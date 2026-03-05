@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::Mutex;
-use uuid;
 
 /// 数据库访问对象，支持事务管理
 #[derive(Debug, Clone)]
@@ -198,8 +197,11 @@ impl Dbx {
             let txn_id = txh.txn_id().to_string();
             let _ = txh_g.insert(txh);
             
-            // 注册事务
+            // 注册事务到元数据注册表
             register_txn(txn_id.clone(), db_id.to_string());
+            
+            // 注册TxnHolder到全局注册表
+            get_txn_holder_registry().write().unwrap().insert(txn_id.clone(), self.txn_holder.clone());
             
             Ok(txn_id)
         }
@@ -223,6 +225,8 @@ impl Dbx {
                 txn_holder.rollback().await?;
                 // 更新事务状态
                 crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::RolledBack);
+                // 从全局TxnHolder注册表中移除
+                get_txn_holder_registry().write().unwrap().remove(&txn_id);
                 // 不需要替换，因为我们希望将其留为 None
             }
             Ok(())
@@ -251,6 +255,8 @@ impl Dbx {
                     txn.commit().await?;
                     // 更新事务状态
                     crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::Committed);
+                    // 从全局TxnHolder注册表中移除
+                    get_txn_holder_registry().write().unwrap().remove(&txn_id);
                 }
             }
 
@@ -334,12 +340,20 @@ pub enum TransactionStatus {
     RolledBack,
 }
 
-// 全局事务注册表
+///// 全局事务注册表
 pub static GLOBAL_TXN_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, TransactionMetadata>>>> = OnceLock::new();
+
+/// 全局TxnHolder注册表，用于通过事务ID获取TxnHolder
+static GLOBAL_TXN_HOLDER_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, Arc<Mutex<Option<TxnHolder>>>>>>> = OnceLock::new();
 
 /// 获取全局事务注册表
 fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMetadata>>> {
     GLOBAL_TXN_REGISTRY.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+/// 获取全局TxnHolder注册表
+fn get_txn_holder_registry() -> &'static Arc<RwLock<HashMap<String, Arc<Mutex<Option<TxnHolder>>>>>> {
+    GLOBAL_TXN_HOLDER_REGISTRY.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
 }
 
 /// 注册事务
@@ -393,4 +407,60 @@ pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<Tran
         })
         .cloned()
         .collect()
+}
+
+/// 通过事务ID提交事务
+///
+/// # 参数
+/// * `txn_id` - 事务ID
+///
+/// # 返回值
+/// * `Result<()>` - 成功返回 Ok(())，失败返回错误
+pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
+    if let Some(txn_holder_mutex) = get_txn_holder_registry().read().unwrap().get(txn_id) {
+        let mut txh_g = txn_holder_mutex.lock().await;
+        if let Some(txh) = txh_g.as_mut() {
+            let counter = txh.dec();
+            if counter == 0 {
+                if let Some(txn) = txh_g.take() {
+                    txn.commit().await?;
+                    update_txn_status(txn_id, TransactionStatus::Committed);
+                    get_txn_holder_registry().write().unwrap().remove(txn_id);
+                }
+            }
+            Ok(())
+        } else {
+            Err(Error::NoTxn)
+        }
+    } else {
+        Err(Error::NoTxn)
+    }
+}
+
+/// 通过事务ID回滚事务
+///
+/// # 参数
+/// * `txn_id` - 事务ID
+///
+/// # 返回值
+/// * `Result<()>` - 成功返回 Ok(())，失败返回错误
+pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
+    if let Some(txn_holder_mutex) = get_txn_holder_registry().read().unwrap().get(txn_id) {
+        let mut txh_g = txn_holder_mutex.lock().await;
+        if let Some(mut txn_holder) = txh_g.take() {
+            if txn_holder.counter > 1 {
+                txn_holder.counter -= 1;
+                let _ = txh_g.replace(txn_holder);
+            } else {
+                txn_holder.rollback().await?;
+                update_txn_status(txn_id, TransactionStatus::RolledBack);
+                get_txn_holder_registry().write().unwrap().remove(txn_id);
+            }
+            Ok(())
+        } else {
+            Err(Error::NoTxn)
+        }
+    } else {
+        Err(Error::NoTxn)
+    }
 }

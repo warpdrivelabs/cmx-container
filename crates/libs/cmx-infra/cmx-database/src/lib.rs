@@ -1,9 +1,9 @@
 /*
  * @Author: yqs
  * @Date: 2026-03-05 13:31:23
- * @Describe: 
+ * @Describe:
  * @LastEditors: yqs
- * @LastEditTime: 2026-03-05 19:57:59
+ * @LastEditTime: 2026-03-05 20:34:11
  */
 pub mod config;
 pub mod connection;
@@ -21,5 +21,5 @@ pub use connection::{DbPool, register_db_pool, update_db_pool, remove_db_pool, g
 pub use load_balancing::{RoundRobinLoadBalancing, RandomLoadBalancing};
 pub use metrics::{PoolMetrics, record_connection_acquire, increment_wait_queue, decrement_wait_queue, get_pool_metrics, get_all_pool_metrics};
 pub use monitoring::start_monitoring;
-pub use transaction::{Dbx, IsolationLevel, TransactionMetadata, TransactionStatus, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions};
+pub use transaction::{Dbx, TransactionMetadata, TransactionStatus, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions, commit_txn_by_id, rollback_txn_by_id};
 

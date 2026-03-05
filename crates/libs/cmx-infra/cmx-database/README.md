@@ -122,6 +122,23 @@ fn main() {
 }
 ```
 
+### 4. 通过事务ID提交或回滚事务
+
+```rust
+use cmx_database::{commit_txn_by_id, rollback_txn_by_id};
+
+async fn handle_transaction_by_id(txn_id: &str, should_commit: bool) -> cmx_database::Result<()> {
+    if should_commit {
+        // 通过事务ID提交事务
+        commit_txn_by_id(txn_id).await?;
+    } else {
+        // 通过事务ID回滚事务
+        rollback_txn_by_id(txn_id).await?;
+    }
+    Ok(())
+}
+```
+
 ## 依赖项
 
 - `sqlx`：数据库操作库
