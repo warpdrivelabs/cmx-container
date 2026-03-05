@@ -1,3 +1,10 @@
+/*
+ * @Author: yqs
+ * @Date: 2026-03-05 19:28:02
+ * @Describe: 
+ * @LastEditors: yqs
+ * @LastEditTime: 2026-03-05 20:46:02
+ */
 use derive_more::From;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
@@ -15,6 +22,8 @@ pub enum Error {
 	CantCreateModelManagerProvider(String),
 	ConnectionTimeout,
 	PoolExhausted,
+	TransactionRequired,
+	TransactionNotAllowed,
 	
 	// -- Externals
 	#[from]

@@ -139,6 +139,70 @@ async fn handle_transaction_by_id(txn_id: &str, should_commit: bool) -> cmx_data
 }
 ```
 
+### 5. 使用事务传播机制
+
+事务传播机制允许开发者控制事务的行为，特别是在嵌套调用的情况下。cmx-database 支持以下传播行为：
+
+| 传播行为 | 描述 | 使用场景 |
+|---------|------|--------|
+| `Required` | 如果当前存在事务，则加入该事务；如果当前不存在事务，则创建一个新事务 | 大多数常规操作，是默认的传播行为 |
+| `RequiresNew` | 创建一个新事务，如果当前存在事务，则将当前事务挂起 | 需要独立事务的操作，如日志记录 |
+| `Nested` | 如果当前存在事务，则创建一个嵌套事务；如果当前不存在事务，则创建一个新事务 | 需要部分回滚能力的操作 |
+| `Supports` | 如果当前存在事务，则加入该事务；如果当前不存在事务，则以非事务方式执行 | 可选事务的操作 |
+| `NotSupported` | 以非事务方式执行，如果当前存在事务，则将当前事务挂起 | 不需要事务的操作，如只读查询 |
+| `Mandatory` | 必须在事务中执行，如果当前不存在事务，则抛出异常 | 必须在事务中执行的操作 |
+| `Never` | 必须以非事务方式执行，如果当前存在事务，则抛出异常 | 绝对不能在事务中执行的操作 |
+
+#### 使用示例
+
+```rust
+use cmx_database::{get_db_access, transaction, Propagation};
+
+async fn use_propagation() -> cmx_database::Result<()> {
+    let dbx = get_db_access("primary").unwrap();
+
+    // 默认传播行为（Required）
+    let result1 = transaction!("primary", dbx, async {
+        // 执行数据库操作
+        Ok(())
+    }).await;
+
+    // 使用指定传播行为
+    let result2 = transaction!("primary", dbx, Propagation::RequiresNew, async {
+        // 执行数据库操作
+        Ok(())
+    }).await;
+
+    // 直接使用begin_txn方法指定传播行为
+    let txn_id = dbx.begin_txn("primary", Propagation::Required).await?;
+    // 执行数据库操作
+    dbx.commit_txn().await?;
+
+    Ok(())
+}
+
+// 嵌套事务示例
+async fn nested_transaction_example() -> cmx_database::Result<()> {
+    let dbx = get_db_access("primary").unwrap();
+
+    // 外部事务
+    let result = transaction!("primary", dbx, async {
+        // 执行一些操作
+        
+        // 内部事务，使用RequiresNew传播行为
+        let inner_result = transaction!("primary", dbx, Propagation::RequiresNew, async {
+            // 执行独立的操作
+            Ok(())
+        }).await;
+        
+        // 即使内部事务失败，外部事务仍然可以继续
+        Ok(())
+    }).await;
+
+    Ok(())
+}
+```
+
 ## 依赖项
 
 - `sqlx`：数据库操作库
