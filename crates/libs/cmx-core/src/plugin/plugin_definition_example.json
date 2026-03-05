@@ -1,0 +1,19 @@
+{
+  "id": "example_plugin",
+  "name": "示例插件",
+  "version": "1.0.0",
+  "description": "演示插件定义：WASM 入口与建表配置文件（表定义已在配置中）",
+  "wasm_file": "bin/plugin.wasm",
+  "table_config_files": [
+    "meta/sys_tables_config.json",
+    "meta/oracle_tables_config.json"
+  ],
+  "supported_databases": ["mysql", "postgres", "sqlite", "oracle"],
+  "domain_code": "FIN",
+  "application_code": "GL_ACCT",
+  "module_code": "GL",
+  "vendor_name": "示例科技公司",
+  "vendor_url": "https://example.com",
+  "vendor_contact": "support@example.com",
+  "development_languages": ["rust"]
+}

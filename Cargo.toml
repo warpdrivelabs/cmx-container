@@ -1,0 +1,108 @@
+# Cargo Workspace 配置文件
+[workspace]
+# Workspace 成员列表，包含本项目的所有 crate
+members = [
+    "crates/libs/cmx-core",
+    "crates/libs/cmx-infra/cmx-database"
+]
+# 依赖版本解析器，"2" 表示使用新版解析器（支持 Edition 2021+）
+resolver = "2"
+
+# Workspace 包级别的元数据配置
+[workspace.package]
+# 项目版本号
+version = "0.1.0"
+# Rust Edition 版本，决定可用的语法特性
+edition = "2024"
+# 项目作者列表
+authors = ["skylake@pansoft.com"]
+
+# Workspace 依赖统一管理，所有成员 crate 可共享这些依赖
+[workspace.dependencies]
+# ============================================
+# 内部依赖
+# ============================================
+# cmx-core: 项目内部核心库
+cmx-core = { path = "crates/libs/cmx-core" }
+
+# ============================================
+# 异步运行时
+# ============================================
+# tokio: 提供完整的异步编程支持
+tokio = { version = "1.41", features = ["full"] }
+
+# ============================================
+# 序列化与数据格式
+# ============================================
+# serde: 序列化框架，支持结构体与数据格式的相互转换
+serde = { version = "1.0", features = ["derive"] }
+# serde_json: JSON 序列化/反序列化
+serde_json = "1.0"
+# serde_yaml: YAML 序列化/反序列化
+serde_yaml = "0.9.33"
+serde_with = {version = "3", features = ["time_0_3", "json"] }
+# ============================================
+# 日期时间处理
+# ============================================
+# chrono: 日期时间库，支持日期时间的解析、计算和格式化
+chrono = { version = "0.4", features = ["serde"] }
+
+# ============================================
+# 错误处理
+# ============================================
+# anyhow: 动态错误上下文，提供灵活的错误处理和传播
+anyhow = "1.0"
+# thiserror: 派生宏定义错误类型，用于自定义错误类型
+thiserror = "2.0"
+
+# ============================================
+# 日志与追踪
+# ============================================
+# tracing: 日志追踪框架，提供结构化的日志记录
+tracing = "0.1"
+# tracing-subscriber: 日志订阅器，收集和导出日志事件，支持环境过滤
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ============================================
+# 内存与字节处理
+# ============================================
+# bumpalo: Arena 内存分配器，快速 bump 指针分配，适合短期 allocations
+bumpalo = { version = "3.16", features = ["collections", "allocator-api2"] }
+# bytes: 字节缓冲区，高效处理字节数据，常用于网络和 I/O
+bytes = "1.8"
+
+# ============================================
+# WebAssembly 支持
+# ============================================
+# wasmtime: WebAssembly 运行时，支持加载和执行 WASM 模块
+wasmtime = "39.0.1"
+
+# ============================================
+# 高性能序列化框架
+# ============================================
+# rkyv: 零拷贝序列化框架，适用于高性能场景
+rkyv = "0.8"
+
+# ============================================
+# 命令行参数解析
+# ============================================
+# clap: 命令行参数解析库，支持派生宏定义 CLI 接口
+clap = { version = "4", features = ["derive"] }
+
+# ============================================
+# 数据库相关
+# ============================================
+sqlx = { version = "0.8", features = [ "macros", "runtime-tokio", "postgres", "uuid" ] }
+sea-query = "0.32"
+sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", "with-time" ] }
+
+# ============================================
+# web相关
+# =================
+axum = {version = "0.8", features = ["macros"]}
+tower-http = { version = "0.6", features = ["fs"] }
+tower-cookies = "0.11"
+
+
+
+derive_more = {version = "1.0.0-beta", features = ["from", "display"] }

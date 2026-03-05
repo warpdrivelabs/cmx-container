@@ -1,0 +1,32 @@
+[package]
+name = "cmx-database"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cmx-core = { workspace = true }
+
+
+# ============================================
+# Workspace 依赖
+# ============================================
+# serde: 序列化框架
+serde = { workspace = true }
+# serde_json: JSON 序列化/反序列化
+serde_json = { workspace = true }
+# sqlx: SQL 异步查询框架
+sqlx = { workspace = true }
+# sea-query: SQL 查询构建器
+sea-query = { workspace = true }
+# sea-query-binder: SQL 参数绑定工具
+sea-query-binder = { workspace = true }
+
+
+derive_more = { workspace = true }
+serde_with = { workspace = true }
+tracing = { workspace = true }
+log = "0.4.29"
+
+tokio = { workspace = true }
+uuid = { version = "1.8.0", features = ["v4"] }
+rand = "0.8.5"

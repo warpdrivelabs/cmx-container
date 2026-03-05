@@ -1,0 +1,51 @@
+{
+  "manifest_version": "1.0",
+  "plugin": {
+    "id": "example_plugin",
+    "name": "示例插件",
+    "version": "1.0.0",
+    "description": "ZIP 包内插件定义，路径均相对 ZIP 根；表定义由配置内 files 指定",
+    "url": "https://example.com/plugin/example_plugin",
+    "dependencies": [
+      "plugin1",
+      "plugin2",
+      "plugin3"
+    ],
+    "main_file": "bin/plugin.wasm",
+    "extra_files": [
+      "bin/script1.bas",
+      "bin/script2.bas"
+    ],
+    "table_config_files": [
+      "meta/sys_tables_config.json",
+      "meta/oracle_tables_config.json"
+    ],
+    "supported_databases": ["mysql", "postgres", "sqlite", "oracle"],
+    "domain_code": "FIN",
+    "application_code": "GL_ACCT",
+    "module_code": "GL",
+    "vendor_name": "示例科技公司",
+    "vendor_url": "https://example.com",
+    "vendor_logo": "https://example.com/logo.png",
+    "vendor_description": "示例科技公司是一家专注于企业应用开发的公司，提供企业应用开发、企业应用集成、企业应用管理等服务。",
+    "vendor_contact_name": "张三",
+    "vendor_contact_email": "zhangsan@example.com",
+    "vendor_contact_phone": "13800138000",
+    "vendor_contact_address": "北京市海淀区",
+    "vendor_contact_website": "https://example.com",
+    "vendor_contact_linkedin": "https://www.linkedin.com/in/zhangsan",
+    "vendor_contact": "support@example.com",
+    "development_languages": ["rust"]
+  },
+  "entries": [
+    "manifest.json",
+    "bin/plugin.wasm",
+    "bin/script1.bas",
+    "bin/script2.bas",
+    "meta/sys_tables_config.json",
+    "meta/oracle_tables_config.json"
+  ],
+  "signature_algorithm": "Ed25519",
+  "signature": "<Base64 编码的 64 字节 Ed25519 签名，对「不含签名字段的清单」规范 JSON 字节签名>",
+  "signer_key_id": "optional-key-id-for-lookup"
+}
