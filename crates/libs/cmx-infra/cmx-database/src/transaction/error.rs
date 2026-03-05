@@ -1,10 +1,3 @@
-/*
- * @Author: yqs
- * @Date: 2026-03-05 13:39:14
- * @Describe: 
- * @LastEditors: yqs
- * @LastEditTime: 2026-03-05 18:07:33
- */
 use derive_more::From;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};

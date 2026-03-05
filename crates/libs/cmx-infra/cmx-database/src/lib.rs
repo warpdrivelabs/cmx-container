@@ -3,13 +3,23 @@
  * @Date: 2026-03-05 13:31:23
  * @Describe: 
  * @LastEditors: yqs
- * @LastEditTime: 2026-03-05 19:07:50
+ * @LastEditTime: 2026-03-05 19:57:59
  */
-pub mod store;
+pub mod config;
+pub mod connection;
+pub mod load_balancing;
+pub mod metrics;
+pub mod monitoring;
+pub mod transaction;
 
-pub use store::{DbConfig, DbManager, DbPool, DbType, PoolConfig, TransactionMetadata, TransactionStatus, PoolMetrics};
-pub use store::{register, update, remove, get, get_config, get_with_timeout, start_monitoring};
-pub use store::{RoundRobinLoadBalancing, RandomLoadBalancing};
-pub use store::{get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions};
-pub use store::{record_connection_acquire, increment_wait_queue, decrement_wait_queue, get_pool_metrics, get_all_pool_metrics};
-pub use store::dbx::{Dbx, Error, IsolationLevel, Result};
+// 重新导出错误类型，确保所有模块都可以使用crate::Error
+pub use transaction::Error;
+pub use transaction::Result;
+
+pub use config::{DbConfig, DbType, PoolConfig};
+pub use connection::{DbPool, register_db_pool, update_db_pool, remove_db_pool, get_db_access, get_db_config, get_db_access_with_timeout};
+pub use load_balancing::{RoundRobinLoadBalancing, RandomLoadBalancing};
+pub use metrics::{PoolMetrics, record_connection_acquire, increment_wait_queue, decrement_wait_queue, get_pool_metrics, get_all_pool_metrics};
+pub use monitoring::start_monitoring;
+pub use transaction::{Dbx, IsolationLevel, TransactionMetadata, TransactionStatus, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions};
+

@@ -1,13 +1,16 @@
-/// 数据库访问对象模块
+/// 事务管理模块，负责数据库事务的创建、提交和回滚
+
 mod error;
 
 pub use error::{Error, Result};
 
-use crate::store::DbPool;
+use crate::connection::DbPool;
 use sqlx::{Postgres, Transaction};
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::Mutex;
+use uuid;
 
 /// 数据库访问对象，支持事务管理
 #[derive(Debug, Clone)]
@@ -115,11 +118,6 @@ impl TxnHolder {
         &self.txn_id
     }
 
-    /// 获取创建时间
-    pub fn created_at(&self) -> std::time::Instant {
-        self.created_at
-    }
-
     /// 获取事务运行时间
     pub fn elapsed(&self) -> std::time::Duration {
         self.created_at.elapsed()
@@ -201,7 +199,7 @@ impl Dbx {
             let _ = txh_g.insert(txh);
             
             // 注册事务
-            crate::store::register_txn(txn_id.clone(), db_id.to_string());
+            register_txn(txn_id.clone(), db_id.to_string());
             
             Ok(txn_id)
         }
@@ -224,7 +222,7 @@ impl Dbx {
                 // 执行实际的回滚操作
                 txn_holder.rollback().await?;
                 // 更新事务状态
-                crate::store::update_txn_status(&txn_id, crate::store::TransactionStatus::RolledBack);
+                crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::RolledBack);
                 // 不需要替换，因为我们希望将其留为 None
             }
             Ok(())
@@ -252,7 +250,7 @@ impl Dbx {
                 if let Some(txn) = txh_g.take() {
                     txn.commit().await?;
                     // 更新事务状态
-                    crate::store::update_txn_status(&txn_id, crate::store::TransactionStatus::Committed);
+                    crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::Committed);
                 }
             }
 
@@ -313,4 +311,86 @@ macro_rules! transaction {
             }
         }
     };
+}
+
+/// 事务元数据
+#[derive(Debug, Clone)]
+pub struct TransactionMetadata {
+    /// 事务ID
+    pub txn_id: String,
+    /// 数据库ID
+    pub db_id: String,
+    /// 创建时间
+    pub created_at: std::time::Instant,
+    /// 状态
+    pub status: TransactionStatus,
+}
+
+/// 事务状态
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransactionStatus {
+    Active,
+    Committed,
+    RolledBack,
+}
+
+// 全局事务注册表
+pub static GLOBAL_TXN_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, TransactionMetadata>>>> = OnceLock::new();
+
+/// 获取全局事务注册表
+fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMetadata>>> {
+    GLOBAL_TXN_REGISTRY.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+/// 注册事务
+pub fn register_txn(txn_id: String, db_id: String) {
+    let metadata = TransactionMetadata {
+        txn_id: txn_id.clone(),
+        db_id,
+        created_at: std::time::Instant::now(),
+        status: TransactionStatus::Active,
+    };
+    get_txn_registry().write().unwrap().insert(txn_id, metadata);
+}
+
+/// 更新事务状态
+pub fn update_txn_status(txn_id: &str, status: TransactionStatus) {
+    if let Some(metadata) = get_txn_registry().write().unwrap().get_mut(txn_id) {
+        metadata.status = status;
+    }
+}
+
+/// 获取事务元数据
+pub fn get_txn_metadata(txn_id: &str) -> Option<TransactionMetadata> {
+    get_txn_registry().read().unwrap().get(txn_id).cloned()
+}
+
+/// 获取活跃事务列表
+pub fn get_active_transactions() -> Vec<TransactionMetadata> {
+    get_txn_registry()
+        .read()
+        .unwrap()
+        .values()
+        .filter(|meta| meta.status == TransactionStatus::Active)
+        .cloned()
+        .collect()
+}
+
+/// 清理已完成的事务
+pub fn cleanup_completed_transactions() {
+    let mut registry = get_txn_registry().write().unwrap();
+    registry.retain(|_, meta| meta.status == TransactionStatus::Active);
+}
+
+/// 检查长时间运行的事务
+pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<TransactionMetadata> {
+    get_txn_registry()
+        .read()
+        .unwrap()
+        .values()
+        .filter(|meta| {
+            meta.status == TransactionStatus::Active && meta.created_at.elapsed() > timeout
+        })
+        .cloned()
+        .collect()
 }
