@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 /// 配置模块，包含数据库和连接池配置结构
 
 /// 数据库类型枚举
@@ -6,6 +8,19 @@ pub enum DbType {
     Postgres,
     MySql,
     Sqlite,
+}
+// let db_type: DbType = "postgres".parse().unwrap();
+impl FromStr for DbType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "postgres" | "postgresql" | "pgsql" => Ok(DbType::Postgres),
+            "mysql" | "mariadb" => Ok(DbType::MySql),
+            "sqlite" | "sqlite3" => Ok(DbType::Sqlite),
+            _ => Err(format!("'{}' 不是支持的数据库类型", s)),
+        }
+    }
 }
 
 /// 连接池配置
