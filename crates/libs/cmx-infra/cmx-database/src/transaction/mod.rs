@@ -1,5 +1,5 @@
 /// 事务管理模块，负责数据库事务的创建、提交和回滚
-/// 
+///
 /// 该模块提供了完整的事务管理功能，包括：
 /// - 事务的创建、提交和回滚
 /// - 事务传播机制
@@ -19,10 +19,10 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::Mutex;
-use uuid; // 用于生成唯一的事务ID
+use uuid;
 
 /// 数据库访问对象，支持事务管理
-/// 
+///
 /// Dbx 是与数据库交互的主要入口点，提供了事务管理功能
 #[derive(Debug, Clone)]
 pub struct Dbx {
@@ -54,7 +54,7 @@ impl Dbx {
 }
 
 /// 统一的数据库事务类型
-/// 
+///
 /// 支持多种数据库类型的事务，目前仅实现了PostgreSQL
 #[derive(Debug)]
 pub enum DbTransaction {
@@ -65,7 +65,7 @@ pub enum DbTransaction {
 }
 
 /// 事务持有器，管理事务和引用计数
-/// 
+///
 /// 用于跟踪事务的状态和引用计数，支持事务的嵌套使用
 #[derive(Debug)]
 struct TxnHolder {
@@ -97,7 +97,7 @@ impl TxnHolder {
     }
 
     /// 增加引用计数
-    /// 
+    ///
     /// 用于支持事务的嵌套使用
     fn inc(&mut self) {
         self.counter += 1;
@@ -113,7 +113,7 @@ impl TxnHolder {
     }
 
     /// 回滚事务
-    /// 
+    ///
     /// 执行实际的事务回滚操作
     ///
     /// # 返回值
@@ -128,7 +128,7 @@ impl TxnHolder {
     }
 
     /// 提交事务
-    /// 
+    ///
     /// 执行实际的事务提交操作
     ///
     /// # 返回值
@@ -203,8 +203,8 @@ pub enum Propagation {
     Required,
     /// REQUIRES_NEW：创建一个新事务，如果当前存在事务，则将当前事务挂起
     RequiresNew,
-    /// NESTED：如果当前存在事务，则创建一个嵌套事务；如果当前不存在事务，则创建一个新事务
-    Nested,
+    // /// NESTED：如果当前存在事务，则创建一个嵌套事务；如果当前不存在事务，则创建一个新事务
+    // Nested,
     /// SUPPORTS：如果当前存在事务，则加入该事务；如果当前不存在事务，则以非事务方式执行
     Supports,
     /// NOT_SUPPORTED：以非事务方式执行，如果当前存在事务，则将当前事务挂起
@@ -230,16 +230,12 @@ impl Dbx {
             return Err(Error::CannotBeginTxnWithTxnFalse);
         }
 
-        // 获取事务持有器的锁
-        let mut txh_g = self.txn_holder.lock().await;
-        // 检查是否存在活跃事务
-        let has_active_txn = txh_g.is_some();
-
         // 根据传播行为执行不同的逻辑
         match propagation {
             Propagation::Required => {
                 // 如果存在事务则加入，否则创建新事务
-                if has_active_txn {
+                let mut txh_g = self.txn_holder.lock().await;
+                if txh_g.is_some() {
                     if let Some(txh) = txh_g.as_mut() {
                         // 增加引用计数
                         txh.inc();
@@ -248,6 +244,8 @@ impl Dbx {
                         Err(Error::NoTxn)
                     }
                 } else {
+                    // 释放锁
+                    drop(txh_g);
                     // 创建新事务
                     self.create_new_txn(db_id).await
                 }
@@ -256,27 +254,33 @@ impl Dbx {
                 // 创建新事务，挂起当前事务
                 // 注意：这里简化实现，实际应该保存当前事务状态
                 // 由于当前实现不支持事务挂起，我们先创建新事务
-                self.create_new_txn(db_id).await
+                // self.create_new_txn(db_id).await
+                //不使用当前事务，创建新事务
+              Dbx::with_transaction(&self)?.create_new_txn(db_id).await
             },
-            Propagation::Nested => {
-                // 如果存在事务则创建嵌套事务，否则创建新事务
-                // 注意：这里简化实现，实际应该使用保存点
-                if has_active_txn {
-                    if let Some(txh) = txh_g.as_mut() {
-                        // 增加引用计数
-                        txh.inc();
-                        Ok(txh.txn_id().to_string())
-                    } else {
-                        Err(Error::NoTxn)
-                    }
-                } else {
-                    // 创建新事务
-                    self.create_new_txn(db_id).await
-                }
-            },
+            // Propagation::Nested => {
+            //     // 如果存在事务则创建嵌套事务，否则创建新事务
+            //     // 注意：这里简化实现，实际应该使用保存点
+            //     let mut txh_g = self.txn_holder.lock().await;
+            //     if txh_g.is_some() {
+            //         if let Some(txh) = txh_g.as_mut() {
+            //             // 增加引用计数
+            //             txh.inc();
+            //             Ok(txh.txn_id().to_string())
+            //         } else {
+            //             Err(Error::NoTxn)
+            //         }
+            //     } else {
+            //         // 释放锁
+            //         drop(txh_g);
+            //         // 创建新事务
+            //         self.create_new_txn(db_id).await
+            //     }
+            // },
             Propagation::Supports => {
                 // 如果存在事务则加入，否则以非事务方式执行
-                if has_active_txn {
+                let mut txh_g = self.txn_holder.lock().await;
+                if txh_g.is_some() {
                     if let Some(txh) = txh_g.as_mut() {
                         // 增加引用计数
                         txh.inc();
@@ -296,7 +300,8 @@ impl Dbx {
             },
             Propagation::Mandatory => {
                 // 必须在事务中执行，否则抛出异常
-                if has_active_txn {
+                let mut txh_g = self.txn_holder.lock().await;
+                if txh_g.is_some() {
                     if let Some(txh) = txh_g.as_mut() {
                         // 增加引用计数
                         txh.inc();
@@ -310,7 +315,8 @@ impl Dbx {
             },
             Propagation::Never => {
                 // 必须以非事务方式执行，否则抛出异常
-                if has_active_txn {
+                let txh_g = self.txn_holder.lock().await;
+                if txh_g.is_some() {
                     Err(Error::TransactionNotAllowed)
                 } else {
                     Ok("non-transactional".to_string())
@@ -332,7 +338,7 @@ impl Dbx {
     }
 
     /// 创建新事务
-    /// 
+    ///
     /// 内部方法，用于创建新的事务实例
     ///
     /// # 参数
@@ -356,21 +362,21 @@ impl Dbx {
             //     DbTransaction::Sqlite(transaction)
             // },
         };
-        
+
         // 创建事务持有器
         let txh = TxnHolder::new(txn);
         let txn_id = txh.txn_id().to_string();
-        
+
         // 获取事务持有器的锁并插入新事务
         let mut txh_g = self.txn_holder.lock().await;
         let _ = txh_g.insert(txh);
-        
+
         // 注册事务到元数据注册表
         register_txn(txn_id.clone(), db_id.to_string());
-        
+
         // 注册TxnHolder到全局注册表，以便通过事务ID操作事务
         get_txn_holder_registry().write().unwrap().insert(txn_id.clone(), self.txn_holder.clone());
-        
+
         // 返回事务ID
         Ok(txn_id)
     }
@@ -380,32 +386,52 @@ impl Dbx {
     /// # 返回值
     /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
     pub async fn rollback_txn(&self) -> Result<()> {
+        let mut txn_id: Option<String> = None;
+        let mut should_rollback = false;
+        let mut txn_to_rollback = None;
+
         // 获取事务持有器的锁
-        let mut txh_g = self.txn_holder.lock().await;
-        
-        // 检查是否存在事务
-        if let Some(mut txn_holder) = txh_g.take() {
-            let txn_id = txn_holder.txn_id().to_string();
-            
-            // 检查引用计数
-            if txn_holder.counter > 1 {
-                // 如果不是最后一个引用，减少计数并放回
-                txn_holder.counter -= 1;
-                let _ = txh_g.replace(txn_holder);
+        let result = {
+            let mut txh_g = self.txn_holder.lock().await;
+
+            // 检查是否存在事务
+            if let Some(mut txn_holder) = txh_g.take() {
+                txn_id = Some(txn_holder.txn_id().to_string());
+
+                // 检查引用计数
+                if txn_holder.counter > 1 {
+                    // 如果不是最后一个引用，减少计数并放回
+                    txn_holder.counter -= 1;
+                    let _ = txh_g.replace(txn_holder);
+                } else {
+                    // 保存事务以便后续回滚
+                    txn_to_rollback = Some(txn_holder);
+                    should_rollback = true;
+                    // 不需要替换，因为我们希望将其留为 None
+                }
+                Ok(())
             } else {
-                // 执行实际的回滚操作
-                txn_holder.rollback().await?;
-                // 更新事务状态为已回滚
-                crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::RolledBack);
-                // 从全局TxnHolder注册表中移除
-                get_txn_holder_registry().write().unwrap().remove(&txn_id);
-                // 不需要替换，因为我们希望将其留为 None
+                // 没有活跃事务，返回错误
+                Err(Error::NoTxn)
             }
-            Ok(())
-        } else {
-            // 没有活跃事务，返回错误
-            Err(Error::NoTxn)
+        };
+        result?;
+
+        // 如果需要回滚，执行回滚操作并更新事务状态
+        if should_rollback && txn_to_rollback.is_some() && txn_id.is_some() {
+            let txn = txn_to_rollback.unwrap();
+            let txn_id = txn_id.unwrap();
+
+            // 执行回滚操作
+            txn.rollback().await?;
+
+            // 更新事务状态为已回滚
+            crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::RolledBack);
+            // 从全局TxnHolder注册表中移除
+            get_txn_holder_registry().write().unwrap().remove(&txn_id);
         }
+
+        Ok(())
     }
 
     /// 提交事务
@@ -418,33 +444,51 @@ impl Dbx {
             return Err(Error::CannotCommitTxnWithTxnFalse);
         }
 
-        // 获取事务持有器的锁
-        let mut txh_g = self.txn_holder.lock().await;
-        
-        // 检查是否存在事务
-        if let Some(txh) = txh_g.as_mut() {
-            let txn_id = txh.txn_id().to_string();
-            // 减少引用计数
-            let counter = txh.dec();
-            
-            // 如果计数器为 0，则应该提交事务
-            if counter == 0 {
-                // 从 Option 中取出事务并执行提交
-                if let Some(txn) = txh_g.take() {
-                    txn.commit().await?;
-                    // 更新事务状态为已提交
-                    crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::Committed);
-                    // 从全局TxnHolder注册表中移除
-                    get_txn_holder_registry().write().unwrap().remove(&txn_id);
-                }
-            }
+        let mut txn_id: Option<String> = None;
+        let mut should_commit = false;
+        let mut txn_to_commit = None;
 
-            Ok(())
+        // 获取事务持有器的锁
+        let result = {
+            let mut txh_g = self.txn_holder.lock().await;
+
+            // 检查是否存在事务
+            if let Some(txh) = txh_g.as_mut() {
+                txn_id = Some(txh.txn_id().to_string());
+                // 减少引用计数
+                let counter = txh.dec();
+
+                // 如果计数器为 0，则应该提交事务
+                if counter == 0 {
+                    // 从 Option 中取出事务
+                    txn_to_commit = txh_g.take();
+                    should_commit = true;
+                }
+
+                Ok(())
+            }
+            // 否则，返回错误
+            else {
+                Err(Error::TxnCantCommitNoOpenTxn)
+            }
+        };
+        result?;
+
+        // 如果需要提交，执行提交操作并更新事务状态
+        if should_commit && txn_to_commit.is_some() && txn_id.is_some() {
+            let txn = txn_to_commit.unwrap();
+            let txn_id = txn_id.unwrap();
+
+            // 执行提交操作
+            txn.commit().await?;
+
+            // 更新事务状态为已提交
+            crate::transaction::update_txn_status(&txn_id, crate::transaction::TransactionStatus::Committed);
+            // 从全局TxnHolder注册表中移除
+            get_txn_holder_registry().write().unwrap().remove(&txn_id);
         }
-        // 否则，返回错误
-        else {
-            Err(Error::TxnCantCommitNoOpenTxn)
-        }
+
+        Ok(())
     }
 
     /// 获取数据库连接池
@@ -475,10 +519,21 @@ impl Dbx {
         let txh_g = self.txn_holder.lock().await;
         txh_g.as_ref().map(|txh| txh.elapsed() > timeout).unwrap_or(false)
     }
+
+    /// 创建一个支持事务的 Dbx 实例
+    ///
+    /// 从当前 Dbx 实例克隆连接池，并创建一个新的支持事务的 Dbx 实例
+    /// 该实例不需要注册到注册表中，适用于临时的事务操作
+    ///
+    /// # 返回值
+    /// * `Result<Self>` - 成功返回支持事务的 Dbx 实例，失败返回错误
+    pub fn with_transaction(&self) -> Result<Self> {
+        Dbx::new(self.db_pool.clone(), true)
+    }
 }
 
 /// 声明式事务管理宏
-/// 
+///
 /// 提供了一种简洁的方式来管理事务，自动处理事务的开始、提交和回滚
 #[macro_export]
 macro_rules! transaction {
@@ -530,7 +585,7 @@ macro_rules! transaction {
 }
 
 /// 事务元数据
-/// 
+///
 /// 用于存储事务的元信息，包括事务ID、数据库ID、创建时间和状态
 #[derive(Debug, Clone)]
 pub struct TransactionMetadata {
@@ -556,17 +611,17 @@ pub enum TransactionStatus {
 }
 
 /// 全局事务注册表
-/// 
+///
 /// 用于存储所有事务的元数据，便于监控和管理
 pub static GLOBAL_TXN_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, TransactionMetadata>>>> = OnceLock::new();
 
 /// 全局TxnHolder注册表
-/// 
+///
 /// 用于通过事务ID获取TxnHolder，支持通过事务ID操作事务
 static GLOBAL_TXN_HOLDER_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, Arc<Mutex<Option<TxnHolder>>>>>>> = OnceLock::new();
 
 /// 获取全局事务注册表
-/// 
+///
 /// # 返回值
 /// * `&'static Arc<RwLock<HashMap<String, TransactionMetadata>>>` - 全局事务注册表
 fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMetadata>>> {
@@ -574,7 +629,7 @@ fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMetadata
 }
 
 /// 获取全局TxnHolder注册表
-/// 
+///
 /// # 返回值
 /// * `&'static Arc<RwLock<HashMap<String, Arc<Mutex<Option<TxnHolder>>>>>` - 全局TxnHolder注册表
 fn get_txn_holder_registry() -> &'static Arc<RwLock<HashMap<String, Arc<Mutex<Option<TxnHolder>>>>>> {
@@ -582,7 +637,7 @@ fn get_txn_holder_registry() -> &'static Arc<RwLock<HashMap<String, Arc<Mutex<Op
 }
 
 /// 注册事务
-/// 
+///
 /// 将事务元数据注册到全局注册表
 ///
 /// # 参数
@@ -599,7 +654,7 @@ pub fn register_txn(txn_id: String, db_id: String) {
 }
 
 /// 更新事务状态
-/// 
+///
 /// 更新事务的状态（活跃、已提交、已回滚）
 ///
 /// # 参数
@@ -612,7 +667,7 @@ pub fn update_txn_status(txn_id: &str, status: TransactionStatus) {
 }
 
 /// 获取事务元数据
-/// 
+///
 /// 通过事务ID获取事务的元数据
 ///
 /// # 参数
@@ -625,7 +680,7 @@ pub fn get_txn_metadata(txn_id: &str) -> Option<TransactionMetadata> {
 }
 
 /// 获取活跃事务列表
-/// 
+///
 /// 获取所有状态为活跃的事务
 ///
 /// # 返回值
@@ -641,7 +696,7 @@ pub fn get_active_transactions() -> Vec<TransactionMetadata> {
 }
 
 /// 清理已完成的事务
-/// 
+///
 /// 从注册表中移除已提交或已回滚的事务，减少内存使用
 pub fn cleanup_completed_transactions() {
     let mut registry = get_txn_registry().write().unwrap();
@@ -649,7 +704,7 @@ pub fn cleanup_completed_transactions() {
 }
 
 /// 检查长时间运行的事务
-/// 
+///
 /// 检查运行时间超过指定超时时间的活跃事务
 ///
 /// # 参数
@@ -670,7 +725,7 @@ pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<Tran
 }
 
 /// 通过事务ID提交事务
-/// 
+///
 /// 允许通过事务ID远程提交事务
 ///
 /// # 参数
@@ -680,36 +735,55 @@ pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<Tran
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
     // 从全局TxnHolder注册表中获取事务
-    if let Some(txn_holder_mutex) = get_txn_holder_registry().read().unwrap().get(txn_id) {
-        let mut txh_g = txn_holder_mutex.lock().await;
-        
-        // 检查是否存在事务
-        if let Some(txh) = txh_g.as_mut() {
-            // 减少引用计数
-            let counter = txh.dec();
-            
-            // 如果计数器为 0，则提交事务
-            if counter == 0 {
-                if let Some(txn) = txh_g.take() {
-                    // 执行提交操作
-                    txn.commit().await?;
-                    // 更新事务状态
-                    update_txn_status(txn_id, TransactionStatus::Committed);
-                    // 从注册表中移除
-                    get_txn_holder_registry().write().unwrap().remove(txn_id);
+    let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+
+    if let Some(txn_holder_mutex) = txn_holder_mutex {
+        let mut should_commit = false;
+        let mut txn_to_commit = None;
+
+        // 获取事务持有器的锁
+        let result = {
+            let mut txh_g = txn_holder_mutex.lock().await;
+
+            // 检查是否存在事务
+            if let Some(txh) = txh_g.as_mut() {
+                // 减少引用计数
+                let counter = txh.dec();
+
+                // 如果计数器为 0，则提交事务
+                if counter == 0 {
+                    // 从 Option 中取出事务
+                    txn_to_commit = txh_g.take();
+                    should_commit = true;
                 }
+                Ok(())
+            } else {
+                Err(Error::NoTxn)
             }
-            Ok(())
-        } else {
-            Err(Error::NoTxn)
+        };
+        result?;
+
+        // 如果需要提交，执行提交操作并更新事务状态
+        if should_commit && txn_to_commit.is_some() {
+            let txn = txn_to_commit.unwrap();
+
+            // 执行提交操作
+            txn.commit().await?;
+
+            // 更新事务状态
+            update_txn_status(txn_id, TransactionStatus::Committed);
+            // 从注册表中移除
+            get_txn_holder_registry().write().unwrap().remove(txn_id);
         }
     } else {
-        Err(Error::NoTxn)
+        return Err(Error::NoTxn);
     }
+
+    Ok(())
 }
 
 /// 通过事务ID回滚事务
-/// 
+///
 /// 允许通过事务ID远程回滚事务
 ///
 /// # 参数
@@ -719,29 +793,50 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
     // 从全局TxnHolder注册表中获取事务
-    if let Some(txn_holder_mutex) = get_txn_holder_registry().read().unwrap().get(txn_id) {
-        let mut txh_g = txn_holder_mutex.lock().await;
-        
-        // 检查是否存在事务
-        if let Some(mut txn_holder) = txh_g.take() {
-            // 检查引用计数
-            if txn_holder.counter > 1 {
-                // 如果不是最后一个引用，减少计数并放回
-                txn_holder.counter -= 1;
-                let _ = txh_g.replace(txn_holder);
+    let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+
+    if let Some(txn_holder_mutex) = txn_holder_mutex {
+        let mut should_rollback = false;
+        let mut txn_to_rollback = None;
+
+        // 获取事务持有器的锁
+        let result = {
+            let mut txh_g = txn_holder_mutex.lock().await;
+
+            // 检查是否存在事务
+            if let Some(mut txn_holder) = txh_g.take() {
+                // 检查引用计数
+                if txn_holder.counter > 1 {
+                    // 如果不是最后一个引用，减少计数并放回
+                    txn_holder.counter -= 1;
+                    let _ = txh_g.replace(txn_holder);
+                } else {
+                    // 保存事务以便后续回滚
+                    txn_to_rollback = Some(txn_holder);
+                    should_rollback = true;
+                }
+                Ok(())
             } else {
-                // 执行回滚操作
-                txn_holder.rollback().await?;
-                // 更新事务状态
-                update_txn_status(txn_id, TransactionStatus::RolledBack);
-                // 从注册表中移除
-                get_txn_holder_registry().write().unwrap().remove(txn_id);
+                Err(Error::NoTxn)
             }
-            Ok(())
-        } else {
-            Err(Error::NoTxn)
+        };
+        result?;
+
+        // 如果需要回滚，执行回滚操作并更新事务状态
+        if should_rollback && txn_to_rollback.is_some() {
+            let txn = txn_to_rollback.unwrap();
+
+            // 执行回滚操作
+            txn.rollback().await?;
+
+            // 更新事务状态
+            update_txn_status(txn_id, TransactionStatus::RolledBack);
+            // 从注册表中移除
+            get_txn_holder_registry().write().unwrap().remove(txn_id);
         }
     } else {
-        Err(Error::NoTxn)
+        return Err(Error::NoTxn);
     }
+
+    Ok(())
 }
