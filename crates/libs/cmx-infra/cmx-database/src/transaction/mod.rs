@@ -64,6 +64,32 @@ pub enum DbTransaction {
     // Sqlite(Transaction<'static, Sqlite>),  // 预留SQLite支持
 }
 
+// impl DbTransaction {
+//     /// 获取PostgreSQL事务的可变引用
+//     ///
+//     /// # 返回值
+//     /// * `Option<&mut Transaction<'static, Postgres>>` - PostgreSQL事务的可变引用，如果不是PostgreSQL事务则返回None
+//     pub fn as_postgres_mut(&mut self) -> Option<&mut Transaction<'static, Postgres>> {
+//         match self {
+//             DbTransaction::Postgres(txn) => Some(txn),
+//             // DbTransaction::MySql(_) => None,
+//             // DbTransaction::Sqlite(_) => None,
+//         }
+//     }
+//
+//     /// 获取PostgreSQL事务的引用
+//     ///
+//     /// # 返回值
+//     /// * `Option<&Transaction<'static, Postgres>>` - PostgreSQL事务的引用，如果不是PostgreSQL事务则返回None
+//     pub fn as_postgres(&self) -> Option<&Transaction<'static, Postgres>> {
+//         match self {
+//             DbTransaction::Postgres(txn) => Some(txn),
+//             // DbTransaction::MySql(_) => None,
+//             // DbTransaction::Sqlite(_) => None,
+//         }
+//     }
+// }
+
 /// 事务持有器，管理事务和引用计数
 ///
 /// 用于跟踪事务的状态和引用计数，支持事务的嵌套使用
@@ -530,6 +556,7 @@ impl Dbx {
     pub fn with_transaction(&self) -> Result<Self> {
         Dbx::new(self.db_pool.clone(), true)
     }
+    
 }
 
 /// 声明式事务管理宏
@@ -840,3 +867,42 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
 
     Ok(())
 }
+//
+// /// 通过事务ID获取PostgreSQL事务的可变引用
+// ///
+// /// 允许通过事务ID获取到sqlx的Transaction可变引用，以便直接操作底层事务
+// ///
+// /// # 参数
+// /// * `txn_id` - 事务ID
+// /// * `f` - 闭包，用于操作事务
+// ///
+// /// # 返回值
+// /// * `Result<T>` - 成功返回闭包的返回值，失败返回错误
+// pub async fn with_transaction_by_id<T, F>(txn_id: &str, f: F) -> Result<T>
+// where
+//     F: FnOnce(&mut Transaction<'static, Postgres>) -> Result<T>,
+// {
+//     // 从全局TxnHolder注册表中获取事务
+//     let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+//
+//     if let Some(txn_holder_mutex) = txn_holder_mutex {
+//         // 获取事务持有器的锁
+//         let mut txh_g = txn_holder_mutex.lock().await;
+//
+//         // 检查是否存在事务
+//         if let Some(txh) = txh_g.as_mut() {
+//             // 获取PostgreSQL事务的可变引用
+//             if let Some(postgres_txn) = txh.txn.as_postgres_mut() {
+//                 // 执行闭包
+//                 let result = f(postgres_txn);
+//                 result
+//             } else {
+//                 Err(Error::NoTxn)
+//             }
+//         } else {
+//             Err(Error::NoTxn)
+//         }
+//     } else {
+//         Err(Error::NoTxn)
+//     }
+// }
