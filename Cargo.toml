@@ -3,6 +3,7 @@
 # Workspace 成员列表，包含本项目的所有 crate
 members = [
     "crates/libs/cmx-core",
+    "crates/libs/cmx-utils",
     "crates/libs/cmx-infra/cmx-database"
 ]
 # 依赖版本解析器，"2" 表示使用新版解析器（支持 Edition 2021+）

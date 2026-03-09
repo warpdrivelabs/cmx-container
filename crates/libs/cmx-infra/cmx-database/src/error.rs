@@ -36,8 +36,6 @@ pub enum Error {
 	TransactionNotAllowed,
 	/// 不支持的数据库类型
 	UnsupportedDbType,
-	/// 数据库池已经存在
-	DbPoolAlreadyExists,
 	/// 数据库不存在
 	NoDb,
 	
