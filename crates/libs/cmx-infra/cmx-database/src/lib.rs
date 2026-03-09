@@ -7,21 +7,17 @@
  */
 pub mod config;
 pub mod connection;
-pub mod load_balancing;
-pub mod metrics;
 pub mod monitoring;
 pub mod transaction;
 
-// 重新导出错误类型，确保所有模块都可以使用crate::Error
-pub use transaction::Error;
-pub use transaction::Result;
+// 导出错误类型，确保所有模块都可以使用crate::Error
+pub mod error;
+pub use error::{Error, Result};
 
 pub use config::{DbConfig, DbType, PoolConfig};
-pub use connection::{DbPool, register_db_pool, update_db_pool, remove_db_pool, get_db_access, get_db_config, get_db_access_with_timeout};
-pub use load_balancing::{RoundRobinLoadBalancing, RandomLoadBalancing};
-pub use metrics::{PoolMetrics, record_connection_acquire, increment_wait_queue, decrement_wait_queue, get_pool_metrics, get_all_pool_metrics};
+pub use connection::{get_db_access, get_db_access_with_timeout, get_db_config, register_db_pool, remove_db_pool, update_db_pool, DbPool};
 pub use monitoring::start_monitoring;
-pub use transaction::{Dbx, IsolationLevel, Propagation, TransactionMetadata, TransactionStatus, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions, commit_txn_by_id, rollback_txn_by_id, get_dbx_by_db_id, get_txn_holder_by_id, with_transaction_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, query_sql_by_ids, query_sql_with_params_by_ids};
+pub use transaction::{check_long_running_transactions, cleanup_completed_transactions, commit_txn_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, get_active_transactions, get_dbx_by_db_id, get_txn_holder_by_id, get_txn_metadata, query_sql_by_ids, query_sql_with_params_by_ids, rollback_txn_by_id, with_transaction_by_id, Dbx, IsolationLevel, Propagation, TransactionMetadata, TransactionStatus};
 
 /// 数据库操作模块，支持 WebAssembly 调用 host 实现数据库操作
 ///
@@ -115,25 +111,6 @@ mod tests {
         assert_eq!(db_config.health_check_timeout, 5);
     }
 
-    // 测试负载均衡策略
-    #[test]
-    fn test_load_balancing() {
-        // 测试轮询负载均衡
-        let round_robin = RoundRobinLoadBalancing::new(vec!["db1".to_string(), "db2".to_string(), "db3".to_string()]);
-        assert_eq!(round_robin.next().unwrap(), "db1");
-        assert_eq!(round_robin.next().unwrap(), "db2");
-        assert_eq!(round_robin.next().unwrap(), "db3");
-        assert_eq!(round_robin.next().unwrap(), "db1"); // 循环
-
-        // 测试随机负载均衡
-        let mut random = RandomLoadBalancing::new(vec!["db1".to_string(), "db2".to_string()]);
-        let result1 = random.next().unwrap();
-        let result2 = random.next().unwrap();
-        // 验证结果是有效的数据库键
-        assert!(result1 == "db1" || result1 == "db2");
-        assert!(result2 == "db1" || result2 == "db2");
-    }
-
     // 测试事务状态枚举
     #[test]
     fn test_transaction_status() {
@@ -217,23 +194,23 @@ mod tests {
             db_url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        
+
         // 注册数据库连接池
         let db_id = "test_sqlite";
         register_db_pool(db_id.to_string(), config).await.unwrap();
-        
+
         // 获取Dbx实例
         let dbx = get_db_access(db_id).unwrap();
         let dbx_with_txn = dbx.with_transaction().unwrap();
-        
+
         // 开始事务
         let txn_id = dbx_with_txn.begin_txn_default(db_id).await.unwrap();
         assert!(!txn_id.is_empty());
-        
+
         // 提交事务
         let commit_result = dbx_with_txn.commit_txn().await;
         assert!(commit_result.is_ok());
-        
+
         // 移除数据库连接池
         remove_db_pool(db_id);
     }
@@ -247,48 +224,48 @@ mod tests {
             db_url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        
+
         // 注册数据库连接池
         let db_id = "test_sqlite_execute";
         register_db_pool(db_id.to_string(), config).await.unwrap();
-        
+
         // 获取Dbx实例
         let dbx = get_db_access(db_id).unwrap();
         let dbx_with_txn = dbx.with_transaction().unwrap();
-        
+
         // 创建表
         let create_table_sql = "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, name TEXT)";
         let result = execute_sql_by_ids(db_id, None, create_table_sql).await;
         assert!(result.is_ok());
-        
+
         // 开始事务
         let txn_id = dbx_with_txn.begin_txn_default(db_id).await.unwrap();
-        
+
         // 在事务中插入数据
         let insert_sql = "INSERT INTO test (name) VALUES ('test')";
         let result = execute_sql_by_ids(db_id, Some(&txn_id), insert_sql).await;
         assert!(result.is_ok());
-        
+
         // 提交事务
         let commit_result = dbx_with_txn.commit_txn().await;
         assert!(commit_result.is_ok());
-        
+
         // 查询数据并打印dataset
         let query_sql = "SELECT * FROM test";
         let dataset_id = "test_dataset";
         let dataset_result = query_sql_by_ids(db_id, None, query_sql, dataset_id).await;
         assert!(dataset_result.is_ok());
-        
+
         let dataset = dataset_result.unwrap();
         println!("Dataset ID: {}", dataset.id);
         println!("Schema fields: {:?}", dataset.schema.fields);
         println!("Number of rows: {}", dataset.rows.len());
-        
+
         // 打印每一行数据
         for (index, row) in dataset.rows.iter().enumerate() {
             println!("Row {}: {:?}", index, row);
         }
-        
+
         // 移除数据库连接池
         remove_db_pool(db_id);
     }

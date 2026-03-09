@@ -9,15 +9,11 @@
 /// - 通过数据库ID和事务ID获取底层事务对象
 
 // 子模块
-mod error;
 mod core;
 mod metadata;
 mod registry;
 mod conversion;
 mod api;
-
-// 导出错误类型和结果类型
-pub use error::{Error, Result};
 
 // 导出核心类型和函数
 pub use core::{Dbx, DbTransaction, TxnHolder, IsolationLevel, Propagation};

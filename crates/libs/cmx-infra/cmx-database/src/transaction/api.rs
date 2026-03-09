@@ -6,7 +6,7 @@
 /// - 通过数据库ID和事务ID执行SQL查询的函数
 
 use futures::future::BoxFuture;
-use crate::transaction::error::{Error, Result};
+use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::metadata::TransactionStatus;

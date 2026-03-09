@@ -1,7 +1,7 @@
 /*
  * @Author: yqs
  * @Date: 2026-03-05 19:28:02
- * @Describe: 事务错误类型定义
+ * @Describe: 数据库错误类型定义
  * @LastEditors: yqs
  * @LastEditTime: 2026-03-09 15:00:00
  */
@@ -36,6 +36,8 @@ pub enum Error {
 	TransactionNotAllowed,
 	/// 不支持的数据库类型
 	UnsupportedDbType,
+	/// 数据库池已经存在
+	DbPoolAlreadyExists,
 	/// 数据库不存在
 	NoDb,
 	

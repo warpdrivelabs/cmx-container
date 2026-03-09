@@ -9,7 +9,7 @@ use crate::connection::{DbPool};
 use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
-use crate::transaction::error::{Error, Result};
+use crate::error::{Error, Result};
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::conversion::TransactionConverter;
