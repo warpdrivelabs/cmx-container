@@ -113,7 +113,7 @@ pub fn get_pool_metrics(db_id: &str) -> Option<PoolMetrics> {
 /// 获取所有连接池性能指标
 pub fn get_all_pool_metrics() -> Vec<PoolMetrics> {
     let registry = crate::connection::get_registry();
-    let db_keys: Vec<String> = registry.read().unwrap().keys().cloned().collect();
+    let db_keys = registry.list();
     
     db_keys
         .into_iter()

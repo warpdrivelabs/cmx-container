@@ -106,3 +106,5 @@ tower-cookies = "0.11"
 
 
 derive_more = {version = "1.0.0-beta", features = ["from", "display"] }
+# 配置
+config={version = "0.15", features = ["toml","yaml","json"]}

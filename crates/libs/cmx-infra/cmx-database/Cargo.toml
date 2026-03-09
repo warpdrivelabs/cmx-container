@@ -15,7 +15,7 @@ serde = { workspace = true }
 # serde_json: JSON 序列化/反序列化
 serde_json = { workspace = true }
 # sqlx: SQL 异步查询框架
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["postgres", "mysql", "sqlite", "runtime-tokio"] }
 # sea-query: SQL 查询构建器
 sea-query = { workspace = true }
 # sea-query-binder: SQL 参数绑定工具
@@ -30,3 +30,6 @@ log = "0.4.29"
 tokio = { workspace = true }
 uuid = { version = "1.8.0", features = ["v4"] }
 rand = "0.8.5"
+futures = "0.3.30"
+rust_decimal = "1.40.0"
+chrono = "0.4.44"

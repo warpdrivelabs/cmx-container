@@ -33,15 +33,10 @@ pub async fn start_monitoring() {
 /// 执行健康检查
 async fn perform_health_check() {
     let registry = get_registry();
-    let db_keys: Vec<String> = registry.read().unwrap().keys().cloned().collect();
+    let db_keys = registry.list();
     
     for key in db_keys {
-        let db_entry = {
-            let registry_read = registry.read().unwrap();
-            registry_read.get(&key).cloned()
-        };
-        
-        if let Some((dbx, config)) = db_entry {
+        if let Some((dbx, config)) = registry.get(&key) {
             let _ = check_db_health(&dbx, &config).await;
         }
     }
@@ -56,12 +51,12 @@ async fn check_db_health(dbx: &crate::transaction::Dbx, config: &crate::config::
             crate::connection::DbPool::Postgres(pool) => {
                 sqlx::query("SELECT 1").execute(pool).await?;
             },
-            // DbPool::MySql(pool) => {
-            //     sqlx::query("SELECT 1").execute(pool).await?;
-            // },
-            // DbPool::Sqlite(pool) => {
-            //     sqlx::query("SELECT 1").execute(pool).await?;
-            // },
+            crate::connection::DbPool::MySql(pool) => {
+                sqlx::query("SELECT 1").execute(pool).await?;
+            },
+            crate::connection::DbPool::Sqlite(pool) => {
+                sqlx::query("SELECT 1").execute(pool).await?;
+            },
         }
         Ok(())
     }).await.map_err(|_| crate::Error::ConnectionTimeout)?
