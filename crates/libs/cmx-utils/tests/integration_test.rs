@@ -50,14 +50,23 @@ port = 443
     file.write_all(b"database.pool_size=20\nserver.host=127.0.0.1\n")
         .unwrap();
 
+    // 设置环境变量CONFIG_FILE指向production.toml
+    unsafe {
+        std::env::set_var("CONFIG_FILE", &production_toml);
+    }
+
     // 使用默认配置加载器
     let config = DefaultConfigLoader::new(config_dir)
         .with_env_prefix("APP_")
         .with_system_env(false) // 禁用系统环境变量以避免干扰
         .with_command_line(false) // 禁用命令行参数
-
         .load()
         .unwrap();
+
+    // 清理环境变量
+    unsafe {
+        std::env::remove_var("CONFIG_FILE");
+    }
 
     // 验证配置合并结果
     // production.toml 覆盖 default.toml

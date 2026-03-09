@@ -307,6 +307,36 @@ impl EnvSource {
         }
         key.to_string()
     }
+
+    /// 规范化环境变量名
+    ///
+    /// 将环境变量名转换为配置键名：
+    /// 1. 转换为小写
+    /// 2. 将双下划线 `__` 转换为点号 `.`（用于嵌套配置）
+    /// 3. 将单下划线 `_` 保持不变（用于单词分隔）
+    ///
+    /// # 参数
+    /// - `key`: 环境变量名
+    ///
+    /// # 返回值
+    /// 返回规范化后的配置键名
+    ///
+    /// # 示例
+    /// ```ignore
+    /// // DB_HOST -> db_host
+    /// // DATABASE__HOST -> database.host
+    /// // DATABASE__CONNECTION__TIMEOUT -> database.connection.timeout
+    /// ```
+    fn normalize_env_key(&self, key: &str) -> String {
+        // 先转换为小写
+        let lower = key.to_lowercase();
+        
+        // 将双下划线替换为点号（用于嵌套配置）
+        // 注意：要先替换双下划线，再处理单下划线
+        let normalized = lower.replace("__", ".");
+        
+        normalized
+    }
 }
 
 impl Default for EnvSource {
@@ -327,9 +357,13 @@ impl ConfigSource for EnvSource {
                 }
             }
             
+            // 先移除前缀
             let config_key = self.strip_prefix(&key);
+            // 再规范化键名（转换为小写，双下划线转点号）
+            let normalized_key = self.normalize_env_key(&config_key);
+            
             // 环境变量值统一作为字符串处理，类型推断在后续使用时进行
-            store.insert(config_key, ConfigValue::String(value));
+            store.insert(normalized_key, ConfigValue::String(value));
         }
         
         Ok(store)
