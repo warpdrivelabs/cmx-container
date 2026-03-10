@@ -14,4 +14,4 @@ pub use error::{ConfigError, ConfigResult};
 pub use value::{ConfigValue, ConfigStore, FromConfigValue};
 pub use parser::{ConfigParser, TomlParser, JsonParser, EnvParser, parse_file_auto};
 pub use source::{ConfigSource, Priority, FileSource, EnvSource, CommandLineSource, MemorySource};
-pub use config::{Config, ConfigBuilder,DefaultConfigLoader};
+pub use config::{Config, ConfigBuilder,DefaultConfigLoader, ConfigManager};

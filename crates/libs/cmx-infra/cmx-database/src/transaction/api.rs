@@ -194,8 +194,7 @@ pub async fn execute_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str) ->
     let sql = sql.to_string();
     match txn_id {
         Some(txn_id) => {
-            // 使用事务执行
-            with_transaction_by_id(txn_id, |txn| Box::pin(async move {
+            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
                 let result = txn.execute(&sql).await?;
                 Ok(result)
             })).await

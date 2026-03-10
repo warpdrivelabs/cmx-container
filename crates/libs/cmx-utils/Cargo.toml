@@ -15,6 +15,10 @@ thiserror = { workspace = true }
 # toml: TOML 解析
 toml = "0.8"
 
+time = { workspace = true }
+uuid = { workspace = true ,features = ["v4","fast-rng"]}
+
+tracing ={workspace = true}
 [dev-dependencies]
 # tempfile: 临时文件测试
 tempfile = "3"

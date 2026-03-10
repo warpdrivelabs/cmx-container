@@ -1,0 +1,25 @@
+[package]
+name = "web-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+cmx-utils={workspace = true}
+cmx-database={workspace = true}
+cmx-api={workspace = true}
+
+
+axum={workspace = true}
+tokio={workspace = true}
+tower-http = { workspace = true }
+tower-cookies = { workspace = true }
+# -- Tracing
+tracing ={workspace = true}
+tracing-subscriber = {workspace = true, features = ["env-filter"] }
+derive_more={workspace = true}
+thiserror={workspace = true}
+serde = { version = "1.0.228", features = ["derive"] }
+
+dotenvy ={workspace = true}
+

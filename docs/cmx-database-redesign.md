@@ -2,7 +2,7 @@
 
 ## 文档信息
 
-- **版本**: v2.0.0
+- **版本**: v2.1.0
 - **日期**: 2026-03-10
 - **状态**: 设计方案（评审优化后）
 - **目标**: 解决现有架构缺陷，提供可测试、可维护、高性能的数据库访问层
@@ -89,25 +89,29 @@
 | 类型系统 | 运行时 `with_txn` 布尔标志控制事务能力 | 编译期无法检查、容易出错 |
 | 资源管理 | 连接池更新时直接替换，未等待活跃连接排空后再关闭旧池 | 活跃连接中断风险 |
 
+> **更新说明 (v2.1)**: 资源管理问题已部分修复——`connection/mod.rs` 的 `update()` 方法现在会标记旧池为关闭状态并等待活跃连接排空（30 秒超时）。新增问题：`remove_db_pool()` 使用 `block_on` 在异步上下文中会 panic。
+
 ### 2.2 事务管理问题
 
 | 问题 | 现状 | 风险 |
 |------|------|------|
-| 传播行为不完整 | `RequiresNew` 注释说明"简化实现"（`core.rs:83-87`），`NotSupported` 未实现事务挂起 | 事务隔离性无法保证 |
-| 事务超时监控失效 | `monitoring/mod.rs:77-79` 通过 `db_id` 获取新 `Dbx`，其 `txn_holder` 为空，`rollback_txn()` 返回 `Err(NoTxn)` | 超时事务根本无法被正确回滚 |
+| 传播行为不完整 | `RequiresNew` 已实现挂起/恢复（`core.rs:107-127`），但 `resume_suspended_txn` 存在死锁 bug | 事务恢复时程序 hang 住 |
+| ~~事务超时监控失效~~ | ~~`monitoring/mod.rs:77-79` 通过 `db_id` 获取新 `Dbx`~~ | **[已修复]** 现在通过 `txn_id` 从注册表获取事务句柄直接回滚 |
 | 引用计数复杂 | 锁操作分散、代码重复 | 死锁风险、维护困难 |
 | 事务状态不一致 | 元数据注册表与实际事务状态可能不同步 | 监控数据不准确 |
+| **[新增] MutexGuard 跨 await** | `with_transaction_by_id` 持有 `MutexGuard` 跨 await | future 非 Send，无法在多线程 runtime 中使用 |
+| **[新增] 参数化执行忽略参数** | `execute_sql_with_params_by_ids` / `query_sql_with_params_by_ids` 事务路径未使用已解析的 params | 参数化 SQL 在事务中无效 |
 
 ### 2.3 API 设计问题
 
 | 问题 | 表现 |
 |------|------|
-| 重复代码 | 多处重复的数据库类型匹配 |
-| 参数传递 | `execute_sql_with_params_by_ids` 的 `_params` 参数完全未使用（`api.rs:239-277`） |
+| 重复代码 | 多处重复的数据库类型匹配（参数绑定逻辑 6 处重复、类型转换逻辑 `conversion.rs` 与 `executor/mod.rs` 完全重复） |
+| 参数传递 | `execute_sql_with_params_by_ids` 和 `query_sql_with_params_by_ids` 的事务路径未使用已解析的参数（`api.rs:248-251, 386-389`） |
 | 错误信息 | 缺乏上下文、无法定位问题 |
-| 异步边界 | 部分操作未正确处理异步边界 |
-| 无端创建事务 | `query_sql_by_ids` 非事务查询路径为调用转换方法而创建临时 `DbTransaction`（`api.rs:309-323`），浪费资源 |
-| 接口不一致 | `rollback_txn` 不检查 `with_txn` 标志，与 `commit_txn` 行为不一致 |
+| 异步边界 | `with_transaction_by_id` 持有 `MutexGuard` 跨 await，future 非 Send；仍依赖 `futures::BoxFuture` |
+| 接口不一致 | `rollback_txn` 检查 `with_txn` 标志，行为与旧版描述不同（现已统一检查） |
+| `futures` 依赖 | `api.rs:8` 仍使用 `futures::future::BoxFuture`，与设计文档移除该依赖的决定不一致 |
 
 ---
 
@@ -144,20 +148,62 @@
 
 ### 4.1 模块划分
 
+#### 4.1.1 当前实际结构
+
+```
+cmx-database
+├── Cargo.toml
+├── src/
+│   ├── lib.rs                    # 模块导出和 pub use
+│   ├── error.rs                  # 扁平 Error 枚举
+│   │
+│   ├── config/                   # 配置模块
+│   │   └── mod.rs                # DbType, PoolConfig, DbConfig
+│   │
+│   ├── connection/               # 连接池管理模块
+│   │   └── mod.rs                # DbPool, DatabasePoolImpl, DbRegistry, 全局注册函数
+│   │
+│   ├── transaction/              # 事务管理模块
+│   │   ├── mod.rs                # 模块导出 + transaction! 宏
+│   │   ├── core.rs               # Dbx, DbTransaction, TxnHolder, Propagation, IsolationLevel
+│   │   ├── api.rs                # WASM 兼容 API (*_by_ids 函数)
+│   │   ├── context.rs            # TransactionFrame, TransactionContextStack (未使用)
+│   │   ├── conversion.rs         # TransactionConverter trait (与 executor 重复)
+│   │   ├── metadata.rs           # TransactionMetadata, TransactionStatus, 全局注册表
+│   │   └── registry.rs           # 全局 TxnHolder 注册表
+│   │
+│   ├── executor/                 # 结果转换模块
+│   │   └── mod.rs                # ParamValue, ResultConverter
+│   │
+│   ├── manager/                  # 数据库管理器模块
+│   │   └── mod.rs                # DatabaseManager, PoolManager, TransactionContext
+│   │
+│   ├── monitoring/               # 监控模块
+│   │   └── mod.rs                # 健康检查 + 事务超时监控
+│   │
+│   └── types/                    # 类型安全查询构建器
+│       └── mod.rs                # QueryBuilder, TypedRow, TypedResult (部分实现)
+│
+└── tests/
+    └── integration_test.rs       # 集成测试 (仅 PostgreSQL)
+```
+
+#### 4.1.2 目标结构（分阶段演进）
+
 ```
 cmx-database
 ├── src/
 │   ├── lib.rs                    # 模块导出
-│   ├── error.rs                  # 错误类型定义
+│   ├── error.rs                  # 层次化错误类型 (Phase 2)
 │   │
-│   ├── pool/                     # 连接池管理模块
+│   ├── pool/                     # 连接池管理模块 (Phase 2: 从 connection/ + config/ 重组)
 │   │   ├── mod.rs
 │   │   ├── manager.rs            # 连接池管理器
 │   │   ├── config.rs             # 连接池配置
 │   │   ├── health.rs             # 健康检查
 │   │   └── inner.rs              # 内部连接池封装
 │   │
-│   ├── transaction/              # 事务管理模块
+│   ├── transaction/              # 事务管理模块 (Phase 3: 重构)
 │   │   ├── mod.rs
 │   │   ├── manager.rs            # 事务管理器
 │   │   ├── context.rs            # 事务上下文
@@ -165,18 +211,18 @@ cmx-database
 │   │   ├── options.rs            # 事务选项
 │   │   └── handle.rs             # 事务句柄
 │   │
-│   ├── executor/                 # 查询执行模块
+│   ├── executor/                 # 查询执行模块 (Phase 4)
 │   │   ├── mod.rs
-│   │   ├── trait.rs              # 执行器 trait
+│   │   ├── trait.rs              # QueryExecutor trait
 │   │   ├── sqlx_impl.rs          # SQLx 实现
-│   │   ├── converter.rs          # 结果转换
-│   │   └── params.rs             # 参数绑定
+│   │   ├── converter.rs          # 统一结果转换
+│   │   └── params.rs             # 统一参数绑定
 │   │
-│   ├── repository/               # 仓库模块
+│   ├── repository/               # 仓库模块 (Phase 4)
 │   │   ├── mod.rs                # CrudRepository trait
 │   │   └── generic.rs            # 通用实现（内部按 db_type 分发）
 │   │
-│   ├── wasm_api/                 # WebAssembly Host Function API
+│   ├── wasm_api/                 # WebAssembly Host Function API (Phase 2)
 │   │   └── mod.rs                # 保持现有 *_by_ids 接口模式
 │   │
 │   └── monitoring/               # 监控模块
@@ -1586,12 +1632,14 @@ PoolConfig {
 
 **目标**: 修复影响正确性的现有问题，不改变整体架构。
 
-| 任务 | 文件 | 说明 |
-|------|------|------|
-| 修复监控回滚 bug | `monitoring/mod.rs` | 超时事务应通过 `txn_id` 从注册表获取句柄直接回滚，而非通过 `db_id` 获取新 Dbx |
-| 修复非事务查询无端创建事务 | `transaction/api.rs` | `query_sql_by_ids` 非事务路径不应调用 `pool.begin()` |
-| 实现参数绑定 | `transaction/api.rs` | `execute_sql_with_params_by_ids` 的 `_params` 需真正使用 |
-| 补充 rollback 检查 | `transaction/core.rs` | `rollback_txn` 应检查 `with_txn` 标志 |
+| 任务 | 文件 | 说明 | 状态 |
+|------|------|------|:----:|
+| ~~修复监控回滚 bug~~ | `monitoring/mod.rs` | ~~超时事务应通过 `txn_id` 从注册表获取句柄直接回滚~~ | **已修复** |
+| 修复参数化执行忽略参数 | `transaction/api.rs` | `execute_sql_with_params_by_ids` / `query_sql_with_params_by_ids` 事务路径需传入 params | 待修复 |
+| 修复 `with_transaction_by_id` 跨 await 持锁 | `transaction/api.rs` | 改为"取出-使用-放回"模式，移除 `futures` 依赖 | 待修复 |
+| 修复 `resume_suspended_txn` 死锁 | `transaction/core.rs` | 避免同一 Mutex 重入锁定 | 待修复 |
+| 修复 `remove_db_pool` block_on panic | `connection/mod.rs` | 改为 async 函数 | 待修复 |
+| 补充 `DbTransaction` 参数化方法 | `transaction/core.rs` | 添加 `execute_with_params` / `query_with_params` | 待修复 |
 
 **验证标准**: 所有现有测试通过 + 新增针对修复点的测试用例。
 
@@ -1684,28 +1732,45 @@ PoolConfig {
 | v1.0.0 | 2026-03-10 | 初始版本 |
 | v1.1.0 | 2026-03-10 | 补充第三方依赖清单 |
 | v2.0.0 | 2026-03-10 | 评审优化：修正技术矛盾、删除过度设计、补充实施路径 |
+| v2.1.0 | 2026-03-10 | 代码审查后更新：修正§2.2/§2.3问题描述、更新§4.1模块结构、更新§11 Phase 1任务状态、更新附录D依赖清单 |
 
 ---
 
 ### D. 第三方依赖清单
 
-#### D.1 核心依赖
+#### D.1 当前实际依赖
+
+| 依赖 | 版本 | 用途 | 目标状态 |
+|------|------|------|---------|
+| cmx-core | workspace | 核心数据模型（DataSet, DataValue） | 保留 |
+| sqlx | workspace + features | 数据库访问层 | 保留 |
+| sea-query | workspace | SQL 查询构建器 | **待移除**（Phase 4 替代） |
+| sea-query-binder | workspace | SQL 参数绑定 | **待移除**（Phase 4 替代） |
+| tokio | workspace | 异步运行时 | 保留 |
+| serde | workspace | 序列化框架 | 保留 |
+| serde_json | workspace | JSON 序列化 | 保留 |
+| derive_more | workspace | derive 宏（From） | **待替换**为 thiserror（Phase 2） |
+| serde_with | workspace | 序列化辅助 | 保留 |
+| tracing | workspace | 结构化日志 | 保留 |
+| log | 0.4.29 | 日志 | **待移除**（统一使用 tracing） |
+| uuid | 1.8.0 | UUID 生成 | 保留 |
+| rand | 0.8.5 | 随机数 | 检查是否仍需要 |
+| futures | 0.3.30 | BoxFuture | **待移除**（原生 async fn 替代） |
+| rust_decimal | 1.40.0 | 精确小数 | 保留 |
+| chrono | 0.4.44 | 日期时间 | 保留 |
+
+#### D.2 目标依赖（重构完成后）
 
 | 依赖 | 用途 | 说明 |
 |------|------|------|
 | sqlx | 数据库访问层 | features: runtime-tokio, postgres, mysql, sqlite, chrono, uuid, json, decimal |
 | tokio | 异步运行时 | workspace 统一管理 |
 | tracing | 结构化日志 | 主要可观测性手段 |
-| thiserror | 错误类型定义 | 库层错误定义 |
+| thiserror | 错误类型定义 | 库层错误定义（替代 derive_more） |
 | serde / serde_json | 序列化 | 参数和结果传输 |
-
-#### D.2 数据库相关
-
-| 依赖 | 用途 |
-|------|------|
-| rust_decimal | 精确小数计算 |
-| chrono | 日期时间处理 |
-| uuid | UUID 生成（事务ID） |
+| rust_decimal | 精确小数计算 | |
+| chrono | 日期时间处理 | |
+| uuid | UUID 生成（事务ID） | |
 
 #### D.3 测试相关（dev-dependencies）
 

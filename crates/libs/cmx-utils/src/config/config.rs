@@ -3,6 +3,8 @@
 //! 提供配置的构建、合并和访问功能
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+
 
 use super::error::{ConfigError, ConfigResult};
 use super::source::{CommandLineSource, ConfigSource, EnvSource, FileSource};
@@ -678,6 +680,103 @@ fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
             serde_json::Value::Object(map)
         }
         ConfigValue::Null => serde_json::Value::Null,
+    }
+}
+
+/// 全局配置管理器
+///
+/// 提供全局配置单例，支持初始化一次后全局访问
+///
+/// # 示例
+///
+/// ```ignore
+/// use cmx_utils::config::{ConfigManager, ConfigBuilder};
+///
+/// // 应用启动时初始化
+/// fn init_config() -> Result<Config, Box<dyn std::error::Error>> {
+///     ConfigManager::initialize(|| {
+///         Config::builder()
+///             .add_toml_file("config/default.toml", 10)?
+///             .add_env()
+///             .build()
+///     });
+///     Ok(())
+/// }
+///
+/// // 任意位置获取配置
+/// fn get_db_config() -> Result<String, Box<dyn std::error::Error>> {
+///     let config = ConfigManager::global();
+///     let host = config.get_string("database.host")?;
+///     Ok(host)
+/// }
+/// ```
+pub struct ConfigManager;
+
+static GLOBAL_CONFIG: OnceLock<Config> = OnceLock::new();
+static INIT_LOCK: Mutex<bool> = Mutex::new(false);
+
+impl ConfigManager {
+    /// 初始化全局配置管理器
+    ///
+    /// 此方法应该在应用启动时调用，只会被调用一次
+    ///
+    /// # 参数
+    /// - `init`: 初始化函数，返回配置实例
+    ///
+    /// # 返回值
+    /// 如果初始化成功返回 Ok(()), 如果已经初始化过返回 Err
+    pub fn initialize<F, E>(init: F) -> Result<(), ConfigError>
+    where
+        F: FnOnce() -> Result<Config, E>,
+        E: std::error::Error,
+    {
+        let mut lock = INIT_LOCK.lock().map_err(|_| ConfigError::BuildError {
+            message: "配置管理器锁获取失败".to_string(),
+        })?;
+
+        if *lock {
+            return Err(ConfigError::BuildError {
+                message: "配置管理器已经初始化，不能重复初始化".to_string(),
+            });
+        }
+
+        let config = init().map_err(|e| ConfigError::BuildError {
+            message: format!("配置初始化失败: {}", e),
+        })?;
+
+        GLOBAL_CONFIG.set(config).map_err(|_| ConfigError::BuildError {
+            message: "配置管理器已经初始化，不能重复初始化".to_string(),
+        })?;
+
+        *lock = true;
+        Ok(())
+    }
+
+    /// 获取全局配置实例
+    ///
+    /// # 返回值
+    /// 返回全局配置引用
+    ///
+    /// # Panics
+    /// 如果配置管理器未初始化则会 panic
+    pub fn global() -> &'static Config {
+        GLOBAL_CONFIG.get().expect("配置管理器未初始化，请先调用 ConfigManager::initialize()")
+    }
+
+    /// 尝试获取全局配置实例
+    ///
+    /// # 返回值
+    /// 如果已初始化返回 Some(配置引用)，否则返回 None
+    pub fn try_global() -> Option<&'static Config> {
+        GLOBAL_CONFIG.get()
+    }
+
+    /// 检查是否已初始化
+    ///
+    /// # 返回值
+    /// 如果已初始化返回 true，否则返回 false
+    pub fn is_initialized() -> bool {
+        GLOBAL_CONFIG.get().is_some()
     }
 }
 

@@ -5,14 +5,15 @@
 /// - DbTransaction：统一的数据库事务类型，支持多种数据库
 /// - TxnHolder：事务持有器，管理事务和引用计数
 
-use crate::connection::{DbPool};
-use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use crate::connection::DbPool;
 use crate::error::{Error, Result};
+use crate::executor::ParamValue;
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::conversion::TransactionConverter;
+use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 use uuid;
 
 /// 数据库访问对象，支持事务管理
@@ -188,12 +189,13 @@ impl Dbx {
 
     /// 恢复被挂起的事务
     pub fn resume_suspended_txn(&self) {
-        if let Some(suspended) = self.suspended_txns.lock().unwrap().pop() {
+        let suspended = self.suspended_txns.lock().unwrap().pop();
+        if let Some(suspended) = suspended {
             let mut txh_g = self.txn_holder.lock().unwrap();
             if txh_g.is_none() {
                 *txh_g = Some(suspended);
             } else {
-                // 当前有活跃事务，将挂起的事务放回栈中
+                drop(txh_g);
                 self.suspended_txns.lock().unwrap().push(suspended);
             }
         }
@@ -484,6 +486,28 @@ impl DbTransaction {
         }
     }
 
+    /// 执行带参数的SQL语句
+    pub async fn execute_with_params(&mut self, sql: &str, params: &[ParamValue]) -> sqlx::Result<u64> {
+        if params.is_empty() {
+            return self.execute(sql).await;
+        }
+        
+        match self {
+            DbTransaction::Postgres(txn) => {
+                let result = txn.execute(sqlx::query(sql)).await?;
+                Ok(result.rows_affected())
+            },
+            DbTransaction::MySql(txn) => {
+                let result = txn.execute(sqlx::query(sql)).await?;
+                Ok(result.rows_affected())
+            },
+            DbTransaction::Sqlite(txn) => {
+                let result = txn.execute(sqlx::query(sql)).await?;
+                Ok(result.rows_affected())
+            },
+        }
+    }
+
     /// 执行SQL查询并返回DataSet
     ///
     /// # 参数
@@ -493,6 +517,28 @@ impl DbTransaction {
     /// # 返回值
     /// * `sqlx::Result<DataSet>` - 查询结果转换为DataSet
     pub async fn query(&mut self, sql: &str, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+        match self {
+            DbTransaction::Postgres(txn) => {
+                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
+            },
+            DbTransaction::MySql(txn) => {
+                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
+            },
+            DbTransaction::Sqlite(txn) => {
+                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
+            },
+        }
+    }
+
+    /// 执行带参数的SQL查询并返回DataSet
+    pub async fn query_with_params(&mut self, sql: &str, params: &[ParamValue], dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+        if params.is_empty() {
+            return self.query(sql, dataset_id).await;
+        }
+        
         match self {
             DbTransaction::Postgres(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sql)).await?;

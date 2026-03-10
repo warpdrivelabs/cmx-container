@@ -4,8 +4,9 @@
 members = [
     "crates/libs/cmx-core",
     "crates/libs/cmx-utils",
-    "crates/libs/cmx-infra/cmx-database"
-]
+    "crates/libs/cmx-infra/cmx-database",
+    "crates/web/web-server"
+, "crates/libs/cmx-api"]
 # 依赖版本解析器，"2" 表示使用新版解析器（支持 Edition 2021+）
 resolver = "2"
 
@@ -25,6 +26,11 @@ authors = ["skylake@pansoft.com"]
 # ============================================
 # cmx-core: 项目内部核心库
 cmx-core = { path = "crates/libs/cmx-core" }
+# cmx-utils: 项目内部工具库
+cmx-utils = { path = "crates/libs/cmx-utils" }
+cmx-api = { path = "crates/libs/cmx-api" }
+cmx-database = { path = "crates/libs/cmx-infra/cmx-database" }
+
 
 # ============================================
 # 异步运行时
@@ -47,7 +53,7 @@ serde_with = {version = "3", features = ["time_0_3", "json"] }
 # ============================================
 # chrono: 日期时间库，支持日期时间的解析、计算和格式化
 chrono = { version = "0.4", features = ["serde"] }
-
+time = {version = "0.3", features = ["formatting", "parsing", "serde"]}
 # ============================================
 # 错误处理
 # ============================================
@@ -105,7 +111,11 @@ tower-http = { version = "0.6", features = ["fs"] }
 tower-cookies = "0.11"
 
 
-
+#第三方派生宏（derive macro）库
 derive_more = {version = "1.0.0-beta", features = ["from", "display"] }
 # 配置
 config={version = "0.15", features = ["toml","yaml","json"]}
+# 环境变量
+dotenvy = "0.15"
+
+uuid={version = "1.21"}

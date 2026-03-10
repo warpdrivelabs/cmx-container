@@ -1,0 +1,22 @@
+[package]
+name = "cmx-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+axum={workspace = true}
+cmx-utils = { workspace = true }
+tokio={workspace = true}
+tower-http = { workspace = true }
+tower-cookies = { workspace = true }
+time = { workspace = true }
+uuid = { workspace = true ,features = ["v4","fast-rng"]}
+
+tracing ={workspace = true}
+derive_more={workspace = true}
+# serde: 序列化框架
+serde = { workspace = true }
+# serde_json: JSON 序列化/反序列化
+serde_json = { workspace = true }
+serde_with={ workspace = true }

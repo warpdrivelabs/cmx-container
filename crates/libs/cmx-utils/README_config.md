@@ -369,7 +369,102 @@ SERVER_PORT=8080
 
 ## 高级用法
 
-### 1. 自定义配置来源
+### 1. 全局配置管理器 (ConfigManager)
+
+使用 `ConfigManager` 可以实现配置初始化一次后全局访问，特别适合大型应用或多模块共享配置的场景。
+
+#### 基本使用
+
+```rust
+use cmx_utils::config::{ConfigManager, ConfigBuilder, Config};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. 应用启动时初始化配置（只调用一次）
+    ConfigManager::initialize(|| {
+        Config::builder()
+            .add_toml_file("config/default.toml", 10)?
+            .add_env()
+            .build()
+    })?;
+    
+    // 2. 任意位置获取配置
+    let host = ConfigManager::global().get_string("database.host")?;
+    let port = ConfigManager::global().get_int("database.port")?;
+    
+    println!("Database: {}:{}", host, port);
+    Ok(())
+}
+```
+
+#### 安全获取配置
+
+```rust
+use cmx_utils::config::ConfigManager;
+
+// 方法1: 使用 try_global() 安全获取
+if let Some(config) = ConfigManager::try_global() {
+    let host = config.get_string("database.host")?;
+}
+
+// 方法2: 检查是否已初始化
+if ConfigManager::is_initialized() {
+    let config = ConfigManager::global();
+    // 使用配置
+}
+
+// 方法3: 在获取前先初始化
+let config = ConfigManager::try_global().unwrap_or_else(|| {
+    // 如果未初始化，使用默认配置
+    panic!("配置未初始化");
+});
+```
+
+#### 使用 DefaultConfigLoader 初始化
+
+```rust
+use cmx_utils::config::{ConfigManager, DefaultConfigLoader};
+
+// 使用默认配置加载器初始化
+ConfigManager::initialize(|| {
+    DefaultConfigLoader::new("config")
+        .with_env_prefix("APP_")
+        .load()
+})?;
+
+// 之后可以在任意位置访问
+let db_host = ConfigManager::global().get_string("database.host")?;
+```
+
+#### 在多模块中使用
+
+```rust
+// config.rs - 配置初始化模块
+pub fn init_config() -> Result<(), Box<dyn std::error::Error>> {
+    ConfigManager::initialize(|| {
+        Config::builder()
+            .add_toml_file("config/default.toml", 10)?
+            .build()
+    })?;
+    Ok(())
+}
+
+// database.rs - 数据库模块
+pub fn create_connection() -> Result<Connection, Box<dyn std::error::Error>> {
+    let host = ConfigManager::global().get_string("database.host")?;
+    let port = ConfigManager::global().get_int("database.port")?;
+    // 创建连接...
+    Ok(())
+}
+
+// main.rs - 应用入口
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    init_config()?;
+    let conn = create_connection()?;
+    Ok(())
+}
+```
+
+### 3. 自定义配置来源
 
 ```rust
 use cmx_utils::config::{ConfigSource, Priority};
@@ -399,7 +494,7 @@ impl ConfigSource for CustomSource {
 }
 ```
 
-### 2. 配置热重载
+### 3. 配置热重载
 
 ```rust
 // 重新加载配置
@@ -411,7 +506,7 @@ if config.is_loaded() {
 }
 ```
 
-### 3. 配置验证
+### 4. 配置验证
 
 ```rust
 // 检查配置项是否存在
@@ -426,7 +521,7 @@ let keys: Vec<&String> = config.keys().collect();
 let count = config.len();
 ```
 
-### 4. 类型转换
+### 5. 类型转换
 
 ```rust
 use cmx_utils::config::{ConfigValue, FromConfigValue};
@@ -571,6 +666,25 @@ cargo tarpaulin --out Html
 
 ## 常见问题
 
+### Q: 如何使用全局配置管理器？
+
+A: 使用 `ConfigManager` 可以实现配置初始化一次后全局访问。
+
+```rust
+use cmx_utils::config::{ConfigManager, Config};
+
+// 应用启动时初始化（只调用一次）
+ConfigManager::initialize(|| {
+    Config::builder()
+        .add_toml_file("config/default.toml", 10)?
+        .add_env()
+        .build()
+})?;
+
+// 任意位置获取配置
+let host = ConfigManager::global().get_string("database.host")?;
+```
+
 ### Q: 如何处理配置项不存在的情况？
 
 A: 使用 `get_optional` 方法返回 `Option<T>`，或使用 `get_as_or` 提供默认值。
@@ -650,6 +764,13 @@ cargo clippy
 ```
 
 ## 更新日志
+
+### v0.2.0 (2026-03-10)
+
+- 新增 `ConfigManager` 全局配置管理器
+- 支持配置初始化一次后全局访问
+- 提供 `initialize()`、`global()`、`try_global()`、`is_initialized()` 方法
+- 适用于大型应用和多模块共享配置场景
 
 ### v0.1.0 (2026-03-09)
 

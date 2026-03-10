@@ -215,12 +215,8 @@ pub async fn register_db_pool(config: DbConfig) -> Result<()> {
     get_global_registry().register(config).await
 }
 
-pub fn remove_db_pool(key: &str) {
-    let registry = get_global_registry();
-    let rt = tokio::runtime::Handle::current();
-    rt.block_on(async {
-        registry.unregister(key).await;
-    });
+pub async fn remove_db_pool(key: &str) {
+    get_global_registry().unregister(key).await;
 }
 
 pub fn get_db_access(key: &str) -> Option<Dbx> {

@@ -51,15 +51,19 @@
 //!     // 读取配置值
 //!     let host: String = config.get_string("database.host")?;
 //!     let port: i64 = config.get_int("database.port")?;
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
 
+pub mod b64;
 pub mod config;
+pub mod time;
 
+pub use config::{CommandLineSource, ConfigSource, EnvSource, FileSource, MemorySource, Priority};
+pub use config::{ConfigParser, EnvParser, JsonParser, TomlParser, parse_file_auto};
 // 重新导出配置模块的常用类型
-pub use config::{Config, ConfigBuilder, ConfigError, ConfigResult, ConfigValue, ConfigStore, FromConfigValue};
-pub use config::{ConfigSource, Priority, FileSource, EnvSource, CommandLineSource, MemorySource};
-pub use config::{ConfigParser, TomlParser, JsonParser, EnvParser, parse_file_auto};
-pub use config::config::DefaultConfigLoader;
+pub use config::{
+    Config, ConfigBuilder, ConfigError, ConfigResult, ConfigStore, ConfigValue, FromConfigValue,
+};
+pub use config::{ConfigManager, DefaultConfigLoader};
