@@ -494,15 +494,57 @@ impl DbTransaction {
         
         match self {
             DbTransaction::Postgres(txn) => {
-                let result = txn.execute(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
             },
             DbTransaction::MySql(txn) => {
-                let result = txn.execute(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
             },
             DbTransaction::Sqlite(txn) => {
-                let result = txn.execute(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
             },
         }
@@ -541,15 +583,57 @@ impl DbTransaction {
         
         match self {
             DbTransaction::Postgres(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
             },
             DbTransaction::MySql(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
             },
             DbTransaction::Sqlite(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = match param {
+                        ParamValue::Null => query.bind(None::<String>),
+                        ParamValue::Bool(v) => query.bind(*v),
+                        ParamValue::Int(v) => query.bind(*v),
+                        ParamValue::Float(v) => query.bind(*v),
+                        ParamValue::String(v) => query.bind(v.clone()),
+                        ParamValue::Decimal(v) => query.bind(v.to_string()),
+                        ParamValue::DateTime(v) => query.bind(v.to_string()),
+                        ParamValue::Date(v) => query.bind(v.to_string()),
+                        ParamValue::Json(v) => query.bind(v.to_string()),
+                    };
+                }
+                let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
             },
         }
