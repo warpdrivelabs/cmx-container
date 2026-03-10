@@ -8,6 +8,7 @@
 pub mod config;
 pub mod connection;
 pub mod monitoring;
+pub mod repository;
 pub mod transaction;
 
 // 导出错误类型，确保所有模块都可以使用crate::Error
@@ -18,6 +19,12 @@ pub use config::{DbConfig, DbType, PoolConfig};
 pub use connection::{get_db_access, get_db_access_with_timeout, get_db_config, register_db_pool, remove_db_pool, update_db_pool, DbPool};
 pub use monitoring::start_monitoring;
 pub use transaction::{check_long_running_transactions, cleanup_completed_transactions, commit_txn_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, get_active_transactions, get_dbx_by_db_id, get_txn_holder_by_id, get_txn_metadata, query_sql_by_ids, query_sql_with_params_by_ids, rollback_txn_by_id, with_transaction_by_id, Dbx, IsolationLevel, Propagation, TransactionMetadata, TransactionStatus};
+
+// 导出仓库模块类型
+pub use repository::{
+    CrudRepository, Condition, ConditionOp, PageResult,
+    PostgresCrudRepository, MySqlCrudRepository, SqliteCrudRepository,
+};
 
 /// 数据库操作模块，支持 WebAssembly 调用 host 实现数据库操作
 ///
