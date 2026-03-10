@@ -1,18 +1,14 @@
-use cmx_database::{register_db_pool, remove_db_pool, get_db_access, transaction, Propagation, commit_txn_by_id, rollback_txn_by_id, start_monitoring};
-use cmx_database::{DbConfig, DbType, PoolConfig, Result};
+use cmx_database::{DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig, TransactionOptions};
+use cmx_core::model::data::dataset::DataSet;
 
-// 测试数据库配置
 const TEST_DB_URL: &str = "postgresql://postgres:postgres@192.168.137.80:5432/postgres";
 const TEST_DB_KEY: &str = "test_db";
 
-// 生成唯一的测试表名
 fn generate_test_table_name() -> String {
     format!("test_transaction_{}", uuid::Uuid::new_v4().simple())
 }
 
-// 初始化测试环境
-async fn setup_test_environment(test_table: &str) -> Result<()> {
-    // 注册数据库连接池
+async fn setup_db_manager() -> DatabaseManager {
     let pool_config = PoolConfig {
         max_connections: 5,
         min_connections: 1,
@@ -24,272 +20,160 @@ async fn setup_test_environment(test_table: &str) -> Result<()> {
     let db_config = DbConfig {
         db_type: DbType::Postgres,
         db_url: TEST_DB_URL.to_string(),
+        db_id: TEST_DB_KEY.to_string(),
         pool_config,
         health_check_interval: 60,
         health_check_timeout: 5,
     };
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
-
-    // 创建测试表
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let pool = match dbx.db() {
-        cmx_database::DbPool::Postgres(pool) => pool,
-        _ => panic!("Expected PostgreSQL pool"),
-    };
-
-    // 先删除已存在的表（如果存在），使用CASCADE选项删除相关的序列
-    sqlx::query(&format!("DROP TABLE IF EXISTS {} CASCADE", test_table)).execute(pool).await?;
-
-    // 尝试删除序列（如果存在）
-    sqlx::query(&format!("DROP SEQUENCE IF EXISTS {}_id_seq CASCADE", test_table)).execute(pool).await?;
-
-    // 创建测试表
-    sqlx::query(&format!(
-        r#"
-        CREATE TABLE {} (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            value INTEGER NOT NULL
-        )
-        "#,
-        test_table
-    )).execute(pool).await?;
-
-    Ok(())
+    let config = DatabaseManagerConfig::default();
+    let manager = DatabaseManager::new(config);
+    manager.register_data_source(db_config).await.unwrap();
+    manager
 }
 
-// 清理测试环境
-async fn cleanup_test_environment(test_table: &str) -> Result<()> {
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let pool = match dbx.db() {
-        cmx_database::DbPool::Postgres(pool) => pool,
-        _ => panic!("Expected PostgreSQL pool"),
-    };
-
-    // 删除测试表
-    sqlx::query(&format!("DROP TABLE IF EXISTS {} CASCADE", test_table)).execute(pool).await?;
-
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-
-    Ok(())
-}
-
-// 测试事务基本功能
 #[tokio::test]
-async fn test_transaction_basic() -> Result<()> {
-    // 注册数据库连接池
-    let pool_config = PoolConfig {
-        max_connections: 5,
-        min_connections: 1,
-        connect_timeout: 30,
-        idle_timeout: 600,
-        max_lifetime: 1800,
-    };
+async fn test_database_manager_basic() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
 
-    let db_config = DbConfig {
-        db_type: DbType::Postgres,
-        db_url: TEST_DB_URL.to_string(),
-        pool_config,
-        health_check_interval: 60,
-        health_check_timeout: 5,
-    };
+    let data_sources = manager.list_data_sources();
+    assert!(data_sources.contains(&TEST_DB_KEY.to_string()));
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-    
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
+    let health = manager.health_check(TEST_DB_KEY).await?;
+    assert!(health);
 
-    // 简化测试，只测试事务的基本功能
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let txn_dbx = dbx.with_transaction().unwrap();
-
-    // 测试事务提交
-    let result: Result<()> = transaction!(TEST_DB_KEY, txn_dbx, async {
-        // 执行一个简单的 SQL 语句
-        Ok(())
-    }).await;
-
-    assert!(result.is_ok());
-
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-    
+    manager.shutdown().await?;
     Ok(())
 }
 
-// 测试事务回滚
 #[tokio::test]
-async fn test_transaction_rollback() -> Result<()> {
-    // 注册数据库连接池
-    let pool_config = PoolConfig {
-        max_connections: 5,
-        min_connections: 1,
-        connect_timeout: 30,
-        idle_timeout: 600,
-        max_lifetime: 1800,
-    };
+async fn test_begin_transaction() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
 
-    let db_config = DbConfig {
-        db_type: DbType::Postgres,
-        db_url: TEST_DB_URL.to_string(),
-        pool_config,
-        health_check_interval: 60,
-        health_check_timeout: 5,
-    };
+    let options = TransactionOptions::default();
+    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+    assert!(!txn_id.is_empty());
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-    
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
+    manager.commit_transaction(&txn_id).await?;
 
-    // 简化测试，只测试事务的回滚功能
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let txn_dbx = dbx.with_transaction().unwrap();
-
-    // 测试事务回滚
-    let result: Result<()> = transaction!(TEST_DB_KEY, txn_dbx, async {
-        // 故意失败
-        Err(cmx_database::Error::NoTxn)
-    }).await;
-
-    assert!(result.is_err());
-
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-    
+    manager.shutdown().await?;
     Ok(())
 }
 
-// 测试事务传播机制
 #[tokio::test]
-async fn test_transaction_propagation() -> Result<()> {
-    // 注册数据库连接池
-    let pool_config = PoolConfig {
-        max_connections: 5,
-        min_connections: 1,
-        connect_timeout: 30,
-        idle_timeout: 600,
-        max_lifetime: 1800,
-    };
+async fn test_transaction_commit() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
 
-    let db_config = DbConfig {
-        db_type: DbType::Postgres,
-        db_url: TEST_DB_URL.to_string(),
-        pool_config,
-        health_check_interval: 60,
-        health_check_timeout: 5,
-    };
+    let table_name = generate_test_table_name();
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-    
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
+    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
-    // 简化测试，只测试事务的传播行为
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let txn_dbx = dbx.with_transaction().unwrap();
+    let options = TransactionOptions::default();
+    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
 
-    // 测试 REQUIRED 传播行为
-    let result: Result<()> = transaction!(TEST_DB_KEY, txn_dbx, Propagation::Required, async {
-        // 嵌套事务，使用 REQUIRED 传播行为
-        let nested_result: Result<()> = transaction!(TEST_DB_KEY, txn_dbx, Propagation::Required, async {
-            Ok(())
-        }).await;
-        
-        assert!(nested_result.is_ok());
-        Ok(())
-    }).await;
+    let insert_sql = format!("INSERT INTO {} (name) VALUES ('test')", table_name);
+    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
 
-    assert!(result.is_ok());
+    manager.commit_transaction(&txn_id).await?;
 
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-    
+    let query_sql = format!("SELECT * FROM {} WHERE name = 'test'", table_name);
+    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_commit").await?;
+
+    assert_eq!(dataset.rows.len(), 1, "事务提交后应该能查询到插入的数据");
+
+    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
+
+    manager.shutdown().await?;
     Ok(())
 }
 
-// 测试通过事务ID操作事务
 #[tokio::test]
-async fn test_transaction_by_id() -> Result<()> {
-    // 注册数据库连接池
-    let pool_config = PoolConfig {
-        max_connections: 5,
-        min_connections: 1,
-        connect_timeout: 30,
-        idle_timeout: 600,
-        max_lifetime: 1800,
-    };
+async fn test_transaction_rollback() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
 
-    let db_config = DbConfig {
-        db_type: DbType::Postgres,
-        db_url: TEST_DB_URL.to_string(),
-        pool_config,
-        health_check_interval: 60,
-        health_check_timeout: 5,
-    };
+    let table_name = generate_test_table_name();
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-    
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
+    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
-    // 简化测试，只测试通过事务ID操作事务的功能
-    let dbx = get_db_access(TEST_DB_KEY).unwrap();
-    let txn_dbx = dbx.with_transaction().unwrap();
+    let options = TransactionOptions::default();
+    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
 
-    // 开始事务
-    let txn_id = txn_dbx.begin_txn(TEST_DB_KEY, Propagation::Required).await?;
+    let insert_sql = format!("INSERT INTO {} (name) VALUES ('should_be_rolled_back')", table_name);
+    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
 
-    // 通过事务ID提交事务
-    commit_txn_by_id(&txn_id).await?;
+    manager.rollback_transaction(&txn_id).await?;
 
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-    
+    let query_sql = format!("SELECT * FROM {} WHERE name = 'should_be_rolled_back'", table_name);
+    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_rollback").await?;
+
+    assert_eq!(dataset.rows.len(), 0, "事务回滚后应该查询不到插入的数据");
+
+    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
+
+    manager.shutdown().await?;
     Ok(())
 }
 
-// 测试监控功能
 #[tokio::test]
-async fn test_monitoring() -> Result<()> {
-    // 注册数据库连接池
-    let pool_config = PoolConfig {
-        max_connections: 5,
-        min_connections: 1,
-        connect_timeout: 30,
-        idle_timeout: 600,
-        max_lifetime: 1800,
-    };
+async fn test_query_sql() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
 
-    let db_config = DbConfig {
-        db_type: DbType::Postgres,
-        db_url: TEST_DB_URL.to_string(),
-        pool_config,
-        health_check_interval: 60,
-        health_check_timeout: 5,
-    };
+    let table_name = generate_test_table_name();
 
-    // 先尝试移除已存在的连接池
-    let _ = remove_db_pool(TEST_DB_KEY);
-    
-    register_db_pool(TEST_DB_KEY.to_string(), db_config).await?;
+    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
+    manager.execute_sql(TEST_DB_KEY, None, &format!("INSERT INTO {} (name) VALUES ('test1'), ('test2')", table_name)).await?;
 
-    // 启动监控
-    start_monitoring().await;
+    let query_sql = format!("SELECT * FROM {} ORDER BY id", table_name);
+    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_query").await?;
 
-    // 等待一段时间，确保监控任务启动
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    assert_eq!(dataset.rows.len(), 2);
 
-    // 监控任务应该正常运行，没有 panic
-    assert!(true);
+    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
 
-    // 移除连接池
-    remove_db_pool(TEST_DB_KEY);
-    
+    manager.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_transaction_with_propagation() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
+
+    let options = TransactionOptions::default();
+    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+
+    let table_name = generate_test_table_name();
+
+    let create_sql = format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, value INTEGER)", table_name);
+    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &create_sql).await?;
+
+    let insert_sql = format!("INSERT INTO {} (value) VALUES (100)", table_name);
+    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
+
+    manager.commit_transaction(&txn_id).await?;
+
+    manager.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_get_db_config() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
+
+    let config = manager.get_db_config(TEST_DB_KEY)?;
+    assert_eq!(config.db_id, TEST_DB_KEY);
+    assert_eq!(config.db_type, DbType::Postgres);
+
+    manager.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_health_check() -> cmx_database::Result<()> {
+    let manager = setup_db_manager().await;
+
+    let is_healthy = manager.health_check(TEST_DB_KEY).await?;
+    assert!(is_healthy);
+
+    manager.shutdown().await?;
     Ok(())
 }

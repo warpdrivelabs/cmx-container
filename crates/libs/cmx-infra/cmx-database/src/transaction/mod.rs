@@ -10,10 +10,11 @@
 
 // 子模块
 mod core;
-mod metadata;
-mod registry;
+pub mod metadata;
+pub mod registry;
 mod conversion;
 mod api;
+pub mod context;
 
 // 导出核心类型和函数
 pub use core::{Dbx, DbTransaction, TxnHolder, IsolationLevel, Propagation};
@@ -23,6 +24,9 @@ pub use metadata::{TransactionStatus, TransactionMetadata, register_txn, update_
 
 // 导出注册表相关函数
 pub use registry::{get_txn_holder_by_id};
+
+// 导出上下文相关类型和函数
+pub use context::{TransactionFrame, TransactionContextStack, SuspendedTransaction};
 
 // 导出API相关函数
 pub use api::{commit_txn_by_id, rollback_txn_by_id, get_dbx_by_db_id, with_transaction_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, query_sql_by_ids, query_sql_with_params_by_ids};

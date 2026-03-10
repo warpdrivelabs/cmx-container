@@ -26,6 +26,8 @@ pub struct Dbx {
     txn_holder: Arc<Mutex<Option<TxnHolder>>>,
     /// 是否启用事务，为false时不能使用事务功能
     with_txn: bool,
+    /// 挂起的事务栈，用于保存被挂起的事务
+    suspended_txns: Arc<Mutex<Vec<TxnHolder>>>,
 }
 
 impl Dbx {
@@ -43,6 +45,8 @@ impl Dbx {
             // 初始化为空的事务持有者
             txn_holder: Arc::default(),
             with_txn,
+            // 初始化挂起事务栈
+            suspended_txns: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -63,75 +67,141 @@ impl Dbx {
         // 根据传播行为执行不同的逻辑
         match propagation {
             Propagation::Required => {
-                // 如果存在事务则加入，否则创建新事务
-                let mut txh_g = self.txn_holder.lock().unwrap();
-                if txh_g.is_some() {
-                    if let Some(txh) = txh_g.as_mut() {
-                        // 增加引用计数
-                        txh.inc();
-                        Ok(txh.txn_id().to_string())
-                    } else {
-                        Err(Error::NoTxn)
-                    }
-                } else {
-                    // 释放锁
-                    drop(txh_g);
-                    // 创建新事务
-                    self.create_new_txn(db_id).await
-                }
+                self.do_required(db_id).await
             },
             Propagation::RequiresNew => {
-                // 创建新事务，挂起当前事务
-                // 注意：这里简化实现，实际应该保存当前事务状态
-                // 由于当前实现不支持事务挂起，我们先创建新事务
-                Dbx::with_transaction(&self)?.create_new_txn(db_id).await
+                self.do_requires_new(db_id).await
             },
             Propagation::Supports => {
-                // 如果存在事务则加入，否则以非事务方式执行
-                let mut txh_g = self.txn_holder.lock().unwrap();
-                if txh_g.is_some() {
-                    if let Some(txh) = txh_g.as_mut() {
-                        // 增加引用计数
-                        txh.inc();
-                        Ok(txh.txn_id().to_string())
-                    } else {
-                        Err(Error::NoTxn)
-                    }
-                } else {
-                    // 以非事务方式执行，返空字符串
-                    Ok("non-transactional".to_string())
-                }
+                self.do_supports(db_id).await
             },
             Propagation::NotSupported => {
-                // 以非事务方式执行，挂起当前事务
-                // 注意：这里简化实现，实际应该保存当前事务状态
-                Ok("non-transactional".to_string())
+                self.do_not_supported(db_id).await
             },
             Propagation::Mandatory => {
-                // 必须在事务中执行，否则抛出异常
-                let mut txh_g = self.txn_holder.lock().unwrap();
-                if txh_g.is_some() {
-                    if let Some(txh) = txh_g.as_mut() {
-                        // 增加引用计数
-                        txh.inc();
-                        Ok(txh.txn_id().to_string())
-                    } else {
-                        Err(Error::NoTxn)
-                    }
-                } else {
-                    Err(Error::TransactionRequired)
-                }
+                self.do_mandatory(db_id).await
             },
             Propagation::Never => {
-                // 必须以非事务方式执行，否则抛出异常
-                let txh_g = self.txn_holder.lock().unwrap();
-                if txh_g.is_some() {
-                    Err(Error::TransactionNotAllowed)
-                } else {
-                    Ok("non-transactional".to_string())
-                }
+                self.do_never(db_id).await
             },
         }
+    }
+
+    /// Required: 如果存在事务则加入，否则创建新事务
+    async fn do_required(&self, db_id: &str) -> Result<String> {
+        let mut txh_g = self.txn_holder.lock().unwrap();
+        if txh_g.is_some() {
+            if let Some(txh) = txh_g.as_mut() {
+                txh.inc();
+                Ok(txh.txn_id().to_string())
+            } else {
+                Err(Error::NoTxn)
+            }
+        } else {
+            drop(txh_g);
+            self.create_new_txn(db_id).await
+        }
+    }
+
+    /// RequiresNew: 创建新事务，挂起当前事务
+    async fn do_requires_new(&self, db_id: &str) -> Result<String> {
+        // 保存当前事务状态（挂起）
+        let mut suspended_txn: Option<TxnHolder> = None;
+        
+        {
+            let mut txh_g = self.txn_holder.lock().unwrap();
+            if let Some(txh) = txh_g.take() {
+                suspended_txn = Some(txh);
+            }
+        }
+        
+        // 创建新事务
+        let txn_id = self.create_new_txn(db_id).await?;
+        
+        // 将挂起的事务保存到栈中
+        if let Some(suspended) = suspended_txn {
+            self.suspended_txns.lock().unwrap().push(suspended);
+        }
+        
+        Ok(txn_id)
+    }
+
+    /// Supports: 如果存在事务则加入，否则以非事务方式执行
+    async fn do_supports(&self, _db_id: &str) -> Result<String> {
+        let mut txh_g = self.txn_holder.lock().unwrap();
+        if txh_g.is_some() {
+            if let Some(txh) = txh_g.as_mut() {
+                txh.inc();
+                Ok(txh.txn_id().to_string())
+            } else {
+                Err(Error::NoTxn)
+            }
+        } else {
+            Ok("non-transactional".to_string())
+        }
+    }
+
+    /// NotSupported: 以非事务方式执行，挂起当前事务
+    async fn do_not_supported(&self, _db_id: &str) -> Result<String> {
+        // 保存当前事务状态（挂起）
+        let mut suspended_txn: Option<TxnHolder> = None;
+        
+        {
+            let mut txh_g = self.txn_holder.lock().unwrap();
+            if let Some(txh) = txh_g.take() {
+                suspended_txn = Some(txh);
+            }
+        }
+        
+        // 将挂起的事务保存到栈中
+        if let Some(suspended) = suspended_txn {
+            self.suspended_txns.lock().unwrap().push(suspended);
+        }
+        
+        Ok("non-transactional".to_string())
+    }
+
+    /// Mandatory: 必须在事务中执行
+    async fn do_mandatory(&self, _db_id: &str) -> Result<String> {
+        let mut txh_g = self.txn_holder.lock().unwrap();
+        if txh_g.is_some() {
+            if let Some(txh) = txh_g.as_mut() {
+                txh.inc();
+                Ok(txh.txn_id().to_string())
+            } else {
+                Err(Error::NoTxn)
+            }
+        } else {
+            Err(Error::TransactionRequired)
+        }
+    }
+
+    /// Never: 必须以非事务方式执行
+    async fn do_never(&self, _db_id: &str) -> Result<String> {
+        let txh_g = self.txn_holder.lock().unwrap();
+        if txh_g.is_some() {
+            Err(Error::TransactionNotAllowed)
+        } else {
+            Ok("non-transactional".to_string())
+        }
+    }
+
+    /// 恢复被挂起的事务
+    pub fn resume_suspended_txn(&self) {
+        if let Some(suspended) = self.suspended_txns.lock().unwrap().pop() {
+            let mut txh_g = self.txn_holder.lock().unwrap();
+            if txh_g.is_none() {
+                *txh_g = Some(suspended);
+            } else {
+                // 当前有活跃事务，将挂起的事务放回栈中
+                self.suspended_txns.lock().unwrap().push(suspended);
+            }
+        }
+    }
+
+    /// 获取挂起事务的数量
+    pub fn suspended_txn_count(&self) -> usize {
+        self.suspended_txns.lock().unwrap().len()
     }
 
     /// 开始事务（默认传播行为：Required）
@@ -195,6 +265,11 @@ impl Dbx {
     /// # 返回值
     /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
     pub async fn rollback_txn(&self) -> Result<()> {
+        // 检查是否启用了事务
+        if !self.with_txn {
+            return Err(Error::CannotBeginTxnWithTxnFalse);
+        }
+        
         let mut txn_id: Option<String> = None;
         let mut should_rollback = false;
         let mut txn_to_rollback = None;
@@ -337,7 +412,12 @@ impl Dbx {
     /// # 返回值
     /// * `Result<Self>` - 成功返回支持事务的 Dbx 实例，失败返回错误
     pub fn with_transaction(&self) -> Result<Self> {
-        Dbx::new(self.db_pool.clone(), true)
+        Ok(Dbx {
+            db_pool: self.db_pool.clone(),
+            txn_holder: Arc::default(),
+            with_txn: true,
+            suspended_txns: Arc::new(Mutex::new(Vec::new())),
+        })
     }
     
 }

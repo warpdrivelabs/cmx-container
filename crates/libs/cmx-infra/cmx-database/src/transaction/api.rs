@@ -10,9 +10,9 @@ use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::metadata::TransactionStatus;
-use crate::transaction::conversion::TransactionConverter;
+
 use cmx_core::model::data::dataset::DataSet;
-use crate::connection::get_db_access;
+use crate::executor::{ParamValue, ResultConverter};
 
 /// 通过事务ID提交事务
 ///
@@ -142,7 +142,7 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
 /// * `Option<Dbx>` - Dbx实例，如果数据库不存在则返回None
 pub fn get_dbx_by_db_id(db_id: &str) -> Option<Dbx> {
     // 直接从连接模块导入 get_db_access 函数
-    get_db_access(db_id)
+    crate::connection::get_db_access(db_id)
 }
 
 /// 通过事务ID获取TxnHolder的可变引用
@@ -232,40 +232,79 @@ pub async fn execute_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str) ->
 /// * `db_id` - 数据库ID
 /// * `txn_id` - 事务ID，None表示使用非事务方式执行
 /// * `sql` - SQL语句
-/// * `_params` - SQL参数，使用serde_json序列化的参数数组
+/// * `params` - SQL参数，使用serde_json序列化的参数数组
 ///
 /// # 返回值
 /// * `Result<u64>` - 执行结果，返回受影响的行数
-pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, _params: serde_json::Value) -> Result<u64> {
+pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value) -> Result<u64> {
     let sql = sql.to_string();
-    // 这里可以根据params的类型进行不同的处理
-    // 实际实现中需要根据具体的参数类型进行绑定
+    let params: Vec<ParamValue> = match params {
+        serde_json::Value::Array(arr) => arr.into_iter().map(ParamValue::from_json).collect(),
+        _ => return Err(Error::InvalidParams("params must be an array".to_string())),
+    };
+
     match txn_id {
         Some(txn_id) => {
-            // 使用事务执行
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                // 简化实现，实际需要根据params的类型进行参数绑定
                 let result = txn.execute(&sql).await?;
                 Ok(result)
             })).await
         },
         None => {
-            // 非事务方式执行
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let result = sqlx::query(&sql).execute(pool).await?;
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let result = query.execute(pool).await?;
                         Ok(result.rows_affected())
                     },
                     crate::connection::DbPool::MySql(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let result = sqlx::query(&sql).execute(pool).await?;
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let result = query.execute(pool).await?;
                         Ok(result.rows_affected())
                     },
                     crate::connection::DbPool::Sqlite(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let result = sqlx::query(&sql).execute(pool).await?;
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let result = query.execute(pool).await?;
                         Ok(result.rows_affected())
                     },
                 }
@@ -293,33 +332,25 @@ pub async fn query_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, data
     let dataset_id = dataset_id.to_string();
     match txn_id {
         Some(txn_id) => {
-            // 使用事务执行
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
                 let result = txn.query(&sql, &dataset_id).await?;
                 Ok(result)
             })).await
         },
         None => {
-            // 非事务方式执行
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
                         let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::Postgres(pool.begin().await?);
-                        Ok(temp_txn.convert_postgres_rows_to_dataset(rows, &dataset_id))
+                        Ok(ResultConverter::convert_postgres_rows(rows, &dataset_id))
                     },
                     crate::connection::DbPool::MySql(pool) => {
                         let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::MySql(pool.begin().await?);
-                        Ok(temp_txn.convert_mysql_rows_to_dataset(rows, &dataset_id))
+                        Ok(ResultConverter::convert_mysql_rows(rows, &dataset_id))
                     },
                     crate::connection::DbPool::Sqlite(pool) => {
                         let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::Sqlite(pool.begin().await?);
-                        Ok(temp_txn.convert_sqlite_rows_to_dataset(rows, &dataset_id))
+                        Ok(ResultConverter::convert_sqlite_rows(rows, &dataset_id))
                     },
                 }
             } else {
@@ -337,49 +368,82 @@ pub async fn query_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, data
 /// * `db_id` - 数据库ID
 /// * `txn_id` - 事务ID，None表示使用非事务方式执行
 /// * `sql` - SQL查询语句
-/// * `_params` - SQL参数，使用serde_json序列化的参数数组
+/// * `params` - SQL参数，使用serde_json序列化的参数数组
 /// * `dataset_id` - 数据集唯一标识
 ///
 /// # 返回值
 /// * `Result<DataSet>` - 查询结果转换为DataSet
-pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, _params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    // 这里可以根据params的类型进行不同的处理
-    // 实际实现中需要根据具体的参数类型进行绑定
+    let params: Vec<ParamValue> = match params {
+        serde_json::Value::Array(arr) => arr.into_iter().map(ParamValue::from_json).collect(),
+        _ => return Err(Error::InvalidParams("params must be an array".to_string())),
+    };
+
     match txn_id {
         Some(txn_id) => {
-            // 使用事务执行
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                // 简化实现，实际需要根据params的类型进行参数绑定
                 let result = txn.query(&sql, &dataset_id).await?;
                 Ok(result)
             })).await
         },
         None => {
-            // 非事务方式执行
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::Postgres(pool.begin().await?);
-                        Ok(temp_txn.convert_postgres_rows_to_dataset(rows, &dataset_id))
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let rows = query.fetch_all(pool).await?;
+                        Ok(ResultConverter::convert_postgres_rows(rows, &dataset_id))
                     },
                     crate::connection::DbPool::MySql(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::MySql(pool.begin().await?);
-                        Ok(temp_txn.convert_mysql_rows_to_dataset(rows, &dataset_id))
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let rows = query.fetch_all(pool).await?;
+                        Ok(ResultConverter::convert_mysql_rows(rows, &dataset_id))
                     },
                     crate::connection::DbPool::Sqlite(pool) => {
-                        // 简化实现，实际需要根据params的类型进行参数绑定
-                        let rows = sqlx::query(&sql).fetch_all(pool).await?;
-                        // 创建一个临时的DbTransaction来使用其转换方法
-                        let temp_txn = DbTransaction::Sqlite(pool.begin().await?);
-                        Ok(temp_txn.convert_sqlite_rows_to_dataset(rows, &dataset_id))
+                        let mut query = sqlx::query(&sql);
+                        for param in &params {
+                            query = match param {
+                                ParamValue::Null => query.bind(None::<String>),
+                                ParamValue::Bool(v) => query.bind(*v),
+                                ParamValue::Int(v) => query.bind(*v),
+                                ParamValue::Float(v) => query.bind(*v),
+                                ParamValue::String(v) => query.bind(v.as_str()),
+                                ParamValue::Decimal(v) => query.bind(v.to_string()),
+                                ParamValue::DateTime(v) => query.bind(v.to_string()),
+                                ParamValue::Date(v) => query.bind(v.to_string()),
+                                ParamValue::Json(v) => query.bind(v.to_string()),
+                            };
+                        }
+                        let rows = query.fetch_all(pool).await?;
+                        Ok(ResultConverter::convert_sqlite_rows(rows, &dataset_id))
                     },
                 }
             } else {

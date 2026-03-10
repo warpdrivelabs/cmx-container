@@ -4,7 +4,7 @@ use sqlx::mysql::MySqlPoolOptions;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crate::config::{DbConfig, DbType};
 use crate::transaction::Dbx;
@@ -35,6 +35,10 @@ pub trait DatabasePool: Send + Sync {
 pub struct DatabasePoolImpl {
     dbx: Dbx,
     config: DbConfig,
+    /// 活跃连接计数
+    active_connections: Arc<std::sync::atomic::AtomicUsize>,
+    /// 是否正在关闭
+    is_closing: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl DatabasePoolImpl {
@@ -44,7 +48,47 @@ impl DatabasePoolImpl {
         Ok(Self {
             dbx,
             config,
+            active_connections: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            is_closing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
+    }
+
+    /// 获取 Dbx（增加活跃计数）
+    pub fn acquire(&self) -> Dbx {
+        self.active_connections.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.dbx.clone()
+    }
+
+    /// 释放 Dbx（减少活跃计数）
+    pub fn release(&self) {
+        self.active_connections.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// 检查是否正在关闭
+    pub fn is_closing(&self) -> bool {
+        self.is_closing.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 标记为正在关闭
+    pub fn mark_closing(&self) {
+        self.is_closing.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// 获取活跃连接数
+    pub fn active_count(&self) -> usize {
+        self.active_connections.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 等待所有活跃连接关闭
+    pub async fn wait_for_idle(&self, timeout: std::time::Duration) -> bool {
+        let start = std::time::Instant::now();
+        while self.active_count() > 0 {
+            if start.elapsed() > timeout {
+                return false;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+        true
     }
 }
 
@@ -52,15 +96,15 @@ impl DatabasePool for DatabasePoolImpl {
     fn get_dbx(&self) -> Dbx {
         self.dbx.clone()
     }
-    
+
     fn get_config(&self) -> DbConfig {
         self.config.clone()
     }
 }
 
 /// 全局注册器
-pub struct DbRegistry {
-    pools: RwLock<HashMap<String, Box<dyn DatabasePool>>>,
+pub(crate) struct DbRegistry {
+    pools: RwLock<HashMap<String, DatabasePoolImpl>>,
 }
 
 impl DbRegistry {
@@ -70,59 +114,131 @@ impl DbRegistry {
             pools: RwLock::new(HashMap::new()),
         }
     }
-    
+
+
     /// 注册数据库连接池
-    pub async fn register(&self, key: String, config: DbConfig) -> crate::Result<()> {
+    pub async fn register(&self,  config: DbConfig) -> crate::Result<()> {
+        let db_key = config.db_id.clone();
         let pool = DatabasePoolImpl::new(config).await?;
         let mut pools = self.pools.write().unwrap();
-        pools.insert(key, Box::new(pool));
+        pools.insert(db_key, pool);
         Ok(())
     }
-    
-    /// 更新数据库连接池配置
+
+    /// 更新数据库连接池配置（优雅关闭旧池）
     pub async fn update(&self, key: &str, config: DbConfig) -> crate::Result<()> {
+        // 标记旧池为关闭状态
+        {
+            let pools = self.pools.read().unwrap();
+            if let Some(pool) = pools.get(key) {
+                pool.mark_closing();
+            }
+        }
+
+        // 等待旧池中的活跃连接关闭
+        {
+            let pools = self.pools.read().unwrap();
+            if let Some(pool) = pools.get(key) {
+                let timeout = std::time::Duration::from_secs(30);
+                if !pool.wait_for_idle(timeout).await {
+                    log::warn!("等待旧连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
+                }
+            }
+        }
+
+        // 创建新池并替换
         let pool = DatabasePoolImpl::new(config).await?;
         let mut pools = self.pools.write().unwrap();
-        pools.insert(key.to_string(), Box::new(pool));
+        pools.insert(key.to_string(), pool);
         Ok(())
     }
-    
-    /// 获取数据库连接池
-    pub fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
-        let pools = self.pools.read().unwrap();
-        pools.get(key).map(|pool| (pool.get_dbx(), pool.get_config()))
-    }
-    
-    /// 注销数据库连接池
-    pub fn unregister(&self, key: &str) -> Option<Box<dyn DatabasePool>> {
+
+    /// 注销数据库连接池（优雅关闭）
+    pub async fn unregister(&self, key: &str) -> Option<DatabasePoolImpl> {
+        // 标记为关闭
+        {
+            let pools = self.pools.read().unwrap();
+            if let Some(pool) = pools.get(key) {
+                pool.mark_closing();
+            }
+        }
+
+        // 等待活跃连接关闭
+        {
+            let pools = self.pools.read().unwrap();
+            if let Some(pool) = pools.get(key) {
+                let timeout = std::time::Duration::from_secs(30);
+                if !pool.wait_for_idle(timeout).await {
+                    log::warn!("等待连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
+                }
+            }
+        }
+
+        // 从注册表中移除
         let mut pools = self.pools.write().unwrap();
         pools.remove(key)
     }
-    
+
     /// 获取所有数据库连接池名称
     pub fn list(&self) -> Vec<String> {
         let pools = self.pools.read().unwrap();
         pools.keys().cloned().collect()
     }
-    
+
+    /// 获取数据库连接池
+    pub fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
+        let pools = self.pools.read().unwrap();
+        pools.get(key).map(|pool| (pool.get_dbx(), pool.get_config()))
+    }
+
     /// 获取数据库访问对象
     pub fn get_db_access(&self, key: &str) -> Option<Dbx> {
         self.get(key).map(|(dbx, _)| dbx)
     }
-    
+
     /// 获取数据库配置
     pub fn get_db_config(&self, key: &str) -> Option<DbConfig> {
         self.get(key).map(|(_, config)| config)
     }
 }
 
-// 全局实例
+use std::sync::OnceLock;
+use crate::error::Result;
+
 static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();
 
-/// 获取全局注册器实例
-pub fn get_registry() -> &'static Arc<DbRegistry> {
+pub fn get_global_registry() -> &'static Arc<DbRegistry> {
     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
 }
+
+pub async fn register_db_pool(config: DbConfig) -> Result<()> {
+    get_global_registry().register(config).await
+}
+
+pub fn remove_db_pool(key: &str) {
+    let registry = get_global_registry();
+    let rt = tokio::runtime::Handle::current();
+    rt.block_on(async {
+        registry.unregister(key).await;
+    });
+}
+
+pub fn get_db_access(key: &str) -> Option<Dbx> {
+    get_global_registry().get_db_access(key)
+}
+
+pub fn list_db_pools() -> Vec<String> {
+    get_global_registry().list()
+}
+
+// // 全局实例
+// static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();
+//
+// /// 获取全局注册器实例
+// pub fn get_registry() -> &'static Arc<DbRegistry> {
+//     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
+// }
+
 
 /// 创建数据库访问对象
 async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
@@ -138,7 +254,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
 ///
 /// # 返回值
 /// * `sqlx::Result<DbPool>` - 成功返回数据库连接池，失败返回错误
-pub async fn new_db_pool(config: &DbConfig) -> sqlx::Result<DbPool> {
+ async fn new_db_pool(config: &DbConfig) -> sqlx::Result<DbPool> {
     let pool_config = &config.pool_config;
 
     match config.db_type {
@@ -175,48 +291,3 @@ pub async fn new_db_pool(config: &DbConfig) -> sqlx::Result<DbPool> {
     }
 }
 
-/// 注册一个数据库连接池
-pub async fn register_db_pool(key: String, config: DbConfig) -> crate::Result<()> {
-    get_registry().register(key, config).await
-}
-
-/// 更新数据库连接池配置
-pub async fn update_db_pool(key: &str, config: DbConfig) -> crate::Result<()> {
-    get_registry().update(key, config).await
-}
-
-/// 移除数据库连接池
-pub fn remove_db_pool(key: &str) {
-    get_registry().unregister(key);
-}
-
-/// 获取数据库访问对象
-pub fn get_db_access(key: &str) -> Option<Dbx> {
-    get_registry().get_db_access(key)
-}
-
-/// 获取数据库配置
-pub fn get_db_config(key: &str) -> Option<DbConfig> {
-    get_registry().get_db_config(key)
-}
-
-/// 获取数据库访问对象，支持超时控制
-///
-/// # 参数
-/// * `key` - 数据库标识符
-/// * `timeout` - 超时时间
-///
-/// # 返回值
-/// * `Result<Dbx>` - 成功返回数据库访问对象，失败返回错误
-pub async fn get_db_access_with_timeout(key: &str, timeout: std::time::Duration) -> crate::Result<Dbx> {
-    tokio::time::timeout(timeout, async move {
-        loop {
-            if let Some(dbx) = get_db_access(key) {
-                return Ok(dbx);
-            }
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .map_err(|_| crate::Error::ConnectionTimeout)?
-}

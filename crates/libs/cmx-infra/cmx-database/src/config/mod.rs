@@ -59,6 +59,9 @@ pub struct DbConfig {
     pub db_type: DbType,
     /// 数据库连接 URL
     pub db_url: String,
+    /// db id
+    pub db_id: String,
+
     /// 连接池配置
     pub pool_config: PoolConfig,
     /// 健康检查间隔（秒）
@@ -71,6 +74,7 @@ impl Default for DbConfig {
     fn default() -> Self {
         Self {
             db_type: DbType::Postgres,
+            db_id: "default".to_string(),
             db_url: "postgresql://localhost/test".to_string(),
             pool_config: PoolConfig::default(),
             health_check_interval: 60,

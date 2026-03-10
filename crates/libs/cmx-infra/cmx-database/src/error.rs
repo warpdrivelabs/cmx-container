@@ -38,6 +38,8 @@ pub enum Error {
 	UnsupportedDbType,
 	/// 数据库不存在
 	NoDb,
+	/// 无效的参数
+	InvalidParams(String),
 	
 	// -- Externals
 	/// SQLx 错误
