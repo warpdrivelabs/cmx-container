@@ -90,7 +90,7 @@ pub enum ConfigError {
         /// 错误信息
         message: String,
     },
-    
+
     /// 无效的优先级错误
     #[error("无效的优先级: {priority}, 优先级必须在 0-100 之间")]
     InvalidPriority {

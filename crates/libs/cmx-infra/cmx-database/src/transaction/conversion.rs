@@ -8,11 +8,10 @@
 use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_core::model::cell::{DataValue, Field, FieldType};
 use sqlx::{Row as SqlxRow, Column};
-use rust_decimal::Decimal;
-use std::str::FromStr;
 use crate::transaction::core::DbTransaction;
 
 /// 事务转换器trait，定义转换方法
+#[allow(dead_code)]
 pub trait TransactionConverter {
     /// 将PostgreSQL行转换为DataSet
     ///
@@ -205,82 +204,67 @@ impl TransactionConverter for DbTransaction {
 
     /// 从PostgreSQL行中获取值
     fn get_postgres_value_from_row(&self, row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
-        // 根据不同的列类型进行转换，使用try_get来处理NULL值
-        if let Ok(value) = row.try_get::<String, _>(index) {
-            DataValue::String(value)
-        } else if let Ok(value) = row.try_get::<i64, _>(index) {
-            DataValue::Int(value)
-        } else if let Ok(value) = row.try_get::<f64, _>(index) {
-            DataValue::Float(value)
-        } else if let Ok(value) = row.try_get::<bool, _>(index) {
-            DataValue::Bool(value)
+        let type_info = row.column(index).type_info();
+        let type_name = type_info.to_string().to_lowercase();
+        
+        if type_name.contains("int") {
+            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
+            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("bool") {
+            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+        } else if type_name.contains("decimal") || type_name.contains("numeric") {
+            row.try_get::<String, _>(index)
+                .ok()
+                .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
+                .map(DataValue::Decimal)
+                .unwrap_or(DataValue::Null)
         } else {
-            // 对于其他类型，尝试转换为字符串
-            match row.try_get::<String, _>(index) {
-                Ok(value) => {
-                    // 尝试解析为Decimal
-                    if let Ok(decimal) = Decimal::from_str(&value) {
-                        DataValue::Decimal(decimal)
-                    } else {
-                        DataValue::String(value)
-                    }
-                },
-                Err(_) => DataValue::Null,
-            }
+            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
 
     /// 从MySQL行中获取值
     fn get_mysql_value_from_row(&self, row: &sqlx::mysql::MySqlRow, index: usize) -> DataValue {
-        // 根据不同的列类型进行转换，使用try_get来处理NULL值
-        if let Ok(value) = row.try_get::<String, _>(index) {
-            DataValue::String(value)
-        } else if let Ok(value) = row.try_get::<i64, _>(index) {
-            DataValue::Int(value)
-        } else if let Ok(value) = row.try_get::<f64, _>(index) {
-            DataValue::Float(value)
-        } else if let Ok(value) = row.try_get::<bool, _>(index) {
-            DataValue::Bool(value)
+        let type_info = row.column(index).type_info();
+        let type_name = type_info.to_string().to_lowercase();
+        
+        if type_name.contains("int") {
+            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
+            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("bool") {
+            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+        } else if type_name.contains("decimal") || type_name.contains("numeric") {
+            row.try_get::<String, _>(index)
+                .ok()
+                .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
+                .map(DataValue::Decimal)
+                .unwrap_or(DataValue::Null)
         } else {
-            // 对于其他类型，尝试转换为字符串
-            match row.try_get::<String, _>(index) {
-                Ok(value) => {
-                    // 尝试解析为Decimal
-                    if let Ok(decimal) = Decimal::from_str(&value) {
-                        DataValue::Decimal(decimal)
-                    } else {
-                        DataValue::String(value)
-                    }
-                },
-                Err(_) => DataValue::Null,
-            }
+            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
 
     /// 从SQLite行中获取值
     fn get_sqlite_value_from_row(&self, row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
-        // 根据不同的列类型进行转换，使用try_get来处理NULL值
-        if let Ok(value) = row.try_get::<String, _>(index) {
-            DataValue::String(value)
-        } else if let Ok(value) = row.try_get::<i64, _>(index) {
-            DataValue::Int(value)
-        } else if let Ok(value) = row.try_get::<f64, _>(index) {
-            DataValue::Float(value)
-        } else if let Ok(value) = row.try_get::<bool, _>(index) {
-            DataValue::Bool(value)
+        let type_info = row.column(index).type_info();
+        let type_name = type_info.to_string().to_lowercase();
+        
+        if type_name.contains("int") {
+            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
+            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("bool") {
+            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+        } else if type_name.contains("decimal") || type_name.contains("numeric") {
+            row.try_get::<String, _>(index)
+                .ok()
+                .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
+                .map(DataValue::Decimal)
+                .unwrap_or(DataValue::Null)
         } else {
-            // 对于其他类型，尝试转换为字符串
-            match row.try_get::<String, _>(index) {
-                Ok(value) => {
-                    // 尝试解析为Decimal
-                    if let Ok(decimal) = Decimal::from_str(&value) {
-                        DataValue::Decimal(decimal)
-                    } else {
-                        DataValue::String(value)
-                    }
-                },
-                Err(_) => DataValue::Null,
-            }
+            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
 

@@ -21,6 +21,8 @@
 
 ### 1.1 [P0-BUG] `execute_sql_with_params_by_ids` 事务路径忽略参数
 
+**[未修复]**
+
 **文件**: `src/transaction/api.rs:246-251`
 
 **问题描述**: 当 `txn_id` 为 `Some` 时，虽然在函数开头解析了 `params`（行 241-244），但事务路径直接调用 `txn.execute(&sql)` 而非带参数版本，导致参数被完全忽略。
@@ -46,6 +48,8 @@ Some(txn_id) => {
 
 ### 1.2 [P0-BUG] `query_sql_with_params_by_ids` 事务路径忽略参数
 
+**[未修复]**
+
 **文件**: `src/transaction/api.rs:384-389`
 
 **问题描述**: 与 1.1 完全相同的问题。事务路径调用 `txn.query(&sql, &dataset_id)` 而非带参数版本。
@@ -67,6 +71,8 @@ Some(txn_id) => {
 ---
 
 ### 1.3 [P0-BUG] `with_transaction_by_id` 持有 MutexGuard 跨 await
+
+**[未修复]**
 
 **文件**: `src/transaction/api.rs:165-173`
 
@@ -120,7 +126,9 @@ where
 
 ### 1.4 [P0-BUG] `resume_suspended_txn` 死锁
 
-**文件**: `src/transaction/core.rs:190-199`
+**[已修复]** - 修复方式：在 core.rs:190-202 中先释放 `suspended_txns` 锁，然后再尝试获取 `txn_holder` 锁，最后在需要放回时重新获取 `suspended_txns` 锁，避免了死锁。
+
+**文件**: `src/transaction/core.rs:190-202`
 
 **问题描述**: 方法先获取 `suspended_txns` 的锁（行 191），在 `else` 分支中再次尝试获取同一锁（行 197），由于 `std::sync::Mutex` 不可重入，会导致**死锁**。
 
@@ -156,9 +164,11 @@ pub fn resume_suspended_txn(&self) {
 
 ---
 
-### 1.5 [P0-BUG] `remove_db_pool` 在异步上下文中调用 `block_on` 会 panic
+### 1.5 [P1-BUG] `remove_db_pool` 在异步上下文中调用 `block_on` 会 panic
 
-**文件**: `src/connection/mod.rs:218-224`
+**[已修复]** - 修复方式：在 connection/mod.rs:218-220 中将 `remove_db_pool` 改为 async 函数，直接调用异步的 `unregister`，移除了 `block_on` 调用。
+
+**文件**: `src/connection/mod.rs:218-220`
 
 **问题描述**: `remove_db_pool` 是同步函数，内部使用 `tokio::runtime::Handle::current().block_on()` 调用异步的 `unregister`。如果在 tokio runtime 内部调用此函数，会触发 panic: "Cannot start a runtime from within a runtime"。
 
@@ -183,6 +193,8 @@ pub async fn remove_db_pool(key: &str) {
 ---
 
 ### 1.6 [P1-BUG] 类型转换优先级错误导致数值类型被误识别为字符串
+
+**[未修复]**
 
 **文件**: `src/transaction/conversion.rs:207-231`, `src/executor/mod.rs:160-181`
 
@@ -217,6 +229,8 @@ fn get_postgres_value_from_row(row: &PgRow, index: usize) -> DataValue {
 ---
 
 ### 1.7 [P1-BUG] `QueryBuilder.to_sql()` 条件始终输出 `1=1`，参数为空
+
+**[未修复]**
 
 **文件**: `src/types/mod.rs:411-419, 450`
 
@@ -797,3 +811,106 @@ fn get_test_db_url() -> String {
 ---
 
 *文档结束*
+
+---
+
+# 问题状态报告
+
+**生成日期**: 2026-03-10
+
+## 一、修复状态汇总
+
+| 类别 | 已修复 | 未修复 | 总计 |
+|------|:------:|:------:|:----:|
+| P0-BUG (严重问题) | 1 | 4 | 5 |
+| P1-BUG (重要问题) | 1 | 1 | 2 |
+| 设计文档不一致 | 0 | 9 | 9 |
+| 代码质量问题 | 0 | 7 | 7 |
+| 架构合理性问题 | 0 | 6 | 6 |
+| 测试覆盖问题 | 0 | 3 | 3 |
+| **总计** | **2** | **30** | **32** |
+
+---
+
+## 二、已修复问题清单
+
+### 1. [P0-BUG] `resume_suspended_txn` 死锁 (问题 1.4)
+
+- **问题描述**: 方法先获取 `suspended_txns` 的锁，在 `else` 分支中再次尝试获取同一锁，导致死锁
+- **修复方式**: 在 [core.rs:190-202](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/core.rs#L190-L202) 中先释放 `suspended_txns` 锁，然后再尝试获取 `txn_holder` 锁，最后在需要放回时重新获取 `suspended_txns` 锁
+- **状态**: ✅ 已修复
+
+### 2. [P1-BUG] `remove_db_pool` 在异步上下文中调用 `block_on` 会 panic (问题 1.5)
+
+- **问题描述**: 同步函数内部使用 `tokio::runtime::Handle::current().block_on()` 调用异步函数会 panic
+- **修复方式**: 在 [connection/mod.rs:218-220](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/connection/mod.rs#L218-L220) 中将 `remove_db_pool` 改为 async 函数，直接调用异步的 `unregister`
+- **状态**: ✅ 已修复
+
+---
+
+## 三、未修复问题清单 (按优先级排序)
+
+### P0 - 必须立即修复 (影响正确性)
+
+| # | 问题描述 | 严重程度 | 建议修复方案 | 代码位置 |
+|---|----------|:--------:|--------------|----------|
+| 1 | `execute_sql_with_params_by_ids` 事务路径忽略参数 | **严重** | 为 `DbTransaction` 添加 `execute_with_params` 方法，在事务路径中调用该方法传入 params | [api.rs:246-251](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/api.rs#L246-L251) |
+| 2 | `query_sql_with_params_by_ids` 事务路径忽略参数 | **严重** | 为 `DbTransaction` 添加 `query_with_params` 方法，在事务路径中调用该方法 | [api.rs:384-389](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/api.rs#L384-L389) |
+| 3 | `with_transaction_by_id` 持有 MutexGuard 跨 await | **严重** | 实现"取出-使用-放回"模式：先持锁取出事务，执行闭包后释放锁，最后再持锁放回 | [api.rs:165-179](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/api.rs#L165-L179) |
+
+### P1 - 应尽快修复 (影响可靠性/可维护性)
+
+| # | 问题描述 | 严重程度 | 建议修复方案 | 代码位置 |
+|---|----------|:--------:|--------------|----------|
+| 4 | 类型转换优先级错误 (String 优先于 i64) | **高** | 先根据列的 `type_info()` 判断类型，再用对应的 Rust 类型提取 | [conversion.rs:207-231](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/conversion.rs#L207-L231), [executor/mod.rs:160-181](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/executor/mod.rs#L160-L181) |
+| 5 | QueryBuilder.to_sql() 条件始终 1=1 | **高** | 实现 `ConditionExpr` 到 SQL 的转换逻辑，并正确填充 params 向量 | [types/mod.rs:411-419](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/types/mod.rs#L411-L419) |
+| 6 | `futures` crate 仍在使用 | **中** | 移除 `futures` 依赖，将 `BoxFuture` 改为泛型 `Fut` 参数 | [Cargo.toml:33](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/Cargo.toml#L33), [api.rs:8](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/api.rs#L8) |
+| 7 | `sea-query`/`sea-query-binder` 仍在依赖中 | **中** | 检查是否有代码引用，若无则移除依赖 | [Cargo.toml:20-22](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/Cargo.toml#L20-L22) |
+
+### P2 - 改进项 (提升代码质量)
+
+| # | 问题描述 | 严重程度 | 建议修复方案 | 代码位置 |
+|---|----------|:--------:|--------------|----------|
+| 8 | 参数绑定逻辑三次重复 | **中** | 提取为辅助函数或使用宏消除重复 | [api.rs:256-309, 392-447](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/api.rs#L256-L309) |
+| 9 | 类型转换逻辑完全重复 | **中** | 保留 `ResultConverter` 为唯一实现，移除 `TransactionConverter` trait | [conversion.rs](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/conversion.rs), [executor/mod.rs](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/executor/mod.rs) |
+| 10 | DbPool 三分支 match 多处重复 | **中** | 为 `DbPool` 添加统一执行方法 | 多处 |
+| 11 | `core.rs` 职责过重 (675行) | **中** | 按设计文档拆分：handle.rs, propagation.rs | [core.rs](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/core.rs) |
+| 12 | 移除不必要的 `#[allow(non_snake_case)]` | **低** | 删除 config/mod.rs:27, 55 的 allow 属性 | [config/mod.rs:27,55](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/config/mod.rs#L27) |
+| 13 | DbConfig 缺少 Debug derive | **低** | 添加 `Debug` derive，注意对 URL 脱敏 | [config/mod.rs:56-57](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/config/mod.rs#L56-L57) |
+| 14 | 注释掉的代码未清理 | **低** | 删除 connection/mod.rs:234-240, manager/mod.rs:232-236 的注释代码 | - |
+| 15 | TransactionContextStack 等未使用 | **低** | 暂时标记 `#[allow(dead_code)]` 或移除 | [context.rs](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/transaction/context.rs) |
+| 16 | health_check 只验证存在性 | **中** | 执行实际的 `SELECT 1` 查询验证连通性 | [manager/mod.rs:186-193](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/manager/mod.rs#L186-L193) |
+| 17 | 监控任务无关闭机制 | **中** | 使用 `CancellationToken` 实现优雅关闭 | [monitoring/mod.rs:16-32](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/monitoring/mod.rs#L16-L32) |
+| 18 | DatabaseManager.shutdown 不完善 | **中** | 实现完整关闭流程：停止监控、回滚活跃事务、关闭连接池 | [manager/mod.rs:117-122](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/src/manager/mod.rs#L117-L122) |
+| 19 | 集成测试仅覆盖 PostgreSQL | **低** | 添加 SQLite 内存数据库测试 | [tests/integration_test.rs](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/tests/integration_test.rs) |
+| 20 | 测试地址硬编码 | **低** | 使用环境变量 `DATABASE_URL` | [integration_test.rs:4](file:///e:/rustspace/cmx/cmx-container/crates/libs/cmx-infra/cmx-database/tests/integration_test.rs#L4) |
+
+---
+
+## 四、技术评估与解决建议
+
+### 关键风险
+
+1. **P0 问题 1.1-1.3** 是严重的正确性问题，会导致：
+   - 事务中参数化 SQL 执行失败
+   - 多线程场景下可能的死锁
+   - future 非 Send 无法在 tokio 多线程 runtime 使用
+
+2. **P1 问题 1.6** 会导致数值类型被误识别为字符串，可能造成业务逻辑错误
+
+### 建议修复顺序
+
+1. **第一阶段 (立即)**：修复 P0 问题 1.1、1.2、1.3
+2. **第二阶段 (本周)**：修复 P1 问题 1.6、1.7、问题 6、7
+3. **第三阶段 (本月)**：处理 P2 问题 8-18，优化代码质量
+4. **第四阶段 (下月)**：完善测试覆盖 (问题 19、20)
+
+### 架构建议
+
+1. **问题 1.1 和 1.2** 可以一起修复：先为 `DbTransaction` 添加带参数的方法，然后在 API 函数中调用
+2. **问题 3.1 和 3.2** 可以一起处理：提取公共辅助函数，统一类型转换实现
+3. **问题 2.6** (移除 futures 依赖) 需要配合问题 1.3 一起修复
+
+---
+
+*报告生成完毕*

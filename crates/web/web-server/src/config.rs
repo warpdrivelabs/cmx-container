@@ -1,8 +1,32 @@
 //! Web 服务器配置模块
 
-use cmx_utils::{CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult, Priority};
-use std::sync::OnceLock;
+use cmx_database::DatabaseManager;
+use cmx_utils::{
+    CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, Priority,
+};
 use serde::Deserialize;
+use std::sync::OnceLock;
+use tracing::error;
+
+pub fn init_global_config() {
+    tracing::info!("加载环境变量和配置文件信息...");
+
+    // 加载.env文件
+    dotenvy::dotenv().ok();
+
+    //初始化配置管理器
+    ConfigManager::initialize(|| {
+        ConfigBuilder::new()
+            // 添加.env支持
+            .add_env()
+            // 添加命令行参数
+            .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
+            .add_toml_file_from_env("CONFIG_FILE", Priority(10))
+            .build()
+
+    })
+    .unwrap();
+}
 
 /// 获取 Web 配置单例
 ///
@@ -32,23 +56,13 @@ impl WebConfig {
     ///
     /// # 返回值
     fn load_from_env() -> ConfigResult<WebConfig> {
-        tracing::info!("加载环境变量和配置文件信息...");
-        // 加载.env文件
-        dotenvy::dotenv().ok();
+        let result = ConfigManager::global().get_string("WEB_FOLDER");
 
-        //初始化配置管理器
-        ConfigManager::initialize(|| {
-            ConfigBuilder::new()
-                // 添加.env支持
-                .add_env()
-                // 添加命令行参数
-                .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
-                .add_toml_file_from_env("CONFIG_FILE", Priority(10))
-                .build()
-        })
-        .unwrap();
-        let webConfig: ConfigResult<WebConfig> = ConfigManager::global().deserialize();
-
-        webConfig
+        return match result {
+            Ok(value) => Ok(WebConfig { WEB_FOLDER: value }),
+            Err(ex) => {
+                Err(ex)
+            }
+        };
     }
 }

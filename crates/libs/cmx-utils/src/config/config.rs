@@ -51,7 +51,7 @@ impl ConfigBuilder {
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_toml_file(mut self, path: impl Into<PathBuf>, priority: u8) -> ConfigResult<Self> {
+    pub fn add_toml_file( self, path: impl Into<PathBuf>, priority: u8) -> ConfigResult<Self> {
         let source = FileSource::with_priority(path, priority)?;
         Ok(Self { sources: self.sources, }.add_source(source))
     }

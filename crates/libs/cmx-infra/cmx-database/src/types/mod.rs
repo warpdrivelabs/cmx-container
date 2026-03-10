@@ -47,6 +47,26 @@ pub enum CompareOp {
     NotLike,
     In,
     NotIn,
+}
+
+impl CompareOp {
+    pub fn to_sql_string(&self) -> &'static str {
+        match self {
+            CompareOp::Equal => "=",
+            CompareOp::NotEqual => "<>",
+            CompareOp::GreaterThan => ">",
+            CompareOp::GreaterThanOrEqual => ">=",
+            CompareOp::LessThan => "<",
+            CompareOp::LessThanOrEqual => "<=",
+            CompareOp::Like => "LIKE",
+            CompareOp::NotLike => "NOT LIKE",
+            CompareOp::In => "IN",
+            CompareOp::NotIn => "NOT IN",
+        }
+    }
+}
+
+pub enum CompareOpEx {
     IsNull,
     IsNotNull,
 }
@@ -58,12 +78,39 @@ pub enum LogicalOp {
     Or,
 }
 
+impl LogicalOp {
+    pub fn to_sql_string(&self) -> &'static str {
+        match self {
+            LogicalOp::And => "AND",
+            LogicalOp::Or => "OR",
+        }
+    }
+}
+
 /// 值表达式
 #[derive(Debug, Clone)]
 pub enum ValueExpr {
     Column(String),
     Param(usize),
     Value(ParamValue),
+}
+
+impl ValueExpr {
+    pub fn to_sql_string(&self) -> String {
+        match self {
+            ValueExpr::Column(name) => name.clone(),
+            ValueExpr::Param(idx) => format!("${}", idx),
+            ValueExpr::Value(_) => "?".to_string(),
+        }
+    }
+
+    pub fn param_count(&self) -> usize {
+        match self {
+            ValueExpr::Column(_) => 0,
+            ValueExpr::Param(_) => 1,
+            ValueExpr::Value(_) => 1,
+        }
+    }
 }
 
 /// 条件表达式
@@ -80,6 +127,30 @@ pub enum ConditionExpr {
         right: Box<ConditionExpr>,
     },
     Nested(Box<ConditionExpr>),
+}
+
+impl ConditionExpr {
+    pub fn to_sql_string(&self, start_index: usize) -> String {
+        match self {
+            ConditionExpr::Compare { left, op, right } => {
+                format!("{} {} ${}", left.to_sql_string(), op.to_sql_string(), start_index + 1)
+            },
+            ConditionExpr::Logical { left, op, right } => {
+                format!("({} {} {})", left.to_sql_string(start_index), op.to_sql_string(), right.to_sql_string(start_index))
+            },
+            ConditionExpr::Nested(inner) => {
+                format!("({})", inner.to_sql_string(start_index))
+            },
+        }
+    }
+
+    pub fn param_count(&self) -> usize {
+        match self {
+            ConditionExpr::Compare { left, right, .. } => left.param_count() + right.param_count(),
+            ConditionExpr::Logical { left, right, .. } => left.param_count() + right.param_count(),
+            ConditionExpr::Nested(inner) => inner.param_count(),
+        }
+    }
 }
 
 /// 查询类型
@@ -333,7 +404,7 @@ impl QueryBuilder {
         self
     }
 
-    pub fn to_sql(&self) -> (String, Vec<ParamValue>) {
+    pub fn to_sql(&mut self) -> (String, Vec<ParamValue>) {
         let mut sql = String::new();
         let params = Vec::new();
 
@@ -410,11 +481,12 @@ impl QueryBuilder {
 
         if !self.conditions.is_empty() {
             sql.push_str(" WHERE ");
-            for (i, _cond) in self.conditions.iter().enumerate() {
+            for (i, cond) in self.conditions.iter().enumerate() {
                 if i > 0 {
                     sql.push_str(" AND ");
                 }
-                sql.push_str("1=1");
+                sql.push_str(&cond.to_sql_string(self.param_index));
+                self.param_index += cond.param_count();
             }
         }
 

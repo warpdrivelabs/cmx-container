@@ -8,7 +8,7 @@
 use futures::future::BoxFuture;
 use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
-use crate::transaction::registry::get_txn_holder_registry;
+use crate::transaction::registry::{get_txn_holder_registry, get_txn_holder_by_id};
 use crate::transaction::metadata::TransactionStatus;
 
 use cmx_core::model::data::dataset::DataSet;
@@ -159,24 +159,21 @@ pub async fn with_transaction_by_id<T, F>(txn_id: &str, f: F) -> Result<T>
 where
     F: FnOnce(&mut DbTransaction) -> BoxFuture<'_, Result<T>> + Send,
 {
-    // 从全局TxnHolder注册表中获取事务
-    let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+    let holder = get_txn_holder_by_id(txn_id).ok_or(Error::NoTxn)?;
 
-    if let Some(txn_holder_mutex) = txn_holder_mutex {
-        // 获取事务持有器的锁
-        let mut txh_g = txn_holder_mutex.lock().unwrap();
+    let mut txn = {
+        let mut guard = holder.lock().unwrap();
+        guard.take().ok_or(Error::NoTxn)?
+    };
 
-        // 检查是否存在事务
-        if let Some(txh) = txh_g.as_mut() {
-            // 执行闭包
-            let result = f(&mut txh.txn).await;
-            result
-        } else {
-            Err(Error::NoTxn)
-        }
-    } else {
-        Err(Error::NoTxn)
+    let result = f(&mut txn).await;
+
+    {
+        let mut guard = holder.lock().unwrap();
+        *guard = Some(txn);
     }
+
+    result
 }
 
 /// 通过数据库ID和事务ID执行SQL操作
@@ -244,8 +241,9 @@ pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, s
 
     match txn_id {
         Some(txn_id) => {
-            with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                let result = txn.execute(&sql).await?;
+            let params = params.clone();
+            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
+                let result = txn.execute_with_params(&sql, &params).await?;
                 Ok(result)
             })).await
         },
@@ -382,8 +380,9 @@ pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql
 
     match txn_id {
         Some(txn_id) => {
+            let params = params.clone();
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                let result = txn.query(&sql, &dataset_id).await?;
+                let result = txn.query_with_params(&sql, &params, &dataset_id).await?;
                 Ok(result)
             })).await
         },

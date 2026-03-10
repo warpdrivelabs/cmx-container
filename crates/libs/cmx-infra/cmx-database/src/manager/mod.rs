@@ -184,11 +184,10 @@ impl PoolManager {
     }
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
-        // 简单检查：只需验证数据库存在且可访问
-        if self.registry.get(db_id).is_some() {
-            Ok(true)
-        } else {
-            Err(Error::NoDb)
+        let result = crate::transaction::query_sql_by_ids(db_id, None, "SELECT 1", "health_check").await;
+        match result {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
         }
     }
 }

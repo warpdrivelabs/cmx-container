@@ -20,16 +20,16 @@ pub struct Priority(pub u8);
 impl Priority {
     /// 命令行参数优先级（最高）
     pub const COMMAND_LINE: Priority = Priority(100);
-    
+
     /// 系统环境变量优先级
     pub const SYSTEM_ENV: Priority = Priority(80);
-    
+
     /// .env 文件优先级
     pub const ENV_FILE: Priority = Priority(60);
-    
+
     /// 默认的TOML配置文件优先级（用户可以根据需要调整）
     pub const DEFAULT_TOML: Priority = Priority(10);
-    
+
     /// 创建新的优先级
     ///
     /// # 参数
@@ -54,13 +54,13 @@ pub trait ConfigSource: Send + Sync {
     /// # 返回值
     /// 成功返回配置存储，失败返回错误
     fn load(&self) -> ConfigResult<ConfigStore>;
-    
+
     /// 获取配置来源名称
     ///
     /// # 返回值
     /// 返回配置来源的名称标识
     fn name(&self) -> &str;
-    
+
     /// 获取配置来源优先级
     ///
     /// # 返回值
@@ -311,7 +311,6 @@ impl EnvSource {
     /// 规范化环境变量名
     ///
     /// 将环境变量名转换为配置键名：
-    /// 1. 转换为小写
     /// 2. 将双下划线 `__` 转换为点号 `.`（用于嵌套配置）
     /// 3. 将单下划线 `_` 保持不变（用于单词分隔）
     ///
@@ -328,13 +327,13 @@ impl EnvSource {
     /// // DATABASE__CONNECTION__TIMEOUT -> database.connection.timeout
     /// ```
     fn normalize_env_key(&self, key: &str) -> String {
-        // 先转换为小写
-        let lower = key.to_lowercase();
-        
+        //暂时先不转换小写
+        let lower = key.to_string();
+
         // 将双下划线替换为点号（用于嵌套配置）
         // 注意：要先替换双下划线，再处理单下划线
         let normalized = lower.replace("__", ".");
-        
+
         normalized
     }
 }
@@ -348,7 +347,7 @@ impl Default for EnvSource {
 impl ConfigSource for EnvSource {
     fn load(&self) -> ConfigResult<ConfigStore> {
         let mut store = ConfigStore::new();
-        
+
         for (key, value) in env::vars() {
             // 如果设置了前缀，只加载匹配的环境变量
             if let Some(ref prefix) = self.prefix {
@@ -356,16 +355,16 @@ impl ConfigSource for EnvSource {
                     continue;
                 }
             }
-            
+
             // 先移除前缀
             let config_key = self.strip_prefix(&key);
-            // 再规范化键名（转换为小写，双下划线转点号）
+            // 再规范化键名（双下划线转点号）
             let normalized_key = self.normalize_env_key(&config_key);
-            
+
             // 环境变量值统一作为字符串处理，类型推断在后续使用时进行
             store.insert(normalized_key, ConfigValue::String(value));
         }
-        
+
         Ok(store)
     }
 
@@ -404,14 +403,14 @@ impl CommandLineSource {
     pub fn from_args<I: Iterator<Item = String>>(args: I) -> Self {
         let mut config_args = HashMap::new();
         let mut iter = args.peekable();
-        
+
         while let Some(arg) = iter.next() {
             // 支持两种格式：
             // 1. --key=value
             // 2. --key value
             if arg.starts_with("--") {
                 let arg_content = &arg[2..];
-                
+
                 if let Some(eq_pos) = arg_content.find('=') {
                     // --key=value 格式
                     let key = arg_content[..eq_pos].to_string();
@@ -428,7 +427,7 @@ impl CommandLineSource {
                 }
             }
         }
-        
+
         CommandLineSource {
             args: config_args,
             name: "command_line".to_string(),
@@ -453,12 +452,12 @@ impl CommandLineSource {
 impl ConfigSource for CommandLineSource {
     fn load(&self) -> ConfigResult<ConfigStore> {
         let mut store = ConfigStore::new();
-        
+
         for (key, value) in &self.args {
             // 命令行参数值统一作为字符串处理
             store.insert(key.clone(), ConfigValue::String(value.clone()));
         }
-        
+
         Ok(store)
     }
 
@@ -564,10 +563,10 @@ mod tests {
             .with("key1", ConfigValue::new_string("value1"))
             .with("key2", ConfigValue::new_integer(42))
             .with_priority(Priority::COMMAND_LINE);
-        
+
         assert_eq!(source.name(), "memory");
         assert_eq!(source.priority(), Priority::COMMAND_LINE);
-        
+
         let store = source.load().unwrap();
         assert_eq!(store.get("key1").unwrap().as_str().unwrap(), "value1");
         assert_eq!(store.get("key2").unwrap().as_integer().unwrap(), 42);
@@ -582,10 +581,10 @@ mod tests {
             "--debug".to_string(),
             "true".to_string(),
         ];
-        
+
         let source = CommandLineSource::from_args(args.into_iter());
         let store = source.load().unwrap();
-        
+
         assert_eq!(store.get("host").unwrap().as_str().unwrap(), "localhost");
         assert_eq!(store.get("port").unwrap().as_str().unwrap(), "8080");
         assert_eq!(store.get("debug").unwrap().as_str().unwrap(), "true");
@@ -604,7 +603,7 @@ mod tests {
         assert!(Priority::new(50).is_ok());
         assert!(Priority::new(100).is_ok());
         assert!(Priority::new(0).is_ok());
-        
+
         // 测试无效优先级
         assert!(Priority::new(101).is_err());
     }
