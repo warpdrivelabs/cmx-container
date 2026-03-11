@@ -108,22 +108,22 @@ impl Dbx {
     async fn do_requires_new(&self, db_id: &str) -> Result<String> {
         // 保存当前事务状态（挂起）
         let mut suspended_txn: Option<TxnHolder> = None;
-        
+
         {
             let mut txh_g = self.txn_holder.lock().unwrap();
             if let Some(txh) = txh_g.take() {
                 suspended_txn = Some(txh);
             }
         }
-        
+
         // 创建新事务
         let txn_id = self.create_new_txn(db_id).await?;
-        
+
         // 将挂起的事务保存到栈中
         if let Some(suspended) = suspended_txn {
             self.suspended_txns.lock().unwrap().push(suspended);
         }
-        
+
         Ok(txn_id)
     }
 
@@ -146,19 +146,19 @@ impl Dbx {
     async fn do_not_supported(&self, _db_id: &str) -> Result<String> {
         // 保存当前事务状态（挂起）
         let mut suspended_txn: Option<TxnHolder> = None;
-        
+
         {
             let mut txh_g = self.txn_holder.lock().unwrap();
             if let Some(txh) = txh_g.take() {
                 suspended_txn = Some(txh);
             }
         }
-        
+
         // 将挂起的事务保存到栈中
         if let Some(suspended) = suspended_txn {
             self.suspended_txns.lock().unwrap().push(suspended);
         }
-        
+
         Ok("non-transactional".to_string())
     }
 
@@ -271,7 +271,7 @@ impl Dbx {
         if !self.with_txn {
             return Err(Error::CannotBeginTxnWithTxnFalse);
         }
-        
+
         let mut txn_id: Option<String> = None;
         let mut should_rollback = false;
         let mut txn_to_rollback = None;
@@ -421,7 +421,7 @@ impl Dbx {
             suspended_txns: Arc::new(Mutex::new(Vec::new())),
         })
     }
-    
+
 }
 
 /// 统一的数据库事务类型
@@ -491,7 +491,7 @@ impl DbTransaction {
         if params.is_empty() {
             return self.execute(sql).await;
         }
-        
+
         match self {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
@@ -580,7 +580,7 @@ impl DbTransaction {
         if params.is_empty() {
             return self.query(sql, dataset_id).await;
         }
-        
+
         match self {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
@@ -773,18 +773,18 @@ impl DerefMut for TxnHolder {
     }
 }
 
-/// 事务隔离级别
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsolationLevel {
-    /// 读取未提交：允许读取未提交的数据
-    ReadUncommitted,
-    /// 读取已提交：只能读取已提交的数据
-    ReadCommitted,
-    /// 可重复读：保证在同一个事务中多次读取同一数据时结果一致
-    RepeatableRead,
-    /// 串行化：最高隔离级别，完全锁定数据
-    Serializable,
-}
+// /// 事务隔离级别
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// pub enum IsolationLevel {
+//     /// 读取未提交：允许读取未提交的数据
+//     ReadUncommitted,
+//     /// 读取已提交：只能读取已提交的数据
+//     ReadCommitted,
+//     /// 可重复读：保证在同一个事务中多次读取同一数据时结果一致
+//     RepeatableRead,
+//     /// 串行化：最高隔离级别，完全锁定数据
+//     Serializable,
+// }
 
 /// 事务传播行为
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

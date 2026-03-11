@@ -17,7 +17,7 @@ mod api;
 pub mod txcontext;
 
 // 导出核心类型和函数
-pub use core::{Dbx, DbTransaction, TxnHolder, IsolationLevel, Propagation};
+pub use core::{Dbx, DbTransaction, TxnHolder, Propagation};
 
 // 导出元数据相关类型和函数
 pub use metadata::{TransactionStatus, TransactionMetadata, register_txn, update_txn_status, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions};
