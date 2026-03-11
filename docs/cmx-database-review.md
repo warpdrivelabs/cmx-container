@@ -64,29 +64,12 @@
 
 ## 4. 架构合理性问题
 
-### 4.3 [架构] `TransactionContextStack` 和 `SuspendedTransaction` 未被使用
 
-**[未修复]**
-
-`TransactionContextStack` 和 `SuspendedTransaction` 被定义并导出，但在整个代码库中没有任何调用点。
-
-**修改建议**: 暂时标记 `#[allow(dead_code)]` 或移除。
-
----
 
 ## 5. 测试覆盖问题
 
-### 5.3 测试使用硬编码的外部数据库地址
 
-**[未修复]**
 
-```rust
-const TEST_DB_URL: &str = "postgresql://postgres:postgres@192.168.137.80:5432/postgres";
-```
-
-**修改建议**: 使用环境变量 `DATABASE_URL`。
-
----
 
 ## 6. 修改建议优先级汇总
 

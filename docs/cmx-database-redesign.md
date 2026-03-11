@@ -12,7 +12,6 @@
 ## 目录
 
 1. [需求分析](#1-需求分析)
-2. [现有问题总结](#2-现有问题总结)
 3. [设计目标与原则](#3-设计目标与原则)
 4. [整体架构设计](#4-整体架构设计)
 5. [核心模块详细设计](#5-核心模块详细设计)
@@ -36,8 +35,6 @@
 - 支持数据源健康检查和自动故障恢复
 
 #### 1.1.2 事务管理
-- 支持完整的事务传播行为（Required、RequiresNew、Supports、NotSupported、Mandatory、Never）
-- 支持事务嵌套和事务栈管理
 - 支持声明式事务和编程式事务
 - 支持事务超时检测和自动回滚
 - 支持只读事务优化
@@ -78,42 +75,7 @@
 
 ---
 
-## 2. 现有问题总结
 
-### 2.1 架构层面问题
-
-| 问题类别 | 具体问题 | 影响 |
-|---------|---------|------|
-| 全局状态 | 使用 3 个 `static` 全局变量（`GLOBAL_REGISTRY`、`GLOBAL_TXN_HOLDER_REGISTRY`、`GLOBAL_TXN_REGISTRY`）存储连接池和事务 | 难以测试、无法多实例、资源泄漏风险 |
-| 职责混乱 | `Dbx` 同时持有 `db_pool`、`txn_holder`、`with_txn`，既管理连接又管理事务 | 违反单一职责原则、代码复杂度高 |
-| 类型系统 | 运行时 `with_txn` 布尔标志控制事务能力 | 编译期无法检查、容易出错 |
-| 资源管理 | 连接池更新时直接替换，未等待活跃连接排空后再关闭旧池 | 活跃连接中断风险 |
-
-> **更新说明 (v2.1)**: 资源管理问题已部分修复——`connection/mod.rs` 的 `update()` 方法现在会标记旧池为关闭状态并等待活跃连接排空（30 秒超时）。新增问题：`remove_db_pool()` 使用 `block_on` 在异步上下文中会 panic。
-
-### 2.2 事务管理问题
-
-| 问题 | 现状 | 风险 |
-|------|------|------|
-| 传播行为不完整 | `RequiresNew` 已实现挂起/恢复（`core.rs:107-127`），但 `resume_suspended_txn` 存在死锁 bug | 事务恢复时程序 hang 住 |
-| ~~事务超时监控失效~~ | ~~`monitoring/mod.rs:77-79` 通过 `db_id` 获取新 `Dbx`~~ | **[已修复]** 现在通过 `txn_id` 从注册表获取事务句柄直接回滚 |
-| 引用计数复杂 | 锁操作分散、代码重复 | 死锁风险、维护困难 |
-| 事务状态不一致 | 元数据注册表与实际事务状态可能不同步 | 监控数据不准确 |
-| **[新增] MutexGuard 跨 await** | `with_transaction_by_id` 持有 `MutexGuard` 跨 await | future 非 Send，无法在多线程 runtime 中使用 |
-| **[新增] 参数化执行忽略参数** | `execute_sql_with_params_by_ids` / `query_sql_with_params_by_ids` 事务路径未使用已解析的 params | 参数化 SQL 在事务中无效 |
-
-### 2.3 API 设计问题
-
-| 问题 | 表现 |
-|------|------|
-| 重复代码 | 多处重复的数据库类型匹配（参数绑定逻辑 6 处重复、类型转换逻辑 `conversion.rs` 与 `executor/mod.rs` 完全重复） |
-| 参数传递 | `execute_sql_with_params_by_ids` 和 `query_sql_with_params_by_ids` 的事务路径未使用已解析的参数（`api.rs:248-251, 386-389`） |
-| 错误信息 | 缺乏上下文、无法定位问题 |
-| 异步边界 | `with_transaction_by_id` 持有 `MutexGuard` 跨 await，future 非 Send；仍依赖 `futures::BoxFuture` |
-| 接口不一致 | `rollback_txn` 检查 `with_txn` 标志，行为与旧版描述不同（现已统一检查） |
-| `futures` 依赖 | `api.rs:8` 仍使用 `futures::future::BoxFuture`，与设计文档移除该依赖的决定不一致 |
-
----
 
 ## 3. 设计目标与原则
 
@@ -495,8 +457,6 @@ impl HealthChecker {
 
 #### 5.2.1 职责
 - 管理事务的生命周期
-- 实现完整的事务传播行为
-- 支持事务嵌套
 - 事务超时检测和自动回滚
 
 #### 5.2.2 核心结构

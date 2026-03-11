@@ -1,13 +1,13 @@
 /// 事务上下文模块
-/// 
-/// 提供事务栈管理和传播行为支持
+///
+/// 提供事务栈管理支持
 
 use std::sync::Arc;
 use crate::error::Result;
 use crate::transaction::core::{TxnHolder, Propagation};
 
 /// 事务帧
-/// 
+///
 /// 用于保存事务状态，支持挂起和恢复
 pub struct TransactionFrame {
     pub handle: Arc<TxnHolder>,
@@ -16,7 +16,7 @@ pub struct TransactionFrame {
 }
 
 /// 事务上下文
-/// 
+///
 /// 管理事务栈，支持嵌套事务
 pub struct TransactionContextStack {
     frames: Vec<TransactionFrame>,
@@ -79,10 +79,10 @@ pub struct SuspendedTransaction {
 pub trait TransactionManager: Send + Sync {
     /// 开始事务
     fn begin_transaction(&self, db_id: &str, propagation: Propagation) -> impl std::future::Future<Output = Result<String>> + Send;
-    
+
     /// 提交事务
     fn commit_transaction(&self, txn_id: &str) -> impl std::future::Future<Output = Result<()>> + Send;
-    
+
     /// 回滚事务
     fn rollback_transaction(&self, txn_id: &str) -> impl std::future::Future<Output = Result<()>> + Send;
 }
