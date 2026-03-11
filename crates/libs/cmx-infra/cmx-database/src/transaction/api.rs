@@ -13,6 +13,7 @@ use crate::transaction::metadata::TransactionStatus;
 
 use cmx_core::model::data::dataset::DataSet;
 use crate::executor::{ParamValue, ResultConverter};
+use crate::get_default_db_manager;
 
 /// 通过事务ID提交事务
 ///
@@ -141,8 +142,8 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
 /// # 返回值
 /// * `Option<Dbx>` - Dbx实例，如果数据库不存在则返回None
 pub fn get_dbx_by_db_id(db_id: &str) -> Option<Dbx> {
-    // 直接从连接模块导入 get_db_access 函数
-    crate::connection::get_db_access(db_id)
+    get_default_db_manager().get_dbx(db_id).ok()
+ 
 }
 
 /// 通过事务ID获取TxnHolder的可变引用

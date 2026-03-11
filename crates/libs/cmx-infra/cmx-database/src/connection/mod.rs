@@ -126,11 +126,13 @@ impl DbRegistry {
     }
 
     /// 更新数据库连接池配置（优雅关闭旧池）
-    pub async fn update(&self, key: &str, config: DbConfig) -> crate::Result<()> {
-        // 标记旧池为关闭状态
+    pub async fn update(&self, config: DbConfig) -> crate::Result<()> {
+        //
+        let key = config.db_id.clone();
+
         {
             let pools = self.pools.read().unwrap();
-            if let Some(pool) = pools.get(key) {
+            if let Some(pool) = pools.get(&key) {
                 pool.mark_closing();
             }
         }
@@ -138,7 +140,7 @@ impl DbRegistry {
         // 等待旧池中的活跃连接关闭
         {
             let pools = self.pools.read().unwrap();
-            if let Some(pool) = pools.get(key) {
+            if let Some(pool) = pools.get(&key) {
                 let timeout = std::time::Duration::from_secs(30);
                 if !pool.wait_for_idle(timeout).await {
                     log::warn!("等待旧连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
@@ -149,7 +151,7 @@ impl DbRegistry {
         // 创建新池并替换
         let pool = DatabasePoolImpl::new(config).await?;
         let mut pools = self.pools.write().unwrap();
-        pools.insert(key.to_string(), pool);
+        pools.insert(key, pool);
         Ok(())
     }
 
@@ -211,21 +213,21 @@ pub fn get_global_registry() -> &'static Arc<DbRegistry> {
     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
 }
 
-pub async fn register_db_pool(config: DbConfig) -> Result<()> {
-    get_global_registry().register(config).await
-}
-
-pub async fn remove_db_pool(key: &str) {
-    get_global_registry().unregister(key).await;
-}
-
-pub fn get_db_access(key: &str) -> Option<Dbx> {
-    get_global_registry().get_db_access(key)
-}
-
-pub fn list_db_pools() -> Vec<String> {
-    get_global_registry().list()
-}
+// pub async fn register_db_pool(config: DbConfig) -> Result<()> {
+//     get_global_registry().register(config).await
+// }
+//
+// pub async fn remove_db_pool(key: &str) {
+//     get_global_registry().unregister(key).await;
+// }
+//
+// pub fn get_db_access(key: &str) -> Option<Dbx> {
+//     get_global_registry().get_db_access(key)
+// }
+//
+// pub fn list_db_pools() -> Vec<String> {
+//     get_global_registry().list()
+// }
 
 // // 全局实例
 // static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();

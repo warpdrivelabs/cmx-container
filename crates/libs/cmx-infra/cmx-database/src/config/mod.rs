@@ -9,7 +9,7 @@ pub enum DbType {
     MySql,
     Sqlite,
 }
-// let db_type: DbType = "postgres".parse().unwrap();
+
 impl FromStr for DbType {
     type Err = String;
 
@@ -52,7 +52,6 @@ impl Default for PoolConfig {
 }
 
 /// 数据库配置
-#[allow(non_snake_case)]
 #[derive(Clone)]
 pub struct DbConfig {
     /// 数据库类型

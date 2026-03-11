@@ -39,11 +39,15 @@ pub fn register_txn(txn_id: String, db_id: String) {
     get_txn_registry().write().unwrap().insert(txn_id, metadata);
 }
 
-/// 更新事务状态
+/// 更新事务状态,已提交 已经回滚的事务移除掉
 pub fn update_txn_status(txn_id: &str, status: TransactionStatus) {
-    if let Some(metadata) = get_txn_registry().write().unwrap().get_mut(txn_id) {
-        metadata.status = status;
+    // if let Some(metadata) = get_txn_registry().write().unwrap().get_mut(txn_id) {
+    //     metadata.status = status;
+    // }
+    if status == TransactionStatus::Committed || status == TransactionStatus::RolledBack {
+        get_txn_registry().write().unwrap().remove(txn_id);
     }
+
 }
 
 /// 获取事务元数据

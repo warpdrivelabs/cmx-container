@@ -53,7 +53,6 @@ async fn test_begin_transaction() -> cmx_database::Result<()> {
     let options = TransactionOptions::default();
     let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
     assert!(!txn_id.is_empty());
-
     manager.commit_transaction(&txn_id).await?;
 
     manager.shutdown().await?;
