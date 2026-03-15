@@ -53,11 +53,11 @@ use crate::model::data::dataset::Schema;
 // ==========================================
 
 /// 行数据，支持扁平字段与嵌套子数据集（主子/树形）
-/// 
+///
 /// # 结构说明
 /// - `values`: 核心扁平数据，使用数组存储以节省内存
 /// - `children`: 子数据集映射，Key 为 DataSetID，Value 为嵌套的 DataSet
-/// 
+///
 /// # 使用示例
 /// ```ignore
 /// let mut row = Row::new(vec![1.into(), "test".into()]);
@@ -73,7 +73,7 @@ pub struct Row {
 
 impl Row {
     /// 创建新的 Row 实例
-    /// 
+    ///
     /// # 参数
     /// - `values`: DataValue 向量，包含该行的所有字段值
     pub fn new(values: Vec<DataValue>) -> Self {
@@ -84,7 +84,7 @@ impl Row {
     }
 
     /// 预分配容量，适合已知行宽时减少扩容
-    /// 
+    ///
     /// # 参数
     /// - `value_count`: 预分配的字段数量
     pub fn with_capacity(value_count: usize) -> Self {
@@ -95,7 +95,7 @@ impl Row {
     }
 
     /// 添加子数据集到当前行
-    /// 
+    ///
     /// # 参数
     /// - `key`: 子数据集的标识键
     /// - `dataset`: 要添加的子 DataSet
@@ -104,10 +104,10 @@ impl Row {
     }
 
     /// 获取子数据集的不可变引用
-    /// 
+    ///
     /// # 参数
     /// - `key`: 子数据集的标识键
-    /// 
+    ///
     /// # 返回值
     /// 如果存在则返回子数据集的引用，否则返回 None
     pub fn get_child(&self, key: &str) -> Option<&DataSet> {
@@ -115,10 +115,10 @@ impl Row {
     }
 
     /// 获取子数据集的可变引用
-    /// 
+    ///
     /// # 参数
     /// - `key`: 子数据集的标识键
-    /// 
+    ///
     /// # 返回值
     /// 如果存在则返回子数据集的可变引用，否则返回 None
     pub fn get_child_mut(&mut self, key: &str) -> Option<&mut DataSet> {
@@ -126,10 +126,10 @@ impl Row {
     }
 
     /// 按索引获取字段的不可变引用
-    /// 
+    ///
     /// # 参数
     /// - `index`: 字段在 values 数组中的索引
-    /// 
+    ///
     /// # 返回值
     /// 如果索引有效则返回 DataValue 的引用，否则返回 None
     pub fn get(&self, index: usize) -> Option<&DataValue> {
@@ -137,10 +137,10 @@ impl Row {
     }
 
     /// 按索引获取字段的可变引用
-    /// 
+    ///
     /// # 参数
     /// - `index`: 字段在 values 数组中的索引
-    /// 
+    ///
     /// # 返回值
     /// 如果索引有效则返回 DataValue 的可变引用，否则返回 None
     pub fn get_mut(&mut self, index: usize) -> Option<&mut DataValue> {
@@ -148,11 +148,11 @@ impl Row {
     }
 
     /// 按字段名获取值（需传入所属 Schema）
-    /// 
+    ///
     /// # 参数
     /// - `schema`: 字段所属的 Schema，用于将字段名转换为索引
     /// - `name`: 字段名称
-    /// 
+    ///
     /// # 返回值
     /// 如果字段存在则返回 DataValue 的引用，否则返回 None
     pub fn get_by_name(&self, schema: &Schema, name: &str) -> Option<&DataValue> {
@@ -165,12 +165,12 @@ impl Row {
 // ==========================================
 
 /// 行式数据集：Schema + 行列表，支持嵌套子 DataSet
-/// 
+///
 /// # 结构说明
 /// - `id`: 数据集唯一标识
 /// - `schema`: 数据结构定义，使用 Arc 实现共享
 /// - `rows`: 行数据列表
-/// 
+///
 /// # 特点
 /// - 支持树形嵌套：每行可包含多个子 DataSet
 /// - 序列化友好：可直接转为嵌套 JSON 结构
@@ -185,7 +185,7 @@ pub struct DataSet {
 
 impl DataSet {
     /// 创建新的 DataSet 实例
-    /// 
+    ///
     /// # 参数
     /// - `id`: 数据集唯一标识
     /// - `schema`: 数据结构定义（Arc 包裹）
@@ -199,7 +199,7 @@ impl DataSet {
     }
 
     /// 创建一个空的 DataSet 实例
-    /// 
+    ///
     /// # 参数
     /// - `id`: 数据集唯一标识
     /// - `schema`: 数据结构定义（Arc 包裹）
@@ -212,7 +212,7 @@ impl DataSet {
     }
 
     /// 预分配行容量的 DataSet
-    /// 
+    ///
     /// # 参数
     /// - `id`: 数据集唯一标识
     /// - `schema`: 数据结构定义（Arc 包裹）
@@ -226,7 +226,7 @@ impl DataSet {
     }
 
     /// 向数据集添加一行数据
-    /// 
+    ///
     /// # 参数
     /// - `row`: 要添加的 Row 对象
     pub fn add_row(&mut self, row: Row) {
@@ -264,7 +264,7 @@ pub type RowDataSet = DataSet;
 const SKIP_NULL_IN_SERIALIZE: bool = true;
 
 /// DataSet 的 Serialize 实现
-/// 
+///
 /// 序列化结构：
 /// ```json
 /// {
@@ -297,7 +297,7 @@ impl Serialize for DataSet {
 }
 
 /// 行数组的序列化包装器（携带 schema 以按名输出字段）
-/// 
+///
 /// # 作用
 /// 将 rows 与 schema 绑定，使得序列化时可以按字段名而非索引输出
 struct RowsRef<'a> {
@@ -322,7 +322,7 @@ impl<'a> Serialize for RowsRef<'a> {
 }
 
 /// Row 的序列化包装器，将 Row 与 Schema 绑定以便按字段名序列化
-/// 
+///
 /// # 序列化行为
 /// - 按 schema 字段顺序输出所有非 Null 值
 /// - 输出所有子 DataSet（children）
@@ -338,7 +338,7 @@ impl<'a> Serialize for RowRef<'a> {
     {
         let len = self.row.values.len() + self.row.children.len();
         let mut map = serializer.serialize_map(Some(len))?;
-        
+
         // 序列化扁平字段：按 schema 定义的字段名输出
         for (i, value) in self.row.values.iter().enumerate() {
             if let Some(field) = self.schema.fields.get(i) {
@@ -357,7 +357,7 @@ impl<'a> Serialize for RowRef<'a> {
 }
 
 /// 反序列化用中间结构（rows 先以 Value 形式读入再转 Row）
-/// 
+///
 /// # 设计原因
 /// 由于 Row 的结构依赖于 Schema，需要先读取 schema 字段，
 /// 然后根据 schema 将 JSON Value 转换为 Row
@@ -369,7 +369,7 @@ struct DataSetDe {
 }
 
 /// DataSet 的 Deserialize 实现
-/// 
+///
 /// # 反序列化流程
 /// 1. 读取 id、schema 和 rows（原始 JSON Value）
 /// 2. 根据 schema 构建 Arc
@@ -397,16 +397,16 @@ impl<'de> Deserialize<'de> for DataSet {
 }
 
 /// 从 JSON Value 和 Schema 构建 Row（递归处理子 DataSet）
-/// 
+///
 /// # 处理逻辑
 /// 1. 解析 JSON 对象
 /// 2. 按 schema 字段顺序提取字段值
 /// 3. 识别并递归解析子 DataSet（不在 schema 中的字段视为子 DataSet）
-/// 
+///
 /// # 参数
 /// - `v`: JSON Value，应该是一个对象
 /// - `schema`: 用于解析的 Schema 定义
-/// 
+///
 /// # 返回值
 /// 成功时返回 Row，失败时返回错误信息字符串
 fn row_from_value(v: serde_json::Value, schema: &Schema) -> Result<Row, String> {

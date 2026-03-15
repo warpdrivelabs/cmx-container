@@ -1,10 +1,12 @@
 use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::ser::{SerializeSeq, SerializeMap};
 use serde_json::Value as JsonValue;
 use rust_decimal::Decimal;
 use chrono::{DateTime, Utc, NaiveDate};
 use smol_str::SmolStr;
 use uuid::Uuid;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 /// ```
 pub type CellValue = DataValue;
@@ -15,37 +17,173 @@ pub type CellValue = DataValue;
 // 1. 值类型系统 (Type System)
 // ==========================================
 
-///  通用数据值枚举
+/// ERP 通用数据值枚举
 /// 这种设计允许我们在编译时不知道具体类型的情况下存储数据
 ///
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)] // 序列化时去掉枚举标签，直接输出值，前端友好
+/// # 序列化策略
+/// 为支持 DataSet 中的新类型（Binary、Array、Json、Uuid），使用自定义序列化：
+/// - Binary: base64 编码字符串
+/// - Uuid: 标准字符串格式
+/// - Json: 保持 JSON 对象格式
+/// - Array: 递归序列化数组元素
+#[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
     Null,
     Bool(bool),
     Int(i64),
-    Float(f64), // 注：f64 无 Eq，故 DataValue 仅 PartialEq
+    Float(f64),
     String(String),
     Decimal(Decimal),
     DateTime(DateTime<Utc>),
     Date(NaiveDate),
-
-    /// 二进制数据 - 用于附件、图片、文档等
+    /// 二进制数据 - 用于附件、图片、文档等（序列化为 base64 字符串）
     Binary(Vec<u8>),
     /// 动态数组 - 用于多值字段和标签列表
     Array(Vec<DataValue>),
     /// JSON 字符串 - 用于半结构化数据
     Json(String),
-    /// 全局唯一标识
+    /// 全局唯一标识（序列化为标准字符串格式）
     Uuid(Uuid),
-    // ========================================
-    // 字符串优化类型
-    // ========================================
     /// 短字符串（≤22字节） - 用于状态码、币种等短文本
-    /// SmolStr 可内联存储，避免堆分配
     ShortStr(SmolStr),
     /// 长字符串 - 用于描述、备注等长文本
     LongStr(SmolStr),
+}
+
+// ==========================================
+// DataValue 序列化实现
+// ==========================================
+
+/// DataValue 序列化
+/// 
+/// # 序列化格式
+/// - Binary: base64 编码字符串
+/// - Uuid: 标准字符串格式
+/// - Json: 保持 JSON 对象格式
+/// - Array: JSON 数组
+/// - 其他类型: 直接值输出
+impl Serialize for DataValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            DataValue::Null => serializer.serialize_unit(),
+            DataValue::Bool(b) => serializer.serialize_bool(*b),
+            DataValue::Int(i) => serializer.serialize_i64(*i),
+            DataValue::Float(f) => {
+                if let Some(n) = serde_json::Number::from_f64(*f) {
+                    serializer.serialize_newtype_struct("Float", &n)
+                } else {
+                    serializer.serialize_unit()
+                }
+            }
+            DataValue::String(s) => serializer.serialize_str(s),
+            DataValue::Decimal(d) => serializer.serialize_str(&d.to_string()),
+            DataValue::DateTime(dt) => serializer.serialize_str(&dt.to_rfc3339()),
+            DataValue::Date(d) => serializer.serialize_str(&d.to_string()),
+            DataValue::Binary(v) => {
+                // 使用 base64 编码
+                let encoded = BASE64.encode(v);
+                serializer.serialize_str(&encoded)
+            }
+            DataValue::Uuid(u) => serializer.serialize_str(&u.to_string()),
+            DataValue::Json(json_str) => {
+                // Json 保持为字符串格式输出，便于反序列化
+                // 注意：这会导致 JSON 中字段值为字符串而非对象
+                // 如果需要保持对象格式，需要在反序列化时做特殊处理
+                serializer.serialize_str(json_str)
+            }
+            DataValue::Array(items) => {
+                let mut seq = serializer.serialize_seq(Some(items.len()))?;
+                for item in items {
+                    seq.serialize_element(item)?;
+                }
+                seq.end()
+            }
+            DataValue::ShortStr(s) => serializer.serialize_str(s),
+            DataValue::LongStr(s) => serializer.serialize_str(s),
+        }
+    }
+}
+
+/// DataValue 反序列化
+/// 
+/// # 反序列化策略
+/// - 识别 base64 编码的 Binary 字符串
+/// - 识别 UUID 格式字符串
+/// - 尝试智能推断类型（JSON 格式等）
+impl<'de> Deserialize<'de> for DataValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // 使用 JsonValue 作为中间类型进行解析
+        let value = JsonValue::deserialize(deserializer)?;
+        
+        match value {
+            JsonValue::Null => Ok(DataValue::Null),
+            JsonValue::Bool(b) => Ok(DataValue::Bool(b)),
+            JsonValue::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(DataValue::Int(i))
+                } else if let Some(f) = n.as_f64() {
+                    Ok(DataValue::Float(f))
+                } else {
+                    Err(serde::de::Error::custom("invalid number"))
+                }
+            }
+            JsonValue::String(s) => {
+                // 尝试解析为 Uuid（标准 UUID 格式）
+                if let Ok(uuid) = Uuid::parse_str(&s) {
+                    return Ok(DataValue::Uuid(uuid));
+                }
+                // 尝试解析为 base64 编码的二进制
+                if let Ok(bytes) = BASE64.decode(&s) {
+                    // 验证是否为有效的二进制数据（非空且解码成功）
+                    if !bytes.is_empty() {
+                        return Ok(DataValue::Binary(bytes));
+                    }
+                }
+                // 尝试解析为 JSON（如果是以 { 或 [ 开头）
+                if s.starts_with('{') || s.starts_with('[') {
+                    if serde_json::from_str::<JsonValue>(&s).is_ok() {
+                        return Ok(DataValue::Json(s));
+                    }
+                }
+                Ok(DataValue::String(s))
+            }
+            JsonValue::Array(arr) => {
+                // 判断是 Binary 还是 Array
+                // 如果所有元素都是 0-255 的数字，则认为是 Binary
+                let is_binary = arr.iter().all(|v| {
+                    if let JsonValue::Number(n) = v {
+                        n.as_u64().map(|n| n <= 255).unwrap_or(false)
+                    } else {
+                        false
+                    }
+                });
+                
+                if is_binary {
+                    let bytes: Vec<u8> = arr.iter()
+                        .filter_map(|v| v.as_u64())
+                        .map(|n| n as u8)
+                        .collect();
+                    return Ok(DataValue::Binary(bytes));
+                }
+                
+                // 否则作为 Array 处理
+                let items: Result<Vec<DataValue>, _> = arr.iter()
+                    .map(DataValue::deserialize)
+                    .collect();
+                Ok(DataValue::Array(items.map_err(|e| serde::de::Error::custom(e.to_string()))?))
+            }
+            JsonValue::Object(_) => {
+                // 对象类型暂不支持直接反序列化
+                Err(serde::de::Error::custom("unexpected object in DataValue"))
+            }
+        }
+    }
 }
 
 // 提供一些便捷转换，方便代码编写
@@ -374,9 +512,10 @@ mod tests {
         let bytes = vec![0x01, 0x02, 0x03];
         let value = DataValue::Binary(bytes);
 
-        // Vec<u8> 在 serde 中序列化为 JSON 数组
+        // Binary 现在序列化为 base64 编码字符串
         let json = serde_json::to_string(&value).unwrap();
-        assert!(json.contains("[1,2,3]"));
+        // 0x01, 0x02, 0x03 的 base64 编码是 "AQID"
+        assert!(json.contains("AQID"));
     }
 
     /// 测试 Binary 反序列化
