@@ -264,6 +264,8 @@ pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, s
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let result = query.execute(pool).await?;
@@ -282,6 +284,8 @@ pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, s
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let result = query.execute(pool).await?;
@@ -300,6 +304,8 @@ pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, s
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let result = query.execute(pool).await?;
@@ -403,6 +409,8 @@ pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let rows = query.fetch_all(pool).await?;
@@ -421,6 +429,8 @@ pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let rows = query.fetch_all(pool).await?;
@@ -439,6 +449,8 @@ pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql
                                 ParamValue::DateTime(v) => query.bind(v.to_string()),
                                 ParamValue::Date(v) => query.bind(v.to_string()),
                                 ParamValue::Json(v) => query.bind(v.to_string()),
+                                ParamValue::Binary(v) => query.bind(v.as_slice()),
+                                ParamValue::Uuid(v) => query.bind(v.to_string()),
                             };
                         }
                         let rows = query.fetch_all(pool).await?;

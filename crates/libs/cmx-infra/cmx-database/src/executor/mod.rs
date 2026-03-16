@@ -6,6 +6,7 @@ use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_core::model::cell::{DataValue, Field, FieldType};
 use sqlx::{Row as SqlxRow, Column};
 use rust_decimal::Decimal;
+use uuid::Uuid;
 
 /// 参数值类型，用于 SQL 参数绑定
 #[derive(Debug, Clone)]
@@ -19,6 +20,8 @@ pub enum ParamValue {
     DateTime(chrono::NaiveDateTime),
     Date(chrono::NaiveDate),
     Json(serde_json::Value),
+    Binary(Vec<u8>),
+    Uuid(Uuid),
 }
 
 impl ParamValue {
@@ -161,7 +164,14 @@ impl ResultConverter {
         let type_name = type_info.to_string().to_lowercase();
         
         if type_name.contains("int") {
-            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+            // 尝试 i32，如果失败尝试 i64
+            if let Ok(v) = row.try_get::<i32, _>(index) {
+                return DataValue::Int(v as i64);
+            }
+            if let Ok(v) = row.try_get::<i64, _>(index) {
+                return DataValue::Int(v);
+            }
+            DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
             row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
@@ -172,7 +182,46 @@ impl ResultConverter {
                 .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
                 .map(DataValue::Decimal)
                 .unwrap_or(DataValue::Null)
+        } else if type_name.contains("uuid") {
+            // 处理 UUID 类型
+            row.try_get::<Uuid, _>(index)
+                .map(DataValue::Uuid)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("bytea") || type_name.contains("blob") {
+            // 处理二进制类型
+            row.try_get::<Vec<u8>, _>(index)
+                .map(DataValue::Binary)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("json") || type_name.contains("jsonb") {
+            // 处理 JSON 类型
+            row.try_get::<String, _>(index)
+                .map(DataValue::Json)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("date") && !type_name.contains("time") {
+            // 处理纯日期类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                    return DataValue::Date(date);
+                }
+            }
+            DataValue::Null
+        } else if type_name.contains("timestamp") || type_name.contains("datetime") {
+            // 处理时间戳类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                // 尝试多种时间格式
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                    return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+            }
+            DataValue::Null
         } else {
+            // 默认尝试获取字符串
             row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
@@ -183,7 +232,14 @@ impl ResultConverter {
         let type_name = type_info.to_string().to_lowercase();
         
         if type_name.contains("int") {
-            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+            // 尝试 i32，如果失败尝试 i64
+            if let Ok(v) = row.try_get::<i32, _>(index) {
+                return DataValue::Int(v as i64);
+            }
+            if let Ok(v) = row.try_get::<i64, _>(index) {
+                return DataValue::Int(v);
+            }
+            DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
             row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
@@ -194,7 +250,47 @@ impl ResultConverter {
                 .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
                 .map(DataValue::Decimal)
                 .unwrap_or(DataValue::Null)
+        } else if type_name.contains("char") && type_name.contains("uuid") {
+            // 处理 MySQL 的 UUID（可能以 CHAR 形式存储）
+            row.try_get::<String, _>(index)
+                .ok()
+                .and_then(|s| Uuid::parse_str(&s).ok())
+                .map(DataValue::Uuid)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("binary") || type_name.contains("blob") || type_name.contains("bytea") {
+            // 处理二进制类型
+            row.try_get::<Vec<u8>, _>(index)
+                .map(DataValue::Binary)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("json") {
+            // 处理 JSON 类型
+            row.try_get::<String, _>(index)
+                .map(DataValue::Json)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("date") && !type_name.contains("time") {
+            // 处理纯日期类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                    return DataValue::Date(date);
+                }
+            }
+            DataValue::Null
+        } else if type_name.contains("timestamp") || type_name.contains("datetime") {
+            // 处理时间戳类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                    return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+            }
+            DataValue::Null
         } else {
+            // 默认尝试获取字符串
             row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
@@ -205,7 +301,14 @@ impl ResultConverter {
         let type_name = type_info.to_string().to_lowercase();
         
         if type_name.contains("int") {
-            row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
+            // 尝试 i32，如果失败尝试 i64
+            if let Ok(v) = row.try_get::<i32, _>(index) {
+                return DataValue::Int(v as i64);
+            }
+            if let Ok(v) = row.try_get::<i64, _>(index) {
+                return DataValue::Int(v);
+            }
+            DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
             row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
@@ -216,7 +319,40 @@ impl ResultConverter {
                 .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
                 .map(DataValue::Decimal)
                 .unwrap_or(DataValue::Null)
+        } else if type_name.contains("blob") || type_name.contains("binary") {
+            // 处理 SQLite 的二进制类型
+            row.try_get::<Vec<u8>, _>(index)
+                .map(DataValue::Binary)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("json") {
+            // 处理 SQLite 的 JSON 类型
+            row.try_get::<String, _>(index)
+                .map(DataValue::Json)
+                .unwrap_or(DataValue::Null)
+        } else if type_name.contains("date") && !type_name.contains("time") {
+            // 处理纯日期类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                    return DataValue::Date(date);
+                }
+            }
+            DataValue::Null
+        } else if type_name.contains("timestamp") || type_name.contains("datetime") {
+            // 处理时间戳类型 - 作为字符串获取后解析
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                    return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                }
+            }
+            DataValue::Null
         } else {
+            // 默认尝试获取字符串
             row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
         }
     }
@@ -242,6 +378,14 @@ impl ResultConverter {
             FieldType::DateTime
         } else if type_name_lower.contains("bool") {
             FieldType::Bool
+        } else if type_name_lower.contains("uuid") {
+            FieldType::Uuid
+        } else if type_name_lower.contains("bytea") || type_name_lower.contains("blob") || type_name_lower.contains("binary") {
+            FieldType::Binary
+        } else if type_name_lower.contains("json") {
+            FieldType::Json
+        } else if type_name_lower.contains("array") {
+            FieldType::Array
         } else {
             FieldType::String
         }

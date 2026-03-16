@@ -507,6 +507,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let result = query.execute(txn.as_mut()).await?;
@@ -525,6 +527,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let result = query.execute(txn.as_mut()).await?;
@@ -543,6 +547,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let result = query.execute(txn.as_mut()).await?;
@@ -596,6 +602,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let rows = txn.fetch_all(query).await?;
@@ -614,6 +622,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let rows = txn.fetch_all(query).await?;
@@ -632,6 +642,8 @@ impl DbTransaction {
                         ParamValue::DateTime(v) => query.bind(v.to_string()),
                         ParamValue::Date(v) => query.bind(v.to_string()),
                         ParamValue::Json(v) => query.bind(v.to_string()),
+                        ParamValue::Binary(v) => query.bind(v.as_slice()),
+                        ParamValue::Uuid(v) => query.bind(v.to_string()),
                     };
                 }
                 let rows = txn.fetch_all(query).await?;
