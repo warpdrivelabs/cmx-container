@@ -1,3 +1,7 @@
+//! Redis 客户端封装模块
+//!
+//! 提供 `RedisClient` 结构体，用于封装 bb8 连接池和 Redis 操作。
+
 use crate::config::{CacheConfig, LockConfig, RedisConfig};
 use crate::error::{Error, Result};
 use crate::logging::ConnLog;
@@ -9,13 +13,9 @@ use tracing::info;
 use std::sync::OnceLock;
 use std::sync::Mutex;
 
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: Redis 客户端封装（使用 bb8 连接池）
- */
-
 /// Redis 客户端包装器（使用 bb8 连接池）
+///
+/// 封装了 Redis 连接池和配置，提供缓存操作和锁管理功能。
 #[derive(Clone)]
 pub struct RedisClient {
     pool: Pool<RedisConnectionManager>,
@@ -25,7 +25,14 @@ pub struct RedisClient {
 }
 
 impl RedisClient {
-    /// 从配置创建新的 Redis 客户端（使用 bb8 连接池）
+    /// 从配置创建新的 Redis 客户端（使用默认配置）
+    ///
+    /// # 参数
+    /// * `config` - Redis 配置
+    ///
+    /// # 返回值
+    /// * 成功返回 `RedisClient`
+    /// * 失败返回 `Error`
     pub async fn new(config: RedisConfig) -> Result<Self> {
         let cache_config = CacheConfig::new();
         let lock_config = LockConfig::new();

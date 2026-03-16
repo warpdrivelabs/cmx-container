@@ -1,12 +1,12 @@
+//! cmx-buffer 模块错误类型定义
+//!
+//! 定义了模块可能遇到的所有错误类型，包括连接错误、缓存操作错误、分布式锁错误等。
+
 use thiserror::Error;
 
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: cmx-buffer 模块错误类型定义
- */
-
 /// cmx-buffer 模块的错误类型
+///
+/// 使用 thiserror 库实现，便于错误传播和错误信息格式化。
 #[derive(Error, Debug)]
 pub enum Error {
     /// 连接相关错误
@@ -55,17 +55,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// 从 redis crate 的错误转换为模块错误
 impl From<redis::RedisError> for Error {
+    #[allow(unreachable_code)]
     fn from(err: redis::RedisError) -> Self {
         let msg = err.to_string();
         if msg.contains("connection") || msg.contains("Connection") {
-            Error::ConnectionError(msg)
-        } else if msg.contains("timeout") || msg.contains("Timeout") || msg.contains("timed out") {
-            Error::TimeoutError(msg)
-        } else if msg.contains("BUSY") || msg.contains("script") {
-            Error::OperationError(msg)
-        } else {
-            Error::OperationError(msg)
+            return Error::ConnectionError(msg);
         }
+        if msg.contains("timeout") || msg.contains("Timeout") || msg.contains("timed out") {
+            return Error::TimeoutError(msg);
+        }
+        if msg.contains("BUSY") || msg.contains("script") {
+            return Error::OperationError(msg);
+        }
+        Error::OperationError(msg)
     }
 }
 

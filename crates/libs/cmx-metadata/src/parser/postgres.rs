@@ -1,4 +1,13 @@
 //! PostgreSQL DDL 解析器实现
+//!
+//! 提供 `PostgresDdlParser` 结构体，实现 `DdlParser` trait，
+//! 用于解析 PostgreSQL DDL 语句还原为 `TableDefine`。
+//!
+//! # 功能特性
+//! - 支持解析 CREATE TABLE 语句
+//! - 支持解析 CREATE INDEX / CREATE UNIQUE INDEX 语句
+//! - 支持解析 COMMENT ON TABLE / COMMENT ON COLUMN 语句
+//! - 支持 round-trip（DDL → TableDefine → DDL）
 
 use std::collections::HashMap;
 
@@ -8,6 +17,10 @@ use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, IndexKind, Tab
 use crate::MetadataError;
 use super::DdlParser;
 
+/// PostgreSQL DDL 解析器
+///
+/// 用于解析 PostgreSQL DDL 语句，还原为 `TableDefine`。
+/// 支持完整的 DDL 解析，包括表、索引、注释等。
 pub struct PostgresDdlParser;
 
 impl DdlParser for PostgresDdlParser {

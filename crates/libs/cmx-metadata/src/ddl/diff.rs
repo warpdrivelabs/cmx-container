@@ -1,4 +1,23 @@
-//! 增量 DDL 生成 — 比对两个版本的 TableDefine 生成 ALTER TABLE 等语句
+//! 增量 DDL 生成模块
+//!
+//! 提供 DDL 增量比对功能，通过比对两个版本的 `TableDefine`
+//! 生成 ALTER TABLE 等变更语句。
+//!
+//! # 功能特性
+//! - 支持表级别的新增、删除、修改
+//! - 支持列级别的新增、删除、修改（类型、nullable、默认值等）
+//! - 支持索引的新增和删除
+//! - 支持表注释的变更
+//!
+//! # 使用示例
+//! ```ignore
+//! use cmx_metadata::ddl::diff::{DdlDiff, TableChange};
+//! use cmx_metadata::ddl::postgres::PostgresDdlDialect;
+//!
+//! let changes = DdlDiff::diff(&old_tables, &new_tables);
+//! let dialect = PostgresDdlDialect::default();
+//! let ddl_statements = DdlDiff::diff_to_ddl(&dialect, &old_tables, &new_tables)?;
+//! ```
 
 use std::collections::HashMap;
 
@@ -7,21 +26,40 @@ use crate::MetadataError;
 use super::DdlDialect;
 
 /// 列变更类型
+///
+/// 描述对列的变更操作：
+/// - 新增列
+/// - 删除列
+/// - 修改列（类型、nullable、默认值等）
 #[derive(Debug, Clone)]
 pub enum ColumnChange {
+    /// 新增列
     AddColumn(ColumnDefine),
+    /// 删除列
     DropColumn(String),
+    /// 修改列（包含旧列和新列定义）
     AlterColumn { old: ColumnDefine, new: Box<ColumnDefine> },
 }
 
 /// 索引变更类型
+///
+/// 描述对索引的变更操作：
+/// - 新增索引
+/// - 删除索引
 #[derive(Debug, Clone)]
 pub enum IndexChange {
+    /// 新增索引
     AddIndex(IndexDefine),
+    /// 删除索引
     DropIndex(String),
 }
 
 /// 表级别的变更描述
+///
+/// 描述对表的变更操作：
+/// - 新建表
+/// - 删除表
+/// - 修改表（包含列变更、索引变更、注释变更等）
 #[derive(Debug, Clone)]
 pub enum TableChange {
     /// 新建表
@@ -39,10 +77,25 @@ pub enum TableChange {
 }
 
 /// 增量 DDL 工具
+///
+/// 提供静态方法用于：
+/// - 比对两组 `TableDefine` 生成变更列表
+/// - 将变更列表转换为 DDL 语句
+/// - 一步到位完成比对和 DDL 生成
 pub struct DdlDiff;
 
 impl DdlDiff {
     /// 比对两组 TableDefine，生成变更列表
+    ///
+    /// 比对旧版本和新版本的表定义，生成增量变更。
+    /// 包括：新增的表、删除的表、修改的表（列变更、索引变更、注释变更）
+    ///
+    /// # 参数
+    /// * `old` - 旧版本表定义列表
+    /// * `new` - 新版本表定义列表
+    ///
+    /// # 返回值
+    /// * `Vec<TableChange>` - 变更列表
     pub fn diff(old: &[TableDefine], new: &[TableDefine]) -> Vec<TableChange> {
         let old_map: HashMap<&str, &TableDefine> = old.iter().map(|t| (t.table_name.as_str(), t)).collect();
         let new_map: HashMap<&str, &TableDefine> = new.iter().map(|t| (t.table_name.as_str(), t)).collect();
@@ -90,6 +143,16 @@ impl DdlDiff {
     }
 
     /// 比对列变更
+    ///
+    /// 比对两组列定义，返回列变更列表。
+    /// 包括：新增列、删除列、修改列（类型、nullable、默认值等）
+    ///
+    /// # 参数
+    /// * `old_cols` - 旧版本列定义列表
+    /// * `new_cols` - 新版本列定义列表
+    ///
+    /// # 返回值
+    /// * `Vec<ColumnChange>` - 列变更列表
     fn diff_columns(old_cols: &[ColumnDefine], new_cols: &[ColumnDefine]) -> Vec<ColumnChange> {
         let old_map: HashMap<&str, &ColumnDefine> = old_cols.iter().map(|c| (c.name.as_str(), c)).collect();
         let new_map: HashMap<&str, &ColumnDefine> = new_cols.iter().map(|c| (c.name.as_str(), c)).collect();
@@ -126,6 +189,21 @@ impl DdlDiff {
     }
 
     /// 判断列是否有实质性变更
+    ///
+    /// 检查列的以下属性是否发生变化：
+    /// - 字段类型（field_type）
+    /// - 可空性（is_nullable）
+    /// - 默认值（default_value）
+    /// - 长度（length）
+    /// - 精度（precision）
+    /// - 小数位（scale）
+    ///
+    /// # 参数
+    /// * `old` - 旧列定义
+    /// * `new` - 新列定义
+    ///
+    /// # 返回值
+    /// * `bool` - 是否发生实质性变更
     fn column_changed(old: &ColumnDefine, new: &ColumnDefine) -> bool {
         old.field_type != new.field_type
             || old.is_nullable != new.is_nullable
@@ -136,6 +214,16 @@ impl DdlDiff {
     }
 
     /// 比对索引变更
+    ///
+    /// 比对两组索引定义，返回索引变更列表。
+    /// 包括：新增索引、删除索引
+    ///
+    /// # 参数
+    /// * `old_idxs` - 旧版本索引定义列表
+    /// * `new_idxs` - 新版本索引定义列表
+    ///
+    /// # 返回值
+    /// * `Vec<IndexChange>` - 索引变更列表
     fn diff_indexes(old_idxs: &[IndexDefine], new_idxs: &[IndexDefine]) -> Vec<IndexChange> {
         let old_map: HashMap<&str, &IndexDefine> = old_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
         let new_map: HashMap<&str, &IndexDefine> = new_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
@@ -158,6 +246,16 @@ impl DdlDiff {
     }
 
     /// 将变更列表转为 DDL 语句
+    ///
+    /// 将变更列表转换为对应数据库方言的 DDL 语句。
+    ///
+    /// # 参数
+    /// * `dialect` - DDL 方言实现
+    /// * `changes` - 变更列表
+    ///
+    /// # 返回值
+    /// * 成功返回 DDL 语句列表
+    /// * 失败返回 `MetadataError`
     pub fn changes_to_ddl(
         dialect: &dyn DdlDialect,
         changes: &[TableChange],
@@ -248,6 +346,17 @@ impl DdlDiff {
     }
 
     /// 一步到位：比对 + 生成 DDL
+    ///
+    /// 一次性完成表定义比对和 DDL 语句生成。
+    ///
+    /// # 参数
+    /// * `dialect` - DDL 方言实现
+    /// * `old` - 旧版本表定义列表
+    /// * `new` - 新版本表定义列表
+    ///
+    /// # 返回值
+    /// * 成功返回 DDL 语句列表
+    /// * 失败返回 `MetadataError`
     pub fn diff_to_ddl(
         dialect: &dyn DdlDialect,
         old: &[TableDefine],

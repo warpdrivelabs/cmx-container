@@ -1,11 +1,9 @@
+//! cmx-buffer 配置结构体定义
+//!
+//! 提供 Redis 连接配置、分布式锁配置和缓存操作配置的定义。
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: cmx-buffer 配置结构体定义
- */
 
 /// Redis 连接配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

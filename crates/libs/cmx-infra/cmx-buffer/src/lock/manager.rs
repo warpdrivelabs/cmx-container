@@ -7,11 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: 分布式锁管理器
- */
+///! 分布式锁管理器
+
+/// 作者: AI Assistant
+/// 日期: 2026-03-16
 
 /// 分布式锁管理器
 #[derive(Clone)]
@@ -49,21 +48,25 @@ impl LockManager {
         Uuid::new_v4().to_string()
     }
 
-    /**
-     * 尝试获取锁（立即返回）
-     * @param key 锁键
-     * @return Result<bool> 是否获取成功
-     */
+    /// 尝试获取锁（立即返回）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Result<bool>` - 是否获取成功
     pub async fn try_lock(&self, key: &str) -> Result<bool> {
         let (success, _) = self.try_lock_with_value(key).await?;
         Ok(success)
     }
 
-    /**
-     * 尝试获取锁（立即返回，返回锁值）
-     * @param key 锁键
-     * @return Result<(bool, Option<String>)> 是否获取成功及锁值
-     */
+    /// 尝试获取锁（立即返回，返回锁值）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Result<(bool, Option<String>)>` - 是否获取成功及锁值
     pub async fn try_lock_with_value(&self, key: &str) -> Result<(bool, Option<String>)> {
         let lock_key = self.build_lock_key(key);
         let lock_value = Self::generate_lock_value();
@@ -92,11 +95,13 @@ impl LockManager {
         }
     }
 
-    /**
-     * 获取锁（带重试机制）
-     * @param key 锁键
-     * @return Result<LockGuard> 锁守卫
-     */
+    /// 获取锁（带重试机制）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Result<LockGuard>` - 锁守卫
     pub async fn lock(&self, key: &str) -> Result<LockGuard> {
         let lock_key = self.build_lock_key(key);
         
@@ -130,12 +135,14 @@ impl LockManager {
         )))
     }
 
-    /**
-     * 释放锁（需要提供锁值以验证所有权）
-     * @param key 锁键
-     * @param lock_value 锁值
-     * @return Result<()> 释放结果
-     */
+    /// 释放锁（需要提供锁值以验证所有权）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    /// * `lock_value` - 锁值
+    ///
+    /// # 返回值
+    /// * `Result<()>` - 释放结果
     pub async fn unlock_with_value(&self, key: &str, lock_value: &str) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
@@ -167,11 +174,13 @@ impl LockManager {
         }
     }
 
-    /**
-     * 释放锁（使用旧方式，不验证锁值）
-     * @param key 锁键
-     * @return Result<()> 释放结果
-     */
+    /// 释放锁（使用旧方式，不验证锁值）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Result<()>` - 释放结果
     pub async fn unlock(&self, key: &str) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
@@ -192,13 +201,15 @@ impl LockManager {
         }
     }
 
-    /**
-     * 延长锁的过期时间（需要提供锁值以验证所有权）
-     * @param key 锁键
-     * @param lock_value 锁值
-     * @param duration 新的过期时间
-     * @return Result<()> 操作结果
-     */
+    /// 延长锁的过期时间（需要提供锁值以验证所有权）
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    /// * `lock_value` - 锁值
+    /// * `duration` - 新的过期时间
+    ///
+    /// # 返回值
+    /// * `Result<()>` - 操作结果
     pub async fn extend_with_value(&self, key: &str, lock_value: &str, duration: Duration) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
@@ -230,12 +241,14 @@ impl LockManager {
         }
     }
 
-    /**
-     * 延长锁的过期时间
-     * @param key 锁键
-     * @param duration 新的过期时间
-     * @return Result<()> 操作结果
-     */
+    /// 延长锁的过期时间
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    /// * `duration` - 新的过期时间
+    ///
+    /// # 返回值
+    /// * `Result<()>` - 操作结果
     pub async fn extend(&self, key: &str, duration: Duration) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
@@ -256,11 +269,13 @@ impl LockManager {
         }
     }
 
-    /**
-     * 检查锁是否仍然有效
-     * @param key 锁键
-     * @return Result<bool> 是否有效
-     */
+    /// 检查锁是否仍然有效
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Result<bool>` - 是否有效
     pub async fn is_locked(&self, key: &str) -> Result<bool> {
         let lock_key = self.build_lock_key(key);
         
@@ -274,11 +289,13 @@ impl LockManager {
         Ok(result > 0)
     }
 
-    /**
-     * 获取锁的剩余时间
-     * @param key 锁键
-     * @return Option<Duration> 剩余时间
-     */
+    /// 获取锁的剩余时间
+    ///
+    /// # 参数
+    /// * `key` - 锁键
+    ///
+    /// # 返回值
+    /// * `Option<Duration>` - 剩余时间
     pub async fn remaining_ttl(&self, key: &str) -> Result<Option<Duration>> {
         let lock_key = self.build_lock_key(key);
         

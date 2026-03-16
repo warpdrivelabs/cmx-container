@@ -1,13 +1,35 @@
 //! PostgreSQL DDL 方言实现
+//!
+//! 提供 `PostgresDdlDialect` 结构体，实现 `DdlDialect` trait，
+//! 用于生成 PostgreSQL 数据库的 DDL 语句。
+//!
+//! # 功能特性
+//! - 支持所有标准 SQL 数据类型映射
+//! - 支持表空间设置
+//! - 支持索引（普通索引、唯一索引）
+//! - 支持表和列的注释
+//! - 支持 round-trip 模式（保留原始 db_type）
 
 use cmx_core::model::cell::{ColumnDefine, FieldType, IndexKind, TableDefine};
 use crate::MetadataError;
 use super::DdlDialect;
 
 /// PostgreSQL DDL 方言
+///
+/// 用于生成 PostgreSQL 数据库的 DDL 语句。
+/// 支持通过 `prefer_db_type` 字段开启 round-trip 模式。
+///
+/// # 示例
+/// ```ignore
+/// let dialect = PostgresDdlDialect::default();
+/// let ddl = dialect.generate_create_table(&table)?;
+/// ```
 #[derive(Default)]
 pub struct PostgresDdlDialect {
     /// 为 true 时优先使用 col.db_type（round-trip 模式）
+    ///
+    /// round-trip 模式下，会优先使用列定义中的 `db_type` 字段
+    /// 而非根据 `FieldType` 自动映射类型。
     pub prefer_db_type: bool,
 }
 

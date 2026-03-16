@@ -1,11 +1,10 @@
 use std::time::Instant;
 use tracing::{debug, error, info, warn};
 
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: 日志辅助工具模块
- */
+///! 日志辅助工具模块
+
+/// 作者: AI Assistant
+/// 日期: 2026-03-16
 
 /// 操作计时器，用于记录操作耗时
 pub struct OperationTimer {

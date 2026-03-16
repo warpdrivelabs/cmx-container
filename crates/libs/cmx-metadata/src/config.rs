@@ -2,6 +2,19 @@
 //!
 //! `TableDefinesConfig` 数据结构定义在 cmx-core 中，
 //! 本模块提供配置加载和管理的具体实现（`TableDefinesConfigManager`）。
+//!
+//! # 功能特性
+//! - 支持从 JSON 文件加载建表配置
+//! - 支持配置依赖管理和拓扑排序
+//! - 支持批量加载所有配置的表定义
+//!
+//! # 使用示例
+//! ```ignore
+//! use cmx_metadata::config::TableDefinesConfigManager;
+//!
+//! let manager = TableDefinesConfigManager::from_config_paths(&["config.json"])?;
+//! let tables = manager.load_all_tables(&base_path)?;
+//! ```
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -12,6 +25,13 @@ use crate::loader::load_table_defines_from_path;
 use crate::MetadataError;
 
 /// 从 JSON 文件路径读取单个建表配置
+///
+/// # 参数
+/// * `path` - JSON 配置文件的路径
+///
+/// # 返回值
+/// * 成功返回 `TableDefinesConfig`
+/// * 失败返回 `MetadataError`
 pub fn load_table_defines_config_from_path(path: &Path) -> Result<TableDefinesConfig, MetadataError> {
     let s = std::fs::read_to_string(path)?;
     let config: TableDefinesConfig = serde_json::from_str(&s)?;
@@ -19,16 +39,39 @@ pub fn load_table_defines_config_from_path(path: &Path) -> Result<TableDefinesCo
 }
 
 /// 管理多套建表配置，可合并加载所有配置指向的表定义
+///
+/// 该管理器支持：
+/// - 添加多个配置文件
+/// - 按依赖关系和优先级进行拓扑排序
+/// - 批量加载所有配置的表定义
+///
+/// # 示例
+/// ```ignore
+/// let mut manager = TableDefinesConfigManager::new();
+/// manager.add_config(config1);
+/// manager.add_config(config2);
+/// let sorted = manager.sorted_configs()?;
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct TableDefinesConfigManager {
+    /// 存储的配置列表
     configs: Vec<TableDefinesConfig>,
 }
 
 impl TableDefinesConfigManager {
+    /// 创建一个新的配置管理器实例
     pub fn new() -> Self {
         Self { configs: Vec::new() }
     }
 
+    /// 从多个配置文件路径创建配置管理器
+    ///
+    /// # 参数
+    /// * `paths` - JSON 配置文件的路径列表
+    ///
+    /// # 返回值
+    /// * 成功返回配置管理器实例
+    /// * 失败返回 `MetadataError`（如文件不存在或 JSON 解析失败）
     pub fn from_config_paths(paths: &[impl AsRef<Path>]) -> Result<Self, MetadataError> {
         let mut manager = Self::new();
         for p in paths {
@@ -38,23 +81,45 @@ impl TableDefinesConfigManager {
         Ok(manager)
     }
 
+    /// 添加一个配置文件到管理器
+    ///
+    /// # 参数
+    /// * `config` - 要添加的 `TableDefinesConfig`
     pub fn add_config(&mut self, config: TableDefinesConfig) {
         self.configs.push(config);
     }
 
+    /// 获取已添加的配置数量
     pub fn config_count(&self) -> usize {
         self.configs.len()
     }
 
+    /// 获取所有配置的引用
     pub fn configs(&self) -> &[TableDefinesConfig] {
         &self.configs
     }
 
+    /// 根据配置名称获取配置
+    ///
+    /// # 参数
+    /// * `name` - 配置的名称
+    ///
+    /// # 返回值
+    /// * 找到返回 `Some(&TableDefinesConfig)`
+    /// * 未找到返回 `None`
     pub fn get_config_by_name(&self, name: &str) -> Option<&TableDefinesConfig> {
         self.configs.iter().find(|c| c.name == name)
     }
 
     /// 按依赖与优先级排序（拓扑排序）
+    ///
+    /// 对所有配置进行拓扑排序，考虑：
+    /// - `depends_on` 字段定义的依赖关系（被依赖的配置先加载）
+    /// - `priority` 字段定义的优先级（优先级高的先加载）
+    ///
+    /// # 返回值
+    /// * 成功返回按排序后的配置引用列表
+    /// * 失败返回 `MetadataError`（如存在循环依赖或依赖不存在的配置）
     pub fn sorted_configs(&self) -> Result<Vec<&TableDefinesConfig>, MetadataError> {
         let name_to_index: HashMap<&str, usize> = self
             .configs
@@ -108,6 +173,16 @@ impl TableDefinesConfigManager {
         Ok(out.into_iter().map(|i| &self.configs[i]).collect())
     }
 
+    /// 加载所有配置的表定义
+    ///
+    /// 按照拓扑排序顺序加载所有配置文件中定义的表。
+    ///
+    /// # 参数
+    /// * `base_path` - 配置文件的基础路径
+    ///
+    /// # 返回值
+    /// * 成功返回所有表定义的向量
+    /// * 失败返回 `MetadataError`
     pub fn load_all_tables(&self, base_path: &Path) -> Result<Vec<TableDefine>, MetadataError> {
         let mut all = Vec::new();
         for config in self.sorted_configs()? {
@@ -120,6 +195,15 @@ impl TableDefinesConfigManager {
         Ok(all)
     }
 
+    /// 加载指定配置名称的表定义
+    ///
+    /// # 参数
+    /// * `base_path` - 配置文件的基础路径
+    /// * `config_name` - 配置的名称
+    ///
+    /// # 返回值
+    /// * 成功返回该配置下所有表定义的向量
+    /// * 失败返回 `MetadataError`
     pub fn load_tables_by_config_name(
         &self,
         base_path: &Path,

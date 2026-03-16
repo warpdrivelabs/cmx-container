@@ -1,3 +1,7 @@
+//! 缓存操作模块入口
+//!
+//! 提供缓存管理器 `CacheManager`，用于统一管理各种缓存操作。
+
 pub mod ops;
 pub mod ttl;
 pub mod sorted_set;
@@ -16,12 +20,6 @@ use crate::error::{Error, Result};
 use std::sync::OnceLock;
 use std::sync::Mutex;
 
-/**
- * @Author: AI Assistant
- * @Date: 2026-03-16
- * @Describe: 缓存操作模块入口
- */
-
 /// 缓存管理器 - 提供统一的缓存操作入口
 #[derive(Clone)]
 pub struct CacheManager {
@@ -30,10 +28,10 @@ pub struct CacheManager {
 
 impl CacheManager {
     /// 创建新的缓存管理器
-    /// 
+    ///
     /// # 参数
     /// * `client` - Redis 客户端实例
-    /// 
+    ///
     /// # 返回值
     /// * 缓存管理器实例
     pub fn new(client: RedisClient) -> Self {
@@ -41,7 +39,7 @@ impl CacheManager {
     }
 
     /// 获取字符串缓存操作器
-    /// 
+    ///
     /// # 返回值
     /// * CacheOps 实例，用于基本的字符串缓存操作
     pub fn ops(&self) -> CacheOps {
@@ -49,7 +47,7 @@ impl CacheManager {
     }
 
     /// 获取 TTL 操作器
-    /// 
+    ///
     /// # 返回值
     /// * TtlOps 实例，用于管理键的过期时间
     pub fn ttl(&self) -> TtlOps {
@@ -57,7 +55,7 @@ impl CacheManager {
     }
 
     /// 获取有序集合操作器
-    /// 
+    ///
     /// # 返回值
     /// * SortedSetOps 实例，用于有序集合操作
     pub fn sorted_set(&self) -> SortedSetOps {
@@ -65,7 +63,7 @@ impl CacheManager {
     }
 
     /// 获取集合操作器
-    /// 
+    ///
     /// # 返回值
     /// * SetOps 实例，用于集合操作
     pub fn set(&self) -> SetOps {
@@ -73,7 +71,7 @@ impl CacheManager {
     }
 
     /// 获取发布/订阅操作器
-    /// 
+    ///
     /// # 返回值
     /// * PubSubOps 实例，用于发布/订阅操作
     pub fn pubsub(&self) -> PubSubOps {
@@ -81,7 +79,7 @@ impl CacheManager {
     }
 
     /// 获取内部客户端引用
-    /// 
+    ///
     /// # 返回值
     /// * Redis 客户端引用
     pub fn client(&self) -> &RedisClient {
@@ -99,10 +97,10 @@ pub struct GlobalCacheManager;
 
 impl GlobalCacheManager {
     /// 初始化全局缓存管理器
-    /// 
+    ///
     /// # 参数
     /// * `redis_config` - Redis 配置
-    /// 
+    ///
     /// # 返回值
     /// * 初始化结果
     pub fn initialize(redis_config: RedisConfig) -> Result<()> {
@@ -110,25 +108,25 @@ impl GlobalCacheManager {
         let client = runtime.block_on(async {
             RedisClient::new(redis_config).await
         })?;
-        
+
         let cache_manager = CacheManager::new(client);
-        
+
         GLOBAL_CACHE_MANAGER
             .set(cache_manager.clone())
             .map_err(|_| Error::ConfigError("全局缓存管理器已初始化".to_string()))?;
-        
+
         GLOBAL_CACHE_MANAGER_MUTEX
             .set(Mutex::new(cache_manager))
             .map_err(|_| Error::ConfigError("全局缓存管理器 Mutex 已初始化".to_string()))
     }
 
     /// 初始化全局缓存管理器（带配置）
-    /// 
+    ///
     /// # 参数
     /// * `redis_config` - Redis 配置
     /// * `cache_config` - 缓存配置
     /// * `lock_config` - 锁配置
-    /// 
+    ///
     /// # 返回值
     /// * 初始化结果
     pub fn initialize_with_configs(
@@ -140,23 +138,23 @@ impl GlobalCacheManager {
         let client = runtime.block_on(async {
             RedisClient::new_with_configs(redis_config, cache_config, lock_config).await
         })?;
-        
+
         let cache_manager = CacheManager::new(client);
-        
+
         GLOBAL_CACHE_MANAGER
             .set(cache_manager.clone())
             .map_err(|_| Error::ConfigError("全局缓存管理器已初始化".to_string()))?;
-        
+
         GLOBAL_CACHE_MANAGER_MUTEX
             .set(Mutex::new(cache_manager))
             .map_err(|_| Error::ConfigError("全局缓存管理器 Mutex 已初始化".to_string()))
     }
 
     /// 获取全局缓存管理器引用
-    /// 
+    ///
     /// # 返回值
     /// * 缓存管理器引用
-    /// 
+    ///
     /// # Panics
     /// 如果未初始化则 panic
     pub fn get() -> &'static CacheManager {
@@ -166,10 +164,10 @@ impl GlobalCacheManager {
     }
 
     /// 获取全局缓存管理器可变引用
-    /// 
+    ///
     /// # 返回值
     /// * 缓存管理器可变引用
-    /// 
+    ///
     /// # Panics
     /// 如果未初始化则 panic
     pub fn get_mut() -> std::sync::MutexGuard<'static, CacheManager> {
@@ -179,7 +177,7 @@ impl GlobalCacheManager {
     }
 
     /// 检查是否已初始化
-    /// 
+    ///
     /// # 返回值
     /// * 是否已初始化
     pub fn is_initialized() -> bool {
@@ -187,7 +185,7 @@ impl GlobalCacheManager {
     }
 
     /// 获取全局缓存管理器克隆
-    /// 
+    ///
     /// # 返回值
     /// * 缓存管理器克隆
     pub fn get_cloned() -> CacheManager {

@@ -1,4 +1,12 @@
-//! 从 JSON 加载 TableDefine（从 cmx-core meta/base.rs 迁移）
+//! 表定义加载模块
+//!
+//! 提供从 JSON 文件加载 `TableDefine` 的功能。
+//! 支持三种 JSON 根格式：
+//! - 单个 `TableDefine` 对象
+//! - `{ "tables": [ ... ] }` 对象格式
+//! - 顶层数组 `[ TableDefine, ... ]` 格式
+//!
+//! 本模块是从 cmx-core 迁移过来的。
 
 use std::path::Path;
 
@@ -8,28 +16,58 @@ use cmx_core::model::cell::TableDefine;
 use crate::MetadataError;
 
 /// 支持"多表"的 JSON 根结构（可选）
+///
+/// 支持三种格式：
+/// - 单个 `TableDefine` 对象
+/// - `{ "tables": [ ... ] }` 对象格式
+/// - 顶层数组 `[ TableDefine, ... ]` 格式
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum TableDefinesRoot {
+    /// 单个表定义
     Single(Box<TableDefine>),
+    /// 多表对象格式（包含 `tables` 键）
     Multi { tables: Vec<TableDefine> },
+    /// 多表数组格式
     Array(Vec<TableDefine>),
 }
 
 /// 从 JSON 字符串解析单个表定义
+///
+/// # 参数
+/// * `s` - JSON 字符串
+///
+/// # 返回值
+/// * 成功返回 `TableDefine`
+/// * 失败返回 `MetadataError`
 pub fn table_define_from_str(s: &str) -> Result<TableDefine, MetadataError> {
     let define: TableDefine = serde_json::from_str(s)?;
     Ok(define)
 }
 
 /// 从 JSON 文件路径读取单个表定义
+///
+/// # 参数
+/// * `path` - JSON 文件路径
+///
+/// # 返回值
+/// * 成功返回 `TableDefine`
+/// * 失败返回 `MetadataError`
 pub fn load_table_define_from_path(path: &Path) -> Result<TableDefine, MetadataError> {
     let s = std::fs::read_to_string(path)?;
     table_define_from_str(&s)
 }
 
 /// 从 JSON 字符串解析多个表定义
+///
 /// 支持三种根格式：单个 `TableDefine` 对象、`{ "tables": [ ... ] }`、或顶层数组 `[ TableDefine, ... ]`
+///
+/// # 参数
+/// * `s` - JSON 字符串
+///
+/// # 返回值
+/// * 成功返回 `Vec<TableDefine>`
+/// * 失败返回 `MetadataError`
 pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError> {
     let root: TableDefinesRoot = serde_json::from_str(s)?;
     Ok(match root {
@@ -40,6 +78,13 @@ pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError
 }
 
 /// 从 JSON 文件路径读取多个表定义
+///
+/// # 参数
+/// * `path` - JSON 文件路径
+///
+/// # 返回值
+/// * 成功返回 `Vec<TableDefine>`
+/// * 失败返回 `MetadataError`
 pub fn load_table_defines_from_path(path: &Path) -> Result<Vec<TableDefine>, MetadataError> {
     let s = std::fs::read_to_string(path)?;
     table_defines_from_str(&s)

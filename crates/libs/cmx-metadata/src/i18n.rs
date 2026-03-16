@@ -1,8 +1,31 @@
-//! i18n 伴生表生成（从 cmx-core meta/base.rs 迁移）
+//! i18n 伴生表生成模块
+//!
+//! 提供从基础表定义生成多语言伴生表定义的功能。
+//! 伴生表的表名后缀为 `_i18n`，包含 `ref_id` 和 `locale` 列，
+//! 以及所有标记为 `i18n: true` 的列。
+//!
+//! 本模块是从 cmx-core 迁移过来的。
 
 use cmx_core::model::cell::{ColumnDefine, FieldType, TableDefine};
 
-/// 根据基础表定义生成多语言伴生表定义（表名后缀 `_i18n`，含 ref_id、locale 及所有 i18n 列）
+/// 根据基础表定义生成多语言伴生表定义
+///
+/// 如果基础表的 `i18n` 字段为 `false`，或者没有标记为 `i18n` 的列，
+/// 则返回 `None`。
+///
+/// 生成的伴生表包含：
+/// - `ref_id` 列：关联到主表的 ID
+/// - `locale` 列：语言标识（如 "zh_CN", "en_US"）
+/// - 所有 `i18n: true` 的列
+///
+/// 主键为 `ref_id` 和 `locale` 的组合。
+///
+/// # 参数
+/// * `base` - 基础表定义
+///
+/// # 返回值
+/// * 成功返回 `Some(TableDefine)` - 伴生表定义
+/// * 返回 `None` - 如果基础表不需要多语言支持
 pub fn derive_i18n_table_define(base: &TableDefine) -> Option<TableDefine> {
     if !base.i18n {
         return None;
