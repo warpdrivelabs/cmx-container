@@ -10,6 +10,8 @@ pub enum MetadataError {
     DdlGeneration(String),
     #[error("DDL 解析错误: {0}")]
     DdlParse(String),
+    #[error("DDL 执行错误: {0}")]
+    DdlExecution(String),
     #[error("配置未找到: {0}")]
     ConfigNotFound(String),
     #[error("配置依赖错误: {0}")]

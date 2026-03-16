@@ -6,18 +6,19 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     cmx-database                        │
-│         DDL 执行（PgTableDefineExecutor）                │
-│         execute_ddl_by_ids / execute_ddl_statement_by_ids│
-└────────────────────────┬────────────────────────────────┘
-                         │ 依赖
-┌────────────────────────▼────────────────────────────────┐
 │                     cmx-metadata                        │
 │  loader    ── JSON 加载                                  │
 │  config    ── 多配置文件管理（拓扑排序）                   │
 │  i18n      ── 多语言伴生表生成                            │
 │  ddl/      ── DDL 生成（DdlDialect trait）               │
 │  parser/   ── DDL 解析（DdlParser trait）                │
+│  executor  ── DDL 执行（PgTableDefineExecutor）          │
+└────────────────────────┬────────────────────────────────┘
+                         │ 依赖
+┌────────────────────────▼────────────────────────────────┐
+│                     cmx-database                        │
+│         底层 SQL 执行（execute_sql_by_ids 等）            │
+│         连接池管理 / 事务管理                              │
 └────────────────────────┬────────────────────────────────┘
                          │ 依赖
 ┌────────────────────────▼────────────────────────────────┐
@@ -32,8 +33,8 @@
 | Crate | 职责 |
 |-------|------|
 | `cmx-core` | 定义核心结构体（`TableDefine`、`ColumnDefine`、`IndexDefine`、`FieldType`）和执行器 trait |
-| `cmx-metadata` | JSON 加载、DDL 生成/解析、增量 DDL diff、i18n 伴生表生成 |
-| `cmx-database` | 通过数据库连接池执行 DDL 语句，实现 `TableDefineDbExecutor` |
+| `cmx-database` | 底层数据库连接池管理、事务管理、SQL 执行（`execute_sql_by_ids` 等） |
+| `cmx-metadata` | JSON 加载、DDL 生成/解析、增量 DDL diff、i18n 伴生表生成、DDL 执行（依赖 cmx-database） |
 
 ---
 
@@ -48,6 +49,7 @@ crates/libs/cmx-metadata/src/
 ├── loader.rs           # JSON 加载函数
 ├── config.rs           # TableDefinesConfig / TableDefinesConfigManager
 ├── i18n.rs             # derive_i18n_table_define
+├── executor.rs         # DDL 执行（PgTableDefineExecutor）
 ├── ddl/
 │   ├── mod.rs          # DdlDialect trait + 便捷函数
 │   ├── postgres.rs     # PostgresDdlDialect 实现
@@ -69,6 +71,7 @@ crates/libs/cmx-metadata/src/
 | `ddl/diff.rs` | `DdlDiff`：两版 TableDefine 比对 + 增量 DDL 生成 |
 | `parser/mod.rs` | `DdlParser` trait 定义及 `pg_ddl_to_table_defines` / `pg_ddl_to_table_define` 便捷函数 |
 | `parser/postgres.rs` | `PostgresDdlParser`：正则解析 CREATE TABLE / CREATE INDEX / COMMENT ON，还原为 TableDefine |
+| `executor.rs` | `execute_ddl_by_ids` / `execute_ddl_statement_by_ids`（异步 DDL 执行）、`PgTableDefineExecutor`（实现 `TableDefineDbExecutor` trait） |
 
 ---
 
@@ -479,9 +482,9 @@ DROP TABLE IF EXISTS "old_table" CASCADE;
 
 ---
 
-## 11. cmx-database DDL 执行
+## 11. DDL 执行（cmx-metadata/executor.rs）
 
-定义于 `cmx-database/src/ddl.rs`：
+DDL 执行功能位于 `cmx-metadata/src/executor.rs`，依赖 `cmx-database` 提供的底层 SQL 执行能力。
 
 ### 11.1 执行函数
 
@@ -491,17 +494,17 @@ pub async fn execute_ddl_by_ids(
     db_id: &str,
     txn_id: Option<&str>,
     statements: &[String],
-) -> Result<()>;
+) -> Result<(), MetadataError>;
 
 /// 执行单条 DDL 语句
 pub async fn execute_ddl_statement_by_ids(
     db_id: &str,
     txn_id: Option<&str>,
     statement: &str,
-) -> Result<u64>;
+) -> Result<u64, MetadataError>;
 ```
 
-底层通过 `crate::transaction::execute_sql_by_ids` 执行，支持通过 `db_id` 查找连接池、通过 `txn_id` 加入事务。
+底层通过 `cmx_database::execute_sql_by_ids` 执行，支持通过 `db_id` 查找连接池、通过 `txn_id` 加入事务。
 
 ### 11.2 PgTableDefineExecutor
 
@@ -711,5 +714,5 @@ CREATE INDEX "idx_cmx_domain_type" ON "public"."cmx_domain" ("type");
 | 增量 DDL diff | `crates/libs/cmx-metadata/src/ddl/diff.rs` |
 | DdlParser trait | `crates/libs/cmx-metadata/src/parser/mod.rs` |
 | PostgreSQL DDL 解析 | `crates/libs/cmx-metadata/src/parser/postgres.rs` |
-| DDL 执行 | `crates/libs/cmx-infra/cmx-database/src/ddl.rs` |
+| DDL 执行 | `crates/libs/cmx-metadata/src/executor.rs` |
 | 示例 JSON | `crates/libs/cmx-core/src/model/domain_app_module_tables.json` |

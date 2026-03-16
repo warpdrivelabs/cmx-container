@@ -489,7 +489,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cmx-core",
- "cmx-metadata",
  "derive_more",
  "futures",
  "log",
@@ -512,10 +511,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cmx-core",
+ "cmx-database",
  "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
