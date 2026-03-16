@@ -1,0 +1,15 @@
+[package]
+name = "cmx-plugin"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cmx-core = { workspace = true }
+cmx-metadata = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+zip = "8.2.0"
+ed25519-dalek = { version = "2.2", features = ["std"] }
+base64 = "0.22"

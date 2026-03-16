@@ -5,27 +5,12 @@ use std::path::{Path, PathBuf};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use serde_json;
-use thiserror::Error;
 
-use crate::model::cell::TableDefine;
-use crate::model::meta::base::TableDefinesConfigManager;
+use cmx_core::model::cell::TableDefine;
+use cmx_core::model::meta::plugin::{PluginDefinition, PluginManifest};
+use cmx_metadata::config::TableDefinesConfigManager;
 
-use super::def::{PluginDefinition, PluginManifest};
-
-#[derive(Error, Debug)]
-pub enum PluginError {
-    #[error("IO 错误: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("JSON 解析错误: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("ZIP 错误: {0}")]
-    Zip(String),
-    #[error("插件错误: {0}")]
-    Plugin(String),
-    #[error("签名验证失败: {0}")]
-    SignatureVerification(String),
-}
+use crate::error::PluginError;
 
 /// 从 ZIP 加载时的验签配置。
 ///
@@ -169,16 +154,6 @@ impl PluginRegistry {
         Ok(())
     }
 
-    /// 同 [register]，保留旧命名兼容
-    #[inline]
-    pub fn register_definition(
-        &mut self,
-        def: PluginDefinition,
-        base_path: &Path,
-    ) -> Result<(), PluginError> {
-        self.register(def, base_path)
-    }
-
     /// 从插件 ZIP 包加载：读取 ZIP 内 manifest（默认 `manifest.json`），解析装配清单并解压到指定或临时目录后注册。
     /// 若提供 `verify_config`，则对带签名的清单执行验签；验签失败或要求签名但清单未带签名时返回错误。
     pub fn load_from_zip_path(
@@ -280,5 +255,11 @@ impl PluginRegistry {
         config_manager
             .load_all_tables(base)
             .map_err(|e| PluginError::Plugin(e.to_string()))
+    }
+}
+
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }

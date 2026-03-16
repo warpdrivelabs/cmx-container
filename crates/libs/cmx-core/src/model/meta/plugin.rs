@@ -149,7 +149,7 @@ impl PluginManifest {
 
     /// 是否包含签名信息（algorithm + signature 均存在）。
     pub fn has_signature(&self) -> bool {
-        self.signature_algorithm.as_ref().map_or(false, |a| !a.is_empty())
-            && self.signature.as_ref().map_or(false, |s| !s.is_empty())
+        self.signature_algorithm.as_ref().is_some_and(|a| !a.is_empty())
+            && self.signature.as_ref().is_some_and(|s| !s.is_empty())
     }
 }

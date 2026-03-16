@@ -5,6 +5,7 @@ members = [
     "crates/libs/cmx-core",
     "crates/libs/cmx-utils",
     "crates/libs/cmx-metadata",
+    "crates/libs/cmx-plugin",
     "crates/libs/cmx-infra/cmx-database",
     "crates/libs/cmx-infra/cmx-buffer",
     "crates/web/web-server",
@@ -35,6 +36,7 @@ cmx-api = { path = "crates/libs/cmx-api" }
 cmx-database = { path = "crates/libs/cmx-infra/cmx-database" }
 cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer" }
 cmx-metadata = { path = "crates/libs/cmx-metadata" }
+cmx-plugin = { path = "crates/libs/cmx-plugin" }
 
 
 # ============================================
@@ -112,7 +114,8 @@ sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", 
 # web相关
 # =================
 axum = {version = "0.8", features = ["macros"]}
-tower-http = { version = "0.6", features = ["fs"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors", "trace", "compression-full", "timeout"] }
 tower-cookies = "0.11"
 
 
@@ -125,3 +128,15 @@ dotenvy = "0.15"
 
 uuid={version = "1.21"}
 regex = "1"
+
+# ============================================
+# 异步与并发
+# ============================================
+futures = "0.3"
+
+# ============================================
+# 验证
+validator = { version = "0.18", features = ["derive"] }
+validator_macros = "0.18"
+# HTTP 日期处理
+http-date = "0.3"

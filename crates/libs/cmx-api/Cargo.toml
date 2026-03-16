@@ -20,3 +20,6 @@ serde = { workspace = true }
 # serde_json: JSON 序列化/反序列化
 serde_json = { workspace = true }
 serde_with={ workspace = true }
+# 验证
+validator = { workspace = true }
+

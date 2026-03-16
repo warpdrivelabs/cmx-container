@@ -1,27 +1,15 @@
-//! 建表 JSON 配置管理（从 cmx-core meta/base.rs 迁移）
+//! 建表 JSON 配置管理
+//!
+//! `TableDefinesConfig` 数据结构定义在 cmx-core 中，
+//! 本模块提供配置加载和管理的具体实现（`TableDefinesConfigManager`）。
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
 use cmx_core::model::cell::TableDefine;
-use cmx_core::model::meta::base::TableDefineDbExecutor;
+use cmx_core::model::meta::base::{TableDefineDbExecutor, TableDefinesConfig};
 use crate::loader::load_table_defines_from_path;
 use crate::MetadataError;
-
-/// 建表 JSON 配置文件：描述一组表定义文件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TableDefinesConfig {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub files: Vec<String>,
-    #[serde(default)]
-    pub depends_on: Vec<String>,
-    #[serde(default)]
-    pub priority: Option<i32>,
-}
 
 /// 从 JSON 文件路径读取单个建表配置
 pub fn load_table_defines_config_from_path(path: &Path) -> Result<TableDefinesConfig, MetadataError> {

@@ -2,10 +2,16 @@
 
 ## 1. 架构概览
 
-本系统采用三层 crate 架构，将表元数据的定义、处理和执行职责清晰分离：
+本系统采用四层 crate 架构，将表元数据的定义、处理、执行和插件管理职责清晰分离：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
+│                      cmx-plugin                         │
+│  registry   ── 插件注册表（JSON/ZIP 加载、验签）         │
+│  error      ── 插件错误类型                              │
+└────────────────────────┬────────────────────────────────┘
+                         │ 依赖
+┌────────────────────────▼────────────────────────────────┐
 │                     cmx-metadata                        │
 │  loader    ── JSON 加载                                  │
 │  config    ── 多配置文件管理（拓扑排序）                   │
@@ -24,7 +30,8 @@
 ┌────────────────────────▼────────────────────────────────┐
 │                      cmx-core                           │
 │  TableDefine / ColumnDefine / IndexDefine / FieldType   │
-│  TableDefineDbExecutor trait                            │
+│  TableDefineDbExecutor trait / TableDefinesConfig        │
+│  PluginDefinition / PluginManifest（基础结构体）          │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -32,9 +39,10 @@
 
 | Crate | 职责 |
 |-------|------|
-| `cmx-core` | 定义核心结构体（`TableDefine`、`ColumnDefine`、`IndexDefine`、`FieldType`）和执行器 trait |
+| `cmx-core` | 定义核心结构体（`TableDefine`、`ColumnDefine`、`IndexDefine`、`FieldType`、`TableDefinesConfig`）、执行器 trait、插件基础结构体（`PluginDefinition`、`PluginManifest`） |
 | `cmx-database` | 底层数据库连接池管理、事务管理、SQL 执行（`execute_sql_by_ids` 等） |
-| `cmx-metadata` | JSON 加载、DDL 生成/解析、增量 DDL diff、i18n 伴生表生成、DDL 执行（依赖 cmx-database） |
+| `cmx-metadata` | JSON 加载、DDL 生成/解析、增量 DDL diff、i18n 伴生表生成、DDL 执行（依赖 cmx-database）、配置管理（`TableDefinesConfigManager`） |
+| `cmx-plugin` | 插件注册表（`PluginRegistry`）、ZIP 加载与解压、Ed25519 签名验证（依赖 cmx-metadata + cmx-core） |
 
 ---
 
@@ -64,7 +72,7 @@ crates/libs/cmx-metadata/src/
 | 模块 | 核心功能 |
 |------|---------|
 | `loader.rs` | `table_define_from_str`（单表解析）、`table_defines_from_str`（多表解析）、`load_table_define_from_path` / `load_table_defines_from_path`（文件加载）；支持三种 JSON 根格式 |
-| `config.rs` | `TableDefinesConfig`（配置描述）、`TableDefinesConfigManager`（多配置管理、拓扑排序加载）、`load_and_apply_table_defines_from_path`（加载并执行建表） |
+| `config.rs` | `TableDefinesConfigManager`（多配置管理、拓扑排序加载，`TableDefinesConfig` 结构体定义在 cmx-core 中）、`load_and_apply_table_defines_from_path`（加载并执行建表） |
 | `i18n.rs` | `derive_i18n_table_define`：根据基础表的 `i18n` 标志生成后缀 `_i18n` 的多语言伴生表 |
 | `ddl/mod.rs` | `DdlDialect` trait 定义及 `table_to_pg_ddl` / `tables_to_pg_ddl` / `table_to_pg_ddl_roundtrip` 便捷函数 |
 | `ddl/postgres.rs` | `PostgresDdlDialect`：FieldType 到 PG 类型映射、CREATE TABLE / INDEX / COMMENT / ALTER / DROP 生成 |
