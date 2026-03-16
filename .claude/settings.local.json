@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo build -p cmx-database)"
+      "Bash(cargo build -p cmx-database)",
+      "Bash(xargs grep:*)",
+      "Bash(mkdir -p e:/rustspace/cmx/cmx-container/crates/libs/cmx-metadata/src/ddl)",
+      "Bash(mkdir -p e:/rustspace/cmx/cmx-container/crates/libs/cmx-metadata/src/parser)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }

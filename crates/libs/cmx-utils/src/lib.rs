@@ -59,6 +59,7 @@
 pub mod b64;
 pub mod config;
 pub mod time;
+pub mod zip;
 
 pub use config::{CommandLineSource, ConfigSource, EnvSource, FileSource, MemorySource, Priority};
 pub use config::{ConfigParser, EnvParser, JsonParser, TomlParser, parse_file_auto};
@@ -67,3 +68,5 @@ pub use config::{
     Config, ConfigBuilder, ConfigError, ConfigResult, ConfigStore, ConfigValue, FromConfigValue,
 };
 pub use config::{ConfigManager, DefaultConfigLoader};
+// 重新导出 zip 模块的常用类型
+pub use zip::{ZipCompressor, ZipExtractor, ZipError, ZipResult};

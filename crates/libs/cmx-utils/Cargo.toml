@@ -14,6 +14,12 @@ base64 = "0.22"
 thiserror = { workspace = true }
 # toml: TOML 解析
 toml = "0.8"
+# zip: ZIP 压缩/解压
+zip = "2.2"
+# walkdir: 目录遍历
+walkdir = "2.5"
+# fs-err: 改进的文件系统操作
+fs-err = "2.2"
 
 time = { workspace = true }
 uuid = { workspace = true ,features = ["v4","fast-rng"]}

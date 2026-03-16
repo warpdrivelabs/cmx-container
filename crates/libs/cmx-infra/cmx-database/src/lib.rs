@@ -12,6 +12,7 @@ pub mod transaction;
 pub mod executor;
 pub mod manager;
 pub mod types;
+pub mod ddl;
 
 // 导出错误类型，确保所有模块都可以使用crate::Error
 pub mod error;
@@ -25,6 +26,7 @@ pub use manager::{DatabaseManager, DatabaseManagerConfig, TransactionContext, Tr
 pub use types::{QueryBuilder, TypedRow, TypedResult, CompareOp, OrderDirection};
 pub use transaction::{check_long_running_transactions, cleanup_completed_transactions, commit_txn_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, get_active_transactions, get_dbx_by_db_id, get_txn_holder_by_id, get_txn_metadata, query_sql_by_ids, query_sql_with_params_by_ids, rollback_txn_by_id, with_transaction_by_id, Dbx, Propagation, TransactionMetadata, TransactionStatus};
 pub use connection::{DbPool};
+pub use ddl::{execute_ddl_by_ids, execute_ddl_statement_by_ids, PgTableDefineExecutor};
 
 
 

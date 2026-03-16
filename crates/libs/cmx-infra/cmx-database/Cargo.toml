@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 cmx-core = { workspace = true }
+cmx-metadata = { workspace = true }
 
 
 # ============================================

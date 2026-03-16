@@ -1,0 +1,12 @@
+[package]
+name = "cmx-metadata"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cmx-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
