@@ -11,7 +11,12 @@ pub mod error;
 pub mod lock;
 pub mod logging;
 
-pub use cache::{CacheManager, CacheOps, GlobalCacheManager, TtlOps};
+pub use cache::{
+    CacheManager, CacheOps, GlobalCacheManager, 
+    SortedSetOps, SetOps, PubSubOps,
+    PubSubMessage, Subscriber, SharedSubscriber,
+    TtlOps
+};
 pub use client::{
     create_shared_client, get_client, get_client_mut, GlobalRedisClient, RedisClient, SharedRedisClient
 };

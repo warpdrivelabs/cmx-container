@@ -52,8 +52,11 @@ cmx-buffer/
 │   ├── client.rs           # Redis 客户端封装（bb8 连接池）
 │   ├── cache/
 │   │   ├── mod.rs          # 缓存操作模块入口
-│   │   ├── ops.rs          # 基础缓存操作（增删改查）
-│   │   └── ttl.rs          # 过期时间管理
+│   │   ├── ops.rs          # 基础缓存操作（字符串）
+│   │   ├── ttl.rs          # 过期时间管理
+│   │   ├── sorted_set.rs   # 有序集合操作
+│   │   ├── set.rs          # 集合操作
+│   │   └── pubsub.rs       # 发布/订阅操作
 │   ├── lock/
 │   │   ├── mod.rs          # 分布式锁模块入口
 │   │   └── manager.rs      # 分布式锁管理器（含自动续期）
@@ -221,6 +224,73 @@ impl LockGuard {
 |------|------|------|--------|
 | `incr` | 自增 | key, delta | `Result<i64>` |
 | `decr` | 自减 | key, delta | `Result<i64>` |
+
+#### 4.1.6 有序集合操作 (SortedSetOps)
+| 方法 | 描述 | 参数 | 返回值 |
+|------|------|------|--------|
+| `zadd` | 添加有序集合成员 | key, items | `Result<u64>` |
+| `zadd_one` | 添加单个成员 | key, score, member | `Result<bool>` |
+| `zadd_nx` | 仅不存在时添加 | key, score, member | `Result<bool>` |
+| `zadd_xx` | 仅存在时更新 | key, score, member | `Result<bool>` |
+| `zrem` | 移除成员 | key, members | `Result<u64>` |
+| `zrem_one` | 移除单个成员 | key, member | `Result<bool>` |
+| `zrange` | 获取索引范围成员 | key, start, stop | `Result<Vec<String>>` |
+| `zrange_with_scores` | 获取成员及分数 | key, start, stop | `Result<Vec<(String, f64)>>` |
+| `zrevrange` | 获取索引范围成员（降序） | key, start, stop | `Result<Vec<String>>` |
+| `zrevrange_with_scores` | 获取成员及分数（降序） | key, start, stop | `Result<Vec<(String, f64)>>` |
+| `zrangebyscore` | 按分数范围查询 | key, min, max | `Result<Vec<String>>` |
+| `zrangebyscore_limit` | 按分数范围查询（限数量） | key, min, max, offset, count | `Result<Vec<String>>` |
+| `zscore` | 获取成员分数 | key, member | `Result<Option<f64>>` |
+| `zrank` | 获取成员排名（升序） | key, member | `Result<Option<u64>>` |
+| `zrevrank` | 获取成员排名（降序） | key, member | `Result<Option<u64>>` |
+| `zcard` | 获取集合大小 | key | `Result<u64>` |
+| `zcount` | 统计分数范围内成员 | key, min, max | `Result<u64>` |
+| `zincrby` | 增加成员分数 | key, delta, member | `Result<f64>` |
+| `zremrangebyrank` | 按排名移除 | key, start, stop | `Result<u64>` |
+| `zremrangebyscore` | 按分数范围移除 | key, min, max | `Result<u64>` |
+| `zpopmin` | 弹出最低分成员 | key, count | `Result<Vec<(String, f64)>>` |
+| `zpopmax` | 弹出最高分成员 | key, count | `Result<Vec<(String, f64)>>` |
+| `zunionstore` | 并集存储 | dest, keys | `Result<u64>` |
+| `zinterstore` | 交集存储 | dest, keys | `Result<u64>` |
+
+#### 4.1.7 集合操作 (SetOps)
+| 方法 | 描述 | 参数 | 返回值 |
+|------|------|------|--------|
+| `sadd` | 添加成员 | key, members | `Result<u64>` |
+| `sadd_one` | 添加单个成员 | key, member | `Result<bool>` |
+| `srem` | 移除成员 | key, members | `Result<u64>` |
+| `srem_one` | 移除单个成员 | key, member | `Result<bool>` |
+| `smembers` | 获取所有成员 | key | `Result<Vec<String>>` |
+| `sismember` | 检查成员是否存在 | key, member | `Result<bool>` |
+| `smismember` | 检查多个成员 | key, members | `Result<Vec<bool>>` |
+| `scard` | 获取集合大小 | key | `Result<u64>` |
+| `spop` | 随机弹出成员 | key | `Result<Option<String>>` |
+| `spop_count` | 随机弹出多个成员 | key, count | `Result<Vec<String>>` |
+| `srandmember` | 随机获取成员 | key | `Result<Option<String>>` |
+| `srandmember_count` | 随机获取多个成员 | key, count | `Result<Vec<String>>` |
+| `sdiff` | 差集 | keys | `Result<Vec<String>>` |
+| `sinter` | 交集 | keys | `Result<Vec<String>>` |
+| `sunion` | 并集 | keys | `Result<Vec<String>>` |
+| `sdiffstore` | 差集存储 | dest, keys | `Result<u64>` |
+| `sinterstore` | 交集存储 | dest, keys | `Result<u64>` |
+| `sunionstore` | 并集存储 | dest, keys | `Result<u64>` |
+| `smove` | 移动成员 | source, dest, member | `Result<bool>` |
+
+#### 4.1.8 发布/订阅操作 (PubSubOps)
+| 方法 | 描述 | 参数 | 返回值 |
+|------|------|------|--------|
+| `publish` | 发布消息 | channel, message | `Result<u64>` |
+| `publish_json` | 发布JSON消息 | channel, message | `Result<u64>` |
+| `pubsub_channels` | 获取活动频道 | pattern | `Result<Vec<String>>` |
+| `pubsub_numsub` | 获取频道订阅数 | channels | `Result<Vec<(String, u64)>>` |
+| `pubsub_numpat` | 获取模式订阅数 | - | `Result<u64>` |
+
+#### 4.1.9 发布/订阅类型 (PubSub Types)
+| 类型 | 描述 |
+|------|------|
+| `PubSubMessage` | 发布/订阅消息结构，包含 channel 和 payload 字段 |
+| `Subscriber` | 订阅者，用于接收频道消息 |
+| `SharedSubscriber` | 可克隆的共享订阅者 |
 
 ### 4.2 分布式锁 API
 

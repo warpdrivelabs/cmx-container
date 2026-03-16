@@ -462,6 +462,7 @@ dependencies = [
  "chrono",
  "cmx-utils",
  "derive_more",
+ "futures-util",
  "redis",
  "serde",
  "serde_json",

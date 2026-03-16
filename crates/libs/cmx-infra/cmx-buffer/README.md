@@ -297,6 +297,115 @@ let success: bool = ttl.setnx("key", "value").await?;
 let success: bool = ttl.setnx_ex("key", "value", Duration::from_secs(60)).await?;
 ```
 
+### 有序集合操作 (SortedSetOps)
+
+```rust
+let sorted_set = cache.sorted_set();
+
+// 添加有序集合成员
+sorted_set.zadd_one("leaderboard", 100.0, "alice").await?;
+sorted_set.zadd("ranking", &[(100.0, "alice"), (200.0, "bob"), (150.0, "charlie")]).await?;
+
+// 获取成员排名
+let rank: Option<u64> = sorted_set.zrank("leaderboard", "alice").await?;
+
+// 获取成员分数
+let score: Option<f64> = sorted_set.zscore("leaderboard", "alice").await?;
+
+// 获取指定范围的成员
+let members: Vec<String> = sorted_set.zrange("leaderboard", 0, -1).await?;
+let members_with_scores: Vec<(String, f64)> = sorted_set.zrange_with_scores("leaderboard", 0, -1).await?;
+
+// 按分数范围查询
+let members: Vec<String> = sorted_set.zrangebyscore("leaderboard", 0.0, 100.0).await?;
+
+// 增加成员分数
+let new_score: f64 = sorted_set.zincrby("leaderboard", 10.0, "alice").await?;
+
+// 获取集合大小
+let count: u64 = sorted_set.zcard("leaderboard").await?;
+
+// 移除成员
+sorted_set.zrem_one("leaderboard", "alice").await?;
+sorted_set.zrem("leaderboard", &["alice", "bob"]).await?;
+
+// 弹出分数最低/最高的成员
+let popped: Vec<(String, f64)> = sorted_set.zpopmin("leaderboard", 1).await?;
+let popped: Vec<(String, f64)> = sorted_set.zpopmax("leaderboard", 1).await?;
+
+// 并集/交集存储
+sorted_set.zunionstore("result", &["set1", "set2"]).await?;
+sorted_set.zinterstore("result", &["set1", "set2"]).await?;
+```
+
+### 集合操作 (SetOps)
+
+```rust
+let set = cache.set();
+
+// 添加集合成员
+set.sadd_one("tags", "rust").await?;
+set.sadd("tags", &["rust", "redis", "valkey"]).await?;
+
+// 获取所有成员
+let members: Vec<String> = set.smembers("tags").await?;
+
+// 检查成员是否存在
+let exists: bool = set.sismember("tags", "rust").await?;
+
+// 检查多个成员
+let results: Vec<bool> = set.smismember("tags", &["rust", "python"]).await?;
+
+// 获取集合大小
+let count: u64 = set.scard("tags").await?;
+
+// 随机获取/弹出成员
+let random: Option<String> = set.srandmember("tags").await?;
+let popped: Option<String> = set.spop("tags").await?;
+let popped: Vec<String> = set.spop_count("tags", 3).await?;
+
+// 集合运算
+let diff: Vec<String> = set.sdiff(&["set1", "set2"]).await?;
+let inter: Vec<String> = set.sinter(&["set1", "set2"]).await?;
+let union: Vec<String> = set.sunion(&["set1", "set2"]).await?;
+
+// 集合运算并存储
+set.sdiffstore("result", &["set1", "set2"]).await?;
+set.sinterstore("result", &["set1", "set2"]).await?;
+set.sunionstore("result", &["set1", "set2"]).await?;
+
+// 移动成员
+set.smove("source", "dest", "member").await?;
+
+// 移除成员
+set.srem_one("tags", "rust").await?;
+set.srem("tags", &["rust", "redis"]).await?;
+```
+
+### 发布/订阅操作 (PubSubOps)
+
+```rust
+let pubsub = cache.pubsub();
+
+// 发布消息
+let subscribers: u64 = pubsub.publish("channel:news", "Hello").await?;
+
+// 发布 JSON 消息
+#[derive(Serialize)]
+struct Message { title: String, content: String }
+let msg = Message { title: "News".to_string(), content: "Content".to_string() };
+pubsub.publish_json("channel:news", &msg).await?;
+
+// 获取活动频道
+let channels: Vec<String> = pubsub.pubsub_channels(Some("channel:*")).await?;
+
+// 获取频道订阅者数量
+let numsub: Vec<(String, u64)> = pubsub.pubsub_numsub(&["channel:news"]).await?;
+
+// 获取模式订阅数量
+let numpat: u64 = pubsub.pubsub_numpat().await?;
+```
+
 ### 分布式锁 (LockManager)
 
 #### 基本使用
