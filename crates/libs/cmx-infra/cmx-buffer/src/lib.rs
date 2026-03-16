@@ -11,11 +11,13 @@ pub mod error;
 pub mod lock;
 pub mod logging;
 
-pub use cache::{CacheManager, CacheOps, TtlOps};
-pub use client::{create_shared_client, get_client, get_client_mut, RedisClient, SharedRedisClient};
+pub use cache::{CacheManager, CacheOps, GlobalCacheManager, TtlOps};
+pub use client::{
+    create_shared_client, get_client, get_client_mut, GlobalRedisClient, RedisClient, SharedRedisClient
+};
 pub use config::{CacheConfig, LockConfig, RedisConfig};
 pub use error::{Error, Result};
-pub use lock::{create_lock_manager, create_lock_manager_with_config, LockGuard, LockManager};
+pub use lock::{create_lock_manager, create_lock_manager_with_config, GlobalLockManager, LockGuard, LockManager};
 
 pub type BufferResult<T> = Result<T>;
 

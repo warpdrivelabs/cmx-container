@@ -5,6 +5,8 @@ use redis::{aio::ConnectionManager, Client, RedisResult};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+use std::sync::OnceLock;
+use std::sync::Mutex;
 
 /**
  * @Author: AI Assistant
@@ -131,4 +133,74 @@ pub async fn get_client(client: &SharedRedisClient) -> tokio::sync::RwLockReadGu
 /// 从共享客户端获取可变引用
 pub async fn get_client_mut(client: &SharedRedisClient) -> tokio::sync::RwLockWriteGuard<'_, RedisClient> {
     client.write().await
+}
+
+// ==================== 全局单例 ====================
+
+static GLOBAL_REDIS_CLIENT: OnceLock<RedisClient> = OnceLock::new();
+static GLOBAL_REDIS_CLIENT_MUTEX: OnceLock<Mutex<RedisClient>> = OnceLock::new();
+
+/// 全局 Redis 客户端管理器
+pub struct GlobalRedisClient;
+
+impl GlobalRedisClient {
+    /// 初始化全局 Redis 客户端
+    pub fn initialize(config: RedisConfig) -> Result<()> {
+        let runtime = tokio::runtime::Handle::current();
+        let client = runtime.block_on(async {
+            RedisClient::new(config).await
+        })?;
+        
+        GLOBAL_REDIS_CLIENT
+            .set(client.clone())
+            .map_err(|_| Error::ConfigError("全局 Redis 客户端已初始化".to_string()))?;
+        
+        GLOBAL_REDIS_CLIENT_MUTEX
+            .set(Mutex::new(client))
+            .map_err(|_| Error::ConfigError("全局 Redis 客户端 Mutex 已初始化".to_string()))
+    }
+
+    /// 初始化全局 Redis 客户端（带缓存和锁配置）
+    pub fn initialize_with_configs(
+        redis_config: RedisConfig,
+        cache_config: CacheConfig,
+        lock_config: LockConfig,
+    ) -> Result<()> {
+        let runtime = tokio::runtime::Handle::current();
+        let client = runtime.block_on(async {
+            RedisClient::new_with_configs(redis_config, cache_config, lock_config).await
+        })?;
+        
+        GLOBAL_REDIS_CLIENT
+            .set(client.clone())
+            .map_err(|_| Error::ConfigError("全局 Redis 客户端已初始化".to_string()))?;
+        
+        GLOBAL_REDIS_CLIENT_MUTEX
+            .set(Mutex::new(client))
+            .map_err(|_| Error::ConfigError("全局 Redis 客户端 Mutex 已初始化".to_string()))
+    }
+
+    /// 获取全局 Redis 客户端引用
+    pub fn get() -> &'static RedisClient {
+        GLOBAL_REDIS_CLIENT.get().expect(
+            "Redis 客户端未初始化，请先调用 GlobalRedisClient::initialize() 或 GlobalRedisClient::initialize_with_configs()"
+        )
+    }
+
+    /// 获取全局 Redis 客户端可变引用
+    pub fn get_mut() -> std::sync::MutexGuard<'static, RedisClient> {
+        GLOBAL_REDIS_CLIENT_MUTEX.get().expect(
+            "Redis 客户端未初始化，请先调用 GlobalRedisClient::initialize() 或 GlobalRedisClient::initialize_with_configs()"
+        ).lock().unwrap()
+    }
+
+    /// 检查是否已初始化
+    pub fn is_initialized() -> bool {
+        GLOBAL_REDIS_CLIENT.get().is_some()
+    }
+
+    /// 获取全局 Redis 客户端克隆
+    pub fn get_cloned() -> RedisClient {
+        Self::get().clone()
+    }
 }
