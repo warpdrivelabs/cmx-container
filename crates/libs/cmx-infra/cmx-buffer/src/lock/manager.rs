@@ -55,6 +55,16 @@ impl LockManager {
      * @return Result<bool> 是否获取成功
      */
     pub async fn try_lock(&self, key: &str) -> Result<bool> {
+        let (success, _) = self.try_lock_with_value(key).await?;
+        Ok(success)
+    }
+
+    /**
+     * 尝试获取锁（立即返回，返回锁值）
+     * @param key 锁键
+     * @return Result<(bool, Option<String>)> 是否获取成功及锁值
+     */
+    pub async fn try_lock_with_value(&self, key: &str) -> Result<(bool, Option<String>)> {
         let lock_key = self.build_lock_key(key);
         let lock_value = Self::generate_lock_value();
         
@@ -73,11 +83,11 @@ impl LockManager {
         match result {
             Some(_) => {
                 LockLog::lock_acquired(&lock_key);
-                Ok(true)
+                Ok((true, Some(lock_value)))
             }
             None => {
                 LockLog::lock_failed(&lock_key, "键已存在");
-                Ok(false)
+                Ok((false, None))
             }
         }
     }
@@ -91,12 +101,19 @@ impl LockManager {
         let lock_key = self.build_lock_key(key);
         
         for attempt in 0..self.config.retry_times {
-            if self.try_lock(key).await? {
-                return Ok(LockGuard::new(
+            let (success, lock_value) = self.try_lock_with_value(key).await?;
+            
+            if success {
+                let guard = LockGuard::new(
                     key.to_string(),
+                    lock_value.unwrap(),
                     self.client.clone(),
                     self.config.clone(),
-                ));
+                );
+                
+                guard.start_auto_renew_task().await;
+                
+                return Ok(guard);
             }
             
             if attempt < self.config.retry_times - 1 {
@@ -114,11 +131,12 @@ impl LockManager {
     }
 
     /**
-     * 释放锁
+     * 释放锁（需要提供锁值以验证所有权）
      * @param key 锁键
+     * @param lock_value 锁值
      * @return Result<()> 释放结果
      */
-    pub async fn unlock(&self, key: &str) -> Result<()> {
+    pub async fn unlock_with_value(&self, key: &str, lock_value: &str) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
         let mut conn = self.client.inner().clone();
@@ -135,7 +153,7 @@ impl LockManager {
             .arg(lua_script)
             .arg(1)
             .arg(&lock_key)
-            .arg("")
+            .arg(lock_value)
             .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
@@ -150,12 +168,38 @@ impl LockManager {
     }
 
     /**
-     * 延长锁的过期时间
+     * 释放锁（使用旧方式，不验证锁值）
      * @param key 锁键
+     * @return Result<()> 释放结果
+     */
+    pub async fn unlock(&self, key: &str) -> Result<()> {
+        let lock_key = self.build_lock_key(key);
+        
+        let mut conn = self.client.inner().clone();
+        
+        let result: i64 = redis::cmd("DEL")
+            .arg(&lock_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(Error::from)?;
+        
+        if result > 0 {
+            LockLog::lock_released(&lock_key);
+            Ok(())
+        } else {
+            LockLog::lock_failed(&lock_key, "锁不存在或已被释放");
+            Err(Error::LockError("锁不存在或已被释放".to_string()))
+        }
+    }
+
+    /**
+     * 延长锁的过期时间（需要提供锁值以验证所有权）
+     * @param key 锁键
+     * @param lock_value 锁值
      * @param duration 新的过期时间
      * @return Result<()> 操作结果
      */
-    pub async fn extend(&self, key: &str, duration: Duration) -> Result<()> {
+    pub async fn extend_with_value(&self, key: &str, lock_value: &str, duration: Duration) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
         let mut conn = self.client.inner().clone();
@@ -172,7 +216,33 @@ impl LockManager {
             .arg(lua_script)
             .arg(1)
             .arg(&lock_key)
-            .arg("")
+            .arg(lock_value)
+            .arg(duration.as_secs())
+            .query_async(&mut conn)
+            .await
+            .map_err(Error::from)?;
+        
+        if result > 0 {
+            LockLog::lock_renewed(&lock_key, duration.as_secs());
+            Ok(())
+        } else {
+            Err(Error::LockError("锁不存在或已过期".to_string()))
+        }
+    }
+
+    /**
+     * 延长锁的过期时间
+     * @param key 锁键
+     * @param duration 新的过期时间
+     * @return Result<()> 操作结果
+     */
+    pub async fn extend(&self, key: &str, duration: Duration) -> Result<()> {
+        let lock_key = self.build_lock_key(key);
+        
+        let mut conn = self.client.inner().clone();
+        
+        let result: i64 = redis::cmd("EXPIRE")
+            .arg(&lock_key)
             .arg(duration.as_secs())
             .query_async(&mut conn)
             .await
@@ -227,27 +297,51 @@ impl LockManager {
     }
 }
 
-/// 分布式锁守卫，确保作用域结束时自动释放锁
+/// 分布式锁守卫，确保作用域结束时自动释放锁，支持自动续期
 pub struct LockGuard {
     key: String,
-    manager: LockManager,
+    lock_value: String,
+    client: RedisClient,
+    config: LockConfig,
     released: Arc<AtomicBool>,
+    auto_renew: Arc<AtomicBool>,
 }
 
 impl LockGuard {
     /// 创建新的锁守卫
-    pub fn new(key: String, client: RedisClient, config: LockConfig) -> Self {
+    pub fn new(key: String, lock_value: String, client: RedisClient, config: LockConfig) -> Self {
         Self {
             key,
-            manager: LockManager::new(client, config),
+            lock_value,
+            client,
+            config,
             released: Arc::new(AtomicBool::new(false)),
+            auto_renew: Arc::new(AtomicBool::new(true)),
         }
+    }
+
+    /// 启动自动续期
+    /// 当锁的剩余时间低于 renew_threshold * expire_duration 时自动续期
+    pub fn start_auto_renew(&self) {
+        self.auto_renew.store(true, Ordering::SeqCst);
+    }
+
+    /// 停止自动续期
+    pub fn stop_auto_renew(&self) {
+        self.auto_renew.store(false, Ordering::SeqCst);
+    }
+
+    /// 检查自动续期是否启用
+    pub fn is_auto_renew_enabled(&self) -> bool {
+        self.auto_renew.load(Ordering::SeqCst)
     }
 
     /// 手动释放锁
     pub async fn unlock(self) -> Result<()> {
         if !self.released.swap(true, Ordering::SeqCst) {
-            self.manager.unlock(&self.key).await?;
+            self.auto_renew.store(false, Ordering::SeqCst);
+            let manager = LockManager::new(self.client.clone(), self.config.clone());
+            manager.unlock_with_value(&self.key, &self.lock_value).await?;
         }
         Ok(())
     }
@@ -255,7 +349,8 @@ impl LockGuard {
     /// 延长锁的过期时间
     pub async fn extend(&self, duration: Duration) -> Result<()> {
         if !self.released.load(Ordering::SeqCst) {
-            self.manager.extend(&self.key, duration).await?;
+            let manager = LockManager::new(self.client.clone(), self.config.clone());
+            manager.extend_with_value(&self.key, &self.lock_value, duration).await?;
         }
         Ok(())
     }
@@ -269,18 +364,115 @@ impl LockGuard {
     pub fn key(&self) -> &str {
         &self.key
     }
+
+    /// 获取锁的值
+    pub fn lock_value(&self) -> &str {
+        &self.lock_value
+    }
+
+    /// 获取锁的剩余时间
+    pub async fn remaining_ttl(&self) -> Result<Option<Duration>> {
+        let lock_key = format!("{}lock:{}", self.client.key_prefix(), self.key);
+        let mut conn = self.client.inner().clone();
+        let result: i64 = redis::cmd("TTL")
+            .arg(&lock_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(Error::from)?;
+        
+        if result > 0 {
+            Ok(Some(Duration::from_secs(result as u64)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 检查是否需要续期（基于 renew_threshold）
+    /// 需要在获取锁后启动自动续期任务
+    pub async fn start_auto_renew_task(&self) {
+        if !self.auto_renew.load(Ordering::SeqCst) {
+            return;
+        }
+
+        let key = self.key.clone();
+        let lock_value = self.lock_value.clone();
+        let client = self.client.clone();
+        let config = self.config.clone();
+        let released = self.released.clone();
+        let auto_renew = self.auto_renew.clone();
+
+        tokio::spawn(async move {
+            let renew_interval = Duration::from_secs(config.expire_seconds / 2);
+            let threshold_secs = (config.expire_seconds as f64 * config.renew_threshold) as u64;
+
+            loop {
+                if released.load(Ordering::SeqCst) || !auto_renew.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                tokio::time::sleep(renew_interval).await;
+
+                if released.load(Ordering::SeqCst) || !auto_renew.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                let lock_key = format!("{}lock:{}", client.key_prefix(), key);
+                let mut conn = client.inner().clone();
+
+                let ttl: i64 = match redis::cmd("TTL")
+                    .arg(&lock_key)
+                    .query_async(&mut conn)
+                    .await
+                {
+                    Ok(v) => v,
+                    Err(_) => -1,
+                };
+
+                if ttl < 0 {
+                    break;
+                }
+
+                if (ttl as u64) < threshold_secs {
+                    let lua_script = r#"
+                        if redis.call("get", KEYS[1]) == ARGV[1] then
+                            return redis.call("expire", KEYS[1], ARGV[2])
+                        else
+                            return 0
+                        end
+                    "#;
+
+                    let _: i64 = match redis::cmd("EVAL")
+                        .arg(lua_script)
+                        .arg(1)
+                        .arg(&lock_key)
+                        .arg(lock_value.as_str())
+                        .arg(config.expire_seconds)
+                        .query_async(&mut conn)
+                        .await
+                    {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::warn!(key = %key, error = %e, "自动续期失败");
+                            break;
+                        }
+                    };
+                }
+            }
+        });
+    }
 }
 
 impl Drop for LockGuard {
     fn drop(&mut self) {
         if !self.released.swap(true, Ordering::SeqCst) {
             let key = self.key.clone();
-            let client = self.manager.client.clone();
-            let config = self.manager.config.clone();
+            let lock_value = self.lock_value.clone();
+            let client = self.client.clone();
+            let config = self.config.clone();
             
             tokio::spawn(async move {
                 let manager = LockManager::new(client, config);
-                if let Err(e) = manager.unlock(&key).await {
+                if let Err(e) = manager.unlock_with_value(&key, &lock_value).await {
                     tracing::warn!(key = %key, error = %e, "自动释放锁失败");
                 }
             });

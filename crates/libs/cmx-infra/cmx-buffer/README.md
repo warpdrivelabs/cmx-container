@@ -9,6 +9,7 @@ Redis 缓存操作和分布式锁管理模块，提供完整的缓存功能和�
 - **分布式锁**: 支持分布式环境下的锁获取、释放、自动续期
 - **批量操作**: 支持批量读写
 - **键前缀**: 支持自定义键前缀，避免键冲突
+- **全局单例**: 支持全局初始化和获取，方便应用启动时配置
 
 ## 快速开始
 
@@ -92,9 +93,10 @@ let config = RedisConfig::new("redis://host:port/db")
 use cmx_buffer::LockConfig;
 
 let config = LockConfig::new()
-    .with_expire(30)           // 锁过期时间(秒)
-    .with_retry_times(3)      // 重试次数
-    .with_retry_interval(200); // 重试间隔(毫秒)
+    .with_expire(30)              // 锁过期时间(秒)
+    .with_retry_times(3)          // 重试次数
+    .with_retry_interval(200)     // 重试间隔(毫秒)
+    .with_renew_threshold(0.3);   // 续期阈值(百分比)
 ```
 
 | 方法 | 描述 | 默认值 |
@@ -103,6 +105,7 @@ let config = LockConfig::new()
 | `with_expire(seconds)` | 锁过期时间 | 30秒 |
 | `with_retry_times(n)` | 获取锁重试次数 | 3次 |
 | `with_retry_interval(ms)` | 重试间隔 | 200毫秒 |
+| `with_renew_threshold(ratio)` | 续期阈值 | 0.3 (30%) |
 
 ### 缓存操作 (CacheOps)
 
@@ -239,7 +242,7 @@ guard.unlock().await?;
 } // 锁自动释放
 ```
 
-#### 锁续期
+#### 锁续期（手动）
 
 ```rust
 let guard = lock_manager.lock("resource:1").await?;
@@ -247,6 +250,41 @@ let guard = lock_manager.lock("resource:1").await?;
 // 在业务处理过程中延长锁
 guard.extend(Duration::from_secs(60)).await?;
 ```
+
+#### 自动续期功能
+
+获取锁后自动启动后台任务，根据 `renew_threshold` 配置自动续期（默认启用）：
+
+```rust
+use cmx_buffer::LockConfig;
+
+// 配置自动续期
+let lock_config = LockConfig::new()
+    .with_expire(30)           // 锁过期时间 30 秒
+    .with_renew_threshold(0.3); // 当剩余时间低于 30*0.3=9 秒时自动续期
+
+let lock_manager = LockManager::new(client, lock_config);
+
+// 获取锁后自动启动后台续期任务
+let guard = lock_manager.lock("resource:1").await?;
+
+// 获取锁剩余时间
+let ttl: Option<Duration> = guard.remaining_ttl().await?;
+
+// 停止自动续期（如需要长时间持有锁且不需要续期）
+guard.stop_auto_renew();
+
+// 重新启动自动续期
+guard.start_auto_renew();
+
+// 检查自动续期是否启用
+let enabled: bool = guard.is_auto_renew_enabled();
+
+// 获取锁的值（UUID）
+let lock_value: &str = guard.lock_value();
+```
+
+**注意**：调用 `lock()` 获取锁时会自动启动自动续期任务，无需手动调用。
 
 #### 检查锁状态
 
@@ -256,6 +294,80 @@ let is_locked: bool = lock_manager.is_locked("resource:1").await?;
 
 // 获取锁剩余时间
 let remaining: Option<Duration> = lock_manager.remaining_ttl("resource:1").await?;
+```
+
+### 全局单例模式
+
+#### GlobalCacheManager 全局缓存管理器
+
+在应用启动时初始化，之后可在代码任意位置获取使用：
+
+```rust
+use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
+
+fn main() {
+    // 在应用启动时初始化
+    let redis_config = RedisConfig::new("redis://192.168.1.100:6379/0")
+        .with_key_prefix("myapp:");
+    
+    // 初始化全局缓存管理器
+    GlobalCacheManager::initialize(redis_config.clone()).unwrap();
+    
+    // 初始化全局锁管理器
+    GlobalLockManager::initialize(redis_config).unwrap();
+    
+    // 之后在代码任意位置使用
+    let cache = GlobalCacheManager::get();
+    let ops = cache.ops();
+    
+    // 或者获取克隆
+    let cache = GlobalCacheManager::get_cloned();
+}
+```
+
+#### GlobalLockManager 全局锁管理器
+
+```rust
+use cmx_buffer::{GlobalLockManager, LockConfig};
+
+// 使用默认配置初始化
+GlobalLockManager::initialize(redis_config).unwrap();
+
+// 或带自定义锁配置
+let lock_config = LockConfig::new()
+    .with_expire(60)
+    .with_renew_threshold(0.3);
+GlobalLockManager::initialize_with_redis_config(redis_config, lock_config).unwrap();
+
+// 获取全局锁管理器
+let lock_manager = GlobalLockManager::get();
+
+// 使用分布式锁
+let guard = lock_manager.lock("resource_key").await?;
+```
+
+#### 全局管理器 API
+
+所有全局管理器提供以下方法：
+
+```rust
+// 初始化（使用默认配置）
+GlobalXxxManager::initialize(redis_config)?;
+
+// 初始化（带完整配置）
+GlobalXxxManager::initialize_with_configs(redis_config, cache_config, lock_config)?;
+
+// 获取引用（不可变）
+let manager = GlobalXxxManager::get();
+
+// 获取可变引用
+let mut manager = GlobalXxxManager::get_mut();
+
+// 获取克隆
+let manager = GlobalXxxManager::get_cloned();
+
+// 检查是否已初始化
+if GlobalXxxManager::is_initialized() { ... }
 ```
 
 ## 错误处理
@@ -328,10 +440,86 @@ cargo test -p cmx-buffer --test integration_test
 
 ## 完整示例
 
+### 使用全局单例模式
+
+```rust
+use cmx_buffer::{
+    GlobalCacheManager, GlobalLockManager,
+    RedisConfig, LockConfig
+};
+use std::collections::HashMap;
+use std::time::Duration;
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CacheData {
+    name: String,
+    value: i64,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. 配置
+    let redis_config = RedisConfig::new("redis://192.168.1.100:6379/0")
+        .with_key_prefix("myapp:")
+        .with_pool_size(10);
+    
+    let lock_config = LockConfig::new()
+        .with_expire(60)
+        .with_retry_times(3)
+        .with_retry_interval(200)
+        .with_renew_threshold(0.3);
+    
+    // 2. 初始化全局管理器
+    GlobalCacheManager::initialize(redis_config.clone())?;
+    GlobalLockManager::initialize_with_redis_config(redis_config, lock_config)?;
+    
+    // 3. 使用缓存
+    let cache = GlobalCacheManager::get();
+    let ops = cache.ops();
+    
+    // 字符串操作
+    ops.set("config:version", "1.0.0").await?;
+    let version = ops.get("config:version").await?;
+    println!("Version: {:?}", version);
+    
+    // 序列化操作
+    let data = CacheData {
+        name: "test".to_string(),
+        value: 42,
+    };
+    ops.set_serialized("data:1", &data).await?;
+    let retrieved: Option<CacheData> = ops.get_deserialized("data:1").await?;
+    println!("Data: {:?}", retrieved);
+    
+    // 4. 使用分布式锁（带自动续期）
+    let lock = GlobalLockManager.get();
+    let lock_key = "resource:processing";
+    
+    let guard = lock.lock(lock_key).await?;
+    println!("获取锁成功，剩余 TTL: {:?}", guard.remaining_ttl().await?);
+    
+    // 执行业务逻辑（锁会自动续期）
+    do_processing().await;
+    
+    // 手动释放（也可以等待 guard 超出作用域自动释放）
+    guard.unlock().await?;
+    
+    println!("完成");
+    Ok(())
+}
+
+async fn do_processing() {
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+```
+
+### 使用本地管理器实例
+
 ```rust
 use cmx_buffer::{
     RedisClient, CacheManager, LockManager,
-    RedisConfig, LockConfig, Error
+    RedisConfig, LockConfig
 };
 use std::collections::HashMap;
 use std::time::Duration;
