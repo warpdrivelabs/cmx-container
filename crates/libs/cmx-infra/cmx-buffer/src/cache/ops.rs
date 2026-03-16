@@ -1,7 +1,6 @@
 use crate::client::RedisClient;
 use crate::error::{Error, Result};
 use crate::logging::OperationTimer;
-use redis::AsyncCommands;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -41,8 +40,13 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("SET", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let _: () = conn.set(&full_key, value).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let _: () = redis::cmd("SET")
+            .arg(&full_key)
+            .arg(value)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(())
@@ -57,8 +61,12 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("GET", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let value: Option<String> = conn.get(&full_key).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let value: Option<String> = redis::cmd("GET")
+            .arg(&full_key)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         
@@ -75,8 +83,12 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("DEL", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let result: u64 = conn.del(&full_key).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: u64 = redis::cmd("DEL")
+            .arg(&full_key)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         let affected = result > 0;
         timer.complete();
@@ -92,8 +104,12 @@ impl CacheOps {
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
         let timer = OperationTimer::new("DEL_BATCH", "batch");
         
-        let mut conn = self.client.inner().clone();
-        let result: u64 = conn.del(full_keys.as_slice()).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: u64 = redis::cmd("DEL")
+            .arg(full_keys.as_slice())
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(result)
@@ -107,8 +123,12 @@ impl CacheOps {
     pub async fn exists(&self, key: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
-        let result: u64 = conn.exists(&full_key).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: u64 = redis::cmd("EXISTS")
+            .arg(&full_key)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         Ok(result > 0)
     }
@@ -123,8 +143,14 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("SET_EX", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let _: () = conn.set_ex(&full_key, value, expire.as_secs()).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let _: () = redis::cmd("SETEX")
+            .arg(&full_key)
+            .arg(expire.as_secs() as i64)
+            .arg(value)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(())
@@ -169,8 +195,12 @@ impl CacheOps {
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
         let timer = OperationTimer::new("MGET", "batch");
         
-        let mut conn = self.client.inner().clone();
-        let result: Vec<Option<String>> = conn.mget(full_keys.as_slice()).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: Vec<Option<String>> = redis::cmd("MGET")
+            .arg(full_keys.as_slice())
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(result)
@@ -188,8 +218,18 @@ impl CacheOps {
             full_items.push((self.client.build_key(k), v.to_string()));
         }
         
-        let mut conn = self.client.inner().clone();
-        let _: () = conn.mset(full_items.as_slice()).await.map_err(Error::from)?;
+        let mut cmd_args: Vec<String> = Vec::new();
+        for (k, v) in full_items {
+            cmd_args.push(k);
+            cmd_args.push(v);
+        }
+        
+        let mut conn = self.client.get_connection().await?;
+        let _: () = redis::cmd("MSET")
+            .arg(cmd_args.as_slice())
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(())
@@ -207,8 +247,13 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("INCR", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let value: i64 = conn.incr(&full_key, delta).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let value: i64 = redis::cmd("INCRBY")
+            .arg(&full_key)
+            .arg(delta)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(value)
@@ -224,8 +269,13 @@ impl CacheOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("DECR", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let value: i64 = conn.decr(&full_key, delta).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let value: i64 = redis::cmd("DECRBY")
+            .arg(&full_key)
+            .arg(delta)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(value)
@@ -241,10 +291,10 @@ impl CacheOps {
     pub async fn r#type(&self, key: &str) -> Result<String> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: String = redis::cmd("TYPE")
             .arg(&full_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         

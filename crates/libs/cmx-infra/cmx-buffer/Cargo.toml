@@ -7,7 +7,11 @@ edition.workspace = true
 cmx-utils = { workspace = true }
 
 # Redis 客户端
-redis = { version = "0.27", features = ["aio", "connection-manager", "tokio-comp", "rustls", "script"] }
+redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script"] }
+
+# 连接池
+bb8 = "0.8"
+bb8-redis = "0.17"
 
 # 序列化
 serde = { workspace = true }

@@ -1,7 +1,8 @@
 use crate::config::{CacheConfig, LockConfig, RedisConfig};
 use crate::error::{Error, Result};
 use crate::logging::ConnLog;
-use redis::{aio::ConnectionManager, Client, RedisResult};
+use bb8::Pool;
+use bb8_redis::RedisConnectionManager;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -11,20 +12,20 @@ use std::sync::Mutex;
 /**
  * @Author: AI Assistant
  * @Date: 2026-03-16
- * @Describe: Redis 客户端封装
+ * @Describe: Redis 客户端封装（使用 bb8 连接池）
  */
 
-/// Redis 客户端包装器
+/// Redis 客户端包装器（使用 bb8 连接池）
 #[derive(Clone)]
 pub struct RedisClient {
-    inner: ConnectionManager,
+    pool: Pool<RedisConnectionManager>,
     config: RedisConfig,
     cache_config: CacheConfig,
     lock_config: LockConfig,
 }
 
 impl RedisClient {
-    /// 从配置创建新的 Redis 客户端
+    /// 从配置创建新的 Redis 客户端（使用 bb8 连接池）
     pub async fn new(config: RedisConfig) -> Result<Self> {
         let cache_config = CacheConfig::new();
         let lock_config = LockConfig::new();
@@ -40,35 +41,31 @@ impl RedisClient {
         info!(
             url = %config.url,
             pool_size = config.pool_size,
-            "创建 Redis 客户端"
+            "创建 Redis 客户端（bb8 连接池）"
         );
 
-        let client = Client::open(config.url.as_str())
+        let manager = RedisConnectionManager::new(config.url.as_str())
             .map_err(|e| Error::ConnectionError(e.to_string()))?;
 
-        let connection_manager = client
-            .get_connection_manager()
+        let pool = Pool::builder()
+            .max_size(config.pool_size as u32)
+            .build(manager)
             .await
-            .map_err(|e| Error::ConnectionError(e.to_string()))?;
+            .map_err(|e| Error::PoolError(e.to_string()))?;
 
         ConnLog::connected(&config.url);
 
         Ok(Self {
-            inner: connection_manager,
+            pool,
             config,
             cache_config,
             lock_config,
         })
     }
 
-    /// 获取 Redis 连接管理器
-    pub fn inner(&self) -> &ConnectionManager {
-        &self.inner
-    }
-
-    /// 获取可变连接管理器引用
-    pub fn inner_mut(&mut self) -> &mut ConnectionManager {
-        &mut self.inner
+    /// 获取连接池
+    pub fn pool(&self) -> &Pool<RedisConnectionManager> {
+        &self.pool
     }
 
     /// 获取配置
@@ -102,17 +99,25 @@ impl RedisClient {
 
     /// 检查连接是否有效
     pub async fn is_connected(&self) -> bool {
-        let mut conn = self.inner.clone();
-        let result: RedisResult<String> = redis::cmd("PING")
-            .query_async(&mut conn)
-            .await;
-        result.is_ok()
+        if let Ok(mut conn) = self.pool.get().await {
+            let result: std::result::Result<String, redis::RedisError> = redis::cmd("PING")
+                .query_async(&mut *conn)
+                .await;
+            return result.is_ok();
+        }
+        false
     }
 
-    /// 关闭连接
+    /// 关闭连接池
     pub async fn close(&self) -> Result<()> {
-        info!("关闭 Redis 连接");
+        info!("关闭 Redis 连接池");
+        drop(self.pool.clone());
         Ok(())
+    }
+
+    /// 获取连接（从连接池获取）
+    pub async fn get_connection(&self) -> Result<bb8::PooledConnection<'_, RedisConnectionManager>> {
+        self.pool.get().await.map_err(|e| Error::PoolError(e.to_string()))
     }
 }
 

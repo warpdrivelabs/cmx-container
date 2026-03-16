@@ -1,7 +1,6 @@
 use crate::client::RedisClient;
 use crate::error::{Error, Result};
 use crate::logging::OperationTimer;
-use redis::AsyncCommands;
 use std::time::Duration;
 
 /**
@@ -36,8 +35,13 @@ impl TtlOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("EXPIRE", &full_key);
         
-        let mut conn = self.client.inner().clone();
-        let result: bool = conn.expire(&full_key, duration.as_secs() as i64).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: bool = redis::cmd("EXPIRE")
+            .arg(&full_key)
+            .arg(duration.as_secs() as i64)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         timer.complete();
         Ok(result)
@@ -52,11 +56,11 @@ impl TtlOps {
     pub async fn expire_at(&self, key: &str, timestamp: i64) -> Result<bool> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: bool = redis::cmd("EXPIREAT")
             .arg(&full_key)
             .arg(timestamp)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -71,8 +75,12 @@ impl TtlOps {
     pub async fn persist(&self, key: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
-        let result: bool = conn.persist(&full_key).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: bool = redis::cmd("PERSIST")
+            .arg(&full_key)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         Ok(result)
     }
@@ -85,8 +93,12 @@ impl TtlOps {
     pub async fn ttl(&self, key: &str) -> Result<Option<Duration>> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
-        let result: i64 = conn.ttl(&full_key).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: i64 = redis::cmd("TTL")
+            .arg(&full_key)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         if result == -1 {
             Ok(None)
@@ -105,10 +117,10 @@ impl TtlOps {
     pub async fn pttl(&self, key: &str) -> Result<Option<Duration>> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: i64 = redis::cmd("PTTL")
             .arg(&full_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -130,13 +142,13 @@ impl TtlOps {
     pub async fn set_with_ttl(&self, key: &str, value: &str, duration: Duration) -> Result<()> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let _: () = redis::cmd("SET")
             .arg(&full_key)
             .arg(value)
             .arg("EX")
             .arg(duration.as_secs())
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -152,8 +164,13 @@ impl TtlOps {
     pub async fn setnx(&self, key: &str, value: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
-        let result: bool = conn.set_nx(&full_key, value).await.map_err(Error::from)?;
+        let mut conn = self.client.get_connection().await?;
+        let result: bool = redis::cmd("SETNX")
+            .arg(&full_key)
+            .arg(value)
+            .query_async(&mut *conn)
+            .await
+            .map_err(Error::from)?;
         
         Ok(result)
     }
@@ -168,14 +185,14 @@ impl TtlOps {
     pub async fn setnx_ex(&self, key: &str, value: &str, duration: Duration) -> Result<bool> {
         let full_key = self.client.build_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: Option<()> = redis::cmd("SET")
             .arg(&full_key)
             .arg(value)
             .arg("NX")
             .arg("EX")
             .arg(duration.as_secs())
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .ok();
         

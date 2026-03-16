@@ -68,7 +68,7 @@ impl LockManager {
         let lock_key = self.build_lock_key(key);
         let lock_value = Self::generate_lock_value();
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         
         let result: Option<()> = redis::cmd("SET")
             .arg(&lock_key)
@@ -76,7 +76,7 @@ impl LockManager {
             .arg("NX")
             .arg("EX")
             .arg(self.config.expire_seconds)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .ok();
         
@@ -139,7 +139,7 @@ impl LockManager {
     pub async fn unlock_with_value(&self, key: &str, lock_value: &str) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         
         let lua_script = r#"
             if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -154,7 +154,7 @@ impl LockManager {
             .arg(1)
             .arg(&lock_key)
             .arg(lock_value)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -175,11 +175,11 @@ impl LockManager {
     pub async fn unlock(&self, key: &str) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         
         let result: i64 = redis::cmd("DEL")
             .arg(&lock_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -202,7 +202,7 @@ impl LockManager {
     pub async fn extend_with_value(&self, key: &str, lock_value: &str, duration: Duration) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         
         let lua_script = r#"
             if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -218,7 +218,7 @@ impl LockManager {
             .arg(&lock_key)
             .arg(lock_value)
             .arg(duration.as_secs())
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -239,12 +239,12 @@ impl LockManager {
     pub async fn extend(&self, key: &str, duration: Duration) -> Result<()> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         
         let result: i64 = redis::cmd("EXPIRE")
             .arg(&lock_key)
             .arg(duration.as_secs())
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -264,10 +264,10 @@ impl LockManager {
     pub async fn is_locked(&self, key: &str) -> Result<bool> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: u64 = redis::cmd("EXISTS")
             .arg(&lock_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -282,10 +282,10 @@ impl LockManager {
     pub async fn remaining_ttl(&self, key: &str) -> Result<Option<Duration>> {
         let lock_key = self.build_lock_key(key);
         
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: i64 = redis::cmd("TTL")
             .arg(&lock_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -373,10 +373,10 @@ impl LockGuard {
     /// 获取锁的剩余时间
     pub async fn remaining_ttl(&self) -> Result<Option<Duration>> {
         let lock_key = format!("{}lock:{}", self.client.key_prefix(), self.key);
-        let mut conn = self.client.inner().clone();
+        let mut conn = self.client.get_connection().await?;
         let result: i64 = redis::cmd("TTL")
             .arg(&lock_key)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await
             .map_err(Error::from)?;
         
@@ -417,11 +417,15 @@ impl LockGuard {
                 }
 
                 let lock_key = format!("{}lock:{}", client.key_prefix(), key);
-                let mut conn = client.inner().clone();
+                
+                let mut conn = match client.get_connection().await {
+                    Ok(c) => c,
+                    Err(_) => break,
+                };
 
                 let ttl: i64 = match redis::cmd("TTL")
                     .arg(&lock_key)
-                    .query_async(&mut conn)
+                    .query_async(&mut *conn)
                     .await
                 {
                     Ok(v) => v,
@@ -441,13 +445,21 @@ impl LockGuard {
                         end
                     "#;
 
+                    let mut conn = match client.get_connection().await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!(key = %key, error = %e, "获取连接失败");
+                            break;
+                        }
+                    };
+
                     let _: i64 = match redis::cmd("EVAL")
                         .arg(lua_script)
                         .arg(1)
                         .arg(&lock_key)
                         .arg(lock_value.as_str())
                         .arg(config.expire_seconds)
-                        .query_async(&mut conn)
+                        .query_async(&mut *conn)
                         .await
                     {
                         Ok(v) => v,

@@ -4,6 +4,7 @@ Redis 缓存操作和分布式锁管理模块，提供完整的缓存功能和�
 
 ## 功能特性
 
+- **bb8 连接池**: 使用 bb8 连接池实现高效的 Redis 连接复用，提升并发性能
 - **缓存操作**: 支持字符串、序列化对象的增删改查
 - **过期管理**: 支持 TTL 设置、查询、持久化
 - **分布式锁**: 支持分布式环境下的锁获取、释放、自动续期
@@ -34,7 +35,7 @@ async fn main() {
         .with_key_prefix("myapp:")
         .with_pool_size(10);
     
-    // 2. 创建 Redis 客户端
+    // 2. 创建 Redis 客户端（自动创建 bb8 连接池）
     let client = RedisClient::new(config).await.unwrap();
     
     // 3. 创建缓存管理器
@@ -52,6 +53,95 @@ async fn main() {
     
     // 设置带过期时间的缓存
     ops.set_ex("temp:data", "value", Duration::from_secs(300)).await.unwrap();
+}
+```
+
+## bb8 连接池
+
+### 为什么使用连接池？
+
+默认情况下，每次 Redis 操作都会创建新的连接，操作完成后关闭连接。这种方式在高频场景下性能较差。
+
+bb8 连接池通过以下方式提升性能：
+- **连接复用**: 多个请求共享连接池中的连接，避免频繁创建/销毁
+- **并发处理**: 支持配置 `pool_size` 参数控制最大并发连接数
+- **资源管理**: 连接自动归还池中，无需手动管理
+
+### 连接池配置
+
+```rust
+use cmx_buffer::RedisConfig;
+
+let config = RedisConfig::new("redis://host:port/db")
+    .with_pool_size(20)        // 最大连接数，默认 10
+    .with_key_prefix("app:")
+    .with_connection_timeout(10)   // 连接超时(秒)
+    .with_operation_timeout(5);    // 操作超时(秒)
+```
+
+| 方法 | 描述 | 默认值 |
+|------|------|--------|
+| `with_pool_size(size)` | 连接池最大连接数 | 10 |
+| `with_key_prefix(prefix)` | 键前缀 | "cmx:" |
+| `with_connection_timeout(sec)` | 连接超时(秒) | 5 |
+| `with_operation_timeout(sec)` | 操作超时(秒) | 3 |
+
+### 连接池工作原理
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    应用代码                          │
+│   ┌─────────┐   ┌─────────┐   ┌─────────┐          │
+│   │ 请求 1  │   │ 请求 2  │   │ 请求 3  │  ...      │
+│   └────┬────┘   └────┬────┘   └────┬────┘          │
+│        │             │             │                │
+│        └─────────────┼─────────────┘                │
+│                      ▼                              │
+│            ┌─────────────────┐                      │
+│            │   bb8 连接池    │  (max_size: 10)     │
+│            │  ┌───────────┐  │                      │
+│            │  │ 连接 1    │◄─┼── 请求1             │
+│            │  │ 连接 2    │◄─┼── 请求2             │
+│            │  │ 连接 3    │◄─┼── 请求3             │
+│            │  │   ...     │  │                      │
+│            │  └───────────┘  │                      │
+│            └────────┬────────┘                      │
+│                     │                               │
+└─────────────────────┼───────────────────────────────┘
+                      ▼
+            ┌─────────────────┐
+            │    Redis        │
+            │   Server        │
+            └─────────────────┘
+```
+
+### 使用示例
+
+```rust
+use cmx_buffer::{RedisClient, CacheManager, RedisConfig};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建带连接池的客户端
+    let config = RedisConfig::new("redis://127.0.0.1:6379")
+        .with_pool_size(20);  // 配置连接池大小
+    
+    let client = RedisClient::new(config).await?;
+    let cache = CacheManager::new(client);
+    let ops = cache.ops();
+    
+    // 并发请求会自动使用连接池
+    // 多个请求可以并发执行，共享连接池
+    let futures = vec![
+        ops.set("key1", "value1"),
+        ops.set("key2", "value2"),
+        ops.set("key3", "value3"),
+    ];
+    
+    // 并发执行
+    futures::future::join_all(futures).await;
+    
+    Ok(())
 }
 ```
 
@@ -383,6 +473,7 @@ match ops.get("key").await {
     Err(e) => {
         match e {
             Error::ConnectionError(msg) => println!("连接错误: {}", msg),
+            Error::PoolError(msg) => println!("连接池错误: {}", msg),
             Error::OperationError(msg) => println!("操作错误: {}", msg),
             Error::LockError(msg) => println!("锁错误: {}", msg),
             _ => println!("其他错误: {}", e),
@@ -394,7 +485,7 @@ match ops.get("key").await {
 错误类型：
 
 - `Error::ConnectionError` - Redis 连接错误
-- `Error::PoolError` - 连接池错误
+- `Error::PoolError` - 连接池错误（获取连接失败、连接池耗尽）
 - `Error::OperationError` - 缓存操作错误
 - `Error::SerializeError` - 序列化/反序列化错误
 - `Error::LockError` - 分布式锁错误
@@ -413,9 +504,9 @@ tracing_subscriber::fmt()
 ```
 
 日志级别：
-- `DEBUG` - 详细操作信息
+- `DEBUG` - 详细操作信息（键名、连接池状态）
 - `INFO` - 重要操作记录（连接、锁获取/释放）
-- `WARN` - 潜在问题（重试、超时）
+- `WARN` - 潜在问题（重试、超时、连接池耗尽）
 - `ERROR` - 操作失败
 
 ## 测试
@@ -543,7 +634,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_retry_times(3)
         .with_retry_interval(200);
     
-    // 2. 创建客户端
+    // 2. 创建客户端（自动创建 bb8 连接池）
     let client = RedisClient::new(redis_config).await?;
     
     // 3. 创建管理器
