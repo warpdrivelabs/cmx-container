@@ -3,6 +3,7 @@
 //! 提供 DDL 执行函数和 `PgTableDefineExecutor` 实现。
 //! 依赖 cmx-database 提供的底层 SQL 执行能力。
 
+use tracing::info;
 use cmx_core::model::cell::TableDefine;
 use cmx_core::model::meta::base::{BaseError, TableDefineDbExecutor};
 use cmx_database::execute_sql_by_ids;
@@ -83,6 +84,10 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         let index_stmts = dialect
             .generate_create_indexes(define)
             .map_err(|e| BaseError::DdlGeneration(e.to_string()))?;
+        info!("PgTableDefineExecutor::create_stmt: {:?}", create_stmt);
+        info!("PgTableDefineExecutor::comment_stmts: {:?}", comment_stmts);
+        info!("PgTableDefineExecutor::index_stmts: {:?}", index_stmts);
+
 
         let mut all_stmts = vec![create_stmt];
         all_stmts.extend(comment_stmts);
