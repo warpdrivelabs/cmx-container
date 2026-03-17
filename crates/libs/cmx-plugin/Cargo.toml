@@ -6,10 +6,47 @@ edition.workspace = true
 [dependencies]
 cmx-core = { workspace = true }
 cmx-metadata = { workspace = true }
+cmx-buffer = { workspace = true }
 
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = "1.0"
 thiserror = "2"
 zip = "8.2.0"
 ed25519-dalek = { version = "2.2", features = ["std"] }
 base64 = "0.22"
+
+# 异步运行时
+tokio = { workspace = true, features = ["fs", "io-util"] }
+
+# HTTP 客户端
+reqwest = { workspace = true, features = ["json"] }
+
+# URL 解析
+url = "2"
+
+# 异步 trait
+async-trait = "0.1"
+
+# 错误处理
+anyhow = "1.0"
+
+# 工具宏
+derive_more = { workspace = true }
+
+# 日期时间处理
+chrono = { workspace = true, features = ["serde"] }
+
+# UUID 生成
+uuid = { workspace = true, features = ["v4"] }
+
+# 正则表达式
+regex = { workspace = true }
+
+# URL 编码
+urlencoding = "2"
+
+# 日志
+log = "0.4"
+
+# SHA256 哈希
+sha2 = "0.10"
