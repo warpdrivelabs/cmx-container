@@ -437,11 +437,18 @@ name = "cmx-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "cmx-core",
+ "cmx-database",
  "cmx-utils",
  "derive_more",
+ "modql",
+ "sea-query",
+ "sea-query-binder",
  "serde",
  "serde_json",
  "serde_with",
+ "sqlx",
+ "thiserror",
  "time",
  "tokio",
  "tower-cookies",
@@ -537,6 +544,7 @@ dependencies = [
  "chrono",
  "cmx-buffer",
  "cmx-core",
+ "cmx-database",
  "cmx-metadata",
  "derive_more",
  "ed25519-dalek",
@@ -1890,6 +1898,30 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "modql"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4226d7e0d2a99687ed0eda5f33f2c9095bdf74869652eab73d075a9f981ecfd"
+dependencies = [
+ "modql-macros",
+ "sea-query",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "modql-macros"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64cb2ed7c4062a6219c5144317219a5b2668f413f40a52757b9481346817ac86"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "sea-query",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -3960,6 +3992,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tower-cookies",

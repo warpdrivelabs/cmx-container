@@ -3,42 +3,44 @@
 //! 定义插件数据库操作的 trait 接口，具体实现由使用方注入。
 //! 支持对接 cmx-database 或其他数据库实现。
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 插件数据库 trait - 定义插件数据持久化操作
 /// 
 /// 使用方可以注入 cmx-database 或其他数据库实现
+#[async_trait]
 pub trait PluginDatabase: Send + Sync {
     /// 插入插件记录
-    fn insert_plugin(&self, record: &PluginDbRecord) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn insert_plugin(&self, record: &PluginDbRecord) -> Result<(), PluginDbError>;
 
     /// 更新插件记录
-    fn update_plugin(&self, db_id: &str, plugin_id: &str, updates: &PluginUpdateFields) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn update_plugin(&self, db_id: &str, plugin_id: &str, updates: &PluginUpdateFields) -> Result<(), PluginDbError>;
 
     /// 删除插件记录
-    fn delete_plugin(&self, db_id: &str, plugin_id: &str) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn delete_plugin(&self, db_id: &str, plugin_id: &str) -> Result<(), PluginDbError>;
 
     /// 根据 plugin_id 查询插件
-    fn get_plugin_by_id(&self, db_id: &str, plugin_id: &str) -> impl std::future::Future<Output = Result<Option<PluginDbRecord>, PluginDbError>> + Send;
+    async fn get_plugin_by_id(&self, db_id: &str, plugin_id: &str) -> Result<Option<PluginDbRecord>, PluginDbError>;
 
     /// 查询所有插件
-    fn get_all_plugins(&self, db_id: &str) -> impl std::future::Future<Output = Result<Vec<PluginDbRecord>, PluginDbError>> + Send;
+    async fn get_all_plugins(&self, db_id: &str) -> Result<Vec<PluginDbRecord>, PluginDbError>;
 
     /// 插入版本记录
-    fn insert_version(&self, db_id: &str, record: &VersionDbRecord) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn insert_version(&self, db_id: &str, record: &VersionDbRecord) -> Result<(), PluginDbError>;
 
     /// 插入审计日志记录
-    fn insert_audit_log(&self, db_id: &str, record: &AuditDbRecord) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn insert_audit_log(&self, db_id: &str, record: &AuditDbRecord) -> Result<(), PluginDbError>;
 
     /// 查询审计日志
-    fn query_audit_logs(&self, db_id: &str, plugin_id: Option<&str>, operation_type: Option<&str>, limit: u64) -> impl std::future::Future<Output = Result<Vec<AuditDbRecord>, PluginDbError>> + Send;
+    async fn query_audit_logs(&self, db_id: &str, plugin_id: Option<&str>, operation_type: Option<&str>, limit: u64) -> Result<Vec<AuditDbRecord>, PluginDbError>;
 
     /// 插入部署记录
-    fn insert_deployment(&self, db_id: &str, record: &DeploymentDbRecord) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn insert_deployment(&self, db_id: &str, record: &DeploymentDbRecord) -> Result<(), PluginDbError>;
 
     /// 插入回滚记录
-    fn insert_rollback(&self, db_id: &str, record: &RollbackDbRecord) -> impl std::future::Future<Output = Result<(), PluginDbError>> + Send;
+    async fn insert_rollback(&self, db_id: &str, record: &RollbackDbRecord) -> Result<(), PluginDbError>;
 }
 
 /// 插件数据库服务 - 封装插件相关的数据库操作

@@ -8,6 +8,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::audit::{log_activate, log_deactivate, log_install, log_uninstall, log_upgrade, AuditLogger};
+use crate::cache::PluginCacheManager;
+use crate::db::{PluginDatabase, PluginDbRecord, PluginUpdateFields};
 use crate::error::PluginError;
 use crate::fetcher::PluginSourceFetcher;
 use crate::registry::PluginRegistry;
@@ -37,6 +39,8 @@ pub struct PluginManager {
     audit_logger: Arc<AuditLogger>,
     security_validator: Arc<SecurityValidator>,
     repository: Arc<PluginRepository>,
+    cache_manager: Option<Arc<PluginCacheManager>>,
+    db_service: Option<Arc<dyn PluginDatabase>>,
 }
 
 impl PluginManager {
@@ -55,14 +59,19 @@ impl PluginManager {
             audit_logger: Arc::new(AuditLogger::new()),
             security_validator: Arc::new(SecurityValidator::default()),
             repository: Arc::new(PluginRepository::new(config.default_db_id.clone())),
+            cache_manager: None,
+            db_service: None,
         })
     }
     
-    /// 创建新的插件管理器（带自定义激活管理器和部署协调器）
+    /// 创建新的插件管理器（带自定义组件）
+    #[allow(dead_code)]
     pub fn with_components(
         config: PluginManagerConfig,
         activation_manager: Option<Arc<ActivationManager>>,
         deployment_coordinator: Option<Arc<crate::deployment::DeploymentCoordinator>>,
+        cache_manager: Option<Arc<PluginCacheManager>>,
+        db_service: Option<Arc<dyn PluginDatabase>>,
     ) -> Result<Self, PluginError> {
         let temp_dir = config.temp_root.clone();
         
@@ -77,16 +86,18 @@ impl PluginManager {
             audit_logger: Arc::new(AuditLogger::new()),
             security_validator: Arc::new(SecurityValidator::default()),
             repository: Arc::new(PluginRepository::new(config.default_db_id.clone())),
+            cache_manager,
+            db_service,
         })
     }
     
     /// 安装插件
-    /// 流程: 验证 -> 解析依赖 -> 校验版本 -> 创建备份 -> 执行安装 -> 在指定数据库创建表 -> 更新元数据状态 -> 记录日志
+    /// 流程: 验证 -> 解析依赖 -> 校验版本 -> 创建备份 -> 执行安装 -> 在指定数据库创建表 -> 更新元数据状态 -> 保存数据库 -> 更新缓存 -> 记录日志
     pub async fn install(&self, request: InstallRequest) -> Result<InstallResponse, PluginError> {
         let start_time = std::time::Instant::now();
         let operation_id = Uuid::new_v4().to_string();
         
-        // 1. 安全验证
+        // 1. 安全验证 - 获取插件包
         let temp_dir = self.source_fetcher.fetch(&request.source).await?;
         
         // 验证插件安全性
@@ -115,6 +126,7 @@ impl PluginManager {
         
         let plugin_def = manifest.plugin;
         let plugin_id = request.plugin_id.unwrap_or_else(|| plugin_def.id.clone());
+        let version = plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string());
         
         // 3. 检查已安装状态
         {
@@ -129,8 +141,7 @@ impl PluginManager {
             }
         }
         
-        // 4. 解析依赖 - 从 plugin_def 读取依赖信息（如果存在）
-        // 检查是否有扩展定义包含依赖
+        // 4. 解析依赖
         let dependencies: Vec<(String, String, String)> = Vec::new();
         
         // 5. 创建安装目录
@@ -154,18 +165,62 @@ impl PluginManager {
             self.create_plugin_tables(&plugin_def, &install_path, &target_db_id).await?;
         }
         
-        // 8. 注册插件
-        let version = plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string());
+        // 8. 注册插件到内存注册表
         {
             let mut registry = self.registry.write().await;
             registry.register(plugin_def.clone(), &install_path)?;
         }
         
-        // 9. 更新元数据到数据库
-        // TODO: 集成 cmx-database 进行持久化
-        // 示例: self.save_plugin_to_db(&plugin_id, &version, &target_db_id).await?;
+        // 9. 保存到数据库（如果配置了数据库服务）
+        if let Some(db_service) = &self.db_service {
+            let record = PluginDbRecord {
+                plugin_id: plugin_id.clone(),
+                name: plugin_def.name.clone(),
+                version: version.clone(),
+                status: "installed".to_string(),
+                wasm_path: install_path.join("plugin.wasm").to_string_lossy().to_string(),
+                install_path: install_path.to_string_lossy().to_string(),
+                config_path: None,
+                db_id: target_db_id.clone(),
+                is_system: false,
+                is_locked: false,
+                domain_code: plugin_def.domain_code.clone(),
+                application_code: plugin_def.application_code.clone(),
+                module_code: plugin_def.module_code.clone(),
+                vendor_name: plugin_def.vendor_name.clone(),
+                vendor_url: plugin_def.vendor_url.clone(),
+                vendor_contact: plugin_def.vendor_contact.clone(),
+                metadata: None,
+                signature_algorithm: None,
+                signer_key_id: None,
+                activated_at: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            };
+            
+            if let Err(e) = db_service.insert_plugin(&record).await {
+                log::error!("保存插件到数据库失败: {}", e);
+            }
+        }
         
-        // 10. 记录审计日志
+        // 10. 更新缓存（如果配置了缓存管理器）
+        if let Some(cache_manager) = &self.cache_manager {
+            let cache_value = crate::cache::PluginCacheValue {
+                plugin_id: plugin_id.clone(),
+                name: plugin_def.name.clone(),
+                version: version.clone(),
+                status: "installed".to_string(),
+                install_path: install_path.to_string_lossy().to_string(),
+                activated: false,
+                updated_at: Utc::now().timestamp(),
+            };
+            
+            if let Err(e) = cache_manager.cache_plugin(&cache_value).await {
+                log::error!("更新插件缓存失败: {}", e);
+            }
+        }
+        
+        // 11. 记录审计日志
         let audit_logger = &self.audit_logger;
         log_install(
             audit_logger,
@@ -193,6 +248,7 @@ impl PluginManager {
     }
     
     /// 卸载插件
+    /// 流程: 检查依赖 -> 停用插件 -> 删除文件 -> 清理注册表 -> 删除数据库记录 -> 清除缓存 -> 记录日志
     pub async fn uninstall(&self, request: UninstallRequest) -> Result<UninstallResponse, PluginError> {
         let start_time = std::time::Instant::now();
         let operation_id = Uuid::new_v4().to_string();
@@ -211,7 +267,6 @@ impl PluginManager {
         }
         
         // 2. 检查依赖 - 是否有其他插件依赖此插件
-        // 查询所有已安装插件，检查是否有依赖此插件的
         let dependent_plugins = self.get_dependent_plugins(plugin_id).await?;
         if !dependent_plugins.is_empty() && !request.force {
             return Err(PluginError::Dependency(format!(
@@ -222,7 +277,6 @@ impl PluginManager {
         }
         
         // 3. 停用插件（如果已激活）
-        // 调用激活管理器停用插件
         if let Some(activation_manager) = &self.activation_manager {
             if activation_manager.is_active(plugin_id).await {
                 activation_manager.deactivate(plugin_id).await?;
@@ -239,14 +293,25 @@ impl PluginManager {
         // 5. 从注册表移除
         {
             let mut registry = self.registry.write().await;
-            // 重新加载注册表（不包含此插件）
             *registry = PluginRegistry::new();
         }
         
-        // 6. 清理数据库
-        // TODO: 集成 cmx-database 进行持久化
+        // 6. 删除数据库记录
+        if let Some(db_service) = &self.db_service {
+            let target_db_id = &self.config.default_db_id;
+            if let Err(e) = db_service.delete_plugin(target_db_id, plugin_id).await {
+                log::error!("删除插件数据库记录失败: {}", e);
+            }
+        }
         
-        // 7. 记录审计日志
+        // 7. 清除缓存
+        if let Some(cache_manager) = &self.cache_manager {
+            if let Err(e) = cache_manager.invalidate_plugin(plugin_id).await {
+                log::error!("清除插件缓存失败: {}", e);
+            }
+        }
+        
+        // 8. 记录审计日志
         let audit_logger = &self.audit_logger;
         log_uninstall(
             audit_logger,
@@ -266,6 +331,7 @@ impl PluginManager {
     }
     
     /// 激活插件
+    /// 流程: 检查插件存在 -> 检查未激活 -> 加载WASM -> 更新数据库状态 -> 更新缓存 -> 记录日志
     pub async fn activate(&self, request: ActivateRequest) -> Result<ActivateResponse, PluginError> {
         let start_time = std::time::Instant::now();
         let operation_id = Uuid::new_v4().to_string();
@@ -308,7 +374,26 @@ impl PluginManager {
             }
         }
         
-        // 4. 记录审计日志
+        // 4. 更新数据库状态（如果配置了数据库服务）
+        if let Some(db_service) = &self.db_service {
+            let updates = PluginUpdateFields {
+                status: Some("active".to_string()),
+                activated_at: Some(Utc::now()),
+                ..Default::default()
+            };
+            if let Err(e) = db_service.update_plugin(&self.config.default_db_id, plugin_id, &updates).await {
+                log::error!("更新插件激活状态到数据库失败: {}", e);
+            }
+        }
+        
+        // 5. 更新缓存状态
+        if let Some(cache_manager) = &self.cache_manager {
+            if let Err(e) = cache_manager.cache_plugin_status(plugin_id, "active").await {
+                log::error!("更新插件缓存状态失败: {}", e);
+            }
+        }
+        
+        // 6. 记录审计日志
         let audit_logger = &self.audit_logger;
         log_activate(
             audit_logger,
@@ -329,6 +414,7 @@ impl PluginManager {
     }
     
     /// 停用插件
+    /// 流程: 检查插件存在 -> 检查依赖 -> 停用WASM -> 更新数据库状态 -> 更新缓存 -> 记录日志
     pub async fn deactivate(&self, request: DeactivateRequest) -> Result<DeactivateResponse, PluginError> {
         let start_time = std::time::Instant::now();
         let operation_id = Uuid::new_v4().to_string();
@@ -338,15 +424,12 @@ impl PluginManager {
         // 1. 检查插件是否存在
         
         // 2. 检查是否有其他已激活的插件依赖此插件
-        // 查询依赖此插件的其他已激活插件
         if let Some(am) = &self.activation_manager {
             let active_plugins = am.get_active_plugins().await;
             for active_id in active_plugins {
-                // 检查 active_id 是否依赖当前插件
                 let registry = self.registry.read().await;
-                if let Some(def) = registry.get_definition(&active_id) {
+                if let Some(_def) = registry.get_definition(&active_id) {
                     // TODO: 检查 def 是否依赖当前插件
-                    // 目前简化处理，假设没有循环依赖
                 }
             }
         }
@@ -358,9 +441,26 @@ impl PluginManager {
             }
         }
         
-        // 4. 释放资源 - 清理插件占用的系统资源
+        // 4. 更新数据库状态
+        if let Some(db_service) = &self.db_service {
+            let updates = PluginUpdateFields {
+                status: Some("installed".to_string()),
+                activated_at: None,
+                ..Default::default()
+            };
+            if let Err(e) = db_service.update_plugin(&self.config.default_db_id, plugin_id, &updates).await {
+                log::error!("更新插件停用状态到数据库失败: {}", e);
+            }
+        }
         
-        // 5. 记录审计日志
+        // 5. 更新缓存状态
+        if let Some(cache_manager) = &self.cache_manager {
+            if let Err(e) = cache_manager.cache_plugin_status(plugin_id, "installed").await {
+                log::error!("更新插件缓存状态失败: {}", e);
+            }
+        }
+        
+        // 6. 记录审计日志
         let audit_logger = &self.audit_logger;
         log_deactivate(
             audit_logger,
@@ -703,6 +803,16 @@ impl PluginManager {
     /// 获取数据库仓库
     pub fn repository(&self) -> &Arc<PluginRepository> {
         &self.repository
+    }
+    
+    /// 获取缓存管理器
+    pub fn cache_manager(&self) -> Option<&Arc<PluginCacheManager>> {
+        self.cache_manager.as_ref()
+    }
+    
+    /// 获取数据库服务
+    pub fn db_service(&self) -> Option<&Arc<dyn PluginDatabase>> {
+        self.db_service.as_ref()
     }
     
     /// 获取依赖此插件的其他插件列表

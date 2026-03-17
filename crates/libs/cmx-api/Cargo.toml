@@ -5,21 +5,39 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+# -- Web 框架
 axum={workspace = true}
-cmx-utils = { workspace = true }
-tokio={workspace = true}
 tower-http = { workspace = true }
 tower-cookies = { workspace = true }
+
+# -- 内部依赖
+cmx-utils = { workspace = true }
+cmx-core = { workspace = true }
+cmx-database = { workspace = true }
+
+# -- 异步
+tokio={workspace = true}
+
+# -- 数据处理
+sea-query = { workspace = true }
+sea-query-binder = { workspace = true }
+modql = { workspace = true, features = ["with-sea-query"] }
+sqlx = { workspace = true }
+
+# -- Json
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with={ workspace = true }
+
+# -- 时间和UUID
 time = { workspace = true }
 uuid = { workspace = true ,features = ["v4","fast-rng"]}
 
+# -- 日志和错误处理
 tracing ={workspace = true}
 derive_more={workspace = true}
-# serde: 序列化框架
-serde = { workspace = true }
-# serde_json: JSON 序列化/反序列化
-serde_json = { workspace = true }
-serde_with={ workspace = true }
-# 验证
+thiserror = { workspace = true }
+
+# -- 验证
 validator = { workspace = true }
 

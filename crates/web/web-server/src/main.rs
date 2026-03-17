@@ -4,6 +4,7 @@
 
 mod config;
 mod error;
+mod routes;
 pub use self::error::{Error, Result};
 use config::web_config;
 
@@ -106,11 +107,15 @@ async fn main() -> Result<()> {
     //     ))
     // };
 
+    // -- 配置 API 路由
+    let api_routes = self::routes::routes().with_state((**database_manager).clone());
+
     // -- 使用中间件构建路由
     // 中间件顺序 (从外到内):
     // 1. CookieManager - 处理 cookies
     // 2. mw_req_stamp_resolver - 添加请求时间戳
     let routes_all = Router::new()
+        .nest("/api", api_routes)
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_req_stamp_resolver));
 
