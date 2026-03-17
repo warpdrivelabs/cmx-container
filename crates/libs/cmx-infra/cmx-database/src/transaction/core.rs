@@ -12,6 +12,7 @@ use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::conversion::TransactionConverter;
 use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
+use sea_query_binder::SqlxValues;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use uuid;
@@ -648,6 +649,55 @@ impl DbTransaction {
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
+            },
+        }
+    }
+
+    /// 执行带 sea-query-binder Values 的 SQL 语句
+    ///
+    /// # 参数
+    /// * `sql` - SQL语句
+    /// * `params` - sea-query-binder 的 SqlxValues
+    ///
+    /// # 返回值
+    /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
+    pub async fn execute_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues) -> sqlx::Result<u64> {
+        match self {
+            DbTransaction::Postgres(txn) => {
+                let query = sqlx::query_with(sql, params);
+                let result = query.execute(txn.as_mut()).await?;
+                Ok(result.rows_affected())
+            },
+            DbTransaction::MySql(_txn) => {
+                Err(sqlx::Error::Protocol("MySql not supported with sea-query yet".to_string()))
+            },
+            DbTransaction::Sqlite(_txn) => {
+                Err(sqlx::Error::Protocol("Sqlite not supported with sea-query yet".to_string()))
+            },
+        }
+    }
+
+    /// 执行带 sea-query-binder Values 的 SQL 查询并返回 DataSet
+    ///
+    /// # 参数
+    /// * `sql` - SQL查询语句
+    /// * `params` - sea-query-binder 的 SqlxValues
+    /// * `dataset_id` - 数据集唯一标识
+    ///
+    /// # 返回值
+    /// * `sqlx::Result<DataSet>` - 查询结果转换为DataSet
+    pub async fn query_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+        match self {
+            DbTransaction::Postgres(txn) => {
+                let query = sqlx::query_with(sql, params);
+                let rows = txn.fetch_all(query).await?;
+                Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
+            },
+            DbTransaction::MySql(_txn) => {
+                Err(sqlx::Error::Protocol("MySql not supported with sea-query yet".to_string()))
+            },
+            DbTransaction::Sqlite(_txn) => {
+                Err(sqlx::Error::Protocol("Sqlite not supported with sea-query yet".to_string()))
             },
         }
     }

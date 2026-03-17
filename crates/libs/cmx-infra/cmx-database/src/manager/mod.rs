@@ -143,6 +143,16 @@ impl DatabaseManager {
         crate::transaction::query_sql_with_params_by_ids(db_id, txn_id, sql, params, dataset_id).await
     }
 
+    /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
+    pub async fn execute_sql_with_sqlxvalues(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: sea_query_binder::SqlxValues) -> Result<u64> {
+        crate::transaction::execute_sql_with_sqlxvalues_by_ids(db_id, txn_id, sql, params).await
+    }
+
+    /// 查询带 sea-query-binder SqlxValues 的 SQL 语句
+    pub async fn query_sql_with_sqlxvalues(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: sea_query_binder::SqlxValues, dataset_id: &str) -> Result<DataSet> {
+        crate::transaction::query_sql_with_sqlxvalues_by_ids(db_id, txn_id, sql, params, dataset_id).await
+    }
+
     /// 提交事务
     pub async fn commit_transaction(&self, txn_id: &str) -> Result<()> {
         crate::transaction::commit_txn_by_id(txn_id).await
