@@ -26,6 +26,19 @@ pub enum ParamValue {
 
 impl ParamValue {
     /// 将 serde_json::Value 转换为 ParamValue
+    /// 
+    /// 支持的类型转换：
+    /// - null -> Null
+    /// - bool -> Bool
+    /// - i64 -> Int
+    /// - f64 -> Float
+    /// - 数字字符串 -> Decimal（如果可以解析）
+    /// - 日期时间字符串 -> DateTime（支持多种格式）
+    /// - 日期字符串 -> Date
+    /// - UUID 格式字符串 -> Uuid
+    /// - base64 编码字符串 -> Binary
+    /// - 数组/对象 -> Json
+    /// - 普通字符串 -> String
     pub fn from_json(value: serde_json::Value) -> Self {
         match value {
             serde_json::Value::Null => ParamValue::Null,
@@ -39,9 +52,79 @@ impl ParamValue {
                     ParamValue::String(n.to_string())
                 }
             }
-            serde_json::Value::String(s) => ParamValue::String(s),
-            serde_json::Value::Array(arr) => ParamValue::Json(serde_json::Value::Array(arr)),
-            serde_json::Value::Object(obj) => ParamValue::Json(serde_json::Value::Object(obj)),
+            serde_json::Value::String(s) => {
+                // 尝试解析为特定类型
+                
+                // 1. 尝试解析为 Uuid
+                if let Ok(uuid) = Uuid::parse_str(&s) {
+                    return ParamValue::Uuid(uuid);
+                }
+                
+                // 2. 尝试解析为 Decimal（金额等）
+                if let Ok(d) = s.parse::<Decimal>() {
+                    return ParamValue::Decimal(d);
+                }
+                
+                // 3. 尝试解析为 DateTime（支持多种格式）
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                    return ParamValue::DateTime(dt.naive_utc());
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f") {
+                    return ParamValue::DateTime(dt);
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
+                    return ParamValue::DateTime(dt);
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                    return ParamValue::DateTime(dt);
+                }
+                
+                // 4. 尝试解析为 Date
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                    return ParamValue::Date(date);
+                }
+                
+                // 5. 尝试解析为 base64 Binary
+                use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+                if let Ok(bytes) = BASE64.decode(&s) {
+                    return ParamValue::Binary(bytes);
+                }
+                
+                // 6. 尝试解析为 JSON（以 { 或 [ 开头）
+                if s.starts_with('{') || s.starts_with('[') {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                        return ParamValue::Json(v);
+                    }
+                }
+                
+                // 默认作为字符串
+                ParamValue::String(s)
+            }
+            serde_json::Value::Array(arr) => {
+                // 检查是否为二进制数据（全是 0-255 的数字）
+                let is_binary = arr.iter().all(|v| {
+                    if let serde_json::Value::Number(n) = v {
+                        n.as_u64().map(|n| n <= 255).unwrap_or(false)
+                    } else {
+                        false
+                    }
+                });
+                
+                if is_binary {
+                    let bytes: Vec<u8> = arr.iter()
+                        .filter_map(|v| v.as_u64())
+                        .map(|n| n as u8)
+                        .collect();
+                    return ParamValue::Binary(bytes);
+                }
+                
+                // 否则作为 JSON 数组
+                ParamValue::Json(serde_json::Value::Array(arr))
+            }
+            serde_json::Value::Object(obj) => {
+                // 对象转为 JSON
+                ParamValue::Json(serde_json::Value::Object(obj))
+            }
         }
     }
 }
