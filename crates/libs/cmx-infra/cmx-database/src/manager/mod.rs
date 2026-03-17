@@ -46,12 +46,14 @@ impl Default for TransactionOptions {
 ///
 /// 统一入口，管理连接池、事务注册表等资源
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct DatabaseManager {
     pool_manager: Arc<PoolManager>,
     config: DatabaseManagerConfig,
 }
 
 /// 连接池管理器
+#[derive(Clone)]
 pub struct PoolManager {
     registry: &'static crate::connection::DbRegistry,
 }
