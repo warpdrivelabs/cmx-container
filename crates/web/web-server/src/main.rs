@@ -9,7 +9,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 
-use crate::config::{init_global_config, WebConfig};
+use crate::config::{init_db_datasource, init_global_config, WebConfig};
 use cmx_api::middleware::mw_req_stamp::mw_req_stamp_resolver;
 use cmx_database::{get_default_db_manager, DatabaseManager};
 use tokio::net::TcpListener;
@@ -28,6 +28,8 @@ async fn main() -> Result<()> {
 
     //初始化全局配置
     init_global_config();
+    //初始化数据库数据源
+    init_db_datasource().await;
 
     // 配置日志系统
     tracing_subscriber::fmt()

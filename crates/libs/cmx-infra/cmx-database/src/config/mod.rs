@@ -1,9 +1,10 @@
 use std::str::FromStr;
+use cmx_utils::{ConfigError, ConfigResult, ConfigValue, FromConfigValue};
 
 /// 配置模块，包含数据库和连接池配置结构
 
 /// 数据库类型枚举
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DbType {
     Postgres,
     MySql,
@@ -25,7 +26,7 @@ impl FromStr for DbType {
 
 /// 连接池配置
 #[allow(non_snake_case)]
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug, serde::Serialize, serde::Deserialize)]
 pub struct PoolConfig {
     /// 最大连接数
     pub max_connections: usize,
@@ -52,7 +53,7 @@ impl Default for PoolConfig {
 }
 
 /// 数据库配置
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct DbConfig {
     /// 数据库类型
     pub db_type: DbType,
@@ -60,6 +61,8 @@ pub struct DbConfig {
     pub db_url: String,
     /// db id
     pub db_id: String,
+    /// 是否是默认数据库
+    pub default: bool,
 
     /// 连接池配置
     pub pool_config: PoolConfig,
@@ -78,6 +81,111 @@ impl Default for DbConfig {
             pool_config: PoolConfig::default(),
             health_check_interval: 60,
             health_check_timeout: 5,
+            default: false
         }
     }
+}
+
+
+/// 从 ConfigValue 转换为 DbConfig
+impl FromConfigValue for DbConfig {
+    fn from_config_value(value: &ConfigValue) -> ConfigResult<Self> {
+        match value {
+            ConfigValue::Object(map) => {
+                let db_type = get_string_field(map, "db_type")
+                    .and_then(|s| DbType::from_str(&s).map_err(|e| ConfigError::TypeConversionError {
+                        key: "db_type".to_string(),
+                        target_type: e,
+                    }))?;
+
+                let db_url = get_string_field(map, "db_url")?;
+                let db_id = get_string_field(map, "db_id")?;
+                let default = get_bool_field(map, "default").unwrap_or(false);
+
+                let pool_config = get_object_field(map, "pool_config")
+                    .and_then(|v| v.try_into_type().ok())
+                    .unwrap_or_default();
+
+                let health_check_interval = get_int_field(map, "health_check_interval").unwrap_or(60) as u64;
+                let health_check_timeout = get_int_field(map, "health_check_timeout").unwrap_or(5) as u64;
+
+                Ok(DbConfig {
+                    db_type,
+                    db_url,
+                    db_id,
+                    default,
+                    pool_config,
+                    health_check_interval,
+                    health_check_timeout,
+                })
+            }
+            _ => Err(ConfigError::TypeConversionError {
+                key: "databases".to_string(),
+                target_type: "DbConfig".to_string(),
+            }),
+        }
+    }
+}
+
+
+
+/// 从 ConfigValue 转换为 PoolConfig
+impl FromConfigValue for PoolConfig {
+    fn from_config_value(value: &ConfigValue) -> ConfigResult<Self> {
+        match value {
+            ConfigValue::Object(map) => {
+                let max_connections = get_int_field(map, "max_connections").unwrap_or(10) as usize;
+                let min_connections = get_int_field(map, "min_connections").unwrap_or(2) as usize;
+                let connect_timeout = get_int_field(map, "connect_timeout").unwrap_or(30) as u64;
+                let idle_timeout = get_int_field(map, "idle_timeout").unwrap_or(600) as u64;
+                let max_lifetime = get_int_field(map, "max_lifetime").unwrap_or(1800) as u64;
+
+                Ok(PoolConfig {
+                    max_connections,
+                    min_connections,
+                    connect_timeout,
+                    idle_timeout,
+                    max_lifetime,
+                })
+            }
+            _ => Err(ConfigError::TypeConversionError {
+                key: "pool_config".to_string(),
+                target_type: "PoolConfig".to_string(),
+            }),
+        }
+    }
+}
+
+/// 从对象字段中获取字符串值
+fn get_string_field(map: &std::collections::HashMap<String, ConfigValue>, key: &str) -> ConfigResult<String> {
+    map.get(key)
+        .ok_or_else(|| ConfigError::KeyNotFound { key: key.to_string() })
+        .and_then(|v| String::from_config_value(v))
+}
+
+/// 从对象字段中获取整数值
+fn get_int_field(map: &std::collections::HashMap<String, ConfigValue>, key: &str) -> Option<i64> {
+    map.get(key).and_then(|v| {
+        if let ConfigValue::Integer(i) = v {
+            Some(*i)
+        } else {
+            None
+        }
+    })
+}
+
+/// 从对象字段中获取布尔值
+fn get_bool_field(map: &std::collections::HashMap<String, ConfigValue>, key: &str) -> Option<bool> {
+    map.get(key).and_then(|v| {
+        if let ConfigValue::Boolean(b) = v {
+            Some(*b)
+        } else {
+            None
+        }
+    })
+}
+
+/// 从对象字段中获取对象值
+fn get_object_field(map: &std::collections::HashMap<String, ConfigValue>, key: &str) -> Option<ConfigValue> {
+    map.get(key).cloned()
 }

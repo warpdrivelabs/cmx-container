@@ -24,6 +24,7 @@ async fn setup_db_manager() -> DatabaseManager {
         pool_config,
         health_check_interval: 60,
         health_check_timeout: 5,
+        default:true
     };
 
     let config = DatabaseManagerConfig::default();

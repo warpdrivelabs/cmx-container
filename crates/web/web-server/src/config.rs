@@ -1,15 +1,23 @@
+/*
+ * @Author: yqs
+ * @Date: 2026-03-10 15:35:34
+ * @Describe:
+ * @LastEditors: yqs
+ * @LastEditTime: 2026-03-17 15:22:43
+ */
 //! Web 服务器配置模块
 
-use cmx_database::DatabaseManager;
+use cmx_database::{DbConfig, DbType, PoolConfig, get_default_db_manager};
 use cmx_utils::{
-    CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, Priority,
+    CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, ConfigValue,
+    FromConfigValue, Priority,
 };
 use serde::Deserialize;
 use std::sync::OnceLock;
-use tracing::error;
+use tracing::{error, info};
 
 pub fn init_global_config() {
-    tracing::info!("加载环境变量和配置文件信息...");
+    info!("加载环境变量和配置文件信息...");
 
     // 加载.env文件
     dotenvy::dotenv().ok();
@@ -23,7 +31,6 @@ pub fn init_global_config() {
             .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
             .add_toml_file_from_env("CONFIG_FILE", Priority(10))
             .build()
-
     })
     .unwrap();
 }
@@ -60,9 +67,46 @@ impl WebConfig {
 
         return match result {
             Ok(value) => Ok(WebConfig { WEB_FOLDER: value }),
-            Err(ex) => {
-                Err(ex)
-            }
+            Err(ex) => Err(ex),
         };
     }
+}
+
+/// 初始化数据库数据源
+///
+/// 从配置管理器读取 databases 配置数组，解析为 Vec<DbConfig> 并注册到数据库管理器
+pub async fn init_db_datasource() {
+    let config = ConfigManager::global();
+
+    // 从配置管理器获取 databases 配置
+    let configs: Vec<ConfigValue> = match config.get_as("databases") {
+        Ok(configs) => configs,
+        Err(e) => {
+            error!("无法从配置管理器获取 databases 配置: {:?}", e);
+            panic!("无法获取数据库配置: {:?}", e);
+        }
+    };
+
+    info!("成功解析到 {} 个数据源配置", configs.len());
+
+    // 获取默认数据库管理器并注册数据源
+    let db_manager = get_default_db_manager();
+
+    for config in &configs {
+        let db_config = DbConfig::from_config_value(config).unwrap();
+        match db_manager.register_data_source(db_config.clone()).await {
+            Ok(_) => {
+                info!(
+                    "成功注册数据源: {} (类型: {:?})",
+                    db_config.db_id, db_config.db_type
+                );
+            }
+            Err(e) => {
+                error!("注册数据源 {} 失败: {}", db_config.db_id, e);
+                panic!("注册数据源失败: {}", e);
+            }
+        }
+    }
+
+    info!("数据库数据源初始化完成");
 }
