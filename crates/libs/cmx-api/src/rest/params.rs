@@ -12,7 +12,7 @@ pub const LIST_LIMIT_DEFAULT: i64 = 1000;
 pub const LIST_LIMIT_MAX: i64 = 5000;
 
 /// 默认数据库 ID
-pub const DB_ID_DEFAULT: &str = "default";
+pub const DB_ID_DEFAULT: &str = "primary";
 
 /// 数据库 ID 参数
 ///
@@ -128,7 +128,7 @@ impl<F> PageParams<F> {
         } else {
             limit
         };
-        
+
         ListOptions {
             limit: Some(limit),
             offset: self.offset,

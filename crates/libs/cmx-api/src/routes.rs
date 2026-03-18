@@ -1,0 +1,47 @@
+//! 集中路由注册模块
+//!
+//! 提供统一的路由注册入口，简化 web-server 的路由配置
+
+use axum::Router;
+use cmx_database::DatabaseManager;
+
+use crate::register_crud_routes;
+use crate::models::domain::{DomainBmc, DomainFilter};
+
+/// 注册所有 API 路由
+///
+/// # 参数
+/// * 无
+///
+/// # 返回值
+/// 返回配置好的 Axum 路由器
+///
+/// # 示例
+/// ```rust
+/// use cmx_api::routes::api_routes;
+/// use cmx_database::DatabaseManager;
+///
+/// let mm = DatabaseManager::new();
+/// let router = api_routes().with_state(mm);
+/// ```
+///
+/// # 注册的路由
+/// ## Domain CRUD
+/// - POST /domains/create   - 创建
+/// - GET  /domains/get      - 获取（?id=xxx）
+/// - POST /domains/update   - 更新
+/// - GET  /domains/delete   - 删除（?id=xxx）
+/// - POST /domains/list     - 列表查询
+/// - POST /domains/page     - 分页查询
+pub fn api_routes() -> Router<DatabaseManager> {
+    let router = Router::new();
+
+    // 注册 Domain CRUD 路由
+    let router = register_crud_routes!(router, DomainBmc, DomainFilter, "/domains");
+
+    // 注册其他模型的路由
+    // let router = register_crud_routes!(router, UserBmc, UserFilter, "/users");
+    // let router = register_crud_routes!(router, OrderBmc, OrderFilter, "/orders");
+
+    router
+}

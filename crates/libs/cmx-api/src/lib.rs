@@ -22,6 +22,9 @@ pub mod rest;
 /// 业务模型模块
 pub mod models;
 
+/// 路由注册模块
+pub mod routes;
+
 // 重新导出常用类型
 pub use crud::{DbBmc, GenericCrudService};
 pub use rest::{PageParams, create, get_by_id, update, delete_by_id, list, page};
