@@ -58,6 +58,7 @@
 
 pub mod b64;
 pub mod config;
+pub mod id;
 pub mod time;
 pub mod zip;
 
@@ -70,3 +71,5 @@ pub use config::{
 pub use config::{ConfigManager, DefaultConfigLoader};
 // 重新导出 zip 模块的常用类型
 pub use zip::{ZipCompressor, ZipExtractor, ZipError, ZipResult};
+// 重新导出 id 模块的常用类型
+pub use id::{snowflake_id, snowflake_id_str, SnowflakeGenerator, UuidGenerator};

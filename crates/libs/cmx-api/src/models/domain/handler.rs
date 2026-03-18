@@ -6,7 +6,7 @@ use axum::{extract::Query, extract::State, Json};
 use cmx_core::model::data::dataset::DataSet;
 use serde::Deserialize;
 use tracing::debug;
-
+use crate::create;
 use crate::error::Result;
 use crate::response::ApiResp;
 use crate::models::domain::DomainService;
@@ -24,7 +24,7 @@ pub struct GetByNameParams {
 impl GetByNameParams {
     /// 获取数据库 ID
     pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or("default")
+        self.db_id.as_deref().unwrap_or(crate::rest::params::DB_ID_DEFAULT)
     }
 }
 

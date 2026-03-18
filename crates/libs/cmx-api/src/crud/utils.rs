@@ -7,6 +7,7 @@
 
 use crate::crud::traits::DbBmc;
 use serde_json::Value;
+use cmx_utils::snowflake_id_str;
 
 /// 当模型控制器准备创建实体时调用此方法。
 /// 此函数会根据模型的配置自动添加所有者ID（如果需要）。
@@ -29,6 +30,9 @@ where
             if let Some(uid) = &user_id {
                 obj.insert("owner_id".to_string(), Value::String(uid.clone()));
             }
+        }
+        if !obj.contains_key(MC::PK_COLUMN) {
+            obj.insert(MC::PK_COLUMN.into(), Value::String(snowflake_id_str()));
         }
     }
 }

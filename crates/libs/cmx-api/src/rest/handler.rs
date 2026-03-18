@@ -37,7 +37,7 @@ where
         .and_then(|v| v.as_str())
         .unwrap_or(DB_ID_DEFAULT)
         .to_string();
-    
+
     data.as_object_mut().map(|obj| obj.remove("db_id"));
 
     let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
@@ -90,12 +90,12 @@ where
         .and_then(|v| v.as_str())
         .unwrap_or(DB_ID_DEFAULT)
         .to_string();
-    
+
     let id = data.get("id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::BadRequest("缺少 id 字段".to_string()))?
         .to_string();
-    
+
     data.as_object_mut().map(|obj| {
         obj.remove("id");
         obj.remove("db_id");
