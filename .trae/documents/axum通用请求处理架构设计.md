@@ -1,728 +1,751 @@
-# Axum 通用请求处理架构设计文档
+# Entity 强类型数据参数设计方案
 
-## 1. 设计理念
+## 1. 问题背景
 
-**核心目标**：开发一个通用 CRUD 框架，参考 example/lib-core、example/lib-rest-core、example/lib-web 的成熟模式，构建支持 GET/POST 两种方法的通用 CRUD 架构，SQL 执行通过 cmx-database 封装 API 实现，返回结果使用 cmx-core 模块封装的 DataSet。
-
-**代码位置**：cmx-api 模块
-
-**使用场景**：用户使用该框架时，只需定义模型结构和 Filter，系统自动生成 CRUD 接口。
-
-**重要决策**：
-- 数据库执行方式：完全使用 cmx-database 的封装 API
-- 主键类型：固定为 varchar（String）类型
-- 认证权限：暂不考虑认证和权限
-- 字段选择：返回所有字段
-- 路由注册：提供宏来简化路由注册
-- 时间戳审计：参考复用 example/lib-core 中的 prep_fields_for_create 和 prep_fields_for_update
-
----
-
-## 2. 接口设计
-
-### 2.1 只使用 GET 和 POST 方法
-
-| 方法 | 路径 | 说明 | 参数位置 |
-|------|------|------|----------|
-| POST | `/api/{resource}/create` | 创建 | body (JSON) |
-| GET | `/api/{resource}/get` | 获取单条 | 查询参数 ?id=xxx |
-| POST | `/api/{resource}/update` | 更新 | body (JSON，包含 id) |
-| GET | `/api/{resource}/delete` | 删除 | 查询参数 ?id=xxx |
-| POST | `/api/{resource}/list` | 列表查询 | body (JSON) |
-| POST | `/api/{resource}/page` | 分页查询 | body (JSON) |
-
----
-
-## 3. 核心技术栈
-
-| 组件 | 作用 | 版本/参考 |
-|------|------|----------|
-| `sea-query` | SQL 构建 | - |
-| `modql` | FilterNodes + Fields | 0.4.1 |
-| `DataSet` | 返回结果 | cmx-core |
-| `RestResponse` | 响应包装 | cmx-core |
-| `DbBmc` trait | 表元信息 | example/lib-core |
-| `SVRContext` | 上下文 | cmx-core 模块 |
-| `cmx-database` | SQL 执行 | 封装 API |
-| `cmx-api` | 代码放置位置 | 你的模块 |
-| Handler 风格 | 请求处理 | example/lib-web |
-
----
-
-## 4. 示例表结构：cmx_domain
-
-作为框架使用的示例表：
-
-```sql
-CREATE TABLE public.cmx_domain (
-    code        varchar(64)  NOT NULL PRIMARY KEY,
-    name        varchar(200) NOT NULL,
-    description text,
-    type        varchar(50),
-    tags        text,
-    sort_order  integer   DEFAULT 0,
-    status      integer   DEFAULT 1,
-    archived    integer   DEFAULT 0,
-    created_at  timestamp DEFAULT CURRENT_TIMESTAMP,
-    updated_at  timestamp DEFAULT CURRENT_TIMESTAMP,
-    created_by  varchar(100),
-    create_name varchar(100),
-    updated_by  varchar(100),
-    update_name varchar(100)
-);
-```
-
----
-
-## 5. 参考代码风格
-
-### 5.1 lib-web Handler 风格（参考 example/lib-web）
+当前 `cmx-api/crud/service.rs` 中的 `create` 和 `update` 方法使用 `serde_json::Value` 作为 data 参数：
 
 ```rust
-// 参考 example/lib-web/src/handlers/handlers_user.rs
-
-use axum::extract::State;
-use axum::Json;
-
-/// Handler 签名风格
-pub async fn create_handler(
-    State(mm): State&lt;ModelManager&gt;,      // 状态提取
-    Json(payload): Json&lt;CreatePayload&gt;,   // JSON 参数
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt; {      // 返回 RestResponse&lt;DataSet&gt;
-    // 业务逻辑
-    Ok(RestResponse::from(dataset))
-}
+pub async fn create(
+    mm: &DatabaseManager,
+    db_id: &str,
+    mut data: Value,  // 问题：JSON 无法正确表达时间类型
+) -> Result<DataSet>
 ```
 
-### 5.2 lib-core DbBmc 风格（参考 example/lib-core）
+**问题**：
+
+1. JSON 中时间类型只能表示为字符串，无法保证类型安全
+2. 缺少字段元数据，无法自动获取字段列表构建 SQL
+3. 无法在编译时检查字段类型
+4. 不支持批量操作
+
+## 2. 解决方案
+
+使用 `modql::field::HasSeaFields` trait，将 data 参数改为强类型 Entity，直接构建 sea-query 表达式。
+
+### 2.1 核心改动
 
 ```rust
-// 参考 example/lib-core 的 DbBmc trait 和 crud_fns
+// 改进前
+pub async fn create(
+    mm: &DatabaseManager,
+    db_id: &str,
+    data: Value,
+) -> Result<DataSet>
 
-pub trait DbBmc {
-    const TABLE: &amp;'static str;
-    const PK_COLUMN: &amp;'static str;  // 主键列名，默认为 "code"
-    fn table_ref() -&gt; TableRef { ... }
-    fn has_timestamps() -&gt; bool { true }
-    fn has_owner_id() -&gt; bool { false }
-}
-
-// 具体实现
-pub struct DomainBmc;
-impl DbBmc for DomainBmc {
-    const TABLE: &amp;'static str = "cmx_domain";
-    const PK_COLUMN: &amp;'static str = "code";
-}
-
-// 使用方式
-let id = DomainBmc::create(&amp;ctx, &amp;mm, data).await?;
-let domain: Domain = DomainBmc::get(&amp;ctx, &amp;mm, code).await?;
-DomainBmc::update(&amp;ctx, &amp;mm, code, data).await?;
-DomainBmc::delete(&amp;ctx, &amp;mm, code).await?;
-```
-
----
-
-## 6. DataSet 结构（cmx-core）
-
-```rust
-// DataSet 结构
-pub struct DataSet {
-    pub id: String,           // 数据集标识
-    pub schema: Schema,       // 字段定义
-    pub rows: Vec&lt;Row&gt;,       // 数据行
-}
-
-// Schema 结构
-pub struct Schema {
-    pub id: String,
-    pub fields: Vec&lt;Field&gt;,
-}
-
-// Field 结构
-pub struct Field {
-    pub name: String,
-    pub field_type: FieldType,
-    pub label: String,
-}
-```
-
----
-
-## 7. 接口详细设计
-
-### 7.1 创建
-
-```
-POST /api/domain
-Content-Type: application/json
-
-{ "code": "FIN", "name": "财务域", "type": "business" }
-
-响应:
-{
-    "success": true,
-    "data": [
-        { "code": "FIN", "name": "财务域", "type": "business" }
-    ]
-}
-```
-
-### 7.2 获取单条（GET + 查询参数）
-
-```
-GET /api/domain/get?id=FIN
-
-响应:
-{
-    "success": true,
-    "data": [
-        { "code": "FIN", "name": "财务域", "type": "business", "description": "..." }
-    ]
-}
-```
-
-### 7.3 更新（POST + body，包含 id）
-
-```
-POST /api/domain/update
-Content-Type: application/json
-
-{ "id": "FIN", "name": "财务域（已更新）", "description": "新描述" }
-
-响应:
-{
-    "success": true,
-    "data": [
-        { "code": "FIN", "name": "财务域（已更新）", "description": "新描述" }
-    ]
-}
-```
-
-### 7.4 删除（GET + 查询参数）
-
-```
-GET /api/domain/delete?id=FIN
-
-响应:
-{
-    "success": true,
-    "data": [
-        { "deleted_code": "FIN" }
-    ]
-}
-```
-
-### 7.5 列表查询（POST + JSON）
-
-```
-POST /api/domain/list
-Content-Type: application/json
-
-{
-    "filter": { "type": "business" },
-    "offset": 0,
-    "limit": 10,
-    "order_bys": "sort_order"
-}
-
-响应:
-{
-    "success": true,
-    "data": [...]
-}
-```
-
-### 7.6 分页查询（POST + JSON）
-
-```
-POST /api/domain/page
-Content-Type: application/json
-
-{
-    "filter": { "status": 1, "archived": 0 },
-    "offset": 0,
-    "limit": 10,
-    "order_bys": "-sort_order"
-}
-
-响应:
-{
-    "success": true,
-    "data": [...],
-    "page_info": { "total": 100, "page_size": 10, "page_number": 1 }
-}
-```
-
----
-
-## 8. 核心技术参考（modql 0.4.1）
-
-### 8.1 模型定义
-
-```rust
-/// 领域实体（使用 modql::field::Fields）
-#[derive(Debug, Clone, modql::field::Fields, FromRow, Serialize)]
-pub struct Domain {
-    pub code: String,
-    pub name: String,
-    pub description: Option&lt;String&gt;,
-    pub r#type: Option&lt;String&gt;,
-    pub tags: Option&lt;String&gt;,
-    pub sort_order: Option&lt;i32&gt;,
-    pub status: Option&lt;i32&gt;,
-    pub archived: Option&lt;i32&gt;,
-    pub created_at: Option&lt;NaiveDateTime&gt;,
-    pub updated_at: Option&lt;NaiveDateTime&gt;,
-    pub created_by: Option&lt;String&gt;,
-    pub create_name: Option&lt;String&gt;,
-    pub updated_by: Option&lt;String&gt;,
-    pub update_name: Option&lt;String&gt;,
-}
-
-/// 查询过滤器（使用 modql::filter::FilterNodes）
-#[derive(modql::filter::FilterNodes, Deserialize, Default, Debug)]
-pub struct DomainFilter {
-    pub code: Option&lt;OpValsString&gt;,
-    pub name: Option&lt;OpValsString&gt;,
-    pub r#type: Option&lt;OpValsString&gt;,
-    pub status: Option&lt;OpValsInt64&gt;,
-    pub archived: Option&lt;OpValsInt64&gt;,
-}
-```
-
-### 8.2 构建查询
-
-```rust
-use modql::filter::{FilterGroups, ListOptions};
-use sea_query::{Condition, PostgresQueryBuilder};
-
-// 构建查询
-let cond: Condition = filter.try_into()?;
-let mut query = sea_query::Query::select();
-query.from(table).columns(Domain::sea_column_refs());
-query.cond_where(cond);
-list_options.apply_to_sea_query(&amp;mut query);
-
-// 获取 SQL
-let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
-```
-
----
-
-## 9. 目录结构
-
-```
-crates/libs/cmx-api/src/
-├── lib.rs
-├── error.rs
-├── response.rs
-│
-├── rest/                    # REST 协议层
-│   ├── mod.rs
-│   ├── params.rs            # 参数解析
-│   └── handler.rs           # 请求处理（参考 lib-web）
-│
-├── crud/                    # 通用 CRUD 核心
-│   ├── mod.rs
-│   ├── traits.rs            # DbBmc trait（参考 lib-core）
-│   ├── macros.rs           # 声明宏 - 用于简化路由注册
-│   ├── utils.rs            # 工具函数 - prep_fields_for_create/prep_fields_for_update
-│   └── service.rs          # GenericCrudService
-│
-└── models/                  # 业务模型
-    ├── mod.rs
-    └── domain.rs           # Domain + DomainBmc + DomainFilter
-```
-
----
-
-## 10. 核心组件
-
-### 10.1 DbBmc trait（参考 lib-core）
-
-```rust
-/// 表元信息 trait
-pub trait DbBmc {
-    const TABLE: &amp;'static str;
-    const PK_COLUMN: &amp;'static str = "code";  // 主键列名，默认 "code"
-    fn table_ref() -&gt; TableRef { ... }
-    fn has_timestamps() -&gt; bool { true }
-    fn has_owner_id() -&gt; bool { false }
-}
-
-/// 领域 Bmc
-pub struct DomainBmc;
-impl DbBmc for DomainBmc {
-    const TABLE: &amp;'static str = "cmx_domain";
-    const PK_COLUMN: &amp;'static str = "code";
-}
-```
-
-### 10.2 GenericCrudService（返回 DataSet）
-
-```rust
-use cmx_core::model::data::dataset::DataSet;
-
-/// 通用 CRUD 服务
-pub struct GenericCrudService&lt;MC, F&gt;
+// 改进后
+pub async fn create<MC, E>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    data: E,
+) -> Result<DataSet>
 where
     MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt;,
-{
-    _marker: PhantomData&lt;(MC, F)&gt;,
-}
-
-impl&lt;MC, F&gt; GenericCrudService&lt;MC, F&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + Default,
-{
-    /// 创建
-    pub async fn create(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        data: serde_json::Value,
-    ) -&gt; Result&lt;DataSet&gt; {
-        // 使用 sea-query 构建 SQL
-        let mut query = Query::insert();
-        // ... 构建插入语句
-        // 使用 prep_fields_for_create 处理时间戳和审计字段
-
-        // 使用 cmx-database API 执行
-        let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
-        mm.execute_sql_with_params(db_id, None, &amp;sql, serde_json::json!(values)).await?;
-
-        Ok(DataSet::from_values(...))
-    }
-
-    /// 获取单条（主键类型为 String）
-    pub async fn get(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        id: String,  // 主键值，String 类型
-    ) -&gt; Result&lt;DataSet&gt; {
-        let mut query = Query::select();
-        query.from(MC::table_ref()).columns(...);
-        // 使用 MC::PK_COLUMN 作为主键列名
-
-        let dataset = mm.query_sql_with_params(
-            db_id, None, &amp;sql, serde_json::json!(values), "result"
-        ).await?;
-
-        Ok(dataset)
-    }
-
-    /// 更新
-    pub async fn update(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        id: String,
-        data: serde_json::Value,
-    ) -&gt; Result&lt;DataSet&gt; {
-        // 使用 sea-query 构建 SQL
-        let mut query = Query::update();
-        // ... 构建更新语句
-        // 使用 prep_fields_for_update 处理时间戳和审计字段
-
-        // 使用 cmx-database API 执行
-        let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
-        mm.execute_sql_with_params(db_id, None, &amp;sql, serde_json::json!(values)).await?;
-
-        Ok(DataSet::from_values(...))
-    }
-
-    /// 删除
-    pub async fn delete(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        id: String,
-    ) -&gt; Result&lt;DataSet&gt; { ... }
-
-    /// 列表查询
-    pub async fn list(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        filter: Option&lt;F&gt;,
-        options: Option&lt;ListOptions&gt;,
-    ) -&gt; Result&lt;DataSet&gt; { ... }
-
-    /// 分页查询
-    pub async fn page(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        filter: Option&lt;F&gt;,
-        options: ListOptions,
-    ) -&gt; Result&lt;(DataSet, i64)&gt; { ... }
-
-    /// 统计数量
-    pub async fn count(
-        ctx: &amp;SVRContext,
-        mm: &amp;DatabaseManager,
-        db_id: &amp;str,
-        filter: Option&lt;F&gt;,
-    ) -&gt; Result&lt;i64&gt; { ... }
-}
+    E: HasSeaFields,
 ```
 
-### 10.3 Handler（参考 lib-web 风格）
+### 2.2 modql::field::HasSeaFields 功能
+
+`HasSeaFields` trait 提供以下能力：
 
 ```rust
-use cmx_core::response::RestResponse;
-
-/// 创建
-pub async fn create&lt;MC, F&gt;(
-    State(mm): State&lt;ModelManager&gt;,
-    Json(data): Json&lt;serde_json::Value&gt;,
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    let dataset = GenericCrudService::&lt;MC, F&gt;::create(
-        &amp;ctx, &amp;mm, "default", data
-    ).await?;
-
-    Ok(RestResponse::from(dataset))
-}
-
-/// 获取单条（GET + 查询参数，主键类型为 String）
-pub async fn get_by_id&lt;MC, F&gt;(
-    Query(params): Query&lt;GetParams&gt;,  // 查询参数 ?id=xxx
-    State(mm): State&lt;ModelManager&gt;,
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    let dataset = GenericCrudService::&lt;MC, F&gt;::get(
-        &amp;ctx, &amp;mm, "default", params.id
-    ).await?;
-
-    Ok(RestResponse::from(dataset))
-}
-
-/// 更新（POST + body，包含 id）
-pub async fn update&lt;MC, F&gt;(
-    State(mm): State&lt;ModelManager&gt;,
-    Json(mut data): Json&lt;serde_json::Value&gt;,  // JSON body，包含 id 字段
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    // 从 body 中提取 id
-    let id = data.get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::MissingField("id"))?
-        .to_string();
-    // 移除 body 中的 id 字段
-    data.as_object_mut().map(|obj| obj.remove("id"));
+pub trait HasSeaFields {
+    /// 获取非 None 字段的 sea-query 表达式
+    fn not_none_sea_fields() -> SeaFields;
     
-    let dataset = GenericCrudService::&lt;MC, F&gt;::update(
-        &amp;ctx, &amp;mm, "default", id, data
-    ).await?;
-
-    Ok(RestResponse::from(dataset))
+    /// 获取列引用（用于 SELECT）
+    fn sea_column_refs() -> Vec<ColumnRef>;
 }
 
-/// 删除（GET + 查询参数）
-pub async fn delete_by_id&lt;MC, F&gt;(
-    Query(params): Query&lt;DeleteParams&gt;,  // 查询参数 ?id=xxx
-    State(mm): State&lt;ModelManager&gt;,
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    let dataset = GenericCrudService::&lt;MC, F&gt;::delete(
-        &amp;ctx, &amp;mm, "default", params.id
-    ).await?;
-
-    Ok(RestResponse::from(dataset))
-}
-
-/// 列表查询（POST + JSON body）
-pub async fn list&lt;MC, F&gt;(
-    State(mm): State&lt;ModelManager&gt;,
-    Json(params): Json&lt;PageParams&lt;F&gt;&gt;,
-) -&gt; Result&lt;RestResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    let list_options = ListOptions {
-        limit: params.limit,
-        offset: params.offset,
-        order_bys: params.order_bys.as_ref().map(|s| s.as_str().into()),
-    };
-
-    let dataset = GenericCrudService::&lt;MC, F&gt;::list(
-        &amp;ctx, &amp;mm, "default", params.filter, Some(list_options)
-    ).await?;
-
-    Ok(RestResponse::from(dataset))
-}
-
-/// 分页查询（POST + JSON body）
-pub async fn page&lt;MC, F&gt;(
-    State(mm): State&lt;ModelManager&gt;,
-    Json(params): Json&lt;PageParams&lt;F&gt;&gt;,
-) -&gt; Result&lt;RestPagedResponse&lt;DataSet&gt;&gt;
-where
-    MC: DbBmc,
-    F: TryInto&lt;FilterGroups&gt; + DeserializeOwned + Default,
-{
-    let ctx = Ctx::root_ctx();
-    let list_options = ListOptions {
-        limit: params.limit.or(Some(20)),
-        offset: params.offset,
-        order_bys: params.order_bys.as_ref().map(|s| s.as_str().into()),
-    };
-
-    let (dataset, total) = GenericCrudService::&lt;MC, F&gt;::page(
-        &amp;ctx, &amp;mm, "default", params.filter, list_options
-    ).await?;
-
-    Ok(RestPagedResponse::new(dataset, total, params.get_limit(), 1))
+/// SeaFields 提供的方法
+impl SeaFields {
+    /// 返回 (columns, sea_values) 用于 INSERT
+    pub fn for_sea_insert() -> (Vec<ColumnRef>, Vec<SimpleExpr>);
+    
+    /// 返回 fields 用于 UPDATE
+    pub fn for_sea_update() -> Vec<(ColumnRef, SimpleExpr)>;
 }
 ```
 
----
+## 3. Entity 定义规范
 
-## 11. 路由注册（含宏简化）
+### 3.1 统一 Entity 文件（合并 entity.rs 和 dto.rs）
 
-### 11.1 手动注册方式
+所有实体元数据定义放在一个文件中：
 
 ```rust
-// cmx-api 模块中（参考 lib-web 风格）
-pub fn routes(mm: ModelManager) -&gt; Router {
-    Router::new()
-        .with_state(mm)
-        // 创建
-        .route("/api/domain/create", post(create::&lt;DomainBmc, DomainFilter&gt;))
-        // 获取单条（GET + 查询参数 ?id=xxx）
-        .route("/api/domain/get", get(get_by_id::&lt;DomainBmc, DomainFilter&gt;))
-        // 更新（POST + body，包含 id）
-        .route("/api/domain/update", post(update::&lt;DomainBmc, DomainFilter&gt;))
-        // 删除（GET + 查询参数 ?id=xxx）
-        .route("/api/domain/delete", get(delete_by_id::&lt;DomainBmc, DomainFilter&gt;))
-        // 列表查询（POST + JSON body）
-        .route("/api/domain/list", post(list::&lt;DomainBmc, DomainFilter&gt;))
-        // 分页查询（POST + JSON body）
-        .route("/api/domain/page", post(page::&lt;DomainBmc, DomainFilter&gt;))
+// models/domain/entity.rs
+
+use chrono::{DateTime, Utc};
+use modql::field::Fields;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+/// 领域实体（完整字段，用于查询返回）
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+pub struct Domain {
+    /// 唯一标识码（主键）
+    pub code: String,
+    /// 名称
+    pub name: String,
+    /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    /// 标签
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i32>,
+    /// 状态
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<i32>,
+    /// 是否归档
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived: Option<i32>,
+    /// 创建时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
+    /// 更新时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
+    /// 创建者 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    /// 创建者名称
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub create_name: Option<String>,
+    /// 更新者 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    /// 更新者名称
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_name: Option<String>,
+}
+
+/// 创建请求 DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForCreate {
+    /// 唯一标识码（主键）
+    pub code: String,
+    /// 名称
+    pub name: String,
+    /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    /// 标签
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i32>,
+}
+
+/// 更新请求 DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForUpdate {
+    /// 名称
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    /// 标签
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i32>,
+    /// 状态
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<i32>,
+    /// 是否归档
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived: Option<i32>,
 }
 ```
 
-### 11.2 使用宏简化注册（推荐）
+## 4. GenericCrudService 改造
+
+### 4.1 create 方法（单个创建）
 
 ```rust
-// 使用宏一次性注册所有 CRUD 路由
-pub fn routes(mm: ModelManager) -&gt; Router {
-    let mut router = Router::new().with_state(mm);
+/// 创建单个实体
+pub async fn create<MC, E>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    data: E,
+) -> Result<DataSet>
+where
+    MC: DbBmc,
+    E: HasSeaFields,
+{
+    info!("{:<12} - GenericCrudService::create - table: {}, db_id: {}", 
+        "CRUD", MC::TABLE, db_id);
 
-    // 使用宏注册 domain 的所有 CRUD 路由
-    register_crud_routes!(router, DomainBmc, DomainFilter, "/api/domain");
+    let mut fields = data.not_none_sea_fields();
+    prep_fields_for_create::<MC>(&mut fields, None);
 
-    router
+    let (columns, sea_values) = fields.for_sea_insert();
+    let mut query = Query::insert();
+    query
+        .into_table(MC::table_ref())
+        .columns(columns)
+        .values(sea_values)?
+        .returning(Query::returning().columns([SIden(MC::PK_COLUMN)]));
+
+    let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+    debug!("{:<12} - SQL: {}", "CRUD", sql);
+
+    let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        .await
+        .map_err(|e| Error::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e)))?;
+
+    info!("{:<12} - 创建成功, 影响行数: {}", "CRUD", rows_affected);
+
+    Ok(DataSet::default())
 }
 ```
 
-### 11.3 宏定义（macros.rs）
+### 4.2 create\_many 方法（批量创建）
+
+```rust
+/// 批量创建多个实体
+pub async fn create_many<MC, E>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    data: Vec<E>,
+) -> Result<DataSet>
+where
+    MC: DbBmc,
+    E: HasSeaFields,
+{
+    info!("{:<12} - GenericCrudService::create_many - table: {}, count: {}", 
+        "CRUD", MC::TABLE, data.len());
+
+    if data.is_empty() {
+        return Err(Error::bad_request("创建数据不能为空"));
+    }
+
+    let mut query = Query::insert();
+
+    for item in data {
+        let mut fields = item.not_none_sea_fields();
+        prep_fields_for_create::<MC>(&mut fields, None);
+        let (columns, sea_values) = fields.for_sea_insert();
+
+        query
+            .into_table(MC::table_ref())
+            .columns(columns.clone())
+            .values(sea_values)?;
+    }
+
+    query.returning(Query::returning().columns([SIden(MC::PK_COLUMN)]));
+
+    let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+    debug!("{:<12} - SQL: {}", "CRUD", sql);
+
+    let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        .await
+        .map_err(|e| Error::internal_error(format!("批量创建失败 [{}]: {}", MC::TABLE, e)))?;
+
+    info!("{:<12} - 批量创建成功, 影响行数: {}", "CRUD", rows_affected);
+
+    Ok(DataSet::default())
+}
+```
+
+### 4.3 update 方法（单个更新）
+
+```rust
+/// 更新单个实体
+pub async fn update<MC, E>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    id: Value,
+    data: E,
+) -> Result<DataSet>
+where
+    MC: DbBmc,
+    E: HasSeaFields,
+{
+    info!("{:<12} - GenericCrudService::update - table: {}, id: {:?}", 
+        "CRUD", MC::TABLE, id);
+
+    let mut fields = data.not_none_sea_fields();
+    prep_fields_for_update::<MC>(&mut fields, None);
+
+    let fields = fields.for_sea_update();
+    let mut query = Query::update();
+    query
+        .table(MC::table_ref())
+        .values(fields)
+        .and_where(Expr::col(SIden(MC::PK_COLUMN)).eq(json_value_to_sea_query(id.clone())));
+
+    let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+    debug!("{:<12} - SQL: {}", "CRUD", sql);
+
+    let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        .await
+        .map_err(|e| Error::internal_error(format!("更新失败 [{}]: {}", MC::TABLE, e)))?;
+
+    info!("{:<12} - 更新成功, 影响行数: {}", "CRUD", rows_affected);
+
+    Self::get(mm, db_id, id).await
+}
+```
+
+### 4.4 update\_many 方法（批量更新）
+
+```rust
+/// 批量更新多个实体
+pub async fn update_many<MC, E>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    data: Vec<UpdateItem<E>>,
+) -> Result<DataSet>
+where
+    MC: DbBmc,
+    E: HasSeaFields,
+{
+    info!("{:<12} - GenericCrudService::update_many - table: {}, count: {}", 
+        "CRUD", MC::TABLE, data.len());
+
+    if data.is_empty() {
+        return Err(Error::bad_request("更新数据不能为空"));
+    }
+
+    let mut total_affected = 0u64;
+
+    for item in data {
+        let mut fields = item.data.not_none_sea_fields();
+        prep_fields_for_update::<MC>(&mut fields, None);
+
+        let fields = fields.for_sea_update();
+        let mut query = Query::update();
+        query
+            .table(MC::table_ref())
+            .values(fields)
+            .and_where(Expr::col(SIden(MC::PK_COLUMN)).eq(json_value_to_sea_query(item.id.clone())));
+
+        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        
+        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            .await
+            .map_err(|e| Error::internal_error(format!("批量更新失败 [{}]: {}", MC::TABLE, e)))?;
+        
+        total_affected += rows_affected;
+    }
+
+    info!("{:<12} - 批量更新成功, 总影响行数: {}", "CRUD", total_affected);
+
+    Ok(DataSet::default())
+}
+
+/// 更新项
+#[derive(Debug, Deserialize)]
+pub struct UpdateItem<E> {
+    pub id: Value,
+    pub data: E,
+}
+```
+
+### 4.5 delete 方法（批量删除，支持单个）
+
+```rust
+/// 删除实体（支持单个和批量）
+///
+/// # 参数
+/// * `ids` - 主键值列表（单个删除传一个元素即可）
+pub async fn delete<MC>(
+    mm: &DatabaseManager,
+    db_id: &str,
+    ids: Vec<Value>,
+) -> Result<DataSet>
+where
+    MC: DbBmc,
+{
+    info!("{:<12} - GenericCrudService::delete - table: {}, count: {}", 
+        "CRUD", MC::TABLE, ids.len());
+
+    if ids.is_empty() {
+        return Ok(DataSet::default());
+    }
+
+    let mut query = Query::delete();
+    query
+        .from_table(MC::table_ref())
+        .and_where(Expr::col(SIden(MC::PK_COLUMN)).is_in(
+            ids.iter().map(|v| json_value_to_sea_query(v.clone())).collect::<Vec<_>>()
+        ));
+
+    let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+    debug!("{:<12} - SQL: {}", "CRUD", sql);
+
+    let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        .await
+        .map_err(|e| Error::internal_error(format!("删除失败 [{}]: {}", MC::TABLE, e)))?;
+
+    info!("{:<12} - 删除成功, 影响行数: {}", "CRUD", rows_affected);
+
+    Ok(DataSet::default())
+}
+```
+
+## 5. Handler 改造
+
+### 5.1 通用 Handler
+
+```rust
+use crate::crud::traits::DbBmc;
+use crate::crud::service::GenericCrudService;
+use crate::error::Result;
+use crate::response::ApiResp;
+use axum::Json;
+use cmx_core::model::data::dataset::DataSet;
+use cmx_database::get_default_db_manager;
+use modql::field::HasSeaFields;
+use serde::de::DeserializeOwned;
+
+/// 创建单个实体 Handler
+pub async fn create<MC, E>(
+    Json(data): Json<E>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    let mm = get_default_db_manager();
+    let db_id = "default".to_string();
+    
+    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
+    
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 批量创建实体 Handler
+pub async fn create_many<MC, E>(
+    Json(data): Json<Vec<E>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    let mm = get_default_db_manager();
+    let db_id = "default".to_string();
+    
+    let dataset = GenericCrudService::<MC>::create_many(&mm, &db_id, data).await?;
+    
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 更新单个实体 Handler
+pub async fn update<MC, E>(
+    Json(payload): Json<UpdatePayload<E>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    let mm = get_default_db_manager();
+    let db_id = "default".to_string();
+    
+    let dataset = GenericCrudService::<MC>::update(
+        &mm, &db_id, payload.id, payload.data
+    ).await?;
+    
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 批量更新实体 Handler
+pub async fn update_many<MC, E>(
+    Json(data): Json<Vec<UpdateItem<E>>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    let mm = get_default_db_manager();
+    let db_id = "default".to_string();
+    
+    let dataset = GenericCrudService::<MC>::update_many(&mm, &db_id, data).await?;
+    
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 删除实体 Handler（支持单个和批量）
+pub async fn delete<MC>(
+    Json(payload): Json<DeletePayload>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+{
+    let mm = get_default_db_manager();
+    let db_id = "default".to_string();
+    
+    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, payload.ids).await?;
+    
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 更新请求 Payload
+#[derive(Debug, Deserialize)]
+pub struct UpdatePayload<E> {
+    pub id: serde_json::Value,
+    pub data: E,
+}
+
+/// 更新项
+#[derive(Debug, Deserialize)]
+pub struct UpdateItem<E> {
+    pub id: serde_json::Value,
+    pub data: E,
+}
+
+/// 删除请求 Payload
+#[derive(Debug, Deserialize)]
+pub struct DeletePayload {
+    /// 主键 ID 列表（单个删除传一个元素）
+    pub ids: Vec<serde_json::Value>,
+}
+```
+
+## 6. 接口设计
+
+### 6.1 接口列表
+
+| 方法   | 路径                            | 说明          | 参数位置              |
+| ---- | ----------------------------- | ----------- | ----------------- |
+| POST | `/api/{resource}/create`      | 创建单个        | body (JSON)       |
+| POST | `/api/{resource}/create-many` | 批量创建        | body (JSON Array) |
+| GET  | `/api/{resource}/get`         | 获取单条        | 查询参数 ?id=xxx      |
+| POST | `/api/{resource}/update`      | 更新单个        | body (JSON)       |
+| POST | `/api/{resource}/update-many` | 批量更新        | body (JSON Array) |
+| POST | `/api/{resource}/delete`      | 删除（支持单个和批量） | body (JSON)       |
+| POST | `/api/{resource}/list`        | 列表查询        | body (JSON)       |
+| POST | `/api/{resource}/page`        | 分页查询        | body (JSON)       |
+
+### 6.2 请求示例
+
+**创建单个**
+
+```json
+POST /api/domains/create
+{ "code": "FIN", "name": "财务域" }
+```
+
+**批量创建**
+
+```json
+POST /api/domains/create-many
+[
+    { "code": "FIN", "name": "财务域" },
+    { "code": "HR", "name": "人力资源域" }
+]
+```
+
+**更新单个**
+
+```json
+POST /api/domains/update
+{ "id": "FIN", "data": { "name": "财务域（已更新）" } }
+```
+
+**批量更新**
+
+```json
+POST /api/domains/update-many
+[
+    { "id": "FIN", "data": { "name": "财务域（已更新）" } },
+    { "id": "HR", "data": { "name": "人力资源域（已更新）" } }
+]
+```
+
+**删除单个**
+
+```json
+POST /api/domains/delete
+{ "ids": ["FIN"] }
+```
+
+**批量删除**
+
+```json
+POST /api/domains/delete
+{ "ids": ["FIN", "HR", "IT"] }
+```
+
+## 7. 路由注册宏
+
+### 7.1 宏定义（区分 ForCreate 和 ForUpdate）
 
 ```rust
 /// 注册 CRUD 路由的宏
 ///
 /// # 参数
-/// * `router` - Router 实例
-/// * `bmc` - Bmc 类型（如 DomainBmc）
-/// * `filter` - Filter 类型（如 DomainFilter）
-/// * `path` - 路径前缀（如 "/api/domain"）
+/// * `$router` - Router 实例
+/// * `$bmc` - Bmc 类型（如 DomainBmc）
+/// * `$filter` - Filter 类型（如 DomainFilter）
+/// * `$entity_create` - 创建 Entity 类型（如 DomainForCreate）
+/// * `$entity_update` - 更新 Entity 类型（如 DomainForUpdate）
+/// * `$path` - 路径前缀（如 "/domains"）
 #[macro_export]
 macro_rules! register_crud_routes {
-    ($router:expr, $bmc:ty, $filter:ty, $path:expr) =&gt; {
+    ($router:expr, $bmc:ty, $filter:ty, $entity_create:ty, $entity_update:ty, $path:expr) => {
         $router = $router
-            .route(concat!($path, "/create"), post(create::&lt;$bmc, $filter&gt;))
-            .route(concat!($path, "/get"), get(get_by_id::&lt;$bmc, $filter&gt;))
-            .route(concat!($path, "/update"), post(update::&lt;$bmc, $filter&gt;))
-            .route(concat!($path, "/delete"), get(delete_by_id::&lt;$bmc, $filter&gt;))
-            .route(concat!($path, "/list"), post(list::&lt;$bmc, $filter&gt;))
-            .route(concat!($path, "/page"), post(page::&lt;$bmc, $filter&gt;));
+            // 创建操作（使用 ForCreate）
+            .route(concat!($path, "/create"), post(create::<$bmc, $entity_create>))
+            .route(concat!($path, "/create-many"), post(create_many::<$bmc, $entity_create>))
+            // 查询操作
+            .route(concat!($path, "/get"), get(get_by_id::<$bmc, $filter>))
+            // 更新操作（使用 ForUpdate）
+            .route(concat!($path, "/update"), post(update::<$bmc, $entity_update>))
+            .route(concat!($path, "/update-many"), post(update_many::<$bmc, $entity_update>))
+            // 删除操作（支持单个和批量）
+            .route(concat!($path, "/delete"), post(delete::<$bmc>))
+            // 列表和分页查询
+            .route(concat!($path, "/list"), post(list::<$bmc, $filter>))
+            .route(concat!($path, "/page"), post(page::<$bmc, $filter>));
     };
 }
 ```
 
----
-
-## 12. 框架使用示例
-
-用户使用该框架开发时，只需：
+### 7.2 使用示例
 
 ```rust
-// 1. 定义 Bmc
-pub struct DomainBmc;
-impl DbBmc for DomainBmc {
-    const TABLE: &amp;'static str = "cmx_domain";
-    const PK_COLUMN: &amp;'static str = "code";
+// routes.rs
+pub fn api_routes() -> Router<CmxAppState> {
+    let router = Router::new();
+    
+    // 注册 Domain CRUD 路由
+    let router = register_crud_routes!(
+        router, 
+        DomainBmc,        // Bmc 类型
+        DomainFilter,     // Filter 类型
+        DomainForCreate,  // 创建 Entity 类型
+        DomainForUpdate,  // 更新 Entity 类型
+        "/domains"
+    );
+    
+    router
 }
-
-// 2. 注册路由（使用宏，推荐）
-let mut router = Router::new().with_state(mm);
-register_crud_routes!(router, DomainBmc, DomainFilter, "/api/domain");
-
-// 或者手动注册
-Router::new()
-    .route("/api/domain/create", post(create::&lt;DomainBmc, DomainFilter&gt;))
-    .route("/api/domain/get", get(get_by_id::&lt;DomainBmc, DomainFilter&gt;))
-    .route("/api/domain/update", post(update::&lt;DomainBmc, DomainFilter&gt;))
-    .route("/api/domain/delete", get(delete_by_id::&lt;DomainBmc, DomainFilter&gt;))
-    .route("/api/domain/list", post(list::&lt;DomainBmc, DomainFilter&gt;))
-    .route("/api/domain/page", post(page::&lt;DomainBmc, DomainFilter&gt;))
 ```
 
----
+## 8. prep\_fields\_for\_create/update 改造
 
-## 13. 总结
+### 8.1 改造后（基于 SeaFields）
 
-**框架特点**：
+```rust
+use modql::field::SeaFields;
+use sea_query::SimpleExpr;
 
-1. **代码位置**：放到 cmx-api 模块
+/// 为创建操作准备字段
+pub fn prep_fields_for_create<MC>(fields: &mut SeaFields, user_id: Option<&str>)
+where
+    MC: DbBmc,
+{
+    // 添加 owner_id
+    if MC::has_owner_id() {
+        if let Some(uid) = user_id {
+            fields.push(("owner_id", SimpleExpr::Value(uid.into())));
+        }
+    }
+    
+    // 添加主键（如果不存在）
+    if !fields.has_field(MC::PK_COLUMN) {
+        let pk_value = snowflake_id_str();
+        fields.push((MC::PK_COLUMN, SimpleExpr::Value(pk_value.into())));
+    }
+}
 
-2. **参考来源**：
-   - lib-core: DbBmc trait、crud_fns、prep_fields_for_create/prep_fields_for_update
-   - lib-rest-core: 响应结构
-   - lib-web: Handler 风格
+/// 为更新操作准备字段
+pub fn prep_fields_for_update<MC>(fields: &mut SeaFields, user_id: Option<&str>)
+where
+    MC: DbBmc,
+{
+    // 更新操作通常不需要添加额外字段
+    // 时间戳由数据库自动处理
+}
+```
 
-3. **返回格式**：使用 cmx-core 的 RestResponse 包装 DataSet
+## 9. 目录结构调整
 
-4. **主键支持**：固定为 varchar（String）类型，通过 DbBmc::PK_COLUMN 配置列名
+```
+crates/libs/cmx-api/src/
+├── crud/
+│   ├── mod.rs
+│   ├── traits.rs            # DbBmc trait
+│   ├── macros.rs            # 路由注册宏
+│   ├── utils.rs             # prep_fields_for_create/update
+│   └── service.rs           # GenericCrudService
+│
+├── rest/
+│   ├── mod.rs
+│   ├── params.rs            # 参数定义
+│   └── handler.rs           # 通用 Handler
+│
+└── models/
+    └── domain/
+        ├── mod.rs
+        ├── bmc.rs           # DomainBmc
+        ├── entity.rs        # Domain, DomainForCreate, DomainForUpdate（合并）
+        ├── filter.rs        # DomainFilter
+        └── handler.rs       # 自定义 Handler
+```
 
-5. **接口设计**（6个接口）：
-   - POST `/api/{resource}/create` - 创建（body JSON）
-   - GET `/api/{resource}/get?id=xxx` - 获取单条（查询参数）
-   - POST `/api/{resource}/update` - 更新（body JSON，包含 id）
-   - GET `/api/{resource}/delete?id=xxx` - 删除（查询参数）
-   - POST `/api/{resource}/list` - 列表查询（body JSON）
-   - POST `/api/{resource}/page` - 分页查询（body JSON）
+## 10. 实施步骤
 
-6. **Handler 风格**：参考 lib-web，使用 `State&lt;ModelManager&gt;`、`Json&lt;T&gt;`、`Query&lt;T&gt;`、`Result&lt;RestResponse&lt;DataSet&gt;&gt;`
+### 阶段一：基础设施
 
-7. **其他特性**：
-   - 数据库执行：完全使用 cmx-database 封装 API
-   - 认证权限：暂不考虑
-   - 字段选择：返回所有字段
-   - 路由注册：提供宏 `register_crud_routes!` 简化注册
-   - 时间戳审计：复用 example/lib-core 的 prep_fields_for_create/prep_fields_for_update
+1. 更新 Cargo.toml 确认 modql features
+2. 合并 entity.rs 和 dto.rs，统一实体定义
+3. 为 Entity 添加 `#[derive(modql::field::Fields)]`
 
-**示例表**：cmx_domain（主键为 varchar 类型，列名为 code）
+### 阶段二：utils.rs 改造
+
+1. 修改 `prep_fields_for_create` 支持 SeaFields
+2. 修改 `prep_fields_for_update` 支持 SeaFields
+
+### 阶段三：Service 改造
+
+1. 修改 `GenericCrudService` 使用 `HasSeaFields`
+2. 添加 `create_many` 批量创建方法
+3. 添加 `update_many` 批量更新方法
+4. 合并删除方法为单个 `delete`（支持批量）
+
+### 阶段四：Handler 改造
+
+1. 修改通用 Handler 支持 Entity 类型
+2. 添加批量操作 Handler
+3. 添加请求 Payload 结构体
+4. 更新路由注册宏（区分 ForCreate/ForUpdate）
+
+### 阶段五：测试验证
+
+1. 编写单元测试
+2. 验证时间类型正确序列化
+3. 验证批量操作正确执行
+
+## 11. 总结
+
+| 改进项       | 改进前                 | 改进后                                   |
+| --------- | ------------------- | ------------------------------------- |
+| data 参数类型 | `serde_json::Value` | 强类型 Entity                            |
+| 字段处理      | 手动遍历 Value          | `HasSeaFields::not_none_sea_fields()` |
+| 时间类型      | JSON 字符串            | `DateTime<Utc>`                       |
+| 类型安全      | 运行时检查               | 编译时检查                                 |
+| 创建/更新区分   | 无                   | ForCreate / ForUpdate                 |
+| 批量创建      | 不支持                 | `create_many`                         |
+| 批量更新      | 不支持                 | `update_many`                         |
+| 删除方法      | GET + Query         | POST + JSON Body（支持批量）                |
+| Entity 文件 | entity.rs + dto.rs  | 合并为 entity.rs                         |
+

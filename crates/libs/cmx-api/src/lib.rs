@@ -29,8 +29,8 @@ pub mod routes;
 pub mod state;
 
 // 重新导出常用类型
-pub use crud::{DbBmc, GenericCrudService};
-pub use rest::{PageParams, create, get_by_id, update, delete_by_id, list, page};
+pub use crud::{DbBmc, GenericCrudService, UpdateItem};
+pub use rest::{PageParams, handler::{create, create_many, get_by_id, update, update_many, delete, list, page, UpdatePayload, DeletePayload}};
 pub use error::{Error, Result};
 pub use response::{ApiResp, Pagination};
 pub use state::{CmxAppState, AppStateInner};

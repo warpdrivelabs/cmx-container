@@ -7,10 +7,9 @@ use crate::error::{Error, Result};
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 use modql::filter::{ListOptions, OpValString, OpValsString};
-use serde_json::Value;
 use tracing::{debug, info};
 
-use super::{DomainBmc, DomainFilter};
+use super::{DomainBmc, DomainFilter, DomainForCreate};
 
 /// Domain 自定义服务
 ///
@@ -57,22 +56,15 @@ impl DomainService {
     pub async fn batch_create(
         mm: &DatabaseManager,
         db_id: &str,
-        items: Vec<Value>,
-    ) -> Result<Vec<DataSet>> {
+        items: Vec<DomainForCreate>,
+    ) -> Result<DataSet> {
         info!(
             "{:<12} - DomainService::batch_create - count: {}",
             "SERVICE",
             items.len()
         );
 
-        let mut results = Vec::new();
-        for item in items {
-            let result = Self::create(mm, db_id, item).await?;
-            results.push(result);
-        }
-
-        info!("{:<12} - 批量创建完成，成功 {} 条", "SERVICE", results.len());
-        Ok(results)
+        GenericCrudService::<DomainBmc>::create_many(mm, db_id, items).await
     }
 
     /// 覆盖方法：自定义创建逻辑
@@ -81,18 +73,16 @@ impl DomainService {
     pub async fn create(
         mm: &DatabaseManager,
         db_id: &str,
-        data: Value,
+        data: DomainForCreate,
     ) -> Result<DataSet> {
         info!("{:<12} - DomainService::create", "SERVICE");
 
         // 自定义验证：名称长度
-        if let Some(name) = data.get("name").and_then(|v| v.as_str()) {
-            if name.len() < 2 {
-                return Err(Error::bad_request("域名长度不能小于2个字符"));
-            }
-            if name.len() > 100 {
-                return Err(Error::bad_request("域名长度不能超过100个字符"));
-            }
+        if data.name.len() < 2 {
+            return Err(Error::bad_request("域名长度不能小于2个字符"));
+        }
+        if data.name.len() > 100 {
+            return Err(Error::bad_request("域名长度不能超过100个字符"));
         }
 
         // 调用父类方法

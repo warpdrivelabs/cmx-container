@@ -1,20 +1,14 @@
-//! Domain 实体模块
+//! Domain 模块
 //!
-//! 包含 Domain 实体的完整定义，包括：
-//! - DbBmc 实现（表元信息）
-//! - Filter 定义（查询过滤）
-//! - Entity 定义（实体结构）
-//! - Service 实现（业务逻辑）
-//! - Handler 实现（HTTP 处理）
+//! 提供领域实体的 CRUD 操作
 
 mod bmc;
-mod filter;
 mod entity;
-mod service;
+mod filter;
 mod handler;
+mod service;
 
 pub use bmc::DomainBmc;
+pub use entity::{Domain, DomainForCreate, DomainForUpdate};
 pub use filter::DomainFilter;
-pub use entity::Domain;
 pub use service::DomainService;
-pub use handler::*;

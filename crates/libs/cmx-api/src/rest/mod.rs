@@ -5,5 +5,5 @@
 pub mod params;
 pub mod handler;
 
-pub use params::{PageParams};
-pub use handler::{create, get_by_id, update, delete_by_id, list, page};
+pub use params::PageParams;
+pub use handler::{create, create_many, get_by_id, update, update_many, delete, list, page, UpdatePayload, DeletePayload};

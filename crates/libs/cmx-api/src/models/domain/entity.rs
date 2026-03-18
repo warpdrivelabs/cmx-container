@@ -1,63 +1,109 @@
 //! Domain 实体定义
 //!
-//! 定义 Domain 实体的数据结构
+//! 定义 Domain 实体的数据结构，包括完整实体和创建/更新 DTO
 
+use modql::field::Fields;
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use time::OffsetDateTime;
 
-/// 领域实体
+/// 领域实体（完整字段，用于查询返回）
 ///
 /// 表示系统中的一个领域/域对象
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
 pub struct Domain {
-    /// 唯一标识码
+    /// 唯一标识码（主键）
     pub code: String,
     /// 名称
     pub name: String,
     /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[field(name="type")]
     pub r#type: Option<String>,
     /// 标签（JSON 格式）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
     /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<i32>,
     /// 状态（0: 禁用, 1: 启用）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<i32>,
     /// 是否归档（0: 否, 1: 是）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub archived: Option<i32>,
     /// 创建时间
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<OffsetDateTime>,
     /// 更新时间
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<OffsetDateTime>,
     /// 创建者 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
     /// 创建者名称
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub create_name: Option<String>,
     /// 更新者 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
     /// 更新者名称
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub update_name: Option<String>,
 }
 
-impl Domain {
-    /// 创建新的 Domain 实体
-    pub fn new(code: String, name: String) -> Self {
-        Self {
-            code,
-            name,
-            description: None,
-            r#type: None,
-            tags: None,
-            sort_order: None,
-            status: Some(1),
-            archived: Some(0),
-            created_at: None,
-            updated_at: None,
-            created_by: None,
-            create_name: None,
-            updated_by: None,
-            update_name: None,
-        }
-    }
+/// 创建请求 DTO
+///
+/// 用于创建 Domain 的请求数据
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForCreate {
+    // /// 唯一标识码（主键）
+    // pub code: String,
+    /// 名称
+    pub name: String,
+    /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[field(name="type")]
+    pub r#type: Option<String>,
+    /// 标签（JSON 格式）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i32>,
+}
+
+/// 更新请求 DTO
+///
+/// 用于更新 Domain 的请求数据，所有字段均为可选
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForUpdate {
+    /// 名称
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 类型
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[field(name="type")]
+    pub r#type: Option<String>,
+    /// 标签（JSON 格式）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// 排序顺序
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i32>,
+    /// 状态（0: 禁用, 1: 启用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<i32>,
+    /// 是否归档（0: 否, 1: 是）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived: Option<i32>,
 }

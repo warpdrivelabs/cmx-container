@@ -6,7 +6,7 @@ use axum::Router;
 
 use crate::register_crud_routes;
 use crate::state::CmxAppState;
-use crate::models::domain::{DomainBmc, DomainFilter};
+use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
 
 /// 注册所有 API 路由
 ///
@@ -26,21 +26,29 @@ use crate::models::domain::{DomainBmc, DomainFilter};
 ///
 /// # 注册的路由
 /// ## Domain CRUD
-/// - POST /domains/create   - 创建
-/// - GET  /domains/get      - 获取（?id=xxx）
-/// - POST /domains/update   - 更新
-/// - GET  /domains/delete   - 删除（?id=xxx）
-/// - POST /domains/list     - 列表查询
-/// - POST /domains/page     - 分页查询
+/// - POST /domains/create       - 创建单个
+/// - POST /domains/create-many  - 批量创建
+/// - GET  /domains/get          - 获取（?id=xxx）
+/// - POST /domains/update       - 更新单个
+/// - POST /domains/update-many  - 批量更新
+/// - POST /domains/delete       - 删除（支持单个和批量）
+/// - POST /domains/list         - 列表查询
+/// - POST /domains/page         - 分页查询
 pub fn api_routes() -> Router<CmxAppState> {
     let router = Router::new();
 
     // 注册 Domain CRUD 路由
-    let router = register_crud_routes!(router, DomainBmc, DomainFilter, "/domains");
+    let router = register_crud_routes!(
+        router, 
+        DomainBmc, 
+        DomainFilter, 
+        DomainForCreate, 
+        DomainForUpdate, 
+        "/domains"
+    );
 
     // 注册其他模型的路由
-    // let router = register_crud_routes!(router, UserBmc, UserFilter, "/users");
-    // let router = register_crud_routes!(router, OrderBmc, OrderFilter, "/orders");
+    // let router = register_crud_routes!(router, UserBmc, UserFilter, UserForCreate, UserForUpdate, "/users");
 
     router
 }

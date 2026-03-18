@@ -6,43 +6,63 @@
 
 use axum::extract::Query;
 use axum::Json;
-use sea_query::SqlWriter;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::get_default_db_manager;
+use modql::field::HasSeaFields;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tracing::debug;
 
+use crate::crud::service::{GenericCrudService, UpdateItem};
 use crate::crud::traits::DbBmc;
-use crate::crud::service::GenericCrudService;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::response::ApiResp;
-use crate::rest::params::{DeleteParams, GetParams, ListParams, PageParams};
+use crate::rest::params::{GetParams, ListParams, PageParams};
 
-/// 创建实体的 Handler
+/// 创建单个实体 Handler
 ///
 /// # 参数
-/// * `data` - 要创建的实体数据（从 JSON body 提取，可包含 db_id 字段）
+/// * `data` - 要创建的实体数据（从 JSON body 提取）
 ///
 /// # 返回值
 /// 返回包含创建结果的 ApiResp
-pub async fn create<MC>(
-    Json(mut data): Json<Value>,
+pub async fn create<MC, E>(
+    Json(data): Json<E>,
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
 {
     debug!("{:<12} - handler::create", "HANDLER");
 
-    let db_id = data.get("db_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or(get_default_db_manager().get_default_db_id().await.as_str())
-        .to_string();
+    let mm = get_default_db_manager();
+    let db_id = mm.get_default_db_id().await;
 
-    data.as_object_mut().map(|obj| obj.remove("db_id"));
+    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 批量创建实体 Handler
+///
+/// # 参数
+/// * `data` - 要创建的实体数据向量（从 JSON body 提取）
+///
+/// # 返回值
+/// 返回包含创建结果的 ApiResp
+pub async fn create_many<MC, E>(
+    Json(data): Json<Vec<E>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    debug!("{:<12} - handler::create_many", "HANDLER");
 
     let mm = get_default_db_manager();
-    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
+    let db_id = mm.get_default_db_id().await;
+
+    let dataset = GenericCrudService::<MC>::create_many(&mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -70,61 +90,73 @@ where
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 更新实体的 Handler
+/// 更新单个实体 Handler
 ///
 /// # 参数
-/// * `data` - 要更新的数据（从 JSON body 提取，包含 id 和可选的 db_id 字段）
+/// * `payload` - 更新请求数据（从 JSON body 提取）
 ///
 /// # 返回值
 /// 返回包含更新后结果的 ApiResp
-pub async fn update<MC>(
-    Json(mut data): Json<Value>,
+pub async fn update<MC, E>(
+    Json(payload): Json<UpdatePayload<E>>,
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
 {
     debug!("{:<12} - handler::update", "HANDLER");
 
-    let db_id = data.get("db_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or(get_default_db_manager().get_default_db_id().await.as_str())
-        .to_string();
-
-    let id = data.get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::BadRequest("缺少 id 字段".to_string()))?
-        .to_string();
-
-    data.as_object_mut().map(|obj| {
-        obj.remove("id");
-        obj.remove("db_id");
-    });
-
     let mm = get_default_db_manager();
-    let dataset = GenericCrudService::<MC>::update(&mm, &db_id, id.into(), data).await?;
+    let db_id = mm.get_default_db_id().await;
+
+    let dataset = GenericCrudService::<MC>::update(&mm, &db_id, payload.id, payload.data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 删除实体的 Handler
+/// 批量更新实体 Handler
 ///
 /// # 参数
-/// * `params` - 查询参数（从 URL 查询参数提取，?id=xxx&db_id=xxx）
+/// * `data` - 更新数据向量（从 JSON body 提取）
+///
+/// # 返回值
+/// 返回包含更新结果的 ApiResp
+pub async fn update_many<MC, E>(
+    Json(data): Json<Vec<UpdateItem<E>>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    debug!("{:<12} - handler::update_many", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = mm.get_default_db_id().await;
+
+    let dataset = GenericCrudService::<MC>::update_many(&mm, &db_id, data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 删除实体 Handler（支持单个和批量）
+///
+/// # 参数
+/// * `payload` - 删除请求数据（从 JSON body 提取）
 ///
 /// # 返回值
 /// 返回包含删除信息的 ApiResp
-pub async fn delete_by_id<MC>(
-    Query(params): Query<DeleteParams>,
+pub async fn delete<MC>(
+    Json(payload): Json<DeletePayload>,
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
 {
-    debug!("{:<12} - handler::delete_by_id", "HANDLER");
+    debug!("{:<12} - handler::delete", "HANDLER");
 
     let mm = get_default_db_manager();
-    let db_id = params.get_db_id().await;
-    let id = params.id.clone();
-    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, id.into()).await?;
+    let db_id = mm.get_default_db_id().await;
+
+    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, payload.ids).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -185,4 +217,20 @@ where
         page_size,
         total as u64,
     )))
+}
+
+/// 更新请求 Payload
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct UpdatePayload<E> {
+    /// 主键 ID
+    pub id: Value,
+    /// 更新数据
+    pub data: E,
+}
+
+/// 删除请求 Payload
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DeletePayload {
+    /// 主键 ID 列表（单个删除传一个元素）
+    pub ids: Vec<Value>,
 }

@@ -30,6 +30,8 @@ serde_json = { workspace = true }
 serde_with={ workspace = true }
 
 # -- 时间和UUID
+# 时间处理
+chrono = { workspace = true, features = ["serde"] }
 time = { workspace = true }
 uuid = { workspace = true ,features = ["v4","fast-rng"]}
 
