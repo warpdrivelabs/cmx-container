@@ -5,7 +5,7 @@
 mod bmc;
 mod entity;
 mod filter;
-mod handler;
+pub mod handler;
 mod service;
 
 pub use bmc::DomainBmc;
