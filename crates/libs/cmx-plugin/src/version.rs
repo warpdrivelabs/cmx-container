@@ -463,6 +463,326 @@ impl DependencyResolver {
     }
 }
 
+/// 版本约束类型 - 支持复杂的版本约束表达式
+#[derive(Debug, Clone, PartialEq)]
+pub enum VersionConstraint {
+    /// 精确版本 (=1.0.0)
+    Exact(String),
+    /// 范围版本 (>=1.0.0 <2.0.0)
+    Range {
+        min: Option<String>,
+        max: Option<String>,
+        min_exclusive: bool,
+        max_exclusive: bool,
+    },
+    /// Caret 约束 (^1.0.0) - 允许兼容更新
+    Caret(String),
+    /// Tilde 约束 (~1.0.0) - 允许补丁更新
+    Tilde(String),
+    /// 通配符 (1.x, 1.2.x)
+    Wildcard { major: u32, minor: Option<u32> },
+    /// 或约束 (1.0.0 || 2.0.0)
+    Or(Vec<VersionConstraint>),
+    /// 与约束 (>=1.0.0 <2.0.0)
+    And(Vec<VersionConstraint>),
+}
+
+impl VersionConstraint {
+    /// 解析版本约束字符串
+    pub fn parse(constraint: &str) -> Result<Self, PluginError> {
+        let constraint = constraint.trim();
+        
+        // 处理或约束
+        if constraint.contains("||") {
+            let parts: Vec<&str> = constraint.split("||").collect();
+            let constraints: Vec<VersionConstraint> = parts
+                .iter()
+                .map(|p| Self::parse(p.trim()))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(VersionConstraint::Or(constraints));
+        }
+        
+        // 处理空格分隔的与约束 (>=1.0.0 <2.0.0)
+        let parts: Vec<&str> = constraint.split_whitespace().collect();
+        if parts.len() > 1 {
+            let constraints: Vec<VersionConstraint> = parts
+                .iter()
+                .map(|p| Self::parse_single(p))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(VersionConstraint::And(constraints));
+        }
+        
+        Self::parse_single(constraint)
+    }
+    
+    /// 解析单个约束
+    fn parse_single(constraint: &str) -> Result<Self, PluginError> {
+        let constraint = constraint.trim();
+        
+        // Caret 约束 (^1.0.0)
+        if constraint.starts_with('^') {
+            return Ok(VersionConstraint::Caret(constraint[1..].to_string()));
+        }
+        
+        // Tilde 约束 (~1.0.0)
+        if constraint.starts_with('~') {
+            return Ok(VersionConstraint::Tilde(constraint[1..].to_string()));
+        }
+        
+        // 通配符 (1.x, 1.2.x, *)
+        if constraint.ends_with(".x") || constraint.ends_with(".*") || constraint == "*" {
+            let parts: Vec<&str> = constraint.trim_end_matches(".x").trim_end_matches(".*").split('.').collect();
+            match parts.len() {
+                1 if parts[0] == "*" => {
+                    return Ok(VersionConstraint::Wildcard { major: 0, minor: None });
+                }
+                1 => {
+                    let major = parts[0].parse().map_err(|_| {
+                        PluginError::Version(format!("无效的通配符: {}", constraint))
+                    })?;
+                    return Ok(VersionConstraint::Wildcard { major, minor: None });
+                }
+                2 => {
+                    let major = parts[0].parse().map_err(|_| {
+                        PluginError::Version(format!("无效的通配符: {}", constraint))
+                    })?;
+                    let minor = parts[1].parse().ok();
+                    return Ok(VersionConstraint::Wildcard { major, minor });
+                }
+                _ => {}
+            }
+        }
+        
+        // 范围约束
+        if constraint.starts_with(">=") {
+            let version = constraint[2..].trim().to_string();
+            return Ok(VersionConstraint::Range {
+                min: Some(version),
+                max: None,
+                min_exclusive: false,
+                max_exclusive: false,
+            });
+        }
+        
+        if constraint.starts_with('>') && !constraint.starts_with(">=") {
+            let version = constraint[1..].trim().to_string();
+            return Ok(VersionConstraint::Range {
+                min: Some(version),
+                max: None,
+                min_exclusive: true,
+                max_exclusive: false,
+            });
+        }
+        
+        if constraint.starts_with("<=") {
+            let version = constraint[2..].trim().to_string();
+            return Ok(VersionConstraint::Range {
+                min: None,
+                max: Some(version),
+                min_exclusive: false,
+                max_exclusive: false,
+            });
+        }
+        
+        if constraint.starts_with('<') && !constraint.starts_with("<=") {
+            let version = constraint[1..].trim().to_string();
+            return Ok(VersionConstraint::Range {
+                min: None,
+                max: Some(version),
+                min_exclusive: false,
+                max_exclusive: true,
+            });
+        }
+        
+        // 精确版本
+        if constraint.starts_with('=') {
+            return Ok(VersionConstraint::Exact(constraint[1..].trim().to_string()));
+        }
+        
+        // 默认为精确版本
+        Ok(VersionConstraint::Exact(constraint.to_string()))
+    }
+    
+    /// 检查版本是否满足约束
+    pub fn satisfies(&self, version: &str) -> bool {
+        let v = match SemanticVersion::parse(version) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        
+        match self {
+            VersionConstraint::Exact(exact) => {
+                match SemanticVersion::parse(exact) {
+                    Ok(exact_v) => v.cmp(&exact_v) == VersionRelation::Equal,
+                    Err(_) => false,
+                }
+            }
+            VersionConstraint::Range { min, max, min_exclusive, max_exclusive } => {
+                let min_ok = match min {
+                    Some(min_v) => match SemanticVersion::parse(min_v) {
+                        Ok(min_v) => {
+                            let cmp = v.cmp(&min_v);
+                            if *min_exclusive {
+                                cmp == VersionRelation::Greater
+                            } else {
+                                cmp != VersionRelation::Less
+                            }
+                        }
+                        Err(_) => false,
+                    },
+                    None => true,
+                };
+                
+                let max_ok = match max {
+                    Some(max_v) => match SemanticVersion::parse(max_v) {
+                        Ok(max_v) => {
+                            let cmp = v.cmp(&max_v);
+                            if *max_exclusive {
+                                cmp == VersionRelation::Less
+                            } else {
+                                cmp != VersionRelation::Greater
+                            }
+                        }
+                        Err(_) => false,
+                    },
+                    None => true,
+                };
+                
+                min_ok && max_ok
+            }
+            VersionConstraint::Caret(base) => {
+                match SemanticVersion::parse(base) {
+                    Ok(base_v) => {
+                        // ^1.2.3 允许 >=1.2.3 <2.0.0
+                        // ^0.2.3 允许 >=0.2.3 <0.3.0
+                        // ^0.0.3 允许 >=0.0.3 <0.0.4
+                        if base_v.major == 0 {
+                            if base_v.minor == 0 {
+                                v.major == 0 && v.minor == 0 && v.patch == base_v.patch
+                            } else {
+                                v.major == 0 && v.minor == base_v.minor && v.patch >= base_v.patch
+                            }
+                        } else {
+                            v.major == base_v.major &&
+                            (v.minor > base_v.minor || 
+                             (v.minor == base_v.minor && v.patch >= base_v.patch))
+                        }
+                    }
+                    Err(_) => false,
+                }
+            }
+            VersionConstraint::Tilde(base) => {
+                match SemanticVersion::parse(base) {
+                    Ok(base_v) => {
+                        // ~1.2.3 允许 >=1.2.3 <1.3.0
+                        v.major == base_v.major &&
+                        v.minor == base_v.minor &&
+                        v.patch >= base_v.patch
+                    }
+                    Err(_) => false,
+                }
+            }
+            VersionConstraint::Wildcard { major, minor } => {
+                v.major == *major && minor.map_or(true, |m| v.minor == m)
+            }
+            VersionConstraint::Or(constraints) => {
+                constraints.iter().any(|c| c.satisfies(version))
+            }
+            VersionConstraint::And(constraints) => {
+                constraints.iter().all(|c| c.satisfies(version))
+            }
+        }
+    }
+    
+    /// 转换为字符串
+    pub fn to_string(&self) -> String {
+        match self {
+            VersionConstraint::Exact(v) => format!("={}", v),
+            VersionConstraint::Range { min, max, min_exclusive, max_exclusive } => {
+                let mut parts = Vec::new();
+                if let Some(min_v) = min {
+                    if *min_exclusive {
+                        parts.push(format!(">{}", min_v));
+                    } else {
+                        parts.push(format!(">={}", min_v));
+                    }
+                }
+                if let Some(max_v) = max {
+                    if *max_exclusive {
+                        parts.push(format!("<{}", max_v));
+                    } else {
+                        parts.push(format!("<={}", max_v));
+                    }
+                }
+                parts.join(" ")
+            }
+            VersionConstraint::Caret(v) => format!("^{}", v),
+            VersionConstraint::Tilde(v) => format!("~{}", v),
+            VersionConstraint::Wildcard { major, minor } => {
+                match minor {
+                    Some(m) => format!("{}.{}.x", major, m),
+                    None => format!("{}.x", major),
+                }
+            }
+            VersionConstraint::Or(constraints) => {
+                constraints.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" || ")
+            }
+            VersionConstraint::And(constraints) => {
+                constraints.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+            }
+        }
+    }
+}
+
+/// 版本约束解析器
+pub struct VersionConstraintParser;
+
+impl VersionConstraintParser {
+    /// 解析约束字符串
+    pub fn parse(constraint: &str) -> Result<VersionConstraint, PluginError> {
+        VersionConstraint::parse(constraint)
+    }
+    
+    /// 检查版本是否满足约束
+    pub fn satisfies(version: &str, constraint: &str) -> bool {
+        match Self::parse(constraint) {
+            Ok(c) => c.satisfies(version),
+            Err(_) => false,
+        }
+    }
+    
+    /// 找到满足所有约束的最佳版本
+    pub fn find_best_version(
+        constraints: &[String],
+        available_versions: &[String],
+    ) -> Option<String> {
+        let parsed_constraints: Vec<VersionConstraint> = constraints
+            .iter()
+            .filter_map(|c| Self::parse(c).ok())
+            .collect();
+        
+        let mut candidates: Vec<SemanticVersion> = available_versions
+            .iter()
+            .filter_map(|v| SemanticVersion::parse(v).ok())
+            .filter(|v| {
+                parsed_constraints.iter().all(|c| c.satisfies(&v.to_string()))
+            })
+            .collect();
+        
+        // 按版本号降序排序，返回最高版本
+        candidates.sort_by(|a, b| {
+            match a.cmp(b) {
+                VersionRelation::Greater => std::cmp::Ordering::Less,
+                VersionRelation::Less => std::cmp::Ordering::Greater,
+                VersionRelation::Equal => std::cmp::Ordering::Equal,
+                VersionRelation::Incompatible => std::cmp::Ordering::Equal,
+            }
+        });
+        
+        candidates.first().map(|v| v.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

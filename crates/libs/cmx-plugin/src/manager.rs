@@ -722,6 +722,8 @@ impl PluginManager {
     }
     
     /// 初始化系统默认插件
+    /// 
+    /// 从配置文件或内置配置加载系统默认插件并按顺序安装
     pub async fn init_system_plugins(&self) -> Result<InitResult, PluginError> {
         let mut results = InitResult::default();
         
@@ -760,6 +762,110 @@ impl PluginManager {
                     }
                 }
             }
+        }
+        
+        Ok(results)
+    }
+    
+    /// 从 TOML 配置文件初始化系统插件
+    /// 
+    /// 读取 TOML 配置文件，解析必需和可选插件配置，按顺序安装
+    pub async fn init_system_plugins_from_config<P: AsRef<std::path::Path>>(
+        &self,
+        config_path: P,
+    ) -> Result<InitResult, PluginError> {
+        use crate::config::SystemPluginsConfig;
+        
+        // 加载配置文件
+        let config = SystemPluginsConfig::from_file(config_path)
+            .map_err(|e| PluginError::Init(format!("加载配置文件失败: {}", e)))?;
+        
+        let mut results = InitResult::default();
+        
+        // 获取按顺序排列的所有插件
+        let plugins = config.get_all_plugins_ordered();
+        
+        log::info!("开始初始化系统插件，共 {} 个", plugins.len());
+        
+        for (is_required, plugin_id, version, source_config) in plugins {
+            log::info!("安装插件: {} ({})", plugin_id, version);
+            
+            // 转换 PluginSourceConfig 到 PluginSource
+            let source = match source_config {
+                crate::config::PluginSourceConfig::Zip { path } => {
+                    PluginSource::Zip { path: path.clone() }
+                }
+                crate::config::PluginSourceConfig::Url { url } => {
+                    PluginSource::Url { 
+                        url: url.clone(),
+                        headers: std::collections::HashMap::new(),
+                    }
+                }
+                crate::config::PluginSourceConfig::Registry { name, version: v } => {
+                    PluginSource::Registry {
+                        plugin_id: name.clone(),
+                        version: v.clone(),
+                    }
+                }
+                crate::config::PluginSourceConfig::Directory { path } => {
+                    PluginSource::Directory { path: path.clone() }
+                }
+            };
+            
+            let request = InstallRequest {
+                plugin_id: Some(plugin_id.to_string()),
+                source,
+                target_db_id: Some(config.settings.default_db_id.clone()),
+                target_db_type: None,
+                target_nodes: None,
+                config: None,
+                force: false,
+                skip_validation: false,
+                operator: "system".to_string(),
+            };
+            
+            match self.install(request).await {
+                Ok(response) => {
+                    log::info!("插件 {} 安装成功: v{}", plugin_id, response.version);
+                    if is_required {
+                        results.required_succeeded += 1;
+                    } else {
+                        results.optional_succeeded += 1;
+                    }
+                }
+                Err(e) => {
+                    log::error!("插件 {} 安装失败: {}", plugin_id, e);
+                    if is_required {
+                        results.required_failed += 1;
+                        results.critical_errors.push(format!(
+                            "必需插件 [{}] 安装失败: {}",
+                            plugin_id, e
+                        ));
+                    } else {
+                        results.optional_failed += 1;
+                        results.warnings.push(format!(
+                            "可选插件 [{}] 安装失败: {}",
+                            plugin_id, e
+                        ));
+                    }
+                }
+            }
+        }
+        
+        log::info!(
+            "系统插件初始化完成: 必需成功={}, 必需失败={}, 可选成功={}, 可选失败={}",
+            results.required_succeeded,
+            results.required_failed,
+            results.optional_succeeded,
+            results.optional_failed
+        );
+        
+        // 如果有必需插件失败，返回错误
+        if results.required_failed > 0 {
+            return Err(PluginError::Init(format!(
+                "{} 个必需插件安装失败",
+                results.required_failed
+            )));
         }
         
         Ok(results)

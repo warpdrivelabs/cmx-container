@@ -14,18 +14,18 @@ use crate::types::{
 /// 分布式锁键前缀
 const DEPLOY_LOCK_PREFIX: &str = "cmx:plugin:deploy:lock:";
 
-/// 节点信息
+/// 部署节点信息
 #[derive(Debug, Clone)]
-pub struct NodeInfo {
+pub struct DeploymentNodeInfo {
     pub node_id: String,
     pub node_name: String,
     pub host: String,
     pub port: u16,
-    pub status: NodeStatus,
+    pub status: DeploymentNodeStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeStatus {
+pub enum DeploymentNodeStatus {
     Online,
     Offline,
     Maintenance,
@@ -67,7 +67,7 @@ pub struct SyncStatus {
 
 /// 部署协调器 - 负责多节点部署协调
 pub struct DeploymentCoordinator {
-    nodes: Arc<RwLock<Vec<NodeInfo>>>,
+    nodes: Arc<RwLock<Vec<DeploymentNodeInfo>>>,
     lock_manager: Option<Arc<cmx_buffer::LockManager>>,
 }
 
@@ -113,7 +113,7 @@ impl DeploymentCoordinator {
     }
     
     /// 注册节点
-    pub async fn register_node(&self, node: NodeInfo) -> Result<(), PluginError> {
+    pub async fn register_node(&self, node: DeploymentNodeInfo) -> Result<(), PluginError> {
         let mut nodes = self.nodes.write().await;
         nodes.push(node);
         Ok(())
@@ -127,7 +127,7 @@ impl DeploymentCoordinator {
     }
     
     /// 获取所有节点
-    pub async fn get_nodes(&self) -> Vec<NodeInfo> {
+    pub async fn get_nodes(&self) -> Vec<DeploymentNodeInfo> {
         self.nodes.read().await.clone()
     }
     
@@ -155,7 +155,7 @@ impl DeploymentCoordinator {
     async fn deploy_serial(
         &self,
         request: &DeployRequest,
-        nodes: &[NodeInfo],
+        nodes: &[DeploymentNodeInfo],
         continue_on_error: bool,
     ) -> Result<DeployResult, PluginError> {
         let mut results = Vec::new();
@@ -164,7 +164,7 @@ impl DeploymentCoordinator {
             let node = nodes.iter().find(|n| &n.node_id == node_id);
             
             match node {
-                Some(n) if n.status == NodeStatus::Online => {
+                Some(n) if n.status == DeploymentNodeStatus::Online => {
                     // 执行实际部署到节点
                     let deploy_result = self.deploy_to_node(
                         node_id,
@@ -266,11 +266,11 @@ impl DeploymentCoordinator {
     async fn deploy_parallel(
         &self,
         request: &DeployRequest,
-        nodes: &[NodeInfo],
+        nodes: &[DeploymentNodeInfo],
         max_concurrent: usize,
     ) -> Result<DeployResult, PluginError> {
         // 收集节点信息
-        let node_map: std::collections::HashMap<String, NodeStatus> = nodes.iter()
+        let node_map: std::collections::HashMap<String, DeploymentNodeStatus> = nodes.iter()
             .map(|n| (n.node_id.clone(), n.status))
             .collect();
         
@@ -292,7 +292,7 @@ impl DeploymentCoordinator {
                 
                 let handle = tokio::spawn(async move {
                     match node_status {
-                        Some(NodeStatus::Online) => {
+                        Some(DeploymentNodeStatus::Online) => {
                             // 部署到节点
                             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                             NodeDeploymentResult {
@@ -343,7 +343,7 @@ impl DeploymentCoordinator {
     async fn deploy_rolling(
         &self,
         request: &DeployRequest,
-        nodes: &[NodeInfo],
+        nodes: &[DeploymentNodeInfo],
         batch_size: usize,
         wait_seconds: u64,
     ) -> Result<DeployResult, PluginError> {
@@ -354,7 +354,7 @@ impl DeploymentCoordinator {
         let all_node_ids: Vec<String> = request.nodes.iter().map(|s| s.clone()).collect();
         
         // 收集节点信息
-        let node_map: std::collections::HashMap<String, NodeStatus> = nodes.iter()
+        let node_map: std::collections::HashMap<String, DeploymentNodeStatus> = nodes.iter()
             .map(|n| (n.node_id.clone(), n.status))
             .collect();
         
@@ -366,7 +366,7 @@ impl DeploymentCoordinator {
                 let node_status = node_map.get(node_id).copied();
                 
                 match node_status {
-                    Some(NodeStatus::Online) => {
+                    Some(DeploymentNodeStatus::Online) => {
                         match self.deploy_to_node(node_id, &request.plugin_id, &request.version).await {
                             Ok(_) => {
                                 batch_results.push(NodeDeploymentResult {
@@ -421,7 +421,7 @@ impl DeploymentCoordinator {
     async fn deploy_blue_green(
         &self,
         request: &DeployRequest,
-        nodes: &[NodeInfo],
+        nodes: &[DeploymentNodeInfo],
         switch_at: Option<String>,
     ) -> Result<DeployResult, PluginError> {
         // 蓝绿部署：同时部署到所有节点，但新版本在单独的环境中
@@ -434,7 +434,7 @@ impl DeploymentCoordinator {
             let node = nodes.iter().find(|n| &n.node_id == node_id);
             
             match node {
-                Some(n) if n.status == NodeStatus::Online => {
+                Some(n) if n.status == DeploymentNodeStatus::Online => {
                     match self.deploy_to_node(node_id, &request.plugin_id, &request.version).await {
                         Ok(_) => {
                             results.push(NodeDeploymentResult {
@@ -488,7 +488,7 @@ impl DeploymentCoordinator {
         let nodes = self.nodes.read().await;
         
         let synced: Vec<String> = nodes.iter()
-            .filter(|n| n.status == NodeStatus::Online)
+            .filter(|n| n.status == DeploymentNodeStatus::Online)
             .map(|n| n.node_id.clone())
             .collect();
         
