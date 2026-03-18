@@ -14,26 +14,33 @@ use crate::crud::traits::DbBmc;
 use crate::crud::service::GenericCrudService;
 use crate::error::{Error, Result};
 use crate::response::ApiResp;
-use crate::rest::params::{DeleteParams, GetParams, ListParams, PageParams};
+use crate::rest::params::{DeleteParams, GetParams, ListParams, PageParams, DB_ID_DEFAULT};
 
 /// 创建实体的 Handler
 ///
 /// # 参数
 /// * `mm` - 数据库管理器（从 State 提取）
-/// * `data` - 要创建的实体数据（从 JSON body 提取）
+/// * `data` - 要创建的实体数据（从 JSON body 提取，可包含 db_id 字段）
 ///
 /// # 返回值
 /// 返回包含创建结果的 ApiResp
 pub async fn create<MC>(
     State(mm): State<DatabaseManager>,
-    Json(data): Json<Value>,
+    Json(mut data): Json<Value>,
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
 {
     debug!("{:<12} - handler::create", "HANDLER");
 
-    let dataset = GenericCrudService::<MC>::create(&mm, "default", data).await?;
+    let db_id = data.get("db_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(DB_ID_DEFAULT)
+        .to_string();
+    
+    data.as_object_mut().map(|obj| obj.remove("db_id"));
+
+    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -41,7 +48,7 @@ where
 /// 根据主键获取单条实体的 Handler
 ///
 /// # 参数
-/// * `params` - 查询参数（从 URL 查询参数提取，?id=xxx）
+/// * `params` - 查询参数（从 URL 查询参数提取，?id=xxx&db_id=xxx）
 /// * `mm` - 数据库管理器（从 State 提取）
 ///
 /// # 返回值
@@ -55,7 +62,9 @@ where
 {
     debug!("{:<12} - handler::get_by_id", "HANDLER");
 
-    let dataset = GenericCrudService::<MC>::get(&mm, "default", params.id.into()).await?;
+    let db_id = params.get_db_id().to_string();
+    let id = params.id.clone();
+    let dataset = GenericCrudService::<MC>::get(&mm, &db_id, id.into()).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -64,7 +73,7 @@ where
 ///
 /// # 参数
 /// * `mm` - 数据库管理器（从 State 提取）
-/// * `data` - 要更新的数据（从 JSON body 提取，包含 id 字段）
+/// * `data` - 要更新的数据（从 JSON body 提取，包含 id 和可选的 db_id 字段）
 ///
 /// # 返回值
 /// 返回包含更新后结果的 ApiResp
@@ -77,14 +86,22 @@ where
 {
     debug!("{:<12} - handler::update", "HANDLER");
 
+    let db_id = data.get("db_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(DB_ID_DEFAULT)
+        .to_string();
+    
     let id = data.get("id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::BadRequest("缺少 id 字段".to_string()))?
         .to_string();
     
-    data.as_object_mut().map(|obj| obj.remove("id"));
+    data.as_object_mut().map(|obj| {
+        obj.remove("id");
+        obj.remove("db_id");
+    });
 
-    let dataset = GenericCrudService::<MC>::update(&mm, "default", id.into(), data).await?;
+    let dataset = GenericCrudService::<MC>::update(&mm, &db_id, id.into(), data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -92,7 +109,7 @@ where
 /// 删除实体的 Handler
 ///
 /// # 参数
-/// * `params` - 查询参数（从 URL 查询参数提取，?id=xxx）
+/// * `params` - 查询参数（从 URL 查询参数提取，?id=xxx&db_id=xxx）
 /// * `mm` - 数据库管理器（从 State 提取）
 ///
 /// # 返回值
@@ -106,7 +123,9 @@ where
 {
     debug!("{:<12} - handler::delete_by_id", "HANDLER");
 
-    let dataset = GenericCrudService::<MC>::delete(&mm, "default", params.id.into()).await?;
+    let db_id = params.get_db_id().to_string();
+    let id = params.id.clone();
+    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, id.into()).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -125,12 +144,14 @@ pub async fn list<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups>,
+    F: DeserializeOwned + Into<modql::filter::FilterGroups> + Clone,
 {
     debug!("{:<12} - handler::list", "HANDLER");
 
+    let db_id = params.get_db_id().to_string();
     let list_options = params.to_list_options();
-    let dataset = GenericCrudService::<MC, F>::list(&mm, "default", params.filter, Some(list_options)).await?;
+    let filter = params.filter.clone();
+    let dataset = GenericCrudService::<MC, F>::list(&mm, &db_id, filter, Some(list_options)).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -149,15 +170,17 @@ pub async fn page<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups>,
+    F: DeserializeOwned + Into<modql::filter::FilterGroups> + Clone,
 {
     debug!("{:<12} - handler::page", "HANDLER");
 
+    let db_id = params.get_db_id().to_string();
     let page_size = params.get_limit() as u64;
     let page_number = (params.offset.unwrap_or(0) / params.get_limit()) as u64 + 1;
 
     let list_options = params.to_list_options();
-    let (dataset, total) = GenericCrudService::<MC, F>::page(&mm, "default", params.filter, list_options).await?;
+    let filter = params.filter.clone();
+    let (dataset, total) = GenericCrudService::<MC, F>::page(&mm, &db_id, filter, list_options).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,

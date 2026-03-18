@@ -5,5 +5,5 @@
 pub mod params;
 pub mod handler;
 
-pub use params::PageParams;
+pub use params::{PageParams, DB_ID_DEFAULT};
 pub use handler::{create, get_by_id, update, delete_by_id, list, page};
