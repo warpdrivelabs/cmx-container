@@ -1,9 +1,12 @@
 /// 数据库管理器模块
 ///
 /// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
-
-use std::sync::Arc;
+use std::sync::{Arc};
+use log::warn;
+use sea_query::SqlWriter;
+use tokio::sync::RwLock;
 use tracing::info;
+
 
 use crate::config::{DbConfig, PoolConfig};
 use crate::error::{Error, Result};
@@ -50,6 +53,7 @@ impl Default for TransactionOptions {
 pub struct DatabaseManager {
     pool_manager: Arc<PoolManager>,
     config: DatabaseManagerConfig,
+    default_db_id: Arc<RwLock<String>>,
 }
 
 /// 连接池管理器
@@ -64,16 +68,31 @@ impl DatabaseManager {
         Self {
             pool_manager: Arc::new(PoolManager::new()),
             config,
+            default_db_id: Arc::new(RwLock::new("default".to_string())),
         }
+    }
+
+
+    pub  async fn get_default_db_id(&self) -> String {
+        self.default_db_id.read().await.clone().into()
     }
 
     /// 注册数据源
     pub async fn register_data_source(&self, db_config: DbConfig) -> Result<()> {
+        if (db_config.clone().default) {
+            let mut write_guard = self.default_db_id.write().await;
+            *write_guard = db_config.clone().db_id;
+        }
+
         self.pool_manager.register(db_config).await
     }
 
     /// 注销数据源
     pub async fn unregister_data_source(&self, db_id: &str) -> Result<()> {
+        if db_id== self.default_db_id.read().await.as_str() {
+            warn!("默认数据源不能删除");
+            return Err(Error::DefaultDbSourceCantDelete("默认数据源不能删除".into()));
+        }
         self.pool_manager.unregister(db_id).await
     }
 
@@ -92,7 +111,11 @@ impl DatabaseManager {
     }
 
     /// 开始事务
-    pub async fn begin_transaction(&self, db_id: &str, options: TransactionOptions) -> Result<String> {
+    pub async fn begin_transaction(
+        &self,
+        db_id: &str,
+        options: TransactionOptions,
+    ) -> Result<String> {
         let dbx = self.get_dbx(db_id)?;
         let dbx_with_txn = dbx.with_transaction()?;
         dbx_with_txn.begin_txn(db_id, options.propagation).await
@@ -129,28 +152,62 @@ impl DatabaseManager {
     }
 
     /// 执行带参数的 SQL 语句
-    pub async fn execute_sql_with_params(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value) -> Result<u64> {
+    pub async fn execute_sql_with_params(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: serde_json::Value,
+    ) -> Result<u64> {
         crate::transaction::execute_sql_with_params_by_ids(db_id, txn_id, sql, params).await
     }
 
     /// 查询 SQL 语句
-    pub async fn query_sql(&self, db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
+    pub async fn query_sql(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
         crate::transaction::query_sql_by_ids(db_id, txn_id, sql, dataset_id).await
     }
 
     /// 查询带参数的 SQL 语句
-    pub async fn query_sql_with_params(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
-        crate::transaction::query_sql_with_params_by_ids(db_id, txn_id, sql, params, dataset_id).await
+    pub async fn query_sql_with_params(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: serde_json::Value,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql_with_params_by_ids(db_id, txn_id, sql, params, dataset_id)
+            .await
     }
 
     /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
-    pub async fn execute_sql_with_sqlxvalues(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: sea_query_binder::SqlxValues) -> Result<u64> {
+    pub async fn execute_sql_with_sqlxvalues(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: sea_query_binder::SqlxValues,
+    ) -> Result<u64> {
         crate::transaction::execute_sql_with_sqlxvalues_by_ids(db_id, txn_id, sql, params).await
     }
 
     /// 查询带 sea-query-binder SqlxValues 的 SQL 语句
-    pub async fn query_sql_with_sqlxvalues(&self, db_id: &str, txn_id: Option<&str>, sql: &str, params: sea_query_binder::SqlxValues, dataset_id: &str) -> Result<DataSet> {
-        crate::transaction::query_sql_with_sqlxvalues_by_ids(db_id, txn_id, sql, params, dataset_id).await
+    pub async fn query_sql_with_sqlxvalues(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: sea_query_binder::SqlxValues,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql_with_sqlxvalues_by_ids(db_id, txn_id, sql, params, dataset_id)
+            .await
     }
 
     /// 提交事务
@@ -171,8 +228,8 @@ impl PoolManager {
         }
     }
 
-    pub async fn register(&self,  config: DbConfig) -> Result<()> {
-        self.registry.register( config).await
+    pub async fn register(&self, config: DbConfig) -> Result<()> {
+        self.registry.register(config).await
     }
 
     pub async fn unregister(&self, key: &str) -> Result<()> {
@@ -184,10 +241,10 @@ impl PoolManager {
         self.registry.get_db_access(key).ok_or(Error::NoDb)
     }
 
-    pub  fn get_db_config(&self, key: &str) -> Result<DbConfig> {
+    pub fn get_db_config(&self, key: &str) -> Result<DbConfig> {
         self.registry.get_db_config(key).ok_or(Error::NoDb)
     }
-    pub fn  get_db(&self, db_id: &str)-> Result<(Dbx,DbConfig)> {
+    pub fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
         self.registry.get(db_id).ok_or(Error::NoDb)
     }
 
@@ -196,7 +253,8 @@ impl PoolManager {
     }
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
-        let result = crate::transaction::query_sql_by_ids(db_id, None, "SELECT 1", "health_check").await;
+        let result =
+            crate::transaction::query_sql_by_ids(db_id, None, "SELECT 1", "health_check").await;
         match result {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
@@ -235,9 +293,7 @@ static DEFAULT_MANAGER: std::sync::OnceLock<Arc<DatabaseManager>> = std::sync::O
 
 /// 获取默认数据库管理器实例
 pub fn get_default_db_manager() -> &'static Arc<DatabaseManager> {
-    DEFAULT_MANAGER.get_or_init(|| {
-        Arc::new(DatabaseManager::new(DatabaseManagerConfig::default()))
-    })
+    DEFAULT_MANAGER.get_or_init(|| Arc::new(DatabaseManager::new(DatabaseManagerConfig::default())))
 }
 
 // impl Default for DatabaseManager {

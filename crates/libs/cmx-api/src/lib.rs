@@ -25,11 +25,15 @@ pub mod models;
 /// 路由注册模块
 pub mod routes;
 
+/// 状态管理模块
+pub mod state;
+
 // 重新导出常用类型
 pub use crud::{DbBmc, GenericCrudService};
 pub use rest::{PageParams, create, get_by_id, update, delete_by_id, list, page};
 pub use error::{Error, Result};
 pub use response::{ApiResp, Pagination};
+pub use state::{CmxAppState, AppStateInner};
 
 // 注意：register_crud_routes 宏通过 #[macro_export] 自动导出到 crate 根目录
 // 使用时直接通过 cmx_api::register_crud_routes! 访问

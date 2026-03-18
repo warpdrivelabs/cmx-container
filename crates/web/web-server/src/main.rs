@@ -12,7 +12,8 @@ use axum::{middleware, Router};
 
 use crate::config::{init_db_datasource, init_global_config, WebConfig};
 use cmx_api::middleware::mw_req_stamp::mw_req_stamp_resolver;
-use cmx_database::{get_default_db_manager, DatabaseManager};
+use cmx_api::CmxAppState;
+use cmx_database::get_default_db_manager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
@@ -47,8 +48,8 @@ async fn main() -> Result<()> {
     // 初始化配置文件并 获取 Web 服务器配置
     let config = web_config();
 
-    //初始化数据库管理器
-    let database_manager = get_default_db_manager();
+    // 初始化数据库管理器（用于初始化连接池）
+    let _database_manager = get_default_db_manager();
 
 
 
@@ -107,8 +108,11 @@ async fn main() -> Result<()> {
     //     ))
     // };
 
+    //获取默认的数据库ID
+    let default_db_id = get_default_db_manager().get_default_db_id().await;
+
     // -- 配置 API 路由
-    let api_routes = self::routes::routes().with_state((**database_manager).clone());
+    let api_routes = self::routes::routes().with_state(CmxAppState::new(default_db_id));
 
     // -- 使用中间件构建路由
     // 中间件顺序 (从外到内):

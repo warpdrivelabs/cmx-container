@@ -3,9 +3,9 @@
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
 use axum::Router;
-use cmx_database::DatabaseManager;
 
 use crate::register_crud_routes;
+use crate::state::CmxAppState;
 use crate::models::domain::{DomainBmc, DomainFilter};
 
 /// 注册所有 API 路由
@@ -19,10 +19,9 @@ use crate::models::domain::{DomainBmc, DomainFilter};
 /// # 示例
 /// ```rust
 /// use cmx_api::routes::api_routes;
-/// use cmx_database::DatabaseManager;
+/// use cmx_api::CmxAppState;
 ///
-/// let mm = DatabaseManager::new();
-/// let router = api_routes().with_state(mm);
+/// let router = api_routes().with_state(CmxAppState::default());
 /// ```
 ///
 /// # 注册的路由
@@ -33,7 +32,7 @@ use crate::models::domain::{DomainBmc, DomainFilter};
 /// - GET  /domains/delete   - 删除（?id=xxx）
 /// - POST /domains/list     - 列表查询
 /// - POST /domains/page     - 分页查询
-pub fn api_routes() -> Router<DatabaseManager> {
+pub fn api_routes() -> Router<CmxAppState> {
     let router = Router::new();
 
     // 注册 Domain CRUD 路由

@@ -4,6 +4,7 @@
 
 use modql::filter::ListOptions;
 use serde::Deserialize;
+use cmx_database::get_default_db_manager;
 
 /// 列表查询的默认限制数量
 pub const LIST_LIMIT_DEFAULT: i64 = 1000;
@@ -11,22 +12,22 @@ pub const LIST_LIMIT_DEFAULT: i64 = 1000;
 /// 列表查询的最大限制数量
 pub const LIST_LIMIT_MAX: i64 = 5000;
 
-/// 默认数据库 ID
-pub const DB_ID_DEFAULT: &str = "primary";
+// /// 默认数据库 ID
+// pub const DB_ID_DEFAULT: &str = "primary";
 
-/// 数据库 ID 参数
-///
-/// 用于指定操作哪个数据库（多租户场景）。
-#[derive(Debug, Deserialize, Clone)]
-pub struct DbIdParams {
-    /// 数据库 ID
-    #[serde(default = "default_db_id")]
-    pub db_id: String,
-}
+// /// 数据库 ID 参数
+// ///
+// /// 用于指定操作哪个数据库（多租户场景）。
+// #[derive(Debug, Deserialize, Clone)]
+// pub struct DbIdParams {
+//     /// 数据库 ID
+//     #[serde(default = "default_db_id")]
+//     pub db_id: String,
+// }
 
-fn default_db_id() -> String {
-    DB_ID_DEFAULT.to_string()
-}
+// fn default_db_id() -> String {
+//     DB_ID_DEFAULT.to_string()
+// }
 
 /// 获取单条记录的查询参数
 ///
@@ -42,8 +43,11 @@ pub struct GetParams {
 
 impl GetParams {
     /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(DB_ID_DEFAULT)
+    pub async fn get_db_id(&self) -> String {
+        if self.db_id.is_some() {
+            return self.db_id.clone().unwrap();
+        }
+        get_default_db_manager().get_default_db_id().await
     }
 }
 
@@ -61,8 +65,11 @@ pub struct DeleteParams {
 
 impl DeleteParams {
     /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(DB_ID_DEFAULT)
+    pub async fn get_db_id(&self) -> String {
+        if self.db_id.is_some() {
+            return self.db_id.clone().unwrap();
+        }
+        get_default_db_manager().get_default_db_id().await
     }
 }
 
@@ -91,8 +98,11 @@ impl<F> ListParams<F> {
     }
 
     /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(DB_ID_DEFAULT)
+    pub async fn get_db_id(&self) -> String {
+        if self.db_id.is_some() {
+            return self.db_id.clone().unwrap();
+        }
+        get_default_db_manager().get_default_db_id().await
     }
 }
 
@@ -137,56 +147,21 @@ impl<F> PageParams<F> {
     }
 
     /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(DB_ID_DEFAULT)
+    pub async fn get_db_id(&self) -> String {
+        if self.db_id.is_some() {
+            return self.db_id.clone().unwrap();
+        }
+        get_default_db_manager().get_default_db_id().await
     }
 }
 
-/// 创建/更新参数的数据库 ID（从 body 中提取）
-#[derive(Debug, Deserialize)]
-pub struct DataWithDbId {
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
-}
 
-impl DataWithDbId {
-    /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(DB_ID_DEFAULT)
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_get_params_default_db_id() {
-        let params = GetParams {
-            id: "test".to_string(),
-            db_id: None,
-        };
-        assert_eq!(params.get_db_id(), "default");
-    }
 
-    #[test]
-    fn test_get_params_custom_db_id() {
-        let params = GetParams {
-            id: "test".to_string(),
-            db_id: Some("tenant1".to_string()),
-        };
-        assert_eq!(params.get_db_id(), "tenant1");
-    }
-
-    #[test]
-    fn test_delete_params_default_db_id() {
-        let params = DeleteParams {
-            id: "test".to_string(),
-            db_id: None,
-        };
-        assert_eq!(params.get_db_id(), "default");
-    }
 
     #[test]
     fn test_list_params_to_list_options() {
@@ -249,7 +224,6 @@ mod tests {
         let options = params.to_list_options();
         assert_eq!(options.limit, Some(50));
         assert_eq!(options.offset, Some(100));
-        assert_eq!(params.get_db_id(), "tenant1");
     }
 
     #[test]
@@ -267,6 +241,5 @@ mod tests {
         assert_eq!(params.offset, Some(10));
         assert_eq!(params.limit, Some(30));
         assert_eq!(params.order_bys, Some("name".to_string()));
-        assert_eq!(params.get_db_id(), "default");
     }
 }

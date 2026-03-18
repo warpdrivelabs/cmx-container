@@ -6,6 +6,7 @@ use axum::{extract::Query, extract::State, Json};
 use cmx_core::model::data::dataset::DataSet;
 use serde::Deserialize;
 use tracing::debug;
+use cmx_database::get_default_db_manager;
 use crate::create;
 use crate::error::Result;
 use crate::response::ApiResp;
@@ -23,8 +24,9 @@ pub struct GetByNameParams {
 
 impl GetByNameParams {
     /// 获取数据库 ID
-    pub fn get_db_id(&self) -> &str {
-        self.db_id.as_deref().unwrap_or(crate::rest::params::DB_ID_DEFAULT)
+    pub async fn get_db_id(&self) -> String {
+        self.db_id.clone()
+            .unwrap_or(get_default_db_manager().get_default_db_id().await)
     }
 }
 
@@ -46,7 +48,7 @@ pub async fn get_by_name(
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::get_by_name", "HANDLER");
 
-    let db_id = params.get_db_id().to_string();
+    let db_id = params.get_db_id().await;
     let name = params.name.clone();
     let dataset = DomainService::get_by_name(&mm, &db_id, &name).await?;
 
@@ -169,7 +171,7 @@ pub async fn count_by_status(
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::count_by_status", "HANDLER");
 
-    let dataset = DomainService::count_by_status(&mm, params.get_db_id()).await?;
+    let dataset = DomainService::count_by_status(&mm, params.get_db_id().await.as_str()).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }

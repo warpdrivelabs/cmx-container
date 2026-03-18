@@ -95,7 +95,7 @@ impl RateLimitState {
 
 /// 限流中间件
 pub async fn mw_rate_limit(
-    mut req: Request<Body>,
+    req: Request<Body>,
     next: Next,
 ) -> Response {
     let config = RateLimitConfig::default();

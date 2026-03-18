@@ -40,7 +40,9 @@ pub enum Error {
 	NoDb,
 	/// 无效的参数
 	InvalidParams(String),
-	
+	///  默认数据源不能删除
+	DefaultDbSourceCantDelete(String),
+
 	// -- Externals
 	/// SQLx 错误
 	#[from]
