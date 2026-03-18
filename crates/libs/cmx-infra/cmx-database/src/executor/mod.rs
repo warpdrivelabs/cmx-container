@@ -1,5 +1,5 @@
 /// 结果转换模块，用于处理SQLx查询结果到DataSet的转换
-/// 
+///
 /// 该模块提供了独立的结果转换功能，不依赖于 DbTransaction
 
 use cmx_core::model::data::dataset::{DataSet, Row, Schema};
@@ -26,7 +26,7 @@ pub enum ParamValue {
 
 impl ParamValue {
     /// 将 serde_json::Value 转换为 ParamValue
-    /// 
+    ///
     /// 支持的类型转换：
     /// - null -> Null
     /// - bool -> Bool
@@ -54,17 +54,17 @@ impl ParamValue {
             }
             serde_json::Value::String(s) => {
                 // 尝试解析为特定类型
-                
+
                 // 1. 尝试解析为 Uuid
                 if let Ok(uuid) = Uuid::parse_str(&s) {
                     return ParamValue::Uuid(uuid);
                 }
-                
+
                 // 2. 尝试解析为 Decimal（金额等）
                 if let Ok(d) = s.parse::<Decimal>() {
                     return ParamValue::Decimal(d);
                 }
-                
+
                 // 3. 尝试解析为 DateTime（支持多种格式）
                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
                     return ParamValue::DateTime(dt.naive_utc());
@@ -78,25 +78,25 @@ impl ParamValue {
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
                     return ParamValue::DateTime(dt);
                 }
-                
+
                 // 4. 尝试解析为 Date
                 if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
                     return ParamValue::Date(date);
                 }
-                
+
                 // 5. 尝试解析为 base64 Binary
                 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
                 if let Ok(bytes) = BASE64.decode(&s) {
                     return ParamValue::Binary(bytes);
                 }
-                
+
                 // 6. 尝试解析为 JSON（以 { 或 [ 开头）
                 if s.starts_with('{') || s.starts_with('[') {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
                         return ParamValue::Json(v);
                     }
                 }
-                
+
                 // 默认作为字符串
                 ParamValue::String(s)
             }
@@ -109,7 +109,7 @@ impl ParamValue {
                         false
                     }
                 });
-                
+
                 if is_binary {
                     let bytes: Vec<u8> = arr.iter()
                         .filter_map(|v| v.as_u64())
@@ -117,7 +117,7 @@ impl ParamValue {
                         .collect();
                     return ParamValue::Binary(bytes);
                 }
-                
+
                 // 否则作为 JSON 数组
                 ParamValue::Json(serde_json::Value::Array(arr))
             }
@@ -245,7 +245,7 @@ impl ResultConverter {
     fn get_postgres_value_from_row(row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             // 尝试 i32，如果失败尝试 i64
             if let Ok(v) = row.try_get::<i32, _>(index) {
@@ -289,9 +289,17 @@ impl ResultConverter {
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
-            // 处理时间戳类型 - 作为字符串获取后解析
+            // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
+            // 优先尝试直接获取带时区的 DateTime<Utc>
+            if let Ok(dt) = row.try_get::<chrono::DateTime<chrono::Utc>, _>(index) {
+                return DataValue::DateTime(dt);
+            }
+            // 尝试获取 NaiveDateTime 然后转换为 DateTime<Utc>
+            if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+            }
+            // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
-                // 尝试多种时间格式
                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
@@ -301,6 +309,7 @@ impl ResultConverter {
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
                     return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
+                return DataValue::String(s);
             }
             DataValue::Null
         } else {
@@ -313,7 +322,7 @@ impl ResultConverter {
     fn get_mysql_value_from_row(row: &sqlx::mysql::MySqlRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             // 尝试 i32，如果失败尝试 i64
             if let Ok(v) = row.try_get::<i32, _>(index) {
@@ -359,7 +368,16 @@ impl ResultConverter {
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
-            // 处理时间戳类型 - 作为字符串获取后解析
+            // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
+            // 优先尝试直接获取带时区的 DateTime<Utc>
+            if let Ok(dt) = row.try_get::<chrono::DateTime<chrono::Utc>, _>(index) {
+                return DataValue::DateTime(dt);
+            }
+            // 尝试获取 NaiveDateTime 然后转换为 DateTime<Utc>
+            if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+            }
+            // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
@@ -370,6 +388,7 @@ impl ResultConverter {
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
                     return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
+                return DataValue::String(s);
             }
             DataValue::Null
         } else {
@@ -382,7 +401,7 @@ impl ResultConverter {
     fn get_sqlite_value_from_row(row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             // 尝试 i32，如果失败尝试 i64
             if let Ok(v) = row.try_get::<i32, _>(index) {
@@ -421,7 +440,12 @@ impl ResultConverter {
             }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
-            // 处理时间戳类型 - 作为字符串获取后解析
+            // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
+            // 优先尝试直接获取 NaiveDateTime
+            if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+            }
+            // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
@@ -432,6 +456,7 @@ impl ResultConverter {
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
                     return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
+                return DataValue::String(s);
             }
             DataValue::Null
         } else {
@@ -444,17 +469,17 @@ impl ResultConverter {
     fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo) -> FieldType {
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
-        
-        if type_name_lower.contains("varchar") || type_name_lower.contains("text") 
+
+        if type_name_lower.contains("varchar") || type_name_lower.contains("text")
             || type_name_lower.contains("string") || type_name_lower.contains("char") {
             FieldType::String
-        } else if type_name_lower.contains("int") || type_name_lower.contains("bigint") 
+        } else if type_name_lower.contains("int") || type_name_lower.contains("bigint")
             || type_name_lower.contains("smallint") || type_name_lower.contains("tinyint") {
             FieldType::Int
-        } else if type_name_lower.contains("float") || type_name_lower.contains("double") 
+        } else if type_name_lower.contains("float") || type_name_lower.contains("double")
             || type_name_lower.contains("real") {
             FieldType::Float
-        } else if type_name_lower.contains("decimal") || type_name_lower.contains("numeric") 
+        } else if type_name_lower.contains("decimal") || type_name_lower.contains("numeric")
             || type_name_lower.contains("money") {
             FieldType::Decimal
         } else if type_name_lower.contains("timestamp") || type_name_lower.contains("datetime") {

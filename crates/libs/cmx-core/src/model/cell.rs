@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeMap};
 use serde_json::Value as JsonValue;
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, Utc, NaiveDate, Datelike};
 use smol_str::SmolStr;
 use uuid::Uuid;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
@@ -134,6 +134,14 @@ impl<'de> Deserialize<'de> for DataValue {
                 }
             }
             JsonValue::String(s) => {
+                // 尝试解析为 DateTime（RFC3339 格式，如 "2024-01-01T12:00:00Z" 或 "2024-01-01T12:00:00+00:00"）
+                if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
+                    return Ok(DataValue::DateTime(dt.with_timezone(&Utc)));
+                }
+                // 尝试解析为 NaiveDate（支持 "2024-01-01" 格式）
+                if let Ok(date) = NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                    return Ok(DataValue::Date(date));
+                }
                 // 尝试解析为 Uuid（标准 UUID 格式）
                 if let Ok(uuid) = Uuid::parse_str(&s) {
                     return Ok(DataValue::Uuid(uuid));
@@ -898,6 +906,91 @@ mod tests {
                 assert_eq!(items.len(), 2);
             }
             _ => panic!("Expected Array for multi-unit"),
+        }
+    }
+
+    // ========================================
+    // DateTime/Date 反序列化测试
+    // ========================================
+
+    /// 测试 DateTime 序列化后再反序列化
+    #[test]
+    fn test_datetime_serialization_roundtrip() {
+        let original = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let data_value = DataValue::DateTime(original);
+        let json = serde_json::to_string(&data_value).unwrap();
+        
+        let deserialized: DataValue = serde_json::from_str(&json).unwrap();
+        
+        match deserialized {
+            DataValue::DateTime(dt) => {
+                assert_eq!(dt.format("%Y-%m-%dT%H:%M:%S").to_string(), "2024-01-15T10:30:00");
+            }
+            _ => panic!("Expected DateTime after roundtrip"),
+        }
+    }
+
+    /// 测试 DateTime RFC3339 格式字符串反序列化
+    #[test]
+    fn test_datetime_deserialization_rfc3339() {
+        let json_str = r#""2024-01-15T10:30:00Z""#;
+        let value: DataValue = serde_json::from_str(json_str).unwrap();
+
+        match value {
+            DataValue::DateTime(dt) => {
+                assert_eq!(dt.format("%Y-%m-%d").to_string(), "2024-01-15");
+            }
+            _ => panic!("Expected DateTime from RFC3339 string"),
+        }
+    }
+
+    /// 测试 DateTime 带时区偏移的字符串反序列化
+    #[test]
+    fn test_datetime_deserialization_with_timezone() {
+        let json_str = r#""2024-01-15T10:30:00+08:00""#;
+        let value: DataValue = serde_json::from_str(json_str).unwrap();
+
+        match value {
+            DataValue::DateTime(dt) => {
+                assert_eq!(dt.format("%Y-%m-%d").to_string(), "2024-01-15");
+            }
+            _ => panic!("Expected DateTime from timezone string"),
+        }
+    }
+
+    /// 测试 Date 序列化后再反序列化
+    #[test]
+    fn test_date_serialization_roundtrip() {
+        let original = DataValue::Date(NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+        let json = serde_json::to_string(&original).unwrap();
+        
+        let deserialized: DataValue = serde_json::from_str(&json).unwrap();
+        
+        match deserialized {
+            DataValue::Date(d) => {
+                assert_eq!(d.year(), 2024);
+                assert_eq!(d.month(), 6);
+                assert_eq!(d.day(), 15);
+            }
+            _ => panic!("Expected Date after roundtrip"),
+        }
+    }
+
+    /// 测试 Date 字符串反序列化
+    #[test]
+    fn test_date_deserialization() {
+        let json_str = r#""2024-06-15""#;
+        let value: DataValue = serde_json::from_str(json_str).unwrap();
+
+        match value {
+            DataValue::Date(d) => {
+                assert_eq!(d.year(), 2024);
+                assert_eq!(d.month(), 6);
+                assert_eq!(d.day(), 15);
+            }
+            _ => panic!("Expected Date from string"),
         }
     }
 }

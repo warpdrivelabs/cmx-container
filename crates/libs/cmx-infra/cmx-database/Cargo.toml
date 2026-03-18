@@ -15,7 +15,7 @@ serde = { workspace = true }
 # serde_json: JSON 序列化/反序列化
 serde_json = { workspace = true }
 # sqlx: SQL 异步查询框架
-sqlx = { workspace = true, features = ["postgres", "mysql", "sqlite", "runtime-tokio"] }
+sqlx = { workspace = true, features = ["postgres", "mysql", "sqlite", "runtime-tokio", "chrono"] }
 # sea-query: SQL 查询构建器
 sea-query = { workspace = true }
 # sea-query-binder: SQL 参数绑定工具
