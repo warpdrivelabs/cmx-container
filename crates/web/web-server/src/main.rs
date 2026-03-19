@@ -5,6 +5,8 @@
 mod config;
 mod error;
 mod routes;
+mod plugins;
+
 pub use self::error::{Error, Result};
 use config::web_config;
 
@@ -18,6 +20,7 @@ use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+use crate::plugins::init_plugins;
 
 /// 应用程序主函数
 ///
@@ -47,11 +50,7 @@ async fn main() -> Result<()> {
     // 获取 Web 服务器配置
     let web_config = web_config();
 
-    // 初始化数据库管理器（用于初始化连接池）
-    let _database_manager = get_default_db_manager();
-
-    // //获取默认的数据库ID
-    // let default_db_id = get_default_db_manager().get_default_db_id().await;
+ init_plugins();
 
     // -- 配置 API 路由
     let api_routes = self::routes::routes().with_state(CmxAppState::new());
