@@ -50,3 +50,6 @@ max_lifetime = 900
 
 health_check_interval = 30
 health_check_timeout = 3
+
+[redis]
+url = "redis://192.168.137.95:32496/13"

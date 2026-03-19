@@ -3999,10 +3999,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "cmx-api",
+ "cmx-buffer",
  "cmx-database",
  "cmx-utils",
  "derive_more",
  "dotenvy",
+ "log",
  "serde",
  "serde_json",
  "thiserror",

@@ -8,11 +8,11 @@ mod routes;
 pub use self::error::{Error, Result};
 use config::web_config;
 
-use axum::{middleware, Router};
+use axum::{Router, middleware};
 
-use crate::config::{init_db_datasource, init_global_config};
-use cmx_api::middleware::{cors_layer, mw_svr_context_resolver};
+use crate::config::{init_cache, init_db_datasource, init_global_config};
 use cmx_api::CmxAppState;
+use cmx_api::middleware::{cors_layer, mw_svr_context_resolver};
 use cmx_database::get_default_db_manager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
@@ -27,10 +27,7 @@ use tracing_subscriber::EnvFilter;
 /// - `Result<()>` - 执行结果，成功返回 Ok(())，失败返回错误
 #[tokio::main]
 async fn main() -> Result<()> {
-    //初始化全局配置
-    init_global_config();
-    //初始化数据库数据源
-    init_db_datasource().await;
+
     // 配置日志系统
     tracing_subscriber::fmt()
         // .without_time() // 用于早期本地开发
@@ -41,7 +38,12 @@ async fn main() -> Result<()> {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
-
+    //初始化全局配置
+    init_global_config();
+    //初始化数据库数据源
+    init_db_datasource().await;
+    //初始化redis缓存
+    init_cache().await;
     // 获取 Web 服务器配置
     let web_config = web_config();
 

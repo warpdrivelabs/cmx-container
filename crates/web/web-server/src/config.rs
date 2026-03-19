@@ -7,6 +7,7 @@
  */
 //! Web 服务器配置模块
 
+use cmx_buffer::{GlobalCacheManager, RedisConfig};
 use cmx_database::{DbConfig, DbType, PoolConfig, get_default_db_manager};
 use cmx_utils::{
     CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, ConfigValue,
@@ -33,6 +34,13 @@ pub fn init_global_config() {
             .build()
     })
     .unwrap();
+    info!("打印所有配置和环境变量键值对...");
+    for key in ConfigManager::global().keys() {
+        if ("Path" == key) {
+            continue;
+        }
+        info!("{:?}: {:?}", key, ConfigManager::global().get_string(key));
+    }
 }
 
 /// 获取 Web 配置单例
@@ -109,4 +117,22 @@ pub async fn init_db_datasource() {
     }
 
     info!("数据库数据源初始化完成");
+}
+/// 初始化缓存
+///
+pub async fn init_cache() {
+    let config = ConfigManager::global();
+    let url_value: &ConfigValue = match config.get("redis.url") {
+        Some(url_value) => url_value,
+        None => {
+            error!("无法从配置管理器获取 redis 配置");
+            panic!("无法获取redis配置");
+        }
+    };
+
+    let redis_config = RedisConfig::from_config(config);
+    GlobalCacheManager::initialize(redis_config)
+        .await
+        .expect("redis初始化失败");
+    info!("redis缓存初始化完成");
 }

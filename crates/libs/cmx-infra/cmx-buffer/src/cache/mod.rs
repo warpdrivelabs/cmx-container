@@ -3,22 +3,22 @@
 //! 提供缓存管理器 `CacheManager`，用于统一管理各种缓存操作。
 
 pub mod ops;
-pub mod ttl;
-pub mod sorted_set;
-pub mod set;
 pub mod pubsub;
+pub mod set;
+pub mod sorted_set;
+pub mod ttl;
 
 pub use ops::CacheOps;
-pub use ttl::TtlOps;
-pub use sorted_set::SortedSetOps;
+pub use pubsub::{PubSubMessage, PubSubOps, SharedSubscriber, Subscriber};
 pub use set::SetOps;
-pub use pubsub::{PubSubOps, PubSubMessage, Subscriber, SharedSubscriber};
+pub use sorted_set::SortedSetOps;
+pub use ttl::TtlOps;
 
 use crate::client::RedisClient;
 use crate::config::{CacheConfig, LockConfig, RedisConfig};
 use crate::error::{Error, Result};
-use std::sync::OnceLock;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 
 /// 缓存管理器 - 提供统一的缓存操作入口
 #[derive(Clone)]
@@ -103,12 +103,8 @@ impl GlobalCacheManager {
     ///
     /// # 返回值
     /// * 初始化结果
-    pub fn initialize(redis_config: RedisConfig) -> Result<()> {
-        let runtime = tokio::runtime::Handle::current();
-        let client = runtime.block_on(async {
-            RedisClient::new(redis_config).await
-        })?;
-
+    pub async fn initialize(redis_config: RedisConfig) -> Result<()> {
+        let client = RedisClient::new(redis_config).await?;
         let cache_manager = CacheManager::new(client);
 
         GLOBAL_CACHE_MANAGER
@@ -129,16 +125,12 @@ impl GlobalCacheManager {
     ///
     /// # 返回值
     /// * 初始化结果
-    pub fn initialize_with_configs(
+    pub async fn initialize_with_configs(
         redis_config: RedisConfig,
         cache_config: CacheConfig,
         lock_config: LockConfig,
     ) -> Result<()> {
-        let runtime = tokio::runtime::Handle::current();
-        let client = runtime.block_on(async {
-            RedisClient::new_with_configs(redis_config, cache_config, lock_config).await
-        })?;
-
+        let client = RedisClient::new_with_configs(redis_config, cache_config, lock_config).await?;
         let cache_manager = CacheManager::new(client);
 
         GLOBAL_CACHE_MANAGER
