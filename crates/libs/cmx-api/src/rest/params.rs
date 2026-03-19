@@ -4,6 +4,7 @@
 
 use modql::filter::ListOptions;
 use serde::Deserialize;
+use serde_json::Value;
 use cmx_database::get_default_db_manager;
 
 /// 列表查询的默认限制数量
@@ -24,21 +25,24 @@ pub const PAGE_SIZE_MAX: i64 = 500;
 #[derive(Debug, Deserialize, Clone)]
 pub struct GetParams {
     /// 主键值
-    pub id: String,
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
+    pub id: String
 }
 
 
-/// 删除记录的查询参数
-///
-/// 用于通过 id 删除记录。
-#[derive(Debug, Deserialize, Clone)]
-pub struct DeleteParams {
-    /// 主键值
-    pub id: String,
+/// 更新请求 Payload
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct UpdatePayload<E> {
+    /// 主键 ID
+    pub id: Value,
+    /// 更新数据
+    pub data: E,
+}
 
+/// 删除请求 Payload
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DeletePayload {
+    /// 主键 ID 列表（单个删除传一个元素）
+    pub ids: Vec<Value>,
 }
 
 
@@ -224,7 +228,6 @@ mod tests {
         let json = r#"{"id":"test123","db_id":"tenant1"}"#;
         let params: GetParams = serde_json::from_str(json).unwrap();
         assert_eq!(params.id, "test123");
-        assert_eq!(params.db_id, Some("tenant1".to_string()));
     }
 
     #[test]

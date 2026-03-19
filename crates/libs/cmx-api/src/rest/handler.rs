@@ -20,7 +20,7 @@ use crate::error::Result;
 use crate::middleware::CmxSvrContext;
 use crate::response::ApiResp;
 use crate::rest::header_parse::get_db_id_from_header;
-use crate::rest::params::{GetParams, ListParams, PageParams};
+use crate::rest::params::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
 use crate::state::CmxAppState;
 
 /// 创建单个实体 Handler
@@ -271,18 +271,3 @@ where
     )))
 }
 
-/// 更新请求 Payload
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload<E> {
-    /// 主键 ID
-    pub id: Value,
-    /// 更新数据
-    pub data: E,
-}
-
-/// 删除请求 Payload
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct DeletePayload {
-    /// 主键 ID 列表（单个删除传一个元素）
-    pub ids: Vec<Value>,
-}
