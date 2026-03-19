@@ -4001,6 +4001,7 @@ dependencies = [
  "cmx-api",
  "cmx-buffer",
  "cmx-database",
+ "cmx-plugin",
  "cmx-utils",
  "derive_more",
  "dotenvy",

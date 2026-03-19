@@ -9,7 +9,7 @@ cmx-utils={workspace = true}
 cmx-database={workspace = true}
 cmx-api={workspace = true}
 cmx-buffer = { workspace = true }
-
+cmx-plugin = { workspace = true }
 
 axum={workspace = true}
 tokio={workspace = true}
