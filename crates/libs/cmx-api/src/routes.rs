@@ -2,11 +2,18 @@
 //!
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
-use axum::Router;
+use crate::models::application::{
+    ApplicationBmc, ApplicationFilter, ApplicationForCreate, ApplicationForUpdate,
+};
 use crate::models::domain;
+use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
+use crate::models::module::{ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate};
+use crate::models::sys_datasource::{
+    SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
+};
 use crate::register_crud_routes;
 use crate::state::CmxAppState;
-use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
+use axum::Router;
 
 /// 注册所有 API 路由
 ///
@@ -46,9 +53,39 @@ pub fn api_routes() -> Router<CmxAppState> {
         DomainForUpdate,
         "/domains"
     );
+
+    let router = register_crud_routes!(
+        router,
+        ApplicationBmc,
+        ApplicationFilter,
+        ApplicationForCreate,
+        ApplicationForUpdate,
+        "/applications"
+    );
+
+    let router = register_crud_routes!(
+        router,
+        ModuleBmc,
+        ModuleFilter,
+        ModuleForCreate,
+        ModuleForUpdate,
+        "/module"
+    );
+
+    let router = register_crud_routes!(
+        router,
+        SysDatasourceBmc,
+        SysDatasourceFilter,
+        SysDatasourceForCreate,
+        SysDatasourceForUpdate,
+        "/sys-datasource"
+    );
+
     //注册自定义路由
-    let router = router
-        .route("/domains/by-name", axum::routing::post(domain::handler::get_by_name));
+    let router = router.route(
+        "/domains/by-name",
+        axum::routing::post(domain::handler::get_by_name),
+    );
 
     // 注册其他模型的路由
     // let router = register_crud_routes!(router, UserBmc, UserFilter, UserForCreate, UserForUpdate, "/users");
