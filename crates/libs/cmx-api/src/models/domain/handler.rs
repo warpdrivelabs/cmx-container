@@ -2,15 +2,20 @@
 //!
 //! 展示如何创建自定义的 HTTP Handler
 
-use axum::{extract::Query, Json};
+use axum::extract::{Query, State};
+use axum::http::HeaderMap;
+use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::get_default_db_manager;
 use serde::Deserialize;
 use tracing::debug;
 
 use crate::error::Result;
+use crate::middleware::CmxSvrContext;
 use crate::models::domain::{DomainForCreate, DomainService};
 use crate::response::ApiResp;
+use crate::rest::header_parse::get_db_id_from_header;
+use crate::state::CmxAppState;
 
 /// 按名称查询的请求参数
 #[derive(Debug, Deserialize)]
@@ -22,14 +27,6 @@ pub struct GetByNameParams {
     pub db_id: Option<String>,
 }
 
-impl GetByNameParams {
-    /// 获取数据库 ID
-    pub async fn get_db_id(&self) -> String {
-        self.db_id
-            .clone()
-            .unwrap_or(get_default_db_manager().get_default_db_id().await)
-    }
-}
 
 /// 按名称查询 Handler
 ///
@@ -43,13 +40,22 @@ impl GetByNameParams {
 ///     "db_id": "tenant1"  // 可选
 /// }
 /// ```
+///
+/// # 参数
+/// * `cmx_state` - 应用状态
+/// * `svr_ctx` - 服务上下文
+/// * `headers` - HTTP 请求头
+/// * `params` - 查询参数
 pub async fn get_by_name(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
     Json(params): Json<GetByNameParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::get_by_name", "HANDLER");
 
     let mm = get_default_db_manager();
-    let db_id = params.get_db_id().await;
+    let db_id = get_db_id_from_header(&headers).await;
     let name = params.name.clone();
     let dataset = DomainService::get_by_name(&mm, &db_id, &name).await?;
 
@@ -61,19 +67,8 @@ pub async fn get_by_name(
 pub struct BatchCreateParams {
     /// 要创建的数据列表
     pub items: Vec<DomainForCreate>,
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
 }
 
-impl BatchCreateParams {
-    /// 获取数据库 ID
-    pub async fn get_db_id(&self) -> String {
-        self.db_id
-            .clone()
-            .unwrap_or(get_default_db_manager().get_default_db_id().await)
-    }
-}
 
 /// 批量创建 Handler
 ///
@@ -86,17 +81,25 @@ impl BatchCreateParams {
 ///     "items": [
 ///         {"code": "domain1", "name": "Domain 1"},
 ///         {"code": "domain2", "name": "Domain 2"}
-///     ],
-///     "db_id": "tenant1"  // 可选
+///     ]
 /// }
 /// ```
+///
+/// # 参数
+/// * `cmx_state` - 应用状态
+/// * `svr_ctx` - 服务上下文
+/// * `headers` - HTTP 请求头
+/// * `params` - 批量创建参数
 pub async fn batch_create(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
     Json(params): Json<BatchCreateParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::batch_create", "HANDLER");
 
     let mm = get_default_db_manager();
-    let db_id = params.get_db_id().await;
+    let db_id = get_db_id_from_header(&headers).await;
     let items = params.items.clone();
     let results = DomainService::batch_create(&mm, &db_id, items).await?;
 
@@ -150,7 +153,16 @@ impl SearchParams {
 ///     "db_id": "tenant1"  // 可选
 /// }
 /// ```
+///
+/// # 参数
+/// * `cmx_state` - 应用状态
+/// * `svr_ctx` - 服务上下文
+/// * `headers` - HTTP 请求头
+/// * `params` - 搜索参数
 pub async fn search(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
     Json(params): Json<SearchParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::search", "HANDLER");
@@ -175,13 +187,23 @@ pub async fn search(
 ///
 /// # 接口
 /// GET /api/domains/count-by-status?db_id=tenant1
+///
+/// # 参数
+/// * `cmx_state` - 应用状态
+/// * `svr_ctx` - 服务上下文
+/// * `headers` - HTTP 请求头
+/// * `params` - 查询参数
 pub async fn count_by_status(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
     Query(params): Query<GetByNameParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::count_by_status", "HANDLER");
 
     let mm = get_default_db_manager();
-    let dataset = DomainService::count_by_status(&mm, params.get_db_id().await.as_str()).await?;
+    let db_id = get_db_id_from_header(&headers).await;
+    let dataset = DomainService::count_by_status(&mm, &db_id).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
