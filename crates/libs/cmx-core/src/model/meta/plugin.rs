@@ -27,6 +27,36 @@ pub mod supported_lang {
     pub const KOTLIN: &str = "kotlin";
 }
 
+/// 插件依赖定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginDependency {
+    /// 依赖插件ID
+    pub plugin_id: String,
+    /// 版本约束（如 "^1.0.0", ">=2.0.0"）
+    #[serde(default)]
+    pub version_constraint: Option<String>,
+    /// 是否为可选依赖
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// 插件服务定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginService {
+    /// 服务ID
+    pub service_id: String,
+    /// 服务名称
+    pub name: String,
+    /// 服务描述
+    #[serde(default)]
+    pub description: Option<String>,
+    /// 服务版本
+    #[serde(default)]
+    pub version: Option<String>,
+    /// 服务入口点（WASM 导出函数名）
+    pub entry_point: String,
+}
+
 /// 单个插件的定义（可从独立 JSON 文件加载，或从 ZIP 内的 manifest 解析）。
 ///
 /// 表定义无需在插件 JSON 中再列；建表配置（table_config_files）中已指向各表定义 JSON 文件。
@@ -38,6 +68,8 @@ pub mod supported_lang {
 /// - **supported_databases**：本插件声明支持的数据库类型，如 mysql、postgres、sqlite、oracle 等（见 [supported_db]）。
 /// - **domain_code** / **application_code** / **module_code**：所属域、应用、模块编码（对应 cmx_domain / cmx_application / cmx_module）。
 /// - **vendor_***：开发商信息；**development_languages**：开发语言列表（见 [supported_lang]）。
+/// - **dependencies**：插件依赖列表，声明本插件依赖的其他插件。
+/// - **services**：插件提供的服务列表，用于服务注册。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginDefinition {
     /// 插件唯一标识
@@ -79,6 +111,12 @@ pub struct PluginDefinition {
     /// 可选说明
     #[serde(default)]
     pub description: Option<String>,
+    /// 插件依赖列表
+    #[serde(default)]
+    pub dependencies: Vec<PluginDependency>,
+    /// 插件提供的服务列表
+    #[serde(default)]
+    pub services: Vec<PluginService>,
 }
 
 /// 用于签名的装配清单载荷（不含签名字段，字段顺序固定以保证序列化稳定）。

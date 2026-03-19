@@ -20,7 +20,6 @@ use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-use crate::plugins::init_plugins;
 
 /// 应用程序主函数
 ///
@@ -50,7 +49,7 @@ async fn main() -> Result<()> {
     // 获取 Web 服务器配置
     let web_config = web_config();
 
- init_plugins();
+ // init_plugins();
 
     // -- 配置 API 路由
     let api_routes = self::routes::routes().with_state(CmxAppState::new());
