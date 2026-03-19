@@ -48,7 +48,7 @@ pub fn api_routes() -> Router<CmxAppState> {
     );
     //注册自定义路由
     let router = router
-        .route("/api/domains/by-name", axum::routing::post(domain::handler::get_by_name));
+        .route("/domains/by-name", axum::routing::post(domain::handler::get_by_name));
 
     // 注册其他模型的路由
     // let router = register_crud_routes!(router, UserBmc, UserFilter, UserForCreate, UserForUpdate, "/users");

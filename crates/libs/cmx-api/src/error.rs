@@ -41,7 +41,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub enum Error {
     SerdeJson(String),
     Validator(String),
-    ReqStampNotInReqExt,
+    SvrContextNotInReqExt,
     Unauthorized(String),
     Forbidden(String),
     NotFound(String),
@@ -103,7 +103,7 @@ impl Error {
             Self::Timeout => "请求超时".to_string(),
             Self::SerdeJson(e) => format!("JSON 解析错误: {}", e),
             Self::Validator(e) => format!("验证错误: {}", e),
-            Self::ReqStampNotInReqExt => "请求标记不存在".to_string(),
+            Self::SvrContextNotInReqExt => "未获取到svrContext".to_string(),
         }
     }
 

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct KeyValue {
-    // 使用动态类型存储属性 
+    // 使用动态类型存储属性
     attributes  : HashMap<String, CellValue>,
     // 使用动态类型存储定义(可以为空)
     definitions : Option<HashMap<String, CellValue>>,

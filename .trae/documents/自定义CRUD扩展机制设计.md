@@ -3,307 +3,462 @@
 ## 1. 设计目标
 
 当默认的通用 CRUD 不满足需求时，开发者需要能够：
+
 1. 扩展现有的 CRUD 方法
 2. 添加自定义的业务方法
 3. 覆盖默认的 CRUD 行为
 4. 组合多个 Service
 
-## 2. 目录结构建议
+## 2. 目录结构
 
-### 2.1 应用层目录结构（推荐）
-
-开发者应在**应用层**创建自定义实现，而非修改 cmx-api 库：
+### 2.1 模块目录结构
 
 ```
-your-app/
-├── src/
-│   ├── main.rs
-│   ├── lib.rs
-│   ├── model/                    # 业务模型层
-│   │   ├── mod.rs
-│   │   └── domain/               # 按实体组织
-│   │       ├── mod.rs
-│   │       ├── entity.rs         # 实体定义
-│   │       ├── filter.rs         # 过滤器定义
-│   │       ├── bmc.rs            # DbBmc 实现
-│   │       ├── service.rs        # 自定义 Service（扩展 CRUD）
-│   │       └── handler.rs        # 自定义 Handler
-│   ├── api/                      # API 层
-│   │   ├── mod.rs
-│   │   └── routes.rs             # 路由注册
-│   └── config/
-│       └── mod.rs
+crates/libs/cmx-api/src/
+├── crud/                      # 通用 CRUD 框架
+│   ├── mod.rs
+│   ├── traits.rs              # DbBmc trait
+│   ├── macros.rs              # 路由注册宏
+│   ├── utils.rs               # prep_fields_for_create/update
+│   └── service.rs             # GenericCrudService
+│
+├── rest/                      # REST 协议层
+│   ├── mod.rs
+│   ├── params.rs              # 参数定义
+│   └── handler.rs             # 通用 Handler
+│
+├── models/                    # 业务模型层
+│   └── domain/                # Domain 实体模块
+│       ├── mod.rs
+│       ├── bmc.rs             # DomainBmc
+│       ├── entity.rs          # Domain, DomainForCreate, DomainForUpdate
+│       ├── filter.rs          # DomainFilter
+│       ├── service.rs         # DomainService（自定义服务）
+│       └── handler.rs         # 自定义 Handler
+│
+├── routes.rs                  # 路由注册入口
+└── state.rs                   # CmxAppState
 ```
 
 ### 2.2 cmx-api 提供的扩展点
 
-cmx-api 库提供以下扩展点：
-
 ```rust
 // 1. GenericCrudService - 可继承扩展
-pub struct GenericCrudService<MC, F> { ... }
+pub struct GenericCrudService<MC, F = ()> { ... }
 
 // 2. DbBmc trait - 可实现自定义表元信息
 pub trait DbBmc { ... }
 
 // 3. Handler 函数 - 可自定义
-pub async fn create<MC>(...) { ... }
+pub async fn create<MC, E>(...) { ... }
 
 // 4. 宏 - 可组合使用
-register_crud_routes!(router, DomainBmc, DomainFilter, "/api/domains");
+register_crud_routes!(router, DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate, "/domains");
 ```
 
-## 3. 扩展模式
+## 3. Entity 定义
 
-### 3.1 模式一：继承扩展（推荐）
-
-在应用层创建自定义 Service，继承 GenericCrudService：
+### 3.1 完整实体定义
 
 ```rust
-// your-app/src/model/domain/service.rs
-use cmx_api::{GenericCrudService, DbBmc, Result};
-use cmx_database::DatabaseManager;
-use cmx_core::model::data::dataset::DataSet;
-use serde_json::Value;
+// models/domain/entity.rs
 
-/// 自定义 Domain Service
+use modql::field::Fields;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+use time::OffsetDateTime;
+
+/// 领域实体（完整字段，用于查询返回）
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+pub struct Domain {
+    pub code: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[field(name = "type")]  // 字段名映射
+    pub r#type: Option<String>,
+    // ... 其他字段
+}
+
+/// 创建请求 DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForCreate {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    // ... 其他可选字段
+}
+
+/// 更新请求 DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+pub struct DomainForUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    // ... 所有字段均为可选
+}
+```
+
+### 3.2 关键点
+
+1. **Fields 派生宏**：`#[derive(modql::field::Fields)]` 自动实现 `HasSeaFields` trait
+2. **字段映射**：使用 `#[field(name = "type")]` 处理 Rust 保留字
+3. **跳过 None**：`#[serde(skip_serializing_if = "Option::is_none")]` 避免序列化空值
+
+## 4. 自定义 Service
+
+### 4.1 继承扩展模式
+
+```rust
+// models/domain/service.rs
+
+use crate::crud::service::GenericCrudService;
+use crate::error::{Error, Result};
+use cmx_core::model::data::dataset::DataSet;
+use cmx_database::DatabaseManager;
+use modql::filter::{ListOptions, OpValString, OpValsString};
+use tracing::{debug, info};
+
+use super::{DomainBmc, DomainFilter, DomainForCreate};
+
+/// Domain 自定义服务
+///
+/// 继承 GenericCrudService 并添加自定义业务方法
 pub struct DomainService;
 
 impl DomainService {
-    /// 扩展：自定义业务方法
+    /// 扩展方法：按名称查询
     pub async fn get_by_name(
         mm: &DatabaseManager,
         db_id: &str,
         name: &str,
     ) -> Result<DataSet> {
-        // 使用 GenericCrudService 的 list 方法
+        info!("{:<12} - DomainService::get_by_name - name: {}", "SERVICE", name);
+
         let filter = DomainFilter {
-            name: Some(modql::filter::OpValsString(vec![
-                modql::filter::OpValString::Eq(name.to_string())
-            ])),
-            ..Default::default()
+            code: None,
+            name: Some(OpValsString(vec![OpValString::Eq(name.to_string())])),
+            r#type: None,
+            status: None,
+            archived: None,
         };
-        GenericCrudService::<DomainBmc, DomainFilter>::list(
-            mm, db_id, Some(filter), None
-        ).await
+
+        // 调用 GenericCrudService 的 list 方法
+        GenericCrudService::<DomainBmc, DomainFilter>::list(mm, db_id, Some(filter), None).await
     }
 
-    /// 扩展：批量操作
+    /// 扩展方法：批量创建
     pub async fn batch_create(
         mm: &DatabaseManager,
         db_id: &str,
-        items: Vec<Value>,
-    ) -> Result<Vec<DataSet>> {
-        let mut results = Vec::new();
-        for item in items {
-            let result = GenericCrudService::<DomainBmc>::create(mm, db_id, item).await?;
-            results.push(result);
-        }
-        Ok(results)
+        items: Vec<DomainForCreate>,
+    ) -> Result<DataSet> {
+        info!("{:<12} - DomainService::batch_create - count: {}", "SERVICE", items.len());
+
+        // 调用 GenericCrudService 的 create_many 方法
+        GenericCrudService::<DomainBmc>::create_many(mm, db_id, items).await
     }
 
-    /// 覆盖：自定义创建逻辑
+    /// 覆盖方法：自定义创建逻辑
+    ///
+    /// 添加额外的验证和业务逻辑
     pub async fn create(
         mm: &DatabaseManager,
         db_id: &str,
-        mut data: Value,
+        data: DomainForCreate,
     ) -> Result<DataSet> {
-        // 添加自定义验证
-        if let Some(name) = data.get("name").and_then(|v| v.as_str()) {
-            if name.len() < 3 {
-                return Err(cmx_api::Error::bad_request("名称长度不能小于3"));
-            }
+        info!("{:<12} - DomainService::create", "SERVICE");
+
+        // 自定义验证：名称长度
+        if data.name.len() < 2 {
+            return Err(Error::bad_request("域名长度不能小于2个字符"));
         }
-        
-        // 调用父类方法
+        if data.name.len() > 100 {
+            return Err(Error::bad_request("域名长度不能超过100个字符"));
+        }
+
+        // 调用 GenericCrudService 方法
         GenericCrudService::<DomainBmc>::create(mm, db_id, data).await
     }
-}
-```
 
-### 3.2 模式二：组合模式
+    /// 扩展方法：按状态统计
+    pub async fn count_by_status(mm: &DatabaseManager, db_id: &str) -> Result<DataSet> {
+        debug!("{:<12} - DomainService::count_by_status", "SERVICE");
 
-组合多个 Service 实现复杂业务：
+        let sql = r#"
+            SELECT status, COUNT(*) as count 
+            FROM cmx_domain 
+            WHERE archived = 0
+            GROUP BY status
+        "#;
 
-```rust
-// your-app/src/model/domain/service.rs
-use cmx_api::{GenericCrudService, DbBmc, Result};
-use cmx_database::DatabaseManager;
+        mm.query_sql(db_id, None, sql, "count_by_status")
+            .await
+            .map_err(|e| Error::internal_error(format!("统计查询失败: {}", e)))
+    }
 
-/// 组合服务
-pub struct DomainWithUserService {
-    domain_service: std::marker::PhantomData<DomainBmc>,
-    user_service: std::marker::PhantomData<UserBmc>,
-}
-
-impl DomainWithUserService {
-    /// 获取域名及其所有者信息
-    pub async fn get_domain_with_owner(
+    /// 扩展方法：搜索域名
+    ///
+    /// 支持模糊搜索和分页
+    pub async fn search(
         mm: &DatabaseManager,
         db_id: &str,
-        domain_id: &str,
-    ) -> Result<serde_json::Value> {
-        // 获取域名
-        let domain = GenericCrudService::<DomainBmc>::get(
-            mm, db_id, domain_id.into()
-        ).await?;
-        
-        // 获取所有者
-        let owner_id = domain.iter()
-            .next()
-            .and_then(|row| row.get("owner_id"))
-            .and_then(|v| match v {
-                cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
-                _ => None,
-            });
-        
-        let owner = if let Some(owner_id) = owner_id {
-            Some(GenericCrudService::<UserBmc>::get(
-                mm, db_id, owner_id.into()
-            ).await?)
-        } else {
-            None
+        keyword: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<(DataSet, i64)> {
+        debug!("{:<12} - DomainService::search - keyword: {}", "SERVICE", keyword);
+
+        let filter = DomainFilter {
+            code: None,
+            name: Some(OpValsString(vec![OpValString::Contains(keyword.to_string())])),
+            r#type: None,
+            status: None,
+            archived: None,
         };
-        
-        Ok(serde_json::json!({
-            "domain": domain,
-            "owner": owner
-        }))
+
+        let list_options = ListOptions {
+            limit: Some(page_size),
+            offset: Some((page - 1) * page_size),
+            order_bys: Some("name".into()),
+        };
+
+        // 调用 GenericCrudService 的 page 方法
+        GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, Some(filter), list_options).await
     }
 }
 ```
 
-### 3.3 模式三：完全自定义
+### 4.2 扩展模式说明
 
-对于完全自定义的需求：
+| 模式    | 说明                         | 示例                            |
+| ----- | -------------------------- | ----------------------------- |
+| 继承扩展  | 直接调用 GenericCrudService 方法 | `get_by_name`, `batch_create` |
+| 覆盖方法  | 添加验证逻辑后调用父类方法              | `create`（验证名称长度）              |
+| 完全自定义 | 直接执行 SQL                   | `count_by_status`             |
+| 组合模式  | 组合多个操作                     | `search`（过滤 + 分页）             |
+
+## 5. 自定义 Handler
+
+### 5.1 Handler 定义
 
 ```rust
-// your-app/src/model/report/service.rs
-use cmx_api::{Result, Error};
-use cmx_database::DatabaseManager;
+// models/domain/handler.rs
+
+use axum::{extract::Query, Json};
 use cmx_core::model::data::dataset::DataSet;
-use sea_query::{Query, PostgresQueryBuilder};
-use sea_query_binder::SqlxBinder;
+use cmx_database::get_default_db_manager;
+use serde::Deserialize;
+use tracing::debug;
 
-/// 完全自定义的报表服务
-pub struct ReportService;
+use crate::error::Result;
+use crate::models::domain::{DomainForCreate, DomainService};
+use crate::response::ApiResp;
 
-impl ReportService {
-    /// 自定义复杂查询
-    pub async fn get_sales_report(
-        mm: &DatabaseManager,
-        db_id: &str,
-        start_date: &str,
-        end_date: &str,
-    ) -> Result<DataSet> {
-        // 使用 sea-query 构建复杂 SQL
-        let sql = format!(
-            r#"
-            SELECT 
-                DATE(created_at) as date,
-                COUNT(*) as total_orders,
-                SUM(amount) as total_amount
-            FROM orders
-            WHERE created_at BETWEEN '{}' AND '{}'
-            GROUP BY DATE(created_at)
-            ORDER BY date
-            "#,
-            start_date, end_date
-        );
-        
-        // 直接执行 SQL
-        mm.query_sql(db_id, None, &sql).await
-            .map_err(|e| Error::internal_error(format!("报表查询失败: {}", e)))
+/// 按名称查询的请求参数
+#[derive(Debug, Deserialize)]
+pub struct GetByNameParams {
+    pub name: String,
+    #[serde(default)]
+    pub db_id: Option<String>,
+}
+
+impl GetByNameParams {
+    pub async fn get_db_id(&self) -> String {
+        self.db_id.clone()
+            .unwrap_or(get_default_db_manager().get_default_db_id().await)
     }
 }
-```
 
-## 4. 自定义 Handler
-
-### 4.1 扩展 Handler
-
-```rust
-// your-app/src/model/domain/handler.rs
-use axum::{extract::State, Json};
-use cmx_api::{ApiResp, Result};
-use cmx_database::DatabaseManager;
-use crate::model::domain::service::DomainService;
-
-/// 自定义 Handler：按名称查询
+/// 按名称查询 Handler
+///
+/// POST /api/domains/by-name
 pub async fn get_by_name(
-    State(mm): State<DatabaseManager>,
-    Json(params): Json<serde_json::Value>,
-) -> Result<Json<ApiResp<cmx_core::model::data::dataset::DataSet>>> {
-    let db_id = params.get("db_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("default");
-    let name = params.get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| cmx_api::Error::bad_request("缺少 name 参数"))?;
-    
-    let dataset = DomainService::get_by_name(&mm, db_id, name).await?;
+    Json(params): Json<GetByNameParams>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::get_by_name", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = params.get_db_id().await;
+    let name = params.name.clone();
+    let dataset = DomainService::get_by_name(&mm, &db_id, &name).await?;
+
     Ok(Json(ApiResp::ok(dataset)))
 }
-```
 
-### 4.2 注册自定义路由
+/// 批量创建的请求参数
+#[derive(Debug, Deserialize, Clone)]
+pub struct BatchCreateParams {
+    pub items: Vec<DomainForCreate>,
+    #[serde(default)]
+    pub db_id: Option<String>,
+}
 
-```rust
-// your-app/src/api/routes.rs
-use axum::Router;
-use cmx_database::DatabaseManager;
-use cmx_api::register_crud_routes;
-use crate::model::domain::{DomainBmc, DomainFilter};
-use crate::model::domain::handler as domain_handler;
+/// 批量创建 Handler
+///
+/// POST /api/domains/batch-create
+pub async fn batch_create(
+    Json(params): Json<BatchCreateParams>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::batch_create", "HANDLER");
 
-pub fn setup_routes() -> Router<DatabaseManager> {
-    let router = Router::new();
-    
-    // 注册标准 CRUD 路由
-    let router = register_crud_routes!(router, DomainBmc, DomainFilter, "/api/domains");
-    
-    // 添加自定义路由
-    router
-        .route("/api/domains/by-name", axum::routing::post(domain_handler::get_by_name))
-        // 更多自定义路由...
+    let mm = get_default_db_manager();
+    let db_id = params.get_db_id().await;
+    let items = params.items.clone();
+    let results = DomainService::batch_create(&mm, &db_id, items).await?;
+
+    Ok(Json(ApiResp::ok(results)))
+}
+
+/// 搜索 Handler
+///
+/// POST /api/domains/search
+pub async fn search(
+    Json(params): Json<SearchParams>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::search", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = params.get_db_id().await;
+    let keyword = params.keyword.clone();
+    let page = params.get_page();
+    let page_size = params.get_page_size();
+
+    let (dataset, total) = DomainService::search(&mm, &db_id, &keyword, page, page_size).await?;
+
+    Ok(Json(ApiResp::ok_with_pagination(
+        dataset,
+        page as u64,
+        page_size as u64,
+        total as u64,
+    )))
 }
 ```
 
-## 5. 最佳实践
+### 5.2 Handler 设计原则
 
-### 5.1 分层架构
+1. **参数结构体**：为每个接口定义专用的参数结构体
+2. **db\_id 处理**：提供 `get_db_id()` 方法，支持可选的数据库 ID
+3. **调用 Service**：Handler 只负责参数解析和响应封装，业务逻辑放在 Service
+4. **统一响应**：使用 `ApiResp::ok()` 和 `ApiResp::ok_with_pagination()` 封装响应
+
+## 6. 路由注册
+
+### 6.1 标准路由注册
+
+```rust
+// routes.rs
+
+use axum::Router;
+use crate::register_crud_routes;
+use crate::state::CmxAppState;
+use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
+
+pub fn api_routes() -> Router<CmxAppState> {
+    let router = Router::new();
+
+    // 注册标准 CRUD 路由
+    let router = register_crud_routes!(
+        router, 
+        DomainBmc,        // Bmc 类型
+        DomainFilter,     // Filter 类型
+        DomainForCreate,  // 创建 Entity 类型
+        DomainForUpdate,  // 更新 Entity 类型
+        "/domains"
+    );
+
+    router
+}
+```
+
+### 6.2 自定义路由注册
+
+```rust
+// routes.rs
+
+use axum::routing::post;
+use crate::models::domain::handler as domain_handler;
+
+pub fn api_routes() -> Router<CmxAppState> {
+    let router = Router::new();
+
+    // 注册标准 CRUD 路由
+    let router = register_crud_routes!(
+        router, 
+        DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate, "/domains"
+    );
+
+    // 注册自定义路由
+    let router = router
+        .route("/domains/by-name", post(domain_handler::get_by_name))
+        .route("/domains/batch-create", post(domain_handler::batch_create))
+        .route("/domains/search", post(domain_handler::search))
+        .route("/domains/count-by-status", post(domain_handler::count_by_status));
+
+    router
+}
+```
+
+## 7. 完整接口列表
+
+### 7.1 标准 CRUD 接口
+
+| 方法   | 路径                     | 说明   | 请求体                                               |
+| ---- | ---------------------- | ---- | ------------------------------------------------- |
+| POST | `/domains/create`      | 创建单个 | `{ "name": "xxx", ... }`                          |
+| POST | `/domains/create-many` | 批量创建 | `[{ ... }, { ... }]`                              |
+| GET  | `/domains/get?id=xxx`  | 获取单条 | -                                                 |
+| POST | `/domains/update`      | 更新单个 | `{ "id": "xxx", "data": { ... } }`                |
+| POST | `/domains/update-many` | 批量更新 | `[{ "id": "xxx", "data": { ... } }]`              |
+| POST | `/domains/delete`      | 删除   | `{ "ids": ["xxx", "yyy"] }`                       |
+| POST | `/domains/list`        | 列表查询 | `{ "filter": { ... } }`                           |
+| POST | `/domains/page`        | 分页查询 | `{ "filter": { ... }, "offset": 0, "limit": 10 }` |
+
+### 7.2 自定义接口
+
+| 方法   | 路径                         | 说明    | 请求体                                                |
+| ---- | -------------------------- | ----- | -------------------------------------------------- |
+| POST | `/domains/by-name`         | 按名称查询 | `{ "name": "xxx" }`                                |
+| POST | `/domains/batch-create`    | 批量创建  | `{ "items": [{ ... }] }`                           |
+| POST | `/domains/search`          | 搜索    | `{ "keyword": "xxx", "page": 1, "page_size": 20 }` |
+| GET  | `/domains/count-by-status` | 按状态统计 | -                                                  |
+
+## 8. 最佳实践
+
+### 8.1 分层架构
 
 ```
 ┌─────────────────────────────────────┐
 │           Handler 层                 │  ← 处理 HTTP 请求/响应
-│   (your-app/src/model/*/handler.rs) │
+│   (models/*/handler.rs)              │
 ├─────────────────────────────────────┤
 │           Service 层                 │  ← 业务逻辑
-│   (your-app/src/model/*/service.rs) │
+│   (models/*/service.rs)              │
 ├─────────────────────────────────────┤
 │           Model 层                   │  ← 数据模型
-│   (your-app/src/model/*/bmc.rs)     │
+│   (models/*/entity.rs, bmc.rs)       │
 ├─────────────────────────────────────┤
 │           cmx-api                    │  ← 通用 CRUD 框架
-│   (cmx-api crate)                    │
+│   (crud/service.rs)                  │
 └─────────────────────────────────────┘
 ```
 
-### 5.2 命名约定
+### 8.2 命名约定
 
-| 组件 | 命名 | 示例 |
-|-----|------|------|
-| 实体 | 名词 | `Domain` |
-| DbBmc | 实体 + Bmc | `DomainBmc` |
-| Filter | 实体 + Filter | `DomainFilter` |
-| Service | 实体 + Service | `DomainService` |
-| Handler | 动作/操作 | `get_by_name`, `batch_create` |
+| 组件      | 命名             | 示例                            |
+| ------- | -------------- | ----------------------------- |
+| 实体      | 名词             | `Domain`                      |
+| 创建 DTO  | 实体 + ForCreate | `DomainForCreate`             |
+| 更新 DTO  | 实体 + ForUpdate | `DomainForUpdate`             |
+| DbBmc   | 实体 + Bmc       | `DomainBmc`                   |
+| Filter  | 实体 + Filter    | `DomainFilter`                |
+| Service | 实体 + Service   | `DomainService`               |
+| Handler | 动作/操作          | `get_by_name`, `batch_create` |
 
-### 5.3 错误处理
+### 8.3 错误处理
 
 ```rust
-// 统一使用 cmx_api::Error
-use cmx_api::{Error, Result};
+use crate::error::{Error, Result};
 
 pub async fn custom_method() -> Result<()> {
     // 参数验证错误
@@ -319,6 +474,13 @@ pub async fn custom_method() -> Result<()> {
 }
 ```
 
-## 6. 完整示例
+## 9. 总结
 
-参见：`examples/custom-crud/` 目录
+| 扩展方式                    | 适用场景       | 示例                           |
+| ----------------------- | ---------- | ---------------------------- |
+| 直接使用 GenericCrudService | 标准 CRUD 操作 | `create`, `update`, `delete` |
+| Service 扩展方法            | 添加业务逻辑     | `get_by_name`, `search`      |
+| Service 覆盖方法            | 自定义验证逻辑    | `create`（验证名称长度）             |
+| 完全自定义 SQL               | 复杂查询       | `count_by_status`            |
+| 自定义 Handler             | 自定义接口      | `/domains/by-name`           |
+

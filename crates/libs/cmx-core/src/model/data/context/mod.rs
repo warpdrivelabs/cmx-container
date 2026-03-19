@@ -4,9 +4,17 @@ use std::sync::{Arc, RwLock};
 use crate::model::cell::CellValue;
 
 
+pub mod  svrkey{
+
+    pub const KEY_TIME_IN: &'static str = "cmx_time_in";
+    pub const KEY_REQUEST_ID: &'static str = "cmx_request_id";
+}
+
+
 /// Context结构体用于管理键值对形式的上下文数据
 #[derive(Clone, Debug)]
 pub struct SVRContext {
+
     data: Arc<RwLock<HashMap<String, CellValue>>>,
 }
 

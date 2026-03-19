@@ -39,36 +39,40 @@ pub struct CmxAppState {
 /// 内部状态结构
 #[derive(Debug, Clone)]
 pub struct AppStateInner {
-    /// 默认数据库 ID
-    pub default_db_id: String,
+    // /// 默认数据库 ID
+    // pub default_db_id: String,
 }
 
 impl CmxAppState {
-    /// 创建新的 CmxAppState
-    ///
-    /// # 参数
-    /// * `default_db_id` - 默认数据库 ID
-    pub fn new(default_db_id: String) -> Self {
+
+
+    pub fn new() -> Self {
         Self {
-            app_state: Arc::new(RwLock::new(AppStateInner { default_db_id })),
+            app_state: Arc::new(RwLock::new(AppStateInner {})),
         }
     }
 
-    /// 获取默认数据库 ID
-    pub async fn get_default_db_id(&self) -> String {
-        let app_state = self.app_state.read().await;
-        app_state.default_db_id.clone()
-    }
-
-    /// 设置默认数据库 ID
-    pub async fn set_default_db_id(&self, db_id: String) {
-        let mut app_state = self.app_state.write().await;
-        app_state.default_db_id = db_id;
-    }
+    // /// 创建新的 CmxAppState
+    // ///
+    // /// # 参数
+    // /// * `default_db_id` - 默认数据库 ID
+    // pub fn new(default_db_id: String) -> Self {
+    //     Self {
+    //         app_state: Arc::new(RwLock::new(AppStateInner { default_db_id })),
+    //     }
+    // }
+    //
+    // /// 获取默认数据库 ID
+    // pub async fn get_default_db_id(&self) -> String {
+    //     let app_state = self.app_state.read().await;
+    //     app_state.default_db_id.clone()
+    // }
+    //
+    // /// 设置默认数据库 ID
+    // pub async fn set_default_db_id(&self, db_id: String) {
+    //     let mut app_state = self.app_state.write().await;
+    //     app_state.default_db_id = db_id;
+    // }
 }
 
-impl Default for CmxAppState {
-    fn default() -> Self {
-        Self::new("default".to_string())
-    }
-}
+

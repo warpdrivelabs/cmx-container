@@ -37,7 +37,7 @@ impl SecurityHeadersConfig {
 
 /// 添加安全头到响应
 pub async fn mw_security_headers(
-    mut req: Request<Body>,
+     req: Request<Body>,
     next: Next,
 ) -> Response {
     let mut response = next.run(req).await;
