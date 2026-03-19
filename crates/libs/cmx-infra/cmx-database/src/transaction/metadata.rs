@@ -16,7 +16,7 @@ pub enum TransactionStatus {
 pub struct TransactionMetadata {
     pub txn_id: String,
     pub db_id: String,
-    pub created_at: std::time::Instant,
+    pub create_time: std::time::Instant,
     pub status: TransactionStatus,
 }
 
@@ -33,7 +33,7 @@ pub fn register_txn(txn_id: String, db_id: String) {
     let metadata = TransactionMetadata {
         txn_id: txn_id.clone(),
         db_id,
-        created_at: std::time::Instant::now(),
+        create_time: std::time::Instant::now(),
         status: TransactionStatus::Active,
     };
     get_txn_registry().write().unwrap().insert(txn_id, metadata);
@@ -79,7 +79,7 @@ pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<Tran
         .unwrap()
         .values()
         .filter(|meta| {
-            meta.status == TransactionStatus::Active && meta.created_at.elapsed() > timeout
+            meta.status == TransactionStatus::Active && meta.create_time.elapsed() > timeout
         })
         .cloned()
         .collect()

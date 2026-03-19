@@ -87,7 +87,7 @@ pub struct NodeInfo {
     /// 注册时间
     pub registered_at: DateTime<Utc>,
     /// 更新时间
-    pub updated_at: DateTime<Utc>,
+    pub update_time: DateTime<Utc>,
 }
 
 impl NodeInfo {
@@ -105,7 +105,7 @@ impl NodeInfo {
             metadata: HashMap::new(),
             last_heartbeat: Some(now),
             registered_at: now,
-            updated_at: now,
+            update_time: now,
         }
     }
 
@@ -130,7 +130,7 @@ impl NodeInfo {
     /// 更新心跳
     pub fn update_heartbeat(&mut self) {
         self.last_heartbeat = Some(Utc::now());
-        self.updated_at = Utc::now();
+        self.update_time = Utc::now();
     }
 
     /// 检查节点是否健康
@@ -138,7 +138,7 @@ impl NodeInfo {
         if self.state != NodeState::Online {
             return false;
         }
-        
+
         if let Some(last_heartbeat) = self.last_heartbeat {
             let elapsed = (Utc::now() - last_heartbeat).num_seconds() as u64;
             elapsed < timeout_seconds
@@ -229,23 +229,23 @@ impl NodeManager {
     /// 注册节点
     pub async fn register(&self, node: NodeInfo) -> Result<(), NodeError> {
         let node_id = node.node_id.clone();
-        
+
         let mut nodes = self.nodes.write().await;
-        
+
         if nodes.contains_key(&node_id) {
             return Err(NodeError::AlreadyRegistered(node_id));
         }
-        
+
         log::info!("注册节点: {} ({})", node_id, node.address());
         nodes.insert(node_id, node);
-        
+
         Ok(())
     }
 
     /// 注销节点
     pub async fn unregister(&self, node_id: &str) -> Result<(), NodeError> {
         let mut nodes = self.nodes.write().await;
-        
+
         if nodes.remove(node_id).is_some() {
             log::info!("注销节点: {}", node_id);
             Ok(())
@@ -257,7 +257,7 @@ impl NodeManager {
     /// 更新节点心跳
     pub async fn heartbeat(&self, node_id: &str) -> Result<(), NodeError> {
         let mut nodes = self.nodes.write().await;
-        
+
         match nodes.get_mut(node_id) {
             Some(node) => {
                 node.update_heartbeat();
@@ -271,11 +271,11 @@ impl NodeManager {
     /// 设置节点状态
     pub async fn set_state(&self, node_id: &str, state: NodeState) -> Result<(), NodeError> {
         let mut nodes = self.nodes.write().await;
-        
+
         match nodes.get_mut(node_id) {
             Some(node) => {
                 node.state = state;
-                node.updated_at = Utc::now();
+                node.update_time = Utc::now();
                 log::info!("节点 {} 状态变更为 {:?}", node_id, state);
                 Ok(())
             }
@@ -316,11 +316,11 @@ impl NodeManager {
     /// 选择节点（根据策略）
     pub async fn select_node(&self) -> Option<NodeInfo> {
         let healthy_nodes = self.get_healthy_nodes().await;
-        
+
         if healthy_nodes.is_empty() {
             return None;
         }
-        
+
         match self.config.selection_strategy {
             NodeSelectionStrategy::Random => {
                 let idx = rand::random::<usize>() % healthy_nodes.len();
@@ -373,10 +373,10 @@ impl NodeManager {
     /// 获取节点统计
     pub async fn get_stats(&self) -> NodeStats {
         let nodes = self.nodes.read().await;
-        
+
         let mut stats = NodeStats::default();
         stats.total = nodes.len();
-        
+
         for node in nodes.values() {
             match node.state {
                 NodeState::Online => stats.online += 1,
@@ -384,14 +384,14 @@ impl NodeManager {
                 NodeState::Maintenance => stats.maintenance += 1,
                 NodeState::Unreachable => stats.offline += 1,
             }
-            
+
             match node.node_type {
                 NodeType::Master => stats.masters += 1,
                 NodeType::Worker => stats.workers += 1,
                 NodeType::Edge => stats.workers += 1,
             }
         }
-        
+
         stats
     }
 
@@ -399,18 +399,18 @@ impl NodeManager {
     pub async fn health_check(&self) -> Vec<String> {
         let mut unhealthy = Vec::new();
         let mut nodes = self.nodes.write().await;
-        
+
         for (node_id, node) in nodes.iter_mut() {
             if !node.is_healthy(self.config.heartbeat_timeout_seconds) {
                 if node.state == NodeState::Online {
                     node.state = NodeState::Unreachable;
-                    node.updated_at = Utc::now();
+                    node.update_time = Utc::now();
                     unhealthy.push(node_id.clone());
                     log::warn!("节点 {} 心跳超时，标记为不可达", node_id);
                 }
             }
         }
-        
+
         unhealthy
     }
 

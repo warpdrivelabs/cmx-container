@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 插件数据库 trait - 定义插件数据持久化操作
-/// 
+///
 /// 使用方可以注入 cmx-database 或其他数据库实现
 #[async_trait]
 pub trait PluginDatabase: Send + Sync {
@@ -82,8 +82,8 @@ pub struct PluginDbRecord {
     pub signature_algorithm: Option<String>,
     pub signer_key_id: Option<String>,
     pub activated_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
+    pub update_time: DateTime<Utc>,
 }
 
 /// 插件更新字段

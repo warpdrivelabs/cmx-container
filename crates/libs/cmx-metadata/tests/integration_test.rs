@@ -330,7 +330,7 @@ fn test_diff_add_column_to_loaded_table() {
     let mut old = tables[0].clone(); // cmx_domain
     let new_table = old.clone();
 
-    // 从旧表删除最后一列（updated_at），模拟"新表加了一列"
+    // 从旧表删除最后一列（update_time），模拟"新表加了一列"
     old.columns.pop();
 
     let changes = DdlDiff::diff(&[old], &[new_table]);
@@ -347,7 +347,7 @@ fn test_diff_add_column_to_loaded_table() {
                 _ => None,
             })
             .collect();
-        assert!(added.contains(&"updated_at"), "应检测到新增 updated_at 列");
+        assert!(added.contains(&"update_time"), "应检测到新增 update_time 列");
     } else {
         panic!("应为 AlterTable 变更");
     }
@@ -539,8 +539,8 @@ fn test_end_to_end_schema_evolution() {
         scale: None,
         db_type: Some("VARCHAR(16)".to_string()),
         ordinal: Some(10),
-        created_at: None,
-        updated_at: None,
+        create_time: None,
+        update_time: None,
         is_foreign_key: false,
         foreign_key_table: None,
         foreign_key_column: None,

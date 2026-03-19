@@ -51,8 +51,8 @@ CREATE TABLE cmx_plugin (
     permissions         JSONB,                               -- 权限配置(JSON)
     installed_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 安装时间
     activated_at        TIMESTAMP WITH TIME ZONE,            -- 激活时间
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
+    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
 );
 
 -- 索引
@@ -112,7 +112,7 @@ CREATE TABLE cmx_plugin_dependencies (
     is_optional         BOOLEAN NOT NULL DEFAULT FALSE,      -- 是否可选
     is_resolved         BOOLEAN NOT NULL DEFAULT FALSE,      -- 是否已解析
     metadata            JSONB,                               -- 扩展元数据
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- 创建时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- 创建时间
 );
 
 -- 索引
@@ -213,19 +213,19 @@ CREATE TABLE cmx_plugin_rollback (
     backup_path         TEXT NOT NULL,                       -- 备份路径
     backup_size         BIGINT,                              -- 备份大小(字节)
     backup_checksum     VARCHAR(128),                        -- 备份校验和
-    backup_created_at   TIMESTAMP WITH TIME ZONE NOT NULL,   -- 备份创建时间
+    backup_create_time   TIMESTAMP WITH TIME ZONE NOT NULL,   -- 备份创建时间
     status              VARCHAR(30) NOT NULL DEFAULT 'pending', -- 状态
     completed_at        TIMESTAMP WITH TIME ZONE,            -- 完成时间
     reason              TEXT,                                -- 回滚原因
     triggered_by        VARCHAR(255),                        -- 触发者
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- 创建时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- 创建时间
 );
 
 -- 索引
 CREATE INDEX idx_rollback_plugin ON cmx_plugin_rollback(plugin_id);
 CREATE INDEX idx_rollback_operation ON cmx_plugin_rollback(operation_id);
 CREATE INDEX idx_rollback_status ON cmx_plugin_rollback(status);
-CREATE INDEX idx_rollback_created ON cmx_plugin_rollback(created_at);
+CREATE INDEX idx_rollback_created ON cmx_plugin_rollback(create_time);
 
 COMMENT ON TABLE cmx_plugin_rollback IS '回滚记录表：记录回滚点信息';
 
@@ -263,8 +263,8 @@ CREATE TABLE cmx_system_plugins (
     last_installed_version VARCHAR(50),                      -- 最后安装版本
     install_attempts    INTEGER NOT NULL DEFAULT 0,          -- 安装尝试次数
     last_error          TEXT,                                -- 最后错误信息
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
+    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
 );
 
 -- 索引
@@ -302,8 +302,8 @@ CREATE TABLE cmx_plugin_nodes (
     active_plugins      INTEGER NOT NULL DEFAULT 0,          -- 激活插件数
     registered_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 注册时间
     last_seen_at        TIMESTAMP WITH TIME ZONE,            -- 最后在线时间
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
+    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
 );
 
 -- 索引
@@ -334,7 +334,7 @@ CREATE TABLE cmx_plugin_services (
     metadata            JSONB,                               -- 服务元数据
     status              VARCHAR(30) NOT NULL DEFAULT 'active', -- 状态
     registered_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 注册时间
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
+    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
 );
 
 -- 索引
@@ -395,8 +395,8 @@ CREATE TABLE cmx_plugin_permissions (
     whitelist           JSONB,                               -- 白名单
     blacklist           JSONB,                               -- 黑名单
     metadata            JSONB,                               -- 扩展元数据
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
+    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- 创建时间
+    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()  -- 更新时间
 );
 
 -- 索引
@@ -411,7 +411,7 @@ COMMENT ON TABLE cmx_plugin_permissions IS '插件权限配置表：记录插件
 
 -- 插件完整信息视图
 CREATE OR REPLACE VIEW v_plugin_full_info AS
-SELECT 
+SELECT
     p.id,
     p.plugin_id,
     p.name,
@@ -436,7 +436,7 @@ COMMENT ON VIEW v_plugin_full_info IS '插件完整信息视图：包含插件�
 
 -- 节点状态视图
 CREATE OR REPLACE VIEW v_node_status AS
-SELECT 
+SELECT
     node_id,
     node_name,
     node_type,
@@ -454,7 +454,7 @@ COMMENT ON VIEW v_node_status IS '节点状态视图：包含节点基本信息�
 
 -- 审计日志统计视图
 CREATE OR REPLACE VIEW v_audit_stats AS
-SELECT 
+SELECT
     operation_type,
     operation_status,
     COUNT(*) AS operation_count,

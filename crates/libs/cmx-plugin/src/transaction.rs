@@ -42,7 +42,7 @@ pub struct TransactionContext {
     /// 事务状态
     pub state: TransactionState,
     /// 创建时间
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub create_time: chrono::DateTime<chrono::Utc>,
 }
 
 /// 事务管理器配置
@@ -102,7 +102,7 @@ impl TransactionManager {
                 completed: false,
             }],
             state: TransactionState::Active,
-            created_at: chrono::Utc::now(),
+            create_time: chrono::Utc::now(),
         };
 
         // 缓存事务上下文

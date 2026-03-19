@@ -97,8 +97,8 @@ pub struct TableDefine {
     pub primary_keys: Vec<String>,   // 主键列名列表
     pub indexes: Vec<IndexDefine>,   // 索引定义
     pub version: u32,                // 表定义版本（默认 1）
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub create_time: Option<DateTime<Utc>>,
+    pub update_time: Option<DateTime<Utc>>,
     pub i18n: bool,                  // 是否支持多语言
     pub comment: Option<String>,     // 表注释
     pub schema: Option<String>,      // 所属 schema
@@ -126,8 +126,8 @@ pub struct ColumnDefine {
     pub scale: Option<u32>,              // NUMERIC 小数位
     pub db_type: Option<String>,         // 原始数据库类型（round-trip 用）
     pub ordinal: Option<u32>,            // 列序号
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub create_time: Option<DateTime<Utc>>,
+    pub update_time: Option<DateTime<Utc>>,
     pub is_foreign_key: bool,            // 是否外键引用
     pub foreign_key_table: Option<String>,   // 外键目标表
     pub foreign_key_column: Option<String>,  // 外键目标列
@@ -684,8 +684,8 @@ CREATE TABLE "public"."cmx_domain" (
     "type" VARCHAR(32),
     "tags" TEXT,
     "sort_order" BIGINT DEFAULT 0,
-    "created_at" TIMESTAMP WITH TIME ZONE,
-    "updated_at" TIMESTAMP WITH TIME ZONE,
+    "create_time" TIMESTAMP WITH TIME ZONE,
+    "update_time" TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY ("id")
 );
 
@@ -698,8 +698,8 @@ COMMENT ON COLUMN "public"."cmx_domain"."description" IS '说明';
 COMMENT ON COLUMN "public"."cmx_domain"."type" IS '域类型';
 COMMENT ON COLUMN "public"."cmx_domain"."tags" IS '标签';
 COMMENT ON COLUMN "public"."cmx_domain"."sort_order" IS '排序号';
-COMMENT ON COLUMN "public"."cmx_domain"."created_at" IS '创建时间';
-COMMENT ON COLUMN "public"."cmx_domain"."updated_at" IS '更新时间';
+COMMENT ON COLUMN "public"."cmx_domain"."create_time" IS '创建时间';
+COMMENT ON COLUMN "public"."cmx_domain"."update_time" IS '更新时间';
 
 CREATE UNIQUE INDEX "uk_cmx_domain_code" ON "public"."cmx_domain" ("code");
 CREATE INDEX "idx_cmx_domain_type" ON "public"."cmx_domain" ("type");

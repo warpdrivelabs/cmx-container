@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS cmx_plugin (
     signature_algorithm VARCHAR(50),
     signer_key_id   VARCHAR(255),
     activated_at    TIMESTAMP,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    create_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_cmx_plugin_plugin_id ON cmx_plugin(plugin_id);
@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_versions (
     uninstalled_at  TIMESTAMP,
     installed_by    VARCHAR(255),
     install_reason  TEXT,
-    
-    CONSTRAINT fk_cmx_plugin_versions_plugin 
+
+    CONSTRAINT fk_cmx_plugin_versions_plugin
         FOREIGN KEY (plugin_id) REFERENCES cmx_plugin(plugin_id) ON DELETE CASCADE
 );
 
@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_dependencies (
     version_constraint  VARCHAR(100) NOT NULL,
     is_optional         BOOLEAN NOT NULL DEFAULT FALSE,
     resolved_version    VARCHAR(50),
-    
-    CONSTRAINT fk_cmx_plugin_dependencies_plugin 
+
+    CONSTRAINT fk_cmx_plugin_dependencies_plugin
         FOREIGN KEY (plugin_id) REFERENCES cmx_plugin(plugin_id) ON DELETE CASCADE
 );
 
@@ -84,8 +84,8 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_deployments (
     status          VARCHAR(50) NOT NULL,
     deployed_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     error_message   TEXT,
-    
-    CONSTRAINT fk_cmx_plugin_deployments_plugin 
+
+    CONSTRAINT fk_cmx_plugin_deployments_plugin
         FOREIGN KEY (plugin_id) REFERENCES cmx_plugin(plugin_id) ON DELETE CASCADE
 );
 
@@ -121,9 +121,9 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_rollback (
     to_version      VARCHAR(50) NOT NULL,
     backup_path    TEXT NOT NULL,
     status          VARCHAR(50) NOT NULL,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT fk_cmx_plugin_rollback_plugin 
+    create_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_cmx_plugin_rollback_plugin
         FOREIGN KEY (plugin_id) REFERENCES cmx_plugin(plugin_id) ON DELETE CASCADE
 );
 
@@ -141,8 +141,8 @@ CREATE TABLE IF NOT EXISTS cmx_system_plugins (
     retry_count     INTEGER NOT NULL DEFAULT 3,
     source_type     VARCHAR(50) NOT NULL,
     source_path     TEXT NOT NULL,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    create_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_cmx_system_plugins_install_order ON cmx_system_plugins(install_order);
@@ -160,8 +160,8 @@ CREATE TABLE IF NOT EXISTS cmx_plugin_nodes (
     capabilities    JSONB,
     metadata        JSONB,
     last_heartbeat TIMESTAMP,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    create_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_cmx_plugin_nodes_node_id ON cmx_plugin_nodes(node_id);
@@ -169,29 +169,29 @@ CREATE INDEX idx_cmx_plugin_nodes_status ON cmx_plugin_nodes(status);
 CREATE INDEX idx_cmx_plugin_nodes_node_type ON cmx_plugin_nodes(node_type);
 
 -- =====================================================
--- 触发器：自动更新 updated_at 时间戳
+-- 触发器：自动更新 update_time 时间戳
 -- =====================================================
 
 -- cmx_plugin 表触发器
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION update_update_time_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.update_time = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_cmx_plugin_updated_at 
-    BEFORE UPDATE ON cmx_plugin 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_cmx_plugin_update_time
+    BEFORE UPDATE ON cmx_plugin
+    FOR EACH ROW EXECUTE FUNCTION update_update_time_column();
 
-CREATE TRIGGER update_cmx_system_plugins_updated_at 
-    BEFORE UPDATE ON cmx_system_plugins 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_cmx_system_plugins_update_time
+    BEFORE UPDATE ON cmx_system_plugins
+    FOR EACH ROW EXECUTE FUNCTION update_update_time_column();
 
-CREATE TRIGGER update_cmx_plugin_nodes_updated_at 
-    BEFORE UPDATE ON cmx_plugin_nodes 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_cmx_plugin_nodes_update_time
+    BEFORE UPDATE ON cmx_plugin_nodes
+    FOR EACH ROW EXECUTE FUNCTION update_update_time_column();
 
 -- =====================================================
 -- 注释说明

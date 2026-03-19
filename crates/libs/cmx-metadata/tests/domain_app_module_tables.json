@@ -118,7 +118,7 @@
           "extensions": {}
         },
         {
-          "name": "created_at",
+          "name": "create_time",
           "label": "创建时间",
           "field_type": "DateTime",
           "is_primary_key": false,
@@ -133,7 +133,7 @@
           "extensions": {}
         },
         {
-          "name": "updated_at",
+          "name": "update_time",
           "label": "更新时间",
           "field_type": "DateTime",
           "is_primary_key": false,
@@ -290,7 +290,7 @@
           "extensions": {}
         },
         {
-          "name": "created_at",
+          "name": "create_time",
           "label": "创建时间",
           "field_type": "DateTime",
           "is_primary_key": false,
@@ -305,7 +305,7 @@
           "extensions": {}
         },
         {
-          "name": "updated_at",
+          "name": "update_time",
           "label": "更新时间",
           "field_type": "DateTime",
           "is_primary_key": false,
@@ -463,7 +463,7 @@
           "extensions": {}
         },
         {
-          "name": "created_at",
+          "name": "create_time",
           "label": "创建时间",
           "field_type": "DateTime",
           "is_primary_key": false,
@@ -478,7 +478,7 @@
           "extensions": {}
         },
         {
-          "name": "updated_at",
+          "name": "update_time",
           "label": "更新时间",
           "field_type": "DateTime",
           "is_primary_key": false,

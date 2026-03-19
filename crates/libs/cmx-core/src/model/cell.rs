@@ -55,7 +55,7 @@ pub enum DataValue {
 // ==========================================
 
 /// DataValue 序列化
-/// 
+///
 /// # 序列化格式
 /// - Binary: base64 编码字符串
 /// - Uuid: 标准字符串格式
@@ -108,7 +108,7 @@ impl Serialize for DataValue {
 }
 
 /// DataValue 反序列化
-/// 
+///
 /// # 反序列化策略
 /// - 识别 base64 编码的 Binary 字符串
 /// - 识别 UUID 格式字符串
@@ -120,7 +120,7 @@ impl<'de> Deserialize<'de> for DataValue {
     {
         // 使用 JsonValue 作为中间类型进行解析
         let value = JsonValue::deserialize(deserializer)?;
-        
+
         match value {
             JsonValue::Null => Ok(DataValue::Null),
             JsonValue::Bool(b) => Ok(DataValue::Bool(b)),
@@ -171,7 +171,7 @@ impl<'de> Deserialize<'de> for DataValue {
                         false
                     }
                 });
-                
+
                 if is_binary {
                     let bytes: Vec<u8> = arr.iter()
                         .filter_map(|v| v.as_u64())
@@ -179,7 +179,7 @@ impl<'de> Deserialize<'de> for DataValue {
                         .collect();
                     return Ok(DataValue::Binary(bytes));
                 }
-                
+
                 // 否则作为 Array 处理
                 let items: Result<Vec<DataValue>, _> = arr.iter()
                     .map(DataValue::deserialize)
@@ -355,10 +355,10 @@ pub struct ColumnDefine {
     pub ordinal: Option<u32>,
     /// 最初创建时间；缺省时表示未设置
     #[serde(default)]
-    pub created_at: Option<DateTime<Utc>>,
+    pub create_time: Option<DateTime<Utc>>,
     /// 最后修改时间；缺省时表示未设置
     #[serde(default)]
-    pub updated_at: Option<DateTime<Utc>>,
+    pub update_time: Option<DateTime<Utc>>,
     /// 是否引用外键表；缺省为 false
     #[serde(default)]
     pub is_foreign_key: bool,
@@ -436,10 +436,10 @@ pub struct TableDefine {
     pub version: u32,
     /// 最初创建时间；缺省时表示未设置
     #[serde(default)]
-    pub created_at: Option<DateTime<Utc>>,
+    pub create_time: Option<DateTime<Utc>>,
     /// 最后修改时间；缺省时表示未设置
     #[serde(default)]
-    pub updated_at: Option<DateTime<Utc>>,
+    pub update_time: Option<DateTime<Utc>>,
     /// 是否支持多语言（表级开关，为 true 时可生成/创建多语言伴生表）；缺省为 false
     #[serde(default)]
     pub i18n: bool,
@@ -921,9 +921,9 @@ mod tests {
             .with_timezone(&Utc);
         let data_value = DataValue::DateTime(original);
         let json = serde_json::to_string(&data_value).unwrap();
-        
+
         let deserialized: DataValue = serde_json::from_str(&json).unwrap();
-        
+
         match deserialized {
             DataValue::DateTime(dt) => {
                 assert_eq!(dt.format("%Y-%m-%dT%H:%M:%S").to_string(), "2024-01-15T10:30:00");
@@ -965,9 +965,9 @@ mod tests {
     fn test_date_serialization_roundtrip() {
         let original = DataValue::Date(NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
         let json = serde_json::to_string(&original).unwrap();
-        
+
         let deserialized: DataValue = serde_json::from_str(&json).unwrap();
-        
+
         match deserialized {
             DataValue::Date(d) => {
                 assert_eq!(d.year(), 2024);

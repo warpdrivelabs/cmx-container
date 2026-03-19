@@ -48,8 +48,8 @@ pub struct PluginRecord {
     pub signature_algorithm: Option<String>,
     pub signer_key_id: Option<String>,
     pub activated_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
+    pub update_time: DateTime<Utc>,
 }
 
 /// 版本历史记录（数据库映射）
@@ -91,7 +91,7 @@ pub struct DeploymentRecord {
     pub status: String,
     pub deployed_at: DateTime<Utc>,
     pub error_message: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
 }
 
 /// 审计日志记录（数据库映射）
@@ -119,7 +119,7 @@ pub struct RollbackRecord {
     pub to_version: String,
     pub backup_path: String,
     pub status: String,
-    pub created_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
 }
 
 /// 系统默认插件记录（数据库映射）
@@ -143,7 +143,7 @@ pub struct NodeRecord {
     pub node_name: String,
     pub node_type: String,
     pub status: String,
-    pub created_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
 }
 
 /// 插件文件记录（数据库映射）
@@ -155,5 +155,5 @@ pub struct PluginFileRecord {
     pub file_type: String,
     pub file_hash: String,
     pub file_size: i64,
-    pub created_at: DateTime<Utc>,
+    pub create_time: DateTime<Utc>,
 }

@@ -107,8 +107,8 @@ clap = { version = "4", features = ["derive"] }
 # 数据库相关
 # ============================================
 sqlx = { version = "0.8", features = [ "macros", "runtime-tokio", "postgres", "uuid" ] }
-sea-query = "0.32"
-sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", "with-time" ] }
+sea-query = {version = "0.32",features = ["with-chrono", "with-time","with-json","with-uuid"]}
+sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", "with-time","with-chrono" ,"with-json"] }
 modql = "0.4.1"
 
 # ============================================

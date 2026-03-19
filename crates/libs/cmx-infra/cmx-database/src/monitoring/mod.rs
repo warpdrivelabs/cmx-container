@@ -70,7 +70,7 @@ async fn check_transaction_timeouts() {
 
     for tx_meta in long_running_txs {
         info!("检测到长时间运行的事务: txn_id={}, db_id={}, 运行时间={:?}",
-              tx_meta.txn_id, tx_meta.db_id, tx_meta.created_at.elapsed());
+              tx_meta.txn_id, tx_meta.db_id, tx_meta.create_time.elapsed());
 
         // 直接通过 txn_id 从注册表获取事务句柄并回滚
         if let Some(txn_holder_mutex) = get_txn_holder_by_id(&tx_meta.txn_id) {

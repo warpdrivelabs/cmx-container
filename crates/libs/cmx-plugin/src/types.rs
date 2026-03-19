@@ -274,9 +274,9 @@ pub struct PluginInfo {
     #[serde(default)]
     pub activated_at: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub created_at: Option<DateTime<Utc>>,
+    pub create_time: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub updated_at: Option<DateTime<Utc>>,
+    pub update_time: Option<DateTime<Utc>>,
 }
 
 /// 插件过滤器

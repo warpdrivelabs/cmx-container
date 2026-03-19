@@ -57,7 +57,7 @@ pub struct PluginCacheValue {
     pub status: String,
     pub install_path: String,
     pub activated: bool,
-    pub updated_at: i64,
+    pub update_time: i64,
 }
 
 /// 插件缓存管理器
@@ -89,7 +89,7 @@ impl PluginCacheManager {
     /// 获取缓存的插件信息
     pub async fn get_cached_plugin(&self, plugin_id: &str) -> Result<Option<PluginCacheValue>, PluginCacheError> {
         let key = PluginCacheKey::new(plugin_id);
-        
+
         let cache_value: Option<String> = self.cache.ops()
             .get(&key.info())
             .await
@@ -108,7 +108,7 @@ impl PluginCacheManager {
     /// 清除插件缓存
     pub async fn invalidate_plugin(&self, plugin_id: &str) -> Result<(), PluginCacheError> {
         let key = PluginCacheKey::new(plugin_id);
-        
+
         // 清除所有相关缓存
         self.cache.ops()
             .del(&key.info())
@@ -136,7 +136,7 @@ impl PluginCacheManager {
     /// 缓存插件状态
     pub async fn cache_plugin_status(&self, plugin_id: &str, status: &str) -> Result<(), PluginCacheError> {
         let key = PluginCacheKey::new(plugin_id);
-        
+
         self.cache.ops()
             .set_ex(&key.status(), status, Duration::from_secs(300))
             .await
@@ -148,7 +148,7 @@ impl PluginCacheManager {
     /// 获取缓存的插件状态
     pub async fn get_cached_status(&self, plugin_id: &str) -> Result<Option<String>, PluginCacheError> {
         let key = PluginCacheKey::new(plugin_id);
-        
+
         self.cache.ops()
             .get(&key.status())
             .await
@@ -158,7 +158,7 @@ impl PluginCacheManager {
     /// 使用分布式锁获取插件操作锁
     pub async fn lock_plugin(&self, plugin_id: &str) -> Result<cmx_buffer::LockGuard, PluginCacheError> {
         let lock_key = format!("{}lock:{}", CACHE_KEY_PREFIX, plugin_id);
-        
+
         let guard = self.lock_manager
             .lock(&lock_key)
             .await

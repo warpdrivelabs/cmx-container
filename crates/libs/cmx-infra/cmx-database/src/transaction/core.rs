@@ -719,7 +719,7 @@ pub struct TxnHolder {
     /// 数据库ID，用于标识事务所属的数据库
     db_id: String,
     /// 创建时间，用于计算事务运行时间
-    created_at: std::time::Instant,
+    create_time: std::time::Instant,
 }
 
 impl TxnHolder {
@@ -737,7 +737,7 @@ impl TxnHolder {
             counter: 1,  // 初始引用计数为1
             txn_id: uuid::Uuid::new_v4().to_string(),  // 生成唯一事务ID
             db_id: db_id.to_string(),
-            created_at: std::time::Instant::now(),  // 记录创建时间
+            create_time: std::time::Instant::now(),  // 记录创建时间
         }
     }
 
@@ -808,7 +808,7 @@ impl TxnHolder {
     /// # 返回值
     /// * `std::time::Duration` - 事务运行时间
     pub fn elapsed(&self) -> std::time::Duration {
-        self.created_at.elapsed()
+        self.create_time.elapsed()
     }
 }
 

@@ -45,8 +45,8 @@ impl CmxPluginDatabase {
             record.metadata,
             record.signature_algorithm,
             record.signer_key_id,
-            record.created_at.to_rfc3339(),
-            record.updated_at.to_rfc3339(),
+            record.create_time.to_rfc3339(),
+            record.update_time.to_rfc3339(),
         ])
     }
 
@@ -66,7 +66,7 @@ impl PluginDatabase for CmxPluginDatabase {
                 plugin_id, name, version, status, wasm_path, install_path, config_path,
                 db_id, is_system, is_locked, domain_code, application_code, module_code,
                 vendor_name, vendor_url, vendor_contact, metadata, signature_algorithm,
-                signer_key_id, created_at, updated_at
+                signer_key_id, create_time, update_time
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         "#;
 
@@ -116,8 +116,8 @@ impl PluginDatabase for CmxPluginDatabase {
             param_idx += 1;
         }
 
-        // 添加 updated_at
-        set_clauses.push(format!("updated_at = ${}", param_idx));
+        // 添加 update_time
+        set_clauses.push(format!("update_time = ${}", param_idx));
         params.push(serde_json::json!(Utc::now().to_rfc3339()));
         param_idx += 1;
 
@@ -170,7 +170,7 @@ impl PluginDatabase for CmxPluginDatabase {
 
     /// 查询所有插件
     async fn get_all_plugins(&self, db_id: &str) -> Result<Vec<PluginDbRecord>, PluginDbError> {
-        let sql = "SELECT * FROM cmx_plugin ORDER BY created_at DESC";
+        let sql = "SELECT * FROM cmx_plugin ORDER BY create_time DESC";
         let dataset: DataSet = self.db_manager
             .query_sql(db_id, None, sql, "plugins")
             .await

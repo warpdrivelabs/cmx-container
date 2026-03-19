@@ -108,19 +108,19 @@ pub struct Domain {
     pub archived: Option<i32>,
     /// 创建时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<OffsetDateTime>,
+    pub create_time: Option<OffsetDateTime>,
     /// 更新时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<OffsetDateTime>,
+    pub update_time: Option<OffsetDateTime>,
     /// 创建者 ID
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by: Option<String>,
+    pub create_by: Option<String>,
     /// 创建者名称
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_name: Option<String>,
     /// 更新者 ID
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_by: Option<String>,
+    pub update_by: Option<String>,
     /// 更新者名称
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_name: Option<String>,
