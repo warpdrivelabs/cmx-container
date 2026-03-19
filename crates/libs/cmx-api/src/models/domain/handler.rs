@@ -22,9 +22,7 @@ use crate::state::CmxAppState;
 pub struct GetByNameParams {
     /// 域名
     pub name: String,
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
+
 }
 
 
@@ -115,18 +113,10 @@ pub struct SearchParams {
     pub page: Option<i64>,
     /// 每页数量
     pub page_size: Option<i64>,
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
 }
 
 impl SearchParams {
-    /// 获取数据库 ID
-    pub async fn get_db_id(&self) -> String {
-        self.db_id
-            .clone()
-            .unwrap_or(get_default_db_manager().get_default_db_id().await)
-    }
+
 
     /// 获取页码
     pub fn get_page(&self) -> i64 {
@@ -168,7 +158,7 @@ pub async fn search(
     debug!("{:<12} - handler::search", "HANDLER");
 
     let mm = get_default_db_manager();
-    let db_id = params.get_db_id().await;
+    let db_id = get_db_id_from_header(&headers).await;
     let keyword = params.keyword.clone();
     let page = params.get_page();
     let page_size = params.get_page_size();

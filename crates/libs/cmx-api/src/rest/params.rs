@@ -110,6 +110,8 @@ impl<F> ListParams<F> {
 ///
 /// 用于列表和分页查询的通用参数结构。
 #[derive(Debug, Deserialize, Clone)]
+// #[serde(rename_all = "camelCase")]  序列化时会支持改成字段小驼峰
+
 pub struct PageParams<F> {
     /// 过滤条件
     pub filter: Option<F>,
