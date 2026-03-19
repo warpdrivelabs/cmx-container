@@ -12,7 +12,7 @@ use config::web_config;
 
 use axum::{Router, middleware};
 
-use crate::config::{init_cache, init_db_datasource, init_global_config};
+use crate::config::{init_cache, init_db_datasource, init_global_config, init_plugins};
 use cmx_api::CmxAppState;
 use cmx_api::middleware::{cors_layer, mw_svr_context_resolver};
 use cmx_database::get_default_db_manager;
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     // 获取 Web 服务器配置
     let web_config = web_config();
 
- // init_plugins();
+    init_plugins().await;
 
     // -- 配置 API 路由
     let api_routes = self::routes::routes().with_state(CmxAppState::new());

@@ -3,7 +3,7 @@
  * @Date: 2026-03-16 15:30:35
  * @Describe: 
  * @LastEditors: yqs
- * @LastEditTime: 2026-03-19 10:00:00
+ * @LastEditTime: 2026-03-20 01:18:41
  */
 //! cmx-plugin — 插件注册表、ZIP 加载、签名验证、生命周期管理
 //!
@@ -47,6 +47,7 @@ pub use cmx_core::model::meta::plugin::{
 
 // 导出核心模块类型
 pub use core::manager::PluginManager;
+pub use core::manager::PluginManagerBuilder;
 pub use core::registry::PluginRegistry;
 pub use core::context::PluginContext;
 pub use core::lifecycle::{LifecycleState, LifecycleStateMachine};
@@ -103,4 +104,209 @@ pub use audit::record::{AuditRecord, OperationType as AuditOperationType, Operat
 pub use fetcher::source::PluginSource as FetcherPluginSource;
 pub use fetcher::local::LocalFetcher;
 pub use fetcher::remote::RemoteFetcher;
-pub use fetcher::registry::{RegistryFetcher, RegistryInfo};
+pub use fetcher::registry::{RegistryFetcher, RegistryInfo, RegistryPackageDetail, RegistrySearchResult};
+
+// ==================== 全局单例 ====================
+
+use std::sync::{Arc, OnceLock};
+use tokio::sync::RwLock;
+
+/// 全局插件管理器
+/// 
+/// 提供应用级别的单例访问，确保整个应用共享同一个 PluginManager 实例。
+/// 
+/// # 使用示例
+/// 
+/// ```rust,no_run
+/// use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
+/// use cmx_database::DatabaseManager;
+/// use cmx_buffer::{CacheManager, LockManager, PubSubOps};
+/// use std::sync::Arc;
+/// 
+/// async fn init() {
+///     // 方式1：使用默认配置初始化
+///     GlobalPluginManager::initialize(Default::default()).await.unwrap();
+///     
+///     // 方式2：使用自定义配置初始化
+///     let settings = PluginManagerSettings {
+///         plugin_root: std::path::PathBuf::from("./plugins"),
+///         ..Default::default()
+///     };
+///     GlobalPluginManager::initialize(settings).await.unwrap();
+///     
+///     // 方式3：注入外部依赖
+///     let db_manager = Arc::new(DatabaseManager::new(Default::default()));
+///     let cache_manager = Arc::new(CacheManager::new(Default::default()));
+///     GlobalPluginManager::initialize_with_deps(
+///         Default::default(),
+///         Some(db_manager),
+///         Some(cache_manager),
+///         None,
+///         None,
+///     ).await.unwrap();
+///     
+///     // 获取全局实例
+///     let manager = GlobalPluginManager::get().await;
+/// }
+/// ```
+pub struct GlobalPluginManager;
+
+static GLOBAL_PLUGIN_MANAGER: OnceLock<Arc<RwLock<PluginManager>>> = OnceLock::new();
+
+impl GlobalPluginManager {
+    /// 初始化全局插件管理器
+    /// 
+    /// 使用默认配置创建并初始化全局 PluginManager 实例。
+    /// 
+    /// # 参数
+    /// * `settings` - 插件管理器配置
+    /// 
+    /// # 返回值
+    /// * `Ok(())` - 初始化成功
+    /// * `Err(PluginError)` - 初始化失败
+    /// 
+    /// # 错误
+    /// 如果已经初始化，将返回错误。
+    pub async fn initialize(settings: PluginManagerSettings) -> error::PluginResult<()> {
+        let manager = PluginManager::new(settings).await?;
+        
+        GLOBAL_PLUGIN_MANAGER
+            .set(Arc::new(RwLock::new(manager)))
+            .map_err(|_| error::PluginError::Plugin("全局插件管理器已初始化".to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// 使用外部依赖初始化全局插件管理器
+    /// 
+    /// 允许注入外部创建的数据库管理器、缓存管理器等依赖。
+    /// 
+    /// # 参数
+    /// * `settings` - 插件管理器配置
+    /// * `db_manager` - 数据库管理器（可选，如不提供将使用默认配置创建）
+    /// * `cache_manager` - 缓存管理器（可选，如不提供将使用默认配置创建）
+    /// * `lock_manager` - 分布式锁管理器（可选）
+    /// * `pubsub` - 消息订阅发布（可选）
+    /// 
+    /// # 返回值
+    /// * `Ok(())` - 初始化成功
+    /// * `Err(PluginError)` - 初始化失败
+    /// 
+    /// # 示例
+    /// ```rust,no_run
+    /// use cmx_plugin::GlobalPluginManager;
+    /// use cmx_database::DatabaseManager;
+    /// use cmx_buffer::CacheManager;
+    /// use std::sync::Arc;
+    /// 
+    /// async fn init() {
+    ///     let db = Arc::new(DatabaseManager::new(Default::default()));
+    ///     let cache = Arc::new(CacheManager::new(Default::default()));
+    ///     
+    ///     GlobalPluginManager::initialize_with_deps(
+    ///         Default::default(),
+    ///         Some(db),
+    ///         Some(cache),
+    ///         None,
+    ///         None,
+    ///     ).await.unwrap();
+    /// }
+    /// ```
+    pub async fn initialize_with_deps(
+        settings: PluginManagerSettings,
+        db_manager: Option<Arc<cmx_database::DatabaseManager>>,
+        cache_manager: Option<Arc<cmx_buffer::CacheManager>>,
+        lock_manager: Option<Arc<cmx_buffer::LockManager>>,
+        pubsub: Option<Arc<cmx_buffer::PubSubOps>>,
+    ) -> error::PluginResult<()> {
+        let mut builder = core::manager::PluginManagerBuilder::new(settings);
+        
+        if let Some(db) = db_manager {
+            builder = builder.with_database(db);
+        }
+        if let Some(cache) = cache_manager {
+            builder = builder.with_cache(cache);
+        }
+        if let Some(lock) = lock_manager {
+            builder = builder.with_lock_manager(lock);
+        }
+        if let Some(ps) = pubsub {
+            builder = builder.with_pubsub(ps);
+        }
+        
+        let manager = builder.build().await?;
+        
+        GLOBAL_PLUGIN_MANAGER
+            .set(Arc::new(RwLock::new(manager)))
+            .map_err(|_| error::PluginError::Plugin("全局插件管理器已初始化".to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// 获取全局插件管理器读锁
+    /// 
+    /// 返回一个 RwLock 读守卫，允许读取插件管理器状态。
+    /// 
+    /// # 返回值
+    /// * `tokio::sync::RwLockReadGuard<'static, PluginManager>` - 读引用守卫
+    /// 
+    /// # Panics
+    /// 如果未初始化则 panic，请确保先调用 `initialize` 或 `initialize_with_deps`。
+    pub async fn get() -> tokio::sync::RwLockReadGuard<'static, PluginManager> {
+        let arc = GLOBAL_PLUGIN_MANAGER.get().expect(
+            "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
+        );
+        arc.read().await
+    }
+    
+    /// 获取全局插件管理器写锁
+    /// 
+    /// 返回一个 RwLock 写守卫，允许对插件管理器进行修改。
+    /// 
+    /// # 返回值
+    /// * `tokio::sync::RwLockWriteGuard<'static, PluginManager>` - 可变引用守卫
+    /// 
+    /// # Panics
+    /// 如果未初始化则 panic。
+    pub async fn get_mut() -> tokio::sync::RwLockWriteGuard<'static, PluginManager> {
+        let arc = GLOBAL_PLUGIN_MANAGER.get().expect(
+            "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
+        );
+        arc.write().await
+    }
+    
+    /// 检查是否已初始化
+    /// 
+    /// # 返回值
+    /// * `bool` - 是否已初始化
+    pub fn is_initialized() -> bool {
+        GLOBAL_PLUGIN_MANAGER.get().is_some()
+    }
+    
+    /// 获取全局插件管理器 Arc 引用
+    /// 
+    /// 返回 Arc 引用，允许在异步任务中共享所有权。
+    /// 
+    /// # 返回值
+    /// * `Arc<RwLock<PluginManager>>` - 插件管理器 Arc 引用
+    /// 
+    /// # Panics
+    /// 如果未初始化则 panic。
+    pub fn get_arc() -> Arc<RwLock<PluginManager>> {
+        GLOBAL_PLUGIN_MANAGER.get().expect(
+            "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
+        ).clone()
+    }
+    
+    /// 关闭全局插件管理器
+    /// 
+    /// 执行清理操作，包括停用所有插件、释放资源等。
+    /// 
+    /// # 返回值
+    /// * `Ok(())` - 关闭成功
+    /// * `Err(PluginError)` - 关闭失败
+    pub async fn shutdown() -> error::PluginResult<()> {
+        let manager = Self::get().await;
+        manager.shutdown().await
+    }
+}

@@ -136,3 +136,31 @@ pub async fn init_cache() {
         .expect("redis初始化失败");
     info!("redis缓存初始化完成");
 }
+// 在 config.rs 中添加初始化函数
+pub async fn init_plugins() {
+    use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
+    use std::path::PathBuf;
+
+    // 方式1：使用默认配置初始化
+    GlobalPluginManager::initialize(Default::default())
+        .await
+        .expect("插件管理器初始化失败");
+
+    // 方式2：使用自定义配置初始化  todo 自定义配置
+    // let settings = PluginManagerSettings {
+    //     plugin_root: PathBuf::from("./plugins"),
+    //     ..Default::default()
+    // };
+    // GlobalPluginManager::initialize(settings).await.expect("插件管理器初始化失败");
+
+    // 方式3：注入外部依赖（推荐）
+    // GlobalPluginManager::initialize_with_deps(
+    //     Default::default(),
+    //     Some(get_default_db_manager()),           // 使用已有的数据库管理器
+    //     Some(GlobalCacheManager::get_arc()),      // 使用已有的缓存管理器
+    //     None,  // 分布式锁管理器
+    //     None,  // 消息订阅发布
+    // ).await.expect("插件管理器初始化失败");
+
+    info!("插件管理器初始化完成");
+}
