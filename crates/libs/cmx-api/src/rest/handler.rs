@@ -256,8 +256,8 @@ where
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let page_size = params.get_limit() as u64;
-    let page_number = (params.offset.unwrap_or(0) / params.get_limit()) as u64 + 1;
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
 
     let list_options = params.to_list_options();
     let filter = params.filter.clone();
