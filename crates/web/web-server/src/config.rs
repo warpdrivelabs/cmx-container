@@ -142,18 +142,21 @@ pub async fn init_plugins() {
     use std::path::PathBuf;
 
     // 方式1：使用默认配置初始化
-    GlobalPluginManager::initialize(Default::default())
-        .await
-        .expect("插件管理器初始化失败");
+    // GlobalPluginManager::initialize(Default::default())
+    //     .await
+    //     .expect("插件管理器初始化失败");
 
     // 方式2：使用自定义配置初始化  todo 自定义配置
-    // let settings = PluginManagerSettings {
-    //     plugin_root: PathBuf::from("./plugins"),
-    //     ..Default::default()
-    // };
-    // GlobalPluginManager::initialize(settings).await.expect("插件管理器初始化失败");
+    let settings = PluginManagerSettings {
+        plugin_root: PathBuf::from("./plugins/root"),
+        backup_root: PathBuf::from("./plugins/backup"),
+        temp_root: PathBuf::from("./plugins/temp"),
+        default_database_id: "primary".to_string(),
+        ..Default::default()
+    };
+    GlobalPluginManager::initialize(settings).await.expect("插件管理器初始化失败");
 
-    // 方式3：注入外部依赖（推荐）
+    // ///方式3：注入外部依赖（推荐）
     // GlobalPluginManager::initialize_with_deps(
     //     Default::default(),
     //     Some(get_default_db_manager()),           // 使用已有的数据库管理器
@@ -162,5 +165,19 @@ pub async fn init_plugins() {
     //     None,  // 消息订阅发布
     // ).await.expect("插件管理器初始化失败");
 
+        // 安装插件
+        let install_req = cmx_plugin::service::install::InstallRequest {
+            source: cmx_plugin::domain::plugin::PluginSource::Local {
+                path: std::path::PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
+            },
+            db_id: None,
+            force: true,
+            auto_activate: false,
+            version_constraint: None,
+        };
+
+
+   let resp = GlobalPluginManager::get().await.install(install_req).await.expect("插件安装失败");
+   info!("插件安装响应: {:?}", resp);
     info!("插件管理器初始化完成");
 }

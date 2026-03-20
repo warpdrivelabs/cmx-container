@@ -67,33 +67,7 @@ use crate::audit::logger::AuditLogger;
 use crate::cluster::node::NodeManager;
 use crate::cluster::deployment::DeploymentCoordinator;
 use crate::cluster::sync::SyncManager;
-
-/// 临时目录清理器
-///
-/// RAII 风格的临时目录清理，在 Drop 时自动删除临时目录。
-struct TempDirCleanup {
-    path: Option<std::path::PathBuf>,
-}
-
-impl TempDirCleanup {
-    fn new(path: Option<std::path::PathBuf>) -> Self {
-        Self { path }
-    }
-}
-
-impl Drop for TempDirCleanup {
-    fn drop(&mut self) {
-        if let Some(ref path) = self.path {
-            if path.exists() {
-                if let Err(e) = std::fs::remove_dir_all(path) {
-                    tracing::warn!("清理临时目录失败: {} - {}", path.display(), e);
-                } else {
-                    tracing::debug!("已清理临时目录: {}", path.display());
-                }
-            }
-        }
-    }
-}
+use crate::infrastructure::storage::TempDirCleanup;
 
 // 重导出服务请求/响应类型，方便使用
 pub use crate::service::install::{InstallRequest, InstallResponse};
@@ -318,8 +292,8 @@ impl PluginManager {
             return Ok(());
         }
 
-        // 初始化系统表
-        self.repository.init_system_tables().await?;
+        // 初始化系统表 fixme 暂不需要
+        // self.repository.init_system_tables().await?;
 
         // 加载已安装插件到内存
         self.load_installed_plugins().await?;
