@@ -382,6 +382,21 @@ impl SecurityValidator {
     }
 
     /// 验证 manifest 文件
+    /// 
+    /// manifest.json 结构示例：
+    /// ```json
+    /// {
+    ///   "manifest_version": "1.0",
+    ///   "plugin": {
+    ///     "id": "example_plugin",
+    ///     "name": "示例插件",
+    ///     "version": "1.0.0",
+    ///     "description": "...",
+    ///     "main_file": "bin/plugin.wasm",
+    ///     "dependencies": ["plugin1", "plugin2"]
+    ///   }
+    /// }
+    /// ```
     fn validate_manifest(&self, package_path: &Path, result: &mut ValidationResult) {
         let manifest_path = if package_path.is_dir() {
             package_path.join("manifest.json")
@@ -412,25 +427,56 @@ impl SecurityValidator {
             }
         };
 
-        // 验证必要字段
+        // 验证 manifest_version
+        if let Some(manifest_version) = manifest.get("manifest_version").and_then(|v| v.as_str()) {
+            if manifest_version != "1.0" {
+                result.add_warning(format!("Manifest 版本可能不兼容: {}", manifest_version));
+            }
+        } else {
+            result.add_warning("Manifest 缺少 manifest_version 字段".to_string());
+        }
+
+        // 获取 plugin 对象
+        let plugin = match manifest.get("plugin") {
+            Some(p) => p,
+            None => {
+                result.add_error("Manifest 缺少 plugin 对象".to_string());
+                return;
+            }
+        };
+
+        // 验证 plugin 对象中的必要字段
         let required_fields = ["id", "name", "version", "main_file"];
         for field in &required_fields {
-            if manifest.get(field).is_none() {
-                result.add_error(format!("Manifest 缺少必要字段: {}", field));
+            if plugin.get(field).is_none() {
+                result.add_error(format!("Manifest.plugin 缺少必要字段: {}", field));
             }
         }
 
         // 验证 ID 格式
-        if let Some(id) = manifest.get("id").and_then(|v| v.as_str()) {
+        if let Some(id) = plugin.get("id").and_then(|v| v.as_str()) {
             if !self.is_valid_plugin_id(id) {
                 result.add_error(format!("无效的插件 ID 格式: {}", id));
             }
         }
 
         // 验证版本格式
-        if let Some(version) = manifest.get("version").and_then(|v| v.as_str()) {
+        if let Some(version) = plugin.get("version").and_then(|v| v.as_str()) {
             if !self.is_valid_version(version) {
                 result.add_warning(format!("版本格式可能无效: {}", version));
+            }
+        }
+
+        // 验证依赖格式（可选）
+        if let Some(deps) = plugin.get("dependencies").and_then(|v| v.as_array()) {
+            for dep in deps {
+                if let Some(dep_id) = dep.as_str() {
+                    if !self.is_valid_plugin_id(dep_id) {
+                        result.add_warning(format!("依赖插件 ID 格式可能无效: {}", dep_id));
+                    }
+                } else {
+                    result.add_warning("依赖列表中存在非字符串项".to_string());
+                }
             }
         }
     }
