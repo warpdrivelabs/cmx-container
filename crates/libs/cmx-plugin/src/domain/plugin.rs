@@ -1,5 +1,5 @@
 //! 插件定义与信息模块
-//! 
+//!
 //! 定义插件的核心数据结构
 
 use std::path::PathBuf;
@@ -40,7 +40,7 @@ pub enum PluginSource {
         url: String,
         checksum: Option<String>,
     },
-    /// 注册表
+    /// 远程注册表，可以认为是插件市场？
     Registry {
         registry_url: Option<String>,
         package_name: String,
