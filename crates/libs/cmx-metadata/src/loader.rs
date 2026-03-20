@@ -69,28 +69,12 @@ pub fn load_table_define_from_path(path: &Path) -> Result<TableDefine, MetadataE
 /// * 成功返回 `Vec<TableDefine>`
 /// * 失败返回 `MetadataError`
 pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError> {
-    let v: Value = serde_json::from_str(s)?;
-
-    //{
-    //   "name": "domain_app_module",
-    //   "description": "域-应用-模块三层结构表定义：域（如财务域）、应用（如会计核算）、模块（如总账、应收应付、报表）",
-    //   "depends_on": [],
-    //   "priority": 0,
-    //   "files": [
-    //     "domain_app_module_tables.json"
-    //   ]
-    // }
-    let files_value = v.as_object().unwrap().get("files").unwrap();
-
-    let tables: Vec<TableDefine> = serde_json::from_value(files_value.clone()).unwrap();
-    Ok(tables)
-
-    // let root: TableDefinesRoot = serde_json::from_str(s)?;
-    // Ok(match root {
-    //     TableDefinesRoot::Single(t) => vec![*t],
-    //     TableDefinesRoot::Multi { tables } => tables,
-    //     TableDefinesRoot::Array(arr) => arr,
-    // })
+    let root: TableDefinesRoot = serde_json::from_str(s)?;
+    Ok(match root {
+        TableDefinesRoot::Single(t) => vec![*t],
+        TableDefinesRoot::Multi { tables } => tables,
+        TableDefinesRoot::Array(arr) => arr,
+    })
 }
 
 /// 从 JSON 文件路径读取多个表定义

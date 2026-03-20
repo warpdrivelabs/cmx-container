@@ -187,7 +187,7 @@ impl TableDefinesConfigManager {
         let mut all = Vec::new();
         for config in self.sorted_configs()? {
             for file in &config.files {
-                let path = base_path.join(file);
+                let path = base_path.join("meta").join(file);
                 let tables = load_table_defines_from_path(&path)?;
                 all.extend(tables);
             }
@@ -221,17 +221,17 @@ impl TableDefinesConfigManager {
         Ok(all)
     }
 }
-
-/// 从 JSON 文件读取所有表定义，并依次对每张表执行"创建或升级"
-pub fn load_and_apply_table_defines_from_path(
-    path: &Path,
-    executor: &dyn TableDefineDbExecutor,
-) -> Result<(), MetadataError> {
-    let defines = load_table_defines_from_path(path)?;
-    for define in &defines {
-        executor
-            .create_or_upgrade_table(define)
-            .map_err(|e| MetadataError::DdlGeneration(e.to_string()))?;
-    }
-    Ok(())
-}
+//
+// /// 从 JSON 文件读取所有表定义，并依次对每张表执行"创建或升级"
+// pub async fn load_and_apply_table_defines_from_path(
+//     path: &Path,
+//     executor: &dyn TableDefineDbExecutor,
+// ) -> Result<(), MetadataError> {
+//     let defines = load_table_defines_from_path(path)?;
+//     for define in &defines {
+//         executor
+//             .create_or_upgrade_table(define).await
+//             .map_err(|e| MetadataError::DdlGeneration(e.to_string()))?;
+//     }
+//     Ok(())
+// }

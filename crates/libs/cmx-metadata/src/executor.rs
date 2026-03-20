@@ -67,17 +67,16 @@ impl PgTableDefineExecutor {
     }
 
     /// 执行多条 DDL 语句（内部辅助）
-    fn execute_statements(&self, statements: Vec<String>) -> Result<(), MetadataError> {
+    async fn execute_statements(&self, statements: Vec<String>) -> Result<(), MetadataError> {
         let db_id = self.db_id.clone();
         let txn_id = self.txn_id.clone();
-        tokio::runtime::Handle::current().block_on(async move {
             for stmt in &statements {
                 execute_sql_by_ids(&db_id, txn_id.as_deref(), stmt)
                     .await
                     .map_err(|e| MetadataError::DdlExecution(e.to_string()))?;
             }
             Ok(())
-        })
+
     }
 
     /// 查询 PostgreSQL 中当前表的结构，构建 TableDefine
@@ -288,7 +287,7 @@ impl PgTableDefineExecutor {
 }
 
 impl TableDefineDbExecutor for PgTableDefineExecutor {
-    fn create_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
+    async fn create_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         let dialect = PostgresDdlDialect::default();
 
         // 生成 CREATE TABLE + COMMENT + INDEX
@@ -309,11 +308,11 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         all_stmts.extend(comment_stmts);
         all_stmts.extend(index_stmts);
 
-        self.execute_statements(all_stmts)
+        self.execute_statements(all_stmts).await
             .map_err(|e| BaseError::DdlGeneration(e.to_string()))
     }
 
-    fn upgrade_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
+    async fn upgrade_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         // 1. 查询当前数据库中的表结构
         let current = self
             .query_current_table_define(define)
@@ -346,7 +345,7 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         }
 
         // 3. 执行增量 DDL
-        self.execute_statements(stmts)
+        self.execute_statements(stmts).await
             .map_err(|e| BaseError::DdlGeneration(format!("执行增量 DDL 失败: {}", e)))
     }
 }

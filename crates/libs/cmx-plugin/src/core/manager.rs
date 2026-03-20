@@ -67,9 +67,10 @@ use crate::security::signature::SignatureValidator;
 use crate::security::validator::SecurityValidator;
 use cmx_buffer::{CacheManager, LockManager, PubSubOps};
 use cmx_core::model::cell::TableDefine;
+use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_database::DatabaseManager;
 use cmx_metadata::config::{
-    TableDefinesConfigManager, load_and_apply_table_defines_from_path,
+    TableDefinesConfigManager,
     load_table_defines_config_from_path,
 };
 
@@ -1644,13 +1645,19 @@ impl PluginManager {
         let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, None);
         for table_config_file in &plugin_def.table_config_files {
             let config_path = install_path.join(table_config_file);
-            let table_config = load_table_defines_config_from_path(&config_path)
+            let table_df = load_table_defines_config_from_path(&config_path)
                 .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
-            table_config_manager.add_config(table_config);
+            table_config_manager.add_config(table_df);
 
-            //直接直接表创建或者更新
-            load_and_apply_table_defines_from_path(&config_path, &executor)
-                .map_err(|e| PluginError::Metadata(format!("加载并应用表定义失败: {}", e)))?;
+        }
+
+        let table_defs = table_config_manager.load_all_tables(install_path)
+            .map_err(|e| PluginError::Metadata(format!("加载表定义失败: {}", e)))?;
+        for table_def in table_defs {
+            executor
+                .create_or_upgrade_table(&table_def).await
+                .map_err(|e|
+                    PluginError::Metadata(format!("创建或升级表{}失败: {}", &table_def.table_name, e)))?;
         }
 
         //开始创建表
