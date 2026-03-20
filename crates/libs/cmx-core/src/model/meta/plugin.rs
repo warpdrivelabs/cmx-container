@@ -62,7 +62,7 @@ pub struct PluginService {
 /// 表定义无需在插件 JSON 中再列；建表配置（table_config_files）中已指向各表定义 JSON 文件。
 ///
 /// JSON 格式说明：
-/// - **wasm_file**：WASM 二进制文件路径（相对插件根目录或 ZIP 根目录）。
+/// - **main_file**：WASM 二进制文件路径（相对插件根目录或 ZIP 根目录）。
 /// - **table_config_files**：本插件使用的「建表配置」JSON 文件列表（即 `TableDefinesConfig` 文件，
 ///   如 `sys_tables_config.json`、`oracle_tables_config.json`），配置内已定义具体表定义文件列表。
 /// - **supported_databases**：本插件声明支持的数据库类型，如 mysql、postgres、sqlite、oracle 等（见 [supported_db]）。
@@ -80,7 +80,7 @@ pub struct PluginDefinition {
     #[serde(default)]
     pub version: Option<String>,
     /// WASM 入口文件路径（相对定义文件所在目录或 ZIP 根）
-    pub wasm_file: String,
+    pub main_file: String,
     /// 本插件使用的建表配置 JSON 文件列表（TableDefinesConfig 格式，其内已定义表定义文件）
     #[serde(default)]
     pub table_config_files: Vec<String>,
@@ -111,7 +111,7 @@ pub struct PluginDefinition {
     /// 可选说明
     #[serde(default)]
     pub description: Option<String>,
-    /// 插件依赖列表
+    /// 插件依赖列表 todo 现在不支持解析json文件中的依赖，因为格式不一致0320
     #[serde(default)]
     pub dependencies: Vec<PluginDependency>,
     /// 插件提供的服务列表
@@ -162,7 +162,7 @@ pub struct PluginManifest {
     /// 清单格式版本，便于后续兼容
     #[serde(default)]
     pub manifest_version: Option<String>,
-    /// 插件定义（wasm_file / table_config_files 均为 ZIP 内相对路径）
+    /// 插件定义（main_file / table_config_files 均为 ZIP 内相对路径）
     pub plugin: PluginDefinition,
     /// ZIP 内文件条目相对路径列表（装配清单，用于校验包内容）
     #[serde(default)]

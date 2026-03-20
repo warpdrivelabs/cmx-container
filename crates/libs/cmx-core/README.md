@@ -127,7 +127,7 @@ pub trait CMXResponse: Any + Send + Sync {
   "id": "com.example.sales",
   "name": "销售管理插件",
   "version": "1.0.0",
-  "wasm_file": "target/sales.wasm",
+  "main_file": "target/sales.wasm",
   "table_config_files": ["tables/sale_order.json"],
   "supported_databases": ["postgres", "mysql"],
   "domain_code": "SALES",

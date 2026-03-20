@@ -37,45 +37,51 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
-use cmx_database::DatabaseManager;
-use cmx_buffer::{CacheManager, LockManager, PubSubOps};
-
-use crate::error::{PluginError, PluginResult};
+use crate::audit::logger::AuditLogger;
+use crate::cluster::deployment::DeploymentCoordinator;
+use crate::cluster::node::NodeManager;
+use crate::cluster::sync::SyncManager;
 use crate::config::settings::PluginManagerSettings;
-use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus, PluginFilter};
-use crate::domain::status::StatusTransition;
-use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
 use crate::core::lifecycle::{LifecycleState, LifecycleStateMachine};
+use crate::core::registry::PluginRegistry;
+use crate::domain::plugin::{PluginFilter, PluginInfo, PluginSource, PluginStatus};
+use crate::domain::status::StatusTransition;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::schema::SchemaManager;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::storage::file::FileStorage;
-use crate::infrastructure::storage::backup::BackupManager;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
-use crate::security::validator::SecurityValidator;
-use crate::security::signature::SignatureValidator;
-use crate::security::permission::PermissionManager;
-use crate::runtime::activation::ActivationManager;
-use crate::runtime::service_registry::ServiceRegistry;
-use crate::runtime::feature::FeatureManager;
-use crate::audit::logger::AuditLogger;
-use crate::cluster::node::NodeManager;
-use crate::cluster::deployment::DeploymentCoordinator;
-use crate::cluster::sync::SyncManager;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
+use crate::infrastructure::storage::backup::BackupManager;
+use crate::infrastructure::storage::file::FileStorage;
+use crate::runtime::activation::ActivationManager;
+use crate::runtime::feature::FeatureManager;
+use crate::runtime::service_registry::ServiceRegistry;
+use crate::security::permission::PermissionManager;
+use crate::security::signature::SignatureValidator;
+use crate::security::validator::SecurityValidator;
+use cmx_buffer::{CacheManager, LockManager, PubSubOps};
+use cmx_core::model::cell::TableDefine;
+use cmx_database::DatabaseManager;
+use cmx_metadata::config::{
+    TableDefinesConfigManager, load_and_apply_table_defines_from_path,
+    load_table_defines_config_from_path,
+};
 
+pub use crate::service::activate::{
+    ActivateRequest, ActivateResponse, DeactivateRequest, DeactivateResponse,
+};
+pub use crate::service::downgrade::{DowngradeRequest, DowngradeResponse};
 // 重导出服务请求/响应类型，方便使用
 pub use crate::service::install::{InstallRequest, InstallResponse};
-pub use crate::service::uninstall::{UninstallRequest, UninstallResponse};
-pub use crate::service::activate::{ActivateRequest, ActivateResponse, DeactivateRequest, DeactivateResponse};
-pub use crate::service::upgrade::{UpgradeRequest, UpgradeResponse};
-pub use crate::service::downgrade::{DowngradeRequest, DowngradeResponse};
 pub use crate::service::rollback::{RollbackRequest, RollbackResponse};
+pub use crate::service::uninstall::{UninstallRequest, UninstallResponse};
+pub use crate::service::upgrade::{UpgradeRequest, UpgradeResponse};
 
 /// 插件管理器构建器
 ///
@@ -205,9 +211,9 @@ impl PluginManager {
         let settings = builder.settings;
 
         // 创建数据库管理器（如果没有提供）
-        let db_manager = builder.db_manager.unwrap_or_else(|| {
-            Arc::new(DatabaseManager::new(Default::default()))
-        });
+        let db_manager = builder
+            .db_manager
+            .unwrap_or_else(|| Arc::new(DatabaseManager::new(Default::default())));
 
         // 创建数据仓库
         let repository = Arc::new(PluginRepository::new(
@@ -301,20 +307,25 @@ impl PluginManager {
         *initialized = true;
 
         // 发布初始化完成事件
-        self.event_bus.publish(Event::new(
-            EventType::SystemStarted,
-            "plugin-manager".to_string(),
-            serde_json::json!({
-                "timestamp": Utc::now().to_rfc3339(),
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::SystemStarted,
+                "plugin-manager".to_string(),
+                serde_json::json!({
+                    "timestamp": Utc::now().to_rfc3339(),
+                }),
+            ))
+            .await;
 
         Ok(())
     }
 
     /// 加载已安装插件到内存
     async fn load_installed_plugins(&self) -> PluginResult<()> {
-        let records = self.repository.list_plugins(&PluginFilter::default()).await?;
+        let records = self
+            .repository
+            .list_plugins(&PluginFilter::default())
+            .await?;
 
         let mut registry = self.registry.write().await;
         let mut contexts = self.contexts.write().await;
@@ -329,7 +340,9 @@ impl PluginManager {
                 version: record.version,
                 description: None,
                 author: record.vendor_name,
-                source: PluginSource::Local { path: PathBuf::from(&record.install_path) },
+                source: PluginSource::Local {
+                    path: PathBuf::from(&record.install_path),
+                },
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
@@ -364,7 +377,8 @@ impl PluginManager {
         // 使用分布式锁（如果可用）
         self.with_lock(&format!("plugin:install:{}", plugin_id), || async {
             self.do_install(request, start_time).await
-        }).await
+        })
+        .await
     }
 
     /// 执行安装操作
@@ -383,19 +397,33 @@ impl PluginManager {
     /// 11. 更新缓存
     /// 12. 记录审计日志
     /// 13. 清理临时目录
-    async fn do_install(&self, request: InstallRequest, start_time: std::time::Instant) -> PluginResult<InstallResponse> {
+    async fn do_install(
+        &self,
+        request: InstallRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<InstallResponse> {
         // 步骤1：获取插件包
-        let package_path = self.fetch_package(&request.source, request.version_constraint.as_deref()).await?;
+        let package_path = self
+            .fetch_package(&request.source, request.version_constraint.as_deref())
+            .await?;
 
         // 步骤2：准备临时目录（如果是 zip 则解压，如果是文件夹则直接使用）
-        let temp_dir = self.settings.temp_root.join(format!("plugin_install_{}", uuid::Uuid::new_v4()));
-        let (extract_path, needs_cleanup) = self.prepare_package_for_validation(&package_path, &temp_dir).await?;
+        let temp_dir = self
+            .settings
+            .temp_root
+            .join(format!("plugin_install_{}", uuid::Uuid::new_v4()));
+        let (extract_path, needs_cleanup) = self
+            .prepare_package_for_validation(&package_path, &temp_dir)
+            .await?;
 
         // 使用 RAII 确保临时目录被清理
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
         // 步骤3：验证插件安全性（在解压后的目录进行）
-        let validation_result = self.security_validator.validate_plugin_package(&extract_path).await;
+        let validation_result = self
+            .security_validator
+            .validate_plugin_package(&extract_path)
+            .await;
         if !validation_result.passed {
             let errors = validation_result.errors.join(", ");
             return Err(PluginError::Security(format!("安全验证失败: {}", errors)));
@@ -404,7 +432,10 @@ impl PluginManager {
         // 步骤4：解析插件定义（在解压后的目录进行）
         let plugin_def = self.parse_plugin_definition(&extract_path).await?;
         let plugin_id = plugin_def.id.clone();
-        let version = plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string());
+        let version = plugin_def
+            .version
+            .clone()
+            .unwrap_or_else(|| "1.0.0".to_string());
 
         // 步骤5：检查已安装状态
         if !request.force {
@@ -416,7 +447,9 @@ impl PluginManager {
         // 步骤6：检查依赖
         let dep_result = self.check_plugin_dependencies(&plugin_def).await?;
         if !dep_result.satisfied {
-            let missing: Vec<String> = dep_result.missing.iter()
+            let missing: Vec<String> = dep_result
+                .missing
+                .iter()
                 .map(|m| format!("{} ({})", m.plugin_id, m.required_by))
                 .collect();
             return Err(PluginError::Dependency(format!(
@@ -436,9 +469,13 @@ impl PluginManager {
         self.copy_plugin_files(&extract_path, &install_path).await?;
 
         // 步骤9：创建数据库表（如果需要）
-        let db_id = request.db_id.clone().unwrap_or_else(|| self.settings.default_database_id.clone());
+        let db_id = request
+            .db_id
+            .clone()
+            .unwrap_or_else(|| self.settings.default_database_id.clone());
         if !plugin_def.table_config_files.is_empty() {
-            self.create_plugin_tables(&plugin_def, &db_id, &install_path).await?;
+            self.create_plugin_tables(&plugin_def, &db_id, &install_path)
+                .await?;
         }
 
         // 步骤10：注册插件
@@ -460,7 +497,10 @@ impl PluginManager {
             plugin_id: plugin_id.clone(),
             name: plugin_def.name.clone(),
             version: version.clone(),
-            wasm_path: install_path.join(&plugin_def.wasm_file).to_string_lossy().to_string(),
+            wasm_path: install_path
+                .join(&plugin_def.main_file)
+                .to_string_lossy()
+                .to_string(),
             install_path: install_path.to_string_lossy().to_string(),
             config_path: None,
             db_id: db_id.clone(),
@@ -496,17 +536,22 @@ impl PluginManager {
         }
 
         // 步骤12：更新缓存
-        self.cache.set(
-            &format!("plugin:{}", plugin_id),
-            crate::infrastructure::cache::layered::CacheValue::Json(serde_json::to_value(&plugin_info).unwrap()),
-            None,
-        ).await;
+        self.cache
+            .set(
+                &format!("plugin:{}", plugin_id),
+                crate::infrastructure::cache::layered::CacheValue::Json(
+                    serde_json::to_value(&plugin_info).unwrap(),
+                ),
+                None,
+            )
+            .await;
 
         // 步骤13：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "version": version,
             "install_path": install_path.to_string_lossy().to_string(),
             "duration_ms": start_time.elapsed().as_millis(),
@@ -514,14 +559,16 @@ impl PluginManager {
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginInstalled,
-            plugin_id.clone(),
-            serde_json::json!({
-                "version": version,
-                "install_path": install_path.to_string_lossy().to_string(),
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginInstalled,
+                plugin_id.clone(),
+                serde_json::json!({
+                    "version": version,
+                    "install_path": install_path.to_string_lossy().to_string(),
+                }),
+            ))
+            .await;
 
         // 如果需要自动激活
         if request.auto_activate {
@@ -552,7 +599,8 @@ impl PluginManager {
         temp_dir: &std::path::Path,
     ) -> PluginResult<(std::path::PathBuf, bool)> {
         // 判断是 zip 还是文件夹
-        let is_zip = package_path.extension()
+        let is_zip = package_path
+            .extension()
             .map(|ext| ext == "zip")
             .unwrap_or(false);
 
@@ -625,15 +673,24 @@ impl PluginManager {
         let start_time = std::time::Instant::now();
 
         // 使用分布式锁（如果可用）
-        self.with_lock(&format!("plugin:uninstall:{}", request.plugin_id), || async {
-            self.do_uninstall(request, start_time).await
-        }).await
+        self.with_lock(
+            &format!("plugin:uninstall:{}", request.plugin_id),
+            || async { self.do_uninstall(request, start_time).await },
+        )
+        .await
     }
 
     /// 执行卸载操作
-    async fn do_uninstall(&self, request: UninstallRequest, start_time: std::time::Instant) -> PluginResult<UninstallResponse> {
+    async fn do_uninstall(
+        &self,
+        request: UninstallRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<UninstallResponse> {
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         // 步骤2：检查依赖（非强制模式）
@@ -661,18 +718,18 @@ impl PluginManager {
         if request.keep_data {
             let install_path = PathBuf::from(&plugin.install_path);
             if install_path.exists() {
-                self.backup_manager.create_backup(
-                    &request.plugin_id,
-                    &plugin.version,
-                    &install_path,
-                ).await.map_err(|e| PluginError::Uninstall(format!("创建备份失败: {}", e)))?;
+                self.backup_manager
+                    .create_backup(&request.plugin_id, &plugin.version, &install_path)
+                    .await
+                    .map_err(|e| PluginError::Uninstall(format!("创建备份失败: {}", e)))?;
             }
         }
 
         // 步骤5：删除文件
         let install_path = PathBuf::from(&plugin.install_path);
         if install_path.exists() && !request.keep_config {
-            self.storage.remove_dir(&install_path)
+            self.storage
+                .remove_dir(&install_path)
                 .map_err(|e| PluginError::Uninstall(format!("删除插件文件失败: {}", e)))?;
         }
 
@@ -691,13 +748,16 @@ impl PluginManager {
         }
 
         // 步骤7：清除缓存
-        self.cache.delete(&format!("plugin:{}", request.plugin_id)).await;
+        self.cache
+            .delete(&format!("plugin:{}", request.plugin_id))
+            .await;
 
         // 步骤8：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Uninstall,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "version": plugin.version,
             "keep_config": request.keep_config,
             "keep_data": request.keep_data,
@@ -706,13 +766,15 @@ impl PluginManager {
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginUninstalled,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "version": plugin.version,
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginUninstalled,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "version": plugin.version,
+                }),
+            ))
+            .await;
 
         Ok(UninstallResponse {
             plugin_id: request.plugin_id,
@@ -735,15 +797,24 @@ impl PluginManager {
         let start_time = std::time::Instant::now();
 
         // 使用分布式锁（如果可用）
-        self.with_lock(&format!("plugin:activate:{}", request.plugin_id), || async {
-            self.do_activate(request, start_time).await
-        }).await
+        self.with_lock(
+            &format!("plugin:activate:{}", request.plugin_id),
+            || async { self.do_activate(request, start_time).await },
+        )
+        .await
     }
 
     /// 执行激活操作
-    async fn do_activate(&self, request: ActivateRequest, start_time: std::time::Instant) -> PluginResult<ActivateResponse> {
+    async fn do_activate(
+        &self,
+        request: ActivateRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<ActivateResponse> {
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         // 步骤2：检查当前状态
@@ -765,7 +836,9 @@ impl PluginManager {
 
         // 步骤3：检查依赖是否已激活（非强制模式）
         if !request.force {
-            let inactive_deps = self.check_dependencies_activated(&request.plugin_id).await?;
+            let inactive_deps = self
+                .check_dependencies_activated(&request.plugin_id)
+                .await?;
             if !inactive_deps.is_empty() {
                 return Err(PluginError::Dependency(format!(
                     "以下依赖尚未激活: {}",
@@ -775,11 +848,14 @@ impl PluginManager {
         }
 
         // 步骤4：加载 WASM 模块
-        self.activation_manager.activate(&request.plugin_id, &plugin.version).await
+        self.activation_manager
+            .activate(&request.plugin_id, &plugin.version)
+            .await
             .map_err(|e| PluginError::Activate(format!("加载 WASM 模块失败: {}", e)))?;
 
         // 步骤5：注册服务（如果插件提供服务）
-        self.register_plugin_services(&request.plugin_id, &plugin.install_path).await?;
+        self.register_plugin_services(&request.plugin_id, &plugin.install_path)
+            .await?;
 
         // 步骤6：更新状态
         let mut fields = crate::infrastructure::database::repository::PluginUpdateFields {
@@ -787,7 +863,9 @@ impl PluginManager {
             ..Default::default()
         };
         fields.activated_at = Some(Utc::now());
-        self.repository.update_plugin(&request.plugin_id, &fields).await?;
+        self.repository
+            .update_plugin(&request.plugin_id, &fields)
+            .await?;
 
         // 更新上下文
         {
@@ -799,26 +877,31 @@ impl PluginManager {
         }
 
         // 更新缓存
-        self.cache.delete(&format!("plugin:{}", request.plugin_id)).await;
+        self.cache
+            .delete(&format!("plugin:{}", request.plugin_id))
+            .await;
 
         // 步骤7：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Activate,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "version": plugin.version,
             "duration_ms": start_time.elapsed().as_millis(),
         }));
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginActivated,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "version": plugin.version,
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginActivated,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "version": plugin.version,
+                }),
+            ))
+            .await;
 
         Ok(ActivateResponse {
             plugin_id: request.plugin_id,
@@ -841,15 +924,24 @@ impl PluginManager {
         let start_time = std::time::Instant::now();
 
         // 使用分布式锁（如果可用）
-        self.with_lock(&format!("plugin:deactivate:{}", request.plugin_id), || async {
-            self.do_deactivate(request, start_time).await
-        }).await
+        self.with_lock(
+            &format!("plugin:deactivate:{}", request.plugin_id),
+            || async { self.do_deactivate(request, start_time).await },
+        )
+        .await
     }
 
     /// 执行停用操作
-    async fn do_deactivate(&self, request: DeactivateRequest, start_time: std::time::Instant) -> PluginResult<DeactivateResponse> {
+    async fn do_deactivate(
+        &self,
+        request: DeactivateRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<DeactivateResponse> {
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         // 步骤2：检查当前状态
@@ -873,14 +965,20 @@ impl PluginManager {
         }
 
         // 步骤4：注销服务
-        self.service_registry.unregister_plugin_services(&request.plugin_id).await;
+        self.service_registry
+            .unregister_plugin_services(&request.plugin_id)
+            .await;
 
         // 步骤5：卸载 WASM 模块
-        self.activation_manager.deactivate(&request.plugin_id).await
+        self.activation_manager
+            .deactivate(&request.plugin_id)
+            .await
             .map_err(|e| PluginError::Deactivate(format!("卸载 WASM 模块失败: {}", e)))?;
 
         // 步骤6：更新状态
-        self.repository.update_plugin_status(&request.plugin_id, "deactivated").await?;
+        self.repository
+            .update_plugin_status(&request.plugin_id, "deactivated")
+            .await?;
 
         // 更新上下文
         {
@@ -891,26 +989,31 @@ impl PluginManager {
         }
 
         // 更新缓存
-        self.cache.delete(&format!("plugin:{}", request.plugin_id)).await;
+        self.cache
+            .delete(&format!("plugin:{}", request.plugin_id))
+            .await;
 
         // 步骤7：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Deactivate,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "version": plugin.version,
             "duration_ms": start_time.elapsed().as_millis(),
         }));
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginDeactivated,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "version": plugin.version,
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginDeactivated,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "version": plugin.version,
+                }),
+            ))
+            .await;
 
         Ok(DeactivateResponse {
             plugin_id: request.plugin_id,
@@ -937,7 +1040,8 @@ impl PluginManager {
         // 使用分布式锁（如果可用）
         self.with_lock(&format!("plugin:upgrade:{}", request.plugin_id), || async {
             self.do_upgrade(request, start_time).await
-        }).await
+        })
+        .await
     }
 
     /// 执行升级操作
@@ -954,25 +1058,42 @@ impl PluginManager {
     /// 9. 更新数据库记录
     /// 10. 重新激活（如需要）
     /// 11. 清理临时目录
-    async fn do_upgrade(&self, request: UpgradeRequest, start_time: std::time::Instant) -> PluginResult<UpgradeResponse> {
+    async fn do_upgrade(
+        &self,
+        request: UpgradeRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<UpgradeResponse> {
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         let old_version = plugin.version.clone();
 
         // 步骤2：获取新版本插件包
-        let package_path = self.fetch_package(&request.source, request.version_constraint.as_deref()).await?;
+        let package_path = self
+            .fetch_package(&request.source, request.version_constraint.as_deref())
+            .await?;
 
         // 步骤3：准备临时目录（如果是 zip 则解压，如果是文件夹则直接使用）
-        let temp_dir = self.settings.temp_root.join(format!("plugin_upgrade_{}", uuid::Uuid::new_v4()));
-        let (extract_path, needs_cleanup) = self.prepare_package_for_validation(&package_path, &temp_dir).await?;
+        let temp_dir = self
+            .settings
+            .temp_root
+            .join(format!("plugin_upgrade_{}", uuid::Uuid::new_v4()));
+        let (extract_path, needs_cleanup) = self
+            .prepare_package_for_validation(&package_path, &temp_dir)
+            .await?;
 
         // 使用 RAII 确保临时目录被清理
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
         // 步骤4：安全验证
-        let validation_result = self.security_validator.validate_plugin_package(&extract_path).await;
+        let validation_result = self
+            .security_validator
+            .validate_plugin_package(&extract_path)
+            .await;
         if !validation_result.passed {
             let errors = validation_result.errors.join(", ");
             return Err(PluginError::Security(format!("安全验证失败: {}", errors)));
@@ -980,7 +1101,10 @@ impl PluginManager {
 
         // 步骤5：解析新版本插件定义
         let new_plugin_def = self.parse_plugin_definition(&extract_path).await?;
-        let new_version = new_plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string());
+        let new_version = new_plugin_def
+            .version
+            .clone()
+            .unwrap_or_else(|| "1.0.0".to_string());
 
         // 步骤6：验证版本升级
         if !request.force {
@@ -999,11 +1123,11 @@ impl PluginManager {
 
         // 步骤7：创建备份
         let install_path = PathBuf::from(&plugin.install_path);
-        let backup_path = self.backup_manager.create_backup(
-            &request.plugin_id,
-            &old_version,
-            &install_path,
-        ).await.map_err(|e| PluginError::Upgrade(format!("创建备份失败: {}", e)))?;
+        let backup_path = self
+            .backup_manager
+            .create_backup(&request.plugin_id, &old_version, &install_path)
+            .await
+            .map_err(|e| PluginError::Upgrade(format!("创建备份失败: {}", e)))?;
 
         // 步骤8：停用插件（如果已激活）
         let was_activated = plugin.status == "activated";
@@ -1017,7 +1141,8 @@ impl PluginManager {
 
         // 步骤9：删除旧文件
         if install_path.exists() {
-            self.storage.remove_dir(&install_path)
+            self.storage
+                .remove_dir(&install_path)
                 .map_err(|e| PluginError::Upgrade(format!("删除旧文件失败: {}", e)))?;
         }
 
@@ -1030,7 +1155,9 @@ impl PluginManager {
             version: Some(new_version.clone()),
             ..Default::default()
         };
-        self.repository.update_plugin(&request.plugin_id, &fields).await?;
+        self.repository
+            .update_plugin(&request.plugin_id, &fields)
+            .await?;
 
         // 步骤12：如果之前是激活状态，重新激活
         if was_activated || request.auto_activate {
@@ -1045,7 +1172,8 @@ impl PluginManager {
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Upgrade,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "old_version": old_version,
             "new_version": new_version,
             "backup_path": backup_path.to_string_lossy().to_string(),
@@ -1054,14 +1182,16 @@ impl PluginManager {
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginUpgraded,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "old_version": old_version,
-                "new_version": new_version,
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginUpgraded,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "old_version": old_version,
+                    "new_version": new_version,
+                }),
+            ))
+            .await;
 
         Ok(UpgradeResponse {
             plugin_id: request.plugin_id,
@@ -1086,37 +1216,48 @@ impl PluginManager {
         let start_time = std::time::Instant::now();
 
         // 使用分布式锁（如果可用）
-        self.with_lock(&format!("plugin:downgrade:{}", request.plugin_id), || async {
-            self.do_downgrade(request, start_time).await
-        }).await
+        self.with_lock(
+            &format!("plugin:downgrade:{}", request.plugin_id),
+            || async { self.do_downgrade(request, start_time).await },
+        )
+        .await
     }
 
     /// 执行降级操作
-    async fn do_downgrade(&self, request: DowngradeRequest, start_time: std::time::Instant) -> PluginResult<DowngradeResponse> {
+    async fn do_downgrade(
+        &self,
+        request: DowngradeRequest,
+        start_time: std::time::Instant,
+    ) -> PluginResult<DowngradeResponse> {
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         let current_version = plugin.version.clone();
 
         // 步骤2：查找目标版本的备份
-        let backups = self.backup_manager.list_backups(&request.plugin_id).await
+        let backups = self
+            .backup_manager
+            .list_backups(&request.plugin_id)
+            .await
             .map_err(|e| PluginError::Downgrade(format!("获取备份列表失败: {}", e)))?;
 
-        let target_backup = backups.into_iter()
+        let target_backup = backups
+            .into_iter()
             .find(|b| b.version == request.target_version)
-            .ok_or_else(|| PluginError::Downgrade(format!(
-                "未找到版本 {} 的备份",
-                request.target_version
-            )))?;
+            .ok_or_else(|| {
+                PluginError::Downgrade(format!("未找到版本 {} 的备份", request.target_version))
+            })?;
 
         // 步骤3：创建当前版本备份
         let install_path = PathBuf::from(&plugin.install_path);
-        self.backup_manager.create_backup(
-            &request.plugin_id,
-            &current_version,
-            &install_path,
-        ).await.map_err(|e| PluginError::Downgrade(format!("创建备份失败: {}", e)))?;
+        self.backup_manager
+            .create_backup(&request.plugin_id, &current_version, &install_path)
+            .await
+            .map_err(|e| PluginError::Downgrade(format!("创建备份失败: {}", e)))?;
 
         // 步骤4：停用插件（如果已激活）
         let was_activated = plugin.status == "activated";
@@ -1130,11 +1271,14 @@ impl PluginManager {
 
         // 步骤5：恢复旧版本
         if install_path.exists() {
-            self.storage.remove_dir(&install_path)
+            self.storage
+                .remove_dir(&install_path)
                 .map_err(|e| PluginError::Downgrade(format!("删除当前文件失败: {}", e)))?;
         }
 
-        self.backup_manager.restore_backup(&target_backup.path, &install_path).await
+        self.backup_manager
+            .restore_backup(&target_backup.path, &install_path)
+            .await
             .map_err(|e| PluginError::Downgrade(format!("恢复备份失败: {}", e)))?;
 
         // 步骤6：更新数据库记录
@@ -1142,7 +1286,9 @@ impl PluginManager {
             version: Some(request.target_version.clone()),
             ..Default::default()
         };
-        self.repository.update_plugin(&request.plugin_id, &fields).await?;
+        self.repository
+            .update_plugin(&request.plugin_id, &fields)
+            .await?;
 
         // 步骤7：如果之前是激活状态，重新激活
         if was_activated {
@@ -1157,7 +1303,8 @@ impl PluginManager {
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Downgrade,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "from_version": current_version,
             "to_version": request.target_version,
             "duration_ms": start_time.elapsed().as_millis(),
@@ -1165,14 +1312,16 @@ impl PluginManager {
         self.audit_logger.log(audit_record).await;
 
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginDowngraded,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "from_version": current_version,
-                "to_version": request.target_version,
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::PluginDowngraded,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "from_version": current_version,
+                    "to_version": request.target_version,
+                }),
+            ))
+            .await;
 
         Ok(DowngradeResponse {
             plugin_id: request.plugin_id,
@@ -1190,17 +1339,24 @@ impl PluginManager {
         let start_time = std::time::Instant::now();
 
         // 步骤1：检查插件存在
-        let plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         let current_version = plugin.version.clone();
 
         // 步骤2：获取最近的备份
-        let backups = self.backup_manager.list_backups(&request.plugin_id).await
+        let backups = self
+            .backup_manager
+            .list_backups(&request.plugin_id)
+            .await
             .map_err(|e| PluginError::Rollback(format!("获取备份列表失败: {}", e)))?;
 
         // 排除当前版本，获取最近的备份
-        let target_backup = backups.into_iter()
+        let target_backup = backups
+            .into_iter()
             .filter(|b| b.version != current_version)
             .next()
             .ok_or_else(|| PluginError::Rollback("没有可回滚的备份".to_string()))?;
@@ -1223,7 +1379,8 @@ impl PluginManager {
         let audit_record = crate::audit::record::AuditRecord::success(
             plugin_id.clone(),
             crate::audit::record::OperationType::Rollback,
-        ).with_details(serde_json::json!({
+        )
+        .with_details(serde_json::json!({
             "from_version": current_version,
             "to_version": target_version,
             "duration_ms": start_time.elapsed().as_millis(),
@@ -1259,7 +1416,9 @@ impl PluginManager {
                 version: record.version,
                 description: None,
                 author: record.vendor_name,
-                source: PluginSource::Local { path: PathBuf::from(&record.install_path) },
+                source: PluginSource::Local {
+                    path: PathBuf::from(&record.install_path),
+                },
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
@@ -1324,7 +1483,8 @@ impl PluginManager {
         match source {
             PluginSource::Local { path } => {
                 // 从路径提取插件ID
-                let file_name = path.file_stem()
+                let file_name = path
+                    .file_stem()
                     .ok_or_else(|| PluginError::Install("无法从路径提取插件ID".to_string()))?
                     .to_string_lossy()
                     .to_string();
@@ -1334,65 +1494,118 @@ impl PluginManager {
                 // 从URL提取插件ID
                 let url_parsed = url::Url::parse(url)
                     .map_err(|e| PluginError::Install(format!("解析URL失败: {}", e)))?;
-                let file_name = url_parsed.path_segments()
+                let file_name = url_parsed
+                    .path_segments()
                     .and_then(|segments| segments.last())
                     .ok_or_else(|| PluginError::Install("无法从URL提取插件ID".to_string()))?
                     .trim_end_matches(".zip");
                 Ok(file_name.to_string())
             }
-            PluginSource::Registry { package_name, .. } => {
-                Ok(package_name.clone())
-            }
+            PluginSource::Registry { package_name, .. } => Ok(package_name.clone()),
         }
     }
 
     /// 获取插件包
-    async fn fetch_package(&self, source: &PluginSource, version_constraint: Option<&str>) -> PluginResult<PathBuf> {
+    async fn fetch_package(
+        &self,
+        source: &PluginSource,
+        version_constraint: Option<&str>,
+    ) -> PluginResult<PathBuf> {
         match source {
             PluginSource::Local { path } => {
                 let fetcher = crate::fetcher::local::LocalFetcher::new(&self.settings.plugin_root);
-                fetcher.fetch(&crate::fetcher::source::PluginSource::local(path.clone()))
+                fetcher
+                    .fetch(&crate::fetcher::source::PluginSource::local(path.clone()))
                     .await
                     .map_err(|e| PluginError::Install(format!("获取本地插件包失败: {}", e)))
             }
             PluginSource::Remote { url, checksum } => {
-                let fetcher = crate::fetcher::remote::RemoteFetcher::new(self.settings.temp_root.clone());
-                fetcher.fetch(&crate::fetcher::source::PluginSource::remote(url.clone(), checksum.clone()))
+                let fetcher =
+                    crate::fetcher::remote::RemoteFetcher::new(self.settings.temp_root.clone());
+                fetcher
+                    .fetch(&crate::fetcher::source::PluginSource::remote(
+                        url.clone(),
+                        checksum.clone(),
+                    ))
                     .await
                     .map_err(|e| PluginError::Install(format!("获取远程插件包失败: {}", e)))
             }
-            PluginSource::Registry { registry_url, package_name } => {
+            PluginSource::Registry {
+                registry_url,
+                package_name,
+            } => {
                 let fetcher = crate::fetcher::registry::RegistryFetcher::new(
-                    crate::fetcher::registry::RegistryInfo::new(registry_url.clone().unwrap_or_default()),
+                    crate::fetcher::registry::RegistryInfo::new(
+                        registry_url.clone().unwrap_or_default(),
+                    ),
                     self.settings.temp_root.clone(),
                 );
-                fetcher.fetch_by_name(package_name, version_constraint.map(|s| s.to_string())).await
+                fetcher
+                    .fetch_by_name(package_name, version_constraint.map(|s| s.to_string()))
+                    .await
                     .map_err(|e| PluginError::Install(format!("从注册表获取插件包失败: {}", e)))
             }
         }
     }
 
     /// 解析插件定义
-    async fn parse_plugin_definition(&self, package_path: &std::path::Path) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
+    ///
+    /// 从 manifest.json 中解析插件定义。
+    ///
+    /// manifest.json 结构：
+    /// ```json
+    /// {
+    ///   "manifest_version": "1.0",
+    ///   "plugin": {
+    ///     "id": "example_plugin",
+    ///     "name": "示例插件",
+    ///     "version": "1.0.0",
+    ///     "main_file": "bin/plugin.wasm",
+    ///     ...
+    ///   }
+    /// }
+    /// ```
+    async fn parse_plugin_definition(
+        &self,
+        package_path: &std::path::Path,
+    ) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
         let manifest_path = package_path.join("manifest.json");
 
         if !manifest_path.exists() {
-            return Err(PluginError::Metadata("插件定义文件 manifest.json 不存在".to_string()));
+            return Err(PluginError::Metadata(
+                "插件定义文件 manifest.json 不存在".to_string(),
+            ));
         }
 
         let content = std::fs::read_to_string(&manifest_path)
             .map_err(|e| PluginError::Metadata(format!("读取插件定义文件失败: {}", e)))?;
 
-        let definition: cmx_core::model::meta::plugin::PluginDefinition = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Metadata(format!("解析插件定义文件失败: {}", e)))?;
+        // 先解析为 JSON Value 以获取 plugin 对象
+        let manifest: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| PluginError::Metadata(format!("解析 manifest.json 失败: {}", e)))?;
+
+        // 获取 plugin 对象
+        let plugin_value = manifest
+            .get("plugin")
+            .ok_or_else(|| PluginError::Metadata("manifest.json 缺少 plugin 对象".to_string()))?;
+
+        // 将 plugin 对象解析为 PluginDefinition
+        let definition: cmx_core::model::meta::plugin::PluginDefinition =
+            serde_json::from_value(plugin_value.clone())
+                .map_err(|e| PluginError::Metadata(format!("解析 plugin 定义失败: {}", e)))?;
 
         Ok(definition)
     }
 
     /// 复制插件文件
-    async fn copy_plugin_files(&self, source: &std::path::Path, target: &std::path::Path) -> PluginResult<()> {
+    async fn copy_plugin_files(
+        &self,
+        source: &std::path::Path,
+        target: &std::path::Path,
+    ) -> PluginResult<()> {
         if source.is_dir() {
-            self.storage.copy_dir(source, target)
+            self.storage
+                .copy_dir(source, target)
                 .map_err(|e| PluginError::Install(format!("复制插件文件失败: {}", e)))?;
         } else if source.extension().map(|e| e == "zip").unwrap_or(false) {
             // 解压 ZIP 文件
@@ -1402,7 +1615,11 @@ impl PluginManager {
     }
 
     /// 解压 ZIP 文件
-    async fn extract_zip(&self, zip_path: &std::path::Path, target: &std::path::Path) -> PluginResult<()> {
+    async fn extract_zip(
+        &self,
+        zip_path: &std::path::Path,
+        target: &std::path::Path,
+    ) -> PluginResult<()> {
         cmx_utils::zip::ZipExtractor::extract(zip_path, target)
             .map_err(|e| PluginError::Install(format!("解压插件包失败: {}", e)))?;
 
@@ -1423,57 +1640,84 @@ impl PluginManager {
             return Ok(());
         }
 
-        // 遍历所有表配置文件
+        let mut table_config_manager = TableDefinesConfigManager::new();
+        let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, None);
         for table_config_file in &plugin_def.table_config_files {
             let config_path = install_path.join(table_config_file);
+            let table_config = load_table_defines_config_from_path(&config_path)
+                .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
+            table_config_manager.add_config(table_config);
 
-            if !config_path.exists() {
-                tracing::warn!(
-                    "表配置文件不存在: {}",
-                    config_path.display()
-                );
-                continue;
-            }
-
-            // 读取配置文件内容
-            let config_content = std::fs::read_to_string(&config_path)
-                .map_err(|e| PluginError::Metadata(format!(
-                    "读取表配置文件失败: {} - {}",
-                    config_path.display(),
-                    e
-                )))?;
-
-            // 解析表定义
-            let table_def: cmx_core::model::cell::TableDefine =
-                serde_json::from_str(&config_content)
-                    .or_else(|_| {
-                        // 尝试作为 TOML 解析
-                        toml::from_str(&config_content)
-                            .map_err(|e| PluginError::Metadata(format!(
-                                "解析表配置文件失败: {} - {}",
-                                config_path.display(),
-                                e
-                            )))
-                    })?;
-
-            // 创建表执行器
-            let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, None);
-
-            // 执行建表
-            use cmx_core::model::meta::base::TableDefineDbExecutor;
-            executor.create_table(&table_def)
-                .map_err(|e| PluginError::Metadata(format!(
-                    "创建表失败: {} - {}",
-                    table_def.table_name,
-                    e
-                )))?;
-
-            tracing::info!(
-                "成功创建插件表: {} ({})",
-                table_def.table_name,
-                plugin_def.id
-            );
+            //直接直接表创建或者更新
+            load_and_apply_table_defines_from_path(&config_path, &executor)
+                .map_err(|e| PluginError::Metadata(format!("加载并应用表定义失败: {}", e)))?;
         }
+
+        //开始创建表
+        // let table_defs = table_config_manager.load_all_tables(install_path)
+        //     .map_err(|e| PluginError::Metadata(format!("加载表定义失败: {}", e)))?;
+
+        // 遍历所有表配置文件
+        // for table_config_file in &plugin_def.table_config_files {
+        //     let config_path = install_path.join(table_config_file);
+        //
+        //     if !config_path.exists() {
+        //         tracing::warn!(
+        //             "表配置文件不存在: {}",
+        //             config_path.display()
+        //         );
+        //         continue;
+        //     }
+        //
+        //     // 读取配置文件内容
+        //     let config_content = std::fs::read_to_string(&config_path)
+        //         .map_err(|e| PluginError::Metadata(format!(
+        //             "读取表配置文件失败: {} - {}",
+        //             config_path.display(),
+        //             e
+        //         )))?;
+        //
+        //
+        //
+        //     // 解析表定义
+        //     let table_def: cmx_core::model::cell::TableDefine =
+        //         serde_json::from_str(&config_content)
+        //             .or_else(|e| {
+        //                 // `e` 就是 serde_json::from_str 返回的错误
+        //                 eprintln!("TableDefine JSON 解析失败: {}", e);
+        //
+        //             Err(     PluginError::Metadata(format!(
+        //                 "解析表配置文件失败: {} - {}",
+        //                 config_path.display(),
+        //                 e
+        //             )))
+        //                 // // 尝试作为 TOML 解析
+        //                 // toml::from_str(&config_content)
+        //                 //     .map_err(|e| PluginError::Metadata(format!(
+        //                 //         "解析表配置文件失败: {} - {}",
+        //                 //         config_path.display(),
+        //                 //         e
+        //                 //     )))
+        //             })?;
+        //
+        //     // 创建表执行器
+        //     let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, None);
+        //
+        //     // 执行建表
+        //     use cmx_core::model::meta::base::TableDefineDbExecutor;
+        //     executor.create_table(&table_def)
+        //         .map_err(|e| PluginError::Metadata(format!(
+        //             "创建表失败: {} - {}",
+        //             table_def.table_name,
+        //             e
+        //         )))?;
+        //
+        //     tracing::info!(
+        //         "成功创建插件表: {} ({})",
+        //         table_def.table_name,
+        //         plugin_def.id
+        //     );
+        // }
 
         Ok(())
     }
@@ -1485,7 +1729,9 @@ impl PluginManager {
         &self,
         plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
     ) -> PluginResult<crate::domain::dependency::DependencyCheckResult> {
-        use crate::domain::dependency::{DependencyCheckResult, MissingDependency, DependencyConflict};
+        use crate::domain::dependency::{
+            DependencyCheckResult, DependencyConflict, MissingDependency,
+        };
 
         let mut result = DependencyCheckResult::new();
 
@@ -1497,7 +1743,9 @@ impl PluginManager {
             let installed = self.is_plugin_installed(&dep.plugin_id).await?;
 
             if !installed {
-                let version_constraint = dep.version_constraint.as_ref()
+                let version_constraint = dep
+                    .version_constraint
+                    .as_ref()
                     .and_then(|v| crate::domain::version::VersionConstraint::parse(v).ok());
 
                 result.add_missing(MissingDependency {
@@ -1509,9 +1757,13 @@ impl PluginManager {
             }
 
             if let Some(ref constraint_str) = dep.version_constraint {
-                if let Ok(constraint) = crate::domain::version::VersionConstraint::parse(constraint_str) {
+                if let Ok(constraint) =
+                    crate::domain::version::VersionConstraint::parse(constraint_str)
+                {
                     if let Some(plugin_info) = self.get_plugin(&dep.plugin_id).await? {
-                        if let Ok(installed_version) = crate::domain::version::SemanticVersion::parse(&plugin_info.version) {
+                        if let Ok(installed_version) =
+                            crate::domain::version::SemanticVersion::parse(&plugin_info.version)
+                        {
                             if !constraint.satisfies(&installed_version) {
                                 result.add_conflict(DependencyConflict {
                                     plugin_id: dep.plugin_id.clone(),
@@ -1530,7 +1782,11 @@ impl PluginManager {
     /// 注册插件服务
     ///
     /// 从插件定义中获取服务列表并注册到服务注册表。
-    async fn register_plugin_services(&self, plugin_id: &str, install_path: &str) -> PluginResult<()> {
+    async fn register_plugin_services(
+        &self,
+        plugin_id: &str,
+        install_path: &str,
+    ) -> PluginResult<()> {
         let install_path = std::path::PathBuf::from(install_path);
         let manifest_path = install_path.join("manifest.json");
 
@@ -1542,8 +1798,9 @@ impl PluginManager {
         let content = std::fs::read_to_string(&manifest_path)
             .map_err(|e| PluginError::Activate(format!("读取插件定义失败: {}", e)))?;
 
-        let plugin_def: cmx_core::model::meta::plugin::PluginDefinition = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Activate(format!("解析插件定义失败: {}", e)))?;
+        let plugin_def: cmx_core::model::meta::plugin::PluginDefinition =
+            serde_json::from_str(&content)
+                .map_err(|e| PluginError::Activate(format!("解析插件定义失败: {}", e)))?;
 
         if plugin_def.services.is_empty() {
             tracing::debug!("插件 {} 没有定义服务，跳过服务注册", plugin_id);
@@ -1577,7 +1834,10 @@ impl PluginManager {
     ///
     /// 查询所有插件，检查它们的依赖列表中是否包含当前插件。
     async fn check_dependents(&self, plugin_id: &str) -> PluginResult<Vec<String>> {
-        let all_plugins = self.repository.list_plugins(&PluginFilter::default()).await?;
+        let all_plugins = self
+            .repository
+            .list_plugins(&PluginFilter::default())
+            .await?;
         let mut dependents = Vec::new();
 
         for plugin in all_plugins {
@@ -1603,7 +1863,10 @@ impl PluginManager {
     ///
     /// 获取插件的依赖列表，检查每个依赖是否已激活。
     async fn check_dependencies_activated(&self, plugin_id: &str) -> PluginResult<Vec<String>> {
-        let plugin = self.repository.find_plugin(plugin_id).await?
+        let plugin = self
+            .repository
+            .find_plugin(plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(plugin_id))?;
 
         let mut inactive_deps = Vec::new();
@@ -1634,7 +1897,10 @@ impl PluginManager {
     ///
     /// 查询所有已激活的插件，检查它们的依赖列表中是否包含当前插件。
     async fn check_active_dependents(&self, plugin_id: &str) -> PluginResult<Vec<String>> {
-        let all_plugins = self.repository.list_plugins(&PluginFilter::default()).await?;
+        let all_plugins = self
+            .repository
+            .list_plugins(&PluginFilter::default())
+            .await?;
         let mut dependents = Vec::new();
 
         for plugin in all_plugins {
@@ -1668,7 +1934,9 @@ impl PluginManager {
         Fut: std::future::Future<Output = PluginResult<T>>,
     {
         if let Some(ref lock_manager) = self.lock_manager {
-            let _guard = lock_manager.lock(lock_key).await
+            let _guard = lock_manager
+                .lock(lock_key)
+                .await
                 .map_err(|e| PluginError::Plugin(format!("获取分布式锁失败: {}", e)))?;
             f().await
         } else {
@@ -1743,13 +2011,15 @@ impl PluginManager {
         }
 
         // 发布关闭事件
-        self.event_bus.publish(Event::new(
-            EventType::SystemStopped,
-            "plugin-manager".to_string(),
-            serde_json::json!({
-                "timestamp": Utc::now().to_rfc3339(),
-            }),
-        )).await;
+        self.event_bus
+            .publish(Event::new(
+                EventType::SystemStopped,
+                "plugin-manager".to_string(),
+                serde_json::json!({
+                    "timestamp": Utc::now().to_rfc3339(),
+                }),
+            ))
+            .await;
 
         Ok(())
     }
@@ -1762,7 +2032,9 @@ impl Default for PluginManager {
         let settings = PluginManagerSettings::default();
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                Self::new(settings).await.expect("创建默认 PluginManager 失败")
+                Self::new(settings)
+                    .await
+                    .expect("创建默认 PluginManager 失败")
             })
         })
     }

@@ -190,7 +190,7 @@ impl InstallService {
             plugin_id: plugin_id.clone(),
             name: plugin_def.name.clone(),
             version: version.clone(),
-            wasm_path: install_path.join(&plugin_def.wasm_file).to_string_lossy().to_string(),
+            wasm_path: install_path.join(&plugin_def.main_file).to_string_lossy().to_string(),
             install_path: install_path.to_string_lossy().to_string(),
             config_path: None,
             db_id: db_id.clone(),
@@ -304,7 +304,7 @@ impl InstallService {
     
     /// 解析插件定义
     async fn parse_plugin_definition(&self, package_path: &Path) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
-        let manifest_path = package_path.join("plugin.json");
+        let manifest_path = package_path.join("manifest.json");
         
         if !manifest_path.exists() {
             return Err(PluginError::Metadata("插件定义文件 plugin.json 不存在".to_string()));

@@ -1,5 +1,5 @@
 //! 插件上下文模块
-//! 
+//!
 //! 管理插件运行时状态
 
 use std::collections::HashMap;
@@ -50,7 +50,7 @@ impl PluginContext {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// 从插件定义创建上下文
     pub fn from_definition(def: &cmx_core::model::meta::plugin::PluginDefinition, install_path: &Path) -> Self {
         Self {
@@ -59,14 +59,14 @@ impl PluginContext {
             status: PluginStatus::Installed,
             db_id: String::new(),
             install_path: install_path.to_path_buf(),
-            wasm_path: install_path.join(&def.wasm_file),
+            wasm_path: install_path.join(&def.main_file),
             config: None,
             activated_at: None,
             services: Vec::new(),
             metadata: HashMap::new(),
         }
     }
-    
+
     /// 从数据库记录创建上下文
     pub fn from_db_record(record: &crate::infrastructure::database::repository::PluginDbRecord) -> Self {
         Self {
@@ -88,7 +88,7 @@ impl PluginContext {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// 转换为数据库记录
     pub fn to_db_record(&self) -> crate::infrastructure::database::repository::PluginDbRecord {
         crate::infrastructure::database::repository::PluginDbRecord {

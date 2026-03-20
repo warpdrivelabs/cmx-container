@@ -178,7 +178,7 @@ impl TableDefinesConfigManager {
     /// 按照拓扑排序顺序加载所有配置文件中定义的表。
     ///
     /// # 参数
-    /// * `base_path` - 配置文件的基础路径
+    /// * `base_path` - table_config_file配置文件的基础路径
     ///
     /// # 返回值
     /// * 成功返回所有表定义的向量
