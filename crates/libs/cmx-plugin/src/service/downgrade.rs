@@ -1,9 +1,10 @@
 //! 降级服务模块
-//! 
+//!
 //! 处理插件降级流程
 
 use std::path::PathBuf;
 use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PluginError, PluginResult};
@@ -13,8 +14,7 @@ use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
-use crate::audit::record::{AuditRecord, OperationType};
-use crate::service::activate::ActivateService;
+use crate::core::context::PluginContext;
 
 /// 降级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,149 +46,172 @@ pub struct DowngradeResponse {
     pub message: String,
 }
 
+/// 降级服务依赖
+pub struct DowngradeServiceDeps {
+    /// 数据仓库
+    pub repository: Arc<PluginRepository>,
+    /// 文件存储
+    pub storage: Arc<FileStorage>,
+    /// 备份管理器
+    pub backup_manager: Arc<BackupManager>,
+    /// 事件总线
+    pub event_bus: Arc<EventBus>,
+    /// 审计日志
+    pub audit_logger: Arc<AuditLogger>,
+    /// 插件上下文
+    pub contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
+}
+
 /// 降级服务
 pub struct DowngradeService {
-    /// 数据仓库
-    repository: Arc<PluginRepository>,
-    /// 缓存管理器
-    cache: Arc<LayeredCacheManager>,
-    /// 文件存储
-    storage: Arc<FileStorage>,
-    /// 备份管理器
-    backup_manager: Arc<BackupManager>,
-    /// 事件总线
-    event_bus: Arc<EventBus>,
-    /// 审计日志
-    audit_logger: Arc<AuditLogger>,
-    /// 激活服务
-    activate_service: Arc<ActivateService>,
+    deps: DowngradeServiceDeps,
 }
 
 impl DowngradeService {
     /// 创建新的降级服务
-    pub fn new(
-        repository: Arc<PluginRepository>,
-        cache: Arc<LayeredCacheManager>,
-        storage: Arc<FileStorage>,
-        backup_manager: Arc<BackupManager>,
-        event_bus: Arc<EventBus>,
-        audit_logger: Arc<AuditLogger>,
-        activate_service: Arc<ActivateService>,
-    ) -> Self {
-        Self {
-            repository,
-            cache,
-            storage,
-            backup_manager,
-            event_bus,
-            audit_logger,
-            activate_service,
-        }
+    pub fn new(deps: DowngradeServiceDeps) -> Self {
+        Self { deps }
     }
-    
+
     /// 降级插件
-    /// 
+    ///
     /// 完整的降级流程：
     /// 1. 检查插件存在
     /// 2. 查找目标版本备份
     /// 3. 停用当前版本
     /// 4. 创建当前版本备份
     /// 5. 恢复目标版本
-    /// 6. 激活目标版本（可选）
-    /// 7. 记录审计日志
+    /// 6. 更新数据库记录
+    /// 7. 重新激活（如果需要）
+    /// 8. 记录审计日志
     pub async fn downgrade(&self, request: DowngradeRequest) -> PluginResult<DowngradeResponse> {
         let start_time = std::time::Instant::now();
-        
+
         // 步骤1：检查插件存在
-        let old_plugin = self.repository.find_plugin(&request.plugin_id).await?
+        let plugin = self
+            .deps
+            .repository
+            .find_plugin(&request.plugin_id)
+            .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
-        
-        let old_version = old_plugin.version.clone();
-        let was_activated = old_plugin.status == "activated";
-        
-        // 步骤2：查找目标版本备份
-        let backups = self.backup_manager.list_backups(&request.plugin_id).await
+
+        let current_version = plugin.version.clone();
+
+        // 步骤2：查找目标版本的备份
+        let backups = self
+            .deps
+            .backup_manager
+            .list_backups(&request.plugin_id)
+            .await
             .map_err(|e| PluginError::Downgrade(format!("获取备份列表失败: {}", e)))?;
-        
-        let target_backup = backups.into_iter()
+
+        let target_backup = backups
+            .into_iter()
             .find(|b| b.version == request.target_version)
-            .ok_or_else(|| PluginError::Downgrade(format!(
-                "未找到版本 {} 的备份",
-                request.target_version
-            )))?;
-        
-        // 步骤3：停用当前版本（如果已激活）
+            .ok_or_else(|| {
+                PluginError::Downgrade(format!("未找到版本 {} 的备份", request.target_version))
+            })?;
+
+        // 步骤3：创建当前版本备份
+        let install_path = PathBuf::from(&plugin.install_path);
+        self.deps
+            .backup_manager
+            .create_backup(&request.plugin_id, &current_version, &install_path)
+            .await
+            .map_err(|e| PluginError::Downgrade(format!("创建备份失败: {}", e)))?;
+
+        // 步骤4：停用插件（如果已激活）
+        let was_activated = plugin.status == "activated";
         if was_activated {
-            self.activate_service.deactivate(crate::service::activate::DeactivateRequest {
-                plugin_id: request.plugin_id.clone(),
-                force: request.force,
-            }).await?;
+            self.deps
+                .repository
+                .update_plugin_status(&request.plugin_id, "deactivated")
+                .await?;
         }
-        
-        // 步骤4：创建当前版本备份
-        if request.keep_backup {
-            let install_path = PathBuf::from(&old_plugin.install_path);
-            if install_path.exists() {
-                self.backup_manager.create_backup(
-                    &request.plugin_id,
-                    &old_version,
-                    &install_path,
-                ).await.map_err(|e| PluginError::Downgrade(format!("创建备份失败: {}", e)))?;
-            }
-        }
-        
-        // 步骤5：恢复目标版本
-        let install_path = PathBuf::from(&old_plugin.install_path);
+
+        // 步骤5：恢复旧版本
         if install_path.exists() {
-            self.storage.remove_dir(&install_path)
-                .map_err(|e| PluginError::Downgrade(format!("删除当前版本文件失败: {}", e)))?;
+            self.deps
+                .storage
+                .remove_dir(&install_path)
+                .map_err(|e| PluginError::Downgrade(format!("删除当前文件失败: {}", e)))?;
         }
-        
-        self.backup_manager.restore_backup(&target_backup.path, &install_path).await
+
+        self.deps
+            .backup_manager
+            .restore_backup(&target_backup.path, &install_path)
+            .await
             .map_err(|e| PluginError::Downgrade(format!("恢复备份失败: {}", e)))?;
-        
-        // 更新数据库记录
+
+        // 步骤6：更新数据库记录
         let fields = crate::infrastructure::database::repository::PluginUpdateFields {
             version: Some(request.target_version.clone()),
+            status: Some(if was_activated || request.auto_activate {
+                "activated".to_string()
+            } else {
+                "installed".to_string()
+            }),
             ..Default::default()
         };
-        self.repository.update_plugin(&request.plugin_id, &fields).await?;
-        
-        // 步骤6：激活目标版本（可选）
-        if request.auto_activate || was_activated {
-            self.activate_service.activate(crate::service::activate::ActivateRequest {
-                plugin_id: request.plugin_id.clone(),
-                force: request.force,
-            }).await?;
+        self.deps
+            .repository
+            .update_plugin(&request.plugin_id, &fields)
+            .await?;
+
+        // 更新上下文
+        {
+            let mut contexts = self.deps.contexts.write().await;
+            if let Some(context) = contexts.get_mut(&request.plugin_id) {
+                context.version = request.target_version.clone();
+            }
         }
-        
+
         // 步骤7：记录审计日志
-        let audit_record = AuditRecord::success(
+        let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
-            OperationType::Downgrade,
-        ).with_details(serde_json::json!({
-            "old_version": old_version,
-            "new_version": request.target_version,
+            crate::audit::record::OperationType::Downgrade,
+        )
+        .with_details(serde_json::json!({
+            "from_version": current_version,
+            "to_version": request.target_version,
             "duration_ms": start_time.elapsed().as_millis(),
         }));
-        self.audit_logger.log(audit_record).await;
-        
+        self.deps.audit_logger.log(audit_record).await;
+
         // 发布事件
-        self.event_bus.publish(Event::new(
-            EventType::PluginDowngraded,
-            request.plugin_id.clone(),
-            serde_json::json!({
-                "old_version": old_version,
-                "new_version": request.target_version,
-            }),
-        )).await;
-        
+        self.deps
+            .event_bus
+            .publish(Event::new(
+                EventType::PluginDowngraded,
+                request.plugin_id.clone(),
+                serde_json::json!({
+                    "from_version": current_version,
+                    "to_version": request.target_version,
+                }),
+            ))
+            .await;
+
         Ok(DowngradeResponse {
             plugin_id: request.plugin_id,
-            old_version,
+            old_version: current_version,
             new_version: request.target_version,
             success: true,
             message: "插件降级成功".to_string(),
+        })
+    }
+}
+
+impl Default for DowngradeService {
+    fn default() -> Self {
+        use std::sync::Arc;
+
+        Self::new(DowngradeServiceDeps {
+            repository: Arc::new(PluginRepository::default()),
+            storage: Arc::new(FileStorage::new(std::path::Path::new(""))),
+            backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),
+            event_bus: Arc::new(EventBus::new()),
+            audit_logger: Arc::new(AuditLogger::default()),
+            contexts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         })
     }
 }
