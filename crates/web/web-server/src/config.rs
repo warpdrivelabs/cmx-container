@@ -122,7 +122,7 @@ pub async fn init_db_datasource() {
 ///
 pub async fn init_cache() {
     let config = ConfigManager::global();
-    let url_value: &ConfigValue = match config.get("redis.url") {
+    match config.get("redis.url") {
         Some(url_value) => url_value,
         None => {
             error!("无法从配置管理器获取 redis 配置");
@@ -152,9 +152,9 @@ pub async fn init_plugins() {
 
     // 方式2：使用自定义配置初始化  todo 自定义配置需要完善
     let settings = PluginManagerSettings {
-        plugin_root: PathBuf::from("./plugins/root"),
-        backup_root: PathBuf::from("./plugins/backup"),
-        temp_root: PathBuf::from("./plugins/temp"),
+        plugin_root: PathBuf::new().join("plugins").join("root"),
+        backup_root: PathBuf::new().join("plugins").join("backup"),
+        temp_root: PathBuf::new().join("plugins").join("temp"),
         default_database_id: "primary".to_string(),
         ..Default::default()
     };

@@ -498,19 +498,7 @@ impl DbTransaction {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_postgres(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
@@ -518,19 +506,7 @@ impl DbTransaction {
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_mysql(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
@@ -538,19 +514,7 @@ impl DbTransaction {
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_sqlite(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
@@ -593,19 +557,7 @@ impl DbTransaction {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_postgres(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
@@ -613,19 +565,7 @@ impl DbTransaction {
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_mysql(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
@@ -633,19 +573,7 @@ impl DbTransaction {
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = match param {
-                        ParamValue::Null => query.bind(None::<String>),
-                        ParamValue::Bool(v) => query.bind(*v),
-                        ParamValue::Int(v) => query.bind(*v),
-                        ParamValue::Float(v) => query.bind(*v),
-                        ParamValue::String(v) => query.bind(v.clone()),
-                        ParamValue::Decimal(v) => query.bind(v.to_string()),
-                        ParamValue::DateTime(v) => query.bind(v.to_string()),
-                        ParamValue::Date(v) => query.bind(v.to_string()),
-                        ParamValue::Json(v) => query.bind(v.to_string()),
-                        ParamValue::Binary(v) => query.bind(v.as_slice()),
-                        ParamValue::Uuid(v) => query.bind(v.to_string()),
-                    };
+                    query = bind_param_sqlite(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
@@ -703,7 +631,86 @@ impl DbTransaction {
     }
 }
 
+/// 为 PostgreSQL 绑定参数
+///
+/// PostgreSQL 支持原生类型绑定，包括 Decimal、DateTime、Date、Json、Uuid
+///
+/// # 参数
+/// * `query` - SQL 查询
+/// * `param` - 参数值
+///
+/// # 返回值
+/// * 绑定参数后的查询
+#[inline]
+fn bind_param_postgres<'q>(query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    match param {
+        ParamValue::Null => query.bind(None::<String>),
+        ParamValue::Bool(v) => query.bind(*v),
+        ParamValue::Int(v) => query.bind(*v),
+        ParamValue::Float(v) => query.bind(*v),
+        ParamValue::String(v) => query.bind(v.as_str()),
+        ParamValue::Decimal(v) => query.bind(*v),
+        ParamValue::DateTime(v) => query.bind(*v),
+        ParamValue::Date(v) => query.bind(*v),
+        ParamValue::Json(v) => query.bind(v.clone()),
+        ParamValue::Binary(v) => query.bind(v.as_slice()),
+        ParamValue::Uuid(v) => query.bind(*v),
+    }
+}
 
+/// 为 MySQL 绑定参数
+///
+/// MySQL 对部分类型需要转换为字符串
+///
+/// # 参数
+/// * `query` - SQL 查询
+/// * `param` - 参数值
+///
+/// # 返回值
+/// * 绑定参数后的查询
+#[inline]
+fn bind_param_mysql<'q>(query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+    match param {
+        ParamValue::Null => query.bind(None::<String>),
+        ParamValue::Bool(v) => query.bind(*v),
+        ParamValue::Int(v) => query.bind(*v),
+        ParamValue::Float(v) => query.bind(*v),
+        ParamValue::String(v) => query.bind(v.clone()),
+        ParamValue::Decimal(v) => query.bind(v.to_string()),
+        ParamValue::DateTime(v) => query.bind(v.to_string()),
+        ParamValue::Date(v) => query.bind(v.to_string()),
+        ParamValue::Json(v) => query.bind(v.to_string()),
+        ParamValue::Binary(v) => query.bind(v.as_slice()),
+        ParamValue::Uuid(v) => query.bind(v.to_string()),
+    }
+}
+
+/// 为 SQLite 绑定参数
+///
+/// SQLite 对部分类型需要转换为字符串
+///
+/// # 参数
+/// * `query` - SQL 查询
+/// * `param` - 参数值
+///
+/// # 返回值
+/// * 绑定参数后的查询
+#[inline]
+fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+    match param {
+        ParamValue::Null => query.bind(None::<String>),
+        ParamValue::Bool(v) => query.bind(*v),
+        ParamValue::Int(v) => query.bind(*v),
+        ParamValue::Float(v) => query.bind(*v),
+        ParamValue::String(v) => query.bind(v.clone()),
+        ParamValue::Decimal(v) => query.bind(v.to_string()),
+        ParamValue::DateTime(v) => query.bind(v.to_string()),
+        ParamValue::Date(v) => query.bind(v.to_string()),
+        ParamValue::Json(v) => query.bind(v.to_string()),
+        ParamValue::Binary(v) => query.bind(v.as_slice()),
+        ParamValue::Uuid(v) => query.bind(v.to_string()),
+    }
+}
 
 /// 事务持有器，管理事务和引用计数
 ///

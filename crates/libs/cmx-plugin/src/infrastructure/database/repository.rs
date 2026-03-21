@@ -1,5 +1,5 @@
 //! 数据仓库模块
-//! 
+//!
 //! 提供插件数据的增删改查操作
 
 use std::sync::Arc;
@@ -98,22 +98,22 @@ impl PluginRepository {
             default_db_id,
         }
     }
-    
+
     /// 获取默认数据库ID
     pub fn default_db_id(&self) -> &str {
         &self.default_db_id
     }
-    
+
     /// 初始化系统表
     pub async fn init_system_tables(&self) -> PluginResult<()> {
         let sqls = SchemaManager::get_create_system_tables_sql();
-        
+
         for sql in sqls {
             let statements: Vec<&str> = sql.split(';')
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty() && !s.starts_with("--"))
                 .collect();
-            
+
             for statement in statements {
                 if !statement.is_empty() {
                     self.db_manager
@@ -123,10 +123,10 @@ impl PluginRepository {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// 插入插件记录
     pub async fn insert_plugin(&self, record: &PluginDbRecord) -> PluginResult<()> {
         let sql = r#"
@@ -137,7 +137,7 @@ impl PluginRepository {
                 signature_algorithm, signer_key_id, activated_at, create_time, update_time
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         "#;
-        
+
         let params = serde_json::json!([
             record.id,
             record.plugin_id,
@@ -159,77 +159,77 @@ impl PluginRepository {
             record.metadata,
             record.signature_algorithm,
             record.signer_key_id,
-            record.activated_at.map(|t| t.to_rfc3339()),
-            record.create_time.to_rfc3339(),
-            record.update_time.to_rfc3339(),
+            record.activated_at,
+            record.create_time,
+            record.update_time,
         ]);
-        
+
         self.db_manager
             .execute_sql_with_params(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("插入插件记录失败: {}", e)))?;
-        
+
         Ok(())
     }
-    
+
     /// 更新插件记录
     pub async fn update_plugin(&self, plugin_id: &str, fields: &PluginUpdateFields) -> PluginResult<()> {
         let mut updates = Vec::new();
         let mut param_index = 1;
         let mut params = Vec::new();
-        
+
         if let Some(ref name) = fields.name {
             updates.push(format!("name = ${}", param_index));
             params.push(serde_json::json!(name));
             param_index += 1;
         }
-        
+
         if let Some(ref version) = fields.version {
             updates.push(format!("version = ${}", param_index));
             params.push(serde_json::json!(version));
             param_index += 1;
         }
-        
+
         if let Some(ref status) = fields.status {
             updates.push(format!("status = ${}", param_index));
             params.push(serde_json::json!(status));
             param_index += 1;
         }
-        
+
         if let Some(is_locked) = fields.is_locked {
             updates.push(format!("is_locked = ${}", param_index));
             params.push(serde_json::json!(is_locked));
             param_index += 1;
         }
-        
+
         if let Some(ref metadata) = fields.metadata {
             updates.push(format!("metadata = ${}", param_index));
             params.push(serde_json::json!(metadata));
             param_index += 1;
         }
-        
+
         if let Some(ref activated_at) = fields.activated_at {
             updates.push(format!("activated_at = ${}", param_index));
-            params.push(serde_json::json!(activated_at.to_rfc3339()));
+            params.push(serde_json::json!(activated_at));
             param_index += 1;
         }
-        
+
         if updates.is_empty() {
             return Ok(());
         }
-        
+
         updates.push(format!("update_time = ${}", param_index));
-        params.push(serde_json::json!(Utc::now().to_rfc3339()));
+        params.push(serde_json::json!(Utc::now()));
         param_index += 1;
-        
+
         params.push(serde_json::json!(plugin_id));
-        
+
         let sql = format!(
             "UPDATE cmx_plugin SET {} WHERE plugin_id = ${}",
             updates.join(", "),
             param_index
         );
-        
+
         self.db_manager
             .execute_sql_with_params(
                 &self.default_db_id,
@@ -239,75 +239,75 @@ impl PluginRepository {
             )
             .await
             .map_err(|e| PluginError::Database(format!("更新插件记录失败: {}", e)))?;
-        
+
         Ok(())
     }
-    
+
     /// 删除插件记录
     pub async fn delete_plugin(&self, plugin_id: &str) -> PluginResult<()> {
         let sql = "DELETE FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
-        
+
         self.db_manager
             .execute_sql_with_params(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("删除插件记录失败: {}", e)))?;
-        
+
         Ok(())
     }
-    
+
     /// 查询插件记录
     pub async fn find_plugin(&self, plugin_id: &str) -> PluginResult<Option<PluginDbRecord>> {
         let sql = "SELECT * FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
-        
+
         let result = self.db_manager
             .query_sql_with_params(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
-        
+
         Self::parse_plugin_record(&result).map(|r| r.into_iter().next())
     }
-    
+
     /// 通过ID查询插件记录
     pub async fn find_plugin_by_id(&self, id: &str) -> PluginResult<Option<PluginDbRecord>> {
         let sql = "SELECT * FROM cmx_plugin WHERE id = $1";
         let params = serde_json::json!([id]);
-        
+
         let result = self.db_manager
             .query_sql_with_params(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
-        
+
         Self::parse_plugin_record(&result).map(|r| r.into_iter().next())
     }
-    
+
     /// 列出所有插件
     pub async fn list_plugins(&self, filter: &PluginFilter) -> PluginResult<Vec<PluginDbRecord>> {
         let mut conditions = Vec::new();
         let mut params = Vec::new();
         let mut param_index = 1;
-        
+
         if let Some(ref status) = filter.status {
             conditions.push(format!("status = ${}", param_index));
             params.push(serde_json::json!(status.to_string()));
             param_index += 1;
         }
-        
+
         if let Some(ref name) = filter.name {
             conditions.push(format!("name LIKE ${}", param_index));
             params.push(serde_json::json!(format!("%{}%", name)));
             param_index += 1;
         }
-        
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {
             format!("WHERE {}", conditions.join(" AND "))
         };
-        
+
         let sql = format!("SELECT * FROM cmx_plugin {} ORDER BY create_time DESC", where_clause);
-        
+
         let result = self.db_manager
             .query_sql_with_params(
                 &self.default_db_id,
@@ -318,36 +318,36 @@ impl PluginRepository {
             )
             .await
             .map_err(|e| PluginError::Database(format!("列出插件失败: {}", e)))?;
-        
+
         Self::parse_plugin_record(&result)
     }
-    
+
     /// 检查插件是否存在
     pub async fn plugin_exists(&self, plugin_id: &str) -> PluginResult<bool> {
         let sql = "SELECT COUNT(*) as count FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
-        
+
         let result = self.db_manager
             .query_sql_with_params(&self.default_db_id, None, sql, params, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("检查插件存在失败: {}", e)))?;
-        
+
         let count = Self::parse_count(&result).unwrap_or(0);
         Ok(count > 0)
     }
-    
+
     /// 获取插件总数
     pub async fn count_plugins(&self) -> PluginResult<u64> {
         let sql = "SELECT COUNT(*) as count FROM cmx_plugin";
-        
+
         let result = self.db_manager
             .query_sql(&self.default_db_id, None, sql, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("获取插件总数失败: {}", e)))?;
-        
+
         Ok(Self::parse_count(&result).unwrap_or(0) as u64)
     }
-    
+
     /// 更新插件状态
     pub async fn update_plugin_status(&self, plugin_id: &str, status: &str) -> PluginResult<()> {
         let fields = PluginUpdateFields {
@@ -356,12 +356,12 @@ impl PluginRepository {
         };
         self.update_plugin(plugin_id, &fields).await
     }
-    
+
     /// 解析插件记录
     fn parse_plugin_record(dataset: &DataSet) -> PluginResult<Vec<PluginDbRecord>> {
         let mut records = Vec::new();
         let schema = dataset.schema.as_ref();
-        
+
         for row in dataset.iter() {
             let get_string = |col_name: &str| -> Option<String> {
                 row.get_by_name(schema, col_name)
@@ -371,7 +371,7 @@ impl PluginRepository {
                         None
                     })
             };
-            
+
             let get_opt_string = |col_name: &str| -> Option<String> {
                 row.get_by_name(schema, col_name).and_then(|v| {
                     match v {
@@ -381,7 +381,7 @@ impl PluginRepository {
                     }
                 })
             };
-            
+
             let get_bool = |col_name: &str| -> bool {
                 row.get_by_name(schema, col_name)
                     .map(|v| {
@@ -392,7 +392,7 @@ impl PluginRepository {
                     })
                     .unwrap_or(false)
             };
-            
+
             let get_opt_json = |col_name: &str| -> Option<serde_json::Value> {
                 row.get_by_name(schema, col_name).and_then(|v| {
                     match v {
@@ -404,7 +404,7 @@ impl PluginRepository {
                     }
                 })
             };
-            
+
             let get_datetime = |col_name: &str| -> DateTime<Utc> {
                 row.get_by_name(schema, col_name)
                     .and_then(|v| {
@@ -417,7 +417,7 @@ impl PluginRepository {
                     })
                     .unwrap_or_else(Utc::now)
             };
-            
+
             let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
                 row.get_by_name(schema, col_name)
                     .and_then(|v| {
@@ -429,7 +429,7 @@ impl PluginRepository {
                         }
                     })
             };
-            
+
             let record = PluginDbRecord {
                 id: get_string("id").unwrap_or_default(),
                 plugin_id: get_string("plugin_id").unwrap_or_default(),
@@ -455,13 +455,13 @@ impl PluginRepository {
                 create_time: get_datetime("create_time"),
                 update_time: get_datetime("update_time"),
             };
-            
+
             records.push(record);
         }
-        
+
         Ok(records)
     }
-    
+
     /// 解析计数结果
     fn parse_count(dataset: &DataSet) -> Option<i64> {
         if dataset.row_count() > 0 {
@@ -478,7 +478,7 @@ impl PluginRepository {
             None
         }
     }
-    
+
     /// 在事务中执行操作
     pub async fn with_transaction<F, T>(&self, db_id: &str, f: F) -> PluginResult<T>
     where
@@ -487,7 +487,7 @@ impl PluginRepository {
         let txn_context = self.db_manager.get_transaction_context();
         let txn_id = txn_context.begin(db_id, TransactionOptions::default()).await
             .map_err(|e| PluginError::Transaction(format!("开始事务失败: {}", e)))?;
-        
+
         match f().await {
             Ok(result) => {
                 txn_context.commit(&txn_id).await
