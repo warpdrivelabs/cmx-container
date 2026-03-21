@@ -11,12 +11,12 @@
 
 use std::collections::HashMap;
 
-use tracing::info;
 use cmx_core::model::cell::{
     ColumnDefine, DataValue, FieldType, IndexDefine, IndexKind, TableDefine,
 };
 use cmx_core::model::meta::base::{BaseError, TableDefineDbExecutor};
 use cmx_database::{execute_sql_by_ids, query_sql_by_ids, DataSet};
+use tracing::info;
 
 use crate::ddl::diff::DdlDiff;
 use crate::ddl::postgres::PostgresDdlDialect;
@@ -51,8 +51,6 @@ pub async fn execute_ddl_statement_by_ids(
 /// PostgreSQL TableDefine 执行器
 ///
 /// 将 TableDefine 转为 DDL 语句后通过数据库连接执行。
-/// 注意：`TableDefineDbExecutor` trait 的方法是同步签名，
-/// 因此内部使用 `tokio::runtime::Handle::current().block_on()` 执行异步操作。
 pub struct PgTableDefineExecutor {
     pub db_id: String,
     pub txn_id: Option<String>,
@@ -83,13 +81,12 @@ impl PgTableDefineExecutor {
     ///
     /// 通过查询 information_schema.columns、pg_indexes、pg_description
     /// 还原当前数据库中的表定义，用于与新定义进行 diff。
-    fn query_current_table_define(&self, define: &TableDefine) -> Result<TableDefine, MetadataError> {
+   async fn query_current_table_define(&self, define: &TableDefine) -> Result<TableDefine, MetadataError> {
         let db_id = self.db_id.clone();
         let txn_id = self.txn_id.clone();
         let table_name = define.table_name.clone();
         let schema_name = define.schema.clone().unwrap_or_else(|| "public".to_string());
 
-        tokio::runtime::Handle::current().block_on(async move {
             // 1. 查询列信息
             let columns_sql = format!(
                 "SELECT column_name, data_type, character_maximum_length, \
@@ -282,7 +279,7 @@ impl PgTableDefineExecutor {
                 partition_columns: vec![],
                 extensions: HashMap::new(),
             })
-        })
+
     }
 }
 
@@ -315,7 +312,7 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
     async fn upgrade_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         // 1. 查询当前数据库中的表结构
         let current = self
-            .query_current_table_define(define)
+            .query_current_table_define(define).await
             .map_err(|e| BaseError::DdlGeneration(format!("查询当前表结构失败: {}", e)))?;
 
         info!(

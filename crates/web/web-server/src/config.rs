@@ -8,7 +8,7 @@
 //! Web 服务器配置模块
 
 use cmx_buffer::{GlobalCacheManager, RedisConfig};
-use cmx_database::{DbConfig, DbType, PoolConfig, get_default_db_manager};
+use cmx_database::{get_default_db_manager, DbConfig, DbType, PoolConfig};
 use cmx_utils::{
     CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, ConfigValue,
     FromConfigValue, Priority,
@@ -146,7 +146,7 @@ pub async fn init_plugins() {
     //     .await
     //     .expect("插件管理器初始化失败");
 
-    // 方式2：使用自定义配置初始化  todo 自定义配置
+    // 方式2：使用自定义配置初始化  todo 自定义配置需要完善
     let settings = PluginManagerSettings {
         plugin_root: PathBuf::from("./plugins/root"),
         backup_root: PathBuf::from("./plugins/backup"),
@@ -154,7 +154,10 @@ pub async fn init_plugins() {
         default_database_id: "primary".to_string(),
         ..Default::default()
     };
-    GlobalPluginManager::initialize(settings).await.expect("插件管理器初始化失败");
+ GlobalPluginManager::initialize(settings)
+        .await
+        .unwrap_or_else(|e| panic!("初始化插件管理器失败: {:?}", e));
+    info!("成功初始化插件管理器");
 
     // ///方式3：注入外部依赖（推荐）
     // GlobalPluginManager::initialize_with_deps(
@@ -165,19 +168,24 @@ pub async fn init_plugins() {
     //     None,  // 消息订阅发布
     // ).await.expect("插件管理器初始化失败");
 
-        // 安装插件
-        let install_req = cmx_plugin::service::install::InstallRequest {
-            source: cmx_plugin::domain::plugin::PluginSource::Local {
-                path: std::path::PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
-            },
-            db_id: None,
-            force: true,
-            auto_activate: false,
-            version_constraint: None,
-        };
+    // 安装插件
+    let install_req = cmx_plugin::service::install::InstallRequest {
+        source: cmx_plugin::domain::plugin::PluginSource::Local {
+            path: std::path::PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
+        },
+        db_id: None,
+        force: true,
+        auto_activate: false,
+        version_constraint: None,
+    };
 
-
-   let resp = GlobalPluginManager::get().await.install(install_req).await.expect("插件安装失败");
-   info!("插件安装响应: {:?}", resp);
-    info!("插件管理器初始化完成");
+    let resp = GlobalPluginManager::get().await.install(install_req).await;
+    match resp {
+        Ok(resp) => {
+            info!("插件安装响应: {:?}", resp);
+        }
+        Err(e) => {
+            error!("插件安装失败: {:?}", e);
+        }
+    }
 }
