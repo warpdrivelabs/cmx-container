@@ -35,6 +35,7 @@ pub mod config;
 pub mod audit;
 pub mod fetcher;
 pub mod error;
+pub mod common;
 
 // 导出错误类型
 pub use error::PluginError;

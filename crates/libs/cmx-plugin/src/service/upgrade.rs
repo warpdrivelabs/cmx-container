@@ -21,8 +21,7 @@ use crate::security::validator::SecurityValidator;
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
-use crate::fetcher::local::LocalFetcher;
-use crate::fetcher::remote::RemoteFetcher;
+use crate::common::{PackageUtils, DefinitionUtils, PackageUtilsDeps};
 
 /// 升级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,12 +85,18 @@ pub struct UpgradeServiceDeps {
 /// 升级服务
 pub struct UpgradeService {
     deps: UpgradeServiceDeps,
+    package_utils: PackageUtils,
 }
 
 impl UpgradeService {
     /// 创建新的升级服务
     pub fn new(deps: UpgradeServiceDeps) -> Self {
-        Self { deps }
+        let package_utils = PackageUtils::new(PackageUtilsDeps {
+            plugin_root: deps.plugin_root.clone(),
+            temp_root: deps.temp_root.clone(),
+            storage: Some(deps.storage.clone()),
+        });
+        Self { deps, package_utils }
     }
 
     /// 执行升级操作
@@ -112,7 +117,6 @@ impl UpgradeService {
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
         let start_time = std::time::Instant::now();
 
-        // 步骤1：检查插件存在
         let plugin = self
             .deps
             .repository
@@ -122,23 +126,21 @@ impl UpgradeService {
 
         let old_version = plugin.version.clone();
 
-        // 步骤2：获取新版本插件包
         let package_path = self
-            .fetch_package(&request.source, request.version_constraint.as_deref())
+            .package_utils
+            .fetch_package(&request.source, request.version_constraint.as_deref(), "升级")
             .await?;
 
-        // 步骤3：准备临时目录
         let temp_dir = self
             .deps
             .temp_root
             .join(format!("plugin_upgrade_{}", uuid::Uuid::new_v4()));
         let (extract_path, needs_cleanup) = self
-            .prepare_package_for_validation(&package_path, &temp_dir)
-            .await?;
+            .package_utils
+            .prepare_package_for_validation(&package_path, &temp_dir, "升级")?;
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
-        // 步骤4：安全验证
         let validation_result = self
             .deps
             .security_validator
@@ -149,14 +151,12 @@ impl UpgradeService {
             return Err(PluginError::Security(format!("安全验证失败: {}", errors)));
         }
 
-        // 步骤5：解析新版本插件定义
-        let new_plugin_def = self.parse_plugin_definition(&extract_path).await?;
+        let new_plugin_def = DefinitionUtils::parse_plugin_definition(&extract_path)?;
         let new_version = new_plugin_def
             .version
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
 
-        // 步骤6：验证版本升级
         if !request.force {
             let old_semver = crate::domain::version::SemanticVersion::parse(&old_version)
                 .map_err(|e| PluginError::Upgrade(format!("解析旧版本失败: {}", e)))?;
@@ -171,7 +171,6 @@ impl UpgradeService {
             }
         }
 
-        // 步骤7：创建备份
         let install_path = PathBuf::from(&plugin.install_path);
         let backup_path = self
             .deps
@@ -180,10 +179,8 @@ impl UpgradeService {
             .await
             .map_err(|e| PluginError::Upgrade(format!("创建备份失败: {}", e)))?;
 
-        // 步骤8：停用插件（如果已激活）
         let was_activated = plugin.status == "activated";
         if was_activated {
-            // 直接更新状态，不调用 deactivate（避免循环依赖）
             let fields = crate::infrastructure::database::repository::PluginUpdateFields {
                 status: Some("installed".to_string()),
                 ..Default::default()
@@ -191,7 +188,6 @@ impl UpgradeService {
             self.deps.repository.update_plugin(&request.plugin_id, &fields).await?;
         }
 
-        // 步骤9：删除旧文件
         if install_path.exists() {
             self.deps
                 .storage
@@ -199,11 +195,9 @@ impl UpgradeService {
                 .map_err(|e| PluginError::Upgrade(format!("删除旧文件失败: {}", e)))?;
         }
 
-        // 步骤10：安装新版本
         self.deps.storage.create_dir(&install_path)?;
-        self.copy_plugin_files(&extract_path, &install_path).await?;
+        self.package_utils.copy_plugin_files(&extract_path, &install_path, "升级")?;
 
-        // 步骤11：更新数据库记录
         let fields = crate::infrastructure::database::repository::PluginUpdateFields {
             version: Some(new_version.clone()),
             status: Some(if was_activated || request.auto_activate {
@@ -218,7 +212,6 @@ impl UpgradeService {
             .update_plugin(&request.plugin_id, &fields)
             .await?;
 
-        // 更新上下文
         {
             let mut contexts = self.deps.contexts.write().await;
             if let Some(context) = contexts.get_mut(&request.plugin_id) {
@@ -226,7 +219,6 @@ impl UpgradeService {
             }
         }
 
-        // 步骤12：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Upgrade,
@@ -239,7 +231,6 @@ impl UpgradeService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
-        // 发布事件
         self.deps
             .event_bus
             .publish(Event::new(
@@ -259,161 +250,6 @@ impl UpgradeService {
             success: true,
             message: "插件升级成功".to_string(),
         })
-    }
-
-    /// 获取插件包
-    async fn fetch_package(
-        &self,
-        source: &PluginSource,
-        version_constraint: Option<&str>,
-    ) -> PluginResult<PathBuf> {
-        match source {
-            PluginSource::Local { path } => {
-                let fetcher = LocalFetcher::new(&self.deps.plugin_root);
-                fetcher
-                    .fetch(&crate::fetcher::source::PluginSource::local(path.clone()))
-                    .await
-                    .map_err(|e| PluginError::Upgrade(format!("获取本地插件包失败: {}", e)))
-            }
-            PluginSource::Remote { url, checksum } => {
-                let fetcher = RemoteFetcher::new(self.deps.temp_root.clone());
-                fetcher
-                    .fetch(&crate::fetcher::source::PluginSource::remote(
-                        url.clone(),
-                        checksum.clone(),
-                    ))
-                    .await
-                    .map_err(|e| PluginError::Upgrade(format!("获取远程插件包失败: {}", e)))
-            }
-            PluginSource::Registry {
-                registry_url,
-                package_name,
-            } => {
-                let registry_info =
-                    crate::fetcher::registry::RegistryInfo::new(registry_url.clone().unwrap_or_default());
-                let fetcher = crate::fetcher::registry::RegistryFetcher::new(
-                    registry_info,
-                    self.deps.temp_root.clone(),
-                );
-
-                fetcher
-                    .fetch_by_name(package_name, version_constraint.map(|s| s.to_string()))
-                    .await
-                    .map_err(|e| PluginError::Upgrade(format!("从注册表获取插件包失败: {}", e)))
-            }
-        }
-    }
-
-    /// 准备插件包用于验证
-    async fn prepare_package_for_validation(
-        &self,
-        package_path: &std::path::Path,
-        temp_dir: &std::path::Path,
-    ) -> PluginResult<(std::path::PathBuf, bool)> {
-        let is_zip = package_path
-            .extension()
-            .map(|ext| ext == "zip")
-            .unwrap_or(false);
-
-        if is_zip {
-            std::fs::create_dir_all(temp_dir)
-                .map_err(|e| PluginError::Upgrade(format!("创建临时目录失败: {}", e)))?;
-
-            self.extract_zip(package_path, temp_dir).await?;
-
-            let extract_path = self.find_plugin_root_in_dir(temp_dir)?;
-
-            tracing::info!("插件包已解压到临时目录: {}", extract_path.display());
-
-            Ok((extract_path, true))
-        } else if package_path.is_dir() {
-            Ok((package_path.to_path_buf(), false))
-        } else {
-            Err(PluginError::Upgrade(format!(
-                "不支持的插件包格式: {}",
-                package_path.display()
-            )))
-        }
-    }
-
-    /// 在解压目录中查找插件根目录
-    fn find_plugin_root_in_dir(&self, dir: &std::path::Path) -> PluginResult<std::path::PathBuf> {
-        if dir.join("manifest.json").exists() {
-            return Ok(dir.to_path_buf());
-        }
-
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    if path.join("manifest.json").exists() {
-                        return Ok(path);
-                    }
-                    if let Ok(found) = self.find_plugin_root_in_dir(&path) {
-                        return Ok(found);
-                    }
-                }
-            }
-        }
-
-        Ok(dir.to_path_buf())
-    }
-
-    /// 解析插件定义
-    async fn parse_plugin_definition(
-        &self,
-        package_path: &std::path::Path,
-    ) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
-        let manifest_path = package_path.join("manifest.json");
-
-        if !manifest_path.exists() {
-            return Err(PluginError::Metadata(
-                "插件定义文件 manifest.json 不存在".to_string(),
-            ));
-        }
-
-        let content = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| PluginError::Metadata(format!("读取插件定义文件失败: {}", e)))?;
-
-        let manifest: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Metadata(format!("解析 manifest.json 失败: {}", e)))?;
-
-        let plugin_value = manifest.get("plugin").ok_or_else(|| {
-            PluginError::Metadata("manifest.json 缺少 plugin 对象".to_string())
-        })?;
-
-        let definition: cmx_core::model::meta::plugin::PluginDefinition =
-            serde_json::from_value(plugin_value.clone())
-                .map_err(|e| PluginError::Metadata(format!("解析 plugin 定义失败: {}", e)))?;
-
-        Ok(definition)
-    }
-
-    /// 复制插件文件
-    async fn copy_plugin_files(
-        &self,
-        source: &std::path::Path,
-        target: &std::path::Path,
-    ) -> PluginResult<()> {
-        if source.is_dir() {
-            self.deps
-                .storage
-                .copy_dir(source, target)
-                .map_err(|e| PluginError::Upgrade(format!("复制插件文件失败: {}", e)))?;
-        }
-        Ok(())
-    }
-
-    /// 解压 ZIP 文件
-    async fn extract_zip(
-        &self,
-        zip_path: &std::path::Path,
-        target: &std::path::Path,
-    ) -> PluginResult<()> {
-        cmx_utils::zip::ZipExtractor::extract(zip_path, target)
-            .map_err(|e| PluginError::Upgrade(format!("解压插件包失败: {}", e)))?;
-
-        Ok(())
     }
 }
 

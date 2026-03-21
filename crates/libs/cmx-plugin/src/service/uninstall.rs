@@ -16,6 +16,7 @@ use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
+use crate::common::{DependencyUtils, DependencyUtilsDeps};
 
 /// 卸载请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,12 +65,16 @@ pub struct UninstallServiceDeps {
 /// 卸载服务
 pub struct UninstallService {
     deps: UninstallServiceDeps,
+    dependency_utils: DependencyUtils,
 }
 
 impl UninstallService {
     /// 创建新的卸载服务
     pub fn new(deps: UninstallServiceDeps) -> Self {
-        Self { deps }
+        let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
+            repository: deps.repository.clone(),
+        });
+        Self { deps, dependency_utils }
     }
 
     /// 卸载插件
@@ -87,7 +92,6 @@ impl UninstallService {
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
         let start_time = std::time::Instant::now();
 
-        // 步骤1：检查插件存在
         let plugin = self
             .deps
             .repository
@@ -95,9 +99,8 @@ impl UninstallService {
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
-        // 步骤2：检查依赖（非强制模式）
         if !request.force {
-            let dependents = self.check_dependents(&request.plugin_id).await?;
+            let dependents = self.dependency_utils.check_dependents(&request.plugin_id).await?;
             if !dependents.is_empty() {
                 return Err(PluginError::Dependency(format!(
                     "插件 {} 被以下插件依赖: {}",
@@ -107,12 +110,10 @@ impl UninstallService {
             }
         }
 
-        // 步骤3：停用插件（如果已激活）
         if plugin.status == "activated" {
             self.deactivate_plugin(&request.plugin_id).await?;
         }
 
-        // 步骤4：创建备份（如果保留数据）
         if request.keep_data {
             let install_path = PathBuf::from(&plugin.install_path);
             if install_path.exists() {
@@ -124,7 +125,6 @@ impl UninstallService {
             }
         }
 
-        // 步骤5：删除文件
         let install_path = PathBuf::from(&plugin.install_path);
         if install_path.exists() && !request.keep_config {
             self.deps
@@ -133,13 +133,11 @@ impl UninstallService {
                 .map_err(|e| PluginError::Uninstall(format!("删除插件文件失败: {}", e)))?;
         }
 
-        // 步骤6：清理数据库记录
         self.deps
             .repository
             .delete_plugin(&request.plugin_id)
             .await?;
 
-        // 步骤7：更新注册表和上下文
         {
             let mut registry = self.deps.registry.write().await;
             registry.unregister(&request.plugin_id);
@@ -150,13 +148,11 @@ impl UninstallService {
             contexts.remove(&request.plugin_id);
         }
 
-        // 步骤8：清除缓存
         self.deps
             .cache
             .delete(&format!("plugin:{}", request.plugin_id))
             .await;
 
-        // 步骤9：记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Uninstall,
@@ -169,7 +165,6 @@ impl UninstallService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
-        // 发布事件
         self.deps
             .event_bus
             .publish(Event::new(
@@ -186,34 +181,6 @@ impl UninstallService {
             success: true,
             message: "插件卸载成功".to_string(),
         })
-    }
-
-    /// 检查依赖此插件的其他插件
-    async fn check_dependents(&self, plugin_id: &str) -> PluginResult<Vec<String>> {
-        let all_plugins = self
-            .deps
-            .repository
-            .list_plugins(&crate::domain::plugin::PluginFilter::default())
-            .await?;
-        let mut dependents = Vec::new();
-
-        for plugin in all_plugins {
-            // 从元数据中获取依赖信息
-            if let Some(ref metadata) = plugin.metadata {
-                if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
-                    for dep in deps {
-                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
-                            if dep_id == plugin_id {
-                                dependents.push(plugin.plugin_id.clone());
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(dependents)
     }
 
     /// 停用插件
