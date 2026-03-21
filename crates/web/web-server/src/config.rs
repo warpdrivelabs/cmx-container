@@ -7,8 +7,8 @@
  */
 //! Web 服务器配置模块
 
-use cmx_buffer::{GlobalCacheManager, RedisConfig};
-use cmx_database::{get_default_db_manager, DbConfig, DbType, PoolConfig};
+use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
+use cmx_database::{DbConfig, DbType, PoolConfig, get_default_db_manager};
 use cmx_utils::{
     CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, ConfigValue,
     FromConfigValue, Priority,
@@ -131,10 +131,14 @@ pub async fn init_cache() {
     };
 
     let redis_config = RedisConfig::from_config(config);
-    GlobalCacheManager::initialize(redis_config)
+    GlobalCacheManager::initialize(redis_config.clone())
         .await
         .expect("redis初始化失败");
     info!("redis缓存初始化完成");
+    GlobalLockManager::initialize(redis_config)
+        .await
+        .expect("redis分布式锁初始化失败");
+    info!("redis分布式锁初始化完成");
 }
 // 在 config.rs 中添加初始化函数
 pub async fn init_plugins() {
@@ -154,7 +158,7 @@ pub async fn init_plugins() {
         default_database_id: "primary".to_string(),
         ..Default::default()
     };
- GlobalPluginManager::initialize(settings)
+    GlobalPluginManager::initialize(settings)
         .await
         .unwrap_or_else(|e| panic!("初始化插件管理器失败: {:?}", e));
     info!("成功初始化插件管理器");

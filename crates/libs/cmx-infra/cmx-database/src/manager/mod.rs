@@ -49,11 +49,10 @@ impl Default for TransactionOptions {
 ///
 /// 统一入口，管理连接池、事务注册表等资源
 #[allow(dead_code)]
-#[derive(Clone)]
 pub struct DatabaseManager {
     pool_manager: Arc<PoolManager>,
     config: DatabaseManagerConfig,
-    default_db_id: Arc<RwLock<String>>,
+    default_db_id: RwLock<String>,
 }
 
 /// 连接池管理器
@@ -68,7 +67,7 @@ impl DatabaseManager {
         Self {
             pool_manager: Arc::new(PoolManager::new()),
             config,
-            default_db_id: Arc::new(RwLock::new("default".to_string())),
+            default_db_id: RwLock::new("default".to_string()),
         }
     }
 
@@ -81,7 +80,7 @@ impl DatabaseManager {
     pub async fn register_data_source(&self, db_config: DbConfig) -> Result<()> {
         if (db_config.clone().default) {
             let mut write_guard = self.default_db_id.write().await;
-            *write_guard = db_config.clone().db_id;
+            *write_guard = db_config.db_id.clone();
         }
 
         self.pool_manager.register(db_config).await

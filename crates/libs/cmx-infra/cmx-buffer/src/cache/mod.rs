@@ -17,7 +17,7 @@ pub use ttl::TtlOps;
 use crate::client::RedisClient;
 use crate::config::{CacheConfig, LockConfig, RedisConfig};
 use crate::error::{Error, Result};
-use std::sync::Mutex;
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 /// 缓存管理器 - 提供统一的缓存操作入口
@@ -89,8 +89,7 @@ impl CacheManager {
 
 // ==================== 全局单例 ====================
 
-static GLOBAL_CACHE_MANAGER: OnceLock<CacheManager> = OnceLock::new();
-static GLOBAL_CACHE_MANAGER_MUTEX: OnceLock<Mutex<CacheManager>> = OnceLock::new();
+static GLOBAL_CACHE_MANAGER: OnceLock<Arc<CacheManager>> = OnceLock::new();
 
 /// 全局缓存管理器 - 提供应用级别的单例访问
 pub struct GlobalCacheManager;
@@ -108,12 +107,9 @@ impl GlobalCacheManager {
         let cache_manager = CacheManager::new(client);
 
         GLOBAL_CACHE_MANAGER
-            .set(cache_manager.clone())
+            .set(Arc::new(cache_manager))
             .map_err(|_| Error::ConfigError("全局缓存管理器已初始化".to_string()))?;
-
-        GLOBAL_CACHE_MANAGER_MUTEX
-            .set(Mutex::new(cache_manager))
-            .map_err(|_| Error::ConfigError("全局缓存管理器 Mutex 已初始化".to_string()))
+        Ok(())
     }
 
     /// 初始化全局缓存管理器（带配置）
@@ -134,12 +130,9 @@ impl GlobalCacheManager {
         let cache_manager = CacheManager::new(client);
 
         GLOBAL_CACHE_MANAGER
-            .set(cache_manager.clone())
+            .set(Arc::new(cache_manager))
             .map_err(|_| Error::ConfigError("全局缓存管理器已初始化".to_string()))?;
-
-        GLOBAL_CACHE_MANAGER_MUTEX
-            .set(Mutex::new(cache_manager))
-            .map_err(|_| Error::ConfigError("全局缓存管理器 Mutex 已初始化".to_string()))
+        Ok(())
     }
 
     /// 获取全局缓存管理器引用
@@ -149,23 +142,10 @@ impl GlobalCacheManager {
     ///
     /// # Panics
     /// 如果未初始化则 panic
-    pub fn get() -> &'static CacheManager {
+    pub fn get() -> &'static Arc<CacheManager> {
         GLOBAL_CACHE_MANAGER.get().expect(
             "缓存管理器未初始化，请先调用 GlobalCacheManager::initialize() 或 GlobalCacheManager::initialize_with_configs()"
         )
-    }
-
-    /// 获取全局缓存管理器可变引用
-    ///
-    /// # 返回值
-    /// * 缓存管理器可变引用
-    ///
-    /// # Panics
-    /// 如果未初始化则 panic
-    pub fn get_mut() -> std::sync::MutexGuard<'static, CacheManager> {
-        GLOBAL_CACHE_MANAGER_MUTEX.get().expect(
-            "缓存管理器未初始化，请先调用 GlobalCacheManager::initialize() 或 GlobalCacheManager::initialize_with_configs()"
-        ).lock().unwrap()
     }
 
     /// 检查是否已初始化
@@ -174,13 +154,5 @@ impl GlobalCacheManager {
     /// * 是否已初始化
     pub fn is_initialized() -> bool {
         GLOBAL_CACHE_MANAGER.get().is_some()
-    }
-
-    /// 获取全局缓存管理器克隆
-    ///
-    /// # 返回值
-    /// * 缓存管理器克隆
-    pub fn get_cloned() -> CacheManager {
-        Self::get().clone()
     }
 }

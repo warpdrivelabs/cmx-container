@@ -65,14 +65,11 @@ use crate::runtime::service_registry::ServiceRegistry;
 use crate::security::permission::PermissionManager;
 use crate::security::signature::SignatureValidator;
 use crate::security::validator::SecurityValidator;
-use cmx_buffer::{CacheManager, LockManager, PubSubOps};
+use cmx_buffer::{CacheManager, GlobalCacheManager, GlobalLockManager, LockManager, PubSubOps};
 use cmx_core::model::cell::TableDefine;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
-use cmx_database::DatabaseManager;
-use cmx_metadata::config::{
-    TableDefinesConfigManager,
-    load_table_defines_config_from_path,
-};
+use cmx_database::{DatabaseManager, get_default_db_manager};
+use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 
 pub use crate::service::activate::{
     ActivateRequest, ActivateResponse, DeactivateRequest, DeactivateResponse,
@@ -100,10 +97,10 @@ impl PluginManagerBuilder {
     pub fn new(settings: PluginManagerSettings) -> Self {
         Self {
             settings,
-            db_manager: None,
-            cache_manager: None,
-            lock_manager: None,
-            pubsub: None,
+            db_manager: Some(get_default_db_manager().clone()),
+            cache_manager: Some(GlobalCacheManager::get().clone()),
+            lock_manager: Some(GlobalLockManager::get().clone()),
+            pubsub: Some(Arc::new(GlobalCacheManager::get().pubsub())),
         }
     }
 
@@ -286,7 +283,7 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
                 default_database_id: settings.default_database_id.clone(),
-            }
+            },
         );
 
         let upgrade_service = crate::service::upgrade::UpgradeService::new(
@@ -302,7 +299,7 @@ impl PluginManager {
                 contexts: contexts.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
-            }
+            },
         );
 
         let activate_service = crate::service::activate::ActivateService::new(
@@ -315,7 +312,7 @@ impl PluginManager {
                 activation_manager: activation_manager.clone(),
                 service_registry: service_registry.clone(),
                 contexts: contexts.clone(),
-            }
+            },
         );
 
         let uninstall_service = crate::service::uninstall::UninstallService::new(
@@ -328,7 +325,7 @@ impl PluginManager {
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
-            }
+            },
         );
 
         let downgrade_service = crate::service::downgrade::DowngradeService::new(
@@ -339,7 +336,7 @@ impl PluginManager {
                 event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 contexts: contexts.clone(),
-            }
+            },
         );
 
         let rollback_service = crate::service::rollback::RollbackService::new(
@@ -351,7 +348,7 @@ impl PluginManager {
                 event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 contexts: contexts.clone(),
-            }
+            },
         );
 
         let manager = Self {
@@ -397,9 +394,11 @@ impl PluginManager {
         // self.repository.init_system_tables().await?;
 
         //删除临时文件夹
-        self.storage.remove_dir(&self.settings.temp_root)
-            .unwrap_or_else(|e| log::error!("删除临时目录{:?}失败: {}",&self.settings.temp_root, e));
-
+        self.storage
+            .remove_dir(&self.settings.temp_root)
+            .unwrap_or_else(|e| {
+                log::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
+            });
 
         // 加载已安装插件到内存
         self.load_installed_plugins().await?;
@@ -471,15 +470,11 @@ impl PluginManager {
     /// 11. 更新缓存
     /// 12. 记录审计日志
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
-        self.install_service.install(request).await
+        self.install_service
+            .install(request)
+            .await
             .map_err(|e| PluginError::Install(format!("安装失败: {}", e)))
     }
-
-
-
-
-
-
 
     /// 卸载插件
     ///
@@ -493,10 +488,11 @@ impl PluginManager {
     /// 7. 清除缓存
     /// 8. 记录审计日志
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
-        self.uninstall_service.uninstall(request).await
+        self.uninstall_service
+            .uninstall(request)
+            .await
             .map_err(|e| PluginError::Uninstall(format!("卸载失败: {}", e)))
     }
-
 
     /// 激活插件
     ///
@@ -509,11 +505,11 @@ impl PluginManager {
     /// 6. 更新状态
     /// 7. 记录审计日志
     pub async fn activate(&self, request: ActivateRequest) -> PluginResult<ActivateResponse> {
-        self.activate_service.activate(request).await
+        self.activate_service
+            .activate(request)
+            .await
             .map_err(|e| PluginError::Activate(format!("激活失败: {}", e)))
     }
-
-
 
     /// 停用插件
     ///
@@ -526,10 +522,11 @@ impl PluginManager {
     /// 6. 更新状态
     /// 7. 记录审计日志
     pub async fn deactivate(&self, request: DeactivateRequest) -> PluginResult<DeactivateResponse> {
-        self.activate_service.deactivate(request).await
+        self.activate_service
+            .deactivate(request)
+            .await
             .map_err(|e| PluginError::Deactivate(format!("停用失败: {}", e)))
     }
-
 
     /// 升级插件
     ///
@@ -544,11 +541,11 @@ impl PluginManager {
     /// 8. 激活新版本
     /// 9. 记录审计日志
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
-        self.upgrade_service.upgrade(request).await
+        self.upgrade_service
+            .upgrade(request)
+            .await
             .map_err(|e| PluginError::Upgrade(format!("升级失败: {}", e)))
     }
-
-
 
     /// 降级插件
     ///
@@ -561,7 +558,9 @@ impl PluginManager {
     /// 6. 激活旧版本
     /// 7. 记录审计日志
     pub async fn downgrade(&self, request: DowngradeRequest) -> PluginResult<DowngradeResponse> {
-        self.downgrade_service.downgrade(request).await
+        self.downgrade_service
+            .downgrade(request)
+            .await
             .map_err(|e| PluginError::Downgrade(format!("降级失败: {}", e)))
     }
 
@@ -711,33 +710,6 @@ impl PluginManager {
 
     // ==================== 辅助方法 ====================
 
-    /// 从插件来源提取插件ID
-    async fn extract_plugin_id_from_source(&self, source: &PluginSource) -> PluginResult<String> {
-        match source {
-            PluginSource::Local { path } => {
-                // 从路径提取插件ID
-                let file_name = path
-                    .file_stem()
-                    .ok_or_else(|| PluginError::Install("无法从路径提取插件ID".to_string()))?
-                    .to_string_lossy()
-                    .to_string();
-                Ok(file_name)
-            }
-            PluginSource::Remote { url, .. } => {
-                // 从URL提取插件ID
-                let url_parsed = url::Url::parse(url)
-                    .map_err(|e| PluginError::Install(format!("解析URL失败: {}", e)))?;
-                let file_name = url_parsed
-                    .path_segments()
-                    .and_then(|segments| segments.last())
-                    .ok_or_else(|| PluginError::Install("无法从URL提取插件ID".to_string()))?
-                    .trim_end_matches(".zip");
-                Ok(file_name.to_string())
-            }
-            PluginSource::Registry { package_name, .. } => Ok(package_name.clone()),
-        }
-    }
-
     /// 获取插件包
     async fn fetch_package(
         &self,
@@ -858,10 +830,6 @@ impl PluginManager {
 
         Ok(())
     }
-
-
-
-
 
     /// 注册插件服务
     ///
@@ -1086,4 +1054,3 @@ impl PluginManager {
         Ok(())
     }
 }
-
