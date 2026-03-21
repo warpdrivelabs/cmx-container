@@ -84,16 +84,39 @@ pub use crate::service::upgrade::{UpgradeRequest, UpgradeResponse};
 /// 插件管理器构建器
 ///
 /// 用于逐步配置和创建 PluginManager 实例。
+///
+/// # 示例
+///
+/// ```rust,no_run
+/// use cmx_plugin::core::manager::PluginManagerBuilder;
+/// use cmx_plugin::config::settings::PluginManagerSettings;
+///
+/// let builder = PluginManagerBuilder::new(PluginManagerSettings::default())
+///     .with_database(cmx_database::get_default_db_manager().clone());
+/// ```
 pub struct PluginManagerBuilder {
+    /// 配置设置
     settings: PluginManagerSettings,
+    /// 数据库管理器
     db_manager: Option<Arc<DatabaseManager>>,
+    /// Redis 缓存管理器
     cache_manager: Option<Arc<CacheManager>>,
+    /// 分布式锁管理器
     lock_manager: Option<Arc<LockManager>>,
+    /// 消息订阅发布
     pubsub: Option<Arc<PubSubOps>>,
 }
 
 impl PluginManagerBuilder {
     /// 创建新的构建器
+    ///
+    /// # 参数
+    ///
+    /// * `settings` - 插件管理器配置设置
+    ///
+    /// # 返回值
+    ///
+    /// 返回初始化后的构建器实例，已预设默认的数据库、缓存和锁管理器。
     pub fn new(settings: PluginManagerSettings) -> Self {
         Self {
             settings,
@@ -105,30 +128,54 @@ impl PluginManagerBuilder {
     }
 
     /// 设置数据库管理器
+    ///
+    /// # 参数
+    ///
+    /// * `db_manager` - 数据库管理器实例
     pub fn with_database(mut self, db_manager: Arc<DatabaseManager>) -> Self {
         self.db_manager = Some(db_manager);
         self
     }
 
     /// 设置 Redis 缓存管理器
+    ///
+    /// # 参数
+    ///
+    /// * `cache_manager` - Redis 缓存管理器实例
     pub fn with_cache(mut self, cache_manager: Arc<CacheManager>) -> Self {
         self.cache_manager = Some(cache_manager);
         self
     }
 
     /// 设置分布式锁管理器
+    ///
+    /// # 参数
+    ///
+    /// * `lock_manager` - 分布式锁管理器实例
     pub fn with_lock_manager(mut self, lock_manager: Arc<LockManager>) -> Self {
         self.lock_manager = Some(lock_manager);
         self
     }
 
     /// 设置消息订阅发布
+    ///
+    /// # 参数
+    ///
+    /// * `pubsub` - 消息订阅发布实例
     pub fn with_pubsub(mut self, pubsub: Arc<PubSubOps>) -> Self {
         self.pubsub = Some(pubsub);
         self
     }
 
     /// 构建插件管理器
+    ///
+    /// # 返回值
+    ///
+    /// 返回构建完成的 PluginManager 实例。
+    ///
+    /// # 错误
+    ///
+    /// - 初始化失败时返回错误
     pub async fn build(self) -> PluginResult<PluginManager> {
         PluginManager::from_builder(self).await
     }
@@ -448,7 +495,7 @@ impl PluginManager {
         Ok(())
     }
 
-    // ==================== 生命周期操作 ====================
+    // ==================== 生命周期操作 ==================== start
 
     /// 安装插件
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
@@ -554,6 +601,7 @@ impl PluginManager {
             message: "插件回滚成功".to_string(),
         })
     }
+    // ==================== 生命周期操作函数 end ====================
 
     // ==================== 查询操作 ====================
 
