@@ -23,7 +23,6 @@ use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
 use crate::common::{PackageUtils, DefinitionUtils, DependencyUtils, PackageUtilsDeps, DependencyUtilsDeps};
-use crate::GlobalPluginManager;
 
 /// 安装请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,11 +121,13 @@ impl InstallService {
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
         let start_time = std::time::Instant::now();
 
+        // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self
             .package_utils
             .fetch_package(&request.source, request.version_constraint.as_deref(), "安装")
             .await?;
 
+        // 步骤2: 如果是 zip，解压到临时目录
         let temp_dir = self
             .deps
             .temp_root
@@ -137,6 +138,7 @@ impl InstallService {
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
+        // 步骤3: 在临时目录进行安全验证和元数据解析
         let validation_result = self
             .deps
             .security_validator
@@ -154,17 +156,45 @@ impl InstallService {
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
 
+        // 步骤4: 检查已安装状态
         if !request.force {
             if self.is_plugin_installed(&plugin_id).await? {
                 return Err(PluginError::plugin_already_exists(&plugin_id));
             }
         }
 
+        // 步骤5: 检查依赖
+        let registry = self.deps.registry.clone();
+        let repository = self.deps.repository.clone();
         let dep_result = self.dependency_utils.check_plugin_dependencies(&plugin_def, |plugin_id| {
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                GlobalPluginManager::get().await.get_plugin(plugin_id).await
-            })
+            let registry = registry.clone();
+            let repository = repository.clone();
+            let plugin_id = plugin_id.to_string();
+            async move {
+                {
+                    let registry = registry.read().await;
+                    if let Some(info) = registry.get(&plugin_id) {
+                        return Ok(Some(info.clone()));
+                    }
+                }
+                if let Some(record) = repository.find_plugin(&plugin_id).await? {
+                    let info = PluginInfo {
+                        id: record.plugin_id,
+                        name: record.name,
+                        version: record.version,
+                        description: None,
+                        author: record.vendor_name,
+                        source: PluginSource::Local {
+                            path: PathBuf::from(&record.install_path),
+                        },
+                        status: PluginStatus::Installed,
+                        installed_at: Some(record.create_time),
+                        updated_at: Some(record.update_time),
+                    };
+                    return Ok(Some(info));
+                }
+                Ok(None)
+            }
         }).await?;
         if !dep_result.satisfied {
             let missing: Vec<String> = dep_result
@@ -178,14 +208,17 @@ impl InstallService {
             )));
         }
 
+        // 步骤6: 创建安装目录
         let install_path = self.deps.plugin_root.join(&plugin_id);
         if install_path.exists() && request.force {
             self.deps.storage.remove_dir(&install_path)?;
         }
         self.deps.storage.create_dir(&install_path)?;
 
+        // 步骤7: 复制文件到安装目录
         self.package_utils.copy_plugin_files(&extract_path, &install_path, "安装")?;
 
+        // 步骤8: 创建数据库表
         let db_id = request
             .db_id
             .clone()
@@ -195,6 +228,7 @@ impl InstallService {
                 .await?;
         }
 
+        // 步骤9: 注册插件
         let plugin_info = PluginInfo {
             id: plugin_id.clone(),
             name: plugin_def.name.clone(),
@@ -207,6 +241,7 @@ impl InstallService {
             updated_at: Some(Utc::now()),
         };
 
+        // 步骤10: 保存数据库记录
         let db_record = crate::infrastructure::database::repository::PluginDbRecord {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id: plugin_id.clone(),
@@ -249,6 +284,7 @@ impl InstallService {
             contexts.insert(plugin_id.clone(), context);
         }
 
+        // 步骤11: 更新缓存
         self.deps
             .cache
             .set(
@@ -260,6 +296,7 @@ impl InstallService {
             )
             .await;
 
+        // 步骤12: 记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
@@ -271,6 +308,7 @@ impl InstallService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
+        // 步骤13: 发布安装完成事件（临时目录由 TempDirCleanup 自动清理）
         self.deps
             .event_bus
             .publish(Event::new(

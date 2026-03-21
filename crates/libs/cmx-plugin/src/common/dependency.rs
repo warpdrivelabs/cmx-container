@@ -2,6 +2,7 @@
 //!
 //! 提供插件依赖检查、依赖者查找等通用操作。
 
+use std::future::Future;
 use std::sync::Arc;
 
 use crate::domain::dependency::{DependencyCheckResult, DependencyConflict, MissingDependency};
@@ -126,11 +127,22 @@ impl DependencyUtils {
     /// 检查插件依赖是否满足
     ///
     /// 验证插件的所有依赖是否已安装且版本满足约束。
-    pub async fn check_plugin_dependencies(
+    /// 
+    /// # 参数
+    /// * `plugin_def` - 插件定义
+    /// * `get_plugin_info` - 异步回调函数，用于获取已安装插件的信息
+    /// 
+    /// # 返回值
+    /// * `PluginResult<DependencyCheckResult>` - 依赖检查结果
+    pub async fn check_plugin_dependencies<F, Fut>(
         &self,
         plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
-        get_plugin_info: impl Fn(&str) -> PluginResult<Option<crate::domain::plugin::PluginInfo>>,
-    ) -> PluginResult<DependencyCheckResult> {
+        get_plugin_info: F,
+    ) -> PluginResult<DependencyCheckResult>
+    where
+        F: Fn(&str) -> Fut,
+        Fut: Future<Output = PluginResult<Option<crate::domain::plugin::PluginInfo>>>,
+    {
         let mut result = DependencyCheckResult::new();
 
         for dep in &plugin_def.dependencies {
@@ -157,7 +169,7 @@ impl DependencyUtils {
             if let Some(ref constraint_str) = dep.version_constraint {
                 if let Ok(constraint) = crate::domain::version::VersionConstraint::parse(constraint_str)
                 {
-                    if let Some(plugin_info) = get_plugin_info(&dep.plugin_id)? {
+                    if let Some(plugin_info) = get_plugin_info(&dep.plugin_id).await? {
                         if let Ok(installed_version) =
                             crate::domain::version::SemanticVersion::parse(&plugin_info.version)
                         {
