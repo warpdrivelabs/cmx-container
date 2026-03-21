@@ -246,6 +246,7 @@ impl UninstallService {
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
         let start_time = std::time::Instant::now();
 
+        // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
@@ -253,6 +254,7 @@ impl UninstallService {
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
+        // 步骤2: 检查依赖（非强制模式）
         if !request.force {
             let dependents = self.dependency_utils.check_dependents(&request.plugin_id).await?;
             if !dependents.is_empty() {
@@ -264,10 +266,12 @@ impl UninstallService {
             }
         }
 
+        // 步骤3: 停用插件（如果已激活）
         if plugin.status == "activated" {
             self.deactivate_plugin(&request.plugin_id).await?;
         }
 
+        // 步骤4: 创建备份（如果保留数据）
         if request.keep_data {
             let install_path = PathBuf::from(&plugin.install_path);
             if install_path.exists() {
@@ -279,6 +283,7 @@ impl UninstallService {
             }
         }
 
+        // 步骤5: 删除文件
         let install_path = PathBuf::from(&plugin.install_path);
         if install_path.exists() && !request.keep_config {
             self.deps
@@ -287,26 +292,31 @@ impl UninstallService {
                 .map_err(|e| PluginError::Uninstall(format!("删除插件文件失败: {}", e)))?;
         }
 
+        // 步骤6: 清理数据库记录
         self.deps
             .repository
             .delete_plugin(&request.plugin_id)
             .await?;
 
+        // 步骤7: 更新注册表
         {
             let mut registry = self.deps.registry.write().await;
             registry.unregister(&request.plugin_id);
         }
 
+        // 步骤8: 更新上下文
         {
             let mut contexts = self.deps.contexts.write().await;
             contexts.remove(&request.plugin_id);
         }
 
+        // 步骤9: 清除缓存
         self.deps
             .cache
             .delete(&format!("plugin:{}", request.plugin_id))
             .await;
 
+        // 步骤10: 记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Uninstall,
@@ -319,6 +329,7 @@ impl UninstallService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
+        // 步骤11: 发布卸载事件
         self.deps
             .event_bus
             .publish(Event::new(

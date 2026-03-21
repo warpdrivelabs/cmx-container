@@ -295,6 +295,7 @@ impl UpgradeService {
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
         let start_time = std::time::Instant::now();
 
+        // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
@@ -304,11 +305,13 @@ impl UpgradeService {
 
         let old_version = plugin.version.clone();
 
+        // 步骤2: 获取新版本插件包
         let package_path = self
             .package_utils
             .fetch_package(&request.source, request.version_constraint.as_deref(), "升级")
             .await?;
 
+        // 步骤3: 解压到临时目录
         let temp_dir = self
             .deps
             .temp_root
@@ -319,6 +322,7 @@ impl UpgradeService {
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
+        // 步骤4: 安全验证和元数据解析
         let validation_result = self
             .deps
             .security_validator
@@ -335,6 +339,7 @@ impl UpgradeService {
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
 
+        // 步骤5: 验证版本升级
         if !request.force {
             let old_semver = crate::domain::version::SemanticVersion::parse(&old_version)
                 .map_err(|e| PluginError::Upgrade(format!("解析旧版本失败: {}", e)))?;
@@ -349,6 +354,7 @@ impl UpgradeService {
             }
         }
 
+        // 步骤6: 创建备份
         let install_path = PathBuf::from(&plugin.install_path);
         let backup_path = self
             .deps
@@ -357,6 +363,7 @@ impl UpgradeService {
             .await
             .map_err(|e| PluginError::Upgrade(format!("创建备份失败: {}", e)))?;
 
+        // 步骤7: 停用插件
         let was_activated = plugin.status == "activated";
         if was_activated {
             let fields = crate::infrastructure::database::repository::PluginUpdateFields {
@@ -366,6 +373,7 @@ impl UpgradeService {
             self.deps.repository.update_plugin(&request.plugin_id, &fields).await?;
         }
 
+        // 步骤8: 删除旧文件
         if install_path.exists() {
             self.deps
                 .storage
@@ -373,9 +381,11 @@ impl UpgradeService {
                 .map_err(|e| PluginError::Upgrade(format!("删除旧文件失败: {}", e)))?;
         }
 
+        // 步骤9: 安装新版本
         self.deps.storage.create_dir(&install_path)?;
         self.package_utils.copy_plugin_files(&extract_path, &install_path, "升级")?;
 
+        // 步骤10: 更新数据库记录
         let fields = crate::infrastructure::database::repository::PluginUpdateFields {
             version: Some(new_version.clone()),
             status: Some(if was_activated || request.auto_activate {
@@ -390,6 +400,7 @@ impl UpgradeService {
             .update_plugin(&request.plugin_id, &fields)
             .await?;
 
+        // 步骤11: 更新上下文
         {
             let mut contexts = self.deps.contexts.write().await;
             if let Some(context) = contexts.get_mut(&request.plugin_id) {
@@ -397,6 +408,7 @@ impl UpgradeService {
             }
         }
 
+        // 步骤12: 记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Upgrade,
@@ -409,6 +421,7 @@ impl UpgradeService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
+        // 步骤13: 发布升级完成事件
         self.deps
             .event_bus
             .publish(Event::new(

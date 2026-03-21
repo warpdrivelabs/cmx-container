@@ -271,6 +271,7 @@ impl ActivateService {
     pub async fn activate(&self, request: ActivateRequest) -> PluginResult<ActivateResponse> {
         let start_time = std::time::Instant::now();
 
+        // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
@@ -278,6 +279,7 @@ impl ActivateService {
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
+        // 步骤2: 检查当前状态
         if plugin.status == "activated" {
             return Ok(ActivateResponse {
                 plugin_id: request.plugin_id,
@@ -294,6 +296,7 @@ impl ActivateService {
             ));
         }
 
+        // 步骤3: 检查依赖
         if !request.force {
             let dep_result = self.check_dependencies(&request.plugin_id).await?;
             if !dep_result.satisfied {
@@ -309,14 +312,17 @@ impl ActivateService {
             }
         }
 
+        // 步骤4: 加载 WASM 模块
         self.deps
             .activation_manager
             .activate(&request.plugin_id, &plugin.version)
             .await
             .map_err(|e| PluginError::Activate(format!("加载 WASM 模块失败: {}", e)))?;
 
+        // 步骤5: 注册服务
         self.register_plugin_services(&request.plugin_id, &plugin).await?;
 
+        // 步骤6: 更新状态
         self.deps
             .repository
             .update_plugin_status(&request.plugin_id, "activated")
@@ -329,11 +335,13 @@ impl ActivateService {
             }
         }
 
+        // 步骤7: 清除缓存
         self.deps
             .cache
             .delete(&format!("plugin:{}", request.plugin_id))
             .await;
 
+        // 步骤8: 记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Activate,
@@ -344,6 +352,7 @@ impl ActivateService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
+        // 步骤9: 发布激活事件
         self.deps
             .event_bus
             .publish(Event::new(
@@ -411,6 +420,7 @@ impl ActivateService {
     pub async fn deactivate(&self, request: DeactivateRequest) -> PluginResult<DeactivateResponse> {
         let start_time = std::time::Instant::now();
 
+        // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
@@ -418,6 +428,7 @@ impl ActivateService {
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
+        // 步骤2: 检查当前状态
         if plugin.status != "activated" {
             return Ok(DeactivateResponse {
                 plugin_id: request.plugin_id,
@@ -426,6 +437,7 @@ impl ActivateService {
             });
         }
 
+        // 步骤3: 检查依赖者
         if !request.force {
             let dependents = self.check_active_dependents(&request.plugin_id).await?;
             if !dependents.is_empty() {
@@ -436,17 +448,20 @@ impl ActivateService {
             }
         }
 
+        // 步骤4: 注销服务
         self.deps
             .service_registry
             .unregister_plugin_services(&request.plugin_id)
             .await;
 
+        // 步骤5: 卸载 WASM 模块
         self.deps
             .activation_manager
             .deactivate(&request.plugin_id)
             .await
             .map_err(|e| PluginError::Deactivate(format!("卸载 WASM 模块失败: {}", e)))?;
 
+        // 步骤6: 更新状态
         self.deps
             .repository
             .update_plugin_status(&request.plugin_id, "deactivated")
@@ -459,11 +474,13 @@ impl ActivateService {
             }
         }
 
+        // 步骤7: 清除缓存
         self.deps
             .cache
             .delete(&format!("plugin:{}", request.plugin_id))
             .await;
 
+        // 步骤8: 记录审计日志
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Deactivate,
@@ -474,6 +491,7 @@ impl ActivateService {
         }));
         self.deps.audit_logger.log(audit_record).await;
 
+        // 步骤9: 发布停用事件
         self.deps
             .event_bus
             .publish(Event::new(
