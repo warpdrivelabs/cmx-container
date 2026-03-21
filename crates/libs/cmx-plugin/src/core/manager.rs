@@ -302,6 +302,11 @@ impl PluginManager {
         // 初始化系统表 fixme 暂不需要
         // self.repository.init_system_tables().await?;
 
+        //删除临时文件夹
+        self.storage.remove_dir(&self.settings.temp_root)
+            .unwrap_or_else(|e| log::error!("删除临时目录{:?}失败: {}",&self.settings.temp_root, e));
+
+
         // 加载已安装插件到内存
         self.load_installed_plugins().await?;
 
