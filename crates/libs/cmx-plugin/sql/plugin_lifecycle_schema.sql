@@ -1,0 +1,373 @@
+-- 插件生命周期管理与版本控制系统 - 数据库表结构
+-- 整理要求：
+-- 1. 主键都改为 varchar(64)
+-- 2. 表中每个字段都添加 COMMENT 注释
+-- 3. 移除所有的 CONSTRAINT 约束
+
+-- =============================================
+-- 3.3.1 插件注册表 (cmx_plugin)
+-- 存储所有已安装插件的核心信息（位于默认数据库）
+-- =============================================
+CREATE TABLE cmx_plugin (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(255) NOT NULL,
+    name                VARCHAR(500) NOT NULL,
+    version             VARCHAR(50) NOT NULL,
+    wasm_path           TEXT NOT NULL,
+    install_path        TEXT NOT NULL,
+    config_path         TEXT,
+    db_id               VARCHAR(100) NOT NULL DEFAULT 'default',
+    status              VARCHAR(30) NOT NULL DEFAULT 'installed',
+    is_system           BOOLEAN NOT NULL DEFAULT FALSE,
+    is_locked           BOOLEAN NOT NULL DEFAULT FALSE,
+    domain_code         VARCHAR(50),
+    application_code    VARCHAR(50),
+    module_code         VARCHAR(50),
+    vendor_name         VARCHAR(255),
+    vendor_url          TEXT,
+    vendor_contact      VARCHAR(255),
+    metadata            JSONB,
+    signature_algorithm VARCHAR(50),
+    signer_key_id       VARCHAR(255),
+    activated_at        TIMESTAMP WITH TIME ZONE,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON COLUMN cmx_plugin.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin.plugin_id IS '插件唯一标识 (如 "example_plugin")';
+COMMENT ON COLUMN cmx_plugin.name IS '显示名称';
+COMMENT ON COLUMN cmx_plugin.version IS '当前版本 (语义版本)';
+COMMENT ON COLUMN cmx_plugin.wasm_path IS 'WASM 文件绝对路径';
+COMMENT ON COLUMN cmx_plugin.install_path IS '安装根目录路径';
+COMMENT ON COLUMN cmx_plugin.config_path IS '配置文件路径';
+COMMENT ON COLUMN cmx_plugin.db_id IS '插件业务数据存储的数据库ID';
+COMMENT ON COLUMN cmx_plugin.status IS '状态: installed(已安装), active(已激活), inactive(已停用), failed(失败)';
+COMMENT ON COLUMN cmx_plugin.is_system IS '是否系统默认插件';
+COMMENT ON COLUMN cmx_plugin.is_locked IS '是否被锁定 (防止卸载)';
+COMMENT ON COLUMN cmx_plugin.domain_code IS '所属域编码 (如 "FIN")';
+COMMENT ON COLUMN cmx_plugin.application_code IS '所属应用编码 (如 "GL_ACCT")';
+COMMENT ON COLUMN cmx_plugin.module_code IS '所属模块编码 (如 "GL")';
+COMMENT ON COLUMN cmx_plugin.vendor_name IS '开发商名称';
+COMMENT ON COLUMN cmx_plugin.vendor_url IS '开发商URL';
+COMMENT ON COLUMN cmx_plugin.vendor_contact IS '开发商联系方式';
+COMMENT ON COLUMN cmx_plugin.metadata IS '扩展元数据';
+COMMENT ON COLUMN cmx_plugin.signature_algorithm IS '签名算法';
+COMMENT ON COLUMN cmx_plugin.signer_key_id IS '签名密钥ID';
+COMMENT ON COLUMN cmx_plugin.activated_at IS '激活时间';
+COMMENT ON COLUMN cmx_plugin.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_plugin.update_time IS '更新时间';
+
+CREATE INDEX idx_plugin_status ON cmx_plugin(status);
+CREATE INDEX idx_plugin_system ON cmx_plugin(is_system);
+CREATE INDEX idx_plugin_db_id ON cmx_plugin(db_id);
+CREATE INDEX idx_plugin_domain_app_module ON cmx_plugin(domain_code, application_code, module_code);
+
+
+-- =============================================
+-- 3.3.2 版本历史表 (cmx_plugin_versions)
+-- 记录插件的版本变更历史
+-- =============================================
+CREATE TABLE cmx_plugin_versions (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(64) NOT NULL,
+    version             VARCHAR(50) NOT NULL,
+    version_type        VARCHAR(30) NOT NULL,
+    from_version        VARCHAR(50),
+    install_path        TEXT NOT NULL,
+    wasm_path           TEXT NOT NULL,
+    backup_path         TEXT,
+    is_current          BOOLEAN NOT NULL DEFAULT FALSE,
+    installed_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    uninstalled_at      TIMESTAMP WITH TIME ZONE,
+    installed_by        VARCHAR(255),
+    install_reason      TEXT
+);
+
+COMMENT ON COLUMN cmx_plugin_versions.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_versions.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_versions.version IS '版本号';
+COMMENT ON COLUMN cmx_plugin_versions.version_type IS '版本类型: initial(初始安装), upgrade(升级), downgrade(降级)';
+COMMENT ON COLUMN cmx_plugin_versions.from_version IS '升级/降级来源版本';
+COMMENT ON COLUMN cmx_plugin_versions.install_path IS '该版本的安装路径';
+COMMENT ON COLUMN cmx_plugin_versions.wasm_path IS '该版本的 WASM 路径';
+COMMENT ON COLUMN cmx_plugin_versions.backup_path IS '备份路径 (用于回滚)';
+COMMENT ON COLUMN cmx_plugin_versions.is_current IS '是否当前版本';
+COMMENT ON COLUMN cmx_plugin_versions.installed_at IS '安装时间';
+COMMENT ON COLUMN cmx_plugin_versions.uninstalled_at IS '卸载时间 (如果已卸载)';
+COMMENT ON COLUMN cmx_plugin_versions.installed_by IS '安装操作者';
+COMMENT ON COLUMN cmx_plugin_versions.install_reason IS '安装原因';
+
+CREATE INDEX idx_version_plugin ON cmx_plugin_versions(plugin_id);
+CREATE INDEX idx_version_current ON cmx_plugin_versions(plugin_id, is_current) WHERE is_current = TRUE;
+
+
+-- =============================================
+-- 3.3.3 依赖关系表 (cmx_plugin_dependencies)
+-- 记录插件之间的依赖关系
+-- =============================================
+CREATE TABLE cmx_plugin_dependencies (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(64) NOT NULL,
+    dependency_plugin_id VARCHAR(255) NOT NULL,
+    dependency_name     VARCHAR(500),
+    version_constraint  VARCHAR(100),
+    min_version         VARCHAR(50),
+    max_version         VARCHAR(50),
+    is_optional         BOOLEAN NOT NULL DEFAULT FALSE,
+    is_dev              BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_version    VARCHAR(50),
+    resolution_status   VARCHAR(30),
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON COLUMN cmx_plugin_dependencies.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_dependencies.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_dependencies.dependency_plugin_id IS '依赖的插件ID (可能是未安装的)';
+COMMENT ON COLUMN cmx_plugin_dependencies.dependency_name IS '依赖的插件名称';
+COMMENT ON COLUMN cmx_plugin_dependencies.version_constraint IS '版本约束 (如 "^1.0.0", "~2.1.0", ">=1.0.0 <3.0.0")';
+COMMENT ON COLUMN cmx_plugin_dependencies.min_version IS '最小版本';
+COMMENT ON COLUMN cmx_plugin_dependencies.max_version IS '最大版本';
+COMMENT ON COLUMN cmx_plugin_dependencies.is_optional IS '是否可选依赖';
+COMMENT ON COLUMN cmx_plugin_dependencies.is_dev IS '是否开发依赖';
+COMMENT ON COLUMN cmx_plugin_dependencies.resolved_version IS '已解析的版本';
+COMMENT ON COLUMN cmx_plugin_dependencies.resolution_status IS '解析状态: resolved, conflict, missing';
+COMMENT ON COLUMN cmx_plugin_dependencies.create_time IS '创建时间';
+
+CREATE INDEX idx_dep_plugin ON cmx_plugin_dependencies(plugin_id);
+CREATE INDEX idx_dep_resolved ON cmx_plugin_dependencies(plugin_id, resolution_status);
+
+
+-- =============================================
+-- 3.3.4 节点部署记录表 (cmx_plugin_deployments)
+-- 记录在各个节点上的部署状态
+-- =============================================
+CREATE TABLE cmx_plugin_deployments (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(64) NOT NULL,
+    node_id             VARCHAR(100) NOT NULL,
+    node_name           VARCHAR(255),
+    node_type           VARCHAR(50),
+    version             VARCHAR(50) NOT NULL,
+    deployment_type     VARCHAR(30) NOT NULL,
+    status              VARCHAR(30) NOT NULL,
+    progress            INTEGER DEFAULT 0,
+    error_message       TEXT,
+    error_details       JSONB,
+    sync_token          VARCHAR(255),
+    last_sync_at        TIMESTAMP WITH TIME ZONE,
+    deployed_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    validated_at        TIMESTAMP WITH TIME ZONE
+);
+
+COMMENT ON COLUMN cmx_plugin_deployments.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_deployments.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_deployments.node_id IS '节点标识';
+COMMENT ON COLUMN cmx_plugin_deployments.node_name IS '节点名称';
+COMMENT ON COLUMN cmx_plugin_deployments.node_type IS '节点类型: primary, replica, worker';
+COMMENT ON COLUMN cmx_plugin_deployments.version IS '部署的版本';
+COMMENT ON COLUMN cmx_plugin_deployments.deployment_type IS '部署类型: initial, sync, recovery';
+COMMENT ON COLUMN cmx_plugin_deployments.status IS '部署状态';
+COMMENT ON COLUMN cmx_plugin_deployments.progress IS '进度 (0-100)';
+COMMENT ON COLUMN cmx_plugin_deployments.error_message IS '错误信息';
+COMMENT ON COLUMN cmx_plugin_deployments.error_details IS '错误详情';
+COMMENT ON COLUMN cmx_plugin_deployments.sync_token IS '同步令牌';
+COMMENT ON COLUMN cmx_plugin_deployments.last_sync_at IS '最后同步时间';
+COMMENT ON COLUMN cmx_plugin_deployments.deployed_at IS '部署时间';
+COMMENT ON COLUMN cmx_plugin_deployments.validated_at IS '验证通过时间';
+
+CREATE INDEX idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
+CREATE INDEX idx_deploy_node ON cmx_plugin_deployments(node_id);
+CREATE INDEX idx_deploy_status ON cmx_plugin_deployments(status);
+
+
+-- =============================================
+-- 3.3.5 审计日志表 (cmx_plugin_audit_log)
+-- 记录所有插件生命周期操作
+-- =============================================
+CREATE TABLE cmx_plugin_audit_log (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(64),
+    version_id          VARCHAR(64),
+    deployment_id       VARCHAR(64),
+    operation_type      VARCHAR(50) NOT NULL,
+    operation_status    VARCHAR(30) NOT NULL,
+    operator            VARCHAR(255),
+    operator_ip         VARCHAR(45),
+    operator_session    VARCHAR(255),
+    request_id          VARCHAR(100),
+    correlation_id      VARCHAR(100),
+    details             JSONB,
+    old_value           JSONB,
+    new_value           JSONB,
+    error_code          VARCHAR(50),
+    error_message       TEXT,
+    stack_trace         TEXT,
+    started_at          TIMESTAMP WITH TIME ZONE NOT NULL,
+    completed_at        TIMESTAMP WITH TIME ZONE,
+    duration_ms         BIGINT
+);
+
+COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.version_id IS '关联版本ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.deployment_id IS '关联部署ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.operation_type IS '操作类型';
+COMMENT ON COLUMN cmx_plugin_audit_log.operation_status IS '操作状态';
+COMMENT ON COLUMN cmx_plugin_audit_log.operator IS '操作者';
+COMMENT ON COLUMN cmx_plugin_audit_log.operator_ip IS '操作者 IP';
+COMMENT ON COLUMN cmx_plugin_audit_log.operator_session IS '会话 ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.request_id IS '请求 ID (用于链路追踪)';
+COMMENT ON COLUMN cmx_plugin_audit_log.correlation_id IS '关联 ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.details IS '操作详情 (JSON)';
+COMMENT ON COLUMN cmx_plugin_audit_log.old_value IS '旧值';
+COMMENT ON COLUMN cmx_plugin_audit_log.new_value IS '新值';
+COMMENT ON COLUMN cmx_plugin_audit_log.error_code IS '错误代码';
+COMMENT ON COLUMN cmx_plugin_audit_log.error_message IS '错误消息';
+COMMENT ON COLUMN cmx_plugin_audit_log.stack_trace IS '堆栈跟踪';
+COMMENT ON COLUMN cmx_plugin_audit_log.started_at IS '操作开始时间';
+COMMENT ON COLUMN cmx_plugin_audit_log.completed_at IS '操作完成时间';
+COMMENT ON COLUMN cmx_plugin_audit_log.duration_ms IS '操作耗时 (毫秒)';
+
+CREATE INDEX idx_audit_plugin ON cmx_plugin_audit_log(plugin_id);
+CREATE INDEX idx_audit_operation ON cmx_plugin_audit_log(operation_type);
+CREATE INDEX idx_audit_operator ON cmx_plugin_audit_log(operator);
+CREATE INDEX idx_audit_timestamp ON cmx_plugin_audit_log(started_at);
+CREATE INDEX idx_audit_request ON cmx_plugin_audit_log(request_id);
+CREATE INDEX idx_audit_correlation ON cmx_plugin_audit_log(correlation_id);
+
+
+-- =============================================
+-- 3.3.6 回滚记录表 (cmx_plugin_rollback)
+-- 记录回滚点信息
+-- =============================================
+CREATE TABLE cmx_plugin_rollback (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(64) NOT NULL,
+    operation_id        VARCHAR(100) NOT NULL,
+    from_version        VARCHAR(50) NOT NULL,
+    to_version          VARCHAR(50) NOT NULL,
+    backup_path         TEXT NOT NULL,
+    backup_size         BIGINT,
+    backup_create_time  TIMESTAMP WITH TIME ZONE NOT NULL,
+    status              VARCHAR(30) NOT NULL,
+    completed_at        TIMESTAMP WITH TIME ZONE,
+    reason              TEXT,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON COLUMN cmx_plugin_rollback.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_rollback.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_rollback.operation_id IS '原始操作 ID';
+COMMENT ON COLUMN cmx_plugin_rollback.from_version IS '回滚前版本';
+COMMENT ON COLUMN cmx_plugin_rollback.to_version IS '回滚后版本';
+COMMENT ON COLUMN cmx_plugin_rollback.backup_path IS '备份路径';
+COMMENT ON COLUMN cmx_plugin_rollback.backup_size IS '备份大小 (字节)';
+COMMENT ON COLUMN cmx_plugin_rollback.backup_create_time IS '备份创建时间';
+COMMENT ON COLUMN cmx_plugin_rollback.status IS '状态';
+COMMENT ON COLUMN cmx_plugin_rollback.completed_at IS '完成时间';
+COMMENT ON COLUMN cmx_plugin_rollback.reason IS '回滚原因';
+COMMENT ON COLUMN cmx_plugin_rollback.create_time IS '创建时间';
+
+CREATE INDEX idx_rollback_plugin ON cmx_plugin_rollback(plugin_id);
+CREATE INDEX idx_rollback_operation ON cmx_plugin_rollback(operation_id);
+
+
+-- =============================================
+-- 3.3.7 系统默认插件配置表 (cmx_system_plugins)
+-- 配置系统启动时需要自动安装的插件
+-- =============================================
+CREATE TABLE cmx_system_plugins (
+    id                  VARCHAR(64) NOT NULL,
+    plugin_id           VARCHAR(255) NOT NULL,
+    name                VARCHAR(500) NOT NULL,
+    version             VARCHAR(50) NOT NULL,
+    fallback_version    VARCHAR(50),
+    install_order       INTEGER NOT NULL DEFAULT 0,
+    is_optional         BOOLEAN NOT NULL DEFAULT FALSE,
+    is_critical         BOOLEAN NOT NULL DEFAULT FALSE,
+    retry_count         INTEGER NOT NULL DEFAULT 3,
+    retry_delay_seconds INTEGER NOT NULL DEFAULT 10,
+    wait_for_plugins    VARCHAR(255)[],
+    source_type         VARCHAR(30) NOT NULL,
+    source_path         TEXT,
+    source_url          TEXT,
+    required_signature  BOOLEAN NOT NULL DEFAULT TRUE,
+    install_config      JSONB,
+    env_vars            JSONB,
+    status              VARCHAR(30) NOT NULL DEFAULT 'pending',
+    last_installed_at   TIMESTAMP WITH TIME ZONE,
+    install_attempts    INTEGER NOT NULL DEFAULT 0,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON COLUMN cmx_system_plugins.id IS '主键ID';
+COMMENT ON COLUMN cmx_system_plugins.plugin_id IS '插件唯一标识';
+COMMENT ON COLUMN cmx_system_plugins.name IS '插件名称';
+COMMENT ON COLUMN cmx_system_plugins.version IS '默认版本';
+COMMENT ON COLUMN cmx_system_plugins.fallback_version IS '备用版本 (主版本失败时使用)';
+COMMENT ON COLUMN cmx_system_plugins.install_order IS '安装顺序 (数字越小越先安装)';
+COMMENT ON COLUMN cmx_system_plugins.is_optional IS '是否可选 (可选则安装失败不阻止启动)';
+COMMENT ON COLUMN cmx_system_plugins.is_critical IS '是否关键 (关键插件失败导致系统无法启动)';
+COMMENT ON COLUMN cmx_system_plugins.retry_count IS '重试次数';
+COMMENT ON COLUMN cmx_system_plugins.retry_delay_seconds IS '重试间隔 (秒)';
+COMMENT ON COLUMN cmx_system_plugins.wait_for_plugins IS '需要等待完成的插件列表';
+COMMENT ON COLUMN cmx_system_plugins.source_type IS '来源类型: bundled, registry, url';
+COMMENT ON COLUMN cmx_system_plugins.source_path IS '来源路径 (bundled 时为内置路径)';
+COMMENT ON COLUMN cmx_system_plugins.source_url IS '来源 URL (url 类型时使用)';
+COMMENT ON COLUMN cmx_system_plugins.required_signature IS '是否必须签名';
+COMMENT ON COLUMN cmx_system_plugins.install_config IS '安装配置';
+COMMENT ON COLUMN cmx_system_plugins.env_vars IS '环境变量';
+COMMENT ON COLUMN cmx_system_plugins.status IS '状态';
+COMMENT ON COLUMN cmx_system_plugins.last_installed_at IS '最后安装时间';
+COMMENT ON COLUMN cmx_system_plugins.install_attempts IS '安装尝试次数';
+COMMENT ON COLUMN cmx_system_plugins.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_system_plugins.update_time IS '更新时间';
+
+CREATE INDEX idx_system_plugin_order ON cmx_system_plugins(install_order);
+CREATE INDEX idx_system_plugin_status ON cmx_system_plugins(status);
+
+
+-- =============================================
+-- 3.3.8 节点信息表 (cmx_plugin_nodes)
+-- 记录集群中的节点信息
+-- =============================================
+CREATE TABLE cmx_plugin_nodes (
+    node_id             VARCHAR(64) NOT NULL,
+    node_name           VARCHAR(255) NOT NULL,
+    node_type           VARCHAR(30) NOT NULL,
+    status              VARCHAR(30) NOT NULL,
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    host                VARCHAR(255) NOT NULL,
+    port                INTEGER NOT NULL,
+    protocol            VARCHAR(10) NOT NULL DEFAULT 'http',
+    capabilities        JSONB,
+    last_health_check   TIMESTAMP WITH TIME ZONE,
+    health_check_interval INTEGER NOT NULL DEFAULT 30,
+    plugin_manager_version VARCHAR(50),
+    registered_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_seen_at        TIMESTAMP WITH TIME ZONE,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON COLUMN cmx_plugin_nodes.node_id IS '节点ID';
+COMMENT ON COLUMN cmx_plugin_nodes.node_name IS '节点名称';
+COMMENT ON COLUMN cmx_plugin_nodes.node_type IS '节点类型: primary, replica, worker';
+COMMENT ON COLUMN cmx_plugin_nodes.status IS '节点状态: online, offline, maintenance';
+COMMENT ON COLUMN cmx_plugin_nodes.is_active IS '是否激活';
+COMMENT ON COLUMN cmx_plugin_nodes.host IS '主机地址';
+COMMENT ON COLUMN cmx_plugin_nodes.port IS '端口';
+COMMENT ON COLUMN cmx_plugin_nodes.protocol IS '协议';
+COMMENT ON COLUMN cmx_plugin_nodes.capabilities IS '节点能力';
+COMMENT ON COLUMN cmx_plugin_nodes.last_health_check IS '最后健康检查时间';
+COMMENT ON COLUMN cmx_plugin_nodes.health_check_interval IS '健康检查间隔 (秒)';
+COMMENT ON COLUMN cmx_plugin_nodes.plugin_manager_version IS '插件管理器版本';
+COMMENT ON COLUMN cmx_plugin_nodes.registered_at IS '注册时间';
+COMMENT ON COLUMN cmx_plugin_nodes.last_seen_at IS '最后可见时间';
+COMMENT ON COLUMN cmx_plugin_nodes.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_plugin_nodes.update_time IS '更新时间';
+
+CREATE INDEX idx_node_status ON cmx_plugin_nodes(status);
+CREATE INDEX idx_node_type ON cmx_plugin_nodes(node_type);
