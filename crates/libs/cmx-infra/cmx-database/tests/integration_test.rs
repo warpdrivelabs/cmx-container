@@ -21,6 +21,7 @@ async fn setup_db_manager() -> DatabaseManager {
         db_type: DbType::Postgres,
         db_url: TEST_DB_URL.to_string(),
         db_id: TEST_DB_KEY.to_string(),
+        db_schema: Some("public".to_string()),
         pool_config,
         health_check_interval: 60,
         health_check_timeout: 5,

@@ -61,6 +61,8 @@ pub struct DbConfig {
     pub db_url: String,
     /// db id
     pub db_id: String,
+    /// 数据库 schema pg库默认publc
+    pub db_schema: Option<String>,
     /// 是否是默认数据库
     pub default: bool,
 
@@ -72,19 +74,19 @@ pub struct DbConfig {
     pub health_check_timeout: u64,
 }
 
-impl Default for DbConfig {
-    fn default() -> Self {
-        Self {
-            db_type: DbType::Postgres,
-            db_id: "default".to_string(),
-            db_url: "postgresql://localhost/test".to_string(),
-            pool_config: PoolConfig::default(),
-            health_check_interval: 60,
-            health_check_timeout: 5,
-            default: false
-        }
-    }
-}
+// impl Default for DbConfig {
+//     fn default() -> Self {
+//         Self {
+//             db_type: DbType::Postgres,
+//             db_id: "default".to_string(),
+//             db_url: "postgresql://localhost/test".to_string(),
+//             pool_config: PoolConfig::default(),
+//             health_check_interval: 60,
+//             health_check_timeout: 5,
+//             default: false
+//         }
+//     }
+// }
 
 
 /// 从 ConfigValue 转换为 DbConfig
@@ -101,6 +103,7 @@ impl FromConfigValue for DbConfig {
                 let db_url = get_string_field(map, "db_url")?;
                 let db_id = get_string_field(map, "db_id")?;
                 let default = get_bool_field(map, "default").unwrap_or(false);
+                let db_schema = get_string_field(map, "db_schema").unwrap_or("public".to_string());
 
                 let pool_config = get_object_field(map, "pool_config")
                     .and_then(|v| v.try_into_type().ok())
@@ -113,6 +116,7 @@ impl FromConfigValue for DbConfig {
                     db_type,
                     db_url,
                     db_id,
+                    db_schema: Some(db_schema),
                     default,
                     pool_config,
                     health_check_interval,

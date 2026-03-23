@@ -6,9 +6,10 @@ use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+
 use crate::config::{DbConfig, DbType};
 use crate::transaction::Dbx;
-use sqlx::{MySql, Pool, Postgres, Sqlite};
+use sqlx::{MySql, PgConnection, Pool, Postgres, Sqlite};
 use tracing::info;
 
 /// 数据库连接池枚举类型
@@ -204,8 +205,8 @@ impl DbRegistry {
     }
 }
 
-use std::sync::OnceLock;
 use crate::error::Result;
+use std::sync::OnceLock;
 
 static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();
 
@@ -258,31 +259,48 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
     match config.db_type {
         DbType::Postgres => {
             info!("创建 PostgreSQL 连接池，连接池配置：{:?}", pool_config);
+            let db_schema = config.db_schema.clone();
+            let db_url = config.db_url.clone();
             let pool = PgPoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
                 .min_connections(pool_config.min_connections as u32)
                 .idle_timeout(std::time::Duration::from_secs(pool_config.idle_timeout))
                 .max_lifetime(std::time::Duration::from_secs(pool_config.max_lifetime))
-                .connect(&config.db_url)
+                .after_connect(move |conn, _metadata| {
+                    let schema = db_schema.clone();
+                    Box::pin(async move {
+                        // 每次新建连接时设置 schema
+                        sqlx::query(format!("SET search_path TO {}, public", schema
+                            .unwrap_or("public".to_string())).as_str())
+                            .execute(conn)
+                            .await?;
+                        Ok(())
+                    })
+                })
+
+                .connect(&db_url)
+
                 .await?;
             Ok(DbPool::Postgres(pool))
         },
         DbType::MySql => {
             info!("创建 MySQL 连接池，连接池配置：{:?}", pool_config);
+            let db_url = config.db_url.clone();
             let pool = MySqlPoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
                 .min_connections(pool_config.min_connections as u32)
                 .idle_timeout(std::time::Duration::from_secs(pool_config.idle_timeout))
                 .max_lifetime(std::time::Duration::from_secs(pool_config.max_lifetime))
-                .connect(&config.db_url)
+                .connect(&db_url)
                 .await?;
             Ok(DbPool::MySql(pool))
         },
         DbType::Sqlite => {
             info!("创建 SQLite 连接池，连接池配置：{:?}", pool_config);
+            let db_url = config.db_url.clone();
             let pool = SqlitePoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
-                .connect(&config.db_url)
+                .connect(&db_url)
                 .await?;
             Ok(DbPool::Sqlite(pool))
         },
