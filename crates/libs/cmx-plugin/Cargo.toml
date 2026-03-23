@@ -67,3 +67,8 @@ md5 = "0.7"
 
 # 随机数生成
 rand = "0.8"
+
+# sea-query: SQL 构建工具
+sea-query = { workspace = true }
+# sea-query-binder: SQL 参数绑定工具
+sea-query-binder = { workspace = true }

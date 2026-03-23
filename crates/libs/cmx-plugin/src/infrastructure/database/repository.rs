@@ -9,6 +9,7 @@ use std::sync::Arc;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::{DatabaseManager, TransactionOptions};
+use sea_query_binder::SqlxValues;
 
 use super::schema::SchemaManager;
 use crate::domain::plugin::PluginFilter;
@@ -129,43 +130,49 @@ impl PluginRepository {
 
     /// 插入插件记录
     pub async fn insert_plugin(&self, record: &PluginDbRecord) -> PluginResult<()> {
-        let sql = r#"
-            INSERT INTO cmx_plugin (
-                id, plugin_id, name, version, wasm_path, install_path, config_path,
-                db_id, status, is_system, is_locked, domain_code, application_code,
-                module_code, vendor_name, vendor_url, vendor_contact, metadata,
-                signature_algorithm, signer_key_id, activated_at, create_time, update_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-        "#;
+        use sea_query::{Query, PostgresQueryBuilder};
+        use sea_query_binder::SqlxBinder;
 
-        let params = serde_json::json!([
-            record.id,
-            record.plugin_id,
-            record.name,
-            record.version,
-            record.wasm_path,
-            record.install_path,
-            record.config_path,
-            record.db_id,
-            record.status,
-            record.is_system,
-            record.is_locked,
-            record.domain_code,
-            record.application_code,
-            record.module_code,
-            record.vendor_name,
-            record.vendor_url,
-            record.vendor_contact,
-            record.metadata,
-            record.signature_algorithm,
-            record.signer_key_id,
-            record.activated_at,
-            record.create_time,
-            record.update_time,
-        ]);
+        let mut query = Query::insert();
+        query
+            .into_table("cmx_plugin")
+            .columns(vec![
+                "id", "plugin_id", "name", "version", "wasm_path", "install_path", "config_path",
+                "db_id", "status", "is_system", "is_locked", "domain_code", "application_code",
+                "module_code", "vendor_name", "vendor_url", "vendor_contact", "metadata",
+                "signature_algorithm", "signer_key_id", "activated_at", "create_time", "update_time"
+            ])
+            .values(vec![
+                record.id.clone().into(),
+                record.plugin_id.clone().into(),
+                record.name.clone().into(),
+                record.version.clone().into(),
+                record.wasm_path.clone().into(),
+                record.install_path.clone().into(),
+                record.config_path.clone().into(),
+                record.db_id.clone().into(),
+                record.status.clone().into(),
+                record.is_system.into(),
+                record.is_locked.into(),
+                record.domain_code.clone().into(),
+                record.application_code.clone().into(),
+                record.module_code.clone().into(),
+                record.vendor_name.clone().into(),
+                record.vendor_url.clone().into(),
+                record.vendor_contact.clone().into(),
+                record.metadata.clone().into(),
+                record.signature_algorithm.clone().into(),
+                record.signer_key_id.clone().into(),
+                record.activated_at.clone().into(),
+                record.create_time.into(),
+                record.update_time.into()
+            ])
+            .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
+
+        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_sqlxvalues(&self.default_db_id, None, &sql, sql_values)
             .await
             .map_err(|e| PluginError::Database(format!("插入插件记录失败: {}", e)))?;
 

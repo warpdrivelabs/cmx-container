@@ -266,7 +266,7 @@ impl InstallService {
             metadata: None,
             signature_algorithm: None,
             signer_key_id: None,
-            activated_at: Some(Utc::now()),
+            activated_at: None,
             create_time: Utc::now(),
             update_time: Utc::now(),
         };
