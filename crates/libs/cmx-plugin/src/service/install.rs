@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::Utc;
+use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
@@ -234,6 +235,12 @@ impl InstallService {
 
 
         if !plugin_def.table_config_files.is_empty() {
+            ///PostgreSQL 的行为：
+            // 一旦事务中任何语句失败，整个事务进入 “aborted” 状态
+            // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
+            // 必须显式执行 ROLLBACK 才能退出这个状态
+            //所以ddl语句不要在事务中执行
+            // self.create_plugin_tables(&plugin_def, &db_id, Some(txn_guard.txn_id().to_string()), &install_path)
             self.create_plugin_tables(&plugin_def, &db_id, None, &install_path)
                 .await?;
         }
@@ -330,10 +337,10 @@ impl InstallService {
                 }),
             ))
             .await;
-        
+
         //提交事务
         txn_guard.commit().await.map_err(|e| PluginError::Database(e.to_string()))?;
-
+ info!("返回结果");
         Ok(InstallResponse {
             plugin_id,
             install_path,

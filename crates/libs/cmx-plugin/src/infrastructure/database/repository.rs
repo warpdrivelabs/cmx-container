@@ -8,8 +8,7 @@ use std::sync::Arc;
 
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
-use cmx_database::{DatabaseManager, TransactionOptions};
-use sea_query_binder::SqlxValues;
+use cmx_database::DatabaseManager;
 
 use super::schema::SchemaManager;
 use crate::domain::plugin::PluginFilter;
@@ -130,7 +129,7 @@ impl PluginRepository {
 
     /// 插入插件记录
     pub async fn insert_plugin(&self, record: &PluginDbRecord,txn_id:Option<&str>) -> PluginResult<()> {
-        use sea_query::{Query, PostgresQueryBuilder};
+        use sea_query::{PostgresQueryBuilder, Query};
         use sea_query_binder::SqlxBinder;
 
         let mut query = Query::insert();

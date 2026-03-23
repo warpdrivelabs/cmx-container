@@ -1,13 +1,12 @@
+use log::{error, warn};
+use sea_query::SqlWriter;
 /// 数据库管理器模块
 ///
 /// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
-use std::sync::{Arc};
-use log::{warn, error};
-use sea_query::SqlWriter;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tracing::info;
-
 
 use crate::config::{DbConfig, PoolConfig};
 use crate::error::{Error, Result};
@@ -20,9 +19,9 @@ pub struct DatabaseManagerConfig {
     pub default_pool_config: PoolConfig,
     pub health_check_interval: std::time::Duration,
     pub health_check_timeout: std::time::Duration,
-    pub txn_timeout: std::time::Duration,
-    pub cleanup_interval: std::time::Duration,
-    pub enable_txn_cleanup: bool,
+    // pub txn_timeout: std::time::Duration,
+    // pub cleanup_interval: std::time::Duration,
+    // pub enable_txn_cleanup: bool,
 }
 
 impl Default for DatabaseManagerConfig {
@@ -31,9 +30,9 @@ impl Default for DatabaseManagerConfig {
             default_pool_config: PoolConfig::default(),
             health_check_interval: std::time::Duration::from_secs(60),
             health_check_timeout: std::time::Duration::from_secs(5),
-            txn_timeout: std::time::Duration::from_secs(300),
-            cleanup_interval: std::time::Duration::from_secs(10),
-            enable_txn_cleanup: true,
+            // txn_timeout: std::time::Duration::from_secs(300),
+            // cleanup_interval: std::time::Duration::from_secs(10),
+            // enable_txn_cleanup: true,
         }
     }
 }
@@ -60,7 +59,7 @@ pub struct DatabaseManager {
     pool_manager: Arc<PoolManager>,
     config: DatabaseManagerConfig,
     default_db_id: RwLock<String>,
-    cleanup_shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
+    // cleanup_shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
 }
 
 /// 连接池管理器
@@ -76,12 +75,11 @@ impl DatabaseManager {
             pool_manager: Arc::new(PoolManager::new()),
             config,
             default_db_id: RwLock::new("default".to_string()),
-            cleanup_shutdown_tx: RwLock::new(None),
+            // cleanup_shutdown_tx: RwLock::new(None),
         }
     }
 
-
-    pub  async fn get_default_db_id(&self) -> String {
+    pub async fn get_default_db_id(&self) -> String {
         self.default_db_id.read().await.clone().into()
     }
 
@@ -97,9 +95,11 @@ impl DatabaseManager {
 
     /// 注销数据源
     pub async fn unregister_data_source(&self, db_id: &str) -> Result<()> {
-        if db_id== self.default_db_id.read().await.as_str() {
+        if db_id == self.default_db_id.read().await.as_str() {
             warn!("默认数据源不能删除");
-            return Err(Error::DefaultDbSourceCantDelete("默认数据源不能删除".into()));
+            return Err(Error::DefaultDbSourceCantDelete(
+                "默认数据源不能删除".into(),
+            ));
         }
         self.pool_manager.unregister(db_id).await
     }
@@ -159,60 +159,60 @@ impl DatabaseManager {
     /// 优雅关闭
     pub async fn shutdown(&self) -> Result<()> {
         info!("DatabaseManager 开始关闭");
-        self.stop_cleanup_task().await;
+        // self.stop_cleanup_task().await;
         crate::transaction::cleanup_completed_transactions();
         info!("DatabaseManager 已关闭");
         Ok(())
     }
 
-    /// 启动事务超时清理任务
-    pub async fn start_cleanup_task(self: &Arc<Self>) {
-        if !self.config.enable_txn_cleanup {
-            info!("事务清理任务已禁用");
-            return;
-        }
-
-        let mut shutdown_rx = {
-            let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
-            if shutdown_tx_guard.is_some() {
-                info!("事务清理任务已在运行");
-                return;
-            }
-            let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
-            *shutdown_tx_guard = Some(shutdown_tx);
-            shutdown_rx
-        };
-
-        let timeout = self.config.txn_timeout;
-        let interval = self.config.cleanup_interval;
-        let manager = self.clone();
-
-        info!("启动事务超时清理任务，超时: {:?}, 间隔: {:?}", timeout, interval);
-
-        tokio::spawn(async move {
-            let mut interval_timer = tokio::time::interval(interval);
-            loop {
-                tokio::select! {
-                    _ = interval_timer.tick() => {
-                        manager.cleanup_stale_transactions(timeout).await;
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("接收到清理任务关闭信号");
-                        break;
-                    }
-                }
-            }
-            info!("事务超时清理任务已停止");
-        });
-    }
-
-    /// 停止事务超时清理任务
-    async fn stop_cleanup_task(&self) {
-        let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
-        if let Some(shutdown_tx) = shutdown_tx_guard.take() {
-            let _ = shutdown_tx.send(()).await;
-        }
-    }
+    // /// 启动事务超时清理任务
+    // pub async fn start_cleanup_task(self: &Arc<Self>) {
+    //     if !self.config.enable_txn_cleanup {
+    //         info!("事务清理任务已禁用");
+    //         return;
+    //     }
+    //
+    //     let mut shutdown_rx = {
+    //         let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
+    //         if shutdown_tx_guard.is_some() {
+    //             info!("事务清理任务已在运行");
+    //             return;
+    //         }
+    //         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+    //         *shutdown_tx_guard = Some(shutdown_tx);
+    //         shutdown_rx
+    //     };
+    //
+    //     let timeout = self.config.txn_timeout;
+    //     let interval = self.config.cleanup_interval;
+    //     let manager = self.clone();
+    //
+    //     info!("启动事务超时清理任务，超时: {:?}, 间隔: {:?}", timeout, interval);
+    //
+    //     tokio::spawn(async move {
+    //         let mut interval_timer = tokio::time::interval(interval);
+    //         loop {
+    //             tokio::select! {
+    //                 _ = interval_timer.tick() => {
+    //                     manager.cleanup_stale_transactions(timeout).await;
+    //                 }
+    //                 _ = shutdown_rx.recv() => {
+    //                     info!("接收到清理任务关闭信号");
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         info!("事务超时清理任务已停止");
+    //     });
+    // }
+    //
+    // /// 停止事务超时清理任务
+    // async fn stop_cleanup_task(&self) {
+    //     let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
+    //     if let Some(shutdown_tx) = shutdown_tx_guard.take() {
+    //         let _ = shutdown_tx.send(()).await;
+    //     }
+    // }
 
     /// 清理超时的事务
     async fn cleanup_stale_transactions(&self, timeout: std::time::Duration) {
@@ -223,8 +223,12 @@ impl DatabaseManager {
 
         warn!("发现 {} 个超时事务待清理", stale.len());
         for meta in stale {
-            warn!("清理超时事务: txn_id={}, db_id={}, elapsed={:?}",
-                meta.txn_id, meta.db_id, meta.create_time.elapsed());
+            warn!(
+                "清理超时事务: txn_id={}, db_id={}, elapsed={:?}",
+                meta.txn_id,
+                meta.db_id,
+                meta.create_time.elapsed()
+            );
             match self.rollback_transaction(&meta.txn_id).await {
                 Ok(_) => info!("超时事务已回滚: {}", meta.txn_id),
                 Err(e) => error!("清理事务失败: txn_id={}, error={}", meta.txn_id, e),
@@ -237,8 +241,6 @@ impl DatabaseManager {
         crate::transaction::execute_sql(db_id, txn_id, sql).await
     }
 
-
-
     /// 执行带 serde_json::Value 参数的 SQL 语句
     pub async fn execute_sql_with_json(
         &self,
@@ -247,7 +249,13 @@ impl DatabaseManager {
         sql: &str,
         params: serde_json::Value,
     ) -> Result<u64> {
-        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::Json(params)).await
+        crate::transaction::execute_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::Json(params),
+        )
+        .await
     }
 
     /// 执行带 DataValue 参数的 SQL 语句
@@ -258,7 +266,13 @@ impl DatabaseManager {
         sql: &str,
         params: Vec<cmx_core::model::cell::DataValue>,
     ) -> Result<u64> {
-        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::DataValues(params)).await
+        crate::transaction::execute_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::DataValues(params),
+        )
+        .await
     }
 
     /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
@@ -269,7 +283,13 @@ impl DatabaseManager {
         sql: &str,
         params: sea_query_binder::SqlxValues,
     ) -> Result<u64> {
-        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params)).await
+        crate::transaction::execute_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::SqlxValues(params),
+        )
+        .await
     }
 
     /// 查询 SQL 语句
@@ -292,8 +312,14 @@ impl DatabaseManager {
         params: serde_json::Value,
         dataset_id: &str,
     ) -> Result<DataSet> {
-        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::Json(params), dataset_id)
-            .await
+        crate::transaction::query_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::Json(params),
+            dataset_id,
+        )
+        .await
     }
 
     /// 查询带 DataValue 参数的 SQL 语句
@@ -305,10 +331,15 @@ impl DatabaseManager {
         params: Vec<cmx_core::model::cell::DataValue>,
         dataset_id: &str,
     ) -> Result<DataSet> {
-        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::DataValues(params), dataset_id)
-            .await
+        crate::transaction::query_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::DataValues(params),
+            dataset_id,
+        )
+        .await
     }
-
 
     /// 查询带 sea-query-binder SqlxValues 的 SQL 语句
     pub async fn query_sql_with_sqlxvalues(
@@ -319,13 +350,15 @@ impl DatabaseManager {
         params: sea_query_binder::SqlxValues,
         dataset_id: &str,
     ) -> Result<DataSet> {
-        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params), dataset_id)
-            .await
+        crate::transaction::query_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::SqlxValues(params),
+            dataset_id,
+        )
+        .await
     }
-
-
-
-
 
     /// 提交事务
     pub async fn commit_transaction(&self, txn_id: &str) -> Result<()> {
@@ -336,8 +369,6 @@ impl DatabaseManager {
     pub async fn rollback_transaction(&self, txn_id: &str) -> Result<()> {
         crate::transaction::rollback_txn_by_id(txn_id).await
     }
-
-
 }
 
 impl PoolManager {
@@ -372,8 +403,7 @@ impl PoolManager {
     }
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
-        let result =
-            crate::transaction::query_sql(db_id, None, "SELECT 1", "health_check").await;
+        let result = crate::transaction::query_sql(db_id, None, "SELECT 1", "health_check").await;
         match result {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
@@ -407,13 +437,18 @@ impl TransactionContext {
     }
 
     /// 开始事务并返回 TransactionGuard
-    pub async fn begin_with_guard(&self, db_id: &str) -> Result<crate::transaction::TransactionGuard> {
+    pub async fn begin_with_guard(
+        &self,
+        db_id: &str,
+    ) -> Result<crate::transaction::TransactionGuard> {
         let dbx = self.pool_manager.get_dbx(db_id)?;
         let dbx_with_txn = dbx.with_transaction()?;
         let txn_id = dbx_with_txn.begin_txn_default(db_id).await?;
-        Ok(crate::transaction::TransactionGuard::new(txn_id, db_id.to_string()))
+        Ok(crate::transaction::TransactionGuard::new(
+            txn_id,
+            db_id.to_string(),
+        ))
     }
-    
 }
 
 /// 默认数据库管理器实例
