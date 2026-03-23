@@ -22,6 +22,8 @@ pub struct SysDatasource {
     pub description: Option<String>,
     /// 数据库类型
     pub db_type: String,
+    /// 数据库模式
+    pub db_schema: Option<String>,
     /// 是否默认;0否1是
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_flag: Option<i32>,

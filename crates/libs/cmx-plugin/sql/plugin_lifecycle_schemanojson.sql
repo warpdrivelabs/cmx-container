@@ -1,8 +1,11 @@
 -- 插件生命周期管理与版本控制系统 - 数据库表结构
 -- 整理要求：
 -- 1. 主键都改为 varchar(64)
--- 2. 表中每个字段都添加 COMMENT 注释
--- 3. 移除所有的 CONSTRAINT 约束
+-- 2. 表中每个字段都添加 COMMENT ON COLUMN 注释
+-- 3. 每个表都有 COMMENT ON TABLE 注释
+-- 4. 移除所有的 CONSTRAINT 约束
+-- 4. 存储json的字段使用TEXT类型，字段注释标识下是json文本
+
 
 -- =============================================
 -- 3.3.1 插件注册表 (cmx_plugin)
@@ -371,3 +374,63 @@ COMMENT ON COLUMN cmx_plugin_nodes.update_time IS '更新时间';
 
 CREATE INDEX idx_node_status ON cmx_plugin_nodes(status);
 CREATE INDEX idx_node_type ON cmx_plugin_nodes(node_type);
+
+
+-- =============================================
+-- 3.3.9 插件功能表 (cmx_plugin_features)
+-- 记录插件暴露的功能和api
+-- =============================================
+CREATE TABLE cmx_plugin_features (
+                                     id                  VARCHAR(64) NOT NULL,
+                                     plugin_id           VARCHAR(64) NOT NULL,
+                                     plugin_version      VARCHAR(50) NOT NULL,
+                                     feature_id          VARCHAR(255) NOT NULL,
+                                     feature_name        VARCHAR(500) NOT NULL,
+                                     feature_type        VARCHAR(50) NOT NULL,
+                                     description         TEXT,
+                                     config              JSONB,
+                                     status              VARCHAR(30) NOT NULL DEFAULT 'active',
+                                     create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                                     update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE cmx_plugin_features IS '插件功能表';
+COMMENT ON COLUMN cmx_plugin_features.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_features.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_features.plugin_version IS '插件版本';
+COMMENT ON COLUMN cmx_plugin_features.feature_id IS '功能唯一标识';
+COMMENT ON COLUMN cmx_plugin_features.feature_name IS '功能名称';
+COMMENT ON COLUMN cmx_plugin_features.feature_type IS '功能类型: service, event_handler, scheduler, api,function';
+COMMENT ON COLUMN cmx_plugin_features.description IS '功能描述';
+COMMENT ON COLUMN cmx_plugin_features.config IS '功能配置';
+COMMENT ON COLUMN cmx_plugin_features.status IS '状态: active, inactive, error';
+
+-- =============================================
+-- 3.3.9 插件事件表 (cmx_plugin_events)
+-- =============================================
+CREATE TABLE cmx_plugin_events (
+                                   id                  VARCHAR(64) NOT NULL,
+                                   plugin_id           VARCHAR(64) NOT NULL,
+                                   event_type          VARCHAR(100) NOT NULL,
+                                   event_data          JSONB,
+                                   processed           BOOLEAN NOT NULL DEFAULT FALSE,
+                                   processed_at        TIMESTAMP WITH TIME ZONE,
+                                   create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE cmx_plugin_events IS '插件事件表';
+COMMENT ON COLUMN cmx_plugin_events.id IS '主键ID';
+COMMENT ON COLUMN cmx_plugin_events.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_events.event_type IS '事件类型';
+COMMENT ON COLUMN cmx_plugin_events.event_data IS '事件数据';
+COMMENT ON COLUMN cmx_plugin_events.processed IS '是否已处理';
+COMMENT ON COLUMN cmx_plugin_events.processed_at IS '处理时间';
+
+
+
+COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息';
+COMMENT ON TABLE cmx_plugin_versions IS '版本历史表：记录插件的版本变更历史';
+COMMENT ON TABLE cmx_plugin_dependencies IS '依赖关系表：记录插件之间的依赖关系';
+COMMENT ON TABLE cmx_plugin_deployments IS '节点部署记录表：记录在各个节点上的部署状态';
+COMMENT ON TABLE cmx_plugin_audit_log IS '审计日志表：记录所有插件生命周期操作';
+COMMENT ON TABLE cmx_plugin_rollback IS '回滚记录表：记录回滚点信息';
+COMMENT ON TABLE cmx_system_plugins IS '系统默认插件配置表：配置系统启动时需要自动安装的插件';
+COMMENT ON TABLE cmx_plugin_nodes IS '节点信息表：记录集群中的节点信息';
