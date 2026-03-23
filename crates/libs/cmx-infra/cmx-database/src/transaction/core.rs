@@ -7,12 +7,13 @@
 
 use crate::connection::DbPool;
 use crate::error::{Error, Result};
-use crate::executor::ParamValue;
+use crate::executor::{bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite};
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
 use crate::transaction::conversion::TransactionConverter;
 use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
 use sea_query_binder::SqlxValues;
+use cmx_core::model::cell::DataValue;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use uuid;
@@ -488,8 +489,15 @@ impl DbTransaction {
         }
     }
 
-    /// 执行带参数的SQL语句
-    pub async fn execute_with_params(&mut self, sql: &str, params: &[ParamValue]) -> sqlx::Result<u64> {
+    /// 执行带 DataValue 参数的 SQL 语句
+    ///
+    /// # 参数
+    /// * `sql` - SQL语句
+    /// * `params` - DataValue 数组
+    ///
+    /// # 返回值
+    /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
+    pub async fn execute_with_datavalues(&mut self, sql: &str, params: &[DataValue]) -> sqlx::Result<u64> {
         if params.is_empty() {
             return self.execute(sql).await;
         }
@@ -498,7 +506,7 @@ impl DbTransaction {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_postgres(query, param);
+                    query = bind_data_value_postgres(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
@@ -506,7 +514,7 @@ impl DbTransaction {
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_mysql(query, param);
+                    query = bind_data_value_mysql(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
@@ -514,12 +522,26 @@ impl DbTransaction {
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_sqlite(query, param);
+                    query = bind_data_value_sqlite(query, param);
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
             },
         }
+    }
+
+    /// 执行带 serde_json::Value 参数的 SQL 语句
+    ///
+    /// # 参数
+    /// * `sql` - SQL语句
+    /// * `params` - serde_json::Value 数组
+    ///
+    /// # 返回值
+    /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
+    pub async fn execute_with_json(&mut self, sql: &str, params: serde_json::Value) -> sqlx::Result<u64> {
+        let values: Vec<DataValue> = serde_json::from_value(params)
+            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        self.execute_with_datavalues(sql, &values).await
     }
 
     /// 执行SQL查询并返回DataSet
@@ -548,7 +570,7 @@ impl DbTransaction {
     }
 
     /// 执行带参数的SQL查询并返回DataSet
-    pub async fn query_with_params(&mut self, sql: &str, params: &[ParamValue], dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+    pub async fn query_with_datavalues(&mut self, sql: &str, params: &[DataValue], dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         if params.is_empty() {
             return self.query(sql, dataset_id).await;
         }
@@ -557,7 +579,7 @@ impl DbTransaction {
             DbTransaction::Postgres(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_postgres(query, param);
+                    query = bind_data_value_postgres(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
@@ -565,7 +587,7 @@ impl DbTransaction {
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_mysql(query, param);
+                    query = bind_data_value_mysql(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
@@ -573,12 +595,19 @@ impl DbTransaction {
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sql);
                 for param in params {
-                    query = bind_param_sqlite(query, param);
+                    query = bind_data_value_sqlite(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
             },
         }
+    }
+
+    /// 执行带 serde_json::Value 参数的 SQL 查询并返回 DataSet
+    pub async fn query_with_json(&mut self, sql: &str, params: serde_json::Value, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+        let values: Vec<DataValue> = serde_json::from_value(params)
+            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        self.query_with_datavalues(sql, &values, dataset_id).await
     }
 
     /// 执行带 sea-query-binder Values 的 SQL 语句
@@ -628,87 +657,6 @@ impl DbTransaction {
                 Err(sqlx::Error::Protocol("Sqlite not supported with sea-query yet".to_string()))
             },
         }
-    }
-}
-
-/// 为 PostgreSQL 绑定参数
-///
-/// PostgreSQL 支持原生类型绑定，包括 Decimal、DateTime、Date、Json、Uuid
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_postgres<'q>(query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.as_str()),
-        ParamValue::Decimal(v) => query.bind(*v),
-        ParamValue::DateTime(v) => query.bind(*v),
-        ParamValue::Date(v) => query.bind(*v),
-        ParamValue::Json(v) => query.bind(v.clone()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(*v),
-    }
-}
-
-/// 为 MySQL 绑定参数
-///
-/// MySQL 对部分类型需要转换为字符串
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_mysql<'q>(query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.clone()),
-        ParamValue::Decimal(v) => query.bind(v.to_string()),
-        ParamValue::DateTime(v) => query.bind(v.to_string()),
-        ParamValue::Date(v) => query.bind(v.to_string()),
-        ParamValue::Json(v) => query.bind(v.to_string()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(v.to_string()),
-    }
-}
-
-/// 为 SQLite 绑定参数
-///
-/// SQLite 对部分类型需要转换为字符串
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.clone()),
-        ParamValue::Decimal(v) => query.bind(v.to_string()),
-        ParamValue::DateTime(v) => query.bind(v.to_string()),
-        ParamValue::Date(v) => query.bind(v.to_string()),
-        ParamValue::Json(v) => query.bind(v.to_string()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(v.to_string()),
     }
 }
 

@@ -2,17 +2,17 @@
 //!
 //! 提供插件数据的增删改查操作
 
-use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-use cmx_database::{DatabaseManager, TransactionOptions};
-use cmx_core::model::data::dataset::DataSet;
 use cmx_core::model::cell::DataValue;
+use cmx_core::model::data::dataset::DataSet;
+use cmx_database::{DatabaseManager, TransactionOptions};
 
-use crate::error::{PluginError, PluginResult};
-use crate::domain::plugin::PluginFilter;
 use super::schema::SchemaManager;
+use crate::domain::plugin::PluginFilter;
+use crate::error::{PluginError, PluginResult};
 
 /// 插件数据库记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,7 +165,7 @@ impl PluginRepository {
         ]);
 
         self.db_manager
-            .execute_sql_with_params(&self.default_db_id, None, sql, params)
+            .execute_sql_with_json(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("插入插件记录失败: {}", e)))?;
 
@@ -231,7 +231,7 @@ impl PluginRepository {
         );
 
         self.db_manager
-            .execute_sql_with_params(
+            .execute_sql_with_json(
                 &self.default_db_id,
                 None,
                 &sql,
@@ -249,7 +249,7 @@ impl PluginRepository {
         let params = serde_json::json!([plugin_id]);
 
         self.db_manager
-            .execute_sql_with_params(&self.default_db_id, None, sql, params)
+            .execute_sql_with_json(&self.default_db_id, None, sql, params)
             .await
             .map_err(|e| PluginError::Database(format!("删除插件记录失败: {}", e)))?;
 
@@ -262,7 +262,7 @@ impl PluginRepository {
         let params = serde_json::json!([plugin_id]);
 
         let result = self.db_manager
-            .query_sql_with_params(&self.default_db_id, None, sql, params, "plugin_query")
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
 
@@ -275,7 +275,7 @@ impl PluginRepository {
         let params = serde_json::json!([id]);
 
         let result = self.db_manager
-            .query_sql_with_params(&self.default_db_id, None, sql, params, "plugin_query")
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
 
@@ -309,7 +309,7 @@ impl PluginRepository {
         let sql = format!("SELECT * FROM cmx_plugin {} ORDER BY create_time DESC", where_clause);
 
         let result = self.db_manager
-            .query_sql_with_params(
+            .query_sql_with_json(
                 &self.default_db_id,
                 None,
                 &sql,
@@ -328,7 +328,7 @@ impl PluginRepository {
         let params = serde_json::json!([plugin_id]);
 
         let result = self.db_manager
-            .query_sql_with_params(&self.default_db_id, None, sql, params, "count_query")
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("检查插件存在失败: {}", e)))?;
 

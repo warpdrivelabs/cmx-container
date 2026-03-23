@@ -316,6 +316,8 @@ pub enum FieldType {
     /// UUID 类型 - 用于全局唯一标识
     /// 对应数据库 UUID 类型
     Uuid,
+    /// 未知类型 - 用于null值字段反序列化时不清楚类型的情况
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

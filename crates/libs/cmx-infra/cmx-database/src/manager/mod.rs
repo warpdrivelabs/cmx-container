@@ -147,19 +147,8 @@ impl DatabaseManager {
 
     /// 执行 SQL 语句
     pub async fn execute_sql(&self, db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
-        crate::transaction::execute_sql_by_ids(db_id, txn_id, sql).await
+        crate::transaction::execute_sql(db_id, txn_id, sql).await
     }
-
-    // /// 执行带参数的 SQL 语句
-    // pub async fn execute_sql_with_params(
-    //     &self,
-    //     db_id: &str,
-    //     txn_id: Option<&str>,
-    //     sql: &str,
-    //     params: serde_json::Value,
-    // ) -> Result<u64> {
-    //     crate::transaction::execute_sql_with_params_by_ids(db_id, txn_id, sql, params).await
-    // }
 
     /// 查询 SQL 语句
     pub async fn query_sql(
@@ -169,21 +158,56 @@ impl DatabaseManager {
         sql: &str,
         dataset_id: &str,
     ) -> Result<DataSet> {
-        crate::transaction::query_sql_by_ids(db_id, txn_id, sql, dataset_id).await
+        crate::transaction::query_sql(db_id, txn_id, sql, dataset_id).await
     }
 
-    // /// 查询带参数的 SQL 语句
-    // pub async fn query_sql_with_params(
-    //     &self,
-    //     db_id: &str,
-    //     txn_id: Option<&str>,
-    //     sql: &str,
-    //     params: serde_json::Value,
-    //     dataset_id: &str,
-    // ) -> Result<DataSet> {
-    //     crate::transaction::query_sql_with_params_by_ids(db_id, txn_id, sql, params, dataset_id)
-    //         .await
-    // }
+    /// 执行带 serde_json::Value 参数的 SQL 语句
+    pub async fn execute_sql_with_json(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: serde_json::Value,
+    ) -> Result<u64> {
+        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::Json(params)).await
+    }
+
+    /// 执行带 DataValue 参数的 SQL 语句
+    pub async fn execute_sql_with_datavalues(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::DataValue>,
+    ) -> Result<u64> {
+        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::DataValues(params)).await
+    }
+
+    /// 查询带 serde_json::Value 参数的 SQL 语句
+    pub async fn query_sql_with_json(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: serde_json::Value,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::Json(params), dataset_id)
+            .await
+    }
+
+    /// 查询带 DataValue 参数的 SQL 语句
+    pub async fn query_sql_with_datavalues(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::DataValue>,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::DataValues(params), dataset_id)
+            .await
+    }
 
     /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
     pub async fn execute_sql_with_params(
@@ -193,7 +217,7 @@ impl DatabaseManager {
         sql: &str,
         params: sea_query_binder::SqlxValues,
     ) -> Result<u64> {
-        crate::transaction::execute_sql_with_params_by_ids(db_id, txn_id, sql, params).await
+        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params)).await
     }
 
     /// 查询带 sea-query-binder SqlxValues 的 SQL 语句
@@ -205,9 +229,13 @@ impl DatabaseManager {
         params: sea_query_binder::SqlxValues,
         dataset_id: &str,
     ) -> Result<DataSet> {
-        crate::transaction::query_sql_with_params_by_ids(db_id, txn_id, sql, params, dataset_id)
+        crate::transaction::query_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params), dataset_id)
             .await
     }
+
+
+
+
 
     /// 提交事务
     pub async fn commit_transaction(&self, txn_id: &str) -> Result<()> {
@@ -253,7 +281,7 @@ impl PoolManager {
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
         let result =
-            crate::transaction::query_sql_by_ids(db_id, None, "SELECT 1", "health_check").await;
+            crate::transaction::query_sql(db_id, None, "SELECT 1", "health_check").await;
         match result {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),

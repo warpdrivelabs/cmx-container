@@ -12,9 +12,20 @@ use crate::transaction::registry::{get_txn_holder_registry, get_txn_holder_by_id
 use crate::transaction::metadata::TransactionStatus;
 
 use cmx_core::model::data::dataset::DataSet;
-use crate::executor::{ParamValue, ResultConverter};
+use cmx_core::model::cell::DataValue;
+use crate::executor::{ResultConverter, bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite, json_to_data_values};
 use crate::get_default_db_manager;
 use sea_query_binder::SqlxValues;
+
+/// SQL 查询参数，支持多种输入类型
+pub enum SqlParams {
+    /// serde_json::Value 数组，内部自动转换为 DataValue
+    Json(serde_json::Value),
+    /// DataValue 数组，直接使用
+    DataValues(Vec<DataValue>),
+    /// sea-query-binder 的 SqlxValues
+    SqlxValues(SqlxValues),
+}
 
 /// 通过事务ID提交事务
 ///
@@ -26,25 +37,19 @@ use sea_query_binder::SqlxValues;
 /// # 返回值
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
-    // 从全局TxnHolder注册表中获取事务
     let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
 
     if let Some(txn_holder_mutex) = txn_holder_mutex {
         let mut should_commit = false;
         let mut txn_to_commit = None;
 
-        // 获取事务持有器的锁
         let result = {
             let mut txh_g = txn_holder_mutex.lock().unwrap();
 
-            // 检查是否存在事务
             if let Some(txh) = txh_g.as_mut() {
-                // 减少引用计数
                 let counter = txh.dec();
 
-                // 如果计数器为 0，则提交事务
                 if counter == 0 {
-                    // 从 Option 中取出事务
                     txn_to_commit = txh_g.take();
                     should_commit = true;
                 }
@@ -55,16 +60,10 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        // 如果需要提交，执行提交操作并更新事务状态
         if should_commit && txn_to_commit.is_some() {
             let txn = txn_to_commit.unwrap();
-
-            // 执行提交操作
             txn.commit().await?;
-
-            // 更新事务状态
             crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed);
-            // 从注册表中移除
             get_txn_holder_registry().write().unwrap().remove(txn_id);
         }
     } else {
@@ -84,26 +83,20 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
 /// # 返回值
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
-    // 从全局TxnHolder注册表中获取事务
     let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
 
     if let Some(txn_holder_mutex) = txn_holder_mutex {
         let mut should_rollback = false;
         let mut txn_to_rollback = None;
 
-        // 获取事务持有器的锁
         let result = {
             let mut txh_g = txn_holder_mutex.lock().unwrap();
 
-            // 检查是否存在事务
             if let Some(mut txn_holder) = txh_g.take() {
-                // 检查引用计数
                 if txn_holder.counter > 1 {
-                    // 如果不是最后一个引用，减少计数并放回
                     txn_holder.counter -= 1;
                     let _ = txh_g.replace(txn_holder);
                 } else {
-                    // 保存事务以便后续回滚
                     txn_to_rollback = Some(txn_holder);
                     should_rollback = true;
                 }
@@ -114,16 +107,10 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        // 如果需要回滚，执行回滚操作并更新事务状态
         if should_rollback && txn_to_rollback.is_some() {
             let txn = txn_to_rollback.unwrap();
-
-            // 执行回滚操作
             txn.rollback().await?;
-
-            // 更新事务状态为已回滚
             crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack);
-            // 从全局TxnHolder注册表中移除
             get_txn_holder_registry().write().unwrap().remove(txn_id);
         }
     } else {
@@ -144,7 +131,6 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
 /// * `Option<Dbx>` - Dbx实例，如果数据库不存在则返回None
 pub fn get_dbx_by_db_id(db_id: &str) -> Option<Dbx> {
     get_default_db_manager().get_dbx(db_id).ok()
-
 }
 
 /// 通过事务ID获取TxnHolder的可变引用
@@ -178,7 +164,7 @@ where
     result
 }
 
-/// 通过数据库ID和事务ID执行SQL操作
+/// 通过数据库ID和事务ID执行SQL操作（无参数）
 ///
 /// 允许通过数据库ID和事务ID执行SQL操作，适用于wasm调用host的场景
 ///
@@ -189,7 +175,7 @@ where
 ///
 /// # 返回值
 /// * `Result<u64>` - 执行结果，返回受影响的行数
-pub async fn execute_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
+pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
     let sql = sql.to_string();
     match txn_id {
         Some(txn_id) => {
@@ -199,7 +185,6 @@ pub async fn execute_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str) ->
             })).await
         },
         None => {
-            // 非事务方式执行
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
@@ -219,87 +204,6 @@ pub async fn execute_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str) ->
                 Err(Error::NoDb)
             }
         },
-    }
-}
-
-/// 为 PostgreSQL 绑定参数
-///
-/// PostgreSQL 支持原生类型绑定，包括 Decimal、DateTime、Date、Json、Uuid
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_postgres<'q>(query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.as_str()),
-        ParamValue::Decimal(v) => query.bind(*v),
-        ParamValue::DateTime(v) => query.bind(*v),
-        ParamValue::Date(v) => query.bind(*v),
-        ParamValue::Json(v) => query.bind(v.clone()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(*v),
-    }
-}
-
-/// 为 MySQL 绑定参数
-///
-/// MySQL 对部分类型需要转换为字符串
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_mysql<'q>(query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.clone()),
-        ParamValue::Decimal(v) => query.bind(v.to_string()),
-        ParamValue::DateTime(v) => query.bind(v.to_string()),
-        ParamValue::Date(v) => query.bind(v.to_string()),
-        ParamValue::Json(v) => query.bind(v.to_string()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(v.to_string()),
-    }
-}
-
-/// 为 SQLite 绑定参数
-///
-/// SQLite 对部分类型需要转换为字符串
-///
-/// # 参数
-/// * `query` - SQL 查询
-/// * `param` - 参数值
-///
-/// # 返回值
-/// * 绑定参数后的查询
-#[inline]
-fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>, param: &'q ParamValue) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
-    match param {
-        ParamValue::Null => query.bind(None::<String>),
-        ParamValue::Bool(v) => query.bind(*v),
-        ParamValue::Int(v) => query.bind(*v),
-        ParamValue::Float(v) => query.bind(*v),
-        ParamValue::String(v) => query.bind(v.clone()),
-        ParamValue::Decimal(v) => query.bind(v.to_string()),
-        ParamValue::DateTime(v) => query.bind(v.to_string()),
-        ParamValue::Date(v) => query.bind(v.to_string()),
-        ParamValue::Json(v) => query.bind(v.to_string()),
-        ParamValue::Binary(v) => query.bind(v.as_slice()),
-        ParamValue::Uuid(v) => query.bind(v.to_string()),
     }
 }
 
@@ -307,60 +211,60 @@ fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlit
 ///
 /// 允许通过数据库ID和事务ID执行带参数的SQL操作，适用于wasm调用host的场景
 ///
-/// serdejson
-/// 不携带目标数据库字段的类型信息。而 SQLx 是一个 类型安全 的库，
-/// 要求你在 .bind() 时提供能被映射到具体 SQL 类型的 Rust 类型（如 Option<NaiveDateTime>、Option<String> 等）
-///
 /// # 参数
 /// * `db_id` - 数据库ID
 /// * `txn_id` - 事务ID，None表示使用非事务方式执行
 /// * `sql` - SQL语句
-/// * `params` - SQL参数，使用serde_json序列化的参数数组
+/// * `params` - SQL参数，支持 Json、DataValues、SqlxValues
 ///
 /// # 返回值
 /// * `Result<u64>` - 执行结果，返回受影响的行数
-#[deprecated(since = "0.0.1", note = "请使用 `execute_sql_with_params_by_ids` 代替")]
-pub async fn execute_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value) -> Result<u64> {
+pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams) -> Result<u64> {
     let sql = sql.to_string();
-    let params: Vec<ParamValue> = match params {
-        serde_json::Value::Array(arr) => arr.into_iter().map(ParamValue::from_json).collect(),
-        _ => return Err(Error::InvalidParams("params must be an array".to_string())),
-    };
-
     match txn_id {
         Some(txn_id) => {
-            let params = params.clone();
             with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
-                let result = txn.execute_with_params(&sql, &params).await?;
+                let result = match params {
+                    SqlParams::Json(json) => {
+                        let values = json_to_data_values(json)
+                            .map_err(|e| Error::InvalidParams(e))?;
+                        txn.execute_with_datavalues(&sql, &values).await?
+                    },
+                    SqlParams::DataValues(values) => {
+                        txn.execute_with_datavalues(&sql, &values).await?
+                    },
+                    SqlParams::SqlxValues(sqlx_values) => {
+                        txn.execute_with_sqlxvalues(&sql, sqlx_values).await?
+                    },
+                };
                 Ok(result)
             })).await
         },
         None => {
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
-                match dbx.db() {
-                    crate::connection::DbPool::Postgres(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_postgres(query, param);
-                        }
-                        let result = query.execute(pool).await?;
-                        Ok(result.rows_affected())
+                match params {
+                    SqlParams::Json(json) => {
+                        let values = json_to_data_values(json)
+                            .map_err(|e| Error::InvalidParams(e))?;
+                        execute_with_datavalues_no_txn(&dbx, &sql, &values).await
                     },
-                    crate::connection::DbPool::MySql(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_mysql(query, param);
-                        }
-                        let result = query.execute(pool).await?;
-                        Ok(result.rows_affected())
+                    SqlParams::DataValues(values) => {
+                        execute_with_datavalues_no_txn(&dbx, &sql, &values).await
                     },
-                    crate::connection::DbPool::Sqlite(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_sqlite(query, param);
+                    SqlParams::SqlxValues(sqlx_values) => {
+                        match dbx.db() {
+                            crate::connection::DbPool::Postgres(pool) => {
+                                let query = sqlx::query_with(&sql, sqlx_values);
+                                let result = query.execute(pool).await?;
+                                Ok(result.rows_affected())
+                            },
+                            crate::connection::DbPool::MySql(_) => {
+                                Err(Error::InvalidParams("MySql not supported with sea-query yet".to_string()))
+                            },
+                            crate::connection::DbPool::Sqlite(_) => {
+                                Err(Error::InvalidParams("Sqlite not supported with sea-query yet".to_string()))
+                            },
                         }
-                        let result = query.execute(pool).await?;
-                        Ok(result.rows_affected())
                     },
                 }
             } else {
@@ -370,7 +274,7 @@ pub async fn execute_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql
     }
 }
 
-/// 通过数据库ID和事务ID执行SQL查询并返回DataSet
+/// 通过数据库ID和事务ID执行SQL查询（无参数）
 ///
 /// 允许通过数据库ID和事务ID执行SQL查询并返回DataSet，适用于wasm调用host的场景
 ///
@@ -382,7 +286,7 @@ pub async fn execute_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql
 ///
 /// # 返回值
 /// * `Result<DataSet>` - 查询结果转换为DataSet
-pub async fn query_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
     match txn_id {
@@ -423,54 +327,58 @@ pub async fn query_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, data
 /// * `db_id` - 数据库ID
 /// * `txn_id` - 事务ID，None表示使用非事务方式执行
 /// * `sql` - SQL查询语句
-/// * `params` - SQL参数，使用serde_json序列化的参数数组
+/// * `params` - SQL参数，支持 Json、DataValues、SqlxValues
 /// * `dataset_id` - 数据集唯一标识
 ///
 /// # 返回值
 /// * `Result<DataSet>` - 查询结果转换为DataSet
-#[deprecated(since = "0.0.1", note = "请使用 `query_sql_with_params_by_ids` 代替")]
-pub async fn query_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    let params: Vec<ParamValue> = match params {
-        serde_json::Value::Array(arr) => arr.into_iter().map(ParamValue::from_json).collect(),
-        _ => return Err(Error::InvalidParams("params must be an array".to_string())),
-    };
-
     match txn_id {
         Some(txn_id) => {
-            let params = params.clone();
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                let result = txn.query_with_params(&sql, &params, &dataset_id).await?;
+                let result = match params {
+                    SqlParams::Json(json) => {
+                        let values = json_to_data_values(json)
+                            .map_err(|e| Error::InvalidParams(e))?;
+                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                    },
+                    SqlParams::DataValues(values) => {
+                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                    },
+                    SqlParams::SqlxValues(sqlx_values) => {
+                        txn.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id).await?
+                    },
+                };
                 Ok(result)
             })).await
         },
         None => {
             if let Some(dbx) = get_dbx_by_db_id(db_id) {
-                match dbx.db() {
-                    crate::connection::DbPool::Postgres(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_postgres(query, param);
-                        }
-                        let rows = query.fetch_all(pool).await?;
-                        Ok(ResultConverter::convert_postgres_rows(rows, &dataset_id))
+                match params {
+                    SqlParams::Json(json) => {
+                        let values = json_to_data_values(json)
+                            .map_err(|e| Error::InvalidParams(e))?;
+                        query_with_datavalues_no_txn(&dbx, &sql, &values, &dataset_id).await
                     },
-                    crate::connection::DbPool::MySql(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_mysql(query, param);
-                        }
-                        let rows = query.fetch_all(pool).await?;
-                        Ok(ResultConverter::convert_mysql_rows(rows, &dataset_id))
+                    SqlParams::DataValues(values) => {
+                        query_with_datavalues_no_txn(&dbx, &sql, &values, &dataset_id).await
                     },
-                    crate::connection::DbPool::Sqlite(pool) => {
-                        let mut query = sqlx::query(&sql);
-                        for param in &params {
-                            query = bind_param_sqlite(query, param);
+                    SqlParams::SqlxValues(sqlx_values) => {
+                        match dbx.db() {
+                            crate::connection::DbPool::Postgres(pool) => {
+                                let query = sqlx::query_with(&sql, sqlx_values);
+                                let rows = query.fetch_all(pool).await?;
+                                Ok(ResultConverter::convert_postgres_rows(rows, &dataset_id))
+                            },
+                            crate::connection::DbPool::MySql(_) => {
+                                Err(Error::InvalidParams("MySql not supported with sea-query yet".to_string()))
+                            },
+                            crate::connection::DbPool::Sqlite(_) => {
+                                Err(Error::InvalidParams("Sqlite not supported with sea-query yet".to_string()))
+                            },
                         }
-                        let rows = query.fetch_all(pool).await?;
-                        Ok(ResultConverter::convert_sqlite_rows(rows, &dataset_id))
                     },
                 }
             } else {
@@ -480,90 +388,62 @@ pub async fn query_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql: 
     }
 }
 
-/// 通过数据库ID和事务ID执行带 sea-query-binder SqlxValues 的 SQL 操作
-///
-/// 允许通过数据库ID和事务ID执行带参数的SQL操作，使用 sea-query-binder 的 SqlxValues
-///
-/// # 参数
-/// * `db_id` - 数据库ID
-/// * `txn_id` - 事务ID，None表示使用非事务方式执行
-/// * `sql` - SQL语句
-/// * `params` - sea-query-binder 的 SqlxValues
-///
-/// # 返回值
-/// * `Result<u64>` - 执行结果，返回受影响的行数
-pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues) -> Result<u64> {
-    let sql = sql.to_string();
-    match txn_id {
-        Some(txn_id) => {
-            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
-                let result = txn.execute_with_sqlxvalues(&sql, params).await?;
-                Ok(result)
-            })).await
-        },
-        None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
-                match dbx.db() {
-                    crate::connection::DbPool::Postgres(pool) => {
-                        let query = sqlx::query_with(&sql, params);
-                        let result = query.execute(pool).await?;
-                        Ok(result.rows_affected())
-                    },
-                    crate::connection::DbPool::MySql(_pool) => {
-                        Err(Error::InvalidParams("MySql not supported with sea-query yet".to_string()))
-                    },
-                    crate::connection::DbPool::Sqlite(_pool) => {
-                        Err(Error::InvalidParams("Sqlite not supported with sea-query yet".to_string()))
-                    },
-                }
-            } else {
-                Err(Error::NoDb)
+/// 非事务方式执行带 DataValue 参数的 SQL
+async fn execute_with_datavalues_no_txn(dbx: &Dbx, sql: &str, params: &[DataValue]) -> Result<u64> {
+    match dbx.db() {
+        crate::connection::DbPool::Postgres(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_postgres(query, param);
             }
+            let result = query.execute(pool).await?;
+            Ok(result.rows_affected())
+        },
+        crate::connection::DbPool::MySql(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_mysql(query, param);
+            }
+            let result = query.execute(pool).await?;
+            Ok(result.rows_affected())
+        },
+        crate::connection::DbPool::Sqlite(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_sqlite(query, param);
+            }
+            let result = query.execute(pool).await?;
+            Ok(result.rows_affected())
         },
     }
 }
 
-/// 通过数据库ID和事务ID执行带 sea-query-binder SqlxValues 的 SQL 查询并返回 DataSet
-///
-/// 允许通过数据库ID和事务ID执行带参数的SQL查询，使用 sea-query-binder 的 SqlxValues
-///
-/// # 参数
-/// * `db_id` - 数据库ID
-/// * `txn_id` - 事务ID，None表示使用非事务方式执行
-/// * `sql` - SQL查询语句
-/// * `params` - sea-query-binder 的 SqlxValues
-/// * `dataset_id` - 数据集唯一标识
-///
-/// # 返回值
-/// * `Result<DataSet>` - 查询结果转换为DataSet
-pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues, dataset_id: &str) -> Result<DataSet> {
-    let sql = sql.to_string();
-    let dataset_id = dataset_id.to_string();
-    match txn_id {
-        Some(txn_id) => {
-            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
-                let result = txn.query_with_sqlxvalues(&sql, params, &dataset_id).await?;
-                Ok(result)
-            })).await
-        },
-        None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
-                match dbx.db() {
-                    crate::connection::DbPool::Postgres(pool) => {
-                        let query = sqlx::query_with(&sql, params);
-                        let rows = query.fetch_all(pool).await?;
-                        Ok(ResultConverter::convert_postgres_rows(rows, &dataset_id))
-                    },
-                    crate::connection::DbPool::MySql(_pool) => {
-                        Err(Error::InvalidParams("MySql not supported with sea-query yet".to_string()))
-                    },
-                    crate::connection::DbPool::Sqlite(_pool) => {
-                        Err(Error::InvalidParams("Sqlite not supported with sea-query yet".to_string()))
-                    },
-                }
-            } else {
-                Err(Error::NoDb)
+/// 非事务方式查询带 DataValue 参数的 SQL
+async fn query_with_datavalues_no_txn(dbx: &Dbx, sql: &str, params: &[DataValue], dataset_id: &str) -> Result<DataSet> {
+    match dbx.db() {
+        crate::connection::DbPool::Postgres(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_postgres(query, param);
             }
+            let rows = query.fetch_all(pool).await?;
+            Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
+        },
+        crate::connection::DbPool::MySql(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_mysql(query, param);
+            }
+            let rows = query.fetch_all(pool).await?;
+            Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
+        },
+        crate::connection::DbPool::Sqlite(pool) => {
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = bind_data_value_sqlite(query, param);
+            }
+            let rows = query.fetch_all(pool).await?;
+            Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
         },
     }
 }

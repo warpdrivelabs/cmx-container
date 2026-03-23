@@ -28,7 +28,7 @@ pub use registry::{get_txn_holder_by_id};
 pub use txcontext::{TransactionFrame, TransactionContextStack, SuspendedTransaction};
 
 // 导出API相关函数
-pub use api::{commit_txn_by_id, rollback_txn_by_id, get_dbx_by_db_id, with_transaction_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, query_sql_by_ids, query_sql_with_params_by_ids};
+pub use api::{commit_txn_by_id, rollback_txn_by_id, get_dbx_by_db_id, with_transaction_by_id, execute_sql, execute_sql_with_params, query_sql, query_sql_with_params, SqlParams};
 
 // 声明式事务管理宏
 ///

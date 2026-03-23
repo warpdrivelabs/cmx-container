@@ -23,7 +23,7 @@ pub use executor::{ParamValue, ResultConverter};
 pub use cmx_core::model::data::dataset::DataSet;
 pub use manager::{DatabaseManager, DatabaseManagerConfig, TransactionContext, TransactionOptions, get_default_db_manager};
 pub use types::{QueryBuilder, TypedRow, TypedResult, CompareOp, OrderDirection};
-pub use transaction::{check_long_running_transactions, cleanup_completed_transactions, commit_txn_by_id, execute_sql_by_ids, execute_sql_with_params_by_ids, get_active_transactions, get_dbx_by_db_id, get_txn_holder_by_id, get_txn_metadata, query_sql_by_ids, query_sql_with_params_by_ids, rollback_txn_by_id, with_transaction_by_id, Dbx, Propagation, TransactionMetadata, TransactionStatus};
+pub use transaction::{check_long_running_transactions, cleanup_completed_transactions, commit_txn_by_id, execute_sql, execute_sql_with_params, get_active_transactions, get_dbx_by_db_id, get_txn_holder_by_id, get_txn_metadata, query_sql, query_sql_with_params, rollback_txn_by_id, with_transaction_by_id, Dbx, Propagation, TransactionMetadata, TransactionStatus, SqlParams};
 pub use connection::{DbPool};
 
 

@@ -1,3 +1,4 @@
+use log::warn;
 /// 结果转换模块，用于处理SQLx查询结果到DataSet的转换
 ///
 /// 该模块提供了独立的结果转换功能，不依赖于 DbTransaction
@@ -17,7 +18,7 @@ pub enum ParamValue {
     Float(f64),
     String(String),
     Decimal(Decimal),
-    DateTime(chrono::NaiveDateTime),
+    DateTime(chrono::DateTime<chrono::Utc>),
     Date(chrono::NaiveDate),
     Json(serde_json::Value),
     Binary(Vec<u8>),
@@ -67,16 +68,16 @@ impl ParamValue {
 
                 // 3. 尝试解析为 DateTime（支持多种格式）
                 if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
-                    return ParamValue::DateTime(dt.naive_utc());
+                    return ParamValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f") {
-                    return ParamValue::DateTime(dt);
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
-                    return ParamValue::DateTime(dt);
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
-                    return ParamValue::DateTime(dt);
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
                 }
 
                 // 4. 尝试解析为 Date
@@ -126,6 +127,90 @@ impl ParamValue {
                 ParamValue::Json(serde_json::Value::Object(obj))
             }
         }
+    }
+}
+
+/// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（PostgreSQL）
+#[inline]
+pub fn bind_data_value_postgres<'q>(
+    query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    param: &'q DataValue,
+) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    match param {
+        DataValue::Null => query.bind(None::<String>),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.as_str()),
+        DataValue::Decimal(v) => query.bind(*v),
+        DataValue::DateTime(v) => query.bind(*v),
+        DataValue::Date(v) => query.bind(*v),
+        DataValue::Json(v) => query.bind(v.clone()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(*v),
+        DataValue::Array(_) => query.bind(None::<String>),
+        DataValue::ShortStr(_) => query.bind(None::<String>),
+        DataValue::LongStr(_) => query.bind(None::<String>),
+    }
+}
+
+/// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（MySQL）
+#[inline]
+pub fn bind_data_value_mysql<'q>(
+    query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
+    param: &'q DataValue,
+) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+    match param {
+        DataValue::Null => query.bind(None::<String>),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.clone()),
+        DataValue::Decimal(v) => query.bind(v.to_string()),
+        DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
+        DataValue::Date(v) => query.bind(v.to_string()),
+        DataValue::Json(v) => query.bind(v.to_string()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(v.to_string()),
+        DataValue::Array(_) => query.bind(None::<String>),
+        DataValue::ShortStr(_) => query.bind(None::<String>),
+        DataValue::LongStr(_) => query.bind(None::<String>),
+    }
+}
+
+/// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（SQLite）
+#[inline]
+pub fn bind_data_value_sqlite<'q>(
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    param: &'q DataValue,
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+    match param {
+        DataValue::Null => query.bind(None::<String>),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.clone()),
+        DataValue::Decimal(v) => query.bind(v.to_string()),
+        DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
+        DataValue::Date(v) => query.bind(v.to_string()),
+        DataValue::Json(v) => query.bind(v.to_string()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(v.to_string()),
+        DataValue::Array(_) => query.bind(None::<String>),
+        DataValue::ShortStr(_) => query.bind(None::<String>),
+        DataValue::LongStr(_) => query.bind(None::<String>),
+    }
+}
+
+/// 将 serde_json::Value 数组转换为 Vec<DataValue>
+pub fn json_to_data_values(json: serde_json::Value) -> Result<Vec<DataValue>, String> {
+    match json {
+        serde_json::Value::Array(arr) => {
+            arr.into_iter()
+                .map(|v| serde_json::from_value(v).map_err(|e| e.to_string()))
+                .collect()
+        }
+        _ => Err("params must be an array".to_string()),
     }
 }
 
@@ -495,7 +580,8 @@ impl ResultConverter {
         } else if type_name_lower.contains("array") {
             FieldType::Array
         } else {
-            FieldType::String
+            warn!("未处理的数据库字段类型: {}", type_name);
+            FieldType::Unknown
         }
     }
 }

@@ -85,6 +85,9 @@ impl DdlDialect for PostgresDdlDialect {
             FieldType::Array => "JSONB".to_string(),
             FieldType::Json => "JSONB".to_string(),
             FieldType::Uuid => "UUID".to_string(),
+            FieldType::Unknown => "TEXT".to_string(),
+
+
         }
     }
 

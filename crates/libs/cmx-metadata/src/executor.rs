@@ -15,13 +15,13 @@ use cmx_core::model::cell::{
     ColumnDefine, DataValue, FieldType, IndexDefine, IndexKind, TableDefine,
 };
 use cmx_core::model::meta::base::{BaseError, TableDefineDbExecutor};
-use cmx_database::{execute_sql_by_ids, query_sql_by_ids, DataSet};
+use cmx_database::{DataSet, get_default_db_manager};
 use tracing::info;
 
+use crate::MetadataError;
+use crate::ddl::DdlDialect;
 use crate::ddl::diff::DdlDiff;
 use crate::ddl::postgres::PostgresDdlDialect;
-use crate::ddl::DdlDialect;
-use crate::MetadataError;
 
 /// 执行多条 DDL 语句（逐条执行）
 pub async fn execute_ddl_by_ids(
@@ -30,7 +30,8 @@ pub async fn execute_ddl_by_ids(
     statements: &[String],
 ) -> Result<(), MetadataError> {
     for stmt in statements {
-        execute_sql_by_ids(db_id, txn_id, stmt)
+        get_default_db_manager()
+            .execute_sql(db_id, txn_id, stmt)
             .await
             .map_err(|e| MetadataError::DdlExecution(e.to_string()))?;
     }
@@ -43,7 +44,8 @@ pub async fn execute_ddl_statement_by_ids(
     txn_id: Option<&str>,
     statement: &str,
 ) -> Result<u64, MetadataError> {
-    execute_sql_by_ids(db_id, txn_id, statement)
+    get_default_db_manager()
+        .execute_sql(db_id, txn_id, statement)
         .await
         .map_err(|e| MetadataError::DdlExecution(e.to_string()))
 }
@@ -68,62 +70,70 @@ impl PgTableDefineExecutor {
     async fn execute_statements(&self, statements: Vec<String>) -> Result<(), MetadataError> {
         let db_id = self.db_id.clone();
         let txn_id = self.txn_id.clone();
-            for stmt in &statements {
-                execute_sql_by_ids(&db_id, txn_id.as_deref(), stmt)
-                    .await
-                    .map_err(|e| MetadataError::DdlExecution(e.to_string()))?;
-            }
-            Ok(())
-
+        for stmt in &statements {
+            get_default_db_manager()
+                .execute_sql(&db_id, txn_id.as_deref(), stmt)
+                .await
+                .map_err(|e| MetadataError::DdlExecution(e.to_string()))?;
+        }
+        Ok(())
     }
 
     /// 查询 PostgreSQL 中当前表的结构，构建 TableDefine
     ///
     /// 通过查询 information_schema.columns、pg_indexes、pg_description
     /// 还原当前数据库中的表定义，用于与新定义进行 diff。
-   async fn query_current_table_define(&self, define: &TableDefine) -> Result<TableDefine, MetadataError> {
+    async fn query_current_table_define(
+        &self,
+        define: &TableDefine,
+    ) -> Result<TableDefine, MetadataError> {
         let db_id = self.db_id.clone();
         let txn_id = self.txn_id.clone();
         let table_name = define.table_name.clone();
-        let schema_name = define.schema.clone().unwrap_or_else(|| "public".to_string());
+        let schema_name = define
+            .schema
+            .clone()
+            .unwrap_or_else(|| "public".to_string());
 
-            // 1. 查询列信息
-            let columns_sql = format!(
-                "SELECT column_name, data_type, character_maximum_length, \
+        // 1. 查询列信息
+        let columns_sql = format!(
+            "SELECT column_name, data_type, character_maximum_length, \
                  numeric_precision, numeric_scale, is_nullable, column_default, \
                  ordinal_position, udt_name \
                  FROM information_schema.columns \
                  WHERE table_schema = '{}' AND table_name = '{}' \
                  ORDER BY ordinal_position",
+            schema_name, table_name
+        );
+        let col_ds = get_default_db_manager()
+            .query_sql(&db_id, txn_id.as_deref(), &columns_sql, "columns")
+            .await
+            .map_err(|e| MetadataError::DdlExecution(format!("查询列信息失败: {}", e)))?;
+
+        if col_ds.is_empty() {
+            return Err(MetadataError::DdlExecution(format!(
+                "表 {}.{} 不存在或无列信息",
                 schema_name, table_name
-            );
-            let col_ds = query_sql_by_ids(&db_id, txn_id.as_deref(), &columns_sql, "columns")
-                .await
-                .map_err(|e| MetadataError::DdlExecution(format!("查询列信息失败: {}", e)))?;
+            )));
+        }
 
-            if col_ds.is_empty() {
-                return Err(MetadataError::DdlExecution(format!(
-                    "表 {}.{} 不存在或无列信息",
-                    schema_name, table_name
-                )));
-            }
-
-            // 2. 查询主键列
-            let pk_sql = format!(
-                "SELECT a.attname \
+        // 2. 查询主键列
+        let pk_sql = format!(
+            "SELECT a.attname \
                  FROM pg_index i \
                  JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) \
                  WHERE i.indrelid = '{}.{}'::regclass AND i.indisprimary \
                  ORDER BY array_position(i.indkey, a.attnum)",
-                schema_name, table_name
-            );
-            let pk_ds = query_sql_by_ids(&db_id, txn_id.as_deref(), &pk_sql, "pk")
-                .await
-                .unwrap_or_else(|_| empty_dataset("pk"));
+            schema_name, table_name
+        );
+        let pk_ds = get_default_db_manager()
+            .query_sql(&db_id, txn_id.as_deref(), &pk_sql, "pk")
+            .await
+            .unwrap_or_else(|_| empty_dataset("pk"));
 
-            // 3. 查询索引信息（排除主键索引）
-            let idx_sql = format!(
-                "SELECT i.relname AS index_name, \
+        // 3. 查询索引信息（排除主键索引）
+        let idx_sql = format!(
+            "SELECT i.relname AS index_name, \
                  ix.indisunique AS is_unique, \
                  array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS columns \
                  FROM pg_class t \
@@ -135,24 +145,26 @@ impl PgTableDefineExecutor {
                  AND NOT ix.indisprimary \
                  GROUP BY i.relname, ix.indisunique \
                  ORDER BY i.relname",
-                table_name, schema_name
-            );
-            let idx_ds = query_sql_by_ids(&db_id, txn_id.as_deref(), &idx_sql, "indexes")
-                .await
-                .unwrap_or_else(|_| empty_dataset("indexes"));
+            table_name, schema_name
+        );
+        let idx_ds = get_default_db_manager()
+            .query_sql(&db_id, txn_id.as_deref(), &idx_sql, "indexes")
+            .await
+            .unwrap_or_else(|_| empty_dataset("indexes"));
 
-            // 4. 查询表注释
-            let comment_sql = format!(
-                "SELECT obj_description('{}.{}'::regclass, 'pg_class') AS comment",
-                schema_name, table_name
-            );
-            let comment_ds = query_sql_by_ids(&db_id, txn_id.as_deref(), &comment_sql, "comment")
-                .await
-                .unwrap_or_else(|_| empty_dataset("comment"));
+        // 4. 查询表注释
+        let comment_sql = format!(
+            "SELECT obj_description('{}.{}'::regclass, 'pg_class') AS comment",
+            schema_name, table_name
+        );
+        let comment_ds = get_default_db_manager()
+            .query_sql(&db_id, txn_id.as_deref(), &comment_sql, "comment")
+            .await
+            .unwrap_or_else(|_| empty_dataset("comment"));
 
-            // 5. 查询列注释
-            let col_comment_sql = format!(
-                "SELECT a.attname AS column_name, \
+        // 5. 查询列注释
+        let col_comment_sql = format!(
+            "SELECT a.attname AS column_name, \
                  col_description(a.attrelid, a.attnum) AS comment \
                  FROM pg_attribute a \
                  JOIN pg_class c ON a.attrelid = c.oid \
@@ -160,126 +172,136 @@ impl PgTableDefineExecutor {
                  WHERE c.relname = '{}' AND n.nspname = '{}' \
                  AND a.attnum > 0 AND NOT a.attisdropped \
                  AND col_description(a.attrelid, a.attnum) IS NOT NULL",
-                table_name, schema_name
+            table_name, schema_name
+        );
+        let col_comment_ds = get_default_db_manager()
+            .query_sql(&db_id, txn_id.as_deref(), &col_comment_sql, "col_comments")
+            .await
+            .unwrap_or_else(|_| empty_dataset("col_comments"));
+
+        // 构建列注释映射
+        let mut col_comment_map: HashMap<String, String> = HashMap::new();
+        for row in col_comment_ds.iter() {
+            let col_name = get_string_field(row.get(0));
+            let comment = get_string_field(row.get(1));
+            if !col_name.is_empty() && !comment.is_empty() {
+                col_comment_map.insert(col_name, comment);
+            }
+        }
+
+        // 构建主键列集合
+        let mut primary_keys: Vec<String> = Vec::new();
+        for row in pk_ds.iter() {
+            let pk_col = get_string_field(row.get(0));
+            if !pk_col.is_empty() {
+                primary_keys.push(pk_col);
+            }
+        }
+
+        // 构建列定义
+        let mut columns: Vec<ColumnDefine> = Vec::new();
+        for row in col_ds.iter() {
+            let name = get_string_field(row.get(0));
+            let data_type = get_string_field(row.get(1));
+            let char_max_len = get_opt_i64(row.get(2));
+            let num_precision = get_opt_i64(row.get(3));
+            let num_scale = get_opt_i64(row.get(4));
+            let is_nullable_str = get_string_field(row.get(5));
+            let column_default = get_opt_string(row.get(6));
+            let ordinal = get_opt_i64(row.get(7));
+            let udt_name = get_string_field(row.get(8));
+
+            let is_nullable = is_nullable_str == "YES";
+            let is_pk = primary_keys.contains(&name);
+
+            // 构建原始 db_type
+            let db_type = build_pg_db_type(
+                &data_type,
+                &udt_name,
+                char_max_len,
+                num_precision,
+                num_scale,
             );
-            let col_comment_ds = query_sql_by_ids(&db_id, txn_id.as_deref(), &col_comment_sql, "col_comments")
-                .await
-                .unwrap_or_else(|_| empty_dataset("col_comments"));
 
-            // 构建列注释映射
-            let mut col_comment_map: HashMap<String, String> = HashMap::new();
-            for row in col_comment_ds.iter() {
-                let col_name = get_string_field(row.get(0));
-                let comment = get_string_field(row.get(1));
-                if !col_name.is_empty() && !comment.is_empty() {
-                    col_comment_map.insert(col_name, comment);
-                }
-            }
+            // 映射为 FieldType
+            let field_type = pg_type_to_field_type(&data_type, &udt_name);
 
-            // 构建主键列集合
-            let mut primary_keys: Vec<String> = Vec::new();
-            for row in pk_ds.iter() {
-                let pk_col = get_string_field(row.get(0));
-                if !pk_col.is_empty() {
-                    primary_keys.push(pk_col);
-                }
-            }
+            // 处理默认值（去掉类型转换后缀）
+            let default_value = column_default.map(|d| clean_pg_default(&d));
 
-            // 构建列定义
-            let mut columns: Vec<ColumnDefine> = Vec::new();
-            for row in col_ds.iter() {
-                let name = get_string_field(row.get(0));
-                let data_type = get_string_field(row.get(1));
-                let char_max_len = get_opt_i64(row.get(2));
-                let num_precision = get_opt_i64(row.get(3));
-                let num_scale = get_opt_i64(row.get(4));
-                let is_nullable_str = get_string_field(row.get(5));
-                let column_default = get_opt_string(row.get(6));
-                let ordinal = get_opt_i64(row.get(7));
-                let udt_name = get_string_field(row.get(8));
+            let label = col_comment_map.get(&name).cloned().unwrap_or_default();
 
-                let is_nullable = is_nullable_str == "YES";
-                let is_pk = primary_keys.contains(&name);
-
-                // 构建原始 db_type
-                let db_type = build_pg_db_type(&data_type, &udt_name, char_max_len, num_precision, num_scale);
-
-                // 映射为 FieldType
-                let field_type = pg_type_to_field_type(&data_type, &udt_name);
-
-                // 处理默认值（去掉类型转换后缀）
-                let default_value = column_default.map(|d| clean_pg_default(&d));
-
-                let label = col_comment_map.get(&name).cloned().unwrap_or_default();
-
-                columns.push(ColumnDefine {
-                    name,
-                    label,
-                    field_type,
-                    is_primary_key: is_pk,
-                    is_nullable,
-                    default_value,
-                    i18n: false,
-                    length: char_max_len.map(|v| v as u32),
-                    precision: num_precision.map(|v| v as u32),
-                    scale: num_scale.map(|v| v as u32),
-                    db_type: Some(db_type),
-                    ordinal: ordinal.map(|v| v as u32),
-                    create_time: None,
-                    update_time: None,
-                    is_foreign_key: false,
-                    foreign_key_table: None,
-                    foreign_key_column: None,
-                    extensions: HashMap::new(),
-                });
-            }
-
-            // 构建索引定义
-            let mut indexes: Vec<IndexDefine> = Vec::new();
-            for row in idx_ds.iter() {
-                let idx_name = get_string_field(row.get(0));
-                let is_unique = match row.get(1) {
-                    Some(DataValue::Bool(b)) => *b,
-                    _ => false,
-                };
-                // columns 字段可能是 String（PostgreSQL array_agg 返回的文本格式）
-                let idx_columns = parse_pg_array_column(row.get(2));
-
-                if !idx_name.is_empty() {
-                    indexes.push(IndexDefine {
-                        name: idx_name,
-                        columns: idx_columns,
-                        kind: if is_unique { IndexKind::Unique } else { IndexKind::Normal },
-                    });
-                }
-            }
-
-            // 表注释
-            let table_comment = if !comment_ds.is_empty() {
-                get_opt_string(comment_ds.iter().next().and_then(|r| r.get(0)))
-            } else {
-                None
-            };
-
-            Ok(TableDefine {
-                table_name: table_name.clone(),
-                display_name: table_comment.clone().unwrap_or_else(|| table_name.clone()),
-                columns,
-                primary_keys,
-                indexes,
-                version: define.version,
+            columns.push(ColumnDefine {
+                name,
+                label,
+                field_type,
+                is_primary_key: is_pk,
+                is_nullable,
+                default_value,
+                i18n: false,
+                length: char_max_len.map(|v| v as u32),
+                precision: num_precision.map(|v| v as u32),
+                scale: num_scale.map(|v| v as u32),
+                db_type: Some(db_type),
+                ordinal: ordinal.map(|v| v as u32),
                 create_time: None,
                 update_time: None,
-                i18n: false,
-                comment: table_comment,
-                schema: Some(schema_name),
-                tablespace: None,
-                is_partitioned: false,
-                partition_type: None,
-                partition_columns: vec![],
+                is_foreign_key: false,
+                foreign_key_table: None,
+                foreign_key_column: None,
                 extensions: HashMap::new(),
-            })
+            });
+        }
 
+        // 构建索引定义
+        let mut indexes: Vec<IndexDefine> = Vec::new();
+        for row in idx_ds.iter() {
+            let idx_name = get_string_field(row.get(0));
+            let is_unique = match row.get(1) {
+                Some(DataValue::Bool(b)) => *b,
+                _ => false,
+            };
+            // columns 字段可能是 String（PostgreSQL array_agg 返回的文本格式）
+            let idx_columns = parse_pg_array_column(row.get(2));
+
+            if !idx_name.is_empty() {
+                indexes.push(IndexDefine {
+                    name: idx_name,
+                    columns: idx_columns,
+                    kind: if is_unique {
+                        IndexKind::Unique
+                    } else {
+                        IndexKind::Normal
+                    },
+                });
+            }
+        }
+
+        // 表注释
+        let table_comment = if !comment_ds.is_empty() {
+            get_opt_string(comment_ds.iter().next().and_then(|r| r.get(0)))
+        } else {
+            None
+        };
+
+        Ok(TableDefine {
+            table_name: table_name.clone(),
+            display_name: table_comment.clone().unwrap_or_else(|| table_name.clone()),
+            columns,
+            primary_keys,
+            indexes,
+            version: define.version,
+            create_time: None,
+            update_time: None,
+            i18n: false,
+            comment: table_comment,
+            schema: Some(schema_name),
+            tablespace: None,
+            is_partitioned: false,
+            partition_type: None,
+            partition_columns: vec![],
+            extensions: HashMap::new(),
+        })
     }
 }
 
@@ -305,14 +327,16 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         all_stmts.extend(comment_stmts);
         all_stmts.extend(index_stmts);
 
-        self.execute_statements(all_stmts).await
+        self.execute_statements(all_stmts)
+            .await
             .map_err(|e| BaseError::DdlGeneration(e.to_string()))
     }
 
     async fn upgrade_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         // 1. 查询当前数据库中的表结构
         let current = self
-            .query_current_table_define(define).await
+            .query_current_table_define(define)
+            .await
             .map_err(|e| BaseError::DdlGeneration(format!("查询当前表结构失败: {}", e)))?;
 
         info!(
@@ -323,7 +347,9 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         );
 
         // 2. 使用 DdlDiff 生成增量 DDL
-        let dialect = PostgresDdlDialect { prefer_db_type: true };
+        let dialect = PostgresDdlDialect {
+            prefer_db_type: true,
+        };
         let stmts = DdlDiff::diff_to_ddl(&dialect, &[current], &[define.clone()])
             .map_err(|e| BaseError::DdlGeneration(format!("生成增量 DDL 失败: {}", e)))?;
 
@@ -342,7 +368,8 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         }
 
         // 3. 执行增量 DDL
-        self.execute_statements(stmts).await
+        self.execute_statements(stmts)
+            .await
             .map_err(|e| BaseError::DdlGeneration(format!("执行增量 DDL 失败: {}", e)))
     }
 }
@@ -404,16 +431,18 @@ fn build_pg_db_type(
                 "CHAR".to_string()
             }
         }
-        "NUMERIC" | "numeric" => {
-            match (num_precision, num_scale) {
-                (Some(p), Some(s)) if s > 0 => format!("NUMERIC({},{})", p, s),
-                (Some(p), _) => format!("NUMERIC({})", p),
-                _ => "NUMERIC".to_string(),
-            }
-        }
+        "NUMERIC" | "numeric" => match (num_precision, num_scale) {
+            (Some(p), Some(s)) if s > 0 => format!("NUMERIC({},{})", p, s),
+            (Some(p), _) => format!("NUMERIC({})", p),
+            _ => "NUMERIC".to_string(),
+        },
         _ => {
             // 对于其他类型，优先使用 udt_name 的大写形式
-            let name = if udt_name.is_empty() { data_type } else { udt_name };
+            let name = if udt_name.is_empty() {
+                data_type
+            } else {
+                udt_name
+            };
             pg_udt_to_display(name)
         }
     }
@@ -513,24 +542,28 @@ fn parse_pg_array_column(val: Option<&DataValue>) -> Vec<String> {
             if trimmed.is_empty() {
                 vec![]
             } else {
-                trimmed.split(',').map(|s| s.trim().trim_matches('"').to_string()).collect()
+                trimmed
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .collect()
             }
         }
-        Some(DataValue::Array(arr)) => {
-            arr.iter().filter_map(|v| match v {
+        Some(DataValue::Array(arr)) => arr
+            .iter()
+            .filter_map(|v| match v {
                 DataValue::String(s) => Some(s.clone()),
                 DataValue::ShortStr(s) => Some(s.to_string()),
                 _ => None,
-            }).collect()
-        }
+            })
+            .collect(),
         _ => vec![],
     }
 }
 
 /// 创建空 DataSet（查询失败时的 fallback）
 fn empty_dataset(id: &str) -> DataSet {
-    use std::sync::Arc;
     use cmx_core::model::data::dataset::Schema;
+    use std::sync::Arc;
     DataSet::empty(id, Arc::new(Schema::new(id, vec![])))
 }
 
@@ -542,11 +575,20 @@ mod tests {
     fn test_pg_type_to_field_type() {
         assert_eq!(pg_type_to_field_type("integer", "int4"), FieldType::Int);
         assert_eq!(pg_type_to_field_type("bigint", "int8"), FieldType::Int);
-        assert_eq!(pg_type_to_field_type("character varying", "varchar"), FieldType::String);
+        assert_eq!(
+            pg_type_to_field_type("character varying", "varchar"),
+            FieldType::String
+        );
         assert_eq!(pg_type_to_field_type("text", "text"), FieldType::Text);
         assert_eq!(pg_type_to_field_type("boolean", "bool"), FieldType::Bool);
-        assert_eq!(pg_type_to_field_type("numeric", "numeric"), FieldType::Decimal);
-        assert_eq!(pg_type_to_field_type("timestamp with time zone", "timestamptz"), FieldType::DateTime);
+        assert_eq!(
+            pg_type_to_field_type("numeric", "numeric"),
+            FieldType::Decimal
+        );
+        assert_eq!(
+            pg_type_to_field_type("timestamp with time zone", "timestamptz"),
+            FieldType::DateTime
+        );
         assert_eq!(pg_type_to_field_type("date", "date"), FieldType::Date);
         assert_eq!(pg_type_to_field_type("uuid", "uuid"), FieldType::Uuid);
         assert_eq!(pg_type_to_field_type("json", "json"), FieldType::Json);
@@ -575,10 +617,7 @@ mod tests {
             build_pg_db_type("bigint", "int8", None, Some(64), Some(0)),
             "BIGINT"
         );
-        assert_eq!(
-            build_pg_db_type("text", "text", None, None, None),
-            "TEXT"
-        );
+        assert_eq!(build_pg_db_type("text", "text", None, None, None), "TEXT");
         assert_eq!(
             build_pg_db_type("timestamp with time zone", "timestamptz", None, None, None),
             "TIMESTAMP WITH TIME ZONE"
@@ -605,9 +644,6 @@ mod tests {
             parse_pg_array_column(Some(&DataValue::String("{}".to_string()))),
             Vec::<String>::new()
         );
-        assert_eq!(
-            parse_pg_array_column(None),
-            Vec::<String>::new()
-        );
+        assert_eq!(parse_pg_array_column(None), Vec::<String>::new());
     }
 }
