@@ -409,6 +409,7 @@ impl UpgradeService {
         }
 
         // 步骤12: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Upgrade,
@@ -417,8 +418,10 @@ impl UpgradeService {
             "old_version": old_version,
             "new_version": new_version,
             "backup_path": backup_path.to_string_lossy().to_string(),
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_old_value(old_version.clone())
+        .with_new_value(new_version.clone())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤13: 发布升级完成事件

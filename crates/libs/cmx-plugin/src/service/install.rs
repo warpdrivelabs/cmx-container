@@ -314,6 +314,7 @@ impl InstallService {
             .await;
 
         // 步骤12: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
@@ -321,8 +322,9 @@ impl InstallService {
         .with_details(serde_json::json!({
             "version": version,
             "install_path": install_path.to_string_lossy().to_string(),
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_new_value(install_path.to_string_lossy().to_string())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤13: 发布安装完成事件（临时目录由 TempDirCleanup 自动清理）

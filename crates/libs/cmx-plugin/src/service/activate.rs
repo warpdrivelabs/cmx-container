@@ -342,14 +342,16 @@ impl ActivateService {
             .await;
 
         // 步骤8: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Activate,
         )
         .with_details(serde_json::json!({
             "version": plugin.version,
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_new_value("activated".to_string())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤9: 发布激活事件
@@ -481,14 +483,17 @@ impl ActivateService {
             .await;
 
         // 步骤8: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Deactivate,
         )
         .with_details(serde_json::json!({
             "version": plugin.version,
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_old_value("activated".to_string())
+        .with_new_value("deactivated".to_string())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤9: 发布停用事件

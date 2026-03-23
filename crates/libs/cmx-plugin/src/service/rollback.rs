@@ -296,7 +296,8 @@ impl RollbackService {
             }
         }
 
-        // 步骤9：记录审计日志
+        // 步骤9: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Rollback,
@@ -305,8 +306,10 @@ impl RollbackService {
             "from_version": from_version,
             "to_version": to_version,
             "backup_path": backup_path.to_string_lossy().to_string(),
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_old_value(from_version.clone())
+        .with_new_value(to_version.clone())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤10：发布事件

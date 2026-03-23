@@ -288,7 +288,8 @@ impl DowngradeService {
             }
         }
 
-        // 步骤9：记录审计日志
+        // 步骤9: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Downgrade,
@@ -296,8 +297,10 @@ impl DowngradeService {
         .with_details(serde_json::json!({
             "from_version": current_version,
             "to_version": request.target_version,
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_old_value(current_version.clone())
+        .with_new_value(request.target_version.clone())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤10：发布事件

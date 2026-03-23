@@ -317,6 +317,7 @@ impl UninstallService {
             .await;
 
         // 步骤10: 记录审计日志
+        let duration_ms = start_time.elapsed().as_millis() as i64;
         let audit_record = crate::audit::record::AuditRecord::success(
             request.plugin_id.clone(),
             crate::audit::record::OperationType::Uninstall,
@@ -325,8 +326,9 @@ impl UninstallService {
             "version": plugin.version,
             "keep_config": request.keep_config,
             "keep_data": request.keep_data,
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
+        }))
+        .with_old_value(plugin.version.clone())
+        .with_completed(duration_ms);
         self.deps.audit_logger.log(audit_record).await;
 
         // 步骤11: 发布卸载事件
