@@ -85,7 +85,7 @@ where
         let mut fields = data.not_none_sea_fields();
         //主键值
      let pk_value=   prep_fields_for_create::<MC>(&mut fields, None);
-        
+
 
         let (columns, sea_values) = fields.for_sea_insert();
         let mut query = Query::insert();
@@ -98,7 +98,7 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm.execute_sql_with_params(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -149,7 +149,7 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm.execute_sql_with_params(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 批量创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -189,7 +189,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_params(db_id, None, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 查询失败: {}, table: {}, id: {:?}", "CRUD", e, MC::TABLE, id);
@@ -237,7 +237,7 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm.execute_sql_with_params(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 更新失败: {}, table: {}, id: {:?}", "CRUD", e, MC::TABLE, id);
@@ -292,7 +292,7 @@ where
 
             let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
-            let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            let rows_affected = mm.execute_sql_with_params(db_id, None, &sql, sql_values)
                 .await
                 .map_err(|e| {
                     warn!("{:<12} - 批量更新失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -338,7 +338,7 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm.execute_sql_with_params(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 删除失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -398,7 +398,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_params(db_id, None, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 列表查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -451,7 +451,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_params(db_id, None, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 分页查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -502,7 +502,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "count")
+            .query_sql_with_params(db_id, None, &sql, sql_values, "count")
             .await
             .map_err(|e| {
                 warn!("{:<12} - 统计失败: {}, table: {}", "CRUD", e, MC::TABLE);

@@ -307,6 +307,10 @@ fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlit
 ///
 /// 允许通过数据库ID和事务ID执行带参数的SQL操作，适用于wasm调用host的场景
 ///
+/// serdejson
+/// 不携带目标数据库字段的类型信息。而 SQLx 是一个 类型安全 的库，
+/// 要求你在 .bind() 时提供能被映射到具体 SQL 类型的 Rust 类型（如 Option<NaiveDateTime>、Option<String> 等）
+///
 /// # 参数
 /// * `db_id` - 数据库ID
 /// * `txn_id` - 事务ID，None表示使用非事务方式执行
@@ -315,7 +319,8 @@ fn bind_param_sqlite<'q>(query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlit
 ///
 /// # 返回值
 /// * `Result<u64>` - 执行结果，返回受影响的行数
-pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value) -> Result<u64> {
+#[deprecated(since = "0.0.1", note = "请使用 `execute_sql_with_params_by_ids` 代替")]
+pub async fn execute_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value) -> Result<u64> {
     let sql = sql.to_string();
     let params: Vec<ParamValue> = match params {
         serde_json::Value::Array(arr) => arr.into_iter().map(ParamValue::from_json).collect(),
@@ -423,7 +428,8 @@ pub async fn query_sql_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, data
 ///
 /// # 返回值
 /// * `Result<DataSet>` - 查询结果转换为DataSet
-pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
+#[deprecated(since = "0.0.1", note = "请使用 `query_sql_with_params_by_ids` 代替")]
+pub async fn query_sql_with_json_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: serde_json::Value, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
     let params: Vec<ParamValue> = match params {
@@ -486,7 +492,7 @@ pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql
 ///
 /// # 返回值
 /// * `Result<u64>` - 执行结果，返回受影响的行数
-pub async fn execute_sql_with_sqlxvalues_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues) -> Result<u64> {
+pub async fn execute_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues) -> Result<u64> {
     let sql = sql.to_string();
     match txn_id {
         Some(txn_id) => {
@@ -530,7 +536,7 @@ pub async fn execute_sql_with_sqlxvalues_by_ids(db_id: &str, txn_id: Option<&str
 ///
 /// # 返回值
 /// * `Result<DataSet>` - 查询结果转换为DataSet
-pub async fn query_sql_with_sqlxvalues_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql_with_params_by_ids(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlxValues, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
     match txn_id {
