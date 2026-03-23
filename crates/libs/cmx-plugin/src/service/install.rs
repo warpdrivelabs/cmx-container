@@ -12,6 +12,7 @@ use tokio::sync::RwLock;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_database::get_default_db_manager;
 use cmx_metadata::config::{load_table_defines_config_from_path, TableDefinesConfigManager};
+use cmx_utils::ConfigManager;
 use crate::error::{PluginError, PluginResult};
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
 use crate::infrastructure::database::repository::PluginRepository;
@@ -122,6 +123,8 @@ impl InstallService {
     /// 13. 清理临时目录
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
         let start_time = std::time::Instant::now();
+        //节点id
+        let node_id = ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string());
 
         // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self

@@ -53,3 +53,6 @@ health_check_timeout = 3
 
 [redis]
 url = "redis://192.168.137.95:32496/13"
+
+[node]
+node_id="0323"
