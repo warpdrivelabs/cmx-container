@@ -150,16 +150,7 @@ impl DatabaseManager {
         crate::transaction::execute_sql(db_id, txn_id, sql).await
     }
 
-    /// 查询 SQL 语句
-    pub async fn query_sql(
-        &self,
-        db_id: &str,
-        txn_id: Option<&str>,
-        sql: &str,
-        dataset_id: &str,
-    ) -> Result<DataSet> {
-        crate::transaction::query_sql(db_id, txn_id, sql, dataset_id).await
-    }
+
 
     /// 执行带 serde_json::Value 参数的 SQL 语句
     pub async fn execute_sql_with_json(
@@ -181,6 +172,28 @@ impl DatabaseManager {
         params: Vec<cmx_core::model::cell::DataValue>,
     ) -> Result<u64> {
         crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::DataValues(params)).await
+    }
+
+    /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
+    pub async fn execute_sql_with_sqlxvalues(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: sea_query_binder::SqlxValues,
+    ) -> Result<u64> {
+        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params)).await
+    }
+
+    /// 查询 SQL 语句
+    pub async fn query_sql(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql(db_id, txn_id, sql, dataset_id).await
     }
 
     /// 查询带 serde_json::Value 参数的 SQL 语句
@@ -209,19 +222,9 @@ impl DatabaseManager {
             .await
     }
 
-    /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
-    pub async fn execute_sql_with_params(
-        &self,
-        db_id: &str,
-        txn_id: Option<&str>,
-        sql: &str,
-        params: sea_query_binder::SqlxValues,
-    ) -> Result<u64> {
-        crate::transaction::execute_sql_with_params(db_id, txn_id, sql, crate::transaction::SqlParams::SqlxValues(params)).await
-    }
 
     /// 查询带 sea-query-binder SqlxValues 的 SQL 语句
-    pub async fn query_sql_with_params(
+    pub async fn query_sql_with_sqlxvalues(
         &self,
         db_id: &str,
         txn_id: Option<&str>,
