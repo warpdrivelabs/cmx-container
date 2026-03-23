@@ -234,7 +234,7 @@ impl InstallService {
 
 
         if !plugin_def.table_config_files.is_empty() {
-            self.create_plugin_tables(&plugin_def, &db_id, Some(txn_guard.txn_id().to_string()), &install_path)
+            self.create_plugin_tables(&plugin_def, &db_id, None, &install_path)
                 .await?;
         }
 
@@ -330,10 +330,7 @@ impl InstallService {
                 }),
             ))
             .await;
-
-       if true{
-         return   Err(PluginError::Plugin("插件安装失败".to_string()));
-       }
+        
         //提交事务
         txn_guard.commit().await.map_err(|e| PluginError::Database(e.to_string()))?;
 
