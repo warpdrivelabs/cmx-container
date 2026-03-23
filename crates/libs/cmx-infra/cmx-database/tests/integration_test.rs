@@ -1,5 +1,5 @@
-use cmx_database::{DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig, TransactionOptions};
 use cmx_core::model::data::dataset::DataSet;
+use cmx_database::{DatabaseManager, DatabaseManagerConfig, DbConfig, DbType, PoolConfig};
 
 const TEST_DB_URL: &str = "postgresql://postgres:postgres@192.168.137.80:5432/postgres";
 const TEST_DB_KEY: &str = "test_db";
@@ -52,8 +52,7 @@ async fn test_database_manager_basic() -> cmx_database::Result<()> {
 async fn test_begin_transaction() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
-    let options = TransactionOptions::default();
-    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
     assert!(!txn_id.is_empty());
     manager.commit_transaction(&txn_id).await?;
 
@@ -69,8 +68,7 @@ async fn test_transaction_commit() -> cmx_database::Result<()> {
 
     manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
-    let options = TransactionOptions::default();
-    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
 
     let insert_sql = format!("INSERT INTO {} (name) VALUES ('test')", table_name);
     manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
@@ -96,8 +94,7 @@ async fn test_transaction_rollback() -> cmx_database::Result<()> {
 
     manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
-    let options = TransactionOptions::default();
-    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
 
     let insert_sql = format!("INSERT INTO {} (name) VALUES ('should_be_rolled_back')", table_name);
     manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
@@ -139,8 +136,7 @@ async fn test_query_sql() -> cmx_database::Result<()> {
 async fn test_transaction_with_propagation() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
-    let options = TransactionOptions::default();
-    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
 
     let table_name = generate_test_table_name();
 

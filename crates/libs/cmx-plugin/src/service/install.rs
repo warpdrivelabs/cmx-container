@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
+use cmx_database::get_default_db_manager;
 use cmx_metadata::config::{load_table_defines_config_from_path, TableDefinesConfigManager};
 use crate::error::{PluginError, PluginResult};
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
@@ -218,13 +219,22 @@ impl InstallService {
         // 步骤7: 复制文件到安装目录
         self.package_utils.copy_plugin_files(&extract_path, &install_path, "安装")?;
 
+
         // 步骤8: 创建数据库表
         let db_id = request
             .db_id
             .clone()
             .unwrap_or_else(|| self.deps.default_database_id.clone());
+
+        //开启事务
+        let txn_guard = get_default_db_manager()
+            .get_transaction_context()
+            .begin_with_guard(db_id.clone().as_str()).await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
+
+
         if !plugin_def.table_config_files.is_empty() {
-            self.create_plugin_tables(&plugin_def, &db_id, &install_path)
+            self.create_plugin_tables(&plugin_def, &db_id, Some(txn_guard.txn_id().to_string()), &install_path)
                 .await?;
         }
 
@@ -271,7 +281,7 @@ impl InstallService {
             update_time: Utc::now(),
         };
 
-        self.deps.repository.insert_plugin(&db_record).await?;
+        self.deps.repository.insert_plugin(&db_record,Some(txn_guard.txn_id())).await?;
 
         {
             let mut registry = self.deps.registry.write().await;
@@ -321,6 +331,12 @@ impl InstallService {
             ))
             .await;
 
+       if true{
+         return   Err(PluginError::Plugin("插件安装失败".to_string()));
+       }
+        //提交事务
+        txn_guard.commit().await.map_err(|e| PluginError::Database(e.to_string()))?;
+
         Ok(InstallResponse {
             plugin_id,
             install_path,
@@ -341,6 +357,7 @@ impl InstallService {
         &self,
         plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
         db_id: &str,
+        txn_id: Option<String>,
         install_path: &std::path::Path,
     ) -> PluginResult<()> {
         if plugin_def.table_config_files.is_empty() {
@@ -348,7 +365,7 @@ impl InstallService {
         }
 
         let mut table_config_manager = TableDefinesConfigManager::new();
-        let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, None);
+        let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, txn_id);
         for table_config_file in &plugin_def.table_config_files {
             let config_path = install_path.join(table_config_file);
             let table_df = load_table_defines_config_from_path(&config_path)

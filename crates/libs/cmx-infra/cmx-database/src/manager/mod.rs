@@ -390,10 +390,10 @@ pub struct TransactionContext {
 
 impl TransactionContext {
     /// 开始事务
-    pub async fn begin(&self, db_id: &str, options: TransactionOptions) -> Result<String> {
+    pub async fn begin(&self, db_id: &str) -> Result<String> {
         let dbx = self.pool_manager.get_dbx(db_id)?;
         let dbx_with_txn = dbx.with_transaction()?;
-        dbx_with_txn.begin_txn(db_id, options.propagation).await
+        dbx_with_txn.begin_txn_default(db_id).await
     }
 
     /// 提交事务
@@ -407,12 +407,13 @@ impl TransactionContext {
     }
 
     /// 开始事务并返回 TransactionGuard
-    pub async fn begin_with_guard(&self, db_id: &str, options: TransactionOptions) -> Result<crate::transaction::TransactionGuard> {
+    pub async fn begin_with_guard(&self, db_id: &str) -> Result<crate::transaction::TransactionGuard> {
         let dbx = self.pool_manager.get_dbx(db_id)?;
         let dbx_with_txn = dbx.with_transaction()?;
-        let txn_id = dbx_with_txn.begin_txn(db_id, options.propagation).await?;
+        let txn_id = dbx_with_txn.begin_txn_default(db_id).await?;
         Ok(crate::transaction::TransactionGuard::new(txn_id, db_id.to_string()))
     }
+    
 }
 
 /// 默认数据库管理器实例

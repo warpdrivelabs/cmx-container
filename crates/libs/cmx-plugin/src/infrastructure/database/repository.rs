@@ -129,7 +129,7 @@ impl PluginRepository {
     }
 
     /// 插入插件记录
-    pub async fn insert_plugin(&self, record: &PluginDbRecord) -> PluginResult<()> {
+    pub async fn insert_plugin(&self, record: &PluginDbRecord,txn_id:Option<&str>) -> PluginResult<()> {
         use sea_query::{Query, PostgresQueryBuilder};
         use sea_query_binder::SqlxBinder;
 
@@ -172,7 +172,7 @@ impl PluginRepository {
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
         self.db_manager
-            .execute_sql_with_sqlxvalues(&self.default_db_id, None, &sql, sql_values)
+            .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| PluginError::Database(format!("插入插件记录失败: {}", e)))?;
 
