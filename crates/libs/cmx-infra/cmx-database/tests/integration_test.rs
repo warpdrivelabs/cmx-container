@@ -53,7 +53,7 @@ async fn test_begin_transaction() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
     let options = TransactionOptions::default();
-    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
     assert!(!txn_id.is_empty());
     manager.commit_transaction(&txn_id).await?;
 
@@ -70,7 +70,7 @@ async fn test_transaction_commit() -> cmx_database::Result<()> {
     manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
     let options = TransactionOptions::default();
-    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
 
     let insert_sql = format!("INSERT INTO {} (name) VALUES ('test')", table_name);
     manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
@@ -97,7 +97,7 @@ async fn test_transaction_rollback() -> cmx_database::Result<()> {
     manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
 
     let options = TransactionOptions::default();
-    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
 
     let insert_sql = format!("INSERT INTO {} (name) VALUES ('should_be_rolled_back')", table_name);
     manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
@@ -140,7 +140,7 @@ async fn test_transaction_with_propagation() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
     let options = TransactionOptions::default();
-    let txn_id = manager.begin_transaction(TEST_DB_KEY, options).await?;
+    let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY, options).await?;
 
     let table_name = generate_test_table_name();
 

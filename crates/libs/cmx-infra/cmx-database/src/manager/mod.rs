@@ -2,15 +2,16 @@
 ///
 /// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
 use std::sync::{Arc};
-use log::warn;
+use log::{warn, error};
 use sea_query::SqlWriter;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 use tracing::info;
 
 
 use crate::config::{DbConfig, PoolConfig};
 use crate::error::{Error, Result};
-use crate::transaction::Dbx;
+use crate::transaction::{Dbx, check_long_running_transactions};
 use cmx_core::model::data::dataset::DataSet;
 
 /// 数据库管理器配置
@@ -19,6 +20,9 @@ pub struct DatabaseManagerConfig {
     pub default_pool_config: PoolConfig,
     pub health_check_interval: std::time::Duration,
     pub health_check_timeout: std::time::Duration,
+    pub txn_timeout: std::time::Duration,
+    pub cleanup_interval: std::time::Duration,
+    pub enable_txn_cleanup: bool,
 }
 
 impl Default for DatabaseManagerConfig {
@@ -27,6 +31,9 @@ impl Default for DatabaseManagerConfig {
             default_pool_config: PoolConfig::default(),
             health_check_interval: std::time::Duration::from_secs(60),
             health_check_timeout: std::time::Duration::from_secs(5),
+            txn_timeout: std::time::Duration::from_secs(300),
+            cleanup_interval: std::time::Duration::from_secs(10),
+            enable_txn_cleanup: true,
         }
     }
 }
@@ -53,6 +60,7 @@ pub struct DatabaseManager {
     pool_manager: Arc<PoolManager>,
     config: DatabaseManagerConfig,
     default_db_id: RwLock<String>,
+    cleanup_shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
 }
 
 /// 连接池管理器
@@ -68,6 +76,7 @@ impl DatabaseManager {
             pool_manager: Arc::new(PoolManager::new()),
             config,
             default_db_id: RwLock::new("default".to_string()),
+            cleanup_shutdown_tx: RwLock::new(None),
         }
     }
 
@@ -109,16 +118,26 @@ impl DatabaseManager {
         self.pool_manager.get_db(db_id)
     }
 
-    /// 开始事务
-    pub async fn begin_transaction(
-        &self,
-        db_id: &str,
-        options: TransactionOptions,
-    ) -> Result<String> {
-        let dbx = self.get_dbx(db_id)?;
-        let dbx_with_txn = dbx.with_transaction()?;
-        dbx_with_txn.begin_txn(db_id, options.propagation).await
-    }
+    // /// 开始事务
+    // pub async fn begin_transaction(
+    //     &self,
+    //     db_id: &str,
+    //     options: TransactionOptions,
+    // ) -> Result<String> {
+    //     let dbx = self.get_dbx(db_id)?;
+    //     let dbx_with_txn = dbx.with_transaction()?;
+    //     dbx_with_txn.begin_txn(db_id, options.propagation).await
+    // }
+    //
+    // /// 开始事务并返回 TransactionGuard（RAII 模式）
+    // ///
+    // /// TransactionGuard 在函数结束或发生 panic 时会自动回滚未提交的事务
+    // ///
+    //
+    // pub async fn begin_transaction_guard(&self, db_id: &str, options: TransactionOptions) -> Result<crate::transaction::TransactionGuard> {
+    //     let txn_ctx = self.get_transaction_context();
+    //     txn_ctx.begin_with_guard(db_id, options).await
+    // }
 
     /// 获取事务上下文（用于声明式事务）
     pub fn get_transaction_context(&self) -> TransactionContext {
@@ -140,9 +159,77 @@ impl DatabaseManager {
     /// 优雅关闭
     pub async fn shutdown(&self) -> Result<()> {
         info!("DatabaseManager 开始关闭");
+        self.stop_cleanup_task().await;
         crate::transaction::cleanup_completed_transactions();
         info!("DatabaseManager 已关闭");
         Ok(())
+    }
+
+    /// 启动事务超时清理任务
+    pub async fn start_cleanup_task(self: &Arc<Self>) {
+        if !self.config.enable_txn_cleanup {
+            info!("事务清理任务已禁用");
+            return;
+        }
+
+        let mut shutdown_rx = {
+            let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
+            if shutdown_tx_guard.is_some() {
+                info!("事务清理任务已在运行");
+                return;
+            }
+            let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+            *shutdown_tx_guard = Some(shutdown_tx);
+            shutdown_rx
+        };
+
+        let timeout = self.config.txn_timeout;
+        let interval = self.config.cleanup_interval;
+        let manager = self.clone();
+
+        info!("启动事务超时清理任务，超时: {:?}, 间隔: {:?}", timeout, interval);
+
+        tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(interval);
+            loop {
+                tokio::select! {
+                    _ = interval_timer.tick() => {
+                        manager.cleanup_stale_transactions(timeout).await;
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("接收到清理任务关闭信号");
+                        break;
+                    }
+                }
+            }
+            info!("事务超时清理任务已停止");
+        });
+    }
+
+    /// 停止事务超时清理任务
+    async fn stop_cleanup_task(&self) {
+        let mut shutdown_tx_guard = self.cleanup_shutdown_tx.write().await;
+        if let Some(shutdown_tx) = shutdown_tx_guard.take() {
+            let _ = shutdown_tx.send(()).await;
+        }
+    }
+
+    /// 清理超时的事务
+    async fn cleanup_stale_transactions(&self, timeout: std::time::Duration) {
+        let stale = check_long_running_transactions(timeout);
+        if stale.is_empty() {
+            return;
+        }
+
+        warn!("发现 {} 个超时事务待清理", stale.len());
+        for meta in stale {
+            warn!("清理超时事务: txn_id={}, db_id={}, elapsed={:?}",
+                meta.txn_id, meta.db_id, meta.create_time.elapsed());
+            match self.rollback_transaction(&meta.txn_id).await {
+                Ok(_) => info!("超时事务已回滚: {}", meta.txn_id),
+                Err(e) => error!("清理事务失败: txn_id={}, error={}", meta.txn_id, e),
+            }
+        }
     }
 
     /// 执行 SQL 语句
@@ -249,6 +336,8 @@ impl DatabaseManager {
     pub async fn rollback_transaction(&self, txn_id: &str) -> Result<()> {
         crate::transaction::rollback_txn_by_id(txn_id).await
     }
+
+
 }
 
 impl PoolManager {
@@ -315,6 +404,14 @@ impl TransactionContext {
     /// 回滚事务
     pub async fn rollback(&self, txn_id: &str) -> Result<()> {
         crate::transaction::rollback_txn_by_id(txn_id).await
+    }
+
+    /// 开始事务并返回 TransactionGuard
+    pub async fn begin_with_guard(&self, db_id: &str, options: TransactionOptions) -> Result<crate::transaction::TransactionGuard> {
+        let dbx = self.pool_manager.get_dbx(db_id)?;
+        let dbx_with_txn = dbx.with_transaction()?;
+        let txn_id = dbx_with_txn.begin_txn(db_id, options.propagation).await?;
+        Ok(crate::transaction::TransactionGuard::new(txn_id, db_id.to_string()))
     }
 }
 

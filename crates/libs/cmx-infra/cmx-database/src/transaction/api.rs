@@ -6,6 +6,8 @@
 /// - 通过数据库ID和事务ID执行SQL查询的函数
 
 use futures::future::BoxFuture;
+use std::sync::OnceLock;
+use tokio::sync::mpsc;
 use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
 use crate::transaction::registry::{get_txn_holder_registry, get_txn_holder_by_id};
@@ -16,6 +18,129 @@ use cmx_core::model::cell::DataValue;
 use crate::executor::{ResultConverter, bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite, json_to_data_values};
 use crate::get_default_db_manager;
 use sea_query_binder::SqlxValues;
+
+/// TransactionGuard 清理命令
+#[derive(Debug)]
+enum TxnCleanupCommand {
+    Rollback(String),
+    Commit(String),
+}
+
+/// TransactionGuard 的全局清理通道
+static CLEANUP_CHAN: OnceLock<mpsc::Sender<TxnCleanupCommand>> = OnceLock::new();
+
+fn get_cleanup_sender() -> &'static mpsc::Sender<TxnCleanupCommand> {
+    CLEANUP_CHAN.get_or_init(|| {
+        let (tx, mut rx) = mpsc::channel::<TxnCleanupCommand>(100);
+        tokio::spawn(async move {
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    TxnCleanupCommand::Rollback(txn_id) => {
+                        if let Err(e) = rollback_txn_by_id(&txn_id).await {
+                            tracing::error!("TransactionGuard 自动回滚失败: txn_id={}, error={}", txn_id, e);
+                        } else {
+                            tracing::debug!("TransactionGuard 自动回滚成功: txn_id={}", txn_id);
+                        }
+                    },
+                    TxnCleanupCommand::Commit(txn_id) => {
+                        if let Err(e) = commit_txn_by_id(&txn_id).await {
+                            tracing::error!("TransactionGuard 自动提交失败: txn_id={}, error={}", txn_id, e);
+                        } else {
+                            tracing::debug!("TransactionGuard 自动提交成功: txn_id={}", txn_id);
+                        }
+                    }
+                }
+            }
+        });
+        tx
+    })
+}
+
+/// TransactionGuard - RAII 模式的事务守卫
+///
+/// 确保事务在函数结束或发生panic时自动回滚（除非显式提交）
+///
+/// # 示例
+///
+/// ```ignore
+/// async fn do_something() -> Result<()> {
+///     let guard = begin_transaction_guard("db1").await?;
+///     // 执行数据库操作...
+///
+///     // 显式提交事务
+///     guard.commit().await?;
+///     Ok(())
+/// } // 如果没有调用 commit，guard 析构时会自动回滚
+/// ```
+#[derive(Debug)]
+pub struct TransactionGuard {
+    txn_id: String,
+    db_id: String,
+    committed: bool,
+}
+
+impl TransactionGuard {
+    /// 创建新的 TransactionGuard
+    pub fn new(txn_id: String, db_id: String) -> Self {
+        Self {
+            txn_id,
+            db_id,
+            committed: false,
+        }
+    }
+
+    /// 获取事务ID
+    pub fn txn_id(&self) -> &str {
+        &self.txn_id
+    }
+
+    /// 获取数据库ID
+    pub fn db_id(&self) -> &str {
+        &self.db_id
+    }
+
+    /// 检查事务是否已提交
+    pub fn is_committed(&self) -> bool {
+        self.committed
+    }
+
+    /// 提交事务
+    pub async fn commit(mut self) -> Result<()> {
+        self.committed = true;
+        commit_txn_by_id(&self.txn_id).await?;
+        Ok(())
+    }
+
+    /// 回滚事务
+    pub async fn rollback(mut self) -> Result<()> {
+        self.committed = true;
+        rollback_txn_by_id(&self.txn_id).await?;
+        Ok(())
+    }
+
+    /// 获取数据库访问对象
+    pub fn get_dbx(&self) -> Option<Dbx> {
+        get_dbx_by_db_id(&self.db_id)
+    }
+
+    /// 在事务中执行操作
+    pub async fn with_transaction<F, T>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut DbTransaction) -> BoxFuture<'_, Result<T>> + Send,
+    {
+        with_transaction_by_id(&self.txn_id, f).await
+    }
+}
+
+impl Drop for TransactionGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            let txn_id = self.txn_id.clone();
+            let sender = get_cleanup_sender();
+            let _ = sender.try_send(TxnCleanupCommand::Rollback(txn_id));
+        }
+    }
+}
 
 /// SQL 查询参数，支持多种输入类型
 pub enum SqlParams {
@@ -446,4 +571,35 @@ async fn query_with_datavalues_no_txn(dbx: &Dbx, sql: &str, params: &[DataValue]
             Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
         },
     }
+}
+
+/// 开始事务并返回 TransactionGuard（RAII 模式）
+///
+/// 通过数据库ID创建事务，返回 TransactionGuard 来自动管理事务生命周期
+///
+/// # 参数
+/// * `db_id` - 数据库ID
+/// * `options` - 事务选项
+///
+/// # 返回值
+/// * `Result<TransactionGuard>` - 成功返回 TransactionGuard，失败返回错误
+///
+/// # 示例
+///
+/// ```ignore
+/// async fn do_something() -> Result<()> {
+///     let guard = begin_transaction_guard_by_db_id("db1", TransactionOptions::default()).await?;
+///     // 执行数据库操作...
+///     guard.commit().await?; // 显式提交
+///     Ok(())
+/// } // 如果没有调用 commit，guard 析构时会自动回滚
+/// ```
+pub async fn begin_transaction_guard_by_db_id(
+    db_id: &str,
+    options: crate::manager::TransactionOptions,
+) -> Result<TransactionGuard> {
+    let dbx = get_dbx_by_db_id(db_id).ok_or(Error::NoDb)?;
+    let dbx_with_txn = dbx.with_transaction()?;
+    let txn_id = dbx_with_txn.begin_txn(db_id, options.propagation).await?;
+    Ok(TransactionGuard::new(txn_id, db_id.to_string()))
 }

@@ -486,27 +486,27 @@ impl PluginRepository {
         }
     }
 
-    /// 在事务中执行操作
-    pub async fn with_transaction<F, T>(&self, db_id: &str, f: F) -> PluginResult<T>
-    where
-        F: FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = PluginResult<T>> + Send>>,
-    {
-        let txn_context = self.db_manager.get_transaction_context();
-        let txn_id = txn_context.begin(db_id, TransactionOptions::default()).await
-            .map_err(|e| PluginError::Transaction(format!("开始事务失败: {}", e)))?;
-
-        match f().await {
-            Ok(result) => {
-                txn_context.commit(&txn_id).await
-                    .map_err(|e| PluginError::Transaction(format!("提交事务失败: {}", e)))?;
-                Ok(result)
-            }
-            Err(e) => {
-                let _ = txn_context.rollback(&txn_id).await;
-                Err(e)
-            }
-        }
-    }
+    // /// 在事务中执行操作
+    // pub async fn with_transaction<F, T>(&self, db_id: &str, f: F) -> PluginResult<T>
+    // where
+    //     F: FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = PluginResult<T>> + Send>>,
+    // {
+    //     let txn_context = self.db_manager.get_transaction_context();
+    //     let txn_id = txn_context.begin(db_id, TransactionOptions::default()).await
+    //         .map_err(|e| PluginError::Transaction(format!("开始事务失败: {}", e)))?;
+    //
+    //     match f().await {
+    //         Ok(result) => {
+    //             txn_context.commit(&txn_id).await
+    //                 .map_err(|e| PluginError::Transaction(format!("提交事务失败: {}", e)))?;
+    //             Ok(result)
+    //         }
+    //         Err(e) => {
+    //             let _ = txn_context.rollback(&txn_id).await;
+    //             Err(e)
+    //         }
+    //     }
+    // }
 }
 
 impl Default for PluginRepository {
