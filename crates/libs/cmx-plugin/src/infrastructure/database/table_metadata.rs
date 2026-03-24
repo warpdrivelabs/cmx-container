@@ -7,7 +7,7 @@
 //! 使用 sea_query 构建 SQL，使用 cmx-database 执行查询
 
 use chrono::{DateTime, Utc};
-use sea_query::{Expr, OnConflict, PostgresQueryBuilder, Query};
+use sea_query::{Expr, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use std::sync::Arc;
 
@@ -86,48 +86,74 @@ impl TableMetadataRepository {
         record: &TableMetadataVersionRecord,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        let mut query = Query::insert();
-        query
-            .into_table("cmx_meta_table_define_version")
-            .columns(vec![
-                "id",
-                "table_name",
-                "db_id",
-                "plugin_id",
-                "version",
-                "metadata",
-                "archived",
-                "create_time",
-                "update_time",
-                "create_by",
-                "create_name",
-            ])
-            .values(vec![
-                record.id.clone().into(),
-                record.table_name.clone().into(),
-                record.db_id.clone().into(),
-                record.plugin_id.clone().into(),
-                record.version.clone().into(),
-                record.metadata.clone().into(),
-                record.archived.into(),
-                record.create_time.into(),
-                record.update_time.into(),
-                record.create_by.clone().into(),
-                record.create_name.clone().into(),
-            ])
-            .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?
-            .on_conflict(
-                OnConflict::columns(vec!["table_name", "db_id", "version"])
-                    .update_columns(vec!["metadata", "update_time", "update_by", "update_name"])
-                    .to_owned(),
-            );
+        let existing = self
+            .find_version(
+                &record.table_name,
+                &record.version,
+                Some(&record.db_id),
+                Some(&record.plugin_id),
+            )
+            .await?;
 
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        if existing.is_some() {
+            let mut query = Query::update();
+            query
+                .table("cmx_meta_table_define_version")
+                .values(vec![
+                    ("metadata", record.metadata.clone().into()),
+                    ("update_time", record.update_time.into()),
+                    ("update_by", record.update_by.clone().into()),
+                    ("update_name", record.update_name.clone().into()),
+                ])
+                .and_where(Expr::col("table_name").eq(&record.table_name))
+                .and_where(Expr::col("db_id").eq(&record.db_id))
+                .and_where(Expr::col("version").eq(&record.version));
 
-        self.db_manager
-            .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
-            .await
-            .map_err(|e| PluginError::Database(format!("插入或更新版本元数据失败: {}", e)))?;
+            let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+
+            self.db_manager
+                .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
+                .await
+                .map_err(|e| PluginError::Database(format!("更新版本元数据失败: {}", e)))?;
+        } else {
+            let mut query = Query::insert();
+            query
+                .into_table("cmx_meta_table_define_version")
+                .columns(vec![
+                    "id",
+                    "table_name",
+                    "db_id",
+                    "plugin_id",
+                    "version",
+                    "metadata",
+                    "archived",
+                    "create_time",
+                    "update_time",
+                    "create_by",
+                    "create_name",
+                ])
+                .values(vec![
+                    record.id.clone().into(),
+                    record.table_name.clone().into(),
+                    record.db_id.clone().into(),
+                    record.plugin_id.clone().into(),
+                    record.version.clone().into(),
+                    record.metadata.clone().into(),
+                    record.archived.into(),
+                    record.create_time.into(),
+                    record.update_time.into(),
+                    record.create_by.clone().into(),
+                    record.create_name.clone().into(),
+                ])
+                .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
+
+            let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+
+            self.db_manager
+                .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
+                .await
+                .map_err(|e| PluginError::Database(format!("插入版本元数据失败: {}", e)))?;
+        }
 
         Ok(())
     }
@@ -266,58 +292,76 @@ impl TableMetadataRepository {
         Ok(())
     }
 
-    /// 插入或更新表元数据（upsert）
+    /// 插入或更新表元数据（先查后写）
     pub async fn upsert_metadata(
         &self,
         record: &TableMetadataRecord,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        let mut query = Query::insert();
-        query
-            .into_table("cmx_meta_table_define")
-            .columns(vec![
-                "id",
-                "table_name",
-                "db_id",
-                "plugin_id",
-                "version",
-                "archived",
-                "create_time",
-                "update_time",
-                "create_by",
-                "create_name",
-            ])
-            .values(vec![
-                record.id.clone().into(),
-                record.table_name.clone().into(),
-                record.db_id.clone().into(),
-                record.plugin_id.clone().into(),
-                record.version.clone().into(),
-                record.archived.into(),
-                record.create_time.into(),
-                record.update_time.into(),
-                record.create_by.clone().into(),
-                record.create_name.clone().into(),
-            ])
-            .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?
-            .on_conflict(
-                OnConflict::columns(vec!["table_name", "db_id"])
-                    .update_columns(vec![
-                        "plugin_id",
-                        "version",
-                        "update_time",
-                        "update_by",
-                        "update_name",
-                    ])
-                    .to_owned(),
-            );
+        let query = TableMetadataQuery {
+            table_name: record.table_name.clone(),
+            db_id: Some(record.db_id.clone()),
+            plugin_id: None,
+        };
+        let existing = self.find_metadata(&query).await?;
 
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        if existing.is_some() {
+            let mut update_query = Query::update();
+            update_query
+                .table("cmx_meta_table_define")
+                .values(vec![
+                    ("plugin_id", record.plugin_id.clone().into()),
+                    ("version", record.version.clone().into()),
+                    ("update_time", record.update_time.into()),
+                    ("update_by", record.update_by.clone().into()),
+                    ("update_name", record.update_name.clone().into()),
+                ])
+                .and_where(Expr::col("table_name").eq(&record.table_name))
+                .and_where(Expr::col("db_id").eq(&record.db_id));
 
-        self.db_manager
-            .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
-            .await
-            .map_err(|e| PluginError::Database(format!("插入或更新表元数据失败: {}", e)))?;
+            let (sql, sql_values) = update_query.build_sqlx(PostgresQueryBuilder);
+
+            self.db_manager
+                .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
+                .await
+                .map_err(|e| PluginError::Database(format!("更新表元数据失败: {}", e)))?;
+        } else {
+            let mut insert_query = Query::insert();
+            insert_query
+                .into_table("cmx_meta_table_define")
+                .columns(vec![
+                    "id",
+                    "table_name",
+                    "db_id",
+                    "plugin_id",
+                    "version",
+                    "archived",
+                    "create_time",
+                    "update_time",
+                    "create_by",
+                    "create_name",
+                ])
+                .values(vec![
+                    record.id.clone().into(),
+                    record.table_name.clone().into(),
+                    record.db_id.clone().into(),
+                    record.plugin_id.clone().into(),
+                    record.version.clone().into(),
+                    record.archived.into(),
+                    record.create_time.into(),
+                    record.update_time.into(),
+                    record.create_by.clone().into(),
+                    record.create_name.clone().into(),
+                ])
+                .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
+
+            let (sql, sql_values) = insert_query.build_sqlx(PostgresQueryBuilder);
+
+            self.db_manager
+                .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
+                .await
+                .map_err(|e| PluginError::Database(format!("插入表元数据失败: {}", e)))?;
+        }
 
         Ok(())
     }
@@ -331,18 +375,18 @@ impl TableMetadataRepository {
         select
             .from("cmx_meta_table_define")
             .columns(vec![
-                "id",
-                "table_name",
-                "db_id",
-                "plugin_id",
-                "version",
-                "archived",
-                "create_time",
-                "update_time",
-                "create_by",
-                "create_name",
-                "update_by",
-                "update_name",
+               ( "cmx_meta_table_define","id"),
+               ( "cmx_meta_table_define","table_name"),
+               ( "cmx_meta_table_define","db_id"),
+               ( "cmx_meta_table_define","plugin_id"),
+               ( "cmx_meta_table_define","version"),
+               ( "cmx_meta_table_define","archived"),
+               ( "cmx_meta_table_define","create_time"),
+               ( "cmx_meta_table_define","update_time"),
+               ( "cmx_meta_table_define","create_by"),
+               ( "cmx_meta_table_define","create_name"),
+               ( "cmx_meta_table_define","update_by"),
+               ( "cmx_meta_table_define","update_name"),
             ])
             .expr_as(
                 sea_query::Expr::col(("cmx_meta_table_define_version", "metadata")),
@@ -352,17 +396,17 @@ impl TableMetadataRepository {
                 sea_query::JoinType::LeftJoin,
                 "cmx_meta_table_define_version",
                 sea_query::Condition::all()
-                    .add(sea_query::Expr::col("cmx_meta_table_define.table_name").equals(("cmx_meta_table_define_version", "table_name")))
-                    .add(sea_query::Expr::col("cmx_meta_table_define.version").equals(("cmx_meta_table_define_version", "version")))
-                    .add(sea_query::Expr::col("cmx_meta_table_define.db_id").equals(("cmx_meta_table_define_version", "db_id"))),
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","table_name")).equals(("cmx_meta_table_define_version", "table_name")))
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","version")).equals(("cmx_meta_table_define_version", "version")))
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","db_id")).equals(("cmx_meta_table_define_version", "db_id"))),
             )
-            .and_where(sea_query::Expr::col("cmx_meta_table_define.table_name").eq(&query.table_name));
+            .and_where(sea_query::Expr::col(("cmx_meta_table_define","table_name")).eq(&query.table_name));
 
         if let Some(ref db_id) = query.db_id {
-            select.and_where(sea_query::Expr::col("cmx_meta_table_define.db_id").eq(db_id));
+            select.and_where(sea_query::Expr::col(("cmx_meta_table_define","db_id")).eq(db_id));
         }
         if let Some(ref plugin_id) = query.plugin_id {
-            select.and_where(sea_query::Expr::col("cmx_meta_table_define.plugin_id").eq(plugin_id));
+            select.and_where(sea_query::Expr::col(("cmx_meta_table_define","plugin_id")).eq(plugin_id));
         }
 
         let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
@@ -412,9 +456,9 @@ impl TableMetadataRepository {
                 sea_query::JoinType::LeftJoin,
                 "cmx_meta_table_define_version",
                 sea_query::Condition::all()
-                    .add(sea_query::Expr::col("cmx_meta_table_define.table_name").equals(("cmx_meta_table_define_version", "table_name")))
-                    .add(sea_query::Expr::col("cmx_meta_table_define.version").equals(("cmx_meta_table_define_version", "version")))
-                    .add(sea_query::Expr::col("cmx_meta_table_define.db_id").equals(("cmx_meta_table_define_version", "db_id"))),
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","table_name")).equals(("cmx_meta_table_define_version", "table_name")))
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","version")).equals(("cmx_meta_table_define_version", "version")))
+                    .add(sea_query::Expr::col(("cmx_meta_table_define","db_id")).equals(("cmx_meta_table_define_version", "db_id"))),
             );
 
         if let Some(db_id) = db_id {
