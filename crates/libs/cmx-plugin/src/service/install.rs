@@ -9,9 +9,7 @@ use chrono::Utc;
 use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_database::get_default_db_manager;
-use cmx_metadata::config::{load_table_defines_config_from_path, TableDefinesConfigManager};
 use cmx_utils::ConfigManager;
 use crate::error::{PluginError, PluginResult};
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
@@ -252,11 +250,11 @@ impl InstallService {
 
         if !plugin_def.table_config_files.is_empty() {
             ///PostgreSQL 的行为：
-            // 一旦事务中任何语句失败，整个事务进入 “aborted” 状态
+            // 一旦事务中任何语句失败，整个事务进入 "aborted" 状态
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
             //所以ddl语句不要在事务中执行
-            self.create_plugin_tables(&plugin_def, &db_id, None, &install_path)
+            crate::service::utils::create_plugin_tables(&db_id, &install_path, &plugin_def.table_config_files, None)
                 .await?;
         }
 
@@ -444,41 +442,6 @@ impl InstallService {
     }
 
 
-
-    /// 创建插件数据库表
-    ///
-    /// 使用 cmx-metadata 解析表定义并创建数据库表。
-    async fn create_plugin_tables(
-        &self,
-        plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
-        db_id: &str,
-        txn_id: Option<String>,
-        install_path: &std::path::Path,
-    ) -> PluginResult<()> {
-        if plugin_def.table_config_files.is_empty() {
-            return Ok(());
-        }
-
-        let mut table_config_manager = TableDefinesConfigManager::new();
-        let executor = cmx_metadata::PgTableDefineExecutor::new(db_id, txn_id);
-        for table_config_file in &plugin_def.table_config_files {
-            let config_path = install_path.join(table_config_file);
-            let table_df = load_table_defines_config_from_path(&config_path)
-                .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
-            table_config_manager.add_config(table_df);
-        }
-
-        let table_defs = table_config_manager.load_all_tables(install_path)
-            .map_err(|e| PluginError::Metadata(format!("加载表定义失败: {}", e)))?;
-        for table_def in table_defs {
-            executor
-                .create_or_upgrade_table(&table_def).await
-                .map_err(|e|
-                    PluginError::Metadata(format!("创建或升级表{}失败: {}", &table_def.table_name, e)))?;
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for InstallService {

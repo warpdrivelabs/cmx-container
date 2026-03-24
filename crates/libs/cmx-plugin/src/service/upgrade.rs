@@ -24,11 +24,6 @@ use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
 use crate::common::{PackageUtils, DefinitionUtils, PackageUtilsDeps};
-use cmx_metadata::config::TableDefinesConfigManager;
-use cmx_metadata::config::load_table_defines_config_from_path;
-use cmx_metadata::PgTableDefineExecutor;
-use cmx_core::model::meta::base::TableDefineDbExecutor;
-use cmx_core::model::meta::plugin::PluginDefinition;
 
 /// 升级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,7 +196,7 @@ impl UpgradeService {
 
         // 步骤9: 创建数据库表
         let db_id = plugin.db_id.clone();
-        self.create_plugin_tables(&plugin_def, &db_id, &install_path).await?;
+        crate::service::utils::create_plugin_tables(&db_id, &install_path, &plugin_def.table_config_files, None).await?;
 
         // 步骤10: 插入 cmx_plugin_versions 版本历史
         let version_record = crate::infrastructure::database::version_history::VersionHistoryRecord {
@@ -323,38 +318,6 @@ impl UpgradeService {
             success: true,
             message: "插件升级成功".to_string(),
         })
-    }
-
-    /// 创建插件数据库表
-    async fn create_plugin_tables(
-        &self,
-        plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
-        db_id: &str,
-        install_path: &Path,
-    ) -> PluginResult<()> {
-        if plugin_def.table_config_files.is_empty() {
-            return Ok(());
-        }
-
-        let mut table_config_manager = TableDefinesConfigManager::new();
-        let executor = PgTableDefineExecutor::new(db_id, None);
-        for table_config_file in &plugin_def.table_config_files {
-            let config_path = install_path.join(table_config_file);
-            let table_df = load_table_defines_config_from_path(&config_path)
-                .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
-            table_config_manager.add_config(table_df);
-        }
-
-        let table_defs = table_config_manager.load_all_tables(install_path)
-            .map_err(|e| PluginError::Metadata(format!("加载表定义失败: {}", e)))?;
-        for table_def in table_defs {
-            executor
-                .create_or_upgrade_table(&table_def).await
-                .map_err(|e|
-                    PluginError::Metadata(format!("创建或升级表{}失败: {}", &table_def.table_name, e)))?;
-        }
-
-        Ok(())
     }
 }
 
