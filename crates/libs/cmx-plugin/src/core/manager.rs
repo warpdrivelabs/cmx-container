@@ -41,7 +41,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::audit::logger::AuditLogger;
+use crate::audit::logger::{AuditLogger, AuditLoggerConfig};
 use crate::cluster::deployment::DeploymentCoordinator;
 use crate::cluster::node::NodeManager;
 use crate::cluster::sync::SyncManager;
@@ -307,7 +307,11 @@ impl PluginManager {
 
         let service_registry = Arc::new(ServiceRegistry::new());
 
-        let audit_logger = Arc::new(AuditLogger::default());
+
+        let mut audit_logger_config = AuditLoggerConfig::default();
+        audit_logger_config.db_manager = Some(db_manager.clone());
+        audit_logger_config.persist =true;
+        let audit_logger = Arc::new(AuditLogger::new(audit_logger_config));
 
         let registry = Arc::new(RwLock::new(PluginRegistry::new()));
         let contexts = Arc::new(RwLock::new(HashMap::new()));
