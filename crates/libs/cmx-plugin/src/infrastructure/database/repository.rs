@@ -63,6 +63,16 @@ pub struct PluginDbRecord {
     pub create_time: DateTime<Utc>,
     /// 更新时间
     pub update_time: DateTime<Utc>,
+    /// 归档标志
+    pub archived: i32,
+    /// 创建人ID
+    pub create_by: Option<String>,
+    /// 创建人名称
+    pub create_name: Option<String>,
+    /// 更新人ID
+    pub update_by: Option<String>,
+    /// 更新人名称
+    pub update_name: Option<String>,
 }
 
 /// 插件更新字段
@@ -354,6 +364,91 @@ impl PluginRepository {
         Ok(Self::parse_count(&result).unwrap_or(0) as u64)
     }
 
+    /// 插入或更新插件记录
+    pub async fn upsert_plugin(&self, record: &PluginDbRecord, txn_id: Option<&str>) -> PluginResult<()> {
+        let sql = r#"
+            INSERT INTO cmx_plugin (
+                id, plugin_id, name, version, wasm_path, install_path, config_path,
+                db_id, status, is_system, is_locked, domain_code, application_code,
+                module_code, vendor_name, vendor_url, vendor_contact, metadata,
+                signature_algorithm, signer_key_id, activated_at, create_time, update_time,
+                archived, create_by, create_name, update_by, update_name
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+            ON CONFLICT (plugin_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                version = EXCLUDED.version,
+                wasm_path = EXCLUDED.wasm_path,
+                install_path = EXCLUDED.install_path,
+                config_path = EXCLUDED.config_path,
+                status = EXCLUDED.status,
+                is_locked = EXCLUDED.is_locked,
+                metadata = EXCLUDED.metadata,
+                activated_at = EXCLUDED.activated_at,
+                update_time = EXCLUDED.update_time,
+                update_by = EXCLUDED.update_by,
+                update_name = EXCLUDED.update_name
+        "#;
+
+        let params = serde_json::json!([
+            record.id,
+            record.plugin_id,
+            record.name,
+            record.version,
+            record.wasm_path,
+            record.install_path,
+            record.config_path,
+            record.db_id,
+            record.status,
+            record.is_system,
+            record.is_locked,
+            record.domain_code,
+            record.application_code,
+            record.module_code,
+            record.vendor_name,
+            record.vendor_url,
+            record.vendor_contact,
+            record.metadata,
+            record.signature_algorithm,
+            record.signer_key_id,
+            record.activated_at,
+            record.create_time,
+            record.update_time,
+            record.archived,
+            record.create_by,
+            record.create_name,
+            record.update_by,
+            record.update_name,
+        ]);
+
+        self.db_manager
+            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+            .await
+            .map_err(|e| PluginError::Database(format!("插入或更新插件记录失败: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 查询插件基线版本
+    pub async fn get_baseline_version(&self, plugin_id: &str) -> PluginResult<Option<String>> {
+        let sql = "SELECT version FROM cmx_plugin WHERE plugin_id = $1";
+        let params = serde_json::json!([plugin_id]);
+
+        let result = self.db_manager
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "baseline_version_query")
+            .await
+            .map_err(|e| PluginError::Database(format!("查询基线版本失败: {}", e)))?;
+
+        if result.row_count() > 0 {
+            let row = result.iter().next();
+            if let Some(row) = row {
+                let version = row.get_by_name(result.schema.as_ref(), "version")
+                    .and_then(|v| if let DataValue::String(s) = v { Some(s.clone()) } else { None });
+                return Ok(version);
+            }
+        }
+        Ok(None)
+    }
+
     /// 更新插件状态
     pub async fn update_plugin_status(&self, plugin_id: &str, status: &str) -> PluginResult<()> {
         let fields = PluginUpdateFields {
@@ -424,6 +519,12 @@ impl PluginRepository {
                     .unwrap_or_else(Utc::now)
             };
 
+            let get_i32 = |col_name: &str| -> i32 {
+                row.get_by_name(schema, col_name)
+                    .and_then(|v| if let DataValue::Int(n) = v { Some(*n as i32) } else { None })
+                    .unwrap_or(0)
+            };
+
             let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
                 row.get_by_name(schema, col_name)
                     .and_then(|v| {
@@ -460,6 +561,11 @@ impl PluginRepository {
                 activated_at: get_opt_datetime("activated_at"),
                 create_time: get_datetime("create_time"),
                 update_time: get_datetime("update_time"),
+                archived: get_i32("archived"),
+                create_by: get_opt_string("create_by"),
+                create_name: get_opt_string("create_name"),
+                update_by: get_opt_string("update_by"),
+                update_name: get_opt_string("update_name"),
             };
 
             records.push(record);

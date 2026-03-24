@@ -54,6 +54,8 @@ use crate::domain::status::StatusTransition;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::database::schema::SchemaManager;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
@@ -281,6 +283,16 @@ impl PluginManager {
             settings.default_database_id.clone(),
         ));
 
+        let deployment_repository = Arc::new(DeploymentRepository::new(
+            db_manager.clone(),
+            settings.default_database_id.clone(),
+        ));
+
+        let version_history_repository = Arc::new(VersionHistoryRepository::new(
+            db_manager.clone(),
+            settings.default_database_id.clone(),
+        ));
+
         let cache = Arc::new(LayeredCacheManager::new(Default::default()));
 
         let storage = Arc::new(FileStorage::new(&settings.plugin_root));
@@ -320,6 +332,8 @@ impl PluginManager {
         let install_service = crate::service::install::InstallService::new(
             crate::service::install::InstallServiceDeps {
                 repository: repository.clone(),
+                deployment_repository: deployment_repository.clone(),
+                version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
@@ -331,12 +345,17 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
                 default_database_id: settings.default_database_id.clone(),
+                node_id: settings.node_id.clone(),
+                node_name: settings.node_name.clone(),
+                node_type: settings.node_type.clone(),
             },
         );
 
         let upgrade_service = crate::service::upgrade::UpgradeService::new(
             crate::service::upgrade::UpgradeServiceDeps {
                 repository: repository.clone(),
+                deployment_repository: deployment_repository.clone(),
+                version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
@@ -347,6 +366,10 @@ impl PluginManager {
                 contexts: contexts.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
+                default_database_id: settings.default_database_id.clone(),
+                node_id: settings.node_id.clone(),
+                node_name: settings.node_name.clone(),
+                node_type: settings.node_type.clone(),
             },
         );
 
@@ -366,24 +389,28 @@ impl PluginManager {
         let uninstall_service = crate::service::uninstall::UninstallService::new(
             crate::service::uninstall::UninstallServiceDeps {
                 repository: repository.clone(),
+                deployment_repository: deployment_repository.clone(),
+                version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
-                storage: storage.clone(),
-                backup_manager: backup_manager.clone(),
                 event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
+                node_id: settings.node_id.clone(),
             },
         );
 
         let downgrade_service = crate::service::downgrade::DowngradeService::new(
             crate::service::downgrade::DowngradeServiceDeps {
                 repository: repository.clone(),
-                storage: storage.clone(),
-                backup_manager: backup_manager.clone(),
+                deployment_repository: deployment_repository.clone(),
+                version_history_repository: version_history_repository.clone(),
+                cache: cache.clone(),
                 event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
-                contexts: contexts.clone(),
+                registry: registry.clone(),
+                plugin_root: settings.plugin_root.clone(),
+                node_id: settings.node_id.clone(),
             },
         );
 
@@ -575,9 +602,7 @@ impl PluginManager {
         let downgrade_req = DowngradeRequest {
             plugin_id: request.plugin_id,
             target_version: target_backup.version,
-            force: true,
-            auto_activate: request.auto_activate,
-            keep_backup: true,
+            operator: "system".to_string(),
         };
 
         self.downgrade(downgrade_req).await?;

@@ -4,3 +4,4 @@ pub mod activate;
 pub mod upgrade;
 pub mod downgrade;
 pub mod rollback;
+pub mod sync;

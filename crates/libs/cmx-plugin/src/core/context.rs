@@ -115,6 +115,11 @@ impl PluginContext {
             activated_at: self.activated_at,
             create_time: Utc::now(),
             update_time: Utc::now(),
+            archived: 0,
+            create_by: None,
+            create_name: None,
+            update_by: None,
+            update_name: None,
         }
     }
 }

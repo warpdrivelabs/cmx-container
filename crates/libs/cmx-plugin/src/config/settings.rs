@@ -27,6 +27,12 @@ pub struct PluginManagerSettings {
     pub cache: CacheSettings,
     /// 集群配置
     pub cluster: Option<ClusterSettings>,
+    /// 节点ID
+    pub node_id: String,
+    /// 节点名称
+    pub node_name: Option<String>,
+    /// 节点类型
+    pub node_type: Option<String>,
 }
 
 impl Default for PluginManagerSettings {
@@ -41,6 +47,9 @@ impl Default for PluginManagerSettings {
             check_permissions: true,
             cache: CacheSettings::default(),
             cluster: None,
+            node_id: "default".to_string(),
+            node_name: None,
+            node_type: None,
         }
     }
 }

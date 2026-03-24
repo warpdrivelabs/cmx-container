@@ -16,6 +16,8 @@ use cmx_utils::ConfigManager;
 use crate::error::{PluginError, PluginResult};
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
 use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::backup::BackupManager;
@@ -60,6 +62,10 @@ pub struct InstallResponse {
 pub struct InstallServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
+    /// 部署仓库
+    pub deployment_repository: Arc<DeploymentRepository>,
+    /// 版本历史仓库
+    pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
     /// 文件存储
@@ -82,6 +88,12 @@ pub struct InstallServiceDeps {
     pub temp_root: PathBuf,
     /// 默认数据库ID
     pub default_database_id: String,
+    /// 节点ID
+    pub node_id: String,
+    /// 节点名称
+    pub node_name: Option<String>,
+    /// 节点类型
+    pub node_type: Option<String>,
 }
 
 /// 安装服务
@@ -213,8 +225,8 @@ impl InstallService {
             )));
         }
 
-        // 步骤6: 创建安装目录
-        let install_path = self.deps.plugin_root.join(&plugin_id);
+        // 步骤6: 创建安装目录 (plugin_id/version/)
+        let install_path = self.deps.plugin_root.join(&plugin_id).join(&version);
         if install_path.exists() && request.force {
             self.deps.storage.remove_dir(&install_path)?;
         }
@@ -224,7 +236,7 @@ impl InstallService {
         self.package_utils.copy_plugin_files(&extract_path, &install_path, "安装")?;
 
 
-        // 步骤8: 创建数据库表
+        // 步骤8: 创建插件数据库表
         let db_id = request
             .db_id
             .clone()
@@ -289,9 +301,83 @@ impl InstallService {
             activated_at: None,
             create_time: Utc::now(),
             update_time: Utc::now(),
+            archived: 0,
+            create_by: None,
+            create_name: None,
+            update_by: None,
+            update_name: None,
         };
 
         self.deps.repository.insert_plugin(&db_record,Some(txn_guard.txn_id())).await?;
+
+        // 步骤10.1: 【新增】插入 cmx_plugin_versions 版本历史
+        let baseline_version = self.deps.repository
+            .get_baseline_version(&plugin_id)
+            .await?;
+
+        let version_type = if baseline_version.is_some() { "upgrade" } else { "initial" };
+
+        let version_record = crate::infrastructure::database::version_history::VersionHistoryRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            plugin_id: plugin_id.clone(),
+            version: version.clone(),
+            version_type: version_type.to_string(),
+            from_version: baseline_version.clone(),
+            install_path: install_path.to_string_lossy().to_string(),
+            wasm_path: install_path.join(&plugin_def.main_file).to_string_lossy().to_string(),
+            backup_path: None,
+            is_current: true,
+            installed_at: Utc::now(),
+            uninstalled_at: None,
+            installed_by: None,
+            install_reason: None,
+            archived: 0,
+            create_by: None,
+            create_name: None,
+            update_by: None,
+            update_name: None,
+        };
+        self.deps.version_history_repository
+            .insert_version(&version_record)
+            .await?;
+
+        // 将之前的基线版本标记为非当前
+        if baseline_version.is_some() {
+            self.deps.version_history_repository
+                .mark_all_not_current(&plugin_id)
+                .await?;
+        }
+
+        // 步骤10.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
+        let existing_deployment = self.deps.deployment_repository
+            .find_deployment(&plugin_id, &self.deps.node_id)
+            .await?;
+
+        let deployment_record = crate::infrastructure::database::deployment::DeploymentRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            plugin_id: plugin_id.clone(),
+            node_id: self.deps.node_id.clone(),
+            node_name: self.deps.node_name.clone(),
+            node_type: self.deps.node_type.clone(),
+            version: version.clone(),
+            deployment_type: if existing_deployment.is_some() { version_type.to_string() } else { "initial".to_string() },
+            status: "deployed".to_string(),
+            progress: 100,
+            error_message: None,
+            error_details: None,
+            sync_token: None,
+            last_sync_at: Some(Utc::now()),
+            deployed_at: Utc::now(),
+            validated_at: None,
+            archived: 0,
+            create_by: None,
+            create_name: None,
+            update_by: None,
+            update_name: None,
+        };
+        self.deps.deployment_repository
+            .insert_deployment(&deployment_record)
+            .await?;
 
         {
             let mut registry = self.deps.registry.write().await;
@@ -325,6 +411,8 @@ impl InstallService {
         .with_details(serde_json::json!({
             "version": version,
             "install_path": install_path.to_string_lossy().to_string(),
+            "node_id": self.deps.node_id,
+            "version_type": version_type,
         }))
         .with_new_value(install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
@@ -401,6 +489,8 @@ impl Default for InstallService {
 
         Self::new(InstallServiceDeps {
             repository: Arc::new(PluginRepository::default()),
+            deployment_repository: Arc::new(DeploymentRepository::default()),
+            version_history_repository: Arc::new(VersionHistoryRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(Path::new(""))),
             backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),
@@ -412,6 +502,9 @@ impl Default for InstallService {
             plugin_root: PathBuf::from("./plugins"),
             temp_root: PathBuf::from("./temp"),
             default_database_id: "default".to_string(),
+            node_id: "default".to_string(),
+            node_name: None,
+            node_type: None,
         })
     }
 }

@@ -34,7 +34,12 @@ CREATE TABLE cmx_plugin (
     signer_key_id       VARCHAR(255),
     activated_at        TIMESTAMP WITH TIME ZONE,
     create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin.id IS '主键ID';
@@ -60,6 +65,11 @@ COMMENT ON COLUMN cmx_plugin.signer_key_id IS '签名密钥ID';
 COMMENT ON COLUMN cmx_plugin.activated_at IS '激活时间';
 COMMENT ON COLUMN cmx_plugin.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_plugin.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_plugin.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_plugin.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_plugin.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_plugin.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_plugin.update_name IS '更新人名称';
 
 CREATE INDEX idx_plugin_status ON cmx_plugin(status);
 CREATE INDEX idx_plugin_system ON cmx_plugin(is_system);
@@ -84,7 +94,14 @@ CREATE TABLE cmx_plugin_versions (
     installed_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     uninstalled_at      TIMESTAMP WITH TIME ZONE,
     installed_by        VARCHAR(255),
-    install_reason      TEXT
+    install_reason      TEXT,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_versions.id IS '主键ID';
@@ -100,6 +117,11 @@ COMMENT ON COLUMN cmx_plugin_versions.installed_at IS '安装时间';
 COMMENT ON COLUMN cmx_plugin_versions.uninstalled_at IS '卸载时间 (如果已卸载)';
 COMMENT ON COLUMN cmx_plugin_versions.installed_by IS '安装操作者';
 COMMENT ON COLUMN cmx_plugin_versions.install_reason IS '安装原因';
+COMMENT ON COLUMN cmx_plugin_versions.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_plugin_versions.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_plugin_versions.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_plugin_versions.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_plugin_versions.update_name IS '更新人名称';
 
 CREATE INDEX idx_version_plugin ON cmx_plugin_versions(plugin_id);
 CREATE INDEX idx_version_current ON cmx_plugin_versions(plugin_id, is_current) WHERE is_current = TRUE;
@@ -121,7 +143,13 @@ CREATE TABLE cmx_plugin_dependencies (
     is_dev              BOOLEAN NOT NULL DEFAULT FALSE,
     resolved_version    VARCHAR(50),
     resolution_status   VARCHAR(30),
-    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_dependencies.id IS '主键ID';
@@ -160,7 +188,14 @@ CREATE TABLE cmx_plugin_deployments (
     sync_token          VARCHAR(255),
     last_sync_at        TIMESTAMP WITH TIME ZONE,
     deployed_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    validated_at        TIMESTAMP WITH TIME ZONE
+    validated_at        TIMESTAMP WITH TIME ZONE,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_deployments.id IS '主键ID';
@@ -178,6 +213,11 @@ COMMENT ON COLUMN cmx_plugin_deployments.sync_token IS '同步令牌';
 COMMENT ON COLUMN cmx_plugin_deployments.last_sync_at IS '最后同步时间';
 COMMENT ON COLUMN cmx_plugin_deployments.deployed_at IS '部署时间';
 COMMENT ON COLUMN cmx_plugin_deployments.validated_at IS '验证通过时间';
+COMMENT ON COLUMN cmx_plugin_deployments.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_plugin_deployments.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_plugin_deployments.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_plugin_deployments.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_plugin_deployments.update_name IS '更新人名称';
 
 CREATE INDEX idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
 CREATE INDEX idx_deploy_node ON cmx_plugin_deployments(node_id);
@@ -208,7 +248,14 @@ CREATE TABLE cmx_plugin_audit_log (
     stack_trace         TEXT,
     started_at          TIMESTAMP WITH TIME ZONE NOT NULL,
     completed_at        TIMESTAMP WITH TIME ZONE,
-    duration_ms         BIGINT
+    duration_ms         BIGINT,
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
@@ -256,7 +303,13 @@ CREATE TABLE cmx_plugin_rollback (
     status              VARCHAR(30) NOT NULL,
     completed_at        TIMESTAMP WITH TIME ZONE,
     reason              TEXT,
-    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_rollback.id IS '主键ID';
@@ -302,7 +355,12 @@ CREATE TABLE cmx_system_plugins (
     last_installed_at   TIMESTAMP WITH TIME ZONE,
     install_attempts    INTEGER NOT NULL DEFAULT 0,
     create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_system_plugins.id IS '主键ID';
@@ -352,7 +410,12 @@ CREATE TABLE cmx_plugin_nodes (
     registered_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     last_seen_at        TIMESTAMP WITH TIME ZONE,
     create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived            INT4 NOT NULL DEFAULT 0,
+    create_by           VARCHAR(100),
+    create_name         VARCHAR(100),
+    update_by           VARCHAR(100),
+    update_name         VARCHAR(100)
 );
 
 COMMENT ON COLUMN cmx_plugin_nodes.node_id IS '节点ID';
@@ -391,7 +454,12 @@ CREATE TABLE cmx_plugin_features (
                                      config              JSONB,
                                      status              VARCHAR(30) NOT NULL DEFAULT 'active',
                                      create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                                     update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                                     update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                                     archived            INT4 NOT NULL DEFAULT 0,
+                                     create_by           VARCHAR(100),
+                                     create_name         VARCHAR(100),
+                                     update_by           VARCHAR(100),
+                                     update_name         VARCHAR(100)
 );
 COMMENT ON TABLE cmx_plugin_features IS '插件功能表';
 COMMENT ON COLUMN cmx_plugin_features.id IS '主键ID';
@@ -414,7 +482,13 @@ CREATE TABLE cmx_plugin_events (
                                    event_data          JSONB,
                                    processed           BOOLEAN NOT NULL DEFAULT FALSE,
                                    processed_at        TIMESTAMP WITH TIME ZONE,
-                                   create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                                   create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                                   update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                                   archived            INT4 NOT NULL DEFAULT 0,
+                                   create_by           VARCHAR(100),
+                                   create_name         VARCHAR(100),
+                                   update_by           VARCHAR(100),
+                                   update_name         VARCHAR(100)
 );
 COMMENT ON TABLE cmx_plugin_events IS '插件事件表';
 COMMENT ON COLUMN cmx_plugin_events.id IS '主键ID';
@@ -426,7 +500,7 @@ COMMENT ON COLUMN cmx_plugin_events.processed_at IS '处理时间';
 
 
 
-COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息';
+COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 COMMENT ON TABLE cmx_plugin_versions IS '版本历史表：记录插件的版本变更历史';
 COMMENT ON TABLE cmx_plugin_dependencies IS '依赖关系表：记录插件之间的依赖关系';
 COMMENT ON TABLE cmx_plugin_deployments IS '节点部署记录表：记录在各个节点上的部署状态';
