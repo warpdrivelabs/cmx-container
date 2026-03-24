@@ -19,6 +19,7 @@ use cmx_core::model::cell::DataValue;
 use crate::executor::{ResultConverter, bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite, json_to_data_values};
 use crate::get_default_db_manager;
 use sea_query_binder::SqlxValues;
+use tracing::debug;
 
 /// TransactionGuard 清理命令
 #[derive(Debug)]
@@ -304,7 +305,7 @@ where
 /// * `Result<u64>` - 执行结果，返回受影响的行数
 pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
     let sql = sql.to_string();
-    info!("execute_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}", db_id, txn_id, sql);
+    debug!("execute_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}", db_id, txn_id, sql);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
@@ -349,7 +350,7 @@ pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result
 /// * `Result<u64>` - 执行结果，返回受影响的行数
 pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams) -> Result<u64> {
     let sql = sql.to_string();
-    info!("execute_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, ", db_id, txn_id, sql);
+    debug!("execute_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, ", db_id, txn_id, sql);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
@@ -418,7 +419,7 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
 pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    info!("query_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}",  db_id, txn_id, sql, dataset_id);
+    debug!("query_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}",  db_id, txn_id, sql, dataset_id);
 
     match txn_id {
         Some(txn_id) => {
@@ -466,7 +467,7 @@ pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id:
 pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    info!("query_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}", db_id, txn_id, sql, dataset_id);
+    debug!("query_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}", db_id, txn_id, sql, dataset_id);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
