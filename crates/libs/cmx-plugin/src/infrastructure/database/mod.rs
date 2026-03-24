@@ -3,3 +3,4 @@ pub mod repository;
 pub mod migration;
 pub mod deployment;
 pub mod version_history;
+pub mod table_metadata;

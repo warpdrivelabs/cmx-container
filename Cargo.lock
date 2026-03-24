@@ -528,6 +528,8 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "regex",
+ "sea-query",
+ "sea-query-binder",
  "serde",
  "serde_json",
  "thiserror",

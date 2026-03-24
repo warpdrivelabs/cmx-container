@@ -14,6 +14,7 @@ use crate::domain::plugin::PluginSource;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
+use crate::infrastructure::database::table_metadata::TableMetadataRepository;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::backup::BackupManager;
@@ -64,6 +65,8 @@ pub struct UpgradeServiceDeps {
     pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
+    /// 表元数据仓库
+    pub table_metadata_repository: Arc<TableMetadataRepository>,
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
     /// 文件存储
@@ -196,7 +199,7 @@ impl UpgradeService {
 
         // 步骤9: 创建数据库表
         let db_id = plugin.db_id.clone();
-        crate::service::utils::create_plugin_tables(&db_id, &install_path, &plugin_def.table_config_files, None).await?;
+        crate::service::utils::create_plugin_tables(&db_id, &plugin_id, &new_version, &install_path, &plugin_def.table_config_files, None, Some(&self.deps.table_metadata_repository)).await?;
 
         // 步骤10: 插入 cmx_plugin_versions 版本历史
         let version_record = crate::infrastructure::database::version_history::VersionHistoryRecord {
@@ -329,6 +332,7 @@ impl Default for UpgradeService {
             repository: Arc::new(PluginRepository::default()),
             deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
+            table_metadata_repository: Arc::new(TableMetadataRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(Path::new(""))),
             backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),

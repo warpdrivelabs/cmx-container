@@ -511,3 +511,73 @@ COMMENT ON TABLE cmx_plugin_audit_log IS '审计日志表：记录所有插件�
 COMMENT ON TABLE cmx_plugin_rollback IS '回滚记录表：记录回滚点信息';
 COMMENT ON TABLE cmx_system_plugins IS '系统默认插件配置表：配置系统启动时需要自动安装的插件';
 COMMENT ON TABLE cmx_plugin_nodes IS '节点信息表：记录集群中的节点信息';
+
+-- =============================================
+-- 表定义元数据存储表 (cmx_meta_table_define)
+-- =============================================
+DROP TABLE IF EXISTS cmx_meta_table_define;
+CREATE TABLE cmx_meta_table_define(
+                                      id VARCHAR(64) NOT NULL,
+                                      table_name VARCHAR(100),
+                                      db_id VARCHAR(100),
+                                      plugin_id VARCHAR(64),
+                                      version VARCHAR(50),
+                                      archived int4 DEFAULT  0,
+                                      create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                                      update_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                                      create_by varchar(100),
+                                      create_name varchar(100),
+                                      update_by varchar(100),
+                                      update_name varchar(100),
+                                      PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_meta_table_define IS '表定义元数据';
+COMMENT ON COLUMN cmx_meta_table_define.id IS '主键';
+COMMENT ON COLUMN cmx_meta_table_define.table_name IS '表名';
+COMMENT ON COLUMN cmx_meta_table_define.db_id IS '所属数据库id';
+COMMENT ON COLUMN cmx_meta_table_define.plugin_id IS '插件id';
+COMMENT ON COLUMN cmx_meta_table_define.version IS '当前使用的元数据插件版本';
+COMMENT ON COLUMN cmx_meta_table_define.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_meta_table_define.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_meta_table_define.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_meta_table_define.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_meta_table_define.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_meta_table_define.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_meta_table_define.update_name IS '更新人名称';
+
+-- =============================================
+-- 表定义元数据版本表 (cmx_meta_table_define_version)
+-- =============================================
+DROP TABLE IF EXISTS cmx_meta_table_define_version;
+CREATE TABLE cmx_meta_table_define_version(
+                                              id VARCHAR(64) NOT NULL,
+                                              table_name VARCHAR(100),
+                                              db_id VARCHAR(100),
+                                              plugin_id VARCHAR(64),
+                                              version VARCHAR(50),
+                                              metadata jsonb,
+                                              archived int4 DEFAULT  0,
+                                              create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                                              update_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                                              create_by varchar(100),
+                                              create_name varchar(100),
+                                              update_by varchar(100),
+                                              update_name varchar(100),
+                                              PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
+COMMENT ON COLUMN cmx_meta_table_define_version.id IS '主键';
+COMMENT ON COLUMN cmx_meta_table_define_version.table_name IS '表名';
+COMMENT ON COLUMN cmx_meta_table_define_version.db_id IS '所属数据库id';
+COMMENT ON COLUMN cmx_meta_table_define_version.plugin_id IS '插件id';
+COMMENT ON COLUMN cmx_meta_table_define_version.version IS '插件版本';
+COMMENT ON COLUMN cmx_meta_table_define_version.metadata IS '元数据json';
+COMMENT ON COLUMN cmx_meta_table_define_version.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_meta_table_define_version.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_meta_table_define_version.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_meta_table_define_version.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_meta_table_define_version.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_meta_table_define_version.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_meta_table_define_version.update_name IS '更新人名称';

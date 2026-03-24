@@ -82,15 +82,22 @@ CREATE TABLE cmx_sys_datasource(
                                    db_schema VARCHAR(64),
                                    description VARCHAR(255),
                                    db_type VARCHAR(255) NOT NULL,
+                                   db_url VARCHAR(255),
+                                   max_connections INTEGER,
+                                   min_connections INTEGER,
+                                   connect_timeout INTEGER,
+                                   idle_timeout INTEGER,
+                                   health_check_interval INTEGER,
+                                   health_check_timeout INTEGER,
                                    default_flag INTEGER,
                                    status int4 DEFAULT  1,
                                    archived int4 DEFAULT  0,
                                    create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
                                    update_time timestamp DEFAULT  CURRENT_TIMESTAMP,
-                                   create_by VARCHAR(100),
-                                   create_name VARCHAR(100),
-                                   update_by VARCHAR(100),
-                                   update_name VARCHAR(100),
+                                   create_by varchar(100),
+                                   create_name varchar(100),
+                                   update_by varchar(100),
+                                   update_name varchar(100),
                                    PRIMARY KEY (id)
 );
 
@@ -100,6 +107,13 @@ COMMENT ON COLUMN cmx_sys_datasource.db_id IS '数据源标识';
 COMMENT ON COLUMN cmx_sys_datasource.db_schema IS '数据库模式';
 COMMENT ON COLUMN cmx_sys_datasource.description IS '数据源描述';
 COMMENT ON COLUMN cmx_sys_datasource.db_type IS '数据库类型';
+COMMENT ON COLUMN cmx_sys_datasource.db_url IS '数据库连接 URL';
+COMMENT ON COLUMN cmx_sys_datasource.max_connections IS '最大连接数';
+COMMENT ON COLUMN cmx_sys_datasource.min_connections IS '最小空闲连接数';
+COMMENT ON COLUMN cmx_sys_datasource.connect_timeout IS '连接超时时间（秒）';
+COMMENT ON COLUMN cmx_sys_datasource.idle_timeout IS '空闲连接超时时间（秒）';
+COMMENT ON COLUMN cmx_sys_datasource.health_check_interval IS '健康检查间隔（秒）';
+COMMENT ON COLUMN cmx_sys_datasource.health_check_timeout IS '健康检查超时（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.default_flag IS '是否默认;0否1是';
 COMMENT ON COLUMN cmx_sys_datasource.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_sys_datasource.archived IS '归档标志：0-未归档，1-已归档';
@@ -109,6 +123,7 @@ COMMENT ON COLUMN cmx_sys_datasource.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_sys_datasource.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_sys_datasource.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_sys_datasource.update_name IS '更新人名称';
+
 
 
 CREATE UNIQUE INDEX uk_cmx_datasource_db_id ON cmx_sys_datasource(db_id);

@@ -22,11 +22,35 @@ pub struct SysDatasource {
     pub description: Option<String>,
     /// 数据库类型
     pub db_type: String,
+    /// 数据库连接 URL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_url: Option<String>,
     /// 数据库模式
     pub db_schema: Option<String>,
     /// 是否默认;0否1是
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_flag: Option<i32>,
+    /// 最大连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_connections: Option<i32>,
+    /// 最小空闲连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_connections: Option<i32>,
+    /// 连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect_timeout: Option<i64>,
+    /// 空闲连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idle_timeout: Option<i64>,
+    /// 最大生命周期（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_lifetime: Option<i64>,
+    /// 健康检查间隔（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_interval: Option<i64>,
+    /// 健康检查超时（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_timeout: Option<i64>,
     /// 状态：0-禁用，1-启用
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<i32>,
@@ -55,20 +79,45 @@ pub struct SysDatasource {
 
 /// 创建请求 DTO
 ///
-/// 用于创建 SysDatasource 的请求数据
+/// 用于创建 SysDatasource 的请求数据，包含完整的数据库连接配置
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct SysDatasourceForCreate {
-    /// 数据源标识
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub db_id: Option<String>,
+    /// 数据源标识（唯一）
+    pub db_id: String,
     /// 数据源描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// 数据库类型
+    /// 数据库类型 (postgres, mysql, sqlite)
     pub db_type: String,
-    /// 是否默认;0否1是
+    /// 数据库连接 URL
+    pub db_url: String,
+    /// 数据库模式（PostgreSQL 默认为 public）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_schema: Option<String>,
+    /// 是否默认数据源；0否1是
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_flag: Option<i32>,
+    /// 最大连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_connections: Option<i32>,
+    /// 最小空闲连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_connections: Option<i32>,
+    /// 连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect_timeout: Option<i64>,
+    /// 空闲连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idle_timeout: Option<i64>,
+    /// 最大生命周期（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_lifetime: Option<i64>,
+    /// 健康检查间隔（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_interval: Option<i64>,
+    /// 健康检查超时（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_timeout: Option<i64>,
 }
 
 /// 更新请求 DTO
@@ -85,9 +134,36 @@ pub struct SysDatasourceForUpdate {
     /// 数据库类型
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_type: Option<String>,
-    /// 是否默认;0否1是
+    /// 数据库连接 URL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_url: Option<String>,
+    /// 数据库模式
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_schema: Option<String>,
+    /// 是否默认；0否1是
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_flag: Option<i32>,
+    /// 最大连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_connections: Option<i32>,
+    /// 最小空闲连接数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_connections: Option<i32>,
+    /// 连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect_timeout: Option<i64>,
+    /// 空闲连接超时时间（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idle_timeout: Option<i64>,
+    /// 最大生命周期（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_lifetime: Option<i64>,
+    /// 健康检查间隔（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_interval: Option<i64>,
+    /// 健康检查超时（秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_timeout: Option<i64>,
     /// 状态：0-禁用，1-启用
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<i32>,

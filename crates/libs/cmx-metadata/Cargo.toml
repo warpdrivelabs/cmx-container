@@ -13,3 +13,7 @@ chrono = { workspace = true }
 regex = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# sea-query: SQL 构建工具
+sea-query = { workspace = true }
+# sea-query-binder: SQL 参数绑定工具
+sea-query-binder = { workspace = true }
