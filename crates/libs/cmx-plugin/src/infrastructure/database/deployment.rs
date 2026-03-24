@@ -8,7 +8,6 @@ use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 
@@ -257,68 +256,31 @@ impl DeploymentRepository {
         let schema = dataset.schema.as_ref();
 
         for row in dataset.iter() {
-            let get_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::String(s) = v { Some(s.clone()) } else { None })
-            };
-
-            let get_opt_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name).and_then(|v| match v {
-                    DataValue::Null => None,
-                    DataValue::String(s) => Some(s.clone()),
-                    _ => None,
-                })
-            };
-
-            let get_i32 = |col_name: &str| -> i32 {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::Int(n) = v { Some(*n as i32) } else { None })
-                    .unwrap_or(0)
-            };
-
-            let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    if let DataValue::String(s) = v {
-                        DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                    } else {
-                        None
-                    }
-                })
-            };
-
-            let get_datetime = |col_name: &str| -> DateTime<Utc> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| {
-                        if let DataValue::String(s) = v {
-                            DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(Utc::now)
+            let get_datetime_default = |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
+                row.get_by_name_as(schema, col_name).unwrap_or_else(default_fn)
             };
 
             let record = DeploymentRecord {
-                id: get_string("id").unwrap_or_default(),
-                plugin_id: get_string("plugin_id").unwrap_or_default(),
-                node_id: get_string("node_id").unwrap_or_default(),
-                node_name: get_opt_string("node_name"),
-                node_type: get_opt_string("node_type"),
-                version: get_string("version").unwrap_or_default(),
-                deployment_type: get_string("deployment_type").unwrap_or_default(),
-                status: get_string("status").unwrap_or_default(),
-                progress: get_i32("progress"),
-                error_message: get_opt_string("error_message"),
-                error_details: get_opt_string("error_details"),
-                sync_token: get_opt_string("sync_token"),
-                last_sync_at: get_opt_datetime("last_sync_at"),
-                deployed_at: get_datetime("deployed_at"),
-                validated_at: get_opt_datetime("validated_at"),
-                archived: get_i32("archived"),
-                create_by: get_opt_string("create_by"),
-                create_name: get_opt_string("create_name"),
-                update_by: get_opt_string("update_by"),
-                update_name: get_opt_string("update_name"),
+                id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
+                node_id: row.get_by_name_as(schema, "node_id").unwrap_or_default(),
+                node_name: row.get_by_name_as(schema, "node_name"),
+                node_type: row.get_by_name_as(schema, "node_type"),
+                version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                deployment_type: row.get_by_name_as(schema, "deployment_type").unwrap_or_default(),
+                status: row.get_by_name_as(schema, "status").unwrap_or_default(),
+                progress: row.get_by_name_as(schema, "progress").unwrap_or(0),
+                error_message: row.get_by_name_as(schema, "error_message"),
+                error_details: row.get_by_name_as(schema, "error_details"),
+                sync_token: row.get_by_name_as(schema, "sync_token"),
+                last_sync_at: row.get_by_name_as(schema, "last_sync_at"),
+                deployed_at: get_datetime_default("deployed_at", Utc::now),
+                validated_at: row.get_by_name_as(schema, "validated_at"),
+                archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
+                create_by: row.get_by_name_as(schema, "create_by"),
+                create_name: row.get_by_name_as(schema, "create_name"),
+                update_by: row.get_by_name_as(schema, "update_by"),
+                update_name: row.get_by_name_as(schema, "update_name"),
             };
 
             records.push(record);

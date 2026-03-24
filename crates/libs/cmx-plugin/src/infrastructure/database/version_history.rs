@@ -8,7 +8,6 @@ use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 
@@ -234,72 +233,29 @@ impl VersionHistoryRepository {
         let schema = dataset.schema.as_ref();
 
         for row in dataset.iter() {
-            let get_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::String(s) = v { Some(s.clone()) } else { None })
-            };
-
-            let get_opt_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name).and_then(|v| match v {
-                    DataValue::Null => None,
-                    DataValue::String(s) => Some(s.clone()),
-                    _ => None,
-                })
-            };
-
-            let get_bool = |col_name: &str| -> bool {
-                row.get_by_name(schema, col_name)
-                    .map(|v| if let DataValue::Bool(b) = v { *b } else { false })
-                    .unwrap_or(false)
-            };
-
-            let get_i32 = |col_name: &str| -> i32 {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::Int(n) = v { Some(*n as i32) } else { None })
-                    .unwrap_or(0)
-            };
-
-            let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    if let DataValue::String(s) = v {
-                        DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                    } else {
-                        None
-                    }
-                })
-            };
-
-            let get_datetime = |col_name: &str| -> DateTime<Utc> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| {
-                        if let DataValue::String(s) = v {
-                            DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(Utc::now)
+            let get_datetime_default = |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
+                row.get_by_name_as(schema, col_name).unwrap_or_else(default_fn)
             };
 
             let record = VersionHistoryRecord {
-                id: get_string("id").unwrap_or_default(),
-                plugin_id: get_string("plugin_id").unwrap_or_default(),
-                version: get_string("version").unwrap_or_default(),
-                version_type: get_string("version_type").unwrap_or_default(),
-                from_version: get_opt_string("from_version"),
-                install_path: get_string("install_path").unwrap_or_default(),
-                wasm_path: get_string("wasm_path").unwrap_or_default(),
-                backup_path: get_opt_string("backup_path"),
-                is_current: get_bool("is_current"),
-                installed_at: get_datetime("installed_at"),
-                uninstalled_at: get_opt_datetime("uninstalled_at"),
-                installed_by: get_opt_string("installed_by"),
-                install_reason: get_opt_string("install_reason"),
-                archived: get_i32("archived"),
-                create_by: get_opt_string("create_by"),
-                create_name: get_opt_string("create_name"),
-                update_by: get_opt_string("update_by"),
-                update_name: get_opt_string("update_name"),
+                id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
+                version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                version_type: row.get_by_name_as(schema, "version_type").unwrap_or_default(),
+                from_version: row.get_by_name_as(schema, "from_version"),
+                install_path: row.get_by_name_as(schema, "install_path").unwrap_or_default(),
+                wasm_path: row.get_by_name_as(schema, "wasm_path").unwrap_or_default(),
+                backup_path: row.get_by_name_as(schema, "backup_path"),
+                is_current: row.get_by_name_as(schema, "is_current").unwrap_or(false),
+                installed_at: get_datetime_default("installed_at", Utc::now),
+                uninstalled_at: row.get_by_name_as(schema, "uninstalled_at"),
+                installed_by: row.get_by_name_as(schema, "installed_by"),
+                install_reason: row.get_by_name_as(schema, "install_reason"),
+                archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
+                create_by: row.get_by_name_as(schema, "create_by"),
+                create_name: row.get_by_name_as(schema, "create_name"),
+                update_by: row.get_by_name_as(schema, "update_by"),
+                update_name: row.get_by_name_as(schema, "update_name"),
             };
 
             records.push(record);
