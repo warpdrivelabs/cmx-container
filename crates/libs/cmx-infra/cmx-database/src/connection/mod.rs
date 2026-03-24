@@ -166,16 +166,6 @@ impl DbRegistry {
             }
         }
 
-        // 等待活跃连接关闭
-        {
-            let pools = self.pools.read().unwrap();
-            if let Some(pool) = pools.get(key) {
-                let timeout = std::time::Duration::from_secs(30);
-                if !pool.wait_for_idle(timeout).await {
-                    log::warn!("等待连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
-                }
-            }
-        }
 
         // 从注册表中移除
         let mut pools = self.pools.write().unwrap();
