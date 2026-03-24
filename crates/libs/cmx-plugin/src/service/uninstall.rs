@@ -131,7 +131,7 @@ impl UninstallService {
                 ..Default::default()
             };
             self.deps.deployment_repository
-                .update_deployment(&deployment.id, &update_fields)
+                .update_deployment(&deployment.id, &update_fields, None)
                 .await?;
         }
 
@@ -146,7 +146,7 @@ impl UninstallService {
                 ..Default::default()
             };
             self.deps.version_history_repository
-                .update_version(&version_record.id, &update_fields)
+                .update_version(&version_record.id, &update_fields, None)
                 .await?;
         }
 
@@ -186,7 +186,7 @@ impl UninstallService {
 
                 // 更新 cmx_plugin_versions 的 is_current
                 self.deps.version_history_repository
-                    .mark_all_not_current(&plugin_id)
+                    .mark_all_not_current(&plugin_id, None)
                     .await?;
 
                 if let Ok(Some(version_record)) = self.deps.version_history_repository
@@ -198,7 +198,7 @@ impl UninstallService {
                         ..Default::default()
                     };
                     self.deps.version_history_repository
-                        .update_version(&version_record.id, &update_fields)
+                        .update_version(&version_record.id, &update_fields, None)
                         .await?;
                 }
             }

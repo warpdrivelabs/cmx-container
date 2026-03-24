@@ -338,13 +338,13 @@ impl InstallService {
             update_name: None,
         };
         self.deps.version_history_repository
-            .insert_version(&version_record)
+            .insert_version(&version_record, None)
             .await?;
 
         // 将之前的基线版本标记为非当前
         if baseline_version.is_some() {
             self.deps.version_history_repository
-                .mark_all_not_current(&plugin_id)
+                .mark_all_not_current(&plugin_id, None)
                 .await?;
         }
 
@@ -376,7 +376,7 @@ impl InstallService {
             update_name: None,
         };
         self.deps.deployment_repository
-            .insert_deployment(&deployment_record)
+            .insert_deployment(&deployment_record, None)
             .await?;
 
         {

@@ -135,12 +135,12 @@ impl DowngradeService {
             ..Default::default()
         };
         self.deps.version_history_repository
-            .update_version(&target_version_record.id, &update_fields)
+            .update_version(&target_version_record.id, &update_fields, None)
             .await?;
 
         // 将旧版本标记为非当前
         self.deps.version_history_repository
-            .mark_all_not_current(&plugin_id)
+            .mark_all_not_current(&plugin_id, None)
             .await?;
 
         // 步骤5: 更新 cmx_plugin_deployments 节点部署记录
@@ -153,7 +153,7 @@ impl DowngradeService {
                 ..Default::default()
             };
             self.deps.deployment_repository
-                .update_deployment(&deployment.id, &update_fields)
+                .update_deployment(&deployment.id, &update_fields, None)
                 .await?;
         }
 

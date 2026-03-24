@@ -225,12 +225,12 @@ impl UpgradeService {
             update_name: None,
         };
         self.deps.version_history_repository
-            .insert_version(&version_record)
+            .insert_version(&version_record, None)
             .await?;
 
         // 将之前的基线版本标记为非当前
         self.deps.version_history_repository
-            .mark_all_not_current(&plugin_id)
+            .mark_all_not_current(&plugin_id, None)
             .await?;
 
         // 步骤11: 更新 cmx_plugin 主表
@@ -249,7 +249,7 @@ impl UpgradeService {
                 ..Default::default()
             };
             self.deps.deployment_repository
-                .update_deployment(&deployment.id, &update_fields)
+                .update_deployment(&deployment.id, &update_fields, None)
                 .await?;
         }
 
