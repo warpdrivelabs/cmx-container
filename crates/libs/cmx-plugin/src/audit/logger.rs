@@ -84,6 +84,7 @@ impl AuditLogger {
 
     /// 插入记录到数据库
     async fn insert_record(&self, record: &AuditRecord) -> PluginResult<()> {
+        let now = Utc::now();
         let mut query = Query::insert();
         query
             .into_table("cmx_plugin_audit_log")
@@ -93,7 +94,8 @@ impl AuditLogger {
                 "operator_session", "request_id", "correlation_id", "details",
                 "old_value", "new_value", "error_code", "error_message",
                 "stack_trace", "started_at", "completed_at", "duration_ms",
-                "archived", "create_by", "create_name", "update_by", "update_name"
+                "create_time", "update_time", "archived",
+                "create_by", "create_name", "update_by", "update_name"
             ])
             .values(vec![
                 record.id.clone().into(),
@@ -117,6 +119,8 @@ impl AuditLogger {
                 record.started_at.into(),
                 record.completed_at.clone().into(),
                 record.duration_ms.into(),
+                now.into(),
+                now.into(),
                 0.into(),
                 record.operator.clone().into(),
                 record.operator.clone().into(),

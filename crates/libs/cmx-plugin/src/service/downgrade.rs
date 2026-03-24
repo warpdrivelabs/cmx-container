@@ -106,7 +106,7 @@ impl DowngradeService {
 
         // 步骤2: 检查节点部署记录
         let existing_deployment = self.deps.deployment_repository
-            .find_deployment(&request.plugin_id, &self.deps.node_id)
+            .find_deployment(&request.plugin_id, &self.deps.node_id, &old_version)
             .await?;
 
         if existing_deployment.is_none() {

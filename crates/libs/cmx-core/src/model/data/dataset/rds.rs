@@ -37,6 +37,7 @@
 //! - 零拷贝潜力：未来可结合 Cow 等类型进一步优化
 
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 // serde 序列化/反序列化核心 trait
@@ -158,6 +159,30 @@ impl Row {
     pub fn get_by_name(&self, schema: &Schema, name: &str) -> Option<&DataValue> {
         schema.get_index(name).and_then(|i| self.values.get(i))
     }
+
+    /// 按字段名获取值并转换为指定类型（需传入所属 Schema）
+    ///
+    /// # 参数
+    /// - `schema`: 字段所属的 Schema，用于将字段名转换为索引
+    /// - `name`: 字段名称
+    ///
+    /// # 返回值
+    /// 如果字段存在且能转换为目标类型 T 则返回 Some(T)，否则返回 None
+    ///
+    /// # 支持的类型
+    /// - i32, i64, f64, bool, String, Decimal
+    /// - DateTime<Utc>, NaiveDate, Uuid
+    /// - Vec<u8> (Binary), Vec<DataValue> (Array)
+    pub fn get_by_name_as<T: TryFrom<DataValue, Error = String>>(
+        &self,
+        schema: &Schema,
+        name: &str,
+    ) -> Option<T> {
+        self.get_by_name(schema, name)
+            .and_then(|v| T::try_from(v.clone()).ok())
+    }
+
+
 }
 
 // ==========================================

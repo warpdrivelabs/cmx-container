@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use cmx_core::model::cell::DataValue;
-use cmx_core::model::data::dataset::DataSet;
+use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_database::DatabaseManager;
 
 use super::schema::SchemaManager;
@@ -364,69 +364,69 @@ impl PluginRepository {
         Ok(Self::parse_count(&result).unwrap_or(0) as u64)
     }
 
-    /// 插入或更新插件记录
-    pub async fn upsert_plugin(&self, record: &PluginDbRecord, txn_id: Option<&str>) -> PluginResult<()> {
-        let sql = r#"
-            INSERT INTO cmx_plugin (
-                id, plugin_id, name, version, wasm_path, install_path, config_path,
-                db_id, status, is_system, is_locked, domain_code, application_code,
-                module_code, vendor_name, vendor_url, vendor_contact, metadata,
-                signature_algorithm, signer_key_id, activated_at, create_time, update_time,
-                archived, create_by, create_name, update_by, update_name
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
-            ON CONFLICT (plugin_id) DO UPDATE SET
-                name = EXCLUDED.name,
-                version = EXCLUDED.version,
-                wasm_path = EXCLUDED.wasm_path,
-                install_path = EXCLUDED.install_path,
-                config_path = EXCLUDED.config_path,
-                status = EXCLUDED.status,
-                is_locked = EXCLUDED.is_locked,
-                metadata = EXCLUDED.metadata,
-                activated_at = EXCLUDED.activated_at,
-                update_time = EXCLUDED.update_time,
-                update_by = EXCLUDED.update_by,
-                update_name = EXCLUDED.update_name
-        "#;
-
-        let params = serde_json::json!([
-            record.id,
-            record.plugin_id,
-            record.name,
-            record.version,
-            record.wasm_path,
-            record.install_path,
-            record.config_path,
-            record.db_id,
-            record.status,
-            record.is_system,
-            record.is_locked,
-            record.domain_code,
-            record.application_code,
-            record.module_code,
-            record.vendor_name,
-            record.vendor_url,
-            record.vendor_contact,
-            record.metadata,
-            record.signature_algorithm,
-            record.signer_key_id,
-            record.activated_at,
-            record.create_time,
-            record.update_time,
-            record.archived,
-            record.create_by,
-            record.create_name,
-            record.update_by,
-            record.update_name,
-        ]);
-
-        self.db_manager
-            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
-            .await
-            .map_err(|e| PluginError::Database(format!("插入或更新插件记录失败: {}", e)))?;
-
-        Ok(())
-    }
+    // /// 插入或更新插件记录
+    // pub async fn upsert_plugin(&self, record: &PluginDbRecord, txn_id: Option<&str>) -> PluginResult<()> {
+    //     let sql = r#"
+    //         INSERT INTO cmx_plugin (
+    //             id, plugin_id, name, version, wasm_path, install_path, config_path,
+    //             db_id, status, is_system, is_locked, domain_code, application_code,
+    //             module_code, vendor_name, vendor_url, vendor_contact, metadata,
+    //             signature_algorithm, signer_key_id, activated_at, create_time, update_time,
+    //             archived, create_by, create_name, update_by, update_name
+    //         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+    //         ON CONFLICT (plugin_id) DO UPDATE SET
+    //             name = EXCLUDED.name,
+    //             version = EXCLUDED.version,
+    //             wasm_path = EXCLUDED.wasm_path,
+    //             install_path = EXCLUDED.install_path,
+    //             config_path = EXCLUDED.config_path,
+    //             status = EXCLUDED.status,
+    //             is_locked = EXCLUDED.is_locked,
+    //             metadata = EXCLUDED.metadata,
+    //             activated_at = EXCLUDED.activated_at,
+    //             update_time = EXCLUDED.update_time,
+    //             update_by = EXCLUDED.update_by,
+    //             update_name = EXCLUDED.update_name
+    //     "#;
+    //
+    //     let params = serde_json::json!([
+    //         record.id,
+    //         record.plugin_id,
+    //         record.name,
+    //         record.version,
+    //         record.wasm_path,
+    //         record.install_path,
+    //         record.config_path,
+    //         record.db_id,
+    //         record.status,
+    //         record.is_system,
+    //         record.is_locked,
+    //         record.domain_code,
+    //         record.application_code,
+    //         record.module_code,
+    //         record.vendor_name,
+    //         record.vendor_url,
+    //         record.vendor_contact,
+    //         record.metadata,
+    //         record.signature_algorithm,
+    //         record.signer_key_id,
+    //         record.activated_at,
+    //         record.create_time,
+    //         record.update_time,
+    //         record.archived,
+    //         record.create_by,
+    //         record.create_name,
+    //         record.update_by,
+    //         record.update_name,
+    //     ]);
+    //
+    //     self.db_manager
+    //         .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+    //         .await
+    //         .map_err(|e| PluginError::Database(format!("插入或更新插件记录失败: {}", e)))?;
+    //
+    //     Ok(())
+    // }
 
     /// 查询插件基线版本
     pub async fn get_baseline_version(&self, plugin_id: &str) -> PluginResult<Option<String>> {
@@ -464,114 +464,55 @@ impl PluginRepository {
         let schema = dataset.schema.as_ref();
 
         for row in dataset.iter() {
-            let get_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::String(s) = v {
-                        Some(s.clone())
-                    } else {
-                        None
-                    })
-            };
-
-            let get_opt_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    match v {
-                        DataValue::Null => None,
-                        DataValue::String(s) => Some(s.clone()),
-                        _ => None,
-                    }
-                })
-            };
-
-            let get_bool = |col_name: &str| -> bool {
-                row.get_by_name(schema, col_name)
-                    .map(|v| {
-                        match v {
-                            DataValue::Bool(b) => *b,
-                            _ => false,
-                        }
-                    })
-                    .unwrap_or(false)
-            };
-
-            let get_opt_json = |col_name: &str| -> Option<serde_json::Value> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    match v {
-                        DataValue::Null => None,
-                        DataValue::Json(s) => {
-                            serde_json::from_str(s).ok()
-                        }
-                        _ => None,
-                    }
-                })
-            };
-
-            let get_datetime = |col_name: &str| -> DateTime<Utc> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| {
-                        if let DataValue::String(s) = v {
-                            DateTime::parse_from_rfc3339(s).ok()
-                                .map(|dt| dt.with_timezone(&Utc))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(Utc::now)
-            };
-
-            let get_i32 = |col_name: &str| -> i32 {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::Int(n) = v { Some(*n as i32) } else { None })
-                    .unwrap_or(0)
-            };
-
-            let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| {
-                        if let DataValue::String(s) = v {
-                            DateTime::parse_from_rfc3339(s).ok()
-                                .map(|dt| dt.with_timezone(&Utc))
-                        } else {
-                            None
-                        }
-                    })
+            let get_datetime_default = |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
+                row.get_by_name_as(schema, col_name).unwrap_or_else(default_fn)
             };
 
             let record = PluginDbRecord {
-                id: get_string("id").unwrap_or_default(),
-                plugin_id: get_string("plugin_id").unwrap_or_default(),
-                name: get_string("name").unwrap_or_default(),
-                version: get_string("version").unwrap_or_default(),
-                wasm_path: get_string("wasm_path").unwrap_or_default(),
-                install_path: get_string("install_path").unwrap_or_default(),
-                config_path: get_opt_string("config_path"),
-                db_id: get_string("db_id").unwrap_or_else(|| "default".to_string()),
-                status: get_string("status").unwrap_or_else(|| "installed".to_string()),
-                is_system: get_bool("is_system"),
-                is_locked: get_bool("is_locked"),
-                domain_code: get_opt_string("domain_code"),
-                application_code: get_opt_string("application_code"),
-                module_code: get_opt_string("module_code"),
-                vendor_name: get_opt_string("vendor_name"),
-                vendor_url: get_opt_string("vendor_url"),
-                vendor_contact: get_opt_string("vendor_contact"),
-                metadata: get_opt_json("metadata"),
-                signature_algorithm: get_opt_string("signature_algorithm"),
-                signer_key_id: get_opt_string("signer_key_id"),
-                activated_at: get_opt_datetime("activated_at"),
-                create_time: get_datetime("create_time"),
-                update_time: get_datetime("update_time"),
-                archived: get_i32("archived"),
-                create_by: get_opt_string("create_by"),
-                create_name: get_opt_string("create_name"),
-                update_by: get_opt_string("update_by"),
-                update_name: get_opt_string("update_name"),
+                id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
+                name: row.get_by_name_as(schema, "name").unwrap_or_default(),
+                version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                wasm_path: row.get_by_name_as(schema, "wasm_path").unwrap_or_default(),
+                install_path: row.get_by_name_as(schema, "install_path").unwrap_or_default(),
+                config_path: row.get_by_name_as(schema, "config_path"),
+                db_id: row.get_by_name_as(schema, "db_id").unwrap_or_else(|| "default".to_string()),
+                status: row.get_by_name_as(schema, "status").unwrap_or_else(|| "installed".to_string()),
+                is_system: row.get_by_name_as(schema, "is_system").unwrap_or(false),
+                is_locked: row.get_by_name_as(schema, "is_locked").unwrap_or(false),
+                domain_code: row.get_by_name_as(schema, "domain_code"),
+                application_code: row.get_by_name_as(schema, "application_code"),
+                module_code: row.get_by_name_as(schema, "module_code"),
+                vendor_name: row.get_by_name_as(schema, "vendor_name"),
+                vendor_url: row.get_by_name_as(schema, "vendor_url"),
+                vendor_contact: row.get_by_name_as(schema, "vendor_contact"),
+                metadata: Self::parse_metadata(row, schema),
+                signature_algorithm: row.get_by_name_as(schema, "signature_algorithm"),
+                signer_key_id: row.get_by_name_as(schema, "signer_key_id"),
+                activated_at: row.get_by_name_as(schema, "activated_at"),
+                create_time: get_datetime_default("create_time", Utc::now),
+                update_time: get_datetime_default("update_time", Utc::now),
+                archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
+                create_by: row.get_by_name_as(schema, "create_by"),
+                create_name: row.get_by_name_as(schema, "create_name"),
+                update_by: row.get_by_name_as(schema, "update_by"),
+                update_name: row.get_by_name_as(schema, "update_name"),
             };
 
             records.push(record);
         }
 
         Ok(records)
+    }
+
+    fn parse_metadata(row: &Row, schema: &Schema) -> Option<serde_json::Value> {
+        row.get_by_name(schema, "metadata").and_then(|v| {
+            match v {
+                DataValue::Json(s) => serde_json::from_str(s).ok(),
+                DataValue::String(s) => serde_json::from_str(s).ok(),
+                _ => None,
+            }
+        })
     }
 
     /// 解析计数结果

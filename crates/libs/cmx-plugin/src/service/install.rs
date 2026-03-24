@@ -36,8 +36,8 @@ pub struct InstallRequest {
     pub source: PluginSource,
     /// 目标数据库ID（可选）
     pub db_id: Option<String>,
-    /// 是否强制安装（覆盖已存在的插件）
-    pub force: bool,
+    // /// 是否强制安装（覆盖已存在的插件）
+    // pub force: bool,
     /// 是否自动激活
     pub auto_activate: bool,
     /// 版本约束（仅对注册表来源有效，如 "^1.0.0", ">=2.0.0"）
@@ -171,12 +171,15 @@ impl InstallService {
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
 
-        // 步骤4: 检查已安装状态
-        if !request.force {
-            if self.is_plugin_installed(&plugin_id).await? {
-                return Err(PluginError::plugin_already_exists(&plugin_id));
-            }
+        // 步骤4: 检查当前节点此插件版本是否已安装
+        let existing_deployment = self.deps.deployment_repository
+            .find_deployment(&plugin_id, &self.deps.node_id, &version)
+            .await?;
+
+        if existing_deployment.is_some() {
+            return Err(PluginError::plugin_already_exists(&plugin_id));
         }
+
 
         // 步骤5: 检查依赖
         let registry = self.deps.registry.clone();
@@ -225,7 +228,7 @@ impl InstallService {
 
         // 步骤6: 创建安装目录 (plugin_id/version/)
         let install_path = self.deps.plugin_root.join(&plugin_id).join(&version);
-        if install_path.exists() && request.force {
+        if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
         self.deps.storage.create_dir(&install_path)?;
@@ -348,7 +351,7 @@ impl InstallService {
 
         // 步骤10.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
         let existing_deployment = self.deps.deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id)
+            .find_deployment(&plugin_id, &self.deps.node_id, &version)
             .await?;
 
         let deployment_record = crate::infrastructure::database::deployment::DeploymentRecord {
@@ -441,10 +444,7 @@ impl InstallService {
         })
     }
 
-    /// 检查插件是否已安装
-    async fn is_plugin_installed(&self, plugin_id: &str) -> PluginResult<bool> {
-        self.deps.repository.plugin_exists(plugin_id).await
-    }
+
 
     /// 创建插件数据库表
     ///

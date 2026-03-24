@@ -146,13 +146,13 @@ impl<'de> Deserialize<'de> for DataValue {
                 if let Ok(uuid) = Uuid::parse_str(&s) {
                     return Ok(DataValue::Uuid(uuid));
                 }
-                // 尝试解析为 base64 编码的二进制
-                if let Ok(bytes) = BASE64.decode(&s) {
-                    // 验证是否为有效的二进制数据（非空且解码成功）
-                    if !bytes.is_empty() {
-                        return Ok(DataValue::Binary(bytes));
-                    }
-                }
+                // 尝试解析为 base64 编码的二进制 fixme 需要修改 字符0323在这里会被变为二进制，这样不正确
+                // if let Ok(bytes) = BASE64.decode(&s) {
+                //     // 验证是否为有效的二进制数据（非空且解码成功）
+                //     if !bytes.is_empty() {
+                //         return Ok(DataValue::Binary(bytes));
+                //     }
+                // }
                 // 尝试解析为 JSON（如果是以 { 或 [ 开头）
                 if s.starts_with('{') || s.starts_with('[') {
                     if serde_json::from_str::<JsonValue>(&s).is_ok() {
@@ -278,6 +278,156 @@ impl From<Vec<DataValue>> for DataValue {
     /// let value = DataValue::from(arr);
     /// ```
     fn from(v: Vec<DataValue>) -> Self { DataValue::Array(v) }
+}
+
+// ==========================================
+// DataValue 类型转换实现（用于 get_by_name_as 泛型方法）
+// ==========================================
+
+use std::convert::TryFrom;
+
+impl TryFrom<DataValue> for i64 {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Int(i) => Ok(i),
+            DataValue::String(s) => s.parse::<i64>().map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to i64", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for i32 {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Int(i) => Ok(i as i32),
+            DataValue::String(s) => s.parse::<i32>().map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to i32", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for f64 {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Float(f) => Ok(f),
+            DataValue::Int(i) => Ok(i as f64),
+            DataValue::String(s) => s.parse::<f64>().map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to f64", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for bool {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Bool(b) => Ok(b),
+            DataValue::String(s) => s.parse::<bool>().map_err(|e| e.to_string()),
+            DataValue::Int(i) => Ok(i != 0),
+            _ => Err(format!("cannot convert {:?} to bool", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for String {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::String(s) => Ok(s),
+            DataValue::Int(i) => Ok(i.to_string()),
+            DataValue::Float(f) => Ok(f.to_string()),
+            DataValue::Bool(b) => Ok(b.to_string()),
+            DataValue::DateTime(dt) => Ok(dt.to_rfc3339()),
+            DataValue::Date(d) => Ok(d.to_string()),
+            DataValue::Uuid(u) => Ok(u.to_string()),
+            DataValue::Json(s) => Ok(s),
+            DataValue::Null => Ok(String::new()),
+            _ => Err(format!("cannot convert {:?} to String", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for Decimal {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Decimal(d) => Ok(d),
+            DataValue::String(s) => s.parse::<Decimal>().map_err(|e| e.to_string()),
+            DataValue::Int(i) => Ok(Decimal::from(i)),
+            DataValue::Float(f) => Decimal::try_from(f).map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to Decimal", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for DateTime<Utc> {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::DateTime(dt) => Ok(dt),
+            DataValue::String(s) => DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to DateTime<Utc>", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for NaiveDate {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Date(d) => Ok(d),
+            DataValue::String(s) => NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+                .map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to NaiveDate", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for Uuid {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Uuid(u) => Ok(u),
+            DataValue::String(s) => Uuid::parse_str(&s).map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to Uuid", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for Vec<u8> {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Binary(b) => Ok(b),
+            DataValue::String(s) => BASE64.decode(&s).map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to Vec<u8>", v)),
+        }
+    }
+}
+
+impl TryFrom<DataValue> for Vec<DataValue> {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Array(arr) => Ok(arr),
+            _ => Err(format!("cannot convert {:?} to Vec<DataValue>", v)),
+        }
+    }
+}
+impl TryFrom<DataValue> for serde_json::Value {
+    type Error = String;
+    fn try_from(v: DataValue) -> Result<Self, Self::Error> {
+        match v {
+            DataValue::Json(json_str) => serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string()),
+            DataValue::String(json_str) => serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string()),
+            _ => Err(format!("cannot convert {:?} to serde_json::Value", v)),
+        }
+    }
 }
 
 // ==========================================

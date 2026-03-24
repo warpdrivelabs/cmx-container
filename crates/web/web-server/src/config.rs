@@ -181,7 +181,6 @@ pub async fn init_plugins() {
             path: std::path::PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
         },
         db_id: None,
-        force: true,
         auto_activate: false,
         version_constraint: None,
     };

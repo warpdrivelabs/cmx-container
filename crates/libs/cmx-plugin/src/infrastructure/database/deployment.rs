@@ -177,12 +177,12 @@ impl DeploymentRepository {
     }
 
     /// 查询节点上的插件部署
-    pub async fn find_deployment(&self, plugin_id: &str, node_id: &str) -> PluginResult<Option<DeploymentRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND node_id = $2";
-        let params = serde_json::json!([plugin_id, node_id]);
+    pub async fn find_deployment(&self, plugin_id: &str, node_id: &str, version: &str) -> PluginResult<Option<DeploymentRecord>> {
+        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND node_id = $2 AND version = $3 and archived =0";
+        let params = serde_json::json!([plugin_id, node_id, version]);
 
         let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "deployment_query")
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "cmx_plugin_deployments")
             .await
             .map_err(|e| PluginError::Database(format!("查询部署记录失败: {}", e)))?;
 
@@ -191,7 +191,7 @@ impl DeploymentRepository {
 
     /// 查询插件在所有节点的部署情况
     pub async fn list_plugin_deployments(&self, plugin_id: &str) -> PluginResult<Vec<DeploymentRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 ORDER BY deployed_at DESC";
+        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 and archived =0 ORDER BY deployed_at DESC";
         let params = serde_json::json!([plugin_id]);
 
         let result = self.db_manager
@@ -204,7 +204,7 @@ impl DeploymentRepository {
 
     /// 查询节点的所有部署
     pub async fn list_node_deployments(&self, node_id: &str) -> PluginResult<Vec<DeploymentRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_deployments WHERE node_id = $1 ORDER BY deployed_at DESC";
+        let sql = "SELECT * FROM cmx_plugin_deployments WHERE node_id = $1 and archived =0 ORDER BY deployed_at DESC";
         let params = serde_json::json!([node_id]);
 
         let result = self.db_manager
