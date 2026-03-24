@@ -308,9 +308,11 @@ impl PluginManager {
         let service_registry = Arc::new(ServiceRegistry::new());
 
 
-        let mut audit_logger_config = AuditLoggerConfig::default();
-        audit_logger_config.db_manager = Some(db_manager.clone());
-        audit_logger_config.persist =true;
+        let audit_logger_config = AuditLoggerConfig::new(
+            db_manager.clone(),
+            settings.default_database_id.clone(),
+            settings.node_id.clone(),
+        );
         let audit_logger = Arc::new(AuditLogger::new(audit_logger_config));
 
         let registry = Arc::new(RwLock::new(PluginRegistry::new()));

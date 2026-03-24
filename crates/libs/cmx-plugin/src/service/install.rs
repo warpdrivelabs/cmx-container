@@ -135,8 +135,6 @@ impl InstallService {
     /// 13. 清理临时目录
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
         let start_time = std::time::Instant::now();
-        //节点id
-        let node_id = ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string());
 
         // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self
@@ -408,6 +406,7 @@ impl InstallService {
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
         )
+            .with_node_id(self.deps.node_id.clone())
         .with_details(serde_json::json!({
             "version": version,
             "install_path": install_path.to_string_lossy().to_string(),

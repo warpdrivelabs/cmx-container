@@ -231,6 +231,7 @@ CREATE INDEX idx_deploy_status ON cmx_plugin_deployments(status);
 CREATE TABLE cmx_plugin_audit_log (
     id                  VARCHAR(64) NOT NULL,
     plugin_id           VARCHAR(64),
+    node_id             VARCHAR(64),
     version_id          VARCHAR(64),
     deployment_id       VARCHAR(64),
     operation_type      VARCHAR(50) NOT NULL,
@@ -260,6 +261,7 @@ CREATE TABLE cmx_plugin_audit_log (
 
 COMMENT ON COLUMN cmx_plugin_audit_log.id IS '主键ID';
 COMMENT ON COLUMN cmx_plugin_audit_log.plugin_id IS '关联插件ID';
+COMMENT ON COLUMN cmx_plugin_audit_log.node_id IS '节点ID';
 COMMENT ON COLUMN cmx_plugin_audit_log.version_id IS '关联版本ID';
 COMMENT ON COLUMN cmx_plugin_audit_log.deployment_id IS '关联部署ID';
 COMMENT ON COLUMN cmx_plugin_audit_log.operation_type IS '操作类型';
@@ -280,6 +282,7 @@ COMMENT ON COLUMN cmx_plugin_audit_log.completed_at IS '操作完成时间';
 COMMENT ON COLUMN cmx_plugin_audit_log.duration_ms IS '操作耗时 (毫秒)';
 
 CREATE INDEX idx_audit_plugin ON cmx_plugin_audit_log(plugin_id);
+CREATE INDEX idx_audit_node ON cmx_plugin_audit_log(node_id);
 CREATE INDEX idx_audit_operation ON cmx_plugin_audit_log(operation_type);
 CREATE INDEX idx_audit_operator ON cmx_plugin_audit_log(operator);
 CREATE INDEX idx_audit_timestamp ON cmx_plugin_audit_log(started_at);

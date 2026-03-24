@@ -68,6 +68,8 @@ pub struct AuditRecord {
     pub id: String,
     /// 关联插件ID
     pub plugin_id: String,
+    /// 节点ID
+    pub node_id: Option<String>,
     /// 关联版本ID
     pub version_id: Option<String>,
     /// 关联部署ID
@@ -116,6 +118,7 @@ impl AuditRecord {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id,
+            node_id: None,
             version_id: None,
             deployment_id: None,
             operation,
@@ -176,6 +179,12 @@ impl AuditRecord {
     /// 设置部署ID
     pub fn with_deployment_id(mut self, deployment_id: String) -> Self {
         self.deployment_id = Some(deployment_id);
+        self
+    }
+
+    /// 设置节点ID
+    pub fn with_node_id(mut self, node_id: String) -> Self {
+        self.node_id = Some(node_id);
         self
     }
     

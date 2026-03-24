@@ -151,11 +151,14 @@ pub async fn init_plugins() {
     //     .expect("插件管理器初始化失败");
 
     // 方式2：使用自定义配置初始化  todo 自定义配置需要完善
+
+    let default_db_id = get_default_db_manager().get_default_db_id().await;
     let settings = PluginManagerSettings {
         plugin_root: PathBuf::new().join("plugins").join("root"),
         backup_root: PathBuf::new().join("plugins").join("backup"),
         temp_root: PathBuf::new().join("plugins").join("temp"),
-        default_database_id: "primary".to_string(),
+        default_database_id: default_db_id,
+        node_id: ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string()),
         ..Default::default()
     };
     GlobalPluginManager::initialize(settings)
