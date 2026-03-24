@@ -191,7 +191,7 @@ impl UpgradeService {
 
         // 步骤7: 创建新版本目录 (plugin_id/new_version/)
         let install_path = self.deps.plugin_root.join(&plugin_id).join(&new_version);
-        if install_path.exists() && request.force {
+        if install_path.exists()  {
             self.deps.storage.remove_dir(&install_path)?;
         }
         self.deps.storage.create_dir(&install_path)?;

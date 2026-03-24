@@ -256,7 +256,6 @@ impl InstallService {
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
             //所以ddl语句不要在事务中执行
-            // self.create_plugin_tables(&plugin_def, &db_id, Some(txn_guard.txn_id().to_string()), &install_path)
             self.create_plugin_tables(&plugin_def, &db_id, None, &install_path)
                 .await?;
         }
