@@ -20,7 +20,7 @@
 //! ```
 
 use std::collections::HashMap;
-
+use tracing::log::info;
 use cmx_core::model::cell::{ColumnDefine, IndexDefine, TableDefine};
 use crate::MetadataError;
 use super::DdlDialect;
@@ -270,7 +270,8 @@ impl DdlDiff {
                     stmts.extend(dialect.generate_create_indexes(table)?);
                 }
                 TableChange::DropTable(name) => {
-                    stmts.push(format!("DROP TABLE IF EXISTS \"{}\" CASCADE;", name));
+                    // stmts.push(format!("DROP TABLE IF EXISTS \"{}\" CASCADE;", name));
+                    info!("表元数据更新需要删除的表: {}，实际未执行", name);
                 }
                 TableChange::AlterTable {
                     table_name,
@@ -289,11 +290,12 @@ impl DdlDiff {
                                 )?);
                             }
                             ColumnChange::DropColumn(name) => {
-                                stmts.push(dialect.generate_drop_column(
-                                    table_name,
-                                    schema.as_deref(),
-                                    name,
-                                )?);
+                                // stmts.push(dialect.generate_drop_column(
+                                //     table_name,
+                                //     schema.as_deref(),
+                                //     name,
+                                // )?);
+                                info!("表元数据更新需要删除的列: {}，实际未执行", name);
                             }
                             ColumnChange::AlterColumn { old, new } => {
                                 stmts.extend(dialect.generate_alter_column(
