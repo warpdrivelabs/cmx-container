@@ -89,27 +89,23 @@ impl AuditLogger {
         query
             .into_table("cmx_plugin_audit_log")
             .columns(vec![
-                "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status", "operator", "operator_ip",
-                "operator_session", "request_id", "correlation_id", "details",
+                "id", "plugin_id", "node_id", "version", "deployment_id",
+                "operation_type", "operation_status",  "request_id",  "details",
                 "old_value", "new_value", "error_code", "error_message",
                 "stack_trace", "started_at", "completed_at", "duration_ms",
                 "create_time", "update_time", "archived",
-                "create_by", "create_name", "update_by", "update_name"
+                // "create_by", "create_name", "update_by", "update_name"
             ])
             .values(vec![
                 record.id.clone().into(),
                 record.plugin_id.clone().into(),
                 record.node_id.clone().into(),
-                record.version_id.clone().into(),
+                record.version.clone().into(),
                 record.deployment_id.clone().into(),
-                record.operation.to_string().into(),
-                record.result.to_string().into(),
-                record.operator.clone().into(),
-                record.operator_ip.clone().into(),
-                record.operator_session.clone().into(),
+                record.operation_type.to_string().into(),
+                record.operation_status.to_string().into(),
+
                 record.request_id.clone().into(),
-                record.correlation_id.clone().into(),
                 record.details.clone().into(),
                 record.old_value.clone().into(),
                 record.new_value.clone().into(),
@@ -121,11 +117,7 @@ impl AuditLogger {
                 record.duration_ms.into(),
                 now.into(),
                 now.into(),
-                0.into(),
-                record.operator.clone().into(),
-                record.operator.clone().into(),
-                record.operator.clone().into(),
-                record.operator.clone().into(),
+                0.into()
             ])
             .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
 
@@ -233,8 +225,7 @@ impl AuditLogger {
             .from("cmx_plugin_audit_log")
             .columns(vec![
                 "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status", "operator", "operator_ip",
-                "operator_session", "request_id", "correlation_id", "details",
+                "operation_type", "operation_status",  "request_id", "details",
                 "old_value", "new_value", "error_code", "error_message",
                 "stack_trace", "started_at", "completed_at", "duration_ms"
             ])
@@ -376,15 +367,12 @@ impl AuditLogger {
                 id: get_string("id").unwrap_or_default(),
                 plugin_id: get_string("plugin_id").unwrap_or_default(),
                 node_id: get_opt_string("node_id"),
-                version_id: get_opt_string("version_id"),
+                version: get_opt_string("version"),
                 deployment_id: get_opt_string("deployment_id"),
-                operation,
-                result,
-                operator: get_opt_string("operator"),
-                operator_ip: get_opt_string("operator_ip"),
-                operator_session: get_opt_string("operator_session"),
+                operation_type: operation,
+                operation_status: result,
+
                 request_id: get_opt_string("request_id"),
-                correlation_id: get_opt_string("correlation_id"),
                 details: get_opt_json("details"),
                 old_value: get_opt_string("old_value"),
                 new_value: get_opt_string("new_value"),

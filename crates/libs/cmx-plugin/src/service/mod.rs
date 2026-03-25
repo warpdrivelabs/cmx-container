@@ -6,3 +6,4 @@ pub mod downgrade;
 pub mod rollback;
 pub mod sync;
 pub mod utils;
+pub mod record_builder;

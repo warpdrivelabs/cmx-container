@@ -211,6 +211,72 @@ impl VersionHistoryRepository {
         Ok(())
     }
 
+    /// 设置当前版本（原子操作）
+    ///
+    /// 1. 将所有版本标记为非当前
+    /// 2. 插入或更新指定版本为当前
+    ///
+    /// # 参数
+    /// - `plugin_id`: 插件ID
+    /// - `version`: 版本号
+    /// - `install_path`: 安装路径
+    /// - `wasm_path`: WASM文件路径
+    /// - `txn_id`: 事务ID
+    pub async fn set_current_version(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        install_path: &str,
+        wasm_path: &str,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
+        // 1. 标记所有版本为非当前
+        self.mark_all_not_current(plugin_id, txn_id).await?;
+
+        // 2. 检查版本记录是否存在
+        let existing = self.find_version(plugin_id, version).await?;
+
+        if let Some(ref record) = existing {
+            // 3a. 更新现有记录为当前版本
+            let update_fields = VersionHistoryUpdateFields {
+                plugin_id: plugin_id.to_string(),
+                version: version.to_string(),
+                install_path: Some(install_path.to_string()),
+                wasm_path: Some(wasm_path.to_string()),
+                is_current: Some(true),
+                uninstalled_at: None,
+                update_time: Utc::now(),
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
+            self.update_version(&record.id, &update_fields, txn_id).await?;
+        } else {
+            // 3b. 插入新版本记录
+            let record = VersionHistoryRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                plugin_id: plugin_id.to_string(),
+                version: version.to_string(),
+                install_path: install_path.to_string(),
+                wasm_path: wasm_path.to_string(),
+                is_current: true,
+                installed_at: Utc::now(),
+                uninstalled_at: None,
+                create_time: Utc::now(),
+                update_time: Utc::now(),
+                archived: 0,
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
+            self.insert_version(&record, txn_id).await?;
+        }
+
+        Ok(())
+    }
+
     /// 解析版本历史记录
     fn parse_version_record(dataset: &DataSet) -> PluginResult<Vec<VersionHistoryRecord>> {
         let mut records = Vec::new();

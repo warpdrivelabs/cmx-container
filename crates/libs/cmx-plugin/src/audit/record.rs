@@ -70,24 +70,17 @@ pub struct AuditRecord {
     pub plugin_id: String,
     /// 节点ID
     pub node_id: Option<String>,
-    /// 关联版本ID
-    pub version_id: Option<String>,
+    /// 关联版本
+    pub version: Option<String>,
     /// 关联部署ID
     pub deployment_id: Option<String>,
     /// 操作类型
-    pub operation: OperationType,
-    /// 操作结果
-    pub result: OperationResult,
-    /// 操作者
-    pub operator: Option<String>,
-    /// 操作者IP
-    pub operator_ip: Option<String>,
-    /// 会话ID
-    pub operator_session: Option<String>,
+    pub operation_type: OperationType,
+    /// 操作状态
+    pub operation_status: OperationResult,
+
     /// 请求ID（用于链路追踪）
     pub request_id: Option<String>,
-    /// 关联ID
-    pub correlation_id: Option<String>,
     /// 操作详情（JSON）
     pub details: Option<serde_json::Value>,
     /// 旧值
@@ -119,15 +112,11 @@ impl AuditRecord {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id,
             node_id: None,
-            version_id: None,
+            version: None,
             deployment_id: None,
-            operation,
-            result,
-            operator: None,
-            operator_ip: None,
-            operator_session: None,
+            operation_type: operation,
+            operation_status: result,
             request_id: None,
-            correlation_id: None,
             details: None,
             old_value: None,
             new_value: None,
@@ -139,43 +128,31 @@ impl AuditRecord {
             duration_ms: None,
         }
     }
-    
+
     /// 创建成功记录
     pub fn success(plugin_id: String, operation: OperationType) -> Self {
         Self::new(plugin_id, operation, OperationResult::Success)
     }
-    
+
     /// 创建失败记录
     pub fn failure(plugin_id: String, operation: OperationType, error: String) -> Self {
         let mut record = Self::new(plugin_id, operation, OperationResult::Failure);
         record.error_message = Some(error);
         record
     }
-    
-    /// 设置操作者
-    pub fn with_operator(mut self, operator: String) -> Self {
-        self.operator = Some(operator);
-        self
-    }
-    
-    /// 设置来源IP
-    pub fn with_source_ip(mut self, source_ip: String) -> Self {
-        self.operator_ip = Some(source_ip);
-        self
-    }
-    
+
     /// 设置详细信息
     pub fn with_details(mut self, details: serde_json::Value) -> Self {
         self.details = Some(details);
         self
     }
-    
-    /// 设置版本ID
-    pub fn with_version_id(mut self, version_id: String) -> Self {
-        self.version_id = Some(version_id);
+
+    /// 设置版本
+    pub fn with_version(mut self, version: String) -> Self {
+        self.version = Some(version);
         self
     }
-    
+
     /// 设置部署ID
     pub fn with_deployment_id(mut self, deployment_id: String) -> Self {
         self.deployment_id = Some(deployment_id);
@@ -187,49 +164,38 @@ impl AuditRecord {
         self.node_id = Some(node_id);
         self
     }
-    
+
     /// 设置请求ID
     pub fn with_request_id(mut self, request_id: String) -> Self {
         self.request_id = Some(request_id);
         self
     }
-    
-    /// 设置关联ID
-    pub fn with_correlation_id(mut self, correlation_id: String) -> Self {
-        self.correlation_id = Some(correlation_id);
-        self
-    }
-    
-    /// 设置会话ID
-    pub fn with_session_id(mut self, session_id: String) -> Self {
-        self.operator_session = Some(session_id);
-        self
-    }
-    
+
+
     /// 设置旧值
     pub fn with_old_value(mut self, old_value: String) -> Self {
         self.old_value = Some(old_value);
         self
     }
-    
+
     /// 设置新值
     pub fn with_new_value(mut self, new_value: String) -> Self {
         self.new_value = Some(new_value);
         self
     }
-    
+
     /// 设置错误代码
     pub fn with_error_code(mut self, error_code: String) -> Self {
         self.error_code = Some(error_code);
         self
     }
-    
+
     /// 设置堆栈跟踪
     pub fn with_stack_trace(mut self, stack_trace: String) -> Self {
         self.stack_trace = Some(stack_trace);
         self
     }
-    
+
     /// 设置操作完成时间和耗时
     pub fn with_completed(mut self, duration_ms: i64) -> Self {
         self.completed_at = Some(Utc::now());

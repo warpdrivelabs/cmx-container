@@ -259,7 +259,7 @@ impl PluginRepository {
         if fields.version != String::default() {
             query.value("version", fields.version.clone());
         }
-        if fields.version != String::default() {
+        if fields.name != String::default() {
             query.value("name", fields.name.clone());
         }
         if fields.wasm_path != String::default() {
@@ -337,6 +337,134 @@ impl PluginRepository {
             .map_err(|e| PluginError::Database(format!("删除插件记录失败: {}", e)))?;
 
         Ok(())
+    }
+
+    /// 插入或更新插件记录 (upsert)
+    ///
+    /// 使用 ON CONFLICT (plugin_id) DO UPDATE 实现 upsert 语义
+    ///
+    /// # 参数
+    /// - `record`: 插件记录
+    /// - `txn_id`: 事务ID
+    ///
+    /// # 返回
+    /// - `Ok(true)`: 新插入的记录
+    /// - `Ok(false)`: 更新的记录
+    pub async fn upsert_plugin(
+        &self,
+        record: &PluginDbRecord,
+        txn_id: Option<&str>,
+    ) -> PluginResult<bool> {
+        use sea_query::{Alias, PostgresQueryBuilder, Query};
+        use sea_query_binder::SqlxBinder;
+
+        // 使用 sea_query 构建带参数占位符的 SQL
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("cmx_plugin"))
+            .columns(vec![
+                Alias::new("id"),
+                Alias::new("plugin_id"),
+                Alias::new("name"),
+                Alias::new("version"),
+                Alias::new("wasm_path"),
+                Alias::new("install_path"),
+                Alias::new("db_id"),
+                Alias::new("status"),
+                Alias::new("is_system"),
+                Alias::new("is_locked"),
+                Alias::new("domain_code"),
+                Alias::new("application_code"),
+                Alias::new("module_code"),
+                Alias::new("vendor_name"),
+                Alias::new("vendor_url"),
+                Alias::new("vendor_contact"),
+                Alias::new("metadata"),
+                Alias::new("signature_algorithm"),
+                Alias::new("signer_key_id"),
+                Alias::new("create_time"),
+                Alias::new("update_time"),
+                Alias::new("archived"),
+                Alias::new("create_by"),
+                Alias::new("create_name"),
+                Alias::new("update_by"),
+                Alias::new("update_name"),
+            ])
+            .values_panic(vec![
+                record.id.clone().into(),
+                record.plugin_id.clone().into(),
+                record.name.clone().into(),
+                record.version.clone().into(),
+                record.wasm_path.clone().into(),
+                record.install_path.clone().into(),
+                record.db_id.clone().into(),
+                record.status.clone().into(),
+                record.is_system.into(),
+                record.is_locked.into(),
+                record.domain_code.clone().into(),
+                record.application_code.clone().into(),
+                record.module_code.clone().into(),
+                record.vendor_name.clone().into(),
+                record.vendor_url.clone().into(),
+                record.vendor_contact.clone().into(),
+                record.metadata.clone().into(),
+                record.signature_algorithm.clone().into(),
+                record.signer_key_id.clone().into(),
+                record.create_time.into(),
+                record.update_time.into(),
+                record.archived.into(),
+                record.create_by.clone().into(),
+                record.create_name.clone().into(),
+                record.update_by.clone().into(),
+                record.update_name.clone().into(),
+            ]);
+
+        // 构建简单的 ON CONFLICT 子句
+        let on_conflict = sea_query::OnConflict::column(Alias::new("plugin_id"))
+            .update_columns(vec![
+                Alias::new("name"),
+                Alias::new("version"),
+                Alias::new("wasm_path"),
+                Alias::new("install_path"),
+                Alias::new("db_id"),
+                Alias::new("status"),
+                Alias::new("is_system"),
+                Alias::new("is_locked"),
+                Alias::new("domain_code"),
+                Alias::new("application_code"),
+                Alias::new("module_code"),
+                Alias::new("vendor_name"),
+                Alias::new("vendor_url"),
+                Alias::new("vendor_contact"),
+                Alias::new("signature_algorithm"),
+                Alias::new("signer_key_id"),
+                Alias::new("update_time"),
+                Alias::new("update_by"),
+                Alias::new("update_name"),
+            ])
+            .to_owned();
+
+        query.on_conflict(on_conflict);
+
+        // 手动添加 RETURNING 子句
+        let (mut sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        sql.push_str(" RETURNING (xmax = 0) AS is_inserted");
+
+        let result = self
+            .db_manager
+            .query_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values, "upsert_plugin")
+            .await
+            .map_err(|e| PluginError::Database(format!("upsert插件记录失败: {}", e)))?;
+
+        // 解析返回值判断是插入还是更新
+        if let Some(row) = result.iter().next() {
+            if let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0) {
+                return Ok(*is_inserted);
+            }
+        }
+
+        // 默认返回 false（更新）
+        Ok(false)
     }
 
     /// 查询插件记录

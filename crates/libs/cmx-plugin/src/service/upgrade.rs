@@ -224,141 +224,59 @@ impl UpgradeService {
         )
         .await?;
 
-        // 步骤10: 插入 cmx_plugin_versions 版本历史
-        let db_record = crate::infrastructure::database::repository::PluginDbRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            plugin_id: plugin_id.clone(),
-            name: plugin_def.name.clone(),
-            version: new_version.clone(),
-            wasm_path: install_path
-                .join(&plugin_def.main_file)
-                .to_string_lossy()
-                .to_string(),
-            install_path: install_path.to_string_lossy().to_string(),
-            db_id: db_id.clone(),
-            status: "installed".to_string(),
-            is_system: false,
-            is_locked: false,
-            domain_code: plugin_def.domain_code.clone(),
-            application_code: plugin_def.application_code.clone(),
-            module_code: plugin_def.module_code.clone(),
-            vendor_name: plugin_def.vendor_name.clone(),
-            vendor_url: plugin_def.vendor_url.clone(),
-            vendor_contact: plugin_def.vendor_contact.clone(),
-            metadata: None,
-            signature_algorithm: None,
-            signer_key_id: None,
-            create_time: Utc::now(),
-            update_time: Utc::now(),
-            archived: 0,
-            create_by: None,
-            create_name: None,
-            update_by: None,
-            update_name: None,
-        };
+        // 步骤10: 保存数据库记录
+        // 使用辅助函数构建记录
+        let db_record = super::record_builder::build_plugin_db_record(
+            &plugin_def,
+            &new_version,
+            &install_path,
+            &db_id,
+        );
 
-        // 查询数据库是否已经有基线插件了
-        let baseline_version = self
+        // 使用 upsert 保存插件记录
+        let is_new = self
             .deps
             .repository
-            .get_baseline_version(&plugin_id)
+            .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
             .await?;
 
-        let baseline_exist = baseline_version.is_some();
-
-        let version_record =
-            crate::infrastructure::database::version_history::VersionHistoryRecord {
-                id: uuid::Uuid::new_v4().to_string(),
-                plugin_id: plugin_id.clone(),
-                version: new_version.clone(),
-                install_path: install_path.to_string_lossy().to_string(),
-                wasm_path: install_path
-                    .join(&plugin_def.main_file)
-                    .to_string_lossy()
-                    .to_string(),
-                is_current: true,
-                installed_at: Utc::now(),
-                create_time: Utc::now(),
-                update_time: Utc::now(),
-                uninstalled_at: None,
-                archived: 0,
-                create_by: None,
-                create_name: None,
-                update_by: None,
-                update_name: None,
-            };
-
-        //基线插件不存在
-        if !baseline_exist {
-            //插入数据
-            self.deps
-                .repository
-                .insert_plugin(&db_record, Some(txn_guard.txn_id()))
-                .await?;
-            //插入版本历史
-            self.deps
-                .version_history_repository
-                .insert_version(&version_record, None)
-                .await?;
-        } else {
-            //基线版本存在，
-            //// 将之前的基线版本标记为非当前
-            self.deps
-                .version_history_repository
-                .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
-                .await?;
-
-            let update_fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                plugin_id: plugin_id.clone(),
-                name: plugin_def.name.clone(),
-                version: new_version.clone(),
-                wasm_path: install_path
-                    .join(&plugin_def.main_file)
-                    .to_string_lossy()
-                    .to_string(),
-                install_path: install_path.to_string_lossy().to_string(),
-                db_id: db_id.clone(),
-                status: "installed".to_string(),
-                is_system: false,
-                is_locked: false,
-                domain_code: plugin_def.domain_code.clone(),
-                application_code: plugin_def.application_code.clone(),
-                module_code: plugin_def.module_code.clone(),
-                vendor_name: plugin_def.vendor_name.clone(),
-                vendor_url: plugin_def.vendor_url.clone(),
-                vendor_contact: plugin_def.vendor_contact.clone(),
-                metadata: None,
-                signature_algorithm: None,
-                signer_key_id: None,
-                update_time: Utc::now(),
-                archived: 0,
-                create_by: None,
-                create_name: None,
-                update_by: None,
-                update_name: None,
-            };
-            self.deps
-                .repository
-                .update_plugin(&plugin_id, &update_fields, Some(txn_guard.txn_id()))
-                .await?;
-
-            //插入版本历史
-            self.deps
-                .version_history_repository
-                .insert_version(&version_record, None)
-                .await?;
-        }
+        // 设置当前版本（原子操作：标记旧版本 + 插入/更新新版本）
+        let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
+        self.deps
+            .version_history_repository
+            .set_current_version(
+                &plugin_id,
+                &new_version,
+                &install_path.to_string_lossy(),
+                &wasm_path,
+                Some(txn_guard.txn_id()),
+            )
+            .await?;
 
         // 步骤12: 更新 cmx_plugin_deployments 节点部署记录
         if let Some(deployment) = existing_deployment {
             let update_fields =
                 crate::infrastructure::database::deployment::DeploymentUpdateFields {
+                    plugin_id: plugin_id.clone(),
+                    node_id: deployment.node_id.clone(),
                     version: new_version.clone(),
                     ..Default::default()
                 };
             self.deps
                 .deployment_repository
-                .update_deployment(&deployment.id, &update_fields, None)
+                .update_deployment(&deployment.id, &update_fields, Some(txn_guard.txn_id()))
+                .await?;
+        } else if is_new {
+            // 如果是新插件，插入部署记录
+            let deployment_record = super::record_builder::build_deployment_record(
+                &plugin_id,
+                &self.deps.node_id,
+                self.deps.node_type.as_deref(),
+                &new_version,
+            );
+            self.deps
+                .deployment_repository
+                .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
                 .await?;
         }
 

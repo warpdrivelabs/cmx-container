@@ -280,37 +280,13 @@ impl InstallService {
         }
 
         // 步骤9: 保存数据库记录
-        let db_record = crate::infrastructure::database::repository::PluginDbRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            plugin_id: plugin_id.clone(),
-            name: plugin_def.name.clone(),
-            version: version.clone(),
-            wasm_path: install_path
-                .join(&plugin_def.main_file)
-                .to_string_lossy()
-                .to_string(),
-            install_path: install_path.to_string_lossy().to_string(),
-            db_id: db_id.clone(),
-            status: "installed".to_string(),
-            is_system: false,
-            is_locked: false,
-            domain_code: plugin_def.domain_code.clone(),
-            application_code: plugin_def.application_code.clone(),
-            module_code: plugin_def.module_code.clone(),
-            vendor_name: plugin_def.vendor_name.clone(),
-            vendor_url: plugin_def.vendor_url.clone(),
-            vendor_contact: plugin_def.vendor_contact.clone(),
-            metadata: None,
-            signature_algorithm: None,
-            signer_key_id: None,
-            create_time: Utc::now(),
-            update_time: Utc::now(),
-            archived: 0,
-            create_by: None,
-            create_name: None,
-            update_by: None,
-            update_name: None,
-        };
+        // 使用辅助函数构建记录
+        let db_record = super::record_builder::build_plugin_db_record(
+            &plugin_def,
+            &version,
+            &install_path,
+            &db_id,
+        );
 
         // 查询数据库是否已经有基线插件了
         let baseline_version = self
@@ -319,125 +295,77 @@ impl InstallService {
             .get_baseline_version(&plugin_id)
             .await?;
 
-        let plugin_exist  = baseline_version.is_some();
-        if plugin_exist {
-            let db_version = baseline_version.clone().unwrap();
-            //版本小不能用安装，应该使用降级
-            if version < db_version {
+        if let Some(ref db_version) = baseline_version {
+            // 版本小不能用安装，应该使用降级
+            if version < *db_version {
                 return Err(PluginError::Install(format!(
-                    "要安装的{}插件版本{}小于数据库中的版本{}，应该使用降级方式，不能采用安装方式",
-                    plugin_id, version, db_version
+                    "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
+                    plugin_id, db_version, version
+                )));
+            }
+            // 版本相同，无需重复安装
+            if version == *db_version {
+                return Err(PluginError::Install(format!(
+                    "插件 {} 版本 {} 已安装，无需重复安装",
+                    plugin_id, version
                 )));
             }
         }
 
-        let version_record =
-            crate::infrastructure::database::version_history::VersionHistoryRecord {
-                id: uuid::Uuid::new_v4().to_string(),
-                plugin_id: plugin_id.clone(),
-                version: version.clone(),
-                install_path: install_path.to_string_lossy().to_string(),
-                wasm_path: install_path
-                    .join(&plugin_def.main_file)
-                    .to_string_lossy()
-                    .to_string(),
-                is_current: true,
-                installed_at: Utc::now(),
-                create_time: Utc::now(),
-                update_time: Utc::now(),
-                uninstalled_at: None,
-                archived: 0,
-                create_by: None,
-                create_name: None,
-                update_by: None,
-                update_name: None,
-            };
+        // 使用 upsert 保存插件记录
+        let is_new = self
+            .deps
+            .repository
+            .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
+            .await?;
 
-        //基线插件不存在
-        if !plugin_exist {
+        // 设置当前版本（原子操作：标记旧版本 + 插入/更新新版本）
+        let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
+        self.deps
+            .version_history_repository
+            .set_current_version(
+                &plugin_id,
+                &version,
+                &install_path.to_string_lossy(),
+                &wasm_path,
+                Some(txn_guard.txn_id()),
+            )
+            .await?;
 
-            //插入数据
+        // 步骤9.2: 插入/更新 cmx_plugin_deployments 节点部署记录
+        if is_new {
+            let deployment_record = super::record_builder::build_deployment_record(
+                &plugin_id,
+                &self.deps.node_id,
+                self.deps.node_type.as_deref(),
+                &version,
+            );
             self.deps
-                .repository
-                .insert_plugin(&db_record, Some(txn_guard.txn_id()))
-                .await?;
-            //插入版本历史
-            self.deps
-                .version_history_repository
-                .insert_version(&version_record, None)
+                .deployment_repository
+                .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
                 .await?;
         } else {
-            //基线插件存在，且安装的版本不同
-            if version != baseline_version.clone().unwrap() {
-            //更新插件基线表的插件基本信息
-            let update_fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                plugin_id: plugin_id.clone(),
-                name: plugin_def.name.clone(),
-                version: version.clone(),
-                wasm_path: install_path
-                    .join(&plugin_def.main_file)
-                    .to_string_lossy()
-                    .to_string(),
-                install_path: install_path.to_string_lossy().to_string(),
-                db_id: db_id.clone(),
-                status: "installed".to_string(),
-                is_system: false,
-                is_locked: false,
-                domain_code: plugin_def.domain_code.clone(),
-                application_code: plugin_def.application_code.clone(),
-                module_code: plugin_def.module_code.clone(),
-                vendor_name: plugin_def.vendor_name.clone(),
-                vendor_url: plugin_def.vendor_url.clone(),
-                vendor_contact: plugin_def.vendor_contact.clone(),
-                metadata: None,
-                signature_algorithm: None,
-                signer_key_id: None,
-                update_time: Utc::now(),
-                archived: 0,
-                create_by: None,
-                create_name: None,
-                update_by: None,
-                update_name: None,
-            };
-            self.deps.repository.update_plugin(&plugin_id, &update_fields, Some(txn_guard.txn_id())).await?;
-
-            //插入版本历史
-                /// 将之前的插件版本历史都标记为非当前
+            // 更新现有部署记录
+            let update_fields =
+                crate::infrastructure::database::deployment::DeploymentUpdateFields {
+                    plugin_id: plugin_id.clone(),
+                    node_id: self.deps.node_id.clone(),
+                    version: version.clone(),
+                    ..Default::default()
+                };
+            // 查询现有部署记录的 ID
+            if let Some(existing_deployment) = self
+                .deps
+                .deployment_repository
+                .find_deployment(&plugin_id, &self.deps.node_id, &version)
+                .await?
+            {
                 self.deps
-                    .version_history_repository
-                    .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+                    .deployment_repository
+                    .update_deployment(&existing_deployment.id, &update_fields, Some(txn_guard.txn_id()))
                     .await?;
-
-            self.deps
-                .version_history_repository
-                .insert_version(&version_record, None)
-                .await?;
             }
         }
-
-        // 步骤9.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
-        let deployment_record = crate::infrastructure::database::deployment::DeploymentRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            plugin_id: plugin_id.clone(),
-            node_id: self.deps.node_id.clone(),
-            node_type: self.deps.node_type.clone(),
-            version: version.clone(),
-            status: "deployed".to_string(),
-            progress: 100,
-            error_message: None,
-            error_details: None,
-            archived: 0,
-            create_by: None,
-            create_name: None,
-            update_by: None,
-            update_name: None,
-            create_time: Utc::now(),
-            update_time: Utc::now(),
-        };
-        self.deps
-            .deployment_repository
-            .insert_deployment(&deployment_record, None)
-            .await?;
 
         // 步骤10: 注册插件
         let plugin_info = PluginInfo {
@@ -489,7 +417,7 @@ impl InstallService {
         .with_new_value(install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
 
-        let _ = self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await?;
 
         // 步骤13: 发布安装完成事件（临时目录由 TempDirCleanup 自动清理）
         self.deps

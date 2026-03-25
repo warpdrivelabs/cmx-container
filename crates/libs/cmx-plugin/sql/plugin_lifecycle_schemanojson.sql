@@ -581,3 +581,16 @@ COMMENT ON COLUMN cmx_meta_table_define_version.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_meta_table_define_version.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_meta_table_define_version.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_meta_table_define_version.update_name IS '更新人名称';
+
+-- =============================================
+-- 唯一约束（并发安全）
+-- =============================================
+
+-- cmx_plugin 表添加唯一约束
+ALTER TABLE cmx_plugin ADD CONSTRAINT uk_cmx_plugin_plugin_id UNIQUE (plugin_id);
+
+-- cmx_plugin_versions 表添加复合唯一约束
+ALTER TABLE cmx_plugin_versions ADD CONSTRAINT uk_cmx_plugin_versions_plugin_version UNIQUE (plugin_id, version);
+
+-- cmx_plugin_deployments 表添加复合唯一约束
+ALTER TABLE cmx_plugin_deployments ADD CONSTRAINT uk_cmx_plugin_deployments_plugin_node_version UNIQUE (plugin_id, node_id, version);
