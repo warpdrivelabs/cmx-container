@@ -28,7 +28,6 @@ use crate::infrastructure::database::table_metadata::{TableMetadataForCreate, Ta
 /// - `install_path`: 插件安装路径
 /// - `plugin_define`: 插件配置信息表配置文件列表
 /// - `txn_id`: 可选的事务ID
-/// - `table_metadata_repo`: 表元数据仓库（用于存储元数据）
 pub async fn create_plugin_tables(
     db_id: &str,
     plugin_id: &str,
