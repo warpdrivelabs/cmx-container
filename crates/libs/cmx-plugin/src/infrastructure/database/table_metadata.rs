@@ -25,6 +25,12 @@ pub struct TableMetadataVersionRecord {
     pub db_id: String,
     pub plugin_id: String,
     pub version: String,
+    /// 域编码
+    pub domain_code: String,
+    /// 应用编码
+    pub application_code: String,
+    /// 模块编码
+    pub module_code: String,
     pub metadata: serde_json::Value,
     pub archived: i32,
     pub create_time: DateTime<Utc>,
@@ -43,6 +49,12 @@ pub struct TableMetadataRecord {
     pub db_id: String,
     pub plugin_id: String,
     pub version: String,
+    /// 域编码
+    pub domain_code: String,
+    /// 应用编码
+    pub application_code: String,
+    /// 模块编码
+    pub module_code: String,
     pub metadata: serde_json::Value,
     pub archived: i32,
     pub create_time: DateTime<Utc>,
@@ -524,6 +536,9 @@ impl TableMetadataRepository {
                 db_id: row.get_by_name_as(schema, "db_id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
                 metadata: row
                     .get_by_name_as::<serde_json::Value>(schema, "metadata")
                     .unwrap_or(serde_json::Value::Null),
@@ -556,6 +571,9 @@ impl TableMetadataRepository {
                 db_id: row.get_by_name_as(schema, "db_id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
                 metadata: row
                     .get_by_name_as::<serde_json::Value>(schema, "metadata")
                     .unwrap_or(serde_json::Value::Null),

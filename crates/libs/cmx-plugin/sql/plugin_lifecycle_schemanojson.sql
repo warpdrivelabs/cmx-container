@@ -510,6 +510,9 @@ CREATE TABLE cmx_meta_table_define(
                                       db_id VARCHAR(100),
                                       plugin_id VARCHAR(64),
                                       version VARCHAR(50),
+                                      domain_code VARCHAR(100),
+                                      application_code VARCHAR(100),
+                                      module_code VARCHAR(100),
                                       archived int4 DEFAULT  0,
                                       create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
                                       update_time timestamp DEFAULT  CURRENT_TIMESTAMP,
@@ -526,6 +529,9 @@ COMMENT ON COLUMN cmx_meta_table_define.table_name IS '表名';
 COMMENT ON COLUMN cmx_meta_table_define.db_id IS '所属数据库id';
 COMMENT ON COLUMN cmx_meta_table_define.plugin_id IS '插件id';
 COMMENT ON COLUMN cmx_meta_table_define.version IS '当前使用的元数据插件版本';
+COMMENT ON COLUMN cmx_meta_table_define.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_meta_table_define.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_meta_table_define.module_code IS '模块编码';
 COMMENT ON COLUMN cmx_meta_table_define.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_meta_table_define.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_meta_table_define.update_time IS '更新时间';
@@ -544,6 +550,9 @@ CREATE TABLE cmx_meta_table_define_version(
                                               db_id VARCHAR(100),
                                               plugin_id VARCHAR(64),
                                               version VARCHAR(50),
+                                              domain_code VARCHAR(100),
+                                              application_code VARCHAR(100),
+                                              module_code VARCHAR(100),
                                               metadata jsonb,
                                               archived int4 DEFAULT  0,
                                               create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
@@ -561,6 +570,9 @@ COMMENT ON COLUMN cmx_meta_table_define_version.table_name IS '表名';
 COMMENT ON COLUMN cmx_meta_table_define_version.db_id IS '所属数据库id';
 COMMENT ON COLUMN cmx_meta_table_define_version.plugin_id IS '插件id';
 COMMENT ON COLUMN cmx_meta_table_define_version.version IS '插件版本';
+COMMENT ON COLUMN cmx_meta_table_define_version.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_meta_table_define_version.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_meta_table_define_version.module_code IS '模块编码';
 COMMENT ON COLUMN cmx_meta_table_define_version.metadata IS '元数据json';
 COMMENT ON COLUMN cmx_meta_table_define_version.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_meta_table_define_version.create_time IS '创建时间';

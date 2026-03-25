@@ -11,7 +11,7 @@ use cmx_core::model::cell::TableDefine;
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 use cmx_metadata::PgTableDefineExecutor;
 use uuid::Uuid;
-
+use cmx_core::model::meta::plugin::PluginDefinition;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::table_metadata::{
     TableMetadataRecord, TableMetadataRepository, TableMetadataVersionRecord,
@@ -26,7 +26,7 @@ use crate::infrastructure::database::table_metadata::{
 /// - `plugin_id`: 插件ID
 /// - `version`: 插件版本
 /// - `install_path`: 插件安装路径
-/// - `table_config_files`: 表配置文件列表
+/// - `plugin_define`: 插件配置信息表配置文件列表
 /// - `txn_id`: 可选的事务ID
 /// - `table_metadata_repo`: 表元数据仓库（用于存储元数据）
 pub async fn create_plugin_tables(
@@ -34,18 +34,18 @@ pub async fn create_plugin_tables(
     plugin_id: &str,
     version: &str,
     install_path: &Path,
-    table_config_files: &[String],
+    plugin_define:&PluginDefinition,
     txn_id: Option<String>,
     table_metadata_repo: Option<&TableMetadataRepository>,
 ) -> PluginResult<Vec<TableDefine>> {
-    if table_config_files.is_empty() {
+    if plugin_define.table_config_files.clone().is_empty() {
         return Ok(Vec::new());
     }
 
     let mut table_config_manager = TableDefinesConfigManager::new();
     let executor = PgTableDefineExecutor::new(db_id, txn_id.clone());
 
-    for table_config_file in table_config_files {
+    for table_config_file in plugin_define.table_config_files.clone() {
         let config_path = install_path.join(table_config_file);
         let table_df = load_table_defines_config_from_path(&config_path)
             .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
@@ -75,6 +75,9 @@ pub async fn create_plugin_tables(
             plugin_id,
             version,
             &table_defs,
+            plugin_define.domain_code.clone(),
+            plugin_define.application_code.clone(),
+            plugin_define.module_code.clone(),
             None,
         )
         .await
@@ -103,6 +106,9 @@ pub async fn save_plugin_table_metadata(
     plugin_id: &str,
     version: &str,
     table_defs: &[TableDefine],
+    domain_code: Option<String>,
+    application_code: Option<String>,
+    moudule_code: Option<String>,
     operator: Option<&str>,
 ) -> PluginResult<()> {
     for table_def in table_defs {
@@ -115,6 +121,9 @@ pub async fn save_plugin_table_metadata(
             db_id: db_id.to_string(),
             plugin_id: plugin_id.to_string(),
             version: version.to_string(),
+            domain_code: domain_code.clone().unwrap_or_default(),
+            application_code: application_code.clone().unwrap_or_default(),
+            module_code: moudule_code.clone().unwrap_or_default(),
             metadata: serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
             archived: 0,
             create_time: now,
@@ -135,6 +144,9 @@ pub async fn save_plugin_table_metadata(
             db_id: db_id.to_string(),
             plugin_id: plugin_id.to_string(),
             version: version.to_string(),
+            domain_code: domain_code.clone().unwrap_or_default(),
+            application_code: application_code.clone().unwrap_or_default(),
+            module_code: moudule_code.clone().unwrap_or_default(),
             metadata: serde_json::Value::Null,
             archived: 0,
             create_time: now,

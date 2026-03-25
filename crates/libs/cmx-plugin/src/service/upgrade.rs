@@ -221,7 +221,7 @@ impl UpgradeService {
             &plugin_id,
             &new_version,
             &install_path,
-            &plugin_def.table_config_files,
+            &plugin_def,
             None,
             Some(&self.deps.table_metadata_repository),
         )
