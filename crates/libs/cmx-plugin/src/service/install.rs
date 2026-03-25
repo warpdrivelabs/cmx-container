@@ -16,7 +16,7 @@ use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::table_metadata::TableMetadataRepository;
+use crate::infrastructure::database::table_metadata::TableMetadataService;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
@@ -65,8 +65,7 @@ pub struct InstallServiceDeps {
     pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
-    /// 表元数据仓库
-    pub table_metadata_repository: Arc<TableMetadataRepository>,
+
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
     /// 文件存储
@@ -275,8 +274,7 @@ impl InstallService {
                 &version,
                 &install_path,
                 &plugin_def,
-                None,
-                Some(&self.deps.table_metadata_repository),
+                None
             )
             .await?;
         }
@@ -529,7 +527,6 @@ impl Default for InstallService {
             repository: Arc::new(PluginRepository::default()),
             deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
-            table_metadata_repository: Arc::new(TableMetadataRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(Path::new(""))),
             backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),

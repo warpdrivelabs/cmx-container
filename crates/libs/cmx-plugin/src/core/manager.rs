@@ -56,7 +56,6 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::database::table_metadata::TableMetadataRepository;
 use crate::infrastructure::database::schema::SchemaManager;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
@@ -294,10 +293,7 @@ impl PluginManager {
             settings.default_database_id.clone(),
         ));
 
-        let table_metadata_repository = Arc::new(TableMetadataRepository::new(
-            db_manager.clone(),
-            settings.default_database_id.clone(),
-        ));
+
 
         let cache = Arc::new(LayeredCacheManager::new(Default::default()));
 
@@ -346,7 +342,6 @@ impl PluginManager {
                 repository: repository.clone(),
                 deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
-                table_metadata_repository: table_metadata_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
@@ -369,7 +364,6 @@ impl PluginManager {
                 repository: repository.clone(),
                 deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
-                table_metadata_repository: table_metadata_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
