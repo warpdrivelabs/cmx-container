@@ -1,9 +1,17 @@
-//! DbBmc trait 定义
-//!
-//! 用于定义表的元信息，如表名、主键列名、是否有时间戳字段等。
+// region:    --- 模块
+
+mod crud_fns;
+mod error;
+// mod macro_utils;
+mod utils;
+
+// -- 展平用户代码的层级结构。
+pub use crud_fns::*;
+pub use utils::*;
+pub use error::*;
 
 use modql::SIden;
-use sea_query::{IntoIden, TableRef};
+use sea_query::{Iden, IntoIden, TableRef};
 
 /// DbBmc trait 必须为实体的 Bmc 结构体实现。
 /// 它指定了元信息，如表名、主键列名、

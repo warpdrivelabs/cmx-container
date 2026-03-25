@@ -486,6 +486,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
+ "modql",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -507,6 +508,7 @@ dependencies = [
  "derive_more",
  "futures",
  "log",
+ "modql",
  "rand 0.8.5",
  "rust_decimal",
  "sea-query",
@@ -515,6 +517,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sqlx",
+ "thiserror",
  "tokio",
  "tracing",
  "uuid",

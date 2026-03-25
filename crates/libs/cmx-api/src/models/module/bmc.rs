@@ -2,7 +2,7 @@
 //!
 //! 定义表名、主键等元信息
 
-use crate::crud::traits::DbBmc;
+use cmx_database::crud::DbBmc;
 
 /// Module 实体的 Bmc
 ///

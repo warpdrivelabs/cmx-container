@@ -20,13 +20,14 @@ sqlx = { workspace = true, features = ["postgres", "mysql", "sqlite", "runtime-t
 sea-query = { workspace = true }
 # sea-query-binder: SQL 参数绑定工具
 sea-query-binder = { workspace = true }
+modql = { workspace = true, features = ["with-sea-query"] }
 
 
 derive_more = { workspace = true }
 serde_with = { workspace = true }
 tracing = { workspace = true }
 log = "0.4.29"
-
+thiserror = { workspace = true }
 tokio = { workspace = true }
 uuid = { version = "1.8.0", features = ["v4"] }
 rand = "0.8.5"

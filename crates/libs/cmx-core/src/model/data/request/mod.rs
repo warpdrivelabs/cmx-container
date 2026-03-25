@@ -1,3 +1,6 @@
+pub mod params;
+pub use params::{PageParams, ListParams,UpdatePayload, DeletePayload};
+
 use std::{any::Any, collections::HashMap};
 use serde::{Deserialize, Serialize};
 

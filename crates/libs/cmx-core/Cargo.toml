@@ -16,7 +16,6 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 # smol_str: 小字符串优化库
 smol_str = { version = "0.3", features = ["serde"] }
-
 # ============================================
 # 数值处理
 # ============================================
@@ -48,3 +47,5 @@ uuid = { version = "1.21", features = ["v4", "serde"] }
 # ============================================
 # base64: Base64 编码/解码（DataValue 序列化需要）
 base64 = "0.22"
+modql = { workspace = true }
+

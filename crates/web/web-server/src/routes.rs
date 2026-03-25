@@ -3,8 +3,8 @@
 //! 简单调用 cmx-api 的统一路由注册
 
 use axum::Router;
-use cmx_api::routes::api_routes;
 use cmx_api::CmxAppState;
+use cmx_api::route::routes::api_routes;
 
 /// 配置所有 API 路由
 ///

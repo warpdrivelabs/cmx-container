@@ -1,7 +1,7 @@
 /*
  * @Author: yqs
  * @Date: 2026-03-10 17:07:29
- * @Describe: 
+ * @Describe:
  * @LastEditors: yqs
  * @LastEditTime: 2026-03-18 08:41:53
  */
@@ -13,8 +13,7 @@ pub mod middleware;
 pub mod error;
 pub mod response;
 
-/// 通用 CRUD 模块
-pub mod crud;
+
 
 /// REST 协议层模块
 pub mod rest;
@@ -23,14 +22,13 @@ pub mod rest;
 pub mod models;
 
 /// 路由注册模块
-pub mod routes;
+pub mod route;
 
 /// 状态管理模块
 pub mod state;
 
-// 重新导出常用类型
-pub use crud::{DbBmc, GenericCrudService, UpdateItem};
-pub use rest::{PageParams, handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
+
+pub use rest::{ handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
 pub use error::{Error, Result};
 pub use response::{ApiResp, Pagination};
 pub use state::{CmxAppState, AppStateInner};

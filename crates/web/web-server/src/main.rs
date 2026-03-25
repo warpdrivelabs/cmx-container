@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
     let web_config = web_config();
 
     init_plugins().await;
-    
+
 
     // -- 配置 API 路由
     let api_routes = self::routes::routes().with_state(CmxAppState::new());

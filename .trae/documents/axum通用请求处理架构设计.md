@@ -342,7 +342,7 @@ impl DomainService {
 
 ```rust
 use crate::crud::service::{GenericCrudService, UpdateItem};
-use crate::crud::traits::DbBmc;
+use cmx_database::crud::DbBmc;
 use crate::error::Result;
 use crate::response::ApiResp;
 use axum::Json;

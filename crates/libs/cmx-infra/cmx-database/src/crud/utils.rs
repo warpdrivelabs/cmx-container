@@ -2,7 +2,7 @@
 //!
 //! 提供字段预处理等辅助功能
 
-use crate::crud::traits::DbBmc;
+use crate::crud::DbBmc;
 use chrono::Utc;
 use cmx_utils::snowflake_id_str;
 use cmx_utils::time::now_utc;

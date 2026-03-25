@@ -6,19 +6,18 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::DatabaseManager;
+use crate::crud::error::{ServiceError, Result};
+use crate::crud::{DbBmc, prep_fields_for_create, prep_fields_for_update};
+use cmx_core::UpdatePayload;
 use cmx_core::model::data::dataset::{DataSet, Schema};
-use cmx_database::DatabaseManager;
+use modql::SIden;
 use modql::field::HasSeaFields;
 use modql::filter::{FilterGroups, ListOptions};
-use modql::SIden;
 use sea_query::{Asterisk, Condition, Expr, IntoIden, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, info, warn};
-
-use crate::crud::traits::DbBmc;
-use crate::crud::utils::{prep_fields_for_create, prep_fields_for_update};
-use crate::error::{Error, Result};
 
 /// 创建一个空的 DataSet（用于返回操作结果）
 fn empty_dataset() -> DataSet {
@@ -41,8 +40,12 @@ fn json_value_to_sea_query(value: Value) -> sea_query::SimpleExpr {
             }
         }
         Value::String(s) => sea_query::Value::String(Some(s.into())),
-        Value::Array(arr) => sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap().into())),
-        Value::Object(obj) => sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap().into())),
+        Value::Array(arr) => {
+            sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap().into()))
+        }
+        Value::Object(obj) => {
+            sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap().into()))
+        }
     };
     sea_query::SimpleExpr::Value(sea_value)
 }
@@ -72,20 +75,20 @@ where
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create<E>(
-        mm: &DatabaseManager,
-        db_id: &str,
-        data: E,
-    ) -> Result<DataSet>
+    pub async fn create<E>(mm: &DatabaseManager, db_id: &str, data: E) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
-        info!("{:<12} - GenericCrudService::create - table: {}, db_id: {}", "CRUD", MC::TABLE, db_id);
+        info!(
+            "{:<12} - GenericCrudService::create - table: {}, db_id: {}",
+            "CRUD",
+            MC::TABLE,
+            db_id
+        );
 
         let mut fields = data.not_none_sea_fields();
         //主键值
-     let pk_value=   prep_fields_for_create::<MC>(&mut fields, None);
-
+        let pk_value = prep_fields_for_create::<MC>(&mut fields, None);
 
         let (columns, sea_values) = fields.for_sea_insert();
         let mut query = Query::insert();
@@ -93,16 +96,17 @@ where
             .into_table(MC::table_ref())
             .columns(columns)
             .values(sea_values)
-            .map_err(|e| Error::internal_error(format!("构建插入语句失败: {}", e)))?;
+            .map_err(|e| ServiceError::internal_error(format!("构建插入语句失败: {}", e)))?;
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm
+            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         info!("{:<12} - 创建成功, 影响行数: {}", "CRUD", rows_affected);
@@ -118,18 +122,19 @@ where
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create_many<E>(
-        mm: &DatabaseManager,
-        db_id: &str,
-        data: Vec<E>,
-    ) -> Result<DataSet>
+    pub async fn create_many<E>(mm: &DatabaseManager, db_id: &str, data: Vec<E>) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
-        info!("{:<12} - GenericCrudService::create_many - table: {}, count: {}", "CRUD", MC::TABLE, data.len());
+        info!(
+            "{:<12} - GenericCrudService::create_many - table: {}, count: {}",
+            "CRUD",
+            MC::TABLE,
+            data.len()
+        );
 
         if data.is_empty() {
-            return Err(Error::bad_request("创建数据不能为空"));
+            return Err(ServiceError::bad_request("创建数据不能为空"));
         }
 
         let mut query = Query::insert();
@@ -143,17 +148,18 @@ where
                 .into_table(MC::table_ref())
                 .columns(columns.clone())
                 .values(sea_values)
-                .map_err(|e| Error::internal_error(format!("构建插入语句失败: {}", e)))?;
+                .map_err(|e| ServiceError::internal_error(format!("构建插入语句失败: {}", e)))?;
         }
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm
+            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 批量创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("批量创建失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("批量创建失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         info!("{:<12} - 批量创建成功, 影响行数: {}", "CRUD", rows_affected);
@@ -170,13 +176,14 @@ where
     ///
     /// # 返回值
     /// 返回包含查询结果的 DataSet
-    pub async fn get(
-        mm: &DatabaseManager,
-        db_id: &str,
-        id: Value,
-    ) -> Result<DataSet> {
-        debug!("{:<12} - GenericCrudService::get - table: {}, db_id: {}, id: {:?}",
-            "CRUD", MC::TABLE, db_id, id);
+    pub async fn get(mm: &DatabaseManager, db_id: &str, id: Value) -> Result<DataSet> {
+        debug!(
+            "{:<12} - GenericCrudService::get - table: {}, db_id: {}, id: {:?}",
+            "CRUD",
+            MC::TABLE,
+            db_id,
+            id
+        );
 
         let mut query = Query::select();
         query.from(MC::table_ref());
@@ -192,8 +199,14 @@ where
             .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
-                warn!("{:<12} - 查询失败: {}, table: {}, id: {:?}", "CRUD", e, MC::TABLE, id);
-                Error::internal_error(format!("查询失败 [{}]: {}", MC::TABLE, e))
+                warn!(
+                    "{:<12} - 查询失败: {}, table: {}, id: {:?}",
+                    "CRUD",
+                    e,
+                    MC::TABLE,
+                    id
+                );
+                ServiceError::internal_error(format!("查询失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         let row_count = dataset.iter().count();
@@ -212,17 +225,17 @@ where
     ///
     /// # 返回值
     /// 返回包含更新后结果的 DataSet
-    pub async fn update<E>(
-        mm: &DatabaseManager,
-        db_id: &str,
-        id: Value,
-        data: E,
-    ) -> Result<DataSet>
+    pub async fn update<E>(mm: &DatabaseManager, db_id: &str, id: Value, data: E) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
-        info!("{:<12} - GenericCrudService::update - table: {}, db_id: {}, id: {:?}",
-            "CRUD", MC::TABLE, db_id, id);
+        info!(
+            "{:<12} - GenericCrudService::update - table: {}, db_id: {}, id: {:?}",
+            "CRUD",
+            MC::TABLE,
+            db_id,
+            id
+        );
 
         let mut fields = data.not_none_sea_fields();
         prep_fields_for_update::<MC>(&mut fields, None);
@@ -237,15 +250,27 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm
+            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
-                warn!("{:<12} - 更新失败: {}, table: {}, id: {:?}", "CRUD", e, MC::TABLE, id);
-                Error::internal_error(format!("更新失败 [{}]: {}", MC::TABLE, e))
+                warn!(
+                    "{:<12} - 更新失败: {}, table: {}, id: {:?}",
+                    "CRUD",
+                    e,
+                    MC::TABLE,
+                    id
+                );
+                ServiceError::internal_error(format!("更新失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         if rows_affected == 0 {
-            warn!("{:<12} - 更新未影响任何行, table: {}, id: {:?}", "CRUD", MC::TABLE, id);
+            warn!(
+                "{:<12} - 更新未影响任何行, table: {}, id: {:?}",
+                "CRUD",
+                MC::TABLE,
+                id
+            );
         } else {
             info!("{:<12} - 更新成功, 影响行数: {}", "CRUD", rows_affected);
         }
@@ -265,16 +290,20 @@ where
     pub async fn update_many<E>(
         mm: &DatabaseManager,
         db_id: &str,
-        data: Vec<UpdateItem<E>>,
+        data: Vec<UpdatePayload<E>>,
     ) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
-        info!("{:<12} - GenericCrudService::update_many - table: {}, count: {}",
-            "CRUD", MC::TABLE, data.len());
+        info!(
+            "{:<12} - GenericCrudService::update_many - table: {}, count: {}",
+            "CRUD",
+            MC::TABLE,
+            data.len()
+        );
 
         if data.is_empty() {
-            return Err(Error::bad_request("更新数据不能为空"));
+            return Err(ServiceError::bad_request("更新数据不能为空"));
         }
 
         let mut total_affected = 0u64;
@@ -285,24 +314,27 @@ where
 
             let fields = fields.for_sea_update();
             let mut query = Query::update();
-            query
-                .table(MC::table_ref())
-                .values(fields)
-                .and_where(Expr::col(SIden(MC::PK_COLUMN)).eq(json_value_to_sea_query(item.id.clone())));
+            query.table(MC::table_ref()).values(fields).and_where(
+                Expr::col(SIden(MC::PK_COLUMN)).eq(json_value_to_sea_query(item.id.clone())),
+            );
 
             let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
-            let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            let rows_affected = mm
+                .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
                 .await
                 .map_err(|e| {
                     warn!("{:<12} - 批量更新失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                    Error::internal_error(format!("批量更新失败 [{}]: {}", MC::TABLE, e))
+                    ServiceError::internal_error(format!("批量更新失败 [{}]: {}", MC::TABLE, e))
                 })?;
 
             total_affected += rows_affected;
         }
 
-        info!("{:<12} - 批量更新成功, 总影响行数: {}", "CRUD", total_affected);
+        info!(
+            "{:<12} - 批量更新成功, 总影响行数: {}",
+            "CRUD", total_affected
+        );
 
         Ok(empty_dataset())
     }
@@ -316,33 +348,37 @@ where
     ///
     /// # 返回值
     /// 返回包含删除信息的 DataSet
-    pub async fn delete(
-        mm: &DatabaseManager,
-        db_id: &str,
-        ids: Vec<Value>,
-    ) -> Result<DataSet> {
-        info!("{:<12} - GenericCrudService::delete - table: {}, db_id: {}, count: {}",
-            "CRUD", MC::TABLE, db_id, ids.len());
+    pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<Value>) -> Result<DataSet> {
+        info!(
+            "{:<12} - GenericCrudService::delete - table: {}, db_id: {}, count: {}",
+            "CRUD",
+            MC::TABLE,
+            db_id,
+            ids.len()
+        );
 
         if ids.is_empty() {
             return Ok(empty_dataset());
         }
 
         let mut query = Query::delete();
-        query
-            .from_table(MC::table_ref())
-            .and_where(Expr::col(SIden(MC::PK_COLUMN)).is_in(
-                ids.iter().map(|v| json_value_to_sea_query(v.clone())).collect::<Vec<_>>()
-            ));
+        query.from_table(MC::table_ref()).and_where(
+            Expr::col(SIden(MC::PK_COLUMN)).is_in(
+                ids.iter()
+                    .map(|v| json_value_to_sea_query(v.clone()))
+                    .collect::<Vec<_>>(),
+            ),
+        );
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let rows_affected = mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+        let rows_affected = mm
+            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 删除失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("删除失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("删除失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         info!("{:<12} - 删除成功, 影响行数: {}", "CRUD", rows_affected);
@@ -372,8 +408,12 @@ where
         filter: Option<F>,
         list_options: Option<ListOptions>,
     ) -> Result<DataSet> {
-        debug!("{:<12} - GenericCrudService::list - table: {}, db_id: {}",
-            "CRUD", MC::TABLE, db_id);
+        debug!(
+            "{:<12} - GenericCrudService::list - table: {}, db_id: {}",
+            "CRUD",
+            MC::TABLE,
+            db_id
+        );
 
         let mut query = Query::select();
         query.from(MC::table_ref());
@@ -381,12 +421,10 @@ where
 
         if let Some(filter) = filter {
             let filters: FilterGroups = filter.into();
-            let cond: Condition = filters
-                .try_into()
-                .map_err(|e| {
-                    warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
-                    Error::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
-                })?;
+            let cond: Condition = filters.try_into().map_err(|e| {
+                warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
+                ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
+            })?;
             query.cond_where(cond);
         }
 
@@ -402,7 +440,7 @@ where
             .await
             .map_err(|e| {
                 warn!("{:<12} - 列表查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("列表查询失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("列表查询失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         let row_count = dataset.iter().count();
@@ -427,8 +465,12 @@ where
         filter: Option<F>,
         list_options: ListOptions,
     ) -> Result<(DataSet, i64)> {
-        debug!("{:<12} - GenericCrudService::page - table: {}, db_id: {}",
-            "CRUD", MC::TABLE, db_id);
+        debug!(
+            "{:<12} - GenericCrudService::page - table: {}, db_id: {}",
+            "CRUD",
+            MC::TABLE,
+            db_id
+        );
 
         let mut query = Query::select();
         query.from(MC::table_ref());
@@ -436,12 +478,10 @@ where
 
         if let Some(filter) = filter.clone() {
             let filters: FilterGroups = filter.into();
-            let cond: Condition = filters
-                .try_into()
-                .map_err(|e| {
-                    warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
-                    Error::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
-                })?;
+            let cond: Condition = filters.try_into().map_err(|e| {
+                warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
+                ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
+            })?;
             query.cond_where(cond);
         }
 
@@ -455,13 +495,16 @@ where
             .await
             .map_err(|e| {
                 warn!("{:<12} - 分页查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("分页查询失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("分页查询失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         let row_count = dataset.iter().count();
         let total = Self::count(mm, db_id, filter).await?;
 
-        debug!("{:<12} - 分页查询返回 {} 行, 总数: {}", "CRUD", row_count, total);
+        debug!(
+            "{:<12} - 分页查询返回 {} 行, 总数: {}",
+            "CRUD", row_count, total
+        );
 
         Ok((dataset, total))
     }
@@ -475,13 +518,13 @@ where
     ///
     /// # 返回值
     /// 返回记录总数
-    pub async fn count(
-        mm: &DatabaseManager,
-        db_id: &str,
-        filter: Option<F>,
-    ) -> Result<i64> {
-        debug!("{:<12} - GenericCrudService::count - table: {}, db_id: {}",
-            "CRUD", MC::TABLE, db_id);
+    pub async fn count(mm: &DatabaseManager, db_id: &str, filter: Option<F>) -> Result<i64> {
+        debug!(
+            "{:<12} - GenericCrudService::count - table: {}, db_id: {}",
+            "CRUD",
+            MC::TABLE,
+            db_id
+        );
 
         let mut query = Query::select();
         query.from(MC::table_ref());
@@ -489,12 +532,10 @@ where
 
         if let Some(filter) = filter {
             let filters: FilterGroups = filter.into();
-            let cond: Condition = filters
-                .try_into()
-                .map_err(|e| {
-                    warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
-                    Error::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
-                })?;
+            let cond: Condition = filters.try_into().map_err(|e| {
+                warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
+                ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
+            })?;
             query.cond_where(cond);
         }
 
@@ -506,7 +547,7 @@ where
             .await
             .map_err(|e| {
                 warn!("{:<12} - 统计失败: {}, table: {}", "CRUD", e, MC::TABLE);
-                Error::internal_error(format!("统计失败 [{}]: {}", MC::TABLE, e))
+                ServiceError::internal_error(format!("统计失败 [{}]: {}", MC::TABLE, e))
             })?;
 
         let count = dataset
@@ -521,15 +562,4 @@ where
 
         Ok(count)
     }
-}
-
-/// 更新项
-///
-/// 用于批量更新时，包含主键 ID 和更新数据
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdateItem<E> {
-    /// 主键 ID
-    pub id: Value,
-    /// 更新数据
-    pub data: E,
 }

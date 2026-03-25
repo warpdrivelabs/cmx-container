@@ -13,14 +13,12 @@ use modql::field::HasSeaFields;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tracing::debug;
-
-use crate::crud::service::{GenericCrudService, UpdateItem};
-use crate::crud::traits::DbBmc;
+use cmx_database::crud::{DbBmc, GenericCrudService};
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
 use crate::response::ApiResp;
 use crate::rest::header_parse::get_db_id_from_header;
-use crate::rest::params::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
+use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
 use crate::state::CmxAppState;
 
 /// 创建单个实体 Handler
@@ -156,7 +154,7 @@ pub async fn update_many<MC, E>(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(svr_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Json(data): Json<Vec<UpdateItem<E>>>,
+    Json(data): Json<Vec<UpdatePayload<E>>>,
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,

@@ -2,13 +2,12 @@
 //!
 //! 展示如何扩展 GenericCrudService 实现自定义业务逻辑
 
-use crate::crud::service::GenericCrudService;
 use crate::error::{Error, Result};
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 use modql::filter::{ListOptions, OpValString, OpValsString};
 use tracing::{debug, info};
-
+use cmx_database::crud::GenericCrudService;
 use super::{DomainBmc, DomainFilter, DomainForCreate};
 
 /// Domain 自定义服务
@@ -41,7 +40,9 @@ impl DomainService {
             archived: None,
         };
 
-        GenericCrudService::<DomainBmc, DomainFilter>::list(mm, db_id, Some(filter), None).await
+        GenericCrudService::<DomainBmc, DomainFilter>::list(mm, db_id, Some(filter), None)
+            .await
+            .map_err(Error::from)
     }
 
     /// 扩展方法：批量创建
@@ -64,7 +65,9 @@ impl DomainService {
             items.len()
         );
 
-        GenericCrudService::<DomainBmc>::create_many(mm, db_id, items).await
+        GenericCrudService::<DomainBmc>::create_many(mm, db_id, items)
+            .await
+            .map_err(Error::from)
     }
 
     /// 覆盖方法：自定义创建逻辑
@@ -86,7 +89,9 @@ impl DomainService {
         }
 
         // 调用父类方法
-        GenericCrudService::<DomainBmc>::create(mm, db_id, data).await
+        GenericCrudService::<DomainBmc>::create(mm, db_id, data)
+            .await
+            .map_err(Error::from)
     }
 
     /// 扩展方法：按状态统计
@@ -101,8 +106,8 @@ impl DomainService {
         debug!("{:<12} - DomainService::count_by_status", "SERVICE");
 
         let sql = r#"
-            SELECT status, COUNT(*) as count 
-            FROM cmx_domain 
+            SELECT status, COUNT(*) as count
+            FROM cmx_domain
             WHERE archived = 0
             GROUP BY status
         "#;
@@ -145,5 +150,6 @@ impl DomainService {
 
         GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, Some(filter), list_options)
             .await
+            .map_err(Error::from)
     }
 }

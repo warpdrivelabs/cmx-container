@@ -2,8 +2,6 @@
 //!
 //! 实现数据源的 CRUD 操作，并动态管理数据库连接池
 
-use crate::crud::service::GenericCrudService;
-use crate::crud::UpdateItem;
 use crate::error::{Error, Result};
 use cmx_core::model::data::dataset::{DataSet, Schema};
 use cmx_database::{DatabaseManager, DbConfig, PoolConfig};
@@ -14,7 +12,8 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-
+use cmx_core::UpdatePayload;
+use cmx_database::crud::GenericCrudService;
 use super::{SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate};
 
 /// SysDatasource 自定义服务
@@ -125,7 +124,7 @@ impl SysDatasourceService {
     pub async fn update_many(
         mm: &DatabaseManager,
         db_id: &str,
-        items: Vec<UpdateItem<SysDatasourceForUpdate>>,
+        items: Vec<UpdatePayload<SysDatasourceForUpdate>>,
     ) -> Result<DataSet> {
         info!(
             "{:<12} - SysDatasourceService::update_many - count: {}",
@@ -166,7 +165,9 @@ impl SysDatasourceService {
         }
 
         let ids_value: Vec<Value> = ids.into_iter().map(Value::String).collect();
-        GenericCrudService::<SysDatasourceBmc>::delete(mm, db_id, ids_value).await
+        GenericCrudService::<SysDatasourceBmc>::delete(mm, db_id, ids_value)
+            .await
+            .map_err(Error::from)
     }
 
     /// 按 db_id 查询数据源
@@ -189,7 +190,9 @@ impl SysDatasourceService {
             archived: None,
         };
 
-        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, Some(filter), None).await
+        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, Some(filter), None)
+            .await
+            .map_err(Error::from)
     }
 
     /// 测试数据源连接

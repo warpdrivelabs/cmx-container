@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde_json::json;
+use thiserror::Error;
 use tracing::debug;
 
 /// 错误码枚举
@@ -36,26 +37,142 @@ impl From<ErrCode> for u16 {
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Web 层错误类型
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", content = "data")]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("JSON 解析错误: {0}")]
     SerdeJson(String),
+
+    #[error("验证错误: {0}")]
     Validator(String),
+
+    #[error("未获取到svrContext")]
     SvrContextNotInReqExt,
+
+    #[error("未授权: {0}")]
     Unauthorized(String),
+
+    #[error("禁止访问: {0}")]
     Forbidden(String),
+
+    #[error("资源不存在: {0}")]
     NotFound(String),
-    ValidationError(Vec<String>),
+
+    #[error("验证失败")]
+    ValidationError {
+        errors: Vec<String>,
+    },
+
+    #[error("请求错误: {0}")]
     BadRequest(String),
+
+    #[error("内部错误: {0}")]
     InternalError(String),
+
+    #[error("服务不可用: {0}")]
     ServiceUnavailable(String),
+
+    #[error("服务错误: {0}")]
+    ServiceError(String),
+
+    #[error("请求过于频繁，请在 {retry_after} 秒后重试。限制: {limit} 请求/{window} 秒")]
     RateLimitExceeded {
         retry_after: u64,
         limit: u64,
         window: u64,
     },
+
+    #[error("请求超时")]
     Timeout,
 }
+
+// impl serde::Serialize for Error {
+//     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         let value: serde_json::Value = match self {
+//             Self::ValidationError { errors } => {
+//                 serde_json::json!({
+//                     "type": "ValidationError",
+//                     "data": { "errors": errors }
+//                 })
+//             }
+//             Self::RateLimitExceeded { retry_after, limit, window } => {
+//                 serde_json::json!({
+//                     "type": "RateLimitExceeded",
+//                     "data": { "retry_after": retry_after, "limit": limit, "window": window }
+//                 })
+//             }
+//             Self::Timeout => {
+//                 serde_json::json!({
+//                     "type": "Timeout",
+//                     "data": null
+//                 })
+//             }
+//             Self::SvrContextNotInReqExt => {
+//                 serde_json::json!({
+//                     "type": "SvrContextNotInReqExt",
+//                     "data": null
+//                 })
+//             }
+//             Self::SerdeJson(e) => {
+//                 serde_json::json!({
+//                     "type": "SerdeJson",
+//                     "data": e
+//                 })
+//             }
+//             Self::Validator(e) => {
+//                 serde_json::json!({
+//                     "type": "Validator",
+//                     "data": e
+//                 })
+//             }
+//             Self::Unauthorized(e) => {
+//                 serde_json::json!({
+//                     "type": "Unauthorized",
+//                     "data": e
+//                 })
+//             }
+//             Self::Forbidden(e) => {
+//                 serde_json::json!({
+//                     "type": "Forbidden",
+//                     "data": e
+//                 })
+//             }
+//             Self::NotFound(e) => {
+//                 serde_json::json!({
+//                     "type": "NotFound",
+//                     "data": e
+//                 })
+//             }
+//             Self::BadRequest(e) => {
+//                 serde_json::json!({
+//                     "type": "BadRequest",
+//                     "data": e
+//                 })
+//             }
+//             Self::InternalError(e) => {
+//                 serde_json::json!({
+//                     "type": "InternalError",
+//                     "data": e
+//                 })
+//             }
+//             Self::ServiceUnavailable(e) => {
+//                 serde_json::json!({
+//                     "type": "ServiceUnavailable",
+//                     "data": e
+//                 })
+//             }
+//             Self::ServiceError(e) => {
+//                 serde_json::json!({
+//                     "type": "ServiceError",
+//                     "data": e
+//                 })
+//             }
+//         };
+//         value.serialize(serializer)
+//     }
+// }
 
 impl Error {
     pub fn code(&self) -> ErrCode {
@@ -63,7 +180,7 @@ impl Error {
             Self::Unauthorized(_) => ErrCode::Unauthorized,
             Self::Forbidden(_) => ErrCode::Forbidden,
             Self::NotFound(_) => ErrCode::NotFound,
-            Self::ValidationError(_) => ErrCode::ValidationError,
+            Self::ValidationError { .. } => ErrCode::ValidationError,
             Self::BadRequest(_) => ErrCode::BadRequest,
             Self::RateLimitExceeded { .. } => ErrCode::RateLimitExceeded,
             Self::InternalError(_) => ErrCode::InternalError,
@@ -78,7 +195,7 @@ impl Error {
             Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::ValidationError { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -89,22 +206,7 @@ impl Error {
     }
 
     pub fn message(&self) -> String {
-        match self {
-            Self::Unauthorized(msg) => msg.clone(),
-            Self::Forbidden(msg) => msg.clone(),
-            Self::NotFound(msg) => msg.clone(),
-            Self::ValidationError(errors) => errors.join(", "),
-            Self::BadRequest(msg) => msg.clone(),
-            Self::RateLimitExceeded { retry_after, limit, window } => {
-                format!("请求过于频繁，请在 {} 秒后重试。限制: {} 请求/{} 秒", retry_after, limit, window)
-            }
-            Self::InternalError(msg) => msg.clone(),
-            Self::ServiceUnavailable(msg) => msg.clone(),
-            Self::Timeout => "请求超时".to_string(),
-            Self::SerdeJson(e) => format!("JSON 解析错误: {}", e),
-            Self::Validator(e) => format!("验证错误: {}", e),
-            Self::SvrContextNotInReqExt => "未获取到svrContext".to_string(),
-        }
+        self.to_string()
     }
 
     pub fn unauthorized(msg: impl Into<String>) -> Self {
@@ -120,7 +222,7 @@ impl Error {
     }
 
     pub fn validation_error(errors: Vec<String>) -> Self {
-        Self::ValidationError(errors)
+        Self::ValidationError { errors }
     }
 
     pub fn bad_request(msg: impl Into<String>) -> Self {
@@ -135,17 +237,21 @@ impl Error {
         Self::RateLimitExceeded { retry_after, limit, window }
     }
 
-    /// 获取状态码
     pub fn get_status_code(&self) -> StatusCode {
         self.status_code()
     }
 
-    /// 获取用于响应的 JSON 值
     pub fn to_response_body(&self) -> serde_json::Value {
         json!({
             "code": self.code() as u16,
             "msg": self.message(),
         })
+    }
+}
+
+impl From<cmx_database::crud::ServiceError> for Error {
+    fn from(e: cmx_database::crud::ServiceError) -> Self {
+        Self::ServiceError(e.to_string())
     }
 }
 
@@ -167,7 +273,7 @@ impl From<validator::ValidationErrors> for Error {
                 format!("{}: {}", field, msgs.join(", "))
             })
             .collect();
-        Self::ValidationError(error_messages)
+        Self::ValidationError { errors: error_messages }
     }
 }
 
@@ -176,14 +282,13 @@ impl IntoResponse for Error {
         debug!("{:<12} - Error {self:?}", "ERROR");
         let status_code = self.get_status_code();
         let body = self.to_response_body();
-        
+
         let body = axum::Json(body);
         (status_code, body).into_response()
     }
 }
 
 impl Error {
-    /// 用于限流错误的响应处理
     pub fn into_rate_limit_response(self) -> Response {
         if let Self::RateLimitExceeded { retry_after, .. } = self {
             let mut response = self.into_response();
@@ -197,11 +302,3 @@ impl Error {
         }
     }
 }
-
-impl core::fmt::Display for Error {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
-        write!(fmt, "{}", self.message())
-    }
-}
-
-impl std::error::Error for Error {}
