@@ -114,6 +114,9 @@ impl TableMetadataRepository {
                 .table("cmx_meta_table_define_version")
                 .values(vec![
                     ("metadata", record.metadata.clone().into()),
+                    ("domain_code", record.domain_code.clone().into()),
+                    ("application_code", record.application_code.clone().into()),
+                    ("module_code", record.module_code.clone().into()),
                     ("update_time", record.update_time.into()),
                     ("update_by", record.update_by.clone().into()),
                     ("update_name", record.update_name.clone().into()),
@@ -138,6 +141,9 @@ impl TableMetadataRepository {
                     "db_id",
                     "plugin_id",
                     "version",
+                    "domain_code",
+                    "application_code",
+                    "module_code",
                     "metadata",
                     "archived",
                     "create_time",
@@ -151,6 +157,9 @@ impl TableMetadataRepository {
                     record.db_id.clone().into(),
                     record.plugin_id.clone().into(),
                     record.version.clone().into(),
+                    record.domain_code.clone().into(),
+                    record.application_code.clone().into(),
+                    record.module_code.clone().into(),
                     record.metadata.clone().into(),
                     record.archived.into(),
                     record.create_time.into(),
@@ -325,6 +334,9 @@ impl TableMetadataRepository {
                 .values(vec![
                     ("plugin_id", record.plugin_id.clone().into()),
                     ("version", record.version.clone().into()),
+                    ("domain_code", record.domain_code.clone().into()),
+                    ("application_code", record.application_code.clone().into()),
+                    ("module_code", record.module_code.clone().into()),
                     ("update_time", record.update_time.into()),
                     ("update_by", record.update_by.clone().into()),
                     ("update_name", record.update_name.clone().into()),
@@ -348,6 +360,9 @@ impl TableMetadataRepository {
                     "db_id",
                     "plugin_id",
                     "version",
+                    "domain_code",
+                    "application_code",
+                    "module_code",
                     "archived",
                     "create_time",
                     "update_time",
@@ -360,6 +375,9 @@ impl TableMetadataRepository {
                     record.db_id.clone().into(),
                     record.plugin_id.clone().into(),
                     record.version.clone().into(),
+                    record.domain_code.clone().into(),
+                    record.application_code.clone().into(),
+                    record.module_code.clone().into(),
                     record.archived.into(),
                     record.create_time.into(),
                     record.update_time.into(),
@@ -393,6 +411,9 @@ impl TableMetadataRepository {
                ( "cmx_meta_table_define","db_id"),
                ( "cmx_meta_table_define","plugin_id"),
                ( "cmx_meta_table_define","version"),
+               ( "cmx_meta_table_define","domain_code"),
+               ( "cmx_meta_table_define","application_code"),
+               ( "cmx_meta_table_define","module_code"),
                ( "cmx_meta_table_define","archived"),
                ( "cmx_meta_table_define","create_time"),
                ( "cmx_meta_table_define","update_time"),
@@ -430,7 +451,7 @@ impl TableMetadataRepository {
                 None,
                 &sql,
                 sql_values,
-                "table_metadata_query",
+                "cmx_meta_table_define",
             )
             .await
             .map_err(|e| PluginError::Database(format!("查询表元数据失败: {}", e)))?;
@@ -448,18 +469,21 @@ impl TableMetadataRepository {
         select
             .from("cmx_meta_table_define")
             .columns(vec![
-                "id",
-                "table_name",
-                "db_id",
-                "plugin_id",
-                "version",
-                "archived",
-                "create_time",
-                "update_time",
-                "create_by",
-                "create_name",
-                "update_by",
-                "update_name",
+                ( "cmx_meta_table_define","id"),
+                ( "cmx_meta_table_define","table_name"),
+                ( "cmx_meta_table_define","db_id"),
+                ( "cmx_meta_table_define","plugin_id"),
+                ( "cmx_meta_table_define","version"),
+                ( "cmx_meta_table_define","domain_code"),
+                ( "cmx_meta_table_define","application_code"),
+                ( "cmx_meta_table_define","module_code"),
+                ( "cmx_meta_table_define","archived"),
+                ( "cmx_meta_table_define","create_time"),
+                ( "cmx_meta_table_define","update_time"),
+                ( "cmx_meta_table_define","create_by"),
+                ( "cmx_meta_table_define","create_name"),
+                ( "cmx_meta_table_define","update_by"),
+                ( "cmx_meta_table_define","update_name"),
             ])
             .expr_as(
                 sea_query::Expr::col(("cmx_meta_table_define_version", "metadata")),
@@ -475,7 +499,7 @@ impl TableMetadataRepository {
             );
 
         if let Some(db_id) = db_id {
-            select.and_where(sea_query::Expr::col("cmx_meta_table_define.db_id").eq(db_id));
+            select.and_where(sea_query::Expr::col("cmx_meta_table_define").eq(db_id));
         }
 
         let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);

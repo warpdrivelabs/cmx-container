@@ -27,7 +27,7 @@
 //! ```
 
 use std::path::Path;
-
+use cmx_core::model::meta::plugin::PluginManifest;
 use crate::error::{PluginError, PluginResult};
 
 /// 插件定义工具
@@ -109,10 +109,10 @@ impl DefinitionUtils {
         let content = std::fs::read_to_string(&manifest_path)
             .map_err(|e| PluginError::Metadata(format!("读取插件定义文件失败: {}", e)))?;
 
-        let manifest: serde_json::Value = serde_json::from_str(&content)
+        let manifest_json: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| PluginError::Metadata(format!("解析 manifest.json 失败: {}", e)))?;
 
-        let plugin_value = manifest.get("plugin").ok_or_else(|| {
+        let plugin_value = manifest_json.get("plugin").ok_or_else(|| {
             PluginError::Metadata("manifest.json 缺少 plugin 对象".to_string())
         })?;
 
@@ -120,6 +120,8 @@ impl DefinitionUtils {
             serde_json::from_value(plugin_value.clone())
                 .map_err(|e| PluginError::Metadata(format!("解析 plugin 定义失败: {}", e)))?;
 
+        let _manifest: PluginManifest = serde_json::from_value(manifest_json)
+            .map_err(|e| PluginError::Metadata(format!("解析 manifest 定义失败: {}", e)))?;;
         Ok(definition)
     }
 
