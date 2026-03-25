@@ -321,14 +321,14 @@ impl InstallService {
             .get_baseline_version(&plugin_id)
             .await?;
 
-        let baseline_exist = baseline_version.is_some();
-        if baseline_exist {
-            let bversion = baseline_version.unwrap();
+        let plugin_exist  = baseline_version.is_some();
+        if plugin_exist {
+            let db_version = baseline_version.clone().unwrap();
             //版本小不能用安装，应该使用降级
-            if version < bversion {
+            if version < db_version {
                 return Err(PluginError::Install(format!(
-                    "要安装的{}插件版本{}小于基线版本{}，应该使用降级方式，不能采用安装方式",
-                    plugin_id, version, bversion
+                    "要安装的{}插件版本{}小于数据库中的版本{}，应该使用降级方式，不能采用安装方式",
+                    plugin_id, version, db_version
                 )));
             }
         }
@@ -356,7 +356,7 @@ impl InstallService {
             };
 
         //基线插件不存在
-        if !baseline_exist {
+        if !plugin_exist {
 
             //插入数据
             self.deps
@@ -369,13 +369,9 @@ impl InstallService {
                 .insert_version(&version_record, None)
                 .await?;
         } else {
-            //基线版本存在，
-            //// 将之前的基线版本标记为非当前
-            self.deps
-                .version_history_repository
-                .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
-                .await?;
-
+            //基线插件存在，且安装的版本不同
+            if version != baseline_version.clone().unwrap() {
+            //更新插件基线表的插件基本信息
             let update_fields = crate::infrastructure::database::repository::PluginUpdateFields {
                 plugin_id: plugin_id.clone(),
                 name: plugin_def.name.clone(),
@@ -408,10 +404,17 @@ impl InstallService {
             self.deps.repository.update_plugin(&plugin_id, &update_fields, Some(txn_guard.txn_id())).await?;
 
             //插入版本历史
+                /// 将之前的插件版本历史都标记为非当前
+                self.deps
+                    .version_history_repository
+                    .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+                    .await?;
+
             self.deps
                 .version_history_repository
                 .insert_version(&version_record, None)
                 .await?;
+            }
         }
 
         // 步骤9.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
