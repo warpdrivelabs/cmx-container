@@ -72,3 +72,4 @@ rand = "0.8"
 sea-query = { workspace = true }
 # sea-query-binder: SQL 参数绑定工具
 sea-query-binder = { workspace = true }
+modql = { workspace = true, features = ["with-sea-query"] }

@@ -131,7 +131,7 @@ impl NodeSyncService {
                 deployed_version: deployment.version,
                 baseline_version,
                 sync_state,
-                deployed_at: deployment.deployed_at,
+                deployed_at: deployment.create_time,
                 status: deployment.status,
             });
         }

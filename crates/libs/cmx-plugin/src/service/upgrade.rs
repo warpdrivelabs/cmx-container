@@ -5,26 +5,26 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::audit::logger::AuditLogger;
+use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
+use crate::core::context::PluginContext;
+use crate::core::registry::PluginRegistry;
+use crate::domain::plugin::PluginSource;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::database::table_metadata::TableMetadataRepository;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use crate::infrastructure::storage::TempDirCleanup;
+use crate::infrastructure::storage::backup::BackupManager;
+use crate::infrastructure::storage::file::FileStorage;
+use crate::security::validator::SecurityValidator;
 use chrono::Utc;
+use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-
-use crate::error::{PluginError, PluginResult};
-use crate::domain::plugin::PluginSource;
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::deployment::DeploymentRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::database::table_metadata::TableMetadataRepository;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::storage::file::FileStorage;
-use crate::infrastructure::storage::backup::BackupManager;
-use crate::infrastructure::storage::TempDirCleanup;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
-use crate::security::validator::SecurityValidator;
-use crate::audit::logger::AuditLogger;
-use crate::core::registry::PluginRegistry;
-use crate::core::context::PluginContext;
-use crate::common::{PackageUtils, DefinitionUtils, PackageUtilsDeps};
 
 /// 升级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,7 +111,10 @@ impl UpgradeService {
             temp_root: deps.temp_root.clone(),
             storage: Some(deps.storage.clone()),
         });
-        Self { deps, package_utils }
+        Self {
+            deps,
+            package_utils,
+        }
     }
 
     /// 执行升级操作
@@ -129,7 +132,9 @@ impl UpgradeService {
         let old_version = plugin.version.clone();
 
         // 步骤2: 检查节点部署记录
-        let existing_deployment = self.deps.deployment_repository
+        let existing_deployment = self
+            .deps
+            .deployment_repository
             .find_deployment(&request.plugin_id, &self.deps.node_id, &old_version)
             .await?;
 
@@ -144,7 +149,11 @@ impl UpgradeService {
         // 步骤3: 获取新版本插件包
         let package_path = self
             .package_utils
-            .fetch_package(&request.source, request.version_constraint.as_deref(), "升级")
+            .fetch_package(
+                &request.source,
+                request.version_constraint.as_deref(),
+                "升级",
+            )
             .await?;
 
         // 步骤4: 解压到临时目录
@@ -152,9 +161,9 @@ impl UpgradeService {
             .deps
             .temp_root
             .join(format!("plugin_upgrade_{}", uuid::Uuid::new_v4()));
-        let (extract_path, needs_cleanup) = self
-            .package_utils
-            .prepare_package_for_validation(&package_path, &temp_dir, "升级")?;
+        let (extract_path, needs_cleanup) =
+            self.package_utils
+                .prepare_package_for_validation(&package_path, &temp_dir, "升级")?;
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
@@ -189,64 +198,169 @@ impl UpgradeService {
 
         // 步骤7: 创建新版本目录 (plugin_id/new_version/)
         let install_path = self.deps.plugin_root.join(&plugin_id).join(&new_version);
-        if install_path.exists()  {
+        if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
         self.deps.storage.create_dir(&install_path)?;
 
         // 步骤8: 复制文件到新版本目录
-        self.package_utils.copy_plugin_files(&extract_path, &install_path, "升级")?;
+        self.package_utils
+            .copy_plugin_files(&extract_path, &install_path, "升级")?;
+
+        let db_id = plugin.db_id.clone();
+        //开启事务
+        let txn_guard = get_default_db_manager()
+            .get_transaction_context()
+            .begin_with_guard(db_id.clone().as_str())
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
 
         // 步骤9: 创建数据库表
-        let db_id = plugin.db_id.clone();
-        crate::service::utils::create_plugin_tables(&db_id, &plugin_id, &new_version, &install_path, &plugin_def.table_config_files, None, Some(&self.deps.table_metadata_repository)).await?;
+        crate::service::utils::create_plugin_tables(
+            &db_id,
+            &plugin_id,
+            &new_version,
+            &install_path,
+            &plugin_def.table_config_files,
+            None,
+            Some(&self.deps.table_metadata_repository),
+        )
+        .await?;
 
         // 步骤10: 插入 cmx_plugin_versions 版本历史
-        let version_record = crate::infrastructure::database::version_history::VersionHistoryRecord {
+        let db_record = crate::infrastructure::database::repository::PluginDbRecord {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id: plugin_id.clone(),
+            name: plugin_def.name.clone(),
             version: new_version.clone(),
-            version_type: "upgrade".to_string(),
-            from_version: Some(old_version.clone()),
+            wasm_path: install_path
+                .join(&plugin_def.main_file)
+                .to_string_lossy()
+                .to_string(),
             install_path: install_path.to_string_lossy().to_string(),
-            wasm_path: install_path.join(&plugin_def.main_file).to_string_lossy().to_string(),
-            backup_path: None,
-            is_current: true,
-            installed_at: Utc::now(),
-            uninstalled_at: None,
-            installed_by: Some(request.operator.clone()),
-            install_reason: Some("upgrade".to_string()),
+            db_id: db_id.clone(),
+            status: "installed".to_string(),
+            is_system: false,
+            is_locked: false,
+            domain_code: plugin_def.domain_code.clone(),
+            application_code: plugin_def.application_code.clone(),
+            module_code: plugin_def.module_code.clone(),
+            vendor_name: plugin_def.vendor_name.clone(),
+            vendor_url: plugin_def.vendor_url.clone(),
+            vendor_contact: plugin_def.vendor_contact.clone(),
+            metadata: None,
+            signature_algorithm: None,
+            signer_key_id: None,
+            create_time: Utc::now(),
+            update_time: Utc::now(),
             archived: 0,
             create_by: None,
             create_name: None,
             update_by: None,
             update_name: None,
         };
-        self.deps.version_history_repository
-            .insert_version(&version_record, None)
+
+        // 查询数据库是否已经有基线插件了
+        let baseline_version = self
+            .deps
+            .repository
+            .get_baseline_version(&plugin_id)
             .await?;
 
-        // 将之前的基线版本标记为非当前
-        self.deps.version_history_repository
-            .mark_all_not_current(&plugin_id, None)
-            .await?;
+        let baseline_exist = baseline_version.is_some();
 
-        // 步骤11: 更新 cmx_plugin 主表
-        let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-            version: Some(new_version.clone()),
-            ..Default::default()
-        };
-        self.deps.repository.update_plugin(&plugin_id, &fields).await?;
+        let version_record =
+            crate::infrastructure::database::version_history::VersionHistoryRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                plugin_id: plugin_id.clone(),
+                version: new_version.clone(),
+                install_path: install_path.to_string_lossy().to_string(),
+                wasm_path: install_path
+                    .join(&plugin_def.main_file)
+                    .to_string_lossy()
+                    .to_string(),
+                is_current: true,
+                installed_at: Utc::now(),
+                create_time: Utc::now(),
+                update_time: Utc::now(),
+                uninstalled_at: None,
+                archived: 0,
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
+
+        //基线插件不存在
+        if !baseline_exist {
+            //插入数据
+            self.deps
+                .repository
+                .insert_plugin(&db_record, Some(txn_guard.txn_id()))
+                .await?;
+            //插入版本历史
+            self.deps
+                .version_history_repository
+                .insert_version(&version_record, None)
+                .await?;
+        } else {
+            //基线版本存在，
+            //// 将之前的基线版本标记为非当前
+            self.deps
+                .version_history_repository
+                .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+                .await?;
+
+            let update_fields = crate::infrastructure::database::repository::PluginUpdateFields {
+                plugin_id: plugin_id.clone(),
+                name: plugin_def.name.clone(),
+                version: new_version.clone(),
+                wasm_path: install_path
+                    .join(&plugin_def.main_file)
+                    .to_string_lossy()
+                    .to_string(),
+                install_path: install_path.to_string_lossy().to_string(),
+                db_id: db_id.clone(),
+                status: "installed".to_string(),
+                is_system: false,
+                is_locked: false,
+                domain_code: plugin_def.domain_code.clone(),
+                application_code: plugin_def.application_code.clone(),
+                module_code: plugin_def.module_code.clone(),
+                vendor_name: plugin_def.vendor_name.clone(),
+                vendor_url: plugin_def.vendor_url.clone(),
+                vendor_contact: plugin_def.vendor_contact.clone(),
+                metadata: None,
+                signature_algorithm: None,
+                signer_key_id: None,
+                update_time: Utc::now(),
+                archived: 0,
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
+            self.deps
+                .repository
+                .update_plugin(&plugin_id, &update_fields, Some(txn_guard.txn_id()))
+                .await?;
+
+            //插入版本历史
+            self.deps
+                .version_history_repository
+                .insert_version(&version_record, None)
+                .await?;
+        }
 
         // 步骤12: 更新 cmx_plugin_deployments 节点部署记录
         if let Some(deployment) = existing_deployment {
-            let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateFields {
-                version: Some(new_version.clone()),
-                deployment_type: Some("upgrade".to_string()),
-                last_sync_at: Some(Utc::now()),
-                ..Default::default()
-            };
-            self.deps.deployment_repository
+            let update_fields =
+                crate::infrastructure::database::deployment::DeploymentUpdateFields {
+                    version: new_version.clone(),
+                    ..Default::default()
+                };
+            self.deps
+                .deployment_repository
                 .update_deployment(&deployment.id, &update_fields, None)
                 .await?;
         }
@@ -298,7 +412,7 @@ impl UpgradeService {
         .with_old_value(old_version.clone())
         .with_new_value(new_version.clone())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤16: 发布升级完成事件
         self.deps
@@ -313,7 +427,11 @@ impl UpgradeService {
                 }),
             ))
             .await;
-
+        //提交事务
+        txn_guard
+            .commit()
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
         Ok(UpgradeResponse {
             plugin_id,
             old_version,

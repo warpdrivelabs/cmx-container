@@ -3,19 +3,19 @@
 //! 提供插件数据的增删改查操作
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_database::DatabaseManager;
+use modql::field::Fields;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use super::schema::SchemaManager;
 use crate::domain::plugin::PluginFilter;
 use crate::error::{PluginError, PluginResult};
 
 /// 插件数据库记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct PluginDbRecord {
     /// 主键ID
     pub id: String,
@@ -29,8 +29,6 @@ pub struct PluginDbRecord {
     pub wasm_path: String,
     /// 安装根目录路径
     pub install_path: String,
-    /// 配置文件路径
-    pub config_path: Option<String>,
     /// 数据库ID
     pub db_id: String,
     /// 状态
@@ -57,8 +55,7 @@ pub struct PluginDbRecord {
     pub signature_algorithm: Option<String>,
     /// 签名密钥ID
     pub signer_key_id: Option<String>,
-    /// 激活时间
-    pub activated_at: Option<DateTime<Utc>>,
+
     /// 创建时间
     pub create_time: DateTime<Utc>,
     /// 更新时间
@@ -75,21 +72,59 @@ pub struct PluginDbRecord {
     pub update_name: Option<String>,
 }
 
-/// 插件更新字段
-#[derive(Debug, Clone, Default)]
+/// 插件更新字段 通过插件id和版本 作为where条件更新插件信息
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Fields)]
 pub struct PluginUpdateFields {
-    /// 名称
-    pub name: Option<String>,
-    /// 版本
-    pub version: Option<String>,
+    /// 插件唯一标识
+    pub plugin_id: String,
+    /// 显示名称
+    pub name: String,
+    /// 当前版本
+    pub version: String,
+
+    /// WASM 文件路径
+    pub wasm_path: String,
+    /// 安装根目录路径
+    pub install_path: String,
+    /// 数据库ID
+    pub db_id: String,
     /// 状态
-    pub status: Option<String>,
+    pub status: String,
+    /// 是否系统插件
+    pub is_system: bool,
     /// 是否锁定
-    pub is_locked: Option<bool>,
-    /// 元数据
+    pub is_locked: bool,
+    /// 域编码
+    pub domain_code: Option<String>,
+    /// 应用编码
+    pub application_code: Option<String>,
+    /// 模块编码
+    pub module_code: Option<String>,
+    /// 开发商名称
+    pub vendor_name: Option<String>,
+    /// 开发商URL
+    pub vendor_url: Option<String>,
+    /// 开发商联系方式
+    pub vendor_contact: Option<String>,
+    /// 扩展元数据
     pub metadata: Option<serde_json::Value>,
-    /// 激活时间
-    pub activated_at: Option<DateTime<Utc>>,
+    /// 签名算法
+    pub signature_algorithm: Option<String>,
+    /// 签名密钥ID
+    pub signer_key_id: Option<String>,
+
+    /// 更新时间
+    pub update_time: DateTime<Utc>,
+    /// 归档标志
+    pub archived: i32,
+    /// 创建人ID
+    pub create_by: Option<String>,
+    /// 创建人名称
+    pub create_name: Option<String>,
+    /// 更新人ID
+    pub update_by: Option<String>,
+    /// 更新人名称
+    pub update_name: Option<String>,
 }
 
 /// 插件数据仓库
@@ -119,7 +154,8 @@ impl PluginRepository {
         let sqls = SchemaManager::get_create_system_tables_sql();
 
         for sql in sqls {
-            let statements: Vec<&str> = sql.split(';')
+            let statements: Vec<&str> = sql
+                .split(';')
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty() && !s.starts_with("--"))
                 .collect();
@@ -138,7 +174,11 @@ impl PluginRepository {
     }
 
     /// 插入插件记录
-    pub async fn insert_plugin(&self, record: &PluginDbRecord,txn_id:Option<&str>) -> PluginResult<()> {
+    pub async fn insert_plugin(
+        &self,
+        record: &PluginDbRecord,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
         use sea_query::{PostgresQueryBuilder, Query};
         use sea_query_binder::SqlxBinder;
 
@@ -146,10 +186,27 @@ impl PluginRepository {
         query
             .into_table("cmx_plugin")
             .columns(vec![
-                "id", "plugin_id", "name", "version", "wasm_path", "install_path", "config_path",
-                "db_id", "status", "is_system", "is_locked", "domain_code", "application_code",
-                "module_code", "vendor_name", "vendor_url", "vendor_contact", "metadata",
-                "signature_algorithm", "signer_key_id", "activated_at", "create_time", "update_time"
+                "id",
+                "plugin_id",
+                "name",
+                "version",
+                "wasm_path",
+                "install_path",
+                "db_id",
+                "status",
+                "is_system",
+                "is_locked",
+                "domain_code",
+                "application_code",
+                "module_code",
+                "vendor_name",
+                "vendor_url",
+                "vendor_contact",
+                "metadata",
+                "signature_algorithm",
+                "signer_key_id",
+                "create_time",
+                "update_time",
             ])
             .values(vec![
                 record.id.clone().into(),
@@ -158,7 +215,6 @@ impl PluginRepository {
                 record.version.clone().into(),
                 record.wasm_path.clone().into(),
                 record.install_path.clone().into(),
-                record.config_path.clone().into(),
                 record.db_id.clone().into(),
                 record.status.clone().into(),
                 record.is_system.into(),
@@ -172,9 +228,8 @@ impl PluginRepository {
                 record.metadata.clone().into(),
                 record.signature_algorithm.clone().into(),
                 record.signer_key_id.clone().into(),
-                record.activated_at.clone().into(),
                 record.create_time.into(),
-                record.update_time.into()
+                record.update_time.into(),
             ])
             .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
 
@@ -188,71 +243,83 @@ impl PluginRepository {
         Ok(())
     }
 
-    /// 更新插件记录
-    pub async fn update_plugin(&self, plugin_id: &str, fields: &PluginUpdateFields) -> PluginResult<()> {
-        let mut updates = Vec::new();
-        let mut param_index = 1;
-        let mut params = Vec::new();
+    /// 更新插件记录，通过 plugin_id 作为 where 条件
+    pub async fn update_plugin(
+        &self,
+        plugin_id: &str,
+        fields: &PluginUpdateFields,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
+        use sea_query::{Expr, PostgresQueryBuilder, Query};
+        use sea_query_binder::SqlxBinder;
 
-        if let Some(ref name) = fields.name {
-            updates.push(format!("name = ${}", param_index));
-            params.push(serde_json::json!(name));
-            param_index += 1;
+        let mut query = Query::update();
+        query.table("cmx_plugin");
+
+        if fields.version != String::default() {
+            query.value("version", fields.version.clone());
+        }
+        if fields.version != String::default() {
+            query.value("name", fields.name.clone());
+        }
+        if fields.wasm_path != String::default() {
+            query.value("wasm_path", fields.wasm_path.clone());
+        }
+        if fields.install_path != String::default() {
+            query.value("install_path", fields.install_path.clone());
+        }
+        if fields.db_id != String::default() {
+            query.value("db_id", fields.db_id.clone());
+        }
+        if fields.status != String::default() {
+            query.value("status", fields.status.clone());
+        }
+        if fields.is_system != bool::default() {
+            query.value("is_system", fields.is_system);
+        }
+        if fields.is_locked != bool::default() {
+            query.value("is_locked", fields.is_locked);
+        }
+        if fields.domain_code.is_some() {
+            query.value("domain_code", fields.domain_code.clone());
+        }
+        if fields.application_code.is_some() {
+            query.value("application_code", fields.application_code.clone());
+        }
+        if fields.module_code.is_some() {
+            query.value("module_code", fields.module_code.clone());
+        }
+        if fields.vendor_name.is_some() {
+            query.value("vendor_name", fields.vendor_name.clone());
+        }
+        if fields.vendor_url.is_some() {
+            query.value("vendor_url", fields.vendor_url.clone());
+        }
+        if fields.vendor_contact.is_some() {
+            query.value("vendor_contact", fields.vendor_contact.clone());
+        }
+        if fields.metadata.is_some() {
+            query.value("metadata", fields.metadata.clone());
+        }
+        if fields.signature_algorithm.is_some() {
+            query.value("signature_algorithm", fields.signature_algorithm.clone());
+        }
+        if fields.signer_key_id.is_some() {
+            query.value("signer_key_id", fields.signer_key_id.clone());
+        }
+        if fields.update_by.is_some() {
+            query.value("update_by", fields.update_by.clone());
+        }
+        if fields.update_name.is_some() {
+            query.value("update_name", fields.update_name.clone());
         }
 
-        if let Some(ref version) = fields.version {
-            updates.push(format!("version = ${}", param_index));
-            params.push(serde_json::json!(version));
-            param_index += 1;
-        }
+        query.and_where(Expr::col("plugin_id").eq(plugin_id));
 
-        if let Some(ref status) = fields.status {
-            updates.push(format!("status = ${}", param_index));
-            params.push(serde_json::json!(status));
-            param_index += 1;
-        }
-
-        if let Some(is_locked) = fields.is_locked {
-            updates.push(format!("is_locked = ${}", param_index));
-            params.push(serde_json::json!(is_locked));
-            param_index += 1;
-        }
-
-        if let Some(ref metadata) = fields.metadata {
-            updates.push(format!("metadata = ${}", param_index));
-            params.push(serde_json::json!(metadata));
-            param_index += 1;
-        }
-
-        if let Some(ref activated_at) = fields.activated_at {
-            updates.push(format!("activated_at = ${}", param_index));
-            params.push(serde_json::json!(activated_at));
-            param_index += 1;
-        }
-
-        if updates.is_empty() {
-            return Ok(());
-        }
-
-        updates.push(format!("update_time = ${}", param_index));
-        params.push(serde_json::json!(Utc::now()));
-        param_index += 1;
-
-        params.push(serde_json::json!(plugin_id));
-
-        let sql = format!(
-            "UPDATE cmx_plugin SET {} WHERE plugin_id = ${}",
-            updates.join(", "),
-            param_index
-        );
+        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
         self.db_manager
-            .execute_sql_with_json(
-                &self.default_db_id,
-                None,
-                &sql,
-                serde_json::json!(params),
-            )
+            .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| PluginError::Database(format!("更新插件记录失败: {}", e)))?;
 
@@ -277,7 +344,8 @@ impl PluginRepository {
         let sql = "SELECT * FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
@@ -290,7 +358,8 @@ impl PluginRepository {
         let sql = "SELECT * FROM cmx_plugin WHERE id = $1";
         let params = serde_json::json!([id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
@@ -322,9 +391,13 @@ impl PluginRepository {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        let sql = format!("SELECT * FROM cmx_plugin {} ORDER BY create_time DESC", where_clause);
+        let sql = format!(
+            "SELECT * FROM cmx_plugin {} ORDER BY create_time DESC",
+            where_clause
+        );
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(
                 &self.default_db_id,
                 None,
@@ -343,7 +416,8 @@ impl PluginRepository {
         let sql = "SELECT COUNT(*) as count FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("检查插件存在失败: {}", e)))?;
@@ -356,7 +430,8 @@ impl PluginRepository {
     pub async fn count_plugins(&self) -> PluginResult<u64> {
         let sql = "SELECT COUNT(*) as count FROM cmx_plugin";
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql(&self.default_db_id, None, sql, "count_query")
             .await
             .map_err(|e| PluginError::Database(format!("获取插件总数失败: {}", e)))?;
@@ -433,16 +508,30 @@ impl PluginRepository {
         let sql = "SELECT version FROM cmx_plugin WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
 
-        let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "baseline_version_query")
+        let result = self
+            .db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "baseline_version_query",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("查询基线版本失败: {}", e)))?;
 
         if result.row_count() > 0 {
             let row = result.iter().next();
             if let Some(row) = row {
-                let version = row.get_by_name(result.schema.as_ref(), "version")
-                    .and_then(|v| if let DataValue::String(s) = v { Some(s.clone()) } else { None });
+                let version = row
+                    .get_by_name(result.schema.as_ref(), "version")
+                    .and_then(|v| {
+                        if let DataValue::String(s) = v {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    });
                 return Ok(version);
             }
         }
@@ -452,10 +541,10 @@ impl PluginRepository {
     /// 更新插件状态
     pub async fn update_plugin_status(&self, plugin_id: &str, status: &str) -> PluginResult<()> {
         let fields = PluginUpdateFields {
-            status: Some(status.to_string()),
+            status: status.to_string(),
             ..Default::default()
         };
-        self.update_plugin(plugin_id, &fields).await
+        self.update_plugin(plugin_id, &fields, None).await
     }
 
     /// 解析插件记录
@@ -464,9 +553,11 @@ impl PluginRepository {
         let schema = dataset.schema.as_ref();
 
         for row in dataset.iter() {
-            let get_datetime_default = |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
-                row.get_by_name_as(schema, col_name).unwrap_or_else(default_fn)
-            };
+            let get_datetime_default =
+                |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
+                    row.get_by_name_as(schema, col_name)
+                        .unwrap_or_else(default_fn)
+                };
 
             let record = PluginDbRecord {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
@@ -474,10 +565,15 @@ impl PluginRepository {
                 name: row.get_by_name_as(schema, "name").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
                 wasm_path: row.get_by_name_as(schema, "wasm_path").unwrap_or_default(),
-                install_path: row.get_by_name_as(schema, "install_path").unwrap_or_default(),
-                config_path: row.get_by_name_as(schema, "config_path"),
-                db_id: row.get_by_name_as(schema, "db_id").unwrap_or_else(|| "default".to_string()),
-                status: row.get_by_name_as(schema, "status").unwrap_or_else(|| "installed".to_string()),
+                install_path: row
+                    .get_by_name_as(schema, "install_path")
+                    .unwrap_or_default(),
+                db_id: row
+                    .get_by_name_as(schema, "db_id")
+                    .unwrap_or_else(|| "default".to_string()),
+                status: row
+                    .get_by_name_as(schema, "status")
+                    .unwrap_or_else(|| "installed".to_string()),
                 is_system: row.get_by_name_as(schema, "is_system").unwrap_or(false),
                 is_locked: row.get_by_name_as(schema, "is_locked").unwrap_or(false),
                 domain_code: row.get_by_name_as(schema, "domain_code"),
@@ -489,7 +585,6 @@ impl PluginRepository {
                 metadata: Self::parse_metadata(row, schema),
                 signature_algorithm: row.get_by_name_as(schema, "signature_algorithm"),
                 signer_key_id: row.get_by_name_as(schema, "signer_key_id"),
-                activated_at: row.get_by_name_as(schema, "activated_at"),
                 create_time: get_datetime_default("create_time", Utc::now),
                 update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
@@ -506,12 +601,10 @@ impl PluginRepository {
     }
 
     fn parse_metadata(row: &Row, schema: &Schema) -> Option<serde_json::Value> {
-        row.get_by_name(schema, "metadata").and_then(|v| {
-            match v {
-                DataValue::Json(s) => serde_json::from_str(s).ok(),
-                DataValue::String(s) => serde_json::from_str(s).ok(),
-                _ => None,
-            }
+        row.get_by_name(schema, "metadata").and_then(|v| match v {
+            DataValue::Json(s) => serde_json::from_str(s).ok(),
+            DataValue::String(s) => serde_json::from_str(s).ok(),
+            _ => None,
         })
     }
 
@@ -531,28 +624,6 @@ impl PluginRepository {
             None
         }
     }
-
-    // /// 在事务中执行操作
-    // pub async fn with_transaction<F, T>(&self, db_id: &str, f: F) -> PluginResult<T>
-    // where
-    //     F: FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = PluginResult<T>> + Send>>,
-    // {
-    //     let txn_context = self.db_manager.get_transaction_context();
-    //     let txn_id = txn_context.begin(db_id, TransactionOptions::default()).await
-    //         .map_err(|e| PluginError::Transaction(format!("开始事务失败: {}", e)))?;
-    //
-    //     match f().await {
-    //         Ok(result) => {
-    //             txn_context.commit(&txn_id).await
-    //                 .map_err(|e| PluginError::Transaction(format!("提交事务失败: {}", e)))?;
-    //             Ok(result)
-    //         }
-    //         Err(e) => {
-    //             let _ = txn_context.rollback(&txn_id).await;
-    //             Err(e)
-    //         }
-    //     }
-    // }
 }
 
 impl Default for PluginRepository {

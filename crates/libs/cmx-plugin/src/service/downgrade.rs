@@ -146,10 +146,8 @@ impl DowngradeService {
         // 步骤5: 更新 cmx_plugin_deployments 节点部署记录
         if let Some(deployment) = existing_deployment {
             let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateFields {
-                version: Some(request.target_version.clone()),
-                deployment_type: Some("downgrade".to_string()),
+                version: request.target_version.clone(),
                 status: Some("deployed".to_string()),
-                last_sync_at: Some(Utc::now()),
                 ..Default::default()
             };
             self.deps.deployment_repository
@@ -159,10 +157,10 @@ impl DowngradeService {
 
         // 步骤6: 更新 cmx_plugin 主表
         let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-            version: Some(request.target_version.clone()),
+            version: request.target_version.clone(),
             ..Default::default()
         };
-        self.deps.repository.update_plugin(&plugin_id, &fields).await?;
+        self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
 
         // 步骤7: 更新注册表
         {
@@ -189,7 +187,7 @@ impl DowngradeService {
             author: None,
             source: crate::domain::plugin::PluginSource::Local { path: target_version_record.install_path.clone().into() },
             status: plugin_status,
-            installed_at: plugin.activated_at,
+            installed_at: Some(plugin.create_time),
             updated_at: Some(Utc::now()),
         };
         self.deps

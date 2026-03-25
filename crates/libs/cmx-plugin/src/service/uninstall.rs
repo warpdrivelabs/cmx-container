@@ -164,10 +164,10 @@ impl UninstallService {
         if other_active_nodes.is_empty() {
             // 没有其他节点，更新 cmx_plugin 状态为 uninstalled
             let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                status: Some("uninstalled".to_string()),
+                status: "uninstalled".to_string(),
                 ..Default::default()
             };
-            self.deps.repository.update_plugin(&plugin_id, &fields).await?;
+            self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
         } else {
             // 有其他节点，找到最高版本，更新 cmx_plugin 基线版本
             let highest_version = other_active_nodes
@@ -179,10 +179,10 @@ impl UninstallService {
             if let Some(hv) = highest_version {
                 let hv_clone = hv.clone();
                 let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                    version: Some(hv_clone.clone()),
+                    version: hv_clone.clone(),
                     ..Default::default()
                 };
-                self.deps.repository.update_plugin(&plugin_id, &fields).await?;
+                self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
 
                 // 更新 cmx_plugin_versions 的 is_current
                 self.deps.version_history_repository

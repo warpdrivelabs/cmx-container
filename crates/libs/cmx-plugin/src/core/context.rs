@@ -24,10 +24,6 @@ pub struct PluginContext {
     pub install_path: PathBuf,
     /// WASM路径
     pub wasm_path: PathBuf,
-    /// 配置
-    pub config: Option<serde_json::Value>,
-    /// 激活时间
-    pub activated_at: Option<DateTime<Utc>>,
     /// 服务句柄列表
     pub services: Vec<String>,
     /// 扩展元数据
@@ -44,8 +40,6 @@ impl PluginContext {
             db_id: String::new(),
             install_path: PathBuf::new(),
             wasm_path: PathBuf::new(),
-            config: None,
-            activated_at: None,
             services: Vec::new(),
             metadata: HashMap::new(),
         }
@@ -60,8 +54,6 @@ impl PluginContext {
             db_id: String::new(),
             install_path: install_path.to_path_buf(),
             wasm_path: install_path.join(&def.main_file),
-            config: None,
-            activated_at: None,
             services: Vec::new(),
             metadata: HashMap::new(),
         }
@@ -82,46 +74,42 @@ impl PluginContext {
             db_id: record.db_id.clone(),
             install_path: PathBuf::from(&record.install_path),
             wasm_path: PathBuf::from(&record.wasm_path),
-            config: record.metadata.clone(),
-            activated_at: record.activated_at,
             services: Vec::new(),
             metadata: HashMap::new(),
         }
     }
 
-    /// 转换为数据库记录
-    pub fn to_db_record(&self) -> crate::infrastructure::database::repository::PluginDbRecord {
-        crate::infrastructure::database::repository::PluginDbRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            plugin_id: self.plugin_id.clone(),
-            name: self.plugin_id.clone(),
-            version: self.version.clone(),
-            wasm_path: self.wasm_path.to_string_lossy().to_string(),
-            install_path: self.install_path.to_string_lossy().to_string(),
-            config_path: None,
-            db_id: self.db_id.clone(),
-            status: self.status.to_string(),
-            is_system: false,
-            is_locked: false,
-            domain_code: None,
-            application_code: None,
-            module_code: None,
-            vendor_name: None,
-            vendor_url: None,
-            vendor_contact: None,
-            metadata: self.config.clone(),
-            signature_algorithm: None,
-            signer_key_id: None,
-            activated_at: self.activated_at,
-            create_time: Utc::now(),
-            update_time: Utc::now(),
-            archived: 0,
-            create_by: None,
-            create_name: None,
-            update_by: None,
-            update_name: None,
-        }
-    }
+    // /// 转换为数据库记录
+    // pub fn to_db_record(&self) -> crate::infrastructure::database::repository::PluginDbRecord {
+    //     crate::infrastructure::database::repository::PluginDbRecord {
+    //         id: uuid::Uuid::new_v4().to_string(),
+    //         plugin_id: self.plugin_id.clone(),
+    //         name: self.plugin_id.clone(),
+    //         version: self.version.clone(),
+    //         wasm_path: self.wasm_path.to_string_lossy().to_string(),
+    //         install_path: self.install_path.to_string_lossy().to_string(),
+    //         db_id: self.db_id.clone(),
+    //         status: self.status.to_string(),
+    //         is_system: false,
+    //         is_locked: false,
+    //         domain_code: None,
+    //         application_code: None,
+    //         module_code: None,
+    //         vendor_name: None,
+    //         vendor_url: None,
+    //         vendor_contact: None,
+    //         metadata: self.config.clone(),
+    //         signature_algorithm: None,
+    //         signer_key_id: None,
+    //         create_time: Utc::now(),
+    //         update_time: Utc::now(),
+    //         archived: 0,
+    //         create_by: None,
+    //         create_name: None,
+    //         update_by: None,
+    //         update_name: None,
+    //     }
+    // }
 }
 
 use std::path::Path;

@@ -5,28 +5,28 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::audit::logger::AuditLogger;
+use crate::common::{
+    DefinitionUtils, DependencyUtils, DependencyUtilsDeps, PackageUtils, PackageUtilsDeps,
+};
+use crate::core::context::PluginContext;
+use crate::core::registry::PluginRegistry;
+use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::database::table_metadata::TableMetadataRepository;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use crate::infrastructure::storage::TempDirCleanup;
+use crate::infrastructure::storage::backup::BackupManager;
+use crate::infrastructure::storage::file::FileStorage;
+use crate::security::validator::SecurityValidator;
 use chrono::Utc;
-use log::info;
+use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use cmx_database::get_default_db_manager;
-use cmx_utils::ConfigManager;
-use crate::error::{PluginError, PluginResult};
-use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::deployment::DeploymentRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::database::table_metadata::TableMetadataRepository;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::storage::file::FileStorage;
-use crate::infrastructure::storage::backup::BackupManager;
-use crate::infrastructure::storage::TempDirCleanup;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
-use crate::security::validator::SecurityValidator;
-use crate::audit::logger::AuditLogger;
-use crate::core::registry::PluginRegistry;
-use crate::core::context::PluginContext;
-use crate::common::{PackageUtils, DefinitionUtils, DependencyUtils, PackageUtilsDeps, DependencyUtilsDeps};
 
 /// 安装请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +115,11 @@ impl InstallService {
         let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
             repository: deps.repository.clone(),
         });
-        Self { deps, package_utils, dependency_utils }
+        Self {
+            deps,
+            package_utils,
+            dependency_utils,
+        }
     }
 
     /// 执行安装操作
@@ -129,8 +133,8 @@ impl InstallService {
     /// 6. 创建安装目录
     /// 7. 复制文件到安装目录
     /// 8. 创建数据库表
-    /// 9. 注册插件
-    /// 10. 保存数据库记录
+    /// 9. 保存数据库记录
+    /// 10  注册插件到内存
     /// 11. 更新缓存
     /// 12. 记录审计日志
     /// 13. 清理临时目录
@@ -140,7 +144,11 @@ impl InstallService {
         // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self
             .package_utils
-            .fetch_package(&request.source, request.version_constraint.as_deref(), "安装")
+            .fetch_package(
+                &request.source,
+                request.version_constraint.as_deref(),
+                "安装",
+            )
             .await?;
 
         // 步骤2: 如果是 zip，解压到临时目录
@@ -148,9 +156,9 @@ impl InstallService {
             .deps
             .temp_root
             .join(format!("plugin_install_{}", uuid::Uuid::new_v4()));
-        let (extract_path, needs_cleanup) = self
-            .package_utils
-            .prepare_package_for_validation(&package_path, &temp_dir, "安装")?;
+        let (extract_path, needs_cleanup) =
+            self.package_utils
+                .prepare_package_for_validation(&package_path, &temp_dir, "安装")?;
 
         let _cleanup = TempDirCleanup::new(needs_cleanup.then_some(temp_dir.clone()));
 
@@ -173,7 +181,9 @@ impl InstallService {
             .unwrap_or_else(|| "1.0.0".to_string());
 
         // 步骤4: 检查当前节点此插件版本是否已安装
-        let existing_deployment = self.deps.deployment_repository
+        let existing_deployment = self
+            .deps
+            .deployment_repository
             .find_deployment(&plugin_id, &self.deps.node_id, &version)
             .await?;
 
@@ -181,40 +191,42 @@ impl InstallService {
             return Err(PluginError::plugin_already_exists(&plugin_id));
         }
 
-
         // 步骤5: 检查依赖
         let registry = self.deps.registry.clone();
         let repository = self.deps.repository.clone();
-        let dep_result = self.dependency_utils.check_plugin_dependencies(&plugin_def, |plugin_id| {
-            let registry = registry.clone();
-            let repository = repository.clone();
-            let plugin_id = plugin_id.to_string();
-            async move {
-                {
-                    let registry = registry.read().await;
-                    if let Some(info) = registry.get(&plugin_id) {
-                        return Ok(Some(info.clone()));
+        let dep_result = self
+            .dependency_utils
+            .check_plugin_dependencies(&plugin_def, |plugin_id| {
+                let registry = registry.clone();
+                let repository = repository.clone();
+                let plugin_id = plugin_id.to_string();
+                async move {
+                    {
+                        let registry = registry.read().await;
+                        if let Some(info) = registry.get(&plugin_id) {
+                            return Ok(Some(info.clone()));
+                        }
                     }
+                    if let Some(record) = repository.find_plugin(&plugin_id).await? {
+                        let info = PluginInfo {
+                            id: record.plugin_id,
+                            name: record.name,
+                            version: record.version,
+                            description: None,
+                            author: record.vendor_name,
+                            source: PluginSource::Local {
+                                path: PathBuf::from(&record.install_path),
+                            },
+                            status: PluginStatus::Installed,
+                            installed_at: Some(record.create_time),
+                            updated_at: Some(record.update_time),
+                        };
+                        return Ok(Some(info));
+                    }
+                    Ok(None)
                 }
-                if let Some(record) = repository.find_plugin(&plugin_id).await? {
-                    let info = PluginInfo {
-                        id: record.plugin_id,
-                        name: record.name,
-                        version: record.version,
-                        description: None,
-                        author: record.vendor_name,
-                        source: PluginSource::Local {
-                            path: PathBuf::from(&record.install_path),
-                        },
-                        status: PluginStatus::Installed,
-                        installed_at: Some(record.create_time),
-                        updated_at: Some(record.update_time),
-                    };
-                    return Ok(Some(info));
-                }
-                Ok(None)
-            }
-        }).await?;
+            })
+            .await?;
         if !dep_result.satisfied {
             let missing: Vec<String> = dep_result
                 .missing
@@ -235,8 +247,8 @@ impl InstallService {
         self.deps.storage.create_dir(&install_path)?;
 
         // 步骤7: 复制文件到安装目录
-        self.package_utils.copy_plugin_files(&extract_path, &install_path, "安装")?;
-
+        self.package_utils
+            .copy_plugin_files(&extract_path, &install_path, "安装")?;
 
         // 步骤8: 创建插件数据库表
         let db_id = request
@@ -247,9 +259,9 @@ impl InstallService {
         //开启事务
         let txn_guard = get_default_db_manager()
             .get_transaction_context()
-            .begin_with_guard(db_id.clone().as_str()).await
+            .begin_with_guard(db_id.clone().as_str())
+            .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
-
 
         if !plugin_def.table_config_files.is_empty() {
             ///PostgreSQL 的行为：
@@ -257,24 +269,19 @@ impl InstallService {
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
             //所以ddl语句不要在事务中执行
-            crate::service::utils::create_plugin_tables(&db_id, &plugin_id, &version, &install_path, &plugin_def.table_config_files, None, Some(&self.deps.table_metadata_repository))
-                .await?;
+            crate::service::utils::create_plugin_tables(
+                &db_id,
+                &plugin_id,
+                &version,
+                &install_path,
+                &plugin_def.table_config_files,
+                None,
+                Some(&self.deps.table_metadata_repository),
+            )
+            .await?;
         }
 
-        // 步骤9: 注册插件
-        let plugin_info = PluginInfo {
-            id: plugin_id.clone(),
-            name: plugin_def.name.clone(),
-            version: version.clone(),
-            description: plugin_def.description.clone(),
-            author: plugin_def.vendor_name.clone(),
-            source: request.source.clone(),
-            status: PluginStatus::Installed,
-            installed_at: Some(Utc::now()),
-            updated_at: Some(Utc::now()),
-        };
-
-        // 步骤10: 保存数据库记录
+        // 步骤9: 保存数据库记录
         let db_record = crate::infrastructure::database::repository::PluginDbRecord {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id: plugin_id.clone(),
@@ -285,7 +292,6 @@ impl InstallService {
                 .to_string_lossy()
                 .to_string(),
             install_path: install_path.to_string_lossy().to_string(),
-            config_path: None,
             db_id: db_id.clone(),
             status: "installed".to_string(),
             is_system: false,
@@ -299,7 +305,6 @@ impl InstallService {
             metadata: None,
             signature_algorithm: None,
             signer_key_id: None,
-            activated_at: None,
             create_time: Utc::now(),
             update_time: Utc::now(),
             archived: 0,
@@ -309,77 +314,142 @@ impl InstallService {
             update_name: None,
         };
 
-        self.deps.repository.insert_plugin(&db_record,Some(txn_guard.txn_id())).await?;
-
-        // 步骤10.1: 【新增】插入 cmx_plugin_versions 版本历史
-        let baseline_version = self.deps.repository
+        // 查询数据库是否已经有基线插件了
+        let baseline_version = self
+            .deps
+            .repository
             .get_baseline_version(&plugin_id)
             .await?;
 
-        let version_type = if baseline_version.is_some() { "upgrade" } else { "initial" };
+        let baseline_exist = baseline_version.is_some();
+        if baseline_exist {
+            let bversion = baseline_version.unwrap();
+            //版本小不能用安装，应该使用降级
+            if version < bversion {
+                return Err(PluginError::Install(format!(
+                    "要安装的{}插件版本{}小于基线版本{}，应该使用降级方式，不能采用安装方式",
+                    plugin_id, version, bversion
+                )));
+            }
+        }
 
-        let version_record = crate::infrastructure::database::version_history::VersionHistoryRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            plugin_id: plugin_id.clone(),
-            version: version.clone(),
-            version_type: version_type.to_string(),
-            from_version: baseline_version.clone(),
-            install_path: install_path.to_string_lossy().to_string(),
-            wasm_path: install_path.join(&plugin_def.main_file).to_string_lossy().to_string(),
-            backup_path: None,
-            is_current: true,
-            installed_at: Utc::now(),
-            uninstalled_at: None,
-            installed_by: None,
-            install_reason: None,
-            archived: 0,
-            create_by: None,
-            create_name: None,
-            update_by: None,
-            update_name: None,
-        };
-        self.deps.version_history_repository
-            .insert_version(&version_record, None)
-            .await?;
+        let version_record =
+            crate::infrastructure::database::version_history::VersionHistoryRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                plugin_id: plugin_id.clone(),
+                version: version.clone(),
+                install_path: install_path.to_string_lossy().to_string(),
+                wasm_path: install_path
+                    .join(&plugin_def.main_file)
+                    .to_string_lossy()
+                    .to_string(),
+                is_current: true,
+                installed_at: Utc::now(),
+                create_time: Utc::now(),
+                update_time: Utc::now(),
+                uninstalled_at: None,
+                archived: 0,
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
 
-        // 将之前的基线版本标记为非当前
-        if baseline_version.is_some() {
-            self.deps.version_history_repository
-                .mark_all_not_current(&plugin_id, None)
+        //基线插件不存在
+        if !baseline_exist {
+
+            //插入数据
+            self.deps
+                .repository
+                .insert_plugin(&db_record, Some(txn_guard.txn_id()))
+                .await?;
+            //插入版本历史
+            self.deps
+                .version_history_repository
+                .insert_version(&version_record, None)
+                .await?;
+        } else {
+            //基线版本存在，
+            //// 将之前的基线版本标记为非当前
+            self.deps
+                .version_history_repository
+                .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+                .await?;
+
+            let update_fields = crate::infrastructure::database::repository::PluginUpdateFields {
+                plugin_id: plugin_id.clone(),
+                name: plugin_def.name.clone(),
+                version: version.clone(),
+                wasm_path: install_path
+                    .join(&plugin_def.main_file)
+                    .to_string_lossy()
+                    .to_string(),
+                install_path: install_path.to_string_lossy().to_string(),
+                db_id: db_id.clone(),
+                status: "installed".to_string(),
+                is_system: false,
+                is_locked: false,
+                domain_code: plugin_def.domain_code.clone(),
+                application_code: plugin_def.application_code.clone(),
+                module_code: plugin_def.module_code.clone(),
+                vendor_name: plugin_def.vendor_name.clone(),
+                vendor_url: plugin_def.vendor_url.clone(),
+                vendor_contact: plugin_def.vendor_contact.clone(),
+                metadata: None,
+                signature_algorithm: None,
+                signer_key_id: None,
+                update_time: Utc::now(),
+                archived: 0,
+                create_by: None,
+                create_name: None,
+                update_by: None,
+                update_name: None,
+            };
+            self.deps.repository.update_plugin(&plugin_id, &update_fields, Some(txn_guard.txn_id())).await?;
+
+            //插入版本历史
+            self.deps
+                .version_history_repository
+                .insert_version(&version_record, None)
                 .await?;
         }
 
-        // 步骤10.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
-        let existing_deployment = self.deps.deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id, &version)
-            .await?;
-
+        // 步骤9.2: 【新增】插入 cmx_plugin_deployments 节点部署记录
         let deployment_record = crate::infrastructure::database::deployment::DeploymentRecord {
             id: uuid::Uuid::new_v4().to_string(),
             plugin_id: plugin_id.clone(),
             node_id: self.deps.node_id.clone(),
-            node_name: self.deps.node_name.clone(),
             node_type: self.deps.node_type.clone(),
             version: version.clone(),
-            deployment_type: if existing_deployment.is_some() { version_type.to_string() } else { "initial".to_string() },
             status: "deployed".to_string(),
             progress: 100,
             error_message: None,
             error_details: None,
-            sync_token: None,
-            last_sync_at: Some(Utc::now()),
-            deployed_at: Utc::now(),
-            validated_at: None,
             archived: 0,
             create_by: None,
             create_name: None,
             update_by: None,
             update_name: None,
+            create_time: Utc::now(),
+            update_time: Utc::now(),
         };
-        self.deps.deployment_repository
+        self.deps
+            .deployment_repository
             .insert_deployment(&deployment_record, None)
             .await?;
 
+        // 步骤10: 注册插件
+        let plugin_info = PluginInfo {
+            id: plugin_id.clone(),
+            name: plugin_def.name.clone(),
+            version: version.clone(),
+            description: plugin_def.description.clone(),
+            author: plugin_def.vendor_name.clone(),
+            source: request.source.clone(),
+            status: PluginStatus::Installed,
+            installed_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+        };
         {
             let mut registry = self.deps.registry.write().await;
             registry.register(plugin_info.clone());
@@ -409,16 +479,16 @@ impl InstallService {
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
         )
-            .with_node_id(self.deps.node_id.clone())
+        .with_node_id(self.deps.node_id.clone())
         .with_details(serde_json::json!({
             "version": version,
             "install_path": install_path.to_string_lossy().to_string(),
             "node_id": self.deps.node_id,
-            "version_type": version_type,
         }))
         .with_new_value(install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤13: 发布安装完成事件（临时目录由 TempDirCleanup 自动清理）
         self.deps
@@ -434,8 +504,11 @@ impl InstallService {
             .await;
 
         //提交事务
-        txn_guard.commit().await.map_err(|e| PluginError::Database(e.to_string()))?;
- info!("返回结果");
+        txn_guard
+            .commit()
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
+
         Ok(InstallResponse {
             plugin_id,
             install_path,
@@ -443,8 +516,6 @@ impl InstallService {
             message: "插件安装成功".to_string(),
         })
     }
-
-
 }
 
 impl Default for InstallService {

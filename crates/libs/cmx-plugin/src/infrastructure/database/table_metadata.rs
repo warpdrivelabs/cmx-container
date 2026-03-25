@@ -10,14 +10,15 @@ use chrono::{DateTime, Utc};
 use sea_query::{Expr, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use std::sync::Arc;
-
+use modql::field::Fields;
+use serde::{Deserialize, Serialize};
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 
 use crate::error::{PluginError, PluginResult};
 
 /// cmx_meta_table_define_version 记录
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Serialize, Deserialize,Fields)]
 pub struct TableMetadataVersionRecord {
     pub id: String,
     pub table_name: String,
@@ -35,7 +36,7 @@ pub struct TableMetadataVersionRecord {
 }
 
 /// cmx_meta_table_define + metadata 联查结果
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Serialize, Deserialize,Fields)]
 pub struct TableMetadataRecord {
     pub id: String,
     pub table_name: String,

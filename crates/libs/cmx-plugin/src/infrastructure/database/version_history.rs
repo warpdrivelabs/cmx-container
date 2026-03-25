@@ -19,16 +19,13 @@ pub struct VersionHistoryRecord {
     pub id: String,
     pub plugin_id: String,
     pub version: String,
-    pub version_type: String,
-    pub from_version: Option<String>,
     pub install_path: String,
     pub wasm_path: String,
-    pub backup_path: Option<String>,
     pub is_current: bool,
     pub installed_at: DateTime<Utc>,
     pub uninstalled_at: Option<DateTime<Utc>>,
-    pub installed_by: Option<String>,
-    pub install_reason: Option<String>,
+    pub create_time: DateTime<Utc>,
+    pub update_time: DateTime<Utc>,
     pub archived: i32,
     pub create_by: Option<String>,
     pub create_name: Option<String>,
@@ -39,17 +36,18 @@ pub struct VersionHistoryRecord {
 /// 版本历史更新字段
 #[derive(Debug, Clone, Default)]
 pub struct VersionHistoryUpdateFields {
-    pub from_version: Option<String>,
+    pub plugin_id: String,
+    pub version: String,
     pub install_path: Option<String>,
     pub wasm_path: Option<String>,
-    pub backup_path: Option<String>,
     pub is_current: Option<bool>,
     pub uninstalled_at: Option<DateTime<Utc>>,
-    pub installed_by: Option<String>,
-    pub install_reason: Option<String>,
-    pub archived: Option<i32>,
+    pub update_time: DateTime<Utc>,
+    pub create_by: Option<String>,
+    pub create_name: Option<String>,
     pub update_by: Option<String>,
     pub update_name: Option<String>,
+
 }
 
 /// 版本历史仓库
@@ -78,25 +76,22 @@ impl VersionHistoryRepository {
         query
             .into_table("cmx_plugin_versions")
             .columns(vec![
-                "id", "plugin_id", "version", "version_type", "from_version",
-                "install_path", "wasm_path", "backup_path", "is_current",
-                "installed_at", "uninstalled_at", "installed_by", "install_reason",
+                "id", "plugin_id", "version",
+                "install_path", "wasm_path", "is_current",
+                "installed_at", "uninstalled_at", "create_time", "update_time",
                 "archived", "create_by", "create_name", "update_by", "update_name"
             ])
             .values(vec![
                 record.id.clone().into(),
                 record.plugin_id.clone().into(),
                 record.version.clone().into(),
-                record.version_type.clone().into(),
-                record.from_version.clone().into(),
                 record.install_path.clone().into(),
                 record.wasm_path.clone().into(),
-                record.backup_path.clone().into(),
                 record.is_current.into(),
                 record.installed_at.into(),
                 record.uninstalled_at.clone().into(),
-                record.installed_by.clone().into(),
-                record.install_reason.clone().into(),
+                record.create_time.into(),
+                record.update_time.into(),
                 record.archived.into(),
                 record.create_by.clone().into(),
                 record.create_name.clone().into(),
@@ -120,9 +115,7 @@ impl VersionHistoryRepository {
         let mut query = Query::update();
         query.table("cmx_plugin_versions");
 
-        if let Some(ref from_version) = fields.from_version {
-            query.value("from_version", from_version.clone());
-        }
+
 
         if let Some(ref install_path) = fields.install_path {
             query.value("install_path", install_path.clone());
@@ -132,9 +125,6 @@ impl VersionHistoryRepository {
             query.value("wasm_path", wasm_path.clone());
         }
 
-        if let Some(ref backup_path) = fields.backup_path {
-            query.value("backup_path", backup_path.clone());
-        }
 
         if let Some(is_current) = fields.is_current {
             query.value("is_current", is_current);
@@ -143,23 +133,17 @@ impl VersionHistoryRepository {
         if let Some(ref uninstalled_at) = fields.uninstalled_at {
             query.value("uninstalled_at", uninstalled_at.clone());
         }
-
-        if let Some(ref installed_by) = fields.installed_by {
-            query.value("installed_by", installed_by.clone());
+        if let Some(ref update_time) = fields.uninstalled_at {
+            query.value("update_time", update_time.clone());
         }
 
-        if let Some(ref install_reason) = fields.install_reason {
-            query.value("install_reason", install_reason.clone());
-        }
 
-        if let Some(archived) = fields.archived {
-            query.value("archived", archived);
-        }
 
         query.value("update_by", fields.update_by.clone());
         query.value("update_name", fields.update_name.clone());
 
-        query.and_where(sea_query::Expr::col("id").eq(id));
+        query.and_where(sea_query::Expr::col("plugin_id").eq(fields.plugin_id.clone()));
+        query.and_where(sea_query::Expr::col("version").eq(fields.version.clone()));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -241,16 +225,13 @@ impl VersionHistoryRepository {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
-                version_type: row.get_by_name_as(schema, "version_type").unwrap_or_default(),
-                from_version: row.get_by_name_as(schema, "from_version"),
                 install_path: row.get_by_name_as(schema, "install_path").unwrap_or_default(),
                 wasm_path: row.get_by_name_as(schema, "wasm_path").unwrap_or_default(),
-                backup_path: row.get_by_name_as(schema, "backup_path"),
                 is_current: row.get_by_name_as(schema, "is_current").unwrap_or(false),
                 installed_at: get_datetime_default("installed_at", Utc::now),
                 uninstalled_at: row.get_by_name_as(schema, "uninstalled_at"),
-                installed_by: row.get_by_name_as(schema, "installed_by"),
-                install_reason: row.get_by_name_as(schema, "install_reason"),
+                create_time: row.get_by_name_as(schema, "create_time").unwrap(),
+                update_time: row.get_by_name_as(schema, "update_time").unwrap(),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
                 create_by: row.get_by_name_as(schema, "create_by"),
                 create_name: row.get_by_name_as(schema, "create_name"),
