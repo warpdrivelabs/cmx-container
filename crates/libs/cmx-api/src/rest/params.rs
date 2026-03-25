@@ -5,7 +5,6 @@
 use modql::filter::ListOptions;
 use serde::Deserialize;
 use serde_json::Value;
-use cmx_database::get_default_db_manager;
 
 /// 列表查询的默认限制数量
 pub const LIST_LIMIT_DEFAULT: i64 = 1000;
@@ -83,9 +82,9 @@ pub struct PageParams<F> {
     pub size: Option<i64>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
     pub order_bys: Option<String>,
-    /// 数据库 ID（可选）
-    #[serde(default)]
-    pub db_id: Option<String>,
+    // /// 数据库 ID（可选）
+    // #[serde(default)]
+    // pub db_id: Option<String>,
 }
 
 fn default_page() -> Option<i64> {
@@ -131,19 +130,19 @@ impl<F> PageParams<F> {
         }
     }
 
-    /// 获取数据库 ID
-    pub async fn get_db_id(&self) -> String {
-        if self.db_id.is_some() {
-            return self.db_id.clone().unwrap();
-        }
-        get_default_db_manager().get_default_db_id().await
-    }
+    // /// 获取数据库 ID
+    // pub async fn get_db_id(&self) -> String {
+    //     if self.db_id.is_some() {
+    //         return self.db_id.clone().unwrap();
+    //     }
+    //     get_default_db_manager().get_default_db_id().await
+    // }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::crud::utils::FIELD_CREATE_TIME;
     use super::*;
+    use crate::crud::utils::FIELD_CREATE_TIME;
 
     #[test]
     fn test_list_params_to_list_options() {
@@ -163,7 +162,7 @@ mod tests {
             current: None,
             size: None,
             order_bys: None,
-            db_id: None,
+            // db_id: None,
         };
         assert_eq!(params.get_page(), 1);
         assert_eq!(params.get_size(), PAGE_SIZE_DEFAULT);
@@ -177,7 +176,7 @@ mod tests {
             current: Some(3),
             size: Some(50),
             order_bys: None,
-            db_id: None,
+            // db_id: None,
         };
         assert_eq!(params.get_page(), 3);
         assert_eq!(params.get_size(), 50);
@@ -191,7 +190,7 @@ mod tests {
             current: Some(1),
             size: Some(10000),
             order_bys: None,
-            db_id: None,
+            // db_id: None,
         };
         assert_eq!(params.get_size(), PAGE_SIZE_MAX);
     }
@@ -203,7 +202,7 @@ mod tests {
             current: Some(0),
             size: Some(20),
             order_bys: None,
-            db_id: None,
+            // db_id: None,
         };
         assert_eq!(params.get_page(), 1);
         assert_eq!(params.get_offset(), 0);
@@ -216,7 +215,7 @@ mod tests {
             current: Some(3),
             size: Some(50),
             order_bys: Some("-create_time".to_string()),
-            db_id: Some("tenant1".to_string()),
+            // db_id: Some("tenant1".to_string()),
         };
         let options = params.to_list_options();
         assert_eq!(options.limit, Some(50));
