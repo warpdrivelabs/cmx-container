@@ -68,9 +68,12 @@ pub struct TableMetadataRecord {
 /// 查询条件结构
 #[derive(Debug, Clone, Default)]
 pub struct TableMetadataQuery {
-    pub table_name: String,
+    pub table_name: Option<String>,
     pub db_id: Option<String>,
     pub plugin_id: Option<String>,
+    pub domain_code: Option<String>,
+    pub application_code: Option<String>,
+    pub module_code: Option<String>,
 }
 
 /// 表元数据仓库
@@ -321,9 +324,12 @@ impl TableMetadataRepository {
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         let query = TableMetadataQuery {
-            table_name: record.table_name.clone(),
+            table_name: Some(record.table_name.clone()),
             db_id: Some(record.db_id.clone()),
             plugin_id: None,
+            domain_code: None,
+            application_code: None,
+            module_code: None,
         };
         let existing = self.find_metadata(&query).await?;
 
@@ -433,9 +439,10 @@ impl TableMetadataRepository {
                     .add(sea_query::Expr::col(("cmx_meta_table_define","table_name")).equals(("cmx_meta_table_define_version", "table_name")))
                     .add(sea_query::Expr::col(("cmx_meta_table_define","version")).equals(("cmx_meta_table_define_version", "version")))
                     .add(sea_query::Expr::col(("cmx_meta_table_define","db_id")).equals(("cmx_meta_table_define_version", "db_id"))),
-            )
-            .and_where(sea_query::Expr::col(("cmx_meta_table_define","table_name")).eq(&query.table_name));
-
+            );
+        if let Some(ref table_name) = query.table_name {
+            select.and_where(sea_query::Expr::col(("cmx_meta_table_define","table_name")).eq(table_name));
+        }
         if let Some(ref db_id) = query.db_id {
             select.and_where(sea_query::Expr::col(("cmx_meta_table_define","db_id")).eq(db_id));
         }
@@ -524,7 +531,10 @@ impl TableMetadataRepository {
         query: &TableMetadataQuery,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        let mut conditions = vec![Expr::col("table_name").eq(&query.table_name)];
+        let mut conditions = vec![];
+        if let Some(ref table_name) = query.table_name {
+            conditions.push(Expr::col("table_name").eq(table_name));
+        }
 
         if let Some(ref db_id) = query.db_id {
             conditions.push(Expr::col("db_id").eq(db_id));
