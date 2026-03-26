@@ -115,16 +115,6 @@ pub fn api_routes() -> Router<CmxAppState> {
             axum::routing::post(sys_datasource::handler::delete_datasource),
         )
 
-
-        // .route(
-        //     "/sys-datasource/update-many-custom",
-        //     axum::routing::post(sys_datasource::handler::update_many_datasource),
-        // )
-        // .route(
-        //     "/sys-datasource/create-many-custom",
-        //     axum::routing::post(sys_datasource::handler::create_many_datasource),
-        // )
-
         .route(
             "/sys-datasource/by-db-id",
             axum::routing::post(sys_datasource::handler::get_by_db_id),

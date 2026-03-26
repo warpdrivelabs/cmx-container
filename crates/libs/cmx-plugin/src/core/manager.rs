@@ -530,44 +530,6 @@ impl PluginManager {
         Ok(())
     }
 
-    /// 加载已安装插件到内存（仅加载，不执行同步操作）
-    ///
-    /// 此方法保留用于非启动场景下的内存加载，如需要手动刷新内存时调用。
-    async fn load_installed_plugins(&self) -> PluginResult<()> {
-        let records = self
-            .repository
-            .list_plugins(&PluginFilter::default())
-            .await?;
-
-        let mut registry = self.registry.write().await;
-        let mut contexts = self.contexts.write().await;
-
-        for record in records {
-            let context = PluginContext::from_db_record(&record);
-            contexts.insert(record.plugin_id.clone(), context);
-
-            let source = crate::service::initializer::build_plugin_source(
-                record.zip_source_url.as_deref(),
-                record.zip_source_type.as_deref(),
-            );
-
-            let info = PluginInfo {
-                id: record.plugin_id.clone(),
-                name: record.name.clone(),
-                version: record.version.clone(),
-                description: None,
-                author: record.vendor_name.clone(),
-                source,
-                status: PluginStatus::Installed,
-                installed_at: Some(record.create_time),
-                updated_at: Some(record.update_time),
-                install_path: PathBuf::from(&record.install_path),
-            };
-            registry.register(info);
-        }
-
-        Ok(())
-    }
 
     // ==================== 生命周期操作 ==================== start
 
@@ -587,21 +549,21 @@ impl PluginManager {
             .map_err(|e| PluginError::Uninstall(format!("卸载失败: {}", e)))
     }
 
-    /// 激活插件
-    pub async fn activate(&self, request: ActivateRequest) -> PluginResult<ActivateResponse> {
-        self.activate_service
-            .activate(request)
-            .await
-            .map_err(|e| PluginError::Activate(format!("激活失败: {}", e)))
-    }
-
-    /// 停用插件
-    pub async fn deactivate(&self, request: DeactivateRequest) -> PluginResult<DeactivateResponse> {
-        self.activate_service
-            .deactivate(request)
-            .await
-            .map_err(|e| PluginError::Deactivate(format!("停用失败: {}", e)))
-    }
+    // /// 激活插件
+    // pub async fn activate(&self, request: ActivateRequest) -> PluginResult<ActivateResponse> {
+    //     self.activate_service
+    //         .activate(request)
+    //         .await
+    //         .map_err(|e| PluginError::Activate(format!("激活失败: {}", e)))
+    // }
+    //
+    // /// 停用插件
+    // pub async fn deactivate(&self, request: DeactivateRequest) -> PluginResult<DeactivateResponse> {
+    //     self.activate_service
+    //         .deactivate(request)
+    //         .await
+    //         .map_err(|e| PluginError::Deactivate(format!("停用失败: {}", e)))
+    // }
 
     /// 升级插件
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
@@ -619,61 +581,61 @@ impl PluginManager {
             .map_err(|e| PluginError::Downgrade(format!("降级失败: {}", e)))
     }
 
-    /// 回滚插件
-    pub async fn rollback(&self, request: RollbackRequest) -> PluginResult<RollbackResponse> {
-        let start_time = std::time::Instant::now();
-
-        let plugin = self
-            .repository
-            .find_plugin(&request.plugin_id)
-            .await?
-            .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
-
-        let current_version = plugin.version.clone();
-
-        let backups = self
-            .backup_manager
-            .list_backups(&request.plugin_id)
-            .await
-            .map_err(|e| PluginError::Rollback(format!("获取备份列表失败: {}", e)))?;
-
-        let target_backup = backups
-            .into_iter()
-            .filter(|b| b.version != current_version)
-            .next()
-            .ok_or_else(|| PluginError::Rollback("没有可回滚的备份".to_string()))?;
-
-        let target_version = target_backup.version.clone();
-        let plugin_id = request.plugin_id.clone();
-
-        let downgrade_req = DowngradeRequest {
-            plugin_id: request.plugin_id,
-            target_version: target_backup.version,
-            source: None,
-            operator: "system".to_string(),
-        };
-
-        self.downgrade(downgrade_req).await?;
-
-        let audit_record = crate::audit::record::AuditRecord::success(
-            plugin_id.clone(),
-            crate::audit::record::OperationType::Rollback,
-        )
-        .with_details(serde_json::json!({
-            "from_version": current_version,
-            "to_version": target_version,
-            "duration_ms": start_time.elapsed().as_millis(),
-        }));
-        self.audit_logger.log(audit_record).await;
-
-        Ok(RollbackResponse {
-            plugin_id,
-            from_version: current_version,
-            to_version: target_version,
-            success: true,
-            message: "插件回滚成功".to_string(),
-        })
-    }
+    // /// 回滚插件
+    // pub async fn rollback(&self, request: RollbackRequest) -> PluginResult<RollbackResponse> {
+    //     let start_time = std::time::Instant::now();
+    //
+    //     let plugin = self
+    //         .repository
+    //         .find_plugin(&request.plugin_id)
+    //         .await?
+    //         .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
+    //
+    //     let current_version = plugin.version.clone();
+    //
+    //     let backups = self
+    //         .backup_manager
+    //         .list_backups(&request.plugin_id)
+    //         .await
+    //         .map_err(|e| PluginError::Rollback(format!("获取备份列表失败: {}", e)))?;
+    //
+    //     let target_backup = backups
+    //         .into_iter()
+    //         .filter(|b| b.version != current_version)
+    //         .next()
+    //         .ok_or_else(|| PluginError::Rollback("没有可回滚的备份".to_string()))?;
+    //
+    //     let target_version = target_backup.version.clone();
+    //     let plugin_id = request.plugin_id.clone();
+    //
+    //     let downgrade_req = DowngradeRequest {
+    //         plugin_id: request.plugin_id,
+    //         target_version: target_backup.version,
+    //         source: None,
+    //         operator: "system".to_string(),
+    //     };
+    //
+    //     self.downgrade(downgrade_req).await?;
+    //
+    //     let audit_record = crate::audit::record::AuditRecord::success(
+    //         plugin_id.clone(),
+    //         crate::audit::record::OperationType::Rollback,
+    //     )
+    //     .with_details(serde_json::json!({
+    //         "from_version": current_version,
+    //         "to_version": target_version,
+    //         "duration_ms": start_time.elapsed().as_millis(),
+    //     }));
+    //     self.audit_logger.log(audit_record).await;
+    //
+    //     Ok(RollbackResponse {
+    //         plugin_id,
+    //         from_version: current_version,
+    //         to_version: target_version,
+    //         success: true,
+    //         message: "插件回滚成功".to_string(),
+    //     })
+    // }
     // ==================== 生命周期操作函数 end ====================
 
     // ==================== 查询操作 ====================
@@ -810,7 +772,8 @@ impl PluginManager {
                 plugin_id,
                 force: true,
             };
-            let _ = self.deactivate(deactivate_req).await;
+            //fixme 暂时注释了
+            // let _ = self.deactivate(deactivate_req).await;
         }
 
         self.event_bus
