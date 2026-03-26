@@ -334,62 +334,16 @@ if existing_deployment.is_some() {
 
 ## 五、具体修改步骤
 
-### 步骤 1: 修复 repository.rs 的 bug
 
-- [x] 修复 `update_plugin` 方法中 `name` 字段的判断条件
 
-### 步骤 2: 添加 upsert 方法
-
-- [x] 在 `repository.rs` 添加 `upsert_plugin` 方法
-
-- [x] 在 `version_history.rs` 添加 `upsert_version` 方法 ✅ 已实现
-
-### 步骤 3: 提取记录构建函数
-
-- [x] 新建 `service/record_builder.rs`
-
-- [x] 实现 `build_plugin_db_record` 函数
-
-- [x] 实现 `build_version_record` 函数
-
-- [x] 实现 `build_deployment_record` 函数
-
-### 步骤 4: 简化 install.rs 步骤9
-
-- [x] 使用 `build_*` 函数替代直接构建
-
-- [x] 使用 `upsert_plugin` 替代 if-else 逻辑
-
-- [x] 添加智能错误提示
-
-### 步骤 5: 简化 upgrade.rs
-
-- [x] 使用 `build_*` 函数替代直接构建
-
-- [x] 使用 `upsert_plugin` 优化逻辑
-
-- [x] 优化错误提示
 
 ### 步骤 6: 验证和测试
 
-- [ ] 编写单元测试验证 upsert 行为
 
-- [ ] 手动测试 install/upgrade/downgrade 流程
 
-***
 
 ## 六、预期优化效果
 
-| 指标                      | 优化前       | 优化后       | 改善幅度  |
-| ----------------------- | --------- | --------- | ----- |
-| `db_record` 构建重复代码      | \~35行 x 2 | \~35行 x 1 | -50%  |
-| `version_record` 构建重复代码 | \~22行 x 2 | \~22行 x 1 | -50%  |
-| `update_fields` 构建重复代码  | \~29行 x 2 | \~29行 x 1 | -50%  |
-| install.rs 步骤9代码行数      | \~135行    | \~50行     | -63%  |
-| upgrade.rs 数据库操作代码行数    | \~100行    | \~40行     | -60%  |
-| if-else 分支深度            | 3层        | 1层        | -67%  |
-| Bug 数量                  | 1个已知      | 0         | -100% |
-| 错误提示质量                  | 模糊        | 明确        | ✅     |
 
 ***
 
@@ -397,13 +351,7 @@ if existing_deployment.is_some() {
 
 | 风险                  | 影响 | 缓解措施                                  |
 | ------------------- | -- | ------------------------------------- |
-| upsert SQL 错误       | 高  | 先在测试环境验证 SQL                          |
-| 事务边界问题              | 高  | 统一所有数据库操作在同一事务中                       |
-| 并发竞态条件              | 高  | 添加数据库唯一约束 + 乐观锁                       |
-| is_current 标记不一致    | 中  | 提取统一的版本历史管理方法                         |
 | Repository 重构兼容性   | 中  | 保留自定义方法，仅重构通用 CRUD                    |
-| 向后兼容性               | 低  | 仅内部重构，不改 API                          |
-| 性能影响                | 低  | upsert 比 select+insert/update 更高效     |
 
 ***
 
@@ -411,43 +359,19 @@ if existing_deployment.is_some() {
 
 ### 9.1 已完成优化项 ✅
 
-以下优化已按计划完成：
 
-| 优化项 | 完成状态 | 备注 |
-|-------|---------|------|
-| repository.rs 第262行 Bug | ✅ 已修复 | `name` 字段判断条件已更正 |
-| upsert_plugin 方法 | ✅ 已实现 | 支持 RETURNING 子句 |
-| record_builder.rs | ✅ 已创建 | build_plugin_db_record, build_version_record, build_deployment_record |
-| install.rs 重构 | ✅ 已完成 | 使用辅助函数和 upsert_plugin |
-| upgrade.rs 重构 | ✅ 已完成 | 使用辅助函数和 upsert_plugin |
-| 智能错误提示 | ✅ 已完成 | install 时版本比较提示 |
 
 ### 9.2 必须修复的问题（高优先级）
 
-1. **version_history.update_version WHERE 条件错误** ✅ 已修复
-   - 位置：`version_history.rs` 第137行
-   - 修复方案：使用传入的 `id` 参数作为 WHERE 条件
 
-2. **downgrade.rs 调用逻辑问题** ✅ 已修复
-   - 位置：`downgrade.rs` 第130-140行
-   - 修复方案：使用 `set_current_version` 原子方法替代
-
-3. ~~**repository.rs 第262行 Bug**~~ ✅ 已修复（之前已标记）
 
 ### 9.3 建议优化的问题（中优先级）
 
-1. **代码重复**：提取 `build_*` 辅助函数 ✅ 已完成
-2. **upsert 方法**：减少数据库往返次数
-   - [x] upsert_plugin ✅ 已完成
-   - [x] upsert_version ✅ 已完成
-3. **版本历史标记**：统一 `is_current` 标记逻辑 ✅ 已完成
-   - `set_current_version` 原子方法已实现，downgrade 现已使用
+
 
 ### 9.4 可选优化的问题（低优先级）
-
-1. **错误提示优化** ✅ 智能提示用户使用正确的操作 - 已完成
-2. **Repository 层重构**：使用 `cmx-database` 的 `GenericCrudService` 和 `DbBmc` 封装
-3. **并发安全优化**：添加 SELECT FOR UPDATE 或乐观锁
+1. **Repository 层重构**：使用 `cmx-database` 的 `GenericCrudService` 和 `DbBmc` 封装
+2. **并发安全优化**：添加 SELECT FOR UPDATE 或乐观锁
 
 ### 9.5 关于 install/upgrade 合并的最终建议
 
@@ -457,11 +381,6 @@ if existing_deployment.is_some() {
 2. **审计友好**：分开的操作便于审计日志分析
 3. **API 稳定**：避免破坏现有 API
 
-**但需要改进：**
-
-1. 在 install 失败时提供智能提示 ✅ 已完成
-2. 统一两者的版本历史管理逻辑 ✅ 已完成（downgrade 现使用 set_current_version）
-3. 提取公共代码减少重复 ✅ 已完成
 
 ---
 
@@ -474,10 +393,8 @@ if existing_deployment.is_some() {
 | 中优先级优化 | 4 | 2 | 67% |
 | 低优先级优化 | 1 | 2 | 33% |
 
-**已完成的关键修复：**
-1. ✅ version_history.update_version WHERE 条件 bug
-2. ✅ downgrade.rs 使用 set_current_version 原子方法
-3. ✅ upsert_version 方法
+
+
 
 **剩余待优化项：**
 - Repository 层重构（GenericCrudService）
