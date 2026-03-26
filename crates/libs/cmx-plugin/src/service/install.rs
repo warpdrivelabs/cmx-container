@@ -326,7 +326,7 @@ impl InstallService {
         }
 
         // 使用 upsert 保存插件记录
-        let is_new = self
+        let _is_new = self
             .deps
             .repository
             .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
@@ -345,8 +345,16 @@ impl InstallService {
             )
             .await?;
 
-        // 步骤9.2: 插入/更新 cmx_plugin_deployments 节点部署记录
-        if is_new {
+        // 步骤9.2: 插入 cmx_plugin_deployments 节点部署记录
+        // 检查该节点是否已有此版本的部署记录
+        let existing_deployment_for_version = self
+            .deps
+            .deployment_repository
+            .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
+            .await?;
+
+        if existing_deployment_for_version.is_none() {
+            // 节点上没有此版本的部署记录，插入新记录
             let deployment_record = super::record_builder::build_deployment_record(
                 &plugin_id,
                 &self.deps.node_id,
@@ -357,28 +365,8 @@ impl InstallService {
                 .deployment_repository
                 .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
                 .await?;
-        } else {
-            // 更新现有部署记录
-            let update_fields =
-                crate::infrastructure::database::deployment::DeploymentUpdateFields {
-                    plugin_id: plugin_id.clone(),
-                    node_id: self.deps.node_id.clone(),
-                    version: install_version.clone(),
-                    ..Default::default()
-                };
-            // 查询现有部署记录的 ID
-            if let Some(existing_deployment) = self
-                .deps
-                .deployment_repository
-                .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
-                .await?
-            {
-                self.deps
-                    .deployment_repository
-                    .update_deployment(&existing_deployment.id, &update_fields, Some(txn_guard.txn_id()))
-                    .await?;
-            }
         }
+        // 如果已存在同版本部署记录，无需重复插入（可能是并发请求或重试）
 
         // 步骤10: 注册插件
         let plugin_info = PluginInfo {

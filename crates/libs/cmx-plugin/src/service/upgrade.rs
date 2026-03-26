@@ -129,14 +129,14 @@ impl UpgradeService {
 
         let old_version = plugin.version.clone();
 
-        // 步骤2: 检查节点部署记录
-        let existing_deployment = self
+        // 步骤2: 检查节点部署记录（用于验证插件是否已部署在此节点）
+        let _existing_deployment = self
             .deps
             .deployment_repository
             .find_deployment(&request.plugin_id, &self.deps.node_id, &old_version)
             .await?;
 
-        if existing_deployment.is_none() {
+        if _existing_deployment.is_none() {
             return Err(PluginError::invalid_state(
                 &request.plugin_id,
                 "not_deployed",
@@ -234,7 +234,7 @@ impl UpgradeService {
         );
 
         // 使用 upsert 保存插件记录
-        let is_new = self
+        let _is_new = self
             .deps
             .repository
             .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
@@ -253,21 +253,17 @@ impl UpgradeService {
             )
             .await?;
 
-        // 步骤12: 更新 cmx_plugin_deployments 节点部署记录
-        if let Some(deployment) = existing_deployment {
-            let update_fields =
-                crate::infrastructure::database::deployment::DeploymentUpdateFields {
-                    plugin_id: plugin_id.clone(),
-                    node_id: deployment.node_id.clone(),
-                    version: new_version.clone(),
-                    ..Default::default()
-                };
-            self.deps
-                .deployment_repository
-                .update_deployment(&deployment.id, &update_fields, Some(txn_guard.txn_id()))
-                .await?;
-        } else if is_new {
-            // 如果是新插件，插入部署记录
+        // 步骤12: 插入 cmx_plugin_deployments 节点部署记录
+        // 检查该节点是否已有此版本的部署记录
+        let existing_deployment_for_new_version = self
+            .deps
+            .deployment_repository
+            .find_deployment(&plugin_id, &self.deps.node_id, &new_version)
+            .await?;
+
+        if existing_deployment_for_new_version.is_none() {
+            // 节点上没有新版本的部署记录，插入新记录
+            // 注意：同一插件可以在一个节点上安装多个版本，所以这里只插入不更新旧版本
             let deployment_record = super::record_builder::build_deployment_record(
                 &plugin_id,
                 &self.deps.node_id,
@@ -279,6 +275,7 @@ impl UpgradeService {
                 .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
                 .await?;
         }
+        // 如果已存在新版本部署记录，无需重复插入
 
         // 步骤13: 更新注册表
         {

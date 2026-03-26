@@ -523,6 +523,7 @@ impl PluginManager {
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
+                install_path:PathBuf::from(&record.install_path),
             };
             registry.register(info);
         }
@@ -660,6 +661,7 @@ impl PluginManager {
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
+                install_path:PathBuf::from(&record.install_path),
             };
             return Ok(Some(info));
         }
