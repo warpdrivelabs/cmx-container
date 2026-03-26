@@ -20,6 +20,7 @@ use crate::infrastructure::storage::file::FileStorage;
 /// 包处理工具依赖
 ///
 /// 包含包处理工具运行所需的所有依赖项。
+#[derive(Clone)]
 pub struct PackageUtilsDeps {
     /// 插件根目录
     ///
@@ -56,6 +57,8 @@ pub struct PackageUtilsDeps {
 ///     storage: None,
 /// });
 /// ```
+/// 包处理工具
+#[derive(Clone)]
 pub struct PackageUtils {
     deps: PackageUtilsDeps,
 }

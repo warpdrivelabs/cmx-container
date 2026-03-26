@@ -18,6 +18,7 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
+use crate::domain::plugin::PluginSource;
 
 /// 降级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +27,8 @@ pub struct DowngradeRequest {
     pub plugin_id: String,
     /// 目标版本
     pub target_version: String,
+    /// 插件来源（可选，用于下载旧版本）
+    pub source: Option<PluginSource>,
     /// 操作者
     pub operator: String,
 }
@@ -46,6 +49,7 @@ pub struct DowngradeResponse {
 }
 
 /// 降级服务依赖
+#[derive(Clone)]
 pub struct DowngradeServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
@@ -68,6 +72,7 @@ pub struct DowngradeServiceDeps {
 }
 
 /// 降级服务
+#[derive(Clone)]
 pub struct DowngradeService {
     deps: DowngradeServiceDeps,
 }

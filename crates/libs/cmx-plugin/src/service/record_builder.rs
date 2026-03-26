@@ -19,6 +19,8 @@ use crate::infrastructure::database::version_history::VersionHistoryRecord;
 /// - `version`: 插件版本
 /// - `install_path`: 安装路径
 /// - `db_id`: 数据库ID
+/// - `zip_source_url`: 插件ZIP包来源地址
+/// - `zip_source_type`: 插件来源类型
 ///
 /// # 返回
 /// 插件数据库记录
@@ -27,6 +29,8 @@ pub fn build_plugin_db_record(
     version: &str,
     install_path: &Path,
     db_id: &str,
+    zip_source_url: Option<&str>,
+    zip_source_type: Option<&str>,
 ) -> PluginDbRecord {
     PluginDbRecord {
         id: Uuid::new_v4().to_string(),
@@ -51,6 +55,8 @@ pub fn build_plugin_db_record(
         metadata: None,
         signature_algorithm: None,
         signer_key_id: None,
+        zip_source_url: zip_source_url.map(|s| s.to_string()),
+        zip_source_type: zip_source_type.map(|s| s.to_string()),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
@@ -68,6 +74,8 @@ pub fn build_plugin_db_record(
 /// - `version`: 版本号
 /// - `install_path`: 安装路径
 /// - `wasm_path`: WASM文件路径
+/// - `zip_source_url`: 插件ZIP包来源地址
+/// - `zip_source_type`: 插件来源类型
 ///
 /// # 返回
 /// 版本历史记录
@@ -76,6 +84,8 @@ pub fn build_version_record(
     version: &str,
     install_path: &str,
     wasm_path: &str,
+    zip_source_url: Option<&str>,
+    zip_source_type: Option<&str>,
 ) -> VersionHistoryRecord {
     VersionHistoryRecord {
         id: Uuid::new_v4().to_string(),
@@ -86,6 +96,8 @@ pub fn build_version_record(
         is_current: true,
         installed_at: Utc::now(),
         uninstalled_at: None,
+        zip_source_url: zip_source_url.map(|s| s.to_string()),
+        zip_source_type: zip_source_type.map(|s| s.to_string()),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,

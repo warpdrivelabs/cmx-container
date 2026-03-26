@@ -24,6 +24,8 @@ pub struct VersionHistoryRecord {
     pub is_current: bool,
     pub installed_at: DateTime<Utc>,
     pub uninstalled_at: Option<DateTime<Utc>>,
+    pub zip_source_url: Option<String>,
+    pub zip_source_type: Option<String>,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
     pub archived: i32,
@@ -75,7 +77,9 @@ impl VersionHistoryRepository {
             .columns(vec![
                 "id", "plugin_id", "version",
                 "install_path", "wasm_path", "is_current",
-                "installed_at", "uninstalled_at", "create_time", "update_time",
+                "installed_at", "uninstalled_at",
+                "zip_source_url", "zip_source_type",
+                "create_time", "update_time",
                 "archived", "create_by", "create_name", "update_by", "update_name"
             ])
             .values(vec![
@@ -87,6 +91,8 @@ impl VersionHistoryRepository {
                 record.is_current.into(),
                 record.installed_at.into(),
                 record.uninstalled_at.clone().into(),
+                record.zip_source_url.clone().into(),
+                record.zip_source_type.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -135,6 +141,8 @@ impl VersionHistoryRepository {
                 Alias::new("is_current"),
                 Alias::new("installed_at"),
                 Alias::new("uninstalled_at"),
+                Alias::new("zip_source_url"),
+                Alias::new("zip_source_type"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -152,6 +160,8 @@ impl VersionHistoryRepository {
                 record.is_current.into(),
                 record.installed_at.into(),
                 record.uninstalled_at.clone().into(),
+                record.zip_source_url.clone().into(),
+                record.zip_source_type.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -170,6 +180,8 @@ impl VersionHistoryRepository {
             Alias::new("wasm_path"),
             Alias::new("is_current"),
             Alias::new("uninstalled_at"),
+            Alias::new("zip_source_url"),
+            Alias::new("zip_source_type"),
             Alias::new("update_time"),
             Alias::new("update_by"),
             Alias::new("update_name"),
@@ -331,7 +343,7 @@ impl VersionHistoryRepository {
             };
             self.update_version(&record.id, &update_fields, txn_id).await?;
         } else {
-            // 3b. 插入新版本记录
+            // 3b. 插入新版本记录（此时没有来源信息，来源信息应在插入时由调用方提供）
             let record = VersionHistoryRecord {
                 id: uuid::Uuid::new_v4().to_string(),
                 plugin_id: plugin_id.to_string(),
@@ -341,6 +353,8 @@ impl VersionHistoryRepository {
                 is_current: true,
                 installed_at: Utc::now(),
                 uninstalled_at: None,
+                zip_source_url: None,
+                zip_source_type: None,
                 create_time: Utc::now(),
                 update_time: Utc::now(),
                 archived: 0,
@@ -374,8 +388,10 @@ impl VersionHistoryRepository {
                 is_current: row.get_by_name_as(schema, "is_current").unwrap_or(false),
                 installed_at: get_datetime_default("installed_at", Utc::now),
                 uninstalled_at: row.get_by_name_as(schema, "uninstalled_at"),
-                create_time: row.get_by_name_as(schema, "create_time").unwrap(),
-                update_time: row.get_by_name_as(schema, "update_time").unwrap(),
+                zip_source_url: row.get_by_name_as(schema, "zip_source_url"),
+                zip_source_type: row.get_by_name_as(schema, "zip_source_type"),
+                create_time: get_datetime_default("create_time", Utc::now),
+                update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
                 create_by: row.get_by_name_as(schema, "create_by"),
                 create_name: row.get_by_name_as(schema, "create_name"),

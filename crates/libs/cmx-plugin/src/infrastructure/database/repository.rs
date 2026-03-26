@@ -55,6 +55,10 @@ pub struct PluginDbRecord {
     pub signature_algorithm: Option<String>,
     /// 签名密钥ID
     pub signer_key_id: Option<String>,
+    /// 插件ZIP包来源地址
+    pub zip_source_url: Option<String>,
+    /// 插件来源类型: local, url, registry
+    pub zip_source_type: Option<String>,
 
     /// 创建时间
     pub create_time: DateTime<Utc>,
@@ -112,6 +116,10 @@ pub struct PluginUpdateFields {
     pub signature_algorithm: Option<String>,
     /// 签名密钥ID
     pub signer_key_id: Option<String>,
+    /// 插件ZIP包来源地址
+    pub zip_source_url: Option<String>,
+    /// 插件来源类型: local, url, registry
+    pub zip_source_type: Option<String>,
 
     /// 更新时间
     pub update_time: DateTime<Utc>,
@@ -205,6 +213,8 @@ impl PluginRepository {
                 "metadata",
                 "signature_algorithm",
                 "signer_key_id",
+                "zip_source_url",
+                "zip_source_type",
                 "create_time",
                 "update_time",
             ])
@@ -228,6 +238,8 @@ impl PluginRepository {
                 record.metadata.clone().into(),
                 record.signature_algorithm.clone().into(),
                 record.signer_key_id.clone().into(),
+                record.zip_source_url.clone().into(),
+                record.zip_source_type.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
             ])
@@ -307,6 +319,12 @@ impl PluginRepository {
         if fields.signer_key_id.is_some() {
             query.value("signer_key_id", fields.signer_key_id.clone());
         }
+        if fields.zip_source_url.is_some() {
+            query.value("zip_source_url", fields.zip_source_url.clone());
+        }
+        if fields.zip_source_type.is_some() {
+            query.value("zip_source_type", fields.zip_source_type.clone());
+        }
         if fields.update_by.is_some() {
             query.value("update_by", fields.update_by.clone());
         }
@@ -382,6 +400,8 @@ impl PluginRepository {
                 Alias::new("metadata"),
                 Alias::new("signature_algorithm"),
                 Alias::new("signer_key_id"),
+                Alias::new("zip_source_url"),
+                Alias::new("zip_source_type"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -410,6 +430,8 @@ impl PluginRepository {
                 record.metadata.clone().into(),
                 record.signature_algorithm.clone().into(),
                 record.signer_key_id.clone().into(),
+                record.zip_source_url.clone().into(),
+                record.zip_source_type.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -438,6 +460,8 @@ impl PluginRepository {
                 Alias::new("vendor_contact"),
                 Alias::new("signature_algorithm"),
                 Alias::new("signer_key_id"),
+                Alias::new("zip_source_url"),
+                Alias::new("zip_source_type"),
                 Alias::new("update_time"),
                 Alias::new("update_by"),
                 Alias::new("update_name"),
@@ -713,6 +737,8 @@ impl PluginRepository {
                 metadata: Self::parse_metadata(row, schema),
                 signature_algorithm: row.get_by_name_as(schema, "signature_algorithm"),
                 signer_key_id: row.get_by_name_as(schema, "signer_key_id"),
+                zip_source_url: row.get_by_name_as(schema, "zip_source_url"),
+                zip_source_type: row.get_by_name_as(schema, "zip_source_type"),
                 create_time: get_datetime_default("create_time", Utc::now),
                 update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),

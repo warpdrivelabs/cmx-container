@@ -11,12 +11,14 @@ use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
 
 /// 依赖检查工具依赖
+#[derive(Clone)]
 pub struct DependencyUtilsDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
 }
 
 /// 依赖检查工具
+#[derive(Clone)]
 pub struct DependencyUtils {
     deps: DependencyUtilsDeps,
 }

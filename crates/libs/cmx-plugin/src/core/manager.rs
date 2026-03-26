@@ -251,6 +251,10 @@ pub struct PluginManager {
     /// 回滚服务
     rollback_service: crate::service::rollback::RollbackService,
 
+    // 初始化组件
+    /// 插件初始化器（用于启动时同步）
+    plugin_initializer: crate::service::initializer::PluginInitializer,
+
     // 通用工具
     /// 依赖检查工具
     dependency_utils: DependencyUtils,
@@ -434,6 +438,20 @@ impl PluginManager {
             },
         );
 
+        // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
+        let plugin_initializer = crate::service::initializer::PluginInitializer::new(
+            repository.clone(),
+            deployment_repository.clone(),
+            version_history_repository.clone(),
+            registry.clone(),
+            contexts.clone(),
+            install_service.clone(),
+            upgrade_service.clone(),
+            downgrade_service.clone(),
+            uninstall_service.clone(),
+            settings.node_id.clone(),
+        );
+
         let manager = Self {
             settings,
             registry,
@@ -455,6 +473,7 @@ impl PluginManager {
             uninstall_service,
             downgrade_service,
             rollback_service,
+            plugin_initializer,
             dependency_utils,
             service_utils,
             initialized: Arc::new(RwLock::new(false)),
@@ -480,7 +499,21 @@ impl PluginManager {
                 log::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
             });
 
-        self.load_installed_plugins().await?;
+        // 启动时同步插件：对比 cmx_plugin 和 cmx_plugin_deployments
+        // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
+        let sync_result = self.plugin_initializer.sync_plugins().await?;
+        log::info!(
+            "插件同步完成: 安装={}, 升级={}, 降级={}, 卸载={}, 跳过={}, 失败={}",
+            sync_result.installed.len(),
+            sync_result.upgraded.len(),
+            sync_result.downgraded.len(),
+            sync_result.uninstalled.len(),
+            sync_result.skipped.len(),
+            sync_result.failed.len()
+        );
+        for (plugin_id, err) in &sync_result.failed {
+            log::error!("插件 {} 同步失败: {}", plugin_id, err);
+        }
 
         *initialized = true;
 
@@ -497,7 +530,9 @@ impl PluginManager {
         Ok(())
     }
 
-    /// 加载已安装插件到内存
+    /// 加载已安装插件到内存（仅加载，不执行同步操作）
+    ///
+    /// 此方法保留用于非启动场景下的内存加载，如需要手动刷新内存时调用。
     async fn load_installed_plugins(&self) -> PluginResult<()> {
         let records = self
             .repository
@@ -511,19 +546,22 @@ impl PluginManager {
             let context = PluginContext::from_db_record(&record);
             contexts.insert(record.plugin_id.clone(), context);
 
+            let source = crate::service::initializer::build_plugin_source(
+                record.zip_source_url.as_deref(),
+                record.zip_source_type.as_deref(),
+            );
+
             let info = PluginInfo {
-                id: record.plugin_id,
-                name: record.name,
-                version: record.version,
+                id: record.plugin_id.clone(),
+                name: record.name.clone(),
+                version: record.version.clone(),
                 description: None,
-                author: record.vendor_name,
-                source: PluginSource::Local {
-                    path: PathBuf::from(&record.install_path),
-                },
+                author: record.vendor_name.clone(),
+                source,
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
-                install_path:PathBuf::from(&record.install_path),
+                install_path: PathBuf::from(&record.install_path),
             };
             registry.register(info);
         }
@@ -611,6 +649,7 @@ impl PluginManager {
         let downgrade_req = DowngradeRequest {
             plugin_id: request.plugin_id,
             target_version: target_backup.version,
+            source: None,
             operator: "system".to_string(),
         };
 

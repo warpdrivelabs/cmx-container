@@ -59,6 +59,7 @@ pub struct InstallResponse {
 }
 
 /// 安装服务依赖
+#[derive(Clone)]
 pub struct InstallServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
@@ -98,6 +99,7 @@ pub struct InstallServiceDeps {
 }
 
 /// 安装服务
+#[derive(Clone)]
 pub struct InstallService {
     deps: InstallServiceDeps,
     package_utils: PackageUtils,
@@ -294,11 +296,14 @@ impl InstallService {
 
         // 步骤9: 保存数据库记录
         // 使用辅助函数构建记录
+        let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
         let db_record = super::record_builder::build_plugin_db_record(
             &plugin_def,
             &install_version,
             &install_path,
             &db_id,
+            zip_source_url.as_deref(),
+            zip_source_type.as_deref(),
         );
 
         // 查询数据库是否已经有基线插件了
@@ -325,22 +330,47 @@ impl InstallService {
             // }
         }
 
-        // 使用 upsert 保存插件记录
-        let _is_new = self
-            .deps
+        // 步骤9.1: Upsert 插件记录（cmx_plugin）
+        self.deps
             .repository
             .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
             .await?;
 
-        // 设置当前版本（原子操作：标记旧版本 + 插入/更新新版本）
+        // 步骤9.2: 插入 cmx_plugin_versions 版本历史记录（包含来源信息）
         let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
+        let version_record = super::record_builder::build_version_record(
+            &plugin_id,
+            &install_version,
+            &install_path.to_string_lossy(),
+            &wasm_path,
+            zip_source_url.as_deref(),
+            zip_source_type.as_deref(),
+        );
         self.deps
             .version_history_repository
-            .set_current_version(
-                &plugin_id,
-                &install_version,
-                &install_path.to_string_lossy(),
-                &wasm_path,
+            .upsert_version(&version_record, Some(txn_guard.txn_id()))
+            .await?;
+
+        // 标记当前版本
+        self.deps
+            .version_history_repository
+            .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+            .await?;
+        self.deps
+            .version_history_repository
+            .update_version(
+                &version_record.id,
+                &crate::infrastructure::database::version_history::VersionHistoryUpdateFields {
+                    install_path: Some(install_path.to_string_lossy().to_string()),
+                    wasm_path: Some(wasm_path),
+                    is_current: Some(true),
+                    uninstalled_at: None,
+                    update_time: chrono::Utc::now(),
+                    create_by: None,
+                    create_name: None,
+                    update_by: None,
+                    update_name: None,
+                },
                 Some(txn_guard.txn_id()),
             )
             .await?;
@@ -446,6 +476,22 @@ impl InstallService {
             success: true,
             message: "插件安装成功".to_string(),
         })
+    }
+}
+
+/// 从 PluginSource 解析来源类型和地址
+fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>) {
+    match source {
+        PluginSource::Local { path } => {
+            (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
+        }
+        PluginSource::Remote { url, .. } => {
+            (Some("url".to_string()), Some(url.clone()))
+        }
+        PluginSource::Registry { registry_url, package_name } => {
+            let url = registry_url.as_ref().map(|s| s.as_str()).unwrap_or(package_name);
+            (Some("registry".to_string()), Some(url.to_string()))
+        }
     }
 }
 

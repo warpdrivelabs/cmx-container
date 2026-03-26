@@ -40,6 +40,7 @@ pub struct UninstallResponse {
 }
 
 /// 卸载服务依赖
+#[derive(Clone)]
 pub struct UninstallServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
@@ -62,6 +63,7 @@ pub struct UninstallServiceDeps {
 }
 
 /// 卸载服务
+#[derive(Clone)]
 pub struct UninstallService {
     deps: UninstallServiceDeps,
 }
