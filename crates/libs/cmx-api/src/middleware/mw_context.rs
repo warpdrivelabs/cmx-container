@@ -18,8 +18,8 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct CmxSvrContext(pub SVRContext);
 
-pub async fn mw_svr_context_resolver(mut req: Request<Body>, next: Next) -> Result<Response> {
-    debug!("{:<12} - mw_svr_context_resolver", "MIDDLEWARE");
+pub async fn mw_context_resolver(mut req: Request<Body>, next: Next) -> Result<Response> {
+    debug!("{:<12} - mw_context_resolver", "MIDDLEWARE");
 
     // let time_in = now_utc();
     let time_in = Utc::now();

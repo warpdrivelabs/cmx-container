@@ -11,27 +11,25 @@
 
 pub mod middleware;
 pub mod error;
-pub mod response;
-
-
+pub mod api_response;
 
 /// REST 协议层模块
 pub mod rest;
 
-/// 业务模型模块
-pub mod models;
+/// 业务模型模块（自定义 HTTP Handler）
+pub mod handlers;
 
 /// 路由注册模块
-pub mod route;
+pub mod routes;
 
 /// 状态管理模块
-pub mod state;
+pub mod app_state;
 
 
 pub use rest::{ handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
 pub use error::{Error, Result};
-pub use response::{ApiResp, Pagination};
-pub use state::{CmxAppState, AppStateInner};
+pub use api_response::{ApiResp, Pagination};
+pub use app_state::{CmxAppState, AppStateInner};
 
 // 注意：register_crud_routes 宏通过 #[macro_export] 自动导出到 crate 根目录
 // 使用时直接通过 cmx_api::register_crud_routes! 访问

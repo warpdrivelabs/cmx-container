@@ -2,18 +2,18 @@
 //!
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
-use crate::models::application::{
+use crate::handlers::application::{
     ApplicationBmc, ApplicationFilter, ApplicationForCreate, ApplicationForUpdate,
 };
-use crate::models::domain;
-use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
-use crate::models::module::{ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate};
-use crate::models::sys_datasource;
-use crate::models::sys_datasource::{
+use crate::handlers::domain;
+use crate::handlers::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
+use crate::handlers::module::{ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate};
+use crate::handlers::sys_datasource;
+use crate::handlers::sys_datasource::{
     SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
 };
 use crate::register_crud_routes;
-use crate::state::CmxAppState;
+use crate::app_state::CmxAppState;
 use axum::Router;
 
 /// 注册所有 API 路由

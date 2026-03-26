@@ -14,7 +14,7 @@ use axum::{Router, middleware};
 
 use crate::config::{init_cache, init_db_datasource, init_global_config, init_plugins};
 use cmx_api::CmxAppState;
-use cmx_api::middleware::{cors_layer, mw_svr_context_resolver};
+use cmx_api::middleware::{cors_layer, mw_context_resolver};
 use cmx_database::get_default_db_manager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
     let routes_all = Router::new()
         .nest("/api", api_routes)
         .layer(CookieManagerLayer::new())
-        .layer(middleware::from_fn(mw_svr_context_resolver));
+        .layer(middleware::from_fn(mw_context_resolver));
     // 应用剩余的中间件并添加静态文件服务
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
         tower_http::services::ServeDir::new(&web_config.WEB_FOLDER),

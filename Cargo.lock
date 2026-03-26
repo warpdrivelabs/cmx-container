@@ -440,6 +440,8 @@ dependencies = [
  "chrono",
  "cmx-core",
  "cmx-database",
+ "cmx-metadata",
+ "cmx-plugin",
  "cmx-utils",
  "derive_more",
  "modql",
