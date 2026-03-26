@@ -127,20 +127,19 @@ impl DowngradeService {
 
         let plugin_id = request.plugin_id.clone();
 
-        // 步骤4: 更新 cmx_plugin_versions
-        // 将目标版本标记为当前
-        let update_fields = crate::infrastructure::database::version_history::VersionHistoryUpdateFields {
-            is_current: Some(true),
-            uninstalled_at: None,
-            ..Default::default()
-        };
+        // 步骤4: 更新 cmx_plugin_versions（使用原子操作）
+        // 使用 set_current_version 会自动：
+        // 1. 标记所有版本为非当前
+        // 2. 将目标版本标记为当前
+        // 注意：降级场景下 install_path 和 wasm_path 使用已有的记录值
         self.deps.version_history_repository
-            .update_version(&target_version_record.id, &update_fields, None)
-            .await?;
-
-        // 将旧版本标记为非当前
-        self.deps.version_history_repository
-            .mark_all_not_current(&plugin_id, None)
+            .set_current_version(
+                &plugin_id,
+                &request.target_version,
+                &target_version_record.install_path,
+                &target_version_record.wasm_path,
+                None,
+            )
             .await?;
 
         // 步骤5: 更新 cmx_plugin_deployments 节点部署记录

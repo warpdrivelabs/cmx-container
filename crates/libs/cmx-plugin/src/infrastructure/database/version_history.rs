@@ -3,7 +3,7 @@
 //! 提供插件版本历史的增删改查操作
 
 use chrono::{DateTime, Utc};
-use sea_query::{PostgresQueryBuilder, Query};
+use sea_query::{Alias, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -33,11 +33,9 @@ pub struct VersionHistoryRecord {
     pub update_name: Option<String>,
 }
 
-/// 版本历史更新字段
+/// 版本历史更新字段（不含 WHERE 条件字段）
 #[derive(Debug, Clone, Default)]
 pub struct VersionHistoryUpdateFields {
-    pub plugin_id: String,
-    pub version: String,
     pub install_path: Option<String>,
     pub wasm_path: Option<String>,
     pub is_current: Option<bool>,
@@ -47,7 +45,6 @@ pub struct VersionHistoryUpdateFields {
     pub create_name: Option<String>,
     pub update_by: Option<String>,
     pub update_name: Option<String>,
-
 }
 
 /// 版本历史仓库
@@ -110,12 +107,99 @@ impl VersionHistoryRepository {
         Ok(())
     }
 
-    /// 更新版本历史记录
+    /// 插入或更新版本历史记录 (upsert)
+    ///
+    /// 使用 ON CONFLICT (plugin_id, version) DO UPDATE 实现 upsert 语义
+    ///
+    /// # 参数
+    /// - `record`: 版本历史记录
+    /// - `txn_id`: 事务ID
+    ///
+    /// # 返回
+    /// - `Ok(true)`: 新插入的记录
+    /// - `Ok(false)`: 更新的记录
+    pub async fn upsert_version(
+        &self,
+        record: &VersionHistoryRecord,
+        txn_id: Option<&str>,
+    ) -> PluginResult<bool> {
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("cmx_plugin_versions"))
+            .columns(vec![
+                Alias::new("id"),
+                Alias::new("plugin_id"),
+                Alias::new("version"),
+                Alias::new("install_path"),
+                Alias::new("wasm_path"),
+                Alias::new("is_current"),
+                Alias::new("installed_at"),
+                Alias::new("uninstalled_at"),
+                Alias::new("create_time"),
+                Alias::new("update_time"),
+                Alias::new("archived"),
+                Alias::new("create_by"),
+                Alias::new("create_name"),
+                Alias::new("update_by"),
+                Alias::new("update_name"),
+            ])
+            .values_panic(vec![
+                record.id.clone().into(),
+                record.plugin_id.clone().into(),
+                record.version.clone().into(),
+                record.install_path.clone().into(),
+                record.wasm_path.clone().into(),
+                record.is_current.into(),
+                record.installed_at.into(),
+                record.uninstalled_at.clone().into(),
+                record.create_time.into(),
+                record.update_time.into(),
+                record.archived.into(),
+                record.create_by.clone().into(),
+                record.create_name.clone().into(),
+                record.update_by.clone().into(),
+                record.update_name.clone().into(),
+            ]);
+
+        let on_conflict = sea_query::OnConflict::columns(vec![
+            Alias::new("plugin_id"),
+            Alias::new("version"),
+        ])
+        .update_columns(vec![
+            Alias::new("install_path"),
+            Alias::new("wasm_path"),
+            Alias::new("is_current"),
+            Alias::new("uninstalled_at"),
+            Alias::new("update_time"),
+            Alias::new("update_by"),
+            Alias::new("update_name"),
+        ])
+        .to_owned();
+
+        query.on_conflict(on_conflict);
+
+        let (mut sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        sql.push_str(" RETURNING (xmax = 0) AS is_inserted");
+
+        let result = self
+            .db_manager
+            .query_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values, "upsert_version")
+            .await
+            .map_err(|e| PluginError::Database(format!("upsert版本历史失败: {}", e)))?;
+
+        if let Some(row) = result.iter().next() {
+            if let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0) {
+                return Ok(*is_inserted);
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// 更新版本历史记录（通过主键 ID）
     pub async fn update_version(&self, id: &str, fields: &VersionHistoryUpdateFields, txn_id: Option<&str>) -> PluginResult<()> {
         let mut query = Query::update();
         query.table("cmx_plugin_versions");
-
-
 
         if let Some(ref install_path) = fields.install_path {
             query.value("install_path", install_path.clone());
@@ -124,7 +208,6 @@ impl VersionHistoryRepository {
         if let Some(ref wasm_path) = fields.wasm_path {
             query.value("wasm_path", wasm_path.clone());
         }
-
 
         if let Some(is_current) = fields.is_current {
             query.value("is_current", is_current);
@@ -137,13 +220,10 @@ impl VersionHistoryRepository {
             query.value("update_time", update_time.clone());
         }
 
-
-
         query.value("update_by", fields.update_by.clone());
         query.value("update_name", fields.update_name.clone());
 
-        query.and_where(sea_query::Expr::col("plugin_id").eq(fields.plugin_id.clone()));
-        query.and_where(sea_query::Expr::col("version").eq(fields.version.clone()));
+        query.and_where(sea_query::Expr::col("id").eq(id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -239,8 +319,6 @@ impl VersionHistoryRepository {
         if let Some(ref record) = existing {
             // 3a. 更新现有记录为当前版本
             let update_fields = VersionHistoryUpdateFields {
-                plugin_id: plugin_id.to_string(),
-                version: version.to_string(),
                 install_path: Some(install_path.to_string()),
                 wasm_path: Some(wasm_path.to_string()),
                 is_current: Some(true),
