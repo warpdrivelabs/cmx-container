@@ -172,7 +172,7 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         let mut txn_to_commit = None;
 
         let result = {
-            let mut txh_g = txn_holder_mutex.lock().unwrap();
+            let mut txh_g = txn_holder_mutex.lock().await;
 
             if let Some(txh) = txh_g.as_mut() {
                 let counter = txh.dec();
@@ -218,7 +218,7 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         let mut txn_to_rollback = None;
 
         let result = {
-            let mut txh_g = txn_holder_mutex.lock().unwrap();
+            let mut txh_g = txn_holder_mutex.lock().await;
 
             if let Some(mut txn_holder) = txh_g.take() {
                 if txn_holder.counter > 1 {
@@ -278,14 +278,14 @@ where
     let holder = get_txn_holder_by_id(txn_id).ok_or(Error::NoTxn)?;
 
     let mut txn = {
-        let mut guard = holder.lock().unwrap();
+        let mut guard = holder.lock().await;
         guard.take().ok_or(Error::NoTxn)?
     };
 
     let result = f(&mut txn).await;
 
     {
-        let mut guard = holder.lock().unwrap();
+        let mut guard = holder.lock().await;
         *guard = Some(txn);
     }
 

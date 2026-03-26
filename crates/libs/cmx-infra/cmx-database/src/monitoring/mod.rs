@@ -79,7 +79,7 @@ async fn check_transaction_timeouts() {
 
             // 获取锁并取出事务
             {
-                let mut txh_g = txn_holder_mutex.lock().unwrap();
+                let mut txh_g = txn_holder_mutex.lock().await;
                 if let Some(txn_holder) = txh_g.take() {
                     txn_to_rollback = Some(txn_holder);
                     should_rollback = true;

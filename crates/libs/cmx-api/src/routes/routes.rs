@@ -8,12 +8,14 @@ use crate::handlers::application::{
 use crate::handlers::domain;
 use crate::handlers::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
 use crate::handlers::module::{ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate};
+use crate::handlers::plugin;
 use crate::handlers::sys_datasource;
 use crate::handlers::sys_datasource::{
     SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
 };
 use crate::register_crud_routes;
 use crate::app_state::CmxAppState;
+use axum::routing::{get, post};
 use axum::Router;
 
 /// 注册所有 API 路由
@@ -130,6 +132,16 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册其他模型的路由
     // let router = register_crud_routes!(router, UserBmc, UserFilter, UserForCreate, UserForUpdate, "/users");
+
+    // 注册插件管理路由
+    let router = router
+        .route("/plugin/install", post(plugin::plugin_install))
+        .route("/plugin/uninstall", post(plugin::plugin_uninstall))
+        .route("/plugin/upgrade", post(plugin::plugin_upgrade))
+        .route("/plugin/downgrade", post(plugin::plugin_downgrade))
+        .route("/plugin/list", get(plugin::plugin_list))
+        .route("/plugin/page", get(plugin::plugin_page))
+        .route("/plugin/{plugin_id}", get(plugin::plugin_get));
 
     router
 }

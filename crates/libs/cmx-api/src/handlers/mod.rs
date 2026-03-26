@@ -12,4 +12,5 @@
 pub mod application;
 pub mod domain;
 pub mod module;
+pub mod plugin;
 pub mod sys_datasource;

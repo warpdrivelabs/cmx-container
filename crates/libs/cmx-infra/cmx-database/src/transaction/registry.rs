@@ -2,8 +2,9 @@
 ///
 /// 该模块定义了全局TxnHolder注册表及相关操作函数
 
-use std::sync::{Arc, OnceLock, RwLock, Mutex};
+use std::sync::{Arc, OnceLock, RwLock,};
 use std::collections::HashMap;
+use tokio::sync::Mutex;
 use crate::transaction::core::TxnHolder;
 
 /// 全局 TxnHolder 注册表

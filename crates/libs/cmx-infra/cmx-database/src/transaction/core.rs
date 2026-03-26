@@ -15,7 +15,8 @@ use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
 use sea_query_binder::SqlxValues;
 use cmx_core::model::cell::DataValue;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use tokio::sync::Mutex;
 use uuid;
 
 /// 数据库访问对象，支持事务管理
@@ -93,7 +94,7 @@ impl Dbx {
 
     /// Required: 如果存在事务则加入，否则创建新事务
     async fn do_required(&self, db_id: &str) -> Result<String> {
-        let mut txh_g = self.txn_holder.lock().unwrap();
+        let mut txh_g = self.txn_holder.lock().await;
         if txh_g.is_some() {
             if let Some(txh) = txh_g.as_mut() {
                 txh.inc();
@@ -252,7 +253,7 @@ impl Dbx {
         let txn_id = txh.txn_id().to_string();
 
         // 获取事务持有器的锁并插入新事务
-        let mut txh_g = self.txn_holder.lock().unwrap();
+        let mut txh_g = self.txn_holder.lock().await;
         let _ = txh_g.insert(txh);
 
         // 注册事务到元数据注册表
@@ -281,7 +282,7 @@ impl Dbx {
 
         // 获取事务持有器的锁
         let result = {
-            let mut txh_g = self.txn_holder.lock().unwrap();
+            let mut txh_g = self.txn_holder.lock().await;
 
             // 检查是否存在事务
             if let Some(mut txn_holder) = txh_g.take() {
@@ -339,7 +340,7 @@ impl Dbx {
 
         // 获取事务持有器的锁
         let result = {
-            let mut txh_g = self.txn_holder.lock().unwrap();
+            let mut txh_g = self.txn_holder.lock().await;
 
             // 检查是否存在事务
             if let Some(txh) = txh_g.as_mut() {
@@ -393,7 +394,7 @@ impl Dbx {
     /// # 返回值
     /// * `Option<String>` - 事务ID，如果没有活跃事务则返回 None
     pub async fn get_txn_id(&self) -> Option<String> {
-        let txh_g = self.txn_holder.lock().unwrap();
+        let txh_g = self.txn_holder.lock().await;
         txh_g.as_ref().map(|txh| txh.txn_id().to_string())
     }
 
@@ -405,7 +406,7 @@ impl Dbx {
     /// # 返回值
     /// * `bool` - 如果事务超时则返回 true
     pub async fn is_txn_timeout(&self, timeout: std::time::Duration) -> bool {
-        let txh_g = self.txn_holder.lock().unwrap();
+        let txh_g = self.txn_holder.lock().await;
         txh_g.as_ref().map(|txh| txh.elapsed() > timeout).unwrap_or(false)
     }
 
