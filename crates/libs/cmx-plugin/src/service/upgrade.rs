@@ -301,6 +301,7 @@ impl UpgradeService {
             status: crate::domain::plugin::PluginStatus::Installed,
             installed_at: Some(Utc::now()),
             updated_at: Some(Utc::now()),
+            install_path: install_path.clone(),
         };
         self.deps
             .cache

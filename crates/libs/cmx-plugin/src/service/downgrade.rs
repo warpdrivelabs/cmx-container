@@ -188,6 +188,7 @@ impl DowngradeService {
             status: plugin_status,
             installed_at: Some(plugin.create_time),
             updated_at: Some(Utc::now()),
+            install_path:PathBuf::from(&target_version_record.install_path),
         };
         self.deps
             .cache

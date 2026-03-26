@@ -26,6 +26,8 @@ pub struct PluginInfo {
     pub installed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// 更新时间
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// 安装路径
+    pub install_path: PathBuf,
 }
 
 /// 插件来源

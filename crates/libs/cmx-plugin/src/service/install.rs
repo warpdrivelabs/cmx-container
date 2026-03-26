@@ -24,6 +24,7 @@ use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
 use chrono::Utc;
+use log::warn;
 use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -174,7 +175,7 @@ impl InstallService {
 
         let plugin_def = DefinitionUtils::parse_plugin_definition(&extract_path)?;
         let plugin_id = plugin_def.id.clone();
-        let version = plugin_def
+        let install_version = plugin_def
             .version
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
@@ -183,10 +184,21 @@ impl InstallService {
         let existing_deployment = self
             .deps
             .deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id, &version)
+            .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
             .await?;
 
-        if existing_deployment.is_some() {
+        if let Some(node_deploment) = existing_deployment {
+            let mut registry = self.deps.registry.read().await;
+            if let Some(info) = registry.get(&plugin_id) {
+                return Ok(InstallResponse {
+                    plugin_id,
+                    install_path:info.install_path.clone(),
+                    success: true,
+                    message: "插件已安装".to_string(),
+                });
+            }else{
+              warn!("插件 {} 已部署，但未注册到registry", plugin_id);
+            }
             return Err(PluginError::plugin_already_exists(&plugin_id));
         }
 
@@ -219,6 +231,7 @@ impl InstallService {
                             status: PluginStatus::Installed,
                             installed_at: Some(record.create_time),
                             updated_at: Some(record.update_time),
+                            install_path:PathBuf::from(&record.install_path),
                         };
                         return Ok(Some(info));
                     }
@@ -239,7 +252,7 @@ impl InstallService {
         }
 
         // 步骤6: 创建安装目录 (plugin_id/version/)
-        let install_path = self.deps.plugin_root.join(&plugin_id).join(&version);
+        let install_path = self.deps.plugin_root.join(&plugin_id).join(&install_version);
         if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
@@ -271,7 +284,7 @@ impl InstallService {
             crate::service::utils::create_plugin_tables(
                 &db_id,
                 &plugin_id,
-                &version,
+                &install_version,
                 &install_path,
                 &plugin_def,
                 None
@@ -283,7 +296,7 @@ impl InstallService {
         // 使用辅助函数构建记录
         let db_record = super::record_builder::build_plugin_db_record(
             &plugin_def,
-            &version,
+            &install_version,
             &install_path,
             &db_id,
         );
@@ -297,19 +310,19 @@ impl InstallService {
 
         if let Some(ref db_version) = baseline_version {
             // 版本小不能用安装，应该使用降级
-            if version < *db_version {
+            if install_version < *db_version {
                 return Err(PluginError::Install(format!(
                     "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
-                    plugin_id, db_version, version
+                    plugin_id, db_version, install_version
                 )));
             }
-            // 版本相同，无需重复安装
-            if version == *db_version {
-                return Err(PluginError::Install(format!(
-                    "插件 {} 版本 {} 已安装，无需重复安装",
-                    plugin_id, version
-                )));
-            }
+            // // 版本相同，无需重复安装
+            // if install_version == *db_version {
+            //     return Err(PluginError::Install(format!(
+            //         "插件 {} 版本 {} 已安装，无需重复安装",
+            //         plugin_id, install_version
+            //     )));
+            // }
         }
 
         // 使用 upsert 保存插件记录
@@ -325,7 +338,7 @@ impl InstallService {
             .version_history_repository
             .set_current_version(
                 &plugin_id,
-                &version,
+                &install_version,
                 &install_path.to_string_lossy(),
                 &wasm_path,
                 Some(txn_guard.txn_id()),
@@ -338,7 +351,7 @@ impl InstallService {
                 &plugin_id,
                 &self.deps.node_id,
                 self.deps.node_type.as_deref(),
-                &version,
+                &install_version,
             );
             self.deps
                 .deployment_repository
@@ -350,14 +363,14 @@ impl InstallService {
                 crate::infrastructure::database::deployment::DeploymentUpdateFields {
                     plugin_id: plugin_id.clone(),
                     node_id: self.deps.node_id.clone(),
-                    version: version.clone(),
+                    version: install_version.clone(),
                     ..Default::default()
                 };
             // 查询现有部署记录的 ID
             if let Some(existing_deployment) = self
                 .deps
                 .deployment_repository
-                .find_deployment(&plugin_id, &self.deps.node_id, &version)
+                .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
                 .await?
             {
                 self.deps
@@ -371,13 +384,14 @@ impl InstallService {
         let plugin_info = PluginInfo {
             id: plugin_id.clone(),
             name: plugin_def.name.clone(),
-            version: version.clone(),
+            version: install_version.clone(),
             description: plugin_def.description.clone(),
             author: plugin_def.vendor_name.clone(),
             source: request.source.clone(),
             status: PluginStatus::Installed,
             installed_at: Some(Utc::now()),
             updated_at: Some(Utc::now()),
+            install_path: install_path.clone(),
         };
         {
             let mut registry = self.deps.registry.write().await;
@@ -410,7 +424,7 @@ impl InstallService {
         )
         .with_node_id(self.deps.node_id.clone())
         .with_details(serde_json::json!({
-            "version": version,
+            "version": install_version,
             "install_path": install_path.to_string_lossy().to_string(),
             "node_id": self.deps.node_id,
         }))
@@ -426,7 +440,7 @@ impl InstallService {
                 EventType::PluginInstalled,
                 plugin_id.clone(),
                 serde_json::json!({
-                    "version": version,
+                    "version": install_version,
                     "install_path": install_path.to_string_lossy().to_string(),
                 }),
             ))
