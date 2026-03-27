@@ -4,8 +4,6 @@
 
 use utoipa::OpenApi;
 
-// 引入生成的 CRUD handlers 模块
-
 /// CMX API OpenAPI 文档
 #[derive(OpenApi)]
 #[openapi(
@@ -15,12 +13,49 @@ use utoipa::OpenApi;
         description = "CMX 系统 API 文档",
     ),
     paths(
-     
-        // Domain 自定义 handlers
+        // Domain CRUD handlers
+        crate::routes::crud_handlers::domain_crud::create,
+        crate::routes::crud_handlers::domain_crud::create_many,
+        crate::routes::crud_handlers::domain_crud::get,
+        crate::routes::crud_handlers::domain_crud::update,
+        crate::routes::crud_handlers::domain_crud::update_many,
+        crate::routes::crud_handlers::domain_crud::delete,
+        crate::routes::crud_handlers::domain_crud::list,
+        crate::routes::crud_handlers::domain_crud::page,
+        // Application CRUD handlers
+        crate::routes::crud_handlers::application_crud::create,
+        crate::routes::crud_handlers::application_crud::create_many,
+        crate::routes::crud_handlers::application_crud::get,
+        crate::routes::crud_handlers::application_crud::update,
+        crate::routes::crud_handlers::application_crud::update_many,
+        crate::routes::crud_handlers::application_crud::delete,
+        crate::routes::crud_handlers::application_crud::list,
+        crate::routes::crud_handlers::application_crud::page,
+        // Module CRUD handlers
+        crate::routes::crud_handlers::module_crud::create,
+        crate::routes::crud_handlers::module_crud::create_many,
+        crate::routes::crud_handlers::module_crud::get,
+        crate::routes::crud_handlers::module_crud::update,
+        crate::routes::crud_handlers::module_crud::update_many,
+        crate::routes::crud_handlers::module_crud::delete,
+        crate::routes::crud_handlers::module_crud::list,
+        crate::routes::crud_handlers::module_crud::page,
+        // SysDatasource CRUD handlers
+        crate::routes::crud_handlers::sys_datasource_crud::create,
+        crate::routes::crud_handlers::sys_datasource_crud::create_many,
+        crate::routes::crud_handlers::sys_datasource_crud::get,
+        crate::routes::crud_handlers::sys_datasource_crud::update,
+        crate::routes::crud_handlers::sys_datasource_crud::update_many,
+        crate::routes::crud_handlers::sys_datasource_crud::delete,
+        crate::routes::crud_handlers::sys_datasource_crud::list,
+        crate::routes::crud_handlers::sys_datasource_crud::page,
+
+        // Domain handlers
         crate::handlers::domain::handler::get_by_name,
         crate::handlers::domain::handler::batch_create,
         crate::handlers::domain::handler::search,
         crate::handlers::domain::handler::count_by_status,
+
         // SysDatasource 自定义 handlers
         crate::handlers::sys_datasource::handler::get_by_db_id,
         crate::handlers::sys_datasource::handler::create_datasource,
