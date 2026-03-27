@@ -8,7 +8,9 @@ use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::get_default_db_manager;
 use serde::Deserialize;
+use serde_json::Value;
 use tracing::debug;
+use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
@@ -18,35 +20,28 @@ use crate::app_state::CmxAppState;
 use crate::rest::header_parse::get_db_id_from_header;
 
 /// 按名称查询的请求参数
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct GetByNameParams {
     /// 域名
     pub name: String,
 
 }
 
-
 /// 按名称查询 Handler
 ///
-/// # 接口
-/// POST /api/domains/by-name
-///
-/// # 请求体
-/// ```json
-/// {
-///     "name": "example.com",
-///     "db_id": "tenant1"  // 可选
-/// }
-/// ```
-///
-/// # 参数
-/// * `cmx_state` - 应用状态
-/// * `svr_ctx` - 服务上下文
-/// * `headers` - HTTP 请求头
-/// * `params` - 查询参数
+/// 根据域名查询 Domain 实体
+#[utoipa::path(
+    post,
+    path = "/domains/by-name",
+    request_body = GetByNameParams,
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Value>)
+    ),
+    tag = "Domain"
+)]
 pub async fn get_by_name(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<GetByNameParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
@@ -61,36 +56,27 @@ pub async fn get_by_name(
 }
 
 /// 批量创建的请求参数
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct BatchCreateParams {
     /// 要创建的数据列表
     pub items: Vec<DomainForCreate>,
 }
 
-
 /// 批量创建 Handler
 ///
-/// # 接口
-/// POST /api/domains/batch-create
-///
-/// # 请求体
-/// ```json
-/// {
-///     "items": [
-///         {"code": "domain1", "name": "Domain 1"},
-///         {"code": "domain2", "name": "Domain 2"}
-///     ]
-/// }
-/// ```
-///
-/// # 参数
-/// * `cmx_state` - 应用状态
-/// * `svr_ctx` - 服务上下文
-/// * `headers` - HTTP 请求头
-/// * `params` - 批量创建参数
+/// 批量创建多个 Domain 实体
+#[utoipa::path(
+    post,
+    path = "/domains/batch-create",
+    request_body = BatchCreateParams,
+    responses(
+        (status = 200, description = "创建成功", body = ApiResp<Value>)
+    ),
+    tag = "Domain"
+)]
 pub async fn batch_create(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<BatchCreateParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
@@ -105,7 +91,7 @@ pub async fn batch_create(
 }
 
 /// 搜索的请求参数
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SearchParams {
     /// 搜索关键字
     pub keyword: String,
@@ -116,8 +102,6 @@ pub struct SearchParams {
 }
 
 impl SearchParams {
-
-
     /// 获取页码
     pub fn get_page(&self) -> i64 {
         self.page.unwrap_or(1)
@@ -131,27 +115,19 @@ impl SearchParams {
 
 /// 搜索 Handler
 ///
-/// # 接口
-/// POST /api/domains/search
-///
-/// # 请求体
-/// ```json
-/// {
-///     "keyword": "example",
-///     "page": 1,
-///     "page_size": 20,
-///     "db_id": "tenant1"  // 可选
-/// }
-/// ```
-///
-/// # 参数
-/// * `cmx_state` - 应用状态
-/// * `svr_ctx` - 服务上下文
-/// * `headers` - HTTP 请求头
-/// * `params` - 搜索参数
+/// 根据关键字搜索 Domain 实体
+#[utoipa::path(
+    post,
+    path = "/domains/search",
+    request_body = SearchParams,
+    responses(
+        (status = 200, description = "搜索成功", body = ApiResp<Value>)
+    ),
+    tag = "Domain"
+)]
 pub async fn search(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<SearchParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
@@ -175,19 +151,20 @@ pub async fn search(
 
 /// 统计按状态 Handler
 ///
-/// # 接口
-/// GET /api/domains/count-by-status?db_id=tenant1
-///
-/// # 参数
-/// * `cmx_state` - 应用状态
-/// * `svr_ctx` - 服务上下文
-/// * `headers` - HTTP 请求头
-/// * `params` - 查询参数
+/// 按状态统计 Domain 数量
+#[utoipa::path(
+    get,
+    path = "/domains/count-by-status",
+    responses(
+        (status = 200, description = "统计成功", body = ApiResp<Value>)
+    ),
+    tag = "Domain"
+)]
 pub async fn count_by_status(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Query(params): Query<GetByNameParams>,
+    Query(_params): Query<GetByNameParams>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::count_by_status", "HANDLER");
 

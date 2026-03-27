@@ -11,6 +11,7 @@ use cmx_database::get_default_db_manager;
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
+use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
@@ -22,14 +23,14 @@ use crate::rest::header_parse::get_db_id_from_header;
 use crate::app_state::CmxAppState;
 
 /// 按 db_id 查询的请求参数
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct GetByDbIdParams {
     /// 数据源标识
     pub db_id: String,
 }
 
 /// 更新请求 Payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct DatasourceUpdatePayload {
     /// 数据源 ID
     pub id: String,
@@ -38,7 +39,7 @@ pub struct DatasourceUpdatePayload {
 }
 
 /// 删除请求 Payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct DatasourceDeletePayload {
     /// 要删除的数据源 ID 列表
     pub ids: Vec<String>,
@@ -46,8 +47,16 @@ pub struct DatasourceDeletePayload {
 
 /// 按 db_id 查询数据源 Handler
 ///
-/// # 接口
-/// POST /api/sys-datasource/by-db-id
+/// 根据数据源标识查询数据源配置
+#[utoipa::path(
+    post,
+    path = "/sys-datasource/by-db-id",
+    request_body = GetByDbIdParams,
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Value>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn get_by_db_id(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -66,8 +75,16 @@ pub async fn get_by_db_id(
 
 /// 创建数据源 Handler
 ///
-/// # 接口
-/// POST /api/sys-datasource/create-custom
+/// 创建新的数据源配置并自动注册到 DatabaseManager
+#[utoipa::path(
+    post,
+    path = "/sys-datasource/create-custom",
+    request_body = SysDatasourceForCreate,
+    responses(
+        (status = 200, description = "创建成功", body = ApiResp<Value>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn create_datasource(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -85,8 +102,16 @@ pub async fn create_datasource(
 
 /// 更新数据源 Handler
 ///
-/// # 接口
-/// POST /api/sys-datasource/update-custom
+/// 更新数据源配置并自动重新注册到 DatabaseManager
+#[utoipa::path(
+    post,
+    path = "/sys-datasource/update-custom",
+    request_body = DatasourceUpdatePayload,
+    responses(
+        (status = 200, description = "更新成功", body = ApiResp<Value>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn update_datasource(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -101,17 +126,21 @@ pub async fn update_datasource(
     let data = payload.data;
     let dataset = SysDatasourceService::update(&mm, &db_id, &id, data).await?;
 
-
-
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-
-
 /// 删除数据源 Handler
 ///
-/// # 接口
-/// POST /api/sys-datasource/delete-custom
+/// 删除数据源配置并自动从 DatabaseManager 注销
+#[utoipa::path(
+    post,
+    path = "/sys-datasource/delete-custom",
+    request_body = DatasourceDeletePayload,
+    responses(
+        (status = 200, description = "删除成功", body = ApiResp<Value>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn delete_datasource(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -129,8 +158,18 @@ pub async fn delete_datasource(
 
 /// 测试数据源连接 Handler
 ///
-/// # 接口
-/// GET /api/sys-datasource/test-connection?db_id=tenant1
+/// 测试指定数据源的连接是否正常
+#[utoipa::path(
+    get,
+    path = "/sys-datasource/test-connection",
+    params(
+        ("db_id" = String, Query, description = "数据源标识")
+    ),
+    responses(
+        (status = 200, description = "测试完成", body = ApiResp<bool>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn test_connection(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -147,8 +186,15 @@ pub async fn test_connection(
 
 /// 列出所有已注册数据源 Handler
 ///
-/// # 接口
-/// GET /api/sys-datasource/registered
+/// 获取当前已注册到 DatabaseManager 的所有数据源标识列表
+#[utoipa::path(
+    get,
+    path = "/sys-datasource/registered",
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Vec<String>>)
+    ),
+    tag = "SysDatasource"
+)]
 pub async fn list_registered(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,

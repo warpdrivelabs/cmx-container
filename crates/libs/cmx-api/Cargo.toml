@@ -45,3 +45,5 @@ thiserror = { workspace = true }
 # -- 验证
 validator = { workspace = true }
 
+utoipa={workspace = true}
+utoipa-swagger-ui={workspace = true}

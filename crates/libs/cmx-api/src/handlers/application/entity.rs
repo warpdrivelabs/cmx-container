@@ -6,11 +6,12 @@ use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 /// 应用实体（完整字段，用于查询返回）
 ///
 /// 表示系统中的一个应用对象
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Application {
     /// 主键，应用编码，全局唯一，如: FI, CO, MM
     pub code: String,
@@ -39,9 +40,11 @@ pub struct Application {
     pub archived: Option<i32>,
     /// 创建时间
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>)]
     pub create_time: Option<OffsetDateTime>,
     /// 更新时间
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>)]
     pub update_time: Option<OffsetDateTime>,
     /// 创建人ID
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,7 +63,7 @@ pub struct Application {
 /// 创建请求 DTO
 ///
 /// 用于创建 Application 的请求数据
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ApplicationForCreate {
     /// 应用名称，如: 财务会计, 管理会计
     pub name: String,
@@ -84,7 +87,7 @@ pub struct ApplicationForCreate {
 /// 更新请求 DTO
 ///
 /// 用于更新 Application 的请求数据，所有字段均为可选
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ApplicationForUpdate {
     /// 应用名称，如: 财务会计, 管理会计
     #[serde(skip_serializing_if = "Option::is_none")]

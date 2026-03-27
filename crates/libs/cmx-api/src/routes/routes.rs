@@ -15,8 +15,11 @@ use crate::handlers::sys_datasource::{
 };
 use crate::register_crud_routes;
 use crate::app_state::CmxAppState;
+use crate::openapi::ApiDoc;
 use axum::routing::{get, post};
 use axum::Router;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 /// 注册所有 API 路由
 ///
@@ -144,4 +147,22 @@ pub fn api_routes() -> Router<CmxAppState> {
         .route("/plugin/{plugin_id}", get(plugin::plugin_get));
 
     router
+}
+
+/// 注册带有 Swagger UI 的 API 路由
+///
+/// # 参数
+/// * 无
+///
+/// # 返回值
+/// 返回配置好的 Axum 路由器，包含 Swagger UI
+///
+/// # Swagger UI 访问
+/// - Swagger UI: http://localhost:port/swagger-ui/
+/// - OpenAPI JSON: http://localhost:port/api-docs/openapi.json
+pub fn swagger_routes() -> Router{
+    let app = Router::new()
+        .merge(SwaggerUi::new("/swagger-ui")
+            .url("/api-docs/openapi.json", ApiDoc::openapi()));
+    return  app;
 }

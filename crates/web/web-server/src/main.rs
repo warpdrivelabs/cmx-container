@@ -62,6 +62,7 @@ async fn main() -> Result<()> {
     // 2. mw_req_stamp_resolver - 添加请求时间戳
     let routes_all = Router::new()
         .nest("/api", api_routes)
+        .merge(self::routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver));
     // 应用剩余的中间件并添加静态文件服务

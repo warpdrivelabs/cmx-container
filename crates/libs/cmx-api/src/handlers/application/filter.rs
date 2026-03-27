@@ -10,16 +10,16 @@ use serde::Deserialize;
 /// 支持按 code、name、domain_code、type、status 等字段进行过滤
 #[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
 pub struct ApplicationFilter {
-    /// 按 code 过滤
+    /// 编码过滤
     pub code: Option<OpValsString>,
-    /// 按名称过滤
+    /// 名称过滤
     pub name: Option<OpValsString>,
-    /// 按域编码过滤
+    /// 域编码过滤
     pub domain_code: Option<OpValsString>,
-    /// 按类型过滤
+    /// 类型过滤
     pub r#type: Option<OpValsString>,
-    /// 按状态过滤
+    /// 状态过滤
     pub status: Option<OpValsInt64>,
-    /// 按归档状态过滤
+    /// 归档标志过滤
     pub archived: Option<OpValsInt64>,
 }

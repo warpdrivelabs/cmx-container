@@ -1,4 +1,5 @@
 use serde::Serialize;
+use utoipa::ToSchema;
 
 /// API 统一响应结构
 ///
@@ -10,7 +11,7 @@ use serde::Serialize;
 ///     "data": { ... }
 /// }
 /// ```
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiResp<T> {
     pub code: u16,
@@ -69,7 +70,7 @@ impl<T> ApiResp<T> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
     pub page: u64,

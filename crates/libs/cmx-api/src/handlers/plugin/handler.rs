@@ -3,18 +3,16 @@
 //! 提供插件安装、卸载、升级、降级、列表查询等 API
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use tracing::debug;
 
-use crate::api_response::{ApiResp, Pagination};
+use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
-use crate::rest::header_parse::get_db_id_from_header;
 
 use super::request::*;
 use super::response::*;
@@ -38,7 +36,7 @@ fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::Plug
             package_name,
         } => {
             cmx_plugin::domain::plugin::PluginSource::Registry {
-                registry_url: registry_url.clone(),
+                registry_url: Some(registry_url.clone()),
                 package_name: package_name.clone(),
             }
         }
@@ -46,6 +44,17 @@ fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::Plug
 }
 
 /// 插件安装 Handler
+///
+/// 从指定来源安装插件
+#[utoipa::path(
+    post,
+    path = "/plugin/install",
+    request_body = PluginInstallRequest,
+    responses(
+        (status = 200, description = "安装成功", body = ApiResp<String>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_install(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -67,17 +76,28 @@ pub async fn plugin_install(
         crate::error::Error::InternalError(format!("插件安装失败: {}", e))
     })?;
 
-    let resp = InstallResponse {
+    let _resp = InstallResponse {
         plugin_id: result.plugin_id,
         install_path: result.install_path.to_string_lossy().to_string(),
         success: result.success,
-        message: result.message,
+        message: Some(result.message),
     };
 
     Ok(Json(ApiResp::ok("success".to_string())))
 }
 
 /// 插件卸载 Handler
+///
+/// 卸载指定的插件
+#[utoipa::path(
+    post,
+    path = "/plugin/uninstall",
+    request_body = PluginUninstallRequest,
+    responses(
+        (status = 200, description = "卸载成功", body = ApiResp<UninstallResponse>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_uninstall(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -101,13 +121,24 @@ pub async fn plugin_uninstall(
     let resp = UninstallResponse {
         plugin_id: result.plugin_id,
         success: result.success,
-        message: result.message,
+        message: Some(result.message),
     };
 
     Ok(Json(ApiResp::ok(resp)))
 }
 
 /// 插件升级 Handler
+///
+/// 升级指定的插件到新版本
+#[utoipa::path(
+    post,
+    path = "/plugin/upgrade",
+    request_body = PluginUpgradeRequest,
+    responses(
+        (status = 200, description = "升级成功", body = ApiResp<UpgradeResponse>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_upgrade(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -135,13 +166,24 @@ pub async fn plugin_upgrade(
         old_version: result.old_version,
         new_version: result.new_version,
         success: result.success,
-        message: result.message,
+        message: Some(result.message),
     };
 
     Ok(Json(ApiResp::ok(resp)))
 }
 
 /// 插件降级 Handler
+///
+/// 将指定的插件降级到目标版本
+#[utoipa::path(
+    post,
+    path = "/plugin/downgrade",
+    request_body = PluginDowngradeRequest,
+    responses(
+        (status = 200, description = "降级成功", body = ApiResp<DowngradeResponse>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_downgrade(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -168,7 +210,7 @@ pub async fn plugin_downgrade(
         old_version: result.old_version,
         target_version: result.new_version,
         success: result.success,
-        message: result.message,
+        message: Some(result.message),
     };
 
     Ok(Json(ApiResp::ok(resp)))
@@ -205,6 +247,19 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
 }
 
 /// 插件列表 Handler
+///
+/// 获取插件列表，支持按状态过滤
+#[utoipa::path(
+    get,
+    path = "/plugin/list",
+    params(
+        PluginListQuery
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<PluginListResponse>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_list(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
@@ -239,26 +294,53 @@ pub async fn plugin_list(
 }
 
 /// 插件详情 Handler
+///
+/// 获取指定插件的详细信息
+#[utoipa::path(
+    get,
+    path = "/plugin/{plugin_id}",
+    params(
+        PluginIdPath
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<PluginInfoResponse>),
+        (status = 404, description = "插件不存在")
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_get(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Path(PluginIdPath { plugin_id }): Path<PluginIdPath>,
+    Path(params): Path<PluginIdPath>,
 ) -> Result<Json<ApiResp<PluginInfoResponse>>> {
-    debug!("插件详情查询: plugin_id={}", plugin_id);
+    debug!("插件详情查询: plugin_id={}", params.plugin_id);
 
     let manager = cmx_plugin::GlobalPluginManager::get().await;
 
-    let plugin = manager.get_plugin(&plugin_id).await.map_err(|e| {
+    let plugin = manager.get_plugin(&params.plugin_id).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件详情失败: {}", e))
     })?;
 
     match plugin {
         Some(info) => Ok(Json(ApiResp::ok(convert_plugin_info(info)))),
-        None => Err(crate::error::Error::NotFound(format!("插件 {} 不存在", plugin_id))),
+        None => Err(crate::error::Error::NotFound(format!("插件 {} 不存在", params.plugin_id))),
     }
 }
 
 /// 插件分页 Handler
+///
+/// 分页获取插件列表
+#[utoipa::path(
+    get,
+    path = "/plugin/page",
+    params(
+        PluginPageQuery
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Vec<PluginInfoResponse>>)
+    ),
+    tag = "Plugin"
+)]
 pub async fn plugin_page(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,

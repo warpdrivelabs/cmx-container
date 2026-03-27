@@ -6,11 +6,12 @@ use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 /// 模块实体（完整字段，用于查询返回）
 ///
 /// 表示系统中的一个模块对象
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Module {
     /// 主键，模块编码，全局唯一，如: GL, AR, AP
     pub code: String,
@@ -41,9 +42,11 @@ pub struct Module {
     pub archived: Option<i32>,
     /// 创建时间
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>)]
     pub create_time: Option<OffsetDateTime>,
     /// 更新时间
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>)]
     pub update_time: Option<OffsetDateTime>,
     /// 创建人ID
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,7 +65,7 @@ pub struct Module {
 /// 创建请求 DTO
 ///
 /// 用于创建 Module 的请求数据
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ModuleForCreate {
     /// 模块名称，如: 总账模块, 应收模块
     pub name: String,
@@ -88,7 +91,7 @@ pub struct ModuleForCreate {
 /// 更新请求 DTO
 ///
 /// 用于更新 Module 的请求数据，所有字段均为可选
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ModuleForUpdate {
     /// 模块名称，如: 总账模块, 应收模块
     #[serde(skip_serializing_if = "Option::is_none")]

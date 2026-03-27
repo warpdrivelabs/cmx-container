@@ -25,11 +25,15 @@ pub mod routes;
 /// 状态管理模块
 pub mod app_state;
 
+/// OpenAPI 文档模块
+pub mod openapi;
+
 
 pub use rest::{ handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
 pub use error::{Error, Result};
 pub use api_response::{ApiResp, Pagination};
 pub use app_state::{CmxAppState, AppStateInner};
+pub use openapi::ApiDoc;
 
 // 注意：register_crud_routes 宏通过 #[macro_export] 自动导出到 crate 根目录
 // 使用时直接通过 cmx_api::register_crud_routes! 访问

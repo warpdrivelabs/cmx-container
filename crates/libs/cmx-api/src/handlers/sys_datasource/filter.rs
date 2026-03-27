@@ -10,16 +10,16 @@ use serde::Deserialize;
 /// 支持按 id、db_id、db_type、status 等字段进行过滤
 #[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
 pub struct SysDatasourceFilter {
-    /// 按 id 过滤
+    /// 主键过滤
     pub id: Option<OpValsString>,
-    /// 按数据源标识过滤
+    /// 数据源标识过滤
     pub db_id: Option<OpValsString>,
-    /// 按数据库类型过滤
+    /// 数据库类型过滤
     pub db_type: Option<OpValsString>,
-    /// 按是否默认过滤
+    /// 默认标志过滤
     pub default_flag: Option<OpValsInt64>,
-    /// 按状态过滤
+    /// 状态过滤
     pub status: Option<OpValsInt64>,
-    /// 按归档状态过滤
+    /// 归档标志过滤
     pub archived: Option<OpValsInt64>,
 }
