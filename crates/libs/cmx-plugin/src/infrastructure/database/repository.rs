@@ -537,6 +537,24 @@ impl PluginRepository {
             param_index += 1;
         }
 
+        if let Some(ref domain_code) = filter.domain_code {
+            conditions.push(format!("domain_code = ${}", param_index));
+            params.push(serde_json::json!(domain_code));
+            param_index += 1;
+        }
+
+        if let Some(ref application_code) = filter.application_code {
+            conditions.push(format!("application_code = ${}", param_index));
+            params.push(serde_json::json!(application_code));
+            param_index += 1;
+        }
+
+        if let Some(ref module_code) = filter.module_code {
+            conditions.push(format!("module_code = ${}", param_index));
+            params.push(serde_json::json!(module_code));
+            param_index += 1;
+        }
+
         let where_clause = if conditions.is_empty() {
             String::new()
         } else {

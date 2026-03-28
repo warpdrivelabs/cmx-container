@@ -51,6 +51,8 @@ pub enum PluginSource {
 
 /// 插件状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+// 允许前端传 "installed", "activated" 等
+#[serde(rename_all = "lowercase")]
 pub enum PluginStatus {
     /// 已安装
     Installed,
@@ -73,15 +75,21 @@ impl std::fmt::Display for PluginStatus {
     }
 }
 
+
+
 /// 插件筛选条件
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default,Serialize,Deserialize)]
 pub struct PluginFilter {
     /// 按状态筛选
     pub status: Option<PluginStatus>,
     /// 按名称筛选（模糊匹配）
     pub name: Option<String>,
-    /// 按作者筛选
-    pub author: Option<String>,
+    /// 按域编码筛选
+    pub domain_code: Option<String>,
+    /// 按应用编码筛选
+    pub application_code: Option<String>,
+    /// 按模块编码筛选
+    pub module_code: Option<String>,
 }
 
 /// 插件配置
