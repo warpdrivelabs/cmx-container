@@ -52,6 +52,8 @@ pub struct InstallResponse {
     pub plugin_id: String,
     /// 安装路径
     pub install_path: PathBuf,
+    /// 插件版本
+    pub version: String,
     /// 是否成功
     pub success: bool,
     /// 消息
@@ -196,6 +198,7 @@ impl InstallService {
                     plugin_id,
                     install_path:info.install_path.clone(),
                     success: true,
+                    version: install_version,
                     message: "插件已安装".to_string(),
                 });
             }else{
@@ -473,6 +476,7 @@ impl InstallService {
         Ok(InstallResponse {
             plugin_id,
             install_path,
+            version: install_version,
             success: true,
             message: "插件安装成功".to_string(),
         })

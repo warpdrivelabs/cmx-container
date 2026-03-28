@@ -79,6 +79,7 @@ pub async fn plugin_install(
     let _resp = InstallResponse {
         plugin_id: result.plugin_id,
         install_path: result.install_path.to_string_lossy().to_string(),
+        version: result.version,
         success: result.success,
         message: Some(result.message),
     };

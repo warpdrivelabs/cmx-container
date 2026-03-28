@@ -68,6 +68,9 @@ macro_rules! declare_crud_handlers {
             use $crate::error::Result;
             use $crate::middleware::CmxSvrContext;
 
+            /// 创建实体 Handler
+            ///
+            /// 创建单个实体记录，请求体为实体的创建 DTO。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/create"),
@@ -96,6 +99,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 批量创建实体 Handler
+            ///
+            /// 批量创建多个实体记录，请求体为实体创建 DTO 的数组。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/create-many"),
@@ -124,6 +130,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 获取实体详情 Handler
+            ///
+            /// 根据主键 ID 查询单个实体的详细信息。
             #[utoipa::path(
                 get,
                 path = concat!($prefix, "/get"),
@@ -150,6 +159,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 更新实体 Handler
+            ///
+            /// 根据主键 ID 更新单个实体记录，请求体包含 ID 和更新字段。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/update"),
@@ -178,6 +190,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 批量更新实体 Handler
+            ///
+            /// 批量更新多个实体记录，请求体为包含 ID 和更新字段的对象数组。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/update-many"),
@@ -206,6 +221,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 删除实体 Handler
+            ///
+            /// 根据主键 ID 删除单个实体记录。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/delete"),
@@ -234,6 +252,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 实体列表查询 Handler
+            ///
+            /// 根据过滤条件查询实体列表，返回符合条件的所有记录。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/list"),
@@ -262,6 +283,9 @@ macro_rules! declare_crud_handlers {
                 .await
             }
 
+            /// 实体分页查询 Handler
+            ///
+            /// 根据过滤条件和分页参数查询实体数据，返回分页结果。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/page"),

@@ -41,20 +41,20 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::module_crud::list,
         crate::routes::crud_handlers::module_crud::page,
         // SysDatasource CRUD handlers
-        crate::routes::crud_handlers::sys_datasource_crud::create,
-        crate::routes::crud_handlers::sys_datasource_crud::create_many,
+        // crate::routes::crud_handlers::sys_datasource_crud::create,
+        // crate::routes::crud_handlers::sys_datasource_crud::create_many,
         crate::routes::crud_handlers::sys_datasource_crud::get,
-        crate::routes::crud_handlers::sys_datasource_crud::update,
-        crate::routes::crud_handlers::sys_datasource_crud::update_many,
-        crate::routes::crud_handlers::sys_datasource_crud::delete,
+        // crate::routes::crud_handlers::sys_datasource_crud::update,
+        // crate::routes::crud_handlers::sys_datasource_crud::update_many,
+        // crate::routes::crud_handlers::sys_datasource_crud::delete,
         crate::routes::crud_handlers::sys_datasource_crud::list,
         crate::routes::crud_handlers::sys_datasource_crud::page,
 
         // Domain handlers
-        crate::handlers::domain::handler::get_by_name,
-        crate::handlers::domain::handler::batch_create,
-        crate::handlers::domain::handler::search,
-        crate::handlers::domain::handler::count_by_status,
+        // crate::handlers::domain::handler::get_by_name,
+        // crate::handlers::domain::handler::batch_create,
+        // crate::handlers::domain::handler::search,
+        // crate::handlers::domain::handler::count_by_status,
 
         // SysDatasource 自定义 handlers
         crate::handlers::sys_datasource::handler::get_by_db_id,

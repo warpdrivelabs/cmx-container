@@ -48,6 +48,8 @@ pub struct InstallResponse {
     pub plugin_id: String,
     /// 安装路径
     pub install_path: String,
+    /// 插件版本
+    pub version: String,
     /// 是否成功
     pub success: bool,
     /// 消息
