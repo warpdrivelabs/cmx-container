@@ -178,7 +178,7 @@ impl DeploymentRepository {
 
     /// 查询节点上的插件部署
     pub async fn find_deployment(&self, plugin_id: &str, node_id: &str, version: &str) -> PluginResult<Option<DeploymentRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND node_id = $2 AND version = $3 and archived =0";
+        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND node_id = $2 AND version = $3 AND status != 'uninstalled' AND archived = 0";
         let params = serde_json::json!([plugin_id, node_id, version]);
 
         let result = self.db_manager
@@ -246,6 +246,22 @@ impl DeploymentRepository {
             .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| PluginError::Database(format!("删除部署记录失败: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 物理删除插件的所有部署记录
+    pub async fn delete_deployments_by_plugin_id(&self, plugin_id: &str, txn_id: Option<&str>) -> PluginResult<()> {
+        let mut query = Query::delete();
+        query.from_table("cmx_plugin_deployments");
+        query.and_where(sea_query::Expr::col("plugin_id").eq(plugin_id));
+
+        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+
+        self.db_manager
+            .execute_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values)
+            .await
+            .map_err(|e| PluginError::Database(format!("删除插件部署记录失败: {}", e)))?;
 
         Ok(())
     }

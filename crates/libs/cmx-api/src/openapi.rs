@@ -71,6 +71,7 @@ use utoipa::OpenApi;
         crate::handlers::plugin::handler::plugin_list,
         crate::handlers::plugin::handler::plugin_page,
         crate::handlers::plugin::handler::plugin_get,
+        crate::handlers::plugin::handler::plugin_deploy,
     ),
     components(
         schemas(
@@ -97,12 +98,14 @@ use utoipa::OpenApi;
             crate::handlers::plugin::request::PluginUpgradeRequest,
             crate::handlers::plugin::request::PluginDowngradeRequest,
             crate::handlers::plugin::request::PluginSourceRequest,
+            crate::handlers::plugin::request::PluginDeployRequest,
             crate::handlers::plugin::response::PluginInfoResponse,
             crate::handlers::plugin::response::PluginListResponse,
             crate::handlers::plugin::response::InstallResponse,
             crate::handlers::plugin::response::UninstallResponse,
             crate::handlers::plugin::response::UpgradeResponse,
             crate::handlers::plugin::response::DowngradeResponse,
+            crate::handlers::plugin::response::PluginDeployResponse,
             crate::api_response::Pagination,
         )
     )

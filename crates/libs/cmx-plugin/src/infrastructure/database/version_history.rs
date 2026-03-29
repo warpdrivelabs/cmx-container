@@ -247,6 +247,19 @@ impl VersionHistoryRepository {
         Ok(())
     }
 
+    /// 物理删除插件的所有版本历史记录
+    pub async fn delete_versions_by_plugin_id(&self, plugin_id: &str, txn_id: Option<&str>) -> PluginResult<()> {
+        let sql = "DELETE FROM cmx_plugin_versions WHERE plugin_id = $1";
+        let params = serde_json::json!([plugin_id]);
+
+        self.db_manager
+            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
+            .await
+            .map_err(|e| PluginError::Database(format!("删除版本历史记录失败: {}", e)))?;
+
+        Ok(())
+    }
+
     /// 查询插件的版本历史
     pub async fn list_versions(&self, plugin_id: &str) -> PluginResult<Vec<VersionHistoryRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 ORDER BY installed_at DESC";

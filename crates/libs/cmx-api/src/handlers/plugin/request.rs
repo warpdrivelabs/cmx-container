@@ -81,6 +81,23 @@ pub struct PluginListQuery {
     pub status: Option<String>,
 }
 
+
+
+/// 插件部署请求参数
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PluginDeployRequest {
+    /// 插件 zip 包文件
+    #[schema(content_media_type = "application/octet-stream")]
+    pub file: Vec<u8>,
+
+    /// 目标数据库 ID (可选)
+    pub target_db_id: Option<String>,
+
+    /// 是否覆盖安装 (可选，默认 false)
+    pub force_reinstall: Option<bool>,
+}
+
+
 /// API 层插件过滤条件
 ///
 /// 用于分页查询接口的过滤参数

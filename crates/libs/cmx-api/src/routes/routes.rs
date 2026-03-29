@@ -113,6 +113,7 @@ pub fn api_routes() -> Router<CmxAppState> {
         .route("/plugin/downgrade", post(plugin::plugin_downgrade))
         .route("/plugin/list", post(plugin::plugin_list))
         .route("/plugin/page", post(plugin::plugin_page))
+        .route("/plugin/deploy", post(plugin::plugin_deploy))
         .route("/plugin/{plugin_id}", get(plugin::plugin_get));
 
     router

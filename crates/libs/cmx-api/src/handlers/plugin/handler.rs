@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use axum::extract::{Multipart, Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
@@ -228,6 +228,8 @@ pub async fn plugin_downgrade(
 #[utoipa::path(
     post,
     path = "/api/plugin/deploy",
+  // 核心：声明请求体结构体，utoipa 会根据字段生成表单
+     request_body(content = PluginDeployRequest, description = "部署参数", content_type = "multipart/form-data"),
     responses(
         (status = 200, description = "部署成功", body = ApiResp<PluginDeployResponse>),
         (status = 400, description = "请求参数错误"),
@@ -240,7 +242,7 @@ pub async fn plugin_deploy(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<PluginDeployResponse>>> {
-    debug!("插件部署请求（文件上传）");
+    info!("插件部署请求（文件上传）");
 
     let uploads_dir = PathBuf::from("./uploads/plugins");
     let mut file_bytes: Option<Vec<u8>> = None;
@@ -287,9 +289,11 @@ pub async fn plugin_deploy(
     tokio::fs::write(&file_path, &file_bytes).await
         .map_err(|e| crate::error::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
-    // 构建 PluginSource::Local
+    // 构建 PluginSource::Local（使用绝对路径，避免 LocalFetcher 拼接 plugin_root 前缀）
+    let abs_path = std::fs::canonicalize(&file_path)
+        .map_err(|e| crate::error::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
     let source = cmx_plugin::domain::plugin::PluginSource::Local {
-        path: file_path.clone(),
+        path: abs_path.clone(),
     };
 
     // 调用 PluginManager.deploy()

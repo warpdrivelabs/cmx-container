@@ -4,7 +4,6 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PluginError, PluginResult};
@@ -74,18 +73,19 @@ impl UninstallService {
         Self { deps }
     }
 
-    /// 卸载插件（简化版）
+    /// 卸载插件
     ///
     /// 卸载流程:
     /// 1. 检查插件存在
     /// 2. 检查节点部署记录
     /// 3. 从内存注册表删除
-    /// 4. 更新 cmx_plugin_deployments 节点部署记录
-    /// 5. 更新 cmx_plugin_versions 版本历史
-    /// 6. 检查并更新 cmx_plugin 主表
-    /// 7. 更新缓存
-    /// 8. 记录审计日志
-    /// 9. 发布卸载事件
+    /// 4. 清除插件上下文
+    /// 5. 物理删除 cmx_plugin_deployments 部署记录
+    /// 6. 物理删除 cmx_plugin_versions 版本历史记录
+    /// 7. 物理删除 cmx_plugin 主表记录
+    /// 8. 清除缓存
+    /// 9. 记录审计日志
+    /// 10. 发布卸载事件
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
         let start_time = std::time::Instant::now();
 
@@ -126,85 +126,18 @@ impl UninstallService {
             contexts.remove(&plugin_id);
         }
 
-        // 步骤5: 更新 cmx_plugin_deployments 节点部署记录（软删除）
-        if let Some(deployment) = existing_deployment {
-            let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateFields {
-                status: Some("uninstalled".to_string()),
-                ..Default::default()
-            };
-            self.deps.deployment_repository
-                .update_deployment(&deployment.id, &update_fields, None)
-                .await?;
-        }
-
-        // 步骤6: 更新 cmx_plugin_versions 版本历史
-        let current_version = self.deps.version_history_repository
-            .get_current_baseline(&plugin_id)
+        // 步骤5: 物理删除 cmx_plugin_deployments 部署记录
+        self.deps.deployment_repository
+            .delete_deployments_by_plugin_id(&plugin_id, None)
             .await?;
 
-        if let Some(version_record) = current_version {
-            let update_fields = crate::infrastructure::database::version_history::VersionHistoryUpdateFields {
-                uninstalled_at: Some(Utc::now()),
-                ..Default::default()
-            };
-            self.deps.version_history_repository
-                .update_version(&version_record.id, &update_fields, None)
-                .await?;
-        }
-
-        // 步骤7: 检查并更新 cmx_plugin 主表
-        // 查询是否还有其他节点部署此插件
-        let other_deployments = self.deps.deployment_repository
-            .list_plugin_deployments(&plugin_id)
+        // 步骤6: 物理删除 cmx_plugin_versions 版本历史记录
+        self.deps.version_history_repository
+            .delete_versions_by_plugin_id(&plugin_id, None)
             .await?;
 
-        let other_active_nodes: Vec<_> = other_deployments
-            .into_iter()
-            .filter(|d| d.node_id != self.deps.node_id && d.status != "uninstalled")
-            .collect();
-
-        if other_active_nodes.is_empty() {
-            // 没有其他节点，更新 cmx_plugin 状态为 uninstalled
-            let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                status: "uninstalled".to_string(),
-                ..Default::default()
-            };
-            self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
-        } else {
-            // 有其他节点，找到最高版本，更新 cmx_plugin 基线版本
-            let highest_version = other_active_nodes
-                .iter()
-                .map(|d| &d.version)
-                .max()
-                .cloned();
-
-            if let Some(hv) = highest_version {
-                let hv_clone = hv.clone();
-                let fields = crate::infrastructure::database::repository::PluginUpdateFields {
-                    version: hv_clone.clone(),
-                    ..Default::default()
-                };
-                self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
-
-                // 更新 cmx_plugin_versions 的 is_current
-                self.deps.version_history_repository
-                    .mark_all_not_current(&plugin_id, None)
-                    .await?;
-
-                if let Ok(Some(version_record)) = self.deps.version_history_repository
-                    .find_version(&plugin_id, &hv_clone)
-                    .await
-                {
-                    let update_fields = crate::infrastructure::database::version_history::VersionHistoryUpdateFields {
-                        is_current: Some(true),
-                        ..Default::default()
-                    };
-                    self.deps.version_history_repository
-                        .update_version(&version_record.id, &update_fields, None)
-                        .await?;
-                }
-            }
-        }
+        // 步骤7: 物理删除 cmx_plugin 主表记录
+        self.deps.repository.delete_plugin(&plugin_id).await?;
 
         // 步骤8: 清除缓存
         self.deps
@@ -235,7 +168,6 @@ impl UninstallService {
                 serde_json::json!({
                     "version": version,
                     "node_id": self.deps.node_id,
-                    "remaining_nodes": other_active_nodes.iter().map(|d| d.node_id.clone()).collect::<Vec<_>>(),
                 }),
             ))
             .await;
