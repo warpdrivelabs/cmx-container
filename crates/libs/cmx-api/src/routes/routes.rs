@@ -111,8 +111,8 @@ pub fn api_routes() -> Router<CmxAppState> {
         .route("/plugin/uninstall", post(plugin::plugin_uninstall))
         .route("/plugin/upgrade", post(plugin::plugin_upgrade))
         .route("/plugin/downgrade", post(plugin::plugin_downgrade))
-        .route("/plugin/list", get(plugin::plugin_list))
-        .route("/plugin/page", get(plugin::plugin_page))
+        .route("/plugin/list", post(plugin::plugin_list))
+        .route("/plugin/page", post(plugin::plugin_page))
         .route("/plugin/{plugin_id}", get(plugin::plugin_get));
 
     router
