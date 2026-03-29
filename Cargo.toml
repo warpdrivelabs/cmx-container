@@ -114,7 +114,7 @@ modql = "0.4.1"
 # ============================================
 # web相关
 # =================
-axum = {version = "0.8", features = ["macros"]}
+axum = {version = "0.8", features = ["macros", "multipart"]}
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "cors", "trace", "compression-full", "timeout"] }
 tower-cookies = "0.11"

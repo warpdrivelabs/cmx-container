@@ -94,6 +94,10 @@ pub enum PluginError {
     #[error("回滚错误: {0}")]
     Rollback(String),
 
+    /// 插件部署错误（智能安装/升级）
+    #[error("部署错误: {0}")]
+    Deploy(String),
+
     // ==================== 依赖和版本错误 ====================
     
     /// 依赖错误：缺少依赖、依赖冲突等
@@ -351,6 +355,7 @@ impl PluginError {
             PluginError::Upgrade(_) => "UPGRADE_ERROR",
             PluginError::Downgrade(_) => "DOWNGRADE_ERROR",
             PluginError::Rollback(_) => "ROLLBACK_ERROR",
+            PluginError::Deploy(_) => "DEPLOY_ERROR",
             PluginError::Dependency(_) => "DEPENDENCY_ERROR",
             PluginError::MissingDependency { .. } => "MISSING_DEPENDENCY",
             PluginError::DependencyConflict { .. } => "DEPENDENCY_CONFLICT",

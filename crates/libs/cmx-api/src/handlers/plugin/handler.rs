@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use tracing::debug;
@@ -210,6 +210,107 @@ pub async fn plugin_downgrade(
         plugin_id: result.plugin_id,
         old_version: result.old_version,
         target_version: result.new_version,
+        success: result.success,
+        message: Some(result.message),
+    };
+
+    Ok(Json(ApiResp::ok(resp)))
+}
+
+/// 插件部署 Handler（上传 zip 文件，自动判断安装/升级/覆盖安装）
+///
+/// 通过 multipart/form-data 上传插件 zip 文件，系统自动判断操作类型。
+///
+/// 请求字段：
+/// - `file`: 插件 zip 包文件（必填）
+/// - `target_db_id`: 目标数据库ID（可选）
+/// - `force_reinstall`: 是否覆盖安装（可选，默认 false）
+#[utoipa::path(
+    post,
+    path = "/api/plugin/deploy",
+    responses(
+        (status = 200, description = "部署成功", body = ApiResp<PluginDeployResponse>),
+        (status = 400, description = "请求参数错误"),
+        (status = 500, description = "部署失败")
+    ),
+    tag = "Plugin"
+)]
+pub async fn plugin_deploy(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    mut multipart: Multipart,
+) -> Result<Json<ApiResp<PluginDeployResponse>>> {
+    debug!("插件部署请求（文件上传）");
+
+    let uploads_dir = PathBuf::from("./uploads/plugins");
+    let mut file_bytes: Option<Vec<u8>> = None;
+    let mut target_db_id: Option<String> = None;
+    let mut force_reinstall: bool = false;
+
+    while let Some(field) = multipart.next_field().await
+        .map_err(|e| crate::error::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
+    {
+        let name = field.name().unwrap_or_default().to_string();
+        match name.as_str() {
+            "file" => {
+                let data = field.bytes().await
+                    .map_err(|e| crate::error::Error::BadRequest(format!("读取文件失败: {}", e)))?;
+                file_bytes = Some(data.to_vec());
+            }
+            "target_db_id" => {
+                let val = field.text().await
+                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 target_db_id 失败: {}", e)))?;
+                if !val.is_empty() {
+                    target_db_id = Some(val);
+                }
+            }
+            "force_reinstall" => {
+                let val = field.text().await
+                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e)))?;
+                force_reinstall = val == "true" || val == "1";
+            }
+            _ => {}
+        }
+    }
+
+    let file_bytes = file_bytes.ok_or_else(|| {
+        crate::error::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string())
+    })?;
+
+    // 确保上传目录存在
+    tokio::fs::create_dir_all(&uploads_dir).await
+        .map_err(|e| crate::error::Error::InternalError(format!("创建上传目录失败: {}", e)))?;
+
+    // 使用 UUID 重命名保存 zip 文件
+    let file_name = format!("{}.zip", uuid::Uuid::new_v4());
+    let file_path = uploads_dir.join(&file_name);
+    tokio::fs::write(&file_path, &file_bytes).await
+        .map_err(|e| crate::error::Error::InternalError(format!("保存文件失败: {}", e)))?;
+
+    // 构建 PluginSource::Local
+    let source = cmx_plugin::domain::plugin::PluginSource::Local {
+        path: file_path.clone(),
+    };
+
+    // 调用 PluginManager.deploy()
+    let manager = cmx_plugin::GlobalPluginManager::get().await;
+
+    let deploy_req = cmx_plugin::DeployRequest {
+        source,
+        db_id: target_db_id,
+        force_reinstall,
+    };
+
+    let result = manager.deploy(deploy_req).await.map_err(|e| {
+        crate::error::Error::InternalError(format!("插件部署失败: {}", e))
+    })?;
+
+    let resp = PluginDeployResponse {
+        plugin_id: result.plugin_id,
+        action: format!("{:?}", result.action).to_lowercase(),
+        old_version: result.old_version,
+        new_version: result.new_version,
+        install_path: result.install_path.to_string_lossy().to_string(),
         success: result.success,
         message: Some(result.message),
     };

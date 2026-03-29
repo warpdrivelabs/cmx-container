@@ -66,6 +66,7 @@ pub use service::activate::ActivateService;
 pub use service::upgrade::UpgradeService;
 pub use service::downgrade::DowngradeService;
 pub use service::rollback::RollbackService;
+pub use service::deploy::{DeployAction, DeployRequest, DeployResponse};
 
 // 导出基础设施模块类型
 pub use infrastructure::database::schema::SchemaManager;

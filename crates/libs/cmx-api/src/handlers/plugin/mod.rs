@@ -19,13 +19,14 @@ use axum::Router;
 use crate::app_state::CmxAppState;
 
 pub use handler::{
-    plugin_downgrade, plugin_get, plugin_install, plugin_list, plugin_page, plugin_uninstall,
-    plugin_upgrade,
+    plugin_deploy, plugin_downgrade, plugin_get, plugin_install, plugin_list, plugin_page,
+    plugin_uninstall, plugin_upgrade,
 };
 
 /// 创建插件管理路由
 pub fn plugin_routes() -> Router<CmxAppState> {
     Router::new()
+        .route("/deploy", post(plugin_deploy))
         .route("/install", post(plugin_install))
         .route("/uninstall", post(plugin_uninstall))
         .route("/upgrade", post(plugin_upgrade))

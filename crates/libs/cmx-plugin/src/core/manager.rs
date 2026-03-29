@@ -77,6 +77,7 @@ use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_
 pub use crate::service::activate::{
     ActivateRequest, ActivateResponse, DeactivateRequest, DeactivateResponse,
 };
+pub use crate::service::deploy::{DeployAction, DeployRequest, DeployResponse};
 pub use crate::service::downgrade::{DowngradeRequest, DowngradeResponse};
 pub use crate::service::install::{InstallRequest, InstallResponse};
 pub use crate::service::rollback::{RollbackRequest, RollbackResponse};
@@ -250,6 +251,9 @@ pub struct PluginManager {
     downgrade_service: crate::service::downgrade::DowngradeService,
     /// 回滚服务
     rollback_service: crate::service::rollback::RollbackService,
+
+    /// 部署服务（智能安装/升级）
+    deploy_service: crate::service::deploy::DeployService,
 
     // 初始化组件
     /// 插件初始化器（用于启动时同步）
@@ -438,6 +442,22 @@ impl PluginManager {
             },
         );
 
+        let deploy_service = crate::service::deploy::DeployService::new(
+            crate::service::deploy::DeployServiceDeps {
+                repository: repository.clone(),
+                deployment_repository: deployment_repository.clone(),
+                cache: cache.clone(),
+                storage: storage.clone(),
+                security_validator: security_validator.clone(),
+                install_service: install_service.clone(),
+                upgrade_service: upgrade_service.clone(),
+                uninstall_service: uninstall_service.clone(),
+                plugin_root: settings.plugin_root.clone(),
+                temp_root: settings.temp_root.clone(),
+                node_id: settings.node_id.clone(),
+            },
+        );
+
         // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
         let plugin_initializer = crate::service::initializer::PluginInitializer::new(
             repository.clone(),
@@ -473,6 +493,7 @@ impl PluginManager {
             uninstall_service,
             downgrade_service,
             rollback_service,
+            deploy_service,
             plugin_initializer,
             dependency_utils,
             service_utils,
@@ -579,6 +600,16 @@ impl PluginManager {
             .downgrade(request)
             .await
             .map_err(|e| PluginError::Downgrade(format!("降级失败: {}", e)))
+    }
+
+    /// 部署插件（自动判断安装/升级/覆盖安装）
+    ///
+    /// 根据当前插件安装状态和版本比较结果，自动选择执行安装、升级或覆盖安装操作。
+    pub async fn deploy(&self, request: DeployRequest) -> PluginResult<DeployResponse> {
+        self.deploy_service
+            .deploy(request)
+            .await
+            .map_err(|e| PluginError::Deploy(format!("部署失败: {}", e)))
     }
 
     // /// 回滚插件

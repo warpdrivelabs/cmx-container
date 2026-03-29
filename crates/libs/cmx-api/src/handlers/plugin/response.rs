@@ -99,3 +99,23 @@ pub struct DowngradeResponse {
     /// 消息
     pub message: Option<String>,
 }
+
+/// 插件部署响应（自动判断安装/升级/覆盖安装）
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginDeployResponse {
+    /// 插件ID
+    pub plugin_id: String,
+    /// 操作类型: "install" | "upgrade" | "reinstall" | "already_installed"
+    pub action: String,
+    /// 旧版本（仅 upgrade/reinstall 时有值）
+    pub old_version: Option<String>,
+    /// 新版本
+    pub new_version: String,
+    /// 安装路径
+    pub install_path: String,
+    /// 是否成功
+    pub success: bool,
+    /// 消息
+    pub message: Option<String>,
+}
