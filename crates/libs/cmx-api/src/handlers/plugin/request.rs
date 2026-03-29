@@ -81,13 +81,36 @@ pub struct PluginListQuery {
     pub status: Option<String>,
 }
 
-/// 插件分页查询参数
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct PluginPageQuery {
-    /// 页码
-    pub page: Option<u64>,
-    /// 每页数量
-    pub page_size: Option<u64>,
+/// API 层插件过滤条件
+///
+/// 用于分页查询接口的过滤参数
+#[derive(Debug, Deserialize, ToSchema, Default, Clone)]
+pub struct ApiPluginFilter {
+    /// 按状态筛选
+    pub status: Option<String>,
+    /// 按名称筛选（模糊匹配）
+    pub name: Option<String>,
+    /// 按域编码筛选
+    pub domain_code: Option<String>,
+    /// 按应用编码筛选
+    pub application_code: Option<String>,
+    /// 按模块编码筛选
+    pub module_code: Option<String>,
+}
+
+/// 从 API 层过滤条件转换为 cmx-plugin 层过滤条件
+impl From<ApiPluginFilter> for cmx_plugin::domain::plugin::PluginFilter {
+    fn from(api_filter: ApiPluginFilter) -> Self {
+        Self {
+            status: api_filter.status.as_ref().and_then(|s| {
+                s.parse::<cmx_plugin::domain::plugin::PluginStatus>().ok()
+            }),
+            name: api_filter.name,
+            domain_code: api_filter.domain_code,
+            application_code: api_filter.application_code,
+            module_code: api_filter.module_code,
+        }
+    }
 }
 
 /// 插件ID路径参数

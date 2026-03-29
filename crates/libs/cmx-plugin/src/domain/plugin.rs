@@ -75,6 +75,20 @@ impl std::fmt::Display for PluginStatus {
     }
 }
 
+/// 从字符串解析插件状态
+impl std::str::FromStr for PluginStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "installed" => Ok(PluginStatus::Installed),
+            "activated" => Ok(PluginStatus::Activated),
+            "deactivated" => Ok(PluginStatus::Deactivated),
+            "error" => Ok(PluginStatus::Error),
+            _ => Err(format!("未知插件状态: {}", s)),
+        }
+    }
+}
 
 
 /// 插件筛选条件

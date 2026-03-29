@@ -13,7 +13,7 @@ use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
-
+use crate::rest::PageParamsDoc;
 use super::request::*;
 use super::response::*;
 
@@ -330,13 +330,11 @@ pub async fn plugin_get(
 
 /// 插件分页 Handler
 ///
-/// 分页获取插件列表
+/// 分页获取插件列表，支持按域编码、应用编码、模块编码、状态、名称过滤
 #[utoipa::path(
-    get,
+    post,
     path = "/plugin/page",
-    params(
-        PluginPageQuery
-    ),
+    request_body = PageParamsDoc<super::request::ApiPluginFilter>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<PluginInfoResponse>>)
     ),
@@ -345,17 +343,19 @@ pub async fn plugin_get(
 pub async fn plugin_page(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(query): Query<PluginPageQuery>,
+    Json(params): Json<cmx_core::PageParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<Vec<PluginInfoResponse>>>> {
-    debug!("插件分页查询: {:?}", query);
+    debug!("插件分页查询: {:?}", params);
 
-    let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(20).min(100);
-    let skip = (page - 1) * page_size;
+    let page = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
+    let skip = params.get_offset() as usize;
+
+    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+        .unwrap_or_default()
+        .into();
 
     let manager = cmx_plugin::GlobalPluginManager::get().await;
-
-    let filter = cmx_plugin::domain::plugin::PluginFilter::default();
     let all_plugins = manager.list_plugins(&filter).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
@@ -364,7 +364,7 @@ pub async fn plugin_page(
 
     let paginated_plugins: Vec<PluginInfoResponse> = all_plugins
         .into_iter()
-        .skip(skip as usize)
+        .skip(skip)
         .take(page_size as usize)
         .map(convert_plugin_info)
         .collect();

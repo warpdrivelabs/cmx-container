@@ -1,3 +1,10 @@
+/*
+ * @Author: yqs
+ * @Date: 2026-03-26 16:37:40
+ * @Describe: 
+ * @LastEditors: yqs
+ * @LastEditTime: 2026-03-28 22:43:19
+ */
 //! 插件管理 API 模块
 //!
 //! 提供插件安装、卸载、升级、降级、列表查询等 HTTP API
@@ -24,6 +31,6 @@ pub fn plugin_routes() -> Router<CmxAppState> {
         .route("/upgrade", post(plugin_upgrade))
         .route("/downgrade", post(plugin_downgrade))
         .route("/list", get(plugin_list))
-        .route("/page", get(plugin_page))
+        .route("/page", post(plugin_page))
         .route("/{plugin_id}", get(plugin_get))
 }
