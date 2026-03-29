@@ -9,28 +9,48 @@ use utoipa::ToSchema;
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginInfoResponse {
+    /// 主键ID
+    pub id: String,
     /// 插件ID
     pub plugin_id: String,
     /// 插件名称
     pub name: String,
     /// 版本
     pub version: String,
-    /// 描述
-    pub description: Option<String>,
-    /// 作者
-    pub author: Option<String>,
-    /// 来源类型
-    pub source_type: String,
-    /// 来源 URL
-    pub source_url: Option<String>,
+    /// WASM 文件路径
+    pub wasm_path: Option<String>,
+    /// 安装路径
+    pub install_path: String,
+    /// 数据库ID
+    pub db_id: Option<String>,
     /// 状态
     pub status: String,
+    /// 是否系统插件
+    pub is_system: bool,
+    /// 是否锁定
+    pub is_locked: bool,
+    /// 域编码
+    pub domain_code: Option<String>,
+    /// 应用编码
+    pub application_code: Option<String>,
+    /// 模块编码
+    pub module_code: Option<String>,
+    /// 开发商名称
+    pub vendor_name: Option<String>,
+    /// 开发商URL
+    pub vendor_url: Option<String>,
+    /// 开发商联系方式
+    pub vendor_contact: Option<String>,
+    /// 扩展元数据
+    pub metadata: Option<serde_json::Value>,
+    /// 来源类型: local, url, registry
+    pub source_type: Option<String>,
+    /// 来源URL
+    pub source_url: Option<String>,
     /// 安装时间
     pub installed_at: Option<String>,
     /// 更新时间
     pub updated_at: Option<String>,
-    /// 安装路径
-    pub install_path: String,
 }
 
 /// 插件列表响应

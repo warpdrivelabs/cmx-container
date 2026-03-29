@@ -32,6 +32,8 @@ pub struct PluginInfo {
     pub domain_code: String,
     /// 应用编码
     pub application_code: String,
+    /// 模块编码
+    pub module_code: String,
 }
 
 /// 插件来源

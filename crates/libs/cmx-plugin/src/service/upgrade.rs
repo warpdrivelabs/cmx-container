@@ -329,6 +329,9 @@ impl UpgradeService {
             installed_at: Some(Utc::now()),
             updated_at: Some(Utc::now()),
             install_path: install_path.clone(),
+            domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
+            application_code: plugin_def.application_code.clone().unwrap_or_default(),
+            module_code: plugin_def.module_code.clone().unwrap_or_default(),
         };
         self.deps
             .cache

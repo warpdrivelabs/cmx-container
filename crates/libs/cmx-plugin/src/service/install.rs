@@ -237,6 +237,9 @@ impl InstallService {
                             installed_at: Some(record.create_time),
                             updated_at: Some(record.update_time),
                             install_path:PathBuf::from(&record.install_path),
+                            domain_code: record.domain_code.unwrap_or_default(),
+                            application_code: record.application_code.unwrap_or_default(),
+                            module_code: record.module_code.unwrap_or_default(),
                         };
                         return Ok(Some(info));
                     }
@@ -413,6 +416,9 @@ impl InstallService {
             installed_at: Some(Utc::now()),
             updated_at: Some(Utc::now()),
             install_path: install_path.clone(),
+            domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
+            application_code: plugin_def.application_code.clone().unwrap_or_default(),
+            module_code: plugin_def.module_code.clone().unwrap_or_default(),
         };
         {
             let mut registry = self.deps.registry.write().await;

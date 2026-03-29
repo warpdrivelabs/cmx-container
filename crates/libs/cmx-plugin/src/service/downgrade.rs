@@ -194,6 +194,9 @@ impl DowngradeService {
             installed_at: Some(plugin.create_time),
             updated_at: Some(Utc::now()),
             install_path:PathBuf::from(&target_version_record.install_path),
+            domain_code: plugin.domain_code.unwrap_or_default(),
+            application_code: plugin.application_code.unwrap_or_default(),
+            module_code: plugin.module_code.unwrap_or_default(),
         };
         self.deps
             .cache

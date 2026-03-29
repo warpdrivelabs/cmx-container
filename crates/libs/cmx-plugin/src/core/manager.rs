@@ -694,6 +694,9 @@ impl PluginManager {
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
                 install_path:PathBuf::from(&record.install_path),
+                domain_code: record.domain_code.unwrap_or_default(),
+                application_code: record.application_code.unwrap_or_default(),
+                module_code: record.module_code.unwrap_or_default(),
             };
             return Ok(Some(info));
         }

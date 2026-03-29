@@ -318,33 +318,70 @@ pub async fn plugin_deploy(
     Ok(Json(ApiResp::ok(resp)))
 }
 
-/// 转换 PluginInfo 为 PluginInfoResponse
+/// 将 PluginDbRecord 转换为 PluginInfoResponse
+fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::repository::PluginDbRecord) -> PluginInfoResponse {
+    PluginInfoResponse {
+        id: record.id,
+        plugin_id: record.plugin_id,
+        name: record.name,
+        version: record.version,
+        wasm_path: if record.wasm_path.is_empty() { None } else { Some(record.wasm_path) },
+        install_path: record.install_path,
+        db_id: if record.db_id.is_empty() { None } else { Some(record.db_id) },
+        status: record.status,
+        is_system: record.is_system,
+        is_locked: record.is_locked,
+        domain_code: record.domain_code,
+        application_code: record.application_code,
+        module_code: record.module_code,
+        vendor_name: record.vendor_name,
+        vendor_url: record.vendor_url,
+        vendor_contact: record.vendor_contact,
+        metadata: record.metadata,
+        source_type: record.zip_source_type,
+        source_url: record.zip_source_url,
+        installed_at: Some(record.create_time.to_rfc3339()),
+        updated_at: Some(record.update_time.to_rfc3339()),
+    }
+}
+
+/// 将 PluginInfo 转换为 PluginInfoResponse
 fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginInfoResponse {
     let (source_type, source_url) = match &info.source {
         cmx_plugin::domain::plugin::PluginSource::Local { path } => {
-            ("local".to_string(), Some(path.to_string_lossy().to_string()))
+            (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
         }
         cmx_plugin::domain::plugin::PluginSource::Remote { url, .. } => {
-            ("remote".to_string(), Some(url.clone()))
+            (Some("remote".to_string()), Some(url.clone()))
         }
         cmx_plugin::domain::plugin::PluginSource::Registry {
             package_name,
             ..
-        } => ("registry".to_string(), Some(package_name.clone())),
+        } => (Some("registry".to_string()), Some(package_name.clone())),
     };
 
     PluginInfoResponse {
+        id: String::new(),
         plugin_id: info.id.clone(),
         name: info.name.clone(),
         version: info.version.clone(),
-        description: info.description.clone(),
-        author: info.author.clone(),
+        wasm_path: None,
+        install_path: info.install_path.to_string_lossy().to_string(),
+        db_id: None,
+        status: format!("{:?}", info.status),
+        is_system: false,
+        is_locked: false,
+        domain_code: if info.domain_code.is_empty() { None } else { Some(info.domain_code) },
+        application_code: if info.application_code.is_empty() { None } else { Some(info.application_code) },
+        module_code: if info.module_code.is_empty() { None } else { Some(info.module_code) },
+        vendor_name: info.author.clone(),
+        vendor_url: None,
+        vendor_contact: None,
+        metadata: None,
         source_type,
         source_url,
-        status: format!("{:?}", info.status),
         installed_at: info.installed_at.map(|dt| dt.to_rfc3339()),
         updated_at: info.updated_at.map(|dt| dt.to_rfc3339()),
-        install_path: info.install_path.to_string_lossy().to_string(),
     }
 }
 
@@ -372,13 +409,13 @@ pub async fn plugin_list(
     let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
         .into();
-    let plugins = manager.list_plugins(&filter).await.map_err(|e| {
+    let plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
 
     let plugin_responses: Vec<PluginInfoResponse> = plugins
         .into_iter()
-        .map(convert_plugin_info)
+        .map(convert_db_record_to_response)
         .collect();
 
     Ok(Json(ApiResp::ok(PluginListResponse {
