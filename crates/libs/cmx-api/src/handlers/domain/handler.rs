@@ -32,7 +32,7 @@ pub struct GetByNameParams {
 /// 根据域名查询 Domain 实体
 #[utoipa::path(
     post,
-    path = "/domains/by-name",
+    path = "/api/domains/by-name",
     request_body = GetByNameParams,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Value>)
@@ -62,33 +62,7 @@ pub struct BatchCreateParams {
     pub items: Vec<DomainForCreate>,
 }
 
-/// 批量创建 Handler
-///
-/// 批量创建多个 Domain 实体
-#[utoipa::path(
-    post,
-    path = "/domains/batch-create",
-    request_body = BatchCreateParams,
-    responses(
-        (status = 200, description = "创建成功", body = ApiResp<Value>)
-    ),
-    tag = "Domain"
-)]
-pub async fn batch_create(
-    State(_cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
-    Json(params): Json<BatchCreateParams>,
-) -> Result<Json<ApiResp<DataSet>>> {
-    debug!("{:<12} - handler::batch_create", "HANDLER");
 
-    let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
-    let items = params.items.clone();
-    let results = DomainService::batch_create(&mm, &db_id, items).await?;
-
-    Ok(Json(ApiResp::ok(results)))
-}
 
 /// 搜索的请求参数
 #[derive(Debug, Deserialize, ToSchema)]
@@ -118,7 +92,7 @@ impl SearchParams {
 /// 根据关键字搜索 Domain 实体
 #[utoipa::path(
     post,
-    path = "/domains/search",
+    path = "/api/domains/search",
     request_body = SearchParams,
     responses(
         (status = 200, description = "搜索成功", body = ApiResp<Value>)
@@ -154,7 +128,7 @@ pub async fn search(
 /// 按状态统计 Domain 数量
 #[utoipa::path(
     get,
-    path = "/domains/count-by-status",
+    path = "/api/domains/count-by-status",
     responses(
         (status = 200, description = "统计成功", body = ApiResp<Value>)
     ),

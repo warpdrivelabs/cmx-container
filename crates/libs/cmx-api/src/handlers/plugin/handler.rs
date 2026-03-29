@@ -48,7 +48,7 @@ fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::Plug
 /// 从指定来源安装插件
 #[utoipa::path(
     post,
-    path = "/plugin/install",
+    path = "/api/plugin/install",
     request_body = PluginInstallRequest,
     responses(
         (status = 200, description = "安装成功", body = ApiResp<String>)
@@ -92,7 +92,7 @@ pub async fn plugin_install(
 /// 卸载指定的插件
 #[utoipa::path(
     post,
-    path = "/plugin/uninstall",
+    path = "/api/plugin/uninstall",
     request_body = PluginUninstallRequest,
     responses(
         (status = 200, description = "卸载成功", body = ApiResp<UninstallResponse>)
@@ -133,7 +133,7 @@ pub async fn plugin_uninstall(
 /// 升级指定的插件到新版本
 #[utoipa::path(
     post,
-    path = "/plugin/upgrade",
+    path = "/api/plugin/upgrade",
     request_body = PluginUpgradeRequest,
     responses(
         (status = 200, description = "升级成功", body = ApiResp<UpgradeResponse>)
@@ -178,7 +178,7 @@ pub async fn plugin_upgrade(
 /// 将指定的插件降级到目标版本
 #[utoipa::path(
     post,
-    path = "/plugin/downgrade",
+    path = "/api/plugin/downgrade",
     request_body = PluginDowngradeRequest,
     responses(
         (status = 200, description = "降级成功", body = ApiResp<DowngradeResponse>)
@@ -249,13 +249,11 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
 
 /// 插件列表 Handler
 ///
-/// 获取插件列表，支持按状态过滤
+/// 获取插件列表，支持按过滤条件筛选
 #[utoipa::path(
-    get,
-    path = "/plugin/list",
-    params(
-        PluginListQuery
-    ),
+    post,
+    path = "/api/plugin/list",
+    request_body = crate::rest::ListParamsDoc<super::request::ApiPluginFilter>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<PluginListResponse>)
     ),
@@ -264,28 +262,21 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
 pub async fn plugin_list(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(query): Query<PluginListQuery>,
+    Json(params): Json<cmx_core::ListParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<PluginListResponse>>> {
-    debug!("插件列表查询: {:?}", query);
+    debug!("插件列表查询: {:?}", params);
 
     let manager = cmx_plugin::GlobalPluginManager::get().await;
 
-    let filter = cmx_plugin::domain::plugin::PluginFilter::default();
+    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+        .unwrap_or_default()
+        .into();
     let plugins = manager.list_plugins(&filter).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
 
     let plugin_responses: Vec<PluginInfoResponse> = plugins
         .into_iter()
-        .filter(|p| {
-            if let Some(ref status) = query.status {
-                let status_str = format!("{:?}", p.status);
-                if !status_str.to_lowercase().contains(&status.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        })
         .map(convert_plugin_info)
         .collect();
 
@@ -299,7 +290,7 @@ pub async fn plugin_list(
 /// 获取指定插件的详细信息
 #[utoipa::path(
     get,
-    path = "/plugin/{plugin_id}",
+    path = "/api/plugin/{plugin_id}",
     params(
         PluginIdPath
     ),
@@ -333,7 +324,7 @@ pub async fn plugin_get(
 /// 分页获取插件列表，支持按域编码、应用编码、模块编码、状态、名称过滤
 #[utoipa::path(
     post,
-    path = "/plugin/page",
+    path = "/api/plugin/page",
     request_body = PageParamsDoc<super::request::ApiPluginFilter>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<PluginInfoResponse>>)

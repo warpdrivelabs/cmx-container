@@ -80,7 +80,7 @@ macro_rules! declare_crud_handlers {
             /// 创建单个实体记录，请求体为实体的创建 DTO。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/create"),
+                path = concat!("/api",$prefix, "/create"),
                 request_body = $entity_create,
                 responses(
                     (status = 200, description = "创建成功")
@@ -107,7 +107,7 @@ macro_rules! declare_crud_handlers {
             /// 批量创建多个实体记录，请求体为实体创建 DTO 的数组。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/create-many"),
+                path = concat!("/api",$prefix, "/create-many"),
                 request_body = Vec<$entity_create>,
                 responses(
                     (status = 200, description = "批量创建成功")
@@ -134,7 +134,7 @@ macro_rules! declare_crud_handlers {
             /// 根据主键 ID 查询单个实体的详细信息。
             #[utoipa::path(
                 get,
-                path = concat!($prefix, "/get"),
+                path = concat!("/api",$prefix, "/get"),
                 params(
                     ("id" = String, Path, description = "实体主键ID")
                 ),
@@ -163,7 +163,7 @@ macro_rules! declare_crud_handlers {
             /// 根据主键 ID 更新单个实体记录，请求体包含 ID 和更新字段。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/update"),
+                path = concat!("/api",$prefix, "/update"),
                 request_body = UpdatePayloadDoc<$entity_update>,
                 // request_body = serde_json::Value,
                 responses(
@@ -191,7 +191,7 @@ macro_rules! declare_crud_handlers {
             /// 批量更新多个实体记录，请求体为包含 ID 和更新字段的对象数组。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/update-many"),
+                path = concat!("/api",$prefix, "/update-many"),
                 // request_body = Vec<UpdatePayloadDoc<serde_json::Value>>,
                 request_body = inline(Vec<UpdatePayloadDoc<$entity_update>>),
                 responses(
@@ -219,7 +219,7 @@ macro_rules! declare_crud_handlers {
             /// 根据主键 ID 删除单个或多个实体记录。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/delete"),
+                path = concat!("/api",$prefix, "/delete"),
                 request_body = DeletePayloadDoc,
                 responses(
                     (status = 200, description = "删除成功")
@@ -246,7 +246,7 @@ macro_rules! declare_crud_handlers {
             /// 根据过滤条件查询实体列表，返回符合条件的所有记录。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/list"),
+                path = concat!("/api",$prefix, "/list"),
                 request_body = ListParamsDoc<serde_json::Value>,
                 responses(
                     (status = 200, description = "列表查询成功")
@@ -273,7 +273,7 @@ macro_rules! declare_crud_handlers {
             /// 根据过滤条件和分页参数查询实体数据，返回分页结果。
             #[utoipa::path(
                 post,
-                path = concat!($prefix, "/page"),
+                path = concat!("/api",$prefix, "/page"),
                 request_body = PageParamsDoc<serde_json::Value>,
                 responses(
                     (status = 200, description = "分页查询成功")

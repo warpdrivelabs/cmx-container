@@ -30,7 +30,7 @@ pub fn plugin_routes() -> Router<CmxAppState> {
         .route("/uninstall", post(plugin_uninstall))
         .route("/upgrade", post(plugin_upgrade))
         .route("/downgrade", post(plugin_downgrade))
-        .route("/list", get(plugin_list))
+        .route("/list", post(plugin_list))
         .route("/page", post(plugin_page))
         .route("/{plugin_id}", get(plugin_get))
 }
