@@ -1,6 +1,12 @@
 //! 路由注册宏
 //!
 //! 提供宏来简化通用 CRUD 路由的注册，支持 OpenAPI 文档生成。
+//!
+//! ## 设计原则
+//!
+//! 采用**双层结构体**模式：handler 函数签名使用 cmx-core 的运行时参数类型，
+//! utoipa 宏的 request_body 使用 cmx-api 的文档类型（param_doc）。
+//! 只有 get_by_id 使用 GET 请求，其他操作（包括 update、delete）均使用 POST + application/json。
 
 /// 注册通用 CRUD 路由（旧版，不生成 OpenAPI 文档）
 ///
@@ -31,16 +37,16 @@ macro_rules! register_crud_routes {
 /// 为指定实体生成包含 8 个 CRUD handler 函数的模块，
 /// 这些 handler 调用通用的 rest::handler 函数，并添加 OpenAPI 注解。
 ///
-/// 使用 `serde_json::Value` 作为 OpenAPI 兼容的参数类型，
-/// 内部通过反序列化转换为正确的类型。
+/// handler 函数签名使用 cmx-core 运行时参数类型（PageParams、UpdatePayload 等），
+/// utoipa 宏的 request_body 使用 cmx-api 文档类型（PageParamsDoc、UpdatePayloadDoc 等）。
 ///
 /// # 参数
 /// * `$module_name` - 生成的模块名
 /// * `$entity` - 实体类型
 /// * `$bmc` - BMC 类型
-/// * `$entity_create` - 创建 DTO 类型
-/// * `$entity_update` - 更新 DTO 类型
-/// * `$filter` - 过滤器类型
+/// * `$entity_create` - 创建 DTO 类型（需实现 ToSchema）
+/// * `$entity_update` - 更新 DTO 类型（需实现 ToSchema）
+/// * `$filter` - 过滤器类型（实现 Into<FilterGroups>）
 /// * `$tag` - OpenAPI tag
 /// * `$prefix` - 路由前缀
 #[macro_export]
@@ -61,12 +67,13 @@ macro_rules! declare_crud_handlers {
             use axum::Json;
             use cmx_core::model::data::dataset::DataSet;
             use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
-            use serde::Deserialize;
-            use serde_json::Value;
             use $crate::api_response::ApiResp;
             use $crate::app_state::CmxAppState;
             use $crate::error::Result;
             use $crate::middleware::CmxSvrContext;
+            use $crate::rest::param_doc::{
+                DeletePayloadDoc, ListParamsDoc, PageParamsDoc,UpdatePayloadDoc
+            };
 
             /// 创建实体 Handler
             ///
@@ -84,12 +91,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(data): Json<Value>,
+                Json(data): Json<$entity_create>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let data: $entity_create = serde_json::from_value(data)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::create::<$bmc, $entity_create>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -115,12 +118,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(data): Json<Value>,
+                Json(data): Json<Vec<$entity_create>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let data: Vec<$entity_create> = serde_json::from_value(data)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::create_many::<$bmc, $entity_create>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -165,7 +164,8 @@ macro_rules! declare_crud_handlers {
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/update"),
-                request_body = serde_json::Value,
+                request_body = UpdatePayloadDoc<$entity_update>,
+                // request_body = serde_json::Value,
                 responses(
                     (status = 200, description = "更新成功")
                 ),
@@ -175,12 +175,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(payload): Json<Value>,
+                Json(payload): Json<UpdatePayload<$entity_update>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let payload: UpdatePayload<$entity_update> = serde_json::from_value(payload)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::update::<$bmc, $entity_update>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -196,7 +192,8 @@ macro_rules! declare_crud_handlers {
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/update-many"),
-                request_body = serde_json::Value,
+                // request_body = Vec<UpdatePayloadDoc<serde_json::Value>>,
+                request_body = inline(Vec<UpdatePayloadDoc<$entity_update>>),
                 responses(
                     (status = 200, description = "批量更新成功")
                 ),
@@ -206,12 +203,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(data): Json<Value>,
+                Json(data): Json<Vec<UpdatePayload<$entity_update>>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let data: Vec<UpdatePayload<$entity_update>> = serde_json::from_value(data)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::update_many::<$bmc, $entity_update>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -223,11 +216,11 @@ macro_rules! declare_crud_handlers {
 
             /// 删除实体 Handler
             ///
-            /// 根据主键 ID 删除单个实体记录。
+            /// 根据主键 ID 删除单个或多个实体记录。
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/delete"),
-                request_body = serde_json::Value,
+                request_body = DeletePayloadDoc,
                 responses(
                     (status = 200, description = "删除成功")
                 ),
@@ -237,12 +230,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(payload): Json<Value>,
+                Json(payload): Json<DeletePayload>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let payload: DeletePayload = serde_json::from_value(payload)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::delete::<$bmc>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -258,7 +247,7 @@ macro_rules! declare_crud_handlers {
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/list"),
-                request_body = serde_json::Value,
+                request_body = ListParamsDoc<serde_json::Value>,
                 responses(
                     (status = 200, description = "列表查询成功")
                 ),
@@ -268,12 +257,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(params): Json<Value>,
+                Json(params): Json<ListParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let params: ListParams<$filter> = serde_json::from_value(params)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::list::<$bmc, $filter>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -289,7 +274,7 @@ macro_rules! declare_crud_handlers {
             #[utoipa::path(
                 post,
                 path = concat!($prefix, "/page"),
-                request_body = serde_json::Value,
+                request_body = PageParamsDoc<serde_json::Value>,
                 responses(
                     (status = 200, description = "分页查询成功")
                 ),
@@ -299,12 +284,8 @@ macro_rules! declare_crud_handlers {
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
                 headers: HeaderMap,
-                Json(params): Json<Value>,
+                Json(params): Json<PageParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
-                let params: PageParams<$filter> = serde_json::from_value(params)
-                    .map_err(|e| $crate::error::Error::ValidationError {
-                        errors: vec![e.to_string()],
-                    })?;
                 $crate::rest::handler::page::<$bmc, $filter>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),

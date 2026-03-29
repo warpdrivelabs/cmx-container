@@ -27,7 +27,7 @@ pub struct GetParamsDoc {
 
 /// 更新请求 Payload
 #[derive(Debug, Clone, serde::Deserialize,ToSchema)]
-pub struct UpdatePayloadDoc<E> {
+pub struct UpdatePayloadDoc<E>  {
     /// 主键 ID
     pub id: Value,
     /// 更新数据
