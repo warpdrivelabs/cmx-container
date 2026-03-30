@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use std::io::Read;
-
+use tracing::error;
 use super::signature::{SignatureValidator, SignatureInfo};
 
 /// 验证结果
@@ -382,7 +382,7 @@ impl SecurityValidator {
     }
 
     /// 验证 manifest 文件
-    /// 
+    ///
     /// manifest.json 结构示例：
     /// ```json
     /// {
@@ -509,6 +509,7 @@ impl SecurityValidator {
         let signature_info: serde_json::Value = match serde_json::from_str(&signature_content) {
             Ok(v) => v,
             Err(e) => {
+                error!("解析签名文件失败: {}", e);
                 // 尝试作为纯签名值
                 let sig = SignatureInfo::new(
                     "Ed25519".to_string(),

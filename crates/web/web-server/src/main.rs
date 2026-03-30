@@ -10,18 +10,18 @@ mod plugins;
 pub use self::error::{Error, Result};
 use config::web_config;
 
-use axum::{Router, middleware};
+use axum::{middleware, Router};
 
 use crate::config::{init_cache, init_db_datasource, init_global_config, init_plugins};
-use cmx_api::CmxAppState;
 use cmx_api::middleware::{cors_layer, mw_context_resolver};
+use cmx_api::CmxAppState;
 use cmx_database::get_default_db_manager;
+use cmx_plugin::GlobalPluginManager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, registry};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use cmx_plugin::GlobalPluginManager;
+use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 
 /// 应用程序主函数
 ///
@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
     init_plugins().await;
 
     // -- 配置 API 路由
-    let api_routes = self::routes::routes().with_state(CmxAppState::new());
+    let api_routes = routes::routes().with_state(CmxAppState::new());
 
     // -- 使用中间件构建路由
     // 中间件顺序 (从外到内):
@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
     // 2. mw_req_stamp_resolver - 添加请求时间戳
     let routes_all = Router::new()
         .nest("/api", api_routes)
-        .merge(self::routes::get_swagger_routes())
+        .merge(routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver));
     // 应用剩余的中间件并添加静态文件服务

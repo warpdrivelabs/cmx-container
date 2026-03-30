@@ -23,14 +23,14 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{PluginError, PluginResult};
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::storage::file::FileStorage;
-use crate::infrastructure::storage::backup::BackupManager;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
 use crate::core::context::PluginContext;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use crate::infrastructure::storage::backup::BackupManager;
+use crate::infrastructure::storage::file::FileStorage;
 
 /// 回滚请求
 ///
@@ -311,7 +311,7 @@ impl RollbackService {
         .with_old_value(from_version.clone())
         .with_new_value(to_version.clone())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤10：发布事件
         self.deps
@@ -348,10 +348,7 @@ impl RollbackService {
     ///
     /// 返回解析出的版本号字符串。
     fn parse_version_from_backup_path(&self, path: &PathBuf) -> PluginResult<String> {
-        let file_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         let parts: Vec<&str> = file_name.splitn(2, '_').collect();
         let version = parts.first().unwrap_or(&"unknown").to_string();

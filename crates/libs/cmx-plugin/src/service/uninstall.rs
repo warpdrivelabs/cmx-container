@@ -68,7 +68,7 @@ pub struct UninstallService {
 }
 
 impl UninstallService {
-    /// 创建新的卸载服务
+    /// 创建卸载服务
     pub fn new(deps: UninstallServiceDeps) -> Self {
         Self { deps }
     }
@@ -157,7 +157,7 @@ impl UninstallService {
         }))
         .with_old_value(version.clone())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤10: 发布卸载事件（通知其他节点）
         self.deps

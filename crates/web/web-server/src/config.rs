@@ -8,9 +8,9 @@
 //! Web 服务器配置模块
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
-use cmx_database::{DbConfig, DbType, PoolConfig, get_default_db_manager};
+use cmx_database::{get_default_db_manager, DbConfig, PoolConfig};
 use cmx_utils::{
-    CommandLineSource, ConfigBuilder, ConfigError, ConfigManager, ConfigResult, ConfigValue,
+    CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult, ConfigValue,
     FromConfigValue, Priority,
 };
 use serde::Deserialize;
@@ -36,7 +36,7 @@ pub fn init_global_config() {
     .unwrap();
     info!("打印所有配置和环境变量键值对...");
     for key in ConfigManager::global().keys() {
-        if ("Path" == key) {
+        if "Path" == key {
             continue;
         }
         info!("{:?}: {:?}", key, ConfigManager::global().get_string(key));
@@ -73,10 +73,10 @@ impl WebConfig {
     fn load_from_env() -> ConfigResult<WebConfig> {
         let result = ConfigManager::global().get_string("WEB_FOLDER");
 
-        return match result {
+        match result {
             Ok(value) => Ok(WebConfig { WEB_FOLDER: value }),
             Err(ex) => Err(ex),
-        };
+        }
     }
 }
 
@@ -178,7 +178,7 @@ pub async fn init_plugins() {
     // 安装插件
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: cmx_plugin::domain::plugin::PluginSource::Local {
-            path: std::path::PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
+            path: PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
         },
         db_id: None,
         auto_activate: false,

@@ -37,14 +37,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
-use tracing::error;
 use crate::audit::logger::{AuditLogger, AuditLoggerConfig};
 use crate::cluster::deployment::DeploymentCoordinator;
 use crate::cluster::node::NodeManager;
 use crate::cluster::sync::SyncManager;
+use crate::common::{
+    DefinitionUtils, DependencyUtils, DependencyUtilsDeps, ServiceUtils, ServiceUtilsDeps,
+};
 use crate::config::settings::PluginManagerSettings;
 use crate::core::context::PluginContext;
 use crate::core::lifecycle::{LifecycleState, LifecycleStateMachine};
@@ -53,10 +52,10 @@ use crate::domain::plugin::{PluginFilter, PluginInfo, PluginSource, PluginStatus
 use crate::domain::status::StatusTransition;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
+use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::schema::SchemaManager;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::backup::BackupManager;
@@ -67,12 +66,15 @@ use crate::runtime::service_registry::ServiceRegistry;
 use crate::security::permission::PermissionManager;
 use crate::security::signature::SignatureValidator;
 use crate::security::validator::SecurityValidator;
-use crate::common::{DefinitionUtils, DependencyUtils, ServiceUtils, DependencyUtilsDeps, ServiceUtilsDeps};
+use chrono::{DateTime, Utc};
 use cmx_buffer::{CacheManager, GlobalCacheManager, GlobalLockManager, LockManager, PubSubOps};
 use cmx_core::model::cell::TableDefine;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_database::{DatabaseManager, get_default_db_manager};
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+use tracing::error;
 
 pub use crate::service::activate::{
     ActivateRequest, ActivateResponse, DeactivateRequest, DeactivateResponse,
@@ -301,8 +303,6 @@ impl PluginManager {
             settings.default_database_id.clone(),
         ));
 
-
-
         let cache = Arc::new(LayeredCacheManager::new(Default::default()));
 
         let storage = Arc::new(FileStorage::new(&settings.plugin_root));
@@ -316,7 +316,6 @@ impl PluginManager {
         let activation_manager = Arc::new(ActivationManager::new());
 
         let service_registry = Arc::new(ServiceRegistry::new());
-
 
         let audit_logger_config = AuditLoggerConfig::new(
             db_manager.clone(),
@@ -442,8 +441,8 @@ impl PluginManager {
             },
         );
 
-        let deploy_service = crate::service::deploy::DeployService::new(
-            crate::service::deploy::DeployServiceDeps {
+        let deploy_service =
+            crate::service::deploy::DeployService::new(crate::service::deploy::DeployServiceDeps {
                 repository: repository.clone(),
                 deployment_repository: deployment_repository.clone(),
                 cache: cache.clone(),
@@ -455,8 +454,7 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
                 node_id: settings.node_id.clone(),
-            },
-        );
+            });
 
         // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
         let plugin_initializer = crate::service::initializer::PluginInitializer::new(
@@ -551,15 +549,14 @@ impl PluginManager {
         Ok(())
     }
 
-
     // ==================== 生命周期操作 ==================== start
 
     /// 安装插件
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
-        self.install_service
-            .install(request)
-            .await
-            .map_err(|e| {error!("安装失败: {}", e); e} )
+        self.install_service.install(request).await.map_err(|e| {
+            error!("安装失败: {}", e);
+            e
+        })
     }
 
     /// 卸载插件
@@ -567,7 +564,10 @@ impl PluginManager {
         self.uninstall_service
             .uninstall(request)
             .await
-            .map_err(|e| {error!("卸载失败: {}", e); e} )
+            .map_err(|e| {
+                error!("卸载失败: {}", e);
+                e
+            })
     }
 
     // /// 激活插件
@@ -588,10 +588,10 @@ impl PluginManager {
 
     /// 升级插件
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
-        self.upgrade_service
-            .upgrade(request)
-            .await
-            .map_err(|e| {error!("升级失败: {}", e); e})
+        self.upgrade_service.upgrade(request).await.map_err(|e| {
+            error!("升级失败: {}", e);
+            e
+        })
     }
 
     /// 降级插件
@@ -599,17 +599,20 @@ impl PluginManager {
         self.downgrade_service
             .downgrade(request)
             .await
-            .map_err(|e| {error!("降级失败: {}", e); e})
+            .map_err(|e| {
+                error!("降级失败: {}", e);
+                e
+            })
     }
 
     /// 部署插件（自动判断安装/升级/覆盖安装）
     ///
     /// 根据当前插件安装状态和版本比较结果，自动选择执行安装、升级或覆盖安装操作。
     pub async fn deploy(&self, request: DeployRequest) -> PluginResult<DeployResponse> {
-        self.deploy_service
-            .deploy(request)
-            .await
-            .map_err(|e| {error!("部署失败: {}", e); e})
+        self.deploy_service.deploy(request).await.map_err(|e| {
+            error!("部署失败: {}", e);
+            e
+        })
     }
 
     // /// 回滚插件
@@ -693,7 +696,7 @@ impl PluginManager {
                 status: PluginStatus::Installed,
                 installed_at: Some(record.create_time),
                 updated_at: Some(record.update_time),
-                install_path:PathBuf::from(&record.install_path),
+                install_path: PathBuf::from(&record.install_path),
                 domain_code: record.domain_code.unwrap_or_default(),
                 application_code: record.application_code.unwrap_or_default(),
                 module_code: record.module_code.unwrap_or_default(),
