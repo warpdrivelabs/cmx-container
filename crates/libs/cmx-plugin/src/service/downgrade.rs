@@ -189,7 +189,7 @@ impl DowngradeService {
             version: request.target_version.clone(),
             description: None,
             author: None,
-            source: crate::domain::plugin::PluginSource::Local { path: target_version_record.install_path.clone().into() },
+            source: PluginSource::Local { path: target_version_record.install_path.clone().into() },
             status: plugin_status,
             installed_at: Some(plugin.create_time),
             updated_at: Some(Utc::now()),
@@ -205,7 +205,7 @@ impl DowngradeService {
             .set(
                 &plugin_id,
                 crate::infrastructure::cache::layered::CacheValue::Json(
-                    serde_json::to_value(&plugin_info).unwrap(),
+                    serde_json::to_value(&plugin_info)?,
                 ),
                 None,
             )
@@ -225,7 +225,7 @@ impl DowngradeService {
         .with_old_value(old_version.clone())
         .with_new_value(request.target_version.clone())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+       let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤10: 发布降级事件
         self.deps

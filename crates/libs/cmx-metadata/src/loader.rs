@@ -25,7 +25,7 @@ use crate::MetadataError;
 #[serde(untagged)]
 enum TableDefinesRoot {
     /// 单个表定义
-    Single(Box<TableDefine>),
+    // Single(Box<TableDefine>),
     /// 多表对象格式（包含 `tables` 键）
     Multi { tables: Vec<TableDefine> },
     /// 多表数组格式
@@ -71,7 +71,7 @@ pub fn load_table_define_from_path(path: &Path) -> Result<TableDefine, MetadataE
 pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError> {
     let root: TableDefinesRoot = serde_json::from_str(s)?;
     Ok(match root {
-        TableDefinesRoot::Single(t) => vec![*t],
+        // TableDefinesRoot::Single(t) => vec![*t],
         TableDefinesRoot::Multi { tables } => tables,
         TableDefinesRoot::Array(arr) => arr,
     })

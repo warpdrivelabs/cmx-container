@@ -36,16 +36,16 @@ use std::sync::Arc;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{PluginError, PluginResult};
-use crate::domain::plugin::PluginStatus;
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::storage::file::FileStorage;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
+use crate::core::context::PluginContext;
+use crate::domain::plugin::PluginStatus;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use crate::infrastructure::storage::file::FileStorage;
 use crate::runtime::activation::ActivationManager;
 use crate::runtime::service_registry::ServiceRegistry;
-use crate::core::context::PluginContext;
 
 /// 激活请求
 ///
@@ -352,7 +352,7 @@ impl ActivateService {
         }))
         .with_new_value("activated".to_string())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤9: 发布激活事件
         self.deps
@@ -494,7 +494,7 @@ impl ActivateService {
         .with_old_value("activated".to_string())
         .with_new_value("deactivated".to_string())
         .with_completed(duration_ms);
-        self.deps.audit_logger.log(audit_record).await;
+        let _ = self.deps.audit_logger.log(audit_record).await;
 
         // 步骤9: 发布停用事件
         self.deps
