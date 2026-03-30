@@ -65,7 +65,7 @@ pub enum Error {
     #[error("请求错误: {0}")]
     BadRequest(String),
 
-    #[error("内部错误: {0}")]
+    #[error("{0}")]
     InternalError(String),
 
     #[error("服务不可用: {0}")]
