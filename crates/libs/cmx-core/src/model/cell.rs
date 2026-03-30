@@ -481,10 +481,14 @@ pub struct Field {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnDefine {
+    #[serde(default)]
     pub name: String,        // 数据库列名 (例如 "unit_price")
+    #[serde(default)]
     pub label: String,       // UI 显示名 (例如 "单价")
     pub field_type: FieldType, // 类型
+    #[serde(default)]
     pub is_primary_key: bool,  // 是否主键
+    #[serde(default)]
     pub is_nullable: bool,     // 是否允许为空
     pub default_value: Option<String>, // 默认值
     /// 是否支持多语言（该列参与多语言表翻译）；缺省为 false
@@ -574,8 +578,12 @@ pub enum PartitionType {
 /// 表定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableDefine {
-    pub table_name: String,  // 数据库表名 (例如 "sale_order")
+    #[serde(default)]
+    pub table_name: String,
+    #[serde(default)]
+    // 数据库表名 (例如 "sale_order")
     pub display_name: String,// 显示名 (例如 "销售订单")
+    #[serde(default)]
     pub columns: Vec<ColumnDefine>, // 包含的所有列
     /// 主键列名列表，顺序影响复合主键；缺省时为空（可与列上的 is_primary_key 并存）
     #[serde(default)]

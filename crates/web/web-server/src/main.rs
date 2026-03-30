@@ -19,7 +19,8 @@ use cmx_database::get_default_db_manager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, registry};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use cmx_plugin::GlobalPluginManager;
 
 /// 应用程序主函数
@@ -30,28 +31,53 @@ use cmx_plugin::GlobalPluginManager;
 /// - `Result<()>` - 执行结果，成功返回 Ok(())，失败返回错误
 #[tokio::main]
 async fn main() -> Result<()> {
+    // ========== 日志文件滚动配置 ==========
+    // 日志输出目录
+    let log_dir = "logs";
+    // 按天滚动生成新文件，可选: MINUTELY / HOURLY / DAILY / NEVER
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, "cmx-server.log");
+    // 非阻塞写入，避免文件 I/O 影响服务性能
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    // 配置日志系统
-    tracing_subscriber::fmt()
-        // .without_time() // 用于早期本地开发
+    // 文件日志层: JSON 格式，不带 ANSI 颜色码，便于日志收集系统解析
+    let file_layer = fmt::layer()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(true)
+        .json();
+
+    // 控制台日志层: 简洁格式，带颜色，便于开发调试
+    let console_layer = fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_ansi(true)
         .with_target(false)
-        // 使用环境变量过滤器来控制哪些日志级别和模块的日志会被输出
-        // 它会读取 RUST_LOG 环境变量来确定日志过滤规则
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .compact();
+
+    // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // 注册日志层: 控制台 + 文件 + 环境过滤
+    registry()
+        .with(env_filter)
+        .with(console_layer)
+        .with(file_layer)
         .init();
-    //初始化全局配置
+
+    // 保持 guard 活跃直至程序结束，确保日志写入完成
+    std::mem::forget(guard);
+
+    // 初始化全局配置
     init_global_config();
-    //初始化数据库数据源
+    // 初始化数据库数据源
     init_db_datasource().await;
-    //初始化redis缓存
+    // 初始化 Redis 缓存
     init_cache().await;
     // 获取 Web 服务器配置
     let web_config = web_config();
 
     init_plugins().await;
-
 
     // -- 配置 API 路由
     let api_routes = self::routes::routes().with_state(CmxAppState::new());
@@ -80,10 +106,11 @@ async fn main() -> Result<()> {
     info!("🚀 {:<44} 🚀", "Web 服务器启动成功");
     info!("{}", "=".repeat(60));
     info!(
-        "   监听地址：{}",
-        format!("{:?}", listener.local_addr().unwrap())
+        "   监听地址：{:?}",
+        listener.local_addr().unwrap()
     );
     info!("   静态文件目录：{}", web_config.WEB_FOLDER);
+    info!("   日志目录：{}", log_dir);
     info!("{}", "-".repeat(60));
 
     // 启动服务器

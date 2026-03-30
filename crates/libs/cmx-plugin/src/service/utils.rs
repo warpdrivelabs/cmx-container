@@ -46,7 +46,7 @@ pub async fn create_plugin_tables(
     for table_config_file in plugin_define.table_config_files.clone() {
         let config_path = install_path.join(table_config_file);
         let table_df = load_table_defines_config_from_path(&config_path)
-            .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败: {}", e)))?;
+            .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败:路径{:?}，错误： {}",config_path, e)))?;
         table_config_manager.add_config(table_df);
     }
 

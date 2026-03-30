@@ -17,7 +17,8 @@ tower-http = { workspace = true }
 tower-cookies = { workspace = true }
 # -- Tracing
 tracing ={workspace = true}
-tracing-subscriber = {workspace = true, features = ["env-filter"] }
+tracing-subscriber = {workspace = true, features = ["env-filter", "json", "fmt"] }
+tracing-appender = "0.2"
 derive_more={workspace = true}
 thiserror={workspace = true}
 serde = { workspace = true }
