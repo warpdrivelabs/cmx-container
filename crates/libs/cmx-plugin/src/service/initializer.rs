@@ -364,6 +364,8 @@ impl PluginInitializer {
                 domain_code: record.domain_code.unwrap_or_default(),
                 application_code: record.application_code.unwrap_or_default(),
                 module_code: record.module_code.unwrap_or_default(),
+                plugin_type: record.plugin_type.clone().unwrap_or_default(),
+                source_path: record.source_path.clone(),
             };
             registry.register(info);
         }

@@ -59,6 +59,10 @@ pub struct PluginDbRecord {
     pub zip_source_url: Option<String>,
     /// 插件来源类型: local, url, registry
     pub zip_source_type: Option<String>,
+    /// 插件类型
+    pub plugin_type: Option<String>,
+    /// 源码路径
+    pub source_path: Option<String>,
 
     /// 创建时间
     pub create_time: DateTime<Utc>,
@@ -120,6 +124,10 @@ pub struct PluginUpdateFields {
     pub zip_source_url: Option<String>,
     /// 插件来源类型: local, url, registry
     pub zip_source_type: Option<String>,
+    /// 插件类型
+    pub plugin_type: Option<String>,
+    /// 源码路径
+    pub source_path: Option<String>,
 
     /// 更新时间
     pub update_time: DateTime<Utc>,
@@ -215,6 +223,8 @@ impl PluginRepository {
                 "signer_key_id",
                 "zip_source_url",
                 "zip_source_type",
+                "plugin_type",
+                "source_path",
                 "create_time",
                 "update_time",
             ])
@@ -240,6 +250,8 @@ impl PluginRepository {
                 record.signer_key_id.clone().into(),
                 record.zip_source_url.clone().into(),
                 record.zip_source_type.clone().into(),
+                record.plugin_type.clone().into(),
+                record.source_path.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
             ])
@@ -325,6 +337,12 @@ impl PluginRepository {
         if fields.zip_source_type.is_some() {
             query.value("zip_source_type", fields.zip_source_type.clone());
         }
+        if fields.plugin_type.is_some() {
+            query.value("plugin_type", fields.plugin_type.clone());
+        }
+        if fields.source_path.is_some() {
+            query.value("source_path", fields.source_path.clone());
+        }
         if fields.update_by.is_some() {
             query.value("update_by", fields.update_by.clone());
         }
@@ -402,6 +420,8 @@ impl PluginRepository {
                 Alias::new("signer_key_id"),
                 Alias::new("zip_source_url"),
                 Alias::new("zip_source_type"),
+                Alias::new("plugin_type"),
+                Alias::new("source_path"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -432,6 +452,8 @@ impl PluginRepository {
                 record.signer_key_id.clone().into(),
                 record.zip_source_url.clone().into(),
                 record.zip_source_type.clone().into(),
+                record.plugin_type.clone().into(),
+                record.source_path.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -462,6 +484,8 @@ impl PluginRepository {
                 Alias::new("signer_key_id"),
                 Alias::new("zip_source_url"),
                 Alias::new("zip_source_type"),
+                Alias::new("plugin_type"),
+                Alias::new("source_path"),
                 Alias::new("update_time"),
                 Alias::new("update_by"),
                 Alias::new("update_name"),
@@ -757,6 +781,8 @@ impl PluginRepository {
                 signer_key_id: row.get_by_name_as(schema, "signer_key_id"),
                 zip_source_url: row.get_by_name_as(schema, "zip_source_url"),
                 zip_source_type: row.get_by_name_as(schema, "zip_source_type"),
+                plugin_type: row.get_by_name_as(schema, "plugin_type"),
+                source_path: row.get_by_name_as(schema, "source_path"),
                 create_time: get_datetime_default("create_time", Utc::now),
                 update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),

@@ -24,6 +24,10 @@ pub struct PluginContext {
     pub install_path: PathBuf,
     /// WASM路径
     pub wasm_path: PathBuf,
+    /// 插件类型
+    pub plugin_type: Option<String>,
+    /// 源码路径
+    pub source_path: Option<String>,
     /// 服务句柄列表
     pub services: Vec<String>,
     /// 扩展元数据
@@ -40,6 +44,8 @@ impl PluginContext {
             db_id: String::new(),
             install_path: PathBuf::new(),
             wasm_path: PathBuf::new(),
+            plugin_type: None,
+            source_path: None,
             services: Vec::new(),
             metadata: HashMap::new(),
         }
@@ -54,6 +60,8 @@ impl PluginContext {
             db_id: String::new(),
             install_path: install_path.to_path_buf(),
             wasm_path: install_path.join(&def.main_file),
+            plugin_type: Some(def.r#type.clone()),
+            source_path: def.source_path.clone(),
             services: Vec::new(),
             metadata: HashMap::new(),
         }
@@ -74,6 +82,8 @@ impl PluginContext {
             db_id: record.db_id.clone(),
             install_path: PathBuf::from(&record.install_path),
             wasm_path: PathBuf::from(&record.wasm_path),
+            plugin_type: record.plugin_type.clone(),
+            source_path: record.source_path.clone(),
             services: Vec::new(),
             metadata: HashMap::new(),
         }

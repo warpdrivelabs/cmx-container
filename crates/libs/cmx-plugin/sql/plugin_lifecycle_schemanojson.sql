@@ -39,7 +39,9 @@ CREATE TABLE cmx_plugin (
     create_by           VARCHAR(100),
     create_name         VARCHAR(100),
     update_by           VARCHAR(100),
-    update_name         VARCHAR(100)
+    update_name         VARCHAR(100),
+    plugin_type         VARCHAR(50),
+    source_path         TEXT
 );
 COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 
@@ -71,6 +73,8 @@ COMMENT ON COLUMN cmx_plugin.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_plugin.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_plugin.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_plugin.update_name IS '更新人名称';
+COMMENT ON COLUMN cmx_plugin.plugin_type IS '插件类型: wasm/rhai';
+COMMENT ON COLUMN cmx_plugin.source_path IS '源码路径';
 
 CREATE INDEX idx_plugin_system ON cmx_plugin(is_system);
 CREATE INDEX idx_plugin_db_id ON cmx_plugin(db_id);
@@ -98,7 +102,9 @@ CREATE TABLE cmx_plugin_versions (
     create_by           VARCHAR(100),
     create_name         VARCHAR(100),
     update_by           VARCHAR(100),
-    update_name         VARCHAR(100)
+    update_name         VARCHAR(100),
+    plugin_type         VARCHAR(50),
+    source_path         TEXT
 );
 
 COMMENT ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
@@ -118,6 +124,8 @@ COMMENT ON COLUMN cmx_plugin_versions.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_plugin_versions.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_plugin_versions.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_plugin_versions.update_name IS '更新人名称';
+COMMENT ON COLUMN cmx_plugin_versions.plugin_type IS '插件类型: wasm/rhai';
+COMMENT ON COLUMN cmx_plugin_versions.source_path IS '源码路径';
 
 CREATE INDEX idx_version_plugin ON cmx_plugin_versions(plugin_id);
 CREATE INDEX idx_version_current ON cmx_plugin_versions(plugin_id, is_current) WHERE is_current = TRUE;
@@ -190,7 +198,9 @@ CREATE TABLE cmx_plugin_deployments (
     create_by           VARCHAR(100),
     create_name         VARCHAR(100),
     update_by           VARCHAR(100),
-    update_name         VARCHAR(100)
+    update_name         VARCHAR(100),
+    plugin_type         VARCHAR(50),
+    source_path         TEXT
 );
 COMMENT ON TABLE cmx_plugin_deployments IS '节点插件部署记录表：记录插件在各个节点上的部署状态';
 COMMENT ON COLUMN cmx_plugin_deployments.id IS '主键ID';
@@ -209,6 +219,8 @@ COMMENT ON COLUMN cmx_plugin_deployments.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_plugin_deployments.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_plugin_deployments.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_plugin_deployments.update_name IS '更新人名称';
+COMMENT ON COLUMN cmx_plugin_deployments.plugin_type IS '插件类型: wasm/rhai';
+COMMENT ON COLUMN cmx_plugin_deployments.source_path IS '源码路径';
 
 CREATE INDEX idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
 CREATE INDEX idx_deploy_node ON cmx_plugin_deployments(node_id);

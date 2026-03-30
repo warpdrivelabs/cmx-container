@@ -240,6 +240,8 @@ impl InstallService {
                             domain_code: record.domain_code.unwrap_or_default(),
                             application_code: record.application_code.unwrap_or_default(),
                             module_code: record.module_code.unwrap_or_default(),
+                            plugin_type: record.plugin_type.clone().unwrap_or_default(),
+                            source_path: record.source_path.clone(),
                         };
                         return Ok(Some(info));
                     }
@@ -351,6 +353,7 @@ impl InstallService {
             &wasm_path,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
+            Some(&plugin_def),
         );
         self.deps
             .version_history_repository
@@ -419,6 +422,8 @@ impl InstallService {
             domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
+            plugin_type: plugin_def.r#type.clone(),
+            source_path: plugin_def.source_path.clone(),
         };
         {
             let mut registry = self.deps.registry.write().await;

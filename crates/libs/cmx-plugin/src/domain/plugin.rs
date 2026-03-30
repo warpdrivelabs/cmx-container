@@ -28,6 +28,10 @@ pub struct PluginInfo {
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
     /// 安装路径
     pub install_path: PathBuf,
+    /// 插件类型 (wasm/rhai)
+    pub plugin_type: String,
+    /// 源码路径
+    pub source_path: Option<String>,
     // 插件域编码
     pub domain_code: String,
     /// 应用编码

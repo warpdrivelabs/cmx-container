@@ -21,6 +21,11 @@ pub struct PluginInfoResponse {
     pub wasm_path: Option<String>,
     /// 安装路径
     pub install_path: String,
+
+    /// 插件类型
+    pub plugin_type: Option<String>,
+    /// 源码路径
+    pub source_path: Option<String>,
     /// 数据库ID
     pub db_id: Option<String>,
     /// 状态

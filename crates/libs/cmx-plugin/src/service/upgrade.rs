@@ -253,6 +253,7 @@ impl UpgradeService {
             &wasm_path,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
+            Some(&plugin_def),
         );
         self.deps
             .version_history_repository
@@ -332,6 +333,8 @@ impl UpgradeService {
             domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
+            plugin_type: plugin_def.r#type.clone(),
+            source_path: plugin_def.source_path.clone(),
         };
         self.deps
             .cache

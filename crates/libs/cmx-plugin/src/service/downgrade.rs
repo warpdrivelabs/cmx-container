@@ -197,6 +197,8 @@ impl DowngradeService {
             domain_code: plugin.domain_code.unwrap_or_default(),
             application_code: plugin.application_code.unwrap_or_default(),
             module_code: plugin.module_code.unwrap_or_default(),
+            plugin_type: target_version_record.plugin_type.clone().unwrap_or_default(),
+            source_path: target_version_record.source_path.clone(),
         };
         self.deps
             .cache

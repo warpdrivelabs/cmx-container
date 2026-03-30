@@ -344,6 +344,8 @@ fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::r
         metadata: record.metadata,
         source_type: record.zip_source_type,
         source_url: record.zip_source_url,
+        plugin_type: record.plugin_type,
+        source_path: record.source_path,
         installed_at: Some(record.create_time.to_rfc3339()),
         updated_at: Some(record.update_time.to_rfc3339()),
     }
@@ -384,6 +386,8 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         metadata: None,
         source_type,
         source_url,
+        plugin_type: Some(info.plugin_type),
+        source_path: info.source_path,
         installed_at: info.installed_at.map(|dt| dt.to_rfc3339()),
         updated_at: info.updated_at.map(|dt| dt.to_rfc3339()),
     }

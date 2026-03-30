@@ -81,6 +81,11 @@ pub struct PluginDefinition {
     pub version: Option<String>,
     /// WASM 入口文件路径（相对定义文件所在目录或 ZIP 根）
     pub main_file: String,
+    //插件类型 wasm或者rhai
+    pub r#type: String,
+    //源码路径
+    pub source_path: Option<String>,
+
     /// 本插件使用的建表配置 JSON 文件列表（TableDefinesConfig 格式，其内已定义表定义文件）
     #[serde(default)]
     pub table_config_files: Vec<String>,

@@ -57,6 +57,8 @@ pub fn build_plugin_db_record(
         signer_key_id: None,
         zip_source_url: zip_source_url.map(|s| s.to_string()),
         zip_source_type: zip_source_type.map(|s| s.to_string()),
+        plugin_type: Some(plugin_def.r#type.clone()),
+        source_path: plugin_def.source_path.clone(),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
@@ -76,6 +78,7 @@ pub fn build_plugin_db_record(
 /// - `wasm_path`: WASM文件路径
 /// - `zip_source_url`: 插件ZIP包来源地址
 /// - `zip_source_type`: 插件来源类型
+/// - `plugin_def`: 插件定义（用于获取 plugin_type 和 source_path）
 ///
 /// # 返回
 /// 版本历史记录
@@ -86,7 +89,10 @@ pub fn build_version_record(
     wasm_path: &str,
     zip_source_url: Option<&str>,
     zip_source_type: Option<&str>,
+    plugin_def: Option<&crate::PluginDefinition>,
 ) -> VersionHistoryRecord {
+    let plugin_type = plugin_def.map(|d| d.r#type.clone());
+    let source_path = plugin_def.and_then(|d| d.source_path.clone());
     VersionHistoryRecord {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),
@@ -98,6 +104,8 @@ pub fn build_version_record(
         uninstalled_at: None,
         zip_source_url: zip_source_url.map(|s| s.to_string()),
         zip_source_type: zip_source_type.map(|s| s.to_string()),
+        plugin_type,
+        source_path,
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
