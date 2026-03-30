@@ -67,6 +67,10 @@ pub enum PluginError {
 
     // ==================== 生命周期操作错误 ====================
 
+    /// 插件获取错误（从本地/远程/注册表获取插件包时）
+    #[error("获取错误: {0}")]
+    Fetcher(String),
+
     /// 插件安装错误
     #[error("安装错误: {0}")]
     Install(String),
@@ -357,6 +361,7 @@ impl PluginError {
             PluginError::Downgrade(_) => "DOWNGRADE_ERROR",
             PluginError::Rollback(_) => "ROLLBACK_ERROR",
             PluginError::Deploy(_) => "DEPLOY_ERROR",
+            PluginError::Fetcher(_) => "FETCHER_ERROR",
             PluginError::Dependency(_) => "DEPENDENCY_ERROR",
             PluginError::MissingDependency { .. } => "MISSING_DEPENDENCY",
             PluginError::DependencyConflict { .. } => "DEPENDENCY_CONFLICT",

@@ -8,6 +8,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::source::PluginSource;
+use crate::error::{PluginError, PluginResult};
 
 /// 插件注册表信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,7 +148,7 @@ impl RegistryFetcher {
     }
 
     /// 获取插件
-    pub async fn fetch(&self, source: &PluginSource) -> Result<PathBuf, String> {
+    pub async fn fetch(&self, source: &PluginSource) -> PluginResult<PathBuf> {
         match source {
             PluginSource::Registry {
                 registry_url,
@@ -157,12 +158,12 @@ impl RegistryFetcher {
                 let info = self.resolve_package(registry_url, package_name, version_constraint).await?;
                 self.download_package(&info).await
             }
-            _ => Err("来源类型不是注册表".to_string()),
+            _ => Err(PluginError::Fetcher("来源类型不是注册表".to_string())),
         }
     }
 
     /// 根据名称获取插件
-    pub async fn fetch_by_name(&self, package_name: &str, version_constraint: Option<String>) -> Result<PathBuf, String> {
+    pub async fn fetch_by_name(&self, package_name: &str, version_constraint: Option<String>) -> PluginResult<PathBuf> {
         let info = self.resolve_package(&self.registry_info.url, package_name, &version_constraint).await?;
         self.download_package(&info).await
     }
@@ -175,7 +176,7 @@ impl RegistryFetcher {
         registry_url: &str,
         package_name: &str,
         version_constraint: &Option<String>,
-    ) -> Result<RegistryInfo, String> {
+    ) -> PluginResult<RegistryInfo> {
         let url = self.build_package_url(registry_url, package_name);
 
         tracing::info!("查询注册表: {}", url);
@@ -183,15 +184,15 @@ impl RegistryFetcher {
         let response = self.client.get(&url)
             .send()
             .await
-            .map_err(|e| format!("请求注册表失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("请求注册表失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(format!("注册表响应错误: {} - {}", response.status(), package_name));
+            return Err(PluginError::Fetcher(format!("注册表响应错误: {} - {}", response.status(), package_name)));
         }
 
         let detail: RegistryPackageDetail = response.json()
             .await
-            .map_err(|e| format!("解析注册表响应失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("解析注册表响应失败: {}", e)))?;
 
         let version_info = self.select_version(&detail, version_constraint)?;
 
@@ -222,13 +223,13 @@ impl RegistryFetcher {
     /// 下载包
     ///
     /// 从下载URL下载插件包到临时目录。
-    pub async fn download_package(&self, info: &RegistryInfo) -> Result<PathBuf, String> {
+    pub async fn download_package(&self, info: &RegistryInfo) -> PluginResult<PathBuf> {
         if info.download_url.is_empty() {
-            return Err("下载URL为空".to_string());
+            return Err(PluginError::Fetcher("下载URL为空".to_string()));
         }
 
         std::fs::create_dir_all(&self.temp_dir)
-            .map_err(|e| format!("创建临时目录失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("创建临时目录失败: {}", e)))?;
 
         let file_name = self.extract_filename(&info.download_url, &info.name, &info.version);
         let target_path = self.temp_dir.join(&file_name);
@@ -243,18 +244,18 @@ impl RegistryFetcher {
         let response = self.client.get(&info.download_url)
             .send()
             .await
-            .map_err(|e| format!("下载请求失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("下载请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(format!("下载响应错误: {}", response.status()));
+            return Err(PluginError::Fetcher(format!("下载响应错误: {}", response.status())));
         }
 
         let bytes = response.bytes()
             .await
-            .map_err(|e| format!("读取响应体失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("读取响应体失败: {}", e)))?;
 
         std::fs::write(&target_path, &bytes)
-            .map_err(|e| format!("写入文件失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("写入文件失败: {}", e)))?;
 
         if let Some(ref checksum) = info.checksum {
             self.verify_checksum(&target_path, checksum, info.checksum_type.as_deref())?;
@@ -272,7 +273,7 @@ impl RegistryFetcher {
     /// 搜索插件
     ///
     /// 在注册表中搜索插件。
-    pub async fn search(&self, registry_url: &str, query: &str) -> Result<Vec<RegistrySearchResult>, String> {
+    pub async fn search(&self, registry_url: &str, query: &str) -> PluginResult<Vec<RegistrySearchResult>> {
         let url = self.build_search_url(registry_url, query);
 
         tracing::info!("搜索注册表: {}", url);
@@ -280,15 +281,15 @@ impl RegistryFetcher {
         let response = self.client.get(&url)
             .send()
             .await
-            .map_err(|e| format!("搜索请求失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("搜索请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(format!("搜索响应错误: {}", response.status()));
+            return Err(PluginError::Fetcher(format!("搜索响应错误: {}", response.status())));
         }
 
         let results: Vec<RegistrySearchResult> = response.json()
             .await
-            .map_err(|e| format!("解析搜索结果失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("解析搜索结果失败: {}", e)))?;
 
         tracing::info!("搜索完成: 找到 {} 个结果", results.len());
 
@@ -298,7 +299,7 @@ impl RegistryFetcher {
     /// 获取插件详情
     ///
     /// 获取插件在注册表中的详细信息。
-    pub async fn get_package_info(&self, registry_url: &str, package_name: &str) -> Result<RegistryPackageDetail, String> {
+    pub async fn get_package_info(&self, registry_url: &str, package_name: &str) -> PluginResult<RegistryPackageDetail> {
         let url = self.build_package_url(registry_url, package_name);
 
         tracing::info!("获取包详情: {}", url);
@@ -306,15 +307,15 @@ impl RegistryFetcher {
         let response = self.client.get(&url)
             .send()
             .await
-            .map_err(|e| format!("请求包详情失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("请求包详情失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(format!("获取详情响应错误: {}", response.status()));
+            return Err(PluginError::Fetcher(format!("获取详情响应错误: {}", response.status())));
         }
 
         let detail: RegistryPackageDetail = response.json()
             .await
-            .map_err(|e| format!("解析包详情失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("解析包详情失败: {}", e)))?;
 
         tracing::info!("获取包详情成功: {}@{}", detail.name, detail.latest_version);
 
@@ -339,15 +340,15 @@ impl RegistryFetcher {
         &self,
         detail: &RegistryPackageDetail,
         version_constraint: &Option<String>,
-    ) -> Result<RegistryPackageVersion, String> {
+    ) -> PluginResult<RegistryPackageVersion> {
         if detail.versions.is_empty() {
-            return Err(format!("包 {} 没有可用版本", detail.name));
+            return Err(PluginError::Fetcher(format!("包 {} 没有可用版本", detail.name)));
         }
 
         match version_constraint {
             Some(constraint) => {
                 let parsed_constraint = crate::domain::version::VersionConstraint::parse(constraint)
-                    .map_err(|e| format!("解析版本约束失败: {}", e))?;
+                    .map_err(|e| PluginError::Fetcher(format!("解析版本约束失败: {}", e)))?;
 
                 let matching_versions: Vec<_> = detail.versions.iter()
                     .filter(|v| {
@@ -360,10 +361,10 @@ impl RegistryFetcher {
                     .collect();
 
                 if matching_versions.is_empty() {
-                    return Err(format!(
+                    return Err(PluginError::Fetcher(format!(
                         "没有找到满足约束 {} 的版本",
                         constraint
-                    ));
+                    )));
                 }
 
                 matching_versions.into_iter()
@@ -372,7 +373,7 @@ impl RegistryFetcher {
                             .unwrap_or_else(|| crate::domain::version::SemanticVersion::new(0, 0, 0))
                     })
                     .cloned()
-                    .ok_or_else(|| "选择版本失败".to_string())
+                    .ok_or_else(|| PluginError::Fetcher("选择版本失败".to_string()))
             }
             None => {
                 detail.versions.iter()
@@ -381,7 +382,7 @@ impl RegistryFetcher {
                     .or_else(|| {
                         detail.versions.first().cloned()
                     })
-                    .ok_or_else(|| "没有可用版本".to_string())
+                    .ok_or_else(|| PluginError::Fetcher("没有可用版本".to_string()))
             }
         }
     }
@@ -402,15 +403,15 @@ impl RegistryFetcher {
     }
 
     /// 验证校验和
-    fn verify_checksum(&self, file_path: &PathBuf, expected: &str, checksum_type: Option<&str>) -> Result<(), String> {
+    fn verify_checksum(&self, file_path: &PathBuf, expected: &str, checksum_type: Option<&str>) -> PluginResult<()> {
         use std::io::Read;
 
         let mut file = std::fs::File::open(file_path)
-            .map_err(|e| format!("打开文件失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("打开文件失败: {}", e)))?;
 
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)
-            .map_err(|e| format!("读取文件失败: {}", e))?;
+            .map_err(|e| PluginError::Fetcher(format!("读取文件失败: {}", e)))?;
 
         let actual = match checksum_type {
             Some("sha256") | Some("SHA256") => {
@@ -431,7 +432,7 @@ impl RegistryFetcher {
         };
 
         if actual != expected.to_lowercase() {
-            return Err(format!("校验和不匹配: 期望 {}, 实际 {}", expected, actual));
+            return Err(PluginError::Fetcher(format!("校验和不匹配: 期望 {}, 实际 {}", expected, actual)));
         }
 
         tracing::info!("校验和验证通过: {}", file_path.display());

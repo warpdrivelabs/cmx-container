@@ -129,7 +129,7 @@ impl PackageUtils {
                 fetcher
                     .fetch(&crate::fetcher::source::PluginSource::local(path.clone()))
                     .await
-                    .map_err(|e| PluginError::Install(format!("获取本地插件包失败: {} - {}", error_context, e)))
+                    .map_err(|e| { tracing::error!("获取本地插件包失败: {} - {}", error_context, e); e })
             }
             PluginSource::Remote { url, checksum } => {
                 let fetcher = RemoteFetcher::new(self.deps.temp_root.clone());
@@ -139,7 +139,7 @@ impl PackageUtils {
                         checksum.clone(),
                     ))
                     .await
-                    .map_err(|e| PluginError::Install(format!("获取远程插件包失败: {} - {}", error_context, e)))
+                    .map_err(|e| { tracing::error!("获取远程插件包失败: {} - {}", error_context, e); e })
             }
             PluginSource::Registry {
                 registry_url,
@@ -156,7 +156,7 @@ impl PackageUtils {
                 fetcher
                     .fetch_by_name(package_name, version_constraint.map(|s| s.to_string()))
                     .await
-                    .map_err(|e| PluginError::Install(format!("从注册表获取插件包失败: {} - {}", error_context, e)))
+                    .map_err(|e| { tracing::error!("从注册表获取插件包失败: {} - {}", error_context, e); e })
             }
         }
     }
