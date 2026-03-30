@@ -20,7 +20,7 @@ base64 = "0.22"
 tokio = { workspace = true, features = ["fs", "io-util"] }
 
 # HTTP 客户端
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true }
 
 # URL 解析
 url = "2"

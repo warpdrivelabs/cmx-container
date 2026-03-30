@@ -80,13 +80,13 @@ impl ZipExtractor {
                 std::io::copy(&mut file, &mut outfile)?;
             }
 
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Some(mode) = file.unix_mode() {
-                    fs_err::set_permissions(&outpath, fs_err::Permissions::from_mode(mode))?;
-                }
-            }
+            // #[cfg(unix)]
+            // {
+            //     use std::os::unix::fs::PermissionsExt;
+            //     if let Some(mode) = file.unix_mode() {
+            //         fs_err::set_permissions(&outpath, std::fs::Permissions::from_mode(mode))?;
+            //     }
+            // }
         }
 
         Ok(())
@@ -144,13 +144,13 @@ impl ZipExtractor {
                 extracted_files.push(outpath);
             }
 
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Some(mode) = file.unix_mode() {
-                    fs_err::set_permissions(&outpath, fs_err::Permissions::from_mode(mode))?;
-                }
-            }
+            // #[cfg(unix)]
+            // {
+            //     use std::os::unix::fs::PermissionsExt;
+            //     if let Some(mode) = file.unix_mode() {
+            //         fs_err::set_permissions(&outpath, std::fs::Permissions::from_mode(mode))?;
+            //     }
+            // }
         }
 
         Ok(extracted_files)

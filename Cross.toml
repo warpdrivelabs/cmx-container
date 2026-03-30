@@ -1,2 +1,43 @@
+
+# Cross.toml — 放在项目根目录（与 Cargo.toml 同级）
+
+# === 全局配置（可选）===
+[build]
+# 是否启用调试模式（打印详细日志）
+# debug = true
+
+# === Linux musl 目标配置 ===
 [target.x86_64-unknown-linux-musl]
+# 使用自定义 Docker 镜像（可选，默认 cross 会自动选择）
 image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:latest"
+
+# 构建前在容器内执行的命令（数组）
+pre-build = [
+    #"apk add --no-cache openssl-dev sqlite-dev",  # Alpine 系统用 apk
+    # "apt-get update && apt-get install -y libssl-dev libsqlite3-dev"  # Debian 系统用 apt
+]
+
+# 传递给容器的环境变量
+# ✅ 环境变量必须放在 build.env 下！
+#[build.env]
+#passthrough = [
+#    "LIBSQLITE3_SYS_USE_BUNDLED",
+#    "PKG_CONFIG_ALLOW_CROSS",
+#    # 注意：CC_x86_64_unknown_linux_musl 通常不需要手动设置
+#]
+#在容器内固定值
+#[build.env]
+#LIBSQLITE3_SYS_USE_BUNDLED = "1"
+#PKG_CONFIG_ALLOW_CROSS = "1"
+
+# 挂载额外目录到容器（格式：["宿主机路径:容器路径"]）
+# volumes = ["/host/path:/container/path"]
+
+# === 其他目标示例：ARM64 Linux ===
+#[target.aarch64-unknown-linux-gnu]
+#pre-build = ["apt-get update && apt-get install -y libssl-dev"]
+#env = { "PKG_CONFIG_PATH" = "/usr/lib/aarch64-linux-gnu/pkgconfig" }
+#
+## === Windows 目标示例 ===
+#[target.x86_64-pc-windows-gnu]
+## Windows 目标通常无需额外配置
