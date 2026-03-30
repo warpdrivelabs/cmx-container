@@ -40,7 +40,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-
+use tracing::error;
 use crate::audit::logger::{AuditLogger, AuditLoggerConfig};
 use crate::cluster::deployment::DeploymentCoordinator;
 use crate::cluster::node::NodeManager;
@@ -559,7 +559,7 @@ impl PluginManager {
         self.install_service
             .install(request)
             .await
-            .map_err(|e| PluginError::Install(format!("安装失败: {}", e)))
+            .map_err(|e| {error!("安装失败: {}", e); e} )
     }
 
     /// 卸载插件
@@ -567,7 +567,7 @@ impl PluginManager {
         self.uninstall_service
             .uninstall(request)
             .await
-            .map_err(|e| PluginError::Uninstall(format!("卸载失败: {}", e)))
+            .map_err(|e| {error!("卸载失败: {}", e); e} )
     }
 
     // /// 激活插件
@@ -591,7 +591,7 @@ impl PluginManager {
         self.upgrade_service
             .upgrade(request)
             .await
-            .map_err(|e| PluginError::Upgrade(format!("升级失败: {}", e)))
+            .map_err(|e| {error!("升级失败: {}", e); e})
     }
 
     /// 降级插件
@@ -599,7 +599,7 @@ impl PluginManager {
         self.downgrade_service
             .downgrade(request)
             .await
-            .map_err(|e| PluginError::Downgrade(format!("降级失败: {}", e)))
+            .map_err(|e| {error!("降级失败: {}", e); e})
     }
 
     /// 部署插件（自动判断安装/升级/覆盖安装）
@@ -609,7 +609,7 @@ impl PluginManager {
         self.deploy_service
             .deploy(request)
             .await
-            .map_err(|e| PluginError::Deploy(format!("部署失败: {}", e)))
+            .map_err(|e| {error!("部署失败: {}", e); e})
     }
 
     // /// 回滚插件

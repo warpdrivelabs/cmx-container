@@ -51,7 +51,7 @@ fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::Plug
     path = "/api/plugin/install",
     request_body = PluginInstallRequest,
     responses(
-        (status = 200, description = "安装成功", body = ApiResp<String>)
+        (status = 200, description = "安装成功", body = ApiResp<InstallResponse>)
     ),
     tag = "Plugin"
 )]
@@ -60,7 +60,7 @@ pub async fn plugin_install(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     _headers: HeaderMap,
     Json(req): Json<PluginInstallRequest>,
-) -> Result<Json<ApiResp<String>>> {
+) -> Result<Json<ApiResp<InstallResponse>>> {
     debug!("插件安装请求: {:?}", req);
 
     let manager = cmx_plugin::GlobalPluginManager::get().await;
@@ -76,7 +76,7 @@ pub async fn plugin_install(
         crate::error::Error::InternalError(format!("插件安装失败: {}", e))
     })?;
 
-    let _resp = InstallResponse {
+    let resp = InstallResponse {
         plugin_id: result.plugin_id,
         install_path: result.install_path.to_string_lossy().to_string(),
         version: result.version,
@@ -84,7 +84,7 @@ pub async fn plugin_install(
         message: Some(result.message),
     };
 
-    Ok(Json(ApiResp::ok("success".to_string())))
+    Ok(Json(ApiResp::ok(resp)))
 }
 
 /// 插件卸载 Handler
