@@ -14,7 +14,7 @@ use crate::config::{init_cache, init_db_datasource, init_global_config, init_plu
 use axum::{middleware, Router};
 use cmx_api::middleware::{mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
-use log::warn;
+use log::{log, warn};
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
@@ -31,9 +31,9 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberIn
 async fn main() -> Result<()> {
     // 必须先加载.env文件
     match dotenvy::dotenv() {
-        Ok(path) => info!("Loaded .env file from: {}", path.display()),
+        Ok(path) => println!("Loaded .env file from: {}", path.display()),
         Err(e) => {
-            warn!("Failed to load .env file: {}", e);
+            println!("Failed to load .env file: {}", e);
         }
     }
     // ========== 日志文件滚动配置 ==========
@@ -62,12 +62,12 @@ async fn main() -> Result<()> {
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
     // ✅ 显式检查多种来源：系统环境变量 > .env 文件 > 默认值
     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| {
-        warn!("RUST_LOG not set, using default value 'info'");
+        println!("RUST_LOG not set, using default value 'info'");
         // .env 文件中可能有 RUST_LOG，dotenv 已加载到进程环境
         std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string())
     });
 
-    info!("📋 RUST_LOG = {}", rust_log);
+    println!("📋 RUST_LOG = {}", rust_log);
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&rust_log));
 
