@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use axum::extract::{Multipart, Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
+use chrono::DateTime;
 use tracing::{debug, info};
 
 use crate::api_response::ApiResp;
@@ -391,13 +392,20 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         source_type,
         source_url,
         plugin_type: Some(info.plugin_type),
-        source_path: info.source_path,
-        create_time: info.create_time,
-        update_time: info.update_time,
-        create_by: info.create_by,
-        create_name: info.create_name,
-        update_by: info.update_by,
-        update_name: info.update_name,
+        // source_path: info.source_path,
+        // create_time: info.create_time,
+        // update_time: info.update_time,
+        // create_by: info.create_by,
+        // create_name: info.create_name,
+        // update_by: info.update_by,
+        // update_name: info.update_name,
+        source_path: None,
+        create_time: DateTime::default(),
+        update_time: DateTime::default(),
+        create_by: None,
+        create_name: None,
+        update_by: None,
+        update_name: None,
     }
 }
 
