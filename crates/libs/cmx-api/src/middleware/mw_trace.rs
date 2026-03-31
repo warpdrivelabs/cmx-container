@@ -113,8 +113,15 @@ fn collect_headers(headers: &axum::http::HeaderMap) -> Vec<(String, String)> {
         "x-api-key",
         "x-auth-token",
         "proxy-authorization",
+        "connection",
+        "accept-language",
+        "user-agent",
+        "host",
+        "cache-control",
+        "pragma",
+        "accept",
+        "accept-encoding",
     ];
-
     headers
         .iter()
         .filter(|(name, _)| {
