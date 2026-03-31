@@ -524,7 +524,17 @@ impl PluginRepository {
 
     /// 查询插件记录
     pub async fn find_plugin(&self, plugin_id: &str) -> PluginResult<Option<PluginDbRecord>> {
-        let sql = "SELECT * FROM cmx_plugin WHERE plugin_id = $1";
+        let sql = r#"
+            SELECT p.*,
+                   d.name AS domain_name,
+                   a.name AS application_name,
+                   m.name AS module_name
+            FROM cmx_plugin p
+            LEFT JOIN cmx_domain d ON p.domain_code = d.code
+            LEFT JOIN cmx_application a ON p.application_code = a.code
+            LEFT JOIN cmx_module m ON p.module_code = m.code
+            WHERE p.plugin_id = $1
+        "#;
         let params = serde_json::json!([plugin_id]);
 
         let result = self
@@ -538,7 +548,17 @@ impl PluginRepository {
 
     /// 通过ID查询插件记录
     pub async fn find_plugin_by_id(&self, id: &str) -> PluginResult<Option<PluginDbRecord>> {
-        let sql = "SELECT * FROM cmx_plugin WHERE id = $1";
+        let sql = r#"
+            SELECT p.*,
+                   d.name AS domain_name,
+                   a.name AS application_name,
+                   m.name AS module_name
+            FROM cmx_plugin p
+            LEFT JOIN cmx_domain d ON p.domain_code = d.code
+            LEFT JOIN cmx_application a ON p.application_code = a.code
+            LEFT JOIN cmx_module m ON p.module_code = m.code
+            WHERE p.id = $1
+        "#;
         let params = serde_json::json!([id]);
 
         let result = self
@@ -593,7 +613,17 @@ impl PluginRepository {
         };
 
         let sql = format!(
-            "SELECT * FROM cmx_plugin {} ORDER BY create_time DESC",
+            r#"
+            SELECT p.*,
+                   d.name AS domain_name,
+                   a.name AS application_name,
+                   m.name AS module_name
+            FROM cmx_plugin p
+            LEFT JOIN cmx_domain d ON p.domain_code = d.code
+            LEFT JOIN cmx_application a ON p.application_code = a.code
+            LEFT JOIN cmx_module m ON p.module_code = m.code
+            {} ORDER BY p.create_time DESC
+            "#,
             where_clause
         );
 
