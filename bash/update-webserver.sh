@@ -51,7 +51,17 @@ if [ ! -f "appctl.sh" ]; then
 fi
 
 echo "⏹️  停止当前服务..."
-./appctl.sh stop
+# 使用 set +e 临时关闭严格模式，避免 stop 失败导致脚本退出
+(
+    set +e
+    sudo ./appctl.sh stop
+    exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        echo "✅ 服务已成功停止"
+    else
+        echo "ℹ️  停止命令返回非零状态码 ($exit_code)，可能服务未运行，继续执行..."
+    fi
+)
 
 # 可选：确保进程已退出（等待最多5秒）
 sleep 1
@@ -70,7 +80,7 @@ cp "$TARGET_BIN" "$WEB_DIR/$APP_NAME"
 
 # --- 5. 启动服务 ---
 echo "▶️  启动服务..."
-./appctl.sh start
+sudo ./appctl.sh start
 
 # --- 6. 完成统计 ---
 end_time=$(date +%s)
