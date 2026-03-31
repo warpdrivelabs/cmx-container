@@ -481,7 +481,6 @@ pub struct Field {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnDefine {
-    #[serde(default)]
     pub name: String,        // 数据库列名 (例如 "unit_price")
     #[serde(default)]
     pub label: String,       // UI 显示名 (例如 "单价")
@@ -578,7 +577,7 @@ pub enum PartitionType {
 /// 表定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableDefine {
-    #[serde(default)]
+    /// 表名（例如 "sale_order"）
     pub table_name: String,
     #[serde(default)]
     // 数据库表名 (例如 "sale_order")
