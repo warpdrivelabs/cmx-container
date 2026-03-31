@@ -45,13 +45,14 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
         .unwrap_or(false);
 
     if is_multipart {
-        let response = next.run(req).await;
+        let mut response = next.run(req).await;
         let duration = start.elapsed();
         let status = response.status();
+        let resp_body_preview = extract_and_log_response_body(&mut response).await;
 
         info!(
             target: "req_trace",
-            "━━━━━━━━━━━━━━━━━━━━req trace━━━━━━━━━━━━━━━━━━━━━━\n\
+            "━━━━━━━━━━━━━━━━━━━━req trace print━━━━━━━━━━━━━━━━━━━━━━\n\
              --REQUEST [MULTIPART - BODY SKIPPED]\n\
              ┣ path: {} {}\n\
              ┣ query: {:?}\n\
@@ -59,12 +60,14 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
              ┗ body: <multipart/form-data - skipped>\n\
              --RESPONSE\n\
              ┣ status: {}\n\
+             ┣ body: {}\n\
              ┗ duration: {:?}",
             method,
             path,
             query,
             headers,
             status.as_u16(),
+            resp_body_preview,
             duration,
         );
 
@@ -87,7 +90,7 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
 
     info!(
         target: "req_trace",
-        "━━━━━━━━━━━━━━━━━━━━req trace━━━━━━━━━━━━━━━━━━━━━━\n\
+        "━━━━━━━━━━━━━━━━━━━━req trace print━━━━━━━━━━━━━━━━━━━━━━\n\
          --REQUEST\n\
          ┣ path: {} {}\n\
          ┣ query: {:?}\n\
@@ -116,9 +119,7 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
             status.as_u16()
         );
     }
-
-    debug!(target: "req_trace", "━━━━━━━━━━━━━━━━━━━━req trace━━━━━━━━━━━━━━━━━━━━━━");
-
+    
     response
 }
 
