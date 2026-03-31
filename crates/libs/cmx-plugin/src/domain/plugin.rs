@@ -3,7 +3,6 @@
 //! 定义插件的核心数据结构
 
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 插件信息

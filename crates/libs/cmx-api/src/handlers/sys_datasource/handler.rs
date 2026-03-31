@@ -2,11 +2,10 @@
 //!
 //! 提供数据源管理的 HTTP Handler
 
-use std::sync::Arc;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use cmx_core::model::data::dataset::{DataSet, Schema};
+use cmx_core::model::data::dataset::DataSet;
 use cmx_database::get_default_db_manager;
 use serde::Deserialize;
 use serde_json::Value;

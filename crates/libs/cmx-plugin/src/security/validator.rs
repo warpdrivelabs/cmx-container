@@ -3,7 +3,6 @@
 //! 验证插件安全性，包括包结构、签名、权限等
 
 use std::path::Path;
-use std::io::Read;
 use tracing::error;
 use super::signature::{SignatureValidator, SignatureInfo};
 
@@ -230,7 +229,7 @@ impl SecurityValidator {
         };
 
         let mut has_wasm = false;
-        let mut has_plugin_json = false;
+        let mut _has_plugin_json = false;
         let mut has_manifest_json = false;
 
         for i in 0..archive.len() {
@@ -268,7 +267,7 @@ impl SecurityValidator {
                     has_wasm = true;
                 }
                 if file_name == "plugin.json" {
-                    has_plugin_json = true;
+                    _has_plugin_json = true;
                 }
                 if file_name == "manifest.json" {
                     has_manifest_json = true;
@@ -279,7 +278,7 @@ impl SecurityValidator {
         if !has_wasm {
             result.add_error("插件包中缺少 WASM 文件（递归搜索所有子目录未找到 .wasm 文件）".to_string());
         }
-        // if !has_plugin_json {
+        // if !_has_plugin_json {
         //     result.add_warning("插件包中缺少 plugin.json 文件".to_string());
         // }
         if !has_manifest_json {

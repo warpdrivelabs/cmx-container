@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::plugin::PluginStatus;

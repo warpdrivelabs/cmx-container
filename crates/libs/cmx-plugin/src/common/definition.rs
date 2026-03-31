@@ -121,7 +121,7 @@ impl DefinitionUtils {
                 .map_err(|e| PluginError::Metadata(format!("解析 plugin 定义失败: {}", e)))?;
 
         let _manifest: PluginManifest = serde_json::from_value(manifest_json)
-            .map_err(|e| PluginError::Metadata(format!("解析 manifest 定义失败: {}", e)))?;;
+            .map_err(|e| PluginError::Metadata(format!("解析 manifest 定义失败: {}", e)))?;
         Ok(definition)
     }
 

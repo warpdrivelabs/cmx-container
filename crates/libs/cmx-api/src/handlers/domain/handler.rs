@@ -2,7 +2,7 @@
 //!
 //! 展示如何创建自定义的 HTTP Handler
 
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
 use cmx_core::model::data::dataset::DataSet;

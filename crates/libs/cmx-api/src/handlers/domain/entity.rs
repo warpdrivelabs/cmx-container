@@ -5,7 +5,6 @@ use crate::rest::TreeNodeData;
 use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 /// 领域实体（完整字段，用于查询返回）

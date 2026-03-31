@@ -132,7 +132,7 @@ pub enum ConditionExpr {
 impl ConditionExpr {
     pub fn to_sql_string(&self, start_index: usize) -> String {
         match self {
-            ConditionExpr::Compare { left, op, right } => {
+            ConditionExpr::Compare { left, op, .. } => {
                 format!("{} {} ${}", left.to_sql_string(), op.to_sql_string(), start_index + 1)
             },
             ConditionExpr::Logical { left, op, right } => {

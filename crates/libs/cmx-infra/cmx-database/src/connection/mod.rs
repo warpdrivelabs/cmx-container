@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::config::{DbConfig, DbType};
 use crate::transaction::Dbx;
-use sqlx::{MySql, PgConnection, Pool, Postgres, Sqlite};
+use sqlx::{MySql, Pool, Postgres, Sqlite};
 use tracing::info;
 
 /// 数据库连接池枚举类型
@@ -195,12 +195,11 @@ impl DbRegistry {
     }
 }
 
-use crate::error::Result;
 use std::sync::OnceLock;
 
 static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();
 
-pub fn get_global_registry() -> &'static Arc<DbRegistry> {
+pub(crate) fn get_global_registry() -> &'static Arc<DbRegistry> {
     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
 }
 

@@ -5,11 +5,10 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{PluginError, PluginResult};
-use crate::domain::plugin::PluginInfo;
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::error::PluginResult;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::repository::PluginRepository;
 use crate::audit::logger::AuditLogger;
 
 /// 同步结果

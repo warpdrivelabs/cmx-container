@@ -48,7 +48,7 @@ impl GlobalLockManager {
         let lock_manager = LockManager::new(client, lock_config);
         GLOBAL_LOCK_MANAGER
             .set(Arc::new(lock_manager))
-            .map_err(|e| Error::ConfigError("全局锁管理器已初始化".to_string()))?;
+            .map_err(|_| Error::ConfigError("全局锁管理器已初始化".to_string()))?;
 
         Ok(())
 
@@ -69,7 +69,7 @@ impl GlobalLockManager {
 
         GLOBAL_LOCK_MANAGER
             .set(Arc::new(lock_manager))
-            .map_err(|e| Error::ConfigError("全局锁管理器已初始化".to_string()))?;
+            .map_err(|_| Error::ConfigError("全局锁管理器已初始化".to_string()))?;
 
         Ok(())
     }

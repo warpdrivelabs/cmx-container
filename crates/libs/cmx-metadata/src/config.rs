@@ -20,7 +20,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
 use cmx_core::model::cell::TableDefine;
-use cmx_core::model::meta::base::{TableDefineDbExecutor, TableDefinesConfig};
+use cmx_core::model::meta::base::TableDefinesConfig;
 use crate::loader::load_table_defines_from_path;
 use crate::MetadataError;
 

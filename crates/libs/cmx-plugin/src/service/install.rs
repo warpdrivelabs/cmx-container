@@ -16,7 +16,6 @@ use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::table_metadata::TableMetadataService;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::TempDirCleanup;
@@ -191,8 +190,8 @@ impl InstallService {
             .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
             .await?;
 
-        if let Some(node_deploment) = existing_deployment {
-            let mut registry = self.deps.registry.read().await;
+        if let Some(_node_deploment) = existing_deployment {
+            let registry = self.deps.registry.read().await;
             if let Some(info) = registry.get(&plugin_id) {
                 return Ok(InstallResponse {
                     plugin_id,
@@ -286,11 +285,11 @@ impl InstallService {
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
         if !plugin_def.table_config_files.is_empty() {
-            ///PostgreSQL 的行为：
+            // PostgreSQL 的行为：
             // 一旦事务中任何语句失败，整个事务进入 "aborted" 状态
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
-            //所以ddl语句不要在事务中执行
+            // 所以ddl语句不要在事务中执行
             crate::service::utils::create_plugin_tables(
                 &db_id,
                 &plugin_id,

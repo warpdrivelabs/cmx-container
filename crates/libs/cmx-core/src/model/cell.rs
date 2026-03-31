@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::{SerializeSeq, SerializeMap};
+use serde::ser::SerializeSeq;
 use serde_json::Value as JsonValue;
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc, NaiveDate, Datelike};
+use chrono::{DateTime, Utc, NaiveDate};
 use smol_str::SmolStr;
 use uuid::Uuid;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
@@ -635,6 +635,7 @@ fn default_table_version() -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Datelike;
     use super::*;
     use serde_json::json;
     use uuid::Uuid;

@@ -5,7 +5,6 @@
 use crate::crud::DbBmc;
 use chrono::Utc;
 use cmx_utils::snowflake_id_str;
-use cmx_utils::time::now_utc;
 use modql::field::SeaField;
 use modql::field::SeaFields;
 use sea_query::SimpleExpr;
@@ -93,7 +92,6 @@ fn add_timestamps_for_create(fields: &mut SeaFields, user_id: Option<&str>) {
 /// * `fields` - 要添加时间戳字段的字段集合
 /// * `user_id` - 当前用户的ID，用作最后修改者ID
 fn add_timestamps_for_update(fields: &mut SeaFields, user_id: Option<&str>) {
-    let now = now_utc();
     let now = Utc::now();
     fields.push(SeaField::new(FIELD_UPDATE_BY, user_id));
     fields.push(SeaField::new(FIELD_UPDATE_TIME, now));

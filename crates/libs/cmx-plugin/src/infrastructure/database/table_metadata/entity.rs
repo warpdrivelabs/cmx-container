@@ -3,7 +3,7 @@
 //! 定义表元数据的各种数据结构
 
 use chrono::{DateTime, Utc};
-use modql::field::{Fields, HasSeaFields};
+use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 
 /// cmx_meta_table_define_version 记录（版本历史）

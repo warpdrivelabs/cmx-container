@@ -1,8 +1,6 @@
 //! 表结构迁移模块
-//! 
+//!
 //! 管理数据库表结构的迁移
-
-use std::sync::Arc;
 
 /// 迁移状态
 #[derive(Debug, Clone)]

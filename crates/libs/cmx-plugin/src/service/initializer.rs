@@ -18,15 +18,14 @@ use std::sync::Arc;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
-use crate::error::{PluginResult, PluginError};
+use crate::error::PluginResult;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::service::install::{InstallRequest, InstallService};
-use crate::service::upgrade::{UpgradeRequest, UpgradeService};
 use crate::service::downgrade::{DowngradeRequest, DowngradeService};
+use crate::service::install::{InstallRequest, InstallService};
 use crate::service::uninstall::{UninstallRequest, UninstallService};
-use chrono::Utc;
+use crate::service::upgrade::{UpgradeRequest, UpgradeService};
 
 /// 插件操作计划
 #[derive(Debug, Clone)]

@@ -11,7 +11,7 @@ pub use utils::*;
 pub use error::*;
 
 use modql::SIden;
-use sea_query::{Iden, IntoIden, TableRef};
+use sea_query::{IntoIden, TableRef};
 
 /// DbBmc trait 必须为实体的 Bmc 结构体实现。
 /// 它指定了元信息，如表名、主键列名、

@@ -3,15 +3,12 @@
 //! 提供插件服务共用的工具函数
 
 use std::path::Path;
-use std::sync::Arc;
 
-use chrono::Utc;
 use serde_json::Value;
 use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_core::model::cell::TableDefine;
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 use cmx_metadata::PgTableDefineExecutor;
-use uuid::Uuid;
 use cmx_core::model::meta::plugin::PluginDefinition;
 use cmx_database::get_default_db_manager;
 use crate::error::{PluginError, PluginResult};
@@ -105,7 +102,7 @@ pub async fn save_plugin_table_metadata(
     domain_code: Option<String>,
     application_code: Option<String>,
     moudule_code: Option<String>,
-    operator: Option<&str>,
+    _operator: Option<&str>,
 ) -> PluginResult<()> {
     for table_def in table_defs {
         let dbm = get_default_db_manager();

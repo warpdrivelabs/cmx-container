@@ -207,11 +207,7 @@ impl SyncManager {
                 let _ = self.respond_full_sync().await;
             }
             SyncMessageType::FullSyncResponse => {
-                // 处理全量同步响应
-                if let Some(ref pubsub) = self.pubsub {
-                    // 全量同步响应通常包含多个状态记录
-                    // 这里简化处理，实际可能需要更复杂的协议
-                }
+                // 处理全量同步响应（已通过其他机制处理）
             }
         }
         

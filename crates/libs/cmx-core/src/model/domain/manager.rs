@@ -1,10 +1,4 @@
 use super::entity::DomainEntity;
-use crate::model::data::dataset::Schema;
-use std::sync::Arc;
-
-fn empty_schema() -> Arc<Schema> {
-    Arc::new(Schema::new("default", vec![]))
-}
 
 #[derive(Debug)]
 pub struct DomainEntityManager;

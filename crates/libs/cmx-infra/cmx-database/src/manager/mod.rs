@@ -1,11 +1,9 @@
 use log::{error, warn};
-use sea_query::SqlWriter;
 /// 数据库管理器模块
 ///
 /// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 use tracing::info;
 
 use crate::config::{DbConfig, PoolConfig};
@@ -85,7 +83,7 @@ impl DatabaseManager {
 
     /// 注册数据源
     pub async fn register_data_source(&self, db_config: DbConfig) -> Result<()> {
-        if (db_config.clone().default) {
+        if db_config.clone().default {
             let mut write_guard = self.default_db_id.write().await;
             *write_guard = db_config.db_id.clone();
         }

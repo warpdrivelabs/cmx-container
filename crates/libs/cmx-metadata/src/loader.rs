@@ -11,7 +11,6 @@
 use std::path::Path;
 
 use serde::Deserialize;
-use serde_json::Value;
 use cmx_core::model::cell::TableDefine;
 use crate::MetadataError;
 

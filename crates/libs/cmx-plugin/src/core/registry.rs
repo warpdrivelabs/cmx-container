@@ -3,8 +3,6 @@
 //! 管理已加载插件的元数据
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::domain::plugin::{PluginInfo, PluginStatus, PluginFilter};
 

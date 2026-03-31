@@ -6,9 +6,6 @@ use crate::handlers::domain;
 use crate::handlers::plugin;
 use crate::handlers::sys_datasource;
 use crate::register_crud_handlers_module;
-use crate::routes::crud_handlers::{
-    application_crud, domain_crud, module_crud, sys_datasource_crud,
-};
 use crate::app_state::CmxAppState;
 use crate::openapi::ApiDoc;
 use axum::routing::{get, post};

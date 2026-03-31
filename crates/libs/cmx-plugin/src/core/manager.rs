@@ -40,39 +40,28 @@ use std::sync::Arc;
 use crate::audit::logger::{AuditLogger, AuditLoggerConfig};
 use crate::cluster::deployment::DeploymentCoordinator;
 use crate::cluster::node::NodeManager;
-use crate::cluster::sync::SyncManager;
 use crate::common::{
-    DefinitionUtils, DependencyUtils, DependencyUtilsDeps, ServiceUtils, ServiceUtilsDeps,
+    DependencyUtils, DependencyUtilsDeps, ServiceUtils, ServiceUtilsDeps,
 };
 use crate::config::settings::PluginManagerSettings;
 use crate::core::context::PluginContext;
 use crate::core::lifecycle::{LifecycleState, LifecycleStateMachine};
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginFilter, PluginInfo, PluginSource, PluginStatus};
-use crate::domain::status::StatusTransition;
-use crate::error::{PluginError, PluginResult};
+use crate::error::PluginResult;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::schema::SchemaManager;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
-use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::runtime::activation::ActivationManager;
-use crate::runtime::feature::FeatureManager;
 use crate::runtime::service_registry::ServiceRegistry;
-use crate::security::permission::PermissionManager;
-use crate::security::signature::SignatureValidator;
 use crate::security::validator::SecurityValidator;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use cmx_buffer::{CacheManager, GlobalCacheManager, GlobalLockManager, LockManager, PubSubOps};
-use cmx_core::model::cell::TableDefine;
-use cmx_core::model::meta::base::TableDefineDbExecutor;
 use cmx_database::{DatabaseManager, get_default_db_manager};
-use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::error;
 
@@ -716,7 +705,7 @@ impl PluginManager {
     }
 
     /// 列出所有插件
-    pub async fn list_plugins(&self, filter: &PluginFilter) -> PluginResult<Vec<PluginInfo>> {
+    pub async fn list_plugins(&self, _filter: &PluginFilter) -> PluginResult<Vec<PluginInfo>> {
         let registry = self.registry.read().await;
         Ok(registry.list_all())
     }
@@ -807,12 +796,12 @@ impl PluginManager {
     pub async fn shutdown(&self) -> PluginResult<()> {
         let active_plugins = self.activation_manager.get_active_plugins().await;
         for plugin_id in active_plugins {
-            let deactivate_req = DeactivateRequest {
+            let _deactivate_req = DeactivateRequest {
                 plugin_id,
                 force: true,
             };
             //fixme 暂时注释了
-            // let _ = self.deactivate(deactivate_req).await;
+            // let _ = self.deactivate(_deactivate_req).await;
         }
 
         self.event_bus
