@@ -19,10 +19,6 @@ use tracing::{error, info};
 
 pub fn init_global_config() {
     info!("加载环境变量和配置文件信息...");
-
-    // 加载.env文件
-    dotenvy::dotenv().ok();
-
     //初始化配置管理器
     ConfigManager::initialize(|| {
         ConfigBuilder::new()

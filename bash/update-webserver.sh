@@ -1,24 +1,23 @@
 #!/bin/bash
 
-set -e  # 遇到任何错误立即退出
+set -e  # 遇到任何命令失败立即退出
 
 # ==================== 配置区 ====================
-APP_NAME="web-server"                     # ←←← 可在此修改应用名称
+APP_NAME="web-server"                     # ←←← 修改此处可适配其他程序
 WEB_DIR="/data/apps/webserver"
 CMX_DIR="/data/project/cmx/cmx-container"
 # ==============================================
 
-# 记录开始时间（秒级）
 start_time=$(date +%s)
 
-# 进入 Web 服务目录
+echo "🚀 开始更新应用: $APP_NAME"
+
+# --- 1. 进入 Web 目录并备份 ---
 cd "$WEB_DIR" || { echo "❌ 无法进入目录: $WEB_DIR"; exit 1; }
 
-# 创建 backup 子目录
 BACKUP_DIR="$WEB_DIR/backup"
 mkdir -p "$BACKUP_DIR"
 
-# 备份当前二进制文件（如果存在）
 if [ -f "$APP_NAME" ]; then
     TIMESTAMP=$(date +"%Y%m%d%H%M%S")
     BACKUP_FILE="$BACKUP_DIR/${APP_NAME}.${TIMESTAMP}"
@@ -28,7 +27,7 @@ else
     echo "⚠️  警告: $WEB_DIR/$APP_NAME 不存在，跳过备份"
 fi
 
-# 拉取并编译新版本
+# --- 2. 拉取并编译新版本 ---
 cd "$CMX_DIR" || { echo "❌ 无法进入目录: $CMX_DIR"; exit 1; }
 
 echo "🔄 执行 git pull..."
@@ -37,28 +36,43 @@ git pull
 echo "⚙️  编译 Rust 应用 (cargo build --release)..."
 cargo build --release
 
-# 检查编译产物
 TARGET_BIN="$CMX_DIR/target/release/$APP_NAME"
 if [ ! -f "$TARGET_BIN" ]; then
     echo "❌ 错误: 编译产物未生成: $TARGET_BIN"
     exit 1
 fi
 
-echo "📤 拷贝新版本 $APP_NAME 到 $WEB_DIR ..."
-cp "$TARGET_BIN" "$WEB_DIR/$APP_NAME"
-
-# 重启服务
+# --- 3. 停止服务（关键！避免“文本文件忙”）---
 cd "$WEB_DIR" || { echo "❌ 无法返回目录: $WEB_DIR"; exit 1; }
 
-if [ -f "appctl.sh" ]; then
-    echo "🔁 执行 ./appctl.sh restart ..."
-    ./appctl.sh restart
-else
-    echo "❌ 错误: $WEB_DIR/appctl.sh 不存在"
+if [ ! -f "appctl.sh" ]; then
+    echo "❌ 错误: 控制脚本 appctl.sh 不存在"
     exit 1
 fi
 
-# 计算总耗时
+echo "⏹️  停止当前服务..."
+./appctl.sh stop
+
+# 可选：确保进程已退出（等待最多5秒）
+sleep 1
+if pgrep -f "$APP_NAME" > /dev/null; then
+    echo "⏳ 检测到残留进程，等待其退出..."
+    timeout 5 bash -c "while pgrep -f '$APP_NAME' > /dev/null; do sleep 0.5; done" || {
+        echo "⚠️  进程未在5秒内退出，尝试强制终止..."
+        pkill -f "$APP_NAME" || true
+        sleep 1
+    }
+fi
+
+# --- 4. 拷贝新二进制 ---
+echo "📤 拷贝新版本 $APP_NAME 到 $WEB_DIR ..."
+cp "$TARGET_BIN" "$WEB_DIR/$APP_NAME"
+
+# --- 5. 启动服务 ---
+echo "▶️  启动服务..."
+./appctl.sh start
+
+# --- 6. 完成统计 ---
 end_time=$(date +%s)
 elapsed=$((end_time - start_time))
-echo "✅ 全部操作完成！总耗时: ${elapsed} 秒"
+echo "✅ 应用 $APP_NAME 更新完成！总耗时: ${elapsed} 秒"

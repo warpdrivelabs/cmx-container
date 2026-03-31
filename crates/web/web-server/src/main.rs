@@ -4,8 +4,8 @@
 
 mod config;
 mod error;
-mod routes;
 mod plugins;
+mod routes;
 
 pub use self::error::{Error, Result};
 use config::web_config;
@@ -31,6 +31,8 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberIn
 /// - `Result<()>` - 执行结果，成功返回 Ok(())，失败返回错误
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 必须先加载.env文件
+    dotenvy::dotenv().ok();
     // ========== 日志文件滚动配置 ==========
     // 日志输出目录
     let log_dir = "logs";
@@ -55,8 +57,7 @@ async fn main() -> Result<()> {
         .compact();
 
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     // 注册日志层: 控制台 + 文件 + 环境过滤
     registry()
@@ -105,10 +106,7 @@ async fn main() -> Result<()> {
     info!("{}", "=".repeat(60));
     info!("🚀 {:<44} 🚀", "Web 服务器启动成功");
     info!("{}", "=".repeat(60));
-    info!(
-        "   监听地址：{:?}",
-        listener.local_addr().unwrap()
-    );
+    info!("   监听地址：{:?}", listener.local_addr().unwrap());
     info!("   静态文件目录：{}", web_config.WEB_FOLDER);
     info!("   日志目录：{}", log_dir);
     info!("{}", "-".repeat(60));
