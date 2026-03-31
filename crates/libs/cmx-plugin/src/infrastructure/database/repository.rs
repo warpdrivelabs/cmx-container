@@ -577,31 +577,31 @@ impl PluginRepository {
         let mut param_index = 1;
 
         if let Some(ref status) = filter.status {
-            conditions.push(format!("status = ${}", param_index));
+            conditions.push(format!("p.status = ${}", param_index));
             params.push(serde_json::json!(status.to_string()));
             param_index += 1;
         }
 
         if let Some(ref name) = filter.name {
-            conditions.push(format!("name LIKE ${}", param_index));
+            conditions.push(format!("p.name LIKE ${}", param_index));
             params.push(serde_json::json!(format!("%{}%", name)));
             param_index += 1;
         }
 
         if let Some(ref domain_code) = filter.domain_code {
-            conditions.push(format!("domain_code = ${}", param_index));
+            conditions.push(format!("p.domain_code = ${}", param_index));
             params.push(serde_json::json!(domain_code));
             param_index += 1;
         }
 
         if let Some(ref application_code) = filter.application_code {
-            conditions.push(format!("application_code = ${}", param_index));
+            conditions.push(format!("p.application_code = ${}", param_index));
             params.push(serde_json::json!(application_code));
             param_index += 1;
         }
 
         if let Some(ref module_code) = filter.module_code {
-            conditions.push(format!("module_code = ${}", param_index));
+            conditions.push(format!("p.module_code = ${}", param_index));
             params.push(serde_json::json!(module_code));
             param_index += 1;
         }
