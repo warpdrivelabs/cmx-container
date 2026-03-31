@@ -36,6 +36,7 @@ async fn main() -> Result<()> {
             println!("Failed to load .env file: {}", e);
         }
     }
+    println!("{}", std::env::var("RUST_LOG").unwrap_or_else(|_| "unknown".to_string()));
     // ========== 日志文件滚动配置 ==========
     // 日志输出目录
     let log_dir = "logs";
