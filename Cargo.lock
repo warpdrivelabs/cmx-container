@@ -532,6 +532,7 @@ dependencies = [
 name = "cmx-metadata"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "cmx-core",
  "cmx-database",

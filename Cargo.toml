@@ -147,4 +147,5 @@ http-date = "0.3"
 #生成openapi规范文档
 utoipa = { version = "5", features = ["axum_extras", "chrono","decimal","uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
-
+#使trait中的异步函数能够与动态特征配合使用
+async-trait = "0.1"

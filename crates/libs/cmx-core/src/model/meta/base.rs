@@ -51,6 +51,7 @@ pub struct TableDefinesConfig {
 // ==========================================
 
 /// 表定义在数据库中执行"创建或升级"的接口，后续由具体数据库实现（如 PostgreSQL / MySQL）。
+// #[async_trait]
 pub trait TableDefineDbExecutor: Send + Sync {
     async fn create_table(&self, define: &TableDefine) -> Result<(), BaseError>;
     async fn upgrade_table(&self, define: &TableDefine) -> Result<(), BaseError>;
