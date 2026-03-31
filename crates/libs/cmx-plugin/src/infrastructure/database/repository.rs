@@ -43,6 +43,13 @@ pub struct PluginDbRecord {
     pub application_code: Option<String>,
     /// 模块编码
     pub module_code: Option<String>,
+    /// 域名称
+    pub domain_name: Option<String>,
+    /// 应用名称
+    pub application_name: Option<String>,
+    /// 模块名称
+    pub module_name: Option<String>,
+
     /// 开发商名称
     pub vendor_name: Option<String>,
     /// 开发商URL
@@ -773,6 +780,9 @@ impl PluginRepository {
                 domain_code: row.get_by_name_as(schema, "domain_code"),
                 application_code: row.get_by_name_as(schema, "application_code"),
                 module_code: row.get_by_name_as(schema, "module_code"),
+                domain_name: row.get_by_name_as(schema, "domain_name"),
+                application_name: row.get_by_name_as(schema, "application_name"),
+                module_name: row.get_by_name_as(schema, "module_name"),
                 vendor_name: row.get_by_name_as(schema, "vendor_name"),
                 vendor_url: row.get_by_name_as(schema, "vendor_url"),
                 vendor_contact: row.get_by_name_as(schema, "vendor_contact"),

@@ -51,10 +51,9 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::sys_datasource_crud::page,
 
         // Domain handlers
+        crate::handlers::domain::handler::get_tree,
         // crate::handlers::domain::handler::get_by_name,
-        // crate::handlers::domain::handler::batch_create,
-        // crate::handlers::domain::handler::search,
-        // crate::handlers::domain::handler::count_by_status,
+
 
         // SysDatasource 自定义 handlers
         crate::handlers::sys_datasource::handler::get_by_db_id,
@@ -78,6 +77,8 @@ use utoipa::OpenApi;
             crate::handlers::domain::Domain,
             crate::handlers::domain::DomainForCreate,
             crate::handlers::domain::DomainForUpdate,
+            crate::handlers::domain::DomainTreeNodeData,
+            crate::rest::TreeNode<crate::handlers::domain::DomainTreeNodeData>,
             crate::handlers::application::Application,
             crate::handlers::application::ApplicationForCreate,
             crate::handlers::application::ApplicationForUpdate,
@@ -87,8 +88,6 @@ use utoipa::OpenApi;
             crate::handlers::sys_datasource::SysDatasource,
             crate::handlers::sys_datasource::SysDatasourceForCreate,
             crate::handlers::sys_datasource::SysDatasourceForUpdate,
-            crate::handlers::domain::handler::GetByNameParams,
-            crate::handlers::domain::handler::BatchCreateParams,
             crate::handlers::domain::handler::SearchParams,
             crate::handlers::sys_datasource::handler::GetByDbIdParams,
             crate::handlers::sys_datasource::handler::DatasourceUpdatePayload,

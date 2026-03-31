@@ -68,10 +68,9 @@ pub fn api_routes() -> Router<CmxAppState> {
     let router = register_crud_handlers_module!(router, sys_datasource_crud, "/sys-datasource");
 
     // 注册 Domain 自定义路由
-    let router = router.route(
-        "/domains/by-name",
-        axum::routing::post(domain::handler::get_by_name),
-    );
+    let router = router
+        .route("/domains/tree", post(domain::handler::get_tree));
+
 
     // 注册 SysDatasource 自定义路由
     let router = router

@@ -14,53 +14,13 @@ use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
-use crate::handlers::domain::{DomainForCreate, DomainService};
+use crate::handlers::domain::{DomainService, DomainTreeNodeData};
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::rest::header_parse::get_db_id_from_header;
+use crate::rest::TreeNode;
 
-/// 按名称查询的请求参数
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct GetByNameParams {
-    /// 域名
-    pub name: String,
 
-}
-
-/// 按名称查询 Handler
-///
-/// 根据域名查询 Domain 实体
-#[utoipa::path(
-    post,
-    path = "/api/domains/by-name",
-    request_body = GetByNameParams,
-    responses(
-        (status = 200, description = "查询成功", body = ApiResp<Value>)
-    ),
-    tag = "Domain"
-)]
-pub async fn get_by_name(
-    State(_cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
-    Json(params): Json<GetByNameParams>,
-) -> Result<Json<ApiResp<DataSet>>> {
-    debug!("{:<12} - handler::get_by_name", "HANDLER");
-
-    let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
-    let name = params.name.clone();
-    let dataset = DomainService::get_by_name(&mm, &db_id, &name).await?;
-
-    Ok(Json(ApiResp::ok(dataset)))
-}
-
-/// 批量创建的请求参数
-#[derive(Debug, Deserialize, Clone, ToSchema)]
-pub struct BatchCreateParams {
-    /// 要创建的数据列表
-    pub items: Vec<DomainForCreate>,
-}
 
 
 
@@ -123,28 +83,30 @@ pub async fn search(
     )))
 }
 
-/// 统计按状态 Handler
+/// 查询域-应用-模块树形结构 Handler
 ///
-/// 按状态统计 Domain 数量
+/// 查询所有启用且未归档的域、应用、模块数据，
+/// 按 域→应用→模块 三级层级组织，同级按 sort_order 排序。
 #[utoipa::path(
-    get,
-    path = "/api/domains/count-by-status",
+    post,
+    path = "/api/domains/tree",
     responses(
-        (status = 200, description = "统计成功", body = ApiResp<Value>)
+        (status = 200, description = "查询成功", body = ApiResp<Vec<TreeNode<DomainTreeNodeData>>>)
     ),
     tag = "Domain"
 )]
-pub async fn count_by_status(
+pub async fn get_tree(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Query(_params): Query<GetByNameParams>,
-) -> Result<Json<ApiResp<DataSet>>> {
-    debug!("{:<12} - handler::count_by_status", "HANDLER");
+) -> Result<Json<ApiResp<Vec<TreeNode<DomainTreeNodeData>>>>> {
+    debug!("{:<12} - handler::get_tree", "HANDLER");
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let dataset = DomainService::count_by_status(&mm, &db_id).await?;
 
-    Ok(Json(ApiResp::ok(dataset)))
+    let tree = DomainService::get_tree(&mm, &db_id).await?;
+
+    Ok(Json(ApiResp::ok(tree)))
 }
+

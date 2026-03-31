@@ -41,6 +41,13 @@ pub struct PluginInfoResponse {
     pub application_code: Option<String>,
     /// 模块编码
     pub module_code: Option<String>,
+    /// 域名称
+    pub domain_name: Option<String>,
+    /// 应用名称
+    pub application_name: Option<String>,
+    /// 模块名称
+    pub module_name: Option<String>,
+
     /// 开发商名称
     pub vendor_name: Option<String>,
     /// 开发商URL

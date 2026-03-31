@@ -9,6 +9,6 @@ pub mod handler;
 mod service;
 
 pub use bmc::DomainBmc;
-pub use entity::{Domain, DomainForCreate, DomainForUpdate};
+pub use entity::{Domain, DomainForCreate, DomainForUpdate, DomainTreeNodeData};
 pub use filter::DomainFilter;
 pub use service::DomainService;
