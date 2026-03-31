@@ -3,6 +3,7 @@
 //! 定义插件的核心数据结构
 
 use std::path::PathBuf;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 插件信息
@@ -38,6 +39,19 @@ pub struct PluginInfo {
     pub application_code: String,
     /// 模块编码
     pub module_code: String,
+
+    /// 创建时间
+    pub create_time: DateTime<Utc>,
+    /// 更新时间
+    pub update_time: DateTime<Utc>,
+    /// 创建人ID
+    pub create_by: Option<String>,
+    /// 创建人名称
+    pub create_name: Option<String>,
+    /// 更新人ID
+    pub update_by: Option<String>,
+    /// 更新人名称
+    pub update_name: Option<String>,
 }
 
 /// 插件来源

@@ -346,8 +346,12 @@ fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::r
         source_url: record.zip_source_url,
         plugin_type: record.plugin_type,
         source_path: record.source_path,
-        installed_at: Some(record.create_time.to_rfc3339()),
-        updated_at: Some(record.update_time.to_rfc3339()),
+        create_time: record.create_time,
+        update_time: record.update_time,
+        create_by: record.create_by,
+        create_name: record.create_name,
+        update_by: record.update_by,
+        update_name: record.update_name,
     }
 }
 
@@ -388,8 +392,12 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         source_url,
         plugin_type: Some(info.plugin_type),
         source_path: info.source_path,
-        installed_at: info.installed_at.map(|dt| dt.to_rfc3339()),
-        updated_at: info.updated_at.map(|dt| dt.to_rfc3339()),
+        create_time: info.create_time,
+        update_time: info.update_time,
+        create_by: info.create_by,
+        create_name: info.create_name,
+        update_by: info.update_by,
+        update_name: info.update_name,
     }
 }
 
@@ -493,7 +501,7 @@ pub async fn plugin_page(
         .into();
 
     let manager = cmx_plugin::GlobalPluginManager::get().await;
-    let all_plugins = manager.list_plugins(&filter).await.map_err(|e| {
+    let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
 
@@ -503,7 +511,7 @@ pub async fn plugin_page(
         .into_iter()
         .skip(skip)
         .take(page_size as usize)
-        .map(convert_plugin_info)
+        .map(convert_db_record_to_response)
         .collect();
 
     Ok(Json(ApiResp::ok_with_pagination(

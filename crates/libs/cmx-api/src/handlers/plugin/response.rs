@@ -2,6 +2,7 @@
 //!
 //! 定义插件安装、卸载、升级、降级等操作的响应参数
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -52,10 +53,18 @@ pub struct PluginInfoResponse {
     pub source_type: Option<String>,
     /// 来源URL
     pub source_url: Option<String>,
-    /// 安装时间
-    pub installed_at: Option<String>,
+    /// 创建时间
+    pub create_time: DateTime<Utc>,
     /// 更新时间
-    pub updated_at: Option<String>,
+    pub update_time: DateTime<Utc>,
+    /// 创建人ID
+    pub create_by: Option<String>,
+    /// 创建人名称
+    pub create_name: Option<String>,
+    /// 更新人ID
+    pub update_by: Option<String>,
+    /// 更新人名称
+    pub update_name: Option<String>,
 }
 
 /// 插件列表响应
