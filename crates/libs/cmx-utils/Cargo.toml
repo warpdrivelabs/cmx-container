@@ -30,4 +30,5 @@ tracing ={workspace = true}
 [dev-dependencies]
 # tempfile: 临时文件测试
 tempfile = "3"
-
+#配置管理
+config={ workspace = true }
