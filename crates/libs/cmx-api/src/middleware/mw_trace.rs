@@ -63,14 +63,14 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
 
     info!(
         target: "req_trace",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\
-         📥 REQUEST\n\
+        "━━━━━━━━━━━━━━━━━━━━req info━━━━━━━━━━━━━━━━━━━━━━━━━━\n\
+         --REQUEST\n\
          ┣ path: {} {}\n\
          ┣ query: {:?}\n\
          ┣ headers: {:?}\n\
          ┣ body_preview: {}\n\
          ┗ duration: {:?}\n\
-         📤 RESPONSE\n\
+         --RESPONSE\n\
          ┣ status: {}\n\
          ┣ response_size: {} bytes\n\
          ┗ duration: {:?}",
@@ -95,10 +95,7 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
         );
     }
 
-    info!(
-        target: "req_trace",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    );
+
 
     response
 }

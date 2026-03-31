@@ -90,7 +90,8 @@ async fn main() -> Result<()> {
         .merge(routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver))
-        .layer(middleware::from_fn(mw_trace));
+        // .layer(middleware::from_fn(mw_trace))
+        ;
     // 应用剩余的中间件并添加静态文件服务
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
         tower_http::services::ServeDir::new(&web_config.WEB_FOLDER),
