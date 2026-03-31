@@ -21,12 +21,6 @@ pub enum ErrCode {
     Timeout = 504,
 }
 
-impl Default for ErrCode {
-    fn default() -> Self {
-        Self::Success
-    }
-}
-
 impl From<ErrCode> for u16 {
     fn from(code: ErrCode) -> Self {
         code as u16

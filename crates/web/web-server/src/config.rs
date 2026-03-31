@@ -8,7 +8,7 @@
 //! Web 服务器配置模块
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
-use cmx_database::{get_default_db_manager, DbConfig, PoolConfig};
+use cmx_database::{get_default_db_manager, DbConfig};
 use cmx_utils::{
     CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult, ConfigValue,
     FromConfigValue, Priority,

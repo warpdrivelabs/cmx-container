@@ -43,6 +43,12 @@ pub struct AppStateInner {
     // pub default_db_id: String,
 }
 
+impl Default for CmxAppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CmxAppState {
 
 

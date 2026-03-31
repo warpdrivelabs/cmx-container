@@ -32,8 +32,8 @@ use crate::app_state::CmxAppState;
 /// # 返回值
 /// 返回包含创建结果的 ApiResp
 pub async fn create<MC, E>(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(data): Json<E>,
 ) -> Result<Json<ApiResp<DataSet>>>
@@ -46,7 +46,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::create(mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -62,8 +62,8 @@ where
 /// # 返回值
 /// 返回包含创建结果的 ApiResp
 pub async fn create_many<MC, E>(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(data): Json<Vec<E>>,
 ) -> Result<Json<ApiResp<DataSet>>>
@@ -76,7 +76,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::create_many(&mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::create_many(mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -105,7 +105,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let id = params.id.clone();
-    let dataset = GenericCrudService::<MC>::get(&mm, &db_id, id.into()).await?;
+    let dataset = GenericCrudService::<MC>::get(mm, &db_id, id.into()).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -121,8 +121,8 @@ where
 /// # 返回值
 /// 返回包含更新后结果的 ApiResp
 pub async fn update<MC, E>(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(payload): Json<UpdatePayload<E>>,
 ) -> Result<Json<ApiResp<DataSet>>>
@@ -135,7 +135,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::update(&mm, &db_id, payload.id, payload.data).await?;
+    let dataset = GenericCrudService::<MC>::update(mm, &db_id, payload.id, payload.data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -151,8 +151,8 @@ where
 /// # 返回值
 /// 返回包含更新结果的 ApiResp
 pub async fn update_many<MC, E>(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(data): Json<Vec<UpdatePayload<E>>>,
 ) -> Result<Json<ApiResp<DataSet>>>
@@ -165,7 +165,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::update_many(&mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::update_many(mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -194,7 +194,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, payload.ids).await?;
+    let dataset = GenericCrudService::<MC>::delete(mm, &db_id, payload.ids).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -225,7 +225,7 @@ where
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
     let filter = params.filter.clone();
-    let dataset = GenericCrudService::<MC, F>::list(&mm, &db_id, filter, Some(list_options)).await?;
+    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, filter, Some(list_options)).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -241,8 +241,8 @@ where
 /// # 返回值
 /// 返回包含查询结果和分页信息的 ApiResp
 pub async fn page<MC, F>(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<PageParams<F>>,
 ) -> Result<Json<ApiResp<DataSet>>>
@@ -259,7 +259,7 @@ where
 
     let list_options = params.to_list_options();
     let filter = params.filter.clone();
-    let (dataset, total) = GenericCrudService::<MC, F>::page(&mm, &db_id, filter, list_options).await?;
+    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, filter, list_options).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,

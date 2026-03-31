@@ -135,10 +135,10 @@ impl SysDatasourceService {
         let result = GenericCrudService::<SysDatasourceBmc>::update_many(mm, db_id, items.clone()).await?;
 
         for item in items {
-            if let Ok(old_data) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, item.id.clone()).await {
-                if let Some(old_db_id) = Self::get_field_from_dataset(&old_data, "db_id") {
-                    let _ = mm.unregister_data_source(&old_db_id).await;
-                }
+            if let Ok(old_data) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, item.id.clone()).await
+                && let Some(old_db_id) = Self::get_field_from_dataset(&old_data, "db_id")
+            {
+                let _ = mm.unregister_data_source(&old_db_id).await;
             }
         }
 
@@ -154,12 +154,12 @@ impl SysDatasourceService {
         );
 
         for id in &ids {
-            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Value::String(id.clone())).await {
-                if let Some(ds_db_id) = Self::get_field_from_dataset(&dataset, "db_id") {
-                    match mm.unregister_data_source(&ds_db_id).await {
-                        Ok(_) => info!("数据源注销成功: {}", ds_db_id),
-                        Err(e) => warn!("数据源注销失败: {}, 错误: {}", ds_db_id, e),
-                    }
+            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Value::String(id.clone())).await
+                && let Some(ds_db_id) = Self::get_field_from_dataset(&dataset, "db_id")
+            {
+                match mm.unregister_data_source(&ds_db_id).await {
+                    Ok(_) => info!("数据源注销成功: {}", ds_db_id),
+                    Err(e) => warn!("数据源注销失败: {}, 错误: {}", ds_db_id, e),
                 }
             }
         }

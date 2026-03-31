@@ -187,7 +187,7 @@ impl TableDefinesConfigManager {
         let mut all = Vec::new();
         for config in self.sorted_configs()? {
             for file in &config.files {
-                let path = base_path.join("meta").join(file);
+                let path = base_path.join("metadata").join(file);
                 let tables = load_table_defines_from_path(&path)?;
                 all.extend(tables);
             }

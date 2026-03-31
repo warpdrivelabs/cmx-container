@@ -57,6 +57,12 @@ struct RateLimitBucket {
     window_start: Instant,
 }
 
+impl Default for RateLimitState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RateLimitState {
     pub fn new() -> Self {
         Self {

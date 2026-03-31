@@ -73,7 +73,7 @@ pub async fn search(
     let page = params.get_page();
     let page_size = params.get_page_size();
 
-    let (dataset, total) = DomainService::search(&mm, &db_id, &keyword, page, page_size).await?;
+    let (dataset, total) = DomainService::search(mm, &db_id, &keyword, page, page_size).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
@@ -105,7 +105,7 @@ pub async fn get_tree(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let tree = DomainService::get_tree(&mm, &db_id).await?;
+    let tree = DomainService::get_tree(mm, &db_id).await?;
 
     Ok(Json(ApiResp::ok(tree)))
 }

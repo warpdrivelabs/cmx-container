@@ -129,9 +129,8 @@ pub fn api_routes() -> Router<CmxAppState> {
 /// # Swagger UI 访问
 /// - Swagger UI: http://localhost:port/swagger-ui/
 /// - OpenAPI JSON: http://localhost:port/api-docs/openapi.json
-pub fn swagger_routes() -> Router{
-    let app = Router::new()
+pub fn swagger_routes() -> Router {
+    Router::new()
         .merge(SwaggerUi::new("/swagger-ui")
-            .url("/api-docs/openapi.json", ApiDoc::openapi()));
-    return  app;
+            .url("/api-docs/openapi.json", ApiDoc::openapi()))
 }

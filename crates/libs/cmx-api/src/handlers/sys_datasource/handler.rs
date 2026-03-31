@@ -68,7 +68,7 @@ pub async fn get_by_db_id(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let target_db_id = params.db_id.clone();
-    let dataset = SysDatasourceService::get_by_db_id(&mm, &db_id, &target_db_id).await?;
+    let dataset = SysDatasourceService::get_by_db_id(mm, &db_id, &target_db_id).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -95,7 +95,7 @@ pub async fn create_datasource(
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let dataset = SysDatasourceService::create(&mm, &db_id, data).await?;
+    let dataset = SysDatasourceService::create(mm, &db_id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -124,7 +124,7 @@ pub async fn update_datasource(
     let db_id = get_db_id_from_header(&headers).await;
     let id = payload.id.clone();
     let data = payload.data;
-    let dataset = SysDatasourceService::update(&mm, &db_id, &id, data).await?;
+    let dataset = SysDatasourceService::update(mm, &db_id, &id, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -151,7 +151,7 @@ pub async fn delete_datasource(
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let dataset = SysDatasourceService::delete(&mm, &db_id, payload.ids).await?;
+    let dataset = SysDatasourceService::delete(mm, &db_id, payload.ids).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -179,7 +179,7 @@ pub async fn test_connection(
     debug!("{:<12} - handler::test_connection", "HANDLER");
 
     let mm = get_default_db_manager();
-    let result = SysDatasourceService::test_connection(&mm, &params.db_id).await?;
+    let result = SysDatasourceService::test_connection(mm, &params.db_id).await?;
 
     Ok(Json(ApiResp::ok(result)))
 }
@@ -203,7 +203,7 @@ pub async fn list_registered(
     debug!("{:<12} - handler::list_registered", "HANDLER");
 
     let mm = get_default_db_manager();
-    let list = SysDatasourceService::list_registered(&mm);
+    let list = SysDatasourceService::list_registered(mm);
 
     Ok(Json(ApiResp::ok(list)))
 }
