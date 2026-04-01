@@ -12,19 +12,19 @@
 -- 存储所有已安装插件的核心信息（位于默认数据库）
 -- =============================================
 CREATE TABLE cmx_plugin (
-    id                  VARCHAR(64) NOT NULL,
+    id                  VARCHAR(64) NOT NULL primary key ,
     plugin_id           VARCHAR(255) NOT NULL,
     name                VARCHAR(500) NOT NULL,
     version             VARCHAR(50) NOT NULL,
     wasm_path           TEXT NOT NULL,
     install_path        TEXT NOT NULL,
     db_id               VARCHAR(100) ,
-    status              VARCHAR(30) NOT NULL DEFAULT 'installed',
-    is_system           BOOLEAN NOT NULL DEFAULT FALSE,
-    is_locked           BOOLEAN NOT NULL DEFAULT FALSE,
-    domain_code         VARCHAR(50),
-    application_code    VARCHAR(50),
-    module_code         VARCHAR(50),
+    status              VARCHAR(30)  DEFAULT 'installed',
+    is_system           BOOLEAN  DEFAULT FALSE,
+    is_locked           BOOLEAN  DEFAULT FALSE,
+    domain_code         VARCHAR(64),
+    application_code    VARCHAR(64),
+    module_code         VARCHAR(64),
     vendor_name         VARCHAR(255),
     vendor_url          TEXT,
     vendor_contact      VARCHAR(255),
@@ -78,8 +78,6 @@ COMMENT ON COLUMN cmx_plugin.plugin_type IS '插件类型: wasm/rhai';
 COMMENT ON COLUMN cmx_plugin.source_path IS '源码路径';
 COMMENT ON COLUMN cmx_plugin.description IS '插件描述信息';
 
-CREATE INDEX idx_plugin_system ON cmx_plugin(is_system);
-CREATE INDEX idx_plugin_db_id ON cmx_plugin(db_id);
 CREATE INDEX idx_plugin_domain_app_module ON cmx_plugin(domain_code, application_code, module_code);
 -- CREATE UNIQUE INDEX uk_cmx_plugin_plugin_id ON cmx_plugin(plugin_id);
 -- cmx_plugin 表添加唯一约束
@@ -90,7 +88,7 @@ ALTER TABLE cmx_plugin ADD CONSTRAINT uk_cmx_plugin_plugin_id UNIQUE (plugin_id)
 -- 记录插件的版本历史
 -- =============================================
 CREATE TABLE cmx_plugin_versions (
-    id                  VARCHAR(64) NOT NULL,
+    id                  VARCHAR(64) NOT NULL primary key,
     plugin_id           VARCHAR(64) NOT NULL,
     version             VARCHAR(50) NOT NULL,
     install_path        TEXT NOT NULL,
@@ -144,7 +142,7 @@ ALTER TABLE cmx_plugin_versions ADD CONSTRAINT uk_cmx_plugin_versions_plugin_ver
 -- 记录插件之间的依赖关系
 -- =============================================
 CREATE TABLE cmx_plugin_dependencies (
-    id                  VARCHAR(64) NOT NULL,
+    id                  VARCHAR(64) NOT NULL primary key,
     plugin_id           VARCHAR(64) NOT NULL,
     dependency_plugin_id VARCHAR(255) NOT NULL,
     dependency_name     VARCHAR(500),
@@ -191,7 +189,7 @@ CREATE INDEX idx_dep_resolved ON cmx_plugin_dependencies(plugin_id, resolution_s
 -- 记录在各个节点上的部署状态
 -- =============================================
 CREATE TABLE cmx_plugin_deployments (
-    id                  VARCHAR(64) NOT NULL,
+    id                  VARCHAR(64) NOT NULL primary key,
     plugin_id           VARCHAR(64) NOT NULL,
     node_id             VARCHAR(100) NOT NULL,
     node_type           VARCHAR(50),

@@ -60,7 +60,7 @@ pub struct PluginUpgradeRequest {
     /// 是否强制升级
     pub force: Option<bool>,
     /// 操作者
-    pub operator: String,
+    pub operator: Option<String>,
 }
 
 /// 插件降级请求
@@ -71,7 +71,7 @@ pub struct PluginDowngradeRequest {
     /// 目标版本
     pub target_version: String,
     /// 操作者
-    pub operator: String,
+    pub operator: Option<String>,
 }
 
 /// 插件列表查询参数

@@ -38,7 +38,7 @@ pub struct UpgradeRequest {
     /// 是否强制升级（忽略版本检查）
     pub force: bool,
     /// 操作者
-    pub operator: String,
+    pub operator: Option<String>,
 }
 
 /// 升级响应

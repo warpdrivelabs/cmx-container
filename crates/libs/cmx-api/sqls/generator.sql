@@ -1,3 +1,40 @@
+DROP TABLE IF EXISTS cmx_domain;
+CREATE TABLE cmx_domain(
+                           code varchar(64) NOT NULL,
+                           name varchar(200) NOT NULL,
+                           description text,
+                           type varchar(50),
+                           tags text,
+                           sort_order int4 DEFAULT  0,
+                           status int4 DEFAULT  1,
+                           archived int4 DEFAULT  0,
+                           create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                           update_time timestamp DEFAULT  CURRENT_TIMESTAMP,
+                           create_by varchar(100),
+                           create_name varchar(100),
+                           update_by varchar(100),
+                           update_name varchar(100),
+                           PRIMARY KEY (code)
+);
+
+COMMENT ON TABLE cmx_domain IS '域表';
+COMMENT ON COLUMN cmx_domain.code IS '主键，域编码，全局唯一，如: FIN, HR, SCM';
+COMMENT ON COLUMN cmx_domain.name IS '域名称，如: 财务域, 人力资源域';
+COMMENT ON COLUMN cmx_domain.description IS '域描述';
+COMMENT ON COLUMN cmx_domain.type IS '类型: business(业务域), technical(技术域), product_line(产品线)';
+COMMENT ON COLUMN cmx_domain.tags IS '多标签，JSON数组字符串，如 ["财务","核心","S4HANA"]';
+COMMENT ON COLUMN cmx_domain.sort_order IS '排序字段，数值小的靠前';
+COMMENT ON COLUMN cmx_domain.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_domain.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_domain.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_domain.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_domain.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_domain.create_name IS '创建人名称';
+COMMENT ON COLUMN cmx_domain.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_domain.update_name IS '更新人名称';
+
+
+
 DROP TABLE IF EXISTS cmx_application;
 CREATE TABLE cmx_application(
                                 code VARCHAR(64) NOT NULL,
@@ -106,7 +143,7 @@ COMMENT ON COLUMN cmx_sys_datasource.id IS '主键';
 COMMENT ON COLUMN cmx_sys_datasource.db_id IS '数据源标识';
 COMMENT ON COLUMN cmx_sys_datasource.db_schema IS '数据库模式';
 COMMENT ON COLUMN cmx_sys_datasource.description IS '数据源描述';
-COMMENT ON COLUMN cmx_sys_datasource.db_type IS '数据库类型';
+COMMENT ON COLUMN cmx_sys_datasource.db_type IS '数据库类型(postgres;mysql)';
 COMMENT ON COLUMN cmx_sys_datasource.db_url IS '数据库连接 URL';
 COMMENT ON COLUMN cmx_sys_datasource.max_connections IS '最大连接数';
 COMMENT ON COLUMN cmx_sys_datasource.min_connections IS '最小空闲连接数';
@@ -123,8 +160,5 @@ COMMENT ON COLUMN cmx_sys_datasource.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_sys_datasource.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_sys_datasource.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_sys_datasource.update_name IS '更新人名称';
-
-
-
 CREATE UNIQUE INDEX uk_cmx_datasource_db_id ON cmx_sys_datasource(db_id);
 

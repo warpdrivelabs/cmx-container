@@ -285,7 +285,7 @@ impl PluginInitializer {
                     source,
                     version_constraint: None,
                     force: false,
-                    operator: "system".to_string(),
+                    operator: Some("system".to_string()),
                 };
                 match self.upgrade_service.upgrade(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -304,7 +304,7 @@ impl PluginInitializer {
                     plugin_id: plugin_id.clone(),
                     target_version: to_version,
                     source: Some(source),
-                    operator: "system".to_string(),
+                    operator: Some("system".to_string()),
                 };
                 match self.downgrade_service.downgrade(request).await {
                     Ok(_) => Ok(plugin_id),

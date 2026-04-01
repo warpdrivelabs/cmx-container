@@ -30,7 +30,7 @@ pub struct DowngradeRequest {
     /// 插件来源（可选，用于下载旧版本）
     pub source: Option<PluginSource>,
     /// 操作者
-    pub operator: String,
+    pub operator: Option<String>,
 }
 
 /// 降级响应

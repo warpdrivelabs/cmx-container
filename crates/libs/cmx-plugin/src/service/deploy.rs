@@ -254,7 +254,7 @@ impl DeployService {
             source: request.source.clone(),
             version_constraint: None,
             force: false,
-            operator: "system".to_string(),
+            operator: Some("system".to_string()),
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
