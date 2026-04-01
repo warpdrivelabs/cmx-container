@@ -163,23 +163,23 @@ pub async fn init_plugins() {
     //     None,  // 消息订阅发布
     // ).await.expect("插件管理器初始化失败");
 
-    // 安装插件
-    let install_req = cmx_plugin::service::install::InstallRequest {
-        source: cmx_plugin::domain::plugin::PluginSource::Local {
-            path: PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
-        },
-        db_id: None,
-        auto_activate: false,
-        version_constraint: None,
-    };
-
-    let resp = GlobalPluginManager::get().await.install(install_req).await;
-    match resp {
-        Ok(resp) => {
-            info!("插件安装响应: {:?}", resp);
-        }
-        Err(e) => {
-            error!("插件安装失败: {:?}", e);
-        }
-    }
+    // // 安装插件
+    // let install_req = cmx_plugin::service::install::InstallRequest {
+    //     source: cmx_plugin::domain::plugin::PluginSource::Local {
+    //         path: PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
+    //     },
+    //     db_id: None,
+    //     auto_activate: false,
+    //     version_constraint: None,
+    // };
+    //
+    // let resp = GlobalPluginManager::get().await.install(install_req).await;
+    // match resp {
+    //     Ok(resp) => {
+    //         info!("插件安装响应: {:?}", resp);
+    //     }
+    //     Err(e) => {
+    //         error!("插件安装失败: {:?}", e);
+    //     }
+    // }
 }
