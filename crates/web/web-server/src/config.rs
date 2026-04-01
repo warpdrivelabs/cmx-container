@@ -138,7 +138,7 @@ pub async fn init_plugins() {
     //     .await
     //     .expect("插件管理器初始化失败");
 
-    // 方式2：使用自定义配置初始化  todo 自定义配置需要完善
+    // 方式2：使用自定义配置初始化  
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
     let settings = PluginManagerSettings {

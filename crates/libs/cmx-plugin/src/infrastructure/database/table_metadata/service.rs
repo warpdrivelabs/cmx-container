@@ -305,6 +305,7 @@ impl TableMetadataService {
     /// 同时更新 cmx_meta_table_define 和 cmx_meta_table_define_version
     pub async fn update(
         mm: &DatabaseManager,
+        plugin_id: &str,
         db_id: &str,
         txn_id: Option<&str>,
         id: Value,
@@ -388,6 +389,9 @@ impl TableMetadataService {
                 let version_id = snowflake_id_str();
                 let mut version_fields =data.clone().not_none_sea_fields();
                 version_fields.push(SeaField::new("id", version_id));
+                version_fields.push(SeaField::new("table_name", table_name));
+                version_fields.push(SeaField::new("db_id", target_db_id));
+                version_fields.push(SeaField::new("plugin_id", plugin_id));
 
 
 
@@ -425,6 +429,117 @@ impl TableMetadataService {
         } else {
             Err(PluginError::NotFound(format!("表元数据不存在: {:?}", id)))
         }
+    }
+
+    /// 根据 plugin_id 更新 version 字段
+    ///
+    /// 更新 cmx_meta_table_define 
+    /// 指定 plugin_id version 字段
+    pub async fn update_version_by_plugin_id(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        plugin_id: &str,
+        new_version: &str,
+    ) -> PluginResult<u64> {
+        info!(
+            "{:<12} - TableMetadataService::update_version_by_plugin_id - plugin_id: {}, new_version: {}",
+            "SERVICE", plugin_id, new_version
+        );
+
+        let now = Utc::now();
+
+        // 更新主表 cmx_meta_table_define 的 version 字段
+        let mut main_query = Query::update();
+        main_query
+            .table(TableMetadataBmc::table_ref())
+            .value("version", new_version)
+            .value("update_time", now)
+            .and_where(Expr::col("plugin_id").eq(plugin_id));
+
+        let (main_sql, main_sql_values) = main_query.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
+
+        mm.execute_sql_with_sqlxvalues(db_id, txn_id, &main_sql, main_sql_values)
+            .await
+            .map_err(|e| {
+                warn!(
+                    "{:<12} - 根据 plugin_id 更新主表 version 失败: {}",
+                    "SERVICE", e
+                );
+                PluginError::Database(format!(
+                    "根据 plugin_id 更新主表 version 失败: {}",
+                    e
+                ))
+            })?;
+        Ok(1)
+    }
+
+    /// 根据 plugin_id 删除表元数据
+    ///
+    /// 同时物理删除 cmx_meta_table_define 和 cmx_meta_table_define_version
+    /// 两个表中指定 plugin_id 对应的所有记录
+    pub async fn delete_by_plugin_id(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        plugin_id: &str,
+    ) -> PluginResult<u64> {
+        info!(
+            "{:<12} - TableMetadataService::delete_by_plugin_id - plugin_id: {}",
+            "SERVICE", plugin_id
+        );
+
+        // 先删除版本表 cmx_meta_table_define_version 中对应 plugin_id 的记录
+        let mut version_delete = Query::delete();
+        version_delete
+            .from_table("cmx_meta_table_define_version")
+            .and_where(Expr::col("plugin_id").eq(plugin_id));
+
+        let (version_sql, version_sql_values) = version_delete.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
+
+        mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
+            .await
+            .map_err(|e| {
+                warn!(
+                    "{:<12} - 根据 plugin_id 删除版本表记录失败: {}",
+                    "SERVICE", e
+                );
+                PluginError::Database(format!(
+                    "根据 plugin_id 删除版本表记录失败: {}",
+                    e
+                ))
+            })?;
+
+        // 再删除主表 cmx_meta_table_define 中对应 plugin_id 的记录
+        let mut main_delete = Query::delete();
+        main_delete
+            .from_table("cmx_meta_table_define")
+            .and_where(Expr::col("plugin_id").eq(plugin_id));
+
+        let (main_sql, main_sql_values) = main_delete.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
+
+        mm.execute_sql_with_sqlxvalues(db_id, txn_id, &main_sql, main_sql_values)
+            .await
+            .map_err(|e| {
+                warn!(
+                    "{:<12} - 根据 plugin_id 删除主表记录失败: {}",
+                    "SERVICE", e
+                );
+                PluginError::Database(format!(
+                    "根据 plugin_id 删除主表记录失败: {}",
+                    e
+                ))
+            })?;
+
+        info!(
+            "{:<12} - 根据 plugin_id 删除成功, plugin_id: {}",
+            "SERVICE", plugin_id
+        );
+
+        Ok(1)
     }
 
     /// 删除表元数据

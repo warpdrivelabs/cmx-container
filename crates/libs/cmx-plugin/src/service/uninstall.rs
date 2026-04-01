@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use cmx_database::get_default_db_manager;
 use crate::audit::logger::AuditLogger;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
@@ -142,6 +143,20 @@ impl UninstallService {
 
         // 步骤7: 物理删除 cmx_plugin 主表记录
         self.deps.repository.delete_plugin(&plugin_id).await?;
+
+        // 步骤7.1: 物理删除 cmx_meta_table_define 和 cmx_meta_table_define_version 对应 plugin_id 的数据
+        {
+            let dbm = get_default_db_manager();
+            let default_db_id = dbm.get_default_db_id().await;
+            crate::infrastructure::database::table_metadata::TableMetadataService::delete_by_plugin_id(
+                dbm,
+                default_db_id.as_str(),
+                None,
+                &plugin_id,
+            )
+            .await
+            .map_err(|e| PluginError::Database(format!("删除表元数据失败: {}", e)))?;
+        }
 
         // 步骤8: 清除缓存
         self.deps

@@ -129,7 +129,7 @@ pub async fn save_plugin_table_metadata(
                 module_code: moudule_code.clone(),
                 metadata: Some(serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null)),
             };
-            TableMetadataService::update(dbm,default_db_id.as_str(),txn_id,Value::String(table_define_primary_id),update_info).await?;
+            TableMetadataService::update(dbm,plugin_id,default_db_id.as_str(),txn_id,Value::String(table_define_primary_id),update_info).await?;
 
         }else{
             //不存在  新增

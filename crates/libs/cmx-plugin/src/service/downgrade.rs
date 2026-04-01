@@ -180,6 +180,20 @@ impl DowngradeService {
         };
         self.deps.repository.update_plugin(&plugin_id, &fields, Some(txn_guard.txn_id())).await?;
 
+        // 步骤6.1: 更新 cmx_meta_table_define  version 字段
+        {
+            let dbm = get_default_db_manager();
+            crate::infrastructure::database::table_metadata::TableMetadataService::update_version_by_plugin_id(
+                dbm,
+                default_db_id.as_str(),
+                Some(txn_guard.txn_id()),
+                &plugin_id,
+                &request.target_version,
+            )
+            .await
+            .map_err(|e| PluginError::Database(format!("更新表元数据 version 失败: {}", e)))?;
+        }
+
         // 步骤7: 更新注册表
         {
             let mut registry = self.deps.registry.write().await;

@@ -193,7 +193,7 @@ impl InstallService {
         if let Some(_node_deploment) = existing_deployment {
             let registry = self.deps.registry.read().await;
             if let Some(info) = registry.get(&plugin_id) {
-                if info.clone().version >= install_version {
+                if info.clone().version > install_version {
                     return Err(PluginError::Install(format!(
                         "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
                         plugin_id, info.version, install_version
