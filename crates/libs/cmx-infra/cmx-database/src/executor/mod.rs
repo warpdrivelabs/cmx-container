@@ -327,7 +327,7 @@ impl ResultConverter {
     }
 
     /// 从 PostgreSQL 行中获取值
-    fn get_postgres_value_from_row(row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
+    pub(crate) fn get_postgres_value_from_row(row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
@@ -361,7 +361,11 @@ impl ResultConverter {
                 .map(DataValue::Binary)
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("json") || type_name.contains("jsonb") {
-            // 处理 JSON 类型
+            // 处理 JSON/JSONB 类型 - 优先尝试直接获取 serde_json::Value
+            if let Ok(json_val) = row.try_get::<serde_json::Value, _>(index) {
+                return DataValue::Json(json_val.to_string());
+            }
+            // 如果失败，尝试作为 String 获取
             row.try_get::<String, _>(index)
                 .map(DataValue::Json)
                 .unwrap_or(DataValue::Null)
@@ -404,7 +408,7 @@ impl ResultConverter {
     }
 
     /// 从 MySQL 行中获取值
-    fn get_mysql_value_from_row(row: &sqlx::mysql::MySqlRow, index: usize) -> DataValue {
+    pub(crate) fn get_mysql_value_from_row(row: &sqlx::mysql::MySqlRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
@@ -483,7 +487,7 @@ impl ResultConverter {
     }
 
     /// 从 SQLite 行中获取值
-    fn get_sqlite_value_from_row(row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
+    pub(crate) fn get_sqlite_value_from_row(row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
@@ -551,7 +555,7 @@ impl ResultConverter {
     }
 
     /// 将 SQL 类型映射为 FieldType
-    fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo) -> FieldType {
+    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo) -> FieldType {
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
 

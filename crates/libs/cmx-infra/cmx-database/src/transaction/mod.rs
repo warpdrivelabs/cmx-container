@@ -11,7 +11,6 @@
 mod core;
 pub mod metadata;
 pub mod registry;
-mod conversion;
 mod api;
 pub mod txcontext;
 

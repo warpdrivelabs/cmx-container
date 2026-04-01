@@ -7,10 +7,9 @@
 
 use crate::connection::DbPool;
 use crate::error::{Error, Result};
-use crate::executor::{bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite};
+use crate::executor::{bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite, ResultConverter};
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
-use crate::transaction::conversion::TransactionConverter;
 use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
 use sea_query_binder::SqlxValues;
 use cmx_core::model::cell::DataValue;
@@ -557,15 +556,15 @@ impl DbTransaction {
         match self {
             DbTransaction::Postgres(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sql)).await?;
-                Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },
             DbTransaction::MySql(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sql)).await?;
-                Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             },
             DbTransaction::Sqlite(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sql)).await?;
-                Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
             },
         }
     }
@@ -583,7 +582,7 @@ impl DbTransaction {
                     query = bind_data_value_postgres(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
-                Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sql);
@@ -591,7 +590,7 @@ impl DbTransaction {
                     query = bind_data_value_mysql(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
-                Ok(self.convert_mysql_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             },
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sql);
@@ -599,7 +598,7 @@ impl DbTransaction {
                     query = bind_data_value_sqlite(query, param);
                 }
                 let rows = txn.fetch_all(query).await?;
-                Ok(self.convert_sqlite_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
             },
         }
     }
@@ -649,7 +648,7 @@ impl DbTransaction {
             DbTransaction::Postgres(txn) => {
                 let query = sqlx::query_with(sql, params);
                 let rows = txn.fetch_all(query).await?;
-                Ok(self.convert_postgres_rows_to_dataset(rows, dataset_id))
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },
             DbTransaction::MySql(_txn) => {
                 Err(sqlx::Error::Protocol("MySql not supported with sea-query yet".to_string()))
