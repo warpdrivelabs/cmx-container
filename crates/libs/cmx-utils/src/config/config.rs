@@ -68,7 +68,7 @@ impl ConfigBuilder {
             let path_buf = PathBuf::from(&path);
             let builder = self.inner.add_source(
                 config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
-                    .required(false),
+                    .required(true),
             );
             return ConfigBuilder { inner: builder };
         }

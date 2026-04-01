@@ -18,9 +18,9 @@ pub fn init_global_config() {
     info!("加载环境变量和配置文件信息...");
     ConfigManager::initialize(|| {
         ConfigBuilder::new()
-            .add_env()
-            .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
             .add_toml_file_from_env("CONFIG_FILE")
+            .add_env()
+            // .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
             .build()
     })
     .unwrap();
