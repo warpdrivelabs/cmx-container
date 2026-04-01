@@ -161,9 +161,7 @@ impl PluginRepository {
         if let Some(ref v) = fields.description {
             query.value("description", v.clone());
         }
-        if let Some(ref v) = fields.version {
-            query.value("version", v.clone());
-        }
+
         if let Some(ref v) = fields.wasm_path {
             query.value("wasm_path", v.clone());
         }

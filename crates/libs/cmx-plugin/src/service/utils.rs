@@ -31,14 +31,15 @@ pub async fn create_plugin_tables(
     version: &str,
     install_path: &Path,
     plugin_define:&PluginDefinition,
-    txn_id: Option<String>,
+    txn_id: Option<&str>,
 ) -> PluginResult<Vec<TableDefine>> {
     if plugin_define.table_config_files.clone().is_empty() {
         return Ok(Vec::new());
     }
 
     let mut table_config_manager = TableDefinesConfigManager::new();
-    let executor = PgTableDefineExecutor::new(db_id, txn_id.clone());
+    // let executor = PgTableDefineExecutor::new(db_id, txn_id.map(|s| s.to_string()));
+    let executor = PgTableDefineExecutor::new(db_id, None);
 
     for table_config_file in plugin_define.table_config_files.clone() {
         let config_path = install_path.join(table_config_file);
@@ -71,7 +72,8 @@ pub async fn create_plugin_tables(
             plugin_define.domain_code.clone(),
             plugin_define.application_code.clone(),
             plugin_define.module_code.clone(),
-            None,
+            txn_id,
+            None
         )
         .await
         {
@@ -102,6 +104,7 @@ pub async fn save_plugin_table_metadata(
     domain_code: Option<String>,
     application_code: Option<String>,
     moudule_code: Option<String>,
+    txn_id: Option<&str>,
     _operator: Option<&str>,
 ) -> PluginResult<()> {
     for table_def in table_defs {
@@ -126,7 +129,7 @@ pub async fn save_plugin_table_metadata(
                 module_code: moudule_code.clone(),
                 metadata: Some(serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null)),
             };
-            TableMetadataService::update(dbm,default_db_id.as_str(),Value::String(table_define_primary_id),update_info).await?;
+            TableMetadataService::update(dbm,default_db_id.as_str(),txn_id,Value::String(table_define_primary_id),update_info).await?;
 
         }else{
             //不存在  新增
@@ -141,7 +144,7 @@ pub async fn save_plugin_table_metadata(
                 metadata: serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
 
             };
-            TableMetadataService::create(dbm,default_db_id.as_str(),create_info).await?;
+            TableMetadataService::create(dbm,default_db_id.as_str(),txn_id,create_info).await?;
         }
     }
 

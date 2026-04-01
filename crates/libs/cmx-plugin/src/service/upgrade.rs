@@ -207,22 +207,25 @@ impl UpgradeService {
         self.package_utils
             .copy_plugin_files(&extract_path, &install_path, "升级")?;
 
-        let db_id = plugin.db_id.clone();
+        let target_db_id = plugin.db_id.clone();
+        
+        let default_db_id = self.deps.default_database_id.clone();
         //开启事务
         let txn_guard = get_default_db_manager()
             .get_transaction_context()
-            .begin_with_guard(db_id.clone().as_str())
+            .begin_with_guard(default_db_id.clone().as_str())
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
         // 步骤9: 创建数据库表
         crate::service::utils::create_plugin_tables(
-            &db_id,
+            &target_db_id,
             &plugin_id,
             &new_version,
             &install_path,
             &plugin_def,
-            None
+            Some(txn_guard.txn_id())
+
         )
         .await?;
 
@@ -233,7 +236,7 @@ impl UpgradeService {
             &plugin_def,
             &new_version,
             &install_path,
-            &db_id,
+            &target_db_id,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
         );

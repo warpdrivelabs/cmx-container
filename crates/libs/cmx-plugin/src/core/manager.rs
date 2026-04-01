@@ -415,6 +415,7 @@ impl PluginManager {
                 registry: registry.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 node_id: settings.node_id.clone(),
+                default_database_id: settings.default_database_id.clone(),
             },
         );
 

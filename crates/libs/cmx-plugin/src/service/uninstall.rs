@@ -4,17 +4,17 @@
 
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
-use crate::error::{PluginError, PluginResult};
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::deployment::DeploymentRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
-use crate::core::registry::PluginRegistry;
 use crate::core::context::PluginContext;
+use crate::core::registry::PluginRegistry;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::cache::layered::LayeredCacheManager;
+use crate::infrastructure::database::deployment::DeploymentRepository;
+use crate::infrastructure::database::repository::PluginRepository;
+use crate::infrastructure::database::version_history::VersionHistoryRepository;
+use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 
 /// 卸载请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,7 +100,9 @@ impl UninstallService {
         let version = plugin.version.clone();
 
         // 步骤2: 检查节点部署记录
-        let existing_deployment = self.deps.deployment_repository
+        let existing_deployment = self
+            .deps
+            .deployment_repository
             .find_deployment(&request.plugin_id, &self.deps.node_id, &version)
             .await?;
 
@@ -127,12 +129,14 @@ impl UninstallService {
         }
 
         // 步骤5: 物理删除 cmx_plugin_deployments 部署记录
-        self.deps.deployment_repository
+        self.deps
+            .deployment_repository
             .delete_deployments_by_plugin_id(&plugin_id, None)
             .await?;
 
         // 步骤6: 物理删除 cmx_plugin_versions 版本历史记录
-        self.deps.version_history_repository
+        self.deps
+            .version_history_repository
             .delete_versions_by_plugin_id(&plugin_id, None)
             .await?;
 
@@ -144,6 +148,14 @@ impl UninstallService {
             .cache
             .delete(&format!("plugin:{}", plugin_id))
             .await;
+
+        //移除物理安装目录
+        let install_path = &plugin.install_path;
+        if std::fs::remove_dir_all(install_path).is_ok() {
+            info!("删除插件安装目录成功: {}", install_path);
+        } else {
+            error!("删除插件安装目录失败: {}", install_path);
+        }
 
         // 步骤9: 记录审计日志
         let duration_ms = start_time.elapsed().as_millis() as i64;

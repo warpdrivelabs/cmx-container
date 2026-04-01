@@ -30,6 +30,7 @@ impl TableMetadataService {
     pub async fn create(
         mm: &DatabaseManager,
         db_id: &str,
+        txn_id: Option<&str>,
         data: TableMetadataForCreate,
     ) -> PluginResult<DataSet> {
         info!(
@@ -70,7 +71,7 @@ impl TableMetadataService {
         let (version_sql, version_sql_values) = version_query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
 
-        mm.execute_sql_with_sqlxvalues(db_id, None, &version_sql, version_sql_values)
+        mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
             .await
             .map_err(|e| {
                 warn!(
@@ -107,7 +108,7 @@ impl TableMetadataService {
         let (main_sql, main_sql_values) = main_query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
 
-        mm.execute_sql_with_sqlxvalues(db_id, None, &main_sql, main_sql_values)
+        mm.execute_sql_with_sqlxvalues(db_id, txn_id, &main_sql, main_sql_values)
             .await
             .map_err(|e| {
                 warn!(
@@ -305,6 +306,7 @@ impl TableMetadataService {
     pub async fn update(
         mm: &DatabaseManager,
         db_id: &str,
+        txn_id: Option<&str>,
         id: Value,
         data: TableMetadataForUpdate,
     ) -> PluginResult<DataSet> {
@@ -341,7 +343,7 @@ impl TableMetadataService {
             let (main_sql, main_sql_values) = main_query.build_sqlx(PostgresQueryBuilder);
             debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
 
-            mm.execute_sql_with_sqlxvalues(db_id, None, &main_sql, main_sql_values)
+            mm.execute_sql_with_sqlxvalues(db_id, txn_id, &main_sql, main_sql_values)
                 .await
                 .map_err(|e| {
                     warn!("{:<12} - 更新主表记录失败: {}", "SERVICE", e);
@@ -375,7 +377,7 @@ impl TableMetadataService {
                 let (version_sql, version_sql_values) = version_query.build_sqlx(PostgresQueryBuilder);
                 debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
 
-                mm.execute_sql_with_sqlxvalues(db_id, None, &version_sql, version_sql_values)
+                mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
                     .await
                     .map_err(|e| {
                         warn!("{:<12} - 更新版本表记录失败: {}", "SERVICE", e);
@@ -386,11 +388,14 @@ impl TableMetadataService {
                 let version_id = snowflake_id_str();
                 let mut version_fields =data.clone().not_none_sea_fields();
                 version_fields.push(SeaField::new("id", version_id));
-                if let Some(ref metadata) = data.metadata {
-                    version_fields.push(SeaField::new("metadata", metadata.clone()));
-                } else {
-                    version_fields.push(SeaField::new("metadata", serde_json::Value::Null));
-                }
+
+
+
+                // if let Some(ref metadata) = data.metadata {
+                //     version_fields.push(SeaField::new("metadata", metadata.clone()));
+                // } else {
+                //     version_fields.push(SeaField::new("metadata", serde_json::Value::Null));
+                // }
                 version_fields.push(SeaField::new("archived", record.archived));
                 version_fields.push(SeaField::new("create_time", now));
                 version_fields.push(SeaField::new("update_time", now));
@@ -408,7 +413,7 @@ impl TableMetadataService {
                 let (version_sql, version_sql_values) = version_insert.build_sqlx(PostgresQueryBuilder);
                 debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
 
-                mm.execute_sql_with_sqlxvalues(db_id, None, &version_sql, version_sql_values)
+                mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
                     .await
                     .map_err(|e| {
                         warn!("{:<12} - 创建版本表记录失败: {}", "SERVICE", e);

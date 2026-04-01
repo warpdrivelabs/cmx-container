@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-
+use cmx_database::get_default_db_manager;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
@@ -69,6 +69,9 @@ pub struct DowngradeServiceDeps {
     pub plugin_root: PathBuf,
     /// 节点ID
     pub node_id: String,
+    /// 默认数据库ID
+    pub default_database_id: String,
+
 }
 
 /// 降级服务
@@ -132,6 +135,15 @@ impl DowngradeService {
 
         let plugin_id = request.plugin_id.clone();
 
+
+        let default_db_id = self.deps.default_database_id.clone();
+        //开启事务
+        let txn_guard = get_default_db_manager()
+            .get_transaction_context()
+            .begin_with_guard(default_db_id.clone().as_str())
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
+
         // 步骤4: 更新 cmx_plugin_versions（使用原子操作）
         // 使用 set_current_version 会自动：
         // 1. 标记所有版本为非当前
@@ -143,28 +155,30 @@ impl DowngradeService {
                 &request.target_version,
                 &target_version_record.install_path,
                 &target_version_record.wasm_path,
-                None,
+                Some(txn_guard.txn_id()),
             )
             .await?;
 
-        // 步骤5: 更新 cmx_plugin_deployments 节点部署记录
-        if let Some(deployment) = existing_deployment {
-            let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateParams {
-                version: Some(request.target_version.clone()),
-                status: Some("deployed".to_string()),
-                ..Default::default()
-            };
-            self.deps.deployment_repository
-                .update_deployment(&deployment.id, &update_fields, None)
-                .await?;
-        }
+        // 步骤5: 更新 cmx_plugin_deployments 节点部署记录, fixme 不能更新，表里已经有旧版本的数据了
+        // if let Some(deployment) = existing_deployment {
+        //     let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateParams {
+        //         version: Some(request.target_version.clone()),
+        //         status: Some("deployed".to_string()),
+        //         ..Default::default()
+        //     };
+        //     self.deps.deployment_repository
+        //         .update_deployment(&deployment.id, &update_fields, Some(txn_guard.txn_id()))
+        //         .await?;
+        // }
 
         // 步骤6: 更新 cmx_plugin 主表
         let fields = crate::infrastructure::database::repository::PluginUpdateParams {
             version: Some(request.target_version.clone()),
+            wasm_path: Some(target_version_record.wasm_path.clone()),
+            install_path: Some(target_version_record.install_path.clone()),
             ..Default::default()
         };
-        self.deps.repository.update_plugin(&plugin_id, &fields, None).await?;
+        self.deps.repository.update_plugin(&plugin_id, &fields, Some(txn_guard.txn_id())).await?;
 
         // 步骤7: 更新注册表
         {
@@ -241,6 +255,11 @@ impl DowngradeService {
             ))
             .await;
 
+        //提交事务
+        txn_guard
+            .commit()
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
         Ok(DowngradeResponse {
             plugin_id,
             old_version,
@@ -251,20 +270,4 @@ impl DowngradeService {
     }
 }
 
-impl Default for DowngradeService {
-    fn default() -> Self {
-        use std::sync::Arc;
 
-        Self::new(DowngradeServiceDeps {
-            repository: Arc::new(PluginRepository::default()),
-            deployment_repository: Arc::new(DeploymentRepository::default()),
-            version_history_repository: Arc::new(VersionHistoryRepository::default()),
-            cache: Arc::new(LayeredCacheManager::default()),
-            event_bus: Arc::new(EventBus::new()),
-            audit_logger: Arc::new(AuditLogger::default()),
-            registry: Arc::new(tokio::sync::RwLock::new(PluginRegistry::new())),
-            plugin_root: PathBuf::from("./plugins"),
-            node_id: "default".to_string(),
-        })
-    }
-}

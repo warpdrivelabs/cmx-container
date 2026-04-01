@@ -193,6 +193,13 @@ impl InstallService {
         if let Some(_node_deploment) = existing_deployment {
             let registry = self.deps.registry.read().await;
             if let Some(info) = registry.get(&plugin_id) {
+                if info.clone().version >= install_version {
+                    return Err(PluginError::Install(format!(
+                        "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
+                        plugin_id, info.version, install_version
+                    )));
+                }
+
                 return Ok(InstallResponse {
                     plugin_id,
                     install_path:info.install_path.clone(),
@@ -272,15 +279,17 @@ impl InstallService {
             .copy_plugin_files(&extract_path, &install_path, "安装")?;
 
         // 步骤8: 创建插件数据库表
-        let db_id = request
+        let target_db_id = request
             .db_id
             .clone()
             .unwrap_or_else(|| self.deps.default_database_id.clone());
 
-        //开启事务
+        let default_db_id = self.deps.default_database_id.clone();
+
+        //开启事务 事务是针对默认表开启的
         let txn_guard = get_default_db_manager()
             .get_transaction_context()
-            .begin_with_guard(db_id.clone().as_str())
+            .begin_with_guard(default_db_id.clone().as_str())
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
@@ -291,12 +300,12 @@ impl InstallService {
             // 必须显式执行 ROLLBACK 才能退出这个状态
             // 所以ddl语句不要在事务中执行
             crate::service::utils::create_plugin_tables(
-                &db_id,
+                &target_db_id,
                 &plugin_id,
                 &install_version,
                 &install_path,
                 &plugin_def,
-                None
+                Some(txn_guard.txn_id())
             )
             .await?;
         }
@@ -308,7 +317,7 @@ impl InstallService {
             &plugin_def,
             &install_version,
             &install_path,
-            &db_id,
+            &target_db_id,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
         );
