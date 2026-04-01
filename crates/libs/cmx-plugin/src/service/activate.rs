@@ -619,7 +619,7 @@ impl ActivateService {
     async fn register_plugin_services(
         &self,
         plugin_id: &str,
-        plugin: &crate::infrastructure::database::repository::PluginDbRecord,
+        plugin: &crate::infrastructure::database::repository::PluginRecord,
     ) -> PluginResult<()> {
         if let Some(ref metadata) = plugin.metadata {
             if let Some(services) = metadata.get("services").and_then(|s| s.as_array()) {

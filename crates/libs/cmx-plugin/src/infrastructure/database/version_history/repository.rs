@@ -1,59 +1,23 @@
-//! 版本历史仓库模块
+//! 版本历史仓库
 //!
-//! 提供插件版本历史的增删改查操作
+//! 提供 `cmx_plugin_versions` 表的增删改查操作
 
 use chrono::{DateTime, Utc};
 use sea_query::{Alias, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 
+use super::model::{VersionCreateParams, VersionRecord, VersionUpdateParams};
 use crate::error::{PluginError, PluginResult};
-
-/// 版本历史记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VersionHistoryRecord {
-    pub id: String,
-    pub plugin_id: String,
-    pub version: String,
-    pub install_path: String,
-    pub wasm_path: String,
-    pub is_current: bool,
-    pub installed_at: DateTime<Utc>,
-    pub uninstalled_at: Option<DateTime<Utc>>,
-    pub zip_source_url: Option<String>,
-    pub zip_source_type: Option<String>,
-    pub plugin_type: Option<String>,
-    pub source_path: Option<String>,
-    pub create_time: DateTime<Utc>,
-    pub update_time: DateTime<Utc>,
-    pub archived: i32,
-    pub create_by: Option<String>,
-    pub create_name: Option<String>,
-    pub update_by: Option<String>,
-    pub update_name: Option<String>,
-}
-
-/// 版本历史更新字段（不含 WHERE 条件字段）
-#[derive(Debug, Clone, Default)]
-pub struct VersionHistoryUpdateFields {
-    pub install_path: Option<String>,
-    pub wasm_path: Option<String>,
-    pub is_current: Option<bool>,
-    pub uninstalled_at: Option<DateTime<Utc>>,
-    pub update_time: DateTime<Utc>,
-    pub create_by: Option<String>,
-    pub create_name: Option<String>,
-    pub update_by: Option<String>,
-    pub update_name: Option<String>,
-}
 
 /// 版本历史仓库
 pub struct VersionHistoryRepository {
+    /// 数据库管理器
     db_manager: Arc<DatabaseManager>,
+    /// 默认数据库ID
     default_db_id: String,
 }
 
@@ -72,7 +36,11 @@ impl VersionHistoryRepository {
     }
 
     /// 插入版本历史记录
-    pub async fn insert_version(&self, record: &VersionHistoryRecord, txn_id: Option<&str>) -> PluginResult<()> {
+    pub async fn insert_version(
+        &self,
+        record: &VersionCreateParams,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
         let mut query = Query::insert();
         query
             .into_table("cmx_plugin_versions")
@@ -123,7 +91,7 @@ impl VersionHistoryRepository {
     /// 使用 ON CONFLICT (plugin_id, version) DO UPDATE 实现 upsert 语义
     ///
     /// # 参数
-    /// - `record`: 版本历史记录
+    /// - `record`: 版本历史创建参数
     /// - `txn_id`: 事务ID
     ///
     /// # 返回
@@ -131,7 +99,7 @@ impl VersionHistoryRepository {
     /// - `Ok(false)`: 更新的记录
     pub async fn upsert_version(
         &self,
-        record: &VersionHistoryRecord,
+        record: &VersionCreateParams,
         txn_id: Option<&str>,
     ) -> PluginResult<bool> {
         let mut query = Query::insert();
@@ -220,7 +188,12 @@ impl VersionHistoryRepository {
     }
 
     /// 更新版本历史记录（通过主键 ID）
-    pub async fn update_version(&self, id: &str, fields: &VersionHistoryUpdateFields, txn_id: Option<&str>) -> PluginResult<()> {
+    pub async fn update_version(
+        &self,
+        id: &str,
+        fields: &VersionUpdateParams,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
         let mut query = Query::update();
         query.table("cmx_plugin_versions");
 
@@ -239,12 +212,18 @@ impl VersionHistoryRepository {
         if let Some(ref uninstalled_at) = fields.uninstalled_at {
             query.value("uninstalled_at", uninstalled_at.clone());
         }
-        if let Some(ref update_time) = fields.uninstalled_at {
+
+        if let Some(ref update_time) = fields.update_time {
             query.value("update_time", update_time.clone());
         }
 
-        query.value("update_by", fields.update_by.clone());
-        query.value("update_name", fields.update_name.clone());
+        if let Some(ref update_by) = fields.update_by {
+            query.value("update_by", update_by.clone());
+        }
+
+        if let Some(ref update_name) = fields.update_name {
+            query.value("update_name", update_name.clone());
+        }
 
         query.and_where(sea_query::Expr::col("id").eq(id));
 
@@ -259,7 +238,11 @@ impl VersionHistoryRepository {
     }
 
     /// 物理删除插件的所有版本历史记录
-    pub async fn delete_versions_by_plugin_id(&self, plugin_id: &str, txn_id: Option<&str>) -> PluginResult<()> {
+    pub async fn delete_versions_by_plugin_id(
+        &self,
+        plugin_id: &str,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
         let sql = "DELETE FROM cmx_plugin_versions WHERE plugin_id = $1";
         let params = serde_json::json!([plugin_id]);
 
@@ -272,11 +255,12 @@ impl VersionHistoryRepository {
     }
 
     /// 查询插件的版本历史
-    pub async fn list_versions(&self, plugin_id: &str) -> PluginResult<Vec<VersionHistoryRecord>> {
+    pub async fn list_versions(&self, plugin_id: &str) -> PluginResult<Vec<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 ORDER BY installed_at DESC";
         let params = serde_json::json!([plugin_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "version_history_list")
             .await
             .map_err(|e| PluginError::Database(format!("查询版本历史失败: {}", e)))?;
@@ -285,11 +269,16 @@ impl VersionHistoryRepository {
     }
 
     /// 查询指定版本
-    pub async fn find_version(&self, plugin_id: &str, version: &str) -> PluginResult<Option<VersionHistoryRecord>> {
+    pub async fn find_version(
+        &self,
+        plugin_id: &str,
+        version: &str,
+    ) -> PluginResult<Option<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND version = $2";
         let params = serde_json::json!([plugin_id, version]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "version_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询指定版本失败: {}", e)))?;
@@ -298,12 +287,22 @@ impl VersionHistoryRepository {
     }
 
     /// 获取当前基线版本（is_current=true 的版本）
-    pub async fn get_current_baseline(&self, plugin_id: &str) -> PluginResult<Option<VersionHistoryRecord>> {
+    pub async fn get_current_baseline(
+        &self,
+        plugin_id: &str,
+    ) -> PluginResult<Option<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND is_current = true";
         let params = serde_json::json!([plugin_id]);
 
-        let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "current_baseline_query")
+        let result = self
+            .db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "current_baseline_query",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("获取当前基线版本失败: {}", e)))?;
 
@@ -311,7 +310,11 @@ impl VersionHistoryRepository {
     }
 
     /// 将所有版本标记为非当前
-    pub async fn mark_all_not_current(&self, plugin_id: &str, txn_id: Option<&str>) -> PluginResult<()> {
+    pub async fn mark_all_not_current(
+        &self,
+        plugin_id: &str,
+        txn_id: Option<&str>,
+    ) -> PluginResult<()> {
         let mut query = Query::update();
         query.table("cmx_plugin_versions");
         query.value("is_current", false);
@@ -331,13 +334,6 @@ impl VersionHistoryRepository {
     ///
     /// 1. 将所有版本标记为非当前
     /// 2. 插入或更新指定版本为当前
-    ///
-    /// # 参数
-    /// - `plugin_id`: 插件ID
-    /// - `version`: 版本号
-    /// - `install_path`: 安装路径
-    /// - `wasm_path`: WASM文件路径
-    /// - `txn_id`: 事务ID
     pub async fn set_current_version(
         &self,
         plugin_id: &str,
@@ -346,20 +342,17 @@ impl VersionHistoryRepository {
         wasm_path: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        // 1. 标记所有版本为非当前
         self.mark_all_not_current(plugin_id, txn_id).await?;
 
-        // 2. 检查版本记录是否存在
         let existing = self.find_version(plugin_id, version).await?;
 
         if let Some(ref record) = existing {
-            // 3a. 更新现有记录为当前版本
-            let update_fields = VersionHistoryUpdateFields {
+            let update_fields = VersionUpdateParams {
                 install_path: Some(install_path.to_string()),
                 wasm_path: Some(wasm_path.to_string()),
                 is_current: Some(true),
                 uninstalled_at: None,
-                update_time: Utc::now(),
+                update_time: Some(Utc::now()),
                 create_by: None,
                 create_name: None,
                 update_by: None,
@@ -367,8 +360,7 @@ impl VersionHistoryRepository {
             };
             self.update_version(&record.id, &update_fields, txn_id).await?;
         } else {
-            // 3b. 插入新版本记录（此时没有来源信息，来源信息应在插入时由调用方提供）
-            let record = VersionHistoryRecord {
+            let record = VersionCreateParams {
                 id: uuid::Uuid::new_v4().to_string(),
                 plugin_id: plugin_id.to_string(),
                 version: version.to_string(),
@@ -395,17 +387,19 @@ impl VersionHistoryRepository {
         Ok(())
     }
 
-    /// 解析版本历史记录
-    fn parse_version_record(dataset: &DataSet) -> PluginResult<Vec<VersionHistoryRecord>> {
+    /// 解析版本历史记录（从 DataSet 转换为 VersionRecord）
+    fn parse_version_record(dataset: &DataSet) -> PluginResult<Vec<VersionRecord>> {
         let mut records = Vec::new();
         let schema = dataset.schema.as_ref();
 
         for row in dataset.iter() {
-            let get_datetime_default = |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
-                row.get_by_name_as(schema, col_name).unwrap_or_else(default_fn)
-            };
+            let get_datetime_default =
+                |col_name: &str, default_fn: fn() -> DateTime<Utc>| -> DateTime<Utc> {
+                    row.get_by_name_as(schema, col_name)
+                        .unwrap_or_else(default_fn)
+                };
 
-            let record = VersionHistoryRecord {
+            let record = VersionRecord {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),

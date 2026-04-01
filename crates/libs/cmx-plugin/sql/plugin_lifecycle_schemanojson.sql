@@ -41,7 +41,8 @@ CREATE TABLE cmx_plugin (
     update_by           VARCHAR(100),
     update_name         VARCHAR(100),
     plugin_type         VARCHAR(50),
-    source_path         TEXT
+    source_path         varchar(500),
+    description         TEXT
 );
 COMMENT ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
 
@@ -75,11 +76,14 @@ COMMENT ON COLUMN cmx_plugin.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_plugin.update_name IS '更新人名称';
 COMMENT ON COLUMN cmx_plugin.plugin_type IS '插件类型: wasm/rhai';
 COMMENT ON COLUMN cmx_plugin.source_path IS '源码路径';
+COMMENT ON COLUMN cmx_plugin.description IS '插件描述信息';
 
 CREATE INDEX idx_plugin_system ON cmx_plugin(is_system);
 CREATE INDEX idx_plugin_db_id ON cmx_plugin(db_id);
 CREATE INDEX idx_plugin_domain_app_module ON cmx_plugin(domain_code, application_code, module_code);
-
+-- CREATE UNIQUE INDEX uk_cmx_plugin_plugin_id ON cmx_plugin(plugin_id);
+-- cmx_plugin 表添加唯一约束
+ALTER TABLE cmx_plugin ADD CONSTRAINT uk_cmx_plugin_plugin_id UNIQUE (plugin_id);
 
 -- =============================================
 -- 3.3.2 版本历史表 (cmx_plugin_versions)
@@ -104,7 +108,9 @@ CREATE TABLE cmx_plugin_versions (
     update_by           VARCHAR(100),
     update_name         VARCHAR(100),
     plugin_type         VARCHAR(50),
-    source_path         TEXT
+    source_path         varchar(500)
+
+
 );
 
 COMMENT ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
@@ -129,7 +135,9 @@ COMMENT ON COLUMN cmx_plugin_versions.source_path IS '源码路径';
 
 CREATE INDEX idx_version_plugin ON cmx_plugin_versions(plugin_id);
 CREATE INDEX idx_version_current ON cmx_plugin_versions(plugin_id, is_current) WHERE is_current = TRUE;
-
+-- CREATE UNIQUE INDEX uk_cmx_plugin_versions_plugin_version ON cmx_plugin_versions(plugin_id,version);
+-- cmx_plugin_versions 表添加复合唯一约束
+ALTER TABLE cmx_plugin_versions ADD CONSTRAINT uk_cmx_plugin_versions_plugin_version UNIQUE (plugin_id, version);
 
 -- =============================================
 -- 3.3.3 依赖关系表 (cmx_plugin_dependencies)
@@ -225,6 +233,9 @@ COMMENT ON COLUMN cmx_plugin_deployments.source_path IS '源码路径';
 CREATE INDEX idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
 CREATE INDEX idx_deploy_node ON cmx_plugin_deployments(node_id);
 CREATE INDEX idx_deploy_status ON cmx_plugin_deployments(status);
+-- CREATE UNIQUE INDEX uk_cmx_plugin_deployments_plugin_node_version ON cmx_plugin_deployments(plugin_id,node_id,version);
+-- cmx_plugin_deployments 表添加复合唯一约束
+ALTER TABLE cmx_plugin_deployments ADD CONSTRAINT uk_cmx_plugin_deployments_plugin_node_version UNIQUE (plugin_id, node_id, version);
 
 
 -- =============================================
@@ -606,11 +617,6 @@ COMMENT ON COLUMN cmx_meta_table_define_version.update_name IS '更新人名称'
 -- 唯一约束（并发安全）
 -- =============================================
 
--- cmx_plugin 表添加唯一约束
-ALTER TABLE cmx_plugin ADD CONSTRAINT uk_cmx_plugin_plugin_id UNIQUE (plugin_id);
 
--- cmx_plugin_versions 表添加复合唯一约束
-ALTER TABLE cmx_plugin_versions ADD CONSTRAINT uk_cmx_plugin_versions_plugin_version UNIQUE (plugin_id, version);
 
--- cmx_plugin_deployments 表添加复合唯一约束
-ALTER TABLE cmx_plugin_deployments ADD CONSTRAINT uk_cmx_plugin_deployments_plugin_node_version UNIQUE (plugin_id, node_id, version);
+

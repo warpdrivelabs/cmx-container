@@ -229,7 +229,7 @@ impl UpgradeService {
         // 步骤10: 保存数据库记录
         // 使用辅助函数构建记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
-        let db_record = super::record_builder::build_plugin_db_record(
+        let db_record = super::record_builder::build_plugin_create_params(
             &plugin_def,
             &new_version,
             &install_path,
@@ -246,7 +246,7 @@ impl UpgradeService {
 
         // 步骤10.2: 插入 cmx_plugin_versions 版本历史记录（包含来源信息）
         let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
-        let version_record = super::record_builder::build_version_record(
+        let version_record = super::record_builder::build_version_create_params(
             &plugin_id,
             &new_version,
             &install_path.to_string_lossy(),
@@ -269,12 +269,12 @@ impl UpgradeService {
             .version_history_repository
             .update_version(
                 &version_record.id,
-                &crate::infrastructure::database::version_history::VersionHistoryUpdateFields {
+                &crate::infrastructure::database::version_history::VersionUpdateParams {
                     install_path: Some(install_path.to_string_lossy().to_string()),
                     wasm_path: Some(wasm_path),
                     is_current: Some(true),
                     uninstalled_at: None,
-                    update_time: chrono::Utc::now(),
+                    update_time: Some(chrono::Utc::now()),
                     create_by: None,
                     create_name: None,
                     update_by: None,
@@ -295,7 +295,7 @@ impl UpgradeService {
         if existing_deployment_for_new_version.is_none() {
             // 节点上没有新版本的部署记录，插入新记录
             // 注意：同一插件可以在一个节点上安装多个版本，所以这里只插入不更新旧版本
-            let deployment_record = super::record_builder::build_deployment_record(
+            let deployment_record = super::record_builder::build_deployment_create_params(
                 &plugin_id,
                 &self.deps.node_id,
                 self.deps.node_type.as_deref(),
@@ -323,7 +323,7 @@ impl UpgradeService {
             id: plugin_id.clone(),
             name: plugin_def.name.clone(),
             version: new_version.clone(),
-            description: None,
+            description: plugin_def.description.clone(),
             author: None,
             source: request.source.clone(),
             status: crate::domain::plugin::PluginStatus::Installed,

@@ -677,7 +677,7 @@ impl PluginManager {
                 id: record.plugin_id,
                 name: record.name,
                 version: record.version,
-                description: None,
+                description: record.description,
                 author: record.vendor_name,
                 source: PluginSource::Local {
                     path: PathBuf::from(&record.install_path),

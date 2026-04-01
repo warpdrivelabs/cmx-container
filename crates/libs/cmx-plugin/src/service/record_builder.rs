@@ -8,11 +8,11 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::PluginDefinition;
-use crate::infrastructure::database::deployment::DeploymentRecord;
-use crate::infrastructure::database::repository::PluginDbRecord;
-use crate::infrastructure::database::version_history::VersionHistoryRecord;
+use crate::infrastructure::database::deployment::DeploymentCreateParams;
+use crate::infrastructure::database::plugin::PluginCreateParams;
+use crate::infrastructure::database::version_history::VersionCreateParams;
 
-/// 构建插件数据库记录
+/// 构建插件创建参数
 ///
 /// # 参数
 /// - `plugin_def`: 插件定义
@@ -23,19 +23,20 @@ use crate::infrastructure::database::version_history::VersionHistoryRecord;
 /// - `zip_source_type`: 插件来源类型
 ///
 /// # 返回
-/// 插件数据库记录
-pub fn build_plugin_db_record(
+/// 插件创建参数（仅数据库列字段，不含 JOIN 补充字段）
+pub fn build_plugin_create_params(
     plugin_def: &PluginDefinition,
     version: &str,
     install_path: &Path,
     db_id: &str,
     zip_source_url: Option<&str>,
     zip_source_type: Option<&str>,
-) -> PluginDbRecord {
-    PluginDbRecord {
+) -> PluginCreateParams {
+    PluginCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_def.id.clone(),
         name: plugin_def.name.clone(),
+        description: plugin_def.description.clone(),
         version: version.to_string(),
         wasm_path: install_path
             .join(&plugin_def.main_file)
@@ -49,9 +50,6 @@ pub fn build_plugin_db_record(
         domain_code: plugin_def.domain_code.clone(),
         application_code: plugin_def.application_code.clone(),
         module_code: plugin_def.module_code.clone(),
-        domain_name: None,
-        application_name: None,
-        module_name: None,
         vendor_name: plugin_def.vendor_name.clone(),
         vendor_url: plugin_def.vendor_url.clone(),
         vendor_contact: plugin_def.vendor_contact.clone(),
@@ -72,7 +70,7 @@ pub fn build_plugin_db_record(
     }
 }
 
-/// 构建版本历史记录
+/// 构建版本历史创建参数
 ///
 /// # 参数
 /// - `plugin_id`: 插件ID
@@ -84,19 +82,20 @@ pub fn build_plugin_db_record(
 /// - `plugin_def`: 插件定义（用于获取 plugin_type 和 source_path）
 ///
 /// # 返回
-/// 版本历史记录
-pub fn build_version_record(
+/// 版本历史创建参数
+pub fn build_version_create_params(
     plugin_id: &str,
     version: &str,
     install_path: &str,
     wasm_path: &str,
     zip_source_url: Option<&str>,
     zip_source_type: Option<&str>,
-    plugin_def: Option<&crate::PluginDefinition>,
-) -> VersionHistoryRecord {
+    plugin_def: Option<&PluginDefinition>,
+) -> VersionCreateParams {
     let plugin_type = plugin_def.map(|d| d.r#type.clone());
     let source_path = plugin_def.and_then(|d| d.source_path.clone());
-    VersionHistoryRecord {
+    let description = plugin_def.and_then(|d| d.description.clone());
+    VersionCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),
         version: version.to_string(),
@@ -119,7 +118,7 @@ pub fn build_version_record(
     }
 }
 
-/// 构建部署记录
+/// 构建部署创建参数
 ///
 /// # 参数
 /// - `plugin_id`: 插件ID
@@ -128,14 +127,14 @@ pub fn build_version_record(
 /// - `version`: 版本号
 ///
 /// # 返回
-/// 部署记录
-pub fn build_deployment_record(
+/// 部署创建参数
+pub fn build_deployment_create_params(
     plugin_id: &str,
     node_id: &str,
     node_type: Option<&str>,
     version: &str,
-) -> DeploymentRecord {
-    DeploymentRecord {
+) -> DeploymentCreateParams {
+    DeploymentCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),
         node_id: node_id.to_string(),
@@ -143,15 +142,13 @@ pub fn build_deployment_record(
         version: version.to_string(),
         status: "deployed".to_string(),
         progress: 100,
-        error_message: None,
-        error_details: None,
         archived: 0,
+        plugin_type: None,
+        source_path: None,
         create_by: None,
         create_name: None,
         update_by: None,
         update_name: None,
-        create_time: Utc::now(),
-        update_time: Utc::now(),
     }
 }
 

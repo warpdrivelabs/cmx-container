@@ -324,11 +324,12 @@ pub async fn plugin_deploy(
 }
 
 /// 将 PluginDbRecord 转换为 PluginInfoResponse
-fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::repository::PluginDbRecord) -> PluginInfoResponse {
+fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::repository::PluginRecord) -> PluginInfoResponse {
     PluginInfoResponse {
         id: record.id,
         plugin_id: record.plugin_id,
         name: record.name,
+        description: record.description,
         version: record.version,
         wasm_path: if record.wasm_path.is_empty() { None } else { Some(record.wasm_path) },
         install_path: record.install_path,
@@ -378,6 +379,7 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         id: String::new(),
         plugin_id: info.id.clone(),
         name: info.name.clone(),
+        description: info.description.clone(),
         version: info.version.clone(),
         wasm_path: None,
         install_path: info.install_path.to_string_lossy().to_string(),

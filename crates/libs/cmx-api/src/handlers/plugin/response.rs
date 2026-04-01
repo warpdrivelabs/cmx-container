@@ -16,6 +16,8 @@ pub struct PluginInfoResponse {
     pub plugin_id: String,
     /// 插件名称
     pub name: String,
+    /// 插件描述
+    pub  description: Option<String>,
     /// 版本
     pub version: String,
     /// WASM 文件路径

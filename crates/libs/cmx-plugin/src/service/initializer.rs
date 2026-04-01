@@ -353,7 +353,7 @@ impl PluginInitializer {
                 id: record.plugin_id.clone(),
                 name: record.name.clone(),
                 version: record.version.clone(),
-                description: None,
+                description: record.description.clone(),
                 author: record.vendor_name.clone(),
                 source,
                 status: PluginStatus::Installed,

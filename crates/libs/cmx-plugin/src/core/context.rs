@@ -67,7 +67,7 @@ impl PluginContext {
     }
 
     /// 从数据库记录创建上下文
-    pub fn from_db_record(record: &crate::infrastructure::database::repository::PluginDbRecord) -> Self {
+    pub fn from_db_record(record: &crate::infrastructure::database::plugin::PluginRecord) -> Self {
         Self {
             plugin_id: record.plugin_id.clone(),
             version: record.version.clone(),

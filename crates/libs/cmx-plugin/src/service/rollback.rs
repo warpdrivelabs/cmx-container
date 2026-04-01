@@ -270,13 +270,13 @@ impl RollbackService {
             .repository
             .update_plugin(
                 &request.plugin_id,
-                &crate::infrastructure::database::repository::PluginUpdateFields {
-                    version: to_version.clone(),
-                    status: if request.auto_activate || was_activated {
+                &crate::infrastructure::database::repository::PluginUpdateParams {
+                    version: Some(to_version.clone()),
+                    status: Some(if request.auto_activate || was_activated {
                         "activated".to_string()
                     } else {
                         "installed".to_string()
-                    },
+                    }),
                     ..Default::default()
                 },
                 None,

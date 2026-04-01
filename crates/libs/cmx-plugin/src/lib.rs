@@ -70,7 +70,7 @@ pub use service::deploy::{DeployAction, DeployRequest, DeployResponse};
 
 // 导出基础设施模块类型
 pub use infrastructure::database::schema::SchemaManager;
-pub use infrastructure::database::repository::PluginRepository;
+pub use infrastructure::database::plugin::PluginRepository;
 pub use infrastructure::database::migration::{MigrationManager, MigrationStatus};
 pub use infrastructure::cache::memory::MemoryCache;
 pub use infrastructure::cache::layered::{LayeredCacheManager, CacheValue, CacheStrategy};
