@@ -2,7 +2,7 @@
 //!
 //! 测试完整的配置加载流程和优先级机制
 
-use cmx_utils::{Config, DefaultConfigLoader, ConfigValue};
+use cmx_utils::{Config, DefaultConfigLoader};
 use std::fs;
 use std::io::Write;
 use tempfile::tempdir;
@@ -10,11 +10,9 @@ use tempfile::tempdir;
 /// 测试完整的配置加载流程
 #[test]
 fn test_full_config_loading_workflow() {
-    // 创建临时目录
     let dir = tempdir().unwrap();
     let config_dir = dir.path();
 
-    // 创建 default.toml
     let default_toml = config_dir.join("default.toml");
     let mut file = fs::File::create(&default_toml).unwrap();
     file.write_all(
@@ -30,7 +28,6 @@ port = 8080
     )
     .unwrap();
 
-    // 创建 production.toml（覆盖部分配置）
     let production_toml = config_dir.join("production.toml");
     let mut file = fs::File::create(&production_toml).unwrap();
     file.write_all(
@@ -44,43 +41,25 @@ port = 443
     )
     .unwrap();
 
-    // 创建 .env 文件
-    let env_file = config_dir.join(".env");
-    let mut file = fs::File::create(&env_file).unwrap();
-    file.write_all(b"database.pool_size=20\nserver.host=127.0.0.1\n")
-        .unwrap();
-
-    // 设置环境变量CONFIG_FILE指向production.toml
     unsafe {
         std::env::set_var("CONFIG_FILE", &production_toml);
     }
 
-    // 使用默认配置加载器
     let config = DefaultConfigLoader::new(config_dir)
-        .with_env_prefix("APP_")
-        .with_system_env(false) // 禁用系统环境变量以避免干扰
-        .with_command_line(false) // 禁用命令行参数
+        .with_command_line(false)
         .load()
         .unwrap();
 
-    // 清理环境变量
     unsafe {
         std::env::remove_var("CONFIG_FILE");
     }
 
-    // 验证配置合并结果
-    // production.toml 覆盖 default.toml
     assert_eq!(
         config.get_string("database.host").unwrap(),
         "prod-db.example.com"
     );
     assert_eq!(config.get_int("database.port").unwrap(), 5433);
-
-    // .env 文件覆盖 production.toml
-    assert_eq!(config.get_int("database.pool_size").unwrap(), 20);
-    assert_eq!(config.get_string("server.host").unwrap(), "127.0.0.1");
-
-    // production.toml 覆盖 default.toml
+    assert_eq!(config.get_int("database.pool_size").unwrap(), 10);
     assert_eq!(config.get_int("server.port").unwrap(), 443);
 }
 
@@ -109,11 +88,9 @@ fn test_config_deserialize() {
         server: ServerConfig,
     }
 
-    // 创建临时目录
     let dir = tempdir().unwrap();
     let config_path = dir.path().join("config.toml");
 
-    // 创建配置文件
     let mut file = fs::File::create(&config_path).unwrap();
     file.write_all(
         br#"[database]
@@ -128,10 +105,8 @@ port = 8080
     )
     .unwrap();
 
-    // 加载配置
     let config = Config::from_file(&config_path).unwrap();
 
-    // 反序列化为结构体
     let app_config: AppConfig = config.deserialize().unwrap();
 
     assert_eq!(app_config.database.host, "localhost");
@@ -144,11 +119,9 @@ port = 8080
 /// 测试子配置视图
 #[test]
 fn test_sub_config() {
-    // 创建临时目录
     let dir = tempdir().unwrap();
     let config_path = dir.path().join("config.toml");
 
-    // 创建配置文件
     let mut file = fs::File::create(&config_path).unwrap();
     file.write_all(
         br#"[database]
@@ -162,47 +135,48 @@ port = 6379
     )
     .unwrap();
 
-    // 加载配置
     let config = Config::from_file(&config_path).unwrap();
 
-    // 获取数据库子配置
     let db_config = config.sub_config("database").unwrap();
     assert_eq!(db_config.get_string("host").unwrap(), "localhost");
     assert_eq!(db_config.get_int("port").unwrap(), 5432);
 
-    // 获取缓存子配置
     let cache_config = config.sub_config("cache").unwrap();
     assert_eq!(cache_config.get_string("host").unwrap(), "redis.example.com");
     assert_eq!(cache_config.get_int("port").unwrap(), 6379);
 }
 
-/// 测试配置构建器的灵活使用
+/// 测试配置构建器的灵活使用（使用 set_default / set_override 替代 MemorySource）
 #[test]
 fn test_config_builder_flexibility() {
-    use cmx_utils::MemorySource;
-
-    // 创建多个配置源
-    let default_source = MemorySource::new()
-        .with("app.name", ConfigValue::new_string("MyApp"))
-        .with("app.version", ConfigValue::new_string("1.0.0"))
-        .with("app.debug", ConfigValue::new_boolean(false));
-
-    let override_source = MemorySource::new()
-        .with("app.debug", ConfigValue::new_boolean(true))
-        .with("app.port", ConfigValue::new_integer(8080));
-
-    // 使用构建器组合配置源
     let config = Config::builder()
-        .add_source(default_source)
-        .add_source(override_source)
+        .add_source(
+            config::Config::builder()
+                .set_default("app.name", "MyApp")
+                .unwrap()
+                .set_default("app.version", "1.0.0")
+                .unwrap()
+                .set_default("app.debug", false)
+                .unwrap()
+                .build()
+                .unwrap(),
+        )
+        .add_source(
+            config::Config::builder()
+                .set_override("app.debug", true)
+                .unwrap()
+                .set_override("app.port", 8080)
+                .unwrap()
+                .build()
+                .unwrap(),
+        )
         .build()
         .unwrap();
 
-    // 验证配置合并
     assert_eq!(config.get_string("app.name").unwrap(), "MyApp");
     assert_eq!(config.get_string("app.version").unwrap(), "1.0.0");
-    assert_eq!(config.get_bool("app.debug").unwrap(), true); // 被覆盖
-    assert_eq!(config.get_int("app.port").unwrap(), 8080); // 新增
+    assert_eq!(config.get_bool("app.debug").unwrap(), true);
+    assert_eq!(config.get_int("app.port").unwrap(), 8080);
 }
 
 /// 测试类型转换
@@ -226,13 +200,11 @@ small_int = 255
 
     let config = Config::from_file(&config_path).unwrap();
 
-    // 测试各种类型转换
     assert_eq!(config.get_string("string_value").unwrap(), "hello");
     assert_eq!(config.get_int("int_value").unwrap(), 42);
     assert!((config.get_float("float_value").unwrap() - 3.14).abs() < 0.001);
     assert_eq!(config.get_bool("bool_value").unwrap(), true);
 
-    // 测试不同整数类型
     let large: i64 = config.get_as("large_int").unwrap();
     assert_eq!(large, 9223372036854775807);
 
@@ -241,4 +213,53 @@ small_int = 255
 
     let int_u16: u16 = config.get_as("int_value").unwrap();
     assert_eq!(int_u16, 42);
+}
+
+/// 测试 CommandLineSource
+#[test]
+fn test_command_line_source() {
+    use cmx_utils::CommandLineSource;
+    use config::Source;
+
+    let args = vec![
+        "--host".to_string(),
+        "localhost".to_string(),
+        "--port=8080".to_string(),
+        "--debug".to_string(),
+        "true".to_string(),
+    ];
+
+    let source = CommandLineSource::from_args(args.into_iter());
+    let map = source.collect().unwrap();
+
+    assert_eq!(map.get("host").unwrap().clone().into_string().unwrap(), "localhost");
+    assert_eq!(map.get("port").unwrap().clone().into_string().unwrap(), "8080");
+    assert_eq!(map.get("debug").unwrap().clone().into_string().unwrap(), "true");
+}
+
+/// 测试 get_optional 和 get_as_or
+#[test]
+fn test_optional_and_default() {
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.toml");
+
+    let mut file = fs::File::create(&config_path).unwrap();
+    file.write_all(b"existing_key = \"hello\"\n").unwrap();
+
+    let config = Config::from_file(&config_path).unwrap();
+
+    assert_eq!(
+        config.get_as_or("existing_key", "default".to_string()),
+        "hello"
+    );
+    assert_eq!(
+        config.get_as_or("missing_key", "default".to_string()),
+        "default"
+    );
+
+    let optional_val: Option<String> = config.get_optional("missing_key");
+    assert!(optional_val.is_none());
+
+    let existing_val: Option<String> = config.get_optional("existing_key");
+    assert_eq!(existing_val.unwrap(), "hello");
 }

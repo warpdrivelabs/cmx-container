@@ -9,24 +9,18 @@
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
 use cmx_database::{get_default_db_manager, DbConfig};
-use cmx_utils::{
-    CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult, ConfigValue,
-    FromConfigValue, Priority,
-};
+use cmx_utils::{CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use tracing::{error, info};
 
 pub fn init_global_config() {
     info!("加载环境变量和配置文件信息...");
-    //初始化配置管理器
     ConfigManager::initialize(|| {
         ConfigBuilder::new()
-            // 添加.env支持
             .add_env()
-            // 添加命令行参数
             .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
-            .add_toml_file_from_env("CONFIG_FILE", Priority(10))
+            .add_toml_file_from_env("CONFIG_FILE")
             .build()
     })
     .unwrap();
@@ -35,7 +29,7 @@ pub fn init_global_config() {
         if "Path" == key {
             continue;
         }
-        info!("{:?}: {:?}", key, ConfigManager::global().get_string(key));
+        info!("{:?}: {:?}", key, ConfigManager::global().get(&key));
     }
 }
 
@@ -55,11 +49,10 @@ pub fn web_config() -> &'static WebConfig {
 }
 
 /// Web 服务器配置结构
-#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 pub struct WebConfig {
     /// Web 静态文件目录
-    pub WEB_FOLDER: String,
+    pub web_folder: String,
 }
 
 impl WebConfig {
@@ -67,10 +60,10 @@ impl WebConfig {
     ///
     /// # 返回值
     fn load_from_env() -> ConfigResult<WebConfig> {
-        let result = ConfigManager::global().get_string("WEB_FOLDER");
+        let result = ConfigManager::global().get_string("web_folder");
 
         match result {
-            Ok(value) => Ok(WebConfig { WEB_FOLDER: value }),
+            Ok(value) => Ok(WebConfig { web_folder: value }),
             Err(ex) => Err(ex),
         }
     }
@@ -82,8 +75,7 @@ impl WebConfig {
 pub async fn init_db_datasource() {
     let config = ConfigManager::global();
 
-    // 从配置管理器获取 databases 配置
-    let configs: Vec<ConfigValue> = match config.get_as("databases") {
+    let configs: Vec<DbConfig> = match config.get_as("databases") {
         Ok(configs) => configs,
         Err(e) => {
             error!("无法从配置管理器获取 databases 配置: {:?}", e);
@@ -93,11 +85,9 @@ pub async fn init_db_datasource() {
 
     info!("成功解析到 {} 个数据源配置", configs.len());
 
-    // 获取默认数据库管理器并注册数据源
     let db_manager = get_default_db_manager();
 
-    for config in &configs {
-        let db_config = DbConfig::from_config_value(config).unwrap();
+    for db_config in &configs {
         match db_manager.register_data_source(db_config.clone()).await {
             Ok(_) => {
                 info!(
@@ -118,7 +108,7 @@ pub async fn init_db_datasource() {
 ///
 pub async fn init_cache() {
     let config = ConfigManager::global();
-    match config.get("redis.url") {
+    let _url_value = match config.get("redis.url") {
         Some(url_value) => url_value,
         None => {
             error!("无法从配置管理器获取 redis 配置");

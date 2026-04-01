@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
         ;
     // 应用剩余的中间件并添加静态文件服务
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
-        tower_http::services::ServeDir::new(&web_config.WEB_FOLDER),
+        tower_http::services::ServeDir::new(&web_config.web_folder),
     ));
 
     // 绑定 TCP 监听器
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
     info!("🚀 {:<44} 🚀", "Web 服务器启动成功");
     info!("{}", "=".repeat(60));
     info!("   监听地址：{:?}", listener.local_addr().unwrap());
-    info!("   静态文件目录：{}", web_config.WEB_FOLDER);
+    info!("   静态文件目录：{}", web_config.web_folder);
     info!("   日志目录：{}", log_dir);
     info!("{}", "-".repeat(60));
 

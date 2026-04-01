@@ -12,8 +12,6 @@ serde_json = { workspace = true }
 base64 = "0.22"
 # thiserror: 错误处理
 thiserror = { workspace = true }
-# toml: TOML 解析
-toml = "0.8"
 # zip: ZIP 压缩/解压
 zip = "2.2"
 # walkdir: 目录遍历
@@ -25,10 +23,12 @@ rand = "0.8"
 
 time = { workspace = true }
 uuid = { workspace = true ,features = ["v4","fast-rng"]}
-
-tracing ={workspace = true}
+#配置管理
+config = { workspace = true }
+# dotenvy: .env 文件加载
+dotenvy = { workspace = true }
+tracing = { workspace = true }
 [dev-dependencies]
 # tempfile: 临时文件测试
 tempfile = "3"
-#配置管理
-config={ workspace = true }
+

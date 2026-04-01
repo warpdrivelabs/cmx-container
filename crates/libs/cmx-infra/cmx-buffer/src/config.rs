@@ -140,51 +140,6 @@ impl Default for RedisConfig {
     }
 }
 
-// /// 从 ConfigValue 转换为 DbConfig
-// impl FromConfigValue for RedisConfig {
-//     fn from_config_value(value: &ConfigValue) -> ConfigResult<Self> {
-//         match value {
-//             ConfigValue::Object(map) => {
-//                 let url: String = map.get("url").unwrap().try_into_type()?;
-//                 let pool_size: i64 = map
-//                     .get("pool_size")
-//                     .unwrap_or(&ConfigValue::from(default_pool_size() as i64))
-//                     .try_into_type()?;
-//                 let connection_timeout: i64 = map
-//                     .get("connection_timeout")
-//                     .unwrap_or(&ConfigValue::from(default_connection_timeout() as i64))
-//                     .try_into_type()?;
-//                 let operation_timeout: i64 = map
-//                     .get("operation_timeout")
-//                     .unwrap_or(&ConfigValue::from(default_operation_timeout() as i64))
-//                     .try_into_type()?;
-//                 let min_idle: i64 = map
-//                     .get("min_idle")
-//                     .unwrap_or(&ConfigValue::from(default_min_idle().unwrap() as i64))
-//                     .try_into_type()?;
-//                 let max_idle_time: i64 = map
-//                     .get("max_idle_time")
-//                     .unwrap_or(&ConfigValue::from(default_max_idle_time().unwrap() as i64))
-//                     .try_into_type()?;
-//
-//                 Ok(RedisConfig {
-//                     url: url.into(),
-//                     pool_size: pool_size as usize,
-//                     connection_timeout: connection_timeout as u64,
-//                     operation_timeout: operation_timeout as u64,
-//                     key_prefix: default_key_prefix(),
-//                     min_idle: Some(min_idle as usize),
-//                     max_idle_time: Some(max_idle_time as u64),
-//                 })
-//             }
-//             _ => Err(ConfigError::TypeConversionError {
-//                 key: "url".to_string(),
-//                 target_type: "RedisConfig".to_string(),
-//             }),
-//         }
-//     }
-// }
-
 /// 分布式锁配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LockConfig {

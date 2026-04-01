@@ -596,6 +596,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "config",
+ "dotenvy",
  "fs-err",
  "rand 0.8.5",
  "serde",
@@ -603,7 +604,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "toml 0.8.23",
  "tracing",
  "uuid",
  "walkdir",

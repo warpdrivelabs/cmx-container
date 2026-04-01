@@ -42,7 +42,7 @@ db_type = "postgres"
 db_url = "postgres://dbuser_dba:uxW2GKFvRIcqL7qDm1W2Zc8b@192.168.1.14:5432/cmx"
 default = false
 
-[[databases.pool_config]]
+[databases.pool_config]
 max_connections = 15
 min_connections = 3
 connect_timeout = 20

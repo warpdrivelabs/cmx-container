@@ -1,23 +1,29 @@
 //! 配置构建器模块
 //!
-//! 提供配置的构建、合并和访问功能
+//! 基于 `config` crate 提供配置的构建、合并和访问功能
+//! 保留 `ConfigManager` 全局单例和 `DefaultConfigLoader` 标准加载流程
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-
 use super::error::{ConfigError, ConfigResult};
-use super::source::{CommandLineSource, ConfigSource, EnvSource, FileSource};
-use super::value::{ConfigStore, ConfigValue, FromConfigValue};
-use crate::Priority;
+use super::source::CommandLineSource;
+use super::value::ConfigValue;
 use serde::de::DeserializeOwned;
 
 /// 配置构建器
 ///
-/// 用于构建配置实例，支持多个配置源的合并
+/// 基于 `config::ConfigBuilder` 的薄封装，支持多种配置源的链式组合。
+/// 后添加的 source 优先级更高，会覆盖先添加的同名配置。
+///
+/// # 配置优先级（从低到高）
+/// 1. TOML 配置文件
+/// 2. 系统环境变量
+/// 3. 命令行参数
 pub struct ConfigBuilder {
-    /// 配置源列表
-    sources: Vec<Box<dyn ConfigSource>>,
+    /// 底层 config crate 构建器
+    inner: config::ConfigBuilder<config::builder::DefaultState>,
 }
 
 impl ConfigBuilder {
@@ -27,193 +33,185 @@ impl ConfigBuilder {
     /// 返回空的配置构建器实例
     pub fn new() -> Self {
         ConfigBuilder {
-            sources: Vec::new(),
+            inner: config::Config::builder(),
         }
     }
 
-    /// 添加配置源
-    ///
-    /// # 参数
-    /// - `source`: 配置源
-    ///
-    /// # 返回值
-    /// 返回更新后的构建器实例
-    pub fn add_source<S: ConfigSource + 'static>(mut self, source: S) -> Self {
-        self.sources.push(Box::new(source));
-        self
-    }
-
-    /// 添加TOML配置文件（用户指定优先级）
+    /// 添加 TOML 配置文件
     ///
     /// # 参数
     /// - `path`: 配置文件路径
-    /// - `priority`: 配置优先级（0-100）
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_toml_file( self, path: impl Into<PathBuf>, priority: u8) -> ConfigResult<Self> {
-        let source = FileSource::with_priority(path, priority)?;
-        Ok(Self { sources: self.sources, }.add_source(source))
+    pub fn add_toml_file(self, path: impl Into<PathBuf>) -> ConfigResult<Self> {
+        let path = path.into();
+        let builder = self
+            .inner
+            .add_source(
+                config::File::new(path.to_str().unwrap_or(""), config::FileFormat::Toml)
+                    .required(false),
+            );
+        Ok(ConfigBuilder { inner: builder })
     }
 
-    /// 从环境变量添加TOML配置文件（可选）
+    /// 从环境变量添加 TOML 配置文件（可选）
     ///
-    /// 从指定的环境变量中读取配置文件路径，如果环境变量存在则添加配置源
+    /// 如果指定的环境变量存在，则加载其指向的 TOML 文件
     ///
     /// # 参数
     /// - `env_var`: 环境变量名
-    /// - `priority`: 配置优先级
-    ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    ///
-    /// # 示例
-    /// ```ignore
-    /// // 假设环境变量 CONFIG_FILE=/path/to/config.toml
-    /// let builder = Config::builder()
-    ///     .add_toml_file_from_env("CONFIG_FILE", Priority::DEFAULT_TOML);
-    /// ```
-    pub fn add_toml_file_from_env(mut self, env_var: &str, priority: super::source::Priority) -> Self {
-        if let Some(source) = FileSource::from_env_var(env_var, priority) {
-            self.sources.push(Box::new(source));
+    pub fn add_toml_file_from_env(self, env_var: &str) -> Self {
+        if let Some(path) = std::env::var(env_var).ok() {
+            let path_buf = PathBuf::from(&path);
+            let builder = self.inner.add_source(
+                config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
+                    .required(false),
+            );
+            return ConfigBuilder { inner: builder };
         }
         self
     }
 
-    /// 从环境变量添加TOML配置文件（必需）
+    /// 从环境变量添加 TOML 配置文件（必需）
     ///
-    /// 从指定的环境变量中读取配置文件路径，如果环境变量不存在则返回错误
+    /// 如果指定的环境变量不存在则返回错误
     ///
     /// # 参数
     /// - `env_var`: 环境变量名
-    /// - `priority`: 配置优先级
+    /// - `priority`: 优先级参数（保留以兼容旧 API）
     ///
     /// # 返回值
     /// 成功返回更新后的构建器实例，失败返回错误
-    ///
-    /// # 示例
-    /// ```ignore
-    /// // 假设环境变量 CONFIG_FILE=/path/to/config.toml
-    /// let builder = Config::builder()
-    ///     .add_toml_file_from_env_required("CONFIG_FILE", Priority::DEFAULT_TOML)?;
-    /// ```
     pub fn add_toml_file_from_env_required(
-        mut self,
+        self,
         env_var: &str,
-        priority: super::source::Priority,
+        _priority: u8,
     ) -> ConfigResult<Self> {
-        let source = FileSource::from_env_var_required(env_var, priority)?;
-        self.sources.push(Box::new(source));
-        Ok(self)
+        let path = std::env::var(env_var).map_err(|_| ConfigError::EnvVarError {
+            var_name: env_var.to_string(),
+        })?;
+        let path_buf = PathBuf::from(&path);
+        let builder = self.inner.add_source(
+            config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
+                .required(true),
+        );
+        Ok(ConfigBuilder { inner: builder })
     }
 
-    /// 从环境变量添加TOML配置文件（带默认值）
+    /// 从环境变量添加 TOML 配置文件（带默认值）
     ///
-    /// 从指定的环境变量中读取配置文件路径，如果环境变量不存在则使用默认路径
+    /// 如果指定的环境变量不存在，则使用默认路径
     ///
     /// # 参数
     /// - `env_var`: 环境变量名
     /// - `default_path`: 默认配置文件路径
-    /// - `priority`: 配置优先级
+    /// - `priority`: 优先级参数（保留以兼容旧 API）
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    ///
-    /// # 示例
-    /// ```ignore
-    /// // 如果环境变量 CONFIG_FILE 存在，使用其值；否则使用 "config/default.toml"
-    /// let builder = Config::builder()
-    ///     .add_toml_file_from_env_or("CONFIG_FILE", "config/default.toml", Priority::DEFAULT_TOML);
-    /// ```
     pub fn add_toml_file_from_env_or(
-        mut self,
+        self,
         env_var: &str,
         default_path: impl Into<PathBuf>,
-        priority: super::source::Priority,
+        _priority: u8,
     ) -> Self {
-        let source = FileSource::from_env_var_or(env_var, default_path, priority);
-        self.sources.push(Box::new(source));
-        self
+        let path = std::env::var(env_var).unwrap_or_else(|_| default_path.into().to_string_lossy().to_string());
+        let path_buf = PathBuf::from(&path);
+        let builder = self.inner.add_source(
+            config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
+                .required(false),
+        );
+        ConfigBuilder { inner: builder }
     }
 
-    /// 添加 .env 文件
+    /// 添加 .env 文件（通过 dotenvy 加载到环境变量中）
     ///
     /// # 参数
     /// - `path`: .env 文件路径
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_env_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.sources.push(Box::new(FileSource::env_file(path)));
+    pub fn add_env_file(self, path: impl Into<PathBuf>) -> Self {
+        let _path = path.into();
+        if let Err(e) = dotenvy::from_path(&_path) {
+            tracing::debug!("加载 .env 文件失败（可能不存在）: {:?}", e);
+        }
         self
     }
 
     /// 添加系统环境变量
     ///
+    /// 加载所有系统环境变量到配置中
+    ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_env(mut self) -> Self {
-        self.sources.push(Box::new(EnvSource::new()));
-        self
+    pub fn add_env(self) -> Self {
+        let builder = self.inner.add_source(
+            config::Environment::default()
+                .separator("__")
+                .try_parsing(true),
+        );
+        ConfigBuilder { inner: builder }
     }
 
     /// 添加带前缀的系统环境变量
+    ///
+    /// 只加载以指定前缀开头的环境变量，并自动去除前缀
     ///
     /// # 参数
     /// - `prefix`: 环境变量前缀
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_env_with_prefix(mut self, prefix: impl Into<String>) -> Self {
-        self.sources
-            .push(Box::new(EnvSource::with_prefix(prefix)));
-        self
+    pub fn add_env_with_prefix(self, prefix: impl Into<String>) -> Self {
+        let builder = self.inner.add_source(
+            config::Environment::with_prefix(&prefix.into())
+                .separator(".")
+                .try_parsing(true),
+        );
+        ConfigBuilder { inner: builder }
     }
 
     /// 添加命令行参数
+    ///
+    /// 支持 `--key=value` 和 `--key value` 两种格式
     ///
     /// # 参数
     /// - `args`: 命令行参数迭代器
     ///
     /// # 返回值
     /// 返回更新后的构建器实例
-    pub fn add_command_line<I: Iterator<Item = String> + 'static>(mut self, args: I) -> Self {
-        self.sources
-            .push(Box::new(CommandLineSource::from_args(args)));
-        self
+    pub fn add_command_line<I: Iterator<Item = String> + 'static>(self, args: I) -> Self {
+        let builder = self
+            .inner
+            .add_source(CommandLineSource::from_args(args));
+        ConfigBuilder { inner: builder }
+    }
+
+    /// 添加配置源（通用方法）
+    ///
+    /// # 参数
+    /// - `source`: 实现了 `config::Source` trait 的配置源
+    ///
+    /// # 返回值
+    /// 返回更新后的构建器实例
+    pub fn add_source<S: config::Source + Send + Sync + 'static>(self, source: S) -> Self {
+        let builder = self.inner.add_source(source);
+        ConfigBuilder { inner: builder }
     }
 
     /// 构建配置实例
     ///
-    /// 按优先级从低到高合并所有配置源
+    /// 按照添加顺序合并所有配置源，后添加的覆盖先添加的
     ///
     /// # 返回值
     /// 成功返回配置实例，失败返回错误
     pub fn build(self) -> ConfigResult<Config> {
-        // 按优先级排序（低优先级在前，高优先级在后）
-        let mut sources = self.sources;
-        sources.sort_by_key(|s| s.priority());
-
-        // 合并配置
-        let mut merged_store = ConfigStore::new();
-        let mut source_names = Vec::new();
-
-        for source in sources {
-            source_names.push(source.name().to_string());
-            match source.load() {
-                Ok(store) => merged_store.merge(store),
-                Err(ConfigError::FileNotFound { .. }) => {
-                    // 文件不存在时跳过，不报错
-                    continue;
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(Config {
-            store: merged_store,
-            sources: source_names,
-        })
+        let inner = self.inner.build()?;
+        Ok(Config { inner })
     }
 }
 
@@ -225,13 +223,12 @@ impl Default for ConfigBuilder {
 
 /// 配置实例
 ///
-/// 提供配置的访问和类型转换功能
+/// 基于 `config::Config` 的薄封装，提供配置的访问和类型转换功能。
+/// 支持点分隔的键名访问嵌套配置（如 `database.host`）。
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// 配置存储
-    store: ConfigStore,
-    /// 配置源名称列表
-    sources: Vec<String>,
+    /// 底层 config crate 配置实例
+    inner: config::Config,
 }
 
 impl Config {
@@ -243,7 +240,7 @@ impl Config {
         ConfigBuilder::new()
     }
 
-    /// 从单个文件创建配置
+    /// 从单个 TOML 文件创建配置
     ///
     /// # 参数
     /// - `path`: 配置文件路径
@@ -251,9 +248,14 @@ impl Config {
     /// # 返回值
     /// 成功返回配置实例，失败返回错误
     pub fn from_file(path: impl AsRef<Path>) -> ConfigResult<Self> {
-        ConfigBuilder::new()
-            .add_toml_file(path.as_ref(), 10)?
-            .build()
+        let path = path.as_ref();
+        let inner = config::Config::builder()
+            .add_source(
+                config::File::new(path.to_str().unwrap_or(""), config::FileFormat::Toml)
+                    .required(true),
+            )
+            .build()?;
+        Ok(Config { inner })
     }
 
     /// 从环境变量创建配置
@@ -261,10 +263,17 @@ impl Config {
     /// # 返回值
     /// 成功返回配置实例，失败返回错误
     pub fn from_env() -> ConfigResult<Self> {
-        ConfigBuilder::new().add_env().build()
+        let inner = config::Config::builder()
+            .add_source(
+                config::Environment::default()
+                    .separator(".")
+                    .try_parsing(true),
+            )
+            .build()?;
+        Ok(Config { inner })
     }
 
-    /// 从环境变量（带前缀）创建配置
+    /// 从带前缀的环境变量创建配置
     ///
     /// # 参数
     /// - `prefix`: 环境变量前缀
@@ -272,48 +281,49 @@ impl Config {
     /// # 返回值
     /// 成功返回配置实例，失败返回错误
     pub fn from_env_with_prefix(prefix: impl Into<String>) -> ConfigResult<Self> {
-        ConfigBuilder::new().add_env_with_prefix(prefix).build()
+        let inner = config::Config::builder()
+            .add_source(
+                config::Environment::with_prefix(&prefix.into())
+                    .separator(".")
+                    .try_parsing(true),
+            )
+            .build()?;
+        Ok(Config { inner })
     }
 
-    /// 获取配置值
+    /// 获取配置值（原始类型）
     ///
     /// # 参数
     /// - `key`: 配置键
     ///
     /// # 返回值
     /// 如果存在返回 Some，否则返回 None
-    pub fn get(&self, key: &str) -> Option<&ConfigValue> {
-        self.store.get(key)
+    pub fn get(&self, key: &str) -> Option<config::Value> {
+        self.inner.get(key).ok()
     }
 
     /// 获取配置值并转换为指定类型
     ///
+    /// 通过 serde 反序列化为目标类型，支持所有实现了 `Deserialize` 的类型
+    ///
     /// # 类型参数
-    /// - `T`: 目标类型，必须实现 `FromConfigValue` trait
+    /// - `T`: 目标类型，必须实现 `Deserialize`
     ///
     /// # 参数
     /// - `key`: 配置键
     ///
     /// # 返回值
     /// 成功返回转换后的值，失败返回错误
-    ///
-    /// # 示例
-    /// ```ignore
-    /// let config = Config::from_file("config.toml")?;
-    /// let host: String = config.get_as("database.host")?;
-    /// let port: u16 = config.get_as("database.port")?;
-    /// ```
-    pub fn get_as<T: FromConfigValue>(&self, key: &str) -> ConfigResult<T> {
-        let value = self.store.get(key).ok_or_else(|| ConfigError::KeyNotFound {
-            key: key.to_string(),
-        })?;
-        value.try_into_type()
+    pub fn get_as<T: DeserializeOwned>(&self, key: &str) -> ConfigResult<T> {
+        self.inner
+            .get::<T>(key)
+            .map_err(|e| ConfigError::from(e))
     }
 
     /// 获取配置值并转换为指定类型，如果不存在则返回默认值
     ///
     /// # 类型参数
-    /// - `T`: 目标类型
+    /// - `T`: 目标类型，必须实现 `DeserializeOwned`
     ///
     /// # 参数
     /// - `key`: 配置键
@@ -321,7 +331,7 @@ impl Config {
     ///
     /// # 返回值
     /// 如果配置存在返回配置值，否则返回默认值
-    pub fn get_as_or<T: FromConfigValue>(&self, key: &str, default: T) -> T {
+    pub fn get_as_or<T: DeserializeOwned>(&self, key: &str, default: T) -> T {
         self.get_as(key).unwrap_or(default)
     }
 
@@ -333,7 +343,9 @@ impl Config {
     /// # 返回值
     /// 成功返回字符串值，失败返回错误
     pub fn get_string(&self, key: &str) -> ConfigResult<String> {
-        self.get_as(key)
+        self.inner
+            .get_string(key)
+            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
     }
 
     /// 获取整数配置值
@@ -344,7 +356,9 @@ impl Config {
     /// # 返回值
     /// 成功返回整数值，失败返回错误
     pub fn get_int(&self, key: &str) -> ConfigResult<i64> {
-        self.get_as(key)
+        self.inner
+            .get_int(key)
+            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
     }
 
     /// 获取浮点数配置值
@@ -355,7 +369,9 @@ impl Config {
     /// # 返回值
     /// 成功返回浮点数值，失败返回错误
     pub fn get_float(&self, key: &str) -> ConfigResult<f64> {
-        self.get_as(key)
+        self.inner
+            .get_float(key)
+            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
     }
 
     /// 获取布尔配置值
@@ -366,7 +382,25 @@ impl Config {
     /// # 返回值
     /// 成功返回布尔值，失败返回错误
     pub fn get_bool(&self, key: &str) -> ConfigResult<bool> {
-        self.get_as(key)
+        self.inner
+            .get_bool(key)
+            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
+    }
+
+    /// 获取可选配置值
+    ///
+    /// 如果配置键不存在则返回 None
+    ///
+    /// # 类型参数
+    /// - `T`: 目标类型
+    ///
+    /// # 参数
+    /// - `key`: 配置键
+    ///
+    /// # 返回值
+    /// 如果存在返回 Some(值)，否则返回 None
+    pub fn get_optional<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.inner.get::<T>(key).ok()
     }
 
     /// 检查配置键是否存在
@@ -377,15 +411,21 @@ impl Config {
     /// # 返回值
     /// 如果存在返回 true，否则返回 false
     pub fn contains(&self, key: &str) -> bool {
-        self.store.contains_key(key)
+        self.inner.get::<String>(key).is_ok()
     }
 
     /// 获取所有配置键
     ///
+    /// 将整个配置反序列化为 HashMap 以获取所有键
+    ///
     /// # 返回值
     /// 返回所有配置键的迭代器
-    pub fn keys(&self) -> impl Iterator<Item = &String> {
-        self.store.keys()
+    pub fn keys(&self) -> impl Iterator<Item = String> {
+        self.inner
+            .clone()
+            .try_deserialize::<HashMap<String, ConfigValue>>()
+            .unwrap_or_default()
+            .into_keys()
     }
 
     /// 获取配置项数量
@@ -393,7 +433,11 @@ impl Config {
     /// # 返回值
     /// 返回配置项的数量
     pub fn len(&self) -> usize {
-        self.store.len()
+        self.inner
+            .clone()
+            .try_deserialize::<HashMap<String, ConfigValue>>()
+            .map(|m: HashMap<String, ConfigValue>| m.len())
+            .unwrap_or(0)
     }
 
     /// 检查配置是否为空
@@ -401,7 +445,7 @@ impl Config {
     /// # 返回值
     /// 如果没有配置项返回 true，否则返回 false
     pub fn is_empty(&self) -> bool {
-        self.store.is_empty()
+        self.len() == 0
     }
 
     /// 将配置反序列化为结构体
@@ -426,80 +470,54 @@ impl Config {
     /// let db_config: DatabaseConfig = config.deserialize()?;
     /// ```
     pub fn deserialize<T: DeserializeOwned>(&self) -> ConfigResult<T> {
-        // 将扁平化的配置转换为嵌套的 JSON 对象
-        let nested_json = self.flatten_to_nested();
-
-        serde_json::from_value(nested_json).map_err(|_e| ConfigError::TypeConversionError {
-            key: "root".to_string(),
-            target_type: std::any::type_name::<T>().to_string(),
-        })
-    }
-
-    /// 将扁平化的配置转换为嵌套的 JSON 对象
-    ///
-    /// # 返回值
-    /// 返回嵌套的 JSON 对象
-    fn flatten_to_nested(&self) -> serde_json::Value {
-        let mut result = serde_json::Map::new();
-
-        for (key, value) in self.store.data() {
-            let parts: Vec<&str> = key.split('.').collect();
-            insert_nested_value(&mut result, &parts, value);
-        }
-
-        serde_json::Value::Object(result)
-    }
-
-    /// 获取配置源列表
-    ///
-    /// # 返回值
-    /// 返回配置源名称列表
-    pub fn sources(&self) -> &[String] {
-        &self.sources
+        self.inner
+            .clone()
+            .try_deserialize()
+            .map_err(ConfigError::from)
     }
 
     /// 创建子配置视图
+    ///
+    /// 获取指定前缀下的配置子树
     ///
     /// # 参数
     /// - `prefix`: 配置键前缀
     ///
     /// # 返回值
     /// 返回只包含指定前缀配置的新配置实例
-    ///
-    /// # 示例
-    /// ```ignore
-    /// let config = Config::from_file("config.toml")?;
-    /// let db_config = config.sub_config("database")?;
-    /// let host: String = db_config.get_as("host")?;
-    /// ```
     pub fn sub_config(&self, prefix: &str) -> ConfigResult<Config> {
-        let mut sub_store = ConfigStore::new();
-        let prefix_with_dot = format!("{}.", prefix);
+        let table = self
+            .inner
+            .get_table(prefix)
+            .map_err(|_| ConfigError::KeyNotFound { key: prefix.to_string() })?;
 
-        for key in self.store.keys() {
-            if key.starts_with(&prefix_with_dot) {
-                if let Some(value) = self.store.get(key) {
-                    let sub_key = key[prefix_with_dot.len()..].to_string();
-                    sub_store.insert(sub_key, value.clone());
-                }
-            }
+        let mut builder = config::Config::builder();
+        for (key, value) in table {
+            builder = builder
+                .set_default(key, value)
+                .map_err(ConfigError::from)?;
         }
 
-        Ok(Config {
-            store: sub_store,
-            sources: self.sources.clone(),
-        })
+        let sub_inner = builder.build().map_err(ConfigError::from)?;
+        Ok(Config { inner: sub_inner })
+    }
+
+    /// 获取底层 config::Config 的引用
+    ///
+    /// 用于需要直接操作底层配置的场景
+    pub fn inner(&self) -> &config::Config {
+        &self.inner
     }
 }
 
 /// 默认配置加载器
 ///
-/// 提供标准的配置加载流程，按照以下优先级加载：
-/// 1. 命令行参数（最高优先级）
-/// 2. 系统环境变量
+/// 提供标准的配置加载流程，按照以下优先级加载（从低到高）：
+/// 1. default.toml 配置文件
+/// 2. 环境变量中指定的 TOML 配置文件
 /// 3. .env 文件
-/// 4. production.toml 配置文件
-/// 5. default.toml 配置文件（最低优先级）
+/// 4. 系统环境变量
+/// 5. 命令行参数（最高优先级）
 pub struct DefaultConfigLoader {
     /// 配置目录
     config_dir: PathBuf,
@@ -588,22 +606,16 @@ impl DefaultConfigLoader {
     pub fn load(self) -> ConfigResult<Config> {
         let mut builder = Config::builder();
 
-        // 1. 加载 default.toml
         let default_path = self.config_dir.join("default.toml");
-        builder = builder.add_toml_file(default_path, 10)?;
+        builder = builder.add_toml_file(default_path)?;
 
-        // 2. 加载 env中指定的  toml
+        builder = builder.add_toml_file_from_env("CONFIG_FILE");
 
-        builder =builder.add_toml_file_from_env("CONFIG_FILE",Priority(11));
-
-
-        // 3. 加载 .env 文件
         if self.load_env_file {
             let env_path = self.config_dir.join(".env");
             builder = builder.add_env_file(env_path);
         }
 
-        // 4. 加载系统环境变量
         if self.load_system_env {
             builder = if let Some(prefix) = self.env_prefix {
                 builder.add_env_with_prefix(prefix)
@@ -612,74 +624,12 @@ impl DefaultConfigLoader {
             };
         }
 
-        // 5. 加载命令行参数
         if self.load_command_line {
             let args: Vec<String> = std::env::args().skip(1).collect();
             builder = builder.add_command_line(args.into_iter());
         }
 
         builder.build()
-    }
-}
-
-/// 将扁平化的键值插入到嵌套的 JSON 对象中
-///
-/// # 参数
-/// - `map`: JSON 对象
-/// - `parts`: 键的部分列表
-/// - `value`: 配置值
-fn insert_nested_value(map: &mut serde_json::Map<String, serde_json::Value>, parts: &[&str], value: &ConfigValue) {
-    if parts.is_empty() {
-        return;
-    }
-
-    if parts.len() == 1 {
-        // 最后一部分，直接插入值
-        map.insert(parts[0].to_string(), config_value_to_json(value));
-    } else {
-        // 中间部分，需要递归处理
-        let key = parts[0];
-        let remaining = &parts[1..];
-
-        // 获取或创建子对象
-        let child = map.entry(key.to_string())
-            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-
-        // 确保子对象是一个 Object
-        if let serde_json::Value::Object(child_map) = child {
-            insert_nested_value(child_map, remaining, value);
-        }
-    }
-}
-
-/// 将 ConfigValue 转换为 serde_json::Value
-///
-/// # 参数
-/// - `value`: 配置值
-///
-/// # 返回值
-/// 返回 JSON 值
-fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
-    match value {
-        ConfigValue::String(s) => serde_json::Value::String(s.clone()),
-        ConfigValue::Integer(i) => serde_json::Value::Number((*i).into()),
-        ConfigValue::Float(f) => {
-            serde_json::Number::from_f64(*f)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
-        ConfigValue::Boolean(b) => serde_json::Value::Bool(*b),
-        ConfigValue::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(config_value_to_json).collect())
-        }
-        ConfigValue::Object(obj) => {
-            let mut map = serde_json::Map::new();
-            for (k, v) in obj {
-                map.insert(k.clone(), config_value_to_json(v));
-            }
-            serde_json::Value::Object(map)
-        }
-        ConfigValue::Null => serde_json::Value::Null,
     }
 }
 
@@ -690,10 +640,10 @@ fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
 /// # 示例
 ///
 /// ```ignore
-/// use cmx_utils::config::{ConfigManager, ConfigBuilder};
+/// use cmx_utils::config::{ConfigManager, Config};
 ///
 /// // 应用启动时初始化
-/// fn init_config() -> Result<Config, Box<dyn std::error::Error>> {
+/// fn init_config() -> Result<(), Box<dyn std::error::Error>> {
 ///     ConfigManager::initialize(|| {
 ///         Config::builder()
 ///             .add_toml_file("config/default.toml", 10)?
@@ -783,80 +733,8 @@ impl ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MemorySource, Priority};
     use std::io::Write;
     use tempfile::tempdir;
-
-    #[test]
-    fn test_config_builder() {
-        let source = MemorySource::new()
-            .with("key1", ConfigValue::new_string("value1"))
-            .with("key2", ConfigValue::new_integer(42));
-
-        let config = Config::builder()
-            .add_source(source)
-            .build()
-            .unwrap();
-
-        assert_eq!(config.get_string("key1").unwrap(), "value1");
-        assert_eq!(config.get_int("key2").unwrap(), 42);
-    }
-
-    #[test]
-    fn test_config_merge() {
-        let source1 = MemorySource::new()
-            .with("key1", ConfigValue::new_string("value1"))
-            .with_priority(Priority::DEFAULT_TOML);
-
-        let source2 = MemorySource::new()
-            .with("key1", ConfigValue::new_string("value2"))
-            .with("key2", ConfigValue::new_string("value2"))
-            .with_priority(Priority::SYSTEM_ENV);
-
-        let config = Config::builder()
-            .add_source(source1)
-            .add_source(source2)
-            .build()
-            .unwrap();
-
-        // 高优先级覆盖低优先级
-        assert_eq!(config.get_string("key1").unwrap(), "value2");
-        // 低优先级的配置保留
-        assert_eq!(config.get_string("key2").unwrap(), "value2");
-    }
-
-    #[test]
-    fn test_config_type_conversion() {
-        let source = MemorySource::new()
-            .with("string_val", ConfigValue::new_string("hello"))
-            .with("int_val", ConfigValue::new_integer(42))
-            .with("float_val", ConfigValue::new_float(3.14))
-            .with("bool_val", ConfigValue::new_boolean(true));
-
-        let config = Config::builder()
-            .add_source(source)
-            .build()
-            .unwrap();
-
-        assert_eq!(config.get_string("string_val").unwrap(), "hello");
-        assert_eq!(config.get_int("int_val").unwrap(), 42);
-        assert!((config.get_float("float_val").unwrap() - 3.14).abs() < 0.001);
-        assert_eq!(config.get_bool("bool_val").unwrap(), true);
-    }
-
-    #[test]
-    fn test_config_get_or() {
-        let source = MemorySource::new()
-            .with("existing", ConfigValue::new_string("value"));
-
-        let config = Config::builder()
-            .add_source(source)
-            .build()
-            .unwrap();
-
-        assert_eq!(config.get_as_or("existing", "default".to_string()), "value");
-        assert_eq!(config.get_as_or("non_existing", "default".to_string()), "default");
-    }
 
     #[test]
     fn test_config_from_file() {
@@ -866,12 +744,151 @@ mod tests {
         let mut file = std::fs::File::create(&config_path).unwrap();
         file.write_all(b"key = \"value\"\nnumber = 42").unwrap();
 
-        let config = Config::builder()
-            .add_toml_file(&config_path, 10)
-            .unwrap()
-            .build()
-            .unwrap();
+        let config = Config::from_file(&config_path).unwrap();
         assert_eq!(config.get_string("key").unwrap(), "value");
         assert_eq!(config.get_int("number").unwrap(), 42);
+    }
+
+    #[test]
+    fn test_config_nested_access() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("test.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(
+            br#"
+[database]
+host = "localhost"
+port = 5432
+"#,
+        )
+        .unwrap();
+
+        let config = Config::from_file(&config_path).unwrap();
+        assert_eq!(config.get_string("database.host").unwrap(), "localhost");
+        assert_eq!(config.get_int("database.port").unwrap(), 5432);
+    }
+
+    #[test]
+    fn test_config_deserialize() {
+        use serde::Deserialize;
+
+        #[derive(Deserialize, Debug)]
+        struct DatabaseConfig {
+            host: String,
+            port: u16,
+        }
+
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("test.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(
+            br#"
+[database]
+host = "localhost"
+port = 5432
+"#,
+        )
+        .unwrap();
+
+        let config = Config::from_file(&config_path).unwrap();
+        let db: DatabaseConfig = config.get_as("database").unwrap();
+        assert_eq!(db.host, "localhost");
+        assert_eq!(db.port, 5432);
+    }
+
+    #[test]
+    fn test_config_get_or() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("test.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(b"existing = \"value\"").unwrap();
+
+        let config = Config::from_file(&config_path).unwrap();
+
+        assert_eq!(
+            config.get_as_or("existing", "default".to_string()),
+            "value"
+        );
+        assert_eq!(
+            config.get_as_or("non_existing", "default".to_string()),
+            "default"
+        );
+    }
+
+    #[test]
+    fn test_config_merge() {
+        let dir = tempdir().unwrap();
+        let default_path = dir.path().join("default.toml");
+        let mut file = std::fs::File::create(&default_path).unwrap();
+        file.write_all(
+            br#"
+[app]
+name = "my-app"
+debug = false
+"#,
+        )
+        .unwrap();
+
+        let config = Config::builder()
+            .add_toml_file(&default_path)
+            .unwrap()
+            .add_source(config::Environment::default().separator("__").try_parsing(true))
+            .build()
+            .unwrap();
+
+        assert_eq!(config.get_string("app.name").unwrap(), "my-app");
+        assert_eq!(config.get_bool("app.debug").unwrap(), false);
+    }
+
+    #[test]
+    fn test_sub_config() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("test.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(
+            br#"
+[database]
+host = "localhost"
+port = 5432
+
+[cache]
+host = "redis.example.com"
+port = 6379
+"#,
+        )
+        .unwrap();
+
+        let config = Config::from_file(&config_path).unwrap();
+        let db_config = config.sub_config("database").unwrap();
+        assert_eq!(db_config.get_string("host").unwrap(), "localhost");
+        assert_eq!(db_config.get_int("port").unwrap(), 5432);
+    }
+
+    #[test]
+    fn test_config_type_conversions() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("test.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(
+            br#"
+string_val = "hello"
+int_val = 42
+float_val = 3.14
+bool_val = true
+"#,
+        )
+        .unwrap();
+
+        let config = Config::from_file(&config_path).unwrap();
+
+        assert_eq!(config.get_string("string_val").unwrap(), "hello");
+        assert_eq!(config.get_int("int_val").unwrap(), 42);
+        assert!((config.get_float("float_val").unwrap() - 3.14).abs() < 0.001);
+        assert_eq!(config.get_bool("bool_val").unwrap(), true);
     }
 }

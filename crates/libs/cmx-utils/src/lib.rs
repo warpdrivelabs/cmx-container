@@ -6,51 +6,40 @@
 //!
 //! ### 配置管理
 //!
-//! - **多配置源支持**: 支持从文件、环境变量、命令行参数等多种来源加载配置
-//! - **多格式支持**: 支持 TOML、JSON、.env 三种配置文件格式
-//! - **优先级机制**: 高优先级配置自动覆盖低优先级配置
-//! - **类型转换**: 提供便捷的类型转换 API
+//! 基于 `config` crate 实现，支持：
+//! - **多配置源支持**: 支持从 TOML/JSON/YAML 文件、环境变量、命令行参数等多种来源加载配置
+//! - **优先级机制**: 后添加的配置源优先级更高，自动覆盖先添加的同名配置
+//! - **类型转换**: 提供便捷的类型转换 API 和 serde 反序列化
 //! - **结构体映射**: 支持将配置反序列化为 Rust 结构体
+//! - **全局单例**: `ConfigManager` 提供全局配置管理
 //!
-//! ## 配置来源优先级（从高到低）
+//! ## 配置来源优先级（从低到高，按添加顺序）
 //!
-//! 1. 命令行参数
-//! 2. 系统环境变量
-//! 3. .env 文件
-//! 4. 用户指定的TOML配置文件（优先级由用户指定）
+//! 1. TOML 配置文件
+//! 2. .env 文件（通过 dotenvy 加载到环境变量）
+//! 3. 系统环境变量
+//! 4. 命令行参数（最高优先级）
 //!
 //! ## 快速开始
 //!
 //! ### 基本使用
 //!
 //! ```rust,no_run
-//! use cmx_utils::config::{Config, ConfigBuilder, FileSource, EnvSource, CommandLineSource, Priority};
+//! use cmx_utils::config::{Config, ConfigManager, CommandLineSource};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // 创建配置管理器
-//!     let mut builder = Config::builder();
-//!
-//!     // 添加默认配置文件（优先级 10）
-//!     builder = builder.add_toml_file("config/default.toml", 10)?;
-//!
-//!     // 添加生产环境配置文件（优先级 20）
-//!     builder = builder.add_toml_file("config/production.toml", 20)?;
-//!
-//!     // 添加 .env 文件
-//!     builder = builder.add_source(FileSource::env_file(".env"));
-//!
-//!     // 添加系统环境变量
-//!     builder = builder.add_source(EnvSource::new());
-//!
-//!     // 添加命令行参数
-//!     builder = builder.add_source(CommandLineSource::from_args(std::env::args().skip(1)));
-//!
-//!     // 构建配置
-//!     let config = builder.build()?;
+//!     // 初始化全局配置
+//!     cmx_utils::ConfigManager::initialize(|| {
+//!         cmx_utils::Config::builder()
+//!             .add_toml_file("config/default.toml", 10)?
+//!             .add_env()
+//!             .add_command_line(std::env::args().skip(1))
+//!             .build()
+//!     })?;
 //!
 //!     // 读取配置值
-//!     let host: String = config.get_string("database.host")?;
-//!     let port: i64 = config.get_int("database.port")?;
+//!     let host = cmx_utils::ConfigManager::global().get_string("database.host")?;
+//!     let port = cmx_utils::ConfigManager::global().get_int("database.port")?;
 //!
 //!     Ok(())
 //! }
@@ -62,14 +51,10 @@ pub mod id;
 pub mod time;
 pub mod zip;
 
-pub use config::{CommandLineSource, ConfigSource, EnvSource, FileSource, MemorySource, Priority};
-pub use config::{ConfigParser, EnvParser, JsonParser, TomlParser, parse_file_auto};
-// 重新导出配置模块的常用类型
+pub use config::{CommandLineSource, ConfigError, ConfigResult};
 pub use config::{
-    Config, ConfigBuilder, ConfigError, ConfigResult, ConfigStore, ConfigValue, FromConfigValue,
+    Config, ConfigBuilder, ConfigManager, DefaultConfigLoader, ConfigStore, ConfigValue,
+    FromConfigValue,
 };
-pub use config::{ConfigManager, DefaultConfigLoader};
-// 重新导出 zip 模块的常用类型
 pub use zip::{ZipCompressor, ZipExtractor, ZipError, ZipResult};
-// 重新导出 id 模块的常用类型
 pub use id::{snowflake_id, snowflake_id_str, SnowflakeGenerator, UuidGenerator};
