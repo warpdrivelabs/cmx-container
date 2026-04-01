@@ -71,6 +71,9 @@ use utoipa::OpenApi;
         crate::handlers::plugin::handler::plugin_page,
         crate::handlers::plugin::handler::plugin_get,
         crate::handlers::plugin::handler::plugin_deploy,
+        // TableMetadata handlers
+        crate::handlers::table_metadata::handler::table_metadata_list,
+        crate::handlers::table_metadata::handler::table_metadata_page,
     ),
     components(
         schemas(

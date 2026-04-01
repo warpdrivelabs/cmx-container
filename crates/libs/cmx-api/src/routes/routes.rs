@@ -5,6 +5,7 @@
 use crate::handlers::domain;
 use crate::handlers::plugin;
 use crate::handlers::sys_datasource;
+use crate::handlers::table_metadata;
 use crate::register_crud_handlers_module;
 use crate::app_state::CmxAppState;
 use crate::openapi::ApiDoc;
@@ -111,6 +112,11 @@ pub fn api_routes() -> Router<CmxAppState> {
         .route("/plugin/page", post(plugin::plugin_page))
         .route("/plugin/deploy", post(plugin::plugin_deploy))
         .route("/plugin/{plugin_id}", get(plugin::plugin_get));
+
+    // 注册表元数据查询路由（仅 list 和 page）
+    let router = router
+        .route("/table-metadata/list", post(table_metadata::handler::table_metadata_list))
+        .route("/table-metadata/page", post(table_metadata::handler::table_metadata_page));
 
     router
 }

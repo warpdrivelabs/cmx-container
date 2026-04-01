@@ -149,3 +149,47 @@ utoipa = { version = "5", features = ["axum_extras", "chrono","decimal","uuid"] 
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 #使trait中的异步函数能够与动态特征配合使用
 async-trait = "0.1"
+
+
+[profile.dev]
+# 优化级别：0=关闭，1=基本，2=中等，3=激进
+# 调试时必须设为0，否则变量可能被优化掉无法调试
+opt-level = 0
+
+# 调试信息级别：0=无，1=行号，2=完整调试信息
+# 设为2确保生成完整的DWARF/PDB调试信息
+debug = 2  # 注意：true 会被转换为2，但显式写2更明确
+
+# 是否剥离符号：调试时必须设为false
+# 如果为true，调试器将无法找到变量和函数名
+strip = false
+
+# 启用调试断言：在开发时检查各种不变式
+# 包括数组越界、空指针等，发布时应关闭以提高性能
+debug-assertions = true
+
+# 启用整数溢出检查：开发时检测算术溢出
+# 发布时通常关闭，溢出会回绕（wrapping arithmetic）
+overflow-checks = true
+
+# 链接时优化：关闭以加速编译和便于调试
+# 如果开启，编译器会进行跨crate的激进优化，破坏调试信息
+lto = false
+
+# 代码生成单元数：影响并行编译粒度
+# 值越大编译越快但优化越少，值越小优化越好但编译越慢
+# 256 是较大的值，适合开发时的快速迭代
+codegen-units = 256
+
+# 恐慌处理策略：'unwind'=展开调用栈，'abort'=立即终止
+# 'unwind' 可以捕获 panic 信息，便于调试
+panic = 'unwind'
+
+# 增量编译：开启以加速重复构建
+# 只重新编译改变的部分，显著提升开发效率
+# 但在某些复杂情况下可能导致奇怪的编译错误
+incremental = true
+
+# 运行时路径：是否在可执行文件中嵌入库搜索路径
+# 开发时通常关闭，发布到特定环境时可能需要开启
+rpath = false

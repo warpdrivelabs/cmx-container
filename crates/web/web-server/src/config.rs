@@ -9,7 +9,7 @@
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
 use cmx_database::{get_default_db_manager, DbConfig};
-use cmx_utils::{CommandLineSource, ConfigBuilder, ConfigManager, ConfigResult};
+use cmx_utils::{ ConfigBuilder, ConfigManager, ConfigResult};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use tracing::{error, info};
@@ -138,7 +138,7 @@ pub async fn init_plugins() {
     //     .await
     //     .expect("插件管理器初始化失败");
 
-    // 方式2：使用自定义配置初始化  
+    // 方式2：使用自定义配置初始化
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
     let settings = PluginManagerSettings {

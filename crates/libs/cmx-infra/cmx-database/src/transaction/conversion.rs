@@ -206,7 +206,7 @@ impl TransactionConverter for DbTransaction {
     fn get_postgres_value_from_row(&self, row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
@@ -228,7 +228,7 @@ impl TransactionConverter for DbTransaction {
     fn get_mysql_value_from_row(&self, row: &sqlx::mysql::MySqlRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
@@ -250,7 +250,7 @@ impl TransactionConverter for DbTransaction {
     fn get_sqlite_value_from_row(&self, row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
-        
+
         if type_name.contains("int") {
             row.try_get::<i64, _>(index).map(DataValue::Int).unwrap_or(DataValue::Null)
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
@@ -273,7 +273,7 @@ impl TransactionConverter for DbTransaction {
         // 简化实现，根据类型名称进行映射
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
-        
+
         if type_name_lower.contains("varchar") || type_name_lower.contains("text") || type_name_lower.contains("string") || type_name_lower.contains("char") {
             FieldType::String
         } else if type_name_lower.contains("int") || type_name_lower.contains("bigint") || type_name_lower.contains("smallint") || type_name_lower.contains("tinyint") {

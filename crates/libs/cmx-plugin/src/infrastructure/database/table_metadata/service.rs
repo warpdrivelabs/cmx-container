@@ -8,8 +8,8 @@ use cmx_database::DatabaseManager;
 use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_utils::snowflake_id_str;
 use modql::field::{HasSeaFields, SeaField, SeaFields};
-use modql::filter::ListOptions;
-use sea_query::{Condition, Expr, PostgresQueryBuilder, Query};
+use modql::filter::{FilterGroups, ListOptions};
+use sea_query::{Asterisk, Condition, Expr, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, info, warn};
@@ -256,7 +256,10 @@ impl TableMetadataService {
         Ok(dataset)
     }
 
-    /// 列表查询（只查询主表）
+    /// 列表查询（联查版本表获取 metadata）
+    ///
+    /// LEFT JOIN cmx_meta_table_define_version，通过 table_name + version + db_id 关联，
+    /// 返回主表全部字段 + 版本表的 metadata 字段
     pub async fn list(
         mm: &DatabaseManager,
         db_id: &str,
@@ -268,17 +271,75 @@ impl TableMetadataService {
             "SERVICE", db_id
         );
 
-        GenericCrudService::<TableMetadataBmc, TableMetadataFilter>::list(
-            mm,
-            db_id,
-            filter,
-            list_options,
-        )
-        .await
-        .map_err(|e| PluginError::Database(format!("列表查询失败: {}", e)))
+        let mut select = Query::select();
+        select.from(TableMetadataBmc::table_ref()).columns(vec![
+            ("cmx_meta_table_define", "id"),
+            ("cmx_meta_table_define", "table_name"),
+            ("cmx_meta_table_define", "db_id"),
+            ("cmx_meta_table_define", "plugin_id"),
+            ("cmx_meta_table_define", "version"),
+            ("cmx_meta_table_define", "domain_code"),
+            ("cmx_meta_table_define", "application_code"),
+            ("cmx_meta_table_define", "module_code"),
+            ("cmx_meta_table_define", "archived"),
+            ("cmx_meta_table_define", "create_time"),
+            ("cmx_meta_table_define", "update_time"),
+            ("cmx_meta_table_define", "create_by"),
+            ("cmx_meta_table_define", "create_name"),
+            ("cmx_meta_table_define", "update_by"),
+            ("cmx_meta_table_define", "update_name"),
+        ]);
+
+        select.expr_as(
+            Expr::col(("cmx_meta_table_define_version", "metadata")),
+            "metadata",
+        );
+
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_meta_table_define_version",
+            Condition::all()
+                .add(
+                    Expr::col(("cmx_meta_table_define", "table_name"))
+                        .equals(("cmx_meta_table_define_version", "table_name")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "version"))
+                        .equals(("cmx_meta_table_define_version", "version")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "db_id"))
+                        .equals(("cmx_meta_table_define_version", "db_id")),
+                ),
+        );
+
+        if let Some(filter) = filter {
+            let filters: FilterGroups = filter.into();
+            let cond: Condition = filters.try_into().map_err(|e| {
+                PluginError::Database(format!("过滤条件错误: {}", e))
+            })?;
+            select.cond_where(cond);
+        }
+
+        if let Some(lo) = list_options {
+            lo.apply_to_sea_query(&mut select);
+        }
+
+        let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", sql);
+
+        let dataset = mm
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "table_metadata_detail")
+            .await
+            .map_err(|e| PluginError::Database(format!("列表查询失败: {}", e)))?;
+
+        Ok(dataset)
     }
 
-    /// 分页查询（只查询主表）
+    /// 分页查询（联查版本表获取 metadata）
+    ///
+    /// LEFT JOIN cmx_meta_table_define_version，通过 table_name + version + db_id 关联，
+    /// 返回主表全部字段 + 版本表的 metadata 字段，并返回总记录数
     pub async fn page(
         mm: &DatabaseManager,
         db_id: &str,
@@ -290,14 +351,108 @@ impl TableMetadataService {
             "SERVICE", db_id
         );
 
-        GenericCrudService::<TableMetadataBmc, TableMetadataFilter>::page(
-            mm,
-            db_id,
-            filter,
-            list_options,
-        )
-        .await
-        .map_err(|e| PluginError::Database(format!("分页查询失败: {}", e)))
+        let mut select = Query::select();
+        select.from(TableMetadataBmc::table_ref()).columns(vec![
+            ("cmx_meta_table_define", "id"),
+            ("cmx_meta_table_define", "table_name"),
+            ("cmx_meta_table_define", "db_id"),
+            ("cmx_meta_table_define", "plugin_id"),
+            ("cmx_meta_table_define", "version"),
+            ("cmx_meta_table_define", "domain_code"),
+            ("cmx_meta_table_define", "application_code"),
+            ("cmx_meta_table_define", "module_code"),
+            ("cmx_meta_table_define", "archived"),
+            ("cmx_meta_table_define", "create_time"),
+            ("cmx_meta_table_define", "update_time"),
+            ("cmx_meta_table_define", "create_by"),
+            ("cmx_meta_table_define", "create_name"),
+            ("cmx_meta_table_define", "update_by"),
+            ("cmx_meta_table_define", "update_name"),
+        ]);
+
+        select.expr_as(
+            Expr::col(("cmx_meta_table_define_version", "metadata")),
+            "metadata",
+        );
+
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_meta_table_define_version",
+            Condition::all()
+                .add(
+                    Expr::col(("cmx_meta_table_define", "table_name"))
+                        .equals(("cmx_meta_table_define_version", "table_name")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "version"))
+                        .equals(("cmx_meta_table_define_version", "version")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "db_id"))
+                        .equals(("cmx_meta_table_define_version", "db_id")),
+                ),
+        );
+
+        if let Some(filter) = filter.clone() {
+            let filters: FilterGroups = filter.into();
+            let cond: Condition = filters.try_into().map_err(|e| {
+                PluginError::Database(format!("过滤条件错误: {}", e))
+            })?;
+            select.cond_where(cond);
+        }
+
+        list_options.clone().apply_to_sea_query(&mut select);
+
+        let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", sql);
+
+        let dataset = mm
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "table_metadata_detail")
+            .await
+            .map_err(|e| PluginError::Database(format!("分页查询失败: {}", e)))?;
+
+        let total = Self::count(mm, db_id, filter).await?;
+
+        Ok((dataset, total))
+    }
+
+    /// 统计主表记录数（用于分页查询的总数计算）
+    async fn count(
+        mm: &DatabaseManager,
+        db_id: &str,
+        filter: Option<TableMetadataFilter>,
+    ) -> PluginResult<i64> {
+        let mut query = Query::select();
+        query.from(TableMetadataBmc::table_ref());
+        query.expr(Expr::col(Asterisk).count());
+
+        if let Some(filter) = filter {
+            let filters: FilterGroups = filter.into();
+            let cond: Condition = filters.try_into().map_err(|e| {
+                PluginError::Database(format!("过滤条件错误: {}", e))
+            })?;
+            query.cond_where(cond);
+        }
+
+        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", sql);
+
+        let dataset = mm
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "count")
+            .await
+            .map_err(|e| PluginError::Database(format!("统计记录数失败: {}", e)))?;
+
+        let count = dataset
+            .iter()
+            .next()
+            .and_then(|row| row.get(0))
+            .and_then(|val| match val {
+                cmx_core::model::cell::DataValue::Int(i) => Some(*i),
+                _ => None,
+            })
+            .unwrap_or(0);
+
+        Ok(count)
     }
 
     /// 更新表元数据

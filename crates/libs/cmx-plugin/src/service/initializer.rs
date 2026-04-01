@@ -145,18 +145,25 @@ impl PluginInitializer {
 
         // 步骤2: 查询 cmx_plugin_deployments 获取当前节点的部署
         let current_deployments = self.deployment_repository.list_node_deployments(&self.node_id).await?;
-        let deployed_map: HashMap<String, String> = current_deployments
-            .iter()
-            .map(|d| (d.plugin_id.clone(), d.version.clone()))
-            .collect();
+
+        // 按 plugin_id 取最高版本（同一插件可能有多条部署记录）
+        let mut deployed_map: HashMap<String, String> = HashMap::new();
+        for d in &current_deployments {
+            if let Some(existing_version) = deployed_map.get(&d.plugin_id) {
+                if &d.version > existing_version {
+                    deployed_map.insert(d.plugin_id.clone(), d.version.clone());
+                }
+            } else {
+                deployed_map.insert(d.plugin_id.clone(), d.version.clone());
+            }
+        }
 
         // 步骤3: 生成操作计划
         let mut install_ops = Vec::new();
         let mut upgrade_ops = Vec::new();
-        let mut downgrade_ops = Vec::new();
         let mut uninstall_ops = Vec::new();
 
-        // 遍历期望插件，决定安装/升级/降级
+        // 遍历期望插件，决定安装/升级
         for (plugin_id, (expected_version, zip_source_url, zip_source_type)) in &expected_map {
             let source = build_plugin_source(
                 zip_source_url.as_deref(),
@@ -164,39 +171,16 @@ impl PluginInitializer {
             );
 
             if let Some(deployed_version) = deployed_map.get(plugin_id) {
-                if expected_version != deployed_version {
-                    // 版本不同，需要升级或降级
-                    if expected_version > deployed_version {
-                        upgrade_ops.push(PluginOperation::Upgrade {
-                            plugin_id: plugin_id.clone(),
-                            from_version: deployed_version.clone(),
-                            to_version: expected_version.clone(),
-                            source,
-                        });
-                    } else {
-                        // 需要降级，从 cmx_plugin_versions 获取目标版本的来源信息
-                        let target_version_record = self
-                            .version_history_repository
-                            .find_version(plugin_id, expected_version)
-                            .await?;
-                        let (zip_source_url, zip_source_type) = if let Some(ref record) = target_version_record {
-                            (record.zip_source_url.clone(), record.zip_source_type.clone())
-                        } else {
-                            (None, None)
-                        };
-                        let source = build_plugin_source(
-                            zip_source_url.as_deref(),
-                            zip_source_type.as_deref(),
-                        );
-                        downgrade_ops.push(PluginOperation::Downgrade {
-                            plugin_id: plugin_id.clone(),
-                            from_version: deployed_version.clone(),
-                            to_version: expected_version.clone(),
-                            source,
-                        });
-                    }
+                if expected_version > deployed_version {
+                    // 期望版本高于已部署版本，需要升级
+                    upgrade_ops.push(PluginOperation::Upgrade {
+                        plugin_id: plugin_id.clone(),
+                        from_version: deployed_version.clone(),
+                        to_version: expected_version.clone(),
+                        source,
+                    });
                 } else {
-                    // 版本相同，无需操作
+                    // 期望版本 <= 已部署版本，无需操作
                     result.skipped.push(plugin_id.clone());
                 }
             } else {
@@ -231,14 +215,6 @@ impl PluginInitializer {
         for op in upgrade_ops {
             match self.execute_upgrade(op).await {
                 Ok(plugin_id) => result.upgraded.push(plugin_id),
-                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
-            }
-        }
-
-        // 执行降级
-        for op in downgrade_ops {
-            match self.execute_downgrade(op).await {
-                Ok(plugin_id) => result.downgraded.push(plugin_id),
                 Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
             }
         }

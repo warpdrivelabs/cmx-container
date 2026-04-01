@@ -467,7 +467,7 @@ pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id:
 pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    debug!("query_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}", db_id, txn_id, sql, dataset_id);
+    debug!("query_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {}, dataset_id: {:?}", db_id, txn_id, sql, dataset_id);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {

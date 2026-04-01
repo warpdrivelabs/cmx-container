@@ -10,7 +10,7 @@ use axum::{
 };
 use axum::body::HttpBody;
 use std::time::Instant;
-use tracing::{debug, info, warn};
+use tracing::{ info, warn};
 
 /// 请求追踪中间件
 ///
@@ -119,7 +119,7 @@ pub async fn mw_trace(req: Request<Body>, next: Next) -> Response {
             status.as_u16()
         );
     }
-    
+
     response
 }
 
