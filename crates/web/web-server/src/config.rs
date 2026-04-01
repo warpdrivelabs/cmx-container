@@ -116,7 +116,9 @@ pub async fn init_cache() {
         }
     };
 
-    let redis_config = RedisConfig::from_config(config);
+    // let redis_config = RedisConfig::from_config(config);
+    let redis_config=  config.get_as::<RedisConfig>("redis").unwrap();
+
     GlobalCacheManager::initialize(redis_config.clone())
         .await
         .expect("redis初始化失败");
