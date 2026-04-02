@@ -16,7 +16,9 @@ pub struct CorsConfig {
 impl Default for CorsConfig {
     fn default() -> Self {
         Self {
-            allow_origins: AllowOrigin::any(),
+            //mirror_request作用：自动将请求的 Origin头值作为 Access-Control-Allow-Origin返回。
+            allow_origins: AllowOrigin::mirror_request(),
+            //# 允许的方法（预检请求时必需）
             allow_methods: vec![
                 axum::http::Method::GET,
                 axum::http::Method::POST,
@@ -25,11 +27,13 @@ impl Default for CorsConfig {
                 axum::http::Method::PATCH,
                 axum::http::Method::OPTIONS,
             ],
+            //允许的请求头（预检请求时必需）
             allow_headers: vec![
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::AUTHORIZATION,
                 axum::http::header::ACCEPT,
             ],
+            //允许客户端访问的响应头
             expose_headers: vec![
                 axum::http::header::CONTENT_LENGTH,
             ],
