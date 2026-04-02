@@ -50,6 +50,12 @@ impl Default for WasmEngineConfig {
 /// - 创建和配置 wasmtime Linker
 /// - 加载/卸载 WASM 模块
 /// - 调用 WASM 导出函数
+///
+/// # 内部可变性
+///
+/// `WasmEngine` 使用内部可变性模式：
+/// - `instances` 和 `host_providers` 都使用 `RwLock` 包装
+/// - 所有公共方法都使用 `&self`，不需要外层锁
 pub struct WasmEngine {
     /// wasmtime 引擎（编译器和运行时配置）
     engine: wasmtime::Engine,
@@ -57,8 +63,8 @@ pub struct WasmEngine {
     /// 已加载的 WASM 实例映射 (plugin_id -> WasmInstance)
     instances: Arc<RwLock<HashMap<String, WasmInstance>>>,
 
-    /// 宿主函数注册器列表
-    host_providers: Vec<Box<dyn HostFunctionProvider>>,
+    /// 宿主函数注册器列表（使用 RwLock 支持运行时注册）
+    host_providers: RwLock<Vec<Box<dyn HostFunctionProvider>>>,
 
     /// 引擎配置
     #[allow(dead_code)]
@@ -91,7 +97,7 @@ impl WasmEngine {
         Ok(Self {
             engine,
             instances: Arc::new(RwLock::new(HashMap::new())),
-            host_providers: Vec::new(),
+            host_providers: RwLock::new(Vec::new()),
             config,
         })
     }
@@ -104,22 +110,24 @@ impl WasmEngine {
     /// # 参数
     ///
     /// * `provider` - 宿主函数注册器（trait 对象）
-    pub fn register_provider(&mut self, provider: Box<dyn HostFunctionProvider>) {
+    pub async fn register_provider(&self, provider: Box<dyn HostFunctionProvider>) {
         tracing::info!(
             "注册宿主函数提供者: {} (提供 {} 个函数)",
             provider.namespace(),
             provider.provided_functions().len()
         );
-        self.host_providers.push(provider);
+        let mut providers = self.host_providers.write().await;
+        providers.push(provider);
     }
 
     /// 构建 wasmtime Linker 并注册所有宿主函数
     ///
     /// 遍历所有注册的 HostFunctionProvider，调用其 register_functions 方法。
-    fn build_linker(&self) -> Result<wasmtime::Linker<WasmStoreData>, RuntimeError> {
+    async fn build_linker(&self) -> Result<wasmtime::Linker<WasmStoreData>, RuntimeError> {
         let mut linker = wasmtime::Linker::new(&self.engine);
 
-        for provider in &self.host_providers {
+        let providers = self.host_providers.read().await;
+        for provider in providers.iter() {
             let mut adapter = RuntimeLinkerAdapter::new(&mut linker);
             provider
                 .register_functions(&mut adapter)
@@ -220,6 +228,7 @@ impl RuntimeInvoker for WasmEngine {
         // 创建 Linker 并注册所有宿主函数
         let linker = self
             .build_linker()
+            .await
             .map_err(|e| TraitError::WasmLoadFailed(format!("创建 Linker 失败: {}", e)))?;
 
         // 创建独立的 Store

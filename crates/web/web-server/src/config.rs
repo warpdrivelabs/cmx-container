@@ -141,12 +141,11 @@ pub async fn init_cache() {
 ///
 /// 必须在 init_db_datasource 和 init_cache 之后调用。
 /// 注册所有宿主函数提供者到 WASM 引擎。
-pub fn init_runtime() {
+pub async fn init_runtime() {
     use cmx_database::host_functions::DatabaseHostFunctions;
     use cmx_buffer::host_functions::BufferHostFunctions;
     use cmx_utils::host_functions::LoggingHostFunctions;
     use cmx_runtime::{GlobalWasmEngine, WasmEngineConfig};
-    use std::sync::Arc;
 
     info!("初始化 WASM 运行时...");
 
@@ -154,23 +153,21 @@ pub fn init_runtime() {
     GlobalWasmEngine::initialize(WasmEngineConfig::default())
         .expect("WASM 引擎初始化失败");
 
-    // 获取运行时并注册宿主函数
-    // 使用 block_on 在同步上下文中获取异步锁
-    let rt = tokio::runtime::Handle::current();
-    let mut engine = rt.block_on(GlobalWasmEngine::get_mut());
+    // 获取引擎引用并注册宿主函数
+    let engine = GlobalWasmEngine::get();
 
     // 注册数据库宿主函数
     let db_manager = get_default_db_manager();
-    engine.register_provider(Box::new(DatabaseHostFunctions::new(db_manager.clone())));
+    engine.register_provider(Box::new(DatabaseHostFunctions::new(db_manager.clone()))).await;
     info!("已注册数据库宿主函数");
 
     // 注册缓存宿主函数
     let cache_manager = GlobalCacheManager::get().clone();
-    engine.register_provider(Box::new(BufferHostFunctions::new(cache_manager)));
+    engine.register_provider(Box::new(BufferHostFunctions::new(cache_manager))).await;
     info!("已注册缓存宿主函数");
 
     // 注册日志宿主函数
-    engine.register_provider(Box::new(LoggingHostFunctions::new()));
+    engine.register_provider(Box::new(LoggingHostFunctions::new())).await;
     info!("已注册日志宿主函数");
 
     info!("WASM 运行时初始化完成");
@@ -183,7 +180,6 @@ pub async fn init_plugins() {
     use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
     use cmx_plugin::host_functions::PluginHostFunctions;
     use cmx_runtime::GlobalWasmEngine;
-    use cmx_traits::RuntimeInvoker;
     use std::path::PathBuf;
 
     info!("初始化插件管理器...");
@@ -204,8 +200,8 @@ pub async fn init_plugins() {
     info!("成功初始化插件管理器");
 
     // 注册插件间调用宿主函数
-    let mut engine = GlobalWasmEngine::get_mut().await;
+    let engine = GlobalWasmEngine::get();
     let runtime = GlobalWasmEngine::get_as_invoker();
-    engine.register_provider(Box::new(PluginHostFunctions::new(runtime)));
+    engine.register_provider(Box::new(PluginHostFunctions::new(runtime))).await;
     info!("已注册插件间调用宿主函数");
 }

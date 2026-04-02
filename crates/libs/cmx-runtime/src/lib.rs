@@ -26,24 +26,29 @@
 pub mod engine;
 pub mod error;
 pub mod instance;
-pub mod invoker_adapter;
 pub mod linker_adapter;
 
 // 导出核心类型
 pub use engine::{WasmEngine, WasmEngineConfig};
 pub use instance::{WasmInstance, WasmStoreData};
 pub use error::RuntimeError;
-pub use invoker_adapter::WasmEngineInvokerAdapter;
 
 use std::sync::{Arc, OnceLock};
-use tokio::sync::RwLock;
 
 /// 全局 WASM 引擎单例
 ///
 /// 提供应用级别的单例访问，确保整个应用共享同一个 WasmEngine 实例。
+///
+/// # 设计说明
+///
+/// `WasmEngine` 内部已使用细粒度锁（如 `instances: Arc<RwLock<...>>`），
+/// 所有公共方法都使用 `&self`，实现了内部可变性。因此外层不需要 `RwLock`。
 pub struct GlobalWasmEngine;
 
-static GLOBAL_WASM_ENGINE: OnceLock<Arc<RwLock<WasmEngine>>> = OnceLock::new();
+/// 全局 WASM 引擎单例
+///
+/// 注意：`WasmEngine` 内部已实现细粒度锁，外层不需要 `RwLock`。
+static GLOBAL_WASM_ENGINE: OnceLock<Arc<WasmEngine>> = OnceLock::new();
 
 impl GlobalWasmEngine {
     /// 初始化全局 WASM 引擎
@@ -59,35 +64,25 @@ impl GlobalWasmEngine {
         let engine = WasmEngine::new(config)?;
 
         GLOBAL_WASM_ENGINE
-            .set(Arc::new(RwLock::new(engine)))
+            .set(Arc::new(engine))
             .map_err(|_| RuntimeError::Internal("全局 WASM 引擎已初始化".to_string()))?;
 
         tracing::info!("全局 WASM 引擎初始化完成");
         Ok(())
     }
 
-    /// 获取全局 WASM 引擎读锁
+    /// 获取全局 WASM 引擎引用
+    ///
+    /// 返回 `&'static WasmEngine`，直接访问引擎。
+    /// 由于 `WasmEngine` 内部使用细粒度锁，此方法不需要 `await`。
     ///
     /// # Panics
     ///
     /// 如果未初始化则 panic。
-    pub async fn get() -> tokio::sync::RwLockReadGuard<'static, WasmEngine> {
-        let arc = GLOBAL_WASM_ENGINE
+    pub fn get() -> &'static WasmEngine {
+        GLOBAL_WASM_ENGINE
             .get()
-            .expect("WASM 引擎未初始化，请先调用 GlobalWasmEngine::initialize()");
-        arc.read().await
-    }
-
-    /// 获取全局 WASM 引擎写锁
-    ///
-    /// # Panics
-    ///
-    /// 如果未初始化则 panic。
-    pub async fn get_mut() -> tokio::sync::RwLockWriteGuard<'static, WasmEngine> {
-        let arc = GLOBAL_WASM_ENGINE
-            .get()
-            .expect("WASM 引擎未初始化，请先调用 GlobalWasmEngine::initialize()");
-        arc.write().await
+            .expect("WASM 引擎未初始化，请先调用 GlobalWasmEngine::initialize()")
     }
 
     /// 获取全局 WASM 引擎 Arc 引用
@@ -95,7 +90,7 @@ impl GlobalWasmEngine {
     /// # Panics
     ///
     /// 如果未初始化则 panic。
-    pub fn get_arc() -> Arc<RwLock<WasmEngine>> {
+    pub fn get_arc() -> Arc<WasmEngine> {
         GLOBAL_WASM_ENGINE
             .get()
             .expect("WASM 引擎未初始化，请先调用 GlobalWasmEngine::initialize()")
@@ -106,26 +101,11 @@ impl GlobalWasmEngine {
     ///
     /// 返回 `Arc<dyn RuntimeInvoker>`，可直接用于依赖注入。
     pub fn get_as_invoker() -> Arc<dyn cmx_traits::RuntimeInvoker> {
-        let arc = GLOBAL_WASM_ENGINE
-            .get()
-            .expect("WASM 引擎未初始化，请先调用 GlobalWasmEngine::initialize()")
-            .clone();
-        Arc::new(WasmEngineInvokerAdapter::new(arc))
+        Self::get_arc()
     }
 
     /// 检查是否已初始化
     pub fn is_initialized() -> bool {
         GLOBAL_WASM_ENGINE.get().is_some()
-    }
-
-    /// 尝试获取全局 WASM 引擎写锁（非异步）
-    ///
-    /// # 返回值
-    ///
-    /// 如果已初始化返回 Some，否则返回 None。
-    pub fn try_get_mut() -> Option<tokio::sync::RwLockWriteGuard<'static, WasmEngine>> {
-        let arc = GLOBAL_WASM_ENGINE.get()?;
-        // 使用 try_write 避免阻塞
-        arc.try_write().ok()
     }
 }

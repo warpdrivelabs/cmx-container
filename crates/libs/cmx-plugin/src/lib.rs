@@ -113,11 +113,15 @@ pub use fetcher::registry::{RegistryFetcher, RegistryInfo, RegistryPackageDetail
 // ==================== 全局单例 ====================
 
 use std::sync::{Arc, OnceLock};
-use tokio::sync::RwLock;
 
 /// 全局插件管理器
 /// 
 /// 提供应用级别的单例访问，确保整个应用共享同一个 PluginManager 实例。
+/// 
+/// # 设计说明
+/// 
+/// `PluginManager` 内部已使用细粒度锁（如 `registry: Arc<RwLock<...>>`），
+/// 所有公共方法都使用 `&self`，实现了内部可变性。因此外层不需要 `RwLock`。
 /// 
 /// # 使用示例
 /// 
@@ -150,12 +154,15 @@ use tokio::sync::RwLock;
 ///     ).await.unwrap();
 ///     
 ///     // 获取全局实例
-///     let manager = GlobalPluginManager::get().await;
+///     let manager = GlobalPluginManager::get();
 /// }
 /// ```
 pub struct GlobalPluginManager;
 
-static GLOBAL_PLUGIN_MANAGER: OnceLock<Arc<RwLock<PluginManager>>> = OnceLock::new();
+/// 全局插件管理器单例
+/// 
+/// 注意：`PluginManager` 内部已实现细粒度锁，外层不需要 `RwLock`。
+static GLOBAL_PLUGIN_MANAGER: OnceLock<Arc<PluginManager>> = OnceLock::new();
 
 impl GlobalPluginManager {
     /// 初始化全局插件管理器
@@ -175,7 +182,7 @@ impl GlobalPluginManager {
         let manager = PluginManager::new(settings).await?;
         
         GLOBAL_PLUGIN_MANAGER
-            .set(Arc::new(RwLock::new(manager)))
+            .set(Arc::new(manager))
             .map_err(|_| error::PluginError::Plugin("全局插件管理器已初始化".to_string()))?;
         
         Ok(())
@@ -241,42 +248,26 @@ impl GlobalPluginManager {
         let manager = builder.build().await?;
         
         GLOBAL_PLUGIN_MANAGER
-            .set(Arc::new(RwLock::new(manager)))
+            .set(Arc::new(manager))
             .map_err(|_| error::PluginError::Plugin("全局插件管理器已初始化".to_string()))?;
         
         Ok(())
     }
     
-    /// 获取全局插件管理器读锁
+    /// 获取全局插件管理器引用
     /// 
-    /// 返回一个 RwLock 读守卫，允许读取插件管理器状态。
+    /// 返回 `&'static PluginManager`，直接访问插件管理器。
+    /// 由于 `PluginManager` 内部使用细粒度锁，此方法不需要 `await`。
     /// 
     /// # 返回值
-    /// * `tokio::sync::RwLockReadGuard<'static, PluginManager>` - 读引用守卫
+    /// * `&'static PluginManager` - 插件管理器静态引用
     /// 
     /// # Panics
     /// 如果未初始化则 panic，请确保先调用 `initialize` 或 `initialize_with_deps`。
-    pub async fn get() -> tokio::sync::RwLockReadGuard<'static, PluginManager> {
-        let arc = GLOBAL_PLUGIN_MANAGER.get().expect(
+    pub fn get() -> &'static PluginManager {
+        GLOBAL_PLUGIN_MANAGER.get().expect(
             "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
-        );
-        arc.read().await
-    }
-    
-    /// 获取全局插件管理器写锁
-    /// 
-    /// 返回一个 RwLock 写守卫，允许对插件管理器进行修改。
-    /// 
-    /// # 返回值
-    /// * `tokio::sync::RwLockWriteGuard<'static, PluginManager>` - 可变引用守卫
-    /// 
-    /// # Panics
-    /// 如果未初始化则 panic。
-    pub async fn get_mut() -> tokio::sync::RwLockWriteGuard<'static, PluginManager> {
-        let arc = GLOBAL_PLUGIN_MANAGER.get().expect(
-            "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
-        );
-        arc.write().await
+        )
     }
     
     /// 检查是否已初始化
@@ -292,14 +283,27 @@ impl GlobalPluginManager {
     /// 返回 Arc 引用，允许在异步任务中共享所有权。
     /// 
     /// # 返回值
-    /// * `Arc<RwLock<PluginManager>>` - 插件管理器 Arc 引用
+    /// * `Arc<PluginManager>` - 插件管理器 Arc 引用
     /// 
     /// # Panics
     /// 如果未初始化则 panic。
-    pub fn get_arc() -> Arc<RwLock<PluginManager>> {
+    pub fn get_arc() -> Arc<PluginManager> {
         GLOBAL_PLUGIN_MANAGER.get().expect(
             "插件管理器未初始化，请先调用 GlobalPluginManager::initialize() 或 GlobalPluginManager::initialize_with_deps()"
         ).clone()
+    }
+    
+    /// 获取全局插件管理器作为 PluginQuery trait 对象
+    /// 
+    /// 返回 `Arc<dyn PluginQuery>`，用于依赖注入场景。
+    /// 
+    /// # 返回值
+    /// * `Arc<dyn PluginQuery>` - 插件查询接口的 trait 对象
+    /// 
+    /// # Panics
+    /// 如果未初始化则 panic。
+    pub fn get_as_plugin_query() -> Arc<dyn cmx_traits::PluginQuery> {
+        Self::get_arc()
     }
     
     /// 关闭全局插件管理器
@@ -310,7 +314,7 @@ impl GlobalPluginManager {
     /// * `Ok(())` - 关闭成功
     /// * `Err(PluginError)` - 关闭失败
     pub async fn shutdown() -> error::PluginResult<()> {
-        let manager = Self::get().await;
+        let manager = Self::get();
         manager.shutdown().await
     }
 }

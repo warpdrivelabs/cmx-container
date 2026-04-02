@@ -77,14 +77,14 @@ async fn main() -> Result<()> {
     let web_config = web_config();
 
     // 初始化 WASM 运行时（必须在 init_plugins 之前）
-    init_runtime();
+    init_runtime().await;
 
     // 初始化插件管理器
     init_plugins().await;
 
     // 构建完整的 AppState（注入 trait 实例）
     let app_state = CmxAppState::new()
-        .with_plugin_query(cmx_plugin::GlobalPluginManager::get_arc())
+        .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
         .with_runtime_invoker(cmx_runtime::GlobalWasmEngine::get_as_invoker());
 
     // -- 配置 API 路由
