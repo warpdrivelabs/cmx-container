@@ -28,6 +28,7 @@ config = { workspace = true }
 # dotenvy: .env 文件加载
 dotenvy = { workspace = true }
 tracing = { workspace = true }
+cmx-traits = { workspace = true }
 [dev-dependencies]
 # tempfile: 临时文件测试
 tempfile = "3"

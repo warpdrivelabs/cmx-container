@@ -1,0 +1,98 @@
+//! cmx-traits 错误类型定义
+//!
+//! 提供跨模块共享的统一错误类型，包括 trait 调用错误和宿主函数错误。
+
+/// cmx-traits 统一错误类型
+///
+/// 用于 trait 方法返回值的错误场景定义。
+#[derive(Debug, thiserror::Error)]
+pub enum TraitError {
+    /// 插件未找到
+    #[error("插件未找到: {0}")]
+    PluginNotFound(String),
+
+    /// 插件未激活
+    #[error("插件未激活: {0}")]
+    PluginNotActive(String),
+
+    /// WASM 模块加载失败
+    #[error("WASM 模块加载失败: {0}")]
+    WasmLoadFailed(String),
+
+    /// WASM 函数调用失败
+    #[error("WASM 函数调用失败: {0}")]
+    WasmInvokeFailed(String),
+
+    /// WASM 模块未加载
+    #[error("WASM 模块未加载: {0}")]
+    WasmNotLoaded(String),
+
+    /// 编排执行失败
+    #[error("编排执行失败: {0}")]
+    OrchestrationFailed(String),
+
+    /// 内部错误
+    #[error("内部错误: {0}")]
+    Internal(String),
+}
+
+/// 宿主函数错误类型
+///
+/// 用于 WASM 宿主函数注册和执行过程中的错误定义。
+#[derive(Debug, thiserror::Error)]
+pub enum HostFuncError {
+    /// 函数注册失败
+    #[error("函数注册失败 [{namespace}/{name}]: {reason}")]
+    RegistrationFailed {
+        /// 命名空间
+        namespace: String,
+        /// 函数名
+        name: String,
+        /// 失败原因
+        reason: String,
+    },
+
+    /// 函数执行失败
+    #[error("函数执行失败 [{namespace}/{name}]: {reason}")]
+    ExecutionFailed {
+        /// 命名空间
+        namespace: String,
+        /// 函数名
+        name: String,
+        /// 失败原因
+        reason: String,
+    },
+
+    /// WASM 内存越界访问
+    #[error("WASM 内存越界访问 (offset={offset}, len={len})")]
+    MemoryOutOfBounds {
+        /// 偏移量
+        offset: u32,
+        /// 长度
+        len: u32,
+    },
+
+    /// 无效参数
+    #[error("无效参数: {0}")]
+    InvalidParam(String),
+}
+
+impl HostFuncError {
+    /// 创建注册失败错误
+    pub fn registration_failed(namespace: &str, name: &str, reason: impl Into<String>) -> Self {
+        Self::RegistrationFailed {
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+            reason: reason.into(),
+        }
+    }
+
+    /// 创建执行失败错误
+    pub fn execution_failed(namespace: &str, name: &str, reason: impl Into<String>) -> Self {
+        Self::ExecutionFailed {
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+            reason: reason.into(),
+        }
+    }
+}

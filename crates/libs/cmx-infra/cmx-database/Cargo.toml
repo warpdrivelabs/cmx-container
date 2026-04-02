@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 cmx-core = { workspace = true }
 cmx-utils = { workspace = true }
+cmx-traits = { workspace = true }
 
 # ============================================
 # Workspace 依赖

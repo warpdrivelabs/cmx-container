@@ -6,10 +6,17 @@
  * @LastEditTime: 2026-03-17 19:59:28
  */
 //! Web 服务器配置模块
+//!
+//! 提供应用程序初始化功能，包括：
+//! - 全局配置加载
+//! - 数据库数据源初始化
+//! - Redis 缓存初始化
+//! - WASM 运行时初始化
+//! - 插件管理器初始化
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
 use cmx_database::{get_default_db_manager, DbConfig};
-use cmx_utils::{ ConfigBuilder, ConfigManager, ConfigResult};
+use cmx_utils::{ConfigBuilder, ConfigManager, ConfigResult};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use tracing::{error, info};
@@ -104,6 +111,7 @@ pub async fn init_db_datasource() {
 
     info!("数据库数据源初始化完成");
 }
+
 /// 初始化缓存
 ///
 pub async fn init_cache() {
@@ -117,7 +125,7 @@ pub async fn init_cache() {
     };
 
     // let redis_config = RedisConfig::from_config(config);
-    let redis_config=  config.get_as::<RedisConfig>("redis").unwrap();
+    let redis_config = config.get_as::<RedisConfig>("redis").unwrap();
 
     GlobalCacheManager::initialize(redis_config.clone())
         .await
@@ -128,17 +136,57 @@ pub async fn init_cache() {
         .expect("redis分布式锁初始化失败");
     info!("redis分布式锁初始化完成");
 }
-// 在 config.rs 中添加初始化函数
+
+/// 初始化 WASM 运行时
+///
+/// 必须在 init_db_datasource 和 init_cache 之后调用。
+/// 注册所有宿主函数提供者到 WASM 引擎。
+pub fn init_runtime() {
+    use cmx_database::host_functions::DatabaseHostFunctions;
+    use cmx_buffer::host_functions::BufferHostFunctions;
+    use cmx_utils::host_functions::LoggingHostFunctions;
+    use cmx_runtime::{GlobalWasmEngine, WasmEngineConfig};
+    use std::sync::Arc;
+
+    info!("初始化 WASM 运行时...");
+
+    // 初始化全局 WASM 引擎
+    GlobalWasmEngine::initialize(WasmEngineConfig::default())
+        .expect("WASM 引擎初始化失败");
+
+    // 获取运行时并注册宿主函数
+    // 使用 block_on 在同步上下文中获取异步锁
+    let rt = tokio::runtime::Handle::current();
+    let mut engine = rt.block_on(GlobalWasmEngine::get_mut());
+
+    // 注册数据库宿主函数
+    let db_manager = get_default_db_manager();
+    engine.register_provider(Box::new(DatabaseHostFunctions::new(db_manager.clone())));
+    info!("已注册数据库宿主函数");
+
+    // 注册缓存宿主函数
+    let cache_manager = GlobalCacheManager::get().clone();
+    engine.register_provider(Box::new(BufferHostFunctions::new(cache_manager)));
+    info!("已注册缓存宿主函数");
+
+    // 注册日志宿主函数
+    engine.register_provider(Box::new(LoggingHostFunctions::new()));
+    info!("已注册日志宿主函数");
+
+    info!("WASM 运行时初始化完成");
+}
+
+/// 初始化插件管理器
+///
+/// 必须在 init_runtime 之后调用，因为需要注册 PluginHostFunctions。
 pub async fn init_plugins() {
     use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
+    use cmx_plugin::host_functions::PluginHostFunctions;
+    use cmx_runtime::GlobalWasmEngine;
+    use cmx_traits::RuntimeInvoker;
     use std::path::PathBuf;
 
-    // 方式1：使用默认配置初始化
-    // GlobalPluginManager::initialize(Default::default())
-    //     .await
-    //     .expect("插件管理器初始化失败");
-
-    // 方式2：使用自定义配置初始化
+    info!("初始化插件管理器...");
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
     let settings = PluginManagerSettings {
@@ -149,37 +197,15 @@ pub async fn init_plugins() {
         node_id: ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string()),
         ..Default::default()
     };
+
     GlobalPluginManager::initialize(settings)
         .await
         .unwrap_or_else(|e| panic!("初始化插件管理器失败: {:?}", e));
     info!("成功初始化插件管理器");
 
-    // ///方式3：注入外部依赖（推荐）
-    // GlobalPluginManager::initialize_with_deps(
-    //     Default::default(),
-    //     Some(get_default_db_manager()),           // 使用已有的数据库管理器
-    //     Some(GlobalCacheManager::get_arc()),      // 使用已有的缓存管理器
-    //     None,  // 分布式锁管理器
-    //     None,  // 消息订阅发布
-    // ).await.expect("插件管理器初始化失败");
-
-    // // 安装插件
-    // let install_req = cmx_plugin::service::install::InstallRequest {
-    //     source: cmx_plugin::domain::plugin::PluginSource::Local {
-    //         path: PathBuf::from("E:/rustspace/cmx/cmx-container/plugin.zip"),
-    //     },
-    //     db_id: None,
-    //     auto_activate: false,
-    //     version_constraint: None,
-    // };
-    //
-    // let resp = GlobalPluginManager::get().await.install(install_req).await;
-    // match resp {
-    //     Ok(resp) => {
-    //         info!("插件安装响应: {:?}", resp);
-    //     }
-    //     Err(e) => {
-    //         error!("插件安装失败: {:?}", e);
-    //     }
-    // }
+    // 注册插件间调用宿主函数
+    let mut engine = GlobalWasmEngine::get_mut().await;
+    let runtime = GlobalWasmEngine::get_as_invoker();
+    engine.register_provider(Box::new(PluginHostFunctions::new(runtime)));
+    info!("已注册插件间调用宿主函数");
 }

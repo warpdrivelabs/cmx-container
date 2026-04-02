@@ -24,18 +24,20 @@
 //! - `fetcher`: 获取器模块，包含来源定义和各类获取器
 
 // 模块声明
+pub mod common;
+pub mod config;
 pub mod core;
 pub mod domain;
-pub mod service;
-pub mod infrastructure;
-pub mod cluster;
-pub mod security;
-pub mod runtime;
-pub mod config;
-pub mod audit;
-pub mod fetcher;
 pub mod error;
-pub mod common;
+pub mod fetcher;
+pub mod host_functions;
+pub mod infrastructure;
+pub mod runtime;
+pub mod security;
+pub mod service;
+pub mod cluster;
+pub mod audit;
+pub mod traits_impl;
 
 // 导出错误类型
 pub use error::PluginError;
