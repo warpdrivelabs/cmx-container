@@ -13,7 +13,7 @@ use config::web_config;
 use axum::{middleware, Router};
 
 use crate::config::{init_cache, init_db_datasource, init_global_config, init_plugins};
-use cmx_api::middleware::{mw_context_resolver, mw_trace};
+use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
@@ -91,6 +91,8 @@ async fn main() -> Result<()> {
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver))
         .layer(middleware::from_fn(mw_trace))
+        // 3. CORS - 允许跨域请求
+        .layer(cors_layer())
         ;
     // 应用剩余的中间件并添加静态文件服务
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
