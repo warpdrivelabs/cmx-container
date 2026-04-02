@@ -11,12 +11,79 @@
 
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use cmx_core::model::cell::{
     ColumnDefine, DataValue, FieldType, IndexDefine, IndexKind, TableDefine,
 };
-use cmx_core::model::meta::base::{BaseError, TableDefineDbExecutor};
 use cmx_database::{DataSet, get_default_db_manager};
+use thiserror::Error;
 use tracing::info;
+
+// ==========================================
+// 错误类型
+// ==========================================
+
+/// 基础错误类型
+#[derive(Error, Debug)]
+pub enum BaseError {
+    /// IO 错误
+    #[error("IO 错误: {0}")]
+    Io(#[from] std::io::Error),
+    /// JSON 解析错误
+    #[error("JSON 解析错误: {0}")]
+    Json(#[from] serde_json::Error),
+    /// 未实现错误
+    #[error("未实现: {0}")]
+    Unimplemented(String),
+    /// 配置未找到错误
+    #[error("配置未找到: {0}")]
+    ConfigNotFound(String),
+    /// 配置依赖错误
+    #[error("配置依赖错误: {0}")]
+    ConfigDependency(String),
+    /// DDL 生成错误
+    #[error("DDL 生成错误: {0}")]
+    DdlGeneration(String),
+    /// DDL 解析错误
+    #[error("DDL 解析错误: {0}")]
+    DdlParse(String),
+}
+
+// ==========================================
+// 数据库创建/升级表接口
+// ==========================================
+
+/// 表定义在数据库中执行"创建或升级"的接口
+///
+/// 后续由具体数据库实现（如 PostgreSQL / MySQL）。
+/// 使用 #[async_trait] 支持异步操作。
+#[async_trait]
+pub trait TableDefineDbExecutor: Send + Sync {
+    /// 创建表
+    ///
+    /// # 参数
+    /// - `define`: 表定义
+    async fn create_table(&self, define: &TableDefine) -> Result<(), BaseError>;
+
+    /// 升级表
+    ///
+    /// # 参数
+    /// - `define`: 表定义
+    async fn upgrade_table(&self, define: &TableDefine) -> Result<(), BaseError>;
+
+    /// 创建或升级表
+    ///
+    /// 默认实现：先尝试创建，失败则尝试升级
+    ///
+    /// # 参数
+    /// - `define`: 表定义
+    async fn create_or_upgrade_table(&self, define: &TableDefine) -> Result<(), BaseError> {
+        if self.create_table(define).await.is_ok() {
+            return Ok(());
+        }
+        self.upgrade_table(define).await
+    }
+}
 
 use crate::MetadataError;
 use crate::ddl::DdlDialect;
@@ -305,6 +372,7 @@ impl PgTableDefineExecutor {
     }
 }
 
+#[async_trait]
 impl TableDefineDbExecutor for PgTableDefineExecutor {
     async fn create_table(&self, define: &TableDefine) -> std::result::Result<(), BaseError> {
         let dialect = PostgresDdlDialect::default();

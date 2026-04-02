@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use serde_json::Value;
-use cmx_core::model::meta::base::TableDefineDbExecutor;
+use cmx_metadata::TableDefineDbExecutor;
 use cmx_core::model::cell::TableDefine;
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 use cmx_metadata::PgTableDefineExecutor;

@@ -13,4 +13,4 @@ pub mod parser;
 pub mod executor;
 
 pub use error::MetadataError;
-pub use executor::{execute_ddl_by_ids, execute_ddl_statement_by_ids, PgTableDefineExecutor};
+pub use executor::{execute_ddl_by_ids, execute_ddl_statement_by_ids, BaseError, PgTableDefineExecutor, TableDefineDbExecutor};
