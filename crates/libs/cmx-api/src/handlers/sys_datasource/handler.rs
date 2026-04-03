@@ -49,7 +49,7 @@ pub struct DatasourceDeletePayload {
 /// 根据数据源标识查询数据源配置
 #[utoipa::path(
     post,
-    path = "/sys-datasource/by-db-id",
+    path = "/api/sys-datasource/by-db-id",
     request_body = GetByDbIdParams,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Value>)
@@ -77,7 +77,7 @@ pub async fn get_by_db_id(
 /// 创建新的数据源配置并自动注册到 DatabaseManager
 #[utoipa::path(
     post,
-    path = "/sys-datasource/create-custom",
+    path = "/api/sys-datasource/create-custom",
     request_body = SysDatasourceForCreate,
     responses(
         (status = 200, description = "创建成功", body = ApiResp<Value>)
@@ -104,7 +104,7 @@ pub async fn create_datasource(
 /// 更新数据源配置并自动重新注册到 DatabaseManager
 #[utoipa::path(
     post,
-    path = "/sys-datasource/update-custom",
+    path = "/api/sys-datasource/update-custom",
     request_body = DatasourceUpdatePayload,
     responses(
         (status = 200, description = "更新成功", body = ApiResp<Value>)
@@ -133,7 +133,7 @@ pub async fn update_datasource(
 /// 删除数据源配置并自动从 DatabaseManager 注销
 #[utoipa::path(
     post,
-    path = "/sys-datasource/delete-custom",
+    path = "/api/sys-datasource/delete-custom",
     request_body = DatasourceDeletePayload,
     responses(
         (status = 200, description = "删除成功", body = ApiResp<Value>)
@@ -160,7 +160,7 @@ pub async fn delete_datasource(
 /// 测试指定数据源的连接是否正常
 #[utoipa::path(
     get,
-    path = "/sys-datasource/test-connection",
+    path = "/api/sys-datasource/test-connection",
     params(
         ("db_id" = String, Query, description = "数据源标识")
     ),
@@ -188,7 +188,7 @@ pub async fn test_connection(
 /// 获取当前已注册到 DatabaseManager 的所有数据源标识列表
 #[utoipa::path(
     get,
-    path = "/sys-datasource/registered",
+    path = "/api/sys-datasource/registered",
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<String>>)
     ),
