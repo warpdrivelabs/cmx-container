@@ -94,10 +94,7 @@ pub fn api_routes() -> Router<CmxAppState> {
             "/sys-datasource/test-connection",
             axum::routing::get(sys_datasource::handler::test_connection),
         )
-        .route(
-            "/sys-datasource/registered",
-            axum::routing::get(sys_datasource::handler::list_registered),
-        );
+        ;
 
     // 注册其他模型的路由
     // let router = register_crud_routes!(router, UserBmc, UserFilter, UserForCreate, UserForUpdate, "/users");

@@ -80,6 +80,38 @@ pub struct SysDatasource {
     pub update_name: Option<String>,
 }
 
+fn default_max_connections() -> Option<i32> {
+    Some(if cfg!(test) { 1 } else { 10 })
+}
+
+fn default_min_connections() -> Option<i32> {
+    Some(2)
+}
+
+fn default_connect_timeout() -> Option<i64> {
+    Some(30)
+}
+
+fn default_idle_timeout() -> Option<i64> {
+    Some(600)
+}
+
+fn default_max_lifetime() -> Option<i64> {
+    Some(1800)
+}
+
+fn default_default_flag() -> Option<i32> {
+    Some(0)
+}
+
+fn default_health_check_interval() -> Option<i64> {
+    Some(60)
+}
+
+fn default_health_check_timeout() -> Option<i64> {
+    Some(5)
+}
+
 /// 创建请求 DTO
 ///
 /// 用于创建 SysDatasource 的请求数据，包含完整的数据库连接配置
@@ -98,29 +130,31 @@ pub struct SysDatasourceForCreate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_schema: Option<String>,
     /// 是否默认数据源；0否1是
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_default_flag")]
     pub default_flag: Option<i32>,
     /// 最大连接数
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,
     /// 最小空闲连接数
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_min_connections")]
     pub min_connections: Option<i32>,
     /// 连接超时时间（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_connect_timeout")]
     pub connect_timeout: Option<i64>,
     /// 空闲连接超时时间（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_idle_timeout")]
     pub idle_timeout: Option<i64>,
     /// 最大生命周期（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_max_lifetime")]
     pub max_lifetime: Option<i64>,
     /// 健康检查间隔（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_health_check_interval")]
     pub health_check_interval: Option<i64>,
     /// 健康检查超时（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_health_check_timeout")]
     pub health_check_timeout: Option<i64>,
+    /// 状态：0-禁用，1-启用
+    pub status: i32,
 }
 
 /// 更新请求 DTO
@@ -144,32 +178,31 @@ pub struct SysDatasourceForUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_schema: Option<String>,
     /// 是否默认；0否1是
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_default_flag")]
     pub default_flag: Option<i32>,
     /// 最大连接数
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,
     /// 最小空闲连接数
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_min_connections")]
     pub min_connections: Option<i32>,
     /// 连接超时时间（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_connect_timeout")]
     pub connect_timeout: Option<i64>,
     /// 空闲连接超时时间（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_idle_timeout")]
     pub idle_timeout: Option<i64>,
     /// 最大生命周期（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_max_lifetime")]
     pub max_lifetime: Option<i64>,
     /// 健康检查间隔（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_health_check_interval")]
     pub health_check_interval: Option<i64>,
     /// 健康检查超时（秒）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default = "default_health_check_timeout")]
     pub health_check_timeout: Option<i64>,
     /// 状态：0-禁用，1-启用
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<i32>,
+    pub status: i32,
     /// 归档标志：0-未归档，1-已归档
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived: Option<i32>,

@@ -41,12 +41,7 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::module_crud::list,
         crate::routes::crud_handlers::module_crud::page,
         // SysDatasource CRUD handlers
-        // crate::routes::crud_handlers::sys_datasource_crud::create,
-        // crate::routes::crud_handlers::sys_datasource_crud::create_many,
         crate::routes::crud_handlers::sys_datasource_crud::get,
-        // crate::routes::crud_handlers::sys_datasource_crud::update,
-        // crate::routes::crud_handlers::sys_datasource_crud::update_many,
-        // crate::routes::crud_handlers::sys_datasource_crud::delete,
         crate::routes::crud_handlers::sys_datasource_crud::list,
         crate::routes::crud_handlers::sys_datasource_crud::page,
 
@@ -61,7 +56,6 @@ use utoipa::OpenApi;
         crate::handlers::sys_datasource::handler::update_datasource,
         crate::handlers::sys_datasource::handler::delete_datasource,
         crate::handlers::sys_datasource::handler::test_connection,
-        crate::handlers::sys_datasource::handler::list_registered,
         // Plugin handlers
         crate::handlers::plugin::handler::plugin_install,
         crate::handlers::plugin::handler::plugin_uninstall,

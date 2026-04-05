@@ -3,6 +3,7 @@
 //! 该模块是应用程序的入口点，负责初始化各种组件、配置路由并启动 HTTP 服务器
 
 mod config;
+mod datasource_init;
 mod error;
 mod plugins;
 mod routes;
@@ -12,7 +13,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 
-use crate::config::{init_cache, init_db_datasource, init_global_config, init_plugins};
+use crate::config::{init_cache, init_datasources, init_global_config, init_plugins};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use tokio::net::TcpListener;
@@ -70,7 +71,7 @@ async fn main() -> Result<()> {
     // 初始化全局配置
     init_global_config();
     // 初始化数据库数据源
-    init_db_datasource().await;
+    init_datasources().await;
     // 初始化 Redis 缓存
     init_cache().await;
     // 获取 Web 服务器配置

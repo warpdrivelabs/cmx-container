@@ -3,16 +3,14 @@
 //! 实现数据源的 CRUD 操作，并动态管理数据库连接池
 
 use crate::error::{Error, Result};
-use cmx_core::model::data::dataset::{DataSet, Schema};
+use cmx_core::model::data::dataset::DataSet;
 use cmx_database::{DatabaseManager, DbConfig, PoolConfig};
 use cmx_database::config::DbType;
 use modql::filter::{OpValString, OpValsString};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::Arc;
 use tracing::{debug, info, warn};
-use cmx_core::UpdatePayload;
 use cmx_database::crud::GenericCrudService;
 use super::{SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate};
 
@@ -46,43 +44,43 @@ impl SysDatasourceService {
             )));
         }
 
-        let result = GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, data.clone()).await?;
+        let tx = mm.get_transaction_context().begin_with_guard(db_id).await
+            .map_err(|e| Error::internal_error(format!("开启事务失败: {}", e)))?;
+
+        let result = GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, Some(tx.txn_id()), data.clone()).await?;
 
         let db_config = Self::to_db_config(&data);
-        match mm.register_data_source(db_config).await {
-            Ok(_) => info!("数据源注册成功: {}", data.db_id),
-            Err(e) => warn!("数据源注册失败: {}, 错误: {}", data.db_id, e),
-        }
-
-        Ok(result)
-    }
-
-    /// 批量创建数据源
-    pub async fn create_many(
-        mm: &DatabaseManager,
-        db_id: &str,
-        items: Vec<SysDatasourceForCreate>,
-    ) -> Result<DataSet> {
-        info!(
-            "{:<12} - SysDatasourceService::create_many - count: {}",
-            "SERVICE",
-            items.len()
-        );
-
-        let result = GenericCrudService::<SysDatasourceBmc>::create_many(mm, db_id, items.clone()).await?;
-
-        for item in items {
-            let db_config = Self::to_db_config(&item);
+        if data.status == 1 {
             match mm.register_data_source(db_config).await {
-                Ok(_) => info!("数据源注册成功: {}", item.db_id),
-                Err(e) => warn!("数据源注册失败: {}, 错误: {}", item.db_id, e),
+                Ok(_) => info!("数据源注册成功: {}", data.db_id),
+                Err(e) => {
+                    warn!("数据源注册失败: {}, 错误: {}", data.db_id, e);
+                    tx.rollback().await
+                        .map_err(|e| Error::internal_error(format!("回滚事务失败: {}", e)))?;
+                    return Err(Error::internal_error(format!("数据源注册失败: {}", e)));
+                }
             }
         }
 
+        tx.commit().await
+            .map_err(|e| Error::internal_error(format!("提交事务失败: {}", e)))?;
+
         Ok(result)
     }
 
+
+
     /// 更新数据源
+    ///
+    /// # 流程
+    /// 1. 开启事务
+    /// 2. 获取更新前的旧数据
+    /// 3. 执行数据库更新
+    /// 4. 注销旧数据源
+    /// 5. 根据 status 判断是否重新注册:
+    ///    - status=0（禁用）: 仅注销，不重新注册
+    ///    - status=1（启用）: 注销后重新注册，注册失败则回滚
+    /// 6. 提交事务
     pub async fn update(
         mm: &DatabaseManager,
         db_id: &str,
@@ -94,56 +92,52 @@ impl SysDatasourceService {
             "SERVICE", id
         );
 
-        let old_data = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Value::String(id.to_string())).await?;
+        let tx = mm.get_transaction_context().begin_with_guard(db_id).await
+            .map_err(|e| Error::internal_error(format!("开启事务失败: {}", e)))?;
+
+        let old_data = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Some(tx.txn_id()), Value::String(id.to_string())).await?;
 
         let result = GenericCrudService::<SysDatasourceBmc>::update(
             mm,
             db_id,
+            Some(tx.txn_id()),
             Value::String(id.to_string()),
             data,
         ).await?;
 
-        if let Some(old_db_id) = Self::get_field_from_dataset(&old_data, "db_id") {
-            let _ = mm.unregister_data_source(&old_db_id).await;
-        }
 
-        if let Some(new_config) = Self::build_db_config_from_dataset(&result) {
-            match mm.register_data_source(new_config).await {
-                Ok(_) => info!("数据源重新注册成功"),
-                Err(e) => warn!("数据源重新注册失败: {}", e),
+
+        let new_status = Self::get_int_field_from_dataset(&result, "status").unwrap_or(1);
+        if new_status == 1 {
+            //先取消注册
+            if let Some(old_db_id) = Self::get_field_from_dataset(&old_data, "db_id") {
+                match mm.unregister_data_source(&old_db_id).await {
+                    Ok(_) => info!("旧数据源注销成功: {}", old_db_id),
+                    Err(e) => warn!("旧数据源注销失败: {}, 错误: {}", old_db_id, e),
+                }
             }
+            if let Some(new_config) = Self::build_db_config_from_dataset(&result) {
+                match mm.register_data_source(new_config).await {
+                    Ok(_) => info!("数据源重新注册成功"),
+                    Err(e) => {
+                        warn!("数据源重新注册失败: {}", e);
+                        tx.rollback().await
+                            .map_err(|e| Error::internal_error(format!("回滚事务失败: {}", e)))?;
+                        return Err(Error::internal_error(format!("数据源更新失败: {}", e)));
+                    }
+                }
+            }
+        } else {
+            info!("数据源 status={}，跳过注册", new_status);
         }
 
-        let schema = Arc::new(Schema::new("empty", vec![]));
-        let result= DataSet::empty("result", schema);
+        tx.commit().await
+            .map_err(|e| Error::internal_error(format!("提交事务失败: {}", e)))?;
 
         Ok(result)
     }
 
-    /// 批量更新数据源
-    pub async fn update_many(
-        mm: &DatabaseManager,
-        db_id: &str,
-        items: Vec<UpdatePayload<SysDatasourceForUpdate>>,
-    ) -> Result<DataSet> {
-        info!(
-            "{:<12} - SysDatasourceService::update_many - count: {}",
-            "SERVICE",
-            items.len()
-        );
 
-        let result = GenericCrudService::<SysDatasourceBmc>::update_many(mm, db_id, items.clone()).await?;
-
-        for item in items {
-            if let Ok(old_data) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, item.id.clone()).await
-                && let Some(old_db_id) = Self::get_field_from_dataset(&old_data, "db_id")
-            {
-                let _ = mm.unregister_data_source(&old_db_id).await;
-            }
-        }
-
-        Ok(result)
-    }
 
     /// 删除数据源
     pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<String>) -> Result<DataSet> {
@@ -154,7 +148,7 @@ impl SysDatasourceService {
         );
 
         for id in &ids {
-            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Value::String(id.clone())).await
+            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, None, Value::String(id.clone())).await
                 && let Some(ds_db_id) = Self::get_field_from_dataset(&dataset, "db_id")
             {
                 match mm.unregister_data_source(&ds_db_id).await {
@@ -165,7 +159,7 @@ impl SysDatasourceService {
         }
 
         let ids_value: Vec<Value> = ids.into_iter().map(Value::String).collect();
-        GenericCrudService::<SysDatasourceBmc>::delete(mm, db_id, ids_value)
+        GenericCrudService::<SysDatasourceBmc>::delete(mm, db_id, None, ids_value)
             .await
             .map_err(Error::from)
     }
@@ -190,7 +184,7 @@ impl SysDatasourceService {
             archived: None,
         };
 
-        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, Some(filter), None)
+        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, None, Some(filter), None)
             .await
             .map_err(Error::from)
     }
@@ -207,10 +201,10 @@ impl SysDatasourceService {
         })
     }
 
-    /// 列出所有已注册的数据源
-    pub fn list_registered(mm: &DatabaseManager) -> Vec<String> {
-        mm.list_data_sources()
-    }
+    // /// 列出所有已注册的数据源
+    // pub fn list_registered(mm: &DatabaseManager) -> Vec<String> {
+    //     mm.list_data_sources()
+    // }
 
     /// 将 SysDatasourceForCreate 转换为 DbConfig
     fn to_db_config(data: &SysDatasourceForCreate) -> DbConfig {
@@ -239,6 +233,13 @@ impl SysDatasourceService {
         let row = dataset.iter().next()?;
         let value = row.get_by_name(&dataset.schema, field_name)?;
         String::try_from(value.clone()).ok()
+    }
+
+    /// 从 DataSet 中获取整数字段值
+    fn get_int_field_from_dataset(dataset: &DataSet, field_name: &str) -> Option<i64> {
+        let row = dataset.iter().next()?;
+        let value = row.get_by_name(&dataset.schema, field_name)?;
+        i64::try_from(value.clone()).ok()
     }
 
     /// 从 DataSet 构建 DbConfig

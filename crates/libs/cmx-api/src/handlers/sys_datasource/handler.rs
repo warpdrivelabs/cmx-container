@@ -101,7 +101,9 @@ pub async fn create_datasource(
 
 /// 更新数据源 Handler
 ///
-/// 更新数据源配置并自动重新注册到 DatabaseManager
+/// 更新数据源配置，根据 status 自动管理内存中的数据源注册:
+/// - status=0（禁用）: 注销数据源
+/// - status=1（启用）: 先注销再重新注册
 #[utoipa::path(
     post,
     path = "/api/sys-datasource/update-custom",
@@ -181,28 +183,4 @@ pub async fn test_connection(
     let result = SysDatasourceService::test_connection(mm, &params.db_id).await?;
 
     Ok(Json(ApiResp::ok(result)))
-}
-
-/// 列出所有已注册数据源 Handler
-///
-/// 获取当前已注册到 DatabaseManager 的所有数据源标识列表
-#[utoipa::path(
-    get,
-    path = "/api/sys-datasource/registered",
-    responses(
-        (status = 200, description = "查询成功", body = ApiResp<Vec<String>>)
-    ),
-    tag = "SysDatasource"
-)]
-pub async fn list_registered(
-    State(_cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    _headers: HeaderMap,
-) -> Result<Json<ApiResp<Vec<String>>>> {
-    debug!("{:<12} - handler::list_registered", "HANDLER");
-
-    let mm = get_default_db_manager();
-    let list = SysDatasourceService::list_registered(mm);
-
-    Ok(Json(ApiResp::ok(list)))
 }
