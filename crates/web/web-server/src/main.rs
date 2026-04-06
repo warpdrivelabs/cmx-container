@@ -46,6 +46,8 @@ async fn main() -> Result<()> {
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(true)
+        .with_file(true)       // 添加文件名
+        .with_line_number(true)  // 添加行号
         .json();
 
     // 控制台日志层: 简洁格式，带颜色，便于开发调试
@@ -53,6 +55,8 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stdout)
         .with_ansi(true)
         .with_target(false)
+        .with_file(true)       // 添加文件名
+        .with_line_number(true)  // 添加行号
         .compact();
 
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
