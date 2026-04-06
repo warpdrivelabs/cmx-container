@@ -13,7 +13,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 
-use crate::config::{init_cache, init_datasources, init_global_config, init_plugins};
+use crate::config::{init_cache, init_datasources, init_global_config, init_plugins,init_runtime};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use tokio::net::TcpListener;
