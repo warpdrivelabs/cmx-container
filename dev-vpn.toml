@@ -1,0 +1,53 @@
+# ============================================
+# 数据源配置数组
+# ============================================
+# databases 是一个数组，可以配置多个数据源
+# 每个数据源必须有一个唯一的 db_id 作为标识
+
+[[databases]]
+# 数据源唯一标识符（必需）
+db_id = "primary"
+# 数据库类型：postgres | mysql | sqlite（必需）
+db_type = "postgres"
+# 数据库连接 URL（必需）
+db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
+#db_url = "postgres://dbuser_dba:uxW2GKFvRIcqL7qDm1W2Zc8b@192.168.1.14:5432/cmx"
+# 是否为默认数据库（可选，默认 false）
+default = true
+
+# 连接池配置（可选，使用默认值时可省略）
+[databases.pool_config]
+# 最大连接数（可选，默认 10，测试环境为 1）
+max_connections = 20
+# 最小空闲连接数（可选，默认 2）
+min_connections = 5
+# 连接超时时间（秒，可选，默认 30）
+connect_timeout = 30
+# 空闲连接超时时间（秒，可选，默认 600）
+idle_timeout = 600
+# 连接最大生命周期（秒，可选，默认 1800）
+max_lifetime = 1800
+
+# 健康检查配置（可选）
+# 健康检查间隔（秒，可选，默认 60）
+health_check_interval = 60
+# 健康检查超时时间（秒，可选，默认 5）
+health_check_timeout = 5
+
+
+# 第二个数据源 - Postgres
+[[databases]]
+db_id = "postgres2"
+db_type = "postgres"
+db_url = "postgres://dbuser_dba:uxW2GKFvRIcqL7qDm1W2Zc8b@192.168.157.46:5432/cmx"
+default = false
+health_check_interval = 30
+health_check_timeout = 3
+pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
+
+[redis]
+#url = "redis://192.168.137.95:32496/13"
+url = "redis://192.168.1.14:6379/13"
+
+[node]
+node_id="0323"

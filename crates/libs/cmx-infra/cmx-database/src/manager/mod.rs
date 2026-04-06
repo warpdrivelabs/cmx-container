@@ -88,7 +88,7 @@ impl DatabaseManager {
             *write_guard = db_config.db_id.clone();
         }
 
-        self.pool_manager.register(db_config).await
+        Ok(self.pool_manager.register(db_config).await?)
     }
 
     /// 注销数据源

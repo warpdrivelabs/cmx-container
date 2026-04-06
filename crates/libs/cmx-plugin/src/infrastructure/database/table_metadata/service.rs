@@ -762,7 +762,7 @@ impl TableMetadataService {
             }
         }
 
-        let result = GenericCrudService::<TableMetadataBmc>::delete(mm, db_id, ids.clone()).await;
+        let result = GenericCrudService::<TableMetadataBmc>::delete(mm, db_id, None, ids.clone()).await;
         match result {
             Ok(_) => {
                 total_affected = ids.len() as u64;
@@ -802,6 +802,7 @@ impl TableMetadataService {
         GenericCrudService::<TableMetadataVersionBmc, TableMetadataVersionFilter>::list(
             mm,
             db_id,
+            None,
             Some(filter),
             None,
         )

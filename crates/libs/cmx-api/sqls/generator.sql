@@ -124,6 +124,7 @@ CREATE TABLE cmx_sys_datasource(
                                    min_connections INTEGER,
                                    connect_timeout INTEGER,
                                    idle_timeout INTEGER,
+                                   max_lifetime INTEGER,
                                    health_check_interval INTEGER,
                                    health_check_timeout INTEGER,
                                    default_flag INTEGER,
@@ -149,6 +150,7 @@ COMMENT ON COLUMN cmx_sys_datasource.max_connections IS '最大连接数';
 COMMENT ON COLUMN cmx_sys_datasource.min_connections IS '最小空闲连接数';
 COMMENT ON COLUMN cmx_sys_datasource.connect_timeout IS '连接超时时间（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.idle_timeout IS '空闲连接超时时间（秒）';
+COMMENT ON COLUMN cmx_sys_datasource.max_lifetime IS '最大生命周期（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.health_check_interval IS '健康检查间隔（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.health_check_timeout IS '健康检查超时（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.default_flag IS '是否默认;0否1是';

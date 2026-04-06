@@ -71,11 +71,12 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `data` - 要创建的实体数据
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create<E>(mm: &DatabaseManager, db_id: &str, data: E) -> Result<DataSet>
+    pub async fn create<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, data: E) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -102,7 +103,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let rows_affected = mm
-            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -110,7 +111,7 @@ where
             })?;
 
         info!("{:<12} - 创建成功, 影响行数: {}", "CRUD", rows_affected);
-        Self::get(mm, db_id, Value::String(pk_value)).await
+        Self::get(mm, db_id, txn_id, Value::String(pk_value)).await
     }
 
     /// 批量创建多个实体
@@ -118,11 +119,12 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `data` - 要创建的实体数据向量
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create_many<E>(mm: &DatabaseManager, db_id: &str, data: Vec<E>) -> Result<DataSet>
+    pub async fn create_many<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, data: Vec<E>) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -155,7 +157,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let rows_affected = mm
-            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 批量创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -172,11 +174,12 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `id` - 主键值
     ///
     /// # 返回值
     /// 返回包含查询结果的 DataSet
-    pub async fn get(mm: &DatabaseManager, db_id: &str, id: Value) -> Result<DataSet> {
+    pub async fn get(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, id: Value) -> Result<DataSet> {
         debug!(
             "{:<12} - GenericCrudService::get - table: {}, db_id: {}, id: {:?}",
             "CRUD",
@@ -196,7 +199,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!(
@@ -220,12 +223,13 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `id` - 主键值
     /// * `data` - 要更新的数据
     ///
     /// # 返回值
     /// 返回包含更新后结果的 DataSet
-    pub async fn update<E>(mm: &DatabaseManager, db_id: &str, id: Value, data: E) -> Result<DataSet>
+    pub async fn update<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, id: Value, data: E) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -251,7 +255,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let rows_affected = mm
-            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!(
@@ -275,7 +279,7 @@ where
             info!("{:<12} - 更新成功, 影响行数: {}", "CRUD", rows_affected);
         }
 
-        Self::get(mm, db_id, id).await
+        Self::get(mm, db_id, txn_id, id).await
     }
 
     /// 批量更新多个实体
@@ -283,6 +287,7 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `data` - 更新数据向量（包含 id 和 data）
     ///
     /// # 返回值
@@ -290,6 +295,7 @@ where
     pub async fn update_many<E>(
         mm: &DatabaseManager,
         db_id: &str,
+        txn_id: Option<&str>,
         data: Vec<UpdatePayload<E>>,
     ) -> Result<DataSet>
     where
@@ -321,7 +327,7 @@ where
             let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
             let rows_affected = mm
-                .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+                .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
                 .await
                 .map_err(|e| {
                     warn!("{:<12} - 批量更新失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -344,11 +350,12 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `ids` - 主键值列表（单个删除传一个元素即可）
     ///
     /// # 返回值
     /// 返回包含删除信息的 DataSet
-    pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<Value>) -> Result<DataSet> {
+    pub async fn delete(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, ids: Vec<Value>) -> Result<DataSet> {
         info!(
             "{:<12} - GenericCrudService::delete - table: {}, db_id: {}, count: {}",
             "CRUD",
@@ -374,7 +381,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let rows_affected = mm
-            .execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values)
+            .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 删除失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -397,6 +404,7 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `filter` - 过滤条件（可选）
     /// * `list_options` - 列表选项（可选，包含分页和排序）
     ///
@@ -405,6 +413,7 @@ where
     pub async fn list(
         mm: &DatabaseManager,
         db_id: &str,
+        txn_id: Option<&str>,
         filter: Option<F>,
         list_options: Option<ListOptions>,
     ) -> Result<DataSet> {
@@ -436,7 +445,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 列表查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -454,6 +463,7 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `filter` - 过滤条件（可选）
     /// * `list_options` - 列表选项（包含分页和排序）
     ///
@@ -462,6 +472,7 @@ where
     pub async fn page(
         mm: &DatabaseManager,
         db_id: &str,
+        txn_id: Option<&str>,
         filter: Option<F>,
         list_options: ListOptions,
     ) -> Result<(DataSet, i64)> {
@@ -491,7 +502,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, MC::TABLE)
+            .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 分页查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
@@ -499,7 +510,7 @@ where
             })?;
 
         let row_count = dataset.iter().count();
-        let total = Self::count(mm, db_id, filter).await?;
+        let total = Self::count(mm, db_id, txn_id, filter).await?;
 
         debug!(
             "{:<12} - 分页查询返回 {} 行, 总数: {}",
@@ -514,11 +525,12 @@ where
     /// # 参数
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
     /// * `filter` - 过滤条件（可选）
     ///
     /// # 返回值
     /// 返回记录总数
-    pub async fn count(mm: &DatabaseManager, db_id: &str, filter: Option<F>) -> Result<i64> {
+    pub async fn count(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, filter: Option<F>) -> Result<i64> {
         debug!(
             "{:<12} - GenericCrudService::count - table: {}, db_id: {}",
             "CRUD",
@@ -543,7 +555,7 @@ where
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "count")
+            .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, "count")
             .await
             .map_err(|e| {
                 warn!("{:<12} - 统计失败: {}, table: {}", "CRUD", e, MC::TABLE);

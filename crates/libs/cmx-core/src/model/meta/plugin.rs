@@ -196,3 +196,24 @@ impl PluginManifest {
             && self.signature.as_ref().is_some_and(|s| !s.is_empty())
     }
 }
+// ==========================================
+// 建表 JSON 配置文件（纯数据结构）
+// ==========================================
+
+/// 建表 JSON 配置文件：描述一组表定义文件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableDefinesConfig {
+    /// 配置名称
+    pub name: String,
+    /// 配置描述
+    #[serde(default)]
+    pub description: Option<String>,
+    /// 表定义文件列表
+    pub files: Vec<String>,
+    /// 依赖的其他配置
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    /// 优先级（数值越小优先级越高）
+    #[serde(default)]
+    pub priority: Option<i32>,
+}

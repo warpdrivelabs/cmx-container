@@ -45,7 +45,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::create(mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::create(mm, &db_id, None, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -75,7 +75,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::create_many(mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::create_many(mm, &db_id, None, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -102,7 +102,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let id = params.id.clone();
-    let dataset = GenericCrudService::<MC>::get(mm, &db_id, id.into()).await?;
+    let dataset = GenericCrudService::<MC>::get(mm, &db_id, None, id.into()).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -132,7 +132,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::update(mm, &db_id, payload.id, payload.data).await?;
+    let dataset = GenericCrudService::<MC>::update(mm, &db_id, None, payload.id, payload.data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -162,7 +162,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::update_many(mm, &db_id, data).await?;
+    let dataset = GenericCrudService::<MC>::update_many(mm, &db_id, None, data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -189,7 +189,7 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::delete(mm, &db_id, payload.ids).await?;
+    let dataset = GenericCrudService::<MC>::delete(mm, &db_id, None, payload.ids).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -218,7 +218,7 @@ where
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
     let filter = params.filter.clone();
-    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, filter, Some(list_options)).await?;
+    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, None, filter, Some(list_options)).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -252,7 +252,7 @@ where
 
     let list_options = params.to_list_options();
     let filter = params.filter.clone();
-    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, filter, list_options).await?;
+    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, None, filter, list_options).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,

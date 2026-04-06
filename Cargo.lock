@@ -5242,6 +5242,7 @@ dependencies = [
  "axum",
  "cmx-api",
  "cmx-buffer",
+ "cmx-core",
  "cmx-database",
  "cmx-plugin",
  "cmx-runtime",
@@ -5250,6 +5251,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "log",
+ "modql",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -5259,6 +5261,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
