@@ -40,7 +40,7 @@ where
         }
     }
     if MC::has_timestamps() {
-        add_timestamps_for_update(fields, user_id);
+        add_timestamps_for_create(fields, user_id);
     }
 
     // 添加主键

@@ -7,7 +7,7 @@
 
 use futures::future::BoxFuture;
 use std::sync::OnceLock;
-use log::info;
+use log::{info, warn};
 use tokio::sync::mpsc;
 use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
@@ -25,7 +25,7 @@ use tracing::debug;
 #[derive(Debug)]
 enum TxnCleanupCommand {
     Rollback(String),
-    Commit(String),
+    // Commit(String),
 }
 
 /// TransactionGuard 的全局清理通道
@@ -44,13 +44,13 @@ fn get_cleanup_sender() -> &'static mpsc::Sender<TxnCleanupCommand> {
                             tracing::debug!("TransactionGuard 自动回滚成功: txn_id={}", txn_id);
                         }
                     },
-                    TxnCleanupCommand::Commit(txn_id) => {
-                        if let Err(e) = commit_txn_by_id(&txn_id).await {
-                            tracing::error!("TransactionGuard 自动提交失败: txn_id={}, error={}", txn_id, e);
-                        } else {
-                            tracing::debug!("TransactionGuard 自动提交成功: txn_id={}", txn_id);
-                        }
-                    }
+                    // TxnCleanupCommand::Commit(txn_id) => {
+                    //     if let Err(e) = commit_txn_by_id(&txn_id).await {
+                    //         tracing::error!("TransactionGuard 自动提交失败: txn_id={}, error={}", txn_id, e);
+                    //     } else {
+                    //         tracing::debug!("TransactionGuard 自动提交成功: txn_id={}", txn_id);
+                    //     }
+                    // }
                 }
             }
         });
@@ -136,8 +136,8 @@ impl TransactionGuard {
 
 impl Drop for TransactionGuard {
     fn drop(&mut self) {
-        info!("TransactionGuard 析构，txnID: {}, committed: {}", self.txn_id, self.committed);
         if !self.committed {
+            warn!("TransactionGuard 析构，txnID: {}", self.txn_id);
             let txn_id = self.txn_id.clone();
             let sender = get_cleanup_sender();
             let _ = sender.try_send(TxnCleanupCommand::Rollback(txn_id));
