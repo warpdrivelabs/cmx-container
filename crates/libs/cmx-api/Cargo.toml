@@ -16,6 +16,8 @@ cmx-core = { workspace = true }
 cmx-database = { workspace = true }
 cmx-metadata = { workspace = true }
 cmx-plugin = { workspace = true }
+cmx-traits = { workspace = true }
+cmx-service = { workspace = true }
 
 # -- 异步
 tokio={workspace = true}

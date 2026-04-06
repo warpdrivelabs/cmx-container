@@ -64,7 +64,7 @@ pub async fn plugin_install(
 ) -> Result<Json<ApiResp<InstallResponse>>> {
     debug!("插件安装请求: {:?}", req);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: convert_source(&req.source),
@@ -108,7 +108,7 @@ pub async fn plugin_uninstall(
 ) -> Result<Json<ApiResp<UninstallResponse>>> {
     debug!("插件卸载请求: {:?}", req);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let uninstall_req = cmx_plugin::service::uninstall::UninstallRequest {
         plugin_id: req.plugin_id.clone(),
@@ -149,7 +149,7 @@ pub async fn plugin_upgrade(
 ) -> Result<Json<ApiResp<UpgradeResponse>>> {
     debug!("插件升级请求: {:?}", req);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let upgrade_req = cmx_plugin::service::upgrade::UpgradeRequest {
         plugin_id: req.plugin_id.clone(),
@@ -194,7 +194,7 @@ pub async fn plugin_downgrade(
 ) -> Result<Json<ApiResp<DowngradeResponse>>> {
     debug!("插件降级请求: {:?}", req);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let downgrade_req = cmx_plugin::service::downgrade::DowngradeRequest {
         plugin_id: req.plugin_id.clone(),
@@ -298,7 +298,7 @@ pub async fn plugin_deploy(
     };
 
     // 调用 PluginManager.deploy()
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let deploy_req = cmx_plugin::DeployRequest {
         source,
@@ -429,7 +429,7 @@ pub async fn plugin_list(
 ) -> Result<Json<ApiResp<PluginListResponse>>> {
     debug!("插件列表查询: {:?}", params);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
@@ -470,7 +470,7 @@ pub async fn plugin_get(
 ) -> Result<Json<ApiResp<PluginInfoResponse>>> {
     debug!("插件详情查询: plugin_id={}", params.plugin_id);
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
 
     let plugin = manager.get_plugin(&params.plugin_id).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件详情失败: {}", e))
@@ -509,7 +509,7 @@ pub async fn plugin_page(
         .unwrap_or_default()
         .into();
 
-    let manager = cmx_plugin::GlobalPluginManager::get().await;
+    let manager = cmx_plugin::GlobalPluginManager::get();
     let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
         crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;

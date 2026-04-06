@@ -6,6 +6,9 @@ members = [
     "crates/libs/cmx-utils",
     "crates/libs/cmx-metadata",
     "crates/libs/cmx-plugin",
+    "crates/libs/cmx-traits",
+    "crates/libs/cmx-runtime",
+    "crates/libs/cmx-service",
     "crates/libs/cmx-infra/cmx-database",
     "crates/libs/cmx-infra/cmx-buffer",
     "crates/web/web-server",
@@ -37,6 +40,9 @@ cmx-database = { path = "crates/libs/cmx-infra/cmx-database" }
 cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer" }
 cmx-metadata = { path = "crates/libs/cmx-metadata" }
 cmx-plugin = { path = "crates/libs/cmx-plugin" }
+cmx-traits = { path = "crates/libs/cmx-traits" }
+cmx-runtime = { path = "crates/libs/cmx-runtime" }
+cmx-service = { path = "crates/libs/cmx-service" }
 
 
 # ============================================

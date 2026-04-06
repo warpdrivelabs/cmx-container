@@ -4,6 +4,7 @@
 
 use crate::handlers::domain;
 use crate::handlers::plugin;
+use crate::handlers::service;
 use crate::handlers::sys_datasource;
 use crate::handlers::table_metadata;
 use crate::register_crud_handlers_module;
@@ -114,6 +115,11 @@ pub fn api_routes() -> Router<CmxAppState> {
     let router = router
         .route("/table-metadata/list", post(table_metadata::handler::table_metadata_list))
         .route("/table-metadata/page", post(table_metadata::handler::table_metadata_page));
+
+    // 注册服务调用路由
+    let router = router
+        .route("/service/call", post(service::service_call))
+        .route("/service/orchestration", post(service::execute_orchestration));
 
     router
 }

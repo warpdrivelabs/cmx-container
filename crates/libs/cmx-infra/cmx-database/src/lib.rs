@@ -7,6 +7,7 @@
  */
 pub mod config;
 pub mod connection;
+pub mod host_functions;
 pub mod monitoring;
 pub mod transaction;
 pub mod executor;
