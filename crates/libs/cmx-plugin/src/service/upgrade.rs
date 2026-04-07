@@ -39,6 +39,8 @@ pub struct UpgradeRequest {
     pub force: bool,
     /// 操作者
     pub operator: Option<String>,
+    /// 构建类型 debug release
+    pub  build_type : Option<String>,
 }
 
 /// 升级响应
@@ -120,6 +122,8 @@ impl UpgradeService {
     /// 执行升级操作
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
         let start_time = std::time::Instant::now();
+        let build_type = request.build_type.unwrap_or("release".to_string());
+
 
         // 步骤1: 检查插件存在
         let plugin = self
@@ -208,7 +212,7 @@ impl UpgradeService {
             .copy_plugin_files(&extract_path, &install_path, "升级")?;
 
         let target_db_id = plugin.db_id.clone();
-        
+
         let default_db_id = self.deps.default_database_id.clone();
         //开启事务
         let txn_guard = get_default_db_manager()
@@ -257,6 +261,7 @@ impl UpgradeService {
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
             Some(&plugin_def),
+            build_type.as_str(),
         );
         self.deps
             .version_history_repository
@@ -266,26 +271,33 @@ impl UpgradeService {
         // 标记当前版本
         self.deps
             .version_history_repository
-            .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
-            .await?;
-        self.deps
-            .version_history_repository
-            .update_version(
-                &version_record.id,
-                &crate::infrastructure::database::version_history::VersionUpdateParams {
-                    install_path: Some(install_path.to_string_lossy().to_string()),
-                    wasm_path: Some(wasm_path),
-                    is_current: Some(true),
-                    uninstalled_at: None,
-                    update_time: Some(chrono::Utc::now()),
-                    create_by: None,
-                    create_name: None,
-                    update_by: None,
-                    update_name: None,
-                },
-                Some(txn_guard.txn_id()),
-            )
-            .await?;
+            .set_current_version(&plugin_id, new_version.as_str(),
+                                 install_path.to_string_lossy().to_string().as_str(),
+                                 wasm_path.as_str(),
+                                 Some(txn_guard.txn_id())).await?;
+
+        // self.deps
+        //     .version_history_repository
+        //     .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+        //     .await?;
+        // self.deps
+        //     .version_history_repository
+        //     .update_version(
+        //         &version_record.id,
+        //         &crate::infrastructure::database::version_history::VersionUpdateParams {
+        //             install_path: Some(install_path.to_string_lossy().to_string()),
+        //             wasm_path: Some(wasm_path),
+        //             is_current: Some(true),
+        //             uninstalled_at: None,
+        //             update_time: Some(chrono::Utc::now()),
+        //             create_by: None,
+        //             create_name: None,
+        //             update_by: None,
+        //             update_name: None,
+        //         },
+        //         Some(txn_guard.txn_id()),
+        //     )
+        //     .await?;
 
         // 步骤12: 插入 cmx_plugin_deployments 节点部署记录
         // 检查该节点是否已有此版本的部署记录

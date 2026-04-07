@@ -43,6 +43,9 @@ pub async fn table_metadata_list(
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);
     }
+    if params.filter.is_none() || params.filters.unwrap().is_empty() {
+        filters = None;
+    }
     let dataset =
         TableMetadataService::list(mm, &db_id, filters, Some(list_options))
             .await

@@ -253,6 +253,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
             let pool = PgPoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
                 .min_connections(pool_config.min_connections as u32)
+                .acquire_timeout(std::time::Duration::from_secs(pool_config.connect_timeout))
                 .idle_timeout(std::time::Duration::from_secs(pool_config.idle_timeout))
                 .max_lifetime(std::time::Duration::from_secs(pool_config.max_lifetime))
                 .after_connect(move |conn, _metadata| {

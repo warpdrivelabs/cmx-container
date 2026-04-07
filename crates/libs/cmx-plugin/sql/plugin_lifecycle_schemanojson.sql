@@ -98,6 +98,7 @@ CREATE TABLE cmx_plugin_versions (
     uninstalled_at      TIMESTAMP WITH TIME ZONE,
     zip_source_url      VARCHAR(500),
     zip_source_type     VARCHAR(30),
+    build_type     VARCHAR(30),
     create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     archived            INT4 NOT NULL DEFAULT 0,
@@ -119,9 +120,11 @@ COMMENT ON COLUMN cmx_plugin_versions.install_path IS '该版本的安装路径'
 COMMENT ON COLUMN cmx_plugin_versions.wasm_path IS '该版本的 WASM 路径';
 COMMENT ON COLUMN cmx_plugin_versions.is_current IS '是否当前版本';
 COMMENT ON COLUMN cmx_plugin_versions.installed_at IS '安装时间';
+COMMENT ON COLUMN cmx_plugin_versions.uninstalled_at IS '卸载时间';
 COMMENT ON COLUMN cmx_plugin_versions.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_plugin_versions.zip_source_url IS '该版本插件ZIP包来源地址';
 COMMENT ON COLUMN cmx_plugin_versions.zip_source_type IS '该版本插件来源类型: local(本地), url(远程URL), registry(注册表)';
+COMMENT ON COLUMN cmx_plugin_versions.build_type IS '构建类型: debug/release';
 COMMENT ON COLUMN cmx_plugin_versions.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_plugin_versions.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_plugin_versions.create_by IS '创建人ID';

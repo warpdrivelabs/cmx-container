@@ -91,6 +91,7 @@ pub fn build_version_create_params(
     zip_source_url: Option<&str>,
     zip_source_type: Option<&str>,
     plugin_def: Option<&PluginDefinition>,
+    build_type: &str,
 ) -> VersionCreateParams {
     let plugin_type = plugin_def.map(|d| d.r#type.clone());
     let source_path = plugin_def.and_then(|d| d.source_path.clone());
@@ -108,6 +109,7 @@ pub fn build_version_create_params(
         zip_source_type: zip_source_type.map(|s| s.to_string()),
         plugin_type,
         source_path,
+        build_type: build_type.to_string(),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,

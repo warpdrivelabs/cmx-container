@@ -220,6 +220,10 @@ where
     // let filter = params.filter.clone();
 
     let mut filters = params.filters.clone();
+    if params.filter.is_none() || params.filters.unwrap().is_empty() {
+      filters = None;
+    }
+
     //都存在时优先使用filter
     if let Some(filter) = params.filter.clone() {
       filters = Some(vec![filter]);
@@ -261,6 +265,9 @@ where
     let list_options = params.to_list_options();
     // let filter = params.filter.clone();
     let mut filters = params.filters.clone();
+    if params.filter.is_none() || params.filters.unwrap().is_empty() {
+        filters = None;
+    }
     //都存在时优先使用filter
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);

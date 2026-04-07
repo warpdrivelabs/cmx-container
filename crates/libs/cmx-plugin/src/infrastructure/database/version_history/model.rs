@@ -83,6 +83,11 @@ pub struct VersionCreateParams {
     pub plugin_type: Option<String>,
     /// 源码路径
     pub source_path: Option<String>,
+
+    /// 构建类型 debug/release
+    pub build_type: String,
+
+
     /// 创建时间
     pub create_time: DateTime<Utc>,
     /// 更新时间

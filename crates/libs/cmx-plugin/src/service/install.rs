@@ -18,13 +18,13 @@ use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
-use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
+use crate::infrastructure::storage::TempDirCleanup;
 use crate::security::validator::SecurityValidator;
 use chrono::Utc;
-use log::warn;
 use cmx_database::get_default_db_manager;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -42,6 +42,8 @@ pub struct InstallRequest {
     /// 版本约束（仅对注册表来源有效，如 "^1.0.0", ">=2.0.0"）
     #[serde(default)]
     pub version_constraint: Option<String>,
+    /// 构建类型 debug release
+    pub build_type: Option<String>,
 }
 
 /// 安装响应
@@ -144,6 +146,8 @@ impl InstallService {
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
         let start_time = std::time::Instant::now();
 
+        let build_type = request.build_type.unwrap_or("release".to_string());
+
         // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self
             .package_utils
@@ -202,13 +206,13 @@ impl InstallService {
 
                 return Ok(InstallResponse {
                     plugin_id,
-                    install_path:info.install_path.clone(),
+                    install_path: info.install_path.clone(),
                     success: true,
                     version: install_version,
                     message: "插件已安装".to_string(),
                 });
-            }else{
-              warn!("插件 {} 已部署，但未注册到registry", plugin_id);
+            } else {
+                warn!("插件 {} 已部署，但未注册到registry", plugin_id);
             }
             return Err(PluginError::plugin_already_exists(&plugin_id));
         }
@@ -242,7 +246,7 @@ impl InstallService {
                             status: PluginStatus::Installed,
                             installed_at: Some(record.create_time),
                             updated_at: Some(record.update_time),
-                            install_path:PathBuf::from(&record.install_path),
+                            install_path: PathBuf::from(&record.install_path),
                             domain_code: record.domain_code.unwrap_or_default(),
                             application_code: record.application_code.unwrap_or_default(),
                             module_code: record.module_code.unwrap_or_default(),
@@ -305,9 +309,9 @@ impl InstallService {
                 &install_version,
                 &install_path,
                 &plugin_def,
-                Some(txn_guard.txn_id())
+                Some(txn_guard.txn_id()),
             )
-            .await?;
+                .await?;
         }
 
         // 步骤9: 保存数据库记录
@@ -362,6 +366,7 @@ impl InstallService {
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
             Some(&plugin_def),
+            build_type.as_str(),
         );
         self.deps
             .version_history_repository
@@ -371,26 +376,33 @@ impl InstallService {
         // 标记当前版本
         self.deps
             .version_history_repository
-            .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+            .set_current_version(&plugin_id, &install_version,
+                                 install_path.to_string_lossy().to_string().as_str(),
+                                 wasm_path.as_str(),
+                                 Some(txn_guard.txn_id()))
             .await?;
-        self.deps
-            .version_history_repository
-            .update_version(
-                &version_record.id,
-                &crate::infrastructure::database::version_history::VersionUpdateParams {
-                    install_path: Some(install_path.to_string_lossy().to_string()),
-                    wasm_path: Some(wasm_path),
-                    is_current: Some(true),
-                    uninstalled_at: None,
-                    update_time: Some(chrono::Utc::now()),
-                    create_by: None,
-                    create_name: None,
-                    update_by: None,
-                    update_name: None,
-                },
-                Some(txn_guard.txn_id()),
-            )
-            .await?;
+        // self.deps
+        //     .version_history_repository
+        //     .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
+        //     .await?;
+        // self.deps
+        //     .version_history_repository
+        //     .update_version(
+        //         &version_record.id,
+        //         &crate::infrastructure::database::version_history::VersionUpdateParams {
+        //             install_path: Some(install_path.to_string_lossy().to_string()),
+        //             wasm_path: Some(wasm_path),
+        //             is_current: Some(true),
+        //             uninstalled_at: None,
+        //             update_time: Some(chrono::Utc::now()),
+        //             create_by: None,
+        //             create_name: None,
+        //             update_by: None,
+        //             update_name: None,
+        //         },
+        //         Some(txn_guard.txn_id()),
+        //     )
+        //     .await?;
 
         // 步骤9.2: 插入 cmx_plugin_deployments 节点部署记录
         // 检查该节点是否已有此版本的部署记录
@@ -462,14 +474,14 @@ impl InstallService {
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
         )
-        .with_node_id(self.deps.node_id.clone())
-        .with_details(serde_json::json!({
+            .with_node_id(self.deps.node_id.clone())
+            .with_details(serde_json::json!({
             "version": install_version,
             "install_path": install_path.to_string_lossy().to_string(),
             "node_id": self.deps.node_id,
         }))
-        .with_new_value(install_path.to_string_lossy().to_string())
-        .with_completed(duration_ms);
+            .with_new_value(install_path.to_string_lossy().to_string())
+            .with_completed(duration_ms);
 
         let _ = self.deps.audit_logger.log(audit_record).await?;
 

@@ -50,6 +50,8 @@ pub struct DeployRequest {
     /// 是否覆盖安装（当已安装版本与待安装版本相同时，先卸载再重新安装）
     #[serde(default)]
     pub force_reinstall: bool,
+    /// 构建类型 debug release
+    pub  build_type : Option<String>,
 }
 
 /// 部署响应
@@ -226,6 +228,7 @@ impl DeployService {
             db_id: request.db_id.clone(),
             auto_activate: false,
             version_constraint: None,
+            build_type: request.build_type.clone(),
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -255,6 +258,7 @@ impl DeployService {
             version_constraint: None,
             force: false,
             operator: Some("system".to_string()),
+            build_type: request.build_type.clone(),
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
@@ -293,6 +297,7 @@ impl DeployService {
             db_id: request.db_id.clone(),
             auto_activate: false,
             version_constraint: None,
+            build_type: request.build_type.clone(),
         };
 
         let result = self.deps.install_service.install(install_req).await?;

@@ -36,7 +36,7 @@ impl VersionHistoryRepository {
     }
 
     /// 插入版本历史记录
-    pub async fn insert_version(
+     async fn insert_version(
         &self,
         record: &VersionCreateParams,
         txn_id: Option<&str>,
@@ -118,6 +118,7 @@ impl VersionHistoryRepository {
                 Alias::new("zip_source_type"),
                 Alias::new("plugin_type"),
                 Alias::new("source_path"),
+                Alias::new("build_type"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -139,6 +140,7 @@ impl VersionHistoryRepository {
                 record.zip_source_type.clone().into(),
                 record.plugin_type.clone().into(),
                 record.source_path.clone().into(),
+                record.build_type.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -161,6 +163,7 @@ impl VersionHistoryRepository {
             Alias::new("zip_source_type"),
             Alias::new("plugin_type"),
             Alias::new("source_path"),
+            Alias::new("build_type"),
             Alias::new("update_time"),
             Alias::new("update_by"),
             Alias::new("update_name"),
@@ -373,6 +376,7 @@ impl VersionHistoryRepository {
                 zip_source_type: None,
                 plugin_type: None,
                 source_path: None,
+                build_type: "release".to_string(),
                 create_time: Utc::now(),
                 update_time: Utc::now(),
                 archived: 0,
