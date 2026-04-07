@@ -13,7 +13,9 @@ use utoipa::ToSchema;
 /// 表示系统中的一个模块对象
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Module {
-    /// 主键，模块编码，全局唯一，如: GL, AR, AP
+    pub  id: String,
+
+    /// 模块编码，全局唯一，如: GL, AR, AP
     pub code: String,
     /// 所属域编码
     pub domain_code: String,
@@ -67,6 +69,8 @@ pub struct Module {
 /// 用于创建 Module 的请求数据
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ModuleForCreate {
+    //// 模块编码，全局唯一，如: GL, AR, AP
+    pub code: String,
     /// 模块名称，如: 总账模块, 应收模块
     pub name: String,
     /// 所属域编码

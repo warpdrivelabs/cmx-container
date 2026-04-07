@@ -1,7 +1,8 @@
 WITH domain_tree AS (
     -- 第一级：域
     SELECT
-        NULL as parent_id,
+        id as id,
+        NULL as parent_code,
         d.code as code,
         d.name as name,
         d.description as description,
@@ -28,7 +29,8 @@ WITH domain_tree AS (
 
     -- 第二级：应用
     SELECT
-        a.domain_code as parent_id,
+        id as id,
+        a.domain_code as parent_code,
         a.code as code,
         a.name as name,
         a.description as description,
@@ -55,7 +57,8 @@ WITH domain_tree AS (
 
     -- 第三级：模块
     SELECT
-        m.application_code as parent_id,
+        id as id,
+        m.application_code as parent_code,
         m.code as code,
         m.name as name,
         m.description as description,
@@ -80,7 +83,8 @@ WITH domain_tree AS (
     WHERE m.status = 1 AND m.archived = 0
 )
 SELECT
-    parent_id,
+    id ,
+    parent_code,
     code,
     name,
     description,
@@ -102,7 +106,7 @@ SELECT
     update_name
 FROM domain_tree
 ORDER BY
-    CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END,
+    CASE WHEN parent_code IS NULL THEN 0 ELSE 1 END,
     domain_code,
     application_code,
     sort_order;

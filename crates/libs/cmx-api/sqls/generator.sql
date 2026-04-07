@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS cmx_domain;
 CREATE TABLE cmx_domain(
+                            id varchar(64) NOT NULL,
                            code varchar(64) NOT NULL,
                            name varchar(200) NOT NULL,
                            description text,
@@ -14,11 +15,11 @@ CREATE TABLE cmx_domain(
                            create_name varchar(100),
                            update_by varchar(100),
                            update_name varchar(100),
-                           PRIMARY KEY (code)
+                           PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_domain IS '域表';
-COMMENT ON COLUMN cmx_domain.code IS '主键，域编码，全局唯一，如: FIN, HR, SCM';
+COMMENT ON COLUMN cmx_domain.code IS '域编码，全局唯一，如: FIN, HR, SCM';
 COMMENT ON COLUMN cmx_domain.name IS '域名称，如: 财务域, 人力资源域';
 COMMENT ON COLUMN cmx_domain.description IS '域描述';
 COMMENT ON COLUMN cmx_domain.type IS '类型: business(业务域), technical(技术域), product_line(产品线)';
@@ -32,11 +33,13 @@ COMMENT ON COLUMN cmx_domain.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_domain.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_domain.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_domain.update_name IS '更新人名称';
+CREATE UNIQUE INDEX uk_cmx_domain_code ON cmx_domain(code);
 
 
 
 DROP TABLE IF EXISTS cmx_application;
 CREATE TABLE cmx_application(
+                                id varchar(64) NOT NULL,
                                 code VARCHAR(64) NOT NULL,
                                 domain_code VARCHAR(64) NOT NULL,
                                 name VARCHAR(200) NOT NULL,
@@ -52,11 +55,11 @@ CREATE TABLE cmx_application(
                                 create_name VARCHAR(100),
                                 update_by VARCHAR(100),
                                 update_name VARCHAR(100),
-                                PRIMARY KEY (code)
+                                PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_application IS '应用表';
-COMMENT ON COLUMN cmx_application.code IS '主键，应用编码，全局唯一，如: FI, CO, MM';
+COMMENT ON COLUMN cmx_application.code IS '应用编码，全局唯一，如: FI, CO, MM';
 COMMENT ON COLUMN cmx_application.domain_code IS '所属域编码，逻辑关联到cmx_domain.code';
 COMMENT ON COLUMN cmx_application.name IS '应用名称，如: 财务会计, 管理会计';
 COMMENT ON COLUMN cmx_application.description IS '应用描述';
@@ -71,10 +74,12 @@ COMMENT ON COLUMN cmx_application.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_application.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_application.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_application.update_name IS '更新人名称';
+CREATE UNIQUE INDEX uk_cmx_application_code ON cmx_application(code);
 
 
 DROP TABLE IF EXISTS cmx_module;
 CREATE TABLE cmx_module(
+                           id varchar(64) NOT NULL,
                            code VARCHAR(64) NOT NULL,
                            domain_code VARCHAR(64) NOT NULL,
                            application_code VARCHAR(64) NOT NULL,
@@ -91,11 +96,11 @@ CREATE TABLE cmx_module(
                            create_name VARCHAR(100),
                            update_by VARCHAR(100),
                            update_name VARCHAR(100),
-                           PRIMARY KEY (code)
+                           PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_module IS '模块表';
-COMMENT ON COLUMN cmx_module.code IS '主键，模块编码，全局唯一，如: GL, AR, AP';
+COMMENT ON COLUMN cmx_module.code IS '模块编码，全局唯一，如: GL, AR, AP';
 COMMENT ON COLUMN cmx_module.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_module.application_code IS '所属应用编码，逻辑关联到cmx_application.code';
 COMMENT ON COLUMN cmx_module.name IS '模块名称，如: 总账模块, 应收模块';
@@ -111,6 +116,12 @@ COMMENT ON COLUMN cmx_module.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_module.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_module.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_module.update_name IS '更新人名称';
+
+CREATE UNIQUE INDEX uk_cmx_module_code ON cmx_module(code);
+
+
+
+
 
 DROP TABLE IF EXISTS cmx_sys_datasource;
 CREATE TABLE cmx_sys_datasource(

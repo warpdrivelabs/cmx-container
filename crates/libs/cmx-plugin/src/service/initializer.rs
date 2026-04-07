@@ -242,6 +242,7 @@ impl PluginInitializer {
                     db_id: None,
                     auto_activate: false,
                     version_constraint: None,
+                    build_type: None,
                 };
                 match self.install_service.install(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -262,6 +263,7 @@ impl PluginInitializer {
                     version_constraint: None,
                     force: false,
                     operator: Some("system".to_string()),
+                    build_type: None,
                 };
                 match self.upgrade_service.upgrade(request).await {
                     Ok(_) => Ok(plugin_id),

@@ -71,6 +71,7 @@ pub async fn plugin_install(
         db_id: req.target_db_id,
         auto_activate: false,
         version_constraint: None,
+        build_type: None,
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
@@ -157,6 +158,7 @@ pub async fn plugin_upgrade(
         version_constraint: req.version_constraint,
         force: req.force.unwrap_or(false),
         operator: req.operator,
+        build_type: None,
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
@@ -304,6 +306,7 @@ pub async fn plugin_deploy(
         source,
         db_id: target_db_id,
         force_reinstall,
+        build_type: None,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {

@@ -14,7 +14,7 @@ impl DbBmc for DomainBmc {
     const TABLE: &'static str = "cmx_domain";
     
     /// 主键列名
-    const PK_COLUMN: &'static str = "code";
+    const PK_COLUMN: &'static str = "id";
     
     /// 是否有时间戳字段
     fn has_timestamps() -> bool {

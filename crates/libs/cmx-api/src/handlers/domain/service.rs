@@ -2,14 +2,14 @@
 //!
 //! 展示如何扩展 GenericCrudService 实现自定义业务逻辑
 
+use super::{DomainBmc, DomainFilter, DomainTreeNodeData};
 use crate::error::{Error, Result};
 use crate::rest::TreeNode;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use modql::filter::{ListOptions, OpValString, OpValsString};
 use tracing::debug;
-use cmx_database::crud::GenericCrudService;
-use super::{DomainBmc, DomainFilter, DomainTreeNodeData};
 
 /// Domain 自定义服务
 ///
@@ -17,8 +17,6 @@ use super::{DomainBmc, DomainFilter, DomainTreeNodeData};
 pub struct DomainService;
 
 impl DomainService {
-
-
     /// 扩展方法：搜索域名
     ///
     /// 支持模糊搜索和分页
@@ -50,9 +48,15 @@ impl DomainService {
             order_bys: Some("name".into()),
         };
 
-        GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, None, Some(vec![filter]), list_options)
-            .await
-            .map_err(Error::from)
+        GenericCrudService::<DomainBmc, DomainFilter>::page(
+            mm,
+            db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
+        )
+        .await
+        .map_err(Error::from)
     }
 
     /// 查询域-应用-模块树形数据
@@ -87,7 +91,8 @@ impl DomainService {
         schema: &cmx_core::model::data::dataset::Schema,
     ) -> Result<DomainTreeNodeData> {
         Ok(DomainTreeNodeData {
-            parent_id: Self::get_string_opt(row, schema, "parent_id"),
+            id: Self::get_string_opt(row, schema, "id").unwrap_or("".to_string()),
+            parent_code: Self::get_string_opt(row, schema, "parent_code"),
             code: Self::get_string_required(row, schema, "code")?,
             name: Self::get_string_required(row, schema, "name")?,
             description: Self::get_string_opt(row, schema, "description"),

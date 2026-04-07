@@ -12,15 +12,15 @@ pub struct ModuleBmc;
 impl DbBmc for ModuleBmc {
     /// 表名
     const TABLE: &'static str = "cmx_module";
-    
+
     /// 主键列名
-    const PK_COLUMN: &'static str = "code";
-    
+    const PK_COLUMN: &'static str = "id";
+
     /// 是否有时间戳字段
     fn has_timestamps() -> bool {
         true
     }
-    
+
     /// 是否有 owner_id 字段
     fn has_owner_id() -> bool {
         false

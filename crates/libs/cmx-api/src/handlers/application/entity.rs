@@ -13,7 +13,9 @@ use utoipa::ToSchema;
 /// 表示系统中的一个应用对象
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Application {
-    /// 主键，应用编码，全局唯一，如: FI, CO, MM
+    pub  id: String,
+
+    /// 应用编码，全局唯一，如: FI, CO, MM
     pub code: String,
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
@@ -65,6 +67,8 @@ pub struct Application {
 /// 用于创建 Application 的请求数据
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct ApplicationForCreate {
+    /// 应用编码，全局唯一，如: FI, CO, MM
+    pub code: String,
     /// 应用名称，如: 财务会计, 管理会计
     pub name: String,
     /// 所属域编码，逻辑关联到cmx_domain.code

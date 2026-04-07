@@ -24,64 +24,6 @@ use crate::rest::TreeNode;
 
 
 
-/// 搜索的请求参数
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SearchParams {
-    /// 搜索关键字
-    pub keyword: String,
-    /// 页码（从 1 开始）
-    pub page: Option<i64>,
-    /// 每页数量
-    pub page_size: Option<i64>,
-}
-
-impl SearchParams {
-    /// 获取页码
-    pub fn get_page(&self) -> i64 {
-        self.page.unwrap_or(1)
-    }
-
-    /// 获取每页数量
-    pub fn get_page_size(&self) -> i64 {
-        self.page_size.unwrap_or(20)
-    }
-}
-
-/// 搜索 Handler
-///
-/// 根据关键字搜索 Domain 实体
-#[utoipa::path(
-    post,
-    path = "/api/domains/search",
-    request_body = SearchParams,
-    responses(
-        (status = 200, description = "搜索成功", body = ApiResp<Value>)
-    ),
-    tag = "Domain"
-)]
-pub async fn search(
-    State(_cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
-    Json(params): Json<SearchParams>,
-) -> Result<Json<ApiResp<DataSet>>> {
-    debug!("{:<12} - handler::search", "HANDLER");
-
-    let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
-    let keyword = params.keyword.clone();
-    let page = params.get_page();
-    let page_size = params.get_page_size();
-
-    let (dataset, total) = DomainService::search(mm, &db_id, &keyword, page, page_size).await?;
-
-    Ok(Json(ApiResp::ok_with_pagination(
-        dataset,
-        page as u64,
-        page_size as u64,
-        total as u64,
-    )))
-}
 
 /// 查询域-应用-模块树形结构 Handler
 ///

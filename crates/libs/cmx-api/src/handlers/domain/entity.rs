@@ -12,7 +12,8 @@ use utoipa::ToSchema;
 /// 表示系统中的一个领域/域对象
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Domain {
-    /// 唯一标识码（主键）
+    pub  id: String,
+    /// 唯一标识码
     pub code: String,
     /// 名称
     pub name: String,
@@ -60,8 +61,8 @@ pub struct Domain {
 /// 用于创建 Domain 的请求数据
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct DomainForCreate {
-    // /// 唯一标识码（主键）
-    // pub code: String,
+    // /// 唯一标识码
+    pub code: String,
     /// 名称
     pub name: String,
     /// 描述
@@ -114,8 +115,10 @@ pub struct DomainForUpdate {
 /// 实现 `TreeNodeData` trait 后可通过 `TreeNode::from_list()` 构建树形结构。
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DomainTreeNodeData {
-    /// 父节点编码（域节点的 parent_id 为 NULL）
-    pub parent_id: Option<String>,
+    //主键列
+    pub id: String,
+    /// 父节点编码（域节点的 parent_code 为 NULL）
+    pub parent_code: Option<String>,
     /// 节点编码（唯一标识）
     pub code: String,
     /// 节点名称
@@ -176,7 +179,7 @@ impl TreeNodeData for DomainTreeNodeData {
 
     /// 父节点 ID 为 parent_id 字段，域节点为 None
     fn parent_id(&self) -> Option<&str> {
-        self.parent_id.as_deref()
+        self.parent_code.as_deref()
     }
 
     /// 排序键为 sort_order 字段，默认 0
