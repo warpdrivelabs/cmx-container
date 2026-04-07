@@ -1,12 +1,14 @@
 // region:    --- 模块
 
 mod crud_fns;
+mod custom_query;
 mod error;
 // mod macro_utils;
 mod utils;
 
 // -- 展平用户代码的层级结构。
 pub use crud_fns::*;
+pub use custom_query::*;
 pub use utils::*;
 pub use error::*;
 

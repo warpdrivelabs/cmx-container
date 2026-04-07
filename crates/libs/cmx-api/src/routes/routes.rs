@@ -2,7 +2,7 @@
 //!
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
-use crate::handlers::domain;
+use crate::handlers::{application, domain};
 use crate::handlers::plugin;
 use crate::handlers::service;
 use crate::handlers::sys_datasource;
@@ -59,7 +59,8 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册 Application CRUD 路由
     let router = register_crud_handlers_module!(router, application_crud, "/applications");
-
+    let router = router
+        .route("/applications/custom-page", post(application::handler::application_custom_page));
     // 注册 Module CRUD 路由
     let router = register_crud_handlers_module!(router, module_crud, "/module");
 

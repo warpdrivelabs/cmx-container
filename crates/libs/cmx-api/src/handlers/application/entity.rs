@@ -17,6 +17,8 @@ pub struct Application {
 
     /// 应用编码，全局唯一，如: FI, CO, MM
     pub code: String,
+    #[field(rel = "cmx_application",prop_name="name")]  //
+    pub domain_name: String,
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
     /// 应用名称，如: 财务会计, 管理会计
@@ -72,8 +74,7 @@ pub struct ApplicationForCreate {
     /// 应用名称，如: 财务会计, 管理会计
     pub name: String,
 
-    #[field(rel = "cmx_application",prop_name="name")]  //
-    pub domain_name: String,
+
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
     /// 应用描述

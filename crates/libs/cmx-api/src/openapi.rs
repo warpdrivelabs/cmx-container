@@ -47,6 +47,7 @@ use utoipa::OpenApi;
 
         // Domain handlers
         crate::handlers::domain::handler::get_tree,
+        crate::handlers::application::handler::application_custom_page,
         // crate::handlers::domain::handler::get_by_name,
 
 

@@ -574,4 +574,30 @@ where
 
         Ok(count)
     }
+
+
+    /// 自定义分页查询（便捷方法）
+    ///
+    /// 这是 CustomQueryService::page_custom 的便捷包装
+    ///
+    /// # 参数
+    /// * `mm` - 数据库管理器
+    /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `filters` - 过滤条件列表（可选）
+    /// * `list_options` - 列表选项（包含分页和排序）
+    /// * `sql` - 自定义 SQL（支持复杂 JOIN 查询）
+    ///
+    /// # 返回值
+    /// 返回包含查询结果的 DataSet 和总数
+    pub async fn page_custom(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        filters: Option<Vec<F>>,
+        list_options: ListOptions,
+        sql: &str,
+    ) -> Result<(DataSet, i64)> {
+        crate::crud::CustomQueryService::page_custom(mm, db_id, txn_id, filters, list_options, sql).await
+    }
 }
