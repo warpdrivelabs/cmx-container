@@ -43,7 +43,7 @@ pub async fn table_metadata_list(
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);
     }
-    if params.filter.is_none() || params.filters.unwrap().is_empty() {
+    if params.filters.is_none() || params.filters.unwrap().is_empty() {
         filters = None;
     }
     let dataset =
