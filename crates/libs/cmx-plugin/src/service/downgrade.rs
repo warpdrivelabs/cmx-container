@@ -127,7 +127,7 @@ impl DowngradeService {
 
         // 步骤3: 查找目标版本信息
         let target_version_record = self.deps.version_history_repository
-            .find_version(&request.plugin_id, &request.target_version)
+            .find_version(&request.plugin_id, &request.target_version,None)
             .await?
             .ok_or_else(|| {
                 PluginError::Downgrade(format!("未找到版本 {} 的记录", request.target_version))

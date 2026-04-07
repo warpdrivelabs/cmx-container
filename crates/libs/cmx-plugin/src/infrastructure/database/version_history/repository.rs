@@ -276,13 +276,14 @@ impl VersionHistoryRepository {
         &self,
         plugin_id: &str,
         version: &str,
+        txn_id: Option<&str>,
     ) -> PluginResult<Option<VersionRecord>> {
         let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND version = $2";
         let params = serde_json::json!([plugin_id, version]);
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "version_query")
+            .query_sql_with_json(&self.default_db_id, txn_id, sql, params, "version_query")
             .await
             .map_err(|e| PluginError::Database(format!("查询指定版本失败: {}", e)))?;
 
@@ -347,7 +348,9 @@ impl VersionHistoryRepository {
     ) -> PluginResult<()> {
         self.mark_all_not_current(plugin_id, txn_id).await?;
 
-        let existing = self.find_version(plugin_id, version).await?;
+        dbg!(plugin_id,version);
+        let existing = self.find_version(plugin_id, version,txn_id).await?;
+        dbg!(&existing);
 
         if let Some(ref record) = existing {
             let update_fields = VersionUpdateParams {
