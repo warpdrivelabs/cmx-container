@@ -49,6 +49,8 @@ pub struct DeletePayloadDoc {
 pub struct ListParamsDoc<F> {
     /// 过滤条件
     pub filter: Option<F>,
+    /// 多个过滤条件（用于or查询）
+    pub filters: Option<Vec<F>>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
     pub order_bys: Option<String>,
 }
@@ -71,6 +73,8 @@ impl<F> ListParamsDoc<F> {
 pub struct PageParamsDoc<F> {
     /// 过滤条件
     pub filter: Option<F>,
+    /// 多个过滤条件（用于or查询）
+    pub filters: Option<Vec<F>>,
     /// 页码（从 1 开始）
     #[serde(default = "default_page")]
     pub current: Option<i64>,

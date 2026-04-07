@@ -52,6 +52,8 @@ pub struct DeletePayload {
 pub struct ListParams<F> {
     /// 过滤条件
     pub filter: Option<F>,
+    /// 多个过滤条件（用于or查询）
+    pub filters: Option<Vec<F>>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
     pub order_bys: Option<String>,
 }
@@ -74,6 +76,8 @@ impl<F> ListParams<F> {
 pub struct PageParams<F> {
     /// 过滤条件
     pub filter: Option<F>,
+    /// 多个过滤条件（用于or查询）
+    pub filters: Option<Vec<F>>,
     /// 页码（从 1 开始）
     #[serde(default = "default_page")]
     pub current: Option<i64>,
@@ -141,6 +145,7 @@ mod tests {
     fn test_list_params_to_list_options() {
         let params: ListParams<()> = ListParams {
             filter: None,
+            filters: None,
             order_bys: Some("create_time".to_string())
         };
         let options = params.to_list_options();
@@ -152,6 +157,7 @@ mod tests {
     fn test_page_params_default_values() {
         let params: PageParams<()> = PageParams {
             filter: None,
+            filters: None,
             current: None,
             size: None,
             order_bys: None,
@@ -166,6 +172,7 @@ mod tests {
     fn test_page_params_custom_values() {
         let params: PageParams<()> = PageParams {
             filter: None,
+            filters: None,
             current: Some(3),
             size: Some(50),
             order_bys: None,
@@ -180,6 +187,7 @@ mod tests {
     fn test_page_params_max_size() {
         let params: PageParams<()> = PageParams {
             filter: None,
+            filters: None,
             current: Some(1),
             size: Some(10000),
             order_bys: None,
@@ -192,6 +200,7 @@ mod tests {
     fn test_page_params_invalid_page() {
         let params: PageParams<()> = PageParams {
             filter: None,
+            filters: None,
             current: Some(0),
             size: Some(20),
             order_bys: None,
@@ -205,6 +214,7 @@ mod tests {
     fn test_page_params_to_list_options() {
         let params: PageParams<()> = PageParams {
             filter: None,
+            filters: None,
             current: Some(3),
             size: Some(50),
             order_bys: Some("-create_time".to_string()),

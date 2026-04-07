@@ -13,7 +13,7 @@ use cmx_core::UpdatePayload;
 use cmx_core::model::data::dataset::{DataSet, Schema};
 use modql::SIden;
 use modql::field::HasSeaFields;
-use modql::filter::{FilterGroups, ListOptions};
+use modql::filter::{FilterGroups, IntoFilterNodes, ListOptions};
 use sea_query::{Asterisk, Condition, Expr, IntoIden, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use serde_json::Value;
@@ -397,7 +397,7 @@ where
 impl<MC, F> GenericCrudService<MC, F>
 where
     MC: DbBmc,
-    F: Into<FilterGroups> + Clone,
+    F: Into<FilterGroups> +Clone + IntoFilterNodes,
 {
     /// 列表查询（带过滤和排序）
     ///
@@ -405,7 +405,7 @@ where
     /// * `mm` - 数据库管理器
     /// * `db_id` - 数据库 ID
     /// * `txn_id` - 事务 ID（可选）
-    /// * `filter` - 过滤条件（可选）
+    /// * `filters` - 过滤条件列表（可选）
     /// * `list_options` - 列表选项（可选，包含分页和排序）
     ///
     /// # 返回值
@@ -414,7 +414,7 @@ where
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
-        filter: Option<F>,
+        filters: Option<Vec<F>>,
         list_options: Option<ListOptions>,
     ) -> Result<DataSet> {
         debug!(
@@ -428,8 +428,8 @@ where
         query.from(MC::table_ref());
         query.column(Asterisk);
 
-        if let Some(filter) = filter {
-            let filters: FilterGroups = filter.into();
+        if let Some(filters) = filters {
+            let filters: FilterGroups = Vec::into(filters);
             let cond: Condition = filters.try_into().map_err(|e| {
                 warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
@@ -473,7 +473,7 @@ where
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
-        filter: Option<F>,
+        filters: Option<Vec<F>>,
         list_options: ListOptions,
     ) -> Result<(DataSet, i64)> {
         debug!(
@@ -487,8 +487,8 @@ where
         query.from(MC::table_ref());
         query.column(Asterisk);
 
-        if let Some(filter) = filter.clone() {
-            let filters: FilterGroups = filter.into();
+        if let Some(filters) = filters.clone() {
+            let filters: FilterGroups = Vec::into(filters);
             let cond: Condition = filters.try_into().map_err(|e| {
                 warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))
@@ -510,7 +510,7 @@ where
             })?;
 
         let row_count = dataset.iter().count();
-        let total = Self::count(mm, db_id, txn_id, filter).await?;
+        let total = Self::count(mm, db_id, txn_id, filters).await?;
 
         debug!(
             "{:<12} - 分页查询返回 {} 行, 总数: {}",
@@ -530,7 +530,7 @@ where
     ///
     /// # 返回值
     /// 返回记录总数
-    pub async fn count(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, filter: Option<F>) -> Result<i64> {
+    pub async fn count(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>,filters: Option<Vec<F>>) -> Result<i64> {
         debug!(
             "{:<12} - GenericCrudService::count - table: {}, db_id: {}",
             "CRUD",
@@ -542,8 +542,8 @@ where
         query.from(MC::table_ref());
         query.expr(Expr::col(Asterisk).count());
 
-        if let Some(filter) = filter {
-            let filters: FilterGroups = filter.into();
+        if let Some(filters) = filters {
+            let filters: FilterGroups = Vec::into(filters);
             let cond: Condition = filters.try_into().map_err(|e| {
                 warn!("{:<12} - 过滤条件错误: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::bad_request(format!("过滤条件错误 [{}]: {}", MC::TABLE, e))

@@ -38,10 +38,13 @@ pub async fn table_metadata_list(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
-    let filter = params.filter.clone();
-
+    let mut filters = params.filters.clone();
+    //都存在时优先使用filter
+    if let Some(filter) = params.filter.clone() {
+        filters = Some(vec![filter]);
+    }
     let dataset =
-        TableMetadataService::list(mm, &db_id, filter, Some(list_options))
+        TableMetadataService::list(mm, &db_id, filters, Some(list_options))
             .await
             .map_err(|e| crate::error::Error::InternalError(format!("列表查询失败: {}", e)))?;
 
@@ -72,10 +75,13 @@ pub async fn table_metadata_page(
     let page_size = params.get_size() as u64;
 
     let list_options = params.to_list_options();
-    let filter = params.filter.clone();
-
+    let mut filters = params.filters.clone();
+    //都存在时优先使用filter
+    if let Some(filter) = params.filter.clone() {
+        filters = Some(vec![filter]);
+    }
     let (dataset, total) =
-        TableMetadataService::page(mm, &db_id, filter, list_options)
+        TableMetadataService::page(mm, &db_id, filters, list_options)
             .await
             .map_err(|e| crate::error::Error::InternalError(format!("分页查询失败: {}", e)))?;
 

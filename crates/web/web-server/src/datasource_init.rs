@@ -102,7 +102,7 @@ async fn persist_datasource_configs(
             mm,
             db_id,
             None,
-            Some(filter),
+            Some(vec![filter]),
             None,
         )
         .await
@@ -174,7 +174,7 @@ async fn load_active_datasources(
         mm,
         db_id,
         None,
-        Some(filter),
+        Some(vec![filter]),
         None,
     )
     .await

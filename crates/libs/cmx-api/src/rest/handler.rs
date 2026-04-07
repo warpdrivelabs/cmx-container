@@ -4,21 +4,21 @@
 //!
 //! 注意：DatabaseManager 通过 get_default_db_manager() 全局获取，不需要通过 state 传递
 
+use crate::api_response::ApiResp;
+use crate::app_state::CmxAppState;
+use crate::error::Result;
+use crate::middleware::CmxSvrContext;
+use crate::rest::header_parse::get_db_id_from_header;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
+use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
+use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_database::get_default_db_manager;
 use modql::field::HasSeaFields;
 use serde::de::DeserializeOwned;
 use tracing::debug;
-use cmx_database::crud::{DbBmc, GenericCrudService};
-use crate::error::Result;
-use crate::middleware::CmxSvrContext;
-use crate::api_response::ApiResp;
-use crate::rest::header_parse::get_db_id_from_header;
-use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
-use crate::app_state::CmxAppState;
 
 /// 创建单个实体 Handler
 ///
@@ -210,15 +210,23 @@ pub async fn list<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups> + Clone,
+    F: DeserializeOwned + Into<modql::filter::FilterGroups> + modql::filter::IntoFilterNodes+ Clone,
 {
     debug!("{:<12} - handler::list", "HANDLER");
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
-    let filter = params.filter.clone();
-    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, None, filter, Some(list_options)).await?;
+    // let filter = params.filter.clone();
+
+    let mut filters = params.filters.clone();
+    //都存在时优先使用filter
+    if let Some(filter) = params.filter.clone() {
+      filters = Some(vec![filter]);
+    }
+
+
+    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, None, filters, Some(list_options)).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -241,7 +249,7 @@ pub async fn page<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups> + Clone,
+    F: DeserializeOwned + Into<modql::filter::FilterGroups> + modql::filter::IntoFilterNodes+ Clone,
 {
     debug!("{:<12} - handler::page", "HANDLER");
 
@@ -251,8 +259,14 @@ where
     let page_size = params.get_size() as u64;
 
     let list_options = params.to_list_options();
-    let filter = params.filter.clone();
-    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, None, filter, list_options).await?;
+    // let filter = params.filter.clone();
+    let mut filters = params.filters.clone();
+    //都存在时优先使用filter
+    if let Some(filter) = params.filter.clone() {
+        filters = Some(vec![filter]);
+    }
+
+    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, None, filters, list_options).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,

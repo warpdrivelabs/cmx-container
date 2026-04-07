@@ -263,7 +263,7 @@ impl TableMetadataService {
     pub async fn list(
         mm: &DatabaseManager,
         db_id: &str,
-        filter: Option<TableMetadataFilter>,
+        filters: Option<Vec<TableMetadataFilter>>,
         list_options: Option<ListOptions>,
     ) -> PluginResult<DataSet> {
         debug!(
@@ -313,13 +313,15 @@ impl TableMetadataService {
                 ),
         );
 
-        if let Some(filter) = filter {
-            let filters: FilterGroups = filter.into();
-            let cond: Condition = filters.try_into().map_err(|e| {
+        if let Some(filters) = filters {
+            let filter_groups: FilterGroups = Vec::into(filters);
+            let cond: Condition = filter_groups.try_into().map_err(|e| {
                 PluginError::Database(format!("过滤条件错误: {}", e))
             })?;
             select.cond_where(cond);
         }
+
+
 
         if let Some(lo) = list_options {
             lo.apply_to_sea_query(&mut select);
@@ -343,7 +345,7 @@ impl TableMetadataService {
     pub async fn page(
         mm: &DatabaseManager,
         db_id: &str,
-        filter: Option<TableMetadataFilter>,
+        filters: Option<Vec<TableMetadataFilter>>,
         list_options: ListOptions,
     ) -> PluginResult<(DataSet, i64)> {
         debug!(
@@ -393,13 +395,14 @@ impl TableMetadataService {
                 ),
         );
 
-        if let Some(filter) = filter.clone() {
-            let filters: FilterGroups = filter.into();
-            let cond: Condition = filters.try_into().map_err(|e| {
+        if let Some(filters) = filters.clone() {
+            let filter_groups: FilterGroups = Vec::into(filters);
+            let cond: Condition = filter_groups.try_into().map_err(|e| {
                 PluginError::Database(format!("过滤条件错误: {}", e))
             })?;
             select.cond_where(cond);
         }
+
 
         list_options.clone().apply_to_sea_query(&mut select);
 
@@ -411,7 +414,7 @@ impl TableMetadataService {
             .await
             .map_err(|e| PluginError::Database(format!("分页查询失败: {}", e)))?;
 
-        let total = Self::count(mm, db_id, filter).await?;
+        let total = Self::count(mm, db_id, filters).await?;
 
         Ok((dataset, total))
     }
@@ -420,15 +423,15 @@ impl TableMetadataService {
     async fn count(
         mm: &DatabaseManager,
         db_id: &str,
-        filter: Option<TableMetadataFilter>,
+        filters: Option<Vec<TableMetadataFilter>>,
     ) -> PluginResult<i64> {
         let mut query = Query::select();
         query.from(TableMetadataBmc::table_ref());
         query.expr(Expr::col(Asterisk).count());
 
-        if let Some(filter) = filter {
-            let filters: FilterGroups = filter.into();
-            let cond: Condition = filters.try_into().map_err(|e| {
+        if let Some(filters) = filters {
+            let filter_groups: FilterGroups = Vec::into(filters);
+            let cond: Condition = filter_groups.try_into().map_err(|e| {
                 PluginError::Database(format!("过滤条件错误: {}", e))
             })?;
             query.cond_where(cond);
@@ -588,7 +591,7 @@ impl TableMetadataService {
 
     /// 根据 plugin_id 更新 version 字段
     ///
-    /// 更新 cmx_meta_table_define 
+    /// 更新 cmx_meta_table_define
     /// 指定 plugin_id version 字段
     pub async fn update_version_by_plugin_id(
         mm: &DatabaseManager,
@@ -803,7 +806,7 @@ impl TableMetadataService {
             mm,
             db_id,
             None,
-            Some(filter),
+            Some(vec![filter]),
             None,
         )
         .await

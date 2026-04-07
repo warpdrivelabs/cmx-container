@@ -184,7 +184,7 @@ impl SysDatasourceService {
             archived: None,
         };
 
-        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, None, Some(filter), None)
+        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, None, Some(vec![filter]), None)
             .await
             .map_err(Error::from)
     }

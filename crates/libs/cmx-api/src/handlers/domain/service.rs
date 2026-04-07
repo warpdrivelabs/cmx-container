@@ -50,7 +50,7 @@ impl DomainService {
             order_bys: Some("name".into()),
         };
 
-        GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, None, Some(filter), list_options)
+        GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, None, Some(vec![filter]), list_options)
             .await
             .map_err(Error::from)
     }
