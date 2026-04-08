@@ -1,0 +1,176 @@
+# cmx-wasmdemo
+
+CMX WASM 插件演示模块，基于 Extism PDK 开发。
+
+## 概述
+
+本模块用于验证 Extism 插件功能，展示如何开发 WASM 插件并与宿主函数交互。
+
+## 导出函数
+
+| 函数名 | 描述 | 输入 | 输出 |
+|--------|------|------|------|
+| `count_vowels` | 统计字符串中的元音字母数量 | String | JSON |
+| `demo_log` | 演示日志功能 | 无 | JSON |
+| `demo_cache` | 演示缓存读写操作 | DemoRequest | JSON |
+| `demo_database` | 演示数据库查询 | DemoRequest | JSON |
+| `demo_plugin_call` | 演示插件间调用 | DemoRequest | JSON |
+| `run_all_demos` | 综合测试入口 | DemoRequest | JSON Array |
+
+## 构建说明
+
+### 前置条件
+
+1. 安装 Rust 工具链
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+2. 添加 wasm32 目标
+```bash
+rustup target add wasm32-unknown-unknown
+```
+
+### 构建 WASM
+
+```bash
+# 开发版本（包含调试信息）
+cargo build --target wasm32-unknown-unknown
+
+# 发布版本（优化体积和性能）
+cargo build --release --target wasm32-unknown-unknown
+```
+
+### 输出位置
+
+```
+target/wasm32-unknown-unknown/debug/cmx_wasmdemo.wasm     # 开发版本
+target/wasm32-unknown-unknown/release/cmx_wasmdemo.wasm   # 发布版本
+```
+
+## 使用示例
+
+### 使用 Extism CLI 测试
+
+```bash
+# 安装 Extism CLI
+# 参考: https://extism.org/docs/install
+
+# 测试 count_vowels 函数
+extism call target/wasm32-unknown-unknown/release/cmx_wasmdemo.wasm count_vowels \
+  --input "Hello, World!"
+
+# 输出: {"count":3,"total":3,"input":"Hello, World!"}
+```
+
+### 在 CMX 宿主中加载
+
+```rust
+use cmx_runtime::{ExtismEngine, ExtismEngineConfig};
+use cmx_traits::RuntimeInvoker;
+
+let engine = ExtismEngine::new(ExtismEngineConfig::default())?;
+engine.load_module("demo-plugin", Path::new("cmx_wasmdemo.wasm")).await?;
+
+// 调用函数
+let result = engine.invoke(
+    "demo-plugin",
+    "count_vowels",
+    b"Hello",
+    &caller_data,
+).await?;
+```
+
+## 宿主函数依赖
+
+本插件依赖以下宿主函数（由宿主端提供）：
+
+| 命名空间 | 函数名 | 用途 |
+|----------|--------|------|
+| `cmx:log` | `log_info`, `log_error`, `log_debug`, `log_warn` | 日志记录 |
+| `cmx:database` | `db_query`, `db_execute` | 数据库操作 |
+| `cmx:buffer` | `cache_get`, `cache_set`, `cache_delete` | 缓存操作 |
+| `cmx:plugin` | `call_service` | 插件间调用 |
+
+## 数据结构
+
+### DemoRequest
+
+```json
+{
+  "name": "string",
+  "count": 123
+}
+```
+
+### DemoResponse
+
+```json
+{
+  "message": "string",
+  "total": 123
+}
+```
+
+## 开发指南
+
+### 添加新的导出函数
+
+```rust
+use extism_pdk::*;
+use cmx_plugin_sdk::HostCaller;
+
+#[plugin_fn]
+pub fn my_function(input: String) -> FnResult<String> {
+    // 调用宿主函数
+    HostCaller::log_info("Function called!")?;
+    
+    // 返回结果
+    Ok(format!("Processed: {}", input))
+}
+```
+
+### 使用 JSON 类型
+
+```rust
+use extism_pdk::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize)]
+struct MyRequest {
+    field: String,
+}
+
+#[derive(Serialize)]
+struct MyResponse {
+    result: String,
+}
+
+#[plugin_fn]
+pub fn my_json_function(Json(req): Json<MyRequest>) -> FnResult<Json<MyResponse>> {
+    Ok(Json(MyResponse {
+        result: format!("Hello, {}", req.field),
+    }))
+}
+```
+
+## 故障排查
+
+### 编译错误: `can't find crate for std`
+
+确保已添加 wasm32 目标：
+```bash
+rustup target add wasm32-unknown-unknown
+```
+
+### 运行时错误: `Host function not found`
+
+检查：
+1. 宿主端是否正确注册了提供者
+2. 函数名和命名空间是否匹配
+
+## 相关链接
+
+- [Extism 官方文档](https://extism.org/)
+- [Extism Rust PDK](https://github.com/extism/rust-pdk)
+- [cmx-plugin-sdk](../cmx-plugin-sdk/)

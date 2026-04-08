@@ -15,9 +15,9 @@ pub struct InvokeRequest {
     pub input: serde_json::Value,
     /// 数据库ID（可选，默认使用系统数据库）
     pub db_id: Option<String>,
-    /// 请求ID（用于追踪）
+    /// 请求ID（可选，用于追踪）
     pub request_id: Option<String>,
-    /// 租户ID（多租户场景）
+    /// 租户ID（可选，用于多租户场景）
     pub tenant_id: Option<String>,
 }
 

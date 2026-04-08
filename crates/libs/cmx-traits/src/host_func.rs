@@ -34,7 +34,6 @@ impl ValType {
     /// 转换为 Extism 的 ValType
     ///
     /// 仅在 cmx-runtime 中使用
-    #[cfg(any(feature = "extism", doc))]
     pub fn to_extism(self) -> extism::ValType {
         match self {
             ValType::I32 => extism::ValType::I32,

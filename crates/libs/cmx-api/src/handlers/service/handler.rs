@@ -58,22 +58,22 @@ pub async fn service_call(
     let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
-    // 检查插件是否已激活
-    let is_active = plugin_query.is_active(&req.plugin_id).await
-        .map_err(|e| Error::internal_error(format!("检查插件状态失败: {}", e)))?;
+    // 检查插件是否已安装
+    let is_install = plugin_query.is_installed(&req.plugin_id).await
+        .map_err(|e| Error::internal_error(format!("检查插件安装状态失败: {}", e)))?;
 
-    if !is_active {
-        return Err(Error::bad_request(format!("插件 {} 未激活", req.plugin_id)));
+    if !is_install {
+        return Err(Error::business_error(format!("插件 {} 未安装", req.plugin_id)));
     }
 
     // 检查 WASM 模块是否已加载
     let is_loaded = runtime.is_loaded(&req.plugin_id).await;
-    
+
     if !is_loaded {
         // 尝试加载 WASM 模块
         let wasm_path = plugin_query.get_wasm_path(&req.plugin_id).await
             .map_err(|e| Error::internal_error(format!("获取 WASM 路径失败: {}", e)))?;
-        
+
         runtime.load_module(&req.plugin_id, &wasm_path).await
             .map_err(|e| Error::internal_error(format!("加载 WASM 模块失败: {}", e)))?;
     }
@@ -81,7 +81,7 @@ pub async fn service_call(
     // 构建调用上下文
     let db_id = req.db_id.as_deref().unwrap_or("default");
     let mut caller_data = CallerData::new(&req.plugin_id, db_id);
-    
+
     if let Some(ref req_id) = req.request_id {
         caller_data = caller_data.with_request_id(req_id);
     }
@@ -159,7 +159,7 @@ pub async fn execute_orchestration(
     // 构建调用上下文
     let db_id = req.db_id.as_deref().unwrap_or("default");
     let mut caller_data = CallerData::new("__orchestration__", db_id);
-    
+
     if let Some(ref req_id) = req.request_id {
         caller_data = caller_data.with_request_id(req_id);
     }

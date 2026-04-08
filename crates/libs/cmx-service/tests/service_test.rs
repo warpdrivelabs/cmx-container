@@ -25,13 +25,13 @@ impl MockPluginQuery {
             active_plugins: Vec::new(),
         }
     }
-    
+
     /// 添加插件
     fn with_plugin(mut self, plugin: PluginSnapshot) -> Self {
         self.plugins.insert(plugin.plugin_id.clone(), plugin);
         self
     }
-    
+
     /// 设置激活的插件
     fn with_active(mut self, plugin_id: &str) -> Self {
         self.active_plugins.push(plugin_id.to_string());
@@ -44,15 +44,19 @@ impl PluginQuery for MockPluginQuery {
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
         Ok(self.plugins.get(plugin_id).cloned())
     }
-    
+
+    async fn is_installed(&self, plugin_id: &str) -> Result<bool, TraitError> {
+       Ok(self.plugins.contains_key(plugin_id))
+    }
+
     async fn is_active(&self, plugin_id: &str) -> Result<bool, TraitError> {
         Ok(self.active_plugins.contains(&plugin_id.to_string()))
     }
-    
+
     async fn get_wasm_path(&self, _plugin_id: &str) -> Result<std::path::PathBuf, TraitError> {
         Ok(std::path::PathBuf::from("test.wasm"))
     }
-    
+
     async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError> {
         let result: Vec<PluginSnapshot> = self.plugins.values()
             .filter(|p| self.active_plugins.contains(&p.plugin_id))
@@ -60,7 +64,7 @@ impl PluginQuery for MockPluginQuery {
             .collect();
         Ok(result)
     }
-    
+
     async fn list_plugins(&self, _filter: &cmx_traits::PluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
         Ok(self.plugins.values().cloned().collect())
     }
@@ -91,15 +95,15 @@ impl RuntimeInvoker for MockRuntimeInvoker {
         let _ = plugin_id;
         Ok(())
     }
-    
+
     async fn unload_module(&self, _plugin_id: &str) -> Result<(), TraitError> {
         Ok(())
     }
-    
+
     async fn is_loaded(&self, plugin_id: &str) -> bool {
         self.loaded_modules.contains(plugin_id)
     }
-    
+
     async fn invoke(
         &self,
         _plugin_id: &str,
@@ -109,7 +113,7 @@ impl RuntimeInvoker for MockRuntimeInvoker {
     ) -> Result<WasmInvokeResult, TraitError> {
         // 增加调用计数
         self.invoke_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+
         // 返回模拟结果
         Ok(WasmInvokeResult {
             output: br#"{"result": "success"}"#.to_vec(),
@@ -140,9 +144,9 @@ fn create_test_plugin(id: &str) -> PluginSnapshot {
 async fn test_service_creation() {
     let plugin_query = Arc::new(MockPluginQuery::new());
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let service = CmxService::new(plugin_query, runtime, ServiceConfig::default());
-    
+
     // 验证配置
     assert!(service.config().invoke_timeout_ms > 0);
     assert!(service.config().max_retries > 0);
@@ -152,15 +156,15 @@ async fn test_service_creation() {
 #[tokio::test]
 async fn test_service_invoke_plugin_not_active() {
     let plugin = create_test_plugin("test-plugin");
-    
+
     let plugin_query = Arc::new(
         MockPluginQuery::new()
             .with_plugin(plugin)
     );
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let service = CmxService::new(plugin_query, runtime, ServiceConfig::default());
-    
+
     let request = InvokeRequest {
         plugin_id: "test-plugin".to_string(),
         function_name: "test_function".to_string(),
@@ -169,9 +173,9 @@ async fn test_service_invoke_plugin_not_active() {
         request_id: Some("req-001".to_string()),
         tenant_id: None,
     };
-    
+
     let result = service.invoke(&request).await;
-    
+
     // 插件未激活，应该返回错误
     assert!(result.is_err());
 }
@@ -180,16 +184,16 @@ async fn test_service_invoke_plugin_not_active() {
 #[tokio::test]
 async fn test_service_invoke_plugin_active() {
     let plugin = create_test_plugin("active-plugin");
-    
+
     let plugin_query = Arc::new(
         MockPluginQuery::new()
             .with_plugin(plugin)
             .with_active("active-plugin")
     );
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let service = CmxService::new(plugin_query, runtime, ServiceConfig::default());
-    
+
     let request = InvokeRequest {
         plugin_id: "active-plugin".to_string(),
         function_name: "test_function".to_string(),
@@ -198,9 +202,9 @@ async fn test_service_invoke_plugin_active() {
         request_id: Some("req-001".to_string()),
         tenant_id: None,
     };
-    
+
     let result = service.invoke(&request).await;
-    
+
     // 插件已激活，应该成功
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -213,9 +217,9 @@ async fn test_service_invoke_plugin_active() {
 async fn test_orchestrator_creation() {
     let plugin_query = Arc::new(MockPluginQuery::new());
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let orchestrator = Orchestrator::new(runtime, plugin_query);
-    
+
     // 验证创建成功
     let _ = orchestrator;
 }
@@ -225,19 +229,19 @@ async fn test_orchestrator_creation() {
 async fn test_orchestration_empty_steps() {
     let plugin_query = Arc::new(MockPluginQuery::new());
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let orchestrator = Orchestrator::new(runtime, plugin_query);
-    
+
     let orchestration = Orchestration {
         id: "test-flow".to_string(),
         name: "测试流程".to_string(),
         description: None,
         steps: vec![],
     };
-    
+
     let caller_data = CallerData::new("__test__", "default");
     let result = orchestrator.execute(&orchestration, &serde_json::json!({}), &caller_data).await;
-    
+
     // 空步骤应该成功
     assert!(result.is_ok());
     let orchestration_result = result.unwrap();
@@ -249,16 +253,16 @@ async fn test_orchestration_empty_steps() {
 #[tokio::test]
 async fn test_orchestration_single_step() {
     let plugin = create_test_plugin("step-plugin");
-    
+
     let plugin_query = Arc::new(
         MockPluginQuery::new()
             .with_plugin(plugin)
             .with_active("step-plugin")
     );
     let runtime = Arc::new(MockRuntimeInvoker::new());
-    
+
     let orchestrator = Orchestrator::new(runtime, plugin_query);
-    
+
     let orchestration = Orchestration {
         id: "single-step-flow".to_string(),
         name: "单步骤流程".to_string(),
@@ -268,18 +272,18 @@ async fn test_orchestration_single_step() {
                 step_id: "step1".to_string(),
                 plugin_id: "step-plugin".to_string(),
                 function_name: "process".to_string(),
-                input: StepInput::Static { 
-                    value: serde_json::json!({"data": "input"}) 
+                input: StepInput::Static {
+                    value: serde_json::json!({"data": "input"})
                 },
                 parallel: false,
                 condition: None,
             }
         ],
     };
-    
+
     let caller_data = CallerData::new("__test__", "default");
     let result = orchestrator.execute(&orchestration, &serde_json::json!({}), &caller_data).await;
-    
+
     assert!(result.is_ok());
     let orchestration_result = result.unwrap();
     assert!(orchestration_result.success);
@@ -291,7 +295,7 @@ async fn test_orchestration_single_step() {
 #[test]
 fn test_service_config_defaults() {
     let config = ServiceConfig::default();
-    
+
     assert_eq!(config.invoke_timeout_ms, 30000);
     assert_eq!(config.max_retries, 3);
     assert!(config.enable_orchestration_cache);

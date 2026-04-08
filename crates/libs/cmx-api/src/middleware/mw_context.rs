@@ -21,7 +21,7 @@ pub async fn mw_context_resolver(mut req: Request<Body>, next: Next) -> Result<R
     let time_in = Utc::now();
     let uuid = UuidGenerator::new_v4_compact();
 
-    let svr_context = SVRContext::new();
+    let mut svr_context = SVRContext::new();
 
     svr_context.set(svrkey::KEY_TIME_IN, CellValue::DateTime(time_in));
     svr_context.set(svrkey::KEY_REQUEST_ID, CellValue::String(uuid));

@@ -96,20 +96,36 @@ where
             });
         }
 
-        for (parent_id, child_ids) in child_map {
-            let child_nodes: Vec<TreeNode<T>> = child_ids
-                .into_iter()
-                .filter_map(|cid| node_map.remove(&cid))
-                .collect();
+        // 递归构建子节点，使用引用而非 remove，避免因 HashMap 迭代顺序不确定导致 children 丢失
+        fn build_children<T: TreeNodeData + Clone>(
+            parent_id: &str,
+            node_map: &HashMap<String, TreeNode<T>>,
+            child_map: &HashMap<String, Vec<String>>,
+        ) -> Vec<TreeNode<T>> {
+            let child_ids = match child_map.get(parent_id) {
+                Some(ids) => ids,
+                None => return Vec::new(),
+            };
 
-            if let Some(parent) = node_map.get_mut(&parent_id) {
-                parent.children = child_nodes;
-            }
+            child_ids
+                .iter()
+                .filter_map(|cid| {
+                    node_map.get(cid).map(|node| TreeNode {
+                        data: node.data.clone(),
+                        children: build_children(cid, node_map, child_map),
+                    })
+                })
+                .collect()
         }
 
         let mut root_nodes: Vec<TreeNode<T>> = root_ids
-            .into_iter()
-            .filter_map(|id| node_map.remove(&id))
+            .iter()
+            .filter_map(|id| {
+                node_map.get(id).map(|node| TreeNode {
+                    data: node.data.clone(),
+                    children: build_children(id, &node_map, &child_map),
+                })
+            })
             .collect();
 
         root_nodes.sort_by_key(|n| n.data.sort_key());

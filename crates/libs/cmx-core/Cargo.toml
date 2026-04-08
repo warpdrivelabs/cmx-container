@@ -40,7 +40,8 @@ strum_macros = "0.27"
 # 唯一标识符
 # ============================================
 # uuid: 通用唯一标识符生成
-uuid = { version = "1.21", features = ["v4", "serde"] }
+# 注意：wasm 目标需要启用 js feature
+uuid = { version = "1.21", features = ["v4", "serde", "js"] }
 
 # ============================================
 # 编码
@@ -56,3 +57,11 @@ base64 = "0.22"
 
 modql = { workspace = true }
 
+# Extism PDK 支持（可选）
+extism-pdk = { version = "1.4.1", optional = true }
+
+[features]
+extism = ["extism-pdk"]
+
+[dev-dependencies]
+cmx-plugin-sdk = { path = "../cmx-plugin-sdk" }

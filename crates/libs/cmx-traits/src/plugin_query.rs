@@ -84,6 +84,22 @@ pub trait PluginQuery: Send + Sync {
     /// 返回插件快照，如果插件不存在则返回 None。
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError>;
 
+    /// 检查插件是否已安装
+    ///
+    /// 插件已安装表示插件已被下载并注册到系统中，
+    /// 但不一定已激活（可能处于 deactivated 状态）。
+    ///
+    /// # 参数
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(true)` - 插件已安装
+    /// - `Ok(false)` - 插件未安装
+    /// - `Err(_)` - 查询过程中发生错误
+    async fn is_installed(&self, plugin_id: &str) -> Result<bool, TraitError>;
+
     /// 检查插件是否已激活
     ///
     /// # 参数

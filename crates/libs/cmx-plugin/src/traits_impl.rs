@@ -87,6 +87,25 @@ impl PluginQuery for PluginManager {
         }
     }
 
+    /// 检查插件是否已安装
+    async fn is_installed(&self, plugin_id: &str) -> Result<bool, TraitError> {
+        // // 先检查数据库
+        // let record = self.repository()
+        //     .find_plugin(plugin_id)
+        //     .await
+        //     .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
+        // 
+        // if record.is_some() {
+        //     return Ok(true);
+        // }
+
+        // 回退到内存注册表检查
+        let info = self.get_plugin(plugin_id).await
+            .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
+
+        Ok(info.is_some())
+    }
+
     /// 检查插件是否已激活
     async fn is_active(&self, plugin_id: &str) -> Result<bool, TraitError> {
         self.is_plugin_activated(plugin_id).await
