@@ -16,6 +16,7 @@ use cmx_core::model::data::dataset::{DataSet, Schema};
 /// 提供自定义 SQL 的分页查询功能
 pub struct CustomQueryService;
 
+
 impl CustomQueryService {
     /// 自定义分页查询
     ///
@@ -29,6 +30,7 @@ impl CustomQueryService {
     /// * `filters` - 过滤条件列表（可选）
     /// * `list_options` - 列表选项（包含分页和排序）
     /// * `sql` - 自定义 SQL（支持复杂 JOIN 查询）
+    /// * `dataset_id` - 数据集 ID（用于标识查询结果集，如 "application_custom_page"）
     ///
     /// # 返回值
     /// 返回包含查询结果的 DataSet 和总数
@@ -37,7 +39,7 @@ impl CustomQueryService {
     /// ```rust
     /// let sql = "select a.*, b.name from a left join b on a.name = b.name";
     /// let (dataset, total) = CustomQueryService::page_custom::<SomeFilter>(
-    ///     &mm, "db_id", None, Some(filters), list_options, sql
+    ///     &mm, "db_id", None, Some(filters), list_options, sql, "my_custom_query"
     /// ).await?;
     /// ```
     pub async fn page_custom<F>(
@@ -47,13 +49,14 @@ impl CustomQueryService {
         filters: Option<Vec<F>>,
         list_options: ListOptions,
         sql: &str,
+        dataset_id: &str,
     ) -> Result<(DataSet, i64)>
     where
         F: Into<FilterGroups> + Clone + IntoFilterNodes,
     {
         debug!(
-            "{:<12} - CustomQueryService::page_custom - db_id: {}",
-            "CUSTOM_QUERY", db_id
+            "{:<12} - CustomQueryService::page_custom - db_id: {}, dataset_id: {}",
+            "CUSTOM_QUERY", db_id, dataset_id
         );
 
         let where_clause = Self::build_where_clause(filters.clone())?;
@@ -67,7 +70,7 @@ impl CustomQueryService {
             None,
         );
 
-        let total = Self::execute_count_query(mm, db_id, txn_id, &count_sql).await?;
+        let total = Self::execute_count_query(mm, db_id, txn_id, &count_sql, dataset_id).await?;
 
         debug!("{:<12} - COUNT 查询结果: {}", "CUSTOM_QUERY", total);
 
@@ -79,9 +82,9 @@ impl CustomQueryService {
                 limit_offset.as_deref(),
             );
 
-            Self::execute_data_query(mm, db_id, txn_id, &data_sql).await?
+            Self::execute_data_query(mm, db_id, txn_id, &data_sql, dataset_id).await?
         } else {
-            Self::empty_dataset()
+            Self::empty_dataset(dataset_id)
         };
 
         let row_count = dataset.iter().count();
@@ -225,6 +228,7 @@ impl CustomQueryService {
     /// * `db_id` - 数据库 ID
     /// * `txn_id` - 事务 ID
     /// * `sql` - SQL 语句
+    /// * `dataset_id` - 数据集 ID
     ///
     /// # 返回值
     /// 返回记录总数
@@ -233,9 +237,11 @@ impl CustomQueryService {
         db_id: &str,
         txn_id: Option<&str>,
         sql: &str,
+        dataset_id: &str,
     ) -> Result<i64> {
+        let count_dataset_id = format!("{}_count", dataset_id);
         let dataset = mm
-            .query_sql(db_id, txn_id, sql, "count")
+            .query_sql(db_id, txn_id, sql, &count_dataset_id)
             .await
             .map_err(|e| ServiceError::internal_error(format!("COUNT 查询失败: {}", e)))?;
 
@@ -259,6 +265,7 @@ impl CustomQueryService {
     /// * `db_id` - 数据库 ID
     /// * `txn_id` - 事务 ID
     /// * `sql` - SQL 语句
+    /// * `dataset_id` - 数据集 ID
     ///
     /// # 返回值
     /// 返回查询结果 DataSet
@@ -267,9 +274,10 @@ impl CustomQueryService {
         db_id: &str,
         txn_id: Option<&str>,
         sql: &str,
+        dataset_id: &str,
     ) -> Result<DataSet> {
         let dataset = mm
-            .query_sql(db_id, txn_id, sql, "custom_query")
+            .query_sql(db_id, txn_id, sql, dataset_id)
             .await
             .map_err(|e| ServiceError::internal_error(format!("数据查询失败: {}", e)))?;
 
@@ -277,8 +285,8 @@ impl CustomQueryService {
     }
 
     /// 创建一个空的 DataSet（用于返回操作结果）
-    fn empty_dataset() -> DataSet {
-        let schema = Arc::new(Schema::new("empty", vec![]));
-        DataSet::empty("result", schema)
+    fn empty_dataset(dataset_id:&str) -> DataSet {
+        let schema = Arc::new(Schema::new(dataset_id, vec![]));
+        DataSet::empty(dataset_id, schema)
     }
 }

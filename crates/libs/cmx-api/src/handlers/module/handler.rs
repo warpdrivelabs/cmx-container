@@ -27,10 +27,10 @@ use crate::rest::header_parse::get_db_id_from_header;
 /// - 主表: cmx_module (别名 m)
 /// - 关联表1: cmx_application (别名 a)
 /// - 关联表2: cmx_domain (别名 d)
-/// - 关联条件: 
+/// - 关联条件:
 ///   - m.application_code = a.code
 ///   - m.domain_code = d.code
-/// - 返回字段: 
+/// - 返回字段:
 ///   - m.* (模块全部字段)
 ///   - a.name as application_name (应用名称)
 ///   - d.name as domain_name (域名称)
@@ -41,7 +41,7 @@ use crate::rest::header_parse::get_db_id_from_header;
 /// - 自动生成 COUNT 查询
 #[utoipa::path(
     post,
-    path = "/api/modules/custom-page",
+    path = "/api/module/custom-page",
     request_body = crate::rest::param_doc::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
@@ -60,7 +60,7 @@ pub async fn module_custom_page(
     let db_id = get_db_id_from_header(&headers).await;
 
     let sql = r#"
-        SELECT 
+        SELECT
             m.*,
             a.name as application_name,
             d.name as domain_name
@@ -86,6 +86,7 @@ pub async fn module_custom_page(
         filters,
         list_options,
         sql,
+        "cmx_module",
     )
     .await
     .map_err(|e| crate::error::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;

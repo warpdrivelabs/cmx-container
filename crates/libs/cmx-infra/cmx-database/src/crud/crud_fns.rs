@@ -587,6 +587,7 @@ where
     /// * `filters` - 过滤条件列表（可选）
     /// * `list_options` - 列表选项（包含分页和排序）
     /// * `sql` - 自定义 SQL（支持复杂 JOIN 查询）
+    /// * `dataset_id` - 数据集 ID（用于标识查询结果集）
     ///
     /// # 返回值
     /// 返回包含查询结果的 DataSet 和总数
@@ -598,6 +599,6 @@ where
         list_options: ListOptions,
         sql: &str,
     ) -> Result<(DataSet, i64)> {
-        crate::crud::CustomQueryService::page_custom(mm, db_id, txn_id, filters, list_options, sql).await
+        crate::crud::CustomQueryService::page_custom(mm, db_id, txn_id, filters, list_options, sql, MC::TABLE).await
     }
 }

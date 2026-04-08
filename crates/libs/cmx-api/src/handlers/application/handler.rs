@@ -78,9 +78,10 @@ pub async fn application_custom_page(
         filters,
         list_options,
         sql,
+        "cmx-application",
     )
-        .await
-        .map_err(|e| crate::error::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
-    
+    .await
+    .map_err(|e| crate::error::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
+
     Ok(Json(ApiResp::ok(dataset)))
 }

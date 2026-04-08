@@ -240,7 +240,7 @@ impl DeployService {
             new_version: result.version,
             install_path: result.install_path,
             success: true,
-            message: "插件安装成功".to_string(),
+            message: result.message,
         })
     }
 
