@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::DatabaseManager;
 use crate::crud::error::{Result, ServiceError};
+use crate::crud::count_optimizer::{generate_count_sql, CountOptimizerConfig};
 use cmx_core::model::data::dataset::{DataSet, Schema};
 
 /// 自定义查询服务
@@ -63,11 +64,10 @@ impl CustomQueryService {
 
         let (order_by, limit_offset) = Self::build_order_and_pagination(&list_options);
 
-        let count_sql = Self::build_final_sql(
-            &format!("SELECT COUNT(*) FROM ({}) AS count_subquery", sql),
+        let count_sql = generate_count_sql(
+            sql,
             where_clause.as_deref(),
-            None,
-            None,
+            &CountOptimizerConfig::default(),
         );
 
         let total = Self::execute_count_query(mm, db_id, txn_id, &count_sql, dataset_id).await?;
