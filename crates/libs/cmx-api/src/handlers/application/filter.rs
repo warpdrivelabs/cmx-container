@@ -14,6 +14,7 @@ pub struct ApplicationFilter {
     #[modql(rel="cmx_domain")]
     pub code: Option<OpValsString>,
     /// 名称过滤
+    #[modql(rel="a")]
     pub name: Option<OpValsString>,
     /// 域编码过滤
     pub domain_code: Option<OpValsString>,

@@ -13,10 +13,13 @@ pub struct ModuleFilter {
     /// 编码过滤
     pub code: Option<OpValsString>,
     /// 名称过滤
+    #[modql(rel="m")]
     pub name: Option<OpValsString>,
     /// 域编码过滤
+   #[modql(rel="m")]
     pub domain_code: Option<OpValsString>,
     /// 应用编码过滤
+    #[modql(rel="m")]
     pub application_code: Option<OpValsString>,
     /// 类型过滤
     pub r#type: Option<OpValsString>,
