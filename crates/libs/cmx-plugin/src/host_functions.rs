@@ -3,6 +3,7 @@
 //! 为 WASM 插件提供插件间调用能力的宿主函数。
 //! 通过 GlobalRuntime 访问 WASM 运行时，实现跨插件的服务调用。
 
+use tracing::info;
 use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult};
 
 /// 插件宿主函数提供者
@@ -28,19 +29,22 @@ impl PluginHostFunctions {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
-
+        info!("插件间调用: {}", req.function_name);
         let runtime = GlobalRuntime::get();
         let input_bytes = req.input.as_bytes();
         let caller_data = Self::build_caller_data();
 
-        let rt = tokio::runtime::Handle::current();
-        let result: Result<WasmInvokeResult, _> = rt.block_on(async {
-            runtime.invoke(
-                &req.target_plugin_id,
-                &req.function_name,
-                input_bytes,
-                &caller_data,
-            ).await
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result: Result<WasmInvokeResult, _> = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                runtime.invoke(
+                    &req.target_plugin_id,
+                    &req.function_name,
+                    input_bytes,
+                    &caller_data,
+                ).await
+            })
         });
 
         match result {

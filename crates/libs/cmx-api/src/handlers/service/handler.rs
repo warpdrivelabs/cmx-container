@@ -17,35 +17,15 @@ use crate::error::Error;
 /// 服务调用 Handler
 ///
 /// 处理 POST /api/service/call 请求，调用 WASM 插件函数。
-///
-/// # 请求体
-///
-/// ```json
-/// {
-///     "plugin_id": "my-plugin",
-///     "function_name": "handle_request",
-///     "input": {"data": "value"},
-///     "db_id": "default",
-///     "request_id": "req-001",
-///     "tenant_id": null
-/// }
-/// ```
-///
-/// # 响应
-///
-/// ```json
-/// {
-///     "code": 0,
-///     "message": "success",
-///     "data": {
-///         "success": true,
-///         "output": {"result": "processed"},
-///         "elapsed_us": 1234,
-///         "fuel_consumed": 5000,
-///         "error": null
-///     }
-/// }
-/// ```
+#[utoipa::path(
+    post,
+    path = "/api/service/call",
+    request_body = InvokeRequest,
+    responses(
+        (status = 200, description = "调用成功", body = ApiResp<InvokeResponse>)
+    ),
+    tag = "Service"
+)]
 pub async fn service_call(
     State(state): State<CmxAppState>,
     Json(req): Json<InvokeRequest>,
@@ -119,28 +99,15 @@ pub async fn service_call(
 /// 编排执行 Handler
 ///
 /// 处理 POST /api/service/orchestration 请求，执行插件编排。
-///
-/// # 请求体
-///
-/// ```json
-/// {
-///     "orchestration": {
-///         "id": "order-flow",
-///         "name": "订单处理流程",
-///         "steps": [
-///             {
-///                 "step_id": "validate",
-///                 "plugin_id": "validator-plugin",
-///                 "function_name": "validate_order",
-///                 "input": {"type": "static", "value": {"order_id": "12345"}},
-///                 "parallel": false
-///             }
-///         ]
-///     },
-///     "initial_input": {},
-///     "db_id": "default"
-/// }
-/// ```
+#[utoipa::path(
+    post,
+    path = "/api/service/orchestration",
+    request_body = OrchestrateRequest,
+    responses(
+        (status = 200, description = "编排执行成功", body = ApiResp<OrchestrateResponse>)
+    ),
+    tag = "Service"
+)]
 pub async fn execute_orchestration(
     State(state): State<CmxAppState>,
     Json(req): Json<OrchestrateRequest>,

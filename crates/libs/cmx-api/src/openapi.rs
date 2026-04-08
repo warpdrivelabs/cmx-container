@@ -71,6 +71,10 @@ use utoipa::OpenApi;
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
         crate::handlers::table_metadata::handler::table_metadata_get_by_id,
+        //服务
+        crate::handlers::service::handler::service_call,
+        crate::handlers::service::handler::execute_orchestration,
+
     ),
     components(
         schemas(
@@ -105,6 +109,15 @@ use utoipa::OpenApi;
             crate::handlers::plugin::response::DowngradeResponse,
             crate::handlers::plugin::response::PluginDeployResponse,
             crate::api_response::Pagination,
+            // Service handlers schemas
+            cmx_service::InvokeRequest,
+            cmx_service::InvokeResponse,
+            cmx_service::OrchestrateRequest,
+            cmx_service::OrchestrateResponse,
+            cmx_service::StepResult,
+            cmx_service::Orchestration,
+            cmx_service::OrchestrationStep,
+            cmx_service::StepInput,
         )
     )
 )]

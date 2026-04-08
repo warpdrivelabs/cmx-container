@@ -41,9 +41,12 @@ impl BufferHostFunctions {
         let cache = GlobalCacheManager::get();
         let full_key = Self::build_key("default", &req.key);
 
-        let rt = tokio::runtime::Handle::current();
-        let result = rt.block_on(async {
-            cache.ops().get(&full_key).await
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                cache.ops().get(&full_key).await
+            })
         });
 
         match result {
@@ -72,13 +75,16 @@ impl BufferHostFunctions {
         let full_key = Self::build_key("default", &req.key);
         let ttl = req.ttl_seconds;
 
-        let rt = tokio::runtime::Handle::current();
-        let result = rt.block_on(async {
-            if let Some(ttl_secs) = ttl {
-                cache.ops().set_ex(&full_key, value, std::time::Duration::from_secs(ttl_secs)).await
-            } else {
-                cache.ops().set(&full_key, value).await
-            }
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                if let Some(ttl_secs) = ttl {
+                    cache.ops().set_ex(&full_key, value, std::time::Duration::from_secs(ttl_secs)).await
+                } else {
+                    cache.ops().set(&full_key, value).await
+                }
+            })
         });
 
         match result {
@@ -102,9 +108,12 @@ impl BufferHostFunctions {
         let cache = GlobalCacheManager::get();
         let full_key = Self::build_key("default", &req.key);
 
-        let rt = tokio::runtime::Handle::current();
-        let result = rt.block_on(async {
-            cache.ops().del(&full_key).await
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                cache.ops().del(&full_key).await
+            })
         });
 
         match result {

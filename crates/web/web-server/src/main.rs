@@ -28,7 +28,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberIn
 ///
 /// # 返回值
 /// - `Result<()>` - 执行结果，成功返回 Ok(())，失败返回错误
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> Result<()> {
     // 必须先加载.env文件
     dotenvy::dotenv().ok();

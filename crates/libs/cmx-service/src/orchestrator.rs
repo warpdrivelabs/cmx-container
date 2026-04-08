@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
+use utoipa::ToSchema;
 
 use cmx_traits::{CallerData, PluginQuery, RuntimeInvoker, WasmInvokeResult};
 
@@ -14,7 +15,7 @@ use crate::error::ServiceError;
 use crate::request::StepResult;
 
 /// 编排步骤
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrationStep {
     /// 步骤ID
     pub step_id: String,
@@ -32,8 +33,9 @@ pub struct OrchestrationStep {
 }
 
 /// 步骤输入定义
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type")]
+#[schema(no_recursion)]
 pub enum StepInput {
     /// 静态 JSON 值
     #[serde(rename = "static")]
@@ -47,7 +49,7 @@ pub enum StepInput {
 }
 
 /// 编排定义
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Orchestration {
     /// 编排ID
     pub id: String,
@@ -61,7 +63,7 @@ pub struct Orchestration {
 }
 
 /// 编排执行结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrationResult {
     /// 是否成功
     pub success: bool,

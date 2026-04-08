@@ -91,6 +91,7 @@ impl ExtismEngine {
         provider: &Arc<dyn HostFunctionProvider>,
     ) -> Result<(), ExtismError> {
         let functions = provider.functions();
+        let namespace = provider.namespace();
 
         for func_def in functions {
             let ctx = HostFunctionContext::new(provider.clone(), func_def.name.to_string());
@@ -111,7 +112,10 @@ impl ExtismEngine {
             let temp_builder = PluginBuilder::new(temp_manifest);
             let old_builder = std::mem::replace(builder, temp_builder);
 
-            let new_builder = old_builder.with_function(
+            // 使用 with_function_in_namespace 正确设置命名空间
+            // 这样 Extism 会将函数注册为 "namespace:function_name" 格式
+            let new_builder = old_builder.with_function_in_namespace(
+                namespace,
                 func_def.name,
                 [ValType::I64],
                 [ValType::I64],

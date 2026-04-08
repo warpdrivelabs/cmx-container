@@ -21,5 +21,5 @@ pub mod service;
 pub use error::ServiceError;
 pub use handler::ServiceHandler;
 pub use orchestrator::{Orchestration, OrchestrationResult, Orchestrator, OrchestrationStep, StepInput};
-pub use request::{InvokeRequest, InvokeResponse, OrchestrateRequest, OrchestrateResponse};
+pub use request::{InvokeRequest, InvokeResponse, OrchestrateRequest, OrchestrateResponse, StepResult};
 pub use service::{CmxService, ServiceConfig};

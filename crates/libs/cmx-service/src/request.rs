@@ -3,9 +3,10 @@
 //! 定义 cmx-service 对外暴露的请求和响应结构体。
 
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// 单次调用请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InvokeRequest {
     /// 目标插件ID
     pub plugin_id: String,
@@ -22,7 +23,7 @@ pub struct InvokeRequest {
 }
 
 /// 单次调用响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InvokeResponse {
     /// 是否成功
     pub success: bool,
@@ -37,7 +38,7 @@ pub struct InvokeResponse {
 }
 
 /// 编排执行请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrateRequest {
     /// 编排定义（内联）
     pub orchestration: super::orchestrator::Orchestration,
@@ -52,7 +53,7 @@ pub struct OrchestrateRequest {
 }
 
 /// 编排执行响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrateResponse {
     /// 是否成功
     pub success: bool,
@@ -67,7 +68,7 @@ pub struct OrchestrateResponse {
 }
 
 /// 单个步骤执行结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct StepResult {
     /// 步骤ID
     pub step_id: String,
