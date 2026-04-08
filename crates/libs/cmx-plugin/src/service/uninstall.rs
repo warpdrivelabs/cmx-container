@@ -2,6 +2,7 @@
 //!
 //! 处理插件卸载流程，提供完整的插件卸载功能。
 
+use std::path::Path;
 use std::sync::Arc;
 
 use cmx_database::get_default_db_manager;
@@ -166,11 +167,14 @@ impl UninstallService {
 
         //移除物理安装目录
         let install_path = &plugin.install_path;
-        if std::fs::remove_dir_all(install_path).is_ok() {
-            info!("删除插件安装目录成功: {}", install_path);
-        } else {
-            error!("删除插件安装目录失败: {}", install_path);
+        if let Some(parent_path) = Path::new(install_path).parent().map(|p| p.to_string_lossy().to_string()) {
+            if std::fs::remove_dir_all(&parent_path).is_ok() {
+                info!("删除插件安装目录成功: {}", parent_path);
+            } else {
+                error!("删除插件安装目录失败: {}", parent_path);
+            }
         }
+
 
         // 步骤9: 记录审计日志
         let duration_ms = start_time.elapsed().as_millis() as i64;

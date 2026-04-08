@@ -33,7 +33,7 @@ COMMENT ON COLUMN cmx_domain.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_domain.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_domain.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_domain.update_name IS '更新人名称';
-CREATE UNIQUE INDEX uk_cmx_domain_code ON cmx_domain(code);
+CREATE UNIQUE INDEX uk_cmx_domain_codee ON cmx_domain(code);
 
 
 
@@ -74,7 +74,7 @@ COMMENT ON COLUMN cmx_application.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_application.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_application.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_application.update_name IS '更新人名称';
-CREATE UNIQUE INDEX uk_cmx_application_code ON cmx_application(code);
+CREATE UNIQUE INDEX uk_cmx_application_codee ON cmx_application(code);
 
 
 DROP TABLE IF EXISTS cmx_module;
@@ -117,7 +117,7 @@ COMMENT ON COLUMN cmx_module.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_module.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_module.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_module_code ON cmx_module(code);
+CREATE UNIQUE INDEX uk_cmx_module_codee ON cmx_module(code);
 
 
 
