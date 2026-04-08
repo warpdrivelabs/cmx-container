@@ -9,7 +9,7 @@ use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_utils::snowflake_id_str;
 use modql::field::{HasSeaFields, SeaField, SeaFields};
 use modql::filter::{FilterGroups, ListOptions};
-use sea_query::{Asterisk, Condition, Expr, PostgresQueryBuilder, Query};
+use sea_query::{Asterisk, Condition, Expr, PostgresQueryBuilder, Query, SelectStatement};
 use sea_query_binder::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, info, warn};
@@ -256,10 +256,10 @@ impl TableMetadataService {
         Ok(dataset)
     }
 
-    /// 列表查询（联查版本表获取 metadata）
+    /// 列表查询（联查版本表 + 域/应用/模块表获取 name 字段）
     ///
-    /// LEFT JOIN cmx_meta_table_define_version，通过 table_name + version + db_id 关联，
-    /// 返回主表全部字段 + 版本表的 metadata 字段
+    /// LEFT JOIN cmx_meta_table_define_version 获取 metadata，
+    /// LEFT JOIN cmx_domain / cmx_application / cmx_module 获取 domain_name / application_name / module_name
     pub async fn list(
         mm: &DatabaseManager,
         db_id: &str,
@@ -271,47 +271,7 @@ impl TableMetadataService {
             "SERVICE", db_id
         );
 
-        let mut select = Query::select();
-        select.from(TableMetadataBmc::table_ref()).columns(vec![
-            ("cmx_meta_table_define", "id"),
-            ("cmx_meta_table_define", "table_name"),
-            ("cmx_meta_table_define", "db_id"),
-            ("cmx_meta_table_define", "plugin_id"),
-            ("cmx_meta_table_define", "version"),
-            ("cmx_meta_table_define", "domain_code"),
-            ("cmx_meta_table_define", "application_code"),
-            ("cmx_meta_table_define", "module_code"),
-            ("cmx_meta_table_define", "archived"),
-            ("cmx_meta_table_define", "create_time"),
-            ("cmx_meta_table_define", "update_time"),
-            ("cmx_meta_table_define", "create_by"),
-            ("cmx_meta_table_define", "create_name"),
-            ("cmx_meta_table_define", "update_by"),
-            ("cmx_meta_table_define", "update_name"),
-        ]);
-
-        select.expr_as(
-            Expr::col(("cmx_meta_table_define_version", "metadata")),
-            "metadata",
-        );
-
-        select.join(
-            sea_query::JoinType::LeftJoin,
-            "cmx_meta_table_define_version",
-            Condition::all()
-                .add(
-                    Expr::col(("cmx_meta_table_define", "table_name"))
-                        .equals(("cmx_meta_table_define_version", "table_name")),
-                )
-                .add(
-                    Expr::col(("cmx_meta_table_define", "version"))
-                        .equals(("cmx_meta_table_define_version", "version")),
-                )
-                .add(
-                    Expr::col(("cmx_meta_table_define", "db_id"))
-                        .equals(("cmx_meta_table_define_version", "db_id")),
-                ),
-        );
+        let mut select = Self::build_join_select(false);
 
         if let Some(filters) = filters {
             let filter_groups: FilterGroups = Vec::into(filters);
@@ -321,8 +281,6 @@ impl TableMetadataService {
             select.cond_where(cond);
         }
 
-
-
         if let Some(lo) = list_options {
             lo.apply_to_sea_query(&mut select);
         }
@@ -331,17 +289,18 @@ impl TableMetadataService {
         debug!("{:<12} - SQL: {}", "SERVICE", sql);
 
         let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "table_metadata_detail")
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "cmx_meta_table_define")
             .await
             .map_err(|e| PluginError::Database(format!("列表查询失败: {}", e)))?;
 
         Ok(dataset)
     }
 
-    /// 分页查询（联查版本表获取 metadata）
+    /// 分页查询（联查版本表 + 域/应用/模块表获取 name 字段）
     ///
-    /// LEFT JOIN cmx_meta_table_define_version，通过 table_name + version + db_id 关联，
-    /// 返回主表全部字段 + 版本表的 metadata 字段，并返回总记录数
+    /// LEFT JOIN cmx_meta_table_define_version 获取 metadata，
+    /// LEFT JOIN cmx_domain / cmx_application / cmx_module 获取 domain_name / application_name / module_name，
+    /// 并返回总记录数
     pub async fn page(
         mm: &DatabaseManager,
         db_id: &str,
@@ -353,6 +312,66 @@ impl TableMetadataService {
             "SERVICE", db_id
         );
 
+        let mut select = Self::build_join_select(false);
+
+        if let Some(filters) = filters.clone() {
+            let filter_groups: FilterGroups = Vec::into(filters);
+            let cond: Condition = filter_groups.try_into().map_err(|e| {
+                PluginError::Database(format!("过滤条件错误: {}", e))
+            })?;
+            select.cond_where(cond);
+        }
+
+        list_options.clone().apply_to_sea_query(&mut select);
+
+        let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", sql);
+
+        let dataset = mm
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "cmx_meta_table_define")
+            .await
+            .map_err(|e| PluginError::Database(format!("分页查询失败: {}", e)))?;
+
+        let total = Self::count(mm, db_id, filters).await?;
+
+        Ok((dataset, total))
+    }
+
+    /// 通过 ID 查询详情（联查版本表 + 域/应用/模块表获取 name 字段）
+    ///
+    /// SQL 与分页查询一致，额外增加 id 等值过滤条件
+    pub async fn get_detail_by_id(
+        mm: &DatabaseManager,
+        db_id: &str,
+        id: &str,
+    ) -> PluginResult<DataSet> {
+        debug!(
+            "{:<12} - TableMetadataService::get_detail_by_id - db_id: {}, id: {}",
+            "SERVICE", db_id, id
+        );
+
+        let mut select = Self::build_join_select(true);
+        select.and_where(Expr::col(("cmx_meta_table_define", "id")).eq(id));
+
+        let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
+        debug!("{:<12} - SQL: {}", "SERVICE", sql);
+
+        let dataset = mm
+            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "cmx_meta_table_define")
+            .await
+            .map_err(|e| PluginError::Database(format!("查询详情失败: {}", e)))?;
+
+        Ok(dataset)
+    }
+
+    /// 构建联查 SELECT 查询（公共基础）
+    ///
+    /// 主表 cmx_meta_table_define LEFT JOIN 四张表：
+    /// - cmx_meta_table_define_version: 通过 table_name + version + db_id 关联，取 metadata
+    /// - cmx_domain: 通过 domain_code = code 关联，取 name AS domain_name
+    /// - cmx_application: 通过 application_code = code 关联，取 name AS application_name
+    /// - cmx_module: 通过 module_code = code 关联，取 name AS module_name
+    fn build_join_select(with_metadata: bool) -> SelectStatement {
         let mut select = Query::select();
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
@@ -371,52 +390,57 @@ impl TableMetadataService {
             ("cmx_meta_table_define", "update_by"),
             ("cmx_meta_table_define", "update_name"),
         ]);
+        if with_metadata {
+            select.expr_as(
+                Expr::col(("cmx_meta_table_define_version", "metadata")),
+                "metadata",
+            );
+        }
 
         select.expr_as(
-            Expr::col(("cmx_meta_table_define_version", "metadata")),
-            "metadata",
+            Expr::col(("cmx_domain", "name")),
+            "domain_name",
+        );
+        select.expr_as(
+            Expr::col(("cmx_application", "name")),
+            "application_name",
+        );
+        select.expr_as(
+            Expr::col(("cmx_module", "name")),
+            "module_name",
         );
 
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_meta_table_define_version",
             Condition::all()
-                .add(
-                    Expr::col(("cmx_meta_table_define", "table_name"))
-                        .equals(("cmx_meta_table_define_version", "table_name")),
-                )
-                .add(
-                    Expr::col(("cmx_meta_table_define", "version"))
-                        .equals(("cmx_meta_table_define_version", "version")),
-                )
-                .add(
-                    Expr::col(("cmx_meta_table_define", "db_id"))
-                        .equals(("cmx_meta_table_define_version", "db_id")),
-                ),
+                .add(Expr::col(("cmx_meta_table_define", "table_name")).equals(("cmx_meta_table_define_version", "table_name")))
+                .add(Expr::col(("cmx_meta_table_define", "version")).equals(("cmx_meta_table_define_version", "version")))
+                .add(Expr::col(("cmx_meta_table_define", "db_id")).equals(("cmx_meta_table_define_version", "db_id"))),
         );
 
-        if let Some(filters) = filters.clone() {
-            let filter_groups: FilterGroups = Vec::into(filters);
-            let cond: Condition = filter_groups.try_into().map_err(|e| {
-                PluginError::Database(format!("过滤条件错误: {}", e))
-            })?;
-            select.cond_where(cond);
-        }
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_domain",
+            Condition::all()
+                .add(Expr::col(("cmx_meta_table_define", "domain_code")).equals(("cmx_domain", "code"))),
+        );
 
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_application",
+            Condition::all()
+                .add(Expr::col(("cmx_meta_table_define", "application_code")).equals(("cmx_application", "code"))),
+        );
 
-        list_options.clone().apply_to_sea_query(&mut select);
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_module",
+            Condition::all()
+                .add(Expr::col(("cmx_meta_table_define", "module_code")).equals(("cmx_module", "code"))),
+        );
 
-        let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
-        debug!("{:<12} - SQL: {}", "SERVICE", sql);
-
-        let dataset = mm
-            .query_sql_with_sqlxvalues(db_id, None, &sql, sql_values, "table_metadata_detail")
-            .await
-            .map_err(|e| PluginError::Database(format!("分页查询失败: {}", e)))?;
-
-        let total = Self::count(mm, db_id, filters).await?;
-
-        Ok((dataset, total))
+        select
     }
 
     /// 统计主表记录数（用于分页查询的总数计算）

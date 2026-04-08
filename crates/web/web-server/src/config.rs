@@ -109,7 +109,7 @@ pub async fn init_cache() {
 /// 注册所有宿主函数提供者到 WASM 引擎。
 pub async fn init_runtime() {
     use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine};
-    use cmx_traits::GlobalRuntime;
+    use cmx_traits::{GlobalRuntime, HostFunctionProvider};
     use cmx_utils::LoggingHostFunctions;
     use cmx_database::DatabaseHostFunctions;
     use cmx_buffer::BufferHostFunctions;
@@ -125,22 +125,28 @@ pub async fn init_runtime() {
 
     // 注册宿主函数提供者
     // 1. 日志宿主函数
-    engine.register_provider(Arc::new(LoggingHostFunctions::new()))
+    let logging_provider: Arc<dyn cmx_traits::HostFunctionProvider> = Arc::new(LoggingHostFunctions::new());
+    engine.register_provider(logging_provider)
         .await
         .expect("注册日志宿主函数失败");
-    
+
     // 2. 数据库宿主函数
-    engine.register_provider(Arc::new(DatabaseHostFunctions::new(cmx_database::get_default_db_manager().clone())))
+    let db_provider: Arc<dyn cmx_traits::HostFunctionProvider> = Arc::new(
+        DatabaseHostFunctions::new(cmx_database::get_default_db_manager().clone())
+    );
+    engine.register_provider(db_provider)
         .await
         .expect("注册数据库宿主函数失败");
-    
+
     // 3. 缓存宿主函数
-    engine.register_provider(Arc::new(BufferHostFunctions::new()))
+    let buffer_provider: Arc<dyn cmx_traits::HostFunctionProvider> = Arc::new(BufferHostFunctions::new());
+    engine.register_provider(buffer_provider)
         .await
         .expect("注册缓存宿主函数失败");
-    
+
     // 4. 插件间调用宿主函数
-    engine.register_provider(Arc::new(PluginHostFunctions::new()))
+    let plugin_provider: Arc<dyn cmx_traits::HostFunctionProvider> = Arc::new(PluginHostFunctions::new());
+    engine.register_provider(plugin_provider)
         .await
         .expect("注册插件宿主函数失败");
 

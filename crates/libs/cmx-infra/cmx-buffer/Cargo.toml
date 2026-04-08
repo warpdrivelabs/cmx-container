@@ -36,6 +36,3 @@ derive_more = { workspace = true }
 async-trait = "0.1"
 uuid = { version = "1.21", features = ["v4"] }
 futures-util = "0.3"
-
-# Extism 支持
-extism = "1.4"

@@ -29,7 +29,7 @@ pub mod global_runtime;
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
 pub use runtime_invoker::{RuntimeInvoker, WasmInvokeResult};
 pub use lifecycle::{PluginLifecycleListener, LifecycleEvent};
-pub use host_func::ExtismFunctionProvider;
+pub use host_func::{HostFunctionProvider, HostFunctionDef, ValType};
 pub use caller_data::CallerData;
 pub use error::{TraitError, HostFuncError};
 pub use global_runtime::GlobalRuntime;

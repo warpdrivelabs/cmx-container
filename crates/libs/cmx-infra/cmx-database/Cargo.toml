@@ -37,8 +37,6 @@ rust_decimal = "1.40.0"
 chrono = "0.4.44"
 base64 = "0.22"
 
-# Extism 支持
-extism = "1.4"
 # SQL 解析器
 sqlparser = "0.49"
 # 正则表达式
