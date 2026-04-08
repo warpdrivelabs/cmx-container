@@ -8,6 +8,7 @@
 2. 提供通用的 CRUD 操作框架，支持批量操作
 3. 支持扩展和自定义业务逻辑
 4. 编译时类型检查，提高代码安全性
+5. 自动生成 OpenAPI 文档
 
 ### 1.2 核心改进
 
@@ -15,55 +16,69 @@
 | --------- | ------------------- | -------------------------------------- |
 | data 参数类型 | `serde_json::Value` | 强类型 Entity                             |
 | 字段处理      | 手动遍历 Value          | `HasSeaFields::not_none_sea_fields()`  |
-| 时间类型      | JSON 字符串            | `time::OffsetDateTime`                 |
 | 类型安全      | 运行时检查               | 编译时检查                                  |
 | 创建/更新区分   | 无                   | ForCreate / ForUpdate                  |
 | 批量操作      | 不支持                 | `create_many`, `update_many`, `delete` |
 | 删除方法      | GET + Query         | POST + JSON Body                       |
+| OpenAPI   | 手动编写                | 自动生成                                   |
 
 ## 2. 目录结构
 
 ```
 crates/libs/cmx-api/src/
-├── crud/                      # 通用 CRUD 框架
-│   ├── mod.rs
-│   ├── traits.rs              # DbBmc trait
-│   ├── macros.rs              # 路由注册宏
-│   ├── utils.rs               # prep_fields_for_create/update
-│   └── service.rs             # GenericCrudService
-│
 ├── rest/                      # REST 协议层
 │   ├── mod.rs
-│   ├── params.rs              # 参数定义
-│   └── handler.rs             # 通用 Handler
+│   ├── param_doc.rs           # 参数文档类型
+│   ├── handler.rs             # 通用 Handler
+│   ├── header_parse.rs        # Header 解析
+│   └── tree.rs                # 树形结构工具
 │
-├── models/                    # 业务模型层
+├── routes/                    # 路由注册模块
+│   ├── mod.rs
+│   ├── routes.rs              # 统一注册入口
+│   ├── traits.rs              # ModuleRoutes trait
+│   ├── macros.rs              # 路由注册宏
+│   └── crud_handlers.rs       # CRUD handlers 声明
+│
+├── handlers/                  # 业务模型层
 │   └── domain/                # Domain 实体模块
-│       ├── mod.rs
+│       ├── mod.rs             # 模块入口 + ModuleRoutes 实现
 │       ├── bmc.rs             # DomainBmc
 │       ├── entity.rs          # Domain, DomainForCreate, DomainForUpdate
 │       ├── filter.rs          # DomainFilter
 │       ├── service.rs         # DomainService（自定义服务）
 │       └── handler.rs         # 自定义 Handler
 │
-├── routes.rs                  # 路由注册入口
-└── state.rs                   # CmxAppState
+├── middleware/                # 中间件
+│   ├── mod.rs
+│   ├── mw_context.rs          # 上下文中间件
+│   ├── mw_cors.rs             # CORS 中间件
+│   ├── mw_rate_limit.rs       # 限流中间件
+│   ├── mw_security_headers.rs # 安全头中间件
+│   └── mw_trace.rs            # 追踪中间件
+│
+├── api_response.rs            # API 响应封装
+├── error.rs                   # 错误类型
+├── app_state.rs               # 应用状态
+├── openapi.rs                 # OpenAPI 文档
+└── lib.rs                     # 模块入口
 ```
 
 ### 2.1 扩展点
 
 ```rust
-// 1. GenericCrudService - 可继承扩展
+// 1. GenericCrudService - 可继承扩展（来自 cmx-database）
 pub struct GenericCrudService<MC, F = ()> { ... }
 
-// 2. DbBmc trait - 可实现自定义表元信息
+// 2. DbBmc trait - 可实现自定义表元信息（来自 cmx-database）
 pub trait DbBmc { ... }
 
 // 3. Handler 函数 - 可自定义
 pub async fn create<MC, E>(...) { ... }
 
 // 4. 宏 - 可组合使用
-register_crud_routes!(router, DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate, "/domains");
+declare_crud_handlers!(...);
+register_crud_handlers_module!(...);
 ```
 
 ## 3. Entity 定义规范
@@ -73,17 +88,19 @@ register_crud_routes!(router, DomainBmc, DomainFilter, DomainForCreate, DomainFo
 所有实体元数据定义放在一个文件中：
 
 ```rust
-// models/domain/entity.rs
+// handlers/domain/entity.rs
 
+use crate::rest::TreeNodeData;
 use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 /// 领域实体（完整字段，用于查询返回）
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
 pub struct Domain {
-    /// 唯一标识码（主键）
+    pub id: String,
+    /// 唯一标识码
     pub code: String,
     /// 名称
     pub name: String,
@@ -108,27 +125,16 @@ pub struct Domain {
     pub archived: Option<i32>,
     /// 创建时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub create_time: Option<OffsetDateTime>,
+    pub create_time: Option<String>,
     /// 更新时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_time: Option<OffsetDateTime>,
-    /// 创建者 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub create_by: Option<String>,
-    /// 创建者名称
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub create_name: Option<String>,
-    /// 更新者 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_by: Option<String>,
-    /// 更新者名称
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_name: Option<String>,
+    pub update_time: Option<String>,
 }
 
 /// 创建请求 DTO
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct DomainForCreate {
+    pub code: String,
     /// 名称
     pub name: String,
     /// 描述
@@ -138,16 +144,10 @@ pub struct DomainForCreate {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[field(name = "type")]
     pub r#type: Option<String>,
-    /// 标签
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<String>,
-    /// 排序顺序
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sort_order: Option<i32>,
 }
 
 /// 更新请求 DTO
-#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
 pub struct DomainForUpdate {
     /// 名称
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -155,22 +155,9 @@ pub struct DomainForUpdate {
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// 类型
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name = "type")]
-    pub r#type: Option<String>,
-    /// 标签
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<String>,
-    /// 排序顺序
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sort_order: Option<i32>,
     /// 状态
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<i32>,
-    /// 是否归档
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub archived: Option<i32>,
 }
 ```
 
@@ -179,382 +166,533 @@ pub struct DomainForUpdate {
 1. **Fields 派生宏**：`#[derive(modql::field::Fields)]` 自动实现 `HasSeaFields` trait
 2. **字段映射**：使用 `#[field(name = "type")]` 将 Rust 保留字 `r#type` 映射到数据库字段 `type`
 3. **跳过 None 值**：`#[serde(skip_serializing_if = "Option::is_none")]` 确保可选字段为 None 时不序列化
-4. **时间类型**：使用 `time::OffsetDateTime` 作为时间类型，与 sqlx 兼容
+4. **ToSchema**：`#[derive(utoipa::ToSchema)]` 支持 OpenAPI 文档生成
 
-## 4. GenericCrudService 实现
+## 4. 通用 REST Handler
 
 ### 4.1 核心方法
 
 ```rust
-/// 创建单个实体
-pub async fn create<E>(mm: &DatabaseManager, db_id: &str, data: E) -> Result<DataSet>
-where E: HasSeaFields
+// rest/handler.rs
 
-/// 批量创建多个实体
-pub async fn create_many<E>(mm: &DatabaseManager, db_id: &str, data: Vec<E>) -> Result<DataSet>
-where E: HasSeaFields
-
-/// 根据主键获取单条实体
-pub async fn get(mm: &DatabaseManager, db_id: &str, id: Value) -> Result<DataSet>
-
-/// 更新单个实体
-pub async fn update<E>(mm: &DatabaseManager, db_id: &str, id: Value, data: E) -> Result<DataSet>
-where E: HasSeaFields
-
-/// 批量更新多个实体
-pub async fn update_many<E>(mm: &DatabaseManager, db_id: &str, data: Vec<UpdateItem<E>>) -> Result<DataSet>
-where E: HasSeaFields
-
-/// 删除实体（支持单个和批量）
-pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<Value>) -> Result<DataSet>
-
-/// 列表查询（带过滤和排序）
-pub async fn list(mm: &DatabaseManager, db_id: &str, filter: Option<F>, list_options: Option<ListOptions>) -> Result<DataSet>
-
-/// 分页查询（带过滤和排序）
-pub async fn page(mm: &DatabaseManager, db_id: &str, filter: Option<F>, list_options: ListOptions) -> Result<(DataSet, i64)>
-```
-
-### 4.2 实现示例
-
-```rust
-/// 创建单个实体
-pub async fn create<E>(
-    mm: &DatabaseManager,
-    db_id: &str,
-    data: E,
-) -> Result<DataSet>
-where
-    E: HasSeaFields,
-{
-    // 获取非 None 字段
-    let mut fields = data.not_none_sea_fields();
-    
-    // 预处理字段（添加主键等）
-    prep_fields_for_create::<MC>(&mut fields, None);
-
-    // 构建 INSERT 语句
-    let (columns, sea_values) = fields.for_sea_insert();
-    let mut query = Query::insert();
-    query
-        .into_table(MC::table_ref())
-        .columns(columns)
-        .values(sea_values)?;
-
-    let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-    mm.execute_sql_with_sqlxvalues(db_id, None, &sql, sql_values).await?;
-
-    Ok(empty_dataset())
-}
-```
-
-## 5. 自定义 Service 扩展
-
-### 5.1 扩展模式
-
-| 模式    | 说明                         | 示例                            |
-| ----- | -------------------------- | ----------------------------- |
-| 继承扩展  | 直接调用 GenericCrudService 方法 | `get_by_name`, `batch_create` |
-| 覆盖方法  | 添加验证逻辑后调用父类方法              | `create`（验证名称长度）              |
-| 完全自定义 | 直接执行 SQL                   | `count_by_status`             |
-| 组合模式  | 组合多个操作                     | `search`（过滤 + 分页）             |
-
-### 5.2 实现示例
-
-```rust
-// models/domain/service.rs
-
-use crate::crud::service::GenericCrudService;
-use crate::error::{Error, Result};
-use cmx_core::model::data::dataset::DataSet;
-use cmx_database::DatabaseManager;
-use modql::filter::{ListOptions, OpValString, OpValsString};
-
-use super::{DomainBmc, DomainFilter, DomainForCreate};
-
-/// Domain 自定义服务
-pub struct DomainService;
-
-impl DomainService {
-    /// 扩展方法：按名称查询
-    pub async fn get_by_name(
-        mm: &DatabaseManager,
-        db_id: &str,
-        name: &str,
-    ) -> Result<DataSet> {
-        let filter = DomainFilter {
-            name: Some(OpValsString(vec![OpValString::Eq(name.to_string())])),
-            ..Default::default()
-        };
-        GenericCrudService::<DomainBmc, DomainFilter>::list(mm, db_id, Some(filter), None).await
-    }
-
-    /// 覆盖方法：自定义创建逻辑
-    pub async fn create(
-        mm: &DatabaseManager,
-        db_id: &str,
-        data: DomainForCreate,
-    ) -> Result<DataSet> {
-        // 自定义验证
-        if data.name.len() < 2 {
-            return Err(Error::bad_request("域名长度不能小于2个字符"));
-        }
-        GenericCrudService::<DomainBmc>::create(mm, db_id, data).await
-    }
-
-    /// 完全自定义：按状态统计
-    pub async fn count_by_status(mm: &DatabaseManager, db_id: &str) -> Result<DataSet> {
-        let sql = r#"
-            SELECT status, COUNT(*) as count 
-            FROM cmx_domain 
-            WHERE archived = 0
-            GROUP BY status
-        "#;
-        mm.query_sql(db_id, None, sql, "count_by_status").await
-            .map_err(|e| Error::internal_error(format!("统计查询失败: {}", e)))
-    }
-
-    /// 组合模式：搜索域名
-    pub async fn search(
-        mm: &DatabaseManager,
-        db_id: &str,
-        keyword: &str,
-        page: i64,
-        page_size: i64,
-    ) -> Result<(DataSet, i64)> {
-        let filter = DomainFilter {
-            name: Some(OpValsString(vec![OpValString::Contains(keyword.to_string())])),
-            ..Default::default()
-        };
-        let list_options = ListOptions {
-            limit: Some(page_size),
-            offset: Some((page - 1) * page_size),
-            order_bys: Some("name".into()),
-        };
-        GenericCrudService::<DomainBmc, DomainFilter>::page(mm, db_id, Some(filter), list_options).await
-    }
-}
-```
-
-## 6. Handler 实现
-
-### 6.1 通用 Handler
-
-```rust
-use crate::crud::service::{GenericCrudService, UpdateItem};
-use cmx_database::crud::DbBmc;
+use crate::api_response::ApiResp;
+use crate::app_state::CmxAppState;
 use crate::error::Result;
-use crate::response::ApiResp;
+use crate::middleware::CmxSvrContext;
+use crate::rest::header_parse::get_db_id_from_header;
+use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
+use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
+use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_database::get_default_db_manager;
 use modql::field::HasSeaFields;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
 
 /// 创建单个实体 Handler
-pub async fn create<MC, E>(Json(data): Json<E>) -> Result<Json<ApiResp<DataSet>>>
+pub async fn create<MC, E>(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(data): Json<E>,
+) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
     E: HasSeaFields + DeserializeOwned,
 {
     let mm = get_default_db_manager();
-    let db_id = mm.get_default_db_id().await;
-    let dataset = GenericCrudService::<MC>::create(&mm, &db_id, data).await?;
+    let db_id = get_db_id_from_header(&headers).await;
+    let dataset = GenericCrudService::<MC>::create(mm, &db_id, None, data).await?;
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 删除 Handler（支持批量）
-pub async fn delete<MC>(Json(payload): Json<DeletePayload>) -> Result<Json<ApiResp<DataSet>>>
+/// 根据主键获取单条实体的 Handler
+pub async fn get_by_id<MC>(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Query(params): Query<GetParams>,
+) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
 {
     let mm = get_default_db_manager();
-    let db_id = mm.get_default_db_id().await;
-    let dataset = GenericCrudService::<MC>::delete(&mm, &db_id, payload.ids).await?;
+    let db_id = get_db_id_from_header(&headers).await;
+    let id = params.id.clone();
+    let dataset = GenericCrudService::<MC>::get(mm, &db_id, None, id.into()).await?;
     Ok(Json(ApiResp::ok(dataset)))
 }
 
+/// 更新单个实体 Handler
+pub async fn update<MC, E>(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<UpdatePayload<E>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    E: HasSeaFields + DeserializeOwned,
+{
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+    let dataset = GenericCrudService::<MC>::update(mm, &db_id, None, payload.id, payload.data).await?;
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 删除实体 Handler（支持单个和批量）
+pub async fn delete<MC>(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<DeletePayload>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+{
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+    let dataset = GenericCrudService::<MC>::delete(mm, &db_id, None, payload.ids).await?;
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 分页查询的 Handler
+pub async fn page<MC, F>(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(params): Json<PageParams<F>>,
+) -> Result<Json<ApiResp<DataSet>>>
+where
+    MC: DbBmc,
+    F: DeserializeOwned + Into<modql::filter::FilterGroups> + modql::filter::IntoFilterNodes + Clone,
+{
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
+    let list_options = params.to_list_options();
+
+    let mut filters = params.filters.clone();
+    if params.filters.is_none() || params.filters.unwrap().is_empty() {
+        filters = None;
+    }
+    if let Some(filter) = params.filter.clone() {
+        filters = Some(vec![filter]);
+    }
+
+    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, None, filters, list_options).await?;
+    Ok(Json(ApiResp::ok_with_pagination(dataset, page_number, page_size, total as u64)))
+}
+```
+
+## 5. 参数类型
+
+### 5.1 运行时参数类型（来自 cmx-core）
+
+```rust
+// cmx-core 中的参数定义
+
+/// 获取单条记录的查询参数
+pub struct GetParams {
+    pub id: String,
+    pub db_id: Option<String>,
+}
+
 /// 更新请求 Payload
-#[derive(Debug, Deserialize)]
 pub struct UpdatePayload<E> {
     pub id: Value,
     pub data: E,
 }
 
 /// 删除请求 Payload
-#[derive(Debug, Deserialize)]
 pub struct DeletePayload {
     pub ids: Vec<Value>,
 }
-```
 
-### 6.2 自定义 Handler
-
-```rust
-// models/domain/handler.rs
-
-use axum::Json;
-use cmx_core::model::data::dataset::DataSet;
-use cmx_database::get_default_db_manager;
-use serde::Deserialize;
-
-use crate::error::Result;
-use crate::models::domain::{DomainForCreate, DomainService};
-use crate::response::ApiResp;
-
-/// 按名称查询的请求参数
-#[derive(Debug, Deserialize)]
-pub struct GetByNameParams {
-    pub name: String,
-    #[serde(default)]
-    pub db_id: Option<String>,
+/// 列表查询参数
+pub struct ListParams<F> {
+    pub filter: Option<F>,
+    pub filters: Option<Vec<F>>,
+    pub order_bys: Option<String>,
 }
 
-impl GetByNameParams {
-    pub async fn get_db_id(&self) -> String {
-        self.db_id.clone()
-            .unwrap_or(get_default_db_manager().get_default_db_id().await)
+/// 分页查询参数
+pub struct PageParams<F> {
+    pub filter: Option<F>,
+    pub filters: Option<Vec<F>>,
+    pub current: Option<i64>,
+    pub size: Option<i64>,
+}
+```
+
+### 5.2 文档参数类型（用于 OpenAPI）
+
+```rust
+// rest/param_doc.rs
+
+use modql::filter::ListOptions;
+use serde::Deserialize;
+use serde_json::Value;
+use utoipa::ToSchema;
+
+/// 分页默认每页条数
+pub const PAGE_SIZE_DEFAULT: i64 = 20;
+
+/// 分页最大每页条数
+pub const PAGE_SIZE_MAX: i64 = 500;
+
+/// 获取单条记录的查询参数
+#[derive(Debug, Deserialize, Clone)]
+pub struct GetParamsDoc {
+    pub id: String,
+}
+
+/// 更新请求 Payload
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct UpdatePayloadDoc<E> {
+    pub id: Value,
+    pub data: E,
+}
+
+/// 删除请求 Payload
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct DeletePayloadDoc {
+    pub ids: Vec<Value>,
+}
+
+/// 列表查询参数
+#[derive(Debug, Deserialize, Clone, ToSchema)]
+pub struct ListParamsDoc<F> {
+    pub filter: Option<F>,
+    pub filters: Option<Vec<F>>,
+    pub order_bys: Option<String>,
+}
+
+/// 分页查询参数
+#[derive(Debug, Deserialize, Clone, ToSchema)]
+pub struct PageParamsDoc<F> {
+    pub filter: Option<F>,
+    pub filters: Option<Vec<F>>,
+    pub current: Option<i64>,
+    pub size: Option<i64>,
+}
+```
+
+## 6. API 响应封装
+
+```rust
+// api_response.rs
+
+use serde::Serialize;
+use utoipa::ToSchema;
+
+/// API 统一响应结构
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiResp<T> {
+    pub code: u16,
+    pub msg: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<Pagination>,
+}
+
+impl<T> ApiResp<T> {
+    pub fn ok(data: T) -> Self {
+        Self {
+            code: 0,
+            msg: "success".to_string(),
+            data: Some(data),
+            pagination: None,
+        }
+    }
+
+    pub fn ok_with_pagination(data: T, page: u64, page_size: u64, total: u64) -> Self {
+        let total_pages = (total as f64 / page_size as f64).ceil() as u64;
+        Self {
+            code: 0,
+            msg: "success".to_string(),
+            data: Some(data),
+            pagination: Some(Pagination {
+                page,
+                page_size,
+                total,
+                total_pages,
+            }),
+        }
+    }
+
+    pub fn fail(code: u16, msg: impl Into<String>) -> Self {
+        Self {
+            code,
+            msg: msg.into(),
+            data: None,
+            pagination: None,
+        }
     }
 }
 
-/// 按名称查询 Handler
-/// POST /api/domains/by-name
-pub async fn get_by_name(
-    Json(params): Json<GetByNameParams>,
-) -> Result<Json<ApiResp<DataSet>>> {
-    let mm = get_default_db_manager();
-    let db_id = params.get_db_id().await;
-    let dataset = DomainService::get_by_name(&mm, &db_id, &params.name).await?;
-    Ok(Json(ApiResp::ok(dataset)))
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Pagination {
+    pub page: u64,
+    pub page_size: u64,
+    pub total: u64,
+    pub total_pages: u64,
 }
 ```
 
-### 6.3 Handler 设计原则
-
-1. **参数结构体**：为每个接口定义专用的参数结构体
-2. **db\_id 处理**：提供 `get_db_id()` 方法，支持可选的数据库 ID
-3. **调用 Service**：Handler 只负责参数解析和响应封装，业务逻辑放在 Service
-4. **统一响应**：使用 `ApiResp::ok()` 和 `ApiResp::ok_with_pagination()` 封装响应
-
-## 7. 路由注册
-
-### 7.1 路由注册宏
+## 7. 错误处理
 
 ```rust
-/// 注册 CRUD 路由的宏
+// error.rs
+
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use serde::Serialize;
+use serde_json::json;
+use thiserror::Error;
+
+/// 错误码枚举
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum ErrCode {
+    Success = 0,
+    /// 业务错误（HTTP 200，json code 1）
+    BusinessError = 1,
+    Unauthorized = 401,
+    Forbidden = 403,
+    NotFound = 404,
+    BadRequest = 400,
+    InternalError = 500,
+}
+
+/// 结果类型
+pub type Result<T> = core::result::Result<T, Error>;
+
+/// Web 层错误类型
+#[derive(Debug, Error)]
+pub enum Error {
+    /// 业务错误（HTTP 200，json code 1）
+    #[error("{0}")]
+    BusinessError(String),
+
+    #[error("未授权: {0}")]
+    Unauthorized(String),
+
+    #[error("请求错误: {0}")]
+    BadRequest(String),
+
+    #[error("{0}")]
+    InternalError(String),
+
+    // ... 其他错误类型
+}
+
+impl Error {
+    pub fn code(&self) -> ErrCode {
+        match self {
+            Self::BusinessError(_) => ErrCode::BusinessError,
+            Self::Unauthorized(_) => ErrCode::Unauthorized,
+            Self::BadRequest(_) => ErrCode::BadRequest,
+            Self::InternalError(_) => ErrCode::InternalError,
+            _ => ErrCode::InternalError,
+        }
+    }
+
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            Self::BusinessError(_) => StatusCode::OK,
+            Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    pub fn business_error(msg: impl Into<String>) -> Self {
+        Self::BusinessError(msg.into())
+    }
+
+    pub fn bad_request(msg: impl Into<String>) -> Self {
+        Self::BadRequest(msg.into())
+    }
+
+    pub fn internal_error(msg: impl Into<String>) -> Self {
+        Self::InternalError(msg.into())
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        let status_code = self.status_code();
+        let body = json!({
+            "code": self.code() as u16,
+            "msg": self.to_string(),
+        });
+        (status_code, axum::Json(body)).into_response()
+    }
+}
+```
+
+## 8. 路由注册
+
+### 8.1 路由注册宏
+
+```rust
+/// 声明 CRUD Handlers 模块
 #[macro_export]
-macro_rules! register_crud_routes {
-    ($router:expr, $bmc:ty, $filter:ty, $entity_create:ty, $entity_update:ty, $path:expr) => {
+macro_rules! declare_crud_handlers {
+    (
+        $module_name:ident,
+        $entity:ty,
+        $bmc:ty,
+        $entity_create:ty,
+        $entity_update:ty,
+        $filter:ty,
+        $tag:expr,
+        $prefix:expr
+    ) => {
+        pub mod $module_name {
+            // 生成 8 个 handler 函数：
+            // - create, create_many
+            // - get
+            // - update, update_many
+            // - delete
+            // - list, page
+            // 每个 handler 都带有 #[utoipa::path] 注解
+        }
+    };
+}
+
+/// 注册已生成的 CRUD Handlers 模块到路由
+#[macro_export]
+macro_rules! register_crud_handlers_module {
+    ($router:expr, $handlers_mod:ident, $prefix:expr) => {
         $router
-            // 创建操作（使用 ForCreate）
-            .route(concat!($path, "/create"), axum::routing::post(
-                $crate::rest::handler::create::<$bmc, $entity_create>
-            ))
-            .route(concat!($path, "/create-many"), axum::routing::post(
-                $crate::rest::handler::create_many::<$bmc, $entity_create>
-            ))
-            // 查询操作
-            .route(concat!($path, "/get"), axum::routing::get(
-                $crate::rest::handler::get_by_id::<$bmc>
-            ))
-            // 更新操作（使用 ForUpdate）
-            .route(concat!($path, "/update"), axum::routing::post(
-                $crate::rest::handler::update::<$bmc, $entity_update>
-            ))
-            .route(concat!($path, "/update-many"), axum::routing::post(
-                $crate::rest::handler::update_many::<$bmc, $entity_update>
-            ))
-            // 删除操作（支持批量）
-            .route(concat!($path, "/delete"), axum::routing::post(
-                $crate::rest::handler::delete::<$bmc>
-            ))
-            // 列表和分页
-            .route(concat!($path, "/list"), axum::routing::post(
-                $crate::rest::handler::list::<$bmc, $filter>
-            ))
-            .route(concat!($path, "/page"), axum::routing::post(
-                $crate::rest::handler::page::<$bmc, $filter>
-            ))
+            .route(concat!($prefix, "/create"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::create))
+            .route(concat!($prefix, "/create-many"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::create_many))
+            .route(concat!($prefix, "/get"), axum::routing::get(crate::routes::crud_handlers::$handlers_mod::get))
+            .route(concat!($prefix, "/update"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::update))
+            .route(concat!($prefix, "/update-many"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::update_many))
+            .route(concat!($prefix, "/delete"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::delete))
+            .route(concat!($prefix, "/list"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::list))
+            .route(concat!($prefix, "/page"), axum::routing::post(crate::routes::crud_handlers::$handlers_mod::page))
     };
 }
 ```
 
-### 7.2 使用示例
+### 8.2 使用示例
 
 ```rust
-// routes.rs
+// routes/crud_handlers.rs
 
-use axum::Router;
-use crate::register_crud_routes;
-use crate::state::CmxAppState;
-use crate::models::domain::{DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate};
-use crate::models::domain::handler as domain_handler;
+use crate::declare_crud_handlers;
 
-pub fn api_routes() -> Router<CmxAppState> {
-    let router = Router::new();
+declare_crud_handlers!(
+    domain_crud,
+    crate::handlers::domain::Domain,
+    crate::handlers::domain::DomainBmc,
+    crate::handlers::domain::DomainForCreate,
+    crate::handlers::domain::DomainForUpdate,
+    crate::handlers::domain::DomainFilter,
+    "Domain",
+    "/domains"
+);
 
-    // 注册标准 CRUD 路由
-    let router = register_crud_routes!(
-        router, 
-        DomainBmc,        // Bmc 类型
-        DomainFilter,     // Filter 类型
-        DomainForCreate,  // 创建 Entity 类型
-        DomainForUpdate,  // 更新 Entity 类型
-        "/domains"
-    );
+// handlers/domain/mod.rs
 
-    // 注册自定义路由
-    let router = router
-        .route("/domains/by-name", axum::routing::post(domain_handler::get_by_name));
-
-    router
+impl ModuleRoutes for DomainModule {
+    fn routes(self) -> Router<CmxAppState> {
+        let router = Router::new();
+        // 注册 CRUD 路由
+        let router = crate::register_crud_handlers_module!(router, domain_crud, "/domains");
+        // 注册自定义路由
+        router.route("/domains/tree", post(handler::get_tree))
+    }
 }
 ```
 
-## 8. 接口设计
+## 9. 接口设计
 
-### 8.1 标准 CRUD 接口
+### 9.1 标准 CRUD 接口
 
-| 方法   | 路径                     | 说明   | 请求体                                               |
-| ---- | ---------------------- | ---- | ------------------------------------------------- |
-| POST | `/domains/create`      | 创建单个 | `{ "name": "xxx", ... }`                          |
-| POST | `/domains/create-many` | 批量创建 | `[{ ... }, { ... }]`                              |
-| GET  | `/domains/get?id=xxx`  | 获取单条 | -                                                 |
-| POST | `/domains/update`      | 更新单个 | `{ "id": "xxx", "data": { ... } }`                |
-| POST | `/domains/update-many` | 批量更新 | `[{ "id": "xxx", "data": { ... } }]`              |
-| POST | `/domains/delete`      | 删除   | `{ "ids": ["xxx", "yyy"] }`                       |
-| POST | `/domains/list`        | 列表查询 | `{ "filter": { ... } }`                           |
-| POST | `/domains/page`        | 分页查询 | `{ "filter": { ... }, "offset": 0, "limit": 10 }` |
+| 方法   | 路径                     | 说明   | 请求体                                  |
+| ---- | ---------------------- | ---- | ----------------------------------- |
+| POST | `/domains/create`      | 创建单个 | `{ "name": "xxx", ... }`            |
+| POST | `/domains/create-many` | 批量创建 | `[{ ... }, { ... }]`                |
+| GET  | `/domains/get?id=xxx`  | 获取单条 | -                                   |
+| POST | `/domains/update`      | 更新单个 | `{ "id": "xxx", "data": { ... } }`  |
+| POST | `/domains/update-many` | 批量更新 | `[{ "id": "xxx", "data": { ... } }]`|
+| POST | `/domains/delete`      | 删除   | `{ "ids": ["xxx", "yyy"] }`         |
+| POST | `/domains/list`        | 列表查询 | `{ "filter": { ... } }`             |
+| POST | `/domains/page`        | 分页查询 | `{ "filter": { ... }, "current": 1, "size": 20 }` |
 
-### 8.2 自定义接口示例
+### 9.2 响应格式
 
-| 方法   | 路径                 | 说明    | 请求体                                                |
-| ---- | ------------------ | ----- | -------------------------------------------------- |
-| POST | `/domains/by-name` | 按名称查询 | `{ "name": "xxx" }`                                |
-| POST | `/domains/search`  | 搜索    | `{ "keyword": "xxx", "page": 1, "page_size": 20 }` |
+**成功响应**:
+```json
+{
+    "code": 0,
+    "msg": "success",
+    "data": { ... }
+}
+```
 
-## 9. 最佳实践
+**分页响应**:
+```json
+{
+    "code": 0,
+    "msg": "success",
+    "data": [ ... ],
+    "pagination": {
+        "page": 1,
+        "pageSize": 20,
+        "total": 100,
+        "totalPages": 5
+    }
+}
+```
 
-### 9.1 分层架构
+**业务错误响应**（HTTP 200）:
+```json
+{
+    "code": 1,
+    "msg": "参数错误"
+}
+```
+
+**系统错误响应**（HTTP 500）:
+```json
+{
+    "code": 500,
+    "msg": "内部错误"
+}
+```
+
+## 10. 最佳实践
+
+### 10.1 分层架构
 
 ```
 ┌─────────────────────────────────────┐
 │           Handler 层                 │  ← 处理 HTTP 请求/响应
-│   (models/*/handler.rs)              │
+│   (handlers/*/handler.rs)            │
 ├─────────────────────────────────────┤
 │           Service 层                 │  ← 业务逻辑
-│   (models/*/service.rs)              │
+│   (handlers/*/service.rs)            │
 ├─────────────────────────────────────┤
 │           Model 层                   │  ← 数据模型
-│   (models/*/entity.rs, bmc.rs)       │
+│   (handlers/*/entity.rs, bmc.rs)     │
 ├─────────────────────────────────────┤
-│           cmx-api                    │  ← 通用 CRUD 框架
-│   (crud/service.rs)                  │
+│           cmx-database               │  ← 通用 CRUD 框架
+│   (GenericCrudService)               │
 └─────────────────────────────────────┘
 ```
 
-### 9.2 命名约定
+### 10.2 命名约定
 
 | 组件      | 命名             | 示例                            |
 | ------- | -------------- | ----------------------------- |
@@ -564,20 +702,21 @@ pub fn api_routes() -> Router<CmxAppState> {
 | DbBmc   | 实体 + Bmc       | `DomainBmc`                   |
 | Filter  | 实体 + Filter    | `DomainFilter`                |
 | Service | 实体 + Service   | `DomainService`               |
-| Handler | 动作/操作          | `get_by_name`, `batch_create` |
+| Handler | 动作/操作          | `get_tree`, `search`          |
+| Module  | 实体 + Module    | `DomainModule`                |
 
-### 9.3 错误处理
+### 10.3 错误处理
 
 ```rust
 use crate::error::{Error, Result};
 
 pub async fn custom_method() -> Result<()> {
-    // 参数验证错误
+    // 参数验证错误（业务错误，HTTP 200，json code 1）
     if invalid_input {
-        return Err(Error::bad_request("参数错误"));
+        return Err(Error::business_error("参数错误"));
     }
     
-    // 内部错误
+    // 内部错误（HTTP 500）
     database_operation()
         .map_err(|e| Error::internal_error(format!("操作失败: {}", e)))?;
     
@@ -585,13 +724,11 @@ pub async fn custom_method() -> Result<()> {
 }
 ```
 
-## 10. 总结
+## 11. 总结
 
 | 扩展方式                    | 适用场景       | 示例                           |
 | ----------------------- | ---------- | ---------------------------- |
 | 直接使用 GenericCrudService | 标准 CRUD 操作 | `create`, `update`, `delete` |
-| Service 扩展方法            | 添加业务逻辑     | `get_by_name`, `search`      |
-| Service 覆盖方法            | 自定义验证逻辑    | `create`（验证名称长度）             |
-| 完全自定义 SQL               | 复杂查询       | `count_by_status`            |
-| 自定义 Handler             | 自定义接口      | `/domains/by-name`           |
-
+| Service 扩展方法            | 添加业务逻辑     | `search`, `get_tree`         |
+| 完全自定义 SQL               | 复杂查询       | `get_tree`                   |
+| 自定义 Handler             | 自定义接口      | `/domains/tree`              |
