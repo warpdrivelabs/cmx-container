@@ -113,8 +113,9 @@ pub fn api_routes() -> Router<CmxAppState> {
         .route("/plugin/deploy", post(plugin::plugin_deploy))
         .route("/plugin/{plugin_id}", get(plugin::plugin_get));
 
-    // 注册表元数据查询路由（仅 list 和 page）
+    // 注册表元数据查询路由
     let router = router
+        .route("/table-metadata/get", get(table_metadata::handler::table_metadata_get_by_id))
         .route("/table-metadata/list", post(table_metadata::handler::table_metadata_list))
         .route("/table-metadata/page", post(table_metadata::handler::table_metadata_page));
 

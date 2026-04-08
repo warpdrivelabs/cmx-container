@@ -3,9 +3,10 @@
 //! 提供 cmx_meta_table_define 表的列表和分页查询功能
 
 use axum::http::HeaderMap;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
+use cmx_core::model::data::request::params::GetParams;
 use cmx_database::get_default_db_manager;
 use cmx_plugin::infrastructure::database::table_metadata::{
     TableMetadataFilter, TableMetadataService,
@@ -16,6 +17,36 @@ use crate::app_state::CmxAppState;
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
+
+/// 获取表元数据详情
+///
+/// 通过 ID 查询 cmx_meta_table_define 表的详情记录
+#[utoipa::path(
+    get,
+    path = "/api/table-metadata/get",
+    params(
+        ("id" = String, Query, description = "表定义ID")
+    ),
+    responses(
+        (status = 200, description = "查询成功")
+    ),
+    tag = "TableMetadata"
+)]
+pub async fn table_metadata_get_by_id(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Query(params): Query<GetParams>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = TableMetadataService::get_detail_by_id(mm, &db_id, &params.id)
+        .await
+        .map_err(|e| crate::error::Error::InternalError(format!("查询详情失败: {}", e)))?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
 
 /// 表元数据列表查询
 ///

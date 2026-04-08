@@ -70,6 +70,7 @@ use utoipa::OpenApi;
         // TableMetadata handlers
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
+        crate::handlers::table_metadata::handler::table_metadata_get_by_id,
     ),
     components(
         schemas(

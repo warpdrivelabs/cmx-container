@@ -70,7 +70,8 @@ pub async fn module_custom_page(
     "#;
 
     let list_options = params.to_list_options();
-
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
     let mut filters = params.filters.clone();
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);
@@ -79,7 +80,7 @@ pub async fn module_custom_page(
         filters = None;
     }
 
-    let (dataset, _total) = CustomQueryService::page_custom(
+    let (dataset, total) = CustomQueryService::page_custom(
         mm,
         &db_id,
         None,
@@ -91,5 +92,9 @@ pub async fn module_custom_page(
     .await
     .map_err(|e| crate::error::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
 
-    Ok(Json(ApiResp::ok(dataset)))
-}
+    Ok(Json(ApiResp::ok_with_pagination(
+        dataset,
+        page_number ,
+        page_size ,
+        total as u64,
+    )))}
