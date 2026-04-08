@@ -10,6 +10,8 @@ use tracing::debug;
 #[serde(rename_all = "snake_case")]
 pub enum ErrCode {
     Success = 0,
+    /// 业务错误（后台主动抛出的已知错误，如参数校验失败），HTTP 200，json code 1
+    BusinessError = 1,
     Unauthorized = 401,
     Forbidden = 403,
     NotFound = 404,
@@ -41,6 +43,10 @@ pub enum Error {
 
     #[error("未获取到svrContext")]
     SvrContextNotInReqExt,
+
+    /// 业务错误（HTTP 200，json code -1），用于后台主动抛出的已知错误，如参数校验失败
+    #[error("{0}")]
+    BusinessError(String),
 
     #[error("未授权: {0}")]
     Unauthorized(String),
@@ -79,98 +85,12 @@ pub enum Error {
     Timeout,
 }
 
-// impl serde::Serialize for Error {
-//     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let value: serde_json::Value = match self {
-//             Self::ValidationError { errors } => {
-//                 serde_json::json!({
-//                     "type": "ValidationError",
-//                     "data": { "errors": errors }
-//                 })
-//             }
-//             Self::RateLimitExceeded { retry_after, limit, window } => {
-//                 serde_json::json!({
-//                     "type": "RateLimitExceeded",
-//                     "data": { "retry_after": retry_after, "limit": limit, "window": window }
-//                 })
-//             }
-//             Self::Timeout => {
-//                 serde_json::json!({
-//                     "type": "Timeout",
-//                     "data": null
-//                 })
-//             }
-//             Self::SvrContextNotInReqExt => {
-//                 serde_json::json!({
-//                     "type": "SvrContextNotInReqExt",
-//                     "data": null
-//                 })
-//             }
-//             Self::SerdeJson(e) => {
-//                 serde_json::json!({
-//                     "type": "SerdeJson",
-//                     "data": e
-//                 })
-//             }
-//             Self::Validator(e) => {
-//                 serde_json::json!({
-//                     "type": "Validator",
-//                     "data": e
-//                 })
-//             }
-//             Self::Unauthorized(e) => {
-//                 serde_json::json!({
-//                     "type": "Unauthorized",
-//                     "data": e
-//                 })
-//             }
-//             Self::Forbidden(e) => {
-//                 serde_json::json!({
-//                     "type": "Forbidden",
-//                     "data": e
-//                 })
-//             }
-//             Self::NotFound(e) => {
-//                 serde_json::json!({
-//                     "type": "NotFound",
-//                     "data": e
-//                 })
-//             }
-//             Self::BadRequest(e) => {
-//                 serde_json::json!({
-//                     "type": "BadRequest",
-//                     "data": e
-//                 })
-//             }
-//             Self::InternalError(e) => {
-//                 serde_json::json!({
-//                     "type": "InternalError",
-//                     "data": e
-//                 })
-//             }
-//             Self::ServiceUnavailable(e) => {
-//                 serde_json::json!({
-//                     "type": "ServiceUnavailable",
-//                     "data": e
-//                 })
-//             }
-//             Self::ServiceError(e) => {
-//                 serde_json::json!({
-//                     "type": "ServiceError",
-//                     "data": e
-//                 })
-//             }
-//         };
-//         value.serialize(serializer)
-//     }
-// }
+
 
 impl Error {
     pub fn code(&self) -> ErrCode {
         match self {
+            Self::BusinessError(_) => ErrCode::BusinessError,
             Self::Unauthorized(_) => ErrCode::Unauthorized,
             Self::Forbidden(_) => ErrCode::Forbidden,
             Self::NotFound(_) => ErrCode::NotFound,
@@ -186,6 +106,7 @@ impl Error {
 
     pub fn status_code(&self) -> StatusCode {
         match self {
+            Self::BusinessError(_) => StatusCode::OK,
             Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
@@ -223,6 +144,10 @@ impl Error {
         Self::BadRequest(msg.into())
     }
 
+    pub fn business_error(msg: impl Into<String>) -> Self {
+        Self::BusinessError(msg.into())
+    }
+
     pub fn internal_error(msg: impl Into<String>) -> Self {
         Self::InternalError(msg.into())
     }
@@ -245,7 +170,10 @@ impl Error {
 
 impl From<cmx_database::crud::ServiceError> for Error {
     fn from(e: cmx_database::crud::ServiceError) -> Self {
-        Self::ServiceError(e.to_string())
+        match e {
+            cmx_database::crud::ServiceError::BusinessError(s) => Self::business_error(s),
+            _ => Self::ServiceError(e.to_string()),
+        }
     }
 }
 

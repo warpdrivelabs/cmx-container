@@ -17,6 +17,11 @@ pub enum ServiceError {
     /// Modql 转换为 SeaQuery 错误
     #[error(" Modql 转换为 SeaQuery 错误{0}")]
     ModqlIntoSea(#[from] modql::filter::IntoSeaError),
+
+    //业务数据异常
+    #[error("{0}")]
+    BusinessError(String),
+
 }
 
 impl ServiceError {
@@ -26,5 +31,9 @@ impl ServiceError {
 
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::BadRequest(msg.into())
+    }
+
+    pub fn business_error(msg: impl Into<String>) -> Self {
+        Self::BusinessError(msg.into())
     }
 }

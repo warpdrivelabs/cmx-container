@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::DatabaseManager;
+use crate::{DatabaseManager, Error};
 use crate::crud::error::{ServiceError, Result};
 use crate::crud::{DbBmc, prep_fields_for_create, prep_fields_for_update};
 use cmx_core::UpdatePayload;
@@ -17,7 +17,7 @@ use modql::filter::{FilterGroups, IntoFilterNodes, ListOptions};
 use sea_query::{Asterisk, Condition, Expr, IntoIden, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxBinder;
 use serde_json::Value;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// 创建一个空的 DataSet（用于返回操作结果）
 fn empty_dataset() -> DataSet {
@@ -105,8 +105,16 @@ where
         let rows_affected = mm
             .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
-            .map_err(|e| {
-                warn!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
+            .map_err(|ref e| {
+             if let Error::Sqlx(err) = e {
+                 if let sqlx::Error::Database( e) = err
+                     && e.code() == Some("23505".into())
+                 {
+                     return ServiceError::business_error("数据已存在");
+                 }
+            }
+
+                error!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e))
             })?;
 
