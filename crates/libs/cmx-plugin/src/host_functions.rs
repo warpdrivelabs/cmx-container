@@ -24,6 +24,10 @@ impl PluginHostFunctions {
     }
 
     /// 执行插件间调用
+    ///
+    /// 通过 GlobalRuntime 调用目标插件的 WASM 导出函数。
+    /// `RuntimeInvoker::invoke` 内部已重构为同步调用（不持有全局锁），
+    /// 使用 `block_in_place` + `block_on` 不会死锁。
     fn do_call_service(&self, input: String) -> Result<String, HostFuncError> {
         let req: cmx_core::wasm_types::PluginCallRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
@@ -34,7 +38,8 @@ impl PluginHostFunctions {
         let input_bytes = req.input.as_bytes();
         let caller_data = Self::build_caller_data();
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        // invoke 内部已不持有全局 HashMap 锁，只锁定目标 Plugin 的独立 Mutex
+        // 所以 block_in_place + block_on 不会死锁
         let result: Result<WasmInvokeResult, _> = tokio::task::block_in_place(|| {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {

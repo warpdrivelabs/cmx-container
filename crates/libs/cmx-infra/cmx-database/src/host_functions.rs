@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef};
+use cmx_core::wasm_types::{DbQueryRequest, DbResponse};
 
 use crate::DatabaseManager;
 
@@ -24,11 +25,17 @@ impl DatabaseHostFunctions {
     }
 
     /// 执行数据库查询
+    ///
+    /// # 参数
+    /// - `input`: JSON 格式的查询请求，包含 sql、params、dataset_id 字段
+    ///
+    /// # 返回
+    /// - JSON 格式的响应，包含 success、dataset、error 字段
     fn do_query(&self, input: String) -> Result<String, HostFuncError> {
-        let _query_request: cmx_core::wasm_types::DbQueryRequest = match serde_json::from_str(&input) {
+        let query_request: DbQueryRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => {
-                let response = cmx_core::wasm_types::DbResponse {
+                let response = DbResponse {
                     success: false,
                     affected_rows: None,
                     dataset: None,
@@ -39,27 +46,79 @@ impl DatabaseHostFunctions {
             }
         };
 
-        // TODO: 实现实际的数据库查询逻辑
-        // 这里需要使用 self.db_manager 执行查询
+        let db_manager = self.db_manager.clone();
+        let sql = query_request.sql.clone();
+        let params = query_request.params.clone();
+        let dataset_id = query_request.dataset_id.clone().unwrap_or_else(|| "wasm_query".to_string());
 
-        // 返回模拟响应
-        let response = cmx_core::wasm_types::DbResponse {
-            success: true,
-            affected_rows: None,
-            dataset: Some(r#"[{"id": 1, "name": "test"}]"#.to_string()),
-            txn_id: None,
-            error: None,
-        };
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                // 获取默认数据库 ID
+                let db_id = db_manager.get_default_db_id().await;
+                
+                // 根据是否有参数选择不同的查询方法
+                if let Some(params_str) = params {
+                    // 解析参数为 JSON Value
+                    let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return Err(format!("解析参数失败: {}", e));
+                        }
+                    };
+                    
+                    db_manager
+                        .query_sql_with_json(&db_id, None, &sql, params_value, &dataset_id)
+                        .await
+                        .map_err(|e| e.to_string())
+                } else {
+                    db_manager
+                        .query_sql(&db_id, None, &sql, &dataset_id)
+                        .await
+                        .map_err(|e| e.to_string())
+                }
+            })
+        });
 
-        Ok(serde_json::to_string(&response).unwrap_or_default())
+        match result {
+            Ok(dataset) => {
+                // 将 DataSet 序列化为 JSON 字符串
+                let dataset_json = serde_json::to_string(&dataset).unwrap_or_default();
+                let response = DbResponse {
+                    success: true,
+                    affected_rows: None,
+                    dataset: Some(dataset_json),
+                    txn_id: None,
+                    error: None,
+                };
+                Ok(serde_json::to_string(&response).unwrap_or_default())
+            }
+            Err(e) => {
+                let response = DbResponse {
+                    success: false,
+                    affected_rows: None,
+                    dataset: None,
+                    txn_id: None,
+                    error: Some(e),
+                };
+                Ok(serde_json::to_string(&response).unwrap_or_default())
+            }
+        }
     }
 
-    /// 执行数据库操作
+    /// 执行数据库操作（INSERT/UPDATE/DELETE）
+    ///
+    /// # 参数
+    /// - `input`: JSON 格式的执行请求，包含 sql、params 字段
+    ///
+    /// # 返回
+    /// - JSON 格式的响应，包含 success、affected_rows、error 字段
     fn do_execute(&self, input: String) -> Result<String, HostFuncError> {
-        let _execute_request: cmx_core::wasm_types::DbQueryRequest = match serde_json::from_str(&input) {
+        let execute_request: DbQueryRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => {
-                let response = cmx_core::wasm_types::DbResponse {
+                let response = DbResponse {
                     success: false,
                     affected_rows: None,
                     dataset: None,
@@ -70,17 +129,62 @@ impl DatabaseHostFunctions {
             }
         };
 
-        // TODO: 实现实际的数据库执行逻辑
+        let db_manager = self.db_manager.clone();
+        let sql = execute_request.sql.clone();
+        let params = execute_request.params.clone();
 
-        let response = cmx_core::wasm_types::DbResponse {
-            success: true,
-            affected_rows: Some(1),
-            dataset: None,
-            txn_id: None,
-            error: None,
-        };
+        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
+        let result = tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                // 获取默认数据库 ID
+                let db_id = db_manager.get_default_db_id().await;
+                
+                // 根据是否有参数选择不同的执行方法
+                if let Some(params_str) = params {
+                    // 解析参数为 JSON Value
+                    let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return Err(format!("解析参数失败: {}", e));
+                        }
+                    };
+                    
+                    db_manager
+                        .execute_sql_with_json(&db_id, None, &sql, params_value)
+                        .await
+                        .map_err(|e| e.to_string())
+                } else {
+                    db_manager
+                        .execute_sql(&db_id, None, &sql)
+                        .await
+                        .map_err(|e| e.to_string())
+                }
+            })
+        });
 
-        Ok(serde_json::to_string(&response).unwrap_or_default())
+        match result {
+            Ok(affected_rows) => {
+                let response = DbResponse {
+                    success: true,
+                    affected_rows: Some(affected_rows),
+                    dataset: None,
+                    txn_id: None,
+                    error: None,
+                };
+                Ok(serde_json::to_string(&response).unwrap_or_default())
+            }
+            Err(e) => {
+                let response = DbResponse {
+                    success: false,
+                    affected_rows: None,
+                    dataset: None,
+                    txn_id: None,
+                    error: Some(e),
+                };
+                Ok(serde_json::to_string(&response).unwrap_or_default())
+            }
+        }
     }
 }
 
