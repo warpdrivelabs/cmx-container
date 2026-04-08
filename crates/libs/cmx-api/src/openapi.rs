@@ -40,6 +40,7 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::module_crud::delete,
         crate::routes::crud_handlers::module_crud::list,
         crate::routes::crud_handlers::module_crud::page,
+        crate::handlers::module::handler::module_custom_page,
         // SysDatasource CRUD handlers
         crate::routes::crud_handlers::sys_datasource_crud::get,
         crate::routes::crud_handlers::sys_datasource_crud::list,
