@@ -121,8 +121,8 @@ impl TransactionGuard {
     }
 
     /// 获取数据库访问对象
-    pub fn get_dbx(&self) -> Option<Dbx> {
-        get_dbx_by_db_id(&self.db_id)
+    pub async fn get_dbx(&self) -> Option<Dbx> {
+        get_dbx_by_db_id(&self.db_id).await
     }
 
     /// 在事务中执行操作
@@ -165,7 +165,7 @@ pub enum SqlParams {
 /// # 返回值
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
-    let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+    let txn_holder_mutex = get_txn_holder_registry().read().await.get(txn_id).cloned();
 
     if let Some(txn_holder_mutex) = txn_holder_mutex {
         let mut should_commit = false;
@@ -191,8 +191,8 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         if should_commit && txn_to_commit.is_some() {
             let txn = txn_to_commit.unwrap();
             txn.commit().await?;
-            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed);
-            get_txn_holder_registry().write().unwrap().remove(txn_id);
+            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed).await;
+            get_txn_holder_registry().write().await.remove(txn_id);
         }
     } else {
         return Err(Error::NoTxn);
@@ -211,7 +211,7 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
 /// # 返回值
 /// * `Result<()>` - 成功返回 Ok(())，失败返回错误
 pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
-    let txn_holder_mutex = get_txn_holder_registry().read().unwrap().get(txn_id).cloned();
+    let txn_holder_mutex = get_txn_holder_registry().read().await.get(txn_id).cloned();
 
     if let Some(txn_holder_mutex) = txn_holder_mutex {
         let mut should_rollback = false;
@@ -238,8 +238,8 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         if should_rollback && txn_to_rollback.is_some() {
             let txn = txn_to_rollback.unwrap();
             txn.rollback().await?;
-            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack);
-            get_txn_holder_registry().write().unwrap().remove(txn_id);
+            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack).await;
+            get_txn_holder_registry().write().await.remove(txn_id);
         }
     } else {
         return Err(Error::NoTxn);
@@ -257,8 +257,8 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
 ///
 /// # 返回值
 /// * `Option<Dbx>` - Dbx实例，如果数据库不存在则返回None
-pub fn get_dbx_by_db_id(db_id: &str) -> Option<Dbx> {
-    get_default_db_manager().get_dbx(db_id).ok()
+pub async fn get_dbx_by_db_id(db_id: &str) -> Option<Dbx> {
+    get_default_db_manager().get_dbx(db_id).await.ok()
 }
 
 /// 通过事务ID获取TxnHolder的可变引用
@@ -275,7 +275,7 @@ pub async fn with_transaction_by_id<T, F>(txn_id: &str, f: F) -> Result<T>
 where
     F: FnOnce(&mut DbTransaction) -> BoxFuture<'_, Result<T>> + Send,
 {
-    let holder = get_txn_holder_by_id(txn_id).ok_or(Error::NoTxn)?;
+    let holder = get_txn_holder_by_id(txn_id).await.ok_or(Error::NoTxn)?;
 
     let mut txn = {
         let mut guard = holder.lock().await;
@@ -305,7 +305,7 @@ where
 /// * `Result<u64>` - 执行结果，返回受影响的行数
 pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
     let sql = sql.to_string();
-    debug!("execute_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}", db_id, txn_id, sql);
+    debug!("execute_sql: db_id: {}, txn_id: {:?}, sql: {}", db_id, txn_id, sql);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
@@ -314,7 +314,7 @@ pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result
             })).await
         },
         None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
+            if let Some(dbx) = get_dbx_by_db_id(db_id).await {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
                         let result = sqlx::query(&sql).execute(pool).await?;
@@ -350,7 +350,7 @@ pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result
 /// * `Result<u64>` - 执行结果，返回受影响的行数
 pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams) -> Result<u64> {
     let sql = sql.to_string();
-    debug!("execute_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {:?}, ", db_id, txn_id, sql);
+    debug!("execute_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, ", db_id, txn_id, sql);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
@@ -371,7 +371,7 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
             })).await
         },
         None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
+            if let Some(dbx) = get_dbx_by_db_id(db_id).await {
                 match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
@@ -419,7 +419,7 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
 pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    debug!("query_sql: db_id: {:?}, txn_id: {:?}, sql: {:?}, dataset_id: {:?}",  db_id, txn_id, sql, dataset_id);
+    debug!("query_sql: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}",  db_id, txn_id, sql, dataset_id);
 
     match txn_id {
         Some(txn_id) => {
@@ -429,7 +429,7 @@ pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id:
             })).await
         },
         None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
+            if let Some(dbx) = get_dbx_by_db_id(db_id).await {
                 match dbx.db() {
                     crate::connection::DbPool::Postgres(pool) => {
                         let rows = sqlx::query(&sql).fetch_all(pool).await?;
@@ -467,7 +467,7 @@ pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id:
 pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams, dataset_id: &str) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    debug!("query_sql_with_params: db_id: {:?}, txn_id: {:?}, sql: {}, dataset_id: {:?}", db_id, txn_id, sql, dataset_id);
+    debug!("query_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}", db_id, txn_id, sql, dataset_id);
     match txn_id {
         Some(txn_id) => {
             with_transaction_by_id(txn_id, |txn| Box::pin(async move {
@@ -488,7 +488,7 @@ pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str,
             })).await
         },
         None => {
-            if let Some(dbx) = get_dbx_by_db_id(db_id) {
+            if let Some(dbx) = get_dbx_by_db_id(db_id).await {
                 match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
@@ -606,7 +606,7 @@ pub async fn begin_transaction_guard_by_db_id(
     db_id: &str,
     options: crate::manager::TransactionOptions,
 ) -> Result<TransactionGuard> {
-    let dbx = get_dbx_by_db_id(db_id).ok_or(Error::NoDb)?;
+    let dbx = get_dbx_by_db_id(db_id).await.ok_or(Error::NoDb)?;
     let dbx_with_txn = dbx.with_transaction()?;
     let txn_id = dbx_with_txn.begin_txn(db_id, options.propagation).await?;
     Ok(TransactionGuard::new(txn_id, db_id.to_string()))

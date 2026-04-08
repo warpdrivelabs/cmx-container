@@ -52,16 +52,14 @@ pub async fn init_datasources() {
             panic!("加载有效数据源失败: {}", e);
         }
     };
-    //排除配置文件中的数据源
-    active_datasources = active_datasources
-        .into_iter()
-        .filter(|config| {
-            if db_manager.get_db(config.db_id.as_str()).is_ok() {
-                return false;
-            }
-            true
-        })
-        .collect::<Vec<_>>();
+    //排除配置文件中的数据源（异步过滤）
+    let mut filtered_datasources = Vec::new();
+    for config in active_datasources {
+        if db_manager.get_db(config.db_id.as_str()).await.is_err() {
+            filtered_datasources.push(config);
+        }
+    }
+    active_datasources = filtered_datasources;
 
     info!("从数据库加载到 {} 个有效数据源", active_datasources.len());
 

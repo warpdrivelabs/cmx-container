@@ -256,10 +256,10 @@ impl Dbx {
         let _ = txh_g.insert(txh);
 
         // 注册事务到元数据注册表
-        register_txn(txn_id.clone(), db_id.to_string());
+        register_txn(txn_id.clone(), db_id.to_string()).await;
 
         // 注册TxnHolder到全局注册表，以便通过事务ID操作事务
-        get_txn_holder_registry().write().unwrap().insert(txn_id.clone(), self.txn_holder.clone());
+        get_txn_holder_registry().write().await.insert(txn_id.clone(), self.txn_holder.clone());
 
         // 返回事务ID
         Ok(txn_id)
@@ -315,9 +315,9 @@ impl Dbx {
             txn.rollback().await?;
 
             // 更新事务状态为已回滚
-            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack);
+            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack).await;
             // 从全局TxnHolder注册表中移除
-            get_txn_holder_registry().write().unwrap().remove(&txn_id);
+            get_txn_holder_registry().write().await.remove(&txn_id);
         }
 
         Ok(())
@@ -372,9 +372,9 @@ impl Dbx {
             txn.commit().await?;
 
             // 更新事务状态为已提交
-            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed);
+            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed).await;
             // 从全局TxnHolder注册表中移除
-            get_txn_holder_registry().write().unwrap().remove(&txn_id);
+            get_txn_holder_registry().write().await.remove(&txn_id);
         }
 
         Ok(())

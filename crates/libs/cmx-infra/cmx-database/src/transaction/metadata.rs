@@ -1,7 +1,8 @@
 /// 事务元数据模块，用于管理事务的元数据和状态
 
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock};
 use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 /// 事务状态
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,37 +30,33 @@ pub fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMeta
 }
 
 /// 注册事务
-pub fn register_txn(txn_id: String, db_id: String) {
+pub async fn register_txn(txn_id: String, db_id: String) {
     let metadata = TransactionMetadata {
         txn_id: txn_id.clone(),
         db_id,
         create_time: std::time::Instant::now(),
         status: TransactionStatus::Active,
     };
-    get_txn_registry().write().unwrap().insert(txn_id, metadata);
+    get_txn_registry().write().await.insert(txn_id, metadata);
 }
 
 /// 更新事务状态,已提交 已经回滚的事务移除掉
-pub fn update_txn_status(txn_id: &str, status: TransactionStatus) {
-    // if let Some(metadata) = get_txn_registry().write().unwrap().get_mut(txn_id) {
-    //     metadata.status = status;
-    // }
+pub async fn update_txn_status(txn_id: &str, status: TransactionStatus) {
     if status == TransactionStatus::Committed || status == TransactionStatus::RolledBack {
-        get_txn_registry().write().unwrap().remove(txn_id);
+        get_txn_registry().write().await.remove(txn_id);
     }
-
 }
 
 /// 获取事务元数据
-pub fn get_txn_metadata(txn_id: &str) -> Option<TransactionMetadata> {
-    get_txn_registry().read().unwrap().get(txn_id).cloned()
+pub async fn get_txn_metadata(txn_id: &str) -> Option<TransactionMetadata> {
+    get_txn_registry().read().await.get(txn_id).cloned()
 }
 
 /// 获取活跃事务列表
-pub fn get_active_transactions() -> Vec<TransactionMetadata> {
+pub async fn get_active_transactions() -> Vec<TransactionMetadata> {
     get_txn_registry()
         .read()
-        .unwrap()
+        .await
         .values()
         .filter(|meta| meta.status == TransactionStatus::Active)
         .cloned()
@@ -67,16 +64,16 @@ pub fn get_active_transactions() -> Vec<TransactionMetadata> {
 }
 
 /// 清理已完成的事务
-pub fn cleanup_completed_transactions() {
-    let mut registry = get_txn_registry().write().unwrap();
+pub async fn cleanup_completed_transactions() {
+    let mut registry = get_txn_registry().write().await;
     registry.retain(|_, meta| meta.status == TransactionStatus::Active);
 }
 
 /// 检查长时间运行的事务
-pub fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<TransactionMetadata> {
+pub async fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<TransactionMetadata> {
     get_txn_registry()
         .read()
-        .unwrap()
+        .await
         .values()
         .filter(|meta| {
             meta.status == TransactionStatus::Active && meta.create_time.elapsed() > timeout

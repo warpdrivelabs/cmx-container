@@ -2,9 +2,9 @@
 ///
 /// 该模块定义了全局TxnHolder注册表及相关操作函数
 
-use std::sync::{Arc, OnceLock, RwLock,};
+use std::sync::{Arc, OnceLock};
 use std::collections::HashMap;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use crate::transaction::core::TxnHolder;
 
 /// 全局 TxnHolder 注册表
@@ -16,6 +16,6 @@ pub fn get_txn_holder_registry() -> &'static Arc<RwLock<HashMap<String, Arc<Mute
 }
 
 /// 通过事务ID获取 TxnHolder
-pub fn get_txn_holder_by_id(txn_id: &str) -> Option<Arc<Mutex<Option<TxnHolder>>>> {
-    get_txn_holder_registry().read().unwrap().get(txn_id).cloned()
+pub async fn get_txn_holder_by_id(txn_id: &str) -> Option<Arc<Mutex<Option<TxnHolder>>>> {
+    get_txn_holder_registry().read().await.get(txn_id).cloned()
 }

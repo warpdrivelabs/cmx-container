@@ -4,7 +4,8 @@ use sqlx::mysql::MySqlPoolOptions;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 
 use crate::config::{DbConfig, DbType};
@@ -116,23 +117,21 @@ impl DbRegistry {
         }
     }
 
-
     /// 注册数据库连接池
-    pub async fn register(&self,  config: DbConfig) -> crate::Result<()> {
+    pub async fn register(&self, config: DbConfig) -> crate::Result<()> {
         let db_key = config.db_id.clone();
         let pool = DatabasePoolImpl::new(config).await?;
-        let mut pools = self.pools.write().unwrap();
+        let mut pools = self.pools.write().await;
         pools.insert(db_key, pool);
         Ok(())
     }
 
     /// 更新数据库连接池配置（优雅关闭旧池）
     pub async fn update(&self, config: DbConfig) -> crate::Result<()> {
-        //
         let key = config.db_id.clone();
 
         {
-            let pools = self.pools.read().unwrap();
+            let pools = self.pools.read().await;
             if let Some(pool) = pools.get(&key) {
                 pool.mark_closing();
             }
@@ -140,7 +139,7 @@ impl DbRegistry {
 
         // 等待旧池中的活跃连接关闭
         {
-            let pools = self.pools.read().unwrap();
+            let pools = self.pools.read().await;
             if let Some(pool) = pools.get(&key) {
                 let timeout = std::time::Duration::from_secs(30);
                 if !pool.wait_for_idle(timeout).await {
@@ -151,7 +150,7 @@ impl DbRegistry {
 
         // 创建新池并替换
         let pool = DatabasePoolImpl::new(config).await?;
-        let mut pools = self.pools.write().unwrap();
+        let mut pools = self.pools.write().await;
         pools.insert(key, pool);
         Ok(())
     }
@@ -160,38 +159,37 @@ impl DbRegistry {
     pub async fn unregister(&self, key: &str) -> Option<DatabasePoolImpl> {
         // 标记为关闭
         {
-            let pools = self.pools.read().unwrap();
+            let pools = self.pools.read().await;
             if let Some(pool) = pools.get(key) {
                 pool.mark_closing();
             }
         }
 
-
         // 从注册表中移除
-        let mut pools = self.pools.write().unwrap();
+        let mut pools = self.pools.write().await;
         pools.remove(key)
     }
 
     /// 获取所有数据库连接池名称
-    pub fn list(&self) -> Vec<String> {
-        let pools = self.pools.read().unwrap();
+    pub async fn list(&self) -> Vec<String> {
+        let pools = self.pools.read().await;
         pools.keys().cloned().collect()
     }
 
     /// 获取数据库连接池
-    pub fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
-        let pools = self.pools.read().unwrap();
+    pub async fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
+        let pools = self.pools.read().await;
         pools.get(key).map(|pool| (pool.get_dbx(), pool.get_config()))
     }
 
     /// 获取数据库访问对象
-    pub fn get_db_access(&self, key: &str) -> Option<Dbx> {
-        self.get(key).map(|(dbx, _)| dbx)
+    pub async fn get_db_access(&self, key: &str) -> Option<Dbx> {
+        self.get(key).await.map(|(dbx, _)| dbx)
     }
 
     /// 获取数据库配置
-    pub fn get_db_config(&self, key: &str) -> Option<DbConfig> {
-        self.get(key).map(|(_, config)| config)
+    pub async fn get_db_config(&self, key: &str) -> Option<DbConfig> {
+        self.get(key).await.map(|(_, config)| config)
     }
 }
 

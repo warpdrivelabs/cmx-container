@@ -103,17 +103,17 @@ impl DatabaseManager {
     }
 
     /// 获取数据库访问对象（非事务）
-    pub fn get_dbx(&self, db_id: &str) -> Result<Dbx> {
-        self.pool_manager.get_dbx(db_id)
+    pub async fn get_dbx(&self, db_id: &str) -> Result<Dbx> {
+        self.pool_manager.get_dbx(db_id).await
     }
 
     /// 获取数据库访问对象（非事务）
-    pub fn get_db_config(&self, db_id: &str) -> Result<DbConfig> {
-        self.pool_manager.get_db_config(db_id)
+    pub async fn get_db_config(&self, db_id: &str) -> Result<DbConfig> {
+        self.pool_manager.get_db_config(db_id).await
     }
 
-    pub fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
-        self.pool_manager.get_db(db_id)
+    pub async fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
+        self.pool_manager.get_db(db_id).await
     }
 
     // /// 开始事务
@@ -145,8 +145,8 @@ impl DatabaseManager {
     }
 
     /// 列出所有数据源
-    pub fn list_data_sources(&self) -> Vec<String> {
-        self.pool_manager.list()
+    pub async fn list_data_sources(&self) -> Vec<String> {
+        self.pool_manager.list().await
     }
 
     /// 健康检查
@@ -158,7 +158,7 @@ impl DatabaseManager {
     pub async fn shutdown(&self) -> Result<()> {
         info!("DatabaseManager 开始关闭");
         // self.stop_cleanup_task().await;
-        crate::transaction::cleanup_completed_transactions();
+        crate::transaction::cleanup_completed_transactions().await;
         info!("DatabaseManager 已关闭");
         Ok(())
     }
@@ -214,7 +214,7 @@ impl DatabaseManager {
 
     /// 清理超时的事务
     async fn cleanup_stale_transactions(&self, timeout: std::time::Duration) {
-        let stale = check_long_running_transactions(timeout);
+        let stale = check_long_running_transactions(timeout).await;
         if stale.is_empty() {
             return;
         }
@@ -385,19 +385,20 @@ impl PoolManager {
         Ok(())
     }
 
-    pub fn get_dbx(&self, key: &str) -> Result<Dbx> {
-        self.registry.get_db_access(key).ok_or(Error::NoDb)
+    pub async fn get_dbx(&self, key: &str) -> Result<Dbx> {
+        self.registry.get_db_access(key).await.ok_or(Error::NoDb)
     }
 
-    pub fn get_db_config(&self, key: &str) -> Result<DbConfig> {
-        self.registry.get_db_config(key).ok_or(Error::NoDb)
-    }
-    pub fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
-        self.registry.get(db_id).ok_or(Error::NoDb)
+    pub async fn get_db_config(&self, key: &str) -> Result<DbConfig> {
+        self.registry.get_db_config(key).await.ok_or(Error::NoDb)
     }
 
-    pub fn list(&self) -> Vec<String> {
-        self.registry.list()
+    pub async fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
+        self.registry.get(db_id).await.ok_or(Error::NoDb)
+    }
+
+    pub async fn list(&self) -> Vec<String> {
+        self.registry.list().await
     }
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
@@ -419,7 +420,7 @@ pub struct TransactionContext {
 impl TransactionContext {
     /// 开始事务
     pub async fn begin(&self, db_id: &str) -> Result<String> {
-        let dbx = self.pool_manager.get_dbx(db_id)?;
+        let dbx = self.pool_manager.get_dbx(db_id).await?;
         let dbx_with_txn = dbx.with_transaction()?;
         dbx_with_txn.begin_txn_default(db_id).await
     }
@@ -439,7 +440,7 @@ impl TransactionContext {
         &self,
         db_id: &str,
     ) -> Result<crate::transaction::TransactionGuard> {
-        let dbx = self.pool_manager.get_dbx(db_id)?;
+        let dbx = self.pool_manager.get_dbx(db_id).await?;
         let dbx_with_txn = dbx.with_transaction()?;
         let txn_id = dbx_with_txn.begin_txn_default(db_id).await?;
         Ok(crate::transaction::TransactionGuard::new(
