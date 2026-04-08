@@ -1,6 +1,6 @@
 # Cargo Workspace 配置文件
 [workspace]
-# Workspace 成员列表，包含本项目的所有 crate
+# Workspace 成员列表,包含本项目的所有 crate
 members = [
     "crates/libs/cmx-core",
     "crates/libs/cmx-utils",
@@ -13,8 +13,10 @@ members = [
     "crates/libs/cmx-infra/cmx-buffer",
     "crates/web/web-server",
     "crates/libs/cmx-api",
+    "crates/libs/cmx-plugin-sdk",
+    "crates/libs/cmx-wasmdemo",
 ]
-# 依赖版本解析器，"2" 表示使用新版解析器（支持 Edition 2021+）
+# 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
 resolver = "2"
 
 # Workspace 包级别的元数据配置
@@ -43,6 +45,7 @@ cmx-plugin = { path = "crates/libs/cmx-plugin" }
 cmx-traits = { path = "crates/libs/cmx-traits" }
 cmx-runtime = { path = "crates/libs/cmx-runtime" }
 cmx-service = { path = "crates/libs/cmx-service" }
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" }
 
 
 # ============================================
@@ -65,7 +68,7 @@ serde_with = {version = "3", features = ["time_0_3", "json"] }
 # 日期时间处理
 # ============================================
 # chrono: 日期时间库，支持日期时间的解析、计算和格式化
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde","rkyv"] }
 time = {version = "0.3", features = ["formatting", "parsing", "serde"]}
 # ============================================
 # 错误处理
@@ -100,8 +103,8 @@ wasmtime = "39.0.1"
 # ============================================
 # 高性能序列化框架
 # ============================================
-# rkyv: 零拷贝序列化框架，适用于高性能场景
-rkyv = "0.8"
+# rkyv: 零拷贝序列化框架,适用于高性能场景
+rkyv = { version = "0.8", features = ["alloc", "bytecheck","uuid-1"] }
 
 # ============================================
 # 命令行参数解析

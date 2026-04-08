@@ -29,7 +29,9 @@ config = { workspace = true }
 dotenvy = { workspace = true }
 tracing = { workspace = true }
 cmx-traits = { workspace = true }
+# Extism 支持
+extism = "1.4"
+
 [dev-dependencies]
 # tempfile: 临时文件测试
 tempfile = "3"
-

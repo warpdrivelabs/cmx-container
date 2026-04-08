@@ -1,90 +1,205 @@
 //! WASM 宿主函数注册 trait 定义
 //!
-//! 定义宿主函数提供者接口。
+//! 定义宿主函数提供者接口，实现依赖反转。
 //! 各模块（cmx-database, cmx-buffer, cmx-plugin 等）通过实现
-//! ExtismFunctionProvider trait 注册自身提供的宿主函数，
-//! cmx-runtime 通过此 trait 消费这些注册。
+//! HostFunctionProvider trait 提供业务逻辑函数，
+//! cmx-runtime 负责将这些函数包装成 Extism 宿主函数。
 //!
 //! # 设计目标
 //!
-//! - cmx-runtime 不依赖任何宿主函数提供模块
-//! - 各模块不依赖 cmx-runtime（仅依赖 cmx-traits）
-//! - 所有组装逻辑集中在 web-server 初始化阶段
-//!
-//! # Extism 适配
-//!
-//! 使用 Extism 的 PluginBuilder 作为宿主函数注册的目标。
-//! 各模块通过 PluginBuilder 注册自己的宿主函数。
+//! - 各模块不依赖 extism，只依赖 cmx-traits
+//! - cmx-runtime 是唯一依赖 extism 的模块
+//! - 所有组装逻辑集中在 cmx-runtime
 
 use crate::error::HostFuncError;
 
-/// 宿主函数注册器 trait（Extism 版本）
+/// 参数类型枚举
 ///
-/// 各模块通过实现此 trait，将自身提供的宿主函数注册到 Extism 引擎。
-/// cmx-runtime 在创建 WASM 插件时，遍历所有注册器完成函数注册。
+/// 描述宿主函数的参数类型，与 Extism 的 ValType 对应。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValType {
+    /// 32位整数
+    I32,
+    /// 64位整数
+    I64,
+    /// 32位浮点数
+    F32,
+    /// 64位浮点数
+    F64,
+    /// 指针（通常是 I64）
+    Ptr,
+}
+
+impl ValType {
+    /// 转换为 Extism 的 ValType
+    #[cfg(feature = "extism")]
+    pub fn to_extism(self) -> extism::ValType {
+        match self {
+            ValType::I32 => extism::ValType::I32,
+            ValType::I64 => extism::ValType::I64,
+            ValType::F32 => extism::ValType::F32,
+            ValType::F64 => extism::ValType::F64,
+            ValType::Ptr => extism::ValType::I64,
+        }
+    }
+}
+
+impl Default for ValType {
+    fn default() -> Self {
+        ValType::Ptr
+    }
+}
+
+/// 宿主函数定义
+///
+/// 描述一个宿主函数的元信息，包括函数名、参数类型和命名空间。
+#[derive(Debug, Clone)]
+pub struct HostFunctionDef {
+    /// 函数名
+    pub name: &'static str,
+    /// 输入参数类型列表
+    pub input_types: &'static [ValType],
+    /// 输出参数类型列表
+    pub output_types: &'static [ValType],
+    /// 命名空间
+    pub namespace: &'static str,
+}
+
+impl HostFunctionDef {
+    /// 创建新的宿主函数定义
+    pub fn new(
+        name: &'static str,
+        namespace: &'static str,
+        input_types: &'static [ValType],
+        output_types: &'static [ValType],
+    ) -> Self {
+        Self {
+            name,
+            input_types,
+            output_types,
+            namespace,
+        }
+    }
+
+    /// 创建无输入参数的函数定义
+    pub fn no_input(name: &'static str, namespace: &'static str, output_types: &'static [ValType]) -> Self {
+        Self {
+            name,
+            input_types: &[],
+            output_types,
+            namespace,
+        }
+    }
+
+    /// 创建无输出参数的函数定义
+    pub fn no_output(name: &'static str, namespace: &'static str, input_types: &'static [ValType]) -> Self {
+        Self {
+            name,
+            input_types,
+            output_types: &[],
+            namespace,
+        }
+    }
+
+    /// 创建标准 JSON 函数定义（一个输入指针，一个输出指针）
+    pub fn json_fn(name: &'static str, namespace: &'static str) -> Self {
+        Self {
+            name,
+            input_types: &[ValType::Ptr],
+            output_types: &[ValType::Ptr],
+            namespace,
+        }
+    }
+
+    /// 创建无返回值的函数定义
+    pub fn void_fn(name: &'static str, namespace: &'static str, input_types: &'static [ValType]) -> Self {
+        Self {
+            name,
+            input_types,
+            output_types: &[],
+            namespace,
+        }
+    }
+}
+
+/// 宿主函数提供者 trait
+///
+/// 各模块通过实现此 trait 提供业务逻辑函数。
+/// cmx-runtime 负责将这些函数包装成 Extism 宿主函数。
+///
+/// # 设计优势
+///
+/// - **解耦**：实现方不需要依赖 extism 库
+/// - **简洁**：只需要实现 `namespace`、`functions` 和 `call` 三个方法
+/// - **类型安全**：使用 `ValType` 枚举描述参数类型
 ///
 /// # 实现示例
 ///
 /// ```rust,ignore
-/// use cmx_traits::ExtismFunctionProvider;
-/// use extism::PluginBuilder;
+/// use cmx_traits::{HostFunctionProvider, HostFunctionDef, ValType, HostFuncError};
 ///
-/// struct DatabaseHostFunctions {
-///     db_manager: Arc<DatabaseManager>,
-/// }
+/// struct DatabaseHostFunctions;
 ///
-/// impl ExtismFunctionProvider for DatabaseHostFunctions {
+/// impl HostFunctionProvider for DatabaseHostFunctions {
 ///     fn namespace(&self) -> &str { "cmx:database" }
 ///
-///     fn register_functions(&self, builder: &mut PluginBuilder) -> Result<(), HostFuncError> {
-///         // 使用 extism::host_fn! 宏定义宿主函数
-///         extism::host_fn!(db_query(_user_data: (); request: String) -> String {
-///             // 实现数据库查询逻辑
-///             Ok("result".to_string())
-///         });
-///         
-///         builder.with_function(
-///             "db_query",
-///             [extism::ValType::I64],
-///             [extism::ValType::I64],
-///             extism::UserData::new(()),
-///             db_query,
-///         );
-///         
-///         Ok(())
+///     fn functions(&self) -> Vec<HostFunctionDef> {
+///         vec![
+///             HostFunctionDef::json_fn("db_query", "cmx:database"),
+///             HostFunctionDef::json_fn("db_execute", "cmx:database"),
+///         ]
 ///     }
 ///
-///     fn provided_functions(&self) -> Vec<&str> {
-///         vec!["db_query", "db_execute"]
+///     fn call(&self, name: &str, input: String) -> Result<String, HostFuncError> {
+///         match name {
+///             "db_query" => self.do_query(input),
+///             "db_execute" => self.do_execute(input),
+///             _ => Err(HostFuncError::invalid_function(name)),
+///         }
 ///     }
 /// }
 /// ```
-pub trait ExtismFunctionProvider: Send + Sync {
+pub trait HostFunctionProvider: Send + Sync {
     /// 命名空间标识
     ///
     /// 用于日志、调试和函数名前缀。
     /// 建议使用 `cmx:模块名` 格式，如 "cmx:database", "cmx:buffer"。
     fn namespace(&self) -> &str;
 
-    /// 注册所有宿主函数
+    /// 返回提供的宿主函数列表
     ///
-    /// 实现方在此方法中通过 PluginBuilder 注册宿主函数。
-    /// cmx-runtime 将在插件加载时调用此方法。
+    /// 每个函数定义包含函数名、参数类型等信息。
+    fn functions(&self) -> Vec<HostFunctionDef>;
+
+    /// 调用宿主函数
+    ///
+    /// cmx-runtime 在收到 WASM 调用时，通过此方法调用实际的业务逻辑。
     ///
     /// # 参数
     ///
-    /// - `builder`: PluginBuilder 实例，用于注册宿主函数
+    /// - `name`: 函数名
+    /// - `input`: 输入数据（JSON 字符串）
     ///
     /// # 返回值
     ///
-    /// 返回注册结果，或错误。
-    fn register_functions(&self, builder: &mut extism::PluginBuilder) -> Result<(), HostFuncError>;
+    /// 返回输出数据（JSON 字符串），或错误。
+    fn call(&self, name: &str, input: String) -> Result<String, HostFuncError>;
 
     /// 列出该提供者注册的所有函数名
     ///
     /// 用于调试、元数据查询和文档生成。
-    /// 默认返回空列表。
     fn provided_functions(&self) -> Vec<&str> {
-        Vec::new()
+        self.functions().iter().map(|f| f.name).collect()
+    }
+}
+
+impl HostFuncError {
+    /// 创建无效函数错误
+    pub fn invalid_function(name: &str) -> Self {
+        Self::ExecutionFailed {
+            namespace: String::new(),
+            name: name.to_string(),
+            reason: "函数不存在".to_string(),
+        }
     }
 }

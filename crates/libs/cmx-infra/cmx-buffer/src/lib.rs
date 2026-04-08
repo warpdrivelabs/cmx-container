@@ -42,6 +42,8 @@ pub use config::{CacheConfig, LockConfig, RedisConfig};
 pub use error::{Error, Result};
 pub use lock::{create_lock_manager, create_lock_manager_with_config, GlobalLockManager, LockGuard, LockManager};
 
+pub use host_functions::BufferHostFunctions;
+
 /// cmx-buffer 模块的结果类型别名
 pub type BufferResult<T> = Result<T>;
 

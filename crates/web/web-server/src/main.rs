@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
     // 构建完整的 AppState（注入 trait 实例）
     let app_state = CmxAppState::new()
         .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
-        .with_runtime_invoker(cmx_runtime::GlobalWasmEngine::get_as_invoker());
+        .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker());
 
     // -- 配置 API 路由
     let api_routes = routes::routes().with_state(app_state);

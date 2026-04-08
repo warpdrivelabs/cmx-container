@@ -110,6 +110,8 @@ pub use fetcher::local::LocalFetcher;
 pub use fetcher::remote::RemoteFetcher;
 pub use fetcher::registry::{RegistryFetcher, RegistryInfo, RegistryPackageDetail, RegistrySearchResult};
 
+pub use host_functions::PluginHostFunctions;
+
 // ==================== 全局单例 ====================
 
 use std::sync::{Arc, OnceLock};

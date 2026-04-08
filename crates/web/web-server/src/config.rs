@@ -18,7 +18,7 @@ use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
 use cmx_database::get_default_db_manager;
 use cmx_utils::{ ConfigBuilder, ConfigManager, ConfigResult};
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use tracing::{error, info};
 
 pub use crate::datasource_init::init_datasources;
@@ -108,35 +108,51 @@ pub async fn init_cache() {
 /// 必须在 init_db_datasource 和 init_cache 之后调用。
 /// 注册所有宿主函数提供者到 WASM 引擎。
 pub async fn init_runtime() {
-    use cmx_database::host_functions::DatabaseHostFunctions;
-    use cmx_buffer::host_functions::BufferHostFunctions;
-    use cmx_utils::host_functions::LoggingHostFunctions;
-    use cmx_runtime::{GlobalWasmEngine, WasmEngineConfig};
+    use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine};
+    use cmx_traits::GlobalRuntime;
+    use cmx_utils::LoggingHostFunctions;
+    use cmx_database::DatabaseHostFunctions;
+    use cmx_buffer::BufferHostFunctions;
+    use cmx_plugin::PluginHostFunctions;
 
     info!("初始化 WASM 运行时...");
 
-    // 初始化全局 WASM 引擎
-    GlobalWasmEngine::initialize(WasmEngineConfig::default())
-        .expect("WASM 引擎初始化失败");
+    // 创建 Extism 引擎
+    let engine = Arc::new(
+        ExtismEngine::new(ExtismEngineConfig::default())
+            .expect("Extism 引擎初始化失败")
+    );
 
-    // 获取引擎引用并注册宿主函数
-    let engine = GlobalWasmEngine::get();
+    // 注册宿主函数提供者
+    // 1. 日志宿主函数
+    engine.register_provider(Arc::new(LoggingHostFunctions::new()))
+        .await
+        .expect("注册日志宿主函数失败");
+    
+    // 2. 数据库宿主函数
+    engine.register_provider(Arc::new(DatabaseHostFunctions::new(cmx_database::get_default_db_manager().clone())))
+        .await
+        .expect("注册数据库宿主函数失败");
+    
+    // 3. 缓存宿主函数
+    engine.register_provider(Arc::new(BufferHostFunctions::new()))
+        .await
+        .expect("注册缓存宿主函数失败");
+    
+    // 4. 插件间调用宿主函数
+    engine.register_provider(Arc::new(PluginHostFunctions::new()))
+        .await
+        .expect("注册插件宿主函数失败");
 
-    // 注册数据库宿主函数
-    let db_manager = get_default_db_manager();
-    engine.register_provider(Box::new(DatabaseHostFunctions::new(db_manager.clone()))).await;
-    info!("已注册数据库宿主函数");
+    // 设置全局运行时（供 PluginHostFunctions 使用）
+    GlobalRuntime::set(engine.clone())
+        .expect("设置全局运行时失败");
 
-    // 注册缓存宿主函数
-    let cache_manager = GlobalCacheManager::get().clone();
-    engine.register_provider(Box::new(BufferHostFunctions::new(cache_manager))).await;
-    info!("已注册缓存宿主函数");
+    // 初始化全局引擎
+    GlobalExtismEngine::initialize(engine)
+        .expect("全局引擎初始化失败");
 
-    // 注册日志宿主函数
-    engine.register_provider(Box::new(LoggingHostFunctions::new())).await;
-    info!("已注册日志宿主函数");
-
-    info!("WASM 运行时初始化完成");
+    info!("WASM 运行时初始化完成，已注册 4 个宿主函数提供者");
 }
 
 /// 初始化插件管理器
@@ -144,8 +160,6 @@ pub async fn init_runtime() {
 /// 必须在 init_runtime 之后调用，因为需要注册 PluginHostFunctions。
 pub async fn init_plugins() {
     use cmx_plugin::{GlobalPluginManager, PluginManagerSettings};
-    use cmx_plugin::host_functions::PluginHostFunctions;
-    use cmx_runtime::GlobalWasmEngine;
     use std::path::PathBuf;
 
     info!("初始化插件管理器...");
@@ -164,10 +178,4 @@ pub async fn init_plugins() {
         .await
         .unwrap_or_else(|e| panic!("初始化插件管理器失败: {:?}", e));
     info!("成功初始化插件管理器");
-
-    // 注册插件间调用宿主函数
-    let engine = GlobalWasmEngine::get();
-    let runtime = GlobalWasmEngine::get_as_invoker();
-    engine.register_provider(Box::new(PluginHostFunctions::new(runtime))).await;
-    info!("已注册插件间调用宿主函数");
 }

@@ -38,7 +38,7 @@ async fn setup_db_manager() -> DatabaseManager {
 async fn test_database_manager_basic() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
-    let data_sources = manager.list_data_sources();
+    let data_sources = manager.list_data_sources().await;
     assert!(data_sources.contains(&TEST_DB_KEY.to_string()));
 
     let health = manager.health_check(TEST_DB_KEY).await?;
@@ -156,7 +156,7 @@ async fn test_transaction_with_propagation() -> cmx_database::Result<()> {
 async fn test_get_db_config() -> cmx_database::Result<()> {
     let manager = setup_db_manager().await;
 
-    let config = manager.get_db_config(TEST_DB_KEY)?;
+    let config = manager.get_db_config(TEST_DB_KEY).await?;
     assert_eq!(config.db_id, TEST_DB_KEY);
     assert_eq!(config.db_type, DbType::Postgres);
 

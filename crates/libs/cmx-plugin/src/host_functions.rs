@@ -1,82 +1,60 @@
 //! WASM 宿主函数 — 插件间调用
 //!
 //! 为 WASM 插件提供插件间调用能力的宿主函数。
-//! 通过 RuntimeInvoker trait 实现跨插件的服务调用。
-//!
-//! # 依赖关系
-//!
-//! PluginHostFunctions 通过 `Arc<dyn RuntimeInvoker>` 引用 WASM 运行时，
-/// 不直接依赖 cmx-runtime crate，仅依赖 cmx-traits 中的 trait 定义。
+//! 通过 GlobalRuntime 访问 WASM 运行时，实现跨插件的服务调用。
 
-use std::sync::Arc;
+use cmx_traits::{ExtismFunctionProvider, GlobalRuntime, HostFuncError, WasmInvokeResult};
+use extism::{host_fn, Manifest, UserData, ValType};
 
-use cmx_traits::{CallerData, HostFuncError, HostFunctionProvider, HostFuncWrapper, RuntimeInvoker, WasmLinker};
-
-/// 插件服务调用请求（JSON 反序列化）
-#[derive(serde::Deserialize)]
-struct ServiceCallRequest {
-    /// 目标插件ID
-    target_plugin_id: String,
-    /// 目标函数名
-    function_name: String,
-    /// 输入数据（JSON 值）
-    input: serde_json::Value,
-}
-
-/// 插件服务调用响应（JSON 序列化）
-#[derive(serde::Serialize)]
-struct ServiceCallResponse {
-    /// 是否成功
-    success: bool,
-    /// 输出数据（JSON 值）
-    output: Option<serde_json::Value>,
-    /// 执行耗时（微秒）
-    elapsed_us: Option<u64>,
-    /// 错误信息
-    error: Option<String>,
-}
+const PTR: ValType = ValType::I64;
 
 /// 插件宿主函数提供者
 ///
 /// 向 WASM 运行时注册插件间调用相关的宿主函数。
-/// 通过 RuntimeInvoker trait 调用目标插件的 WASM 导出函数。
-pub struct PluginHostFunctions {
-    /// WASM 运行时调用器（trait 对象）
-    runtime: Arc<dyn RuntimeInvoker>,
-}
+/// 通过 GlobalRuntime 访问 WASM 运行时，调用目标插件的 WASM 导出函数。
+pub struct PluginHostFunctions;
 
 impl PluginHostFunctions {
     /// 创建插件宿主函数提供者
-    ///
-    /// # 参数
-    ///
-    /// * `runtime` - WASM 运行时调用器（trait 对象）
-    pub fn new(runtime: Arc<dyn RuntimeInvoker>) -> Self {
-        Self { runtime }
+    pub fn new() -> Self {
+        Self
     }
 
     /// 构建成功响应
-    fn ok_response(output: Option<serde_json::Value>, elapsed_us: Option<u64>) -> Vec<u8> {
-        serde_json::to_vec(&ServiceCallResponse {
+    fn ok_response(output: Option<String>, elapsed_us: Option<u64>) -> String {
+        serde_json::to_string(&cmx_core::wasm_types::PluginCallResponse {
             success: true,
             output,
             elapsed_us,
             error: None,
-        }).unwrap_or_default()
+        })
+        .unwrap_or_default()
     }
 
     /// 构建错误响应
-    fn err_response(msg: String) -> Vec<u8> {
-        serde_json::to_vec(&ServiceCallResponse {
+    fn err_response(msg: String) -> String {
+        serde_json::to_string(&cmx_core::wasm_types::PluginCallResponse {
             success: false,
             output: None,
             elapsed_us: None,
             error: Some(msg),
-        }).unwrap_or_default()
+        })
+        .unwrap_or_default()
+    }
+
+    /// 构建 CallerData（简化版本）
+    fn build_caller_data() -> cmx_traits::CallerData {
+        cmx_traits::CallerData::new("default", "default")
     }
 }
 
-impl HostFunctionProvider for PluginHostFunctions {
+impl Default for PluginHostFunctions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ExtismFunctionProvider for PluginHostFunctions {
     /// 返回命名空间 "cmx:plugin"
     fn namespace(&self) -> &str {
         "cmx:plugin"
@@ -85,76 +63,71 @@ impl HostFunctionProvider for PluginHostFunctions {
     /// 注册插件操作宿主函数
     ///
     /// 注册以下函数：
-    /// - `cmx:plugin/call_service` — 调用另一个插件的服务
-    /// - `cmx:plugin/get_info` — 获取当前插件信息
-    fn register_functions(&self, linker: &mut dyn WasmLinker) -> Result<(), HostFuncError> {
-        // cmx:plugin/call_service — 调用另一个插件的服务
-        let runtime = self.runtime.clone();
-        let call_fn: HostFuncWrapper = Box::new(move |caller, input| {
-            let caller_data = caller.caller_data();
-
-            let request = match serde_json::from_slice::<ServiceCallRequest>(input) {
-                Ok(req) => req,
-                Err(e) => return Ok(Self::err_response(format!("请求数据解析失败: {}", e))),
+    /// - `call_service` — 调用另一个插件的服务
+    /// - `get_info` — 获取当前插件信息
+    fn register_functions(&self, builder: &mut extism::PluginBuilder) -> Result<(), HostFuncError> {
+        // call_service — 调用另一个插件的服务
+        host_fn!(call_service(_user_data: (); request: String) -> String {
+            let req: cmx_core::wasm_types::PluginCallRequest = match serde_json::from_str(&request) {
+                Ok(r) => r,
+                Err(e) => return Ok(PluginHostFunctions::err_response(format!("解析请求失败: {}", e))),
             };
 
-            let mut target_caller_data = CallerData::new(&request.target_plugin_id, &caller_data.db_id)
-                .with_request_id(&caller_data.request_id);
-            if let Some(txn_id) = &caller_data.txn_id {
-                target_caller_data = target_caller_data.with_txn_id(txn_id.as_str());
-            }
-            if let Some(tenant_id) = &caller_data.tenant_id {
-                target_caller_data = target_caller_data.with_tenant_id(tenant_id.as_str());
-            }
+            let runtime = GlobalRuntime::get();
+            let input_bytes = req.input.as_bytes();
+            let caller_data = PluginHostFunctions::build_caller_data();
 
-            let input_bytes = serde_json::to_vec(&request.input).unwrap_or_default();
-            let runtime = runtime.clone();
             let rt = tokio::runtime::Handle::current();
-            let result = rt.block_on(async {
+            let result: Result<WasmInvokeResult, _> = rt.block_on(async {
                 runtime.invoke(
-                    &request.target_plugin_id,
-                    &request.function_name,
-                    &input_bytes,
-                    &target_caller_data,
+                    &req.target_plugin_id,
+                    &req.function_name,
+                    input_bytes,
+                    &caller_data,
                 ).await
             });
 
             match result {
                 Ok(invoke_result) => {
-                    let output_json = if invoke_result.output.is_empty() {
+                    let output = if invoke_result.output.is_empty() {
                         None
                     } else {
-                        serde_json::from_slice::<serde_json::Value>(&invoke_result.output).ok()
+                        Some(String::from_utf8_lossy(&invoke_result.output).to_string())
                     };
-                    Ok(Self::ok_response(output_json, Some(invoke_result.elapsed_us)))
+                    Ok(PluginHostFunctions::ok_response(output, Some(invoke_result.elapsed_us)))
                 }
-                Err(e) => Ok(Self::err_response(e.to_string())),
+                Err(e) => Ok(PluginHostFunctions::err_response(e.to_string())),
             }
         });
-        linker.define("cmx:plugin", "call_service", call_fn)?;
 
-        // cmx:plugin/get_info — 获取当前插件信息
-        let info_fn: HostFuncWrapper = Box::new(|caller, _input| {
-            let caller_data = caller.caller_data();
-            let info = serde_json::json!({
-                "plugin_id": caller_data.plugin_id,
-                "db_id": caller_data.db_id,
-                "txn_id": caller_data.txn_id,
-                "request_id": caller_data.request_id,
-                "tenant_id": caller_data.tenant_id,
-            });
-            Ok(serde_json::to_vec(&info).unwrap_or_default())
+        // get_info — 获取当前插件信息
+        host_fn!(get_info(_user_data: (); _input: ()) -> String {
+            let info = cmx_core::wasm_types::PluginInfoResponse {
+                plugin_id: "current_plugin".to_string(),
+                db_id: "default".to_string(),
+                txn_id: None,
+                request_id: "default".to_string(),
+                tenant_id: None,
+            };
+            Ok(serde_json::to_string(&info).unwrap_or_default())
         });
-        linker.define("cmx:plugin", "get_info", info_fn)?;
+
+        // 使用 std::mem::replace 替换 builder
+        let temp_manifest = Manifest::new([extism::Wasm::data(vec![])]);
+        let temp_builder = extism::PluginBuilder::new(temp_manifest);
+        let old_builder = std::mem::replace(builder, temp_builder);
+
+        let new_builder = old_builder
+            .with_function("call_service", [PTR], [PTR], UserData::new(()), call_service)
+            .with_function("get_info", [], [PTR], UserData::new(()), get_info);
+
+        *builder = new_builder;
 
         Ok(())
     }
 
     /// 返回提供的函数名列表
     fn provided_functions(&self) -> Vec<&str> {
-        vec![
-            "cmx:plugin/call_service",
-            "cmx:plugin/get_info",
-        ]
+        vec!["call_service", "get_info"]
     }
 }

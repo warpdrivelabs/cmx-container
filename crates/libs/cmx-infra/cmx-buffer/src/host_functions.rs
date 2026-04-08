@@ -3,20 +3,12 @@
 //! 为 WASM 插件提供 Redis 缓存操作能力的宿主函数。
 //! 所有缓存键自动附加插件ID前缀，实现插件间缓存隔离。
 
-use std::sync::Arc;
+use cmx_traits::{ExtismFunctionProvider, HostFuncError};
+use extism::{host_fn, Manifest, UserData, ValType};
 
-use cmx_traits::{HostFuncError, HostFunctionProvider, HostFuncWrapper, WasmLinker};
+use crate::cache::GlobalCacheManager;
 
-use crate::cache::CacheManager;
-
-/// 缓存宿主函数提供者
-///
-/// 封装 CacheManager 的核心 API，向 WASM 运行时注册缓存操作宿主函数。
-/// 所有缓存键自动添加 `plugin:{plugin_id}:` 前缀，确保插件间缓存隔离。
-pub struct BufferHostFunctions {
-    /// 缓存管理器引用
-    cache_manager: Arc<CacheManager>,
-}
+const PTR: ValType = ValType::I64;
 
 /// 缓存操作请求（JSON 反序列化）
 #[derive(serde::Deserialize)]
@@ -42,14 +34,16 @@ struct CacheResponse {
     error: Option<String>,
 }
 
+/// 缓存宿主函数提供者
+///
+/// 封装 CacheManager 的核心 API，向 WASM 运行时注册缓存操作宿主函数。
+/// 所有缓存键自动添加 `plugin:{plugin_id}:` 前缀，确保插件间缓存隔离。
+pub struct BufferHostFunctions;
+
 impl BufferHostFunctions {
     /// 创建缓存宿主函数提供者
-    ///
-    /// # 参数
-    ///
-    /// * `cache_manager` - 缓存管理器共享引用
-    pub fn new(cache_manager: Arc<CacheManager>) -> Self {
-        Self { cache_manager }
+    pub fn new() -> Self {
+        Self
     }
 
     /// 构建带插件隔离前缀的缓存键
@@ -60,33 +54,35 @@ impl BufferHostFunctions {
     }
 
     /// 构建成功响应
-    fn ok_response(value: Option<String>, exists: Option<bool>) -> Vec<u8> {
-        serde_json::to_vec(&CacheResponse {
+    fn ok_response(value: Option<String>, exists: Option<bool>) -> String {
+        serde_json::to_string(&CacheResponse {
             success: true,
             value,
             exists,
             error: None,
-        }).unwrap_or_default()
+        })
+        .unwrap_or_default()
     }
 
     /// 构建错误响应
-    fn err_response(msg: String) -> Vec<u8> {
-        serde_json::to_vec(&CacheResponse {
+    fn err_response(msg: String) -> String {
+        serde_json::to_string(&CacheResponse {
             success: false,
             value: None,
             exists: None,
             error: Some(msg),
-        }).unwrap_or_default()
-    }
-
-    /// 从输入字节解析请求
-    fn parse_request(input: &[u8]) -> Result<CacheRequest, String> {
-        serde_json::from_slice::<CacheRequest>(input)
-            .map_err(|e| format!("请求数据解析失败: {}", e))
+        })
+        .unwrap_or_default()
     }
 }
 
-impl HostFunctionProvider for BufferHostFunctions {
+impl Default for BufferHostFunctions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ExtismFunctionProvider for BufferHostFunctions {
     /// 返回命名空间 "cmx:buffer"
     fn namespace(&self) -> &str {
         "cmx:buffer"
@@ -95,49 +91,44 @@ impl HostFunctionProvider for BufferHostFunctions {
     /// 注册缓存操作宿主函数
     ///
     /// 注册以下函数：
-    /// - `cmx:buffer/cache_get` — 读取缓存
-    /// - `cmx:buffer/cache_set` — 写入缓存（可选 TTL）
-    /// - `cmx:buffer/cache_delete` — 删除缓存
-    fn register_functions(&self, linker: &mut dyn WasmLinker) -> Result<(), HostFuncError> {
-        // cmx:buffer/cache_get — 读取缓存
-        let cache = self.cache_manager.clone();
-        let get_fn: HostFuncWrapper = Box::new(move |caller, input| {
-            let plugin_id = caller.caller_data().plugin_id.clone();
-
-            let request = match Self::parse_request(input) {
-                Ok(req) => req,
-                Err(e) => return Ok(Self::err_response(e)),
+    /// - `cache_get` — 读取缓存
+    /// - `cache_set` — 写入缓存（可选 TTL）
+    /// - `cache_delete` — 删除缓存
+    fn register_functions(&self, builder: &mut extism::PluginBuilder) -> Result<(), HostFuncError> {
+        // cache_get — 读取缓存
+        host_fn!(cache_get(_user_data: (); request: String) -> String {
+            let req: CacheRequest = match serde_json::from_str(&request) {
+                Ok(r) => r,
+                Err(e) => return Ok(BufferHostFunctions::err_response(format!("解析请求失败: {}", e))),
             };
 
-            let full_key = Self::build_key(&plugin_id, &request.key);
-            let cache = cache.clone();
+            let cache = GlobalCacheManager::get();
+            let full_key = BufferHostFunctions::build_key("default", &req.key);
+
             let rt = tokio::runtime::Handle::current();
             let result = rt.block_on(async {
                 cache.ops().get(&full_key).await
             });
 
             match result {
-                Ok(Some(value)) => Ok(Self::ok_response(Some(value), Some(true))),
-                Ok(None) => Ok(Self::ok_response(None, Some(false))),
-                Err(e) => Ok(Self::err_response(e.to_string())),
+                Ok(Some(value)) => Ok(BufferHostFunctions::ok_response(Some(value), Some(true))),
+                Ok(None) => Ok(BufferHostFunctions::ok_response(None, Some(false))),
+                Err(e) => Ok(BufferHostFunctions::err_response(e.to_string())),
             }
         });
-        linker.define("cmx:buffer", "cache_get", get_fn)?;
 
-        // cmx:buffer/cache_set — 写入缓存
-        let cache = self.cache_manager.clone();
-        let set_fn: HostFuncWrapper = Box::new(move |caller, input| {
-            let plugin_id = caller.caller_data().plugin_id.clone();
-
-            let request = match Self::parse_request(input) {
-                Ok(req) => req,
-                Err(e) => return Ok(Self::err_response(e)),
+        // cache_set — 写入缓存
+        host_fn!(cache_set(_user_data: (); request: String) -> String {
+            let req: CacheRequest = match serde_json::from_str(&request) {
+                Ok(r) => r,
+                Err(e) => return Ok(BufferHostFunctions::err_response(format!("解析请求失败: {}", e))),
             };
 
-            let value = request.value.as_deref().unwrap_or("");
-            let full_key = Self::build_key(&plugin_id, &request.key);
-            let cache = cache.clone();
-            let ttl = request.ttl_seconds;
+            let value = req.value.as_deref().unwrap_or("");
+            let cache = GlobalCacheManager::get();
+            let full_key = BufferHostFunctions::build_key("default", &req.key);
+            let ttl = req.ttl_seconds;
+
             let rt = tokio::runtime::Handle::current();
             let result = rt.block_on(async {
                 if let Some(ttl_secs) = ttl {
@@ -148,45 +139,49 @@ impl HostFunctionProvider for BufferHostFunctions {
             });
 
             match result {
-                Ok(()) => Ok(Self::ok_response(None, None)),
-                Err(e) => Ok(Self::err_response(e.to_string())),
+                Ok(()) => Ok(BufferHostFunctions::ok_response(None, None)),
+                Err(e) => Ok(BufferHostFunctions::err_response(e.to_string())),
             }
         });
-        linker.define("cmx:buffer", "cache_set", set_fn)?;
 
-        // cmx:buffer/cache_delete — 删除缓存
-        let cache = self.cache_manager.clone();
-        let del_fn: HostFuncWrapper = Box::new(move |caller, input| {
-            let plugin_id = caller.caller_data().plugin_id.clone();
-
-            let request = match Self::parse_request(input) {
-                Ok(req) => req,
-                Err(e) => return Ok(Self::err_response(e)),
+        // cache_delete — 删除缓存
+        host_fn!(cache_delete(_user_data: (); request: String) -> String {
+            let req: CacheRequest = match serde_json::from_str(&request) {
+                Ok(r) => r,
+                Err(e) => return Ok(BufferHostFunctions::err_response(format!("解析请求失败: {}", e))),
             };
 
-            let full_key = Self::build_key(&plugin_id, &request.key);
-            let cache = cache.clone();
+            let cache = GlobalCacheManager::get();
+            let full_key = BufferHostFunctions::build_key("default", &req.key);
+
             let rt = tokio::runtime::Handle::current();
             let result = rt.block_on(async {
                 cache.ops().del(&full_key).await
             });
 
             match result {
-                Ok(_deleted) => Ok(Self::ok_response(None, None)),
-                Err(e) => Ok(Self::err_response(e.to_string())),
+                Ok(_deleted) => Ok(BufferHostFunctions::ok_response(None, None)),
+                Err(e) => Ok(BufferHostFunctions::err_response(e.to_string())),
             }
         });
-        linker.define("cmx:buffer", "cache_delete", del_fn)?;
+
+        // 使用 std::mem::replace 替换 builder
+        let temp_manifest = Manifest::new([extism::Wasm::data(vec![])]);
+        let temp_builder = extism::PluginBuilder::new(temp_manifest);
+        let old_builder = std::mem::replace(builder, temp_builder);
+
+        let new_builder = old_builder
+            .with_function("cache_get", [PTR], [PTR], UserData::new(()), cache_get)
+            .with_function("cache_set", [PTR], [PTR], UserData::new(()), cache_set)
+            .with_function("cache_delete", [PTR], [PTR], UserData::new(()), cache_delete);
+
+        *builder = new_builder;
 
         Ok(())
     }
 
     /// 返回提供的函数名列表
     fn provided_functions(&self) -> Vec<&str> {
-        vec![
-            "cmx:buffer/cache_get",
-            "cmx:buffer/cache_set",
-            "cmx:buffer/cache_delete",
-        ]
+        vec!["cache_get", "cache_set", "cache_delete"]
     }
 }

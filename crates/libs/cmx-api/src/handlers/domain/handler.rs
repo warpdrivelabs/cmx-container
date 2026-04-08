@@ -5,12 +5,8 @@
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
-use cmx_core::model::data::dataset::DataSet;
 use cmx_database::get_default_db_manager;
-use serde::Deserialize;
-use serde_json::Value;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;

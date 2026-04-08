@@ -30,4 +30,3 @@ uuid = { workspace = true }
 
 dotenvy ={workspace = true}
 log = "0.4.29"
-

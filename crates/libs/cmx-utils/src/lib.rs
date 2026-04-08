@@ -59,3 +59,4 @@ pub use config::{
 };
 pub use zip::{ZipCompressor, ZipExtractor, ZipError, ZipResult};
 pub use id::{snowflake_id, snowflake_id_str, SnowflakeGenerator, UuidGenerator};
+pub use host_functions::LoggingHostFunctions;

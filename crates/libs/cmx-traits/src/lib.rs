@@ -14,7 +14,7 @@
 //! - [`PluginQuery`] — 插件状态查询（cmx-service 查询 cmx-plugin）
 //! - [`RuntimeInvoker`] — WASM 运行时调用（cmx-service 调用 cmx-runtime）
 //! - [`PluginLifecycleListener`] — 生命周期事件监听（cmx-plugin 通知 cmx-service）
-//! - [`HostFunctionProvider`] — 宿主函数注册（各模块向 cmx-runtime 注册宿主函数）
+//! - [`ExtismFunctionProvider`] — 宿主函数注册（各模块向 cmx-runtime 注册宿主函数）
 
 // 模块声明
 pub mod plugin_query;
@@ -23,14 +23,13 @@ pub mod lifecycle;
 pub mod host_func;
 pub mod error;
 pub mod caller_data;
+pub mod global_runtime;
 
 // 统一导出
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
 pub use runtime_invoker::{RuntimeInvoker, WasmInvokeResult};
 pub use lifecycle::{PluginLifecycleListener, LifecycleEvent};
-pub use host_func::{
-    HostFunctionProvider, WasmLinker, WasmCallerAccess,
-    HostFuncWrapper, HostVoidFuncWrapper,
-};
+pub use host_func::ExtismFunctionProvider;
 pub use caller_data::CallerData;
 pub use error::{TraitError, HostFuncError};
+pub use global_runtime::GlobalRuntime;

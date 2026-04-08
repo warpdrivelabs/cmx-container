@@ -74,3 +74,6 @@ sea-query = { workspace = true }
 # sea-query-binder: SQL 参数绑定工具
 sea-query-binder = { workspace = true }
 modql = { workspace = true, features = ["with-sea-query"] }
+
+# Extism 支持
+extism = "1.4"
