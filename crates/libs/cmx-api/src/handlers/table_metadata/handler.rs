@@ -110,6 +110,9 @@ pub async fn table_metadata_page(
 
     let list_options = params.to_list_options();
     let mut filters = params.filters.clone();
+    if params.filters.is_none() || params.filters.unwrap().is_empty() {
+        filters = None;
+    }
     //都存在时优先使用filter
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);
