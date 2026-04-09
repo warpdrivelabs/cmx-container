@@ -11,6 +11,7 @@ use serde::Deserialize;
 #[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
 pub struct ModuleFilter {
     /// 编码过滤
+    #[modql(rel="m")]
     pub code: Option<OpValsString>,
     /// 名称过滤
     #[modql(rel="m")]
