@@ -80,10 +80,10 @@ impl Default for ExtismEngineConfig {
             enable_wasi: true,
             memory_max: 4096,
             timeout: DEFAULT_TIMEOUT,
-            // pool_max_instances: std::thread::available_parallelism()
-            //     .map(|p| p.get())
-            //     .unwrap_or(4),
-            pool_max_instances: 100,
+            pool_max_instances: std::thread::available_parallelism()
+                .map(|p| p.get())
+                .unwrap_or(4),
+            // pool_max_instances: 100,
         }
     }
 }
