@@ -28,7 +28,8 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberIn
 ///
 /// # 返回值
 /// - `Result<()>` - 执行结果，成功返回 Ok(())，失败返回错误
-#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
+
+#[tokio::main]
 async fn main() -> Result<()> {
     // 必须先加载.env文件
     dotenvy::dotenv().ok();
@@ -48,6 +49,8 @@ async fn main() -> Result<()> {
         .with_thread_ids(true)
         .with_file(true)       // 添加文件名
         .with_line_number(true)  // 添加行号
+        .with_thread_names(true)
+        .with_thread_ids(true)
         .json();
 
     // 控制台日志层: 简洁格式，带颜色，便于开发调试
@@ -57,6 +60,9 @@ async fn main() -> Result<()> {
         .with_target(false)
         .with_file(true)       // 添加文件名
         .with_line_number(true)  // 添加行号
+        .with_thread_names(true)
+        .with_thread_ids(true)
+
         .compact();
 
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别

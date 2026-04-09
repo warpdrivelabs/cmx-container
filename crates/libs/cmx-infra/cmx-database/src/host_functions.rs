@@ -56,7 +56,7 @@ impl DatabaseHostFunctions {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 let db_id = db_manager.get_default_db_id().await;
-                
+
                 if let Some(params_str) = params {
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
                         Ok(v) => v,
@@ -64,7 +64,7 @@ impl DatabaseHostFunctions {
                             return Err(format!("解析参数失败: {}", e));
                         }
                     };
-                    
+
                     db_manager
                         .query_sql_with_json(&db_id, None, &sql, params_value, &dataset_id)
                         .await
@@ -135,7 +135,7 @@ impl DatabaseHostFunctions {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 let db_id = db_manager.get_default_db_id().await;
-                
+
                 if let Some(params_str) = params {
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
                         Ok(v) => v,
@@ -143,7 +143,7 @@ impl DatabaseHostFunctions {
                             return Err(format!("解析参数失败: {}", e));
                         }
                     };
-                    
+
                     db_manager
                         .execute_sql_with_json(&db_id, None, &sql, params_value)
                         .await
