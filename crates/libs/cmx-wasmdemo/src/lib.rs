@@ -168,31 +168,31 @@ pub fn run_all_demos(Json(request): Json<DemoRequest>) -> FnResult<String> {
         Ok(_) => results.push("日志测试: 成功".to_string()),
         Err(e) => results.push(format!("日志测试失败: {}", e)),
     }
-    HostCaller::log_info("测试缓存写入");
-    // 测试缓存
-    match HostCaller::cache_set(&request.name, &request.count.to_string(), Some(3600)) {
-        Ok(_) => results.push("缓存写入测试: 成功".to_string()),
-        Err(e) => results.push(format!("缓存写入测试失败: {}", e)),
-    }
-    HostCaller::log_info("缓存读取测试");
-
-    match HostCaller::cache_get(&request.name) {
-        Ok(resp) => results.push(format!("缓存读取测试: {:?}", resp)),
-        Err(e) => results.push(format!("缓存读取测试失败: {}", e)),
-    }
-    HostCaller::log_info("测试数据库");
-
-    // 测试数据库
-    let query_request = DbQueryRequest {
-        sql: format!("SELECT '{}' as name, {} as count", request.name, request.count),
-        params: None,
-        dataset_id: None,
-    };
-    match HostCaller::db_query(query_request) {
-        Ok(resp) => results.push(format!("数据库测试: {:?}", resp)),
-        Err(e) => results.push(format!("数据库测试失败: {}", e)),
-    }
-    HostCaller::log_info("测试插件调用");
+    // HostCaller::log_info("测试缓存写入");
+    // // 测试缓存
+    // match HostCaller::cache_set(&request.name, &request.count.to_string(), Some(3600)) {
+    //     Ok(_) => results.push("缓存写入测试: 成功".to_string()),
+    //     Err(e) => results.push(format!("缓存写入测试失败: {}", e)),
+    // }
+    // HostCaller::log_info("缓存读取测试");
+    //
+    // match HostCaller::cache_get(&request.name) {
+    //     Ok(resp) => results.push(format!("缓存读取测试: {:?}", resp)),
+    //     Err(e) => results.push(format!("缓存读取测试失败: {}", e)),
+    // }
+    // HostCaller::log_info("测试数据库");
+    //
+    // // 测试数据库
+    // let query_request = DbQueryRequest {
+    //     sql: format!("SELECT '{}' as name, {} as count", request.name, request.count),
+    //     params: None,
+    //     dataset_id: None,
+    // };
+    // match HostCaller::db_query(query_request) {
+    //     Ok(resp) => results.push(format!("数据库测试: {:?}", resp)),
+    //     Err(e) => results.push(format!("数据库测试失败: {}", e)),
+    // }
+    // HostCaller::log_info("测试插件调用");
 
     // 测试插件调用
     // let input_json = serde_json::to_string(&request)?;

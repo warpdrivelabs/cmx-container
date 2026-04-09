@@ -41,13 +41,13 @@ impl BufferHostFunctions {
         let cache = GlobalCacheManager::get();
         let full_key = Self::build_key("default", &req.key);
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
-        let result = tokio::task::block_in_place(|| {
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on
+        let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 cache.ops().get(&full_key).await
             })
-        });
+        };
 
         match result {
             Ok(Some(value)) => Ok(Self::ok_response(Some(value), Some(true))),
@@ -75,8 +75,8 @@ impl BufferHostFunctions {
         let full_key = Self::build_key("default", &req.key);
         let ttl = req.ttl_seconds;
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
-        let result = tokio::task::block_in_place(|| {
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on
+        let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Some(ttl_secs) = ttl {
@@ -85,7 +85,7 @@ impl BufferHostFunctions {
                     cache.ops().set(&full_key, value).await
                 }
             })
-        });
+        };
 
         match result {
             Ok(()) => Ok(Self::ok_response(None, None)),
@@ -108,13 +108,13 @@ impl BufferHostFunctions {
         let cache = GlobalCacheManager::get();
         let full_key = Self::build_key("default", &req.key);
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
-        let result = tokio::task::block_in_place(|| {
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on
+        let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 cache.ops().del(&full_key).await
             })
-        });
+        };
 
         match result {
             Ok(_deleted) => Ok(Self::ok_response(None, None)),

@@ -8,6 +8,7 @@ use async_trait::async_trait;
 
 use crate::caller_data::CallerData;
 use crate::error::TraitError;
+use crate::invoke_context::InvokeOptions;
 
 /// WASM 调用结果
 ///
@@ -30,7 +31,7 @@ pub struct WasmInvokeResult {
 /// cmx-runtime 的 WasmEngine 实现此 trait，实现跨模块解耦。
 #[async_trait]
 pub trait RuntimeInvoker: Send + Sync {
-    /// 调用 WASM 模块的指定导出函数
+    /// 调用 WASM 模块的指定导出函数（使用默认选项）
     ///
     /// # 参数
     ///
@@ -52,6 +53,28 @@ pub trait RuntimeInvoker: Send + Sync {
         function_name: &str,
         input: &[u8],
         caller_data: &CallerData,
+    ) -> Result<WasmInvokeResult, TraitError> {
+        self.invoke_with_options(plugin_id, function_name, input, caller_data, &InvokeOptions::default()).await
+    }
+
+    /// 带选项的 WASM 调用
+    ///
+    /// 支持自定义超时时间和调用深度限制。
+    ///
+    /// # 参数
+    ///
+    /// * `plugin_id` - 目标插件ID
+    /// * `function_name` - WASM 导出函数名
+    /// * `input` - 输入数据（字节）
+    /// * `caller_data` - 调用者上下文
+    /// * `options` - 调用选项（超时、深度限制等）
+    async fn invoke_with_options(
+        &self,
+        plugin_id: &str,
+        function_name: &str,
+        input: &[u8],
+        caller_data: &CallerData,
+        options: &InvokeOptions,
     ) -> Result<WasmInvokeResult, TraitError>;
 
     /// 加载 WASM 模块到运行时

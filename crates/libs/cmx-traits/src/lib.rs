@@ -24,6 +24,7 @@ pub mod host_func;
 pub mod error;
 pub mod caller_data;
 pub mod global_runtime;
+pub mod invoke_context;
 
 // 统一导出
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
@@ -33,3 +34,4 @@ pub use host_func::{HostFunctionProvider, HostFunctionDef, ValType};
 pub use caller_data::CallerData;
 pub use error::{TraitError, HostFuncError};
 pub use global_runtime::GlobalRuntime;
+pub use invoke_context::{InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH};

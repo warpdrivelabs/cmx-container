@@ -2,9 +2,16 @@
 //!
 //! 为 WASM 插件提供插件间调用能力的宿主函数。
 //! 通过 GlobalRuntime 访问 WASM 运行时，实现跨插件的服务调用。
+//!
+//! # 安全机制
+//!
+//! 插件间调用自动受到三层防护：
+//! 1. 调用深度限制（默认 8 层）
+//! 2. 循环检测（检测 A→B→A 循环调用）
+//! 3. Extism 原生超时（默认 30 秒）
 
-use tracing::info;
-use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult};
+use tracing::{info, warn};
+use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult, InvokeOptions};
 
 /// 插件宿主函数提供者
 ///
@@ -26,30 +33,33 @@ impl PluginHostFunctions {
     /// 执行插件间调用
     ///
     /// 通过 GlobalRuntime 调用目标插件的 WASM 导出函数。
-    /// `RuntimeInvoker::invoke` 内部已重构为同步调用（不持有全局锁），
-    /// 使用 `block_in_place` + `block_on` 不会死锁。
+    /// 自动受到深度限制、循环检测和超时控制的三层防护。
+    ///
+    /// 注意：此函数在 spawn_blocking 线程中被调用（因为宿主函数回调
+    /// 在 plugin.call() 的执行线程中），所以可以直接使用 block_on。
     fn do_call_service(&self, input: String) -> Result<String, HostFuncError> {
         let req: cmx_core::wasm_types::PluginCallRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
-        info!("插件间调用: {}", req.function_name);
+        info!("插件间调用: target={}, function={}", req.target_plugin_id, req.function_name);
+
         let runtime = GlobalRuntime::get();
         let input_bytes = req.input.as_bytes();
         let caller_data = Self::build_caller_data();
+        let options = InvokeOptions::default();
 
-        // invoke 内部已不持有全局 HashMap 锁，只锁定目标 Plugin 的独立 Mutex
-        // 所以 block_in_place + block_on 不会死锁
-        let result: Result<WasmInvokeResult, _> = tokio::task::block_in_place(|| {
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                runtime.invoke(
-                    &req.target_plugin_id,
-                    &req.function_name,
-                    input_bytes,
-                    &caller_data,
-                ).await
-            })
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on 调用 async 方法
+        // invoke_with_options 内部会再次 spawn_blocking 执行 plugin.call()
+        let rt = tokio::runtime::Handle::current();
+        let result: Result<WasmInvokeResult, _> = rt.block_on(async {
+            runtime.invoke_with_options(
+                &req.target_plugin_id,
+                &req.function_name,
+                input_bytes,
+                &caller_data,
+                &options,
+            ).await
         });
 
         match result {
@@ -61,7 +71,11 @@ impl PluginHostFunctions {
                 };
                 Ok(Self::ok_response(output, Some(invoke_result.elapsed_us)))
             }
-            Err(e) => Ok(Self::err_response(e.to_string())),
+            Err(e) => {
+                warn!("插件间调用失败: target={}, function={}, error={}",
+                    req.target_plugin_id, req.function_name, e);
+                Ok(Self::err_response(e.to_string()))
+            }
         }
     }
 

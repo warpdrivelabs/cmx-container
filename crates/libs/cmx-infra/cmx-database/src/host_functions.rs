@@ -51,16 +51,13 @@ impl DatabaseHostFunctions {
         let params = query_request.params.clone();
         let dataset_id = query_request.dataset_id.clone().unwrap_or_else(|| "wasm_query".to_string());
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
-        let result = tokio::task::block_in_place(|| {
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on
+        let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
-                // 获取默认数据库 ID
                 let db_id = db_manager.get_default_db_id().await;
                 
-                // 根据是否有参数选择不同的查询方法
                 if let Some(params_str) = params {
-                    // 解析参数为 JSON Value
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
                         Ok(v) => v,
                         Err(e) => {
@@ -79,7 +76,7 @@ impl DatabaseHostFunctions {
                         .map_err(|e| e.to_string())
                 }
             })
-        });
+        };
 
         match result {
             Ok(dataset) => {
@@ -133,16 +130,13 @@ impl DatabaseHostFunctions {
         let sql = execute_request.sql.clone();
         let params = execute_request.params.clone();
 
-        // 使用 block_in_place 允许在异步上下文中执行阻塞操作
-        let result = tokio::task::block_in_place(|| {
+        // 当前已在 spawn_blocking 线程中，直接使用 block_on
+        let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
-                // 获取默认数据库 ID
                 let db_id = db_manager.get_default_db_id().await;
                 
-                // 根据是否有参数选择不同的执行方法
                 if let Some(params_str) = params {
-                    // 解析参数为 JSON Value
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
                         Ok(v) => v,
                         Err(e) => {
@@ -161,7 +155,7 @@ impl DatabaseHostFunctions {
                         .map_err(|e| e.to_string())
                 }
             })
-        });
+        };
 
         match result {
             Ok(affected_rows) => {
