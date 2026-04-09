@@ -19,6 +19,7 @@ CREATE TABLE cmx_domain(
 );
 
 COMMENT ON TABLE cmx_domain IS '域表';
+COMMENT ON COLUMN cmx_domain.id IS 'ID';
 COMMENT ON COLUMN cmx_domain.code IS '域编码，全局唯一，如: FIN, HR, SCM';
 COMMENT ON COLUMN cmx_domain.name IS '域名称，如: 财务域, 人力资源域';
 COMMENT ON COLUMN cmx_domain.description IS '域描述';
@@ -59,6 +60,7 @@ CREATE TABLE cmx_application(
 );
 
 COMMENT ON TABLE cmx_application IS '应用表';
+COMMENT ON COLUMN cmx_application.id IS 'ID';
 COMMENT ON COLUMN cmx_application.code IS '应用编码，全局唯一，如: FI, CO, MM';
 COMMENT ON COLUMN cmx_application.domain_code IS '所属域编码，逻辑关联到cmx_domain.code';
 COMMENT ON COLUMN cmx_application.name IS '应用名称，如: 财务会计, 管理会计';
@@ -100,6 +102,7 @@ CREATE TABLE cmx_module(
 );
 
 COMMENT ON TABLE cmx_module IS '模块表';
+    COMMENT ON COLUMN cmx_module.id IS 'ID';
 COMMENT ON COLUMN cmx_module.code IS '模块编码，全局唯一，如: GL, AR, AP';
 COMMENT ON COLUMN cmx_module.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_module.application_code IS '所属应用编码，逻辑关联到cmx_application.code';
