@@ -22,6 +22,7 @@ pub struct ModuleFilter {
     #[modql(rel="m")]
     pub application_code: Option<OpValsString>,
     /// 类型过滤
+    #[modql(rel="m")]
     pub r#type: Option<OpValsString>,
     /// 状态过滤
     pub status: Option<OpValsInt64>,
