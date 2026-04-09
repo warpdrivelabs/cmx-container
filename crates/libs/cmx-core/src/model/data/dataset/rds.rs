@@ -286,7 +286,7 @@ pub type RowDataSet = DataSet;
 
 /// 序列化时是否跳过 Null 字段（减小 JSON 体积）
 /// 设置为 true 可以显著减少输出大小，特别是对于稀疏数据
-const SKIP_NULL_IN_SERIALIZE: bool = true;
+const SKIP_NULL_IN_SERIALIZE: bool = false;
 
 /// DataSet 的 Serialize 实现
 ///

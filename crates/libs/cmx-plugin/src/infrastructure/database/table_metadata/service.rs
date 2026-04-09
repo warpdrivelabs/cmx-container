@@ -46,6 +46,7 @@ impl TableMetadataService {
         let mut version_fields = SeaFields::new(vec![]);
         version_fields.push(SeaField::new("id", version_id));
         version_fields.push(SeaField::new("table_name", data.table_name.clone()));
+        version_fields.push(SeaField::new("display_name", data.display_name.clone()));
         version_fields.push(SeaField::new("db_id", data.db_id.clone()));
         version_fields.push(SeaField::new("plugin_id", data.plugin_id.clone()));
         version_fields.push(SeaField::new("version", data.version.clone()));
@@ -84,6 +85,7 @@ impl TableMetadataService {
         let mut main_fields = SeaFields::new(vec![]);
         main_fields.push(SeaField::new("id", id.clone()));
         main_fields.push(SeaField::new("table_name", data.table_name.clone()));
+        main_fields.push(SeaField::new("display_name", data.display_name.clone()));
         main_fields.push(SeaField::new("db_id", data.db_id.clone()));
         main_fields.push(SeaField::new("plugin_id", data.plugin_id.clone()));
         main_fields.push(SeaField::new("version", data.version.clone()));
@@ -137,6 +139,7 @@ impl TableMetadataService {
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
             ("cmx_meta_table_define", "table_name"),
+            ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
             ("cmx_meta_table_define", "plugin_id"),
             ("cmx_meta_table_define", "version"),
@@ -204,6 +207,7 @@ impl TableMetadataService {
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
             ("cmx_meta_table_define", "table_name"),
+            ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
             ("cmx_meta_table_define", "plugin_id"),
             ("cmx_meta_table_define", "version"),
@@ -376,6 +380,7 @@ impl TableMetadataService {
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
             ("cmx_meta_table_define", "table_name"),
+            ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
             ("cmx_meta_table_define", "plugin_id"),
             ("cmx_meta_table_define", "version"),
@@ -409,6 +414,10 @@ impl TableMetadataService {
             Expr::col(("cmx_module", "name")),
             "module_name",
         );
+        select.expr_as(
+            Expr::col(("cmx_plugin", "name")),
+            "plugin_name",
+        );
 
         select.join(
             sea_query::JoinType::LeftJoin,
@@ -438,6 +447,12 @@ impl TableMetadataService {
             "cmx_module",
             Condition::all()
                 .add(Expr::col(("cmx_meta_table_define", "module_code")).equals(("cmx_module", "code"))),
+        );
+        select.join(
+            sea_query::JoinType::LeftJoin,
+            "cmx_plugin",
+            Condition::all()
+                .add(Expr::col(("cmx_meta_table_define", "plugin_id")).equals(("cmx_plugin", "plugin_id"))),
         );
 
         select
@@ -506,6 +521,7 @@ impl TableMetadataService {
             && let Some(record) = table_meta_defines_result.unwrap().iter().next()
         {
             let table_name = record.table_name.clone();
+            let display_name = record.display_name.clone();
             let target_db_id = record.db_id.clone();
             let now = Utc::now();
             let mut main_fields = data.clone().not_none_sea_fields();
@@ -572,16 +588,10 @@ impl TableMetadataService {
                 let mut version_fields =data.clone().not_none_sea_fields();
                 version_fields.push(SeaField::new("id", version_id));
                 version_fields.push(SeaField::new("table_name", table_name));
+                version_fields.push(SeaField::new("display_name", display_name));
                 version_fields.push(SeaField::new("db_id", target_db_id));
                 version_fields.push(SeaField::new("plugin_id", plugin_id));
 
-
-
-                // if let Some(ref metadata) = data.metadata {
-                //     version_fields.push(SeaField::new("metadata", metadata.clone()));
-                // } else {
-                //     version_fields.push(SeaField::new("metadata", serde_json::Value::Null));
-                // }
                 version_fields.push(SeaField::new("archived", record.archived));
                 version_fields.push(SeaField::new("create_time", now));
                 version_fields.push(SeaField::new("update_time", now));
@@ -877,6 +887,7 @@ impl TableMetadataService {
             let record = TableMetadataDetail {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 table_name: row.get_by_name_as(schema, "table_name").unwrap_or_default(),
+                display_name: row.get_by_name_as(schema, "display_name").unwrap_or_default(),
                 db_id: row.get_by_name_as(schema, "db_id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),

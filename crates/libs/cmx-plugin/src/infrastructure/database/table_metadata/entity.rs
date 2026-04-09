@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct TableMetadataVersion {
     pub id: String,
     pub table_name: String,
+    pub display_name: String,
     pub db_id: String,
     pub plugin_id: String,
     pub version: String,
@@ -32,6 +33,7 @@ pub struct TableMetadataVersion {
 pub struct TableMetadataDetail {
     pub id: String,
     pub table_name: String,
+    pub display_name: String,
     pub db_id: String,
     pub plugin_id: String,
     pub version: String,
@@ -52,6 +54,7 @@ pub struct TableMetadataDetail {
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct TableMetadataForCreate {
     pub table_name: String,
+    pub display_name: String,
     pub db_id: String,
     pub plugin_id: String,
     pub version: String,
@@ -64,6 +67,8 @@ pub struct TableMetadataForCreate {
 /// 更新请求 DTO
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct TableMetadataForUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

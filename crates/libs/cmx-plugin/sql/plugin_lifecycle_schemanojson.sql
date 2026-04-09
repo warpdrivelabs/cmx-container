@@ -539,6 +539,7 @@ DROP TABLE IF EXISTS cmx_meta_table_define;
 CREATE TABLE cmx_meta_table_define(
                                       id VARCHAR(64) NOT NULL,
                                       table_name VARCHAR(100),
+                                      display_name VARCHAR(100),
                                       db_id VARCHAR(100),
                                       plugin_id VARCHAR(64),
                                       version VARCHAR(50),
@@ -558,6 +559,7 @@ CREATE TABLE cmx_meta_table_define(
 COMMENT ON TABLE cmx_meta_table_define IS '表定义元数据';
 COMMENT ON COLUMN cmx_meta_table_define.id IS '主键';
 COMMENT ON COLUMN cmx_meta_table_define.table_name IS '表名';
+COMMENT ON COLUMN cmx_meta_table_define.display_name IS '显示名称';
 COMMENT ON COLUMN cmx_meta_table_define.db_id IS '所属数据库id';
 COMMENT ON COLUMN cmx_meta_table_define.plugin_id IS '插件id';
 COMMENT ON COLUMN cmx_meta_table_define.version IS '当前使用的元数据插件版本';
@@ -579,6 +581,7 @@ DROP TABLE IF EXISTS cmx_meta_table_define_version;
 CREATE TABLE cmx_meta_table_define_version(
                                               id VARCHAR(64) NOT NULL,
                                               table_name VARCHAR(100),
+                                              display_name VARCHAR(100),
                                               db_id VARCHAR(100),
                                               plugin_id VARCHAR(64),
                                               version VARCHAR(50),
@@ -599,6 +602,7 @@ CREATE TABLE cmx_meta_table_define_version(
 COMMENT ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
 COMMENT ON COLUMN cmx_meta_table_define_version.id IS '主键';
 COMMENT ON COLUMN cmx_meta_table_define_version.table_name IS '表名';
+COMMENT ON COLUMN cmx_meta_table_define_version.display_name IS '显示名称';
 COMMENT ON COLUMN cmx_meta_table_define_version.db_id IS '所属数据库id';
 COMMENT ON COLUMN cmx_meta_table_define_version.plugin_id IS '插件id';
 COMMENT ON COLUMN cmx_meta_table_define_version.version IS '插件版本';

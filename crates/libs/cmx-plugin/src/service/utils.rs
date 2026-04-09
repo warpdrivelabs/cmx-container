@@ -123,6 +123,7 @@ pub async fn save_plugin_table_metadata(
             let table_define_primary_id = record.id.clone();
 
             let update_info = TableMetadataForUpdate{
+                display_name: Some(table_def.display_name.clone()),
                 version: Some(version.to_string()),
                 domain_code: domain_code.clone(),
                 application_code: application_code.clone(),
@@ -135,6 +136,7 @@ pub async fn save_plugin_table_metadata(
             //不存在  新增
             let create_info = TableMetadataForCreate{
                 table_name: table_def.table_name.clone(),
+                display_name: table_def.display_name.clone(),
                 db_id: db_id.to_string(),
                 plugin_id: plugin_id.to_string(),
                 version: version.to_string(),
