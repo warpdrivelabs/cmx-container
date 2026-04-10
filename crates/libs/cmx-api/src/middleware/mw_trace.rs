@@ -224,6 +224,7 @@ async fn extract_and_log_response_body(response: &mut Response<Body>) -> String 
 
     match axum::body::to_bytes(body, 5 * 1024 * 1024).await {
         Ok(bytes) => {
+            let byte_count = bytes.len();
             let preview = if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                 sanitize_json_value(&json).to_string()
             } else if let Ok(s) = std::str::from_utf8(&bytes) {
@@ -233,12 +234,19 @@ async fn extract_and_log_response_body(response: &mut Response<Body>) -> String 
                     s.to_string()
                 }
             } else {
-                format!("<binary: {} bytes>", bytes.len())
+                format!("<binary: {} bytes>", byte_count)
+            };
+
+            // 如果预览内容超过 2000 字符，只显示字符数和字节数
+            let final_preview = if preview.len() > 2000 {
+                format!("<response body too large: {} chars, {} bytes>", preview.len(), byte_count)
+            } else {
+                preview
             };
 
             *response.body_mut() = Body::from(bytes);
 
-            preview
+            final_preview
         }
         Err(_) => {
             *response.body_mut() = Body::empty();
