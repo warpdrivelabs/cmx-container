@@ -8,6 +8,7 @@
 //! |------|------|------|
 //! | POST | /api/service/call | 直接调用 WASM 插件函数 |
 //! | POST | /api/service/execute | 执行服务编排 |
+//! | POST | /api/service/execute/{service-key} | 执行服务编排（路径参数版本） |
 //! | GET | /api/service/list | 获取服务列表 |
 //! | GET | /api/service/get | 获取服务定义 |
 //! | GET | /api/service/by-plugin | 获取插件的所有服务 |
@@ -17,7 +18,7 @@
 
 use std::sync::Arc;
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
 use axum::http::HeaderMap;
@@ -191,6 +192,72 @@ pub async fn service_call(
 
 // ==================== 服务编排 Handler ====================
 
+/// 执行服务编排（内部实现）
+///
+/// 核心逻辑：通过 service_key 查询服务定义，加载插件，执行编排流程。
+///
+/// # 参数
+/// - `state`: 应用状态
+/// - `service_key`: 服务唯一标识
+/// - `input`: 输入数据（JSON 字符串）
+/// - `svr_headers`: HTTP 请求头
+///
+/// # 返回值
+/// 返回服务执行结果
+async fn execute_service_inner(
+    state: &CmxAppState,
+    service_key: &str,
+    input: String,
+    svr_headers: std::collections::HashMap<String, String>,
+) -> Result<ServiceExecuteResponse, Error> {
+    // ==================== 获取依赖组件 ====================
+
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
+        .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
+
+    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
+        .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
+
+    // ==================== 创建编排执行器并执行 ====================
+
+    let default_db_id = get_default_db_manager().get_default_db_id().await;
+    let orchestrator = cmx_service::OrchestratorV2::new(
+        runtime.clone(),
+        plugin_query.clone(),
+        service_query.clone(),
+        default_db_id,
+    );
+
+    let result = orchestrator.execute_service(
+        service_key,
+        &input,
+        svr_headers,
+    ).await
+        .map_err(|e| {
+            error!("服务{}执行失败: {:?}", service_key, e);
+            return  Error::internal_error(format!("服务执行失败: {}", e));
+        })?;
+
+    // ==================== 构建响应 ====================
+
+    let response = ServiceExecuteResponse {
+        success: result.success,
+        output: result.output,
+        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
+            node_id: s.node_id,
+            node_name: s.node_name,
+            output: s.output,
+            elapsed_us: s.elapsed_us,
+        }).collect(),
+        total_elapsed_us: result.total_elapsed_us,
+    };
+
+    Ok(response)
+}
+
 /// 执行服务编排
 ///
 /// 处理 POST /api/service/execute 请求，执行服务编排。
@@ -225,55 +292,66 @@ pub async fn execute_service(
     headers: HeaderMap,
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
-    // ==================== 获取依赖组件 ====================
-
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
-        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
-
-    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
-        .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
-
-    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
-        .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
-
     // ==================== 提取请求头和 input ====================
 
     let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
 
-    // ==================== 创建编排执行器并执行 ====================
+    // ==================== 执行服务编排 ====================
 
-    let default_db_id = get_default_db_manager().get_default_db_id().await;
-    let orchestrator = cmx_service::OrchestratorV2::new(
-        runtime.clone(),
-        plugin_query.clone(),
-        service_query.clone(),
-        default_db_id,
-    );
+    let response = execute_service_inner(&state, &req.service_key, input_str, svr_headers).await?;
 
-    let result = orchestrator.execute_service(
-        &req.service_key,
-        &input_str,
-        svr_headers,
-    ).await
-        .map_err(|e| {
-            error!("服务{}执行失败: {:?}", &req.service_key, e);
-            return  Error::internal_error(format!("服务执行失败: {}", e));
-        })?;
+    Ok(Json(ApiResp::ok(response)))
+}
 
-    // ==================== 构建响应 ====================
+/// 执行服务编排（路径参数版本）
+///
+/// 处理 POST /api/service/execute/{service-key} 请求，执行服务编排。
+/// service_key 从 URL 路径获取，优先于请求体中的 service_key。
+///
+/// # 参数
+/// - `state`: 应用状态
+/// - `service_key`: 服务唯一标识（从 URL 路径获取）
+/// - `_svr_ctx`: 服务上下文（CmxSvrContext）
+/// - `headers`: HTTP 请求头
+/// - `req`: 请求体（ServiceExecuteRequest）
+///
+/// # 路径参数
+/// - `service-key`: 服务唯一标识
+///
+/// # 请求体
+/// - `input`: 初始输入数据（支持 JSON 对象或字符串）
+/// - `service_key`: 会被路径参数覆盖
+///
+/// # 响应体
+/// - `success`: 是否成功
+/// - `output`: 最终输出
+/// - `steps`: 各步骤执行记录
+/// - `total_elapsed_us`: 总耗时
+#[utoipa::path(
+    post,
+    path = "/api/service/execute/{service-key}",
+    request_body = ServiceExecuteRequest,
+    responses(
+        (status = 200, description = "服务编排执行成功", body = ApiResp<ServiceExecuteResponse>)
+    ),
+    tag = "Service"
+)]
+pub async fn execute_service_by_key(
+    State(state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Path(service_key): Path<String>,
+    Json(req): Json<ServiceExecuteRequest>,
+) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
+    // ==================== 提取请求头和 input ====================
 
-    let response = ServiceExecuteResponse {
-        success: result.success,
-        output: result.output,
-        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
-            node_id: s.node_id,
-            node_name: s.node_name,
-            output: s.output,
-            elapsed_us: s.elapsed_us,
-        }).collect(),
-        total_elapsed_us: result.total_elapsed_us,
-    };
+    let svr_headers = extract_headers(&headers);
+    let input_str = value_to_string(req.input)?;
+
+    // ==================== 执行服务编排（路径参数优先） ====================
+
+    let response = execute_service_inner(&state, &service_key, input_str, svr_headers).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
