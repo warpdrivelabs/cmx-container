@@ -690,6 +690,7 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-metadata",
+ "cmx-service",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -754,12 +755,15 @@ dependencies = [
  "cmx-database",
  "cmx-runtime",
  "cmx-traits",
+ "sea-query",
+ "sea-query-binder",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "utoipa",
+ "uuid",
 ]
 
 [[package]]
@@ -5729,6 +5733,7 @@ dependencies = [
  "cmx-database",
  "cmx-plugin",
  "cmx-runtime",
+ "cmx-service",
  "cmx-traits",
  "cmx-utils",
  "derive_more",

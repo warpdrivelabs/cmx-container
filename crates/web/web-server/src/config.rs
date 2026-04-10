@@ -13,6 +13,7 @@
 //! - Redis 缓存初始化
 //! - WASM 运行时初始化
 //! - 插件管理器初始化
+//! - 服务管理器初始化
 
 use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
 use cmx_database::get_default_db_manager;
@@ -22,6 +23,8 @@ use std::sync::{Arc, OnceLock};
 use tracing::{error, info};
 
 pub use crate::datasource_init::init_datasources;
+use std::collections::HashMap;
+use serde_json;
 
 pub fn init_global_config() {
     info!("加载环境变量和配置文件信息...");
@@ -180,4 +183,68 @@ pub async fn init_plugins() {
         .await
         .unwrap_or_else(|e| panic!("初始化插件管理器失败: {:?}", e));
     info!("成功初始化插件管理器");
+}
+
+/// 初始化服务管理器
+///
+/// 加载所有已安装插件的服务定义到内存缓存。
+pub async fn init_services() {
+    use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry, ServiceRepository, ServiceRegistry, ServiceQueryImpl, ServiceStorageImpl};
+    use cmx_traits::{ServiceQuery, ServiceStorage};
+
+    info!("初始化服务管理器...");
+
+    let db_manager = get_default_db_manager();
+
+    let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+    let registry = Arc::new(ServiceRegistry::new());
+
+    GlobalServiceRegistry::set(registry.clone()).expect("初始化服务注册中心失败");
+
+    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone())) as Arc<dyn ServiceQuery>;
+    let service_storage = Arc::new(ServiceStorageImpl::new(repository.clone())) as Arc<dyn ServiceStorage>;
+
+    GlobalServiceQuery::set(service_query.clone()).expect("初始化服务查询器失败");
+    GlobalServiceStorage::set(service_storage.clone()).expect("初始化服务存储失败");
+
+    let services: Vec<cmx_core::model::service::ServiceDefinition> = repository.list_services().await
+        .unwrap_or_else(|e| {
+            tracing::warn!("加载服务列表失败: {:?}", e);
+            Vec::new()
+        });
+
+    if !services.is_empty() {
+        let mut orchestrations: HashMap<String, serde_json::Value> = HashMap::new();
+        for service in &services {
+            let versions: Vec<(String, String)> = repository.get_service_versions(&service.service_key).await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("加载服务版本失败: {:?}", e);
+                    Vec::new()
+                });
+            if let Some((version, _)) = versions.first() {
+                let version_str = version.clone();
+                let config_opt: Option<String> = repository.get_service_config(&service.service_key, &version_str).await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("加载服务配置失败: {:?}", e);
+                        None
+                    });
+                if let Some(config) = config_opt {
+                    if let Ok(orch) = serde_json::from_str::<serde_json::Value>(&config) {
+                        orchestrations.insert(service.service_key.clone(), orch);
+                    }
+                }
+            }
+        }
+
+        let service_infos: Vec<cmx_core::model::service::ServiceInfo> = services.into_iter().map(|s| {
+            cmx_core::model::service::ServiceInfo::from(s)
+        }).collect();
+        registry.load_all(service_infos, orchestrations).await;
+        let keys = registry.get_all_keys().await;
+        info!("已加载 {} 个服务定义到内存", keys.len());
+    } else {
+        info!("未发现已安装的服务定义");
+    }
+
+    info!("服务管理器初始化完成");
 }

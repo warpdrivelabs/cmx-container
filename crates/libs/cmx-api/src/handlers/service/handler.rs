@@ -2,13 +2,16 @@
 //!
 //! 处理 WASM 插件服务调用和编排执行的 HTTP 请求。
 
+use std::collections::HashMap;
+use std::sync::Arc;
 use axum::{
-    extract::State,
+    extract::{Query, State},
     Json,
 };
+use axum::extract::Path;
 use cmx_service::{InvokeRequest, InvokeResponse, OrchestrateRequest, OrchestrateResponse};
-use cmx_traits::{CallerData, PluginQuery, RuntimeInvoker};
-use std::sync::Arc;
+use cmx_traits::{CallerData, PluginQuery, RuntimeInvoker, ServiceQuery};
+use serde::{Deserialize, Serialize};
 
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
@@ -147,4 +150,180 @@ pub async fn execute_orchestration(
     };
 
     Ok(Json(ApiResp::ok(response)))
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExecuteRequest {
+    pub service_key: String,
+    pub input: String,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExecuteResponse {
+    pub success: bool,
+    pub output: Option<String>,
+    pub steps: Vec<ServiceExecutionStep>,
+    pub total_elapsed_us: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExecutionStep {
+    pub node_id: String,
+    pub node_name: String,
+    pub output: Option<String>,
+    pub elapsed_us: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceGetQuery {
+    pub service_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceByPluginQuery {
+    pub plugin_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceDeleteQuery {
+    pub service_key: String,
+}
+
+/// 执行服务编排
+pub async fn execute_service(
+    State(state): State<CmxAppState>,
+    Json(req): Json<ServiceExecuteRequest>,
+) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
+        .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
+
+    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
+        .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
+
+    let orchestrator = cmx_service::OrchestratorV2::new(
+        runtime.clone(),
+        plugin_query.clone(),
+        service_query.clone(),
+    );
+
+    let caller_data = CallerData::new("__service__", "default");
+
+    let result = orchestrator.execute_service(
+        &req.service_key,
+        &req.input,
+        req.headers,
+        &caller_data,
+    ).await
+        .map_err(|e| Error::internal_error(format!("服务执行失败: {}", e)))?;
+
+    let response = ServiceExecuteResponse {
+        success: result.success,
+        output: result.output,
+        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
+            node_id: s.node_id,
+            node_name: s.node_name,
+            output: s.output,
+            elapsed_us: s.elapsed_us,
+        }).collect(),
+        total_elapsed_us: result.total_elapsed_us,
+    };
+
+    Ok(Json(ApiResp::ok(response)))
+}
+
+/// 获取服务列表
+pub async fn list_services(
+    State(state): State<CmxAppState>,
+) -> Result<Json<ApiResp<Vec<serde_json::Value>>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let services = service_query.list_active_services().await
+        .map_err(|e| Error::internal_error(format!("获取服务列表失败: {}", e)))?;
+
+    let values: Vec<serde_json::Value> = services.into_iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "service_key": s.service_key,
+            "service_name": s.service_name,
+            "description": s.description,
+            "plugin_id": s.plugin_id,
+            "status": s.status,
+            "version": s.version,
+        })
+    }).collect();
+
+    Ok(Json(ApiResp::ok(values)))
+}
+
+/// 获取服务定义
+pub async fn get_service(
+    State(state): State<CmxAppState>,
+    Query(query): Query<ServiceGetQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let service = service_query.get_service(&query.service_key).await
+        .map_err(|e| Error::internal_error(format!("获取服务失败: {}", e)))?;
+
+    match service {
+        Some(s) => {
+            let value = serde_json::json!({
+                "id": s.id,
+                "service_key": s.service_key,
+                "service_name": s.service_name,
+                "description": s.description,
+                "plugin_id": s.plugin_id,
+                "status": s.status,
+                "version": s.version,
+            });
+            Ok(Json(ApiResp::ok(value)))
+        }
+        None => Err(Error::business_error(format!("服务 {} 不存在", query.service_key))),
+    }
+}
+
+/// 获取插件的所有服务
+pub async fn get_services_by_plugin(
+    State(state): State<CmxAppState>,
+    Query(query): Query<ServiceByPluginQuery>,
+) -> Result<Json<ApiResp<Vec<serde_json::Value>>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let services = service_query.get_services_by_plugin(&query.plugin_id).await
+        .map_err(|e| Error::internal_error(format!("获取插件服务失败: {}", e)))?;
+
+    let values: Vec<serde_json::Value> = services.into_iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "service_key": s.service_key,
+            "service_name": s.service_name,
+            "description": s.description,
+            "plugin_id": s.plugin_id,
+            "status": s.status,
+            "version": s.version,
+        })
+    }).collect();
+
+    Ok(Json(ApiResp::ok(values)))
+}
+
+/// 删除服务
+pub async fn delete_service(
+    State(state): State<CmxAppState>,
+    Path(service_key): Path<String>,
+) -> Result<Json<ApiResp<()>>, Error> {
+    let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
+        .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
+
+    service_storage.delete_service(&service_key).await
+        .map_err(|e| Error::internal_error(format!("删除服务失败: {}", e)))?;
+
+    Ok(Json(ApiResp::ok(())))
 }

@@ -71,9 +71,9 @@ use utoipa::OpenApi;
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
         crate::handlers::table_metadata::handler::table_metadata_get_by_id,
-        //服务
-        crate::handlers::service::handler::service_call,
-        crate::handlers::service::handler::execute_orchestration,
+        //服务 (暂时移除，需要添加 utoipa 注解)
+        // crate::handlers::service::handler::service_call,
+        // crate::handlers::service::handler::execute_orchestration,
 
     ),
     components(

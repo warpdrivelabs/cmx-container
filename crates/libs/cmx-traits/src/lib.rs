@@ -25,6 +25,8 @@ pub mod error;
 pub mod caller_data;
 pub mod global_runtime;
 pub mod invoke_context;
+pub mod service_query;
+pub mod service_storage;
 
 // 统一导出
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
@@ -35,3 +37,5 @@ pub use caller_data::CallerData;
 pub use error::{TraitError, HostFuncError};
 pub use global_runtime::GlobalRuntime;
 pub use invoke_context::{InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH};
+pub use service_query::ServiceQuery;
+pub use service_storage::ServiceStorage;

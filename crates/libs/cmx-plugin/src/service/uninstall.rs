@@ -61,6 +61,8 @@ pub struct UninstallServiceDeps {
     pub contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
     /// 节点ID
     pub node_id: String,
+    /// 服务存储
+    pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
 }
 
 /// 卸载服务
@@ -203,6 +205,13 @@ impl UninstallService {
             ))
             .await;
 
+        // 步骤10.5: 清理此插件关联的服务定义
+        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id).await {
+            tracing::warn!("清理插件 {} 的服务定义失败: {:?}", plugin_id, e);
+        } else {
+            tracing::info!("已清理插件 {} 的服务定义", plugin_id);
+        }
+
         Ok(UninstallResponse {
             plugin_id,
             success: true,
@@ -214,6 +223,13 @@ impl UninstallService {
 impl Default for UninstallService {
     fn default() -> Self {
         use std::sync::Arc;
+        use cmx_service::ServiceStorageImpl;
+        use cmx_database::get_default_db_manager;
+        use cmx_service::ServiceRepository;
+
+        let db_manager = get_default_db_manager();
+        let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+        let service_storage: Arc<dyn cmx_traits::ServiceStorage> = Arc::new(ServiceStorageImpl::new(repository));
 
         Self::new(UninstallServiceDeps {
             repository: Arc::new(PluginRepository::default()),
@@ -225,6 +241,7 @@ impl Default for UninstallService {
             registry: Arc::new(tokio::sync::RwLock::new(PluginRegistry::new())),
             contexts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             node_id: "default".to_string(),
+            service_storage,
         })
     }
 }

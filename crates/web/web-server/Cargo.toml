@@ -13,6 +13,7 @@ cmx-plugin = { workspace = true }
 cmx-runtime = { workspace = true }
 cmx-traits = { workspace = true }
 cmx-core = { workspace = true }
+cmx-service = { workspace = true }
 axum={workspace = true}
 tokio={workspace = true}
 tower-http = { workspace = true }

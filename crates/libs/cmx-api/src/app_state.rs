@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use cmx_traits::{PluginQuery, RuntimeInvoker};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
 
 /// CMX 应用程序状态
 ///
@@ -28,6 +28,10 @@ pub struct CmxAppState {
     plugin_query: Option<Arc<dyn PluginQuery>>,
     /// WASM 运行时调用器（trait 对象）
     runtime_invoker: Option<Arc<dyn RuntimeInvoker>>,
+    /// 服务查询器（trait 对象）
+    service_query: Option<Arc<dyn ServiceQuery>>,
+    /// 服务存储（trait 对象）
+    service_storage: Option<Arc<dyn ServiceStorage>>,
 }
 
 /// 内部状态结构
@@ -50,6 +54,8 @@ impl CmxAppState {
             app_state: Arc::new(RwLock::new(AppStateInner {})),
             plugin_query: None,
             runtime_invoker: None,
+            service_query: None,
+            service_storage: None,
         }
     }
 
@@ -73,6 +79,26 @@ impl CmxAppState {
         self
     }
 
+    /// 设置服务查询器
+    ///
+    /// # 参数
+    ///
+    /// * `query` - 实现 ServiceQuery trait 的实例
+    pub fn with_service_query(mut self, query: Arc<dyn ServiceQuery>) -> Self {
+        self.service_query = Some(query);
+        self
+    }
+
+    /// 设置服务存储
+    ///
+    /// # 参数
+    ///
+    /// * `storage` - 实现 ServiceStorage trait 的实例
+    pub fn with_service_storage(mut self, storage: Arc<dyn ServiceStorage>) -> Self {
+        self.service_storage = Some(storage);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -91,6 +117,24 @@ impl CmxAppState {
         self.runtime_invoker.as_ref()
     }
 
+    /// 获取服务查询器
+    ///
+    /// # 返回值
+    ///
+    /// 返回 ServiceQuery trait 对象引用，如果未设置返回 None。
+    pub fn service_query(&self) -> Option<&Arc<dyn ServiceQuery>> {
+        self.service_query.as_ref()
+    }
+
+    /// 获取服务存储
+    ///
+    /// # 返回值
+    ///
+    /// 返回 ServiceStorage trait 对象引用，如果未设置返回 None。
+    pub fn service_storage(&self) -> Option<&Arc<dyn ServiceStorage>> {
+        self.service_storage.as_ref()
+    }
+
     /// 检查是否已完全初始化
     ///
     /// 返回 true 表示 plugin_query 和 runtime_invoker 都已设置。
@@ -105,6 +149,8 @@ impl Clone for CmxAppState {
             app_state: self.app_state.clone(),
             plugin_query: self.plugin_query.clone(),
             runtime_invoker: self.runtime_invoker.clone(),
+            service_query: self.service_query.clone(),
+            service_storage: self.service_storage.clone(),
         }
     }
 }

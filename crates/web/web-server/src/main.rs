@@ -13,9 +13,10 @@ use config::web_config;
 
 use axum::{middleware, Router};
 
-use crate::config::{init_cache, init_datasources, init_global_config, init_plugins,init_runtime};
+use crate::config::{init_cache, init_datasources, init_global_config, init_plugins, init_runtime, init_services};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
+use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
@@ -93,10 +94,15 @@ async fn main() -> Result<()> {
     // 初始化插件管理器
     init_plugins().await;
 
+    // 初始化服务管理器
+    init_services().await;
+
     // 构建完整的 AppState（注入 trait 实例）
     let app_state = CmxAppState::new()
         .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
-        .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker());
+        .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker())
+        .with_service_query(GlobalServiceQuery::get().clone())
+        .with_service_storage(GlobalServiceStorage::get().clone());
 
     // -- 配置 API 路由
     let api_routes = routes::routes().with_state(app_state);
