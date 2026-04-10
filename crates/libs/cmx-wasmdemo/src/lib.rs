@@ -358,7 +358,7 @@ pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
         Ok(resp) => results.push(format!("插件调用测试: {:?}", resp)),
         Err(e) => results.push(format!("插件调用测试失败: {}", e)),
     }
-    let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
+    // let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
 
     // 返回标准出参
     Ok(Json(FunctionOutput {
