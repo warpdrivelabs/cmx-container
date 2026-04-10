@@ -14,10 +14,10 @@ use cmx_core::model::service::{ServiceInfo, ServiceOrchestration};
 pub trait ServiceQuery: Send + Sync {
     /// 根据 service_key 查询服务信息
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service_key` - 服务唯一标识
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(Some(ServiceInfo))` - 找到服务
     /// * `Ok(None)` - 服务不存在
     /// * `Err(TraitError)` - 查询失败
@@ -25,27 +25,27 @@ pub trait ServiceQuery: Send + Sync {
 
     /// 根据插件ID查询所有服务
     ///
-    /// # Arguments
+    /// # 参数
     /// * `plugin_id` - 插件唯一标识
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(Vec<ServiceInfo>)` - 该插件下的所有服务列表
     /// * `Err(TraitError)` - 查询失败
     async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceInfo>, TraitError>;
 
     /// 查询所有启用的服务
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(Vec<ServiceInfo>)` - 所有启用状态的服务列表
     /// * `Err(TraitError)` - 查询失败
     async fn list_active_services(&self) -> Result<Vec<ServiceInfo>, TraitError>;
 
     /// 获取服务的编排定义
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service_key` - 服务唯一标识
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(Some(ServiceOrchestration))` - 找到编排定义
     /// * `Ok(None)` - 编排定义不存在
     /// * `Err(TraitError)` - 查询失败

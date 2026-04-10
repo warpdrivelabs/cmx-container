@@ -1,16 +1,29 @@
 //! cmx-service — 企业级通用服务层
 //!
 //! 作为插件编排的执行引擎，协调 PluginQuery 和 RuntimeInvoker 完成请求处理。
-//! 提供：
-//! - CmxService 核心服务结构
-//! - OrchestratorV2 编排执行器 V2
-//! - ServiceHandler HTTP 处理器
+//!
+//! # 核心功能
+//!
+//! - **CmxService** - 核心服务结构，实现 PluginLifecycleListener 响应插件生命周期
+//! - **OrchestratorV2** - 编排执行器 V2，支持服务编排 JSON 格式、事务框、多分支节点
+//! - **ServiceHandler** - HTTP 处理器，封装服务层逻辑供 cmx-api 调用
+//! - **ServiceRegistry** - 服务注册中心，提供服务信息的内存缓存
+//! - **ServiceRepository** - 服务仓储层，提供服务定义的数据库访问
+//!
+//! # 服务编排特性
+//!
+//! - **线性流程执行**：start -> func -> func -> end
+//! - **事务框支持**：多个函数在同一个数据库事务中执行（通过 parent 字段识别）
+//! - **多分支路由**：switch 节点根据返回值选择执行路径
+//! - **SVRContext 上下文传递**：初始入参、请求头、各步骤输出在函数间传递
 //!
 //! # 依赖关系
 //!
 //! - 依赖 cmx-traits（trait 定义）
 //! - 依赖 cmx-database（直接执行 SQL）
+//! - 依赖 cmx-core（模型定义）
 //! - **不依赖** cmx-plugin（通过 PluginQuery trait 交互）
+//! - **不依赖** cmx-runtime（通过 RuntimeInvoker trait 交互）
 
 pub mod error;
 pub mod handler;
