@@ -196,7 +196,8 @@ pub async fn init_services() {
 
     let db_manager = get_default_db_manager();
 
-    let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+    // 使用 new_async 从 DatabaseManager 获取实际的默认数据库ID
+    let repository = Arc::new(ServiceRepository::new_async(db_manager.clone()).await);
     let registry = Arc::new(ServiceRegistry::new());
 
     GlobalServiceRegistry::set(registry.clone()).expect("初始化服务注册中心失败");
@@ -206,6 +207,8 @@ pub async fn init_services() {
 
     GlobalServiceQuery::set(service_query.clone()).expect("初始化服务查询器失败");
     GlobalServiceStorage::set(service_storage.clone()).expect("初始化服务存储失败");
+
+    info!("服务仓储使用数据库ID: {}", repository.get_default_db_id());
 
     let services: Vec<cmx_core::model::service::ServiceDefinition> = repository.list_services().await
         .unwrap_or_else(|e| {

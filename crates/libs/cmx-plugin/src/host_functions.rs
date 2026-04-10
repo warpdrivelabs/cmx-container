@@ -11,7 +11,7 @@
 //! 3. Extism 原生超时（默认 30 秒）
 
 use tracing::{info, warn};
-use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult, InvokeOptions};
+use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult};
 
 /// 插件宿主函数提供者
 ///
@@ -23,11 +23,6 @@ impl PluginHostFunctions {
     /// 创建插件宿主函数提供者
     pub fn new() -> Self {
         Self
-    }
-
-    /// 构建 CallerData（简化版本）
-    fn build_caller_data() -> cmx_traits::CallerData {
-        cmx_traits::CallerData::new("default", "default")
     }
 
     /// 执行插件间调用
@@ -46,19 +41,14 @@ impl PluginHostFunctions {
 
         let runtime = GlobalRuntime::get();
         let input_bytes = req.input.as_bytes();
-        let caller_data = Self::build_caller_data();
-        let options = InvokeOptions::default();
 
         // 当前已在 spawn_blocking 线程中，直接使用 block_on 调用 async 方法
-        // invoke_with_options 内部会再次 spawn_blocking 执行 plugin.call()
         let rt = tokio::runtime::Handle::current();
         let result: Result<WasmInvokeResult, _> = rt.block_on(async {
-            runtime.invoke_with_options(
+            runtime.invoke(
                 &req.target_plugin_id,
                 &req.function_name,
                 input_bytes,
-                &caller_data,
-                &options,
             ).await
         });
 

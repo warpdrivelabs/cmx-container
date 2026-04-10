@@ -10,11 +10,17 @@ use cmx_core::model::service::ServiceInfo;
 
 /// 服务注册中心
 ///
-/// 提供服务信息的内存缓存管理。
+/// 提供服务信息的内存缓存管理，包括：
+/// - 服务定义缓存（service_key -> ServiceInfo）
+/// - 插件服务映射（plugin_id -> Vec<service_key>）
+/// - 编排定义缓存（service_key -> JSON）
 #[derive(Clone)]
 pub struct ServiceRegistry {
+    /// 服务定义缓存（service_key -> ServiceInfo）
     services: Arc<RwLock<HashMap<String, ServiceInfo>>>,
+    /// 插件服务映射（plugin_id -> Vec<service_key>）
     plugin_services: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    /// 编排定义缓存（service_key -> JSON）
     orchestration_cache: Arc<RwLock<HashMap<String, serde_json::Value>>>,
 }
 
@@ -29,6 +35,10 @@ impl ServiceRegistry {
     }
 
     /// 注册服务到内存
+    ///
+    /// # 参数
+    /// * `service` - 服务信息
+    /// * `orchestration` - 编排定义（可选）
     pub async fn register(&self, service: ServiceInfo, orchestration: Option<serde_json::Value>) {
         let service_key = service.service_key.clone();
         let plugin_id = service.plugin_id.clone();
@@ -46,6 +56,10 @@ impl ServiceRegistry {
     }
 
     /// 从内存移除服务
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    /// * `plugin_id` - 所属插件ID
     pub async fn unregister(&self, service_key: &str, plugin_id: &str) {
         self.services.write().await.remove(service_key);
         self.orchestration_cache.write().await.remove(service_key);
@@ -58,11 +72,23 @@ impl ServiceRegistry {
     }
 
     /// 获取服务信息
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    ///
+    /// # 返回值
+    /// 返回服务信息的克隆，如果不存在则返回 None
     pub async fn get(&self, service_key: &str) -> Option<ServiceInfo> {
         self.services.read().await.get(service_key).cloned()
     }
 
     /// 根据插件ID获取所有服务
+    ///
+    /// # 参数
+    /// * `plugin_id` - 插件ID
+    ///
+    /// # 返回值
+    /// 返回该插件下所有服务信息的列表
     pub async fn get_by_plugin(&self, plugin_id: &str) -> Vec<ServiceInfo> {
         let plugin_services = self.plugin_services.read().await;
         let service_keys = plugin_services.get(plugin_id);
@@ -79,16 +105,29 @@ impl ServiceRegistry {
     }
 
     /// 获取编排定义
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    ///
+    /// # 返回值
+    /// 返回编排定义的 JSON 值，如果不存在则返回 None
     pub async fn get_orchestration(&self, service_key: &str) -> Option<serde_json::Value> {
         self.orchestration_cache.read().await.get(service_key).cloned()
     }
 
     /// 获取所有服务键
+    ///
+    /// # 返回值
+    /// 返回所有已注册服务的 service_key 列表
     pub async fn get_all_keys(&self) -> Vec<String> {
         self.services.read().await.keys().cloned().collect()
     }
 
     /// 从数据库加载所有服务到内存
+    ///
+    /// # 参数
+    /// * `services` - 服务信息列表
+    /// * `orchestrations` - 编排定义映射（service_key -> JSON）
     pub async fn load_all(&self, services: Vec<ServiceInfo>, orchestrations: HashMap<String, serde_json::Value>) {
         let mut services_map = self.services.write().await;
         let mut plugin_map = self.plugin_services.write().await;
@@ -116,6 +155,13 @@ impl ServiceRegistry {
     }
 
     /// 同步插件关联的服务
+    ///
+    /// 先移除该插件的旧服务，再添加新服务
+    ///
+    /// # 参数
+    /// * `plugin_id` - 插件ID
+    /// * `services` - 新的服务信息列表
+    /// * `orchestrations` - 编排定义映射（service_key -> JSON）
     pub async fn sync_plugin_services(&self, plugin_id: &str, services: Vec<ServiceInfo>, orchestrations: HashMap<String, serde_json::Value>) {
         let existing_keys = self.plugin_services.read().await
             .get(plugin_id)

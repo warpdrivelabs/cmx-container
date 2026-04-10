@@ -1,6 +1,15 @@
 //! 编排执行器 V2
 //!
 //! 支持服务编排 JSON 格式、多分支节点、事务框和 SVRContext 上下文传递。
+//!
+//! # 核心概念
+//!
+//! - **服务编排**: 基于 Flow JSON 定义的 DAG（有向无环图）流程执行
+//! - **节点类型**: start（开始）、end（结束）、func（函数）、switch（多分支）、transaction（事务框）
+//! - **执行上下文**: SVRContext 在函数间传递初始入参、请求头、各步骤输出
+//! - **事务框**: 父节点指向事务框的函数在同一个数据库事务中执行
+
+// ==================== 依赖导入 ====================
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,44 +20,91 @@ use cmx_core::model::service::{
     SVRContext,
 };
 use cmx_database::transaction::begin_transaction_guard_by_db_id;
-use cmx_traits::{CallerData, PluginQuery, RuntimeInvoker, ServiceQuery};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use utoipa::ToSchema;
 
 use crate::error::ServiceError;
 
+// ==================== 结果结构体定义 ====================
+
 /// 编排执行结果 V2
+///
+/// 包含整个服务编排执行的完整结果信息
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrationResultV2 {
+    /// 是否执行成功（所有节点都成功执行则为 true）
     pub success: bool,
+    /// 最终输出结果（最后一个节点的输出，失败时为 None）
     pub output: Option<String>,
+    /// 各步骤执行记录（按执行顺序记录每个节点的执行情况）
     pub steps: Vec<ExecutionStep>,
+    /// 总执行耗时（微秒，从开始到结束的总时间）
     pub total_elapsed_us: u64,
 }
 
+/// 执行步骤记录
+///
+/// 记录单个节点的执行情况
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ExecutionStep {
+    /// 节点ID（对应 Flow JSON 中的 node.id）
     pub node_id: String,
+    /// 节点名称（对应 Flow JSON 中的 node.data.name）
     pub node_name: String,
+    /// 步骤输出（函数执行结果，失败时可能为 None）
     pub output: Option<String>,
+    /// 执行耗时（微秒，单个节点的执行时间）
     pub elapsed_us: u64,
 }
 
+// ==================== 执行上下文定义 ====================
+
+/// 执行上下文 — 在编排执行过程中传递
+///
+/// 包含当前执行状态和跨函数传递的上下文信息
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {
+    /// 当前步骤输出（传递给下一个步骤的输入）
+    /// - 第一个函数节点：initial_input
+    /// - 后续函数节点：前一个函数的输出
     pub current_output: String,
+    /// 服务调用上下文（包含初始入参、请求头、各步骤输出）
+    /// 在整个编排过程中持续传递和更新
     pub svr_context: SVRContext,
 }
 
+// ==================== 编排执行器定义 ====================
+
+/// 编排执行器 V2
+///
+/// 支持基于 Flow JSON 的 DAG 编排执行，包括：
+/// - 线性流程执行：start -> func -> func -> end
+/// - 事务框支持：多个函数在同一个数据库事务中执行
+/// - 多分支路由：switch 节点根据返回值选择执行路径
+/// - SVRContext 上下文传递：初始入参、请求头、各步骤输出在函数间传递
 pub struct OrchestratorV2 {
+    /// WASM 运行时调用器（用于调用插件函数）
     runtime: Arc<dyn RuntimeInvoker>,
+    /// 插件查询器（用于查询插件状态和获取 WASM 路径）
     plugin_query: Arc<dyn PluginQuery>,
+    /// 服务查询器（用于获取服务编排定义）
     service_query: Arc<dyn ServiceQuery>,
+    /// 默认数据库ID（事务框未指定数据库时使用）
     default_db_id: String,
 }
 
 impl OrchestratorV2 {
+    /// 创建编排执行器
+    ///
+    /// # 参数
+    /// * `runtime` - WASM 运行时调用器
+    /// * `plugin_query` - 插件查询器
+    /// * `service_query` - 服务查询器
+    ///
+    /// # 返回值
+    /// 返回编排执行器实例
     pub fn new(
         runtime: Arc<dyn RuntimeInvoker>,
         plugin_query: Arc<dyn PluginQuery>,
@@ -58,10 +114,18 @@ impl OrchestratorV2 {
             runtime,
             plugin_query,
             service_query,
+            // 默认数据库ID，事务框未指定时使用
             default_db_id: "default".to_string(),
         }
     }
 
+    /// 设置默认数据库ID（Builder 模式）
+    ///
+    /// # 参数
+    /// * `db_id` - 数据库ID
+    ///
+    /// # 返回值
+    /// 返回修改后的 Self，支持链式调用
     pub fn with_db_id(
         mut self,
         db_id: impl Into<String>,
@@ -70,88 +134,191 @@ impl OrchestratorV2 {
         self
     }
 
+    /// 执行服务编排（核心入口方法）
+    ///
+    /// 根据服务编排定义，从 start 节点开始，沿边遍历执行各节点，
+    /// 直到遇到 end 节点或发生错误。
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识（对应 JSON 中的 code 字段）
+    /// * `initial_input` - 初始输入数据（API 请求传入的参数）
+    /// * `headers` - HTTP 请求头（传递给所有函数）
+    ///
+    /// # 返回值
+    /// 返回编排执行结果，包含成功状态、最终输出、各步骤记录、总耗时
+    ///
+    /// # 执行流程
+    /// 1. 加载服务编排定义
+    /// 2. 初始化执行上下文（SVRContext）
+    /// 3. 从 start 节点开始循环执行
+    /// 4. 根据节点类型分发执行
+    /// 5. 收集执行结果，返回最终输出
     pub async fn execute_service(
         &self,
         service_key: &str,
         initial_input: &str,
         headers: HashMap<String, String>,
-        caller_data: &CallerData,
     ) -> Result<OrchestrationResultV2, ServiceError> {
+        // ==================== 初始化阶段 ====================
+
+        // 记录开始时间，用于计算总耗时
         let start_time = Instant::now();
+
+        // 初始化步骤记录列表，用于记录每个节点的执行情况
         let mut steps = Vec::new();
 
+        // 从服务查询器获取编排定义
+        // 如果服务不存在，返回错误
         let orchestration = self.service_query.get_orchestration(service_key).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
             .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
 
-        let svr_context = SVRContext::new(initial_input.to_string(), headers);
+        // 创建服务调用上下文
+        // - initial_input: 初始入参，函数可通过 context.initial_input 获取
+        // - headers: 请求头，函数可通过 context.headers 获取
+        // - step_outputs: 各步骤输出，执行过程中逐步填充
+        let svr_context = SVRContext::new(initial_input.to_string(), headers.clone());
 
+        // 查找开始节点（节点类型为 skylake-start）
+        // 开始节点是流程的入口点，不执行任何函数
         let start_node = orchestration.flow.nodes.iter()
             .find(|n| n.node_type == "skylake-start")
             .ok_or_else(|| ServiceError::InternalError("未找到开始节点".to_string()))?;
 
+        // 初始化执行上下文：
+        // - current_output 设置为 initial_input，这样第一个函数节点能够接收到初始输入
+        // - SVRContext 包含 initial_input 和 headers，在所有函数间传递
         let mut exec_context = ExecutionContext {
-            current_output: String::new(),
+            current_output: initial_input.to_string(),
             svr_context,
         };
 
+        // 设置当前节点ID为开始节点，准备进入主循环
         let mut current_node_id = start_node.id.clone();
+
+        // 获取流程定义的引用，避免重复访问
         let flow = &orchestration.flow;
+
+        // 初始化执行结果，Ok(()) 表示成功，Err 表示失败
         let mut result = Ok(());
 
+        // ==================== 主执行循环 ====================
+        // 循环遍历节点，直到遇到 end 节点或发生错误
         loop {
+            // 根据当前节点ID查找节点定义
             let node = match flow.nodes.iter().find(|n| n.id == current_node_id) {
                 Some(n) => n,
                 None => {
+                    // 节点未找到，记录错误并退出循环
                     result = Err(ServiceError::InternalError(format!("节点未找到: {}", current_node_id)));
                     break;
                 }
             };
 
+            // 根据节点类型分发执行
             match node.node_type.as_str() {
+                // ==================== 开始节点 ====================
+                // 开始节点不执行任何函数，只是流程的入口标识
+                // 查找从开始节点出发的边，跳转到下一个节点
                 "skylake-start" => {
-                    if let Some(next_edge) = flow.edges.iter().find(|e| e.source_node_id == current_node_id && e.source_port_id == "out") {
+                    // 查找从当前节点出发、源端口为 "out" 的边
+                    // 开始节点只有一个出口端口 "out"
+                    if let Some(next_edge) = flow.edges.iter().find(|e| {
+                        e.source_node_id == current_node_id && e.source_port_id == "out"
+                    }) {
+                        // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
+                    // 没有找到下一条边，退出循环
                     break;
                 }
+
+                // ==================== 结束节点 ====================
+                // 结束节点不执行任何函数，只是流程的出口标识
+                // 遇到结束节点，正常退出循环
                 "skylake-end" => {
                     break;
                 }
+
+                // ==================== 函数节点 ====================
+                // 函数节点执行 WASM 插件中的函数
                 "skylake-func" => {
-                    result = self.execute_func_node(node, &mut exec_context, caller_data, &mut steps).await;
+                    // 执行函数节点
+                    result = self.execute_func_node(node, &mut exec_context, &mut steps).await;
+
+                    // 如果执行失败，退出循环
                     if result.is_err() {
                         break;
                     }
-                    if let Some(next_edge) = flow.edges.iter().find(|e| e.source_node_id == current_node_id && e.source_port_id == "out") {
+
+                    // 查找从当前节点出发、源端口为 "out" 的边
+                    // 函数节点只有一个出口端口 "out"
+                    if let Some(next_edge) = flow.edges.iter().find(|e| {
+                        e.source_node_id == current_node_id && e.source_port_id == "out"
+                    }) {
+                        // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
+                    // 没有找到下一条边，退出循环
                     break;
                 }
+
+                // ==================== 多分支节点 ====================
+                // 多分支节点根据函数返回值选择执行路径
+                // 返回值匹配 options 数组中的值，选择对应的出边
                 "skylake-switch" => {
-                    result = self.execute_switch_node(node, &mut exec_context, caller_data, &mut steps).await;
+                    // 执行 switch 节点（内部会调用函数）
+                    result = self.execute_switch_node(node, &mut exec_context, &mut steps).await;
+
+                    // 如果执行失败，退出循环
                     if result.is_err() {
                         break;
                     }
-                    if let Some(next_edge) = flow.edges.iter().find(|e| e.source_node_id == current_node_id && e.source_port_id == format!("out_{}", exec_context.current_output)) {
+
+                    // 根据函数返回值构建出边端口ID
+                    // 端口ID格式为 "out_{value}"，例如 "out_1"、"out_2"
+                    let source_port_id = format!("out_{}", exec_context.current_output);
+
+                    // 查找匹配的出边
+                    if let Some(next_edge) = flow.edges.iter().find(|e| {
+                        e.source_node_id == current_node_id && e.source_port_id == source_port_id
+                    }) {
+                        // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
+                    // 没有找到匹配的出边，退出循环
                     break;
                 }
+
+                // ==================== 事务框节点 ====================
+                // 事务框节点将其内部的所有函数节点在同一个数据库事务中执行
                 "skylake-transaction" => {
-                    result = self.execute_transaction_node(flow, node, &mut exec_context, caller_data, &mut steps).await;
+                    // 执行事务框节点
+                    result = self.execute_transaction_node(flow, node, &mut exec_context, &mut steps).await;
+
+                    // 如果执行失败，退出循环
                     if result.is_err() {
                         break;
                     }
-                    if let Some(next_edge) = flow.edges.iter().find(|e| e.source_node_id == current_node_id && e.source_port_id == "out") {
+
+                    // 查找从当前节点出发、源端口为 "out" 的边
+                    // 事务框节点只有一个出口端口 "out"
+                    if let Some(next_edge) = flow.edges.iter().find(|e| {
+                        e.source_node_id == current_node_id && e.source_port_id == "out"
+                    }) {
+                        // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
+                    // 没有找到下一条边，退出循环
                     break;
                 }
+
+                // ==================== 未知节点类型 ====================
+                // 遇到未知的节点类型，返回错误
                 _ => {
                     result = Err(ServiceError::InternalError(format!("未知节点类型: {}", node.node_type)));
                     break;
@@ -159,11 +326,16 @@ impl OrchestratorV2 {
             }
         }
 
+        // ==================== 构建返回结果 ====================
+
+        // 根据执行结果确定最终输出
+        // 成功时返回当前输出，失败时返回 None
         let final_output = match &result {
             Ok(_) => Some(exec_context.current_output.clone()),
             Err(_) => None,
         };
 
+        // 构建并返回编排执行结果
         Ok(OrchestrationResultV2 {
             success: result.is_ok(),
             output: final_output,
@@ -172,52 +344,114 @@ impl OrchestratorV2 {
         })
     }
 
+    /// 执行 switch（多分支）节点
+    ///
+    /// 多分支节点执行一个函数，根据函数返回值选择执行路径。
+    /// 返回值匹配 options 数组中的值，选择对应的出边（out_{value}）。
+    ///
+    /// # 参数
+    /// * `node` - switch 节点定义
+    /// * `exec_context` - 执行上下文（可变，会更新 current_output 和 step_outputs）
+    /// * `steps` - 执行步骤记录列表（可变，会添加新记录）
+    ///
+    /// # 返回值
+    /// 成功返回 Ok(())，失败返回 ServiceError
+    ///
+    /// # 执行流程
+    /// 1. 获取插件ID和函数名
+    /// 2. 检查插件是否激活
+    /// 3. 加载 WASM 模块（如果未加载）
+    /// 4. 构建函数输入（包含当前输出和上下文）
+    /// 5. 调用函数
+    /// 6. 解析输出，更新执行上下文
+    /// 7. 记录执行步骤
     async fn execute_switch_node(
         &self,
         node: &ServiceNode,
         exec_context: &mut ExecutionContext,
-        caller_data: &CallerData,
         steps: &mut Vec<ExecutionStep>,
     ) -> Result<(), ServiceError> {
+        // ==================== 获取节点元信息 ====================
+
+        // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node.data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("switch 节点缺少 nodeMeta".to_string()))?;
 
+        // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
 
+        // ==================== 检查插件状态 ====================
+
+        // 检查插件是否已激活（已安装且未禁用）
         let is_active = self.plugin_query.is_active(plugin_id).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+        // 如果插件未激活，返回错误
         if !is_active {
             return Err(ServiceError::plugin_not_active(plugin_id));
         }
 
+        // ==================== 加载 WASM 模块 ====================
+
+        // 检查 WASM 模块是否已加载到运行时
         if !self.runtime.is_loaded(plugin_id).await {
+            // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+            // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
                 .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
         }
 
+        // ==================== 构建函数输入 ====================
+
+        // 构建函数输入结构体
+        // - input: 当前输出（前一个节点的输出或初始输入）
+        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出）
+        // - txn_id: 事务ID（switch 节点不在事务中执行，所以为 None）
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
             txn_id: None,
         };
+
+        // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
             .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
 
+        // ==================== 调用函数 ====================
+
+        // 记录步骤开始时间
         let step_start = Instant::now();
+
+        // 调用 WASM 函数
         let invoke_result = self.runtime
-            .invoke(plugin_id, function_name, &input_bytes, caller_data)
+            .invoke(plugin_id, function_name, &input_bytes)
             .await
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
 
+        // ==================== 解析函数输出 ====================
+
+        // 将函数输出反序列化为 FunctionOutput 结构体
         let output: FunctionOutput = serde_json::from_slice(&invoke_result.output)
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
 
+        // ==================== 更新执行上下文 ====================
+
+        // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+
+        // 更新当前输出（用于选择出边和传递给下一个节点）
         exec_context.current_output = output.result.clone();
 
+        // 将步骤输出保存到上下文中（后续节点可通过 context.step_outputs 获取）
+        exec_context.svr_context.add_step_output(node.id.clone(), output.result.clone());
+
+        // ==================== 记录执行步骤 ====================
+
+        // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
             node_name: node.data.name.clone(),
@@ -228,52 +462,113 @@ impl OrchestratorV2 {
         Ok(())
     }
 
+    /// 执行普通函数节点
+    ///
+    /// 执行 WASM 插件中的函数，更新执行上下文。
+    ///
+    /// # 参数
+    /// * `node` - 函数节点定义
+    /// * `exec_context` - 执行上下文（可变，会更新 current_output 和 step_outputs）
+    /// * `steps` - 执行步骤记录列表（可变，会添加新记录）
+    ///
+    /// # 返回值
+    /// 成功返回 Ok(())，失败返回 ServiceError
+    ///
+    /// # 执行流程
+    /// 1. 获取插件ID和函数名
+    /// 2. 检查插件是否激活
+    /// 3. 加载 WASM 模块（如果未加载）
+    /// 4. 构建函数输入（包含当前输出和上下文）
+    /// 5. 调用函数
+    /// 6. 解析输出，更新执行上下文
+    /// 7. 记录执行步骤
     async fn execute_func_node(
         &self,
         node: &ServiceNode,
         exec_context: &mut ExecutionContext,
-        caller_data: &CallerData,
         steps: &mut Vec<ExecutionStep>,
     ) -> Result<(), ServiceError> {
+        // ==================== 获取节点元信息 ====================
+
+        // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node.data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("func 节点缺少 nodeMeta".to_string()))?;
 
+        // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
 
+        // ==================== 检查插件状态 ====================
+
+        // 检查插件是否已激活（已安装且未禁用）
         let is_active = self.plugin_query.is_active(plugin_id).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+        // 如果插件未激活，返回错误
         if !is_active {
             return Err(ServiceError::plugin_not_active(plugin_id));
         }
 
+        // ==================== 加载 WASM 模块 ====================
+
+        // 检查 WASM 模块是否已加载到运行时
         if !self.runtime.is_loaded(plugin_id).await {
+            // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+            // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
                 .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
         }
 
+        // ==================== 构建函数输入 ====================
+
+        // 构建函数输入结构体
+        // - input: 当前输出（前一个节点的输出或初始输入）
+        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出）
+        // - txn_id: 事务ID（普通函数节点不在事务中执行，所以为 None）
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
             txn_id: None,
         };
+
+        // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
             .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
 
+        // ==================== 调用函数 ====================
+
+        // 记录步骤开始时间
         let step_start = Instant::now();
+
+        // 调用 WASM 函数
         let invoke_result = self.runtime
-            .invoke(plugin_id, function_name, &input_bytes, caller_data)
+            .invoke(plugin_id, function_name, &input_bytes)
             .await
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
 
+        // ==================== 解析函数输出 ====================
+
+        // 将函数输出反序列化为 FunctionOutput 结构体
         let output: FunctionOutput = serde_json::from_slice(&invoke_result.output)
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
 
+        // ==================== 更新执行上下文 ====================
+
+        // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+
+        // 更新当前输出（传递给下一个节点）
         exec_context.current_output = output.result.clone();
 
+        // 将步骤输出保存到上下文中（后续节点可通过 context.step_outputs 获取）
+        exec_context.svr_context.add_step_output(node.id.clone(), output.result.clone());
+
+        // ==================== 记录执行步骤 ====================
+
+        // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
             node_name: node.data.name.clone(),
@@ -284,43 +579,94 @@ impl OrchestratorV2 {
         Ok(())
     }
 
+    /// 执行事务框节点
+    ///
+    /// 事务框节点将其内部的所有函数节点在同一个数据库事务中执行。
+    /// 子节点通过 parent 字段指向事务框节点ID。
+    ///
+    /// # 参数
+    /// * `flow` - 流程定义（用于查找子节点）
+    /// * `transaction_node` - 事务框节点定义
+    /// * `exec_context` - 执行上下文（可变，会更新 current_output 和 step_outputs）
+    /// * `steps` - 执行步骤记录列表（可变，会添加新记录）
+    ///
+    /// # 返回值
+    /// 成功返回 Ok(())，失败返回 ServiceError
+    ///
+    /// # 执行流程
+    /// 1. 确定数据库ID（从节点元信息获取或使用默认值）
+    /// 2. 开启数据库事务
+    /// 3. 收集所有子节点（parent 指向事务框的节点）
+    /// 4. 依次执行子节点（在事务中）
+    /// 5. 提交事务
+    ///
+    /// # 事务特性
+    /// - 所有子节点共享同一个事务
+    /// - 任一子节点失败，整个事务回滚
+    /// - 事务ID传递给子节点，子节点使用同一事务执行 SQL
     async fn execute_transaction_node(
         &self,
         flow: &cmx_core::model::service::ServiceFlow,
         transaction_node: &ServiceNode,
         exec_context: &mut ExecutionContext,
-        caller_data: &CallerData,
         steps: &mut Vec<ExecutionStep>,
     ) -> Result<(), ServiceError> {
+        // ==================== 日志记录 ====================
+
         info!("事务框开始: node_id={}", transaction_node.id);
 
+        // ==================== 确定数据库ID ====================
+
+        // 从节点元信息获取数据库ID，如果未指定则使用默认值
         let db_id = transaction_node.data.node_meta.as_ref()
             .and_then(|m| m.database_id.clone())
             .unwrap_or_else(|| self.default_db_id.clone());
 
+        // ==================== 开启事务 ====================
+
+        // 通过数据库管理器开启事务
+        // 返回事务守卫，用于控制事务的提交和回滚
         let txn_guard = begin_transaction_guard_by_db_id(&db_id, Default::default())
             .await
             .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
 
         info!("事务已开启: db_id={}", db_id);
 
+        // ==================== 收集子节点 ====================
+
+        // 查找所有 parent 字段指向当前事务框节点的子节点
+        // 这些子节点将在同一个事务中执行
         let child_nodes: Vec<&ServiceNode> = flow.nodes.iter()
             .filter(|n| n.parent.as_ref() == Some(&transaction_node.id))
             .collect();
 
+        // ==================== 获取事务ID ====================
+
+        // 获取事务ID，传递给子节点
+        // 子节点使用此事务ID执行 SQL，确保在同一事务中
         let txn_id = txn_guard.txn_id().to_string();
 
+        // ==================== 执行子节点 ====================
+
+        // 依次执行每个子节点
         for child_node in child_nodes {
+            // 根据节点类型分发执行
             match child_node.node_type.as_str() {
+                // 函数节点：在事务中执行
                 "skylake-func" => {
-                    self.execute_func_node_with_txn(child_node, exec_context, caller_data, steps, &txn_id).await?;
+                    // 调用在事务中执行函数的方法
+                    self.execute_func_node_with_txn(child_node, exec_context, steps, &txn_id).await?;
                 }
+                // 其他节点类型：记录警告，跳过
                 _ => {
                     warn!("事务框内遇到非 func 节点类型: {}", child_node.node_type);
                 }
             }
         }
 
+        // ==================== 提交事务 ====================
+
+        // 所有子节点执行成功，提交事务
         txn_guard.commit().await
             .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
 
@@ -329,53 +675,111 @@ impl OrchestratorV2 {
         Ok(())
     }
 
+    /// 在事务中执行函数节点
+    ///
+    /// 与 execute_func_node 类似，但会传递事务ID，
+    /// 使函数执行 SQL 时使用指定的事务。
+    ///
+    /// # 参数
+    /// * `node` - 函数节点定义
+    /// * `exec_context` - 执行上下文（可变，会更新 current_output 和 step_outputs）
+    /// * `steps` - 执行步骤记录列表（可变，会添加新记录）
+    /// * `txn_id` - 事务ID（函数使用此事务执行 SQL）
+    ///
+    /// # 返回值
+    /// 成功返回 Ok(())，失败返回 ServiceError
+    ///
+    /// # 与普通函数节点的区别
+    /// - txn_id 不为 None，函数使用指定事务
+    /// - 如果函数执行失败，事务会在外层回滚
     async fn execute_func_node_with_txn(
         &self,
         node: &ServiceNode,
         exec_context: &mut ExecutionContext,
-        caller_data: &CallerData,
         steps: &mut Vec<ExecutionStep>,
         txn_id: &str,
     ) -> Result<(), ServiceError> {
+        // ==================== 获取节点元信息 ====================
+
+        // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node.data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("func 节点缺少 nodeMeta".to_string()))?;
 
+        // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
 
+        // ==================== 检查插件状态 ====================
+
+        // 检查插件是否已激活（已安装且未禁用）
         let is_active = self.plugin_query.is_active(plugin_id).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+        // 如果插件未激活，返回错误
         if !is_active {
             return Err(ServiceError::plugin_not_active(plugin_id));
         }
 
+        // ==================== 加载 WASM 模块 ====================
+
+        // 检查 WASM 模块是否已加载到运行时
         if !self.runtime.is_loaded(plugin_id).await {
+            // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+
+            // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
                 .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
         }
 
+        // ==================== 构建函数输入 ====================
+
+        // 构建函数输入结构体
+        // - input: 当前输出（前一个节点的输出或初始输入）
+        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出）
+        // - txn_id: 事务ID（关键！函数使用此事务执行 SQL）
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
-            txn_id: Some(txn_id.to_string()),
+            txn_id: Some(txn_id.to_string()),  // 传递事务ID
         };
+
+        // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
             .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
 
+        // ==================== 调用函数 ====================
+
+        // 记录步骤开始时间
         let step_start = Instant::now();
+
+        // 调用 WASM 函数
         let invoke_result = self.runtime
-            .invoke(plugin_id, function_name, &input_bytes, caller_data)
+            .invoke(plugin_id, function_name, &input_bytes)
             .await
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
 
+        // ==================== 解析函数输出 ====================
+
+        // 将函数输出反序列化为 FunctionOutput 结构体
         let output: FunctionOutput = serde_json::from_slice(&invoke_result.output)
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
 
+        // ==================== 更新执行上下文 ====================
+
+        // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+
+        // 更新当前输出（传递给下一个节点）
         exec_context.current_output = output.result.clone();
 
+        // 将步骤输出保存到上下文中（后续节点可通过 context.step_outputs 获取）
+        exec_context.svr_context.add_step_output(node.id.clone(), output.result.clone());
+
+        // ==================== 记录执行步骤 ====================
+
+        // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
             node_name: node.data.name.clone(),

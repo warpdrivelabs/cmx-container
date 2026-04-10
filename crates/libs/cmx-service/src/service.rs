@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use tracing::{info, warn};
 
 use cmx_traits::{
-    CallerData, LifecycleEvent, PluginLifecycleListener, PluginQuery, RuntimeInvoker, WasmInvokeResult,
+    LifecycleEvent, PluginLifecycleListener, PluginQuery, RuntimeInvoker, WasmInvokeResult,
 };
 
 use crate::error::ServiceError;
@@ -115,27 +115,13 @@ impl CmxService {
             self.runtime.load_module(&request.plugin_id, &wasm_path).await?;
         }
 
-        // 构建调用上下文
-        let db_id = request.db_id.as_deref().unwrap_or("default");
-        let caller_data = CallerData::new(&request.plugin_id, db_id);
-        let caller_data = if let Some(ref req_id) = request.request_id {
-            caller_data.with_request_id(req_id)
-        } else {
-            caller_data
-        };
-        let caller_data = if let Some(ref tenant_id) = request.tenant_id {
-            caller_data.with_tenant_id(tenant_id)
-        } else {
-            caller_data
-        };
-
         // 序列化输入
         let input_bytes = serde_json::to_vec(&request.input)
             .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
 
         // 调用 WASM 函数
         let result: WasmInvokeResult = self.runtime
-            .invoke(&request.plugin_id, &request.function_name, &input_bytes, &caller_data)
+            .invoke(&request.plugin_id, &request.function_name, &input_bytes)
             .await
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
 

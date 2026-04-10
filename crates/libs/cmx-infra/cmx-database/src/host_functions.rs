@@ -12,7 +12,6 @@ use crate::DatabaseManager;
 /// 数据库宿主函数提供者
 ///
 /// 封装 DatabaseManager 的核心 API，向 WASM 运行时注册数据库操作宿主函数。
-/// 所有数据库操作通过 CallerData 中的 db_id 和 txn_id 确定目标数据库和事务上下文。
 pub struct DatabaseHostFunctions {
     /// 数据库管理器引用
     db_manager: Arc<DatabaseManager>,

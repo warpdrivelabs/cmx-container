@@ -81,23 +81,8 @@ impl ServiceHandler {
     ///
     /// 返回编排响应。
     pub async fn handle_orchestrate(&self, request: OrchestrateRequest) -> OrchestrateResponse {
-        use cmx_traits::CallerData;
-
-        let db_id = request.db_id.as_deref().unwrap_or("default");
-        let caller_data = CallerData::new("__orchestration__", db_id);
-        let caller_data = if let Some(ref req_id) = request.request_id {
-            caller_data.with_request_id(req_id)
-        } else {
-            caller_data
-        };
-        let caller_data = if let Some(ref tenant_id) = request.tenant_id {
-            caller_data.with_tenant_id(tenant_id)
-        } else {
-            caller_data
-        };
-
         match self.orchestrator
-            .execute(&request.orchestration, &request.initial_input, &caller_data)
+            .execute(&request.orchestration, &request.initial_input)
             .await
         {
             Ok(result) => OrchestrateResponse {

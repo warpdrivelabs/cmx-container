@@ -6,7 +6,6 @@
 use std::path::Path;
 use async_trait::async_trait;
 
-use crate::caller_data::CallerData;
 use crate::error::TraitError;
 use crate::invoke_context::InvokeOptions;
 
@@ -37,8 +36,7 @@ pub trait RuntimeInvoker: Send + Sync {
     ///
     /// * `plugin_id` - 目标插件ID
     /// * `function_name` - WASM 导出函数名
-    /// * `input` - 输入数据（字节）
-    /// * `caller_data` - 调用者上下文
+    /// * `input` - 输入数据（字节），通常为 FunctionInput 的 JSON 序列化
     ///
     /// # 返回值
     ///
@@ -52,9 +50,8 @@ pub trait RuntimeInvoker: Send + Sync {
         plugin_id: &str,
         function_name: &str,
         input: &[u8],
-        caller_data: &CallerData,
     ) -> Result<WasmInvokeResult, TraitError> {
-        self.invoke_with_options(plugin_id, function_name, input, caller_data, &InvokeOptions::default()).await
+        self.invoke_with_options(plugin_id, function_name, input, &InvokeOptions::default()).await
     }
 
     /// 带选项的 WASM 调用
@@ -66,14 +63,12 @@ pub trait RuntimeInvoker: Send + Sync {
     /// * `plugin_id` - 目标插件ID
     /// * `function_name` - WASM 导出函数名
     /// * `input` - 输入数据（字节）
-    /// * `caller_data` - 调用者上下文
     /// * `options` - 调用选项（超时、深度限制等）
     async fn invoke_with_options(
         &self,
         plugin_id: &str,
         function_name: &str,
         input: &[u8],
-        caller_data: &CallerData,
         options: &InvokeOptions,
     ) -> Result<WasmInvokeResult, TraitError>;
 

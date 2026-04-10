@@ -54,7 +54,7 @@ use async_trait::async_trait;
 use tracing;
 
 use cmx_traits::{
-    CallerData, HostFunctionProvider, InvokeContext, InvokeOptions,
+    HostFunctionProvider, InvokeContext, InvokeOptions,
     RuntimeInvoker, TraitError, WasmInvokeResult, DEFAULT_TIMEOUT,
 };
 use extism::{CurrentPlugin, Function, Manifest, PluginBuilder, Pool, PoolBuilder, UserData, ValType, Wasm};
@@ -269,7 +269,6 @@ impl RuntimeInvoker for ExtismEngine {
         plugin_id: &str,
         function_name: &str,
         input: &[u8],
-        _caller_data: &CallerData,
         options: &InvokeOptions,
     ) -> Result<WasmInvokeResult, TraitError> {
         // 获取 Pool 引用后立即释放锁

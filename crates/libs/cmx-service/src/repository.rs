@@ -12,15 +12,26 @@ use crate::error::ServiceError;
 
 /// 服务仓储
 ///
-/// 提供服务定义的持久化操作。
+/// 提供服务定义的持久化操作，包括：
+/// - 服务定义的增删改查
+/// - 服务版本的保存和查询
+/// - 编排配置的存储和获取
 #[derive(Clone)]
 pub struct ServiceRepository {
+    /// 数据库管理器
     db_manager: Arc<DatabaseManager>,
+    /// 默认数据库ID
     default_db_id: String,
 }
 
 impl ServiceRepository {
-    /// 创建服务仓储
+    /// 创建服务仓储（同步版本，使用默认值）
+    ///
+    /// 注意：此方法使用硬编码的 "default" 作为数据库ID
+    /// 推荐使用 `new_async` 方法从 DatabaseManager 获取实际的默认数据库ID
+    ///
+    /// # 参数
+    /// * `db_manager` - 数据库管理器
     pub fn new(db_manager: Arc<DatabaseManager>) -> Self {
         Self {
             db_manager,
@@ -28,7 +39,38 @@ impl ServiceRepository {
         }
     }
 
-    /// 保存服务定义
+    /// 创建服务仓储（异步版本，从 DatabaseManager 获取默认数据库ID）
+    ///
+    /// # 参数
+    /// * `db_manager` - 数据库管理器
+    pub async fn new_async(db_manager: Arc<DatabaseManager>) -> Self {
+        let default_db_id = db_manager.get_default_db_id().await;
+        Self {
+            db_manager,
+            default_db_id,
+        }
+    }
+
+    /// 设置默认数据库ID
+    ///
+    /// # 参数
+    /// * `db_id` - 数据库ID
+    pub fn with_db_id(mut self, db_id: impl Into<String>) -> Self {
+        self.default_db_id = db_id.into();
+        self
+    }
+
+    /// 获取默认数据库ID
+    pub fn get_default_db_id(&self) -> &str {
+        &self.default_db_id
+    }
+
+    /// 保存服务定义（UPSERT）
+    ///
+    /// 如果 service_key 已存在则更新，否则插入新记录
+    ///
+    /// # 参数
+    /// * `service` - 服务定义
     pub async fn save_service(&self, service: &ServiceDefinition) -> Result<(), ServiceError> {
         let sql = r#"
             INSERT INTO cmx_service_define (
@@ -63,6 +105,12 @@ impl ServiceRepository {
     }
 
     /// 根据 service_key 获取服务定义
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    ///
+    /// # 返回值
+    /// 返回服务定义，如果不存在则返回 None
     pub async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT id, service_key, service_name, description, plugin_id,
@@ -101,6 +149,9 @@ impl ServiceRepository {
     }
 
     /// 获取所有服务定义
+    ///
+    /// # 返回值
+    /// 返回所有服务定义列表，按更新时间降序排列
     pub async fn list_services(&self) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT id, service_key, service_name, description, plugin_id,
@@ -132,6 +183,12 @@ impl ServiceRepository {
     }
 
     /// 根据插件ID获取所有服务
+    ///
+    /// # 参数
+    /// * `plugin_id` - 插件ID
+    ///
+    /// # 返回值
+    /// 返回该插件下所有服务定义列表
     pub async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT id, service_key, service_name, description, plugin_id,
@@ -165,7 +222,10 @@ impl ServiceRepository {
         Ok(services)
     }
 
-    /// 删除服务定义及其所有版本
+    /// 删除服务定义及其所有版本（物理删除）
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
     pub async fn delete_service(&self, service_key: &str) -> Result<(), ServiceError> {
         let sql_version = r#"
             DELETE FROM cmx_service_define_version WHERE service_key = $1
@@ -187,7 +247,10 @@ impl ServiceRepository {
         Ok(())
     }
 
-    /// 根据插件ID删除所有服务
+    /// 根据插件ID删除所有服务（物理删除）
+    ///
+    /// # 参数
+    /// * `plugin_id` - 插件ID
     pub async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), ServiceError> {
         let services = self.get_services_by_plugin(plugin_id).await?;
         for service in services {
@@ -197,6 +260,13 @@ impl ServiceRepository {
     }
 
     /// 保存服务版本
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    /// * `version` - 服务版本号
+    /// * `plugin_id` - 所属插件ID
+    /// * `plugin_version` - 所属插件版本
+    /// * `config` - 编排配置 JSON 字符串
     pub async fn save_service_version(
         &self,
         service_key: &str,
@@ -224,6 +294,12 @@ impl ServiceRepository {
     }
 
     /// 获取服务版本列表
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    ///
+    /// # 返回值
+    /// 返回 (version, plugin_version) 元组列表，按创建时间降序排列
     pub async fn get_service_versions(&self, service_key: &str) -> Result<Vec<(String, String)>, ServiceError> {
         let sql = r#"
             SELECT version, plugin_version
@@ -252,6 +328,13 @@ impl ServiceRepository {
     }
 
     /// 获取服务编排配置
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    /// * `version` - 服务版本号
+    ///
+    /// # 返回值
+    /// 返回编排配置 JSON 字符串，如果不存在则返回 None
     pub async fn get_service_config(&self, service_key: &str, version: &str) -> Result<Option<String>, ServiceError> {
         let sql = r#"
             SELECT config

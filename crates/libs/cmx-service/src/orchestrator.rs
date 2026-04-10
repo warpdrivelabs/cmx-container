@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use utoipa::ToSchema;
 
-use cmx_traits::{CallerData, PluginQuery, RuntimeInvoker, WasmInvokeResult};
+use cmx_traits::{PluginQuery, RuntimeInvoker, WasmInvokeResult};
 
 use crate::error::ServiceError;
 use crate::request::StepResult;
@@ -99,7 +99,6 @@ impl Orchestrator {
     ///
     /// * `orchestration` - 编排定义
     /// * `initial_input` - 初始输入数据
-    /// * `caller_data` - 调用上下文
     ///
     /// # 返回值
     ///
@@ -108,7 +107,6 @@ impl Orchestrator {
         &self,
         orchestration: &Orchestration,
         initial_input: &serde_json::Value,
-        caller_data: &CallerData,
     ) -> Result<OrchestrationResult, ServiceError> {
         let start_time = std::time::Instant::now();
         let mut step_results = Vec::new();
@@ -148,20 +146,6 @@ impl Orchestrator {
                 self.runtime.load_module(&step.plugin_id, &wasm_path).await?;
             }
 
-            // 构建步骤调用上下文
-            let step_caller_data = CallerData::new(&step.plugin_id, &caller_data.db_id)
-                .with_request_id(&caller_data.request_id);
-            let step_caller_data = if let Some(ref txn_id) = caller_data.txn_id {
-                step_caller_data.with_txn_id(txn_id)
-            } else {
-                step_caller_data
-            };
-            let step_caller_data = if let Some(ref tenant_id) = caller_data.tenant_id {
-                step_caller_data.with_tenant_id(tenant_id)
-            } else {
-                step_caller_data
-            };
-
             // 序列化输入
             let input_bytes = serde_json::to_vec(&input)
                 .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
@@ -169,7 +153,7 @@ impl Orchestrator {
             // 执行 WASM 调用
             let step_start = std::time::Instant::now();
             let result: Result<WasmInvokeResult, _> = self.runtime
-                .invoke(&step.plugin_id, &step.function_name, &input_bytes, &step_caller_data)
+                .invoke(&step.plugin_id, &step.function_name, &input_bytes)
                 .await;
 
             match result {
