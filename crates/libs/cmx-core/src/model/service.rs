@@ -33,6 +33,9 @@ pub struct ServiceOrchestration {
     pub description: String,
     /// 流程定义
     pub flow: ServiceFlow,
+    ///原始json字符
+    #[serde(skip)]
+    pub source_str:String,
 }
 
 /// 流程定义
@@ -57,19 +60,24 @@ pub struct ServiceNode {
     /// 节点元数据（位置、大小）
     pub meta: NodeMeta,
     /// 节点数据（名称、函数信息等）
-    pub data: NodeData,
+    pub data: Option<NodeData>,
 }
 
 /// 流程边
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceEdge {
     /// 源节点ID
+    #[serde(rename = "sourceNodeID")]
     pub source_node_id: String,
     /// 源端口ID（out / out_{value}）
+    ///
+    #[serde(rename = "sourcePortID")]
     pub source_port_id: String,
     /// 目标节点ID
+    #[serde(rename = "targetNodeID")]
     pub target_node_id: String,
     /// 目标端口ID（in）
+    #[serde(rename = "targetPortID")]
     pub target_port_id: String,
 }
 
@@ -77,6 +85,7 @@ pub struct ServiceEdge {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMeta {
     /// 层级顺序
+    #[serde(default)]
     pub z_index: i32,
     /// 节点尺寸
     pub size: NodeSize,
@@ -129,6 +138,7 @@ pub struct NodeNodeMeta {
     /// 插件名称
     pub plugin_name: String,
     /// 插件版本
+    #[serde(default)]
     pub plugin_version: String,
     /// 函数名称
     pub function_name: String,
@@ -148,6 +158,7 @@ pub struct NodeIO {
     /// 参数描述
     pub description: String,
     /// 是否必填
+    #[serde(default)]
     pub required: bool,
 }
 

@@ -16,8 +16,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use cmx_core::model::service::{
-    FunctionInput, FunctionOutput, ServiceNode,
-    SVRContext,
+    FunctionInput, FunctionOutput, SVRContext,
+    ServiceNode,
 };
 use cmx_database::transaction::begin_transaction_guard_by_db_id;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
@@ -373,8 +373,11 @@ impl OrchestratorV2 {
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
 
+        let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
+
+
         // 获取节点的函数元信息（插件ID、函数名等）
-        let node_meta = node.data.node_meta.as_ref()
+        let node_meta = node_data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("switch 节点缺少 nodeMeta".to_string()))?;
 
         // 提取插件ID和函数名
@@ -454,7 +457,7 @@ impl OrchestratorV2 {
         // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
-            node_name: node.data.name.clone(),
+            node_name: node_data.name.clone(),
             output: Some(output.result.clone()),
             elapsed_us,
         });
@@ -489,9 +492,10 @@ impl OrchestratorV2 {
         steps: &mut Vec<ExecutionStep>,
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
+        let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
 
         // 获取节点的函数元信息（插件ID、函数名等）
-        let node_meta = node.data.node_meta.as_ref()
+        let node_meta = node_data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("func 节点缺少 nodeMeta".to_string()))?;
 
         // 提取插件ID和函数名
@@ -571,7 +575,7 @@ impl OrchestratorV2 {
         // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
-            node_name: node.data.name.clone(),
+            node_name: node_data.name.clone(),
             output: Some(output.result),
             elapsed_us,
         });
@@ -614,11 +618,12 @@ impl OrchestratorV2 {
         // ==================== 日志记录 ====================
 
         info!("事务框开始: node_id={}", transaction_node.id);
+        let node_data = transaction_node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
 
         // ==================== 确定数据库ID ====================
 
         // 从节点元信息获取数据库ID，如果未指定则使用默认值
-        let db_id = transaction_node.data.node_meta.as_ref()
+        let db_id = node_data.node_meta.as_ref()
             .and_then(|m| m.database_id.clone())
             .unwrap_or_else(|| self.default_db_id.clone());
 
@@ -700,9 +705,10 @@ impl OrchestratorV2 {
         txn_id: &str,
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
+        let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
 
         // 获取节点的函数元信息（插件ID、函数名等）
-        let node_meta = node.data.node_meta.as_ref()
+        let node_meta = node_data.node_meta.as_ref()
             .ok_or_else(|| ServiceError::InternalError("func 节点缺少 nodeMeta".to_string()))?;
 
         // 提取插件ID和函数名
@@ -782,7 +788,7 @@ impl OrchestratorV2 {
         // 将执行步骤添加到记录列表
         steps.push(ExecutionStep {
             node_id: node.id.clone(),
-            node_name: node.data.name.clone(),
+            node_name: node_data.name.clone(),
             output: Some(output.result),
             elapsed_us,
         });

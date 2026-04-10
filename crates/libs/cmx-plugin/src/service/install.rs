@@ -501,11 +501,7 @@ impl InstallService {
             ))
             .await;
 
-        //提交事务
-        txn_guard
-            .commit()
-            .await
-            .map_err(|e| PluginError::Database(e.to_string()))?;
+
 
         // 步骤9.3: 解析并存储服务定义
         let parsed_services = Self::parse_and_save_services(
@@ -518,6 +514,12 @@ impl InstallService {
         if !parsed_services.is_empty() {
             tracing::info!("插件 {} 安装时解析到 {} 个服务定义", plugin_id, parsed_services.len());
         }
+
+        //提交事务
+        txn_guard
+            .commit()
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
 
         Ok(InstallResponse {
             plugin_id,
@@ -591,7 +593,7 @@ impl InstallService {
             Ok(services) => services,
             Err(e) => {
                 tracing::warn!("解析服务数据失败: {:?}", e);
-                return Ok(Vec::new());
+                return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
             }
         };
 
@@ -601,15 +603,14 @@ impl InstallService {
                 return Err(PluginError::Plugin(format!("保存服务定义失败: {:?}", e)));
             }
 
-            let config = serde_json::to_string(&svc.orchestration)
-                .map_err(|e| PluginError::Plugin(format!("序列化编排配置失败: {}", e)))?;
+            let config = &svc.orchestration.source_str;
 
             if let Err(e) = service_storage.save_service_version(
                 &svc.definition.service_key,
                 plugin_version,
                 plugin_id,
                 plugin_version,
-                &config,
+                config,
             ).await {
                 tracing::error!("保存服务版本 {}:{} 失败: {:?}", svc.definition.service_key, plugin_version, e);
                 return Err(PluginError::Plugin(format!("保存服务版本失败: {:?}", e)));

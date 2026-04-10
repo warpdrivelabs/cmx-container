@@ -86,6 +86,7 @@ impl ServiceDataParser {
                     Err(e) => {
                         // 解析失败，记录警告但继续处理其他文件
                         tracing::warn!("解析服务文件 {:?} 失败: {:?}", path, e);
+                        return Err(e);
                     }
                 }
             }
@@ -114,8 +115,8 @@ impl ServiceDataParser {
         let content = std::fs::read_to_string(json_path)?;
 
         // 解析 JSON 为 ServiceOrchestration 结构
-        let orchestration: ServiceOrchestration = serde_json::from_str(&content)?;
-
+        let mut orchestration: ServiceOrchestration = serde_json::from_str(&content)?;
+        orchestration.source_str = content;
         // 验证编排结构完整性
         Self::validate_orchestration(&orchestration)?;
 
@@ -212,7 +213,7 @@ impl ServiceDataParser {
         let service_key = Self::extract_service_key(orchestration);
 
         // 将编排序列化为 JSON 字符串，用于存储 config 字段
-        let config = serde_json::to_string(orchestration).ok();
+        let config = orchestration.source_str.clone();
 
         // 构造型服务定义结构体
         Ok(ServiceDefinition {
@@ -223,7 +224,7 @@ impl ServiceDataParser {
             plugin_id: plugin_id.to_string(),
             status: 1,  // 默认启用状态
             version: plugin_version.to_string(),
-            config,
+            config: Some(config),
         })
     }
 }

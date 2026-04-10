@@ -394,11 +394,7 @@ impl UpgradeService {
                 }),
             ))
             .await;
-        //提交事务
-        txn_guard
-            .commit()
-            .await
-            .map_err(|e| PluginError::Database(e.to_string()))?;
+
 
         // 步骤9.3: 解析并存储新版本的服务定义
         let parsed_services = Self::parse_and_save_services(
@@ -411,7 +407,12 @@ impl UpgradeService {
         if !parsed_services.is_empty() {
             tracing::info!("插件 {} 升级时解析到 {} 个服务定义", plugin_id, parsed_services.len());
         }
-
+        //提交事务
+        txn_guard
+            .commit()
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
+        
         Ok(UpgradeResponse {
             plugin_id,
             old_version,
@@ -458,7 +459,7 @@ async fn parse_and_save_services(
         Ok(services) => services,
         Err(e) => {
             tracing::warn!("解析服务数据失败: {:?}", e);
-            return Ok(Vec::new());
+            return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
         }
     };
 
