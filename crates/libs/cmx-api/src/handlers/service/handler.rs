@@ -24,6 +24,7 @@ use axum::http::HeaderMap;
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use log::error;
+use cmx_database::get_default_db_manager;
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Error;
@@ -242,10 +243,12 @@ pub async fn execute_service(
 
     // ==================== 创建编排执行器并执行 ====================
 
+    let default_db_id = get_default_db_manager().get_default_db_id().await;
     let orchestrator = cmx_service::OrchestratorV2::new(
         runtime.clone(),
         plugin_query.clone(),
         service_query.clone(),
+        default_db_id,
     );
 
     let result = orchestrator.execute_service(
