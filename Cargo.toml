@@ -68,7 +68,7 @@ serde_with = {version = "3", features = ["time_0_3", "json"] }
 # 日期时间处理
 # ============================================
 # chrono: 日期时间库，支持日期时间的解析、计算和格式化
-chrono = { version = "0.4", features = ["serde","rkyv"] }
+chrono = { version = "0.4", features = ["serde"] }
 time = {version = "0.3", features = ["formatting", "parsing", "serde"]}
 # ============================================
 # 错误处理

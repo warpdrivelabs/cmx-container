@@ -233,6 +233,7 @@ pub async fn init_services() {
                         None
                     });
                 if let Some(config) = config_opt {
+                    info!("服务 {} 配置: {}", service.service_key, config);
                     if let Ok(orch) = serde_json::from_str::<serde_json::Value>(&config) {
                         orchestrations.insert(service.service_key.clone(), orch);
                     }

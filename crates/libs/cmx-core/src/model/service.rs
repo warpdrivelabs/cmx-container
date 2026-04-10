@@ -35,7 +35,7 @@ pub struct ServiceOrchestration {
     pub flow: ServiceFlow,
     ///原始json字符
     #[serde(skip)]
-    pub source_str:String,
+    pub source_str: String,
 }
 
 /// 流程定义
@@ -117,7 +117,8 @@ pub struct NodeData {
     /// 节点名称
     pub name: String,
     /// 函数元信息
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "nodeMeta")]
     pub node_meta: Option<NodeNodeMeta>,
     /// 输入参数列表
     #[serde(default)]
@@ -133,17 +134,22 @@ pub struct NodeData {
 /// 函数元信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeNodeMeta {
+    #[serde(rename = "pluginId")]
     /// 插件ID
     pub plugin_id: String,
     /// 插件名称
+    #[serde(rename = "pluginName")]
     pub plugin_name: String,
     /// 插件版本
     #[serde(default)]
+    #[serde(rename = "pluginVersion")]
     pub plugin_version: String,
     /// 函数名称
+    #[serde(rename = "functionName")]
     pub function_name: String,
     /// 事务节点关联的数据库ID
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "databaseId")]
     pub database_id: Option<String>,
 }
 

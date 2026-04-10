@@ -22,7 +22,7 @@ use cmx_core::model::service::{
 use cmx_database::transaction::begin_transaction_guard_by_db_id;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use utoipa::ToSchema;
 
 use crate::error::ServiceError;
@@ -173,6 +173,9 @@ impl OrchestratorV2 {
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
             .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
 
+        let orchestration_debug = &orchestration;
+        dbg!(orchestration_debug);
+
         // 创建服务调用上下文
         // - initial_input: 初始入参，函数可通过 context.initial_input 获取
         // - headers: 请求头，函数可通过 context.headers 获取
@@ -210,10 +213,16 @@ impl OrchestratorV2 {
                 Some(n) => n,
                 None => {
                     // 节点未找到，记录错误并退出循环
+                    debug!("节点未找到: node_id={}", current_node_id);
                     result = Err(ServiceError::InternalError(format!("节点未找到: {}", current_node_id)));
                     break;
                 }
             };
+
+            debug!(
+                ">>> 进入节点: node_id={}, node_type={}, node_name={}",
+                node.id, node.node_type, node.data.as_ref().map(|d| d.name.as_str()).unwrap_or("unknown")
+            );
 
             // 根据节点类型分发执行
             match node.node_type.as_str() {
@@ -221,16 +230,19 @@ impl OrchestratorV2 {
                 // 开始节点不执行任何函数，只是流程的入口标识
                 // 查找从开始节点出发的边，跳转到下一个节点
                 "skylake-start" => {
+                    debug!("执行开始节点: node_id={}", node.id);
                     // 查找从当前节点出发、源端口为 "out" 的边
                     // 开始节点只有一个出口端口 "out"
                     if let Some(next_edge) = flow.edges.iter().find(|e| {
                         e.source_node_id == current_node_id && e.source_port_id == "out"
                     }) {
+                        debug!("开始节点跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
                         // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
                     // 没有找到下一条边，退出循环
+                    debug!("开始节点无出边，退出循环");
                     break;
                 }
 
@@ -238,17 +250,20 @@ impl OrchestratorV2 {
                 // 结束节点不执行任何函数，只是流程的出口标识
                 // 遇到结束节点，正常退出循环
                 "skylake-end" => {
+                    debug!("执行结束节点: node_id={}", node.id);
                     break;
                 }
 
                 // ==================== 函数节点 ====================
                 // 函数节点执行 WASM 插件中的函数
                 "skylake-func" => {
+                    debug!("执行函数节点: node_id={}", node.id);
                     // 执行函数节点
                     result = self.execute_func_node(node, &mut exec_context, &mut steps).await;
 
                     // 如果执行失败，退出循环
                     if result.is_err() {
+                        debug!("函数节点执行失败: node_id={}, error={:?}", node.id, result);
                         break;
                     }
 
@@ -257,11 +272,13 @@ impl OrchestratorV2 {
                     if let Some(next_edge) = flow.edges.iter().find(|e| {
                         e.source_node_id == current_node_id && e.source_port_id == "out"
                     }) {
+                        debug!("函数节点执行完成跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
                         // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
                     // 没有找到下一条边，退出循环
+                    debug!("函数节点无出边，退出循环");
                     break;
                 }
 
@@ -269,38 +286,45 @@ impl OrchestratorV2 {
                 // 多分支节点根据函数返回值选择执行路径
                 // 返回值匹配 options 数组中的值，选择对应的出边
                 "skylake-switch" => {
+                    debug!("执行多分支节点: node_id={}", node.id);
                     // 执行 switch 节点（内部会调用函数）
                     result = self.execute_switch_node(node, &mut exec_context, &mut steps).await;
 
                     // 如果执行失败，退出循环
                     if result.is_err() {
+                        debug!("多分支节点执行失败: node_id={}, error={:?}", node.id, result);
                         break;
                     }
 
                     // 根据函数返回值构建出边端口ID
                     // 端口ID格式为 "out_{value}"，例如 "out_1"、"out_2"
                     let source_port_id = format!("out_{}", exec_context.current_output);
+                    debug!("多分支节点执行完成，选择分支: node_id={}, output={}, port={}", node.id, exec_context.current_output, source_port_id);
 
                     // 查找匹配的出边
                     if let Some(next_edge) = flow.edges.iter().find(|e| {
                         e.source_node_id == current_node_id && e.source_port_id == source_port_id
                     }) {
+                        debug!("多分支节点跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
                         // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
                     // 没有找到匹配的出边，退出循环
+                    debug!("多分支节点无匹配出边，退出循环");
                     break;
                 }
 
                 // ==================== 事务框节点 ====================
                 // 事务框节点将其内部的所有函数节点在同一个数据库事务中执行
                 "skylake-transaction" => {
+                    debug!("执行事务框节点: node_id={}", node.id);
                     // 执行事务框节点
                     result = self.execute_transaction_node(flow, node, &mut exec_context, &mut steps).await;
 
                     // 如果执行失败，退出循环
                     if result.is_err() {
+                        debug!("事务框节点执行失败: node_id={}, error={:?}", node.id, result);
                         break;
                     }
 
@@ -309,17 +333,20 @@ impl OrchestratorV2 {
                     if let Some(next_edge) = flow.edges.iter().find(|e| {
                         e.source_node_id == current_node_id && e.source_port_id == "out"
                     }) {
+                        debug!("事务框节点执行完成跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
                         // 设置下一个节点ID，继续循环
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
                     // 没有找到下一条边，退出循环
+                    debug!("事务框节点无出边，退出循环");
                     break;
                 }
 
                 // ==================== 未知节点类型 ====================
                 // 遇到未知的节点类型，返回错误
                 _ => {
+                    debug!("遇到未知节点类型: node_id={}, node_type={}", node.id, node.node_type);
                     result = Err(ServiceError::InternalError(format!("未知节点类型: {}", node.node_type)));
                     break;
                 }
@@ -374,7 +401,7 @@ impl OrchestratorV2 {
         // ==================== 获取节点元信息 ====================
 
         let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
-
+        debug!("[switch] 开始执行: node_id={}, node_name={}", node.id, node_data.name);
 
         // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node_data.node_meta.as_ref()
@@ -383,17 +410,19 @@ impl OrchestratorV2 {
         // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
+        debug!("[switch] 调用函数: plugin_id={}, function={}", plugin_id, function_name);
 
         // ==================== 检查插件状态 ====================
 
         // 检查插件是否已激活（已安装且未禁用）
-        let is_active = self.plugin_query.is_active(plugin_id).await
-            .map_err(|e| ServiceError::InternalError(e.to_string()))?;
-
-        // 如果插件未激活，返回错误
-        if !is_active {
-            return Err(ServiceError::plugin_not_active(plugin_id));
-        }
+        // let is_active = self.plugin_query.is_active(plugin_id).await
+        //     .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+        //
+        // // 如果插件未激活，返回错误
+        // if !is_active {
+        //     debug!("[switch] 插件未激活: plugin_id={}", plugin_id);
+        //     return Err(ServiceError::plugin_not_active(plugin_id));
+        // }
 
         // ==================== 加载 WASM 模块 ====================
 
@@ -402,6 +431,7 @@ impl OrchestratorV2 {
             // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+            debug!("[switch] 加载 WASM 模块: plugin_id={}, path={}", plugin_id, wasm_path.display());
 
             // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
@@ -419,6 +449,8 @@ impl OrchestratorV2 {
             context: exec_context.svr_context.clone(),
             txn_id: None,
         };
+
+        debug!("[switch] 函数输入: input={}", func_input.input);
 
         // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
@@ -445,6 +477,7 @@ impl OrchestratorV2 {
 
         // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+        debug!("[switch] 函数执行完成: node_id={}, output={}, elapsed_us={}", node.id, output.result, elapsed_us);
 
         // 更新当前输出（用于选择出边和传递给下一个节点）
         exec_context.current_output = output.result.clone();
@@ -461,6 +494,8 @@ impl OrchestratorV2 {
             output: Some(output.result.clone()),
             elapsed_us,
         });
+
+        debug!("[switch] 执行完成: node_id={}, 选择分支={}", node.id, exec_context.current_output);
 
         Ok(())
     }
@@ -492,7 +527,8 @@ impl OrchestratorV2 {
         steps: &mut Vec<ExecutionStep>,
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
-        let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
+        let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("func 节点缺少 data".to_string()))?;
+        debug!("[func] 开始执行: node_id={}, node_name={}", node.id, node_data.name);
 
         // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node_data.node_meta.as_ref()
@@ -501,17 +537,19 @@ impl OrchestratorV2 {
         // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
+        debug!("[func] 调用函数: plugin_id={}, function={}", plugin_id, function_name);
 
         // ==================== 检查插件状态 ====================
 
         // 检查插件是否已激活（已安装且未禁用）
-        let is_active = self.plugin_query.is_active(plugin_id).await
-            .map_err(|e| ServiceError::InternalError(e.to_string()))?;
-
-        // 如果插件未激活，返回错误
-        if !is_active {
-            return Err(ServiceError::plugin_not_active(plugin_id));
-        }
+        // let is_active = self.plugin_query.is_active(plugin_id).await
+        //     .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+        //
+        // // 如果插件未激活，返回错误
+        // if !is_active {
+        //     debug!("[func] 插件未激活: plugin_id={}", plugin_id);
+        //     return Err(ServiceError::plugin_not_active(plugin_id));
+        // }
 
         // ==================== 加载 WASM 模块 ====================
 
@@ -520,6 +558,7 @@ impl OrchestratorV2 {
             // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+            debug!("[func] 加载 WASM 模块: plugin_id={}, path={}", plugin_id, wasm_path.display());
 
             // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
@@ -537,6 +576,7 @@ impl OrchestratorV2 {
             context: exec_context.svr_context.clone(),
             txn_id: None,
         };
+        debug!("[func] 函数输入: input={}", func_input.input);
 
         // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
@@ -563,6 +603,7 @@ impl OrchestratorV2 {
 
         // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+        debug!("[func] 函数执行完成: node_id={}, output={}, elapsed_us={}", node.id, output.result, elapsed_us);
 
         // 更新当前输出（传递给下一个节点）
         exec_context.current_output = output.result.clone();
@@ -579,6 +620,8 @@ impl OrchestratorV2 {
             output: Some(output.result),
             elapsed_us,
         });
+
+        debug!("[func] 执行完成: node_id={}", node.id);
 
         Ok(())
     }
@@ -619,6 +662,7 @@ impl OrchestratorV2 {
 
         info!("事务框开始: node_id={}", transaction_node.id);
         let node_data = transaction_node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
+        debug!("[transaction] 开始执行: node_id={}, node_name={}", transaction_node.id, node_data.name);
 
         // ==================== 确定数据库ID ====================
 
@@ -626,6 +670,7 @@ impl OrchestratorV2 {
         let db_id = node_data.node_meta.as_ref()
             .and_then(|m| m.database_id.clone())
             .unwrap_or_else(|| self.default_db_id.clone());
+        debug!("[transaction] 数据库ID: db_id={}", db_id);
 
         // ==================== 开启事务 ====================
 
@@ -635,7 +680,7 @@ impl OrchestratorV2 {
             .await
             .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
 
-        info!("事务已开启: db_id={}", db_id);
+        debug!("[transaction] 事务已开启: db_id={}, txn_id={}", db_id, txn_guard.txn_id());
 
         // ==================== 收集子节点 ====================
 
@@ -644,23 +689,27 @@ impl OrchestratorV2 {
         let child_nodes: Vec<&ServiceNode> = flow.nodes.iter()
             .filter(|n| n.parent.as_ref() == Some(&transaction_node.id))
             .collect();
+        debug!("[transaction] 找到 {} 个子节点", child_nodes.len());
 
         // ==================== 获取事务ID ====================
 
         // 获取事务ID，传递给子节点
         // 子节点使用此事务ID执行 SQL，确保在同一事务中
         let txn_id = txn_guard.txn_id().to_string();
+        debug!("[transaction] 子节点将使用事务ID: txn_id={}", txn_id);
 
         // ==================== 执行子节点 ====================
 
         // 依次执行每个子节点
-        for child_node in child_nodes {
+        for (idx, child_node) in child_nodes.iter().enumerate() {
+            debug!("[transaction] 开始执行子节点 {}/{}: node_id={}", idx + 1, child_nodes.len(), child_node.id);
             // 根据节点类型分发执行
             match child_node.node_type.as_str() {
                 // 函数节点：在事务中执行
                 "skylake-func" => {
                     // 调用在事务中执行函数的方法
                     self.execute_func_node_with_txn(child_node, exec_context, steps, &txn_id).await?;
+                    debug!("[transaction] 子节点执行成功: node_id={}", child_node.id);
                 }
                 // 其他节点类型：记录警告，跳过
                 _ => {
@@ -672,10 +721,12 @@ impl OrchestratorV2 {
         // ==================== 提交事务 ====================
 
         // 所有子节点执行成功，提交事务
+        debug!("[transaction] 准备提交事务: txn_id={}", txn_id);
         txn_guard.commit().await
             .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
 
         info!("事务已提交: node_id={}, db_id={}", transaction_node.id, db_id);
+        debug!("[transaction] 事务提交成功: node_id={}", transaction_node.id);
 
         Ok(())
     }
@@ -706,6 +757,7 @@ impl OrchestratorV2 {
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
         let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
+        debug!("[func_with_txn] 开始执行: node_id={}, node_name={}, txn_id={}", node.id, node_data.name, txn_id);
 
         // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node_data.node_meta.as_ref()
@@ -714,17 +766,19 @@ impl OrchestratorV2 {
         // 提取插件ID和函数名
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
+        debug!("[func_with_txn] 调用函数: plugin_id={}, function={}", plugin_id, function_name);
 
         // ==================== 检查插件状态 ====================
 
-        // 检查插件是否已激活（已安装且未禁用）
-        let is_active = self.plugin_query.is_active(plugin_id).await
-            .map_err(|e| ServiceError::InternalError(e.to_string()))?;
-
-        // 如果插件未激活，返回错误
-        if !is_active {
-            return Err(ServiceError::plugin_not_active(plugin_id));
-        }
+        // // 检查插件是否已激活（已安装且未禁用）
+        // let is_active = self.plugin_query.is_active(plugin_id).await
+        //     .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+        //
+        // // 如果插件未激活，返回错误
+        // if !is_active {
+        //     debug!("[func_with_txn] 插件未激活: plugin_id={}", plugin_id);
+        //     return Err(ServiceError::plugin_not_active(plugin_id));
+        // }
 
         // ==================== 加载 WASM 模块 ====================
 
@@ -733,6 +787,7 @@ impl OrchestratorV2 {
             // 获取 WASM 文件路径
             let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
+            debug!("[func_with_txn] 加载 WASM 模块: plugin_id={}, path={}", plugin_id, wasm_path.display());
 
             // 加载 WASM 模块到运行时
             self.runtime.load_module(plugin_id, &wasm_path).await
@@ -750,6 +805,7 @@ impl OrchestratorV2 {
             context: exec_context.svr_context.clone(),
             txn_id: Some(txn_id.to_string()),  // 传递事务ID
         };
+        debug!("[func_with_txn] 函数输入: input={}, txn_id={}", func_input.input, txn_id);
 
         // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
@@ -776,6 +832,7 @@ impl OrchestratorV2 {
 
         // 计算步骤耗时
         let elapsed_us = step_start.elapsed().as_micros() as u64;
+        debug!("[func_with_txn] 函数执行完成: node_id={}, output={}, elapsed_us={}", node.id, output.result, elapsed_us);
 
         // 更新当前输出（传递给下一个节点）
         exec_context.current_output = output.result.clone();
@@ -792,6 +849,8 @@ impl OrchestratorV2 {
             output: Some(output.result),
             elapsed_us,
         });
+
+        debug!("[func_with_txn] 执行完成: node_id={}", node.id);
 
         Ok(())
     }

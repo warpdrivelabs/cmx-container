@@ -49,3 +49,4 @@ validator = { workspace = true }
 
 utoipa={workspace = true}
 utoipa-swagger-ui={workspace = true}
+log = "0.4.29"

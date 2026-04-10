@@ -3,7 +3,6 @@
 //! 包含服务相关 API 的请求和响应数据结构。
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use utoipa::{IntoParams, ToSchema};
 
 // ==================== 函数直接调用请求/响应结构体 ====================
@@ -19,21 +18,16 @@ use utoipa::{IntoParams, ToSchema};
 /// - `context`: 服务调用上下文（初始入参、请求头、步骤输出）
 /// - `txn_id`: 事务ID（可选）
 ///
-/// 本请求体中的 `input` 和 `headers` 会被封装到 `FunctionInput` 中传递给函数。
+/// 本请求体中的 `input` 会被封装到 `FunctionInput` 中传递给函数。
+/// `headers` 从 HTTP 请求头中获取，不从请求体传递。
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct FunctionCallRequest {
     /// 插件ID（要调用的插件）
     pub plugin_id: String,
     /// 函数名（要调用的函数）
     pub function_name: String,
-    /// 输入数据（传递给函数的 input 字段）
-    pub input: String,
-    /// HTTP 请求头（传递给函数的 context.headers 字段）
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
-    /// 事务ID（可选，传递给函数的 txn_id 字段）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub txn_id: Option<String>,
+    /// 输入数据（传递给函数的 input 字段，支持 JSON 对象或字符串）
+    pub input: serde_json::Value,
 }
 
 /// 函数调用响应
@@ -63,16 +57,17 @@ pub struct FunctionCallResponse {
 
 /// 服务执行请求
 ///
-/// 用于 POST /api/service/execute 接口
+/// 用于 POST /api/service/execute 接口。
+///
+/// # 说明
+/// `headers` 从 HTTP 请求头中获取，不从请求体传递。
+/// `input` 支持 JSON 对象或字符串。
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceExecuteRequest {
     /// 服务唯一标识（对应 服务.json 中的 code 字段）
     pub service_key: String,
-    /// 初始输入数据（传递给第一个函数节点）
-    pub input: String,
-    /// HTTP 请求头（传递给所有函数，通过 SVRContext）
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
+    /// 初始输入数据（传递给第一个函数节点，支持 JSON 对象或字符串）
+    pub input: serde_json::Value,
 }
 
 /// 服务执行响应

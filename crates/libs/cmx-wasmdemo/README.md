@@ -29,6 +29,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 2. 添加 wasm32 目标
 ```bash
 rustup target add wasm32-unknown-unknown
+cargo build --target wasm32-wasip1
 ```
 
 ### 构建 WASM
@@ -36,9 +37,10 @@ rustup target add wasm32-unknown-unknown
 ```bash
 # 开发版本（包含调试信息）
 cargo build --target wasm32-unknown-unknown
-
+cargo build --target wasm32-wasip1
 # 发布版本（优化体积和性能）
 cargo build --release --target wasm32-unknown-unknown
+cargo build --release --target wasm32-wasip1
 ```
 
 ### 输出位置

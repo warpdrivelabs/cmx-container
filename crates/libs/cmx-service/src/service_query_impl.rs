@@ -105,6 +105,7 @@ impl ServiceQuery for ServiceQueryImpl {
     /// 返回服务编排定义，如果不存在则返回 None
     async fn get_orchestration(&self, service_key: &str) -> Result<Option<ServiceOrchestration>, TraitError> {
         if let Some(orch_value) = self.registry.get_orchestration(service_key).await {
+            dbg!("获取编排定义: {:?}", orch_value.clone());
             match serde_json::from_value::<ServiceOrchestration>(orch_value) {
                 Ok(orch) => return Ok(Some(orch)),
                 Err(e) => {

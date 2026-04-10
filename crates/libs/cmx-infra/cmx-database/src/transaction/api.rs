@@ -7,7 +7,7 @@
 
 use futures::future::BoxFuture;
 use std::sync::OnceLock;
-use log::{info, warn};
+use log::{warn};
 use tokio::sync::mpsc;
 use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};

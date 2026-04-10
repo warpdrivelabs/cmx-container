@@ -37,18 +37,18 @@
 //! pub fn my_function(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
 //!     // 获取当前步骤输入
 //!     let current_input = &input.input;
-//!     
+//!
 //!     // 获取初始入参（API 请求传入的参数）
 //!     let initial_input = &input.context.initial_input;
-//!     
+//!
 //!     // 获取请求头
 //!     let headers = &input.context.headers;
-//!     
+//!
 //!     // 获取前序步骤输出
 //!     if let Some(prev_output) = input.context.get_step_output("previous_node_id") {
 //!         // 使用前序步骤输出
 //!     }
-//!     
+//!
 //!     // 返回结果
 //!     Ok(Json(FunctionOutput {
 //!         result: "处理结果".to_string(),
@@ -99,7 +99,7 @@ pub struct DemoResponse {
 pub fn count_vowels(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 从标准入参获取当前步骤输入
     let input_str = &input.input;
-    
+
     // 统计元音字母
     let vowels = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U'];
     let count = input_str.chars().filter(|c| vowels.contains(c)).count();
@@ -313,6 +313,7 @@ pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
         });
 
     let mut results = Vec::new();
+
 
     // ==================== 测试日志功能 ====================
     match HostCaller::log_info("测试日志") {

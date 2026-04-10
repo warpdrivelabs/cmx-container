@@ -27,7 +27,6 @@ use cmx_database::get_default_db_manager;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use cmx_service::ServiceRepository;
 
 /// 安装请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
