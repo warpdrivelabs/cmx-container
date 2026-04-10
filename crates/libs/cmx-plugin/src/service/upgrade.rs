@@ -20,7 +20,6 @@ use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
-use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};
 use chrono::Utc;
 use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
@@ -396,23 +395,29 @@ impl UpgradeService {
             .await;
 
 
-        // 步骤9.3: 解析并存储新版本的服务定义
-        let parsed_services = Self::parse_and_save_services(
+        // 步骤9.3: 解析并存储新版本的服务定义（使用事务保证一致性）
+        let parsed_services = crate::service::service_parser::parse_and_save_services(
             &install_path,
             &plugin_id,
             &new_version,
             &self.deps.service_storage,
-        ).await?;
+            Some(txn_guard.txn_id()),
+        )
+        .await?;
 
         if !parsed_services.is_empty() {
-            tracing::info!("插件 {} 升级时解析到 {} 个服务定义", plugin_id, parsed_services.len());
+            tracing::info!(
+                "插件 {} 升级时解析到 {} 个服务定义",
+                plugin_id,
+                parsed_services.len()
+            );
         }
-        //提交事务
+        // 提交事务
         txn_guard
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
-        
+
         Ok(UpgradeResponse {
             plugin_id,
             old_version,
@@ -439,54 +444,6 @@ fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>
     }
 }
 
-/// 解析并保存服务定义
-///
-/// # 参数
-/// * `install_path` - 插件安装路径
-/// * `plugin_id` - 插件ID
-/// * `plugin_version` - 插件版本
-/// * `service_storage` - 服务存储接口
-///
-/// # 返回值
-/// * `Ok(Vec<ParsedServiceDefinition>)` - 解析出的服务定义列表
-async fn parse_and_save_services(
-    install_path: &Path,
-    plugin_id: &str,
-    plugin_version: &str,
-    service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
-) -> PluginResult<Vec<ParsedServiceDefinition>> {
-    let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
-        Ok(services) => services,
-        Err(e) => {
-            tracing::warn!("解析服务数据失败: {:?}", e);
-            return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
-        }
-    };
-
-    for svc in &parsed {
-        if let Err(e) = service_storage.save_service(&svc.definition).await {
-            tracing::error!("保存服务定义 {} 失败: {:?}", svc.definition.service_key, e);
-            return Err(PluginError::Plugin(format!("保存服务定义失败: {:?}", e)));
-        }
-
-        let config = serde_json::to_string(&svc.orchestration)
-            .map_err(|e| PluginError::Plugin(format!("序列化编排配置失败: {}", e)))?;
-
-        if let Err(e) = service_storage.save_service_version(
-            &svc.definition.service_key,
-            plugin_version,
-            plugin_id,
-            plugin_version,
-            &config,
-        ).await {
-            tracing::error!("保存服务版本 {}:{} 失败: {:?}", svc.definition.service_key, plugin_version, e);
-            return Err(PluginError::Plugin(format!("保存服务版本失败: {:?}", e)));
-        }
-    }
-
-    Ok(parsed)
-}
-
 impl Default for UpgradeService {
     fn default() -> Self {
         use std::sync::Arc;
@@ -495,7 +452,9 @@ impl Default for UpgradeService {
         use cmx_service::ServiceRepository;
 
         let db_manager = get_default_db_manager();
-        let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+        let default_database_id = "primary".to_string();
+
+        let repository = Arc::new(ServiceRepository::new(db_manager.clone(),default_database_id));
         let service_storage: Arc<dyn cmx_traits::ServiceStorage> = Arc::new(ServiceStorageImpl::new(repository));
 
         Self::new(UpgradeServiceDeps {
@@ -518,46 +477,5 @@ impl Default for UpgradeService {
             node_type: None,
             service_storage,
         })
-    }
-}
-
-impl UpgradeService {
-    /// 解析并保存服务定义
-    async fn parse_and_save_services(
-        install_path: &Path,
-        plugin_id: &str,
-        plugin_version: &str,
-        service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
-    ) -> PluginResult<Vec<crate::service::data_parser::ParsedServiceDefinition>> {
-        let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
-            Ok(services) => services,
-            Err(e) => {
-                tracing::warn!("解析服务数据失败: {:?}", e);
-                return Ok(Vec::new());
-            }
-        };
-
-        for svc in &parsed {
-            if let Err(e) = service_storage.save_service(&svc.definition).await {
-                tracing::error!("保存服务定义 {} 失败: {:?}", svc.definition.service_key, e);
-                return Err(PluginError::Plugin(format!("保存服务定义失败: {:?}", e)));
-            }
-
-            let config = serde_json::to_string(&svc.orchestration)
-                .map_err(|e| PluginError::Plugin(format!("序列化编排配置失败: {}", e)))?;
-
-            if let Err(e) = service_storage.save_service_version(
-                &svc.definition.service_key,
-                plugin_version,
-                plugin_id,
-                plugin_version,
-                &config,
-            ).await {
-                tracing::error!("保存服务版本 {}:{} 失败: {:?}", svc.definition.service_key, plugin_version, e);
-                return Err(PluginError::Plugin(format!("保存服务版本失败: {:?}", e)));
-            }
-        }
-
-        Ok(parsed)
     }
 }

@@ -16,7 +16,7 @@ use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// 卸载请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +160,12 @@ impl UninstallService {
             .await
             .map_err(|e| PluginError::Database(format!("删除表元数据失败: {}", e)))?;
         }
-
+        // 7.2: 清理此插件关联的服务定义
+        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id).await {
+            warn!("清理插件 {} 的服务定义失败: {:?}", plugin_id, e);
+        } else {
+            info!("已清理插件 {} 的服务定义", plugin_id);
+        }
         // 步骤8: 清除缓存
         self.deps
             .cache
@@ -192,7 +197,9 @@ impl UninstallService {
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-        // 步骤10: 发布卸载事件（通知其他节点）
+
+
+        // 步骤10.2: 发布卸载事件（通知其他节点）
         self.deps
             .event_bus
             .publish(Event::new(
@@ -205,12 +212,7 @@ impl UninstallService {
             ))
             .await;
 
-        // 步骤10.5: 清理此插件关联的服务定义
-        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id).await {
-            tracing::warn!("清理插件 {} 的服务定义失败: {:?}", plugin_id, e);
-        } else {
-            tracing::info!("已清理插件 {} 的服务定义", plugin_id);
-        }
+
 
         Ok(UninstallResponse {
             plugin_id,
@@ -228,7 +230,9 @@ impl Default for UninstallService {
         use cmx_service::ServiceRepository;
 
         let db_manager = get_default_db_manager();
-        let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+        let default_database_id = "primary".to_string();
+
+        let repository = Arc::new(ServiceRepository::new(db_manager.clone(),default_database_id));
         let service_storage: Arc<dyn cmx_traits::ServiceStorage> = Arc::new(ServiceStorageImpl::new(repository));
 
         Self::new(UninstallServiceDeps {

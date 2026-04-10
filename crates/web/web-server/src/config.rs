@@ -195,9 +195,10 @@ pub async fn init_services() {
     info!("初始化服务管理器...");
 
     let db_manager = get_default_db_manager();
+    let default_db_id = get_default_db_manager().get_default_db_id().await;
 
     // 使用 new_async 从 DatabaseManager 获取实际的默认数据库ID
-    let repository = Arc::new(ServiceRepository::new_async(db_manager.clone()).await);
+    let repository = Arc::new(ServiceRepository::new(db_manager.clone(),default_db_id));
     let registry = Arc::new(ServiceRegistry::new());
 
     GlobalServiceRegistry::set(registry.clone()).expect("初始化服务注册中心失败");

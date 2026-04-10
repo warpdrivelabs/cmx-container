@@ -2,10 +2,10 @@
 //!
 //! 提供服务定义的数据库访问能力。
 
-use std::sync::Arc;
 use cmx_core::model::service::ServiceDefinition;
 use cmx_database::DatabaseManager;
 use serde_json::json;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::ServiceError;
@@ -27,29 +27,17 @@ pub struct ServiceRepository {
 impl ServiceRepository {
     /// 创建服务仓储（同步版本，使用默认值）
     ///
-    /// 注意：此方法使用硬编码的 "default" 作为数据库ID
-    /// 推荐使用 `new_async` 方法从 DatabaseManager 获取实际的默认数据库ID
     ///
     /// # 参数
     /// * `db_manager` - 数据库管理器
-    pub fn new(db_manager: Arc<DatabaseManager>) -> Self {
+    /// * `default_db_id` - 默认数据库id
+    pub fn new(db_manager: Arc<DatabaseManager>, default_db_id: String) -> Self {
         Self {
             db_manager,
-            default_db_id: "default".to_string(),
+            default_db_id: default_db_id,
         }
     }
 
-    /// 创建服务仓储（异步版本，从 DatabaseManager 获取默认数据库ID）
-    ///
-    /// # 参数
-    /// * `db_manager` - 数据库管理器
-    pub async fn new_async(db_manager: Arc<DatabaseManager>) -> Self {
-        let default_db_id = db_manager.get_default_db_id().await;
-        Self {
-            db_manager,
-            default_db_id,
-        }
-    }
 
     /// 设置默认数据库ID
     ///
@@ -72,6 +60,22 @@ impl ServiceRepository {
     /// # 参数
     /// * `service` - 服务定义
     pub async fn save_service(&self, service: &ServiceDefinition) -> Result<(), ServiceError> {
+        self.save_service_with_txn(service, None).await
+    }
+
+    /// 保存服务定义（支持事务）
+    ///
+    /// 如果 service_key 已存在则更新，否则插入新记录
+    ///
+    /// # 参数
+    /// * `service` - 服务定义
+    /// * `db_id` - 数据库ID
+    /// * `txn_id` - 事务ID（可选）
+    pub async fn save_service_with_txn(
+        &self,
+        service: &ServiceDefinition,
+        txn_id: Option<&str>,
+    ) -> Result<(), ServiceError> {
         let sql = r#"
             INSERT INTO cmx_service_define (
                 id, service_key, service_name, description, plugin_id,
@@ -92,12 +96,12 @@ impl ServiceRepository {
             service.service_name,
             service.description,
             service.plugin_id,
-            service.status.to_string(),
+            service.status,
             service.version,
         ]);
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -292,6 +296,36 @@ impl ServiceRepository {
         plugin_version: &str,
         config: &str,
     ) -> Result<(), ServiceError> {
+        self.save_service_version_with_txn(
+            service_key,
+            version,
+            plugin_id,
+            plugin_version,
+            config,
+            None,
+        )
+        .await
+    }
+
+    /// 保存服务版本（支持事务）
+    ///
+    /// # 参数
+    /// * `service_key` - 服务唯一标识
+    /// * `version` - 服务版本号
+    /// * `plugin_id` - 所属插件ID
+    /// * `plugin_version` - 所属插件版本
+    /// * `config` - 编排配置 JSON 字符串
+    /// * `db_id` - 数据库ID
+    /// * `txn_id` - 事务ID（可选）
+    pub async fn save_service_version_with_txn(
+        &self,
+        service_key: &str,
+        version: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+        config: &str,
+        txn_id: Option<&str>,
+    ) -> Result<(), ServiceError> {
         let sql = r#"
             INSERT INTO cmx_service_define_version (
                 id, service_key, version, plugin_id, plugin_version,
@@ -303,7 +337,7 @@ impl ServiceRepository {
         let params = json!([id, service_key, version, plugin_id, plugin_version, config]);
 
         self.db_manager
-            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 

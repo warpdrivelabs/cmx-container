@@ -14,24 +14,32 @@ use cmx_core::model::service::ServiceDefinition;
 pub trait ServiceStorage: Send + Sync {
     /// 保存服务定义
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service` - 服务定义
+    /// * `db_id` - 数据库ID
+    /// * `txn_id` - 事务ID（可选）
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(())` - 保存成功
     /// * `Err(TraitError)` - 保存失败
-    async fn save_service(&self, service: &ServiceDefinition) -> Result<(), TraitError>;
+    async fn save_service(
+        &self,
+        service: &ServiceDefinition,
+        txn_id: Option<&str>,
+    ) -> Result<(), TraitError>;
 
     /// 保存服务版本
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service_key` - 服务唯一标识
     /// * `version` - 版本号
     /// * `plugin_id` - 插件ID
     /// * `plugin_version` - 插件版本
     /// * `config` - 编排配置 JSON
+    /// * `db_id` - 数据库ID
+    /// * `txn_id` - 事务ID（可选）
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(())` - 保存成功
     /// * `Err(TraitError)` - 保存失败
     async fn save_service_version(
@@ -41,35 +49,36 @@ pub trait ServiceStorage: Send + Sync {
         plugin_id: &str,
         plugin_version: &str,
         config: &str,
+        txn_id: Option<&str>,
     ) -> Result<(), TraitError>;
 
     /// 删除服务定义及其所有版本（物理删除）
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service_key` - 服务唯一标识
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(())` - 删除成功
     /// * `Err(TraitError)` - 删除失败
     async fn delete_service(&self, service_key: &str) -> Result<(), TraitError>;
 
     /// 根据插件ID删除所有服务
     ///
-    /// # Arguments
+    /// # 参数
     /// * `plugin_id` - 插件唯一标识
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(())` - 删除成功
     /// * `Err(TraitError)` - 删除失败
     async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), TraitError>;
 
     /// 获取服务编排配置
     ///
-    /// # Arguments
+    /// # 参数
     /// * `service_key` - 服务唯一标识
     /// * `version` - 版本号
     ///
-    /// # Returns
+    /// # 返回值
     /// * `Ok(Some(config))` - 找到配置
     /// * `Ok(None)` - 配置不存在
     /// * `Err(TraitError)` - 查询失败

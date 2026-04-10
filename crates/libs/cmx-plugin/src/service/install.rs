@@ -22,12 +22,12 @@ use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::security::validator::SecurityValidator;
-use crate::service::data_parser::ServiceDataParser;
 use chrono::Utc;
 use cmx_database::get_default_db_manager;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use cmx_service::ServiceRepository;
 
 /// 安装请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,8 +36,6 @@ pub struct InstallRequest {
     pub source: PluginSource,
     /// 目标数据库ID（可选）
     pub db_id: Option<String>,
-    // /// 是否强制安装（覆盖已存在的插件）
-    // pub force: bool,
     /// 是否自动激活
     pub auto_activate: bool,
     /// 版本约束（仅对注册表来源有效，如 "^1.0.0", ">=2.0.0"）
@@ -71,7 +69,6 @@ pub struct InstallServiceDeps {
     pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
-
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
     /// 文件存储
@@ -142,10 +139,11 @@ impl InstallService {
     /// 7. 复制文件到安装目录
     /// 8. 创建数据库表
     /// 9. 保存数据库记录
-    /// 10  注册插件到内存
+    /// 10. 注册插件到内存
     /// 11. 更新缓存
     /// 12. 记录审计日志
-    /// 13. 清理临时目录
+    /// 13. 解析并存储服务定义
+    /// 14. 提交事务
     pub async fn install(&self, request: InstallRequest) -> PluginResult<InstallResponse> {
         let start_time = std::time::Instant::now();
 
@@ -293,7 +291,7 @@ impl InstallService {
 
         let default_db_id = self.deps.default_database_id.clone();
 
-        //开启事务 事务是针对默认表开启的
+        // 开启事务（事务是针对默认表开启的）
         let txn_guard = get_default_db_manager()
             .get_transaction_context()
             .begin_with_guard(default_db_id.clone().as_str())
@@ -305,7 +303,7 @@ impl InstallService {
             // 一旦事务中任何语句失败，整个事务进入 "aborted" 状态
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
-            // 所以ddl语句不要在事务中执行
+            // 所以 DDL 语句不要在事务中执行
             crate::service::utils::create_plugin_tables(
                 &target_db_id,
                 &plugin_id,
@@ -314,11 +312,10 @@ impl InstallService {
                 &plugin_def,
                 Some(txn_guard.txn_id()),
             )
-                .await?;
+            .await?;
         }
 
         // 步骤9: 保存数据库记录
-        // 使用辅助函数构建记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
         let db_record = super::record_builder::build_plugin_create_params(
             &plugin_def,
@@ -344,13 +341,6 @@ impl InstallService {
                     plugin_id, db_version, install_version
                 )));
             }
-            // // 版本相同，无需重复安装
-            // if install_version == *db_version {
-            //     return Err(PluginError::Install(format!(
-            //         "插件 {} 版本 {} 已安装，无需重复安装",
-            //         plugin_id, install_version
-            //     )));
-            // }
         }
 
         // 步骤9.1: Upsert 插件记录（cmx_plugin）
@@ -359,7 +349,7 @@ impl InstallService {
             .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
             .await?;
 
-        // 步骤9.2: 插入 cmx_plugin_versions 版本历史记录（包含来源信息）
+        // 步骤9.2: 插入 cmx_plugin_versions 版本历史记录
         let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
         let version_record = super::record_builder::build_version_create_params(
             &plugin_id,
@@ -379,36 +369,16 @@ impl InstallService {
         // 标记当前版本
         self.deps
             .version_history_repository
-            .set_current_version(&plugin_id, &install_version,
-                                 install_path.to_string_lossy().to_string().as_str(),
-                                 wasm_path.as_str(),
-                                 Some(txn_guard.txn_id()))
+            .set_current_version(
+                &plugin_id,
+                &install_version,
+                install_path.to_string_lossy().to_string().as_str(),
+                wasm_path.as_str(),
+                Some(txn_guard.txn_id()),
+            )
             .await?;
-        // self.deps
-        //     .version_history_repository
-        //     .mark_all_not_current(&plugin_id, Some(txn_guard.txn_id()))
-        //     .await?;
-        // self.deps
-        //     .version_history_repository
-        //     .update_version(
-        //         &version_record.id,
-        //         &crate::infrastructure::database::version_history::VersionUpdateParams {
-        //             install_path: Some(install_path.to_string_lossy().to_string()),
-        //             wasm_path: Some(wasm_path),
-        //             is_current: Some(true),
-        //             uninstalled_at: None,
-        //             update_time: Some(chrono::Utc::now()),
-        //             create_by: None,
-        //             create_name: None,
-        //             update_by: None,
-        //             update_name: None,
-        //         },
-        //         Some(txn_guard.txn_id()),
-        //     )
-        //     .await?;
 
-        // 步骤9.2: 插入 cmx_plugin_deployments 节点部署记录
-        // 检查该节点是否已有此版本的部署记录
+        // 步骤9.3: 插入 cmx_plugin_deployments 节点部署记录
         let existing_deployment_for_version = self
             .deps
             .deployment_repository
@@ -416,7 +386,6 @@ impl InstallService {
             .await?;
 
         if existing_deployment_for_version.is_none() {
-            // 节点上没有此版本的部署记录，插入新记录
             let deployment_record = super::record_builder::build_deployment_create_params(
                 &plugin_id,
                 &self.deps.node_id,
@@ -428,7 +397,6 @@ impl InstallService {
                 .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
                 .await?;
         }
-        // 如果已存在同版本部署记录，无需重复插入（可能是并发请求或重试）
 
         // 步骤10: 注册插件
         let plugin_info = PluginInfo {
@@ -477,18 +445,18 @@ impl InstallService {
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
         )
-            .with_node_id(self.deps.node_id.clone())
-            .with_details(serde_json::json!({
+        .with_node_id(self.deps.node_id.clone())
+        .with_details(serde_json::json!({
             "version": install_version,
             "install_path": install_path.to_string_lossy().to_string(),
             "node_id": self.deps.node_id,
         }))
-            .with_new_value(install_path.to_string_lossy().to_string())
-            .with_completed(duration_ms);
+        .with_new_value(install_path.to_string_lossy().to_string())
+        .with_completed(duration_ms);
 
         let _ = self.deps.audit_logger.log(audit_record).await?;
 
-        // 步骤13: 发布安装完成事件（临时目录由 TempDirCleanup 自动清理）
+        // 步骤13: 发布安装完成事件
         self.deps
             .event_bus
             .publish(Event::new(
@@ -501,21 +469,25 @@ impl InstallService {
             ))
             .await;
 
-
-
-        // 步骤9.3: 解析并存储服务定义
-        let parsed_services = Self::parse_and_save_services(
+        // 步骤14: 解析并存储服务定义（使用事务保证一致性）
+        let parsed_services = crate::service::service_parser::parse_and_save_services(
             &install_path,
             &plugin_id,
             &install_version,
             &self.deps.service_storage,
-        ).await?;
+            Some(txn_guard.txn_id()),
+        )
+        .await?;
 
         if !parsed_services.is_empty() {
-            tracing::info!("插件 {} 安装时解析到 {} 个服务定义", plugin_id, parsed_services.len());
+            tracing::info!(
+                "插件 {} 安装时解析到 {} 个服务定义",
+                plugin_id,
+                parsed_services.len()
+            );
         }
 
-        //提交事务
+        // 提交事务
         txn_guard
             .commit()
             .await
@@ -555,8 +527,10 @@ impl Default for InstallService {
         use cmx_service::ServiceRepository;
 
         let db_manager = get_default_db_manager();
-        let repository = Arc::new(ServiceRepository::new(db_manager.clone()));
-        let service_storage: Arc<dyn cmx_traits::ServiceStorage> = Arc::new(ServiceStorageImpl::new(repository));
+        let default_database_id = "primary".to_string();
+        let service_repository = Arc::new(ServiceRepository::new(db_manager.clone(),default_database_id));
+        let service_storage: Arc<dyn cmx_traits::ServiceStorage> =
+            Arc::new(ServiceStorageImpl::new(service_repository.clone()));
 
         Self::new(InstallServiceDeps {
             repository: Arc::new(PluginRepository::default()),
@@ -578,45 +552,5 @@ impl Default for InstallService {
             node_type: None,
             service_storage,
         })
-    }
-}
-
-impl InstallService {
-    /// 解析并保存服务定义
-    async fn parse_and_save_services(
-        install_path: &Path,
-        plugin_id: &str,
-        plugin_version: &str,
-        service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
-    ) -> PluginResult<Vec<crate::service::data_parser::ParsedServiceDefinition>> {
-        let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
-            Ok(services) => services,
-            Err(e) => {
-                tracing::warn!("解析服务数据失败: {:?}", e);
-                return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
-            }
-        };
-
-        for svc in &parsed {
-            if let Err(e) = service_storage.save_service(&svc.definition).await {
-                tracing::error!("保存服务定义 {} 失败: {:?}", svc.definition.service_key, e);
-                return Err(PluginError::Plugin(format!("保存服务定义失败: {:?}", e)));
-            }
-
-            let config = &svc.orchestration.source_str;
-
-            if let Err(e) = service_storage.save_service_version(
-                &svc.definition.service_key,
-                plugin_version,
-                plugin_id,
-                plugin_version,
-                config,
-            ).await {
-                tracing::error!("保存服务版本 {}:{} 失败: {:?}", svc.definition.service_key, plugin_version, e);
-                return Err(PluginError::Plugin(format!("保存服务版本失败: {:?}", e)));
-            }
-        }
-
-        Ok(parsed)
     }
 }

@@ -335,7 +335,7 @@ impl PluginManager {
             service_registry: service_registry.clone(),
         });
 
-        let service_repository = Arc::new(ServiceRepository::new(db_manager.clone()));
+        let service_repository = Arc::new(ServiceRepository::new(db_manager.clone(),settings.default_database_id.clone()));
         let service_storage: Arc<dyn ServiceStorage> = Arc::new(ServiceStorageImpl::new(service_repository.clone()));
 
         let install_service = crate::service::install::InstallService::new(
@@ -357,7 +357,7 @@ impl PluginManager {
                 node_id: settings.node_id.clone(),
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
-                service_storage: service_storage.clone(),
+                service_storage: service_storage.clone()
             },
         );
 
