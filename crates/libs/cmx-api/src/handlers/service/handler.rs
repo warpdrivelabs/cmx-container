@@ -33,7 +33,8 @@ use crate::error::Error;
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
-    ServiceGetQuery, ServiceByPluginQuery, ServiceDeleteQuery,
+    ServiceGetQuery, ServiceByPluginQuery,
+    ServiceListItem, ServiceDetailResponse,
 };
 
 // ==================== 函数直接调用 Handler ====================
@@ -262,6 +263,15 @@ pub async fn execute_orchestration(
 /// 3. 构建调用上下文
 /// 4. 执行服务编排
 /// 5. 构建响应
+#[utoipa::path(
+    post,
+    path = "/api/service/execute",
+    request_body = ServiceExecuteRequest,
+    responses(
+        (status = 200, description = "服务编排执行成功", body = ApiResp<ServiceExecuteResponse>)
+    ),
+    tag = "Service"
+)]
 pub async fn execute_service(
     State(state): State<CmxAppState>,
     Json(req): Json<ServiceExecuteRequest>,
@@ -341,9 +351,17 @@ pub async fn execute_service(
 /// - `plugin_id`: 所属插件ID
 /// - `status`: 状态（1-启用）
 /// - `version`: 当前版本
+#[utoipa::path(
+    get,
+    path = "/api/service/list",
+    responses(
+        (status = 200, description = "获取服务列表成功", body = ApiResp<Vec<ServiceListItem>>)
+    ),
+    tag = "Service"
+)]
 pub async fn list_services(
     State(state): State<CmxAppState>,
-) -> Result<Json<ApiResp<Vec<serde_json::Value>>>, Error> {
+) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
     // 从应用状态获取服务查询器
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
@@ -352,21 +370,21 @@ pub async fn list_services(
     let services = service_query.list_active_services().await
         .map_err(|e| Error::internal_error(format!("获取服务列表失败: {}", e)))?;
 
-    // 将服务信息转换为 JSON 数组
-    let values: Vec<serde_json::Value> = services.into_iter().map(|s| {
-        serde_json::json!({
-            "id": s.id,
-            "service_key": s.service_key,
-            "service_name": s.service_name,
-            "description": s.description,
-            "plugin_id": s.plugin_id,
-            "status": s.status,
-            "version": s.version,
-        })
+    // 将服务信息转换为 ServiceListItem 数组
+    let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
+        ServiceListItem {
+            id: s.id,
+            service_key: s.service_key,
+            service_name: s.service_name,
+            description: s.description,
+            plugin_id: s.plugin_id,
+            status: s.status,
+            version: s.version,
+        }
     }).collect();
 
     // 返回成功响应
-    Ok(Json(ApiResp::ok(values)))
+    Ok(Json(ApiResp::ok(items)))
 }
 
 /// 获取服务定义
@@ -385,10 +403,19 @@ pub async fn list_services(
 /// - `plugin_id`: 所属插件ID
 /// - `status`: 状态
 /// - `version`: 当前版本
+#[utoipa::path(
+    get,
+    path = "/api/service/get",
+    params(ServiceGetQuery),
+    responses(
+        (status = 200, description = "获取服务详情成功", body = ApiResp<ServiceDetailResponse>)
+    ),
+    tag = "Service"
+)]
 pub async fn get_service(
     State(state): State<CmxAppState>,
     Query(query): Query<ServiceGetQuery>,
-) -> Result<Json<ApiResp<serde_json::Value>>, Error> {
+) -> Result<Json<ApiResp<ServiceDetailResponse>>, Error> {
     // 从应用状态获取服务查询器
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
@@ -401,16 +428,16 @@ pub async fn get_service(
     match service {
         // 服务存在，返回服务详情
         Some(s) => {
-            let value = serde_json::json!({
-                "id": s.id,
-                "service_key": s.service_key,
-                "service_name": s.service_name,
-                "description": s.description,
-                "plugin_id": s.plugin_id,
-                "status": s.status,
-                "version": s.version,
-            });
-            Ok(Json(ApiResp::ok(value)))
+            let detail = ServiceDetailResponse {
+                id: s.id,
+                service_key: s.service_key,
+                service_name: s.service_name,
+                description: s.description,
+                plugin_id: s.plugin_id,
+                status: s.status,
+                version: s.version,
+            };
+            Ok(Json(ApiResp::ok(detail)))
         }
         // 服务不存在，返回业务错误
         None => Err(Error::business_error(format!("服务 {} 不存在", query.service_key))),
@@ -426,10 +453,19 @@ pub async fn get_service(
 ///
 /// # 响应体
 /// 返回服务信息数组
+#[utoipa::path(
+    get,
+    path = "/api/service/by-plugin",
+    params(ServiceByPluginQuery),
+    responses(
+        (status = 200, description = "获取插件服务列表成功", body = ApiResp<Vec<ServiceListItem>>)
+    ),
+    tag = "Service"
+)]
 pub async fn get_services_by_plugin(
     State(state): State<CmxAppState>,
     Query(query): Query<ServiceByPluginQuery>,
-) -> Result<Json<ApiResp<Vec<serde_json::Value>>>, Error> {
+) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
     // 从应用状态获取服务查询器
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
@@ -438,21 +474,21 @@ pub async fn get_services_by_plugin(
     let services = service_query.get_services_by_plugin(&query.plugin_id).await
         .map_err(|e| Error::internal_error(format!("获取插件服务失败: {}", e)))?;
 
-    // 将服务信息转换为 JSON 数组
-    let values: Vec<serde_json::Value> = services.into_iter().map(|s| {
-        serde_json::json!({
-            "id": s.id,
-            "service_key": s.service_key,
-            "service_name": s.service_name,
-            "description": s.description,
-            "plugin_id": s.plugin_id,
-            "status": s.status,
-            "version": s.version,
-        })
+    // 将服务信息转换为 ServiceListItem 数组
+    let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
+        ServiceListItem {
+            id: s.id,
+            service_key: s.service_key,
+            service_name: s.service_name,
+            description: s.description,
+            plugin_id: s.plugin_id,
+            status: s.status,
+            version: s.version,
+        }
     }).collect();
 
     // 返回成功响应
-    Ok(Json(ApiResp::ok(values)))
+    Ok(Json(ApiResp::ok(items)))
 }
 
 // ==================== 服务删除 Handler ====================
@@ -467,10 +503,19 @@ pub async fn get_services_by_plugin(
 /// # 注意事项
 /// - 物理删除，不可恢复
 /// - 同时删除 cmx_service_define 和 cmx_service_define_version 表中的记录
+#[utoipa::path(
+    post,
+    path = "/api/service/delete",
+    request_body = crate::handlers::service::models::ServiceDeleteQuery,
+    responses(
+        (status = 200, description = "删除服务成功", body = crate::api_response::UnitResp)
+    ),
+    tag = "Service"
+)]
 pub async fn delete_service(
     State(state): State<CmxAppState>,
-    Json(req): Json<ServiceDeleteQuery>,
-) -> Result<Json<ApiResp<()>>, Error> {
+    Json(req): Json<crate::handlers::service::models::ServiceDeleteQuery>,
+) -> Result<Json<crate::api_response::UnitResp>, Error> {
     // 从应用状态获取服务存储器
     let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
@@ -480,5 +525,5 @@ pub async fn delete_service(
         .map_err(|e| Error::internal_error(format!("删除服务失败: {}", e)))?;
 
     // 返回成功响应
-    Ok(Json(ApiResp::ok(())))
+    Ok(Json(crate::api_response::UnitResp::msg("删除成功")))
 }

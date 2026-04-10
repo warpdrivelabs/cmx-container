@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 // ==================== 函数直接调用请求/响应结构体 ====================
 
@@ -64,7 +64,7 @@ pub struct FunctionCallResponse {
 /// 服务执行请求
 ///
 /// 用于 POST /api/service/execute 接口
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceExecuteRequest {
     /// 服务唯一标识（对应 服务.json 中的 code 字段）
     pub service_key: String,
@@ -78,7 +78,7 @@ pub struct ServiceExecuteRequest {
 /// 服务执行响应
 ///
 /// 包含服务编排执行的完整结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceExecuteResponse {
     /// 是否执行成功（所有节点都成功执行则为 true）
     pub success: bool,
@@ -93,7 +93,7 @@ pub struct ServiceExecuteResponse {
 /// 服务执行步骤记录
 ///
 /// 记录单个节点的执行情况
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceExecutionStep {
     /// 节点ID（对应 Flow JSON 中的 node.id）
     pub node_id: String,
@@ -110,7 +110,7 @@ pub struct ServiceExecutionStep {
 /// 服务获取查询参数
 ///
 /// 用于 GET /api/service/get 接口
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
 pub struct ServiceGetQuery {
     /// 服务唯一标识
     pub service_key: String,
@@ -119,10 +119,33 @@ pub struct ServiceGetQuery {
 /// 插件服务查询参数
 ///
 /// 用于 GET /api/service/by-plugin 接口
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
 pub struct ServiceByPluginQuery {
     /// 插件ID
     pub plugin_id: String,
+}
+
+// ==================== 服务列表响应结构体 ====================
+
+/// 服务列表项
+///
+/// 用于 GET /api/service/list 和 GET /api/service/by-plugin 接口的响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceListItem {
+    /// 主键ID
+    pub id: String,
+    /// 服务唯一标识
+    pub service_key: String,
+    /// 服务名称
+    pub service_name: String,
+    /// 服务描述
+    pub description: String,
+    /// 所属插件ID
+    pub plugin_id: String,
+    /// 状态
+    pub status: i32,
+    /// 当前版本
+    pub version: String,
 }
 
 // ==================== 服务删除请求结构体 ====================
@@ -130,8 +153,29 @@ pub struct ServiceByPluginQuery {
 /// 服务删除请求
 ///
 /// 用于 POST /api/service/delete 接口
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceDeleteQuery {
     /// 服务唯一标识
     pub service_key: String,
+}
+
+/// 服务详情响应
+///
+/// 用于 GET /api/service/get 接口的响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceDetailResponse {
+    /// 主键ID
+    pub id: String,
+    /// 服务唯一标识
+    pub service_key: String,
+    /// 服务名称
+    pub service_name: String,
+    /// 服务描述
+    pub description: String,
+    /// 所属插件ID
+    pub plugin_id: String,
+    /// 状态
+    pub status: i32,
+    /// 当前版本
+    pub version: String,
 }

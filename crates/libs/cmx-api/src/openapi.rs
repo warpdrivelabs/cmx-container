@@ -71,9 +71,14 @@ use utoipa::OpenApi;
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
         crate::handlers::table_metadata::handler::table_metadata_get_by_id,
-        //服务 (暂时移除，需要添加 utoipa 注解)
-        // crate::handlers::service::handler::service_call,
-        // crate::handlers::service::handler::execute_orchestration,
+        //服务
+        crate::handlers::service::handler::service_call,
+        crate::handlers::service::handler::execute_orchestration,
+        crate::handlers::service::handler::execute_service,
+        crate::handlers::service::handler::list_services,
+        crate::handlers::service::handler::get_service,
+        crate::handlers::service::handler::get_services_by_plugin,
+        crate::handlers::service::handler::delete_service,
 
     ),
     components(
@@ -118,6 +123,15 @@ use utoipa::OpenApi;
             cmx_service::Orchestration,
             cmx_service::OrchestrationStep,
             cmx_service::StepInput,
+            // cmx-api service models
+            crate::handlers::service::models::FunctionCallRequest,
+            crate::handlers::service::models::FunctionCallResponse,
+            crate::handlers::service::models::ServiceExecuteRequest,
+            crate::handlers::service::models::ServiceExecuteResponse,
+            crate::handlers::service::models::ServiceExecutionStep,
+            crate::handlers::service::models::ServiceDeleteQuery,
+            crate::handlers::service::models::ServiceListItem,
+            crate::handlers::service::models::ServiceDetailResponse,
         )
     )
 )]
