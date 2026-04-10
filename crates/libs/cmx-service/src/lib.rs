@@ -3,7 +3,7 @@
 //! 作为插件编排的执行引擎，协调 PluginQuery 和 RuntimeInvoker 完成请求处理。
 //! 提供：
 //! - CmxService 核心服务结构
-//! - Orchestrator 编排执行器
+//! - OrchestratorV2 编排执行器 V2
 //! - ServiceHandler HTTP 处理器
 //!
 //! # 依赖关系
@@ -14,7 +14,6 @@
 
 pub mod error;
 pub mod handler;
-pub mod orchestrator;
 pub mod orchestrator_v2;
 pub mod request;
 pub mod service;
@@ -25,9 +24,8 @@ pub mod service_storage_impl;
 
 pub use error::ServiceError;
 pub use handler::ServiceHandler;
-pub use orchestrator::{Orchestration, OrchestrationResult, Orchestrator, OrchestrationStep, StepInput};
 pub use orchestrator_v2::{OrchestratorV2, OrchestrationResultV2, ExecutionStep, ExecutionContext};
-pub use request::{InvokeRequest, InvokeResponse, OrchestrateRequest, OrchestrateResponse, StepResult};
+pub use request::{InvokeRequest, InvokeResponse};
 pub use service::{CmxService, ServiceConfig};
 pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;

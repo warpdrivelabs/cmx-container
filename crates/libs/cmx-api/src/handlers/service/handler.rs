@@ -7,8 +7,7 @@
 //! | 方法 | 路径 | 功能 |
 //! |------|------|------|
 //! | POST | /api/service/call | 直接调用 WASM 插件函数 |
-//! | POST | /api/service/orchestration | 执行旧版编排（已废弃） |
-//! | POST | /api/service/execute | 执行服务编排 V2 |
+//! | POST | /api/service/execute | 执行服务编排 |
 //! | GET | /api/service/list | 获取服务列表 |
 //! | GET | /api/service/get | 获取服务定义 |
 //! | GET | /api/service/by-plugin | 获取插件的所有服务 |
@@ -22,7 +21,6 @@ use axum::{
     Json,
 };
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
-use cmx_service::{OrchestrateRequest, OrchestrateResponse};
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 
 use crate::api_response::ApiResp;
@@ -186,63 +184,9 @@ pub async fn service_call(
     Ok(Json(ApiResp::ok(response)))
 }
 
-// ==================== 旧版编排执行 Handler（已废弃） ====================
+// ==================== 服务编排 Handler ====================
 
-/// 编排执行 Handler（旧版，已废弃）
-///
-/// 处理 POST /api/service/orchestration 请求，执行插件编排。
-///
-/// 注意：此接口使用旧版编排器，建议使用 POST /api/service/execute
-#[utoipa::path(
-    post,
-    path = "/api/service/orchestration",
-    request_body = OrchestrateRequest,
-    responses(
-        (status = 200, description = "编排执行成功", body = ApiResp<OrchestrateResponse>)
-    ),
-    tag = "Service"
-)]
-pub async fn execute_orchestration(
-    State(state): State<CmxAppState>,
-    Json(req): Json<OrchestrateRequest>,
-) -> Result<Json<ApiResp<OrchestrateResponse>>, Error> {
-    // ==================== 获取依赖组件 ====================
-    
-    // 从应用状态获取运行时调用器
-    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
-        .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
-
-    // 从应用状态获取插件查询器
-    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
-        .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
-
-    // ==================== 创建编排执行器 ====================
-    
-    // 创建旧版编排执行器
-    let orchestrator = cmx_service::Orchestrator::new(runtime.clone(), plugin_query.clone());
-
-    // ==================== 执行编排 ====================
-    
-    // 执行编排
-    let result = orchestrator.execute(&req.orchestration, &req.initial_input).await
-        .map_err(|e| Error::internal_error(format!("编排执行失败: {}", e)))?;
-
-    // 构建响应结构体
-    let response = OrchestrateResponse {
-        success: result.success,
-        final_output: result.final_output,
-        step_results: result.step_results,
-        total_elapsed_us: result.total_elapsed_us,
-        error: result.error,
-    };
-
-    // 返回成功响应
-    Ok(Json(ApiResp::ok(response)))
-}
-
-// ==================== 服务编排 V2 Handler ====================
-
-/// 执行服务编排 V2
+/// 执行服务编排
 ///
 /// 处理 POST /api/service/execute 请求，执行服务编排。
 ///

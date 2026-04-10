@@ -5,13 +5,14 @@
 pub mod handler;
 pub mod models;
 
-pub use handler::{service_call, execute_orchestration, execute_service, list_services, get_service, get_services_by_plugin, delete_service};
+pub use handler::{service_call, execute_service, list_services, get_service, get_services_by_plugin, delete_service};
 
 // 重新导出请求/响应结构体，方便外部使用
 pub use models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
     ServiceGetQuery, ServiceByPluginQuery, ServiceDeleteQuery,
+    ServiceListItem, ServiceDetailResponse,
 };
 
 use crate::app_state::CmxAppState;
@@ -22,7 +23,6 @@ use axum::{routing::{post, get}, Router};
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
         .route("/call", post(service_call))
-        .route("/orchestration", post(execute_orchestration))
         .route("/execute", post(execute_service))
         .route("/list", get(list_services))
         .route("/by-plugin", get(get_services_by_plugin))
