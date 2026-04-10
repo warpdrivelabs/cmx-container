@@ -110,19 +110,23 @@ impl ServiceRepository {
     /// * `service_key` - 服务唯一标识
     ///
     /// # 返回值
-    /// 返回服务定义，如果不存在则返回 None
+    /// 返回服务定义（包含最新版本的 config），如果不存在则返回 None
     pub async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, ServiceError> {
         let sql = r#"
-            SELECT id, service_key, service_name, description, plugin_id,
-                   status, version, create_time, update_time
-            FROM cmx_service_define
-            WHERE service_key = $1
+            SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
+                   d.status, d.version, d.create_time, d.update_time,
+                   v.config
+            FROM cmx_service_define d
+            LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key
+            WHERE d.service_key = $1
+            ORDER BY v.create_time DESC
+            LIMIT 1
         "#;
 
         let params = json!([service_key]);
 
         let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_service")
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "cmx_service_define")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -142,6 +146,7 @@ impl ServiceRepository {
                     plugin_id: r.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                     status: r.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                     version: r.get_by_name_as(schema, "version").unwrap_or_default(),
+                    config: r.get_by_name_as(schema, "config"),
                 }))
             }
             None => Ok(None)
@@ -176,6 +181,7 @@ impl ServiceRepository {
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                config:None
             });
         }
 
@@ -188,14 +194,24 @@ impl ServiceRepository {
     /// * `plugin_id` - 插件ID
     ///
     /// # 返回值
-    /// 返回该插件下所有服务定义列表
+    /// 返回该插件下所有服务定义列表（包含最新版本的 config）
     pub async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
-            SELECT id, service_key, service_name, description, plugin_id,
-                   status, version, create_time, update_time
-            FROM cmx_service_define
-            WHERE plugin_id = $1
-            ORDER BY update_time DESC
+            SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
+                   d.status, d.version, d.create_time, d.update_time,
+                   latest_v.config
+            FROM cmx_service_define d
+            LEFT JOIN (
+                SELECT service_key, config
+                FROM cmx_service_define_version v1
+                WHERE create_time = (
+                    SELECT MAX(create_time)
+                    FROM cmx_service_define_version v2
+                    WHERE v1.service_key = v2.service_key
+                )
+            ) latest_v ON d.service_key = latest_v.service_key
+            WHERE d.plugin_id = $1
+            ORDER BY d.update_time DESC
         "#;
 
         let params = json!([plugin_id]);
@@ -216,6 +232,7 @@ impl ServiceRepository {
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                config: row.get_by_name_as(schema, "config"),
             });
         }
 

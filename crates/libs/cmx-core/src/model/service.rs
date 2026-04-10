@@ -18,6 +18,8 @@ pub struct ServiceDefinition {
     pub status: i32,
     /// 服务版本
     pub version: String,
+    /// 服务编排配置
+    pub config: Option<String>,
 }
 
 /// 服务编排定义 — 从 服务.json 解析
