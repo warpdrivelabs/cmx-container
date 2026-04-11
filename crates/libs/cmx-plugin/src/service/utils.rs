@@ -112,7 +112,7 @@ pub async fn save_plugin_table_metadata(
         let default_db_id = dbm.get_default_db_id().await;
 
         let table_metadata_result = TableMetadataService::get_by_table_name(dbm,default_db_id.as_str(),
-                                                                     table_def.table_name.as_str(),db_id).await;
+                                                                     table_def.table_name.as_str(),Some(db_id)).await;
 
         if table_metadata_result.is_ok() && !table_metadata_result.as_ref().unwrap().is_empty(){
             //存在  更新下

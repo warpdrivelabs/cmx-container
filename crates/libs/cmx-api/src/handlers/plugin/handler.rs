@@ -481,7 +481,8 @@ pub async fn plugin_get(
 
     match plugin {
         Some(info) => Ok(Json(ApiResp::ok(convert_plugin_info(info)))),
-        None => Err(crate::error::Error::NotFound(format!("插件 {} 不存在", params.plugin_id))),
+        // None => Err(crate::error::Error::NotFound(format!("插件 {} 不存在", params.plugin_id))),
+        None => Ok(Json(ApiResp::fail(1, "插件不存在"))),
     }
 }
 

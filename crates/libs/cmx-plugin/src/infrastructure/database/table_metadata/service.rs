@@ -196,11 +196,11 @@ impl TableMetadataService {
         mm: &DatabaseManager,
         db_id: &str,
         table_name: &str,
-        target_db_id: &str,
+        target_db_id: Option<&str>,
     ) -> PluginResult<DataSet> {
         debug!(
             "{:<12} - TableMetadataService::get_by_table_name - table_name: {}, db_id: {}",
-            "SERVICE", table_name, target_db_id
+            "SERVICE", table_name, target_db_id.unwrap_or("")
         );
 
         let mut select = Query::select();
@@ -247,7 +247,10 @@ impl TableMetadataService {
         );
 
         select.and_where(Expr::col(("cmx_meta_table_define", "table_name")).eq(table_name));
-        select.and_where(Expr::col(("cmx_meta_table_define", "db_id")).eq(target_db_id));
+        if target_db_id.is_some() {
+            select.and_where(Expr::col(("cmx_meta_table_define", "db_id")).eq(target_db_id));
+        }
+
 
         let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", sql);

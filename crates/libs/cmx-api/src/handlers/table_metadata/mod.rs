@@ -30,6 +30,7 @@ impl ModuleRoutes for TableMetadataModule {
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
         .route("/get", get(handler::table_metadata_get_by_id))
+        .route("/get-by-name", get(handler::table_metadata_get_by_name))
         .route("/list", post(handler::table_metadata_list))
         .route("/page", post(handler::table_metadata_page))
 }

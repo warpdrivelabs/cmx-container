@@ -11,12 +11,21 @@ use cmx_database::get_default_db_manager;
 use cmx_plugin::infrastructure::database::table_metadata::{
     TableMetadataFilter, TableMetadataService,
 };
+use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
 
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Result;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
+
+/// 根据 table_name 查询表元数据的查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+pub struct TableMetadataGetByNameQuery {
+    /// 表名称
+    pub table_name: String,
+}
 
 /// 获取表元数据详情
 ///
@@ -43,7 +52,7 @@ pub async fn table_metadata_get_by_id(
 
     let dataset = TableMetadataService::get_detail_by_id(mm, &db_id, &params.id)
         .await
-        .map_err(|e| crate::error::Error::InternalError(format!("查询详情失败: {}", e)))?;
+        .map_err(|e| crate::error::Error::business_error(format!("查询详情失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -128,4 +137,32 @@ pub async fn table_metadata_page(
         page_size,
         total as u64,
     )))
+}
+
+/// 根据表名获取表元数据
+///
+/// 通过 table_name 查询 cmx_meta_table_define 表的详情记录
+#[utoipa::path(
+    get,
+    path = "/api/table-metadata/get-by-name",
+    params(TableMetadataGetByNameQuery),
+    responses(
+        (status = 200, description = "查询成功")
+    ),
+    tag = "TableMetadata"
+)]
+pub async fn table_metadata_get_by_name(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Query(params): Query<TableMetadataGetByNameQuery>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None)
+        .await
+        .map_err(|e| crate::error::Error::InternalError(format!("根据表名查询失败: {}", e)))?;
+
+    Ok(Json(ApiResp::ok(dataset)))
 }
