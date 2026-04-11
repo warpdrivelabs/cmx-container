@@ -258,7 +258,11 @@ impl OrchestratorV2 {
                         .await
                         .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
 
-                    debug!("事务已开启: txn_id={}, db_id={}", txn_guard.txn_id(), db_id);
+                    let txn_id = txn_guard.txn_id().to_string();
+                    debug!("事务已开启: txn_id={}, db_id={}", txn_id, db_id);
+
+                    // 设置事务ID到上下文
+                    exec_context.svr_context.set_txn_id(txn_id);
 
                     active_txn_guard = Some(txn_guard);
                     active_txn_parent_id = Some(parent_id.clone());
@@ -280,6 +284,9 @@ impl OrchestratorV2 {
                         debug!("事务已提交: parent_id={:?}", active_txn_parent_id);
                     }
 
+                    // 清除上下文中的事务ID
+                    exec_context.svr_context.clear_txn_id();
+
                     active_txn_parent_id = None;
 
                     // 如果节点在新的事务框中，开启新事务
@@ -299,16 +306,17 @@ impl OrchestratorV2 {
                             .await
                             .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
 
-                        debug!("新事务已开启: txn_id={}, db_id={}", txn_guard.txn_id(), db_id);
+                        let txn_id = txn_guard.txn_id().to_string();
+                        debug!("新事务已开启: txn_id={}, db_id={}", txn_id, db_id);
+
+                        // 设置事务ID到上下文
+                        exec_context.svr_context.set_txn_id(txn_id);
 
                         active_txn_guard = Some(txn_guard);
                         active_txn_parent_id = Some(new_parent_id.clone());
                     }
                 }
             }
-
-            // 获取当前事务ID（如果有的话）
-            let current_txn_id = active_txn_guard.as_ref().map(|g| g.txn_id().to_string());
 
             // 根据节点类型分发执行
             match node.node_type.as_str() {
@@ -343,6 +351,9 @@ impl OrchestratorV2 {
                         txn_guard.commit().await
                             .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
                         debug!("结束节点提交事务: parent_id={:?}", active_txn_parent_id);
+
+                        // 清除上下文中的事务ID
+                        exec_context.svr_context.clear_txn_id();
                     }
 
                     break;
@@ -352,8 +363,8 @@ impl OrchestratorV2 {
                 // 函数节点执行 WASM 插件中的函数
                 "skylake-func" => {
                     debug!("执行函数节点: node_id={}", node.id);
-                    // 执行函数节点，传入当前事务ID
-                    result = self.execute_func_node(node, &mut exec_context, &mut steps, current_txn_id.as_deref()).await;
+                    // 执行函数节点（事务ID已设置在 SVRContext 中）
+                    result = self.execute_func_node(node, &mut exec_context, &mut steps).await;
 
                     // 如果执行失败，退出循环
                     if result.is_err() {
@@ -381,7 +392,7 @@ impl OrchestratorV2 {
                 // 返回值匹配 options 数组中的值，选择对应的出边
                 "skylake-switch" => {
                     debug!("执行多分支节点: node_id={}", node.id);
-                    // 执行 switch 节点（内部会调用函数）
+                    // 执行 switch 节点（事务ID已设置在 SVRContext 中）
                     result = self.execute_switch_node(node, &mut exec_context, &mut steps).await;
 
                     // 如果执行失败，退出循环
@@ -510,7 +521,7 @@ impl OrchestratorV2 {
         // ==================== 获取节点元信息 ====================
 
         let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("switch 节点缺少 data".to_string()))?;
-        debug!("[switch] 开始执行: node_id={}, node_name={}", node.id, node_data.name);
+        debug!("[switch] 开始执行: node_id={}, node_name={}, txn_id={:?}", node.id, node_data.name, exec_context.svr_context.txn_id);
 
         // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node_data.node_meta.as_ref()
@@ -551,15 +562,13 @@ impl OrchestratorV2 {
 
         // 构建函数输入结构体
         // - input: 当前输出（前一个节点的输出或初始输入）
-        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出）
-        // - txn_id: 事务ID（switch 节点不在事务中执行，所以为 None）
+        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出、txn_id）
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
-            txn_id: None,
         };
 
-        debug!("[switch] 函数输入: input={}", func_input.input);
+        debug!("[switch] 函数输入: input={}, txn_id={:?}", func_input.input, func_input.context.txn_id);
 
         // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
@@ -617,7 +626,6 @@ impl OrchestratorV2 {
     /// * `node` - 函数节点定义
     /// * `exec_context` - 执行上下文（可变，会更新 current_output 和 step_outputs）
     /// * `steps` - 执行步骤记录列表（可变，会添加新记录）
-    /// * `txn_id` - 可选的事务ID（在事务框中执行时传入）
     ///
     /// # 返回值
     /// 成功返回 Ok(())，失败返回 ServiceError
@@ -635,11 +643,10 @@ impl OrchestratorV2 {
         node: &ServiceNode,
         exec_context: &mut ExecutionContext,
         steps: &mut Vec<ExecutionStep>,
-        txn_id: Option<&str>,
     ) -> Result<(), ServiceError> {
         // ==================== 获取节点元信息 ====================
         let node_data = node.data.as_ref().ok_or_else(|| ServiceError::InternalError("func 节点缺少 data".to_string()))?;
-        debug!("[func] 开始执行: node_id={}, node_name={}, txn_id={:?}", node.id, node_data.name, txn_id);
+        debug!("[func] 开始执行: node_id={}, node_name={}, txn_id={:?}", node.id, node_data.name, exec_context.svr_context.txn_id);
 
         // 获取节点的函数元信息（插件ID、函数名等）
         let node_meta = node_data.node_meta.as_ref()
@@ -680,14 +687,12 @@ impl OrchestratorV2 {
 
         // 构建函数输入结构体
         // - input: 当前输出（前一个节点的输出或初始输入）
-        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出）
-        // - txn_id: 事务ID（在事务框中执行时传入，否则为 None）
+        // - context: 服务调用上下文（包含初始入参、请求头、各步骤输出、txn_id）
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
-            txn_id: txn_id.map(|s| s.to_string()),
         };
-        debug!("[func] 函数输入: input={}, txn_id={:?}", func_input.input, txn_id);
+        debug!("[func] 函数输入: input={}, txn_id={:?}", func_input.input, func_input.context.txn_id);
 
         // 将函数输入序列化为 JSON 字节数组
         let input_bytes = serde_json::to_vec(&func_input)
@@ -791,7 +796,11 @@ impl OrchestratorV2 {
             .await
             .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
 
-        debug!("[transaction] 事务已开启: db_id={}, txn_id={}", db_id, txn_guard.txn_id());
+        let txn_id = txn_guard.txn_id().to_string();
+        debug!("[transaction] 事务已开启: db_id={}, txn_id={}", db_id, txn_id);
+
+        // 设置事务ID到上下文
+        exec_context.svr_context.set_txn_id(txn_id.clone());
 
         // ==================== 收集子节点 ====================
 
@@ -802,13 +811,6 @@ impl OrchestratorV2 {
             .collect();
         debug!("[transaction] 找到 {} 个子节点", child_nodes.len());
 
-        // ==================== 获取事务ID ====================
-
-        // 获取事务ID，传递给子节点
-        // 子节点使用此事务ID执行 SQL，确保在同一事务中
-        let txn_id = txn_guard.txn_id().to_string();
-        debug!("[transaction] 子节点将使用事务ID: txn_id={}", txn_id);
-
         // ==================== 执行子节点 ====================
 
         // 依次执行每个子节点
@@ -818,13 +820,19 @@ impl OrchestratorV2 {
             match child_node.node_type.as_str() {
                 // 函数节点：在事务中执行
                 "skylake-func" => {
-                    // 调用函数节点，传入事务ID
-                    self.execute_func_node(child_node, exec_context, steps, Some(&txn_id)).await?;
+                    // 执行函数节点（事务ID已设置在 SVRContext 中）
+                    self.execute_func_node(child_node, exec_context, steps).await?;
                     debug!("[transaction] 子节点执行成功: node_id={}", child_node.id);
+                }
+                // 多分支节点：在事务中执行
+                "skylake-switch" => {
+                    // 执行 switch 节点（事务ID已设置在 SVRContext 中）
+                    self.execute_switch_node(child_node, exec_context, steps).await?;
+                    debug!("[transaction] switch 子节点执行成功: node_id={}", child_node.id);
                 }
                 // 其他节点类型：记录警告，跳过
                 _ => {
-                    warn!("事务框内遇到非 func 节点类型: {}", child_node.node_type);
+                    warn!("事务框内遇到不支持的节点类型: {}", child_node.node_type);
                 }
             }
         }
@@ -835,6 +843,9 @@ impl OrchestratorV2 {
         debug!("[transaction] 准备提交事务: txn_id={}", txn_id);
         txn_guard.commit().await
             .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
+
+        // 清除上下文中的事务ID
+        exec_context.svr_context.clear_txn_id();
 
         info!("事务已提交: node_id={}, db_id={}", transaction_node.id, db_id);
         debug!("[transaction] 事务提交成功: node_id={}", transaction_node.id);

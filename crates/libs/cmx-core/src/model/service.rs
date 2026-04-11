@@ -178,6 +178,9 @@ pub struct SVRContext {
     /// 各步骤执行结果的缓存（步骤ID -> 输出）
     #[serde(default)]
     pub step_outputs: HashMap<String, String>,
+    /// 事务ID（仅在事务框内执行时设置）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub txn_id: Option<String>,
 }
 
 impl SVRContext {
@@ -191,6 +194,7 @@ impl SVRContext {
             initial_input,
             headers,
             step_outputs: HashMap::new(),
+            txn_id: None,
         }
     }
 
@@ -213,6 +217,19 @@ impl SVRContext {
     pub fn get_step_output(&self, step_id: &str) -> Option<&String> {
         self.step_outputs.get(step_id)
     }
+
+    /// 设置事务ID（事务框开始时调用）
+    ///
+    /// # 参数
+    /// * `txn_id` - 事务ID
+    pub fn set_txn_id(&mut self, txn_id: String) {
+        self.txn_id = Some(txn_id);
+    }
+
+    /// 清除事务ID（事务框结束时调用）
+    pub fn clear_txn_id(&mut self) {
+        self.txn_id = None;
+    }
 }
 
 /// 函数输入结构体 — 固定入参格式
@@ -220,11 +237,8 @@ impl SVRContext {
 pub struct FunctionInput {
     /// 当前步骤输入数据（前序步骤输出或初始输入）
     pub input: String,
-    /// 服务调用上下文
+    /// 服务调用上下文（包含 txn_id）
     pub context: SVRContext,
-    /// 事务ID（仅在事务框内执行时设置）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub txn_id: Option<String>,
 }
 
 /// 函数输出结构体 — 固定出参格式

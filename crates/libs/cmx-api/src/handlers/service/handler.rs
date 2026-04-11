@@ -155,7 +155,6 @@ pub async fn service_call(
     let func_input = FunctionInput {
         input: input_str,
         context: svr_context,
-        txn_id: None,
     };
 
     // ==================== 调用 WASM 函数 ====================
