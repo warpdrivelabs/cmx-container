@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
 use crate::audit::logger::AuditLogger;
 use crate::core::context::PluginContext;
@@ -14,7 +15,7 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
+use cmx_traits::{plugin_events, PluginLifecyclePayload};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
@@ -51,8 +52,6 @@ pub struct UninstallServiceDeps {
     pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
-    /// 事件总线
-    pub event_bus: Arc<EventBus>,
     /// 审计日志
     pub audit_logger: Arc<AuditLogger>,
     /// 插件注册表
@@ -200,16 +199,10 @@ impl UninstallService {
 
 
         // 步骤10.2: 发布卸载事件（通知其他节点）
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginUninstalled,
-                plugin_id.clone(),
-                serde_json::json!({
-                    "version": version,
-                    "node_id": self.deps.node_id,
-                }),
-            ))
+        let payload = PluginLifecyclePayload::new(&plugin_id, &version);
+        
+        GlobalEventBus::get()
+            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
             .await;
 
 
@@ -240,7 +233,6 @@ impl Default for UninstallService {
             deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
-            event_bus: Arc::new(EventBus::new()),
             audit_logger: Arc::new(AuditLogger::default()),
             registry: Arc::new(tokio::sync::RwLock::new(PluginRegistry::new())),
             contexts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),

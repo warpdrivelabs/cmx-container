@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug web-server",
+            "preLaunchTask": "cargo build web-server",
+            "program": "${workspaceFolder}/target/debug/web-server.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "RUST_LOG",
+                    "value": "debug"
+                },
+                {
+                    "name": "RUST_BACKTRACE",
+                    "value": "1"
+                }
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Release web-server",
+            "preLaunchTask": "cargo build web-server --release",
+            "program": "${workspaceFolder}/target/release/web-server.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "RUST_LOG",
+                    "value": "info"
+                }
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}

@@ -40,7 +40,6 @@ use crate::domain::plugin::PluginStatus;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::file::FileStorage;
 use crate::runtime::activation::ActivationManager;
 use crate::runtime::service_registry::ServiceRegistry;
@@ -147,11 +146,6 @@ pub struct ActivateServiceDeps {
     ///
     /// 用于访问插件文件。
     pub storage: Arc<FileStorage>,
-
-    /// 事件总线
-    ///
-    /// 用于发布插件激活/停用事件。
-    pub event_bus: Arc<EventBus>,
 
     /// 审计日志
     ///
@@ -352,18 +346,6 @@ impl ActivateService {
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-        // 步骤9: 发布激活事件
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginActivated,
-                request.plugin_id.clone(),
-                serde_json::json!({
-                    "version": plugin.version,
-                }),
-            ))
-            .await;
-
         Ok(ActivateResponse {
             plugin_id: request.plugin_id,
             success: true,
@@ -493,18 +475,6 @@ impl ActivateService {
         .with_new_value("deactivated".to_string())
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
-
-        // 步骤9: 发布停用事件
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginDeactivated,
-                request.plugin_id.clone(),
-                serde_json::json!({
-                    "version": plugin.version,
-                }),
-            ))
-            .await;
 
         Ok(DeactivateResponse {
             plugin_id: request.plugin_id,
@@ -665,7 +635,6 @@ impl Default for ActivateService {
             repository: Arc::new(PluginRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(std::path::Path::new(""))),
-            event_bus: Arc::new(EventBus::new()),
             audit_logger: Arc::new(AuditLogger::default()),
             activation_manager: Arc::new(ActivationManager::new()),
             service_registry: Arc::new(ServiceRegistry::new()),

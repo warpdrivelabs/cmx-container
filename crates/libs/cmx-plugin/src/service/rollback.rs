@@ -28,7 +28,6 @@ use crate::core::context::PluginContext;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 
@@ -109,11 +108,6 @@ pub struct RollbackServiceDeps {
     ///
     /// 用于管理插件备份，查找和恢复备份。
     pub backup_manager: Arc<BackupManager>,
-
-    /// 事件总线
-    ///
-    /// 用于发布插件回滚事件。
-    pub event_bus: Arc<EventBus>,
 
     /// 审计日志
     ///
@@ -313,20 +307,6 @@ impl RollbackService {
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-        // 步骤10：发布事件
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginInstalled,
-                request.plugin_id.clone(),
-                serde_json::json!({
-                    "from_version": from_version,
-                    "to_version": to_version,
-                    "operation": "rollback",
-                }),
-            ))
-            .await;
-
         Ok(RollbackResponse {
             plugin_id: request.plugin_id,
             from_version,
@@ -442,7 +422,6 @@ impl Default for RollbackService {
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(std::path::Path::new(""))),
             backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),
-            event_bus: Arc::new(EventBus::new()),
             audit_logger: Arc::new(AuditLogger::default()),
             contexts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         })

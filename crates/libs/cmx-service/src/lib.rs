@@ -34,6 +34,7 @@ pub mod repository;
 pub mod registry;
 pub mod service_query_impl;
 pub mod service_storage_impl;
+pub mod lifecycle_listener;
 
 pub use error::ServiceError;
 pub use handler::ServiceHandler;
@@ -44,6 +45,7 @@ pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;
 pub use service_query_impl::ServiceQueryImpl;
 pub use service_storage_impl::ServiceStorageImpl;
+pub use lifecycle_listener::ServiceLifecycleListener;
 
 // ==================== 全局单例 ====================
 

@@ -38,7 +38,9 @@
 pub mod engine;
 pub mod error;
 pub mod global;
+pub mod lifecycle_listener;
 
 pub use engine::{ExtismEngine, ExtismEngineConfig};
 pub use error::ExtismError;
 pub use global::GlobalExtismEngine;
+pub use lifecycle_listener::RuntimeLifecycleListener;

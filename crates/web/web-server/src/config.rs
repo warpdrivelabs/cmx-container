@@ -189,7 +189,8 @@ pub async fn init_plugins() {
 ///
 /// 加载所有已安装插件的服务定义到内存缓存。
 pub async fn init_services() {
-    use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry, ServiceRepository, ServiceRegistry, ServiceQueryImpl, ServiceStorageImpl};
+    use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry, ServiceRepository, ServiceRegistry, ServiceQueryImpl, ServiceStorageImpl, ServiceLifecycleListener};
+    use cmx_runtime::RuntimeLifecycleListener;
     use cmx_traits::{ServiceQuery, ServiceStorage};
 
     info!("初始化服务管理器...");
@@ -251,5 +252,19 @@ pub async fn init_services() {
         info!("未发现已安装的服务定义");
     }
 
+    // 注册服务生命周期监听器
+    let service_listener = ServiceLifecycleListener::new(
+        GlobalServiceQuery::get().clone(),
+        GlobalServiceRegistry::get().clone(),
+    );
+    service_listener.register().await;
+
+    // 注册运行时生命周期监听器
+    let runtime_listener = RuntimeLifecycleListener::new(
+        cmx_runtime::GlobalExtismEngine::get_as_invoker()
+    );
+    runtime_listener.register().await;
+
+    info!("生命周期监听器已注册");
     info!("服务管理器初始化完成");
 }

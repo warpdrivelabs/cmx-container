@@ -34,6 +34,10 @@ pub enum TraitError {
     /// 内部错误
     #[error("内部错误: {0}")]
     Internal(String),
+
+    /// EventBus 已初始化
+    #[error("{0}")]
+    AlreadyInitialized(String),
 }
 
 /// 宿主函数错误类型

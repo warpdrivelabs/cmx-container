@@ -53,7 +53,6 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::runtime::activation::ActivationManager;
@@ -208,8 +207,6 @@ pub struct PluginManager {
     storage: Arc<FileStorage>,
     /// 备份管理器
     backup_manager: Arc<BackupManager>,
-    /// 事件总线
-    event_bus: Arc<EventBus>,
 
     // 安全组件
     /// 安全验证器
@@ -300,8 +297,6 @@ impl PluginManager {
 
         let backup_manager = Arc::new(BackupManager::new(settings.backup_root.clone()));
 
-        let event_bus = Arc::new(EventBus::new());
-
         let security_validator = Arc::new(SecurityValidator::new());
 
         let activation_manager = Arc::new(ActivationManager::new());
@@ -347,7 +342,6 @@ impl PluginManager {
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
                 security_validator: security_validator.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
@@ -370,7 +364,6 @@ impl PluginManager {
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
                 security_validator: security_validator.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
@@ -389,7 +382,6 @@ impl PluginManager {
                 repository: repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 activation_manager: activation_manager.clone(),
                 service_registry: service_registry.clone(),
@@ -403,7 +395,6 @@ impl PluginManager {
                 deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
@@ -418,7 +409,6 @@ impl PluginManager {
                 deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 plugin_root: settings.plugin_root.clone(),
@@ -433,7 +423,6 @@ impl PluginManager {
                 cache: cache.clone(),
                 storage: storage.clone(),
                 backup_manager: backup_manager.clone(),
-                event_bus: event_bus.clone(),
                 audit_logger: audit_logger.clone(),
                 contexts: contexts.clone(),
             },
@@ -476,7 +465,6 @@ impl PluginManager {
             cache,
             storage,
             backup_manager,
-            event_bus,
             security_validator,
             activation_manager,
             service_registry,
@@ -533,16 +521,6 @@ impl PluginManager {
         }
 
         *initialized = true;
-
-        self.event_bus
-            .publish(Event::new(
-                EventType::SystemStarted,
-                "plugin-manager".to_string(),
-                serde_json::json!({
-                    "timestamp": Utc::now().to_rfc3339(),
-                }),
-            ))
-            .await;
 
         Ok(())
     }
@@ -766,11 +744,6 @@ impl PluginManager {
         &self.cache
     }
 
-    /// 获取事件总线
-    pub fn event_bus(&self) -> &Arc<EventBus> {
-        &self.event_bus
-    }
-
     /// 获取激活管理器
     pub fn activation_manager(&self) -> &Arc<ActivationManager> {
         &self.activation_manager
@@ -812,16 +785,6 @@ impl PluginManager {
             //fixme 暂时注释了
             // let _ = self.deactivate(_deactivate_req).await;
         }
-
-        self.event_bus
-            .publish(Event::new(
-                EventType::SystemStopped,
-                "plugin-manager".to_string(),
-                serde_json::json!({
-                    "timestamp": Utc::now().to_rfc3339(),
-                }),
-            ))
-            .await;
 
         Ok(())
     }

@@ -26,14 +26,16 @@ pub mod global_runtime;
 pub mod invoke_context;
 pub mod service_query;
 pub mod service_storage;
+pub mod event_bus;
 
 // 统一导出
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
 pub use runtime_invoker::{RuntimeInvoker, WasmInvokeResult};
-pub use lifecycle::{PluginLifecycleListener, LifecycleEvent};
+pub use lifecycle::{PluginLifecycleListener, LifecycleEvent, PluginLifecyclePayload, plugin_events};
 pub use host_func::{HostFunctionProvider, HostFunctionDef, ValType};
 pub use error::{TraitError, HostFuncError};
 pub use global_runtime::GlobalRuntime;
 pub use invoke_context::{InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH};
 pub use service_query::ServiceQuery;
 pub use service_storage::ServiceStorage;
+pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};

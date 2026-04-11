@@ -15,7 +15,6 @@ use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::messaging::event::{EventBus, Event, EventType};
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
@@ -59,8 +58,6 @@ pub struct DowngradeServiceDeps {
     pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
-    /// 事件总线
-    pub event_bus: Arc<EventBus>,
     /// 审计日志
     pub audit_logger: Arc<AuditLogger>,
     /// 插件注册表
@@ -254,20 +251,6 @@ impl DowngradeService {
         .with_new_value(request.target_version.clone())
         .with_completed(duration_ms);
        let _ = self.deps.audit_logger.log(audit_record).await;
-
-        // 步骤10: 发布降级事件
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginDowngraded,
-                plugin_id.clone(),
-                serde_json::json!({
-                    "old_version": old_version,
-                    "new_version": request.target_version,
-                    "node_id": self.deps.node_id,
-                }),
-            ))
-            .await;
 
         //提交事务
         txn_guard

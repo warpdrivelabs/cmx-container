@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use tracing::{info, warn};
 
 use cmx_traits::{
-    LifecycleEvent, PluginLifecycleListener, PluginQuery, RuntimeInvoker, WasmInvokeResult,
+    PluginLifecyclePayload, PluginLifecycleListener, PluginQuery, RuntimeInvoker, WasmInvokeResult,
 };
 
 use crate::error::ServiceError;
@@ -146,26 +146,20 @@ impl CmxService {
 /// 实现 PluginLifecycleListener，响应插件生命周期事件
 #[async_trait]
 impl PluginLifecycleListener for CmxService {
-    /// 插件激活时，加载 WASM 模块到运行时
-    async fn on_plugin_activated(&self, event: LifecycleEvent) {
-        if let Some(wasm_path) = &event.wasm_path {
-            match self.runtime.load_module(&event.plugin_id, wasm_path).await {
-                Ok(_) => info!("插件 {} WASM 模块加载成功", event.plugin_id),
-                Err(e) => warn!("插件 {} WASM 模块加载失败: {}", event.plugin_id, e),
-            }
-        }
+    /// 插件安装时，不需要额外操作（服务定义由 ServiceLifecycleListener 处理）
+    async fn on_plugin_installed(&self, _event: PluginLifecyclePayload) {
+        // 服务定义的加载由 ServiceLifecycleListener 处理
     }
 
-    /// 插件停用时，卸载 WASM 模块
-    async fn on_plugin_deactivated(&self, event: LifecycleEvent) {
-        match self.runtime.unload_module(&event.plugin_id).await {
-            Ok(_) => info!("插件 {} WASM 模块卸载成功", event.plugin_id),
-            Err(e) => warn!("插件 {} WASM 模块卸载失败: {}", event.plugin_id, e),
-        }
+    /// 插件升级时，重新加载 WASM 模块
+    async fn on_plugin_upgraded(&self, event: PluginLifecyclePayload) {
+        // 先卸载旧版本的 WASM 模块
+        let _ = self.runtime.unload_module(&event.plugin_id).await;
+        info!("插件 {} WASM 模块已卸载（升级）", event.plugin_id);
     }
 
     /// 插件卸载时，清理资源
-    async fn on_plugin_uninstalled(&self, event: LifecycleEvent) {
+    async fn on_plugin_uninstalled(&self, event: PluginLifecyclePayload) {
         let _ = self.runtime.unload_module(&event.plugin_id).await;
         info!("插件 {} 资源已清理", event.plugin_id);
     }

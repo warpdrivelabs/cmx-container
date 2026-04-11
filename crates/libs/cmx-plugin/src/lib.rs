@@ -79,7 +79,6 @@ pub use infrastructure::cache::layered::{LayeredCacheManager, CacheValue, CacheS
 pub use infrastructure::storage::file::FileStorage;
 pub use infrastructure::storage::backup::{BackupManager, BackupInfo};
 pub use infrastructure::messaging::queue::{MessageQueue, Message, MessageQueueManager};
-pub use infrastructure::messaging::event::{EventBus, Event, EventType};
 
 // 导出集群模块类型
 pub use cluster::node::{NodeManager, NodeInfo, NodeStatus};

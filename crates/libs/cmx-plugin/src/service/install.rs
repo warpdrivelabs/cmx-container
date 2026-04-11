@@ -17,13 +17,14 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::infrastructure::messaging::event::{Event, EventBus, EventType};
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::security::validator::SecurityValidator;
 use chrono::Utc;
+use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
+use cmx_traits::{plugin_events, PluginLifecyclePayload};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -76,8 +77,6 @@ pub struct InstallServiceDeps {
     pub backup_manager: Arc<BackupManager>,
     /// 安全验证器
     pub security_validator: Arc<SecurityValidator>,
-    /// 事件总线
-    pub event_bus: Arc<EventBus>,
     /// 审计日志
     pub audit_logger: Arc<AuditLogger>,
     /// 插件注册表
@@ -456,16 +455,12 @@ impl InstallService {
         let _ = self.deps.audit_logger.log(audit_record).await?;
 
         // 步骤13: 发布安装完成事件
-        self.deps
-            .event_bus
-            .publish(Event::new(
-                EventType::PluginInstalled,
-                plugin_id.clone(),
-                serde_json::json!({
-                    "version": install_version,
-                    "install_path": install_path.to_string_lossy().to_string(),
-                }),
-            ))
+        let payload = PluginLifecyclePayload::new(&plugin_id, &install_version)
+            .with_install_path(install_path.clone())
+            .with_wasm_path(PathBuf::from(&wasm_path));
+        
+        GlobalEventBus::get()
+            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
             .await;
 
         // 步骤14: 解析并存储服务定义（使用事务保证一致性）
@@ -539,7 +534,6 @@ impl Default for InstallService {
             storage: Arc::new(FileStorage::new(Path::new(""))),
             backup_manager: Arc::new(BackupManager::new(PathBuf::from("./backups"))),
             security_validator: Arc::new(SecurityValidator::new()),
-            event_bus: Arc::new(EventBus::new()),
             audit_logger: Arc::new(AuditLogger::default()),
             registry: Arc::new(RwLock::new(PluginRegistry::new())),
             contexts: Arc::new(RwLock::new(std::collections::HashMap::new())),

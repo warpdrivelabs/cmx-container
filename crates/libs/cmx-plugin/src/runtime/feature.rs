@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::service_registry::ServiceRegistry;
-use crate::infrastructure::messaging::event::EventBus;
 
 /// 功能类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -52,18 +51,15 @@ pub struct FeatureManager {
     plugin_features: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// 服务注册表
     service_registry: Arc<ServiceRegistry>,
-    /// 事件总线
-    event_bus: Arc<EventBus>,
 }
 
 impl FeatureManager {
     /// 创建新的功能管理器
-    pub fn new(service_registry: Arc<ServiceRegistry>, event_bus: Arc<EventBus>) -> Self {
+    pub fn new(service_registry: Arc<ServiceRegistry>) -> Self {
         Self {
             features: Arc::new(RwLock::new(HashMap::new())),
             plugin_features: Arc::new(RwLock::new(HashMap::new())),
             service_registry,
-            event_bus,
         }
     }
     

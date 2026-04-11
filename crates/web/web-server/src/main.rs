@@ -91,6 +91,10 @@ async fn main() -> Result<()> {
     // 初始化 WASM 运行时（必须在 init_plugins 之前）
     init_runtime().await;
 
+    // 初始化全局事件总线（必须在 init_plugins 之前）
+    cmx_traits::GlobalEventBus::initialize().expect("初始化全局事件总线失败");
+    info!("全局事件总线初始化完成");
+
     // 初始化插件管理器
     init_plugins().await;
 
