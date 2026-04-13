@@ -12,6 +12,7 @@
 
 use tracing::{info, warn};
 use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, ValType, GlobalRuntime, WasmInvokeResult};
+use cmx_core::{ServiceCallRequest, ServiceCallResponse, PluginInfoResponse};
 
 /// 插件宿主函数提供者
 ///
@@ -33,7 +34,7 @@ impl PluginHostFunctions {
     /// 注意：此函数在 spawn_blocking 线程中被调用（因为宿主函数回调
     /// 在 plugin.call() 的执行线程中），所以可以直接使用 block_on。
     fn do_call_service(&self, input: String) -> Result<String, HostFuncError> {
-        let req: cmx_core::wasm_types::PluginCallRequest = match serde_json::from_str(&input) {
+        let req: ServiceCallRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
@@ -71,7 +72,7 @@ impl PluginHostFunctions {
 
     /// 获取插件信息
     fn do_get_info(&self, _input: String) -> Result<String, HostFuncError> {
-        let info = cmx_core::wasm_types::PluginInfoResponse {
+        let info = PluginInfoResponse {
             plugin_id: "current_plugin".to_string(),
             db_id: "default".to_string(),
             txn_id: None,
@@ -83,7 +84,7 @@ impl PluginHostFunctions {
 
     /// 构建成功响应
     fn ok_response(output: Option<String>, elapsed_us: Option<u64>) -> String {
-        serde_json::to_string(&cmx_core::wasm_types::PluginCallResponse {
+        serde_json::to_string(&ServiceCallResponse {
             success: true,
             output,
             elapsed_us,
@@ -94,7 +95,7 @@ impl PluginHostFunctions {
 
     /// 构建错误响应
     fn err_response(msg: String) -> String {
-        serde_json::to_string(&cmx_core::wasm_types::PluginCallResponse {
+        serde_json::to_string(&ServiceCallResponse {
             success: false,
             output: None,
             elapsed_us: None,

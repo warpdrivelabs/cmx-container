@@ -599,6 +599,7 @@ dependencies = [
  "bb8",
  "bb8-redis",
  "chrono",
+ "cmx-core",
  "cmx-traits",
  "cmx-utils",
  "derive_more",

@@ -50,8 +50,11 @@ pub use extism_pdk::*;
 
 // ==================== 宿主函数调用 ====================
 
-pub use host_calls::{
-    HostCaller,
+pub use host_calls::HostCaller;
+
+// ==================== WASM 类型（从 cmx_core 导出） ====================
+
+pub use cmx_core::{
     DbQueryRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
     ServiceCallRequest, ServiceCallResponse,

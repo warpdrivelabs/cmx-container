@@ -4,95 +4,11 @@
 //! 使用 extism-pdk 的 `#[host_fn]` 宏声明宿主函数签名。
 
 use extism_pdk::*;
-use serde::{Deserialize, Serialize};
-
-/// 数据库查询请求
-///
-/// 与宿主端 cmx_core::wasm_types::DbQueryRequest 保持一致
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DbQueryRequest {
-    /// SQL 查询语句
-    pub sql: String,
-    /// SQL 参数（JSON 字符串）
-    #[serde(default)]
-    pub params: Option<String>,
-    /// 数据集ID（可选）
-    #[serde(default)]
-    pub dataset_id: Option<String>,
-}
-
-/// 数据库操作响应
-///
-/// 与宿主端 cmx_core::wasm_types::DbResponse 保持一致
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DbResponse {
-    /// 是否成功
-    pub success: bool,
-    /// 影响行数（写操作返回）
-    pub affected_rows: Option<u64>,
-    /// 查询结果数据集（查询操作返回，JSON 字符串）
-    pub dataset: Option<String>,
-    /// 事务ID（事务操作返回）
-    pub txn_id: Option<String>,
-    /// 错误信息
-    pub error: Option<String>,
-}
-
-/// 缓存获取请求
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CacheGetRequest {
-    /// 缓存键
-    pub key: String,
-}
-
-/// 缓存设置请求
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CacheSetRequest {
-    /// 缓存键
-    pub key: String,
-    /// 缓存值
-    pub value: String,
-    /// 过期时间（秒）
-    #[serde(default)]
-    pub ttl_seconds: Option<u64>,
-}
-
-/// 缓存操作响应
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CacheResponse {
-    /// 是否成功
-    pub success: bool,
-    /// 缓存值（读取操作返回）
-    pub value: Option<String>,
-    /// 是否存在
-    pub exists: Option<bool>,
-    /// 错误信息
-    pub error: Option<String>,
-}
-
-/// 插件服务调用请求
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServiceCallRequest {
-    /// 目标插件ID
-    pub target_plugin_id: String,
-    /// 目标函数名
-    pub function_name: String,
-    /// 输入数据（JSON 字符串）
-    pub input: String,
-}
-
-/// 插件服务调用响应
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServiceCallResponse {
-    /// 是否成功
-    pub success: bool,
-    /// 输出数据（JSON 字符串）
-    pub output: Option<String>,
-    /// 执行耗时（微秒）
-    pub elapsed_us: Option<u64>,
-    /// 错误信息
-    pub error: Option<String>,
-}
+use cmx_core::{
+    DbQueryRequest, DbResponse,
+    CacheGetRequest, CacheSetRequest, CacheResponse,
+    ServiceCallRequest, ServiceCallResponse,
+};
 
 // 声明日志宿主函数
 #[host_fn("cmx:log")]

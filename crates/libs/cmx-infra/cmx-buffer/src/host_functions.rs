@@ -4,6 +4,7 @@
 //! 所有缓存键自动附加插件ID前缀，实现插件间缓存隔离。
 
 use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef};
+use cmx_core::{CacheGetRequest, CacheSetRequest, CacheResponse};
 
 use crate::cache::GlobalCacheManager;
 
@@ -28,12 +29,7 @@ impl BufferHostFunctions {
 
     /// 执行缓存读取
     fn do_cache_get(&self, input: String) -> Result<String, HostFuncError> {
-        #[derive(serde::Deserialize)]
-        struct CacheRequest {
-            key: String,
-        }
-
-        let req: CacheRequest = match serde_json::from_str(&input) {
+        let req: CacheGetRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
@@ -58,19 +54,11 @@ impl BufferHostFunctions {
 
     /// 执行缓存写入
     fn do_cache_set(&self, input: String) -> Result<String, HostFuncError> {
-        #[derive(serde::Deserialize)]
-        struct CacheRequest {
-            key: String,
-            value: Option<String>,
-            ttl_seconds: Option<u64>,
-        }
-
-        let req: CacheRequest = match serde_json::from_str(&input) {
+        let req: CacheSetRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
 
-        let value = req.value.as_deref().unwrap_or("");
         let cache = GlobalCacheManager::get();
         let full_key = Self::build_key("default", &req.key);
         let ttl = req.ttl_seconds;
@@ -80,9 +68,9 @@ impl BufferHostFunctions {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Some(ttl_secs) = ttl {
-                    cache.ops().set_ex(&full_key, value, std::time::Duration::from_secs(ttl_secs)).await
+                    cache.ops().set_ex(&full_key, &req.value, std::time::Duration::from_secs(ttl_secs)).await
                 } else {
-                    cache.ops().set(&full_key, value).await
+                    cache.ops().set(&full_key, &req.value).await
                 }
             })
         };
@@ -95,12 +83,7 @@ impl BufferHostFunctions {
 
     /// 执行缓存删除
     fn do_cache_delete(&self, input: String) -> Result<String, HostFuncError> {
-        #[derive(serde::Deserialize)]
-        struct CacheRequest {
-            key: String,
-        }
-
-        let req: CacheRequest = match serde_json::from_str(&input) {
+        let req: CacheGetRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
@@ -124,14 +107,6 @@ impl BufferHostFunctions {
 
     /// 构建成功响应
     fn ok_response(value: Option<String>, exists: Option<bool>) -> String {
-        #[derive(serde::Serialize)]
-        struct CacheResponse {
-            success: bool,
-            value: Option<String>,
-            exists: Option<bool>,
-            error: Option<String>,
-        }
-
         serde_json::to_string(&CacheResponse {
             success: true,
             value,
@@ -143,14 +118,6 @@ impl BufferHostFunctions {
 
     /// 构建错误响应
     fn err_response(msg: String) -> String {
-        #[derive(serde::Serialize)]
-        struct CacheResponse {
-            success: bool,
-            value: Option<String>,
-            exists: Option<bool>,
-            error: Option<String>,
-        }
-
         serde_json::to_string(&CacheResponse {
             success: false,
             value: None,

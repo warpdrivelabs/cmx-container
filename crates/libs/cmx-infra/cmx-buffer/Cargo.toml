@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 cmx-utils = { workspace = true }
 cmx-traits = { workspace = true }
+cmx-core = { path = "../../cmx-core" }
 
 # Redis 客户端
 redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script"] }
