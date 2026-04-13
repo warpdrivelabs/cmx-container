@@ -16,8 +16,11 @@
 //!
 //! #[plugin_fn]
 //! pub fn my_function(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
-//!     // 获取当前步骤输入
-//!     let current_input = &input.input;
+//!     // 获取当前步骤输入（字符串）
+//!     let current_input = input.as_str();
+//!     
+//!     // 解析为 JSON（如果输入是 JSON 格式）
+//!     let json_value = input.as_json_value();
 //!     
 //!     // 获取初始入参
 //!     let initial_input = &input.context.initial_input;
@@ -30,10 +33,11 @@
 //!         // 使用前序步骤输出
 //!     }
 //!     
-//!     // 返回结果
-//!     Ok(Json(FunctionOutput {
-//!         result: "处理结果".to_string(),
-//!     }))
+//!     // 返回结果（使用辅助方法）
+//!     Ok(Json(FunctionOutput::from_json(serde_json::json!({
+//!         "status": "success",
+//!         "data": "处理结果"
+//!     }))))
 //! }
 //! ```
 
@@ -65,20 +69,31 @@ pub use error::PluginError;
 ///
 /// # 字段说明
 ///
-/// - `input`: 当前步骤输入数据（前序步骤输出或初始输入）
-/// - `context`: 服务调用上下文，包含初始入参、请求头、各步骤输出
-/// - `txn_id`: 事务ID（仅在事务框内执行时设置）
+/// - `input`: 当前步骤输入数据（JSON 字符串或纯文本）
+/// - `context`: 服务调用上下文，包含初始入参、请求头、各步骤输出、事务ID
+/// - `binary_data`: 二进制数据（文件、图像等）
+///
+/// # 辅助方法
+///
+/// - `as_str()`: 获取输入作为字符串
+/// - `as_json_value()`: 解析为 JSON Value（宽松模式）
+/// - `parse_json::<T>()`: 解析为指定类型
 ///
 /// # 示例
 ///
 /// ```rust
 /// use cmx_plugin_sdk::FunctionInput;
+/// use std::collections::HashMap;
 ///
 /// let input = FunctionInput {
-///     input: "当前步骤输入".to_string(),
-///     context: SVRContext::new("初始入参".to_string(), Default::default()),
-///     txn_id: None,
+///     input: r#"{"name":"test"}"#.to_string(),
+///     context: SVRContext::new("初始入参".to_string(), HashMap::new()),
+///     binary_data: HashMap::new(),
 /// };
+///
+/// // 使用辅助方法
+/// let json = input.as_json_value();
+/// let name = input.parse_json::<serde_json::Value>();
 /// ```
 pub use cmx_core::FunctionInput;
 
@@ -88,16 +103,27 @@ pub use cmx_core::FunctionInput;
 ///
 /// # 字段说明
 ///
-/// - `result`: 函数执行结果，将传递给下一个步骤
+/// - `result`: 函数执行结果（JSON 字符串或纯文本）
+/// - `binary_data`: 二进制数据（文件、图像等）
+///
+/// # 辅助方法
+///
+/// - `new(result)`: 从字符串创建输出
+/// - `from_json(value)`: 从 JSON Value 创建输出
+/// - `with_binary(key, data)`: 添加二进制数据
 ///
 /// # 示例
 ///
 /// ```rust
 /// use cmx_plugin_sdk::FunctionOutput;
 ///
-/// let output = FunctionOutput {
-///     result: "处理结果".to_string(),
-/// };
+/// // 从字符串创建
+/// let output = FunctionOutput::new("处理结果");
+///
+/// // 从 JSON 创建
+/// let output = FunctionOutput::from_json(serde_json::json!({
+///     "status": "success"
+/// }));
 /// ```
 pub use cmx_core::FunctionOutput;
 

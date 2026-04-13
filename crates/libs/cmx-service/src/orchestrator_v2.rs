@@ -566,6 +566,7 @@ impl OrchestratorV2 {
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
+            binary_data: HashMap::new(),
         };
 
         debug!("[switch] 函数输入: input={}, txn_id={:?}", func_input.input, func_input.context.txn_id);
@@ -691,6 +692,7 @@ impl OrchestratorV2 {
         let func_input = FunctionInput {
             input: exec_context.current_output.clone(),
             context: exec_context.svr_context.clone(),
+            binary_data: HashMap::new(),
         };
         debug!("[func] 函数输入: input={}, txn_id={:?}", func_input.input, func_input.context.txn_id);
 

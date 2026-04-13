@@ -50,9 +50,7 @@
 //!     }
 //!
 //!     // 返回结果
-//!     Ok(Json(FunctionOutput {
-//!         result: "处理结果".to_string(),
-//!     }))
+//!     Ok(Json(FunctionOutput::new("处理结果")))
 //! }
 //! ```
 
@@ -96,7 +94,7 @@ pub struct DemoResponse {
 /// 输入: `{"input": "hello world", "context": {...}}`
 /// 输出: `{"result": "{\"count\":3,\"total\":3,\"input\":\"hello world\"}"}`
 #[plugin_fn]
-pub fn count_vowels(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 从标准入参获取当前步骤输入
     let input_str = &input.input;
 
@@ -112,9 +110,7 @@ pub fn count_vowels(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionO
     });
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: result.to_string(),
-    }))
+    Ok(Msgpack(FunctionOutput::from_json(result)))
 }
 
 /// 演示日志功能
@@ -148,9 +144,7 @@ pub fn demo_log(Json(_input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: serde_json::to_string(&response)?,
-    }))
+    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
 }
 
 /// 演示缓存功能
@@ -196,9 +190,7 @@ pub fn demo_cache(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOut
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: serde_json::to_string(&response)?,
-    }))
+    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
 }
 
 /// 演示数据库查询功能
@@ -242,9 +234,7 @@ pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: serde_json::to_string(&response)?,
-    }))
+    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
 }
 
 /// 演示插件间调用
@@ -282,9 +272,7 @@ pub fn demo_plugin_call(Json(input): Json<FunctionInput>) -> FnResult<Json<Funct
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: serde_json::to_string(&response)?,
-    }))
+    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
 }
 
 /// 综合测试入口
@@ -361,7 +349,398 @@ pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
     // let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
 
     // 返回标准出参
-    Ok(Json(FunctionOutput {
-        result: serde_json::to_string(&results)?,
-    }))
+    Ok(Json(FunctionOutput::new(serde_json::to_string(&results)?)))
+}
+
+// ==================== 服务编排测试函数 ====================
+
+/// 路由判断函数
+///
+/// 根据输入的 route 字段决定返回哪个分支标识。
+/// 用于 skylake-switch 节点，返回值对应 options 中的选项。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式，包含 route 字段
+///
+/// # 输出
+/// - `result`: 返回 "1"、"2" 或 "3"，对应三个分支
+///
+/// # 示例
+/// 输入: `{"input": "{\"route\":\"1\"}", "context": {...}}`
+/// 输出: `{"result": "1"}`
+#[plugin_fn]
+pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct RouteInput {
+        route: String,
+    }
+
+    let route_input: RouteInput = serde_json::from_str(&input.input)
+        .unwrap_or(RouteInput {
+            route: "1".to_string(),
+        });
+
+    let route = route_input.route.trim();
+    let result = match route {
+        "1" => "1",
+        "2" => "2",
+        "3" => "3",
+        _ => "1",
+    };
+
+    HostCaller::log_info(&format!("路由判断: route={}, 返回分支={}", route, result))?;
+
+    Ok(Json(FunctionOutput::new(result)))
+}
+
+/// 分支1处理函数
+///
+/// 处理分支1的业务逻辑。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的业务数据
+/// - `input.context.initial_input`: 初始入参
+///
+/// # 输出
+/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[plugin_fn]
+pub fn branch_1_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    HostCaller::log_info("执行分支1处理")?;
+
+    let result = serde_json::json!({
+        "branch": "1",
+        "message": "分支1处理完成",
+        "input": input.input,
+        "initial_input": input.context.initial_input,
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 分支2处理函数
+///
+/// 处理分支2的业务逻辑。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的业务数据
+/// - `input.context.initial_input`: 初始入参
+///
+/// # 输出
+/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[plugin_fn]
+pub fn branch_2_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    HostCaller::log_info("执行分支2处理")?;
+
+    let result = serde_json::json!({
+        "branch": "2",
+        "message": "分支2处理完成",
+        "input": input.input,
+        "initial_input": input.context.initial_input,
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 分支3处理函数
+///
+/// 处理分支3的业务逻辑。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的业务数据
+/// - `input.context.initial_input`: 初始入参
+///
+/// # 输出
+/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[plugin_fn]
+pub fn branch_3_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    HostCaller::log_info("执行分支3处理")?;
+
+    let result = serde_json::json!({
+        "branch": "3",
+        "message": "分支3处理完成",
+        "input": input.input,
+        "initial_input": input.context.initial_input,
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 合并结果函数
+///
+/// 合并各分支的处理结果。
+/// 可以通过 step_outputs 获取各分支的输出。
+///
+/// # 输入处理
+/// - `input.input`: 前序步骤的输出
+/// - `input.context.step_outputs`: 各步骤的输出缓存
+///
+/// # 输出
+/// - `result`: JSON 格式的合并结果
+#[plugin_fn]
+pub fn merge_result(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    HostCaller::log_info("执行合并结果处理")?;
+
+    let branch_output = input.context.get_step_output("branch_1_func")
+        .or_else(|| input.context.get_step_output("branch_2_func"))
+        .or_else(|| input.context.get_step_output("branch_3_func"))
+        .cloned()
+        .unwrap_or_else(|| input.input.clone());
+
+    let result = serde_json::json!({
+        "merged": true,
+        "branch_output": branch_output,
+        "message": "结果合并完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 事务插入函数
+///
+/// 在事务中执行插入操作。
+/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的插入数据
+/// - `input.context.txn_id`: 事务ID（由事务框设置）
+///
+/// # 输出
+/// - `result`: JSON 格式的操作结果
+#[plugin_fn]
+pub fn tx_insert(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    let txn_id = input.context.txn_id.clone();
+    HostCaller::log_info(&format!("执行事务插入, txn_id={:?}", txn_id))?;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct InsertData {
+        table: String,
+        name: String,
+        value: i32,
+    }
+
+    let insert_data: InsertData = serde_json::from_str(&input.input)
+        .unwrap_or(InsertData {
+            table: "test_table".to_string(),
+            name: "test".to_string(),
+            value: 1,
+        });
+
+    let sql = format!(
+        "INSERT INTO {} (name, value) VALUES ('{}', {})",
+        insert_data.table, insert_data.name, insert_data.value
+    );
+
+    let query_request = DbQueryRequest {
+        sql,
+        params: None,
+        dataset_id: None,
+    };
+
+    let db_response = HostCaller::db_query(query_request)?;
+
+    let result = serde_json::json!({
+        "operation": "insert",
+        "txn_id": txn_id,
+        "table": insert_data.table,
+        "success": db_response.success,
+        "message": "事务插入完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 事务更新函数
+///
+/// 在事务中执行更新操作。
+/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的更新数据
+/// - `input.context.txn_id`: 事务ID（由事务框设置）
+///
+/// # 输出
+/// - `result`: JSON 格式的操作结果
+#[plugin_fn]
+pub fn tx_update(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    let txn_id = input.context.txn_id.clone();
+    HostCaller::log_info(&format!("执行事务更新, txn_id={:?}", txn_id))?;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct UpdateData {
+        table: String,
+        name: String,
+        value: i32,
+    }
+
+    let update_data: UpdateData = serde_json::from_str(&input.input)
+        .unwrap_or(UpdateData {
+            table: "test_table".to_string(),
+            name: "test".to_string(),
+            value: 2,
+        });
+
+    let sql = format!(
+        "UPDATE {} SET value = {} WHERE name = '{}'",
+        update_data.table, update_data.value, update_data.name
+    );
+
+    let query_request = DbQueryRequest {
+        sql,
+        params: None,
+        dataset_id: None,
+    };
+
+    let db_response = HostCaller::db_query(query_request)?;
+
+    let result = serde_json::json!({
+        "operation": "update",
+        "txn_id": txn_id,
+        "table": update_data.table,
+        "success": db_response.success,
+        "message": "事务更新完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 事务查询函数
+///
+/// 在事务中执行查询操作。
+/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的查询条件
+/// - `input.context.txn_id`: 事务ID（由事务框设置）
+///
+/// # 输出
+/// - `result`: JSON 格式的查询结果
+#[plugin_fn]
+pub fn tx_query(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    let txn_id = input.context.txn_id.clone();
+    HostCaller::log_info(&format!("执行事务查询, txn_id={:?}", txn_id))?;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct QueryData {
+        table: String,
+        name: String,
+    }
+
+    let query_data: QueryData = serde_json::from_str(&input.input)
+        .unwrap_or(QueryData {
+            table: "test_table".to_string(),
+            name: "test".to_string(),
+        });
+
+    let sql = format!(
+        "SELECT * FROM {} WHERE name = '{}'",
+        query_data.table, query_data.name
+    );
+
+    let query_request = DbQueryRequest {
+        sql,
+        params: None,
+        dataset_id: None,
+    };
+
+    let db_response = HostCaller::db_query(query_request)?;
+
+    let result = serde_json::json!({
+        "operation": "query",
+        "txn_id": txn_id,
+        "table": query_data.table,
+        "success": db_response.success,
+        "dataset": db_response.dataset,
+        "message": "事务查询完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 事务删除函数
+///
+/// 在事务中执行删除操作。
+/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的删除条件
+/// - `input.context.txn_id`: 事务ID（由事务框设置）
+///
+/// # 输出
+/// - `result`: JSON 格式的操作结果
+#[plugin_fn]
+pub fn tx_delete(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    let txn_id = input.context.txn_id.clone();
+    HostCaller::log_info(&format!("执行事务删除, txn_id={:?}", txn_id))?;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct DeleteData {
+        table: String,
+        name: String,
+    }
+
+    let delete_data: DeleteData = serde_json::from_str(&input.input)
+        .unwrap_or(DeleteData {
+            table: "test_table".to_string(),
+            name: "test".to_string(),
+        });
+
+    let sql = format!(
+        "DELETE FROM {} WHERE name = '{}'",
+        delete_data.table, delete_data.name
+    );
+
+    let query_request = DbQueryRequest {
+        sql,
+        params: None,
+        dataset_id: None,
+    };
+
+    let db_response = HostCaller::db_query(query_request)?;
+
+    let result = serde_json::json!({
+        "operation": "delete",
+        "txn_id": txn_id,
+        "table": delete_data.table,
+        "success": db_response.success,
+        "message": "事务删除完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
+}
+
+/// 最终处理函数
+///
+/// 最终处理并返回结果。
+///
+/// # 输入处理
+/// - `input.input`: 前序步骤的输出
+/// - `input.context.step_outputs`: 各步骤的输出缓存
+///
+/// # 输出
+/// - `result`: JSON 格式的最终结果
+#[plugin_fn]
+pub fn final_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+    HostCaller::log_info("执行最终处理")?;
+
+    let merge_output = input.context.get_step_output("merge_func")
+        .cloned()
+        .unwrap_or_else(|| input.input.clone());
+
+    let tx_insert_output = input.context.get_step_output("tx_insert");
+    let tx_update_output = input.context.get_step_output("tx_update");
+    let tx_query_output = input.context.get_step_output("tx_query");
+    let tx_delete_output = input.context.get_step_output("tx_delete");
+
+    let result = serde_json::json!({
+        "final": true,
+        "merge_output": merge_output,
+        "tx_insert_output": tx_insert_output,
+        "tx_update_output": tx_update_output,
+        "tx_query_output": tx_query_output,
+        "tx_delete_output": tx_delete_output,
+        "txn_id": input.context.txn_id,
+        "message": "服务编排执行完成",
+    });
+
+    Ok(Json(FunctionOutput::from_json(result)))
 }

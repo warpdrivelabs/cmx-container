@@ -2,8 +2,8 @@ use crate::model::cell::CellValue;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[cfg(feature = "extism")]
-use extism_pdk::*;
+// #[cfg(feature = "extism")]
+// use extism_pdk::*;
 
 pub mod svrkey {
 
@@ -13,8 +13,8 @@ pub mod svrkey {
 
 /// Context结构体用于管理键值对形式的上下文数据
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "extism", derive(FromBytes, ToBytes))]
-#[cfg_attr(feature = "extism", encoding(Json))]
+// #[cfg_attr(feature = "extism", derive(FromBytes, ToBytes))]
+// #[cfg_attr(feature = "extism", encoding(Json))]
 pub struct SVRContext {
     data: HashMap<String, CellValue>,
 

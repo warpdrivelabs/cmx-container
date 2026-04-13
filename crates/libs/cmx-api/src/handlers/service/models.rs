@@ -14,9 +14,9 @@ use utoipa::{IntoParams, ToSchema};
 /// # 统一入参说明
 ///
 /// 所有 WASM 函数都使用 `FunctionInput` 作为入参，包含：
-/// - `input`: 当前步骤输入数据
-/// - `context`: 服务调用上下文（初始入参、请求头、步骤输出）
-/// - `txn_id`: 事务ID（可选）
+/// - `input`: 当前步骤输入数据（JSON 字符串或纯文本）
+/// - `context`: 服务调用上下文（初始入参、请求头、步骤输出、事务ID）
+/// - `binary_data`: 二进制数据（文件、图像等）
 ///
 /// 本请求体中的 `input` 会被封装到 `FunctionInput` 中传递给函数。
 /// `headers` 从 HTTP 请求头中获取，不从请求体传递。
@@ -37,7 +37,8 @@ pub struct FunctionCallRequest {
 /// # 统一出参说明
 ///
 /// 所有 WASM 函数都使用 `FunctionOutput` 作为出参，包含：
-/// - `result`: 函数执行结果
+/// - `result`: 函数执行结果（JSON 字符串或纯文本）
+/// - `binary_data`: 二进制数据（文件、图像等）
 ///
 /// 本响应体中的 `result` 来自 `FunctionOutput.result`。
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

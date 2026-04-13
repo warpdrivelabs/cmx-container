@@ -16,6 +16,7 @@
 
 // ==================== 依赖导入 ====================
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
@@ -155,6 +156,7 @@ pub async fn service_call(
     let func_input = FunctionInput {
         input: input_str,
         context: svr_context,
+        binary_data: HashMap::new(),
     };
 
     // ==================== 调用 WASM 函数 ====================
@@ -171,7 +173,7 @@ pub async fn service_call(
     // ==================== 解析 FunctionOutput ====================
 
     let output: FunctionOutput = if invoke_result.output.is_empty() {
-        FunctionOutput { result: String::new() }
+        FunctionOutput::new(String::new())
     } else {
         serde_json::from_slice(&invoke_result.output)
             .map_err(|e| Error::internal_error(format!("输出数据解析失败: {}", e)))?

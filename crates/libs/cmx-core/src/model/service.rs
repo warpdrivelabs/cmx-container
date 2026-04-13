@@ -235,17 +235,85 @@ impl SVRContext {
 /// 函数输入结构体 — 固定入参格式
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInput {
-    /// 当前步骤输入数据（前序步骤输出或初始输入）
+    /// 当前步骤输入数据（JSON 字符串或纯文本）
     pub input: String,
     /// 服务调用上下文（包含 txn_id）
     pub context: SVRContext,
+    /// 二进制数据（文件、图像等）
+    #[serde(default)]
+    pub binary_data: HashMap<String, Vec<u8>>,
+}
+
+impl FunctionInput {
+    /// 将 input 解析为指定类型
+    ///
+    /// # 类型参数
+    /// - `T`: 目标类型，需实现 `DeserializeOwned`
+    ///
+    /// # 返回值
+    /// - `Ok(T)`: 解析成功
+    /// - `Err`: 解析失败
+    pub fn parse_json<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::from_str(&self.input)
+    }
+
+    /// 将 input 解析为 JSON Value（宽松模式，失败返回 Null）
+    ///
+    /// # 返回值
+    /// - 解析成功返回对应的 JSON Value
+    /// - 解析失败返回 `Value::Null`
+    pub fn as_json_value(&self) -> serde_json::Value {
+        serde_json::from_str(&self.input).unwrap_or(serde_json::Value::Null)
+    }
+
+    /// 获取 input 作为字符串
+    pub fn as_str(&self) -> &str {
+        &self.input
+    }
 }
 
 /// 函数输出结构体 — 固定出参格式
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionOutput {
-    /// 函数执行结果
+    /// 函数执行结果（JSON 字符串或纯文本）
     pub result: String,
+    /// 二进制数据（文件、图像等）
+    #[serde(default)]
+    pub binary_data: HashMap<String, Vec<u8>>,
+}
+
+impl FunctionOutput {
+    /// 创建新的输出
+    ///
+    /// # 参数
+    /// - `result`: 执行结果字符串
+    pub fn new(result: impl Into<String>) -> Self {
+        Self {
+            result: result.into(),
+            binary_data: HashMap::new(),
+        }
+    }
+
+    /// 从 JSON Value 创建输出
+    ///
+    /// # 参数
+    /// - `value`: JSON 值，会被序列化为字符串
+    pub fn from_json(value: serde_json::Value) -> Self {
+        Self {
+            result: serde_json::to_string(&value).unwrap_or_default(),
+            binary_data: HashMap::new(),
+        }
+    }
+
+    /// 添加二进制数据
+    ///
+    /// # 参数
+    /// - `key`: 数据键名
+    /// - `data`: 二进制数据
+    pub fn with_binary(mut self, key: impl Into<String>, data: Vec<u8>) -> Self {
+        self.binary_data.insert(key.into(), data);
+        self
+    }
 }
 
 /// 服务运行时信息 — 内存缓存用
