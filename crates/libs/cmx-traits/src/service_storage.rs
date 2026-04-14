@@ -56,11 +56,13 @@ pub trait ServiceStorage: Send + Sync {
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
+    /// * `txn_id` - 事务id
+    /// * `version` - 服务版本
     ///
     /// # 返回值
     /// * `Ok(())` - 删除成功
     /// * `Err(TraitError)` - 删除失败
-    async fn delete_service(&self, service_key: &str) -> Result<(), TraitError>;
+    async fn delete_service(&self, service_key: &str, txn_id: Option<&str>, version: Option<&str>) -> Result<(), TraitError>;
 
     /// 根据插件ID删除所有服务
     ///

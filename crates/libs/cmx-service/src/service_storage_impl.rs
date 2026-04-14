@@ -87,9 +87,9 @@ impl ServiceStorage for ServiceStorageImpl {
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
-    async fn delete_service(&self, service_key: &str) -> Result<(), TraitError> {
+    async fn delete_service(&self, service_key: &str,txn_id: Option<&str>, version: Option<&str>) -> Result<(), TraitError> {
         self.repository
-            .delete_service(service_key)
+            .delete_service(service_key,txn_id,version)
             .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
         Ok(())
