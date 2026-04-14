@@ -8,8 +8,9 @@
 - [设计思想](#设计思想)
 - [代码结构](#代码结构)
 - [核心类型](#核心类型)
-- [使用指南](#使用指南)
 - [编排执行](#编排执行)
+- [全局单例](#全局单例)
+- [使用指南](#使用指南)
 - [依赖约束](#依赖约束)
 
 ---
@@ -19,8 +20,10 @@
 `cmx-service` 是 CMX 插件系统的服务编排层，提供：
 
 - **服务调用** — 单次 WASM 函数调用
-- **编排执行** — 多步骤流程编排
+- **编排执行** — 基于 Flow JSON 的 DAG 编排，支持事务框、多分支路由
 - **生命周期监听** — 响应插件激活/停用事件
+- **服务注册中心** — 服务信息的内存缓存
+- **服务仓储层** — 服务定义的数据库访问
 - **HTTP Handler** — 提供 HTTP 接口封装
 
 ---
@@ -38,23 +41,30 @@ cmx-service ──► cmx-traits ◄── cmx-plugin (PluginQuery)
 
 ### 2. 服务编排模式
 
-支持两种调用模式：
+基于 Flow JSON 的 DAG 编排执行：
 
-1. **单次调用** — 直接调用 WASM 函数
-2. **编排执行** — 多步骤流程，支持步骤间数据传递
-
-### 3. 生命周期监听
-
-实现 `PluginLifecycleListener` trait，在插件激活时自动加载 WASM 模块：
-
-```rust
-#[async_trait]
-impl PluginLifecycleListener for CmxService {
-    async fn on_plugin_activated(&self, event: LifecycleEvent) {
-        // 自动加载 WASM 模块
-    }
-}
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Orchestrator                             │
+├─────────────────────────────────────────────────────────────────┤
+│  execute_service()                                               │
+│       ↓                                                          │
+│  ┌─────────────┐  ┌──────────────────┐  ┌─────────────────┐    │
+│  │ FlowNavigator│  │TransactionManager│  │  NodeHandler    │    │
+│  │ (流程导航)   │  │  (事务管理)      │  │  (节点执行)     │    │
+│  └─────────────┘  └──────────────────┘  └─────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 3. 节点类型
+
+| 节点类型 | 说明 |
+|----------|------|
+| `skylake-start` | 开始节点，流程入口 |
+| `skylake-end` | 结束节点，流程出口 |
+| `skylake-func` | 函数节点，执行 WASM 函数 |
+| `skylake-switch` | 分支节点，根据返回值选择执行路径 |
+| `skylake-transaction` | 事务框节点，内部子节点在同一事务中执行 |
 
 ---
 
@@ -64,19 +74,114 @@ impl PluginLifecycleListener for CmxService {
 crates/libs/cmx-service/
 ├── Cargo.toml
 ├── src/
-│   ├── lib.rs              # 模块入口
-│   ├── service.rs          # CmxService 核心服务
-│   ├── orchestrator.rs     # Orchestrator 编排执行器
-│   ├── handler.rs          # ServiceHandler HTTP 处理器
-│   ├── request.rs          # 请求/响应类型
-│   └── error.rs            # ServiceError 错误类型
+│   ├── lib.rs                    # 模块入口，全局单例
+│   ├── service.rs                # CmxService 核心服务
+│   ├── handler.rs                # ServiceHandler HTTP 处理器
+│   ├── request.rs                # 请求/响应类型
+│   ├── error.rs                  # ServiceError 错误类型
+│   ├── registry.rs               # ServiceRegistry 服务注册中心
+│   ├── repository.rs             # ServiceRepository 服务仓储层
+│   ├── service_query_impl.rs     # ServiceQuery trait 实现
+│   ├── service_storage_impl.rs   # ServiceStorage trait 实现
+│   ├── lifecycle_listener.rs     # 生命周期监听器
+│   └── orchestrator/             # 编排器模块
+│       ├── mod.rs                # 模块入口
+│       ├── types.rs              # 类型定义
+│       ├── executor.rs           # Orchestrator 主执行器
+│       ├── node_handler.rs       # 节点执行器
+│       ├── flow_navigator.rs     # 流程导航器
+│       └── transaction_manager.rs # 事务管理器
 └── tests/
-    └── service_test.rs      # 单元测试
+    └── service_test.rs           # 单元测试
 ```
 
 ---
 
 ## 核心类型
+
+### Orchestrator
+
+编排执行器，支持基于 Flow JSON 的 DAG 编排：
+
+```rust
+pub struct Orchestrator {
+    runtime: Arc<dyn RuntimeInvoker>,
+    plugin_query: Arc<dyn PluginQuery>,
+    service_query: Arc<dyn ServiceQuery>,
+    default_db_id: String,
+}
+```
+
+### OrchestrationResult
+
+编排执行结果：
+
+```rust
+pub struct OrchestrationResult {
+    /// 是否执行成功
+    pub success: bool,
+    /// 最终输出结果
+    pub output: Option<String>,
+    /// 各步骤执行记录
+    pub steps: Vec<ExecutionStep>,
+    /// 总执行耗时（微秒）
+    pub total_elapsed_us: u64,
+    /// 结构化错误信息（失败时）
+    pub error: Option<OrchestrationError>,
+}
+```
+
+### ExecutionStep
+
+执行步骤记录：
+
+```rust
+pub struct ExecutionStep {
+    pub node_id: String,
+    pub node_name: String,
+    pub node_type: String,
+    pub status: StepStatus,        // Success / Failed / Skipped
+    pub output: Option<String>,
+    pub elapsed_us: u64,
+    pub error: Option<String>,
+}
+```
+
+### ExecuteOptions
+
+执行选项：
+
+```rust
+pub struct ExecuteOptions {
+    /// 是否返回步骤数据
+    /// - false: 仅返回最终结果（生产环境推荐）
+    /// - true: 返回所有步骤数据（调试时使用）
+    /// - 失败时始终返回步骤数据
+    pub include_steps: bool,
+}
+```
+
+### OrchestrationError
+
+结构化错误信息：
+
+```rust
+pub struct OrchestrationError {
+    /// 失败步骤详情
+    pub failed_step: Option<FailedStepInfo>,
+    /// 错误摘要
+    pub message: String,
+}
+
+pub struct FailedStepInfo {
+    pub node_id: String,
+    pub node_name: String,
+    pub node_type: String,
+    pub step_index: usize,
+    pub error: String,
+    pub previous_output: Option<String>,  // 上一步输出，便于排错
+}
+```
 
 ### CmxService
 
@@ -87,17 +192,6 @@ pub struct CmxService {
     plugin_query: Arc<dyn PluginQuery>,
     runtime: Arc<dyn RuntimeInvoker>,
     config: ServiceConfig,
-}
-```
-
-### Orchestrator
-
-编排执行器，支持多步骤流程：
-
-```rust
-pub struct Orchestrator {
-    runtime: Arc<dyn RuntimeInvoker>,
-    plugin_query: Arc<dyn PluginQuery>,
 }
 ```
 
@@ -122,15 +216,93 @@ pub struct InvokeResponse {
     pub fuel_consumed: u64,
     pub error: Option<String>,
 }
+```
 
-// 编排执行请求
-pub struct OrchestrateRequest {
-    pub orchestration: Orchestration,
-    pub initial_input: serde_json::Value,
-    pub db_id: Option<String>,
-    pub request_id: Option<String>,
-    pub tenant_id: Option<String>,
+---
+
+## 编排执行
+
+### 执行流程
+
+```text
+1. 查询服务编排定义（ServiceOrchestration）
+2. 初始化执行上下文（ExecutionContext）
+3. 查找开始节点（skylake-start）
+4. 循环执行节点：
+   a. 查找当前节点
+   b. 管理事务状态（TransactionManager）
+   c. 根据节点类型执行：
+      - skylake-start: 跳转到下一个节点
+      - skylake-end: 提交事务，结束循环
+      - skylake-func: 执行函数，跳转到下一个节点
+      - skylake-switch: 执行函数，根据返回值选择分支
+      - skylake-transaction: 执行事务框内的所有子节点
+5. 构建返回结果（OrchestrationResult）
+```
+
+### 事务管理
+
+事务状态机：
+
+```text
+[无事务] --节点进入事务框--> [有事务] --节点离开事务框--> [提交事务] --> [无事务]
+    |                              |
+    +--节点不在事务框--> 正常执行   +--执行失败--> [回滚事务] --> [无事务]
+```
+
+### 调用示例
+
+```rust
+use cmx_service::{Orchestrator, ExecuteOptions};
+
+// 创建编排执行器
+let orchestrator = Orchestrator::new(
+    runtime.clone(),
+    plugin_query.clone(),
+    service_query.clone(),
+    default_db_id,
+);
+
+// 执行服务编排
+let options = ExecuteOptions::new(true);  // 返回步骤数据
+let result = orchestrator.execute_service(
+    "user-service",
+    r#"{"user_id": "12345"}"#,
+    headers,
+    options,
+).await?;
+
+if result.success {
+    println!("输出: {:?}", result.output);
+    println!("总耗时: {} μs", result.total_elapsed_us);
+} else {
+    println!("失败: {}", result.error.unwrap().message);
+    // 查看失败步骤详情
+    if let Some(failed) = result.error.unwrap().failed_step {
+        println!("失败节点: {} ({})", failed.node_name, failed.node_id);
+        println!("上一步输出: {:?}", failed.previous_output);
+    }
 }
+```
+
+---
+
+## 全局单例
+
+提供全局访问器，避免在应用层传递引用：
+
+```rust
+use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry};
+
+// 初始化
+GlobalServiceQuery::set(service_query)?;
+GlobalServiceStorage::set(service_storage)?;
+GlobalServiceRegistry::set(registry)?;
+
+// 使用
+let query = GlobalServiceQuery::get();
+let storage = GlobalServiceStorage::get();
+let registry = GlobalServiceRegistry::get();
 ```
 
 ---
@@ -201,79 +373,6 @@ async fn handle_call(
 
 ---
 
-## 编排执行
-
-### 编排定义
-
-```rust
-use cmx_service::{Orchestration, OrchestrationStep, StepInput};
-
-let orchestration = Orchestration {
-    id: "order-flow".to_string(),
-    name: "订单处理流程".to_string(),
-    description: Some("处理订单的完整流程".to_string()),
-    steps: vec![
-        // 步骤1: 验证订单
-        OrchestrationStep {
-            step_id: "validate".to_string(),
-            plugin_id: "validator-plugin".to_string(),
-            function_name: "validate_order".to_string(),
-            input: StepInput::Static { 
-                value: json!({"order_id": "12345"}) 
-            },
-            parallel: false,
-            condition: None,
-        },
-        // 步骤2: 处理订单（引用前一步骤输出）
-        OrchestrationStep {
-            step_id: "process".to_string(),
-            plugin_id: "order-plugin".to_string(),
-            function_name: "process_order".to_string(),
-            input: StepInput::Reference { 
-                step_id: "validate".to_string(),
-                path: Some("data".to_string()),
-            },
-            parallel: false,
-            condition: None,
-        },
-    ],
-};
-```
-
-### StepInput 类型
-
-| 类型 | 说明 |
-|------|------|
-| `Static` | 静态 JSON 值 |
-| `Reference` | 引用前序步骤输出，支持 JSON 路径 |
-| `Merge` | 合并多个来源 |
-
-### 执行编排
-
-```rust
-use cmx_service::OrchestrateRequest;
-
-let request = OrchestrateRequest {
-    orchestration,
-    initial_input: json!({}),
-    db_id: Some("main-db".to_string()),
-    request_id: Some("req-002".to_string()),
-    tenant_id: None,
-};
-
-let response = handler.handle_orchestration(request).await;
-
-println!("成功: {}", response.success);
-println!("总耗时: {} μs", response.total_elapsed_us);
-
-for step in response.step_results {
-    println!("步骤 {}: {}", step.step_id, 
-        if step.success { "成功" } else { "失败" });
-}
-```
-
----
-
 ## 依赖约束
 
 ### 允许的依赖
@@ -316,6 +415,8 @@ pub enum ServiceError {
     DatabaseError(String),
     TraitError(TraitError),
     InternalError(String),
+    NodeExecutionFailed { node_id, node_name, node_type, detail },
+    TransactionRolledBack { txn_id, reason },
 }
 ```
 
@@ -338,5 +439,5 @@ pub struct ServiceConfig {
 
 ---
 
-*文档版本: 1.0.0*
-*最后更新: 2026-04-02*
+*文档版本: 2.0.0*
+*最后更新: 2026-04-14*

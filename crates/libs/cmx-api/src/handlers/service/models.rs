@@ -54,7 +54,7 @@ pub struct FunctionCallResponse {
     pub error: Option<String>,
 }
 
-// ==================== 服务编排 V2 请求/响应结构体 ====================
+// ==================== 服务编排请求/响应结构体 ====================
 
 /// 服务执行请求
 ///
@@ -69,6 +69,12 @@ pub struct ServiceExecuteRequest {
     pub service_key: String,
     /// 初始输入数据（传递给第一个函数节点，支持 JSON 对象或字符串）
     pub input: serde_json::Value,
+    /// 是否返回步骤数据（可选，默认 false）
+    /// - true: 调试模式，返回每个步骤的详细数据
+    /// - false: 生产模式，仅返回最终结果
+    /// - 注意：执行失败时无论此参数设置如何，都会返回步骤数据
+    #[serde(default)]
+    pub include_steps: Option<bool>,
 }
 
 /// 服务执行响应
@@ -84,6 +90,9 @@ pub struct ServiceExecuteResponse {
     pub steps: Vec<ServiceExecutionStep>,
     /// 总执行耗时（微秒）
     pub total_elapsed_us: u64,
+    /// 错误详情（失败时包含结构化错误信息）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ServiceOrchestrationError>,
 }
 
 /// 服务执行步骤记录
@@ -95,10 +104,49 @@ pub struct ServiceExecutionStep {
     pub node_id: String,
     /// 节点名称（对应 Flow JSON 中的 node.data.name）
     pub node_name: String,
-    /// 步骤输出（函数执行结果）
+    /// 节点类型（如 skylake-func、skylake-switch）
+    pub node_type: String,
+    /// 步骤执行状态
+    pub status: String,
+    /// 步骤输出（函数执行结果，失败时可能为 None）
     pub output: Option<String>,
     /// 执行耗时（微秒）
     pub elapsed_us: u64,
+    /// 步骤级错误信息（失败时包含具体错误描述）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// 服务编排错误信息
+///
+/// 失败时提供结构化的错误上下文
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceOrchestrationError {
+    /// 失败步骤的详细信息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_step: Option<ServiceFailedStepInfo>,
+    /// 错误摘要信息
+    pub message: String,
+}
+
+/// 服务失败步骤详情
+///
+/// 记录导致编排失败的步骤信息，包括上一步输出用于排错
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceFailedStepInfo {
+    /// 失败的节点ID
+    pub node_id: String,
+    /// 失败的节点名称
+    pub node_name: String,
+    /// 失败的节点类型
+    pub node_type: String,
+    /// 失败步骤的序号（从 0 开始）
+    pub step_index: usize,
+    /// 具体错误信息
+    pub error: String,
+    /// 上一步的输出（失败前的数据，便于排查问题）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_output: Option<String>,
 }
 
 // ==================== 服务查询请求结构体 ====================

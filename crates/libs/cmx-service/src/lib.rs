@@ -5,7 +5,7 @@
 //! # 核心功能
 //!
 //! - **CmxService** - 核心服务结构，实现 PluginLifecycleListener 响应插件生命周期
-//! - **OrchestratorV2** - 编排执行器 V2，支持服务编排 JSON 格式、事务框、多分支节点
+//! - **Orchestrator** - 编排执行器，支持服务编排 JSON 格式、事务框、多分支节点
 //! - **ServiceHandler** - HTTP 处理器，封装服务层逻辑供 cmx-api 调用
 //! - **ServiceRegistry** - 服务注册中心，提供服务信息的内存缓存
 //! - **ServiceRepository** - 服务仓储层，提供服务定义的数据库访问
@@ -27,7 +27,7 @@
 
 pub mod error;
 pub mod handler;
-pub mod orchestrator_v2;
+pub mod orchestrator;
 pub mod request;
 pub mod service;
 pub mod repository;
@@ -38,7 +38,7 @@ pub mod lifecycle_listener;
 
 pub use error::ServiceError;
 pub use handler::ServiceHandler;
-pub use orchestrator_v2::{OrchestratorV2, OrchestrationResultV2, ExecutionStep, ExecutionContext};
+pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, FailedStepInfo, StepStatus};
 pub use request::{InvokeRequest, InvokeResponse};
 pub use service::{CmxService, ServiceConfig};
 pub use registry::ServiceRegistry;

@@ -52,6 +52,28 @@ pub enum ServiceError {
     #[error("{0}")]
     TraitError(#[from] TraitError),
 
+    /// 节点执行失败（携带步骤上下文）
+    #[error("节点执行失败 [{node_type}] {node_name}({node_id}): {detail}")]
+    NodeExecutionFailed {
+        /// 失败的节点ID
+        node_id: String,
+        /// 失败的节点名称
+        node_name: String,
+        /// 失败的节点类型
+        node_type: String,
+        /// 具体错误信息
+        detail: String,
+    },
+
+    /// 事务回滚
+    #[error("事务回滚: txn_id={txn_id}, reason={reason}")]
+    TransactionRolledBack {
+        /// 事务ID
+        txn_id: String,
+        /// 回滚原因
+        reason: String,
+    },
+
     /// 内部错误
     #[error("内部错误: {0}")]
     InternalError(String),

@@ -37,6 +37,7 @@ use crate::middleware::CmxSvrContext;
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
+    ServiceOrchestrationError, ServiceFailedStepInfo,
     ServiceGetQuery, ServiceByPluginQuery,
     ServiceListItem, ServiceDetailResponse,
 };
@@ -204,6 +205,7 @@ pub async fn service_call(
 /// - `service_key`: 服务唯一标识
 /// - `input`: 输入数据（JSON 字符串）
 /// - `svr_headers`: HTTP 请求头
+/// - `include_steps`: 是否返回步骤数据
 ///
 /// # 返回值
 /// 返回服务执行结果
@@ -212,6 +214,7 @@ async fn execute_service_inner(
     service_key: &str,
     input: String,
     svr_headers: std::collections::HashMap<String, String>,
+    include_steps: bool,
 ) -> Result<ServiceExecuteResponse, Error> {
     // ==================== 获取依赖组件 ====================
 
@@ -227,17 +230,20 @@ async fn execute_service_inner(
     // ==================== 创建编排执行器并执行 ====================
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
-    let orchestrator = cmx_service::OrchestratorV2::new(
+    let orchestrator = cmx_service::Orchestrator::new(
         runtime.clone(),
         plugin_query.clone(),
         service_query.clone(),
         default_db_id,
     );
 
+    let options = cmx_service::ExecuteOptions::new(include_steps);
+
     let result = orchestrator.execute_service(
         service_key,
         &input,
         svr_headers,
+        options,
     ).await
         .map_err(|e| {
             error!("服务{}执行失败: {:?}", service_key, e);
@@ -252,10 +258,28 @@ async fn execute_service_inner(
         steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
             node_id: s.node_id,
             node_name: s.node_name,
+            node_type: s.node_type,
+            status: match s.status {
+                cmx_service::StepStatus::Success => "Success".to_string(),
+                cmx_service::StepStatus::Failed => "Failed".to_string(),
+                cmx_service::StepStatus::Skipped => "Skipped".to_string(),
+            },
             output: s.output,
             elapsed_us: s.elapsed_us,
+            error: s.error,
         }).collect(),
         total_elapsed_us: result.total_elapsed_us,
+        error: result.error.map(|e| ServiceOrchestrationError {
+            failed_step: e.failed_step.map(|fs| ServiceFailedStepInfo {
+                node_id: fs.node_id,
+                node_name: fs.node_name,
+                node_type: fs.node_type,
+                step_index: fs.step_index,
+                error: fs.error,
+                previous_output: fs.previous_output,
+            }),
+            message: e.message,
+        }),
     };
 
     Ok(response)
@@ -299,10 +323,11 @@ pub async fn execute_service(
 
     let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
+    let include_steps = req.include_steps.unwrap_or(false);
 
     // ==================== 执行服务编排 ====================
 
-    let response = execute_service_inner(&state, &req.service_key, input_str, svr_headers).await?;
+    let response = execute_service_inner(&state, &req.service_key, input_str, svr_headers, include_steps).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
@@ -351,10 +376,11 @@ pub async fn execute_service_by_key(
 
     let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
+    let include_steps = req.include_steps.unwrap_or(false);
 
     // ==================== 执行服务编排（路径参数优先） ====================
 
-    let response = execute_service_inner(&state, &service_key, input_str, svr_headers).await?;
+    let response = execute_service_inner(&state, &service_key, input_str, svr_headers, include_steps).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
