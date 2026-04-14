@@ -55,7 +55,7 @@ pub use host_calls::HostCaller;
 // ==================== WASM 类型（从 cmx_core 导出） ====================
 
 pub use cmx_core::{
-    DbQueryRequest, DbResponse,
+    DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
     ServiceCallRequest, ServiceCallResponse,
 };

@@ -55,7 +55,7 @@
 //! ```
 
 use extism_pdk::*;
-use cmx_plugin_sdk::{FunctionInput, FunctionOutput, HostCaller, DbQueryRequest};
+use cmx_plugin_sdk::{FunctionInput, FunctionOutput, HostCaller, DbRequest};
 use serde::{Deserialize, Serialize};
 
 // ==================== 业务数据结构 ====================
@@ -215,10 +215,12 @@ pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
         });
 
     // 构建数据库查询请求
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql: format!("SELECT '{}' as name, {} as count", request.name, request.count),
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: None,
     };
 
     // 执行数据库查询
@@ -325,10 +327,12 @@ pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
     let _ = HostCaller::log_info("测试数据库");
 
     // ==================== 测试数据库 ====================
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql: format!("SELECT * from cmx_meta_table_define_version"),
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: None,
     };
     match HostCaller::db_query(query_request) {
         Ok(resp) => results.push(format!("数据库测试: {:?}", resp)),
@@ -530,10 +534,12 @@ pub fn tx_insert(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         insert_data.table, insert_data.name, insert_data.value
     );
 
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql,
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: txn_id.clone(),
     };
 
     let db_response = HostCaller::db_query(query_request)?;
@@ -584,10 +590,12 @@ pub fn tx_update(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         update_data.table, update_data.value, update_data.name
     );
 
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql,
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: txn_id.clone(),
     };
 
     let db_response = HostCaller::db_query(query_request)?;
@@ -636,10 +644,12 @@ pub fn tx_query(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutpu
         query_data.table, query_data.name
     );
 
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql,
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: txn_id.clone(),
     };
 
     let db_response = HostCaller::db_query(query_request)?;
@@ -689,10 +699,12 @@ pub fn tx_delete(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         delete_data.table, delete_data.name
     );
 
-    let query_request = DbQueryRequest {
+    let query_request = DbRequest {
         sql,
         params: None,
         dataset_id: None,
+        db_id: None,
+        txn_id: txn_id.clone(),
     };
 
     let db_response = HostCaller::db_query(query_request)?;

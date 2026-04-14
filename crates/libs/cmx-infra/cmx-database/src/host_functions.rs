@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef};
-use cmx_core::wasm_types::{DbQueryRequest, DbResponse};
+use cmx_core::wasm_types::{DbRequest, DbResponse};
 
 use crate::DatabaseManager;
 
@@ -26,12 +26,12 @@ impl DatabaseHostFunctions {
     /// 执行数据库查询
     ///
     /// # 参数
-    /// - `input`: JSON 格式的查询请求，包含 sql、params、dataset_id 字段
+    /// - `input`: JSON 格式的查询请求，包含 sql、params、dataset_id、db_id、txn_id 字段
     ///
     /// # 返回
     /// - JSON 格式的响应，包含 success、dataset、error 字段
     fn do_query(&self, input: String) -> Result<String, HostFuncError> {
-        let query_request: DbQueryRequest = match serde_json::from_str(&input) {
+        let request: DbRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => {
                 let response = DbResponse {
@@ -46,15 +46,20 @@ impl DatabaseHostFunctions {
         };
 
         let db_manager = self.db_manager.clone();
-        let sql = query_request.sql.clone();
-        let params = query_request.params.clone();
-        let dataset_id = query_request.dataset_id.clone().unwrap_or_else(|| "wasm_query".to_string());
+        let sql = request.sql.clone();
+        let params = request.params.clone();
+        let dataset_id = request.dataset_id.clone().unwrap_or_else(|| "wasm_query".to_string());
+        let request_txn_id = request.txn_id.clone();
 
         // 当前已在 spawn_blocking 线程中，直接使用 block_on
         let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
-                let db_id = db_manager.get_default_db_id().await;
+                // 获取数据库ID：优先使用请求中的 db_id，否则使用默认数据库
+                let db_id = match request.db_id {
+                    Some(ref id) if !id.is_empty() => id.clone(),
+                    _ => db_manager.get_default_db_id().await,
+                };
 
                 if let Some(params_str) = params {
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
@@ -65,12 +70,12 @@ impl DatabaseHostFunctions {
                     };
 
                     db_manager
-                        .query_sql_with_json(&db_id, None, &sql, params_value, &dataset_id)
+                        .query_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value, &dataset_id)
                         .await
                         .map_err(|e| e.to_string())
                 } else {
                     db_manager
-                        .query_sql(&db_id, None, &sql, &dataset_id)
+                        .query_sql(&db_id, request_txn_id.as_deref(), &sql, &dataset_id)
                         .await
                         .map_err(|e| e.to_string())
                 }
@@ -106,12 +111,12 @@ impl DatabaseHostFunctions {
     /// 执行数据库操作（INSERT/UPDATE/DELETE）
     ///
     /// # 参数
-    /// - `input`: JSON 格式的执行请求，包含 sql、params 字段
+    /// - `input`: JSON 格式的执行请求，包含 sql、params、db_id、txn_id 字段
     ///
     /// # 返回
     /// - JSON 格式的响应，包含 success、affected_rows、error 字段
     fn do_execute(&self, input: String) -> Result<String, HostFuncError> {
-        let execute_request: DbQueryRequest = match serde_json::from_str(&input) {
+        let request: DbRequest = match serde_json::from_str(&input) {
             Ok(r) => r,
             Err(e) => {
                 let response = DbResponse {
@@ -126,14 +131,19 @@ impl DatabaseHostFunctions {
         };
 
         let db_manager = self.db_manager.clone();
-        let sql = execute_request.sql.clone();
-        let params = execute_request.params.clone();
+        let sql = request.sql.clone();
+        let params = request.params.clone();
+        let request_txn_id = request.txn_id.clone();
 
         // 当前已在 spawn_blocking 线程中，直接使用 block_on
         let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
-                let db_id = db_manager.get_default_db_id().await;
+                // 获取数据库ID：优先使用请求中的 db_id，否则使用默认数据库
+                let db_id = match request.db_id {
+                    Some(ref id) if !id.is_empty() => id.clone(),
+                    _ => db_manager.get_default_db_id().await,
+                };
 
                 if let Some(params_str) = params {
                     let params_value: serde_json::Value = match serde_json::from_str(&params_str) {
@@ -144,12 +154,12 @@ impl DatabaseHostFunctions {
                     };
 
                     db_manager
-                        .execute_sql_with_json(&db_id, None, &sql, params_value)
+                        .execute_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value)
                         .await
                         .map_err(|e| e.to_string())
                 } else {
                     db_manager
-                        .execute_sql(&db_id, None, &sql)
+                        .execute_sql(&db_id, request_txn_id.as_deref(), &sql)
                         .await
                         .map_err(|e| e.to_string())
                 }

@@ -17,7 +17,7 @@ pub mod context;
 pub mod common;
 
 // 重新导出所有类型，方便外部使用
-pub use database::{DbQueryRequest, DbResponse};
+pub use database::{DbRequest, DbResponse};
 pub use cache::{CacheGetRequest, CacheSetRequest, CacheResponse};
 pub use plugin::{ServiceCallRequest, ServiceCallResponse, PluginInfoResponse};
 pub use context::WasmContext;

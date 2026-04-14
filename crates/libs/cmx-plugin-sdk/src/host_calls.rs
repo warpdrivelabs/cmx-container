@@ -5,7 +5,7 @@
 
 use extism_pdk::*;
 use cmx_core::{
-    DbQueryRequest, DbResponse,
+    DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
     ServiceCallRequest, ServiceCallResponse,
 };
@@ -81,7 +81,7 @@ impl HostCaller {
     }
 
     /// 执行数据库查询
-    pub fn db_query(request: DbQueryRequest) -> Result<DbResponse, Error> {
+    pub fn db_query(request: DbRequest) -> Result<DbResponse, Error> {
         let json = serde_json::to_string(&request)?;
         let result = unsafe { db_query(json)? };
         let response: DbResponse = serde_json::from_str(&result)?;
@@ -89,7 +89,7 @@ impl HostCaller {
     }
 
     /// 执行数据库操作
-    pub fn db_execute(request: DbQueryRequest) -> Result<DbResponse, Error> {
+    pub fn db_execute(request: DbRequest) -> Result<DbResponse, Error> {
         let json = serde_json::to_string(&request)?;
         let result = unsafe { db_execute(json)? };
         let response: DbResponse = serde_json::from_str(&result)?;

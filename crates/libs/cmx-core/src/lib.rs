@@ -6,7 +6,7 @@ pub use error::CoreError;
 pub use model::data::request::params::*;
 pub use model::service::*;
 pub use wasm_types::{
-    DbQueryRequest, DbResponse,
+    DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
     ServiceCallRequest, ServiceCallResponse, PluginInfoResponse,
     WasmContext,

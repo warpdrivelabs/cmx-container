@@ -4,19 +4,26 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 数据库查询请求
+/// 数据库请求
 ///
 /// 用于 WASM 插件向宿主发起数据库查询或执行操作。
+/// 支持指定数据库ID和事务ID。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DbQueryRequest {
+pub struct DbRequest {
     /// SQL 语句
     pub sql: String,
     /// SQL 参数(JSON 字符串)
     #[serde(default)]
     pub params: Option<String>,
-    /// 数据集ID(可选)
+    /// 数据集ID(可选，用于查询结果标识)
     #[serde(default)]
     pub dataset_id: Option<String>,
+    /// 数据库ID(可选，未指定时使用默认数据库)
+    #[serde(default)]
+    pub db_id: Option<String>,
+    /// 事务ID(可选，用于在指定事务中执行)
+    #[serde(default)]
+    pub txn_id: Option<String>,
 }
 
 /// 数据库操作响应
