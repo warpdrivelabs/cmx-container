@@ -23,6 +23,21 @@ pub struct ServiceDefinition {
     pub version: String,
     /// 服务编排配置
     pub config: Option<String>,
+    /// 所属域代码
+    pub domain_code: String,
+    /// 所属应用代码
+    pub application_code: String,
+    /// 所属模块代码
+    pub module_code: String,
+    /// 所属域名称（联查获取）
+    #[serde(default)]
+    pub domain_name: String,
+    /// 所属应用名称（联查获取）
+    #[serde(default)]
+    pub application_name: String,
+    /// 所属模块名称（联查获取）
+    #[serde(default)]
+    pub module_name: String,
 }
 
 /// 服务运行时信息 — 内存缓存用
@@ -44,6 +59,21 @@ pub struct ServiceInfo {
     pub version: String,
     /// 编排配置 JSON
     pub config: String,
+    /// 所属域代码
+    pub domain_code: String,
+    /// 所属应用代码
+    pub application_code: String,
+    /// 所属模块代码
+    pub module_code: String,
+    /// 所属域名称（联查获取）
+    #[serde(default)]
+    pub domain_name: String,
+    /// 所属应用名称（联查获取）
+    #[serde(default)]
+    pub application_name: String,
+    /// 所属模块名称（联查获取）
+    #[serde(default)]
+    pub module_name: String,
 }
 
 impl From<ServiceDefinition> for ServiceInfo {
@@ -57,6 +87,12 @@ impl From<ServiceDefinition> for ServiceInfo {
             status: def.status,
             version: def.version,
             config: String::new(),
+            domain_code: def.domain_code,
+            application_code: def.application_code,
+            module_code: def.module_code,
+            domain_name: def.domain_name,
+            application_name: def.application_name,
+            module_name: def.module_name,
         }
     }
 }

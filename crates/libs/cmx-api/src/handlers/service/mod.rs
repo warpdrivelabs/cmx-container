@@ -5,7 +5,7 @@
 pub mod handler;
 pub mod models;
 
-pub use handler::{service_call, execute_service, execute_service_by_key, list_services, get_service, get_services_by_plugin, delete_service};
+pub use handler::{service_call, execute_service, execute_service_by_key, list_services, page_services, get_service, get_services_by_plugin, delete_service};
 
 // 重新导出请求/响应结构体，方便外部使用
 pub use models::{
@@ -26,6 +26,7 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/execute", post(execute_service))
         .route("/execute/{service_key}", post(execute_service_by_key))
         .route("/list", get(list_services))
+        .route("/page", post(page_services))
         .route("/by-plugin", get(get_services_by_plugin))
         .route("/get", get(get_service))
         .route("/delete", post(delete_service))

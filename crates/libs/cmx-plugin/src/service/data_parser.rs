@@ -199,6 +199,9 @@ impl ServiceDataParser {
     /// | - | plugin_id (参数传入) |
     /// | - | status (固定为 1) |
     /// | - | version (参数传入) |
+    /// | domain_code | domain_code |
+    /// | application_code | application_code |
+    /// | module_code | module_code |
     /// | 序列化JSON | config |
     ///
     /// # 说明
@@ -225,6 +228,12 @@ impl ServiceDataParser {
             status: 1,  // 默认启用状态
             version: plugin_version.to_string(),
             config: Some(config),
+            domain_code: orchestration.domain_code.clone().unwrap_or_default(),
+            application_code: orchestration.application_code.clone().unwrap_or_default(),
+            module_code: orchestration.module_code.clone().unwrap_or_default(),
+            domain_name: String::new(),
+            application_name: String::new(),
+            module_name: String::new(),
         })
     }
 }

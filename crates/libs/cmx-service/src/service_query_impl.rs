@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::{ServiceInfo, ServiceOrchestration};
-use cmx_traits::{ServiceQuery, TraitError};
+use cmx_traits::{ServiceQuery, ServicePageFilter, ServicePageResult, TraitError};
 
 use crate::registry::ServiceRegistry;
 use crate::repository::ServiceRepository;
@@ -133,5 +133,31 @@ impl ServiceQuery for ServiceQueryImpl {
             }
             None => Ok(None),
         }
+    }
+
+    /// 分页查询服务列表
+    ///
+    /// 支持多条件组合查询，service_key 和 service_name 支持模糊匹配
+    ///
+    /// # 参数
+    /// * `filter` - 查询过滤器
+    /// * `page` - 页码（从 1 开始）
+    /// * `size` - 每页大小
+    ///
+    /// # 返回值
+    /// 返回分页结果
+    async fn page_services(
+        &self,
+        filter: ServicePageFilter,
+        page: u64,
+        size: u64,
+    ) -> Result<ServicePageResult, TraitError> {
+        let (items, total) = self.repository.page_services(&filter, page, size).await
+            .map_err(|e| TraitError::Internal(e.to_string()))?;
+
+        Ok(ServicePageResult {
+            items: items.into_iter().map(ServiceInfo::from).collect(),
+            total,
+        })
     }
 }

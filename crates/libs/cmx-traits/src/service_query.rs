@@ -5,6 +5,37 @@
 
 use crate::error::TraitError;
 use cmx_core::model::service::{ServiceInfo, ServiceOrchestration};
+use serde::Deserialize;
+
+/// 服务分页查询过滤器
+///
+/// 支持多条件组合查询服务列表
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ServicePageFilter {
+    /// 服务 key 模糊查询
+    pub service_key: Option<String>,
+    /// 服务名称模糊查询
+    pub service_name: Option<String>,
+    /// 插件 ID 精确匹配
+    pub plugin_id: Option<String>,
+    /// 域代码精确匹配
+    pub domain_code: Option<String>,
+    /// 应用代码精确匹配
+    pub application_code: Option<String>,
+    /// 模块代码精确匹配
+    pub module_code: Option<String>,
+}
+
+/// 服务分页结果
+///
+/// 包含分页数据总数
+#[derive(Debug, Clone)]
+pub struct ServicePageResult {
+    /// 服务列表
+    pub items: Vec<ServiceInfo>,
+    /// 总数
+    pub total: u64,
+}
 
 /// 服务查询 trait
 ///
@@ -50,4 +81,23 @@ pub trait ServiceQuery: Send + Sync {
     /// * `Ok(None)` - 编排定义不存在
     /// * `Err(TraitError)` - 查询失败
     async fn get_orchestration(&self, service_key: &str) -> Result<Option<ServiceOrchestration>, TraitError>;
+
+    /// 分页查询服务列表
+    ///
+    /// 支持多条件组合查询，service_key 和 service_name 支持模糊匹配
+    ///
+    /// # 参数
+    /// * `filter` - 查询过滤器
+    /// * `page` - 页码（从 1 开始）
+    /// * `size` - 每页大小
+    ///
+    /// # 返回值
+    /// * `Ok(ServicePageResult)` - 分页结果
+    /// * `Err(TraitError)` - 查询失败
+    async fn page_services(
+        &self,
+        filter: ServicePageFilter,
+        page: u64,
+        size: u64,
+    ) -> Result<ServicePageResult, TraitError>;
 }

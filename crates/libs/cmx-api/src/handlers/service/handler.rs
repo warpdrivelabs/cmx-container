@@ -10,6 +10,7 @@
 //! | POST | /api/service/execute | 执行服务编排 |
 //! | POST | /api/service/execute/{service-key} | 执行服务编排（路径参数版本） |
 //! | GET | /api/service/list | 获取服务列表 |
+//! | POST | /api/service/page | 分页查询服务 |
 //! | GET | /api/service/get | 获取服务定义 |
 //! | GET | /api/service/by-plugin | 获取插件的所有服务 |
 //! | POST | /api/service/delete | 删除服务 |
@@ -24,8 +25,9 @@ use axum::{
 };
 use axum::http::HeaderMap;
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServicePageFilter};
 use log::error;
+use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
@@ -394,6 +396,12 @@ pub async fn list_services(
             plugin_id: s.plugin_id,
             status: s.status,
             version: s.version,
+            domain_code: s.domain_code,
+            application_code: s.application_code,
+            module_code: s.module_code,
+            domain_name: s.domain_name,
+            application_name: s.application_name,
+            module_name: s.module_name,
         }
     }).collect();
 
@@ -442,6 +450,12 @@ pub async fn get_service(
                 plugin_id: s.plugin_id,
                 status: s.status,
                 version: s.version,
+                domain_code: s.domain_code,
+                application_code: s.application_code,
+                module_code: s.module_code,
+                domain_name: s.domain_name,
+                application_name: s.application_name,
+                module_name: s.module_name,
             };
             Ok(Json(ApiResp::ok(detail)))
         }
@@ -490,10 +504,87 @@ pub async fn get_services_by_plugin(
             plugin_id: s.plugin_id,
             status: s.status,
             version: s.version,
+            domain_code: s.domain_code,
+            application_code: s.application_code,
+            module_code: s.module_code,
+            domain_name: s.domain_name,
+            application_name: s.application_name,
+            module_name: s.module_name,
         }
     }).collect();
 
     Ok(Json(ApiResp::ok(items)))
+}
+
+// ==================== 服务分页查询 Handler ====================
+
+/// 分页查询服务列表
+///
+/// 处理 POST /api/service/page 请求，支持多条件组合查询。
+///
+/// # 参数
+/// - `state`: 应用状态
+/// - `req`: 请求体（ServicePageRequest）
+///
+/// # 请求体
+/// - `service_key`: 服务 key 模糊查询（可选）
+/// - `service_name`: 服务名称模糊查询（可选）
+/// - `plugin_id`: 插件 ID 精确匹配（可选）
+/// - `domain_code`: 域代码精确匹配（可选）
+/// - `application_code`: 应用代码精确匹配（可选）
+/// - `module_code`: 模块代码精确匹配（可选）
+/// - `page`: 页码（从 1 开始，默认 1）
+/// - `size`: 每页大小（默认 10）
+///
+/// # 响应体
+/// 返回分页结果
+#[utoipa::path(
+    post,
+    path = "/api/service/page",
+    request_body = crate::rest::param_doc::PageParamsDoc<serde_json::Value>,
+    responses(
+        (status = 200, description = "分页查询成功", body = ApiResp<Vec<ServiceListItem>>)
+    ),
+    tag = "Service"
+)]
+pub async fn page_services(
+    State(state): State<CmxAppState>,
+    Json(params): Json<PageParams<ServicePageFilter>>,
+) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let filter = params.filter.clone().unwrap_or_default();
+    let page = params.get_page() as u64;
+    let size = params.get_size() as u64;
+
+    let result = service_query.page_services(filter, page, size).await
+        .map_err(|e| Error::internal_error(format!("分页查询失败: {}", e)))?;
+
+    let items: Vec<ServiceListItem> = result.items.into_iter().map(|s| {
+        ServiceListItem {
+            id: s.id,
+            service_key: s.service_key,
+            service_name: s.service_name,
+            description: s.description,
+            plugin_id: s.plugin_id,
+            status: s.status,
+            version: s.version,
+            domain_code: s.domain_code,
+            application_code: s.application_code,
+            module_code: s.module_code,
+            domain_name: s.domain_name,
+            application_name: s.application_name,
+            module_name: s.module_name,
+        }
+    }).collect();
+
+    Ok(Json(ApiResp::ok_with_pagination(
+        items,
+        page,
+        size,
+        result.total,
+    )))
 }
 
 // ==================== 服务删除 Handler ====================
@@ -528,7 +619,7 @@ pub async fn delete_service(
     let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
-    service_storage.delete_service(&req.service_key).await
+    service_storage.delete_service(&req.service_key, None, None).await
         .map_err(|e| Error::internal_error(format!("删除服务失败: {}", e)))?;
 
     Ok(Json(crate::api_response::UnitResp::msg("删除成功")))

@@ -142,7 +142,21 @@ pub struct ServiceListItem {
     pub status: i32,
     /// 当前版本
     pub version: String,
+    /// 所属域代码
+    pub domain_code: String,
+    /// 所属应用代码
+    pub application_code: String,
+    /// 所属模块代码
+    pub module_code: String,
+    /// 所属域名称
+    pub domain_name: String,
+    /// 所属应用名称
+    pub application_name: String,
+    /// 所属模块名称
+    pub module_name: String,
 }
+
+
 
 // ==================== 服务删除请求结构体 ====================
 
@@ -174,4 +188,16 @@ pub struct ServiceDetailResponse {
     pub status: i32,
     /// 当前版本
     pub version: String,
+    /// 所属域代码
+    pub domain_code: String,
+    /// 所属应用代码
+    pub application_code: String,
+    /// 所属模块代码
+    pub module_code: String,
+    /// 所属域名称
+    pub domain_name: String,
+    /// 所属应用名称
+    pub application_name: String,
+    /// 所属模块名称
+    pub module_name: String,
 }

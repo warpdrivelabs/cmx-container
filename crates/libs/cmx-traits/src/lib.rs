@@ -36,6 +36,6 @@ pub use host_func::{HostFunctionProvider, HostFunctionDef, ValType};
 pub use error::{TraitError, HostFuncError};
 pub use global_runtime::GlobalRuntime;
 pub use invoke_context::{InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH};
-pub use service_query::ServiceQuery;
+pub use service_query::{ServiceQuery, ServicePageFilter, ServicePageResult};
 pub use service_storage::ServiceStorage;
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};

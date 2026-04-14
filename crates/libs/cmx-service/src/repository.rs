@@ -79,14 +79,18 @@ impl ServiceRepository {
         let sql = r#"
             INSERT INTO cmx_service_define (
                 id, service_key, service_name, description, plugin_id,
-                status, version, create_time, update_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                status, version, domain_code, application_code, module_code,
+                create_time, update_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
             ON CONFLICT (service_key) DO UPDATE SET
                 service_name = EXCLUDED.service_name,
                 description = EXCLUDED.description,
                 plugin_id = EXCLUDED.plugin_id,
                 status = EXCLUDED.status,
                 version = EXCLUDED.version,
+                domain_code = EXCLUDED.domain_code,
+                application_code = EXCLUDED.application_code,
+                module_code = EXCLUDED.module_code,
                 update_time = NOW()
         "#;
 
@@ -98,6 +102,9 @@ impl ServiceRepository {
             service.plugin_id,
             service.status,
             service.version,
+            service.domain_code,
+            service.application_code,
+            service.module_code,
         ]);
 
         self.db_manager
@@ -118,8 +125,8 @@ impl ServiceRepository {
     pub async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
-                   d.status, d.version, d.create_time, d.update_time,
-                   v.config
+                   d.status, d.version, d.domain_code, d.application_code, d.module_code,
+                   d.create_time, d.update_time, v.config
             FROM cmx_service_define d
             LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key
             WHERE d.service_key = $1
@@ -151,6 +158,12 @@ impl ServiceRepository {
                     status: r.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                     version: r.get_by_name_as(schema, "version").unwrap_or_default(),
                     config: r.get_by_name_as(schema, "config"),
+                    domain_code: r.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                    application_code: r.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                    module_code: r.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                    domain_name: String::new(),
+                    application_name: String::new(),
+                    module_name: String::new(),
                 }))
             }
             None => Ok(None)
@@ -164,7 +177,8 @@ impl ServiceRepository {
     pub async fn list_services(&self) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT id, service_key, service_name, description, plugin_id,
-                   status, version, create_time, update_time
+                   status, version, domain_code, application_code, module_code,
+                   create_time, update_time
             FROM cmx_service_define
             ORDER BY update_time DESC
         "#;
@@ -185,7 +199,13 @@ impl ServiceRepository {
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
-                config:None
+                config: None,
+                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                domain_name: String::new(),
+                application_name: String::new(),
+                module_name: String::new(),
             });
         }
 
@@ -202,8 +222,8 @@ impl ServiceRepository {
     pub async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
-                   d.status, d.version, d.create_time, d.update_time,
-                   latest_v.config
+                   d.status, d.version, d.domain_code, d.application_code, d.module_code,
+                   d.create_time, d.update_time, latest_v.config
             FROM cmx_service_define d
             LEFT JOIN (
                 SELECT service_key, config
@@ -237,6 +257,12 @@ impl ServiceRepository {
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
                 config: row.get_by_name_as(schema, "config"),
+                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                domain_name: String::new(),
+                application_name: String::new(),
+                module_name: String::new(),
             });
         }
 
@@ -247,7 +273,9 @@ impl ServiceRepository {
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
-    pub async fn delete_service(&self, service_key: &str) -> Result<(), ServiceError> {
+    /// * `txn_id` - 事务id
+    /// * `version` - 服务版本
+    pub async fn delete_service(&self, service_key: &str,txn_id: Option<&str>, version: Option<&str>) -> Result<(), ServiceError> {
         let sql_version = r#"
             DELETE FROM cmx_service_define_version WHERE service_key = $1
         "#;
@@ -275,7 +303,7 @@ impl ServiceRepository {
     pub async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), ServiceError> {
         let services = self.get_services_by_plugin(plugin_id).await?;
         for service in services {
-            self.delete_service(&service.service_key).await?;
+            self.delete_service(&service.service_key, None, None).await?;
         }
         Ok(())
     }
@@ -412,5 +440,146 @@ impl ServiceRepository {
             }
             None => Ok(None)
         }
+    }
+
+    /// 分页查询服务列表
+    ///
+    /// 支持多条件组合查询，service_key 和 service_name 支持模糊匹配
+    ///
+    /// # 参数
+    /// * `filter` - 查询过滤器
+    /// * `page` - 页码（从 1 开始）
+    /// * `size` - 每页大小
+    ///
+    /// # 返回值
+    /// 返回 (服务列表, 总数)
+    pub async fn page_services(
+        &self,
+        filter: &cmx_traits::ServicePageFilter,
+        page: u64,
+        size: u64,
+    ) -> Result<(Vec<ServiceDefinition>, u64), ServiceError> {
+        let offset = (page.saturating_sub(1)) * size;
+
+        let mut where_clauses: Vec<String> = Vec::new();
+        let mut params: Vec<serde_json::Value> = Vec::new();
+        let mut param_index = 1;
+
+        if let Some(ref service_key) = filter.service_key {
+            where_clauses.push(format!("s.service_key LIKE ${}", param_index));
+            params.push(json!(format!("%{}%", service_key)));
+            param_index += 1;
+        }
+
+        if let Some(ref service_name) = filter.service_name {
+            where_clauses.push(format!("s.service_name LIKE ${}", param_index));
+            params.push(json!(format!("%{}%", service_name)));
+            param_index += 1;
+        }
+
+        if let Some(ref plugin_id) = filter.plugin_id {
+            where_clauses.push(format!("s.plugin_id = ${}", param_index));
+            params.push(json!(plugin_id));
+            param_index += 1;
+        }
+
+        if let Some(ref domain_code) = filter.domain_code {
+            where_clauses.push(format!("s.domain_code = ${}", param_index));
+            params.push(json!(domain_code));
+            param_index += 1;
+        }
+
+        if let Some(ref application_code) = filter.application_code {
+            where_clauses.push(format!("s.application_code = ${}", param_index));
+            params.push(json!(application_code));
+            param_index += 1;
+        }
+
+        if let Some(ref module_code) = filter.module_code {
+            where_clauses.push(format!("s.module_code = ${}", param_index));
+            params.push(json!(module_code));
+            param_index += 1;
+        }
+
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        let count_sql = format!(
+            "SELECT COUNT(*) as total FROM cmx_service_define {}",
+            where_clause
+        );
+
+        let count_result = self.db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                &count_sql,
+                json!(params.clone()),
+                "count_services",
+            )
+            .await
+            .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
+
+        let total: u64 = count_result
+            .iter()
+            .next()
+            .map(|r| {
+                let schema = count_result.schema.as_ref();
+                r.get_by_name_as::<i64>(schema, "total").unwrap_or(0) as u64
+            })
+            .unwrap_or(0);
+
+        let data_sql = format!(
+            r#"
+            SELECT s.id, s.service_key, s.service_name, s.description, s.plugin_id,
+                   s.status, s.version, s.domain_code, s.application_code, s.module_code,
+                   s.create_time, s.update_time,
+                   d.name as domain_name,
+                   a.name as application_name,
+                   m.name as module_name
+            FROM cmx_service_define s
+            LEFT JOIN cmx_domain d ON s.domain_code = d.code
+            LEFT JOIN cmx_application a ON s.application_code = a.code
+            LEFT JOIN cmx_module m ON s.module_code = m.code
+            {}
+            ORDER BY s.update_time DESC
+            LIMIT ${} OFFSET ${}
+            "#,
+            where_clause, param_index, param_index + 1
+        );
+
+        params.push(json!(size));
+        params.push(json!(offset));
+
+        let result = self.db_manager
+            .query_sql_with_json(&self.default_db_id, None, &data_sql, json!(params), "page_services")
+            .await
+            .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
+
+        let schema = result.schema.as_ref();
+        let mut services = Vec::new();
+        for row in result.iter() {
+            services.push(ServiceDefinition {
+                id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
+                service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
+                description: row.get_by_name_as(schema, "description").unwrap_or_default(),
+                plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
+                status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
+                version: row.get_by_name_as(schema, "version").unwrap_or_default(),
+                config: None,
+                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
+                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                domain_name: row.get_by_name_as(schema, "domain_name").unwrap_or_default(),
+                application_name: row.get_by_name_as(schema, "application_name").unwrap_or_default(),
+                module_name: row.get_by_name_as(schema, "module_name").unwrap_or_default(),
+            });
+        }
+
+        Ok((services, total))
     }
 }
