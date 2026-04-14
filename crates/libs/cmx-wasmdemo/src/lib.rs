@@ -389,6 +389,7 @@ pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOu
         "1" => "1",
         "2" => "2",
         "3" => "3",
+        "4" => "4",
         _ => "1",
     };
 
@@ -542,7 +543,7 @@ pub fn tx_insert(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         txn_id: txn_id.clone(),
     };
 
-    let db_response = HostCaller::db_query(query_request)?;
+    let db_response = HostCaller::db_execute(query_request)?;
 
     let result = serde_json::json!({
         "operation": "insert",

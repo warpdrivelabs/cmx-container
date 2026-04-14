@@ -305,41 +305,41 @@ impl Orchestrator {
                         continue;
                     }
                     // 没有匹配的出边，流程结束（可能是分支未配置）
-                    debug!("多分支节点无匹配出边，退出循环");
+                    warn!("多分支节点无匹配出边，退出循环");
                     break;
                 }
 
-                // ==================== 事务框节点 ====================
-                // 事务框节点将其内部的所有子节点在同一个数据库事务中执行
-                // 子节点通过 parent 字段指向事务框节点ID
-                "skylake-transaction" => {
-                    debug!("执行事务框节点: node_id={}", node.id);
-                    // 调用事务框执行方法
-                    // 内部会：开启事务 → 执行子节点 → 提交/回滚事务
-                    result = self.execute_transaction_node(
-                        flow, node, &mut exec_context, &mut steps, &node_handler, &options
-                    ).await;
-
-                    if let Err(ref err) = result {
-                        // 执行失败，构建错误信息并退出循环
-                        // 事务框内的事务已经回滚
-                        error!("事务框节点执行失败: node_id={}, error={:?}", node.id, err);
-                        orch_error = Self::build_error_info(
-                            node, &steps, err, &mut exec_context
-                        );
-                        break;
-                    }
-
-                    // 查找下一个节点（固定使用 "out" 端口）
-                    if let Some(next_edge) = navigator.find_next_edge(&current_node_id, "out") {
-                        debug!("事务框节点执行完成跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
-                        current_node_id = next_edge.target_node_id.clone();
-                        continue;
-                    }
-                    // 没有出边，流程结束
-                    debug!("事务框节点无出边，退出循环");
-                    break;
-                }
+                // // ==================== 事务框节点 ====================
+                // // 事务框节点将其内部的所有子节点在同一个数据库事务中执行
+                // // 子节点通过 parent 字段指向事务框节点ID
+                // "skylake-transaction" => {
+                //     debug!("执行事务框节点: node_id={}", node.id);
+                //     // 调用事务框执行方法
+                //     // 内部会：开启事务 → 执行子节点 → 提交/回滚事务
+                //     result = self.execute_transaction_node(
+                //         flow, node, &mut exec_context, &mut steps, &node_handler, &options
+                //     ).await;
+                //
+                //     if let Err(ref err) = result {
+                //         // 执行失败，构建错误信息并退出循环
+                //         // 事务框内的事务已经回滚
+                //         error!("事务框节点执行失败: node_id={}, error={:?}", node.id, err);
+                //         orch_error = Self::build_error_info(
+                //             node, &steps, err, &mut exec_context
+                //         );
+                //         break;
+                //     }
+                //
+                //     // 查找下一个节点（固定使用 "out" 端口）
+                //     if let Some(next_edge) = navigator.find_next_edge(&current_node_id, "out") {
+                //         debug!("事务框节点执行完成跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
+                //         current_node_id = next_edge.target_node_id.clone();
+                //         continue;
+                //     }
+                //     // 没有出边，流程结束
+                //     debug!("事务框节点无出边，退出循环");
+                //     break;
+                // }
 
                 // ==================== 未知节点类型 ====================
                 // 遇到不支持的节点类型，记录错误并退出
@@ -403,114 +403,114 @@ impl Orchestrator {
         })
     }
 
-    /// 执行事务框节点
-    ///
-    /// 事务框节点将其内部的所有函数节点在同一个数据库事务中执行。
-    /// 子节点通过 parent 字段指向事务框节点ID。
-    ///
-    /// # 执行流程
-    /// ```text
-    /// 1. 解析事务框的数据库ID
-    /// 2. 开启数据库事务
-    /// 3. 查找事务框内的所有子节点
-    /// 4. 依次执行子节点
-    /// 5. 根据执行结果提交或回滚事务
-    /// ```
-    ///
-    /// # 参数
-    /// * `flow` - 流程定义
-    /// * `transaction_node` - 事务框节点
-    /// * `exec_context` - 执行上下文
-    /// * `steps` - 步骤记录列表
-    /// * `node_handler` - 节点执行器
-    /// * `options` - 执行选项
-    async fn execute_transaction_node(
-        &self,
-        flow: &ServiceFlow,
-        transaction_node: &ServiceNode,
-        exec_context: &mut ExecutionContext,
-        steps: &mut Vec<ExecutionStep>,
-        node_handler: &NodeHandler<'_>,
-        options: &ExecuteOptions,
-    ) -> Result<(), ServiceError> {
-        info!("事务框开始: node_id={}", transaction_node.id);
-
-        // 步骤1: 解析事务框节点数据
-        let node_data = transaction_node.data.as_ref()
-            .ok_or_else(|| ServiceError::InternalError("事务框节点缺少 data".to_string()))?;
-        debug!("[transaction] 开始执行: node_id={}, node_name={}", transaction_node.id, node_data.name);
-
-        // 步骤2: 解析事务框使用的数据库ID
-        // 优先使用事务框指定的 database_id，否则使用默认值
-        let db_id = node_data.node_meta.as_ref()
-            .and_then(|m| m.database_id.clone())
-            .unwrap_or_else(|| self.default_db_id.clone());
-        debug!("[transaction] 数据库ID: db_id={}", db_id);
-
-        // 步骤3: 开启数据库事务
-        let txn_guard = begin_transaction_guard_by_db_id(&db_id, Default::default())
-            .await
-            .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
-
-        let txn_id = txn_guard.txn_id().to_string();
-        debug!("[transaction] 事务已开启: db_id={}, txn_id={}", db_id, txn_id);
-
-        // 将事务ID设置到上下文中，传递给子节点
-        // WASM 函数通过 context.txn_id 获取事务ID，用于后续数据库操作
-        exec_context.svr_context.set_txn_id(txn_id.clone());
-
-        // 步骤4: 查找事务框内的所有子节点
-        // 子节点通过 parent 字段指向事务框节点ID
-        let child_nodes: Vec<&ServiceNode> = flow.nodes.iter()
-            .filter(|n| n.parent.as_ref() == Some(&transaction_node.id))
-            .collect();
-        debug!("[transaction] 找到 {} 个子节点", child_nodes.len());
-
-        let mut child_result: Result<(), ServiceError> = Ok(());
-
-        // 步骤5: 依次执行事务框内的子节点
-        for (idx, child_node) in child_nodes.iter().enumerate() {
-            debug!("[transaction] 开始执行子节点 {}/{}: node_id={}", idx + 1, child_nodes.len(), child_node.id);
-
-            // 只支持 func 和 switch 类型的子节点
-            match child_node.node_type.as_str() {
-                "skylake-func" | "skylake-switch" => {
-                    child_result = node_handler.execute_node(
-                        child_node, exec_context, steps, options.include_steps
-                    ).await;
-
-                    if let Err(ref e) = child_result {
-                        debug!("[transaction] 子节点执行失败: node_id={}, error={:?}", child_node.id, e);
-                        break;  // 失败时跳出循环
-                    }
-                    debug!("[transaction] 子节点执行成功: node_id={}", child_node.id);
-                }
-                _ => {
-                    warn!("事务框内遇到不支持的节点类型: {}", child_node.node_type);
-                }
-            }
-        }
-
-        // 步骤6: 根据执行结果决定提交还是回滚
-        if child_result.is_err() {
-            warn!("[transaction] 子节点执行失败，回滚事务: txn_id={}", txn_id);
-            exec_context.svr_context.clear_txn_id();
-            // drop(txn_guard) 会触发自动回滚
-            drop(txn_guard);
-            return child_result;
-        }
-
-        // 步骤7: 提交事务
-        debug!("[transaction] 准备提交事务: txn_id={}", txn_id);
-        txn_guard.commit().await
-            .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
-
-        exec_context.svr_context.clear_txn_id();
-        info!("事务已提交: node_id={}, db_id={}", transaction_node.id, db_id);
-        debug!("[transaction] 事务提交成功: node_id={}", transaction_node.id);
-
-        Ok(())
-    }
+    // /// 执行事务框节点
+    // ///
+    // /// 事务框节点将其内部的所有函数节点在同一个数据库事务中执行。
+    // /// 子节点通过 parent 字段指向事务框节点ID。
+    // ///
+    // /// # 执行流程
+    // /// ```text
+    // /// 1. 解析事务框的数据库ID
+    // /// 2. 开启数据库事务
+    // /// 3. 查找事务框内的所有子节点
+    // /// 4. 依次执行子节点
+    // /// 5. 根据执行结果提交或回滚事务
+    // /// ```
+    // ///
+    // /// # 参数
+    // /// * `flow` - 流程定义
+    // /// * `transaction_node` - 事务框节点
+    // /// * `exec_context` - 执行上下文
+    // /// * `steps` - 步骤记录列表
+    // /// * `node_handler` - 节点执行器
+    // /// * `options` - 执行选项
+    // async fn execute_transaction_node(
+    //     &self,
+    //     flow: &ServiceFlow,
+    //     transaction_node: &ServiceNode,
+    //     exec_context: &mut ExecutionContext,
+    //     steps: &mut Vec<ExecutionStep>,
+    //     node_handler: &NodeHandler<'_>,
+    //     options: &ExecuteOptions,
+    // ) -> Result<(), ServiceError> {
+    //     info!("事务框开始: node_id={}", transaction_node.id);
+    //
+    //     // 步骤1: 解析事务框节点数据
+    //     let node_data = transaction_node.data.as_ref()
+    //         .ok_or_else(|| ServiceError::InternalError("事务框节点缺少 data".to_string()))?;
+    //     debug!("[transaction] 开始执行: node_id={}, node_name={}", transaction_node.id, node_data.name);
+    //
+    //     // 步骤2: 解析事务框使用的数据库ID
+    //     // 优先使用事务框指定的 database_id，否则使用默认值
+    //     let db_id = node_data.node_meta.as_ref()
+    //         .and_then(|m| m.database_id.clone())
+    //         .unwrap_or_else(|| self.default_db_id.clone());
+    //     debug!("[transaction] 数据库ID: db_id={}", db_id);
+    //
+    //     // 步骤3: 开启数据库事务
+    //     let txn_guard = begin_transaction_guard_by_db_id(&db_id, Default::default())
+    //         .await
+    //         .map_err(|e| ServiceError::InternalError(format!("开启事务失败: {}", e)))?;
+    //
+    //     let txn_id = txn_guard.txn_id().to_string();
+    //     debug!("[transaction] 事务已开启: db_id={}, txn_id={}", db_id, txn_id);
+    //
+    //     // 将事务ID设置到上下文中，传递给子节点
+    //     // WASM 函数通过 context.txn_id 获取事务ID，用于后续数据库操作
+    //     exec_context.svr_context.set_txn_id(txn_id.clone());
+    //
+    //     // 步骤4: 查找事务框内的所有子节点
+    //     // 子节点通过 parent 字段指向事务框节点ID
+    //     let child_nodes: Vec<&ServiceNode> = flow.nodes.iter()
+    //         .filter(|n| n.parent.as_ref() == Some(&transaction_node.id))
+    //         .collect();
+    //     debug!("[transaction] 找到 {} 个子节点", child_nodes.len());
+    //
+    //     let mut child_result: Result<(), ServiceError> = Ok(());
+    //
+    //     // 步骤5: 依次执行事务框内的子节点
+    //     for (idx, child_node) in child_nodes.iter().enumerate() {
+    //         debug!("[transaction] 开始执行子节点 {}/{}: node_id={}", idx + 1, child_nodes.len(), child_node.id);
+    //
+    //         // 只支持 func 和 switch 类型的子节点
+    //         match child_node.node_type.as_str() {
+    //             "skylake-func" | "skylake-switch" => {
+    //                 child_result = node_handler.execute_node(
+    //                     child_node, exec_context, steps, options.include_steps
+    //                 ).await;
+    //
+    //                 if let Err(ref e) = child_result {
+    //                     debug!("[transaction] 子节点执行失败: node_id={}, error={:?}", child_node.id, e);
+    //                     break;  // 失败时跳出循环
+    //                 }
+    //                 debug!("[transaction] 子节点执行成功: node_id={}", child_node.id);
+    //             }
+    //             _ => {
+    //                 warn!("事务框内遇到不支持的节点类型: {}", child_node.node_type);
+    //             }
+    //         }
+    //     }
+    //
+    //     // 步骤6: 根据执行结果决定提交还是回滚
+    //     if child_result.is_err() {
+    //         warn!("[transaction] 子节点执行失败，回滚事务: txn_id={}", txn_id);
+    //         exec_context.svr_context.clear_txn_id();
+    //         // drop(txn_guard) 会触发自动回滚
+    //         drop(txn_guard);
+    //         return child_result;
+    //     }
+    //
+    //     // 步骤7: 提交事务
+    //     debug!("[transaction] 准备提交事务: txn_id={}", txn_id);
+    //     txn_guard.commit().await
+    //         .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
+    //
+    //     exec_context.svr_context.clear_txn_id();
+    //     info!("事务已提交: node_id={}, db_id={}", transaction_node.id, db_id);
+    //     debug!("[transaction] 事务提交成功: node_id={}", transaction_node.id);
+    //
+    //     Ok(())
+    // }
 
     /// 构建结构化错误信息
     ///
