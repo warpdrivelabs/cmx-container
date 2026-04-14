@@ -22,7 +22,7 @@ use cmx_core::model::service::{
 use cmx_database::transaction::begin_transaction_guard_by_db_id;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 
 use crate::error::ServiceError;
@@ -429,7 +429,7 @@ impl OrchestratorV2 {
 
                     // 如果执行失败，退出循环
                     if result.is_err() {
-                        debug!("事务框节点执行失败: node_id={}, error={:?}", node.id, result);
+                        error!("事务框节点执行失败: node_id={}, error={:?}", node.id, result);
                         break;
                     }
 
