@@ -29,6 +29,7 @@ use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServicePageFilter};
 use log::error;
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
+use cmx_service::GlobalServiceRegistry;
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Error;
@@ -464,7 +465,10 @@ pub async fn get_service(
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
     let service = service_query.get_service(&query.service_key).await
-        .map_err(|e| Error::internal_error(format!("获取服务失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("获取服务失败: {}", e)))?;
+    let service_config = GlobalServiceRegistry::get().get_orchestration(&query.service_key).await
+        .ok_or_else(|| Error::business_error("获取服务编排失败"))?;
+       
 
     match service {
         Some(s) => {
@@ -476,6 +480,7 @@ pub async fn get_service(
                 plugin_id: s.plugin_id,
                 status: s.status,
                 version: s.version,
+                config: service_config.to_string(),
                 domain_code: s.domain_code,
                 application_code: s.application_code,
                 module_code: s.module_code,

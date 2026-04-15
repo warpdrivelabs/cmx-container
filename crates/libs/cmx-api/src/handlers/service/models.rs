@@ -236,6 +236,8 @@ pub struct ServiceDetailResponse {
     pub status: i32,
     /// 当前版本
     pub version: String,
+    //服务编排 配置
+    pub  config: String,
     /// 所属域代码
     pub domain_code: String,
     /// 所属应用代码
