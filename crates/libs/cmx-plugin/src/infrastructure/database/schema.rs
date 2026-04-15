@@ -9,7 +9,7 @@ impl SchemaManager {
     /// 获取创建插件系统表的SQL
     pub fn get_create_system_tables_sql() -> Vec<&'static str> {
         vec![
-            include_str!("../../../sql/plugin_lifecycle_schema.sql"),
+            // include_str!("../../../sql/plugin_lifecycle_schema.sql"),
         ]
     }
 
