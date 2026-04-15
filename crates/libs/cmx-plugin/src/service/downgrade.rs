@@ -20,6 +20,7 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
+use crate::service::data_parser::ServiceParseParams;
 use crate::service::service_parser::parse_services_from_plugin_dir;
 
 /// 降级请求
@@ -204,10 +205,16 @@ impl DowngradeService {
         {
             // 1. 从旧版本插件目录解析实际的服务定义列表
             let install_path = PathBuf::from(&target_version_record.install_path);
+            let parse_params = ServiceParseParams {
+                plugin_id: plugin_id.clone(),
+                plugin_version: request.target_version.clone(),
+                domain_code: plugin.domain_code.clone().unwrap_or_default(),
+                application_code: plugin.application_code.clone().unwrap_or_default(),
+                module_code: plugin.module_code.clone().unwrap_or_default(),
+            };
             let old_version_services = parse_services_from_plugin_dir(
                 &install_path,
-                &plugin_id,
-                &request.target_version
+                &parse_params
             )?;
             let old_service_keys: HashSet<String> = old_version_services.iter()
                 .map(|s| s.service_key.clone())

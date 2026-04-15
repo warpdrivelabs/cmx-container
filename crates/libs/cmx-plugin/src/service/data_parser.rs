@@ -19,14 +19,28 @@ use uuid::Uuid;
 /// 4. 转换为服务定义结构体
 pub struct ServiceDataParser;
 
+/// 解析服务数据时的额外参数
+#[derive(Debug, Clone)]
+pub struct ServiceParseParams {
+    /// 插件ID
+    pub plugin_id: String,
+    /// 插件版本
+    pub plugin_version: String,
+    /// 域编码
+    pub domain_code: String,
+    /// 应用编码
+    pub application_code: String,
+    /// 模块编码
+    pub module_code: String,
+}
+
 impl ServiceDataParser {
     /// 解析插件安装目录下的所有服务编排文件
     ///
     /// # 参数
     ///
     /// * `install_path` - 插件安装目录路径
-    /// * `plugin_id` - 插件ID
-    /// * `plugin_version` - 插件版本号
+    /// * `params` - 解析参数，包含 plugin_id, plugin_version, domain_code, application_code, module_code
     ///
     /// # 返回值
     ///
@@ -44,8 +58,7 @@ impl ServiceDataParser {
     /// ```
     pub fn parse_servicedata(
         install_path: &Path,
-        plugin_id: &str,
-        plugin_version: &str,
+        params: &ServiceParseParams,
     ) -> PluginResult<Vec<ParsedServiceDefinition>> {
         // 构造 servicedata 目录路径
         let servicedata_path = install_path.join("servicedata");
@@ -73,8 +86,7 @@ impl ServiceDataParser {
                         // 将编排转换为服务定义结构体
                         let service_def = Self::orchestration_to_service_definition(
                             &orchestration,
-                            plugin_id,
-                            plugin_version,
+                            params,
                         )?;
 
                         // 添加到结果列表
@@ -182,8 +194,7 @@ impl ServiceDataParser {
     /// # 参数
     ///
     /// * `orchestration` - 编排结构体引用
-    /// * `plugin_id` - 插件ID
-    /// * `plugin_version` - 插件版本号
+    /// * `params` - 解析参数，包含 plugin_id, plugin_version, domain_code, application_code, module_code
     ///
     /// # 返回值
     ///
@@ -199,9 +210,9 @@ impl ServiceDataParser {
     /// | - | plugin_id (参数传入) |
     /// | - | status (固定为 1) |
     /// | - | version (参数传入) |
-    /// | domain_code | domain_code |
-    /// | application_code | application_code |
-    /// | module_code | module_code |
+    /// | domain_code | domain_code (参数传入) |
+    /// | application_code | application_code (参数传入) |
+    /// | module_code | module_code (参数传入) |
     /// | 序列化JSON | config |
     ///
     /// # 说明
@@ -209,8 +220,7 @@ impl ServiceDataParser {
     /// config 字段存储编排对象的 JSON 序列化字符串
     fn orchestration_to_service_definition(
         orchestration: &ServiceOrchestration,
-        plugin_id: &str,
-        plugin_version: &str,
+        params: &ServiceParseParams,
     ) -> PluginResult<ServiceDefinition> {
         // 从编排中提取 service_key
         let service_key = Self::extract_service_key(orchestration);
@@ -224,13 +234,13 @@ impl ServiceDataParser {
             service_key,
             service_name: orchestration.name.clone(),
             description: orchestration.description.clone(),
-            plugin_id: plugin_id.to_string(),
+            plugin_id: params.plugin_id.clone(),
             status: 1,  // 默认启用状态
-            version: plugin_version.to_string(),
+            version: params.plugin_version.clone(),
             config: Some(config),
-            domain_code: orchestration.domain_code.clone().unwrap_or_default(),
-            application_code: orchestration.application_code.clone().unwrap_or_default(),
-            module_code: orchestration.module_code.clone().unwrap_or_default(),
+            domain_code: params.domain_code.clone(),
+            application_code: params.application_code.clone(),
+            module_code: params.module_code.clone(),
             domain_name: String::new(),
             application_name: String::new(),
             module_name: String::new(),

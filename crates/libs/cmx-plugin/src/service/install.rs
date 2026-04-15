@@ -21,6 +21,7 @@ use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::security::validator::SecurityValidator;
+use crate::service::data_parser::ServiceParseParams;
 use chrono::Utc;
 use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
@@ -462,10 +463,16 @@ impl InstallService {
 
 
         // 步骤14: 解析并存储服务定义（使用事务保证一致性）
+        let parse_params = ServiceParseParams {
+            plugin_id: plugin_id.clone(),
+            plugin_version: install_version.clone(),
+            domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
+            application_code: plugin_def.application_code.clone().unwrap_or_default(),
+            module_code: plugin_def.module_code.clone().unwrap_or_default(),
+        };
         let parsed_services = crate::service::service_parser::parse_and_save_services(
             &install_path,
-            &plugin_id,
-            &install_version,
+            &parse_params,
             &self.deps.service_storage,
             Some(txn_guard.txn_id())
         )

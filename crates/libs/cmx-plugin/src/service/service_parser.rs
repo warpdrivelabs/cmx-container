@@ -4,10 +4,9 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use cmx_core::model::meta::plugin::PluginDefinition;
 use cmx_core::model::service::ServiceDefinition;
 use crate::error::{PluginError, PluginResult};
-use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};
+use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
 
 /// 从插件目录解析服务定义（不保存到数据库）
 ///
@@ -16,8 +15,7 @@ use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};
 ///
 /// # 参数
 /// * `install_path` - 插件安装路径（应指向具体版本目录，如 plugin_id/v1.0.0/）
-/// * `plugin_id` - 插件ID
-/// * `plugin_version` - 插件版本
+/// * `params` - 解析参数，包含 plugin_id, plugin_version, domain_code, application_code, module_code
 ///
 /// # 返回值
 /// * `Ok(Vec<ServiceDefinition>)` - 解析出的服务定义列表（不包含编排配置）
@@ -27,10 +25,9 @@ use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};
 /// * parse_services_from_plugin_dir: 只解析不保存，用于降级时获取旧版本实际服务列表
 pub fn parse_services_from_plugin_dir(
     install_path: &Path,
-    plugin_id: &str,
-    plugin_version: &str,
+    params: &ServiceParseParams,
 ) -> PluginResult<Vec<ServiceDefinition>> {
-    let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
+    let parsed = match ServiceDataParser::parse_servicedata(install_path, params) {
         Ok(services) => services,
         Err(e) => {
             tracing::warn!("解析服务数据失败: {:?}", e);
@@ -48,10 +45,8 @@ pub fn parse_services_from_plugin_dir(
 ///
 /// # 参数
 /// * `install_path` - 插件安装路径
-/// * `plugin_id` - 插件ID
-/// * `plugin_version` - 插件版本
+/// * `params` - 解析参数，包含 plugin_id, plugin_version, domain_code, application_code, module_code
 /// * `service_storage` - 服务存储接口
-/// * `db_id` - 默认数据库ID
 /// * `txn_id` - 事务ID（可选，用于在同一事务中完成保存）
 ///
 /// # 返回值
@@ -63,13 +58,12 @@ pub fn parse_services_from_plugin_dir(
 /// 3. 对每个服务版本调用 save_service_version 保存
 pub async fn parse_and_save_services(
     install_path: &Path,
-    plugin_id: &str,
-    plugin_version: &str,
+    params: &ServiceParseParams,
     service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
     txn_id: Option<&str>,
 ) -> PluginResult<Vec<ParsedServiceDefinition>> {
     // 解析插件安装目录下的服务数据
-    let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
+    let parsed = match ServiceDataParser::parse_servicedata(install_path, params) {
         Ok(services) => services,
         Err(e) => {
             tracing::warn!("解析服务数据失败: {:?}", e);
@@ -79,7 +73,7 @@ pub async fn parse_and_save_services(
 
     // 遍历并保存每个服务
     for svc in &parsed {
-        // 保存服务定义（使用 db_id 和 txn_id）
+        // 保存服务定义（使用 txn_id）
         if let Err(e) = service_storage.save_service(
             &svc.definition,
             txn_id,
@@ -100,16 +94,16 @@ pub async fn parse_and_save_services(
         // 保存服务版本
         if let Err(e) = service_storage.save_service_version(
             &svc.definition.service_key,
-            plugin_version,
-            plugin_id,
-            plugin_version,
+            &params.plugin_version,
+            &params.plugin_id,
+            &params.plugin_version,
             &config,
             txn_id,
         ).await {
             tracing::error!(
                 "保存服务版本 {}:{} 失败: {:?}",
                 svc.definition.service_key,
-                plugin_version,
+                params.plugin_version,
                 e
             );
             return Err(PluginError::Plugin(format!("保存服务版本失败: {:?}", e)));
