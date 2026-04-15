@@ -55,7 +55,8 @@ impl ServiceQuery for ServiceQueryImpl {
 
         if let Some(def) = &service_def {
             let service_info = ServiceInfo::from(def.clone());
-            self.registry.register(service_info, None).await;
+            let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
+            self.registry.register(service_info, orchestration).await;
         }
 
         Ok(service_def.map(|def| ServiceInfo::from(def)))
@@ -81,7 +82,8 @@ impl ServiceQuery for ServiceQueryImpl {
 
         for def in &service_defs {
             let service_info = ServiceInfo::from(def.clone());
-            self.registry.register(service_info, None).await;
+            let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
+            self.registry.register(service_info, orchestration).await;
         }
 
         Ok(service_defs.into_iter().map(ServiceInfo::from).collect())
@@ -104,7 +106,8 @@ impl ServiceQuery for ServiceQueryImpl {
             for def in all_services {
                 if def.status == 1 {
                     let info = ServiceInfo::from(def.clone());
-                    self.registry.register(info.clone(), None).await;
+                    let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
+                    self.registry.register(info.clone(), orchestration).await;
                     active.push(info);
                 }
             }
