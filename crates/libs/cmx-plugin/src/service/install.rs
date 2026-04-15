@@ -458,10 +458,8 @@ impl InstallService {
         let payload = PluginLifecyclePayload::new(&plugin_id, &install_version)
             .with_install_path(install_path.clone())
             .with_wasm_path(PathBuf::from(&wasm_path));
-        
-        GlobalEventBus::get()
-            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
-            .await;
+
+
 
         // 步骤14: 解析并存储服务定义（使用事务保证一致性）
         let parsed_services = crate::service::service_parser::parse_and_save_services(
@@ -487,6 +485,10 @@ impl InstallService {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
+        //发布事件
+        GlobalEventBus::get()
+            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
         Ok(InstallResponse {
             plugin_id,
             install_path,

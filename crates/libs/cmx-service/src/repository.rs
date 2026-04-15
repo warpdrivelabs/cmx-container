@@ -465,17 +465,17 @@ impl ServiceRepository {
         let mut params: Vec<serde_json::Value> = Vec::new();
         let mut param_index = 1;
 
-        if let Some(ref service_key) = filter.service_key {
-            where_clauses.push(format!("s.service_key LIKE ${}", param_index));
-            params.push(json!(format!("%{}%", service_key)));
-            param_index += 1;
+        if let Some(ref keyword) = filter.keyword {
+            if !keyword.is_empty() {
+                where_clauses.push(format!("(s.service_key LIKE ${} OR S.service_name LIKE ${} )", param_index,param_index+1));
+                params.push(json!(format!("%{}%", keyword)));
+                params.push(json!(format!("%{}%", keyword)));
+                param_index += 2;
+
+            }
         }
 
-        if let Some(ref service_name) = filter.service_name {
-            where_clauses.push(format!("s.service_name LIKE ${}", param_index));
-            params.push(json!(format!("%{}%", service_name)));
-            param_index += 1;
-        }
+
 
         if let Some(ref plugin_id) = filter.plugin_id {
             where_clauses.push(format!("s.plugin_id = ${}", param_index));
@@ -508,7 +508,7 @@ impl ServiceRepository {
         };
 
         let count_sql = format!(
-            "SELECT COUNT(*) as total FROM cmx_service_define {}",
+            "SELECT COUNT(*) as total FROM cmx_service_define s {}",
             where_clause
         );
 

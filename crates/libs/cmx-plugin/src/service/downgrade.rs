@@ -10,6 +10,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use cmx_database::get_default_db_manager;
+use cmx_traits::{GlobalEventBus, plugin_events, PluginLifecyclePayload, ServiceQuery, ServiceStorage};
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::deployment::DeploymentRepository;
@@ -68,6 +69,10 @@ pub struct DowngradeServiceDeps {
     pub node_id: String,
     /// 默认数据库ID
     pub default_database_id: String,
+    /// 服务查询（用于查询插件的服务定义）
+    pub service_query: Arc<dyn ServiceQuery>,
+    /// 服务存储（用于更新服务定义版本）
+    pub service_storage: Arc<dyn ServiceStorage>,
 
 }
 
@@ -191,12 +196,32 @@ impl DowngradeService {
             .map_err(|e| PluginError::Database(format!("更新表元数据 version 失败: {}", e)))?;
         }
 
+        // 步骤6.2: 更新 cmx_service_define 表中的 version 字段
+        {
+            // 查询该插件的所有服务定义
+            let services = self.deps.service_query
+                .get_services_by_plugin(&plugin_id)
+                .await
+                .map_err(|e| PluginError::Database(format!("查询服务定义失败: {}", e)))?;
+
+            // 更新每个服务的版本
+            for service in services {
+                let mut updated_service: cmx_core::model::service::ServiceDefinition = service.into();
+                updated_service.version = request.target_version.clone();
+                self.deps.service_storage
+                    .save_service(&updated_service, Some(txn_guard.txn_id()))
+                    .await
+                    .map_err(|e| PluginError::Database(format!("更新服务定义版本失败: {}", e)))?;
+            }
+        }
+
         // 步骤7: 更新注册表
         {
             let mut registry = self.deps.registry.write().await;
             if let Some(info) = registry.get(&plugin_id) {
                 let mut info = info.clone();
                 info.version = request.target_version.clone();
+                info.install_path =  PathBuf::from(target_version_record.install_path.clone());
                 registry.register(info);
             }
         }
@@ -257,6 +282,17 @@ impl DowngradeService {
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
+
+        // 步骤11: 发布降级完成事件
+        let payload = PluginLifecyclePayload::new(&plugin_id, &request.target_version)
+            .with_old_version(&old_version)
+            .with_install_path(PathBuf::from(&target_version_record.install_path))
+            .with_wasm_path(PathBuf::from(&target_version_record.wasm_path));
+
+        GlobalEventBus::get()
+            .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap())
+            .await;
+
         Ok(DowngradeResponse {
             plugin_id,
             old_version,

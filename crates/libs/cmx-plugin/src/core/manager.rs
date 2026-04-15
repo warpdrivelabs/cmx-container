@@ -61,7 +61,7 @@ use crate::security::validator::SecurityValidator;
 use chrono::Utc;
 use cmx_buffer::{CacheManager, GlobalCacheManager, GlobalLockManager, LockManager, PubSubOps};
 use cmx_database::{DatabaseManager, get_default_db_manager};
-use cmx_service::{ServiceRepository, ServiceStorageImpl};
+use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, ServiceRepository, ServiceStorageImpl};
 use cmx_traits::ServiceStorage;
 use tokio::sync::RwLock;
 use tracing::error;
@@ -330,9 +330,6 @@ impl PluginManager {
             service_registry: service_registry.clone(),
         });
 
-        let service_repository = Arc::new(ServiceRepository::new(db_manager.clone(),settings.default_database_id.clone()));
-        let service_storage: Arc<dyn ServiceStorage> = Arc::new(ServiceStorageImpl::new(service_repository.clone()));
-
         let install_service = crate::service::install::InstallService::new(
             crate::service::install::InstallServiceDeps {
                 repository: repository.clone(),
@@ -351,7 +348,7 @@ impl PluginManager {
                 node_id: settings.node_id.clone(),
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
-                service_storage: service_storage.clone()
+                service_storage: GlobalServiceStorage::get().clone()
             },
         );
 
@@ -373,7 +370,7 @@ impl PluginManager {
                 node_id: settings.node_id.clone(),
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
-                service_storage: service_storage.clone(),
+                service_storage: GlobalServiceStorage::get().clone()
             },
         );
 
@@ -399,7 +396,7 @@ impl PluginManager {
                 registry: registry.clone(),
                 contexts: contexts.clone(),
                 node_id: settings.node_id.clone(),
-                service_storage: service_storage.clone(),
+                service_storage: GlobalServiceStorage::get().clone()
             },
         );
 
@@ -414,6 +411,8 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 node_id: settings.node_id.clone(),
                 default_database_id: settings.default_database_id.clone(),
+                service_query: GlobalServiceQuery::get().clone(),
+                service_storage: GlobalServiceStorage::get().clone()
             },
         );
 

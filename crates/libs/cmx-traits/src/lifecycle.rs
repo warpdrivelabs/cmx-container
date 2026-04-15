@@ -17,6 +17,8 @@ pub mod plugin_events {
     pub const UPGRADED: &str = "plugin.upgraded";
     /// 插件已卸载
     pub const UNINSTALLED: &str = "plugin.uninstalled";
+    /// 插件已降级
+    pub const DOWNGRADED: &str = "plugin.downgraded";
     
     // 暂时注释，暂无此功能
     // /// 插件已激活
@@ -107,6 +109,9 @@ pub trait PluginLifecycleListener: Send + Sync {
 
     /// 插件已卸载 — 通知监听者清理资源
     async fn on_plugin_uninstalled(&self, event: PluginLifecyclePayload);
+
+    /// 插件已降级 — 通知监听者更新服务定义版本
+    async fn on_plugin_downgraded(&self, event: PluginLifecyclePayload);
 
     // 暂时注释，暂无此功能
     // /// 插件已激活 — 通知监听者加载 WASM 模块

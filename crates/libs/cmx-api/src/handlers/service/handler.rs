@@ -552,15 +552,6 @@ pub async fn get_services_by_plugin(
 /// - `state`: 应用状态
 /// - `req`: 请求体（ServicePageRequest）
 ///
-/// # 请求体
-/// - `service_key`: 服务 key 模糊查询（可选）
-/// - `service_name`: 服务名称模糊查询（可选）
-/// - `plugin_id`: 插件 ID 精确匹配（可选）
-/// - `domain_code`: 域代码精确匹配（可选）
-/// - `application_code`: 应用代码精确匹配（可选）
-/// - `module_code`: 模块代码精确匹配（可选）
-/// - `page`: 页码（从 1 开始，默认 1）
-/// - `size`: 每页大小（默认 10）
 ///
 /// # 响应体
 /// 返回分页结果

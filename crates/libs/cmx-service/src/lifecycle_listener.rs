@@ -78,6 +78,20 @@ impl ServiceLifecycleListener {
         });
         GlobalEventBus::get().subscribe(plugin_events::UNINSTALLED, handler).await;
 
+        // 订阅降级事件
+        let query = self.service_query.clone();
+        let registry = self.service_registry.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let query = query.clone();
+            let registry = registry.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    Self::handle_downgraded(query, registry, event).await;
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
+
         info!("服务生命周期监听器已注册");
     }
 
@@ -135,5 +149,18 @@ impl ServiceLifecycleListener {
         }
         
         info!("插件 {} 服务定义已从缓存清理", event.plugin_id);
+    }
+
+    /// 处理降级事件：更新服务定义缓存中的版本信息
+    async fn handle_downgraded(
+        query: Arc<dyn ServiceQuery>,
+        registry: Arc<ServiceRegistry>,
+        event: PluginLifecyclePayload,
+    ) {
+        info!("处理插件降级事件: {} {} -> {}", event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"), event.version);
+        
+        // 降级时重新加载服务定义（逻辑与升级相同）
+        Self::handle_installed(query, registry, event).await;
     }
 }

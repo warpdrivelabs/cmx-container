@@ -413,29 +413,29 @@ impl PluginRepository {
         Self::parse_plugin_record(&result).map(|r| r.into_iter().next())
     }
 
-    /// 通过ID查询插件记录（带 JOIN 域/应用/模块名称）
-    pub async fn find_plugin_by_id(&self, id: &str) -> PluginResult<Option<PluginRecord>> {
-        let sql = r#"
-            SELECT p.*,
-                   d.name AS domain_name,
-                   a.name AS application_name,
-                   m.name AS module_name
-            FROM cmx_plugin p
-            LEFT JOIN cmx_domain d ON p.domain_code = d.code
-            LEFT JOIN cmx_application a ON p.application_code = a.code
-            LEFT JOIN cmx_module m ON p.module_code = m.code
-            WHERE p.id = $1
-        "#;
-        let params = serde_json::json!([id]);
-
-        let result = self
-            .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
-            .await
-            .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
-
-        Self::parse_plugin_record(&result).map(|r| r.into_iter().next())
-    }
+    // /// 通过ID查询插件记录（带 JOIN 域/应用/模块名称）
+    // pub async fn find_plugin_by_id(&self, id: &str) -> PluginResult<Option<PluginRecord>> {
+    //     let sql = r#"
+    //         SELECT p.*,
+    //                d.name AS domain_name,
+    //                a.name AS application_name,
+    //                m.name AS module_name
+    //         FROM cmx_plugin p
+    //         LEFT JOIN cmx_domain d ON p.domain_code = d.code
+    //         LEFT JOIN cmx_application a ON p.application_code = a.code
+    //         LEFT JOIN cmx_module m ON p.module_code = m.code
+    //         WHERE p.id = $1
+    //     "#;
+    //     let params = serde_json::json!([id]);
+    //
+    //     let result = self
+    //         .db_manager
+    //         .query_sql_with_json(&self.default_db_id, None, sql, params, "plugin_query")
+    //         .await
+    //         .map_err(|e| PluginError::Database(format!("查询插件记录失败: {}", e)))?;
+    //
+    //     Self::parse_plugin_record(&result).map(|r| r.into_iter().next())
+    // }
 
     /// 列出所有插件（带 JOIN 域/应用/模块名称）
     pub async fn list_plugins(&self, filter: &PluginFilter) -> PluginResult<Vec<PluginRecord>> {

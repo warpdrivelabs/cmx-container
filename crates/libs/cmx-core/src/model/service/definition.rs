@@ -96,3 +96,24 @@ impl From<ServiceDefinition> for ServiceInfo {
         }
     }
 }
+
+impl From<ServiceInfo> for ServiceDefinition {
+    fn from(info: ServiceInfo) -> Self {
+        Self {
+            id: info.id,
+            service_key: info.service_key,
+            service_name: info.service_name,
+            description: info.description,
+            plugin_id: info.plugin_id,
+            status: info.status,
+            version: info.version,
+            config: if info.config.is_empty() { None } else { Some(info.config) },
+            domain_code: info.domain_code,
+            application_code: info.application_code,
+            module_code: info.module_code,
+            domain_name: info.domain_name,
+            application_name: info.application_name,
+            module_name: info.module_name,
+        }
+    }
+}

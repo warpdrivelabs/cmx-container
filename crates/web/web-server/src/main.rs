@@ -95,11 +95,13 @@ async fn main() -> Result<()> {
     cmx_traits::GlobalEventBus::initialize().expect("初始化全局事件总线失败");
     info!("全局事件总线初始化完成");
 
-    // 初始化插件管理器
-    init_plugins().await;
+
 
     // 初始化服务管理器
     init_services().await;
+
+    // 初始化插件管理器
+    init_plugins().await;
 
     // 构建完整的 AppState（注入 trait 实例）
     let app_state = CmxAppState::new()
