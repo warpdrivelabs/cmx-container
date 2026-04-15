@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use chrono::DateTime;
@@ -533,4 +533,36 @@ pub async fn plugin_page(
         page_size,
         total,
     )))
+}
+
+/// 查询插件是否存在
+///
+/// 处理 GET /api/plugin/exists 请求，通过 plugin_id 查询插件是否已存在。
+///
+/// # 参数
+/// - `query`: 查询参数（PluginExistsQuery）
+///
+/// # 查询参数
+/// - `plugin_id`: 插件ID
+///
+/// # 响应体
+/// - code: 0
+/// - data: "1" 存在, "0" 不存在
+#[utoipa::path(
+    get,
+    path = "/api/plugin/exists",
+    params(PluginExistsQuery),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<String>)
+    ),
+    tag = "Plugin"
+)]
+pub async fn plugin_exists(
+    Query(query): Query<PluginExistsQuery>,
+) -> Result<Json<ApiResp<String>>> {
+    let manager = cmx_plugin::GlobalPluginManager::get();
+    let exists = manager.repository().plugin_exists(&query.plugin_id).await
+        .map_err(|e| crate::error::Error::internal_error(format!("查询插件存在性失败: {}", e)))?;
+
+    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
 }

@@ -39,7 +39,7 @@ use super::models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
     ServiceOrchestrationError, ServiceFailedStepInfo,
-    ServiceGetQuery, ServiceByPluginQuery,
+    ServiceGetQuery, ServiceByPluginQuery, ServiceExistsQuery,
     ServiceListItem, ServiceDetailResponse,
 };
 
@@ -647,4 +647,41 @@ pub async fn delete_service(
         .map_err(|e| Error::internal_error(format!("删除服务失败: {}", e)))?;
 
     Ok(Json(crate::api_response::UnitResp::msg("删除成功")))
+}
+
+/// 查询服务是否存在
+///
+/// 处理 GET /api/service/exists 请求，通过 service_key 查询服务是否已存在。
+///
+/// # 参数
+/// - `state`: 应用状态
+/// - `query`: 查询参数（ServiceExistsQuery）
+///
+/// # 查询参数
+/// - `service_key`: 服务唯一标识
+///
+/// # 响应体
+/// - code: 0
+/// - data: "1" 存在, "0" 不存在
+#[utoipa::path(
+    get,
+    path = "/api/service/exists",
+    params(ServiceExistsQuery),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<String>)
+    ),
+    tag = "Service"
+)]
+pub async fn service_exists(
+    State(state): State<CmxAppState>,
+    Query(query): Query<ServiceExistsQuery>,
+) -> Result<Json<ApiResp<String>>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let service = service_query.get_service(&query.service_key).await
+        .map_err(|e| Error::internal_error(format!("查询服务存在性失败: {}", e)))?;
+
+    let exists = service.is_some();
+    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
 }

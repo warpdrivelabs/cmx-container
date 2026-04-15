@@ -136,3 +136,10 @@ pub struct PluginIdPath {
     /// 插件ID
     pub plugin_id: String,
 }
+
+/// 插件查重查询参数
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct PluginExistsQuery {
+    /// 插件ID
+    pub plugin_id: String,
+}

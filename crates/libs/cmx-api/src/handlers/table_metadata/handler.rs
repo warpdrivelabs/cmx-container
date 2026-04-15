@@ -166,3 +166,49 @@ pub async fn table_metadata_get_by_name(
 
     Ok(Json(ApiResp::ok(dataset)))
 }
+
+/// 根据 table_name 查询表元数据的查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+pub struct TableMetadataExistsQuery {
+    /// 表名称
+    pub table_name: String,
+}
+
+/// 查询表元数据是否存在
+///
+/// 处理 GET /api/table-metadata/exists 请求，通过 table_name 查询表是否已存在。
+///
+/// # 参数
+/// - `query`: 查询参数（TableMetadataExistsQuery）
+///
+/// # 查询参数
+/// - `table_name`: 表名称
+///
+/// # 响应体
+/// - code: 0
+/// - data: "1" 存在, "0" 不存在
+#[utoipa::path(
+    get,
+    path = "/api/table-metadata/exists",
+    params(TableMetadataExistsQuery),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<String>)
+    ),
+    tag = "TableMetadata"
+)]
+pub async fn table_metadata_exists(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Query(params): Query<TableMetadataExistsQuery>,
+) -> Result<Json<ApiResp<String>>> {
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None)
+        .await
+        .map_err(|e| crate::error::Error::InternalError(format!("查询表存在性失败: {}", e)))?;
+
+    let exists = !dataset.rows.is_empty();
+    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
+}

@@ -204,6 +204,13 @@ pub struct ServiceListItem {
     pub module_name: String,
 }
 
+/// 服务查重查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams)]
+pub struct ServiceExistsQuery {
+    /// 服务唯一标识
+    pub service_key: String,
+}
+
 
 
 // ==================== 服务删除请求结构体 ====================
