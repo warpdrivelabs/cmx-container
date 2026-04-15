@@ -55,8 +55,14 @@ impl ServiceQuery for ServiceQueryImpl {
 
         if let Some(def) = &service_def {
             let service_info = ServiceInfo::from(def.clone());
-            let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
-            self.registry.register(service_info, orchestration).await;
+            // let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
+            // self.registry.register(service_info, orchestration).await;
+
+            let orchestration = serde_json::from_str::<serde_json::Value>(
+                def.config.as_ref().unwrap()
+            )
+                .map_err(|e| TraitError::Internal(e.to_string()))?;
+            self.registry.register(service_info, Some(orchestration)).await;
         }
 
         Ok(service_def.map(|def| ServiceInfo::from(def)))
@@ -82,8 +88,11 @@ impl ServiceQuery for ServiceQueryImpl {
 
         for def in &service_defs {
             let service_info = ServiceInfo::from(def.clone());
-            let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
-            self.registry.register(service_info, orchestration).await;
+            let orchestration = serde_json::from_str::<serde_json::Value>(
+                def.config.as_ref().unwrap()
+            )
+            .map_err(|e| TraitError::Internal(e.to_string()))?;
+            self.registry.register(service_info, Some(orchestration)).await;
         }
 
         Ok(service_defs.into_iter().map(ServiceInfo::from).collect())
@@ -106,8 +115,15 @@ impl ServiceQuery for ServiceQueryImpl {
             for def in all_services {
                 if def.status == 1 {
                     let info = ServiceInfo::from(def.clone());
-                    let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
-                    self.registry.register(info.clone(), orchestration).await;
+
+                    let orchestration = serde_json::from_str::<serde_json::Value>(
+                        def.config.as_ref().unwrap()
+                    )
+                        .map_err(|e| TraitError::Internal(e.to_string()))?;
+                    self.registry.register(info.clone(), Some(orchestration)).await;
+
+                    // let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
+                    // self.registry.register(info.clone(), orchestration).await;
                     active.push(info);
                 }
             }
