@@ -16,16 +16,8 @@ pub struct ServiceOrchestration {
     pub description: String,
     /// 流程定义
     pub flow: ServiceFlow,
-    /// 所属域代码
-    #[serde(default)]
-    pub domain_code: Option<String>,
-    /// 所属应用代码
-    #[serde(default)]
-    pub application_code: Option<String>,
-    /// 所属模块代码
-    #[serde(default)]
-    pub module_code: Option<String>,
-    /// 原始json字符
+   
+    /// 原始json字符 非文件中的
     #[serde(skip)]
     pub source_str: String,
 }

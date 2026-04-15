@@ -384,7 +384,7 @@ impl UpgradeService {
             .with_old_version(&old_version)
             .with_install_path(install_path.clone())
             .with_wasm_path(PathBuf::from(&wasm_path));
-        
+
         GlobalEventBus::get()
             .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
             .await;

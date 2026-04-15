@@ -207,7 +207,7 @@ impl DowngradeService {
             let old_version_services = parse_services_from_plugin_dir(
                 &install_path,
                 &plugin_id,
-                &request.target_version,
+                &request.target_version
             )?;
             let old_service_keys: HashSet<String> = old_version_services.iter()
                 .map(|s| s.service_key.clone())

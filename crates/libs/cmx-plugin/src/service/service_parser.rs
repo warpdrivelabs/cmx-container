@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
-
+use cmx_core::model::meta::plugin::PluginDefinition;
 use cmx_core::model::service::ServiceDefinition;
 use crate::error::{PluginError, PluginResult};
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};

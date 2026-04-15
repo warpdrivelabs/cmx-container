@@ -467,7 +467,7 @@ impl InstallService {
             &plugin_id,
             &install_version,
             &self.deps.service_storage,
-            Some(txn_guard.txn_id()),
+            Some(txn_guard.txn_id())
         )
         .await?;
 
