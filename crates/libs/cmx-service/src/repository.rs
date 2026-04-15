@@ -223,19 +223,12 @@ impl ServiceRepository {
         let sql = r#"
             SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
-                   d.create_time, d.update_time, latest_v.config
+                   d.create_time, d.update_time, dv.config
             FROM cmx_service_define d
-            LEFT JOIN (
-                SELECT service_key, config
-                FROM cmx_service_define_version v1
-                WHERE create_time = (
-                    SELECT MAX(create_time)
-                    FROM cmx_service_define_version v2
-                    WHERE v1.service_key = v2.service_key
-                )
-            ) latest_v ON d.service_key = latest_v.service_key
+            LEFT JOIN cmx_service_define_version dv ON d.service_key = dv.service_key
+             and d.version = dv.plugin_version
             WHERE d.plugin_id = $1
-            ORDER BY d.update_time DESC
+            ORDER BY d.create_time DESC
         "#;
 
         let params = json!([plugin_id]);
