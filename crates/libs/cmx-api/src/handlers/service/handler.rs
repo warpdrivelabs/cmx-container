@@ -388,52 +388,52 @@ pub async fn execute_service_by_key(
 
 // ==================== 服务查询 Handler ====================
 
-/// 获取服务列表
-///
-/// 处理 GET /api/service/list 请求，返回所有启用的服务。
-///
-/// # 参数
-/// - `state`: 应用状态
-///
-/// # 响应体
-/// 返回服务信息数组
-#[utoipa::path(
-    get,
-    path = "/api/service/list",
-    responses(
-        (status = 200, description = "获取服务列表成功", body = ApiResp<Vec<ServiceListItem>>)
-    ),
-    tag = "Service"
-)]
-pub async fn list_services(
-    State(state): State<CmxAppState>,
-) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
-        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
-
-    let services = service_query.list_active_services().await
-        .map_err(|e| Error::internal_error(format!("获取服务列表失败: {}", e)))?;
-
-    let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
-        ServiceListItem {
-            id: s.id,
-            service_key: s.service_key,
-            service_name: s.service_name,
-            description: s.description,
-            plugin_id: s.plugin_id,
-            status: s.status,
-            version: s.version,
-            domain_code: s.domain_code,
-            application_code: s.application_code,
-            module_code: s.module_code,
-            domain_name: s.domain_name,
-            application_name: s.application_name,
-            module_name: s.module_name,
-        }
-    }).collect();
-
-    Ok(Json(ApiResp::ok(items)))
-}
+// /// 获取服务列表
+// ///
+// /// 处理 GET /api/service/list 请求，返回所有启用的服务。
+// ///
+// /// # 参数
+// /// - `state`: 应用状态
+// ///
+// /// # 响应体
+// /// 返回服务信息数组
+// #[utoipa::path(
+//     get,
+//     path = "/api/service/list",
+//     responses(
+//         (status = 200, description = "获取服务列表成功", body = ApiResp<Vec<ServiceListItem>>)
+//     ),
+//     tag = "Service"
+// )]
+// pub async fn list_services(
+//     State(state): State<CmxAppState>,
+// ) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
+//     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+//         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+//
+//     let services = service_query.list_active_services().await
+//         .map_err(|e| Error::internal_error(format!("获取服务列表失败: {}", e)))?;
+//
+//     let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
+//         ServiceListItem {
+//             id: s.id,
+//             service_key: s.service_key,
+//             service_name: s.service_name,
+//             description: s.description,
+//             plugin_id: s.plugin_id,
+//             status: s.status,
+//             version: s.version,
+//             domain_code: s.domain_code,
+//             application_code: s.application_code,
+//             module_code: s.module_code,
+//             domain_name: s.domain_name,
+//             application_name: s.application_name,
+//             module_name: s.module_name,
+//         }
+//     }).collect();
+//
+//     Ok(Json(ApiResp::ok(items)))
+// }
 
 /// 获取服务定义
 ///
@@ -466,9 +466,11 @@ pub async fn get_service(
 
     let service = service_query.get_service(&query.service_key).await
         .map_err(|e| Error::business_error(format!("获取服务失败: {}", e)))?;
+    let my_service = service.clone().ok_or_else(|| Error::business_error("服务不存在"))?;
+
     let service_config = GlobalServiceRegistry::get().get_orchestration(&query.service_key).await
         .ok_or_else(|| Error::business_error("获取服务编排失败"))?;
-       
+
 
     match service {
         Some(s) => {

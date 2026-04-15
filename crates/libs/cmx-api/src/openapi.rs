@@ -76,7 +76,7 @@ use utoipa::OpenApi;
         crate::handlers::service::handler::service_call,
         crate::handlers::service::handler::execute_service,
         crate::handlers::service::handler::execute_service_by_key,
-        crate::handlers::service::handler::list_services,
+        // crate::handlers::service::handler::list_services,
         crate::handlers::service::handler::page_services,
         crate::handlers::service::handler::get_service,
         crate::handlers::service::handler::get_services_by_plugin,
