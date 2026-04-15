@@ -380,15 +380,6 @@ impl UpgradeService {
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-        // 步骤16: 发布升级完成事件
-        let payload = PluginLifecyclePayload::new(&plugin_id, &new_version)
-            .with_old_version(&old_version)
-            .with_install_path(install_path.clone())
-            .with_wasm_path(PathBuf::from(&wasm_path));
-
-        GlobalEventBus::get()
-            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
-            .await;
 
 
         // 步骤9.3: 解析并存储新版本的服务定义（使用事务保证一致性）
@@ -419,6 +410,15 @@ impl UpgradeService {
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
+        // 步骤16: 发布升级完成事件
+        let payload = PluginLifecyclePayload::new(&plugin_id, &new_version)
+            .with_old_version(&old_version)
+            .with_install_path(install_path.clone())
+            .with_wasm_path(PathBuf::from(&wasm_path));
+
+        GlobalEventBus::get()
+            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
+            .await;
 
         Ok(UpgradeResponse {
             plugin_id,
