@@ -15,6 +15,7 @@ members = [
     "crates/libs/cmx-api",
     "crates/libs/cmx-plugin-sdk",
     "crates/libs/cmx-wasmdemo",
+    "sdk/cmx-cli",
 ]
 # 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
 resolver = "2"
