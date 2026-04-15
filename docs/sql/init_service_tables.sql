@@ -74,3 +74,6 @@ COMMENT ON COLUMN cmx_service_define_version.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_service_define_version.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_service_define_version.update_name IS '更新人名称';
 COMMENT ON COLUMN cmx_service_define_version.archived IS '归档标志：0-未归档，1-已归档';
+create index cmx_service_define_version_service_key_index
+    on cmx_service_define_version (service_key);
+

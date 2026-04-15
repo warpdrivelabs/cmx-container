@@ -55,9 +55,6 @@ impl ServiceQuery for ServiceQueryImpl {
 
         if let Some(def) = &service_def {
             let service_info = ServiceInfo::from(def.clone());
-            // let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
-            // self.registry.register(service_info, orchestration).await;
-
             let orchestration = serde_json::from_str::<serde_json::Value>(
                 def.config.as_ref().unwrap()
             )

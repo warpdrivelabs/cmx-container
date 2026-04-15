@@ -128,7 +128,7 @@ impl ServiceRepository {
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
                    d.create_time, d.update_time, v.config
             FROM cmx_service_define d
-            LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key
+            LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key and d.version = v.plugin_version
             WHERE d.service_key = $1
             ORDER BY v.create_time DESC
             LIMIT 1

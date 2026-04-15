@@ -466,10 +466,10 @@ pub async fn get_service(
 
     let service = service_query.get_service(&query.service_key).await
         .map_err(|e| Error::business_error(format!("获取服务失败: {}", e)))?;
-    let my_service = service.clone().ok_or_else(|| Error::business_error("服务不存在"))?;
-
-    let service_config = GlobalServiceRegistry::get().get_orchestration(&query.service_key).await
-        .ok_or_else(|| Error::business_error("获取服务编排失败"))?;
+    // let my_service = service.clone().ok_or_else(|| Error::business_error("服务不存在"))?;
+    //
+    // let service_config = GlobalServiceRegistry::get().get_orchestration(&query.service_key).await
+    //     .ok_or_else(|| Error::business_error("获取服务编排失败"))?;
 
 
     match service {
@@ -482,7 +482,7 @@ pub async fn get_service(
                 plugin_id: s.plugin_id,
                 status: s.status,
                 version: s.version,
-                config: service_config.to_string(),
+                config: s.config,
                 domain_code: s.domain_code,
                 application_code: s.application_code,
                 module_code: s.module_code,

@@ -133,6 +133,10 @@ impl Orchestrator {
         // ==================== 阶段2: 加载服务编排定义 ====================
         // 通过 service_key 查询服务编排定义（从数据库或缓存）
         // ServiceOrchestration 包含：name, code, flow(nodes + edges)
+
+        self.service_query.get_service(service_key).await
+            .map_err(|e| ServiceError::InternalError(e.to_string()))?
+            .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
         let orchestration = self.service_query.get_orchestration(service_key).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
             .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;

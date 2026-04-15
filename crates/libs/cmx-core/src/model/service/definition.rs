@@ -86,7 +86,7 @@ impl From<ServiceDefinition> for ServiceInfo {
             plugin_id: def.plugin_id,
             status: def.status,
             version: def.version,
-            config: String::new(),
+            config: def.config.unwrap_or_default(),
             domain_code: def.domain_code,
             application_code: def.application_code,
             module_code: def.module_code,
