@@ -67,11 +67,13 @@ use utoipa::OpenApi;
         crate::handlers::plugin::handler::plugin_page,
         crate::handlers::plugin::handler::plugin_get,
         crate::handlers::plugin::handler::plugin_deploy,
+        crate::handlers::plugin::handler::plugin_exists,
         // TableMetadata handlers
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
         crate::handlers::table_metadata::handler::table_metadata_get_by_id,
         crate::handlers::table_metadata::handler::table_metadata_get_by_name,
+        crate::handlers::table_metadata::handler::table_metadata_exists,
         //服务
         crate::handlers::service::handler::service_call,
         crate::handlers::service::handler::execute_service,
@@ -81,6 +83,7 @@ use utoipa::OpenApi;
         crate::handlers::service::handler::get_service,
         crate::handlers::service::handler::get_services_by_plugin,
         crate::handlers::service::handler::delete_service,
+        crate::handlers::service::handler::service_exists,
 
     ),
     components(
