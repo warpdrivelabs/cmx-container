@@ -5,8 +5,41 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use cmx_core::model::service::ServiceDefinition;
 use crate::error::{PluginError, PluginResult};
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser};
+
+/// 从插件目录解析服务定义（不保存到数据库）
+///
+/// 专门用于降级场景，从旧版本插件目录解析实际包含的服务定义列表，
+/// 用于确定降级后需要删除哪些新增的服务。
+///
+/// # 参数
+/// * `install_path` - 插件安装路径（应指向具体版本目录，如 plugin_id/v1.0.0/）
+/// * `plugin_id` - 插件ID
+/// * `plugin_version` - 插件版本
+///
+/// # 返回值
+/// * `Ok(Vec<ServiceDefinition>)` - 解析出的服务定义列表（不包含编排配置）
+///
+/// # 与 parse_and_save_services 的区别
+/// * parse_and_save_services: 解析并保存到数据库，用于安装/升级
+/// * parse_services_from_plugin_dir: 只解析不保存，用于降级时获取旧版本实际服务列表
+pub fn parse_services_from_plugin_dir(
+    install_path: &Path,
+    plugin_id: &str,
+    plugin_version: &str,
+) -> PluginResult<Vec<ServiceDefinition>> {
+    let parsed = match ServiceDataParser::parse_servicedata(install_path, plugin_id, plugin_version) {
+        Ok(services) => services,
+        Err(e) => {
+            tracing::warn!("解析服务数据失败: {:?}", e);
+            return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
+        }
+    };
+
+    Ok(parsed.into_iter().map(|p| p.definition).collect())
+}
 
 /// 解析并保存服务定义
 ///

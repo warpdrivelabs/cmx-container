@@ -187,7 +187,13 @@ pub async fn init_plugins() {
 
 /// 初始化服务管理器
 ///
-/// 加载所有已安装插件的服务定义到内存缓存。
+/// 初始化服务相关的组件，服务数据采用延迟加载策略：
+/// - 不在启动时全量加载所有服务
+/// - 首次访问服务时才从数据库加载并缓存
+///
+/// 这样做的好处：
+/// - 加快服务启动速度，特别是服务数量较多时
+/// - 避免启动时执行大量数据库查询（1+2N 次）
 pub async fn init_services() {
     use cmx_service::{GlobalServiceQuery, GlobalServiceStorage, GlobalServiceRegistry, ServiceRepository, ServiceRegistry, ServiceQueryImpl, ServiceStorageImpl, ServiceLifecycleListener};
     use cmx_runtime::RuntimeLifecycleListener;
@@ -198,8 +204,7 @@ pub async fn init_services() {
     let db_manager = get_default_db_manager();
     let default_db_id = get_default_db_manager().get_default_db_id().await;
 
-    // 使用 new_async 从 DatabaseManager 获取实际的默认数据库ID
-    let repository = Arc::new(ServiceRepository::new(db_manager.clone(),default_db_id));
+    let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id));
     let registry = Arc::new(ServiceRegistry::new());
 
     GlobalServiceRegistry::set(registry.clone()).expect("初始化服务注册中心失败");
@@ -211,50 +216,12 @@ pub async fn init_services() {
     GlobalServiceStorage::set(service_storage.clone()).expect("初始化服务存储失败");
 
     info!("服务仓储使用数据库ID: {}", repository.get_default_db_id());
-
-    let services: Vec<cmx_core::model::service::ServiceDefinition> = repository.list_services().await
-        .unwrap_or_else(|e| {
-            tracing::warn!("加载服务列表失败: {:?}", e);
-            Vec::new()
-        });
-
-    if !services.is_empty() {
-        let mut orchestrations: HashMap<String, serde_json::Value> = HashMap::new();
-        for service in &services {
-            let versions: Vec<(String, String)> = repository.get_service_versions(&service.service_key).await
-                .unwrap_or_else(|e| {
-                    tracing::warn!("加载服务版本失败: {:?}", e);
-                    Vec::new()
-                });
-            if let Some((version, _)) = versions.first() {
-                let version_str = version.clone();
-                let config_opt: Option<String> = repository.get_service_config(&service.service_key, &version_str).await
-                    .unwrap_or_else(|e| {
-                        tracing::warn!("加载服务配置失败: {:?}", e);
-                        None
-                    });
-                if let Some(config) = config_opt {
-                    // info!("服务 {} 配置: {}", service.service_key, config);
-                    if let Ok(orch) = serde_json::from_str::<serde_json::Value>(&config) {
-                        orchestrations.insert(service.service_key.clone(), orch);
-                    }
-                }
-            }
-        }
-
-        let service_infos: Vec<cmx_core::model::service::ServiceInfo> = services.into_iter().map(|s| {
-            cmx_core::model::service::ServiceInfo::from(s)
-        }).collect();
-        registry.load_all(service_infos, orchestrations).await;
-        let keys = registry.get_all_keys().await;
-        info!("已加载 {} 个服务定义到内存", keys.len());
-    } else {
-        info!("未发现已安装的服务定义");
-    }
+    info!("服务数据采用延迟加载策略，首次访问时自动加载");
 
     // 注册服务生命周期监听器
     let service_listener = ServiceLifecycleListener::new(
         GlobalServiceQuery::get().clone(),
+        repository.clone(),
         GlobalServiceRegistry::get().clone(),
     );
     service_listener.register().await;

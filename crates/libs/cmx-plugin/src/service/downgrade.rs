@@ -4,6 +4,7 @@
 //!
 //! 降级只是切换版本目录，不涉及文件拷贝。
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::audit::logger::AuditLogger;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
+use crate::service::service_parser::parse_services_from_plugin_dir;
 
 /// 降级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,23 +198,53 @@ impl DowngradeService {
             .map_err(|e| PluginError::Database(format!("更新表元数据 version 失败: {}", e)))?;
         }
 
-        // 步骤6.2: 更新 cmx_service_define 表中的 version 字段
+        // 步骤6.2: 处理降级时的服务定义
+        // 降级时需要从旧版本插件目录解析实际包含的服务定义，
+        // 而不是从数据库查询（因为数据库中可能有新版新增的服务）
         {
-            // 查询该插件的所有服务定义
-            let services = self.deps.service_query
+            // 1. 从旧版本插件目录解析实际的服务定义列表
+            let install_path = PathBuf::from(&target_version_record.install_path);
+            let old_version_services = parse_services_from_plugin_dir(
+                &install_path,
+                &plugin_id,
+                &request.target_version,
+            )?;
+            let old_service_keys: HashSet<String> = old_version_services.iter()
+                .map(|s| s.service_key.clone())
+                .collect();
+
+            // 2. 查询数据库中该插件的所有服务
+            let db_services = self.deps.service_query
                 .get_services_by_plugin(&plugin_id)
                 .await
                 .map_err(|e| PluginError::Database(format!("查询服务定义失败: {}", e)))?;
 
-            // 更新每个服务的版本
-            for service in services {
-                let mut updated_service: cmx_core::model::service::ServiceDefinition = service.into();
-                updated_service.version = request.target_version.clone();
-                self.deps.service_storage
-                    .save_service(&updated_service, Some(txn_guard.txn_id()))
-                    .await
-                    .map_err(|e| PluginError::Database(format!("更新服务定义版本失败: {}", e)))?;
+            // 3. 删除在新版本中存在但旧版本中不存在的服务，更新保留服务的版本号
+            let mut deleted_count = 0;
+            let mut updated_count = 0;
+            for service in db_services {
+                if !old_service_keys.contains(&service.service_key) {
+                    // 服务在旧版本中不存在，应该删除
+                    self.deps.service_storage
+                        .delete_service(&service.service_key, Some(txn_guard.txn_id()), None)
+                        .await
+                        .map_err(|e| PluginError::Database(format!("删除服务定义 {} 失败: {}", service.service_key, e)))?;
+                    deleted_count += 1;
+                } else {
+                    // 更新保留服务的版本号
+                    let mut updated_service: cmx_core::model::service::ServiceDefinition = service.into();
+                    updated_service.version = request.target_version.clone();
+                    self.deps.service_storage
+                        .save_service(&updated_service, Some(txn_guard.txn_id()))
+                        .await
+                        .map_err(|e| PluginError::Database(format!("更新服务定义版本失败: {}", e)))?;
+                    updated_count += 1;
+                }
             }
+            tracing::info!(
+                "插件 {} 降级时服务处理完成: 删除 {} 个服务，更新 {} 个服务",
+                plugin_id, deleted_count, updated_count
+            );
         }
 
         // 步骤7: 更新注册表

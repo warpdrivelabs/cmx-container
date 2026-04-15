@@ -12,13 +12,15 @@ pub use self::error::{Error, Result};
 use config::web_config;
 
 use axum::{middleware, Router};
-
+use axum::extract::DefaultBodyLimit;
 use crate::config::{init_cache, init_datasources, init_global_config, init_plugins, init_runtime, init_services};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -123,6 +125,10 @@ async fn main() -> Result<()> {
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver))
         .layer(middleware::from_fn(mw_trace))
+        // 允许最大请求体100 MB
+        .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
+        // .layer(TraceLayer::new_for_http())
         // 3. CORS - 允许跨域请求
         .layer(cors_layer())
         ;

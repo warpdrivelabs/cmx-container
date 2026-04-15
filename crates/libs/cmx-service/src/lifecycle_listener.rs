@@ -5,14 +5,17 @@
 use std::sync::Arc;
 use cmx_traits::{GlobalEventBus, EventHandler, plugin_events, PluginLifecyclePayload, ServiceQuery};
 use crate::registry::ServiceRegistry;
+use crate::repository::ServiceRepository;
 use tracing::{info, error};
 
 /// 服务生命周期监听器
 ///
 /// 监听插件生命周期事件，自动同步服务定义缓存。
 pub struct ServiceLifecycleListener {
-    /// 服务查询（用于从数据库加载服务定义）
+    /// 服务查询（用于从缓存或数据库查询服务定义）
     service_query: Arc<dyn ServiceQuery>,
+    /// 服务仓储（用于在升级/降级时强制从数据库加载）
+    repository: Arc<ServiceRepository>,
     /// 服务注册表（内存缓存）
     service_registry: Arc<ServiceRegistry>,
 }
@@ -22,14 +25,17 @@ impl ServiceLifecycleListener {
     ///
     /// # 参数
     ///
-    /// * `service_query` - 服务查询接口
+    /// * `service_query` - 服务查询接口（缓存优先）
+    /// * `repository` - 服务仓储（用于升级/降级时强制从数据库加载）
     /// * `service_registry` - 服务注册表（内存缓存）
     pub fn new(
         service_query: Arc<dyn ServiceQuery>,
+        repository: Arc<ServiceRepository>,
         service_registry: Arc<ServiceRegistry>,
     ) -> Self {
         Self {
             service_query,
+            repository,
             service_registry,
         }
     }
@@ -53,14 +59,14 @@ impl ServiceLifecycleListener {
         GlobalEventBus::get().subscribe(plugin_events::INSTALLED, handler).await;
 
         // 订阅升级事件
-        let query = self.service_query.clone();
+        let repository = self.repository.clone();
         let registry = self.service_registry.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
-            let query = query.clone();
+            let repository = repository.clone();
             let registry = registry.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
-                    Self::handle_upgraded(query, registry, event).await;
+                    Self::handle_upgraded(repository, registry, event).await;
                 }
             });
         });
@@ -79,14 +85,14 @@ impl ServiceLifecycleListener {
         GlobalEventBus::get().subscribe(plugin_events::UNINSTALLED, handler).await;
 
         // 订阅降级事件
-        let query = self.service_query.clone();
+        let repository = self.repository.clone();
         let registry = self.service_registry.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
-            let query = query.clone();
+            let repository = repository.clone();
             let registry = registry.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
-                    Self::handle_downgraded(query, registry, event).await;
+                    Self::handle_downgraded(repository, registry, event).await;
                 }
             });
         });
@@ -96,13 +102,15 @@ impl ServiceLifecycleListener {
     }
 
     /// 处理安装事件：从数据库加载服务定义到缓存
+    ///
+    /// 安装时缓存本来就不存在，所以可以直接使用 service_query 的缓存优先逻辑。
     async fn handle_installed(
         query: Arc<dyn ServiceQuery>,
         registry: Arc<ServiceRegistry>,
         event: PluginLifecyclePayload,
     ) {
         info!("处理插件安装事件: {} v{}", event.plugin_id, event.version);
-        
+
         match query.get_services_by_plugin(&event.plugin_id).await {
             Ok(services) => {
                 let mut orchestrations = std::collections::HashMap::new();
@@ -113,7 +121,7 @@ impl ServiceLifecycleListener {
                         }
                     }
                 }
-                
+
                 registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
                 info!("插件 {} 服务定义已加载到缓存", event.plugin_id);
             }
@@ -123,44 +131,129 @@ impl ServiceLifecycleListener {
         }
     }
 
-    /// 处理升级事件：更新服务定义缓存
+    /// 处理升级事件：强制从数据库加载最新服务定义到缓存
+    ///
+    /// 升级时必须强制从数据库加载，因为缓存中可能是旧版本的数据。
     async fn handle_upgraded(
-        query: Arc<dyn ServiceQuery>,
+        repository: Arc<ServiceRepository>,
         registry: Arc<ServiceRegistry>,
         event: PluginLifecyclePayload,
     ) {
-        info!("处理插件升级事件: {} {} -> {}", event.plugin_id, 
-            event.old_version.as_deref().unwrap_or("?"), event.version);
-        
-        // 升级时重新加载服务定义（逻辑与安装相同）
-        Self::handle_installed(query, registry, event).await;
+        info!(
+            "处理插件升级事件: {} {} -> {}",
+            event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"),
+            event.version
+        );
+
+        // 先清空该插件在缓存中的数据，确保使用数据库最新数据
+        let existing_services = registry.get_by_plugin(&event.plugin_id).await;
+        for service in &existing_services {
+            registry.unregister(&service.service_key, &event.plugin_id).await;
+        }
+
+        // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
+        // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
+        match repository.get_services_by_plugin(&event.plugin_id).await {
+            Ok(service_defs) => {
+                let mut orchestrations = std::collections::HashMap::new();
+                let service_infos: Vec<_> = service_defs
+                    .into_iter()
+                    .map(|def| {
+                        if let Some(ref config) = def.config {
+                            if !config.is_empty() {
+                                if let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
+                                    orchestrations.insert(def.service_key.clone(), orch);
+                                }
+                            }
+                        }
+                        cmx_core::model::service::ServiceInfo::from(def)
+                    })
+                    .collect();
+
+                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                info!("插件 {} 服务定义已更新到缓存", event.plugin_id);
+            }
+            Err(e) => {
+                error!("加载插件 {} 服务定义失败: {}", event.plugin_id, e);
+            }
+        }
     }
 
     /// 处理卸载事件：清理服务定义缓存
+    ///
+    /// 注意：数据库层面的服务清理已在 uninstall.rs 中完成，
+    /// 这里只负责清理内存缓存。如果缓存为空，说明服务从未被加载到缓存，
+    /// 这是正常的，跳过清理即可。
     async fn handle_uninstalled(registry: Arc<ServiceRegistry>, event: PluginLifecyclePayload) {
         info!("处理插件卸载事件: {} v{}", event.plugin_id, event.version);
-        
-        // 获取该插件的所有服务键
+
         let services = registry.get_by_plugin(&event.plugin_id).await;
-        
-        // 从缓存中移除
-        for service in services {
-            registry.unregister(&service.service_key, &event.plugin_id).await;
+
+        if services.is_empty() {
+            info!(
+                "插件 {} 的服务缓存为空，跳过缓存清理（服务可能从未被加载）",
+                event.plugin_id
+            );
+        } else {
+            for service in &services {
+                registry.unregister(&service.service_key, &event.plugin_id).await;
+            }
+            info!(
+                "插件 {} 服务定义已从缓存清理，共清理 {} 个服务",
+                event.plugin_id,
+                services.len()
+            );
         }
-        
-        info!("插件 {} 服务定义已从缓存清理", event.plugin_id);
     }
 
-    /// 处理降级事件：更新服务定义缓存中的版本信息
+    /// 处理降级事件：强制从数据库加载最新服务定义到缓存
+    ///
+    /// 降级时必须强制从数据库加载，因为缓存中可能是新版本的数据。
+    /// 同时，降级逻辑（downgrade.rs）已经处理了数据库中多余服务的删除。
     async fn handle_downgraded(
-        query: Arc<dyn ServiceQuery>,
+        repository: Arc<ServiceRepository>,
         registry: Arc<ServiceRegistry>,
         event: PluginLifecyclePayload,
     ) {
-        info!("处理插件降级事件: {} {} -> {}", event.plugin_id,
-            event.old_version.as_deref().unwrap_or("?"), event.version);
-        
-        // 降级时重新加载服务定义（逻辑与升级相同）
-        Self::handle_installed(query, registry, event).await;
+        info!(
+            "处理插件降级事件: {} {} -> {}",
+            event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"),
+            event.version
+        );
+
+        // 先清空该插件在缓存中的数据，确保使用数据库最新数据
+        let existing_services = registry.get_by_plugin(&event.plugin_id).await;
+        for service in &existing_services {
+            registry.unregister(&service.service_key, &event.plugin_id).await;
+        }
+
+        // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
+        // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
+        match repository.get_services_by_plugin(&event.plugin_id).await {
+            Ok(service_defs) => {
+                let mut orchestrations = std::collections::HashMap::new();
+                let service_infos: Vec<_> = service_defs
+                    .into_iter()
+                    .map(|def| {
+                        if let Some(ref config) = def.config {
+                            if !config.is_empty() {
+                                if let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
+                                    orchestrations.insert(def.service_key.clone(), orch);
+                                }
+                            }
+                        }
+                        cmx_core::model::service::ServiceInfo::from(def)
+                    })
+                    .collect();
+
+                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                info!("插件 {} 服务定义已更新到缓存（降级后）", event.plugin_id);
+            }
+            Err(e) => {
+                error!("加载插件 {} 服务定义失败: {}", event.plugin_id, e);
+            }
+        }
     }
 }

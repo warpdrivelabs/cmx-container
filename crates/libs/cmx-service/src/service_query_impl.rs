@@ -38,7 +38,7 @@ impl ServiceQueryImpl {
 impl ServiceQuery for ServiceQueryImpl {
     /// 获取服务信息
     ///
-    /// 优先从内存缓存查询，未命中时从数据库查询
+    /// 优先从内存缓存查询，未命中时从数据库查询并回写到缓存。
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
@@ -53,12 +53,17 @@ impl ServiceQuery for ServiceQueryImpl {
         let service_def = self.repository.get_service(service_key).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
+        if let Some(def) = &service_def {
+            let service_info = ServiceInfo::from(def.clone());
+            self.registry.register(service_info, None).await;
+        }
+
         Ok(service_def.map(|def| ServiceInfo::from(def)))
     }
 
     /// 根据插件ID获取所有服务
     ///
-    /// 优先从内存缓存查询，未命中时从数据库查询
+    /// 优先从内存缓存查询，未命中时从数据库查询并回写到缓存。
     ///
     /// # 参数
     /// * `plugin_id` - 插件ID
@@ -66,37 +71,62 @@ impl ServiceQuery for ServiceQueryImpl {
     /// # 返回值
     /// 返回该插件下所有服务信息列表
     async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceInfo>, TraitError> {
-        let services = self.registry.get_by_plugin(plugin_id).await;
-        if !services.is_empty() {
-            return Ok(services);
+        let cached_services = self.registry.get_by_plugin(plugin_id).await;
+        if !cached_services.is_empty() {
+            return Ok(cached_services);
         }
 
         let service_defs = self.repository.get_services_by_plugin(plugin_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
+
+        for def in &service_defs {
+            let service_info = ServiceInfo::from(def.clone());
+            self.registry.register(service_info, None).await;
+        }
 
         Ok(service_defs.into_iter().map(ServiceInfo::from).collect())
     }
 
     /// 获取所有启用的服务
     ///
+    /// 优先从缓存获取，如果缓存中没有则从数据库查询。
+    ///
     /// # 返回值
     /// 返回所有状态为启用的服务信息列表
     async fn list_active_services(&self) -> Result<Vec<ServiceInfo>, TraitError> {
-        let all_services = self.repository.list_services().await
-            .map_err(|e| TraitError::Internal(e.to_string()))?;
+        let all_keys = self.registry.get_all_keys().await;
 
-        let active: Vec<ServiceInfo> = all_services
-            .into_iter()
-            .filter(|s| s.status == 1)
-            .map(ServiceInfo::from)
-            .collect();
+        if all_keys.is_empty() {
+            let all_services = self.repository.list_services().await
+                .map_err(|e| TraitError::Internal(e.to_string()))?;
+
+            let mut active = Vec::new();
+            for def in all_services {
+                if def.status == 1 {
+                    let info = ServiceInfo::from(def.clone());
+                    self.registry.register(info.clone(), None).await;
+                    active.push(info);
+                }
+            }
+
+            return Ok(active);
+        }
+
+        let mut active = Vec::new();
+        for key in all_keys {
+            if let Some(service) = self.registry.get(&key).await {
+                if service.status == 1 {
+                    active.push(service);
+                }
+            }
+        }
 
         Ok(active)
     }
 
     /// 获取服务编排定义
     ///
-    /// 优先从内存缓存查询，未命中时从数据库查询最新版本的编排配置
+    /// 优先从内存缓存查询，未命中时从数据库查询最新版本的编排配置。
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
@@ -137,7 +167,8 @@ impl ServiceQuery for ServiceQueryImpl {
 
     /// 分页查询服务列表
     ///
-    /// 支持多条件组合查询，service_key 和 service_name 支持模糊匹配
+    /// 支持多条件组合查询，service_key 和 service_name 支持模糊匹配。
+    /// 注意：分页查询直接查数据库，不走缓存。
     ///
     /// # 参数
     /// * `filter` - 查询过滤器
