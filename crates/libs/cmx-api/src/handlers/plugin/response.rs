@@ -162,3 +162,14 @@ pub struct PluginDeployResponse {
     /// 消息
     pub message: Option<String>,
 }
+
+/// 插件函数响应
+///
+/// 用于返回插件 api.json 的内容
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PluginFunctionsResponse {
+    /// 是否成功获取插件函数
+    pub success: bool,
+    /// 插件函数列表（JSON 格式的 api.json 内容）
+    pub functions: serde_json::Value,
+}

@@ -20,8 +20,8 @@ use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 
 pub use handler::{
-    plugin_deploy, plugin_downgrade, plugin_exists, plugin_get, plugin_install, plugin_list,
-    plugin_page, plugin_uninstall, plugin_upgrade,
+    plugin_deploy, plugin_downgrade, plugin_exists, plugin_functions, plugin_get, plugin_install,
+    plugin_list, plugin_page, plugin_uninstall, plugin_upgrade,
 };
 
 /// 内部路由（不含前缀）
@@ -35,6 +35,7 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/list", post(plugin_list))
         .route("/page", post(plugin_page))
         .route("/exists", get(plugin_exists))
+        .route("/functions", post(plugin_functions))
         .route("/{plugin_id}", get(plugin_get))
 }
 

@@ -143,3 +143,17 @@ pub struct PluginExistsQuery {
     /// 插件ID
     pub plugin_id: String,
 }
+
+/// 插件函数查询参数
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct PluginFunctionsQuery {
+    /// 插件ID
+    pub plugin_id: String,
+}
+
+/// 批量获取插件函数请求
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PluginFunctionsRequest {
+    /// 插件ID列表
+    pub plugin_ids: Vec<String>,
+}

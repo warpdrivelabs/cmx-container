@@ -68,6 +68,7 @@ use utoipa::OpenApi;
         crate::handlers::plugin::handler::plugin_get,
         crate::handlers::plugin::handler::plugin_deploy,
         crate::handlers::plugin::handler::plugin_exists,
+        crate::handlers::plugin::handler::plugin_functions,
         // TableMetadata handlers
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
@@ -111,6 +112,7 @@ use utoipa::OpenApi;
             crate::handlers::plugin::request::PluginDowngradeRequest,
             crate::handlers::plugin::request::PluginSourceRequest,
             crate::handlers::plugin::request::PluginDeployRequest,
+            crate::handlers::plugin::request::PluginFunctionsRequest,
             crate::handlers::plugin::response::PluginInfoResponse,
             crate::handlers::plugin::response::PluginListResponse,
             crate::handlers::plugin::response::InstallResponse,
@@ -118,6 +120,7 @@ use utoipa::OpenApi;
             crate::handlers::plugin::response::UpgradeResponse,
             crate::handlers::plugin::response::DowngradeResponse,
             crate::handlers::plugin::response::PluginDeployResponse,
+            crate::handlers::plugin::response::PluginFunctionsResponse,
             crate::api_response::Pagination,
             // cmx-api service models
             crate::handlers::service::models::FunctionCallRequest,

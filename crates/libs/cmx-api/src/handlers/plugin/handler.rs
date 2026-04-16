@@ -566,3 +566,83 @@ pub async fn plugin_exists(
 
     Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
 }
+
+/// 批量获取插件函数列表
+///
+/// 处理 POST /api/plugin/functions 请求，批量获取多个插件的 api.json 文件内容。
+///
+/// # 参数
+/// - `request`: 请求体（PluginFunctionsRequest），包含 plugin_ids 列表
+///
+/// # 响应
+/// - 成功：返回 Map<plugin_id, api.json的JSON内容>
+/// - 失败：返回错误信息
+#[utoipa::path(
+    post,
+    path = "/api/plugin/functions",
+    request_body = PluginFunctionsRequest,
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<std::collections::HashMap<String, PluginFunctionsResponse>>)
+    ),
+    tag = "Plugin"
+)]
+pub async fn plugin_functions(
+    Json(request): Json<PluginFunctionsRequest>,
+) -> Result<Json<ApiResp<std::collections::HashMap<String, PluginFunctionsResponse>>>> {
+    let manager = cmx_plugin::GlobalPluginManager::get();
+    let mut result = std::collections::HashMap::new();
+
+    for plugin_id in &request.plugin_ids {
+        match manager.get_plugin(plugin_id).await {
+            Ok(Some(plugin_info)) => {
+                let api_json_path = plugin_info.install_path.join("api").join("api.json");
+                match tokio::fs::read_to_string(&api_json_path).await {
+                    Ok(content) => {
+                        match serde_json::from_str::<serde_json::Value>(&content) {
+                            Ok(json_value) => {
+                                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                                    success: true,
+                                    functions: json_value,
+                                });
+                            }
+                            Err(e) => {
+                                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                                    success: false,
+                                    functions: serde_json::json!({
+                                        "error": format!("解析 api.json 失败: {}", e)
+                                    }),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                            success: false,
+                            functions: serde_json::json!({
+                                "error": format!("读取 api.json 失败: {}", e)
+                            }),
+                        });
+                    }
+                }
+            }
+            Ok(None) => {
+                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                    success: false,
+                    functions: serde_json::json!({
+                        "error": format!("插件 {} 不存在", plugin_id)
+                    }),
+                });
+            }
+            Err(e) => {
+                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                    success: false,
+                    functions: serde_json::json!({
+                        "error": format!("获取插件信息失败: {}", e)
+                    }),
+                });
+            }
+        }
+    }
+
+    Ok(Json(ApiResp::ok(result)))
+}

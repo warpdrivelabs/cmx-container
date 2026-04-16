@@ -139,7 +139,7 @@ impl Orchestrator {
             .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
         let orchestration = self.service_query.get_orchestration(service_key).await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
-            .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
+            .ok_or_else(|| ServiceError::InternalError(format!("服务编排配置未找到: {}", service_key)))?;
 
         // ==================== 阶段3: 初始化执行上下文 ====================
         // SVRContext 是服务调用上下文，在整个编排过程中传递
