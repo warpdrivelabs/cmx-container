@@ -23,7 +23,6 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use axum::http::HeaderMap;
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServicePageFilter};
 use log::error;
@@ -44,24 +43,6 @@ use super::models::{
 };
 
 // ==================== 辅助函数 ====================
-
-/// 将 HeaderMap 转换为 HashMap<String, String>
-///
-/// # 参数
-/// * `headers` - HTTP 请求头
-///
-/// # 返回值
-/// 返回标准库 HashMap
-fn extract_headers(headers: &HeaderMap) -> std::collections::HashMap<String, String> {
-    headers
-        .iter()
-        .filter_map(|(k, v)| {
-            v.to_str()
-                .ok()
-                .map(|s| (k.to_string(), s.to_string()))
-        })
-        .collect()
-}
 
 /// 将 serde_json::Value 转换为字符串
 ///
@@ -114,8 +95,7 @@ fn value_to_string(value: serde_json::Value) -> Result<String, Error> {
 )]
 pub async fn service_call(
     State(state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<FunctionCallRequest>,
 ) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
     // ==================== 获取依赖组件 ====================
@@ -151,15 +131,16 @@ pub async fn service_call(
 
     // ==================== 提取请求头和 input ====================
 
-    let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
 
     // ==================== 构建 FunctionInput ====================
+    // 直接修改 svr_ctx 的 initial_input，避免克隆 headers
+    let mut svr_ctx = svr_ctx;
+    svr_ctx.initial_input = input_str.clone();
 
-    let svr_context = SVRContext::new(input_str.clone(), svr_headers);
     let func_input = FunctionInput {
         input: input_str,
-        context: svr_context,
+        context: svr_ctx,
         binary_data: HashMap::new(),
     };
 
@@ -202,10 +183,9 @@ pub async fn service_call(
 /// 核心逻辑：通过 service_key 查询服务定义，加载插件，执行编排流程。
 ///
 /// # 参数
-/// - `state`: 应用状态
+/// - `state`: 应用状态（包含运行时、服务查询器、插件管理器）
 /// - `service_key`: 服务唯一标识
-/// - `input`: 输入数据（JSON 字符串）
-/// - `svr_headers`: HTTP 请求头
+/// - `svr_context`: 服务调用上下文（包含 initial_input、headers、time_in、request_id）
 /// - `include_steps`: 是否返回步骤数据
 ///
 /// # 返回值
@@ -213,8 +193,7 @@ pub async fn service_call(
 async fn execute_service_inner(
     state: &CmxAppState,
     service_key: &str,
-    input: String,
-    svr_headers: std::collections::HashMap<String, String>,
+    svr_context: SVRContext,
     include_steps: bool,
 ) -> Result<ServiceExecuteResponse, Error> {
     // ==================== 获取依赖组件 ====================
@@ -242,8 +221,7 @@ async fn execute_service_inner(
 
     let result = orchestrator.execute_service(
         service_key,
-        &input,
-        svr_headers,
+        svr_context,
         options,
     ).await
         .map_err(|e| {
@@ -316,19 +294,22 @@ async fn execute_service_inner(
 )]
 pub async fn execute_service(
     State(state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     // ==================== 提取请求头和 input ====================
 
-    let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
+    // ==================== 设置 initial_input ====================
+    // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
+    let mut svr_ctx = svr_ctx;
+    svr_ctx.initial_input = input_str;
+
     // ==================== 执行服务编排 ====================
 
-    let response = execute_service_inner(&state, &req.service_key, input_str, svr_headers, include_steps).await?;
+    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
@@ -368,20 +349,23 @@ pub async fn execute_service(
 )]
 pub async fn execute_service_by_key(
     State(state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    headers: HeaderMap,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
     Path(service_key): Path<String>,
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     // ==================== 提取请求头和 input ====================
 
-    let svr_headers = extract_headers(&headers);
     let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
+    // ==================== 设置 initial_input ====================
+    // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
+    let mut svr_ctx = svr_ctx;
+    svr_ctx.initial_input = input_str;
+
     // ==================== 执行服务编排（路径参数优先） ====================
 
-    let response = execute_service_inner(&state, &service_key, input_str, svr_headers, include_steps).await?;
+    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }

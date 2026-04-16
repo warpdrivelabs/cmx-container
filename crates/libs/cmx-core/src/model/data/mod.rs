@@ -1,6 +1,5 @@
 pub mod response;
 pub mod request;
-pub mod context;
 pub mod dataset;
 
 

@@ -3,14 +3,12 @@
 //! 核心入口方法，协调 FlowNavigator、TransactionManager 和 NodeHandler 完成服务编排执行。
 //! 这是编排器的最顶层模块，对外暴露 `Orchestrator` 结构体和 `execute_service` 方法。
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use cmx_core::model::service::{SVRContext, ServiceFlow, ServiceNode};
-use cmx_database::transaction::begin_transaction_guard_by_db_id;
+use cmx_core::model::service::{SVRContext, ServiceNode};
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::ServiceError;
 use super::flow_navigator::FlowNavigator;
@@ -105,8 +103,7 @@ impl Orchestrator {
     ///
     /// # 参数
     /// * `service_key` - 服务唯一标识
-    /// * `initial_input` - 初始输入数据
-    /// * `headers` - HTTP 请求头
+    /// * `svr_context` - 服务调用上下文（包含 initial_input、headers、time_in、request_id 等）
     /// * `options` - 执行选项（控制是否返回 steps 数据）
     ///
     /// # 返回值
@@ -114,8 +111,7 @@ impl Orchestrator {
     pub async fn execute_service(
         &self,
         service_key: &str,
-        initial_input: &str,
-        headers: HashMap<String, String>,
+        svr_context: SVRContext,
         options: ExecuteOptions,
     ) -> Result<OrchestrationResult, ServiceError> {
         // ==================== 阶段1: 初始化 ====================
@@ -142,9 +138,9 @@ impl Orchestrator {
             .ok_or_else(|| ServiceError::InternalError(format!("服务编排配置未找到: {}", service_key)))?;
 
         // ==================== 阶段3: 初始化执行上下文 ====================
-        // SVRContext 是服务调用上下文，在整个编排过程中传递
-        // 包含：initial_input（初始输入）、headers（请求头）、step_outputs（各步骤输出）、txn_id（事务ID）
-        let svr_context = SVRContext::new(initial_input.to_string(), headers.clone());
+        // SVRContext 是服务调用上下文，由外部（middleware/handler）创建并传入
+        // 包含：initial_input（初始输入）、headers（请求头）、step_outputs（各步骤输出）、txn_id（事务ID）、time_in（请求时间）、request_id（请求ID）
+        let svr_context = svr_context;
 
         // 创建流程导航器：用于查找节点和边
         let flow = &orchestration.flow;
@@ -155,10 +151,10 @@ impl Orchestrator {
             .ok_or_else(|| ServiceError::InternalError("未找到开始节点".to_string()))?;
 
         // 初始化执行上下文
-        // - current_output: 当前步骤的输出，作为下一个步骤的输入（初始为 initial_input）
+        // - current_output: 当前步骤的输出，作为下一个步骤的输入（初始为 svr_context.initial_input）
         // - svr_context: 服务调用上下文，在函数间传递
         let mut exec_context = ExecutionContext {
-            current_output: initial_input.to_string(),
+            current_output: svr_context.initial_input.clone(),
             svr_context,
         };
 

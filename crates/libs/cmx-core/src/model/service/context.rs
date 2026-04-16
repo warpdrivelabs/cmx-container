@@ -3,7 +3,16 @@
 //! 包含服务调用上下文 SVRContext，用于在节点间传递数据。
 
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// 服务调用上下文 key 常量
+pub mod svrkey {
+    /// 请求进入时间 key
+    pub const KEY_TIME_IN: &'static str = "cmx_time_in";
+    /// 请求ID key
+    pub const KEY_REQUEST_ID: &'static str = "cmx_request_id";
+}
 
 /// 服务调用上下文
 ///
@@ -12,6 +21,8 @@ use serde::{Deserialize, Serialize};
 /// - 请求头
 /// - 各步骤的输出缓存
 /// - 事务ID（仅在事务框内执行时设置）
+/// - 请求进入时间
+/// - 请求ID
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SVRContext {
     /// 初始输入数据
@@ -24,6 +35,10 @@ pub struct SVRContext {
     /// 事务ID（仅在事务框内执行时设置）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub txn_id: Option<String>,
+    /// 请求进入时间
+    pub time_in: DateTime<Utc>,
+    /// 请求ID
+    pub request_id: String,
 }
 
 impl SVRContext {
@@ -32,12 +47,16 @@ impl SVRContext {
     /// # 参数
     /// - `initial_input`: 初始输入数据
     /// - `headers`: 请求头
-    pub fn new(initial_input: String, headers: HashMap<String, String>) -> Self {
+    /// - `time_in`: 请求进入时间
+    /// - `request_id`: 请求ID
+    pub fn new(initial_input: String, headers: HashMap<String, String>, time_in: DateTime<Utc>, request_id: String) -> Self {
         Self {
             initial_input,
             headers,
             step_outputs: HashMap::new(),
             txn_id: None,
+            time_in,
+            request_id,
         }
     }
 
@@ -90,5 +109,15 @@ impl SVRContext {
     /// 清除事务ID
     pub fn clear_txn_id(&mut self) {
         self.txn_id = None;
+    }
+
+    /// 获取请求进入时间
+    pub fn get_time_in(&self) -> DateTime<Utc> {
+        self.time_in
+    }
+
+    /// 获取请求ID
+    pub fn get_request_id(&self) -> &str {
+        &self.request_id
     }
 }

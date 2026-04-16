@@ -6,8 +6,7 @@ use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
 use chrono::Utc;
-use cmx_core::model::cell::CellValue;
-use cmx_core::model::data::context::{svrkey, SVRContext};
+use cmx_core::model::service::context::{svrkey, SVRContext};
 use cmx_utils::UuidGenerator;
 use tracing::debug;
 
@@ -17,14 +16,26 @@ pub struct CmxSvrContext(pub SVRContext);
 pub async fn mw_context_resolver(mut req: Request<Body>, next: Next) -> Result<Response> {
     debug!("{:<12} - mw_context_resolver", "MIDDLEWARE");
 
-    // let time_in = now_utc();
+    //请求进入时间
     let time_in = Utc::now();
-    let uuid = UuidGenerator::new_v4_compact();
+    //请求追踪id
+    let request_id = UuidGenerator::new_v4_compact();
+    //请求头信息
+    let headers: std::collections::HashMap<String, String> = req
+        .headers()
+        .iter()
+        .filter_map(|(k, v)| {
+            v.to_str().ok().map(|s| (k.to_string(), s.to_string()))
+        })
+        .collect();
 
-    let mut svr_context = SVRContext::new();
-
-    svr_context.set(svrkey::KEY_TIME_IN, CellValue::DateTime(time_in));
-    svr_context.set(svrkey::KEY_REQUEST_ID, CellValue::String(uuid));
+    //构建svr_context
+    let svr_context = SVRContext::new(
+        String::new(),
+        headers,
+        time_in,
+        request_id,
+    );
 
     req.extensions_mut().insert(CmxSvrContext(svr_context));
 

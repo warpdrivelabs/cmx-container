@@ -9,3 +9,10 @@
 /uploads/
 /logs/
 /.trae/skills/rust规范/
+/.trae/specs/
+/crates/libs/cmx-wasmdemo.zip
+/crates/libs/cmx-service/src/orchestrator/old.rs
+/plugin1.0.1.zip
+/plugin1.0.2.zip
+/crates/libs/cmx-service/src/sample-flow.json
+/test_complex_flow.json
