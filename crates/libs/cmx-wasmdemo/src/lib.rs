@@ -34,7 +34,7 @@
 //! use extism_pdk::*;
 //!
 //! #[plugin_fn]
-//! pub fn my_function(Json(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+//! pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
 //!     // 获取当前步骤输入
 //!     let current_input = &input.input;
 //!
@@ -50,7 +50,7 @@
 //!     }
 //!
 //!     // 返回结果
-//!     Ok(Json(FunctionOutput::new("处理结果")))
+//!     Ok(Msgpack(FunctionOutput::new("处理结果")))
 //! }
 //! ```
 
