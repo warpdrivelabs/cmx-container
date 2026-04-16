@@ -385,6 +385,7 @@ impl Orchestrator {
 
         // 最终输出：成功时返回最后一个节点的输出，失败时返回 None
         let final_output = if is_success {
+            info!("执行成功，返回最终结果:  output={:?}", exec_context.current_output);
             Some(exec_context.current_output.clone())
         } else {
             None
