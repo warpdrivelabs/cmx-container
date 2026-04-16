@@ -1,0 +1,574 @@
+{
+  "plugin": {
+    "name": "cmx-wasmdemo",
+    "version": "0.1.0",
+    "generated_at": "2026-04-15T00:43:27.283206200+00:00"
+  },
+  "functions": [
+    {
+      "name": "count_vowels",
+      "summary": "统计字符串中的元音字母数量",
+      "description": "这是一个简单的字符串处理函数，演示标准入参出参的使用。",
+      "input": {
+        "encoding": "msgpack",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "要统计的字符串"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的统计结果"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "input": "`{\"input\"",
+          "output": "`{\"result\""
+        }
+      ],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 97
+      }
+    },
+    {
+      "name": "demo_log",
+      "summary": "演示日志功能",
+      "description": "调用宿主的日志函数，记录不同级别的日志信息。\n此函数不需要业务输入，直接执行日志演示。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput"
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的演示结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 127
+      }
+    },
+    {
+      "name": "demo_cache",
+      "summary": "演示缓存功能",
+      "description": "演示缓存的写入、读取和删除操作。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的 DemoRequest，包含 name 和 count"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的操作结果"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "input": "`{\"input\"",
+          "output": "`{\"result\""
+        }
+      ],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 164
+      }
+    },
+    {
+      "name": "demo_database",
+      "summary": "演示数据库查询功能",
+      "description": "执行一个简单的数据库查询。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的 DemoRequest，用于构建 SQL"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的查询结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 209
+      }
+    },
+    {
+      "name": "demo_plugin_call",
+      "summary": "演示插件间调用",
+      "description": "调用其他插件的服务。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的 DemoRequest，传递给目标插件"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的调用结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 252
+      }
+    },
+    {
+      "name": "run_all_demos",
+      "summary": "综合测试入口",
+      "description": "执行所有演示功能，用于验证插件环境是否正常。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的 DemoRequest，用于测试参数传递"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 数组，包含各项测试的结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 297
+      }
+    },
+    {
+      "name": "route_check",
+      "summary": "路由判断函数",
+      "description": "根据输入的 route 字段决定返回哪个分支标识。\n用于 skylake-switch 节点，返回值对应 options 中的选项。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式，包含 route 字段"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "返回 \"1\"、\"2\" 或 \"3\"，对应三个分支"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "input": "`{\"input\"",
+          "output": "`{\"result\""
+        }
+      ],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 376
+      }
+    },
+    {
+      "name": "branch_1_process",
+      "summary": "分支1处理函数",
+      "description": "处理分支1的业务逻辑。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的业务数据"
+          },
+          {
+            "name": "input.context.initial_input",
+            "type": "unknown",
+            "description": "初始入参"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 412
+      }
+    },
+    {
+      "name": "branch_2_process",
+      "summary": "分支2处理函数",
+      "description": "处理分支2的业务逻辑。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的业务数据"
+          },
+          {
+            "name": "input.context.initial_input",
+            "type": "unknown",
+            "description": "初始入参"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 436
+      }
+    },
+    {
+      "name": "branch_3_process",
+      "summary": "分支3处理函数",
+      "description": "处理分支3的业务逻辑。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的业务数据"
+          },
+          {
+            "name": "input.context.initial_input",
+            "type": "unknown",
+            "description": "初始入参"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 460
+      }
+    },
+    {
+      "name": "merge_result",
+      "summary": "合并结果函数",
+      "description": "合并各分支的处理结果。\n可以通过 step_outputs 获取各分支的输出。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "前序步骤的输出"
+          },
+          {
+            "name": "input.context.step_outputs",
+            "type": "unknown",
+            "description": "各步骤的输出缓存"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的合并结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 485
+      }
+    },
+    {
+      "name": "tx_insert",
+      "summary": "事务插入函数",
+      "description": "在事务中执行插入操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的插入数据"
+          },
+          {
+            "name": "input.context.txn_id",
+            "type": "unknown",
+            "description": "事务ID（由事务框设置）"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的操作结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 515
+      }
+    },
+    {
+      "name": "tx_update",
+      "summary": "事务更新函数",
+      "description": "在事务中执行更新操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的更新数据"
+          },
+          {
+            "name": "input.context.txn_id",
+            "type": "unknown",
+            "description": "事务ID（由事务框设置）"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的操作结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 571
+      }
+    },
+    {
+      "name": "tx_query",
+      "summary": "事务查询函数",
+      "description": "在事务中执行查询操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的查询条件"
+          },
+          {
+            "name": "input.context.txn_id",
+            "type": "unknown",
+            "description": "事务ID（由事务框设置）"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的查询结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 627
+      }
+    },
+    {
+      "name": "tx_delete",
+      "summary": "事务删除函数",
+      "description": "在事务中执行删除操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "JSON 格式的删除条件"
+          },
+          {
+            "name": "input.context.txn_id",
+            "type": "unknown",
+            "description": "事务ID（由事务框设置）"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的操作结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 682
+      }
+    },
+    {
+      "name": "final_process",
+      "summary": "最终处理函数",
+      "description": "最终处理并返回结果。",
+      "input": {
+        "encoding": "json",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input.input",
+            "type": "unknown",
+            "description": "前序步骤的输出"
+          },
+          {
+            "name": "input.context.step_outputs",
+            "type": "unknown",
+            "description": "各步骤的输出缓存"
+          }
+        ]
+      },
+      "output": {
+        "encoding": "json",
+        "type": "FunctionOutput",
+        "fields": [
+          {
+            "name": "result",
+            "type": "unknown",
+            "description": "JSON 格式的最终结果"
+          }
+        ]
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
+        "line": 735
+      }
+    }
+  ]
+}
