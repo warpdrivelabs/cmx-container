@@ -602,12 +602,16 @@ pub async fn plugin_functions(
                             Ok(json_value) => {
                                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                                     success: true,
+                                    plugin_name: plugin_info.name.clone(),
+                                    plugin_version: plugin_id.clone(),
                                     functions: json_value,
                                 });
                             }
                             Err(e) => {
                                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                                     success: false,
+                                    plugin_name: plugin_info.name.clone(),
+                                    plugin_version: plugin_id.clone(),
                                     functions: serde_json::json!({
                                         "error": format!("解析 api.json 失败: {}", e)
                                     }),
@@ -618,6 +622,8 @@ pub async fn plugin_functions(
                     Err(e) => {
                         result.insert(plugin_id.clone(), PluginFunctionsResponse {
                             success: false,
+                            plugin_name: plugin_info.name.clone(),
+                            plugin_version: plugin_id.clone(),
                             functions: serde_json::json!({
                                 "error": format!("读取 api.json 失败: {}", e)
                             }),
@@ -628,6 +634,8 @@ pub async fn plugin_functions(
             Ok(None) => {
                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                     success: false,
+                    plugin_name: "".to_string(),
+                    plugin_version: "".to_string(),
                     functions: serde_json::json!({
                         "error": format!("插件 {} 不存在", plugin_id)
                     }),
@@ -636,6 +644,8 @@ pub async fn plugin_functions(
             Err(e) => {
                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                     success: false,
+                    plugin_name: "".to_string(),
+                    plugin_version: "".to_string(),
                     functions: serde_json::json!({
                         "error": format!("获取插件信息失败: {}", e)
                     }),

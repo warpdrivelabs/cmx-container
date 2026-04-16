@@ -196,6 +196,12 @@ cmx-cli plugin info ./target/my-plugin.wasm
 /// # 注意
 ///
 /// - 特殊说明
+///
+/// # 类型标注
+///
+/// 使用 `#[doc_type = "func"]` 或 `#[doc_type = "branch_fn"]` 标注函数类型：
+/// - `func`（默认）：普通处理函数
+/// - `branch_fn`：分支函数
 #[plugin_fn]
 pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // ...
@@ -228,6 +234,7 @@ pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
   "functions": [
     {
       "name": "count_vowels",
+      "type": "func",
       "summary": "统计字符串中的元音字母数量",
       "description": "这是一个简单的字符串处理函数",
       "input": {
@@ -279,6 +286,35 @@ pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
 | `Json<T>` | json |
 | `Msgpack<T>` | msgpack |
 | 其他 | raw |
+
+## 函数类型识别
+
+工具支持识别 `#[doc_type]` 属性，自动为函数添加类型标识：
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| 无 `#[doc_type]` 属性 | `func` | 普通处理函数 |
+| `#[doc_type = "func"]` | `func` | 普通处理函数（显式声明） |
+| `#[doc_type = "branch_fn"]` | `branch_fn` | 分支函数 |
+
+### 分支函数示例
+
+```rust
+/// 分支1处理函数
+///
+/// # 输入
+/// - `input.input`: 前序步骤的输出
+///
+/// # 输出
+/// - `result`: 处理结果
+#[doc_type = "branch_fn"]
+#[plugin_fn]
+pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+    // ...
+}
+```
+
+生成的 JSON 中该函数会包含 `"type": "branch_fn"`。
 
 ## 示例
 

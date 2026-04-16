@@ -2,11 +2,12 @@
   "plugin": {
     "name": "cmx-wasmdemo",
     "version": "0.1.0",
-    "generated_at": "2026-04-15T00:43:27.283206200+00:00"
+    "generated_at": "2026-04-16T09:37:23.082622300+00:00"
   },
   "functions": [
     {
       "name": "count_vowels",
+      "type": "func",
       "summary": "统计字符串中的元音字母数量",
       "description": "这是一个简单的字符串处理函数，演示标准入参出参的使用。",
       "input": {
@@ -44,14 +45,15 @@
     },
     {
       "name": "demo_log",
+      "type": "func",
       "summary": "演示日志功能",
       "description": "调用宿主的日志函数，记录不同级别的日志信息。\n此函数不需要业务输入，直接执行日志演示。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput"
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -69,10 +71,11 @@
     },
     {
       "name": "demo_cache",
+      "type": "func",
       "summary": "演示缓存功能",
       "description": "演示缓存的写入、读取和删除操作。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -83,7 +86,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -106,10 +109,11 @@
     },
     {
       "name": "demo_database",
+      "type": "func",
       "summary": "演示数据库查询功能",
       "description": "执行一个简单的数据库查询。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -120,7 +124,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -138,10 +142,11 @@
     },
     {
       "name": "demo_plugin_call",
+      "type": "func",
       "summary": "演示插件间调用",
       "description": "调用其他插件的服务。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -152,7 +157,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -170,10 +175,11 @@
     },
     {
       "name": "run_all_demos",
+      "type": "func",
       "summary": "综合测试入口",
       "description": "执行所有演示功能，用于验证插件环境是否正常。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -184,7 +190,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -202,10 +208,11 @@
     },
     {
       "name": "route_check",
+      "type": "branch_fn",
       "summary": "路由判断函数",
       "description": "根据输入的 route 字段决定返回哪个分支标识。\n用于 skylake-switch 节点，返回值对应 options 中的选项。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -216,7 +223,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -234,21 +241,22 @@
       ],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 376
+        "line": 377
       }
     },
     {
       "name": "branch_1_process",
+      "type": "func",
       "summary": "分支1处理函数",
       "description": "处理分支1的业务逻辑。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
             "name": "input.input",
             "type": "unknown",
-            "description": "JSON 格式的业务数据"
+            "description": "前序步骤的输出"
           },
           {
             "name": "input.context.initial_input",
@@ -258,7 +266,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -271,15 +279,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 412
+        "line": 413
       }
     },
     {
       "name": "branch_2_process",
+      "type": "func",
       "summary": "分支2处理函数",
       "description": "处理分支2的业务逻辑。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -295,7 +304,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -308,15 +317,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 436
+        "line": 437
       }
     },
     {
       "name": "branch_3_process",
+      "type": "func",
       "summary": "分支3处理函数",
       "description": "处理分支3的业务逻辑。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -332,7 +342,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -345,15 +355,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 460
+        "line": 461
       }
     },
     {
       "name": "merge_result",
+      "type": "func",
       "summary": "合并结果函数",
       "description": "合并各分支的处理结果。\n可以通过 step_outputs 获取各分支的输出。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -369,7 +380,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -382,15 +393,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 485
+        "line": 486
       }
     },
     {
       "name": "tx_insert",
+      "type": "func",
       "summary": "事务插入函数",
       "description": "在事务中执行插入操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -406,7 +418,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -419,15 +431,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 515
+        "line": 516
       }
     },
     {
       "name": "tx_update",
+      "type": "func",
       "summary": "事务更新函数",
       "description": "在事务中执行更新操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -443,7 +456,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -456,15 +469,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 571
+        "line": 572
       }
     },
     {
       "name": "tx_query",
+      "type": "func",
       "summary": "事务查询函数",
       "description": "在事务中执行查询操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -480,7 +494,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -493,15 +507,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 627
+        "line": 628
       }
     },
     {
       "name": "tx_delete",
+      "type": "func",
       "summary": "事务删除函数",
       "description": "在事务中执行删除操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -517,7 +532,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -530,15 +545,16 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 682
+        "line": 683
       }
     },
     {
       "name": "final_process",
+      "type": "func",
       "summary": "最终处理函数",
       "description": "最终处理并返回结果。",
       "input": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
@@ -554,7 +570,7 @@
         ]
       },
       "output": {
-        "encoding": "json",
+        "encoding": "msgpack",
         "type": "FunctionOutput",
         "fields": [
           {
@@ -567,7 +583,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 735
+        "line": 736
       }
     }
   ]

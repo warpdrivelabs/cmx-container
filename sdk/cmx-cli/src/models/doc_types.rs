@@ -35,6 +35,9 @@ pub struct PluginInfo {
 pub struct FunctionDoc {
     /// 函数名
     pub name: String,
+    /// 文档类型：func（普通函数）或 branch_fn（分支函数）
+    #[serde(rename = "type")]
+    pub doc_type: String,
     /// 简短描述
     pub summary: String,
     /// 详细描述

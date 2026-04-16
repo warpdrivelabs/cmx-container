@@ -58,10 +58,10 @@ base64 = "0.22"
 modql = { workspace = true }
 
 # Extism PDK 支持（可选）
-extism-pdk = { version = "1.4.1", optional = true }
+#extism-pdk = { version = "1.4.1", optional = true }
 
 [features]
-extism = ["extism-pdk"]
+#extism = ["extism-pdk"]
+extism = []
 
-[dev-dependencies]
-cmx-plugin-sdk = { path = "../cmx-plugin-sdk" }
+

@@ -170,6 +170,10 @@ pub struct PluginDeployResponse {
 pub struct PluginFunctionsResponse {
     /// 是否成功获取插件函数
     pub success: bool,
+    /// 插件名称
+    pub plugin_name:String,
+    /// 插件版本
+    pub plugin_version: String,
     /// 插件函数列表（JSON 格式的 api.json 内容）
     pub functions: serde_json::Value,
 }

@@ -100,6 +100,7 @@ fn build_function_doc(func: &ParsedFunction, doc: &ParsedDoc, file_path: &str) -
 
     FunctionDoc {
         name: func.name.clone(),
+        doc_type: func.doc_type.clone(),
         summary: if doc.summary.is_empty() {
             func.name.clone()
         } else {

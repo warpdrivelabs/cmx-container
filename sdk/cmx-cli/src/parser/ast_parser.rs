@@ -15,6 +15,8 @@ pub struct ParsedFunction {
     pub name: String,
     /// 文档注释
     pub doc_comments: Vec<String>,
+    /// 文档类型：默认 "func"，如果有 #[doc_type = "branch_fn"] 则为 "branch_fn"
+    pub doc_type: String,
     /// 输入类型
     pub input_type: String,
     /// 输出类型
@@ -61,6 +63,9 @@ fn parse_plugin_function(fn_item: &ItemFn) -> Result<Option<ParsedFunction>> {
     // 提取文档注释
     let doc_comments = extract_doc_comments(&fn_item.attrs);
 
+    // 提取文档类型
+    let doc_type = extract_doc_type(&fn_item.attrs);
+
     // 解析输入类型
     let (input_type, input_encoding) = parse_input_type(&fn_item.sig.inputs)?;
 
@@ -78,6 +83,7 @@ fn parse_plugin_function(fn_item: &ItemFn) -> Result<Option<ParsedFunction>> {
     Ok(Some(ParsedFunction {
         name,
         doc_comments,
+        doc_type,
         input_type,
         output_type,
         input_encoding,
@@ -104,6 +110,23 @@ fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {
             None
         })
         .collect()
+}
+
+/// 提取 #[doc_type = "..."] 属性值
+fn extract_doc_type(attrs: &[Attribute]) -> String {
+    for attr in attrs {
+        if attr.path().is_ident("doc_type") {
+            if let syn::Meta::NameValue(nv) = &attr.meta {
+                if let syn::Expr::Lit(lit) = &nv.value {
+                    if let syn::Lit::Str(lit_str) = &lit.lit {
+                        return lit_str.value();
+                    }
+                }
+            }
+        }
+    }
+    // 默认类型为 "func"
+    "func".to_string()
 }
 
 /// 解析输入类型

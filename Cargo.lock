@@ -729,8 +729,6 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
- "cmx-plugin-sdk",
- "extism-pdk",
  "modql",
  "rust_decimal",
  "serde",
