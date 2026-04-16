@@ -97,7 +97,8 @@ impl<'a> NodeHandler<'a> {
             context: exec_context.svr_context.clone(),   // 上下文在整个编排过程中传递
             binary_data: HashMap::new(),                  // 二进制数据暂未使用
         };
-        debug!("[{}] 函数输入: input={}, txn_id={:?}", tag, func_input.input, func_input.context.txn_id);
+        debug!("[{}] 函数输入: input={}, txn_id={:?}",
+            tag, func_input.input, func_input.context.txn_id);
 
         // 序列化输入为 JSON 字节
         let input_bytes = serde_json::to_vec(&func_input)
@@ -115,8 +116,8 @@ impl<'a> NodeHandler<'a> {
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
 
         let elapsed_us = step_start.elapsed().as_micros() as u64;
-        debug!("[{}] 函数执行完成: node_id={}, output={}, elapsed_us={}",
-            tag, node.id, output.result, elapsed_us);
+        debug!("[{}] 函数执行完成: node_id={}, node_name={}, output={}, elapsed_us={}",
+            tag, node.id, node_data.name, output.result, elapsed_us);
 
         // 步骤5: 更新执行上下文
         // current_output 作为下一个节点的输入

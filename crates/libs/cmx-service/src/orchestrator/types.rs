@@ -33,8 +33,8 @@ pub struct ExecutionStep {
     pub node_type: String,
     /// 步骤执行状态（Success/Failed/Skipped）
     pub status: StepStatus,
-    /// 步骤输出（函数执行结果 JSON 字符串，失败时可能为 None）
-    pub output: Option<String>,
+    /// 步骤输出（函数执行结果，失败时可能为 None）
+    pub output: Option<serde_json::Value>,
     /// 执行耗时（微秒，用于性能分析）
     pub elapsed_us: u64,
     /// 步骤级错误信息（失败时包含具体错误描述，成功时为 None）
@@ -51,7 +51,7 @@ pub struct OrchestrationResult {
     /// 是否执行成功（所有节点都成功执行则为 true）
     pub success: bool,
     /// 最终输出结果（最后一个节点的输出，失败时为 None）
-    pub output: Option<String>,
+    pub output: Option<serde_json::Value>,
     /// 各步骤执行记录（按执行顺序记录每个节点的执行情况）
     /// 注意：当 include_steps=false 且成功时，此数组为空
     pub steps: Vec<ExecutionStep>,
@@ -95,7 +95,7 @@ pub struct FailedStepInfo {
     /// 上一步的输出（失败前的数据，便于排查问题）
     /// 如果是第一个步骤失败，则为初始输入数据
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub previous_output: Option<String>,
+    pub previous_output: Option<serde_json::Value>,
 }
 
 /// 执行上下文 — 在编排执行过程中传递
@@ -107,7 +107,7 @@ pub struct ExecutionContext {
     /// 当前步骤输出（传递给下一个步骤的输入）
     /// - 第一个函数节点：initial_input（初始输入）
     /// - 后续函数节点：前一个函数的输出（链式传递）
-    pub current_output: String,
+    pub current_output: serde_json::Value,
     /// 服务调用上下文（包含初始入参、请求头、各步骤输出、事务ID）
     /// 在整个编排过程中持续传递和更新，所有函数共享
     pub svr_context: SVRContext,
@@ -128,7 +128,6 @@ pub struct ExecuteOptions {
 
 impl Default for ExecuteOptions {
     fn default() -> Self {
-        // 默认不返回步骤数据，优化生产环境性能
         Self {
             include_steps: false,
         }

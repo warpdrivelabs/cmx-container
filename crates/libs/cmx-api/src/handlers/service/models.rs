@@ -37,7 +37,7 @@ pub struct FunctionCallRequest {
 /// # 统一出参说明
 ///
 /// 所有 WASM 函数都使用 `FunctionOutput` 作为出参，包含：
-/// - `result`: 函数执行结果（JSON 字符串或纯文本）
+/// - `result`: 函数执行结果
 /// - `binary_data`: 二进制数据（文件、图像等）
 ///
 /// 本响应体中的 `result` 来自 `FunctionOutput.result`。
@@ -46,7 +46,7 @@ pub struct FunctionCallResponse {
     /// 是否执行成功
     pub success: bool,
     /// 函数执行结果（来自 FunctionOutput.result）
-    pub result: Option<String>,
+    pub result: Option<serde_json::Value>,
     /// 执行耗时（微秒）
     pub elapsed_us: u64,
     /// 错误信息（失败时）
@@ -85,7 +85,7 @@ pub struct ServiceExecuteResponse {
     /// 是否执行成功（所有节点都成功执行则为 true）
     pub success: bool,
     /// 最终输出结果（最后一个节点的输出，失败时为 None）
-    pub output: Option<String>,
+    pub output: Option<serde_json::Value>,
     /// 各步骤执行记录（按执行顺序）
     pub steps: Vec<ServiceExecutionStep>,
     /// 总执行耗时（微秒）
@@ -109,7 +109,7 @@ pub struct ServiceExecutionStep {
     /// 步骤执行状态
     pub status: String,
     /// 步骤输出（函数执行结果，失败时可能为 None）
-    pub output: Option<String>,
+    pub output: Option<serde_json::Value>,
     /// 执行耗时（微秒）
     pub elapsed_us: u64,
     /// 步骤级错误信息（失败时包含具体错误描述）
@@ -146,7 +146,7 @@ pub struct ServiceFailedStepInfo {
     pub error: String,
     /// 上一步的输出（失败前的数据，便于排查问题）
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub previous_output: Option<String>,
+    pub previous_output: Option<serde_json::Value>,
 }
 
 // ==================== 服务查询请求结构体 ====================

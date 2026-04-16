@@ -136,10 +136,10 @@ pub async fn service_call(
     // ==================== 构建 FunctionInput ====================
     // 直接修改 svr_ctx 的 initial_input，避免克隆 headers
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = input_str.clone();
+    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
 
     let func_input = FunctionInput {
-        input: input_str,
+        input: serde_json::Value::String(input_str),
         context: svr_ctx,
         binary_data: HashMap::new(),
     };
@@ -158,7 +158,7 @@ pub async fn service_call(
     // ==================== 解析 FunctionOutput ====================
 
     let output: FunctionOutput = if invoke_result.output.is_empty() {
-        FunctionOutput::new(String::new())
+        FunctionOutput::new(serde_json::Value::Null)
     } else {
         serde_json::from_slice(&invoke_result.output)
             .map_err(|e| Error::internal_error(format!("输出数据解析失败: {}", e)))?
@@ -305,7 +305,7 @@ pub async fn execute_service(
     // ==================== 设置 initial_input ====================
     // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = input_str;
+    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
 
     // ==================== 执行服务编排 ====================
 
@@ -361,7 +361,7 @@ pub async fn execute_service_by_key(
     // ==================== 设置 initial_input ====================
     // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = input_str;
+    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
 
     // ==================== 执行服务编排（路径参数优先） ====================
 

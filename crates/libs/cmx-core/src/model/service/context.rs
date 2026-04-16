@@ -26,12 +26,12 @@ pub mod svrkey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SVRContext {
     /// 初始输入数据
-    pub initial_input: String,
+    pub initial_input: serde_json::Value,
     /// 请求头
     pub headers: HashMap<String, String>,
-    /// 各步骤的输出缓存（key: 节点ID，value: 输出字符串）
+    /// 各步骤的输出缓存（key: 节点ID，value: 输出 Value）
     #[serde(default)]
-    pub step_outputs: HashMap<String, String>,
+    pub step_outputs: HashMap<String, serde_json::Value>,
     /// 事务ID（仅在事务框内执行时设置）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub txn_id: Option<String>,
@@ -49,7 +49,7 @@ impl SVRContext {
     /// - `headers`: 请求头
     /// - `time_in`: 请求进入时间
     /// - `request_id`: 请求ID
-    pub fn new(initial_input: String, headers: HashMap<String, String>, time_in: DateTime<Utc>, request_id: String) -> Self {
+    pub fn new(initial_input: serde_json::Value, headers: HashMap<String, String>, time_in: DateTime<Utc>, request_id: String) -> Self {
         Self {
             initial_input,
             headers,
@@ -66,8 +66,8 @@ impl SVRContext {
     /// - `step_id`: 步骤ID（节点ID）
     ///
     /// # 返回值
-    /// - `Option<String>`: 该步骤的输出字符串，不存在则返回 None
-    pub fn get_step_output(&self, step_id: &str) -> Option<&String> {
+    /// - `Option<&serde_json::Value>`: 该步骤的输出 Value，不存在则返回 None
+    pub fn get_step_output(&self, step_id: &str) -> Option<&serde_json::Value> {
         self.step_outputs.get(step_id)
     }
 
@@ -75,13 +75,13 @@ impl SVRContext {
     ///
     /// # 参数
     /// - `step_id`: 步骤ID（节点ID）
-    /// - `output`: 该步骤的输出字符串
-    pub fn set_step_output(&mut self, step_id: impl Into<String>, output: impl Into<String>) {
-        self.step_outputs.insert(step_id.into(), output.into());
+    /// - `output`: 该步骤的输出 Value
+    pub fn set_step_output(&mut self, step_id: impl Into<String>, output: serde_json::Value) {
+        self.step_outputs.insert(step_id.into(), output);
     }
 
     /// 添加指定步骤的输出（set_step_output 的别名）
-    pub fn add_step_output(&mut self, step_id: impl Into<String>, output: impl Into<String>) {
+    pub fn add_step_output(&mut self, step_id: impl Into<String>, output: serde_json::Value) {
         self.set_step_output(step_id, output);
     }
 

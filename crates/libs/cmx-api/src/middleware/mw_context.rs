@@ -31,7 +31,7 @@ pub async fn mw_context_resolver(mut req: Request<Body>, next: Next) -> Result<R
 
     //构建svr_context
     let svr_context = SVRContext::new(
-        String::new(),
+        serde_json::Value::Null,
         headers,
         time_in,
         request_id,

@@ -294,7 +294,13 @@ impl Orchestrator {
 
                     // 根据函数返回值构建端口ID
                     // 例如：返回 "1" → 端口 "out_1"，返回 "2" → 端口 "out_2"
-                    let source_port_id = format!("out_{}", exec_context.current_output);
+                    // current_output 必须是 serde_json::Value::String 类型，否则报错
+                    let branch_name = exec_context.current_output.as_str()
+                        .ok_or_else(|| ServiceError::orchestration_failed(
+                            &node.id,
+                            &format!("多分支节点返回值不是字符串类型，无法确定分支端口。当前值: {}", exec_context.current_output)
+                        ))?;
+                    let source_port_id = format!("out_{}", branch_name);
                     debug!("多分支节点执行完成，选择分支: node_id={}, output={}, port={}",
                         node.id, exec_context.current_output, source_port_id);
 

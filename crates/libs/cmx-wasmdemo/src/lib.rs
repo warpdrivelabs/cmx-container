@@ -95,8 +95,8 @@ pub struct DemoResponse {
 /// 输出: `{"result": "{\"count\":3,\"total\":3,\"input\":\"hello world\"}"}`
 #[plugin_fn]
 pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    // 从标准入参获取当前步骤输入
-    let input_str = &input.input;
+    // 从标准入参获取当前步骤输入（现在是 Value 类型）
+    let input_str = input.input.as_str().unwrap_or_default();
 
     // 统计元音字母
     let vowels = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U'];
@@ -144,7 +144,7 @@ pub fn demo_log(Json(_input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示缓存功能
@@ -162,8 +162,8 @@ pub fn demo_log(Json(_input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
 /// 输出: `{"result": "{\"message\":\"缓存操作成功: ...\",\"total\":100}"}`
 #[plugin_fn]
 pub fn demo_cache(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
-    // 解析业务参数
-    let request: DemoRequest = serde_json::from_str(&input.input)
+    // 解析业务参数（input.input 现在是 Value，需要转为字符串）
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
             name: "default".to_string(),
             count: 0,
@@ -190,7 +190,7 @@ pub fn demo_cache(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOut
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示数据库查询功能
@@ -207,8 +207,8 @@ pub fn demo_cache(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOut
 /// 如果 `input.txn_id` 存在，函数将在指定事务中执行 SQL。
 #[plugin_fn]
 pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
-    // 解析业务参数
-    let request: DemoRequest = serde_json::from_str(&input.input)
+    // 解析业务参数（input.input 现在是 Value）
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
             name: "default".to_string(),
             count: 0,
@@ -236,7 +236,7 @@ pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示插件间调用
@@ -250,8 +250,8 @@ pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
 /// - `result`: JSON 格式的调用结果
 #[plugin_fn]
 pub fn demo_plugin_call(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
-    // 解析业务参数
-    let request: DemoRequest = serde_json::from_str(&input.input)
+    // 解析业务参数（input.input 现在是 Value）
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
             name: "default".to_string(),
             count: 0,
@@ -274,7 +274,7 @@ pub fn demo_plugin_call(Json(input): Json<FunctionInput>) -> FnResult<Json<Funct
     };
 
     // 返回标准出参
-    Ok(Json(FunctionOutput::new(serde_json::to_string(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 综合测试入口
@@ -295,8 +295,8 @@ pub fn demo_plugin_call(Json(input): Json<FunctionInput>) -> FnResult<Json<Funct
 /// 5. 插件调用测试
 #[plugin_fn]
 pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
-    // 解析业务参数
-    let request: DemoRequest = serde_json::from_str(&input.input)
+    // 解析业务参数（input.input 现在是 Value）
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
             name: "default".to_string(),
             count: 0,
@@ -353,7 +353,7 @@ pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<Function
     // let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
 
     // 返回标准出参
-    Ok(Json(FunctionOutput::new(serde_json::to_string(&results)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&results)?)))
 }
 
 // ==================== 服务编排测试函数 ====================
@@ -379,7 +379,7 @@ pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOu
         route: String,
     }
 
-    let route_input: RouteInput = serde_json::from_str(&input.input)
+    let route_input: RouteInput = serde_json::from_value(input.input.clone())
         .unwrap_or(RouteInput {
             route: "1".to_string(),
         });
@@ -395,7 +395,7 @@ pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOu
 
     HostCaller::log_info(&format!("路由判断: route={}, 返回分支={}", route, result))?;
 
-    Ok(Json(FunctionOutput::new(result)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(result)?)))
 }
 
 /// 分支1处理函数
@@ -403,7 +403,7 @@ pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOu
 /// 处理分支1的业务逻辑。
 ///
 /// # 输入处理
-/// - `input.input`: JSON 格式的业务数据
+/// - `input.input`: 前序步骤的输出
 /// - `input.context.initial_input`: 初始入参
 ///
 /// # 输出
@@ -523,7 +523,7 @@ pub fn tx_insert(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         value: i32,
     }
 
-    let insert_data: InsertData = serde_json::from_str(&input.input)
+    let insert_data: InsertData = serde_json::from_value(input.input.clone())
         .unwrap_or(InsertData {
             table: "test_table".to_string(),
             name: "test".to_string(),
@@ -579,7 +579,7 @@ pub fn tx_update(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         value: i32,
     }
 
-    let update_data: UpdateData = serde_json::from_str(&input.input)
+    let update_data: UpdateData = serde_json::from_value(input.input.clone())
         .unwrap_or(UpdateData {
             table: "test_table".to_string(),
             name: "test".to_string(),
@@ -634,7 +634,7 @@ pub fn tx_query(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutpu
         name: String,
     }
 
-    let query_data: QueryData = serde_json::from_str(&input.input)
+    let query_data: QueryData = serde_json::from_value(input.input.clone())
         .unwrap_or(QueryData {
             table: "test_table".to_string(),
             name: "test".to_string(),
@@ -689,7 +689,7 @@ pub fn tx_delete(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutp
         name: String,
     }
 
-    let delete_data: DeleteData = serde_json::from_str(&input.input)
+    let delete_data: DeleteData = serde_json::from_value(input.input.clone())
         .unwrap_or(DeleteData {
             table: "test_table".to_string(),
             name: "test".to_string(),
