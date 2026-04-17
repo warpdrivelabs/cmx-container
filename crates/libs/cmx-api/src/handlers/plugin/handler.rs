@@ -603,7 +603,7 @@ pub async fn plugin_functions(
                                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                                     success: true,
                                     plugin_name: plugin_info.name.clone(),
-                                    plugin_version: plugin_id.clone(),
+                                    plugin_version: plugin_info.version.clone(),
                                     functions: json_value,
                                 });
                             }
@@ -611,7 +611,7 @@ pub async fn plugin_functions(
                                 result.insert(plugin_id.clone(), PluginFunctionsResponse {
                                     success: false,
                                     plugin_name: plugin_info.name.clone(),
-                                    plugin_version: plugin_id.clone(),
+                                    plugin_version: plugin_info.version.clone(),
                                     functions: serde_json::json!({
                                         "error": format!("解析 api.json 失败: {}", e)
                                     }),
@@ -623,7 +623,7 @@ pub async fn plugin_functions(
                         result.insert(plugin_id.clone(), PluginFunctionsResponse {
                             success: false,
                             plugin_name: plugin_info.name.clone(),
-                            plugin_version: plugin_id.clone(),
+                            plugin_version: plugin_info.version.clone(),
                             functions: serde_json::json!({
                                 "error": format!("读取 api.json 失败: {}", e)
                             }),
