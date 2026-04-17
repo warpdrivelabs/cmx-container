@@ -34,7 +34,7 @@
 //! use extism_pdk::*;
 //!
 //! #[plugin_fn]
-//! pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+//! pub fn my_function(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
 //!     // 获取当前步骤输入
 //!     let current_input = &input.input;
 //!
@@ -50,7 +50,7 @@
 //!     }
 //!
 //!     // 返回结果
-//!     Ok(Msgpack(FunctionOutput::new("处理结果")))
+//!     Ok(Json(FunctionOutput::new("处理结果")))
 //! }
 //! ```
 
@@ -94,7 +94,7 @@ pub struct DemoResponse {
 /// 输入: `{"input": "hello world", "context": {...}}`
 /// 输出: `{"result": "{\"count\":3,\"total\":3,\"input\":\"hello world\"}"}`
 #[plugin_fn]
-pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn count_vowels(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 从标准入参获取当前步骤输入（现在是 Value 类型）
     let input_str = input.input.as_str().unwrap_or_default();
 
@@ -110,7 +110,7 @@ pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
     });
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 演示日志功能
@@ -124,7 +124,7 @@ pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
 /// # 输出
 /// - `result`: JSON 格式的演示结果
 #[plugin_fn]
-pub fn demo_log(Msgpack(_input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn demo_log(Json(_input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 记录信息日志
     HostCaller::log_info("Hello from WASM demo!")?;
 
@@ -144,7 +144,7 @@ pub fn demo_log(Msgpack(_input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
     };
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示缓存功能
@@ -161,7 +161,7 @@ pub fn demo_log(Msgpack(_input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// 输入: `{"input": "{\"name\":\"test\",\"count\":100}", "context": {...}}`
 /// 输出: `{"result": "{\"message\":\"缓存操作成功: ...\",\"total\":100}"}`
 #[plugin_fn]
-pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn demo_cache(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value，需要转为字符串）
     let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
@@ -190,7 +190,7 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
     };
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示数据库查询功能
@@ -206,7 +206,7 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
 /// # 事务支持
 /// 如果 `input.txn_id` 存在，函数将在指定事务中执行 SQL。
 #[plugin_fn]
-pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn demo_database(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
     let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
@@ -236,7 +236,7 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     };
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 演示插件间调用
@@ -249,7 +249,7 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 /// # 输出
 /// - `result`: JSON 格式的调用结果
 #[plugin_fn]
-pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn demo_plugin_call(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
     let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
@@ -274,7 +274,7 @@ pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
     };
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
 /// 综合测试入口
@@ -294,7 +294,7 @@ pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 /// 4. 数据库查询测试
 /// 5. 插件调用测试
 #[plugin_fn]
-pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn run_all_demos(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
     let request: DemoRequest = serde_json::from_value(input.input.clone())
         .unwrap_or(DemoRequest {
@@ -353,7 +353,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     // let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
 
     // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&results)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(&results)?)))
 }
 
 // ==================== 服务编排测试函数 ====================
@@ -374,7 +374,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 /// 输出: `{"result": "1"}`
 #[plugin_fn]
 #[doc_type = "branch_fn"]
-pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn route_check(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct RouteInput {
         route: String,
@@ -396,7 +396,7 @@ pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
 
     HostCaller::log_info(&format!("路由判断: route={}, 返回分支={}", route, result))?;
 
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(result)?)))
+    Ok(Json(FunctionOutput::from_json(serde_json::to_value(result)?)))
 }
 
 /// 分支1处理函数
@@ -410,7 +410,7 @@ pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
 #[plugin_fn]
-pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn branch_1_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     HostCaller::log_info("执行分支1处理")?;
 
     let result = serde_json::json!({
@@ -420,7 +420,7 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
         "initial_input": input.context.initial_input,
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 分支2处理函数
@@ -434,7 +434,7 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
 #[plugin_fn]
-pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn branch_2_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     HostCaller::log_info("执行分支2处理")?;
 
     let result = serde_json::json!({
@@ -444,7 +444,7 @@ pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
         "initial_input": input.context.initial_input,
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 分支3处理函数
@@ -458,7 +458,7 @@ pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
 #[plugin_fn]
-pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn branch_3_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     HostCaller::log_info("执行分支3处理")?;
 
     let result = serde_json::json!({
@@ -468,7 +468,7 @@ pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
         "initial_input": input.context.initial_input,
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 合并结果函数
@@ -483,7 +483,7 @@ pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 /// # 输出
 /// - `result`: JSON 格式的合并结果
 #[plugin_fn]
-pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn merge_result(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     HostCaller::log_info("执行合并结果处理")?;
 
     let branch_output = input.context.get_step_output("branch_1_func")
@@ -498,7 +498,7 @@ pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
         "message": "结果合并完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 事务插入函数
@@ -513,7 +513,7 @@ pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
 /// # 输出
 /// - `result`: JSON 格式的操作结果
 #[plugin_fn]
-pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn tx_insert(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
     HostCaller::log_info(&format!("执行事务插入, txn_id={:?}", txn_id))?;
 
@@ -554,7 +554,7 @@ pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         "message": "事务插入完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 事务更新函数
@@ -569,7 +569,7 @@ pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// # 输出
 /// - `result`: JSON 格式的操作结果
 #[plugin_fn]
-pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn tx_update(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
     HostCaller::log_info(&format!("执行事务更新, txn_id={:?}", txn_id))?;
 
@@ -610,7 +610,7 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         "message": "事务更新完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 事务查询函数
@@ -625,7 +625,7 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// # 输出
 /// - `result`: JSON 格式的查询结果
 #[plugin_fn]
-pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn tx_query(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
     HostCaller::log_info(&format!("执行事务查询, txn_id={:?}", txn_id))?;
 
@@ -665,7 +665,7 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
         "message": "事务查询完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 事务删除函数
@@ -680,7 +680,7 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
 /// # 输出
 /// - `result`: JSON 格式的操作结果
 #[plugin_fn]
-pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn tx_delete(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
     HostCaller::log_info(&format!("执行事务删除, txn_id={:?}", txn_id))?;
 
@@ -719,7 +719,7 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         "message": "事务删除完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }
 
 /// 最终处理函数
@@ -733,7 +733,7 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// # 输出
 /// - `result`: JSON 格式的最终结果
 #[plugin_fn]
-pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn final_process(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
     HostCaller::log_info("执行最终处理")?;
 
     let merge_output = input.context.get_step_output("merge_func")
@@ -756,5 +756,5 @@ pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
         "message": "服务编排执行完成",
     });
 
-    Ok(Msgpack(FunctionOutput::from_json(result)))
+    Ok(Json(FunctionOutput::from_json(result)))
 }

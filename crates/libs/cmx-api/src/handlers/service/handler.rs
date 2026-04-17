@@ -131,15 +131,17 @@ pub async fn service_call(
 
     // ==================== 提取请求头和 input ====================
 
-    let input_str = value_to_string(req.input)?;
+    // let input_str = value_to_string(req.input)?;
 
     // ==================== 构建 FunctionInput ====================
     // 直接修改 svr_ctx 的 initial_input，避免克隆 headers
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    svr_ctx.initial_input = req.input.clone();
 
     let func_input = FunctionInput {
-        input: serde_json::Value::String(input_str),
+        // input: serde_json::Value::String(input_str),
+        input: req.input.clone(),
         context: svr_ctx,
         binary_data: HashMap::new(),
     };
@@ -299,13 +301,14 @@ pub async fn execute_service(
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     // ==================== 提取请求头和 input ====================
 
-    let input_str = value_to_string(req.input)?;
+    // let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
     // ==================== 设置 initial_input ====================
     // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    svr_ctx.initial_input = req.input.clone();
 
     // ==================== 执行服务编排 ====================
 
@@ -355,13 +358,14 @@ pub async fn execute_service_by_key(
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     // ==================== 提取请求头和 input ====================
 
-    let input_str = value_to_string(req.input)?;
+    // let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
     // ==================== 设置 initial_input ====================
     // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
+    svr_ctx.initial_input = req.input.clone();
 
     // ==================== 执行服务编排（路径参数优先） ====================
 
