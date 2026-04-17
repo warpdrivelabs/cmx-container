@@ -19,3 +19,5 @@ chrono = { workspace = true }
 sea-query = { workspace = true }
 sea-query-binder = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+#MsgPack编码
+rmp-serde = "1.3.1"

@@ -33,7 +33,6 @@ pub struct SVRContext {
     #[serde(default)]
     pub step_outputs: HashMap<String, serde_json::Value>,
     /// 事务ID（仅在事务框内执行时设置）
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub txn_id: Option<String>,
     /// 请求进入时间
     pub time_in: DateTime<Utc>,

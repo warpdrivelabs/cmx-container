@@ -16,6 +16,7 @@ members = [
     "crates/libs/cmx-plugin-sdk",
     "crates/libs/cmx-wasmdemo",
     "sdk/cmx-cli",
+    "crates/tests/cmx-serde-test",
 ]
 # 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
 resolver = "2"
@@ -65,6 +66,11 @@ serde_json = "1.0"
 # serde_yaml: YAML 序列化/反序列化
 serde_yaml = "0.9.33"
 serde_with = {version = "3", features = ["time_0_3", "json"] }
+# rmp_serde: MessagePack 序列化/反序列化
+rmp = "0.8"
+rmp-serde = "1.0"
+# serde_bytes: 用于更高效地处理字节切片
+serde_bytes = "0.11"
 # ============================================
 # 日期时间处理
 # ============================================

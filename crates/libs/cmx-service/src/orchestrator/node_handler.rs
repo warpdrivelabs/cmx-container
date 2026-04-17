@@ -101,8 +101,12 @@ impl<'a> NodeHandler<'a> {
             tag, func_input.input, func_input.context.txn_id);
 
         // 序列化输入为 JSON 字节
-        let input_bytes = serde_json::to_vec(&func_input)
-            .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
+        // let input_bytes = serde_json::to_vec(&func_input)
+        //     .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
+        // 序列化输入为 MessagePack字节
+        let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| ServiceError::InputParseError(e.to_string()))?;
+
+
 
         // 步骤3: 调用 WASM 函数
         let step_start = Instant::now();
@@ -112,8 +116,13 @@ impl<'a> NodeHandler<'a> {
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
 
         // 步骤4: 解析函数输出
-        let output: FunctionOutput = serde_json::from_slice(&invoke_result.output)
+        // let output: FunctionOutput = serde_json::from_slice(&invoke_result.output)
+        //     .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
+        // 步骤4:  从 MsgPack 二进制数据反序列化回结构体
+        let output: FunctionOutput = rmp_serde::from_slice(&invoke_result.output)
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
+
+
 
         let elapsed_us = step_start.elapsed().as_micros() as u64;
         debug!("[{}] 函数执行完成: node_id={}, node_name={}, output={}, elapsed_us={}",
