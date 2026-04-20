@@ -38,7 +38,7 @@ pub mod lifecycle_listener;
 
 pub use error::ServiceError;
 pub use handler::ServiceHandler;
-pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, FailedStepInfo, StepStatus};
+pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, StepStatus};
 pub use request::{InvokeRequest, InvokeResponse};
 pub use service::{CmxService, ServiceConfig};
 pub use registry::ServiceRegistry;

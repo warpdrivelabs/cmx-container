@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use cmx_core::model::service::{SVRContext, ServiceNode};
+use cmx_core::model::service::SVRContext;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use tracing::{debug, info, warn};
 
@@ -178,11 +178,8 @@ impl Orchestrator {
             let node = match navigator.find_node(&current_node_id) {
                 Some(n) => n,
                 None => {
-                    // 节点未找到，记录错误并退出循环
-                    // 这通常是 Flow JSON 配置错误导致的
                     debug!("节点未找到: node_id={}", current_node_id);
                     orch_error = Some(OrchestrationError {
-                        failed_step: None,
                         message: format!("节点未找到: {}", current_node_id),
                     });
                     result = Err(ServiceError::InternalError(format!("节点未找到: {}", current_node_id)));
@@ -203,7 +200,6 @@ impl Orchestrator {
             // - 有活跃事务 + 节点在同一事务框中 → 继续执行
             if let Err(e) = txn_manager.ensure_transaction(node, &navigator, &mut exec_context.svr_context).await {
                 orch_error = Some(OrchestrationError {
-                    failed_step: None,
                     message: format!("事务管理失败: {}", e),
                 });
                 result = Err(e);
@@ -245,19 +241,29 @@ impl Orchestrator {
                 // 函数输出作为下一个节点的输入
                 "skylake-func" => {
                     debug!("执行函数节点: node_id={}", node.id);
-                    // 调用节点执行器执行 WASM 函数
-                    // 执行过程：加载模块 → 构建输入 → 调用函数 → 解析输出 → 更新上下文
+                    let previous_output = exec_context.current_output.clone();
                     result = node_handler.execute_node(
                         node, &mut exec_context, &mut steps, options.include_steps
                     ).await;
 
                     if let Err(ref err) = result {
-                        // 执行失败，构建错误信息并退出循环
-                        // 错误信息包含：失败节点详情、上一步输出、错误消息
                         debug!("函数节点执行失败: node_id={}, error={:?}", node.id, err);
-                        orch_error = Self::build_error_info(
-                            node, &steps, err, &mut exec_context
-                        );
+                        let node_name = node.data.as_ref()
+                            .map(|d| d.name.as_str())
+                            .unwrap_or("unknown");
+                        steps.push(ExecutionStep {
+                            node_id: node.id.clone(),
+                            node_name: node_name.to_string(),
+                            node_type: node.node_type.clone(),
+                            status: StepStatus::Failed,
+                            output: None,
+                            elapsed_us: 0,
+                            error: Some(err.to_string()),
+                            previous_output: Some(previous_output),
+                        });
+                        orch_error = Some(OrchestrationError {
+                            message: format!("步骤 [{}({})] 执行失败: {}", node_name, node.id, err),
+                        });
                         break;
                     }
 
@@ -278,17 +284,29 @@ impl Orchestrator {
                 // 返回值 "1" → 端口 "out_1"，返回值 "2" → 端口 "out_2"
                 "skylake-switch" => {
                     debug!("执行多分支节点: node_id={}", node.id);
-                    // 调用节点执行器执行 WASM 函数（与 func 节点相同的执行逻辑）
+                    let previous_output = exec_context.current_output.clone();
                     result = node_handler.execute_node(
                         node, &mut exec_context, &mut steps, options.include_steps
                     ).await;
 
                     if let Err(ref err) = result {
-                        // 执行失败，构建错误信息并退出循环
                         debug!("多分支节点执行失败: node_id={}, error={:?}", node.id, err);
-                        orch_error = Self::build_error_info(
-                            node, &steps, err, &mut exec_context
-                        );
+                        let node_name = node.data.as_ref()
+                            .map(|d| d.name.as_str())
+                            .unwrap_or("unknown");
+                        steps.push(ExecutionStep {
+                            node_id: node.id.clone(),
+                            node_name: node_name.to_string(),
+                            node_type: node.node_type.clone(),
+                            status: StepStatus::Failed,
+                            output: None,
+                            elapsed_us: 0,
+                            error: Some(err.to_string()),
+                            previous_output: Some(previous_output),
+                        });
+                        orch_error = Some(OrchestrationError {
+                            message: format!("步骤 [{}({})] 执行失败: {}", node_name, node.id, err),
+                        });
                         break;
                     }
 
@@ -352,7 +370,6 @@ impl Orchestrator {
                 _ => {
                     debug!("遇到未知节点类型: node_id={}, node_type={}", node.id, node.node_type);
                     orch_error = Some(OrchestrationError {
-                        failed_step: None,
                         message: format!("未知节点类型: {}", node.node_type),
                     });
                     result = Err(ServiceError::InternalError(format!("未知节点类型: {}", node.node_type)));
@@ -519,61 +536,4 @@ impl Orchestrator {
     //     Ok(())
     // }
 
-    /// 构建结构化错误信息
-    ///
-    /// 在节点执行失败时，收集失败步骤详情和上一步输出。
-    /// 这是错误处理的核心方法，提供排错所需的完整上下文。
-    ///
-    /// # 参数
-    /// * `node` - 失败的节点
-    /// * `steps` - 已完成的步骤列表
-    /// * `err` - 错误信息
-    /// * `exec_context` - 执行上下文
-    ///
-    /// # 返回值
-    /// 返回结构化的编排错误信息
-    fn build_error_info(
-        node: &ServiceNode,
-        steps: &[ExecutionStep],
-        err: &ServiceError,
-        exec_context: &ExecutionContext,
-    ) -> Option<OrchestrationError> {
-        // 获取节点名称（用于错误消息）
-        let node_name = node.data.as_ref()
-            .map(|d| d.name.as_str())
-            .unwrap_or("unknown");
-
-        // 失败步骤的序号（对应 steps 数组的索引）
-        let step_index = steps.len();
-
-        // 获取上一步的输出（用于排错）
-        // 如果不是第一个步骤，取上一步的 output
-        // 如果是第一个步骤，后续会使用 initial_input
-        let previous_output = if step_index > 0 {
-            steps[step_index - 1].output.clone()
-        } else {
-            None
-        };
-
-        Some(OrchestrationError {
-            failed_step: Some(FailedStepInfo {
-                node_id: node.id.clone(),
-                node_name: node_name.to_string(),
-                node_type: node.node_type.clone(),
-                step_index,
-                error: err.to_string(),
-                // 如果上一步输出为空且 steps 为空，说明是第一个步骤失败
-                // 此时使用 initial_input 作为 previous_output
-                previous_output: previous_output.or_else(|| {
-                    if steps.is_empty() {
-                        Some(exec_context.current_output.clone())
-                    } else {
-                        None
-                    }
-                }),
-            }),
-            // 构建人类可读的错误摘要
-            message: format!("步骤 [{}({})] 执行失败: {}", node_name, node.id, err),
-        })
-    }
 }

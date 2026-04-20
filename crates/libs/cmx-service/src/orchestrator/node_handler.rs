@@ -144,6 +144,7 @@ impl<'a> NodeHandler<'a> {
                 output: Some(output.result),
                 elapsed_us,
                 error: None,
+                previous_output: None,
             });
         }
 

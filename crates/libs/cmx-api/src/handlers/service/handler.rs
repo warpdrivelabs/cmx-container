@@ -37,7 +37,7 @@ use crate::middleware::CmxSvrContext;
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
-    ServiceOrchestrationError, ServiceFailedStepInfo,
+    ServiceOrchestrationError,
     ServiceGetQuery, ServiceByPluginQuery, ServiceExistsQuery,
     ServiceListItem, ServiceDetailResponse,
 };
@@ -248,17 +248,10 @@ async fn execute_service_inner(
             output: s.output,
             elapsed_us: s.elapsed_us,
             error: s.error,
+            previous_output: s.previous_output,
         }).collect(),
         total_elapsed_us: result.total_elapsed_us,
         error: result.error.map(|e| ServiceOrchestrationError {
-            failed_step: e.failed_step.map(|fs| ServiceFailedStepInfo {
-                node_id: fs.node_id,
-                node_name: fs.node_name,
-                node_type: fs.node_type,
-                step_index: fs.step_index,
-                error: fs.error,
-                previous_output: fs.previous_output,
-            }),
             message: e.message,
         }),
     };

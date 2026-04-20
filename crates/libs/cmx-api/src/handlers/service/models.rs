@@ -115,38 +115,16 @@ pub struct ServiceExecutionStep {
     /// 步骤级错误信息（失败时包含具体错误描述）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-}
-
-/// 服务编排错误信息
-///
-/// 失败时提供结构化的错误上下文
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct ServiceOrchestrationError {
-    /// 失败步骤的详细信息
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub failed_step: Option<ServiceFailedStepInfo>,
-    /// 错误摘要信息
-    pub message: String,
-}
-
-/// 服务失败步骤详情
-///
-/// 记录导致编排失败的步骤信息，包括上一步输出用于排错
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct ServiceFailedStepInfo {
-    /// 失败的节点ID
-    pub node_id: String,
-    /// 失败的节点名称
-    pub node_name: String,
-    /// 失败的节点类型
-    pub node_type: String,
-    /// 失败步骤的序号（从 0 开始）
-    pub step_index: usize,
-    /// 具体错误信息
-    pub error: String,
-    /// 上一步的输出（失败前的数据，便于排查问题）
+    /// 上一步的输出（失败时便于排错，记录失败前的数据上下文）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_output: Option<serde_json::Value>,
+}
+///
+/// 失败时提供错误摘要信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceOrchestrationError {
+    /// 错误摘要信息
+    pub message: String,
 }
 
 // ==================== 服务查询请求结构体 ====================

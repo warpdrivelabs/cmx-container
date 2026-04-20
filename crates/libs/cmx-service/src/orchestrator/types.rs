@@ -40,6 +40,10 @@ pub struct ExecutionStep {
     /// 步骤级错误信息（失败时包含具体错误描述，成功时为 None）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// 上一步的输出（失败时便于排错，记录失败前的数据上下文）
+    /// 成功时为 None，序列化时跳过
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_output: Option<serde_json::Value>,
 }
 
 /// 编排执行结果
@@ -65,37 +69,12 @@ pub struct OrchestrationResult {
 
 /// 编排错误信息
 ///
-/// 失败时提供结构化的错误上下文，包含失败步骤详情和摘要信息。
-/// 设计目标：让调用方能够快速定位问题，无需解析日志。
+/// 失败时提供错误摘要信息，失败步骤的详细信息（包括 previous_output）
+/// 统一记录在 steps 数组中对应步骤的 ExecutionStep 里。
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrchestrationError {
-    /// 失败步骤的详细信息（包含节点ID、名称、错误、上一步输出）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub failed_step: Option<FailedStepInfo>,
     /// 错误摘要信息（人类可读的错误描述，适合展示给用户）
     pub message: String,
-}
-
-/// 失败步骤详情
-///
-/// 记录导致编排失败的步骤信息，包括上一步输出用于排错。
-/// 核心价值：提供失败前的数据上下文，便于开发者复现问题。
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct FailedStepInfo {
-    /// 失败的节点ID（用于定位 Flow JSON 中的具体节点）
-    pub node_id: String,
-    /// 失败的节点名称（人类可读，用于错误展示）
-    pub node_name: String,
-    /// 失败的节点类型（如 skylake-func，用于分类处理错误）
-    pub node_type: String,
-    /// 失败步骤的序号（从 0 开始，对应 steps 数组的索引）
-    pub step_index: usize,
-    /// 具体错误信息（原始错误描述，如 WASM trap、函数异常等）
-    pub error: String,
-    /// 上一步的输出（失败前的数据，便于排查问题）
-    /// 如果是第一个步骤失败，则为初始输入数据
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub previous_output: Option<serde_json::Value>,
 }
 
 /// 执行上下文 — 在编排执行过程中传递
