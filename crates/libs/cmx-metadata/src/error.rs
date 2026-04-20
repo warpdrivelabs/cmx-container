@@ -37,4 +37,8 @@ pub enum MetadataError {
     /// 配置依赖错误 - 配置之间存在循环依赖或依赖不存在的配置
     #[error("配置依赖错误: {0}")]
     ConfigDependency(String),
+
+    /// 种子数据错误 - 加载、解析或执行种子数据失败
+    #[error("种子数据错误: {0}")]
+    SeedData(String),
 }

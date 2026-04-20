@@ -9,6 +9,7 @@ use cmx_metadata::TableDefineDbExecutor;
 use cmx_core::model::cell::TableDefine;
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 use cmx_metadata::PgTableDefineExecutor;
+use cmx_metadata::seed::PgSeedDataExecutor;
 use cmx_core::model::meta::plugin::PluginDefinition;
 use cmx_database::get_default_db_manager;
 use crate::error::{PluginError, PluginResult};
@@ -62,6 +63,48 @@ pub async fn create_plugin_tables(
                     &table_def.table_name, e
                 ))
             })?;
+    }
+
+    // 执行种子数据初始化
+    let all_seed_configs = table_config_manager.collect_seed_configs();
+    if !all_seed_configs.is_empty() {
+        let seed_executor = PgSeedDataExecutor::new(db_id, None);
+        let summary = seed_executor
+            .execute_all_seed_data(&table_defs, &all_seed_configs, install_path)
+            .await;
+
+        // 输出汇总日志（不阻断安装）
+        tracing::info!(
+            "插件 {} 种子数据执行完成: {} 表处理, {} 成功, {} 失败, 耗时 {}ms",
+            plugin_id,
+            summary.table_results.len(),
+            summary.total_success(),
+            summary.total_failed(),
+            summary.total_duration_ms,
+        );
+
+        // 输出错误详情
+        for result in &summary.table_results {
+            for failure in &result.failures {
+                tracing::error!(
+                    "种子数据执行失败: 表={}, 行={}, 错误={}",
+                    result.table_name,
+                    failure.row_index,
+                    failure.error_message,
+                );
+            }
+            // 数据条数校验警告
+            if let Some(db_count) = result.db_row_count {
+                if db_count < result.file_row_count {
+                    tracing::warn!(
+                        "种子数据条数不一致: 表={}, 文件={}条, 数据库={}条",
+                        result.table_name,
+                        result.file_row_count,
+                        db_count,
+                    );
+                }
+            }
+        }
     }
 
         if let Err(e) = save_plugin_table_metadata(

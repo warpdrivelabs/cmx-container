@@ -11,6 +11,7 @@ pub mod i18n;
 pub mod ddl;
 pub mod parser;
 pub mod executor;
+pub mod seed;
 
 pub use error::MetadataError;
 pub use executor::{execute_ddl_by_ids, execute_ddl_statement_by_ids, BaseError, PgTableDefineExecutor, TableDefineDbExecutor};

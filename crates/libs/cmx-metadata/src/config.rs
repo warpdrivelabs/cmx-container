@@ -20,7 +20,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
 use cmx_core::model::cell::TableDefine;
-use cmx_core::model::meta::plugin::TableDefinesConfig;
+use cmx_core::model::meta::plugin::{TableDefinesConfig, SeedDataConfig};
 use crate::loader::load_table_defines_from_path;
 use crate::MetadataError;
 
@@ -219,6 +219,22 @@ impl TableDefinesConfigManager {
             all.extend(tables);
         }
         Ok(all)
+    }
+
+    /// 收集所有配置中的种子数据配置
+    ///
+    /// 从所有已加载配置中提取 `seed_data` 字段，
+    /// 按照拓扑排序顺序合并，确保依赖关系正确。
+    pub fn collect_seed_configs(&self) -> Vec<SeedDataConfig> {
+        let mut all = Vec::new();
+        for config in self.configs() {
+            for seed in &config.seed_data {
+                if seed.enabled {
+                    all.push(seed.clone());
+                }
+            }
+        }
+        all
     }
 }
 //

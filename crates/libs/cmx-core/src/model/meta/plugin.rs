@@ -200,6 +200,24 @@ impl PluginManifest {
 // 建表 JSON 配置文件（纯数据结构）
 // ==========================================
 
+/// 种子数据配置项：用于插件安装时预置表初始化数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeedDataConfig {
+    /// 目标表名
+    pub table_name: String,
+    /// 数据文件路径（相对于插件根目录）
+    pub file: String,
+    /// 冲突检测列（用于 PostgreSQL ON CONFLICT 子句）
+    #[serde(default)]
+    pub conflict_columns: Vec<String>,
+    /// 是否启用（默认 true）
+    #[serde(default = "default_true_bool")]
+    pub enabled: bool,
+}
+
+/// 默认返回 true 的辅助函数
+fn default_true_bool() -> bool { true }
+
 /// 建表 JSON 配置文件：描述一组表定义文件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableDefinesConfig {
@@ -216,4 +234,7 @@ pub struct TableDefinesConfig {
     /// 优先级（数值越小优先级越高）
     #[serde(default)]
     pub priority: Option<i32>,
+    /// 种子数据配置列表（插件安装时预置数据）
+    #[serde(default)]
+    pub seed_data: Vec<SeedDataConfig>,
 }
