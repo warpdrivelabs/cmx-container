@@ -2,18 +2,34 @@
 //!
 //! 处理 WASM 插件服务调用和编排执行的 HTTP 请求。
 //!
+//! # 架构说明
+//!
+//! 本模块实现了服务层的两类核心功能：
+//! 1. **直接函数调用** (`service_call`)：绕过编排层，直接调用 WASM 插件函数
+//! 2. **服务编排执行** (`execute_service*`)：通过编排器执行完整的服务流程
+//!
+//! # 服务上下文 (SVRContext)
+//!
+//! 所有服务调用都依赖 SVRContext 传递上下文信息：
+//! - `initial_input`: 初始输入数据，用于服务编排的起始节点
+//! - `headers`: HTTP 请求头，用于传递认证、追踪等信息
+//! - `time_in`: 请求进入时间戳
+//! - `request_id`: 请求唯一标识，用于日志追踪
+//!
+//! SVRContext 由 middleware (`CmxSvrContext`) 自动提取并注入。
+//!
 //! # API 端点
 //!
-//! | 方法 | 路径 | 功能 |
-//! |------|------|------|
-//! | POST | /api/service/call | 直接调用 WASM 插件函数 |
-//! | POST | /api/service/execute | 执行服务编排 |
-//! | POST | /api/service/execute/{service-key} | 执行服务编排（路径参数版本） |
-//! | GET | /api/service/list | 获取服务列表 |
-//! | POST | /api/service/page | 分页查询服务 |
-//! | GET | /api/service/get | 获取服务定义 |
-//! | GET | /api/service/by-plugin | 获取插件的所有服务 |
-//! | POST | /api/service/delete | 删除服务 |
+//! | 方法 | 路径 | 功能 | 认证 |
+//! |------|------|------|------|
+//! | POST | /api/service/call | 直接调用 WASM 插件函数 | 需要 |
+//! | POST | /api/service/execute | 执行服务编排 | 需要 |
+//! | POST | /api/service/execute/{service-key} | 执行服务编排（路径参数） | 需要 |
+//! | GET | /api/service/get | 获取服务定义 | 需要 |
+//! | GET | /api/service/by-plugin | 获取插件的所有服务 | 需要 |
+//! | POST | /api/service/page | 分页查询服务 | 需要 |
+//! | POST | /api/service/delete | 删除服务 | 需要 |
+//! | GET | /api/service/exists | 查询服务是否存在 | 需要 |
 
 // ==================== 依赖导入 ====================
 
@@ -33,7 +49,6 @@ use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Error;
 use crate::middleware::CmxSvrContext;
-// 导入请求/响应结构体
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
     ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
@@ -42,48 +57,60 @@ use super::models::{
     ServiceListItem, ServiceDetailResponse,
 };
 
-// ==================== 辅助函数 ====================
-
-/// 将 serde_json::Value 转换为字符串
-///
-/// 支持 JSON 对象或字符串直接传递
-///
-/// # 参数
-/// * `value` - JSON 值
-///
-/// # 返回值
-/// 返回字符串格式的 JSON
-fn value_to_string(value: serde_json::Value) -> Result<String, Error> {
-    if value.is_string() {
-        Ok(value.as_str().unwrap_or("").to_string())
-    } else {
-        serde_json::to_string(&value)
-            .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))
-    }
-}
-
 // ==================== 函数直接调用 Handler ====================
 
-/// 执行插件函数
+/// 直接调用 WASM 插件函数
 ///
 /// 处理 POST /api/service/call 请求，直接调用指定插件的函数。
+/// 此接口用于绕过服务编排，直接执行单个插件函数，适用于：
+/// - 简单的插件函数调用场景
+/// - 调试和测试插件函数
+/// - 不需要服务编排的轻量级调用
 ///
 /// # 参数
 /// - `state`: 应用状态（包含运行时调用器、插件查询器等）
-/// - `req`: 请求体（FunctionCallRequest）
-/// - `_svr_ctx`: 服务上下文（CmxSvrContext）
-/// - `headers`: HTTP 请求头
+/// - `svr_ctx`: 服务上下文（从 middleware 传入，包含 headers、time_in、request_id）
+/// - `req`: 请求体
 ///
-/// # 请求体
-/// - `plugin_id`: 插件ID
-/// - `function_name`: 函数名
-/// - `input`: 输入数据（支持 JSON 对象或字符串）
+/// # 请求体 (FunctionCallRequest)
+/// - `plugin_id`: 插件ID，必填，用于定位要调用的插件
+/// - `function_name`: 函数名，必填，插件中暴露的函数名
+/// - `input`: 输入数据，支持 JSON 对象或字符串，将作为函数输入
 ///
-/// # 响应体
-/// - `success`: 是否成功
-/// - `result`: 函数执行结果
-/// - `elapsed_us`: 执行耗时（微秒）
-/// - `error`: 错误信息
+/// # 响应体 (FunctionCallResponse)
+/// - `success`: 是否成功，true 表示执行成功
+/// - `result`: 函数执行结果（serde_json::Value），插件函数的返回值
+/// - `elapsed_us`: 执行耗时（微秒），WASM 函数执行时间
+/// - `error`: 错误信息，仅在 success=false 时有值
+///
+/// # 错误处理
+/// - 插件未安装：返回 400 错误
+/// - WASM 模块加载失败：返回 500 错误
+/// - 函数执行失败：返回 500 错误
+///
+/// # 示例
+/// ```json
+/// POST /api/service/call
+/// {
+///     "plugin_id": "my-plugin",
+///     "function_name": "process_data",
+///     "input": {"key": "value"}
+/// }
+/// ```
+///
+/// # 响应示例（成功）
+/// ```json
+/// {
+///     "code": 0,
+///     "msg": "success",
+///     "data": {
+///         "success": true,
+///         "result": {"output": "processed"},
+///         "elapsed_us": 1234,
+///         "error": null
+///     }
+/// }
+/// ```
 #[utoipa::path(
     post,
     path = "/api/service/call",
@@ -100,11 +127,9 @@ pub async fn service_call(
 ) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
     // ==================== 获取依赖组件 ====================
 
-    // 从应用状态获取运行时调用器
     let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
         .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
 
-    // 从应用状态获取插件查询器
     let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
@@ -129,22 +154,12 @@ pub async fn service_call(
             .map_err(|e| Error::internal_error(format!("加载 WASM 模块失败: {}", e)))?;
     }
 
-    // ==================== 提取请求头和 input ====================
-
-    // let input_str = value_to_string(req.input)?;
-
     // ==================== 构建 FunctionInput ====================
-    // 直接修改 svr_ctx 的 initial_input，避免克隆 headers
+
     let mut svr_ctx = svr_ctx;
-    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
     svr_ctx.initial_input = req.input.clone();
 
-    let func_input = FunctionInput {
-        // input: serde_json::Value::String(input_str),
-        input: req.input.clone(),
-        context: svr_ctx,
-        binary_data: HashMap::new(),
-    };
+    let func_input = FunctionInput::from_value(req.input.clone(), svr_ctx);
 
     // ==================== 调用 WASM 函数 ====================
 
@@ -183,15 +198,27 @@ pub async fn service_call(
 /// 执行服务编排（内部实现）
 ///
 /// 核心逻辑：通过 service_key 查询服务定义，加载插件，执行编排流程。
+/// 此函数是编排执行的内部实现，供 `execute_service` 和 `execute_service_by_key` 调用。
 ///
 /// # 参数
 /// - `state`: 应用状态（包含运行时、服务查询器、插件管理器）
-/// - `service_key`: 服务唯一标识
+/// - `service_key`: 服务唯一标识，用于查询服务定义
 /// - `svr_context`: 服务调用上下文（包含 initial_input、headers、time_in、request_id）
-/// - `include_steps`: 是否返回步骤数据
+/// - `include_steps`: 是否返回详细的步骤执行数据
+///
+/// # 执行流程
+/// 1. 从服务查询器获取服务定义
+/// 2. 创建 Orchestrator 实例
+/// 3. 调用 execute_service 执行完整编排
+/// 4. 转换执行结果为响应格式
 ///
 /// # 返回值
-/// 返回服务执行结果
+/// 返回服务执行结果 (ServiceExecuteResponse)，包含：
+/// - `success`: 是否完全成功
+/// - `output`: 最终输出结果
+/// - `steps`: 各节点执行详情（可选）
+/// - `total_elapsed_us`: 总耗时
+/// - `error`: 错误信息（失败时）
 async fn execute_service_inner(
     state: &CmxAppState,
     service_key: &str,
@@ -261,23 +288,52 @@ async fn execute_service_inner(
 
 /// 执行服务编排
 ///
-/// 处理 POST /api/service/execute 请求，执行服务编排。
+/// 处理 POST /api/service/execute 请求，执行完整的服务编排流程。
+/// 通过编排器协调多个 WASM 插件函数的执行，实现复杂的业务逻辑。
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `req`: 请求体（ServiceExecuteRequest）
-/// - `_svr_ctx`: 服务上下文（CmxSvrContext）
-/// - `headers`: HTTP 请求头
+/// - `svr_ctx`: 服务上下文（从 middleware 传入）
+/// - `req`: 请求体
 ///
-/// # 请求体
-/// - `service_key`: 服务唯一标识
-/// - `input`: 初始输入数据（支持 JSON 对象或字符串）
+/// # 请求体 (ServiceExecuteRequest)
+/// - `service_key`: 服务唯一标识，必填
+/// - `input`: 初始输入数据，支持 JSON 对象或字符串，作为编排流程的起始输入
+/// - `include_steps`: 是否返回步骤数据，可选，默认 false
 ///
-/// # 响应体
-/// - `success`: 是否成功
-/// - `output`: 最终输出
-/// - `steps`: 各步骤执行记录
-/// - `total_elapsed_us`: 总耗时
+/// # 响应体 (ServiceExecuteResponse)
+/// - `success`: 是否成功，编排中任何节点失败都为 false
+/// - `output`: 最终输出（serde_json::Value），编排流程最后一个节点的输出
+/// - `steps`: 各步骤执行记录（当 include_steps=true 时），包含每个节点的：
+///   - `node_id`: 节点ID
+///   - `node_name`: 节点名称
+///   - `node_type`: 节点类型（Plugin、Condition、Merge 等）
+///   - `status`: 执行状态（Success、Failed、Skipped）
+///   - `output`: 节点输出
+///   - `elapsed_us`: 节点执行耗时
+///   - `error`: 错误信息（失败时）
+/// - `total_elapsed_us`: 整个编排流程的总耗时（微秒）
+/// - `error`: 错误详情（失败时），包含 message 字段
+///
+/// # SVRContext 传递
+/// - `initial_input`: 从请求的 input 字段设置
+/// - `headers`: 从 HTTP 请求头提取
+/// - `time_in`: 请求进入时间
+/// - `request_id`: 请求追踪ID
+///
+/// # 错误处理
+/// - 服务不存在：返回 code=1 的失败响应
+/// - 编排执行失败：返回 code=1 的失败响应，包含错误信息
+///
+/// # 示例
+/// ```json
+/// POST /api/service/execute
+/// {
+///     "service_key": "order-process",
+///     "input": {"order_id": "12345"},
+///     "include_steps": true
+/// }
+/// ```
 #[utoipa::path(
     post,
     path = "/api/service/execute",
@@ -292,24 +348,19 @@ pub async fn execute_service(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
-    // ==================== 提取请求头和 input ====================
-
-    // let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
-    // ==================== 设置 initial_input ====================
-    // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
+    // 设置 initial_input 到 svr_ctx
     let mut svr_ctx = svr_ctx;
-    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
     svr_ctx.initial_input = req.input.clone();
 
-    // ==================== 执行服务编排 ====================
-
+    // 执行服务编排
     let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps).await?;
 
+    // 失败时返回错误码
     if !response.success {
         let error_message = response.error.as_ref().map(|e| e.message.clone()).unwrap_or_default();
-        return Ok(Json(ApiResp::fail_with_data(1,error_message,response)));
+        return Ok(Json(ApiResp::fail_with_data(1, error_message, response)));
     }
 
     Ok(Json(ApiResp::ok(response)))
@@ -318,27 +369,41 @@ pub async fn execute_service(
 /// 执行服务编排（路径参数版本）
 ///
 /// 处理 POST /api/service/execute/{service-key} 请求，执行服务编排。
-/// service_key 从 URL 路径获取，优先于请求体中的 service_key。
+/// 与 `execute_service` 的区别在于 service_key 从 URL 路径获取，优先级高于请求体。
+/// 适用于 service_key 可能包含复杂字符不适合放在请求体中的场景。
 ///
 /// # 参数
 /// - `state`: 应用状态
+/// - `svr_ctx`: 服务上下文（从 middleware 传入）
 /// - `service_key`: 服务唯一标识（从 URL 路径获取）
-/// - `_svr_ctx`: 服务上下文（CmxSvrContext）
-/// - `headers`: HTTP 请求头
-/// - `req`: 请求体（ServiceExecuteRequest）
+/// - `req`: 请求体（input 和 include_steps）
 ///
 /// # 路径参数
-/// - `service-key`: 服务唯一标识
+/// - `service-key`: 服务唯一标识，优先于请求体中的 service_key
+///   - 可包含路径分隔符（如 `domain/app/service`）
+///   - 会自动 URL 解码
 ///
-/// # 请求体
-/// - `input`: 初始输入数据（支持 JSON 对象或字符串）
-/// - `service_key`: 会被路径参数覆盖
+/// # 请求体 (ServiceExecuteRequest)
+/// - `input`: 初始输入数据，作为编排流程的起始输入
+/// - `include_steps`: 是否返回步骤数据，可选，默认 false
 ///
 /// # 响应体
-/// - `success`: 是否成功
-/// - `output`: 最终输出
-/// - `steps`: 各步骤执行记录
-/// - `total_elapsed_us`: 总耗时
+/// 与 `execute_service` 相同
+///
+/// # 与 execute_service 的区别
+/// | 特性 | execute_service | execute_service_by_key |
+/// |------|-----------------|------------------------|
+/// | service_key 位置 | 请求体 | URL 路径 |
+/// | 适用场景 | 简单服务 key | 复杂/层级 service_key |
+///
+/// # 示例
+/// ```json
+/// POST /api/service/execute/my-domain/my-service
+/// {
+///     "input": {"data": "test"},
+///     "include_steps": true
+/// }
+/// ```
 #[utoipa::path(
     post,
     path = "/api/service/execute/{service-key}",
@@ -354,19 +419,13 @@ pub async fn execute_service_by_key(
     Path(service_key): Path<String>,
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
-    // ==================== 提取请求头和 input ====================
-
-    // let input_str = value_to_string(req.input)?;
     let include_steps = req.include_steps.unwrap_or(false);
 
-    // ==================== 设置 initial_input ====================
-    // 直接修改 svr_ctx 的 initial_input，避免创建新的 SVRContext
+    // 设置 initial_input 到 svr_ctx
     let mut svr_ctx = svr_ctx;
-    // svr_ctx.initial_input = serde_json::Value::String(input_str.clone());
     svr_ctx.initial_input = req.input.clone();
 
-    // ==================== 执行服务编排（路径参数优先） ====================
-
+    // 执行服务编排（路径参数优先）
     let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps).await?;
 
     Ok(Json(ApiResp::ok(response)))
@@ -374,66 +433,56 @@ pub async fn execute_service_by_key(
 
 // ==================== 服务查询 Handler ====================
 
-// /// 获取服务列表
-// ///
-// /// 处理 GET /api/service/list 请求，返回所有启用的服务。
-// ///
-// /// # 参数
-// /// - `state`: 应用状态
-// ///
-// /// # 响应体
-// /// 返回服务信息数组
-// #[utoipa::path(
-//     get,
-//     path = "/api/service/list",
-//     responses(
-//         (status = 200, description = "获取服务列表成功", body = ApiResp<Vec<ServiceListItem>>)
-//     ),
-//     tag = "Service"
-// )]
-// pub async fn list_services(
-//     State(state): State<CmxAppState>,
-// ) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
-//     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
-//         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
-//
-//     let services = service_query.list_active_services().await
-//         .map_err(|e| Error::internal_error(format!("获取服务列表失败: {}", e)))?;
-//
-//     let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
-//         ServiceListItem {
-//             id: s.id,
-//             service_key: s.service_key,
-//             service_name: s.service_name,
-//             description: s.description,
-//             plugin_id: s.plugin_id,
-//             status: s.status,
-//             version: s.version,
-//             domain_code: s.domain_code,
-//             application_code: s.application_code,
-//             module_code: s.module_code,
-//             domain_name: s.domain_name,
-//             application_name: s.application_name,
-//             module_name: s.module_name,
-//         }
-//     }).collect();
-//
-//     Ok(Json(ApiResp::ok(items)))
-// }
-
 /// 获取服务定义
 ///
 /// 处理 GET /api/service/get 请求，返回指定服务的详细信息。
+/// 用于查看服务的完整配置，包括基本信息、关联插件、分类等。
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `query`: 查询参数（service_key）
+/// - `query`: 查询参数
 ///
-/// # 查询参数
-/// - `service_key`: 服务唯一标识
+/// # 查询参数 (ServiceGetQuery)
+/// - `service_key`: 服务唯一标识，必填
 ///
-/// # 响应体
-/// 返回服务详情
+/// # 响应体 (ServiceDetailResponse)
+/// 返回服务详情，包含以下字段：
+/// - 基本信息：`id`, `service_key`, `service_name`, `description`
+/// - 关联信息：`plugin_id`, `version`, `status`
+/// - 分类信息：`domain_code`, `application_code`, `module_code`
+/// - 名称信息：`domain_name`, `application_name`, `module_name`
+/// - 配置信息：`config`（JSON 格式的服务配置）
+///
+/// # 错误处理
+/// - 服务不存在：返回 400 错误
+///
+/// # 示例
+/// ```bash
+/// GET /api/service/get?service_key=order-process
+/// ```
+///
+/// # 响应示例
+/// ```json
+/// {
+///     "code": 0,
+///     "data": {
+///         "id": 1,
+///         "service_key": "order-process",
+///         "service_name": "订单处理服务",
+///         "description": "处理订单创建和支付流程",
+///         "plugin_id": "order-plugin",
+///         "status": "active",
+///         "version": "1.0.0",
+///         "config": {"timeout": 30000},
+///         "domain_code": "ecommerce",
+///         "application_code": "order",
+///         "module_code": "process",
+///         "domain_name": "电子商务",
+///         "application_name": "订单系统",
+///         "module_name": "处理模块"
+///     }
+/// }
+/// ```
 #[utoipa::path(
     get,
     path = "/api/service/get",
@@ -452,11 +501,6 @@ pub async fn get_service(
 
     let service = service_query.get_service(&query.service_key).await
         .map_err(|e| Error::business_error(format!("获取服务失败: {}", e)))?;
-    // let my_service = service.clone().ok_or_else(|| Error::business_error("服务不存在"))?;
-    //
-    // let service_config = GlobalServiceRegistry::get().get_orchestration(&query.service_key).await
-    //     .ok_or_else(|| Error::business_error("获取服务编排失败"))?;
-
 
     match service {
         Some(s) => {
@@ -484,17 +528,58 @@ pub async fn get_service(
 
 /// 获取插件的所有服务
 ///
-/// 处理 GET /api/service/by-plugin 请求，返回指定插件的所有服务。
+/// 处理 GET /api/service/by-plugin 请求，返回指定插件关联的所有服务列表。
+/// 用于查看某个插件部署了哪些服务，或管理插件相关的服务。
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `query`: 查询参数（plugin_id）
+/// - `query`: 查询参数
 ///
-/// # 查询参数
-/// - `plugin_id`: 插件ID
+/// # 查询参数 (ServiceByPluginQuery)
+/// - `plugin_id`: 插件ID，必填
 ///
 /// # 响应体
-/// 返回服务信息数组
+/// 返回服务信息数组 (Vec<ServiceListItem>)，每个服务包含：
+/// - `id`: 服务ID
+/// - `service_key`: 服务唯一标识
+/// - `service_name`: 服务名称
+/// - `description`: 服务描述
+/// - `plugin_id`: 关联的插件ID
+/// - `status`: 服务状态
+/// - `version`: 服务版本
+/// - `domain_code`, `application_code`, `module_code`: 分类编码
+/// - `domain_name`, `application_name`, `module_name`: 分类名称
+///
+/// # 错误处理
+/// - 插件查询失败：返回 500 错误
+///
+/// # 示例
+/// ```bash
+/// GET /api/service/by-plugin?plugin_id=order-plugin
+/// ```
+///
+/// # 响应示例
+/// ```json
+/// {
+///     "code": 0,
+///     "data": [
+///         {
+///             "id": 1,
+///             "service_key": "order-create",
+///             "service_name": "创建订单",
+///             "plugin_id": "order-plugin",
+///             "status": "active"
+///         },
+///         {
+///             "id": 2,
+///             "service_key": "order-pay",
+///             "service_name": "订单支付",
+///             "plugin_id": "order-plugin",
+///             "status": "active"
+///         }
+///     ]
+/// }
+/// ```
 #[utoipa::path(
     get,
     path = "/api/service/by-plugin",
@@ -539,15 +624,60 @@ pub async fn get_services_by_plugin(
 
 /// 分页查询服务列表
 ///
-/// 处理 POST /api/service/page 请求，支持多条件组合查询。
+/// 处理 POST /api/service/page 请求，支持多条件组合查询和分页。
+/// 用于管理后台或服务列表展示场景。
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `req`: 请求体（ServicePageRequest）
+/// - `params`: 分页查询参数
 ///
+/// # 请求体 (PageParams<ServicePageFilter>)
+/// - `filter`: 查询条件（ServicePageFilter），可选
+///   - `domain_code`: 域编码，精确匹配
+///   - `application_code`: 应用编码，精确匹配
+///   - `module_code`: 模块编码，精确匹配
+///   - `status`: 服务状态，精确匹配（如 "active", "inactive"）
+///   - `keyword`: 关键字搜索，模糊匹配服务名称和描述
+/// - `page`: 页码，从 1 开始
+/// - `size`: 每页数量，建议不超过 100
 ///
 /// # 响应体
-/// 返回分页结果
+/// 返回分页结果，包含：
+/// - `items`: 服务列表（Vec<ServiceListItem>）
+/// - `page`: 当前页码
+/// - `size`: 每页数量
+/// - `total`: 总记录数
+///
+/// # 错误处理
+/// - 分页查询失败：返回 500 错误
+///
+/// # 示例
+/// ```json
+/// POST /api/service/page
+/// {
+///     "filter": {
+///         "domain_code": "ecommerce",
+///         "status": "active",
+///         "keyword": "order"
+///     },
+///     "page": 1,
+///     "size": 20
+/// }
+/// ```
+///
+/// # 响应示例
+/// ```json
+/// {
+///     "code": 0,
+///     "msg": "success",
+///     "data": {
+///         "items": [...],
+///         "page": 1,
+///         "size": 20,
+///         "total": 45
+///     }
+/// }
+/// ```
 #[utoipa::path(
     post,
     path = "/api/service/page",
@@ -602,17 +732,36 @@ pub async fn page_services(
 /// 删除服务
 ///
 /// 处理 POST /api/service/delete 请求，物理删除服务定义及其所有版本。
+/// **危险操作：删除后数据无法恢复，请谨慎使用。**
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `req`: 请求体（ServiceDeleteQuery）
+/// - `req`: 请求体
 ///
-/// # 请求体
-/// - `service_key`: 服务唯一标识
+/// # 请求体 (ServiceDeleteQuery)
+/// - `service_key`: 服务唯一标识，必填
+///
+/// # 删除范围
+/// 此操作会同时删除：
+/// - `cmx_service_define` 表中的服务定义记录
+/// - `cmx_service_define_version` 表中该服务的所有版本记录
+///
+/// # 错误处理
+/// - 服务不存在：返回 500 错误
+/// - 删除失败：返回 500 错误
+///
+/// # 示例
+/// ```json
+/// POST /api/service/delete
+/// {
+///     "service_key": "order-process"
+/// }
+/// ```
 ///
 /// # 注意事项
-/// - 物理删除，不可恢复
-/// - 同时删除 cmx_service_define 和 cmx_service_define_version 表中的记录
+/// 1. **不可逆操作**：物理删除，不会进入回收站
+/// 2. **级联删除**：会同时删除所有版本
+/// 3. **建议**：生产环境中建议先停用服务，确认无影响后再删除
 #[utoipa::path(
     post,
     path = "/api/service/delete",
@@ -638,17 +787,49 @@ pub async fn delete_service(
 /// 查询服务是否存在
 ///
 /// 处理 GET /api/service/exists 请求，通过 service_key 查询服务是否已存在。
+/// 用于在创建服务前检查是否重复，或验证服务是否可用。
 ///
 /// # 参数
 /// - `state`: 应用状态
-/// - `query`: 查询参数（ServiceExistsQuery）
+/// - `query`: 查询参数
 ///
-/// # 查询参数
-/// - `service_key`: 服务唯一标识
+/// # 查询参数 (ServiceExistsQuery)
+/// - `service_key`: 服务唯一标识，必填
 ///
 /// # 响应体
-/// - code: 0
-/// - data: "1" 存在, "0" 不存在
+/// - `code`: 0 表示成功
+/// - `data`: 返回字符串 "1" 表示服务存在，"0" 表示不存在
+///
+/// # 业务逻辑
+/// - `service_key` 在数据库中是唯一索引，不允许重复
+/// - 创建新服务前应先调用此接口检查是否已存在
+/// - 可用于验证服务删除是否成功
+///
+/// # 错误处理
+/// - 查询失败：返回 500 错误
+///
+/// # 示例
+/// ```bash
+/// GET /api/service/exists?service_key=order-process
+/// ```
+///
+/// # 响应示例（存在）
+/// ```json
+/// {
+///     "code": 0,
+///     "msg": "success",
+///     "data": "1"
+/// }
+/// ```
+///
+/// # 响应示例（不存在）
+/// ```json
+/// {
+///     "code": 0,
+///     "msg": "success",
+///     "data": "0"
+/// }
+/// ```
 #[utoipa::path(
     get,
     path = "/api/service/exists",
