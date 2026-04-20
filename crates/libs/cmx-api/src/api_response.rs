@@ -65,6 +65,16 @@ impl<T> ApiResp<T> {
         }
     }
 
+    pub fn fail_with_data(code: u16, msg: impl Into<String>,data: T) -> Self {
+        Self {
+            code,
+            msg: msg.into(),
+            data: Some(data),
+            pagination: None,
+        }
+    }
+
+
     pub fn is_success(&self) -> bool {
         self.code == 0
     }

@@ -314,6 +314,11 @@ pub async fn execute_service(
 
     let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps).await?;
 
+    if !response.success {
+        let error_message = response.error.as_ref().map(|e| e.message.clone()).unwrap_or_default();
+        return Ok(Json(ApiResp::fail_with_data(1,error_message,response)));
+    }
+
     Ok(Json(ApiResp::ok(response)))
 }
 
