@@ -36,7 +36,7 @@ pub enum DataValue {
     Decimal(Decimal),
     DateTime(DateTime<Utc>),
     Date(NaiveDate),
-    /// 二进制数据 - 用于附件、图片、文档等（序列化为 base64 字符串）
+    /// 二进制数据 - 用于附件、图片、文档等（序列化为 B64: 前缀的 base64 字符串）
     Binary(Vec<u8>),
     /// 动态数组 - 用于多值字段和标签列表
     Array(Vec<DataValue>),
@@ -57,10 +57,10 @@ pub enum DataValue {
 /// DataValue 序列化
 ///
 /// # 序列化格式
-/// - Binary: base64 编码字符串
+/// - Binary: base64 编码字符串，添加 B64: 前缀以便识别
 /// - Uuid: 标准字符串格式
 /// - Json: 保持 JSON 对象格式
-/// - Array: JSON 数组
+/// - Array: 递归序列化数组元素
 /// - 其他类型: 直接值输出
 impl Serialize for DataValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -83,9 +83,9 @@ impl Serialize for DataValue {
             DataValue::DateTime(dt) => serializer.serialize_str(&dt.to_rfc3339()),
             DataValue::Date(d) => serializer.serialize_str(&d.to_string()),
             DataValue::Binary(v) => {
-                // 使用 base64 编码
+                // 使用 base64 编码，并添加 B64: 前缀以便反序列化时识别
                 let encoded = BASE64.encode(v);
-                serializer.serialize_str(&encoded)
+                serializer.serialize_str(&format!("B64:{}", encoded))
             }
             DataValue::Uuid(u) => serializer.serialize_str(&u.to_string()),
             DataValue::Json(json_str) => {
@@ -110,7 +110,7 @@ impl Serialize for DataValue {
 /// DataValue 反序列化
 ///
 /// # 反序列化策略
-/// - 识别 base64 编码的 Binary 字符串
+/// - 通过 B64: 前缀识别 base64 编码的 Binary 字符串
 /// - 识别 UUID 格式字符串
 /// - 尝试智能推断类型（JSON 格式等）
 impl<'de> Deserialize<'de> for DataValue {
@@ -146,13 +146,12 @@ impl<'de> Deserialize<'de> for DataValue {
                 if let Ok(uuid) = Uuid::parse_str(&s) {
                     return Ok(DataValue::Uuid(uuid));
                 }
-                // 尝试解析为 base64 编码的二进制 fixme 需要修改 字符0323在这里会被变为二进制，这样不正确
-                // if let Ok(bytes) = BASE64.decode(&s) {
-                //     // 验证是否为有效的二进制数据（非空且解码成功）
-                //     if !bytes.is_empty() {
-                //         return Ok(DataValue::Binary(bytes));
-                //     }
-                // }
+                // 尝试解析为 base64 编码的二进制数据（通过 B64: 前缀识别）
+                if let Some(encoded) = s.strip_prefix("B64:") {
+                    if let Ok(bytes) = BASE64.decode(encoded) {
+                        return Ok(DataValue::Binary(bytes));
+                    }
+                }
                 // 尝试解析为 JSON（如果是以 { 或 [ 开头）
                 if s.starts_with('{') || s.starts_with('[') {
                     if serde_json::from_str::<JsonValue>(&s).is_ok() {
