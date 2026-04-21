@@ -1,0 +1,7 @@
+[workspace]
+# 是否从 workspace 继承版本号
+inherit_version = true
+# 是否将所有 workspace 内部依赖链接到 workspace 版本
+link_workspace_deps = true
+# 版本更新时，是否也更新 workspace 内部依赖的版本
+update_workspace_deps = true
