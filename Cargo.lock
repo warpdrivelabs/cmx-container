@@ -652,7 +652,7 @@ version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-database",
  "cmx-metadata",
  "cmx-plugin",
@@ -689,7 +689,7 @@ dependencies = [
  "bb8",
  "bb8-redis",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -741,12 +741,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-core"
+version = "0.1.1"
+source = "registry+http://192.168.1.13:8081/git/"
+checksum = "28bff3eb2c22e2c01e42d1fa894a5d9bfa004916f16b7c40761c4a0d415497a3"
+dependencies = [
+ "base64",
+ "chrono",
+ "modql",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "smol_str",
+ "strum",
+ "strum_macros",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "cmx-database"
 version = "0.1.1"
 dependencies = [
  "base64",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -775,7 +794,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-database",
  "csv",
  "regex",
@@ -797,7 +816,7 @@ dependencies = [
  "base64",
  "chrono",
  "cmx-buffer",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-database",
  "cmx-metadata",
  "cmx-service",
@@ -832,7 +851,20 @@ dependencies = [
 name = "cmx-plugin-sdk"
 version = "0.1.1"
 dependencies = [
- "cmx-core",
+ "cmx-core 0.1.1",
+ "extism-pdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "cmx-plugin-sdk"
+version = "0.1.1"
+source = "registry+http://192.168.1.13:8081/git/"
+checksum = "65784753f58fd400e2f32b15dfacb082bed5cb9bb889dd9cb507519030563fa0"
+dependencies = [
+ "cmx-core 0.1.1 (registry+http://192.168.1.13:8081/git/)",
  "extism-pdk",
  "serde",
  "serde_json",
@@ -844,7 +876,7 @@ name = "cmx-runtime"
 version = "0.1.1"
 dependencies = [
  "async-trait",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-traits",
  "extism",
  "serde",
@@ -861,7 +893,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-database",
  "cmx-runtime",
  "cmx-traits",
@@ -883,7 +915,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core",
+ "cmx-core 0.1.1",
  "extism",
  "serde",
  "serde_json",
@@ -917,7 +949,7 @@ dependencies = [
 name = "cmx-wasmdemo"
 version = "0.1.1"
 dependencies = [
- "cmx-plugin-sdk",
+ "cmx-plugin-sdk 0.1.1 (registry+http://192.168.1.13:8081/git/)",
  "extism-pdk",
  "serde",
  "serde_json",
@@ -5914,7 +5946,7 @@ dependencies = [
  "axum",
  "cmx-api",
  "cmx-buffer",
- "cmx-core",
+ "cmx-core 0.1.1",
  "cmx-database",
  "cmx-plugin",
  "cmx-runtime",
