@@ -102,10 +102,22 @@ impl PgSeedDataExecutor {
 
     /// 执行单表的种子数据初始化
     ///
+    /// # 执行流程
+    /// 1. 检查数据文件是否存在
+    /// 2. 加载数据文件（支持 JSON 和 CSV）
+    /// 3. 按批次执行 INSERT/UPSERT 语句
+    /// 4. 批次失败时降级为逐行执行
+    /// 5. 执行后校验数据条数一致性
+    ///
+    /// # 错误处理策略
+    /// - 批次执行失败时，自动降级为逐行执行，提高容错性
+    /// - 单行执行失败时记录到 failures 列表，不阻断其他行
+    /// - 加载文件失败、SQL 生成失败等记录到 failures
+    ///
     /// # 参数
-    /// - `table_define`: 目标表的完整定义
-    /// - `seed_config`: 种子数据配置
-    /// - `base_path`: 插件安装根路径
+    /// * `table_define` - 目标表的完整定义
+    /// * `seed_config` - 种子数据配置
+    /// * `base_path` - 插件安装根路径
     pub async fn execute_seed_data(
         &self,
         table_define: &TableDefine,
@@ -114,6 +126,9 @@ impl PgSeedDataExecutor {
     ) -> SeedDataTableResult {
         let file_path = base_path.join(&seed_config.file);
 
+        // ============================================
+        // 步骤1：检查文件是否存在
+        // ============================================
         if !file_path.exists() {
             return SeedDataTableResult::new_load_failure(
                 table_define.table_name.clone(),
@@ -122,6 +137,9 @@ impl PgSeedDataExecutor {
             );
         }
 
+        // ============================================
+        // 步骤2：加载数据文件
+        // ============================================
         let result = load_seed_data(&file_path, &table_define.columns);
         let rows = match result {
             Ok(rows) => rows,
@@ -154,6 +172,9 @@ impl PgSeedDataExecutor {
         let mut success_count = 0usize;
         let mut failures = Vec::new();
 
+        // ============================================
+        // 步骤3：按批次执行数据
+        // ============================================
         let batches = rows.chunks(self.batch_size);
         for (batch_idx, batch) in batches.enumerate() {
             info!(
@@ -172,11 +193,13 @@ impl PgSeedDataExecutor {
                 conflict_cols,
             ) {
                 Ok(sql) => {
+                    // 尝试批次执行
                     match self.execute_sql(&sql).await {
                         Ok(_) => {
                             success_count += batch.len();
                         }
                         Err(batch_err) => {
+                            // 批次执行失败，降级为逐行执行
                             warn!("批次 {} 执行失败，降级为逐行执行: {}", batch_idx + 1, batch_err);
                             for (row_idx_in_batch, row) in batch.iter().enumerate() {
                                 match generate_pg_single_insert_or_upsert(
@@ -213,6 +236,7 @@ impl PgSeedDataExecutor {
                     }
                 }
                 Err(gen_err) => {
+                    // SQL 生成失败，记录所有行的失败信息
                     error!("批次 {} SQL 生成失败: {}", batch_idx + 1, gen_err);
                     for (row_idx_in_batch, row) in batch.iter().enumerate() {
                         failures.push(SeedDataFailure {
@@ -229,17 +253,23 @@ impl PgSeedDataExecutor {
         table_result.failed_count = failures.len();
         table_result.failures = failures;
 
+        // ============================================
+        // 步骤4：校验数据条数一致性
+        // ============================================
         table_result.db_row_count = self.verify_row_count(table_name).await;
 
         if let Some(db_count) = table_result.db_row_count {
             if db_count < file_row_count {
+                // 数据库条数少于文件条数，可能有部分数据执行失败
                 warn!(
                     "种子数据条数不一致: 表={}, 文件={}条, 数据库={}条, 可能部分数据执行失败",
                     table_name, file_row_count, db_count
                 );
             } else if db_count == file_row_count {
+                // 完全一致，执行成功
                 debug!("种子数据条数一致: 表={}, 数据库={}条", table_name, db_count);
             } else {
+                // 数据库条数多于文件，可能是历史数据
                 info!(
                     "种子数据条数: 表={}, 文件={}条, 数据库={}条 (数据库可能已有历史数据)",
                     table_name, file_row_count, db_count

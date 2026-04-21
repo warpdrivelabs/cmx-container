@@ -37,10 +37,13 @@ impl DdlParser for PostgresDdlParser {
     }
 
     fn parse_ddl(&self, ddl: &str) -> Result<Vec<TableDefine>, MetadataError> {
+        // 按分号分割 SQL 语句
         let statements = split_statements(ddl);
         let mut tables: HashMap<String, TableDefine> = HashMap::new();
 
+        // ============================================
         // 第一遍：解析 CREATE TABLE
+        // ============================================
         for stmt in &statements {
             let trimmed = stmt.trim();
             if is_create_table(trimmed) {
@@ -49,21 +52,27 @@ impl DdlParser for PostgresDdlParser {
             }
         }
 
+        // ============================================
         // 第二遍：解析 CREATE INDEX 和 COMMENT ON
+        // ============================================
         for stmt in &statements {
             let trimmed = stmt.trim();
             if is_create_index(trimmed) {
+                // 解析索引并关联到对应的表
                 if let Some((table_name, idx)) = parse_create_index_stmt(trimmed)
                     && let Some(table) = tables.get_mut(&table_name)
                 {
                     table.indexes.push(idx);
                 }
             } else if is_comment_on(trimmed) {
+                // 解析注释并应用到对应的表/列
                 apply_comment(trimmed, &mut tables);
             }
         }
 
-        // 按插入顺序返回（使用原 DDL 中 CREATE TABLE 的顺序）
+        // ============================================
+        // 按原 DDL 中 CREATE TABLE 的顺序返回结果
+        // ============================================
         let mut result = Vec::new();
         for stmt in &statements {
             let trimmed = stmt.trim();
@@ -74,7 +83,7 @@ impl DdlParser for PostgresDdlParser {
                 result.push(table);
             }
         }
-        // 添加任何剩余的（不应该有，但以防万一）
+        // 添加任何剩余的表（理论上不应该有）
         for (_, table) in tables {
             result.push(table);
         }
@@ -107,8 +116,22 @@ fn is_comment_on(stmt: &str) -> bool {
 }
 
 /// 解析 CREATE TABLE 语句
+///
+/// # 解析步骤
+/// 1. 使用正则表达式提取表名（支持 schema.table 和引号格式）
+/// 2. 找到匹配的括号对，提取括号内的内容
+/// 3. 按逗号分割列定义（考虑括号嵌套）
+/// 4. 解析每一项：区分 PRIMARY KEY/CONSTRAINT 等约束与普通列定义
+/// 5. 标记主键列
+///
+/// # 参数
+/// * `stmt` - CREATE TABLE 语句
+///
+/// # 返回值
+/// * 成功返回 TableDefine
+/// * 失败返回 MetadataError
 fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
-    // 提取表名（支持 schema.table 和 引号格式）
+    // 使用正则提取表名（支持 schema.table 和 引号格式）
     let re_table = Regex::new(
         r#"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?(\w+)"?\.)?"?(\w+)"?\s*\("#
     ).unwrap();
@@ -120,15 +143,15 @@ fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
     let schema = caps.get(1).map(|m| m.as_str().to_string());
     let table_name = caps[2].to_string();
 
-    // 提取括号内的内容
+    // 找到 CREATE TABLE 后的左括号位置
     let paren_start = stmt.find('(').ok_or_else(|| {
         MetadataError::DdlParse("CREATE TABLE 缺少左括号".to_string())
     })?;
 
-    // 找到匹配的右括号（考虑嵌套）
+    // 找到匹配的右括号（考虑嵌套括号）
     let body = find_matching_paren(&stmt[paren_start..])?;
 
-    // 分割列定义和约束
+    // 按逗号分割列定义（考虑括号嵌套）
     let parts = split_column_defs(body);
 
     let mut columns = Vec::new();
@@ -140,7 +163,7 @@ fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
         let upper = trimmed.to_uppercase();
 
         if upper.starts_with("PRIMARY KEY") {
-            // 提取 PRIMARY KEY 列
+            // 提取 PRIMARY KEY 后括号内的列名
             if let Some(cols) = extract_paren_columns(trimmed) {
                 primary_keys = cols;
             }
@@ -149,9 +172,9 @@ fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
             || upper.starts_with("UNIQUE")
             || upper.starts_with("CHECK")
         {
-            // 跳过其他约束
+            // 跳过其他约束定义（暂不支持解析）
         } else {
-            // 列定义
+            // 普通列定义
             if let Some(mut col) = parse_column_def(trimmed) {
                 col.ordinal = Some(ordinal);
                 ordinal += 1;

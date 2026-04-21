@@ -32,12 +32,25 @@ fn escape_string(s: &str) -> String {
 
 /// 生成 PostgreSQL INSERT 或 UPSERT 语句（批量多行）
 ///
+/// # 语句格式
+/// ```sql
+/// INSERT INTO table (col1, col2, ...) VALUES
+/// (val1, val2, ...),
+/// (val1, val2, ...),
+/// ...
+/// ```
+///
+/// # UPSERT 语义（当 conflict_columns 不为空时）
+/// - 使用 `ON CONFLICT (conflict_cols) DO UPDATE SET` 实现
+/// - 冲突列上存在冲突时，更新非冲突列（使用 EXCLUDED 表引用）
+/// - 若 update_columns 为空，则 `DO NOTHING`
+///
 /// # 参数
-/// - `table_name`: 表名
-/// - `schema`: schema 名称（可选）
-/// - `columns`: 表的列定义
-/// - `rows`: 数据行列表
-/// - `conflict_columns`: 冲突检测列（用于 ON CONFLICT 子句）
+/// * `table_name` - 表名
+/// * `schema` - schema 名称（可选）
+/// * `columns` - 表的列定义
+/// * `rows` - 数据行列表
+/// * `conflict_columns` - 冲突检测列（用于 ON CONFLICT 子句）
 ///
 /// # 返回值
 /// 成功返回完整的 SQL 语句
@@ -52,21 +65,22 @@ pub fn generate_pg_insert_or_upsert(
         return Err(MetadataError::SeedData("数据行为空，无法生成 DML 语句".to_string()));
     }
 
+    // 构建带 schema 的表名
     let qualified_table = match schema {
         Some(s) if !s.is_empty() => format!("\"{}\".\"{}\"", s, table_name),
         _ => format!("\"{}\"", table_name),
     };
 
+    // 构建列名列表
     let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
-
     let col_list = column_names
         .iter()
         .map(|c| format!("\"{}\"", c))
         .collect::<Vec<_>>()
         .join(", ");
 
+    // 构建 VALUES 子句
     let mut values_list = Vec::with_capacity(rows.len());
-
     for row in rows {
         let values: Vec<String> = columns
             .iter()
@@ -78,6 +92,7 @@ pub fn generate_pg_insert_or_upsert(
         values_list.push(format!("({})", values.join(", ")));
     }
 
+    // 组装 INSERT 语句
     let mut sql = format!(
         "INSERT INTO {} ({}) VALUES\n{}",
         qualified_table,
@@ -85,6 +100,7 @@ pub fn generate_pg_insert_or_upsert(
         values_list.join(",\n")
     );
 
+    // 添加 ON CONFLICT 子句（UPSERT）
     if !conflict_columns.is_empty() {
         let conflict_clause = conflict_columns
             .iter()
@@ -92,6 +108,7 @@ pub fn generate_pg_insert_or_upsert(
             .collect::<Vec<_>>()
             .join(", ");
 
+        // 排除冲突列，只更新其他列
         let update_columns: Vec<String> = columns
             .iter()
             .filter(|c| !conflict_columns.contains(&c.name))
@@ -101,12 +118,14 @@ pub fn generate_pg_insert_or_upsert(
             .collect();
 
         if !update_columns.is_empty() {
+            // 有非冲突列需要更新
             sql.push_str(&format!(
                 "\nON CONFLICT ({}) DO UPDATE SET\n  {}",
                 conflict_clause,
                 update_columns.join(",\n  ")
             ));
         } else {
+            // 所有列都是冲突列，只做冲突检测
             sql.push_str(&format!(
                 "\nON CONFLICT ({}) DO NOTHING",
                 conflict_clause

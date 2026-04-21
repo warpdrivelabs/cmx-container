@@ -90,6 +90,12 @@ impl DdlDiff {
     /// 比对旧版本和新版本的表定义，生成增量变更。
     /// 包括：新增的表、删除的表、修改的表（列变更、索引变更、注释变更）
     ///
+    /// # 比对策略
+    /// - 使用 HashMap 按表名快速查找，提高比对效率
+    /// - 新增表：存在于 new 但不在 old 中
+    /// - 删除表：存在于 old 但不在 new 中
+    /// - 修改表：同时存在于两者中，但列/索引/注释有差异
+    ///
     /// # 参数
     /// * `old` - 旧版本表定义列表
     /// * `new` - 新版本表定义列表
@@ -97,36 +103,47 @@ impl DdlDiff {
     /// # 返回值
     /// * `Vec<TableChange>` - 变更列表
     pub fn diff(old: &[TableDefine], new: &[TableDefine]) -> Vec<TableChange> {
+        // 构建按表名索引的 HashMap，加速查找
         let old_map: HashMap<&str, &TableDefine> = old.iter().map(|t| (t.table_name.as_str(), t)).collect();
         let new_map: HashMap<&str, &TableDefine> = new.iter().map(|t| (t.table_name.as_str(), t)).collect();
 
         let mut changes = Vec::new();
 
-        // 新增的表
+        // ============================================
+        // 检测新增的表
+        // ============================================
         for new_table in new {
             if !old_map.contains_key(new_table.table_name.as_str()) {
                 changes.push(TableChange::CreateTable(new_table.clone()));
             }
         }
 
-        // 删除的表
+        // ============================================
+        // 检测删除的表
+        // ============================================
         for old_table in old {
             if !new_map.contains_key(old_table.table_name.as_str()) {
                 changes.push(TableChange::DropTable(old_table.table_name.clone()));
             }
         }
 
-        // 修改的表
+        // ============================================
+        // 检测修改的表（列变更、索引变更、注释变更）
+        // ============================================
         for new_table in new {
             if let Some(old_table) = old_map.get(new_table.table_name.as_str()) {
+                // 比对列定义差异
                 let column_changes = Self::diff_columns(&old_table.columns, &new_table.columns);
+                // 比对索引定义差异
                 let index_changes = Self::diff_indexes(&old_table.indexes, &new_table.indexes);
+                // 比对表注释变更
                 let comment_change = if old_table.comment != new_table.comment {
                     new_table.comment.clone()
                 } else {
                     None
                 };
 
+                // 只有当有实质变更时才记录
                 if !column_changes.is_empty() || !index_changes.is_empty() || comment_change.is_some() {
                     changes.push(TableChange::AlterTable {
                         table_name: new_table.table_name.clone(),
@@ -249,6 +266,14 @@ impl DdlDiff {
     ///
     /// 将变更列表转换为对应数据库方言的 DDL 语句。
     ///
+    /// # 生成的 DDL 类型
+    /// - `TableChange::CreateTable`：生成 CREATE TABLE + COMMENT + INDEX
+    /// - `TableChange::DropTable`：记录日志（不实际生成 DROP 语句，防止数据丢失）
+    /// - `TableChange::AlterTable`：
+    ///   - 列变更：ADD COLUMN / ALTER COLUMN（类型/nullable/default）
+    ///   - 索引变更：CREATE INDEX / DROP INDEX
+    ///   - 注释变更：COMMENT ON TABLE
+    ///
     /// # 参数
     /// * `dialect` - DDL 方言实现
     /// * `changes` - 变更列表
@@ -264,15 +289,24 @@ impl DdlDiff {
 
         for change in changes {
             match change {
+                // ============================================
+                // 新建表：生成完整 DDL
+                // ============================================
                 TableChange::CreateTable(table) => {
                     stmts.push(dialect.generate_create_table(table)?);
                     stmts.extend(dialect.generate_comments(table)?);
                     stmts.extend(dialect.generate_create_indexes(table)?);
                 }
+                // ============================================
+                // 删除表：仅记录日志，不实际执行（安全考虑）
+                // ============================================
                 TableChange::DropTable(name) => {
                     // stmts.push(format!("DROP TABLE IF EXISTS \"{}\" CASCADE;", name));
                     info!("表元数据更新需要删除的表: {}，实际未执行", name);
                 }
+                // ============================================
+                // 修改表：生成列变更、索引变更、注释变更的 DDL
+                // ============================================
                 TableChange::AlterTable {
                     table_name,
                     schema,
@@ -280,8 +314,10 @@ impl DdlDiff {
                     index_changes,
                     comment_change,
                 } => {
+                    // 处理列变更
                     for cc in column_changes {
                         match cc {
+                            // 新增列
                             ColumnChange::AddColumn(col) => {
                                 stmts.push(dialect.generate_add_column(
                                     table_name,
@@ -289,6 +325,7 @@ impl DdlDiff {
                                     col,
                                 )?);
                             }
+                            // 删除列：仅记录日志，不实际执行
                             ColumnChange::DropColumn(name) => {
                                 // stmts.push(dialect.generate_drop_column(
                                 //     table_name,
@@ -297,6 +334,7 @@ impl DdlDiff {
                                 // )?);
                                 info!("表元数据更新需要删除的列: {}，实际未执行", name);
                             }
+                            // 修改列（类型、nullable、默认值）
                             ColumnChange::AlterColumn { old, new } => {
                                 stmts.extend(dialect.generate_alter_column(
                                     table_name,
@@ -307,8 +345,10 @@ impl DdlDiff {
                             }
                         }
                     }
+                    // 处理索引变更
                     for ic in index_changes {
                         match ic {
+                            // 新增索引
                             IndexChange::AddIndex(idx) => {
                                 let qualified = match schema {
                                     Some(s) => format!("\"{}\".\"{}\"", s, table_name),
@@ -327,11 +367,13 @@ impl DdlDiff {
                                     unique, idx.name, qualified, cols
                                 ));
                             }
+                            // 删除索引
                             IndexChange::DropIndex(name) => {
                                 stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", name));
                             }
                         }
                     }
+                    // 处理表注释变更
                     if let Some(comment) = comment_change {
                         let qualified = match schema {
                             Some(s) => format!("\"{}\".\"{}\"", s, table_name),

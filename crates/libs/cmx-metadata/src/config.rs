@@ -117,16 +117,26 @@ impl TableDefinesConfigManager {
     /// - `depends_on` 字段定义的依赖关系（被依赖的配置先加载）
     /// - `priority` 字段定义的优先级（优先级高的先加载）
     ///
+    /// # 算法说明
+    /// 1. 构建有向图：配置 → 其依赖的配置
+    /// 2. 计算每个节点的入度（被依赖次数）
+    /// 3. 使用队列存储入度为0的节点，按优先级排序
+    /// 4. 依次出队，将后继节点的入度减1，入度为0时加入队列
+    /// 5. 若最终输出节点数不等于配置数，说明存在循环依赖
+    ///
     /// # 返回值
     /// * 成功返回按排序后的配置引用列表
     /// * 失败返回 `MetadataError`（如存在循环依赖或依赖不存在的配置）
     pub fn sorted_configs(&self) -> Result<Vec<&TableDefinesConfig>, MetadataError> {
+        // 构建配置名称到索引的映射，用于快速查找
         let name_to_index: HashMap<&str, usize> = self
             .configs
             .iter()
             .enumerate()
             .map(|(i, c)| (c.name.as_str(), i))
             .collect();
+
+        // 检查所有依赖是否都存在，防止悬空依赖
         for c in &self.configs {
             for d in &c.depends_on {
                 if !name_to_index.contains_key(d.as_str()) {
@@ -137,22 +147,39 @@ impl TableDefinesConfigManager {
                 }
             }
         }
+
         let n = self.configs.len();
+
+        // in_degree[i] 表示配置 i 被依赖的次数（入度）
         let mut in_degree: Vec<usize> = vec![0; n];
+
+        // successors[i] 存储依赖配置 i 的所有配置的索引
         let mut successors: Vec<Vec<usize>> = vec![Vec::new(); n];
+
+        // 构建有向图：遍历所有配置，更新入度和后继节点列表
         for (i, c) in self.configs.iter().enumerate() {
-            in_degree[i] = c.depends_on.len();
+            in_degree[i] = c.depends_on.len(); // 入度 = 被依赖次数
             for d in &c.depends_on {
                 let &j = name_to_index.get(d.as_str()).unwrap();
-                successors[j].push(i);
+                successors[j].push(i); // 配置 j 有一个后继 i
             }
         }
+
+        // 优先级函数：优先加载高优先级的配置
         let priority = |i: usize| self.configs[i].priority.unwrap_or(0);
+
+        // 初始化队列：所有入度为0的配置（无依赖的配置）可以首先加载
         let mut queue: VecDeque<usize> = (0..n).filter(|&i| in_degree[i] == 0).collect();
+
+        // 按优先级排序，确保同级别优先级的配置按预期顺序加载
         queue.make_contiguous().sort_by_key(|&i| priority(i));
+
         let mut out: Vec<usize> = Vec::with_capacity(n);
+
+        // Kahn's algorithm：依次处理入度为0的节点
         while let Some(i) = queue.pop_front() {
             out.push(i);
+            // 收集下一批新入度为0的节点
             let mut next_batch: Vec<usize> = Vec::new();
             for &j in &successors[i] {
                 in_degree[j] -= 1;
@@ -160,16 +187,20 @@ impl TableDefinesConfigManager {
                     next_batch.push(j);
                 }
             }
+            // 按优先级排序，保持稳定的加载顺序
             next_batch.sort_by_key(|&j| priority(j));
             for j in next_batch {
                 queue.push_back(j);
             }
         }
+
+        // 检测循环依赖：若输出节点数少于总节点数，说明有环
         if out.len() != n {
             return Err(MetadataError::ConfigDependency(
                 "配置之间存在循环依赖".to_string(),
             ));
         }
+
         Ok(out.into_iter().map(|i| &self.configs[i]).collect())
     }
 

@@ -52,8 +52,21 @@ fn load_seed_data_from_json(path: &Path) -> Result<Vec<serde_json::Value>, Metad
 
 /// 从 CSV 文件加载种子数据
 ///
-/// 首行为列名（表头），后续行为数据行。
-/// 所有值根据 `TableDefine.columns` 的 `field_type` 进行类型转换。
+/// # CSV 格式要求
+/// - 首行为列名（表头）
+/// - 后续行为数据行
+/// - 所有值根据 `TableDefine.columns` 的 `field_type` 进行类型转换
+///
+/// # 类型转换规则
+/// - `Int`：解析为 i64 数字，失败则转为字符串
+/// - `Float`：解析为 f64 浮点数，失败则转为字符串
+/// - `Bool`：支持 true/false/1/0/yes/no/on/off/t/y/f/n
+/// - `Json`：尝试解析为 JSON 对象，失败则转为字符串
+/// - 其他类型：直接转为字符串
+///
+/// # 参数
+/// * `path` - CSV 文件路径
+/// * `columns` - 目标表的列定义（用于类型转换）
 fn load_seed_data_from_csv(
     path: &Path,
     columns: &[ColumnDefine],
@@ -67,11 +80,12 @@ fn load_seed_data_from_csv(
         .collect();
 
     let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .flexible(true)
+        .has_headers(true)  // 首行是表头
+        .flexible(true)      // 允许列数不一致
         .from_path(path)
         .map_err(|e| MetadataError::SeedData(format!("打开 CSV 文件失败: {}", e)))?;
 
+    // 读取表头作为列名
     let headers = reader
         .headers()
         .map_err(|e| MetadataError::SeedData(format!("读取 CSV 表头失败: {}", e)))?
@@ -81,6 +95,7 @@ fn load_seed_data_from_csv(
 
     let mut rows = Vec::new();
 
+    // 逐行读取数据
     for (row_idx, result) in reader.records().enumerate() {
         let record = result.map_err(|e| {
             MetadataError::SeedData(format!("读取 CSV 第 {} 行失败: {}", row_idx + 2, e))

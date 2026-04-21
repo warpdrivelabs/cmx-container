@@ -94,16 +94,20 @@ impl DdlDialect for PostgresDdlDialect {
     fn generate_create_table(&self, table: &TableDefine) -> Result<String, MetadataError> {
         let qualified = self.qualified_table_name(&table.table_name, table.schema.as_deref());
 
-        // 按 ordinal 排序列（若有）
+        // 按 ordinal 排序列（若定义了 ordinal 字段），保证列顺序
         let mut sorted_cols: Vec<&ColumnDefine> = table.columns.iter().collect();
         sorted_cols.sort_by_key(|c| c.ordinal.unwrap_or(u32::MAX));
 
+        // 生成列定义行
         let mut lines: Vec<String> = sorted_cols
             .iter()
             .map(|col| self.render_column_def(col))
             .collect();
 
-        // PRIMARY KEY
+        // ============================================
+        // 构建 PRIMARY KEY 子句
+        // ============================================
+        // 优先使用显式定义的主键列，其次回退到列定义中标记为 is_primary_key 的列
         let pk_cols: Vec<String> = if !table.primary_keys.is_empty() {
             table.primary_keys.clone()
         } else {
@@ -117,9 +121,10 @@ impl DdlDialect for PostgresDdlDialect {
             lines.push(format!("    PRIMARY KEY ({})", pk_list));
         }
 
+        // 组装 CREATE TABLE 语句
         let mut ddl = format!("CREATE TABLE {} (\n{}\n)", qualified, lines.join(",\n"));
 
-        // TABLESPACE
+        // TABLESPACE：可选的表空间配置
         if let Some(ref ts) = table.tablespace {
             ddl.push_str(&format!(" TABLESPACE \"{}\"", ts));
         }
@@ -195,7 +200,9 @@ impl DdlDialect for PostgresDdlDialect {
         let qualified = self.qualified_table_name(table_name, schema);
         let mut stmts = Vec::new();
 
-        // 类型变更
+        // ============================================
+        // 变更1：类型变更
+        // ============================================
         let old_type = self.map_column_type(old_col);
         let new_type = self.map_column_type(new_col);
         if old_type != new_type {
@@ -205,14 +212,18 @@ impl DdlDialect for PostgresDdlDialect {
             ));
         }
 
-        // nullable 变更
+        // ============================================
+        // 变更2：nullable 变更
+        // ============================================
         if old_col.is_nullable != new_col.is_nullable {
             if new_col.is_nullable {
+                // 从 NOT NULL 变为 NULLABLE
                 stmts.push(format!(
                     "ALTER TABLE {} ALTER COLUMN \"{}\" DROP NOT NULL;",
                     qualified, new_col.name
                 ));
             } else {
+                // 从 NULLABLE 变为 NOT NULL
                 stmts.push(format!(
                     "ALTER TABLE {} ALTER COLUMN \"{}\" SET NOT NULL;",
                     qualified, new_col.name
@@ -220,7 +231,9 @@ impl DdlDialect for PostgresDdlDialect {
             }
         }
 
-        // 默认值变更
+        // ============================================
+        // 变更3：默认值变更
+        // ============================================
         if old_col.default_value != new_col.default_value {
             match &new_col.default_value {
                 Some(val) => {
@@ -230,6 +243,7 @@ impl DdlDialect for PostgresDdlDialect {
                     ));
                 }
                 None => {
+                    // 移除默认值
                     stmts.push(format!(
                         "ALTER TABLE {} ALTER COLUMN \"{}\" DROP DEFAULT;",
                         qualified, new_col.name

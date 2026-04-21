@@ -150,6 +150,20 @@ impl PgTableDefineExecutor {
     ///
     /// 通过查询 information_schema.columns、pg_indexes、pg_description
     /// 还原当前数据库中的表定义，用于与新定义进行 diff。
+    ///
+    /// # 查询步骤
+    /// 1. 查询 information_schema.columns 获取列信息（列名、数据类型、长度、精度、可空性、默认值、位置）
+    /// 2. 查询 pg_index 获取主键列
+    /// 3. 查询 pg_class/pg_index/pg_namespace 获取索引信息（排除主键索引）
+    /// 4. 查询 pg_description 获取表注释
+    /// 5. 查询 pg_attribute/pg_class/pg_namespace 获取列注释
+    ///
+    /// # 参数
+    /// * `define` - 表定义（用于获取表名、schema、版本等元信息）
+    ///
+    /// # 返回值
+    /// * 成功返回从数据库查询还原的 TableDefine
+    /// * 失败返回 MetadataError（如表不存在或查询失败）
     async fn query_current_table_define(
         &self,
         define: &TableDefine,
@@ -157,12 +171,15 @@ impl PgTableDefineExecutor {
         let db_id = self.db_id.clone();
         let txn_id = self.txn_id.clone();
         let table_name = define.table_name.clone();
+        // 默认使用 public schema
         let schema_name = define
             .schema
             .clone()
             .unwrap_or_else(|| "public".to_string());
 
-        // 1. 查询列信息
+        // ============================================
+        // 步骤1：查询列信息
+        // ============================================
         let columns_sql = format!(
             "SELECT column_name, data_type, character_maximum_length, \
                  numeric_precision, numeric_scale, is_nullable, column_default, \
@@ -184,7 +201,9 @@ impl PgTableDefineExecutor {
             )));
         }
 
-        // 2. 查询主键列
+        // ============================================
+        // 步骤2：查询主键列
+        // ============================================
         let pk_sql = format!(
             "SELECT a.attname \
                  FROM pg_index i \
@@ -198,7 +217,9 @@ impl PgTableDefineExecutor {
             .await
             .unwrap_or_else(|_| empty_dataset("pk"));
 
-        // 3. 查询索引信息（排除主键索引）
+        // ============================================
+        // 步骤3：查询索引信息（排除主键索引）
+        // ============================================
         let idx_sql = format!(
             "SELECT i.relname AS index_name, \
                  ix.indisunique AS is_unique, \
@@ -219,7 +240,9 @@ impl PgTableDefineExecutor {
             .await
             .unwrap_or_else(|_| empty_dataset("indexes"));
 
-        // 4. 查询表注释
+        // ============================================
+        // 步骤4：查询表注释
+        // ============================================
         let comment_sql = format!(
             "SELECT obj_description('{}.{}'::regclass, 'pg_class') AS comment",
             schema_name, table_name
@@ -229,7 +252,9 @@ impl PgTableDefineExecutor {
             .await
             .unwrap_or_else(|_| empty_dataset("comment"));
 
-        // 5. 查询列注释
+        // ============================================
+        // 步骤5：查询列注释
+        // ============================================
         let col_comment_sql = format!(
             "SELECT a.attname AS column_name, \
                  col_description(a.attrelid, a.attnum) AS comment \
@@ -246,7 +271,9 @@ impl PgTableDefineExecutor {
             .await
             .unwrap_or_else(|_| empty_dataset("col_comments"));
 
-        // 构建列注释映射
+        // ============================================
+        // 构建列注释映射：列名 → 注释
+        // ============================================
         let mut col_comment_map: HashMap<String, String> = HashMap::new();
         for row in col_comment_ds.iter() {
             let col_name = get_string_field(row.get(0));
@@ -256,7 +283,9 @@ impl PgTableDefineExecutor {
             }
         }
 
+        // ============================================
         // 构建主键列集合
+        // ============================================
         let mut primary_keys: Vec<String> = Vec::new();
         for row in pk_ds.iter() {
             let pk_col = get_string_field(row.get(0));
@@ -265,7 +294,9 @@ impl PgTableDefineExecutor {
             }
         }
 
+        // ============================================
         // 构建列定义
+        // ============================================
         let mut columns: Vec<ColumnDefine> = Vec::new();
         for row in col_ds.iter() {
             let name = get_string_field(row.get(0));
@@ -281,7 +312,7 @@ impl PgTableDefineExecutor {
             let is_nullable = is_nullable_str == "YES";
             let is_pk = primary_keys.contains(&name);
 
-            // 构建原始 db_type
+            // 根据 PostgreSQL 数据类型构建 db_type 字符串
             let db_type = build_pg_db_type(
                 &data_type,
                 &udt_name,
@@ -290,12 +321,13 @@ impl PgTableDefineExecutor {
                 num_scale,
             );
 
-            // 映射为 FieldType
+            // 将 PostgreSQL 类型映射为通用的 FieldType
             let field_type = pg_type_to_field_type(&data_type, &udt_name);
 
-            // 处理默认值（去掉类型转换后缀）
+            // 清理默认值：去掉类型转换后缀（如 'active'::varchar → active）和序列引用
             let default_value = column_default.map(|d| clean_pg_default(&d));
 
+            // 使用列注释作为 label
             let label = col_comment_map.get(&name).cloned().unwrap_or_default();
 
             columns.push(ColumnDefine {
@@ -320,7 +352,9 @@ impl PgTableDefineExecutor {
             });
         }
 
+        // ============================================
         // 构建索引定义
+        // ============================================
         let mut indexes: Vec<IndexDefine> = Vec::new();
         for row in idx_ds.iter() {
             let idx_name = get_string_field(row.get(0));
@@ -328,7 +362,7 @@ impl PgTableDefineExecutor {
                 Some(DataValue::Bool(b)) => *b,
                 _ => false,
             };
-            // columns 字段可能是 String（PostgreSQL array_agg 返回的文本格式）
+            // PostgreSQL array_agg 返回的数组格式可能是字符串或数组
             let idx_columns = parse_pg_array_column(row.get(2));
 
             if !idx_name.is_empty() {
@@ -344,7 +378,7 @@ impl PgTableDefineExecutor {
             }
         }
 
-        // 表注释
+        // 获取表注释作为 display_name
         let table_comment = if !comment_ds.is_empty() {
             get_opt_string(comment_ds.iter().next().and_then(|r| r.get(0)))
         } else {
