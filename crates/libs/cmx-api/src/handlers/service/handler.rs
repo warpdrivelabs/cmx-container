@@ -44,7 +44,7 @@ use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServicePageFilter};
 use log::error;
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
-use cmx_service::GlobalServiceRegistry;
+use cmx_service::{GlobalServiceRegistry, ServiceError};
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Error;
@@ -164,8 +164,9 @@ pub async fn service_call(
     // ==================== 调用 WASM 函数 ====================
 
     let start_time = std::time::Instant::now();
-    let input_bytes = serde_json::to_vec(&func_input)
-        .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))?;
+    // let input_bytes = serde_json::to_vec(&func_input)
+    //     .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))?;
+    let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::internal_error(e.to_string()))?;
 
     let invoke_result = runtime.invoke(&req.plugin_id, &req.function_name, &input_bytes).await
         .map_err(|e| Error::internal_error(format!("WASM 调用失败: {}", e)))?;
@@ -177,8 +178,11 @@ pub async fn service_call(
     let output: FunctionOutput = if invoke_result.output.is_empty() {
         FunctionOutput::new(serde_json::Value::Null)
     } else {
-        serde_json::from_slice(&invoke_result.output)
-            .map_err(|e| Error::internal_error(format!("输出数据解析失败: {}", e)))?
+        // serde_json::from_slice(&invoke_result.output)
+        //     .map_err(|e| Error::internal_error(format!("输出数据解析失败: {}", e)))?
+
+       rmp_serde::from_slice(&invoke_result.output)
+            .map_err(|e| Error::internal_error(e.to_string()))?
     };
 
     // ==================== 构建响应 ====================
