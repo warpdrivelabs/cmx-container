@@ -4,11 +4,12 @@
 //!
 //! # 核心功能
 //!
-//! - **CmxService** - 核心服务结构，实现 PluginLifecycleListener 响应插件生命周期
 //! - **Orchestrator** - 编排执行器，支持服务编排 JSON 格式、事务框、多分支节点
-//! - **ServiceHandler** - HTTP 处理器，封装服务层逻辑供 cmx-api 调用
 //! - **ServiceRegistry** - 服务注册中心，提供服务信息的内存缓存
 //! - **ServiceRepository** - 服务仓储层，提供服务定义的数据库访问
+//! - **ServiceQueryImpl** - ServiceQuery trait 实现（缓存优先）
+//! - **ServiceStorageImpl** - ServiceStorage trait 实现
+//! - **ServiceLifecycleListener** - 生命周期监听器，自动同步服务缓存
 //!
 //! # 服务编排特性
 //!
@@ -26,26 +27,33 @@
 //! - **不依赖** cmx-runtime（通过 RuntimeInvoker trait 交互）
 
 pub mod error;
-pub mod handler;
 pub mod orchestrator;
-pub mod request;
-pub mod service;
 pub mod repository;
 pub mod registry;
 pub mod service_query_impl;
 pub mod service_storage_impl;
 pub mod lifecycle_listener;
 
+// [预留] handler / service / request 模块暂未启用
+// 目前 cmx-api 直接通过 Orchestrator + RuntimeInvoker 执行服务编排，
+// 未使用 CmxService（单次调用）和 ServiceHandler（HTTP 封装）。
+// 待后续单次调用场景需要时再启用。
+// pub mod handler;
+// pub mod service;
+// pub mod request;
+
 pub use error::ServiceError;
-pub use handler::ServiceHandler;
 pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, StepStatus};
-pub use request::{InvokeRequest, InvokeResponse};
-pub use service::{CmxService, ServiceConfig};
 pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;
 pub use service_query_impl::ServiceQueryImpl;
 pub use service_storage_impl::ServiceStorageImpl;
 pub use lifecycle_listener::ServiceLifecycleListener;
+
+// [预留] 以下导出随 handler/service/request 模块暂未启用
+// pub use handler::ServiceHandler;
+// pub use request::{InvokeRequest, InvokeResponse};
+// pub use service::{CmxService, ServiceConfig};
 
 // ==================== 全局单例 ====================
 

@@ -9,9 +9,11 @@
 - [代码结构](#代码结构)
 - [核心类型](#核心类型)
 - [编排执行](#编排执行)
+- [服务查询与缓存](#服务查询与缓存)
 - [全局单例](#全局单例)
-- [使用指南](#使用指南)
 - [依赖约束](#依赖约束)
+- [错误处理](#错误处理)
+- [预留模块](#预留模块)
 
 ---
 
@@ -19,12 +21,12 @@
 
 `cmx-service` 是 CMX 插件系统的服务编排层，提供：
 
-- **服务调用** — 单次 WASM 函数调用
 - **编排执行** — 基于 Flow JSON 的 DAG 编排，支持事务框、多分支路由
 - **生命周期监听** — 响应插件激活/停用/升级/降级事件，自动同步服务缓存
-- **服务注册中心** — 服务信息的内存缓存
+- **服务注册中心** — 服务信息的内存缓存（ServiceRegistry）
 - **服务仓储层** — 服务定义的数据库访问（CRUD + 分页）
-- **HTTP Handler** — 提供 HTTP 接口封装供 cmx-api 调用
+- **ServiceQuery 实现** — 缓存优先的服务查询
+- **ServiceStorage 实现** — 服务持久化能力
 
 ---
 
@@ -75,15 +77,15 @@ crates/libs/cmx-service/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs                    # 模块入口，全局单例
-│   ├── service.rs                # CmxService 核心服务
-│   ├── handler.rs                # ServiceHandler HTTP 处理器
-│   ├── request.rs                # 请求/响应类型 (InvokeRequest / InvokeResponse)
 │   ├── error.rs                  # ServiceError 错误类型
 │   ├── registry.rs               # ServiceRegistry 服务注册中心（内存缓存）
 │   ├── repository.rs             # ServiceRepository 服务仓储层（数据库访问）
 │   ├── service_query_impl.rs     # ServiceQuery trait 实现（缓存优先）
 │   ├── service_storage_impl.rs   # ServiceStorage trait 实现
 │   ├── lifecycle_listener.rs     # 生命周期监听器（插件安装/升级/卸载/降级）
+│   ├── handler.rs                # [预留] ServiceHandler HTTP 处理器（暂未启用）
+│   ├── service.rs                # [预留] CmxService 单次调用服务（暂未启用）
+│   ├── request.rs                # [预留] InvokeRequest / InvokeResponse（暂未启用）
 │   └── orchestrator/             # 编排器模块
 │       ├── mod.rs                # 模块入口，统一导出
 │       ├── types.rs              # 类型定义 (OrchestrationResult, ExecutionStep 等)
@@ -198,41 +200,6 @@ pub struct ExecuteOptions {
     /// - true: 返回所有步骤数据（调试时使用）
     /// - 失败时始终返回步骤数据
     pub include_steps: bool,
-}
-```
-
-### CmxService
-
-核心服务结构，持有 trait 对象引用：
-
-```rust
-pub struct CmxService {
-    plugin_query: Arc<dyn PluginQuery>,
-    runtime: Arc<dyn RuntimeInvoker>,
-    config: ServiceConfig,
-}
-```
-
-### 请求/响应类型
-
-```rust
-// 单次调用请求
-pub struct InvokeRequest {
-    pub plugin_id: String,
-    pub function_name: String,
-    pub input: serde_json::Value,
-    pub db_id: Option<String>,
-    pub request_id: Option<String>,
-    pub tenant_id: Option<String>,
-}
-
-// 单次调用响应
-pub struct InvokeResponse {
-    pub success: bool,
-    pub output: Option<serde_json::Value>,
-    pub elapsed_us: u64,
-    pub fuel_consumed: u64,
-    pub error: Option<String>,
 }
 ```
 
@@ -436,67 +403,6 @@ if GlobalServiceQuery::is_initialized() { /* ... */ }
 
 ---
 
-## 使用指南
-
-### 1. 创建服务实例
-
-```rust
-use cmx_service::{CmxService, ServiceConfig};
-use cmx_traits::{PluginQuery, RuntimeInvoker};
-use std::sync::Arc;
-
-// 使用默认配置
-let service = CmxService::with_defaults(
-    plugin_query,  // Arc<dyn PluginQuery>
-    runtime,       // Arc<dyn RuntimeInvoker>
-);
-
-// 或使用自定义配置
-let config = ServiceConfig {
-    invoke_timeout_ms: 60000,
-    max_retries: 5,
-    enable_orchestration_cache: true,
-};
-let service = CmxService::new(plugin_query, runtime, config);
-```
-
-### 2. 单次调用
-
-```rust
-use cmx_service::InvokeRequest;
-
-let request = InvokeRequest {
-    plugin_id: "my-plugin".to_string(),
-    function_name: "handle_request".to_string(),
-    input: json!({"data": "value"}),
-    db_id: Some("main-db".to_string()),
-    request_id: Some("req-001".to_string()),
-    tenant_id: None,
-};
-
-let response = service.invoke(&request).await?;
-
-if response.success {
-    println!("输出: {:?}", response.output);
-    println!("耗时: {} μs", response.elapsed_us);
-    println!("Fuel: {}", response.fuel_consumed);
-}
-```
-
-### 3. 通过 HTTP Handler 使用
-
-```rust
-use cmx_service::ServiceHandler;
-
-// 创建 Handler（从 CmxService 实例）
-let handler = ServiceHandler::new(service);
-
-// 处理调用请求
-let response = handler.handle_invoke(request).await;
-```
-
----
-
 ## 依赖约束
 
 ### 允许的依赖
@@ -546,22 +452,19 @@ pub enum ServiceError {
 
 ---
 
-## 配置选项
+## 预留模块
 
-```rust
-pub struct ServiceConfig {
-    /// 默认调用超时（毫秒）
-    pub invoke_timeout_ms: u64,  // 默认: 30000
+以下模块已实现但暂未启用，代码保留在源文件中，待后续场景需要时再开启：
 
-    /// 最大重试次数
-    pub max_retries: u32,        // 默认: 3
+| 模块 | 文件 | 核心类型 | 说明 |
+|------|------|----------|------|
+| 单次调用服务 | `service.rs` | `CmxService`, `ServiceConfig` | 单次 WASM 函数调用，目前 cmx-api 直接通过 Orchestrator 执行编排 |
+| HTTP 处理器 | `handler.rs` | `ServiceHandler` | 封装 CmxService 的 HTTP 入口，目前无外部消费者 |
+| 请求/响应类型 | `request.rs` | `InvokeRequest`, `InvokeResponse` | 单次调用的请求和响应结构体，仅被 service.rs 和 handler.rs 使用 |
 
-    /// 是否启用编排缓存
-    pub enable_orchestration_cache: bool,  // 默认: true
-}
-```
+> **启用方式**：在 `lib.rs` 中取消对应 `pub mod` 和 `pub use` 的注释即可。
 
 ---
 
-*文档版本: 3.0.0*
+*文档版本: 3.1.0*
 *最后更新: 2026-04-22*
