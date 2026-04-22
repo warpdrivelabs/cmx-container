@@ -51,3 +51,11 @@ url = "redis://192.168.1.14:6379/13"
 
 [node]
 node_id="0323"
+
+[templates]
+# 模板目录路径
+path = "crates/libs/cmx-dev/templates"
+
+[code_server]
+# code-server URL
+url = "https://dev.cloudmatrix.one:18080/"

@@ -11,6 +11,7 @@
 
 pub mod application;
 pub mod debug;
+pub mod dev;
 pub mod domain;
 pub mod module;
 pub mod plugin;
