@@ -2,16 +2,17 @@
 //!
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
+use crate::app_state::CmxAppState;
 use crate::handlers::application;
+use crate::handlers::debug;
 use crate::handlers::domain;
 use crate::handlers::module;
 use crate::handlers::plugin;
 use crate::handlers::service;
 use crate::handlers::sys_datasource;
 use crate::handlers::table_metadata;
-use crate::routes::traits::ModuleRoutes;
-use crate::app_state::CmxAppState;
 use crate::openapi::ApiDoc;
+use crate::routes::traits::ModuleRoutes;
 use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -63,6 +64,9 @@ pub fn api_routes() -> Router<CmxAppState> {
     // 注册服务调用路由（使用 ModuleRoutes）
     let router = router.merge(service::ServiceModule.routes());
 
+    // 注册调试路由（使用 ModuleRoutes）
+    let router = router.merge(debug::DebugModule.routes());
+
     router
     // 统一添加 /api 前缀
     // with_api_prefix(router)
@@ -81,6 +85,5 @@ pub fn api_routes() -> Router<CmxAppState> {
 /// - OpenAPI JSON: http://localhost:port/api-docs/openapi.json
 pub fn swagger_routes() -> Router {
     Router::new()
-        .merge(SwaggerUi::new("/swagger-ui")
-            .url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
 }

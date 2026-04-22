@@ -15,6 +15,7 @@ members = [
     "crates/libs/cmx-api",
     "crates/libs/cmx-plugin-sdk",
     "crates/libs/cmx-wasmdemo",
+    "crates/libs/cmx-debug",
     "sdk/cmx-cli",
 #    "crates/tests/cmx-serde-test",
 ]
@@ -48,6 +49,7 @@ cmx-traits = { path = "crates/libs/cmx-traits" ,version = "0.1.1",registry = "cm
 cmx-runtime = { path = "crates/libs/cmx-runtime" ,version = "0.1.1",registry = "cmx-registry"}
 cmx-service = { path = "crates/libs/cmx-service" ,version = "0.1.1",registry = "cmx-registry"}
 cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" ,version = "0.1.1",registry = "cmx-registry"}
+cmx-debug = { path = "crates/libs/cmx-debug" ,version = "0.1.0",registry = "cmx-registry"}
 
 
 # ============================================

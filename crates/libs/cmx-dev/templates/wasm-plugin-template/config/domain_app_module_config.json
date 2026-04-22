@@ -1,0 +1,7 @@
+{
+    "name": "domain_app_module",
+    "description": "域-应用-模块三层结构表定义：域（如财务域）、应用（如会计核算）、模块（如总账、应收应付、报表）",
+    "depends_on": [],
+    "priority": 0,
+    "files": []
+}

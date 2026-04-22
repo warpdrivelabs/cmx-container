@@ -1,0 +1,40 @@
+{
+    "name": "示例技能",
+    "version": "1.0.0",
+    "description": "MCP/Skills 配置示例",
+    "skills": [
+        {
+            "id": "skill1",
+            "name": "代码生成",
+            "type": "generator",
+            "enabled": true,
+            "config": {
+                "template": "default",
+                "language": "rust"
+            }
+        },
+        {
+            "id": "skill2",
+            "name": "代码审查",
+            "type": "reviewer",
+            "enabled": false,
+            "config": {
+                "rules": [
+                    "security",
+                    "performance",
+                    "style"
+                ]
+            }
+        },
+        {
+            "id": "skill3",
+            "name": "自动补全",
+            "type": "completion",
+            "enabled": true,
+            "config": {
+                "trigger": ".",
+                "maxSuggestions": 10
+            }
+        }
+    ]
+}
