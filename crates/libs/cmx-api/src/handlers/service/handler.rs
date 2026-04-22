@@ -136,7 +136,7 @@ pub async fn service_call(
     // ==================== 检查插件状态 ====================
 
     let is_install = plugin_query.is_installed(&req.plugin_id).await
-        .map_err(|e| Error::internal_error(format!("检查插件安装状态失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("检查插件安装状态失败: {}", e)))?;
 
     if !is_install {
         return Err(Error::business_error(format!("插件 {} 未安装", req.plugin_id)));
@@ -148,10 +148,10 @@ pub async fn service_call(
 
     if !is_loaded {
         let wasm_path = plugin_query.get_wasm_path(&req.plugin_id).await
-            .map_err(|e| Error::internal_error(format!("获取 WASM 路径失败: {}", e)))?;
+            .map_err(|e| Error::business_error(format!("获取 WASM 路径失败: {}", e)))?;
 
         runtime.load_module(&req.plugin_id, &wasm_path).await
-            .map_err(|e| Error::internal_error(format!("加载 WASM 模块失败: {}", e)))?;
+            .map_err(|e| Error::business_error(format!("加载 WASM 模块失败: {}", e)))?;
     }
 
     // ==================== 构建 FunctionInput ====================
@@ -166,10 +166,10 @@ pub async fn service_call(
     let start_time = std::time::Instant::now();
     // let input_bytes = serde_json::to_vec(&func_input)
     //     .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))?;
-    let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::internal_error(e.to_string()))?;
+    let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::business_error(e.to_string()))?;
 
     let invoke_result = runtime.invoke(&req.plugin_id, &req.function_name, &input_bytes).await
-        .map_err(|e| Error::internal_error(format!("WASM 调用失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("WASM 调用失败: {}", e)))?;
 
     let elapsed_us = start_time.elapsed().as_micros() as u64;
 
@@ -179,10 +179,10 @@ pub async fn service_call(
         FunctionOutput::new(serde_json::Value::Null)
     } else {
         // serde_json::from_slice(&invoke_result.output)
-        //     .map_err(|e| Error::internal_error(format!("输出数据解析失败: {}", e)))?
+        //     .map_err(|e| Error::business_error(format!("输出数据解析失败: {}", e)))?
 
        rmp_serde::from_slice(&invoke_result.output)
-            .map_err(|e| Error::internal_error(e.to_string()))?
+            .map_err(|e| Error::business_error(e.to_string()))?
     };
 
     // ==================== 构建响应 ====================
@@ -259,7 +259,7 @@ async fn execute_service_inner(
     ).await
         .map_err(|e| {
             error!("服务{}执行失败: {:?}", service_key, e);
-            return  Error::internal_error(format!("服务执行失败: {}", e));
+            return  Error::business_error(format!("服务执行失败: {}", e));
         })?;
 
     // ==================== 构建响应 ====================
@@ -601,7 +601,7 @@ pub async fn get_services_by_plugin(
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
     let services = service_query.get_services_by_plugin(&query.plugin_id).await
-        .map_err(|e| Error::internal_error(format!("获取插件服务失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("获取插件服务失败: {}", e)))?;
 
     let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
         ServiceListItem {
@@ -703,7 +703,7 @@ pub async fn page_services(
     let size = params.get_size() as u64;
 
     let result = service_query.page_services(filter, page, size).await
-        .map_err(|e| Error::internal_error(format!("分页查询失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("分页查询失败: {}", e)))?;
 
     let items: Vec<ServiceListItem> = result.items.into_iter().map(|s| {
         ServiceListItem {
@@ -783,7 +783,7 @@ pub async fn delete_service(
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
     service_storage.delete_service(&req.service_key, None, None).await
-        .map_err(|e| Error::internal_error(format!("删除服务失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("删除服务失败: {}", e)))?;
 
     Ok(Json(crate::api_response::UnitResp::msg("删除成功")))
 }
@@ -851,7 +851,7 @@ pub async fn service_exists(
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
     let service = service_query.get_service(&query.service_key).await
-        .map_err(|e| Error::internal_error(format!("查询服务存在性失败: {}", e)))?;
+        .map_err(|e| Error::business_error(format!("查询服务存在性失败: {}", e)))?;
 
     let exists = service.is_some();
     Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
