@@ -1,0 +1,479 @@
+use anyhow::Result;
+use extism::PluginBuilder;
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
+
+pub mod plugin;
+
+lazy_static! {
+    pub static ref DEBUG_SESSIONS: Mutex<HashMap<String, DebugSession>> =
+        Mutex::new(HashMap::new());
+}
+
+static CLEANUP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+fn start_cleanup_thread() {
+    if CLEANUP_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    thread::spawn(|| loop {
+        thread::sleep(Duration::from_millis(500));
+        cleanup_dead_sessions();
+    });
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugSession {
+    pub id: String,
+    pub plugin_name: String,
+    pub plugin_version: String,
+    pub function_name: String,
+    pub wasm_path: String,
+    pub wasm_bytes: Vec<u8>,
+    pub source_path: String,
+    pub cmx_pid: u32,
+    pub start_time: Instant,
+    pub is_active: bool,
+    pub is_protected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebugRequest {
+    pub function: String,
+    pub args: Vec<serde_json::Value>,
+    pub data: serde_json::Value,
+    #[serde(rename = "self")]
+    pub is_self: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct DebugResponse {
+    pub code: i32,
+    pub source_path: String,
+    pub wasm_path: String,
+    pub code_server_url: Option<String>,
+    pub plugin: String,
+    pub functions: Vec<WasmFunctionInfo>,
+    pub cmx_pid: u32,
+    pub debug_function: String,
+    pub message: Option<String>,
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct WasmFunctionInfo {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvokeResponse {
+    pub code: i32,
+    pub result: Option<JsonValue>,
+    pub error: Option<String>,
+}
+
+pub fn get_session(session_id: &str) -> Option<DebugSession> {
+    let sessions = DEBUG_SESSIONS.lock().unwrap();
+    sessions.get(session_id).cloned()
+}
+
+pub fn create_session(session: DebugSession) {
+    let mut sessions = DEBUG_SESSIONS.lock().unwrap();
+    sessions.insert(session.id.clone(), session);
+}
+
+pub fn remove_session(session_id: &str) -> Option<DebugSession> {
+    let mut sessions = DEBUG_SESSIONS.lock().unwrap();
+    sessions.remove(session_id)
+}
+
+pub fn get_active_session() -> Option<DebugSession> {
+    let sessions = DEBUG_SESSIONS.lock().unwrap();
+    sessions.values().find(|s| s.is_active).cloned()
+}
+
+pub fn clear_all_sessions() {
+    let mut sessions = DEBUG_SESSIONS.lock().unwrap();
+    sessions.clear();
+}
+
+pub fn is_debugger_attached(target_pid: u32) -> bool {
+    let lldb_pids = if let Ok(output) = std::process::Command::new("pgrep")
+        .args(["-f", "codelldb|lldb"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        stdout
+            .trim()
+            .split('\n')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
+
+    if lldb_pids.is_empty() {
+        return false;
+    }
+
+    log::info!("[cmx-debug] Found lldb/codelldb PIDs: {:?}", lldb_pids);
+
+    for pid in &lldb_pids {
+        if let Ok(lsof_output) = std::process::Command::new("lsof")
+            .args(["-p", pid])
+            .output()
+        {
+            let lsof_str = String::from_utf8_lossy(&lsof_output.stdout);
+            if lsof_str.contains("cmx-container") {
+                log::info!("[cmx-debug] lldb进程 {} 通过lsof附加到了cmx-container", pid);
+                return true;
+            }
+        }
+        if let Ok(fds) = std::fs::read_dir(format!("/proc/{}/fd", pid)) {
+            for fd in fds.flatten() {
+                if let Ok(link) = std::fs::read_link(fd.path()) {
+                    let link_str = link.to_string_lossy();
+                    if link_str.contains(&target_pid.to_string()) {
+                        log::info!(
+                            "[cmx-debug] lldb进程 {} 通过fd附加到目标进程 {}",
+                            pid,
+                            target_pid
+                        );
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!("[cmx-debug] lldb进程存在但未附加到目标进程，保守返回true");
+    true
+}
+
+pub fn cleanup_dead_sessions() {
+    let mut sessions = DEBUG_SESSIONS.lock().unwrap();
+    let active_count = sessions.len();
+    log::info!(
+        "[cmx-debug] cleanup_dead_sessions called, active sessions: {}",
+        active_count
+    );
+    if active_count > 10 {
+        log::warn!(
+            "[cmx-debug] Many active sessions ({}), cleanup may be needed",
+            active_count
+        );
+    }
+    sessions.retain(|session_id, session| {
+        let attached = is_debugger_attached(session.cmx_pid);
+        if session.is_protected {
+            if attached {
+                log::info!(
+                    "[cmx-debug] Session {} is protected and debugger is attached, unprotecting",
+                    session_id
+                );
+                session.is_protected = false;
+                return true;
+            } else {
+                log::info!(
+                    "[cmx-debug] Session {} is protected (debugger starting), keeping",
+                    session_id
+                );
+                return true;
+            }
+        }
+        log::info!(
+            "[cmx-debug] Session {} (cmx_pid={}), is_debugger_attached={}",
+            session_id,
+            session.cmx_pid,
+            attached
+        );
+        if !attached {
+            log::info!(
+                "[cmx-debug] No debugger attached for {}, cleaning up session",
+                session_id
+            );
+            return false;
+        }
+        log::info!("[cmx-debug] Session {} is alive, keeping", session_id);
+        true
+    });
+}
+
+pub fn init() {
+    start_cleanup_thread();
+    log::info!("[cmx-debug] Debug session manager initialized");
+}
+
+pub fn get_code_server_url() -> String {
+    std::env::var("CODE_SERVER_URL")
+        .unwrap_or_else(|_| "https://dev.cloudmatrix.one:18080".to_string())
+}
+
+pub async fn get_code_server_url_async() -> String {
+    if let Ok(url) = std::env::var("CODE_SERVER_URL") {
+        if !url.is_empty() {
+            log::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
+            return url;
+        }
+    }
+
+    let plugin_port = std::env::var("PLUGIN_PORT").unwrap_or_else(|_| "9000".to_string());
+    let url = format!("http://localhost:{}/config", plugin_port);
+
+    log::info!("[cmx-debug] Fetching code_server_url from: {}", url);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(resp) = client.get(&url).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
+                {
+                    log::info!(
+                        "[cmx-debug] Got code_server_url from config: {}",
+                        code_server_url
+                    );
+                    return code_server_url.to_string();
+                }
+            }
+        }
+    }
+
+    log::warn!("[cmx-debug] Failed to get code_server_url, using default");
+    "https://dev.cloudmatrix.one:18080".to_string()
+}
+
+pub fn call_plugin_function(
+    wasm_bytes: &[u8],
+    func_name: &str,
+    input: &JsonValue,
+) -> Result<JsonValue> {
+    std::env::set_var("EXTISM_DEBUG", "1");
+    let mut plugin = PluginBuilder::new(wasm_bytes).with_wasi(true).build()?;
+    std::env::remove_var("EXTISM_DEBUG");
+
+    let input_bytes = serde_json::to_vec(input)?;
+    let result = plugin.call::<&[u8], &[u8]>(func_name, &input_bytes)?;
+    let result_str = String::from_utf8_lossy(result);
+
+    if result_str.is_empty() {
+        return Ok(serde_json::json!({ "success": true, "data": { "result": null } }));
+    }
+
+    match serde_json::from_str::<JsonValue>(&result_str) {
+        Ok(json) => Ok(json),
+        Err(_) => Ok(serde_json::json!({
+            "success": true,
+            "data": { "result": result_str.to_string() }
+        })),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartDebugRequest {
+    pub function: String,
+    pub args: Vec<JsonValue>,
+    pub data: JsonValue,
+}
+
+pub fn start_debug_session(
+    plugin_name: String,
+    plugin_version: String,
+    function_name: String,
+    wasm_path: String,
+    wasm_bytes: Vec<u8>,
+    source_path: String,
+    wasm_functions: Vec<WasmFunctionInfo>,
+) -> DebugResponse {
+    let cmx_pid = std::process::id();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let session_id = format!("debug_{}_{}", plugin_name, timestamp);
+
+    let session = DebugSession {
+        id: session_id.clone(),
+        plugin_name: plugin_name.clone(),
+        plugin_version: plugin_version.clone(),
+        function_name: function_name.clone(),
+        wasm_path: wasm_path.clone(),
+        wasm_bytes: wasm_bytes,
+        source_path: source_path.clone(),
+        cmx_pid,
+        start_time: std::time::Instant::now(),
+        is_active: true,
+        is_protected: true,
+    };
+
+    create_session(session);
+
+    DebugResponse {
+        code: 0,
+        source_path,
+        wasm_path,
+        code_server_url: Some(get_code_server_url()),
+        plugin: plugin_name,
+        functions: wasm_functions,
+        cmx_pid,
+        debug_function: function_name,
+        message: None,
+        session_id: Some(session_id),
+    }
+}
+
+pub async fn start_debug_session_async(
+    plugin_name: String,
+    plugin_version: String,
+    function_name: String,
+    wasm_path: String,
+    wasm_bytes: Vec<u8>,
+    source_path: String,
+    wasm_functions: Vec<WasmFunctionInfo>,
+) -> DebugResponse {
+    let cmx_pid = std::process::id();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let session_id = format!("debug_{}_{}", plugin_name, timestamp);
+
+    let session = DebugSession {
+        id: session_id.clone(),
+        plugin_name: plugin_name.clone(),
+        plugin_version: plugin_version.clone(),
+        function_name: function_name.clone(),
+        wasm_path: wasm_path.clone(),
+        wasm_bytes: wasm_bytes,
+        source_path: source_path.clone(),
+        cmx_pid,
+        start_time: std::time::Instant::now(),
+        is_active: true,
+        is_protected: true,
+    };
+
+    create_session(session);
+
+    DebugResponse {
+        code: 0,
+        source_path,
+        wasm_path,
+        code_server_url: Some(get_code_server_url_async().await),
+        plugin: plugin_name,
+        functions: wasm_functions,
+        cmx_pid,
+        debug_function: function_name,
+        message: None,
+        session_id: Some(session_id),
+    }
+}
+
+pub fn start_debug_session_by_name(
+    plugin_name_or_id: &str,
+    function_name: String,
+    args: Vec<JsonValue>,
+    data: JsonValue,
+) -> Result<DebugResponse> {
+    let plugin_dir = if let Some(found) = plugin::find_plugin_dir_by_id(plugin_name_or_id) {
+        found
+    } else {
+        plugin::find_plugin_dir_by_name(plugin_name_or_id)
+    };
+
+    if !plugin_dir.exists() || !plugin_dir.is_dir() {
+        return Err(anyhow::anyhow!("Plugin not found: {}", plugin_name_or_id));
+    }
+
+    let wasm_file = plugin::find_wasm_file(&plugin_dir)
+        .ok_or_else(|| anyhow::anyhow!("No wasm file found in plugin"))?;
+
+    let wasm_bytes = std::fs::read(&wasm_file)
+        .map_err(|e| anyhow::anyhow!("Failed to read wasm file: {}", e))?;
+
+    let source_path = plugin::get_source_path_from_plugin_json(&plugin_dir)
+        .unwrap_or_else(|| plugin_dir.to_string_lossy().to_string());
+
+    let (plugin_name, plugin_version) = plugin::get_plugin_info_from_json(&plugin_dir)
+        .unwrap_or_else(|| (plugin_name_or_id.to_string(), "0.1.0".to_string()));
+
+    let wasm_functions = Vec::new();
+
+    Ok(start_debug_session(
+        plugin_name,
+        plugin_version,
+        function_name,
+        wasm_file.to_string_lossy().to_string(),
+        wasm_bytes,
+        source_path,
+        wasm_functions,
+    ))
+}
+
+pub async fn start_debug_session_by_name_async(
+    plugin_name_or_id: &str,
+    function_name: String,
+    args: Vec<JsonValue>,
+    data: JsonValue,
+) -> Result<DebugResponse> {
+    log::info!(
+        "[cmx-debug] start_debug_session_by_name_async: plugin={}",
+        plugin_name_or_id
+    );
+
+    let plugin_dir = if let Some(found) = plugin::find_plugin_dir_by_id(plugin_name_or_id) {
+        found
+    } else {
+        plugin::find_plugin_dir_by_name(plugin_name_or_id)
+    };
+
+    log::info!("[cmx-debug] plugin_dir: {:?}", plugin_dir);
+
+    if !plugin_dir.exists() || !plugin_dir.is_dir() {
+        log::error!("[cmx-debug] Plugin not found: {}", plugin_name_or_id);
+        return Err(anyhow::anyhow!("Plugin not found: {}", plugin_name_or_id));
+    }
+
+    let wasm_file = plugin::find_wasm_file(&plugin_dir)
+        .ok_or_else(|| anyhow::anyhow!("No wasm file found in plugin"))?;
+
+    log::info!("[cmx-debug] wasm_file: {:?}", wasm_file);
+
+    let wasm_bytes = std::fs::read(&wasm_file)
+        .map_err(|e| anyhow::anyhow!("Failed to read wasm file: {}", e))?;
+
+    let source_path = plugin::get_source_path_from_plugin_json(&plugin_dir)
+        .unwrap_or_else(|| plugin_dir.to_string_lossy().to_string());
+
+    let (plugin_name, plugin_version) = plugin::get_plugin_info_from_json(&plugin_dir)
+        .unwrap_or_else(|| (plugin_name_or_id.to_string(), "0.1.0".to_string()));
+
+    let wasm_functions = Vec::new();
+
+    log::info!(
+        "[cmx-debug] Creating session for plugin={}, version={}",
+        plugin_name,
+        plugin_version
+    );
+
+    Ok(start_debug_session_async(
+        plugin_name,
+        plugin_version,
+        function_name,
+        wasm_file.to_string_lossy().to_string(),
+        wasm_bytes,
+        source_path,
+        wasm_functions,
+    )
+    .await)
+}

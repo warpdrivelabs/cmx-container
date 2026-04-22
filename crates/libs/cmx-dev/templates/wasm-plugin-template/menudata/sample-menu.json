@@ -1,0 +1,27 @@
+{
+    "name": "示例菜单",
+    "version": "1.0.0",
+    "description": "菜单配置示例",
+    "items": [
+        {
+            "id": "menu1",
+            "label": "首页",
+            "icon": "home",
+            "path": "/home",
+            "children": []
+        },
+        {
+            "id": "menu2",
+            "label": "设置",
+            "icon": "settings",
+            "path": "/settings",
+            "children": [
+                {
+                    "id": "menu2-1",
+                    "label": "基本设置",
+                    "path": "/settings/basic"
+                }
+            ]
+        }
+    ]
+}

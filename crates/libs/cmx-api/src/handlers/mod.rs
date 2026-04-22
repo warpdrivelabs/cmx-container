@@ -10,6 +10,7 @@
 //! - `handler.rs` - Handler 实现（HTTP 处理，可选）
 
 pub mod application;
+pub mod debug;
 pub mod domain;
 pub mod module;
 pub mod plugin;

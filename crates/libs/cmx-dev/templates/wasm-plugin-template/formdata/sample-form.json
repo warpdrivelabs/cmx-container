@@ -1,0 +1,43 @@
+{
+    "name": "示例表单",
+    "version": "1.0.0",
+    "description": "表单配置示例",
+    "fields": [
+        {
+            "id": "field1",
+            "type": "input",
+            "label": "用户名",
+            "placeholder": "请输入用户名",
+            "required": true
+        },
+        {
+            "id": "field2",
+            "type": "input",
+            "label": "邮箱",
+            "placeholder": "请输入邮箱",
+            "required": true,
+            "validation": "email"
+        },
+        {
+            "id": "field3",
+            "type": "select",
+            "label": "角色",
+            "options": [
+                {
+                    "label": "管理员",
+                    "value": "admin"
+                },
+                {
+                    "label": "用户",
+                    "value": "user"
+                }
+            ]
+        },
+        {
+            "id": "field4",
+            "type": "textarea",
+            "label": "备注",
+            "placeholder": "请输入备注"
+        }
+    ]
+}

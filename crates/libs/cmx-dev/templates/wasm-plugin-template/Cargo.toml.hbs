@@ -1,7 +1,7 @@
 [package]
-name = "cmx-wasmdemo"
-version.workspace = true
-edition.workspace = true
+name = "{{project_name}}"
+version = "0.1.0"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
@@ -23,3 +23,11 @@ cmx-plugin-sdk = { version = "0.1.1", registry = "cmx-registry" }
 # ============================================
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[profile.release]
+lto = true
+opt-level = "s"
+
+[profile.dev]
+debug = 2
+opt-level = 0
