@@ -42,6 +42,9 @@ pub struct InvokeOptions {
     /// 默认 8 层。当 WASM-A 调用 WASM-B，WASM-B 又调用 WASM-C 时，
     /// 深度为 2。超过限制时立即返回错误。
     pub max_depth: u32,
+
+    /// 是否调试模式
+    pub  debug:bool,
 }
 
 impl Default for InvokeOptions {
@@ -49,6 +52,7 @@ impl Default for InvokeOptions {
         Self {
             timeout: DEFAULT_TIMEOUT,
             max_depth: DEFAULT_MAX_DEPTH,
+            debug:false
         }
     }
 }
@@ -236,7 +240,7 @@ impl std::fmt::Display for InvokeGuardError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DepthExceeded { current, max, plugin_id, function_name } => {
-                write!(f, "调用深度超限: 当前深度 {} >= 最大深度 {}，插件 {} 函数 {}", 
+                write!(f, "调用深度超限: 当前深度 {} >= 最大深度 {}，插件 {} 函数 {}",
                     current, max, plugin_id, function_name)
             }
             Self::CycleDetected { plugin_id, function_name } => {

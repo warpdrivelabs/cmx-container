@@ -33,29 +33,29 @@
 
 // ==================== 依赖导入 ====================
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use super::models::{
+    FunctionCallRequest, FunctionCallResponse,
+    ServiceByPluginQuery, ServiceDetailResponse, ServiceExecuteRequest,
+    ServiceExecuteResponse,
+    ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
+    ServiceListItem, ServiceOrchestrationError,
+};
+use crate::api_response::ApiResp;
+use crate::app_state::CmxAppState;
+use crate::error::Error;
+use crate::middleware::CmxSvrContext;
 use axum::{
     extract::{Path, Query, State},
     Json,
 };
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServicePageFilter};
-use log::error;
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
 use cmx_service::{GlobalServiceRegistry, ServiceError};
-use crate::api_response::ApiResp;
-use crate::app_state::CmxAppState;
-use crate::error::Error;
-use crate::middleware::CmxSvrContext;
-use super::models::{
-    FunctionCallRequest, FunctionCallResponse,
-    ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
-    ServiceOrchestrationError,
-    ServiceGetQuery, ServiceByPluginQuery, ServiceExistsQuery,
-    ServiceListItem, ServiceDetailResponse,
-};
+use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
+use log::error;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 // ==================== 函数直接调用 Handler ====================
 
@@ -157,7 +157,14 @@ pub async fn service_call(
     // ==================== 构建 FunctionInput ====================
 
     let mut svr_ctx = svr_ctx;
-    svr_ctx.initial_input = req.input.clone();
+
+   //调试的时候initial_input 是服务最开始的入参
+    if let Some(init_input) = req.initial_input {
+        svr_ctx.initial_input = init_input.clone();
+    } else {
+        svr_ctx.initial_input = req.input.clone();
+    }
+
 
     let func_input = FunctionInput::from_value(req.input.clone(), svr_ctx);
 
@@ -168,7 +175,11 @@ pub async fn service_call(
     //     .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))?;
     let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::business_error(e.to_string()))?;
 
-    let invoke_result = runtime.invoke(&req.plugin_id, &req.function_name, &input_bytes).await
+    //调用选项参数
+    let mut  invoke_options = InvokeOptions::default();
+    invoke_options.debug = req.debug;
+
+    let invoke_result = runtime.invoke_with_options(&req.plugin_id, &req.function_name, &input_bytes,&invoke_options).await
         .map_err(|e| Error::business_error(format!("WASM 调用失败: {}", e)))?;
 
     let elapsed_us = start_time.elapsed().as_micros() as u64;

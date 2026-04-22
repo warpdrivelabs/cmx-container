@@ -21,10 +21,10 @@
 
 - **服务调用** — 单次 WASM 函数调用
 - **编排执行** — 基于 Flow JSON 的 DAG 编排，支持事务框、多分支路由
-- **生命周期监听** — 响应插件激活/停用事件
+- **生命周期监听** — 响应插件激活/停用/升级/降级事件，自动同步服务缓存
 - **服务注册中心** — 服务信息的内存缓存
-- **服务仓储层** — 服务定义的数据库访问
-- **HTTP Handler** — 提供 HTTP 接口封装
+- **服务仓储层** — 服务定义的数据库访问（CRUD + 分页）
+- **HTTP Handler** — 提供 HTTP 接口封装供 cmx-api 调用
 
 ---
 
@@ -77,22 +77,20 @@ crates/libs/cmx-service/
 │   ├── lib.rs                    # 模块入口，全局单例
 │   ├── service.rs                # CmxService 核心服务
 │   ├── handler.rs                # ServiceHandler HTTP 处理器
-│   ├── request.rs                # 请求/响应类型
+│   ├── request.rs                # 请求/响应类型 (InvokeRequest / InvokeResponse)
 │   ├── error.rs                  # ServiceError 错误类型
-│   ├── registry.rs               # ServiceRegistry 服务注册中心
-│   ├── repository.rs             # ServiceRepository 服务仓储层
-│   ├── service_query_impl.rs     # ServiceQuery trait 实现
+│   ├── registry.rs               # ServiceRegistry 服务注册中心（内存缓存）
+│   ├── repository.rs             # ServiceRepository 服务仓储层（数据库访问）
+│   ├── service_query_impl.rs     # ServiceQuery trait 实现（缓存优先）
 │   ├── service_storage_impl.rs   # ServiceStorage trait 实现
-│   ├── lifecycle_listener.rs     # 生命周期监听器
+│   ├── lifecycle_listener.rs     # 生命周期监听器（插件安装/升级/卸载/降级）
 │   └── orchestrator/             # 编排器模块
-│       ├── mod.rs                # 模块入口
-│       ├── types.rs              # 类型定义
+│       ├── mod.rs                # 模块入口，统一导出
+│       ├── types.rs              # 类型定义 (OrchestrationResult, ExecutionStep 等)
 │       ├── executor.rs           # Orchestrator 主执行器
-│       ├── node_handler.rs       # 节点执行器
-│       ├── flow_navigator.rs     # 流程导航器
-│       └── transaction_manager.rs # 事务管理器
-└── tests/
-    └── service_test.rs           # 单元测试
+│       ├── node_handler.rs       # 节点执行器（统一 func/switch 调用逻辑）
+│       ├── flow_navigator.rs     # 流程导航器（节点和边查找）
+│       └── transaction_manager.rs # 事务管理器（事务生命周期管理）
 ```
 
 ---
@@ -121,43 +119,45 @@ pub struct OrchestrationResult {
     /// 是否执行成功
     pub success: bool,
     /// 最终输出结果
-    pub output: Option<String>,
+    pub output: Option<serde_json::Value>,
     /// 各步骤执行记录
     pub steps: Vec<ExecutionStep>,
     /// 总执行耗时（微秒）
     pub total_elapsed_us: u64,
     /// 结构化错误信息（失败时）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<OrchestrationError>,
 }
 ```
 
 ### ExecutionStep
 
-执行步骤记录：
+执行步骤记录，自包含成功/失败状态和排错信息：
 
 ```rust
 pub struct ExecutionStep {
     pub node_id: String,
     pub node_name: String,
     pub node_type: String,
-    pub status: StepStatus,        // Success / Failed / Skipped
-    pub output: Option<String>,
+    pub status: StepStatus,                // Success / Failed / Skipped
+    pub output: Option<serde_json::Value>,
     pub elapsed_us: u64,
-    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,             // 失败时的错误描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_output: Option<serde_json::Value>,  // 失败时的上一步输出
 }
 ```
 
-### ExecuteOptions
+### StepStatus
 
-执行选项：
+步骤状态枚举：
 
 ```rust
-pub struct ExecuteOptions {
-    /// 是否返回步骤数据
-    /// - false: 仅返回最终结果（生产环境推荐）
-    /// - true: 返回所有步骤数据（调试时使用）
-    /// - 失败时始终返回步骤数据
-    pub include_steps: bool,
+pub enum StepStatus {
+    Success,   // 执行成功
+    Failed,    // 执行失败
+    Skipped,   // 跳过未执行
 }
 ```
 
@@ -167,19 +167,37 @@ pub struct ExecuteOptions {
 
 ```rust
 pub struct OrchestrationError {
-    /// 失败步骤详情
-    pub failed_step: Option<FailedStepInfo>,
-    /// 错误摘要
+    /// 错误摘要信息
     pub message: String,
 }
+```
 
-pub struct FailedStepInfo {
-    pub node_id: String,
-    pub node_name: String,
-    pub node_type: String,
-    pub step_index: usize,
-    pub error: String,
-    pub previous_output: Option<String>,  // 上一步输出，便于排错
+> **设计说明**：失败步骤的详细信息（node_id、error、previous_output）统一记录在 `steps` 数组中对应步骤的 `ExecutionStep` 里，不再单独维护 `failed_step` 字段。失败时 `steps` 数组中最后一个 `status=Failed` 的步骤即为失败步骤。
+
+### ExecutionContext
+
+执行上下文，在编排执行过程中传递：
+
+```rust
+pub struct ExecutionContext {
+    /// 当前步骤输出（传递给下一个步骤的输入）
+    pub current_output: serde_json::Value,
+    /// 服务调用上下文（包含初始入参、请求头、各步骤输出、事务ID）
+    pub svr_context: SVRContext,
+}
+```
+
+### ExecuteOptions
+
+执行选项：
+
+```rust
+pub struct ExecuteOptions {
+    /// 是否返回 steps 数据
+    /// - false: 仅返回最终结果（生产环境推荐）
+    /// - true: 返回所有步骤数据（调试时使用）
+    /// - 失败时始终返回步骤数据
+    pub include_steps: bool,
 }
 ```
 
@@ -237,8 +255,19 @@ pub struct InvokeResponse {
       - skylake-func: 执行函数，跳转到下一个节点
       - skylake-switch: 执行函数，根据返回值选择分支
       - skylake-transaction: 执行事务框内的所有子节点
-5. 构建返回结果（OrchestrationResult）
+5. 循环退出后处理（提交/回滚事务）
+6. 构建返回结果（OrchestrationResult）
 ```
+
+### 节点执行流程
+
+```text
+解析节点元信息 → 确保 WASM 模块已加载 → 构建 FunctionInput → 调用 WASM 函数 → 解析 FunctionOutput → 更新 ExecutionContext → 记录 ExecutionStep
+```
+
+- `func` 和 `switch` 节点的执行逻辑统一由 `NodeHandler::execute_node()` 处理
+- 输入序列化使用 MessagePack（`rmp_serde`），而非 JSON
+- `switch` 节点根据函数返回值构建端口ID（如返回 `"1"` → 端口 `"out_1"`）
 
 ### 事务管理
 
@@ -249,6 +278,24 @@ pub struct InvokeResponse {
     |                              |
     +--节点不在事务框--> 正常执行   +--执行失败--> [回滚事务] --> [无事务]
 ```
+
+状态转换规则：
+
+| 当前状态 | 节点 parent | 操作 |
+|----------|-------------|------|
+| 无活跃事务 | None | 无操作，正常执行 |
+| 无活跃事务 | Some(id) | 开启新事务 |
+| 有活跃事务 | Some(id) 且 id 相同 | 继续在当前事务中执行 |
+| 有活跃事务 | None 或 id 不同 | 提交当前事务，必要时开启新事务 |
+
+### 失败处理
+
+当节点执行失败时：
+1. 在 `steps` 数组中追加一个 `status=Failed` 的 `ExecutionStep`，包含 `error` 和 `previous_output`
+2. 构建 `OrchestrationError { message }` 摘要信息
+3. 跳出执行循环
+4. 如果有活跃事务则回滚
+5. 返回 `OrchestrationResult { success: false, error: Some(...), steps: [...] }`
 
 ### 调用示例
 
@@ -267,8 +314,7 @@ let orchestrator = Orchestrator::new(
 let options = ExecuteOptions::new(true);  // 返回步骤数据
 let result = orchestrator.execute_service(
     "user-service",
-    r#"{"user_id": "12345"}"#,
-    headers,
+    svr_context,
     options,
 ).await?;
 
@@ -276,14 +322,94 @@ if result.success {
     println!("输出: {:?}", result.output);
     println!("总耗时: {} μs", result.total_elapsed_us);
 } else {
-    println!("失败: {}", result.error.unwrap().message);
-    // 查看失败步骤详情
-    if let Some(failed) = result.error.unwrap().failed_step {
-        println!("失败节点: {} ({})", failed.node_name, failed.node_id);
-        println!("上一步输出: {:?}", failed.previous_output);
+    // 获取错误摘要
+    if let Some(err) = &result.error {
+        println!("失败: {}", err.message);
+    }
+    // 从 steps 中找到失败步骤，获取详细排错信息
+    for step in &result.steps {
+        if matches!(step.status, StepStatus::Failed) {
+            println!("失败节点: {} ({})", step.node_name, step.node_id);
+            println!("错误信息: {:?}", step.error);
+            println!("上一步输出: {:?}", step.previous_output);
+        }
     }
 }
 ```
+
+### 响应 JSON 示例
+
+成功时：
+
+```json
+{
+  "success": true,
+  "output": {"result": "ok"},
+  "steps": [],
+  "total_elapsed_us": 1500,
+  "error": null
+}
+```
+
+失败时：
+
+```json
+{
+  "success": false,
+  "output": null,
+  "steps": [
+    {
+      "node_id": "node-1",
+      "node_name": "查询用户",
+      "node_type": "skylake-func",
+      "status": "Success",
+      "output": {"user_id": "123"},
+      "elapsed_us": 500,
+      "error": null,
+      "previous_output": null
+    },
+    {
+      "node_id": "node-2",
+      "node_name": "更新余额",
+      "node_type": "skylake-func",
+      "status": "Failed",
+      "output": null,
+      "elapsed_us": 0,
+      "error": "运行时调用失败: 余额不足",
+      "previous_output": {"user_id": "123"}
+    }
+  ],
+  "total_elapsed_us": 800,
+  "error": {
+    "message": "步骤 [更新余额(node-2)] 执行失败: 运行时调用失败: 余额不足"
+  }
+}
+```
+
+---
+
+## 服务查询与缓存
+
+### 缓存优先策略
+
+`ServiceQueryImpl` 实现 `ServiceQuery` trait，采用缓存优先策略：
+
+```text
+查询请求 → 检查内存缓存 (ServiceRegistry)
+             ├── 命中 → 直接返回
+             └── 未命中 → 查询数据库 (ServiceRepository) → 回写缓存 → 返回
+```
+
+### 生命周期同步
+
+`ServiceLifecycleListener` 监听插件生命周期事件，自动同步服务缓存：
+
+| 事件 | 处理逻辑 |
+|------|----------|
+| 插件安装 | 从数据库加载服务定义到缓存 |
+| 插件升级 | 清空旧缓存 → 强制从数据库加载最新数据 |
+| 插件卸载 | 清理内存缓存 |
+| 插件降级 | 清空旧缓存 → 强制从数据库加载最新数据 |
 
 ---
 
@@ -303,6 +429,9 @@ GlobalServiceRegistry::set(registry)?;
 let query = GlobalServiceQuery::get();
 let storage = GlobalServiceStorage::get();
 let registry = GlobalServiceRegistry::get();
+
+// 检查是否已初始化
+if GlobalServiceQuery::is_initialized() { /* ... */ }
 ```
 
 ---
@@ -312,14 +441,14 @@ let registry = GlobalServiceRegistry::get();
 ### 1. 创建服务实例
 
 ```rust
-use cmx_service::{CmxService, ServiceConfig, ServiceHandler};
+use cmx_service::{CmxService, ServiceConfig};
 use cmx_traits::{PluginQuery, RuntimeInvoker};
 use std::sync::Arc;
 
 // 使用默认配置
 let service = CmxService::with_defaults(
     plugin_query,  // Arc<dyn PluginQuery>
-    runtime,        // Arc<dyn RuntimeInvoker>
+    runtime,       // Arc<dyn RuntimeInvoker>
 );
 
 // 或使用自定义配置
@@ -350,6 +479,7 @@ let response = service.invoke(&request).await?;
 if response.success {
     println!("输出: {:?}", response.output);
     println!("耗时: {} μs", response.elapsed_us);
+    println!("Fuel: {}", response.fuel_consumed);
 }
 ```
 
@@ -357,18 +487,12 @@ if response.success {
 
 ```rust
 use cmx_service::ServiceHandler;
-use axum::{Router, extract::State, Json};
 
-// 创建 Handler
-let handler = ServiceHandler::from_components(plugin_query, runtime);
+// 创建 Handler（从 CmxService 实例）
+let handler = ServiceHandler::new(service);
 
-// 在路由中使用
-async fn handle_call(
-    State(handler): State<Arc<ServiceHandler>>,
-    Json(req): Json<InvokeRequest>,
-) -> Json<InvokeResponse> {
-    Json(handler.handle_invoke(req).await)
-}
+// 处理调用请求
+let response = handler.handle_invoke(request).await;
 ```
 
 ---
@@ -379,7 +503,7 @@ async fn handle_call(
 
 - `cmx-core` — 基础类型
 - `cmx-traits` — trait 定义
-- `cmx-database` — 直接 SQL 执行（非 WASM）
+- `cmx-database` — 直接 SQL 执行和事务管理
 
 ### 禁止的依赖
 
@@ -414,9 +538,9 @@ pub enum ServiceError {
     OutputSerializeError(String),
     DatabaseError(String),
     TraitError(TraitError),
+    NodeExecutionFailed { node_id: String, node_name: String, node_type: String, detail: String },
+    TransactionRolledBack { txn_id: String, reason: String },
     InternalError(String),
-    NodeExecutionFailed { node_id, node_name, node_type, detail },
-    TransactionRolledBack { txn_id, reason },
 }
 ```
 
@@ -428,10 +552,10 @@ pub enum ServiceError {
 pub struct ServiceConfig {
     /// 默认调用超时（毫秒）
     pub invoke_timeout_ms: u64,  // 默认: 30000
-    
+
     /// 最大重试次数
     pub max_retries: u32,        // 默认: 3
-    
+
     /// 是否启用编排缓存
     pub enable_orchestration_cache: bool,  // 默认: true
 }
@@ -439,5 +563,5 @@ pub struct ServiceConfig {
 
 ---
 
-*文档版本: 2.0.0*
-*最后更新: 2026-04-14*
+*文档版本: 3.0.0*
+*最后更新: 2026-04-22*

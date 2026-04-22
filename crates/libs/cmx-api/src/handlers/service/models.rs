@@ -28,6 +28,11 @@ pub struct FunctionCallRequest {
     pub function_name: String,
     /// 输入数据（传递给函数的 input 字段，支持 JSON 对象或字符串）
     pub input: serde_json::Value,
+    /// 初始输入数据（调试的时候传服务最开始的参数）
+    pub initial_input: Option<serde_json::Value>,
+    /// 是否调试模式
+    #[serde(default)]
+    pub debug:bool
 }
 
 /// 函数调用响应
