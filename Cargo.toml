@@ -36,18 +36,18 @@ authors = ["skylake@pansoft.com"]
 # 内部依赖
 # ============================================
 # cmx-core: 项目内部核心库
-cmx-core = { path = "crates/libs/cmx-core",version = "0.1.1" ,registry = "cmx-registry"}
+cmx-core = { path = "crates/libs/cmx-core",version = "0.1.1" ,registry = "nora"}
 # cmx-utils: 项目内部工具库
-cmx-utils = { path = "crates/libs/cmx-utils" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-api = { path = "crates/libs/cmx-api" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-database = { path = "crates/libs/cmx-infra/cmx-database" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-metadata = { path = "crates/libs/cmx-metadata" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-plugin = { path = "crates/libs/cmx-plugin" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-traits = { path = "crates/libs/cmx-traits" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-runtime = { path = "crates/libs/cmx-runtime" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-service = { path = "crates/libs/cmx-service" ,version = "0.1.1",registry = "cmx-registry"}
-cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" ,version = "0.1.1",registry = "cmx-registry"}
+cmx-utils = { path = "crates/libs/cmx-utils" ,version = "0.1.1",registry = "nora"}
+cmx-api = { path = "crates/libs/cmx-api" ,version = "0.1.1",registry = "nora"}
+cmx-database = { path = "crates/libs/cmx-infra/cmx-database" ,version = "0.1.1",registry = "nora"}
+cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer" ,version = "0.1.1",registry = "nora"}
+cmx-metadata = { path = "crates/libs/cmx-metadata" ,version = "0.1.1",registry = "nora"}
+cmx-plugin = { path = "crates/libs/cmx-plugin" ,version = "0.1.1",registry = "nora"}
+cmx-traits = { path = "crates/libs/cmx-traits" ,version = "0.1.1",registry = "nora"}
+cmx-runtime = { path = "crates/libs/cmx-runtime" ,version = "0.1.1",registry = "nora"}
+cmx-service = { path = "crates/libs/cmx-service" ,version = "0.1.1",registry = "nora"}
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" ,version = "0.1.1",registry = "nora"}
 
 
 # ============================================

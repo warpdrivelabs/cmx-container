@@ -12,8 +12,8 @@ extism = "1.21.0"
 # ============================================
 # CMX 内部依赖
 # ============================================
-cmx-core = { path = "../cmx-core" }
-cmx-traits = { path = "../cmx-traits" }
+cmx-core = { workspace = true  }
+cmx-traits = { workspace = true }
 
 # ============================================
 # 异步运行时
