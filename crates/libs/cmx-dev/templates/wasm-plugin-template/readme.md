@@ -1,0 +1,1 @@
+zip -r /data/project/cmx-container-serverice/cmx-container/crates/libs/cmx-dev/templates/wasm-plugin-template.zip .

@@ -17,3 +17,4 @@
 /crates/libs/cmx-service/src/sample-flow.json
 /test_complex_flow.json
 /crates/tests/
+/Cargo.lock

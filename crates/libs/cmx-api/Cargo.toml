@@ -53,3 +53,7 @@ utoipa-swagger-ui={workspace = true}
 log = "0.4.29"
 #MsgPack编码
 rmp-serde = "1.3.1"
+# ZIP压缩
+zip = "2"
+# URL编码
+percent-encoding = "2"

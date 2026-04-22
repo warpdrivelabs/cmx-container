@@ -5,6 +5,7 @@
 use crate::app_state::CmxAppState;
 use crate::handlers::application;
 use crate::handlers::debug;
+use crate::handlers::dev;
 use crate::handlers::domain;
 use crate::handlers::module;
 use crate::handlers::plugin;
@@ -66,6 +67,9 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册调试路由（使用 ModuleRoutes）
     let router = router.merge(debug::DebugModule.routes());
+
+    // 注册开发工具路由（使用 ModuleRoutes）
+    let router = router.merge(dev::DevModule.routes());
 
     router
     // 统一添加 /api 前缀
