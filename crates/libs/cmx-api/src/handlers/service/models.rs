@@ -2,6 +2,7 @@
 //!
 //! 包含服务相关 API 的请求和响应数据结构。
 
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -86,6 +87,11 @@ pub struct ServiceExecuteRequest {
     /// 调试目标节点ID（开启 debug 时必填）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_node_id: Option<String>,
+    
+    /// 调试参数（开启 debug 时有）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_params: Option<HashMap<String, String>>,
+
 }
 
 /// 服务执行响应

@@ -252,6 +252,7 @@ impl Orchestrator {
                             node,
                             previous_output.clone(),
                             exec_context.svr_context.initial_input.clone(),
+                            options.clone(),
                         ).await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致
@@ -342,6 +343,7 @@ impl Orchestrator {
                             node,
                             previous_output.clone(),
                             exec_context.svr_context.initial_input.clone(),
+                            options.clone(),
                         ).await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致

@@ -2,6 +2,7 @@
 //!
 //! 包含编排执行结果、步骤记录、执行上下文、错误信息和执行选项等核心类型。
 
+use std::collections::HashMap;
 use cmx_core::model::service::SVRContext;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -141,8 +142,8 @@ impl ExecuteOptions {
     /// # 参数
     /// * `debug` - 是否开启调试模式
     /// * `debug_node_id` - 调试目标节点ID（开启 debug 时必填）
-    pub fn with_debug(mut self, debug: bool, debug_node_id: Option<String>) -> Self {
-        self.debug_options = DebugOptions::new(debug, debug_node_id);
+    pub fn with_debug(mut self, debug: bool, debug_node_id: Option<String>,debug_params: Option<HashMap<String, String>>) -> Self {
+        self.debug_options = DebugOptions::new(debug, debug_node_id, debug_params);
         self
     }
 }
@@ -157,12 +158,14 @@ pub struct DebugOptions {
     pub debug: bool,
     /// 调试目标节点ID（当编排执行到该节点时暂停）
     pub debug_node_id: Option<String>,
+    /// 调试参数（开启 debug 时有）
+    pub debug_params: Option<HashMap<String, String>>,
 }
 
 impl DebugOptions {
     /// 创建调试选项
-    pub fn new(debug: bool, debug_node_id: Option<String>) -> Self {
-        Self { debug, debug_node_id }
+    pub fn new(debug: bool, debug_node_id: Option<String>, debug_params: Option<HashMap<String, String>>) -> Self {
+        Self { debug, debug_node_id, debug_params }
     }
 
     /// 判断调试模式是否已启用（debug=true 且 debug_node_id 不为空）

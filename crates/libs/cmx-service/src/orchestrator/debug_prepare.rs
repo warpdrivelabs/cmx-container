@@ -14,6 +14,7 @@ use cmx_traits::PluginQuery;
 use tracing::debug;
 
 use crate::error::ServiceError;
+use crate::ExecuteOptions;
 use super::types::DebugPrepareResult;
 
 /// 调试准备器
@@ -52,6 +53,7 @@ impl<'a> DebugPrepare<'a> {
         node: &ServiceNode,
         previous_output: serde_json::Value,
         initial_input: serde_json::Value,
+        execute_option: ExecuteOptions,
     ) -> Result<DebugPrepareResult, ServiceError> {
         let node_data = node.data.as_ref()
             .ok_or_else(|| ServiceError::InternalError(

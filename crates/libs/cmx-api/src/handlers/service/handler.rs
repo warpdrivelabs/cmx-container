@@ -292,6 +292,7 @@ async fn execute_service_inner(
     include_steps: bool,
     debug: bool,
     debug_node_id: Option<String>,
+    debug_params: Option<HashMap<String, String>>,
 ) -> Result<ServiceExecuteResponse, Error> {
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
@@ -312,7 +313,7 @@ async fn execute_service_inner(
 
     let include_steps = include_steps || debug;
     let options = cmx_service::ExecuteOptions::new(include_steps)
-        .with_debug(debug, debug_node_id);
+        .with_debug(debug, debug_node_id,debug_params);
 
     let result = orchestrator.execute_service(
         service_key,
@@ -438,11 +439,12 @@ pub async fn execute_service(
     let include_steps = req.include_steps.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let debug_node_id = req.debug_node_id.clone();
+    let debug_param = req.debug_params.clone();
 
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps, debug, debug_node_id).await?;
+    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps, debug, debug_node_id,debug_param).await?;
 
     // 失败时返回错误码
     if !response.success {
@@ -509,11 +511,12 @@ pub async fn execute_service_by_key(
     let include_steps = req.include_steps.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let debug_node_id = req.debug_node_id.clone();
+    let debug_param = req.debug_params.clone();
 
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps, debug, debug_node_id).await?;
+    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps, debug, debug_node_id, debug_param).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
