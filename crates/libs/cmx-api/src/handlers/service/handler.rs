@@ -67,6 +67,16 @@ use std::sync::Arc;
 /// - 调试和测试插件函数
 /// - 不需要服务编排的轻量级调用
 ///
+/// # 与 execute_service 的区别
+///
+/// | 特性 | service_call | execute_service |
+/// |------|--------------|-----------------|
+/// | 调用方式 | 直接调用单个插件函数 | 通过编排器执行完整服务流程 |
+/// | 适用场景 | 简单调用、调试测试 | 复杂业务逻辑、多函数协同 |
+/// | 流程控制 | 无 | 支持条件分支、循环、并行等 |
+/// | 执行时间 | 通常较短 | 可能较长（多节点） |
+/// | 错误处理 | 简单返回错误 | 支持部分成功、步骤回滚 |
+///
 /// # 参数
 /// - `state`: 应用状态（包含运行时调用器、插件查询器等）
 /// - `svr_ctx`: 服务上下文（从 middleware 传入，包含 headers、time_in、request_id）
@@ -76,6 +86,8 @@ use std::sync::Arc;
 /// - `plugin_id`: 插件ID，必填，用于定位要调用的插件
 /// - `function_name`: 函数名，必填，插件中暴露的函数名
 /// - `input`: 输入数据，支持 JSON 对象或字符串，将作为函数输入
+/// - `initial_input`: 初始输入数据（可选），用于调试场景，传递服务最开始的入参
+/// - `debug`: 是否调试模式，可选，默认 false，调试模式下会返回更详细的执行信息
 ///
 /// # 响应体 (FunctionCallResponse)
 /// - `success`: 是否成功，true 表示执行成功
@@ -83,10 +95,30 @@ use std::sync::Arc;
 /// - `elapsed_us`: 执行耗时（微秒），WASM 函数执行时间
 /// - `error`: 错误信息，仅在 success=false 时有值
 ///
+/// # 执行流程
+/// 1. 检查插件是否已安装，未安装返回 400 错误
+/// 2. 检查 WASM 模块是否已加载，未加载则从插件目录加载
+/// 3. 构建 FunctionInput：
+///    - 如果提供了 `initial_input`，则使用它作为 `svr_ctx.initial_input`
+///    - 否则使用 `input` 作为 `svr_ctx.initial_input`
+/// 4. 使用 MessagePack 序列化 FunctionInput（高性能二进制序列化）
+/// 5. 调用 runtime.invoke_with_options 执行 WASM 函数
+/// 6. 使用 MessagePack 反序列化函数输出为 FunctionOutput
+/// 7. 返回 FunctionOutput.result 作为响应
+///
 /// # 错误处理
-/// - 插件未安装：返回 400 错误
+/// - 插件未安装：返回 400 错误 ("插件 {} 未安装")
+/// - 获取 WASM 路径失败：返回 400 错误
 /// - WASM 模块加载失败：返回 500 错误
-/// - 函数执行失败：返回 500 错误
+/// - 输入数据序列化失败：返回 500 错误（使用 MessagePack 时）
+/// - WASM 调用失败：返回 500 错误
+/// - 输出数据解析失败：返回 500 错误（使用 MessagePack 时）
+///
+/// # 序列化说明
+/// 本函数使用 MessagePack（rmp_serde）进行序列化和反序列化，相比 JSON：
+/// - 二进制格式，体积更小，传输效率更高
+/// - 序列化/反序列化速度更快
+/// - 支持更多 Rust 原生类型
 ///
 /// # 示例
 /// ```json
@@ -94,7 +126,8 @@ use std::sync::Arc;
 /// {
 ///     "plugin_id": "my-plugin",
 ///     "function_name": "process_data",
-///     "input": {"key": "value"}
+///     "input": {"key": "value"},
+///     "debug": false
 /// }
 /// ```
 ///
@@ -108,6 +141,20 @@ use std::sync::Arc;
 ///         "result": {"output": "processed"},
 ///         "elapsed_us": 1234,
 ///         "error": null
+///     }
+/// }
+/// ```
+///
+/// # 响应示例（失败）
+/// ```json
+/// {
+///     "code": 0,
+///     "msg": "success",
+///     "data": {
+///         "success": false,
+///         "result": null,
+///         "elapsed_us": 0,
+///         "error": "WASM 调用失败: function not found"
 ///     }
 /// }
 /// ```
