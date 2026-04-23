@@ -42,16 +42,16 @@ impl<'a> DebugPrepare<'a> {
     ///
     /// # 参数
     /// * `node` - 调试目标节点
-    /// * `_previous_output` - 上一步的执行输出（调试目标节点的输入数据）
-    /// * `_initial_input` - 服务编排的初始输入（来自请求）
+    /// * `previous_output` - 上一步的执行输出（调试目标节点的输入数据）
+    /// * `initial_input` - 服务编排的初始输入（来自请求）
     ///
     /// # 返回值
     /// 返回调试准备结果，包含插件详情、code-server URL、节点信息等
     pub async fn prepare(
         &self,
         node: &ServiceNode,
-        _previous_output: serde_json::Value,
-        _initial_input: serde_json::Value,
+        previous_output: serde_json::Value,
+        initial_input: serde_json::Value,
     ) -> Result<DebugPrepareResult, ServiceError> {
         let node_data = node.data.as_ref()
             .ok_or_else(|| ServiceError::InternalError(
