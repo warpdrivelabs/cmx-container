@@ -248,7 +248,11 @@ impl Orchestrator {
                         debug!("调试模式拦截: node_id={}", node.id);
                         let previous_output = exec_context.current_output.clone();
                         let debug_prepare = DebugPrepare::new(&self.plugin_query);
-                        let prepare_result = debug_prepare.prepare(node).await?;
+                        let prepare_result = debug_prepare.prepare(
+                            node,
+                            previous_output.clone(),
+                            exec_context.svr_context.initial_input.clone(),
+                        ).await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致
                         if txn_manager.has_active() {
@@ -271,7 +275,7 @@ impl Orchestrator {
                         let debug_output = serde_json::json!({
                             "previous_output": exec_context.current_output,
                             "initial_input": exec_context.svr_context.initial_input,
-                            // "debug_info": &prepare_result,
+                            "debug_info": &prepare_result,
                         });
 
                         return Ok(OrchestrationResult {
@@ -334,7 +338,11 @@ impl Orchestrator {
                         debug!("调试模式拦截(多分支): node_id={}", node.id);
                         let previous_output = exec_context.current_output.clone();
                         let debug_prepare = DebugPrepare::new(&self.plugin_query);
-                        let prepare_result = debug_prepare.prepare(node).await?;
+                        let prepare_result = debug_prepare.prepare(
+                            node,
+                            previous_output.clone(),
+                            exec_context.svr_context.initial_input.clone(),
+                        ).await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致
                         if txn_manager.has_active() {
@@ -357,7 +365,7 @@ impl Orchestrator {
                         let debug_output = serde_json::json!({
                             "previous_output": exec_context.current_output,
                             "initial_input": exec_context.svr_context.initial_input,
-                            // "debug_info": &prepare_result,
+                            "debug_info": &prepare_result,
                         });
 
                         return Ok(OrchestrationResult {
