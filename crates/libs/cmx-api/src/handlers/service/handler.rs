@@ -266,9 +266,14 @@ pub async fn service_call(
 /// - `state`: 应用状态（包含运行时、服务查询器、插件管理器）
 /// - `service_key`: 服务唯一标识，用于查询服务定义
 /// - `svr_context`: 服务调用上下文（包含 initial_input、headers、time_in、request_id）
-/// - `include_steps`: 是否返回详细的步骤执行数据
-/// - `debug`: 是否开启调试模式（调试模式自动开启 include_steps）
-/// - `debug_node_id`: 调试目标节点ID（开启 debug 时必填，编排执行到该节点时暂停）
+/// - `ExecuteOptions`: 服务执行的一些其他可选参数
+/// # 执行选项说明
+///
+/// 通过 `ExecuteOptions` 配置执行行为：
+/// - `include_steps`: 是否记录每个步骤的详细执行信息
+/// - `debug`: 是否开启调试模式（调试模式下 include_steps 自动为 true）
+/// - `debug_node_id`: 调试目标节点 ID（到达该节点时暂停）
+/// - `debug_params`: 调试参数字典（传递给调试器）
 ///
 /// # 执行流程
 /// 1. 从服务查询器获取服务定义
@@ -285,14 +290,13 @@ pub async fn service_call(
 /// - `error`: 错误信息（失败时）
 /// - `debug_triggered`: 是否触发了调试暂停
 /// - `debug_prepare_result`: 调试准备结果（触发调试暂停时）
+///
+
 async fn execute_service_inner(
     state: &CmxAppState,
     service_key: &str,
     svr_context: SVRContext,
-    include_steps: bool,
-    debug: bool,
-    debug_node_id: Option<String>,
-    debug_params: Option<HashMap<String, String>>,
+    options: cmx_service::ExecuteOptions,
 ) -> Result<ServiceExecuteResponse, Error> {
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
@@ -310,10 +314,6 @@ async fn execute_service_inner(
         service_query.clone(),
         default_db_id,
     );
-
-    let include_steps = include_steps || debug;
-    let options = cmx_service::ExecuteOptions::new(include_steps)
-        .with_debug(debug, debug_node_id,debug_params);
 
     let result = orchestrator.execute_service(
         service_key,
@@ -439,12 +439,16 @@ pub async fn execute_service(
     let include_steps = req.include_steps.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let debug_node_id = req.debug_node_id.clone();
-    let debug_param = req.debug_params.clone();
+    let debug_params = req.debug_params.clone();
 
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps, debug, debug_node_id,debug_param).await?;
+    let include_steps = include_steps || debug;
+    let options = cmx_service::ExecuteOptions::new(include_steps)
+        .with_debug(debug, debug_node_id, debug_params);
+
+    let response = execute_service_inner(&state, &req.service_key, svr_ctx, options).await?;
 
     // 失败时返回错误码
     if !response.success {
@@ -511,12 +515,17 @@ pub async fn execute_service_by_key(
     let include_steps = req.include_steps.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let debug_node_id = req.debug_node_id.clone();
-    let debug_param = req.debug_params.clone();
+    let debug_params = req.debug_params.clone();
 
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps, debug, debug_node_id, debug_param).await?;
+
+    let include_steps = include_steps || debug;
+    let options = cmx_service::ExecuteOptions::new(include_steps)
+        .with_debug(debug, debug_node_id, debug_params);
+
+    let response = execute_service_inner(&state, &service_key, svr_ctx, options).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }
