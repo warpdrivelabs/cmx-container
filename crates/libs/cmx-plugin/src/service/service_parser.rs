@@ -70,6 +70,13 @@ pub async fn parse_and_save_services(
             return Err(PluginError::Plugin(format!("解析服务数据失败: {:?}", e)));
         }
     };
+    //删除插件的服务在保存新服务，避免有的插件删除了数据库中还存在
+    if let Err(e) = service_storage.delete_services_by_plugin(params.plugin_id.as_str(),txn_id)
+        .await {
+        tracing::error!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e);
+        return Err(PluginError::Plugin(format!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e)));
+    }
+
 
     // 遍历并保存每个服务
     for svc in &parsed {

@@ -72,7 +72,7 @@ pub trait ServiceStorage: Send + Sync {
     /// # 返回值
     /// * `Ok(())` - 删除成功
     /// * `Err(TraitError)` - 删除失败
-    async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), TraitError>;
+    async fn delete_services_by_plugin(&self, plugin_id: &str,txn_id: Option<&str>) -> Result<(), TraitError>;
 
     /// 获取服务编排配置
     ///

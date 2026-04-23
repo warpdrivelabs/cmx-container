@@ -6,6 +6,7 @@ use cmx_core::model::service::ServiceDefinition;
 use cmx_database::DatabaseManager;
 use serde_json::json;
 use std::sync::Arc;
+use utoipa::openapi::RefOr::T;
 use uuid::Uuid;
 
 use crate::error::ServiceError;
@@ -293,10 +294,10 @@ impl ServiceRepository {
     ///
     /// # 参数
     /// * `plugin_id` - 插件ID
-    pub async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), ServiceError> {
+    pub async fn delete_services_by_plugin(&self, plugin_id: &str,txn_id: Option<&str>) -> Result<(), ServiceError> {
         let services = self.get_services_by_plugin(plugin_id).await?;
         for service in services {
-            self.delete_service(&service.service_key, None, None).await?;
+            self.delete_service(&service.service_key, txn_id, None).await?;
         }
         Ok(())
     }

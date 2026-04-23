@@ -99,9 +99,9 @@ impl ServiceStorage for ServiceStorageImpl {
     ///
     /// # 参数
     /// * `plugin_id` - 插件ID
-    async fn delete_services_by_plugin(&self, plugin_id: &str) -> Result<(), TraitError> {
+    async fn delete_services_by_plugin(&self, plugin_id: &str,txn_id: Option<&str>) -> Result<(), TraitError> {
         self.repository
-            .delete_services_by_plugin(plugin_id)
+            .delete_services_by_plugin(plugin_id,txn_id)
             .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
         Ok(())

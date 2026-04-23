@@ -160,7 +160,7 @@ impl UninstallService {
             .map_err(|e| PluginError::Database(format!("删除表元数据失败: {}", e)))?;
         }
         // 7.2: 清理此插件关联的服务定义
-        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id).await {
+        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id,None).await {
             warn!("清理插件 {} 的服务定义失败: {:?}", plugin_id, e);
         } else {
             info!("已清理插件 {} 的服务定义", plugin_id);
@@ -200,7 +200,7 @@ impl UninstallService {
 
         // 步骤10.2: 发布卸载事件（通知其他节点）
         let payload = PluginLifecyclePayload::new(&plugin_id, &version);
-        
+
         GlobalEventBus::get()
             .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
             .await;
