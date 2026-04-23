@@ -10,12 +10,34 @@ CMX CLI 是一个多功能的命令行工具，为 CMX 插件开发提供文档�
 
 ## 安装
 
+### 方式一：源码编译（推荐）
+
 ```bash
 # 在项目根目录下编译
 cargo build -p cmx-cli --release
 
 # 可执行文件位于
 ./target/release/cmx-cli
+```
+
+### 方式二：安装到本地（全局使用）
+
+```bash
+# 安装到 ~/.cargo/bin/ 或 %USERPROFILE%\.cargo\bin\
+cargo install --path sdk/cmx-cli
+
+# 安装后可以直接使用
+cmx-cli doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
+```
+
+### 方式三：添加到 PATH（便携使用）
+
+```bash
+# Windows: 将编译后的可执行文件路径添加到系统 PATH
+# 或创建符号链接到已有 PATH 目录
+
+# Linux/macOS:
+ln -s "$(pwd)/target/release/cmx-cli" ~/.local/bin/cmx-cli
 ```
 
 ## 快速开始（使用源码运行）
@@ -34,6 +56,22 @@ cargo run -p cmx-cli -- plugin --help
 ```
 
 > **说明**：`--` 后面的参数会传递给 cmx-cli 程序。
+
+### 常用命令示例
+
+```bash
+# 生成 API 文档（自动创建 docs 目录）
+cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
+
+# 输出到控制台（不保存文件）
+cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --pretty
+
+# 验证文档格式
+cargo run -p cmx-cli -- doc validate ./docs/api.json
+
+# 创建新插件项目
+cargo run -p cmx-cli -- plugin new my-plugin
+```
 
 ## 命令概览
 
@@ -101,6 +139,8 @@ cmx-cli doc scan ./crates/libs/cmx-wasmdemo --exclude "tests"
 | `--pretty` | | 美化 JSON 输出 |
 | `--exclude` | | 排除的文件模式 |
 | `--plugin-name` | | 指定插件名称（默认从 Cargo.toml 读取） |
+
+> **注意**：如果输出文件的父目录不存在，将自动创建目录。
 
 #### 验证文档格式 (doc validate)
 

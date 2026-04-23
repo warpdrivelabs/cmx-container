@@ -213,6 +213,16 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
 
     // 输出结果
     if let Some(output_path) = args.output {
+        let path = Path::new(&output_path);
+
+        // 如果父目录不存在，则创建目录
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("无法创建目录: {}", parent.display()))?;
+            }
+        }
+
         fs::write(&output_path, &json)
             .with_context(|| format!("无法写入文件: {}", output_path))?;
         println!("文档已生成: {}", output_path);
