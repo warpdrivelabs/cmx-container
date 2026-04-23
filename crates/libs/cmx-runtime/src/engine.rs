@@ -47,6 +47,7 @@
 //! 3. **Extism 原生超时** — 单次 plugin.call() 超时自动中断
 
 use std::collections::HashMap;
+use std::env;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -216,13 +217,19 @@ impl ExtismEngine {
             function_name,
             _guard.depth()
         );
-
+        unsafe {
+            env::set_var("EXTISM_DEBUG", "1");
+        }
         // 使用 Pool::with_plugin 自动获取和归还实例
         let result = pool
             .with_plugin(options.timeout, |plugin| {
+
                 plugin.call::<&[u8], Vec<u8>>(function_name, input)
             })
             .map_err(|e| TraitError::WasmInvokeFailed(e.to_string()))?;
+        unsafe {
+            env::remove_var("EXTISM_DEBUG");
+        }
 
         match result {
             Some(output) => {
