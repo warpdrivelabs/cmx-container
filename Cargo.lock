@@ -926,6 +926,7 @@ dependencies = [
  "chrono",
  "cmx-core 0.1.1",
  "cmx-database",
+ "cmx-debug",
  "cmx-runtime",
  "cmx-traits",
  "rmp-serde",
