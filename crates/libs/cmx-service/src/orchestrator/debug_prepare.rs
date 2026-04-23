@@ -102,6 +102,35 @@ impl<'a> DebugPrepare<'a> {
             initial_input.clone(),
         ).await;
 
+        if let Some(ref debug_params) = execute_option.debug_options.debug_params {
+            if debug_params.get("isDebugSelfPlugin").map(|v| v == "1").unwrap_or(false) {
+                debug!("[debug-prepare] isDebugSelfPlugin is true, calling /debug interface");
+
+                if let Some(session) = cmx_debug::get_active_session() {
+                    let url = cmx_utils::ConfigManager::global()
+                        .get_string("code_server_extension_server.url")
+                        .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+
+                    let final_url = format!("{}/debug", url.trim_end_matches('/'));
+
+                    let payload = serde_json::json!({
+                        "cmx_pid": session.cmx_pid,
+                        "wasm_path": wasm_path,
+                        "debug_function": function_name.clone(),
+                    });
+
+                    if let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
+                        if let Err(e) = client.post(&final_url).json(&payload).send().await {
+                            debug!("[debug-prepare] /debug interface call failed: {}", e);
+                        } else {
+                            debug!("[debug-prepare] /debug interface called successfully");
+                        }
+                    }
+                }
+            }
+        }
+
+
         Ok(DebugPrepareResult {
             code_server_url,
             plugin_id: plugin_snapshot.plugin_id,

@@ -59,3 +59,7 @@ path = "crates/libs/cmx-dev/templates"
 [code_server]
 # code-server URL
 url = "https://dev.cloudmatrix.one:18080/"
+
+[code_server_extension_server]
+# code-server 扩展服务器 URL，用于自调试
+url = "http://127.0.0.1:3000"

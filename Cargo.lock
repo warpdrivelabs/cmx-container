@@ -929,6 +929,8 @@ dependencies = [
  "cmx-debug",
  "cmx-runtime",
  "cmx-traits",
+ "cmx-utils",
+ "reqwest 0.12.28",
  "rmp-serde",
  "sea-query",
  "sea-query-binder",
