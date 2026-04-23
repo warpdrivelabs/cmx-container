@@ -386,6 +386,7 @@ async fn execute_service_inner(
 /// - `include_steps`: 是否返回步骤数据，可选，默认 false
 /// - `debug`: 是否开启调试模式，可选，默认 false
 /// - `debug_node_id`: 调试目标节点ID，开启 debug 时必填
+/// - `debug_params`: debug相关的参数 HashMap<string, string>
 ///
 /// # 响应体 (ServiceExecuteResponse)
 /// - `success`: 是否成功，编排中任何节点失败都为 false
@@ -479,6 +480,7 @@ pub async fn execute_service(
 /// # 请求体 (ServiceExecuteRequest)
 /// - `input`: 初始输入数据，作为编排流程的起始输入
 /// - `include_steps`: 是否返回步骤数据，可选，默认 false
+/// - `debug_params`: debug相关的参数 HashMap<string, string>
 ///
 /// # 响应体
 /// 与 `execute_service` 相同
