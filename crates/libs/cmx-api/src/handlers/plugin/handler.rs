@@ -251,6 +251,8 @@ pub async fn plugin_deploy(
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut target_db_id: Option<String> = None;
     let mut force_reinstall: bool = false;
+    //构建类型 debug /release
+    let mut build_type:Option<String> = None;
 
     while let Some(field) = multipart.next_field().await
         .map_err(|e| crate::error::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
@@ -273,6 +275,11 @@ pub async fn plugin_deploy(
                 let val = field.text().await
                     .map_err(|e| crate::error::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e)))?;
                 force_reinstall = val == "true" || val == "1";
+            }
+            "build_type" => {
+                let val = field.text().await
+                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 build_type 失败: {}", e)))?;
+                build_type = Some(val);
             }
             _ => {}
         }
@@ -306,7 +313,7 @@ pub async fn plugin_deploy(
         source,
         db_id: target_db_id,
         force_reinstall,
-        build_type: None,
+        build_type: build_type,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {
