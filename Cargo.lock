@@ -6118,6 +6118,7 @@ dependencies = [
  "cmx-buffer",
  "cmx-core 0.1.1",
  "cmx-database",
+ "cmx-debug",
  "cmx-plugin",
  "cmx-runtime",
  "cmx-service",
