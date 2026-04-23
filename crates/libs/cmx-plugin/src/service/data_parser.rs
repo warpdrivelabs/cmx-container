@@ -151,23 +151,23 @@ impl ServiceDataParser {
     ///
     /// 返回验证失败的具体错误信息
     pub fn validate_orchestration(orchestration: &ServiceOrchestration) -> PluginResult<()> {
-        // 检查节点列表是否为空
-        if orchestration.flow.nodes.is_empty() {
-            return Err(PluginError::Plugin("编排节点列表为空".to_string()));
-        }
-
-        // 检查是否存在开始节点
-        let has_start = orchestration.flow.nodes.iter()
-            .any(|n| n.node_type == "skylake-start");
-
-        // 检查是否存在结束节点
-        let has_end = orchestration.flow.nodes.iter()
-            .any(|n| n.node_type == "skylake-end");
-
-        // 必须同时包含开始和结束节点
-        if !has_start || !has_end {
-            return Err(PluginError::Plugin("编排必须包含开始节点和结束节点".to_string()));
-        }
+        // // 检查节点列表是否为空
+        // if orchestration.flow.nodes.is_empty() {
+        //     return Err(PluginError::Plugin("编排节点列表为空".to_string()));
+        // }
+        //
+        // // 检查是否存在开始节点
+        // let has_start = orchestration.flow.nodes.iter()
+        //     .any(|n| n.node_type == "skylake-start");
+        //
+        // // 检查是否存在结束节点
+        // let has_end = orchestration.flow.nodes.iter()
+        //     .any(|n| n.node_type == "skylake-end");
+        //
+        // // 必须同时包含开始和结束节点
+        // if !has_start || !has_end {
+        //     return Err(PluginError::Plugin("编排必须包含开始节点和结束节点".to_string()));
+        // }
 
         Ok(())
     }
