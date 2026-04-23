@@ -271,7 +271,7 @@ impl Orchestrator {
                         let debug_output = serde_json::json!({
                             "previous_output": exec_context.current_output,
                             "initial_input": exec_context.svr_context.initial_input,
-                            "debug_info": &prepare_result,
+                            // "debug_info": &prepare_result,
                         });
 
                         return Ok(OrchestrationResult {
@@ -357,7 +357,7 @@ impl Orchestrator {
                         let debug_output = serde_json::json!({
                             "previous_output": exec_context.current_output,
                             "initial_input": exec_context.svr_context.initial_input,
-                            "debug_info": &prepare_result,
+                            // "debug_info": &prepare_result,
                         });
 
                         return Ok(OrchestrationResult {
@@ -511,7 +511,7 @@ impl Orchestrator {
             steps: final_steps,
             total_elapsed_us: start_time.elapsed().as_micros() as u64,
             error: orch_error,
-            debug_triggered: None,
+            debug_triggered: Some(false),
             debug_prepare_result: None,
         })
     }

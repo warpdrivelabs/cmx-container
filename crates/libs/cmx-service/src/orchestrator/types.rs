@@ -68,10 +68,10 @@ pub struct OrchestrationResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<OrchestrationError>,
     /// 是否触发了调试暂停
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_triggered: Option<bool>,
     /// 调试准备结果（触发调试暂停时包含调试信息）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_prepare_result: Option<DebugPrepareResult>,
 }
 
