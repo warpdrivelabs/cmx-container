@@ -109,7 +109,7 @@ impl<'a> DebugPrepare<'a> {
                 if let Some(session) = cmx_debug::get_active_session() {
                     let url = cmx_utils::ConfigManager::global()
                         .get_string("code_server_extension_server.url")
-                        .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+                        .unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
 
                     let final_url = format!("{}/debug", url.trim_end_matches('/'));
 
