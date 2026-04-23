@@ -40,6 +40,7 @@ impl<'a> DebugPrepare<'a> {
     /// 3. 通过 cmx_debug::get_code_server_url_async() 获取 code-server URL
     /// 4. 将 previous_output 和 initial_input 填充到结果中
     /// 5. 组装返回结果
+    /// 6. 调用 cmx_debug::start_debug_session_async 创建调试会话
     ///
     /// # 参数
     /// * `node` - 调试目标节点
@@ -85,6 +86,21 @@ impl<'a> DebugPrepare<'a> {
             "[debug-prepare] 调试准备完成: code_server_url={}, source_path={:?}",
             code_server_url, plugin_snapshot.source_path
         );
+
+        let wasm_path = plugin_snapshot.wasm_path.clone().unwrap_or_default();
+        let source_path = plugin_snapshot.source_path.clone().unwrap_or_default();
+
+        cmx_debug::start_debug_session_async(
+            plugin_snapshot.plugin_id.clone(),
+            plugin_snapshot.name.clone(),
+            plugin_snapshot.version.clone(),
+            function_name.clone(),
+            wasm_path.clone(),
+            source_path.clone(),
+            Vec::new(),
+            previous_output.clone(),
+            initial_input.clone(),
+        ).await;
 
         Ok(DebugPrepareResult {
             code_server_url,

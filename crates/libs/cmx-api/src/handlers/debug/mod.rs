@@ -3,20 +3,18 @@
 //! 提供插件调试会话管理等 HTTP API
 
 pub mod handler;
-pub mod request;
 pub mod response;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::get;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 
-pub use handler::{debug_plugin, get_current_debug_session};
+pub use handler::get_current_debug_session;
 
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
-        .route("/{name}", post(debug_plugin))
         .route("/current", get(get_current_debug_session))
 }
 

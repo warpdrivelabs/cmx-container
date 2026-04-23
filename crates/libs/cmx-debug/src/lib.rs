@@ -33,16 +33,18 @@ fn start_cleanup_thread() {
 #[derive(Debug, Clone)]
 pub struct DebugSession {
     pub id: String,
+    pub plugin_id: String,
     pub plugin_name: String,
     pub plugin_version: String,
     pub function_name: String,
     pub wasm_path: String,
-    pub wasm_bytes: Vec<u8>,
     pub source_path: String,
     pub cmx_pid: u32,
     pub start_time: Instant,
     pub is_active: bool,
     pub is_protected: bool,
+    pub previous_output: JsonValue,
+    pub initial_input: JsonValue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,13 +290,15 @@ pub struct StartDebugRequest {
 }
 
 pub fn start_debug_session(
+    plugin_id: String,
     plugin_name: String,
     plugin_version: String,
     function_name: String,
     wasm_path: String,
-    wasm_bytes: Vec<u8>,
     source_path: String,
     wasm_functions: Vec<WasmFunctionInfo>,
+    previous_output: JsonValue,
+    initial_input: JsonValue,
 ) -> DebugResponse {
     let cmx_pid = std::process::id();
     let timestamp = std::time::SystemTime::now()
@@ -305,16 +309,18 @@ pub fn start_debug_session(
 
     let session = DebugSession {
         id: session_id.clone(),
+        plugin_id,
         plugin_name: plugin_name.clone(),
         plugin_version: plugin_version.clone(),
         function_name: function_name.clone(),
         wasm_path: wasm_path.clone(),
-        wasm_bytes: wasm_bytes,
         source_path: source_path.clone(),
         cmx_pid,
         start_time: std::time::Instant::now(),
         is_active: true,
         is_protected: true,
+        previous_output,
+        initial_input,
     };
 
     create_session(session);
@@ -334,13 +340,15 @@ pub fn start_debug_session(
 }
 
 pub async fn start_debug_session_async(
+    plugin_id: String,
     plugin_name: String,
     plugin_version: String,
     function_name: String,
     wasm_path: String,
-    wasm_bytes: Vec<u8>,
     source_path: String,
     wasm_functions: Vec<WasmFunctionInfo>,
+    previous_output: JsonValue,
+    initial_input: JsonValue,
 ) -> DebugResponse {
     let cmx_pid = std::process::id();
     let timestamp = std::time::SystemTime::now()
@@ -351,16 +359,18 @@ pub async fn start_debug_session_async(
 
     let session = DebugSession {
         id: session_id.clone(),
+        plugin_id,
         plugin_name: plugin_name.clone(),
         plugin_version: plugin_version.clone(),
         function_name: function_name.clone(),
         wasm_path: wasm_path.clone(),
-        wasm_bytes: wasm_bytes,
         source_path: source_path.clone(),
         cmx_pid,
         start_time: std::time::Instant::now(),
         is_active: true,
         is_protected: true,
+        previous_output,
+        initial_input,
     };
 
     create_session(session);
@@ -379,101 +389,4 @@ pub async fn start_debug_session_async(
     }
 }
 
-pub fn start_debug_session_by_name(
-    plugin_name_or_id: &str,
-    function_name: String,
-    args: Vec<JsonValue>,
-    data: JsonValue,
-) -> Result<DebugResponse> {
-    let plugin_dir = if let Some(found) = plugin::find_plugin_dir_by_id(plugin_name_or_id) {
-        found
-    } else {
-        plugin::find_plugin_dir_by_name(plugin_name_or_id)
-    };
 
-    if !plugin_dir.exists() || !plugin_dir.is_dir() {
-        return Err(anyhow::anyhow!("Plugin not found: {}", plugin_name_or_id));
-    }
-
-    let wasm_file = plugin::find_wasm_file(&plugin_dir)
-        .ok_or_else(|| anyhow::anyhow!("No wasm file found in plugin"))?;
-
-    let wasm_bytes = std::fs::read(&wasm_file)
-        .map_err(|e| anyhow::anyhow!("Failed to read wasm file: {}", e))?;
-
-    let source_path = plugin::get_source_path_from_plugin_json(&plugin_dir)
-        .unwrap_or_else(|| plugin_dir.to_string_lossy().to_string());
-
-    let (plugin_name, plugin_version) = plugin::get_plugin_info_from_json(&plugin_dir)
-        .unwrap_or_else(|| (plugin_name_or_id.to_string(), "0.1.0".to_string()));
-
-    let wasm_functions = Vec::new();
-
-    Ok(start_debug_session(
-        plugin_name,
-        plugin_version,
-        function_name,
-        wasm_file.to_string_lossy().to_string(),
-        wasm_bytes,
-        source_path,
-        wasm_functions,
-    ))
-}
-
-pub async fn start_debug_session_by_name_async(
-    plugin_name_or_id: &str,
-    function_name: String,
-    args: Vec<JsonValue>,
-    data: JsonValue,
-) -> Result<DebugResponse> {
-    log::info!(
-        "[cmx-debug] start_debug_session_by_name_async: plugin={}",
-        plugin_name_or_id
-    );
-
-    let plugin_dir = if let Some(found) = plugin::find_plugin_dir_by_id(plugin_name_or_id) {
-        found
-    } else {
-        plugin::find_plugin_dir_by_name(plugin_name_or_id)
-    };
-
-    log::info!("[cmx-debug] plugin_dir: {:?}", plugin_dir);
-
-    if !plugin_dir.exists() || !plugin_dir.is_dir() {
-        log::error!("[cmx-debug] Plugin not found: {}", plugin_name_or_id);
-        return Err(anyhow::anyhow!("Plugin not found: {}", plugin_name_or_id));
-    }
-
-    let wasm_file = plugin::find_wasm_file(&plugin_dir)
-        .ok_or_else(|| anyhow::anyhow!("No wasm file found in plugin"))?;
-
-    log::info!("[cmx-debug] wasm_file: {:?}", wasm_file);
-
-    let wasm_bytes = std::fs::read(&wasm_file)
-        .map_err(|e| anyhow::anyhow!("Failed to read wasm file: {}", e))?;
-
-    let source_path = plugin::get_source_path_from_plugin_json(&plugin_dir)
-        .unwrap_or_else(|| plugin_dir.to_string_lossy().to_string());
-
-    let (plugin_name, plugin_version) = plugin::get_plugin_info_from_json(&plugin_dir)
-        .unwrap_or_else(|| (plugin_name_or_id.to_string(), "0.1.0".to_string()));
-
-    let wasm_functions = Vec::new();
-
-    log::info!(
-        "[cmx-debug] Creating session for plugin={}, version={}",
-        plugin_name,
-        plugin_version
-    );
-
-    Ok(start_debug_session_async(
-        plugin_name,
-        plugin_version,
-        function_name,
-        wasm_file.to_string_lossy().to_string(),
-        wasm_bytes,
-        source_path,
-        wasm_functions,
-    )
-    .await)
-}

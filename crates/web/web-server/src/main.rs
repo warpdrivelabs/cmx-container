@@ -90,6 +90,10 @@ async fn main() -> Result<()> {
     // 获取 Web 服务器配置
     let web_config = web_config();
 
+    // 初始化调试会话管理器
+    cmx_debug::init();
+    info!("调试会话管理器初始化完成");
+
     // 初始化 WASM 运行时（必须在 init_plugins 之前）
     init_runtime().await;
 
