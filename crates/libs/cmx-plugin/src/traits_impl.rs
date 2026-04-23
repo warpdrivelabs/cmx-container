@@ -28,6 +28,7 @@ impl From<PluginInfo> for PluginSnapshot {
             domain_code: info.domain_code,
             application_code: info.application_code,
             module_code: info.module_code,
+            source_path: info.source_path,
         }
     }
 }
@@ -48,6 +49,7 @@ impl From<PluginRecord> for PluginSnapshot {
             domain_code: record.domain_code.unwrap_or_default(),
             application_code: record.application_code.unwrap_or_default(),
             module_code: record.module_code.unwrap_or_default(),
+            source_path: record.source_path,
         }
     }
 }
@@ -94,7 +96,7 @@ impl PluginQuery for PluginManager {
         //     .find_plugin(plugin_id)
         //     .await
         //     .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
-        // 
+        //
         // if record.is_some() {
         //     return Ok(true);
         // }

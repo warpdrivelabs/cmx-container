@@ -8,6 +8,7 @@ cmx-core = { workspace = true }
 cmx-traits = { workspace = true }
 cmx-runtime = { workspace = true }
 cmx-database = { workspace = true }
+cmx-debug = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }

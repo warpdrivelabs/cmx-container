@@ -80,6 +80,12 @@ pub struct ServiceExecuteRequest {
     /// - 注意：执行失败时无论此参数设置如何，都会返回步骤数据
     #[serde(default)]
     pub include_steps: Option<bool>,
+    /// 是否开启调试模式（可选，默认 false）
+    #[serde(default)]
+    pub debug: Option<bool>,
+    /// 调试目标节点ID（开启 debug 时必填）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_node_id: Option<String>,
 }
 
 /// 服务执行响应
@@ -98,6 +104,12 @@ pub struct ServiceExecuteResponse {
     /// 错误详情（失败时包含结构化错误信息）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ServiceOrchestrationError>,
+    /// 是否触发了调试暂停
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_triggered: Option<bool>,
+    /// 调试准备结果（触发调试暂停时包含调试信息）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_prepare_result: Option<ServiceDebugPrepareResult>,
 }
 
 /// 服务执行步骤记录
@@ -130,6 +142,45 @@ pub struct ServiceExecutionStep {
 pub struct ServiceOrchestrationError {
     /// 错误摘要信息
     pub message: String,
+}
+
+/// 调试准备结果
+///
+/// 当编排执行到调试目标节点时，返回给前端的调试准备信息。
+/// 包含插件详细信息、code-server 在线编辑器 URL 和节点信息，
+/// 供前端打开 code-server 编辑器并定位到待调试的插件源码。
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServiceDebugPrepareResult {
+    /// code-server 在线编辑器 URL
+    pub code_server_url: String,
+    /// 插件唯一标识
+    pub plugin_id: String,
+    /// 插件名称
+    pub plugin_name: String,
+    /// 插件版本
+    pub plugin_version: String,
+    /// 插件状态（installed/activated/deactivated/error）
+    pub plugin_status: String,
+    /// 插件安装路径（绝对路径）
+    pub plugin_install_path: String,
+    /// WASM 文件路径（相对于安装路径）
+    pub plugin_wasm_path: Option<String>,
+    /// 插件类型（wasm/rhai）
+    pub plugin_type: String,
+    /// 插件所属域编码
+    pub domain_code: String,
+    /// 插件所属应用编码
+    pub application_code: String,
+    /// 插件所属模块编码
+    pub module_code: String,
+    /// 要调试的函数名称
+    pub function_name: String,
+    /// 插件源码路径（从 manifest.json 读取）
+    pub source_path: Option<String>,
+    /// 调试目标节点ID
+    pub node_id: String,
+    /// 调试目标节点名称
+    pub node_name: String,
 }
 
 // ==================== 服务查询请求结构体 ====================

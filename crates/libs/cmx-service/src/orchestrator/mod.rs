@@ -18,6 +18,7 @@ mod executor;
 mod node_handler;
 mod flow_navigator;
 mod transaction_manager;
+mod debug_prepare;
 
 pub use types::*;
 pub use executor::Orchestrator;

@@ -17,6 +17,8 @@ pub enum StepStatus {
     Failed,
     /// 跳过 - 节点被跳过未执行（如条件分支未命中）
     Skipped,
+    /// 调试暂停 - 节点被调试模式拦截，未实际执行
+    DebugPaused,
 }
 
 /// 执行步骤记录
@@ -65,6 +67,12 @@ pub struct OrchestrationResult {
     /// 成功时为 None，序列化时跳过
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<OrchestrationError>,
+    /// 是否触发了调试暂停
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_triggered: Option<bool>,
+    /// 调试准备结果（触发调试暂停时包含调试信息）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_prepare_result: Option<DebugPrepareResult>,
 }
 
 /// 编排错误信息
@@ -94,7 +102,7 @@ pub struct ExecutionContext {
 
 /// 执行选项
 ///
-/// 控制编排执行的附加行为，如是否返回步骤数据。
+/// 控制编排执行的附加行为，如是否返回步骤数据、是否开启调试模式。
 /// 通过此参数实现生产环境（精简响应）和调试环境（详细响应）的区分。
 #[derive(Debug, Clone)]
 pub struct ExecuteOptions {
@@ -103,12 +111,15 @@ pub struct ExecuteOptions {
     /// - true: 返回所有步骤数据（调试/排错时使用）
     /// - 注意：执行失败时无论此参数设置如何，都会返回步骤数据（便于排错）
     pub include_steps: bool,
+    /// 调试选项（包含 debug 开关和 debug_node_id）
+    pub debug_options: DebugOptions,
 }
 
 impl Default for ExecuteOptions {
     fn default() -> Self {
         Self {
             include_steps: false,
+            debug_options: DebugOptions::default(),
         }
     }
 }
@@ -118,16 +129,87 @@ impl ExecuteOptions {
     ///
     /// # 参数
     /// * `include_steps` - 是否返回步骤数据
-    ///
-    /// # 示例
-    /// ```
-    /// // 生产环境：不返回步骤数据
-    /// let options = ExecuteOptions::new(false);
-    ///
-    /// // 调试环境：返回步骤数据
-    /// let options = ExecuteOptions::new(true);
-    /// ```
     pub fn new(include_steps: bool) -> Self {
-        Self { include_steps }
+        Self {
+            include_steps,
+            debug_options: DebugOptions::default(),
+        }
     }
+
+    /// 设置调试选项（Builder 模式）
+    ///
+    /// # 参数
+    /// * `debug` - 是否开启调试模式
+    /// * `debug_node_id` - 调试目标节点ID（开启 debug 时必填）
+    pub fn with_debug(mut self, debug: bool, debug_node_id: Option<String>) -> Self {
+        self.debug_options = DebugOptions::new(debug, debug_node_id);
+        self
+    }
+}
+
+/// 调试选项
+///
+/// 控制编排执行的调试行为。当 debug=true 且 debug_node_id 不为空时，
+/// 编排器在执行到目标节点时会暂停执行，转而调用 DebugPrepare 进行调试准备。
+#[derive(Debug, Clone, Default)]
+pub struct DebugOptions {
+    /// 是否开启调试模式
+    pub debug: bool,
+    /// 调试目标节点ID（当编排执行到该节点时暂停）
+    pub debug_node_id: Option<String>,
+}
+
+impl DebugOptions {
+    /// 创建调试选项
+    pub fn new(debug: bool, debug_node_id: Option<String>) -> Self {
+        Self { debug, debug_node_id }
+    }
+
+    /// 判断调试模式是否已启用（debug=true 且 debug_node_id 不为空）
+    pub fn is_debug_enabled(&self) -> bool {
+        self.debug && self.debug_node_id.is_some()
+    }
+
+    /// 判断指定节点是否为调试目标节点
+    pub fn is_debug_node(&self, node_id: &str) -> bool {
+        self.is_debug_enabled() && self.debug_node_id.as_deref() == Some(node_id)
+    }
+}
+
+/// 调试准备结果
+///
+/// 当编排执行到调试目标节点时，由 DebugPrepare 模块收集的调试信息。
+/// 包含插件详细信息、code-server URL、节点信息等，供前端发起调试会话。
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DebugPrepareResult {
+    /// code-server 在线编辑器 URL
+    pub code_server_url: String,
+    /// 插件唯一标识
+    pub plugin_id: String,
+    /// 插件名称
+    pub plugin_name: String,
+    /// 插件版本
+    pub plugin_version: String,
+    /// 插件状态（installed/activated/deactivated/error）
+    pub plugin_status: String,
+    /// 插件安装路径（绝对路径）
+    pub plugin_install_path: String,
+    /// WASM 文件路径（相对于安装路径）
+    pub plugin_wasm_path: Option<String>,
+    /// 插件类型（wasm/rhai）
+    pub plugin_type: String,
+    /// 插件所属域编码
+    pub domain_code: String,
+    /// 插件所属应用编码
+    pub application_code: String,
+    /// 插件所属模块编码
+    pub module_code: String,
+    /// 要调试的函数名称
+    pub function_name: String,
+    /// 插件源码路径（从 manifest.json 读取）
+    pub source_path: Option<String>,
+    /// 调试目标节点ID
+    pub node_id: String,
+    /// 调试目标节点名称
+    pub node_name: String,
 }

@@ -35,7 +35,7 @@
 
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
-    ServiceByPluginQuery, ServiceDetailResponse, ServiceExecuteRequest,
+    ServiceByPluginQuery, ServiceDebugPrepareResult, ServiceDetailResponse, ServiceExecuteRequest,
     ServiceExecuteResponse,
     ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
     ServiceListItem, ServiceOrchestrationError,
@@ -220,6 +220,8 @@ pub async fn service_call(
 /// - `service_key`: 服务唯一标识，用于查询服务定义
 /// - `svr_context`: 服务调用上下文（包含 initial_input、headers、time_in、request_id）
 /// - `include_steps`: 是否返回详细的步骤执行数据
+/// - `debug`: 是否开启调试模式（调试模式自动开启 include_steps）
+/// - `debug_node_id`: 调试目标节点ID（开启 debug 时必填，编排执行到该节点时暂停）
 ///
 /// # 执行流程
 /// 1. 从服务查询器获取服务定义
@@ -234,14 +236,16 @@ pub async fn service_call(
 /// - `steps`: 各节点执行详情（可选）
 /// - `total_elapsed_us`: 总耗时
 /// - `error`: 错误信息（失败时）
+/// - `debug_triggered`: 是否触发了调试暂停
+/// - `debug_prepare_result`: 调试准备结果（触发调试暂停时）
 async fn execute_service_inner(
     state: &CmxAppState,
     service_key: &str,
     svr_context: SVRContext,
     include_steps: bool,
+    debug: bool,
+    debug_node_id: Option<String>,
 ) -> Result<ServiceExecuteResponse, Error> {
-    // ==================== 获取依赖组件 ====================
-
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
@@ -251,8 +255,6 @@ async fn execute_service_inner(
     let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
-    // ==================== 创建编排执行器并执行 ====================
-
     let default_db_id = get_default_db_manager().get_default_db_id().await;
     let orchestrator = cmx_service::Orchestrator::new(
         runtime.clone(),
@@ -261,7 +263,9 @@ async fn execute_service_inner(
         default_db_id,
     );
 
-    let options = cmx_service::ExecuteOptions::new(include_steps);
+    let include_steps = include_steps || debug;
+    let options = cmx_service::ExecuteOptions::new(include_steps)
+        .with_debug(debug, debug_node_id);
 
     let result = orchestrator.execute_service(
         service_key,
@@ -272,8 +276,6 @@ async fn execute_service_inner(
             error!("服务{}执行失败: {:?}", service_key, e);
             return  Error::business_error(format!("服务执行失败: {}", e));
         })?;
-
-    // ==================== 构建响应 ====================
 
     let response = ServiceExecuteResponse {
         success: result.success,
@@ -286,6 +288,7 @@ async fn execute_service_inner(
                 cmx_service::StepStatus::Success => "Success".to_string(),
                 cmx_service::StepStatus::Failed => "Failed".to_string(),
                 cmx_service::StepStatus::Skipped => "Skipped".to_string(),
+                cmx_service::StepStatus::DebugPaused => "DebugPaused".to_string(),
             },
             output: s.output,
             elapsed_us: s.elapsed_us,
@@ -295,6 +298,24 @@ async fn execute_service_inner(
         total_elapsed_us: result.total_elapsed_us,
         error: result.error.map(|e| ServiceOrchestrationError {
             message: e.message,
+        }),
+        debug_triggered: result.debug_triggered,
+        debug_prepare_result: result.debug_prepare_result.map(|d| ServiceDebugPrepareResult {
+            code_server_url: d.code_server_url,
+            plugin_id: d.plugin_id,
+            plugin_name: d.plugin_name,
+            plugin_version: d.plugin_version,
+            plugin_status: d.plugin_status,
+            plugin_install_path: d.plugin_install_path,
+            plugin_wasm_path: d.plugin_wasm_path,
+            plugin_type: d.plugin_type,
+            domain_code: d.domain_code,
+            application_code: d.application_code,
+            module_code: d.module_code,
+            function_name: d.function_name,
+            source_path: d.source_path,
+            node_id: d.node_id,
+            node_name: d.node_name,
         }),
     };
 
@@ -315,6 +336,8 @@ async fn execute_service_inner(
 /// - `service_key`: 服务唯一标识，必填
 /// - `input`: 初始输入数据，支持 JSON 对象或字符串，作为编排流程的起始输入
 /// - `include_steps`: 是否返回步骤数据，可选，默认 false
+/// - `debug`: 是否开启调试模式，可选，默认 false
+/// - `debug_node_id`: 调试目标节点ID，开启 debug 时必填
 ///
 /// # 响应体 (ServiceExecuteResponse)
 /// - `success`: 是否成功，编排中任何节点失败都为 false
@@ -323,12 +346,14 @@ async fn execute_service_inner(
 ///   - `node_id`: 节点ID
 ///   - `node_name`: 节点名称
 ///   - `node_type`: 节点类型（Plugin、Condition、Merge 等）
-///   - `status`: 执行状态（Success、Failed、Skipped）
+///   - `status`: 执行状态（Success、Failed、Skipped、DebugPaused）
 ///   - `output`: 节点输出
 ///   - `elapsed_us`: 节点执行耗时
 ///   - `error`: 错误信息（失败时）
 /// - `total_elapsed_us`: 整个编排流程的总耗时（微秒）
 /// - `error`: 错误详情（失败时），包含 message 字段
+/// - `debug_triggered`: 是否触发了调试暂停（调试模式时）
+/// - `debug_prepare_result`: 调试准备结果（触发调试暂停时），包含插件详情和 code-server URL
 ///
 /// # SVRContext 传递
 /// - `initial_input`: 从请求的 input 字段设置
@@ -364,13 +389,13 @@ pub async fn execute_service(
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     let include_steps = req.include_steps.unwrap_or(false);
+    let debug = req.debug.unwrap_or(false);
+    let debug_node_id = req.debug_node_id.clone();
 
-    // 设置 initial_input 到 svr_ctx
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    // 执行服务编排
-    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps).await?;
+    let response = execute_service_inner(&state, &req.service_key, svr_ctx, include_steps, debug, debug_node_id).await?;
 
     // 失败时返回错误码
     if !response.success {
@@ -435,13 +460,13 @@ pub async fn execute_service_by_key(
     Json(req): Json<ServiceExecuteRequest>,
 ) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
     let include_steps = req.include_steps.unwrap_or(false);
+    let debug = req.debug.unwrap_or(false);
+    let debug_node_id = req.debug_node_id.clone();
 
-    // 设置 initial_input 到 svr_ctx
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-    // 执行服务编排（路径参数优先）
-    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps).await?;
+    let response = execute_service_inner(&state, &service_key, svr_ctx, include_steps, debug, debug_node_id).await?;
 
     Ok(Json(ApiResp::ok(response)))
 }

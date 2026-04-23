@@ -11,6 +11,7 @@ use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
 use tracing::{debug, info, warn};
 
 use crate::error::ServiceError;
+use super::debug_prepare::DebugPrepare;
 use super::flow_navigator::FlowNavigator;
 use super::node_handler::NodeHandler;
 use super::transaction_manager::TransactionManager;
@@ -241,6 +242,49 @@ impl Orchestrator {
                 // 函数输出作为下一个节点的输入
                 "skylake-func" => {
                     debug!("执行函数节点: node_id={}", node.id);
+
+                    // 调试拦截：如果当前节点是调试目标节点，暂停执行并返回调试信息
+                    if options.debug_options.is_debug_node(&current_node_id) {
+                        debug!("调试模式拦截: node_id={}", node.id);
+                        let previous_output = exec_context.current_output.clone();
+                        let debug_prepare = DebugPrepare::new(&self.plugin_query);
+                        let prepare_result = debug_prepare.prepare(node).await?;
+
+                        // 调试暂停时回滚活跃事务，避免数据库状态不一致
+                        if txn_manager.has_active() {
+                            txn_manager.rollback_active().await;
+                        }
+
+                        // 记录 DebugPaused 步骤，便于前端展示执行进度
+                        steps.push(ExecutionStep {
+                            node_id: node.id.clone(),
+                            node_name: node.data.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+                            node_type: node.node_type.clone(),
+                            status: StepStatus::DebugPaused,
+                            output: None,
+                            elapsed_us: 0,
+                            error: None,
+                            previous_output: Some(previous_output),
+                        });
+
+                        // 构建调试输出：包含上一步输出、初始输入和调试准备信息
+                        let debug_output = serde_json::json!({
+                            "previous_output": exec_context.current_output,
+                            "initial_input": exec_context.svr_context.initial_input,
+                            "debug_info": &prepare_result,
+                        });
+
+                        return Ok(OrchestrationResult {
+                            success: true,
+                            output: Some(debug_output),
+                            steps,
+                            total_elapsed_us: start_time.elapsed().as_micros() as u64,
+                            error: None,
+                            debug_triggered: Some(true),
+                            debug_prepare_result: Some(prepare_result),
+                        });
+                    }
+
                     let previous_output = exec_context.current_output.clone();
                     result = node_handler.execute_node(
                         node, &mut exec_context, &mut steps, options.include_steps
@@ -284,6 +328,49 @@ impl Orchestrator {
                 // 返回值 "1" → 端口 "out_1"，返回值 "2" → 端口 "out_2"
                 "skylake-switch" => {
                     debug!("执行多分支节点: node_id={}", node.id);
+
+                    // 调试拦截：如果当前节点是调试目标节点，暂停执行并返回调试信息
+                    if options.debug_options.is_debug_node(&current_node_id) {
+                        debug!("调试模式拦截(多分支): node_id={}", node.id);
+                        let previous_output = exec_context.current_output.clone();
+                        let debug_prepare = DebugPrepare::new(&self.plugin_query);
+                        let prepare_result = debug_prepare.prepare(node).await?;
+
+                        // 调试暂停时回滚活跃事务，避免数据库状态不一致
+                        if txn_manager.has_active() {
+                            txn_manager.rollback_active().await;
+                        }
+
+                        // 记录 DebugPaused 步骤，便于前端展示执行进度
+                        steps.push(ExecutionStep {
+                            node_id: node.id.clone(),
+                            node_name: node.data.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+                            node_type: node.node_type.clone(),
+                            status: StepStatus::DebugPaused,
+                            output: None,
+                            elapsed_us: 0,
+                            error: None,
+                            previous_output: Some(previous_output),
+                        });
+
+                        // 构建调试输出：包含上一步输出、初始输入和调试准备信息
+                        let debug_output = serde_json::json!({
+                            "previous_output": exec_context.current_output,
+                            "initial_input": exec_context.svr_context.initial_input,
+                            "debug_info": &prepare_result,
+                        });
+
+                        return Ok(OrchestrationResult {
+                            success: true,
+                            output: Some(debug_output),
+                            steps,
+                            total_elapsed_us: start_time.elapsed().as_micros() as u64,
+                            error: None,
+                            debug_triggered: Some(true),
+                            debug_prepare_result: Some(prepare_result),
+                        });
+                    }
+
                     let previous_output = exec_context.current_output.clone();
                     result = node_handler.execute_node(
                         node, &mut exec_context, &mut steps, options.include_steps
@@ -424,6 +511,8 @@ impl Orchestrator {
             steps: final_steps,
             total_elapsed_us: start_time.elapsed().as_micros() as u64,
             error: orch_error,
+            debug_triggered: None,
+            debug_prepare_result: None,
         })
     }
 

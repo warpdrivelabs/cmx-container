@@ -44,6 +44,10 @@ pub struct PluginSnapshot {
 
     /// 模块编码
     pub module_code: String,
+
+    /// 源码路径（从 manifest.json 读取，相对于 install_path）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
 }
 
 /// 插件筛选条件

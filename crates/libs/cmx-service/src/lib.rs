@@ -17,6 +17,7 @@
 //! - **事务框支持**：多个函数在同一个数据库事务中执行（通过 parent 字段识别）
 //! - **多分支路由**：switch 节点根据返回值选择执行路径
 //! - **SVRContext 上下文传递**：初始入参、请求头、各步骤输出在函数间传递
+//! - **调试模式**：支持在指定节点处暂停执行，返回插件详情和 code-server URL
 //!
 //! # 依赖关系
 //!
@@ -43,7 +44,7 @@ pub mod lifecycle_listener;
 // pub mod request;
 
 pub use error::ServiceError;
-pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, StepStatus};
+pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, StepStatus, DebugOptions, DebugPrepareResult};
 pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;
 pub use service_query_impl::ServiceQueryImpl;
