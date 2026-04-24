@@ -1,4 +1,7 @@
 pub mod rds;
+pub mod builder;
+pub mod error;
+pub mod validate;
 
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -21,25 +24,40 @@ struct SchemaSerde {
 }  
   
 impl Schema {  
-    /// 创建 Schema，字段名必须唯一，重复会 panic  
-    pub fn new(id: impl Into<String>, fields: Vec<Field>) -> Self {  
+    /// 创建 Schema，字段名重复时返回 Err
+    ///
+    /// # 参数
+    /// - `id`: Schema 唯一标识
+    /// - `fields`: 字段定义列表
+    ///
+    /// # 返回值
+    /// 字段名全部唯一时返回 `Ok(Schema)`，有重复时返回 `Err(String)`
+    pub fn new(id: impl Into<String>, fields: Vec<Field>) -> Result<Self, String> {  
         let mut index_map = HashMap::with_capacity(fields.len());  
         for (i, field) in fields.iter().enumerate() {  
             if index_map.insert(field.name.clone(), i).is_some() {  
-                panic!("Schema 字段名重复: {}", field.name);  
+                return Err(format!("Schema 字段名重复: {}", field.name));
             }  
         }  
-        Schema { id: id.into(), fields, index_map }  
-    }  
+        Ok(Schema { id: id.into(), fields, index_map })
+    }
+
+    /// 创建 Schema，字段名重复时 panic（用于已知安全的场景）
+    ///
+    /// 与 `new()` 功能相同，但遇到重复字段名时直接 panic 而非返回 Result。
+    /// 适用于测试代码或字段名硬编码的确定性场景。
+    pub fn new_unchecked(id: impl Into<String>, fields: Vec<Field>) -> Self {
+        Self::new(id, fields).expect("Schema 字段名重复")
+    }
   
     pub fn get_index(&self, name: &str) -> Option<usize> {  
         self.index_map.get(name).copied()  
-    }  
+    }
 
     #[inline]  
     pub fn field_count(&self) -> usize {  
         self.fields.len()  
-    }  
+    }
 
     #[inline]  
     pub fn is_empty(&self) -> bool {  
@@ -61,8 +79,8 @@ impl<'de> Deserialize<'de> for Schema {
     where  
         D: serde::Deserializer<'de>,  
     {  
-        let s = SchemaSerde::deserialize(deserializer)?;  
-        Ok(Schema::new(s.id, s.fields))  
+        let s = SchemaSerde::deserialize(deserializer)?;
+        Schema::new(s.id, s.fields).map_err(serde::de::Error::custom)
     }  
 }  
 
@@ -94,13 +112,13 @@ mod tests {
         // --- 1. 定义 Schema ---  
           
         // 订单头 Schema  
-        let header_schema = Arc::new(Schema::new("order_header", vec![  
-            Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },  
-            Field { name: "doc_no".into(), field_type: FieldType::String, label: "单号".into() },  
-        ]));  
-  
-        // 订单行 Schema  
-        let line_schema = Arc::new(Schema::new("order_line", vec![  
+        let header_schema = Arc::new(Schema::new_unchecked("order_header", vec![
+            Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
+            Field { name: "doc_no".into(), field_type: FieldType::String, label: "单号".into() },
+        ]));
+
+        // 订单行 Schema
+        let line_schema = Arc::new(Schema::new_unchecked("order_line", vec![
             Field { name: "line_id".into(), field_type: FieldType::Int, label: "行ID".into() },  
             Field { name: "material".into(), field_type: FieldType::String, label: "物料".into() },  
             Field { name: "qty".into(), field_type: FieldType::Int, label: "数量".into() },  
@@ -156,7 +174,7 @@ mod tests {
 
     #[test]  
     fn test_roundtrip_serialize_deserialize() {  
-        let schema = Arc::new(Schema::new("t1", vec![  
+        let schema = Arc::new(Schema::new_unchecked("t1", vec![  
             Field { name: "a".into(), field_type: FieldType::Int, label: "A".into() },  
             Field { name: "b".into(), field_type: FieldType::String, label: "B".into() },  
         ]));  
@@ -177,7 +195,7 @@ mod tests {
     /// 测试 Binary 类型在 DataSet 中的序列化
     #[test]
     fn test_dataset_binary_serialization() {
-        let schema = Arc::new(Schema::new("attachments", vec![
+        let schema = Arc::new(Schema::new_unchecked("attachments", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "file_data".into(), field_type: FieldType::Binary, label: "文件内容".into() },
         ]));
@@ -199,7 +217,7 @@ mod tests {
     /// 测试 Binary 类型在 DataSet 中的反序列化
     #[test]
     fn test_dataset_binary_deserialization() {
-        let schema = Arc::new(Schema::new("attachments", vec![
+        let schema = Arc::new(Schema::new_unchecked("attachments", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "file_data".into(), field_type: FieldType::Binary, label: "文件内容".into() },
         ]));
@@ -235,7 +253,7 @@ mod tests {
     fn test_dataset_uuid_serialization() {
         use uuid::Uuid;
         
-        let schema = Arc::new(Schema::new("orders", vec![
+        let schema = Arc::new(Schema::new_unchecked("orders", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "order_uuid".into(), field_type: FieldType::Uuid, label: "订单UUID".into() },
         ]));
@@ -260,7 +278,7 @@ mod tests {
     fn test_dataset_uuid_deserialization() {
         use uuid::Uuid;
         
-        let schema = Arc::new(Schema::new("orders", vec![
+        let schema = Arc::new(Schema::new_unchecked("orders", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "order_uuid".into(), field_type: FieldType::Uuid, label: "订单UUID".into() },
         ]));
@@ -290,7 +308,7 @@ mod tests {
     /// 测试 Array 类型在 DataSet 中的序列化
     #[test]
     fn test_dataset_array_serialization() {
-        let schema = Arc::new(Schema::new("orders", vec![
+        let schema = Arc::new(Schema::new_unchecked("orders", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "tags".into(), field_type: FieldType::Array, label: "标签".into() },
         ]));
@@ -316,7 +334,7 @@ mod tests {
     /// 测试 Array 类型在 DataSet 中的反序列化
     #[test]
     fn test_dataset_array_deserialization() {
-        let schema = Arc::new(Schema::new("orders", vec![
+        let schema = Arc::new(Schema::new_unchecked("orders", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "tags".into(), field_type: FieldType::Array, label: "标签".into() },
         ]));
@@ -352,7 +370,7 @@ mod tests {
     /// 测试 Json 类型在 DataSet 中的序列化
     #[test]
     fn test_dataset_json_serialization() {
-        let schema = Arc::new(Schema::new("customers", vec![
+        let schema = Arc::new(Schema::new_unchecked("customers", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "custom_fields".into(), field_type: FieldType::Json, label: "自定义字段".into() },
         ]));
@@ -375,7 +393,7 @@ mod tests {
     /// 测试 Json 类型在 DataSet 中的反序列化
     #[test]
     fn test_dataset_json_deserialization() {
-        let schema = Arc::new(Schema::new("customers", vec![
+        let schema = Arc::new(Schema::new_unchecked("customers", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "custom_fields".into(), field_type: FieldType::Json, label: "自定义字段".into() },
         ]));
@@ -407,14 +425,14 @@ mod tests {
         use uuid::Uuid;
         
         // 订单头 Schema
-        let header_schema = Arc::new(Schema::new("order_header", vec![
+        let header_schema = Arc::new(Schema::new_unchecked("order_header", vec![
             Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
             Field { name: "order_uuid".into(), field_type: FieldType::Uuid, label: "订单UUID".into() },
             Field { name: "tags".into(), field_type: FieldType::Array, label: "标签".into() },
         ]));
 
         // 附件 Schema
-        let attachment_schema = Arc::new(Schema::new("attachments", vec![
+        let attachment_schema = Arc::new(Schema::new_unchecked("attachments", vec![
             Field { name: "file_name".into(), field_type: FieldType::String, label: "文件名".into() },
             Field { name: "file_data".into(), field_type: FieldType::Binary, label: "文件内容".into() },
         ]));

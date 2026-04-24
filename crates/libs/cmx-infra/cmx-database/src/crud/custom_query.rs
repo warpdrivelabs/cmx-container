@@ -286,7 +286,7 @@ impl CustomQueryService {
 
     /// 创建一个空的 DataSet（用于返回操作结果）
     fn empty_dataset(dataset_id:&str) -> DataSet {
-        let schema = Arc::new(Schema::new(dataset_id, vec![]));
+        let schema = Arc::new(Schema::new_unchecked(dataset_id, vec![]));
         DataSet::empty(dataset_id, schema)
     }
 }
