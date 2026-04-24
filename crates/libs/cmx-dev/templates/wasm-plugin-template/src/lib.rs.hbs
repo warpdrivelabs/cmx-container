@@ -93,6 +93,7 @@ pub struct DemoResponse {
 /// # 示例
 /// 输入: `{"input": "hello world", "context": {...}}`
 /// 输出: `{"result": "{\"count\":3,\"total\":3,\"input\":\"hello world\"}"}`
+#[no_mangle]
 #[plugin_fn]
 pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 从标准入参获取当前步骤输入（现在是 Value 类型）
@@ -123,6 +124,7 @@ pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
 ///
 /// # 输出
 /// - `result`: JSON 格式的演示结果
+#[no_mangle]
 #[plugin_fn]
 pub fn demo_log(Msgpack(_input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 记录信息日志
@@ -160,6 +162,7 @@ pub fn demo_log(Msgpack(_input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// # 示例
 /// 输入: `{"input": "{\"name\":\"test\",\"count\":100}", "context": {...}}`
 /// 输出: `{"result": "{\"message\":\"缓存操作成功: ...\",\"total\":100}"}`
+#[no_mangle]
 #[plugin_fn]
 pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value，需要转为字符串）
@@ -205,6 +208,7 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
 ///
 /// # 事务支持
 /// 如果 `input.txn_id` 存在，函数将在指定事务中执行 SQL。
+#[no_mangle]
 #[plugin_fn]
 pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
@@ -248,6 +252,7 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 ///
 /// # 输出
 /// - `result`: JSON 格式的调用结果
+#[no_mangle]
 #[plugin_fn]
 pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
@@ -293,6 +298,7 @@ pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 /// 3. 缓存读取测试
 /// 4. 数据库查询测试
 /// 5. 插件调用测试
+#[no_mangle] 
 #[plugin_fn]
 pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // 解析业务参数（input.input 现在是 Value）
@@ -372,6 +378,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 /// # 示例
 /// 输入: `{"input": "{\"route\":\"1\"}", "context": {...}}`
 /// 输出: `{"result": "1"}`
+#[no_mangle] 
 #[plugin_fn]
 #[doc_type = "branch_fn"]
 pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
@@ -409,6 +416,7 @@ pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
 ///
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[no_mangle] 
 #[plugin_fn]
 pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     HostCaller::log_info("执行分支1处理")?;
@@ -433,6 +441,7 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 ///
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[no_mangle]
 #[plugin_fn]
 pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     HostCaller::log_info("执行分支2处理")?;
@@ -457,6 +466,7 @@ pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 ///
 /// # 输出
 /// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+#[no_mangle]
 #[plugin_fn]
 pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     HostCaller::log_info("执行分支3处理")?;
@@ -482,6 +492,7 @@ pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 ///
 /// # 输出
 /// - `result`: JSON 格式的合并结果
+#[no_mangle]
 #[plugin_fn]
 pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     HostCaller::log_info("执行合并结果处理")?;
@@ -512,6 +523,7 @@ pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
 ///
 /// # 输出
 /// - `result`: JSON 格式的操作结果
+#[no_mangle] 
 #[plugin_fn]
 pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
@@ -568,6 +580,7 @@ pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 ///
 /// # 输出
 /// - `result`: JSON 格式的操作结果
+#[no_mangle]
 #[plugin_fn]
 pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
@@ -624,6 +637,7 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 ///
 /// # 输出
 /// - `result`: JSON 格式的查询结果
+#[no_mangle]
 #[plugin_fn]
 pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
@@ -679,6 +693,7 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
 ///
 /// # 输出
 /// - `result`: JSON 格式的操作结果
+#[no_mangle]
 #[plugin_fn]
 pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let txn_id = input.context.txn_id.clone();
@@ -732,6 +747,7 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 ///
 /// # 输出
 /// - `result`: JSON 格式的最终结果
+#[no_mangle]
 #[plugin_fn]
 pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     HostCaller::log_info("执行最终处理")?;
