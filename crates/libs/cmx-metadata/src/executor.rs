@@ -666,7 +666,7 @@ fn parse_pg_array_column(val: Option<&DataValue>) -> Vec<String> {
 fn empty_dataset(id: &str) -> DataSet {
     use cmx_core::model::data::dataset::Schema;
     use std::sync::Arc;
-    DataSet::empty(id, Arc::new(Schema::new(id, vec![])))
+    DataSet::empty(id, Arc::new(Schema::new_unchecked(id, vec![])))
 }
 
 #[cfg(test)]

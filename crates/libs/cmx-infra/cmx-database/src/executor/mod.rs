@@ -221,7 +221,7 @@ impl ResultConverter {
     /// 将 PostgreSQL 行转换为 DataSet
     pub fn convert_postgres_rows(rows: Vec<sqlx::postgres::PgRow>, dataset_id: &str) -> DataSet {
         if rows.is_empty() {
-            let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), vec![]));
+            let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), vec![]));
             return DataSet::empty(dataset_id, schema);
         }
 
@@ -239,7 +239,7 @@ impl ResultConverter {
             });
         }
 
-        let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), fields));
+        let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), fields));
         let mut dataset = DataSet::with_capacity(dataset_id, schema.clone(), rows.len());
 
         for row in rows {
@@ -257,7 +257,7 @@ impl ResultConverter {
     /// 将 MySQL 行转换为 DataSet
     pub fn convert_mysql_rows(rows: Vec<sqlx::mysql::MySqlRow>, dataset_id: &str) -> DataSet {
         if rows.is_empty() {
-            let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), vec![]));
+            let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), vec![]));
             return DataSet::empty(dataset_id, schema);
         }
 
@@ -275,7 +275,7 @@ impl ResultConverter {
             });
         }
 
-        let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), fields));
+        let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), fields));
         let mut dataset = DataSet::with_capacity(dataset_id, schema.clone(), rows.len());
 
         for row in rows {
@@ -293,7 +293,7 @@ impl ResultConverter {
     /// 将 SQLite 行转换为 DataSet
     pub fn convert_sqlite_rows(rows: Vec<sqlx::sqlite::SqliteRow>, dataset_id: &str) -> DataSet {
         if rows.is_empty() {
-            let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), vec![]));
+            let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), vec![]));
             return DataSet::empty(dataset_id, schema);
         }
 
@@ -311,7 +311,7 @@ impl ResultConverter {
             });
         }
 
-        let schema = std::sync::Arc::new(Schema::new(dataset_id.to_string(), fields));
+        let schema = std::sync::Arc::new(Schema::new_unchecked(dataset_id.to_string(), fields));
         let mut dataset = DataSet::with_capacity(dataset_id, schema.clone(), rows.len());
 
         for row in rows {

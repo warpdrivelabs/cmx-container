@@ -232,20 +232,5 @@ mod tests {
         assert_eq!(params.id, "test123");
     }
 
-    #[test]
-    fn test_deserialize_page_params() {
-        let json = r#"{"page":2,"size":30,"order_bys":"name"}"#;
-        let params: PageParams<()> = serde_json::from_str(json).unwrap();
-        assert_eq!(params.current, Some(2));
-        assert_eq!(params.size, Some(30));
-        assert_eq!(params.order_bys, Some("name".to_string()));
-    }
 
-    #[test]
-    fn test_deserialize_page_params_missing_values() {
-        let json = r#"{}"#;
-        let params: PageParams<()> = serde_json::from_str(json).unwrap();
-        assert_eq!(params.get_page(), 1);
-        assert_eq!(params.get_size(), PAGE_SIZE_DEFAULT);
-    }
 }

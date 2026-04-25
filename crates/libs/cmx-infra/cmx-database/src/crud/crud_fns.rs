@@ -21,7 +21,7 @@ use tracing::{debug, error, info, warn};
 
 /// 创建一个空的 DataSet（用于返回操作结果）
 fn empty_dataset() -> DataSet {
-    let schema = Arc::new(Schema::new("empty", vec![]));
+    let schema = Arc::new(Schema::new_unchecked("empty", vec![]));
     DataSet::empty("result", schema)
 }
 
