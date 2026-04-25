@@ -164,48 +164,48 @@ pub fn is_debugger_attached(target_pid: u32) -> bool {
 pub fn cleanup_dead_sessions() {
     let mut sessions = DEBUG_SESSIONS.lock().unwrap();
     let active_count = sessions.len();
-    log::info!(
-        "[cmx-debug] cleanup_dead_sessions called, active sessions: {}",
-        active_count
-    );
+    // log::info!(
+    //     "[cmx-debug] cleanup_dead_sessions called, active sessions: {}",
+    //     active_count
+    // );
     if active_count > 10 {
-        log::warn!(
-            "[cmx-debug] Many active sessions ({}), cleanup may be needed",
-            active_count
-        );
+        // log::warn!(
+        //     "[cmx-debug] Many active sessions ({}), cleanup may be needed",
+        //     active_count
+        // );
     }
     sessions.retain(|session_id, session| {
         let attached = is_debugger_attached(session.cmx_pid);
         if session.is_protected {
             if attached {
-                log::info!(
-                    "[cmx-debug] Session {} is protected and debugger is attached, unprotecting",
-                    session_id
-                );
+                // log::info!(
+                //     "[cmx-debug] Session {} is protected and debugger is attached, unprotecting",
+                //     session_id
+                // );
                 session.is_protected = false;
                 return true;
             } else {
-                log::info!(
-                    "[cmx-debug] Session {} is protected (debugger starting), keeping",
-                    session_id
-                );
+                // log::info!(
+                //     "[cmx-debug] Session {} is protected (debugger starting), keeping",
+                //     session_id
+                // );
                 return true;
             }
         }
-        log::info!(
-            "[cmx-debug] Session {} (cmx_pid={}), is_debugger_attached={}",
-            session_id,
-            session.cmx_pid,
-            attached
-        );
+        // log::info!(
+        //     "[cmx-debug] Session {} (cmx_pid={}), is_debugger_attached={}",
+        //     session_id,
+        //     session.cmx_pid,
+        //     attached
+        // );
         if !attached {
-            log::info!(
-                "[cmx-debug] No debugger attached for {}, cleaning up session",
-                session_id
-            );
+            // log::info!(
+            //     "[cmx-debug] No debugger attached for {}, cleaning up session",
+            //     session_id
+            // );
             return false;
         }
-        log::info!("[cmx-debug] Session {} is alive, keeping", session_id);
+        //log::info!("[cmx-debug] Session {} is alive, keeping", session_id);
         true
     });
 }
