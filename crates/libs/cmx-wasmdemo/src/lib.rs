@@ -550,8 +550,8 @@ pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         "operation": "insert",
         "txn_id": txn_id,
         "table": insert_data.table,
-        "success": db_response.success,
-        "message": "事务插入完成",
+        "affected_rows": db_response.affected_rows ,
+        "message": "插入完成",
     });
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
@@ -600,14 +600,14 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         txn_id: txn_id.clone(),
     };
 
-    let db_response = HostCaller::db_query(query_request)?;
+    let db_response = HostCaller::db_execute(query_request)?;
 
     let result = serde_json::json!({
         "operation": "update",
         "txn_id": txn_id,
         "table": update_data.table,
-        "success": db_response.success,
-        "message": "事务更新完成",
+        "affected_rows": db_response.affected_rows,
+        "message": "更新完成",
     });
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
@@ -649,7 +649,7 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
     let query_request = DbRequest {
         sql,
         params: None,
-        dataset_id: None,
+        dataset_id: Some("test_table".to_string()),
         db_id: None,
         txn_id: txn_id.clone(),
     };
@@ -662,7 +662,7 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
         "table": query_data.table,
         "success": db_response.success,
         "dataset": db_response.dataset,
-        "message": "事务查询完成",
+        "message": "查询完成",
     });
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
@@ -693,7 +693,7 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
     let delete_data: DeleteData = serde_json::from_value(input.input.clone())
         .unwrap_or(DeleteData {
             table: "test_table".to_string(),
-            name: "test".to_string(),
+            name: "test1".to_string(),
         });
 
     let sql = format!(
@@ -709,14 +709,14 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
         txn_id: txn_id.clone(),
     };
 
-    let db_response = HostCaller::db_query(query_request)?;
+    let db_response = HostCaller::db_execute(query_request)?;
 
     let result = serde_json::json!({
         "operation": "delete",
         "txn_id": txn_id,
         "table": delete_data.table,
-        "success": db_response.success,
-        "message": "事务删除完成",
+        "affected_rows": db_response.affected_rows ,
+        "message": "删除完成",
     });
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
