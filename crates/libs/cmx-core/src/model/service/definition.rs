@@ -38,6 +38,9 @@ pub struct ServiceDefinition {
     /// 所属模块名称（联查获取）
     #[serde(default)]
     pub module_name: String,
+    /// 所属插件名称（联查获取）
+    #[serde(default)]
+    pub plugin_name: String,
 }
 
 /// 服务运行时信息 — 内存缓存用
@@ -74,6 +77,9 @@ pub struct ServiceInfo {
     /// 所属模块名称（联查获取）
     #[serde(default)]
     pub module_name: String,
+    /// 所属插件名称（联查获取）
+    #[serde(default)]
+    pub plugin_name: String,
 }
 
 impl From<ServiceDefinition> for ServiceInfo {
@@ -93,6 +99,7 @@ impl From<ServiceDefinition> for ServiceInfo {
             domain_name: def.domain_name,
             application_name: def.application_name,
             module_name: def.module_name,
+            plugin_name: def.plugin_name,
         }
     }
 }
@@ -114,6 +121,7 @@ impl From<ServiceInfo> for ServiceDefinition {
             domain_name: info.domain_name,
             application_name: info.application_name,
             module_name: info.module_name,
+            plugin_name: info.plugin_name,
         }
     }
 }

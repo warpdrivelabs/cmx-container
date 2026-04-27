@@ -244,6 +244,7 @@ impl ServiceDataParser {
             domain_name: String::new(),
             application_name: String::new(),
             module_name: String::new(),
+            plugin_name: String::new()
         })
     }
 }
