@@ -909,6 +909,7 @@ dependencies = [
  "async-trait",
  "cmx-core 0.1.1",
  "cmx-traits",
+ "cmx-utils",
  "extism",
  "serde",
  "serde_json",

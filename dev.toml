@@ -65,6 +65,11 @@ url = "https://dev.cloudmatrix.one:18080/"
 url = "http://127.0.0.1:9000"
 
 
+#WASM运行时相关配置
+[runtime]
+# Fuel 限制（0 表示不限制，单位：Wasm 指令数）
+fuel_limit = 0
+
 #插件相关配置
 [plugin]
 # 插件安装根目录
