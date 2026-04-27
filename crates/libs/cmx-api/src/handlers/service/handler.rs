@@ -817,6 +817,7 @@ pub async fn page_services(
             domain_name: s.domain_name,
             application_name: s.application_name,
             module_name: s.module_name,
+            plugin_name: s.plugin_name,
         }
     }).collect();
 

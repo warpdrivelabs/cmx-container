@@ -87,7 +87,7 @@ pub struct ServiceExecuteRequest {
     /// 调试目标节点ID（开启 debug 时必填）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_node_id: Option<String>,
-    
+
     /// 调试参数（开启 debug 时有）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_params: Option<HashMap<String, String>>,
@@ -242,6 +242,8 @@ pub struct ServiceListItem {
     pub application_name: String,
     /// 所属模块名称
     pub module_name: String,
+    /// 插件名称
+    pub plugin_name: String,
 }
 
 /// 服务查重查询参数
