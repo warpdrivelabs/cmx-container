@@ -542,7 +542,7 @@ impl ServiceRepository {
             LEFT JOIN cmx_domain d ON s.domain_code = d.code
             LEFT JOIN cmx_application a ON s.application_code = a.code
             LEFT JOIN cmx_module m ON s.module_code = m.code
-            LEFT JOIN cmx_plugin p ON s.plugin_id = p.id
+            LEFT JOIN cmx_plugin p ON s.plugin_id = p.plugin_id
             {}
             ORDER BY s.update_time DESC
             LIMIT ${} OFFSET ${}
