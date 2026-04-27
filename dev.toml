@@ -11,7 +11,7 @@ db_id = "primary"
 db_type = "postgres"
 # 数据库连接 URL（必需）
 db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
-#db_url = "postgres://dbuser_dba:uxW2GKFvRIcqL7qDm1W2Zc8b@192.168.1.14:5432/cmx"
+#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 # 是否为默认数据库（可选，默认 false）
 default = true
 
@@ -39,7 +39,7 @@ health_check_timeout = 5
 [[databases]]
 db_id = "postgres2"
 db_type = "postgres"
-db_url = "postgres://dbuser_dba:uxW2GKFvRIcqL7qDm1W2Zc8b@192.168.1.14:5432/cmx"
+db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 default = false
 health_check_interval = 30
 health_check_timeout = 3
@@ -63,3 +63,15 @@ url = "https://dev.cloudmatrix.one:18080/"
 [code_server_extension_server]
 # code-server 扩展服务器 URL，用于自调试
 url = "http://127.0.0.1:9000"
+
+
+#插件相关配置
+[plugin]
+# 插件安装根目录
+install_root = "plugins/root"
+# 插件备份目录
+backup_root = "plugins/backup"
+# 插件解压临时目录
+temp_root = "plugins/temp"
+# 插件上传临时目录
+upload_root = "plugins/uploads"

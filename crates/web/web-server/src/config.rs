@@ -170,10 +170,14 @@ pub async fn init_plugins() {
     info!("初始化插件管理器...");
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
+    let plugin_root = ConfigManager::global().get_string("plugin.install_root").unwrap_or("plugins/root".to_string());
+    let backup_root = ConfigManager::global().get_string("plugin.backup_root").unwrap_or("plugins/backup".to_string());
+    let temp_root = ConfigManager::global().get_string("plugin.temp_root").unwrap_or("plugins/temp".to_string());
+
     let settings = PluginManagerSettings {
-        plugin_root: PathBuf::new().join("plugins").join("root"),
-        backup_root: PathBuf::new().join("plugins").join("backup"),
-        temp_root: PathBuf::new().join("plugins").join("temp"),
+        plugin_root: PathBuf::from(plugin_root),
+        backup_root: PathBuf::from(backup_root),
+        temp_root: PathBuf::from(temp_root),
         default_database_id: default_db_id,
         node_id: ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string()),
         ..Default::default()

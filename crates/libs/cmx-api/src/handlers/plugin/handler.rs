@@ -9,7 +9,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 use chrono::DateTime;
 use tracing::{debug, info};
-
+use cmx_utils::ConfigManager;
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::error::Result;
@@ -247,7 +247,11 @@ pub async fn plugin_deploy(
 ) -> Result<Json<ApiResp<PluginDeployResponse>>> {
     info!("插件部署请求（文件上传）");
 
-    let uploads_dir = PathBuf::from("./uploads/plugins");
+
+    let uploads_root = ConfigManager::global().get_string("plugin.upload_root")
+        .unwrap_or("plugins/uploads".to_string());
+
+    let uploads_dir = PathBuf::from(uploads_root);
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut target_db_id: Option<String> = None;
     let mut force_reinstall: bool = false;
