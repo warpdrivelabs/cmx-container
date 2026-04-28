@@ -128,7 +128,7 @@ config = { version = "0.15", features = ["toml", "yaml", "json"] }
 dotenvy = "0.15"
 
 # 唯一标识符
-uuid = { version = "1.21", features = ["v4", "serde", "js", "v1"] }
+uuid = { version = "1.21", features = ["v4", "serde"] }
 # 正则表达式
 regex = "1"
 
