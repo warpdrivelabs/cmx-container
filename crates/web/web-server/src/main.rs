@@ -70,6 +70,9 @@ async fn main() -> Result<()> {
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
+    // 初始化 tracing-log 桥接：将第三方库的 log 日志桥接到 tracing 系统
+    let _ = tracing_log::LogTracer::init();
+
     // 注册日志层: 控制台 + 文件 + 环境过滤
     registry()
         .with(env_filter)

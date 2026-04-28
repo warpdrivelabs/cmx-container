@@ -31,4 +31,4 @@ modql = { workspace = true }
 uuid = { workspace = true }
 
 dotenvy ={workspace = true}
-log = "0.4.29"
+tracing-log = "0.2"

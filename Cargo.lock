@@ -6204,7 +6204,6 @@ dependencies = [
  "cmx-utils",
  "derive_more",
  "dotenvy",
- "log",
  "modql",
  "serde",
  "serde_json",
@@ -6214,6 +6213,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-appender",
+ "tracing-log",
  "tracing-subscriber",
  "uuid",
 ]
