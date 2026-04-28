@@ -5,13 +5,21 @@ edition = "2021"
 description = "Debug session management and WASM plugin invocation for cmx"
 
 [dependencies]
-lazy_static = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-log = "0.4"
-tracing = "0.1"
-extism = "1.4.0"
-anyhow = "1"
-walkdir = "2"
-reqwest = { version = "0.11", features = ["json", "blocking"], default-features = false }
-utoipa = "5"
+# 懒加载静态量
+lazy_static = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# Extism 运行时
+extism = { workspace = true }
+# 错误处理
+anyhow = { workspace = true }
+# 目录遍历
+walkdir = { workspace = true }
+# HTTP 客户端
+reqwest = { workspace = true }
+# API 文档生成
+utoipa = { workspace = true }

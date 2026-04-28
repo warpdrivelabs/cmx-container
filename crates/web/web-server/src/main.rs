@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     // 初始化 tracing-log 桥接：将第三方库的 log 日志桥接到 tracing 系统
-    let _ = tracing_log::LogTracer::init();
+    // let _ = tracing_log::LogTracer::init();
 
     // 注册日志层: 控制台 + 文件 + 环境过滤
     registry()

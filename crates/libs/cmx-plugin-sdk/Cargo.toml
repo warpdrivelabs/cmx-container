@@ -7,23 +7,13 @@ edition.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# ============================================
 # Extism PDK
-# ============================================
 extism-pdk = "1.4.1"
-
-# ============================================
-# CMX 内部依赖
-# ============================================
-cmx-core = {workspace = true }
-
-# ============================================
-# 序列化
-# ============================================
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-# ============================================
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 序列化框架
+serde = { workspace = true, features = ["derive"] }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
 # 错误处理
-# ============================================
-thiserror = "2"
+thiserror = { workspace = true }

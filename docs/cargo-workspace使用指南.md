@@ -85,6 +85,7 @@ cargo ws publish --allow-branch dev-service
 
 总的来说，`cargo-workspaces` 将一系列繁琐的手动操作（分析依赖、修改版本、更新引用、提交、打 tag、按序发布）整合为了几个简单的命令，极大地提升了多 crate 项目的维护效率和可靠性。
 
+要手动更改下类似cmx-core = { path = "crates/libs/cmx-core",version = "0.1.3" ,registry = "nora"}的版本号
 ```bash
 # 仅发布（不升级版本）
 cargo ws publish --publish-as-is --registry nora  --allow-branch dev-service  --allow-dirty --no-verify

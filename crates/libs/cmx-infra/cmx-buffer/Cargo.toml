@@ -4,36 +4,37 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+# 内部依赖 - 工具库
 cmx-utils = { workspace = true }
+# 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
+# 内部依赖 - 核心库
 cmx-core = { workspace = true }
-
 # Redis 客户端
-redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script"] }
-
-# 连接池
-bb8 = "0.8"
-bb8-redis = "0.17"
-
-# 序列化
+redis = { workspace = true }
+# 连接池管理
+bb8 = { workspace = true }
+# Redis 连接池
+bb8-redis = { workspace = true }
+# 序列化框架
 serde = { workspace = true }
+# JSON 序列化/反序列化
 serde_json = { workspace = true }
-
 # 异步运行时
 tokio = { workspace = true }
-
-# 日志
+# 日志追踪
 tracing = { workspace = true }
-
 # 错误处理
 thiserror = { workspace = true }
+# 错误处理
 anyhow = { workspace = true }
-
 # 时间处理
 chrono = { workspace = true }
-
-# 工具库
+# 派生宏
 derive_more = { workspace = true }
-async-trait = "0.1"
-uuid = { version = "1.21", features = ["v4"] }
-futures-util = "0.3"
+# 异步 trait
+async-trait = { workspace = true }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4"] }
+# Futures 工具
+futures-util = { workspace = true }

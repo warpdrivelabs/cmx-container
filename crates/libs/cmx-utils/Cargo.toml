@@ -4,34 +4,37 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-# serde: 序列化框架
+# 序列化框架
 serde = { workspace = true }
-# serde_json: JSON 序列化/反序列化
+# JSON 序列化/反序列化
 serde_json = { workspace = true }
-# base64: Base64 编码/解码
-base64 = "0.22"
-# thiserror: 错误处理
+# Base64 编码/解码
+base64 = { workspace = true }
+# 错误处理
 thiserror = { workspace = true }
-# zip: ZIP 压缩/解压
-zip = "2.2"
-# walkdir: 目录遍历
-walkdir = "2.5"
-# fs-err: 改进的文件系统操作
-fs-err = "2.2"
-# rand: 随机数生成
-rand = "0.8"
-# aes-gcm: AES-256-GCM 对称加密
+# ZIP 压缩/解压
+zip = { workspace = true }
+# 目录遍历
+walkdir = { workspace = true }
+# 改进的文件系统操作
+fs-err = { workspace = true }
+# 随机数生成
+rand = { workspace = true }
+# AES-256-GCM 对称加密
 aes-gcm = { workspace = true }
-
+# 时间处理
 time = { workspace = true }
-uuid = { workspace = true ,features = ["v4","fast-rng"]}
-#配置管理
+# 唯一标识符
+uuid = { workspace = true, features = ["v4", "fast-rng"] }
+# 配置管理
 config = { workspace = true }
-# dotenvy: .env 文件加载
+# .env 文件加载
 dotenvy = { workspace = true }
+# 日志追踪
 tracing = { workspace = true }
+# 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
 
 [dev-dependencies]
-# tempfile: 临时文件测试
+# 临时文件测试
 tempfile = "3"

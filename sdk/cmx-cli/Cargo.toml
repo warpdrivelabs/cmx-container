@@ -6,36 +6,33 @@ description = "CMX Plugin Documentation Generator CLI"
 authors.workspace = true
 
 [dependencies]
-# AST 解析
-syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
-quote = "1"
-proc-macro2 = { version = "1", features = ["span-locations"] }
-
-# 序列化
+# AST 解析 - 语法树
+syn = { workspace = true }
+# AST 解析 - 代码生成
+quote = { workspace = true }
+# AST 解析 - 底层支持
+proc-macro2 = { workspace = true }
+# 序列化框架
 serde = { workspace = true }
+# JSON 序列化/反序列化
 serde_json = { workspace = true }
-
-# CLI
+# CLI 参数解析
 clap = { workspace = true }
-
 # 错误处理
 anyhow = { workspace = true }
+# 错误处理
 thiserror = { workspace = true }
-
-# 日志
+# 日志追踪
 tracing = { workspace = true }
-
-# 文件系统
-walkdir = "2"
-
-# 时间
+# 目录遍历
+walkdir = { workspace = true }
+# 时间处理
 chrono = { workspace = true }
-
-# Markdown 解析（用于解析表格）
-pulldown-cmark = "0.11"
-
+# Markdown 解析
+pulldown-cmark = { workspace = true }
 # TOML 解析
-toml = "0.8"
+toml = { workspace = true }
 
 [dev-dependencies]
+# 临时文件测试
 tempfile = "3"

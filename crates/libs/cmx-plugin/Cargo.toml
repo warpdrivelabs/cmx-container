@@ -4,74 +4,69 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+# 内部依赖 - 核心库
 cmx-core = { workspace = true }
+# 内部依赖 - 元数据
 cmx-metadata = { workspace = true }
+# 内部依赖 - 缓存
 cmx-buffer = { workspace = true }
+# 内部依赖 - 数据库
 cmx-database = { workspace = true }
+# 内部依赖 - 工具库
 cmx-utils = { workspace = true }
+# 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
+# 内部依赖 - 服务
 cmx-service = { workspace = true }
+# 序列化框架
 serde = { workspace = true }
-serde_json = "1.0"
-thiserror = "2"
-zip = "8.2.0"
-ed25519-dalek = { version = "2.2", features = ["std"] }
-base64 = "0.22"
-
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# ZIP 压缩
+zip = { workspace = true }
+# 签名验证
+ed25519-dalek = { workspace = true }
+# Base64 编码/解码
+base64 = { workspace = true }
+# URL 解析
+url = { workspace = true }
 # 异步运行时
 tokio = { workspace = true, features = ["fs", "io-util"] }
-
 # HTTP 客户端
 reqwest = { workspace = true }
-
-# URL 解析
-url = "2"
-
 # 异步 trait
-async-trait = "0.1"
-
+async-trait = { workspace = true }
 # 错误处理
-anyhow = "1.0"
-
-# 工具宏
+anyhow = { workspace = true }
+# 派生宏
 derive_more = { workspace = true }
-
-# 日期时间处理
+# 时间处理
 chrono = { workspace = true, features = ["serde"] }
-
-# UUID 生成
+# 唯一标识符
 uuid = { workspace = true, features = ["v4"] }
-
 # 正则表达式
 regex = { workspace = true }
-
 # URL 编码
-urlencoding = "2"
-
-# 日志
-log = "0.4"
+urlencoding = { workspace = true }
+# 日志追踪
 tracing = { workspace = true }
-
 # SHA256 哈希
-sha2 = "0.10"
-
+sha2 = { workspace = true }
 # SHA1 哈希
-sha1 = "0.10"
-
+sha1 = { workspace = true }
 # TOML 解析
-toml = "0.8"
-
+toml = { workspace = true }
 # YAML 解析
-serde_yaml = "0.9"
-
+serde_yaml = { workspace = true }
 # MD5 哈希
-md5 = "0.7"
-
+md5 = { workspace = true }
 # 随机数生成
-rand = "0.8"
-
-# sea-query: SQL 构建工具
+rand = { workspace = true }
+# sea-query SQL 构建工具
 sea-query = { workspace = true }
-# sea-query-binder: SQL 参数绑定工具
+# sea-query-binder SQL 参数绑定工具
 sea-query-binder = { workspace = true }
+# modql 支持
 modql = { workspace = true, features = ["with-sea-query"] }

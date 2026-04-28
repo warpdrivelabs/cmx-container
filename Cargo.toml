@@ -70,7 +70,7 @@ serde_yaml = "0.9.33"
 serde_with = {version = "3", features = ["time_0_3", "json"] }
 # rmp_serde: MessagePack 序列化/反序列化
 rmp = "0.8"
-rmp-serde = "1.0"
+rmp-serde = "1.3"
 # serde_bytes: 用于更高效地处理字节切片
 serde_bytes = "0.11"
 # ============================================
@@ -116,7 +116,7 @@ wasmtime = "39.0.1"
 # 高性能序列化框架
 # ============================================
 # rkyv: 零拷贝序列化框架,适用于高性能场景
-rkyv = { version = "0.8", features = ["alloc", "bytecheck","uuid-1"] }
+#rkyv = { version = "0.8", features = ["alloc", "bytecheck","uuid-1"] }
 
 # ============================================
 # 命令行参数解析
@@ -127,7 +127,7 @@ clap = { version = "4", features = ["derive"] }
 # ============================================
 # 数据库相关
 # ============================================
-sqlx = { version = "0.8", features = [ "macros", "runtime-tokio", "postgres", "uuid" ] }
+sqlx = { version = "0.8", features = [ "macros", "runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "rust_decimal", "json" ] }
 sea-query = {version = "0.32",features = ["with-chrono", "with-time","with-json","with-uuid"]}
 sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", "with-time","with-chrono" ,"with-json"] }
 modql = "0.4.1"
@@ -148,7 +148,7 @@ config={version = "0.15", features = ["toml","yaml","json"]}
 # 环境变量
 dotenvy = "0.15"
 
-uuid={version = "1.21"}
+uuid = { version = "1.21", features = ["v4", "serde", "js", "v1"] }
 regex = "1"
 
 # ============================================
@@ -179,6 +179,61 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 #使trait中的异步函数能够与动态特征配合使用
 async-trait = "0.1"
 
+
+# ============================================
+# 新增第三方依赖（被各crate使用但workspace未定义）
+# ============================================
+# 小字符串优化
+smol_str = { version = "0.3", features = ["serde"] }
+# 十进制数处理
+rust_decimal = "1"
+# 枚举字符串转换
+strum = "0.27"
+strum_macros = "0.27"
+# Base64编码
+base64 = "0.22"
+# Redis客户端
+redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script"] }
+# 连接池
+bb8 = "0.8"
+bb8-redis = "0.17"
+# Futures工具
+futures-util = "0.3"
+# CSV解析
+csv = "1.3"
+# 签名验证
+ed25519-dalek = { version = "2.2", features = ["std"] }
+# URL编码
+urlencoding = "2"
+# 哈希算法
+sha2 = "0.10"
+sha1 = "0.10"
+md5 = "0.7"
+# TOML/YAML解析
+toml = "0.8"
+# ZIP压缩
+zip = "2"
+# SQL解析器
+sqlparser = "0.49"
+# Extism运行时
+extism = "1.4"
+# Tracing追加器
+tracing-appender = "0.2"
+# 懒加载静态量
+lazy_static = "1"
+# 宏工具
+syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+quote = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+# Markdown解析
+pulldown-cmark = "0.11"
+# Percent编码
+percent-encoding = "2"
+# 文件系统增强
+fs-err = "2.2"
+walkdir = "2.5"
+# 随机数生成
+rand = "0.8"
 
 [profile.dev]
 # 优化级别：0=关闭，1=基本，2=中等，3=激进

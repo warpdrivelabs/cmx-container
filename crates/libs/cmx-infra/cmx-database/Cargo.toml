@@ -4,44 +4,49 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+# 内部依赖 - 核心库
 cmx-core = { workspace = true }
+# 内部依赖 - 工具库
 cmx-utils = { workspace = true }
+# 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
-
-# ============================================
-# Workspace 依赖
-# ============================================
-# serde: 序列化框架
+# 序列化框架
 serde = { workspace = true }
-# serde_json: JSON 序列化/反序列化
+# JSON 序列化/反序列化
 serde_json = { workspace = true }
-# sqlx: SQL 异步查询框架
-sqlx = { workspace = true, features = ["postgres", "mysql", "sqlite", "runtime-tokio", "chrono", "uuid", "rust_decimal", "json"] }
-# sea-query: SQL 查询构建器
+# SQL 异步查询框架
+sqlx = { workspace = true }
+# sea-query SQL 查询构建器
 sea-query = { workspace = true }
-# sea-query-binder: SQL 参数绑定工具
+# sea-query-binder SQL 参数绑定工具
 sea-query-binder = { workspace = true }
+# modql 支持
 modql = { workspace = true, features = ["with-sea-query"] }
-
-
+# 派生宏
 derive_more = { workspace = true }
+# serde 辅助宏
 serde_with = { workspace = true }
+# 日志追踪
 tracing = { workspace = true }
-log = "0.4.29"
+# 错误处理
 thiserror = { workspace = true }
+# 异步运行时
 tokio = { workspace = true }
-uuid = { version = "1.8.0", features = ["v4"] }
-rand = "0.8.5"
-futures = "0.3.30"
-rust_decimal = "1.40.0"
-chrono = "0.4.44"
-base64 = "0.22"
-
+# 唯一标识符
+uuid = { workspace = true, features = ["v4"] }
+# 随机数生成
+rand = { workspace = true }
+# Futures
+futures = { workspace = true }
+# 十进制数处理
+rust_decimal = { workspace = true }
+# 时间处理
+chrono = { workspace = true }
+# Base64 编码/解码
+base64 = { workspace = true }
 # SQL 解析器
-sqlparser = "0.49"
+sqlparser = { workspace = true }
 # 正则表达式
-regex = "1.10"
-# URL 解析库
+regex = { workspace = true }
+# URL 解析
 url = { workspace = true }
-
-
