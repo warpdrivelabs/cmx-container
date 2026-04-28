@@ -1,5 +1,5 @@
 ---
-name: axum Handler生成
+name: axum-handler-generator
 description: 在生成axum rest接口handler的时候要求遵循的规范
 ---
 
