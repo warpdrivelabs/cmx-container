@@ -783,8 +783,8 @@ dependencies = [
 [[package]]
 name = "cmx-core"
 version = "0.1.1"
-source = "registry+http://192.168.1.13:8081/git/"
-checksum = "28bff3eb2c22e2c01e42d1fa894a5d9bfa004916f16b7c40761c4a0d415497a3"
+source = "sparse+http://192.168.1.14:4000/cargo/index/"
+checksum = "a8bb3a740d72be620fbc51b5f79a94951ed39f4fc66386497e45c20db1425bdb"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -918,10 +918,10 @@ dependencies = [
 [[package]]
 name = "cmx-plugin-sdk"
 version = "0.1.1"
-source = "registry+http://192.168.1.13:8081/git/"
-checksum = "65784753f58fd400e2f32b15dfacb082bed5cb9bb889dd9cb507519030563fa0"
+source = "sparse+http://192.168.1.14:4000/cargo/index/"
+checksum = "9b2badda175ed2ec36ab4fba22ff9bcff2b67bdfe40943cbac79309715cb83cd"
 dependencies = [
- "cmx-core 0.1.1 (registry+http://192.168.1.13:8081/git/)",
+ "cmx-core 0.1.1 (sparse+http://192.168.1.14:4000/cargo/index/)",
  "extism-pdk",
  "serde",
  "serde_json",
@@ -1011,7 +1011,7 @@ dependencies = [
 name = "cmx-wasmdemo"
 version = "0.1.1"
 dependencies = [
- "cmx-plugin-sdk 0.1.1 (registry+http://192.168.1.13:8081/git/)",
+ "cmx-plugin-sdk 0.1.1 (sparse+http://192.168.1.14:4000/cargo/index/)",
  "extism-pdk",
  "serde",
  "serde_json",

@@ -8,7 +8,6 @@
 /plugin.zip
 /uploads/
 /logs/
-/.trae/skills/rust规范/
 /.trae/specs/
 /crates/libs/cmx-wasmdemo.zip
 /crates/libs/cmx-service/src/orchestrator/old.rs
