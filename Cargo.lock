@@ -684,11 +684,11 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cmx-api"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "chrono",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-database",
  "cmx-debug",
  "cmx-metadata",
@@ -722,14 +722,14 @@ dependencies = [
 
 [[package]]
 name = "cmx-buffer"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "bb8",
  "bb8-redis",
  "chrono",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -745,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -761,23 +761,6 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "walkdir",
-]
-
-[[package]]
-name = "cmx-core"
-version = "0.1.1"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "modql",
- "rust_decimal",
- "serde",
- "serde_json",
- "smol_str",
- "strum",
- "strum_macros",
- "thiserror 2.0.18",
- "uuid",
 ]
 
 [[package]]
@@ -800,12 +783,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmx-database"
-version = "0.1.1"
+name = "cmx-core"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "cmx-core 0.1.1",
+ "modql",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "smol_str",
+ "strum",
+ "strum_macros",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "cmx-database"
+version = "0.1.2"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "cmx-core 0.1.2",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-debug"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "extism",
@@ -847,11 +847,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-metadata"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-database",
  "csv",
  "regex",
@@ -866,14 +866,14 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
  "chrono",
  "cmx-buffer",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-database",
  "cmx-metadata",
  "cmx-service",
@@ -907,6 +907,8 @@ dependencies = [
 [[package]]
 name = "cmx-plugin-sdk"
 version = "0.1.1"
+source = "sparse+http://192.168.1.14:4000/cargo/index/"
+checksum = "9b2badda175ed2ec36ab4fba22ff9bcff2b67bdfe40943cbac79309715cb83cd"
 dependencies = [
  "cmx-core 0.1.1",
  "extism-pdk",
@@ -917,11 +919,9 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin-sdk"
-version = "0.1.1"
-source = "sparse+http://192.168.1.14:4000/cargo/index/"
-checksum = "9b2badda175ed2ec36ab4fba22ff9bcff2b67bdfe40943cbac79309715cb83cd"
+version = "0.1.2"
 dependencies = [
- "cmx-core 0.1.1 (sparse+http://192.168.1.14:4000/cargo/index/)",
+ "cmx-core 0.1.2",
  "extism-pdk",
  "serde",
  "serde_json",
@@ -930,10 +930,10 @@ dependencies = [
 
 [[package]]
 name = "cmx-runtime"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-traits",
  "cmx-utils",
  "extism",
@@ -947,11 +947,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-service"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-database",
  "cmx-debug",
  "cmx-runtime",
@@ -972,11 +972,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-traits"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "extism",
  "serde",
  "serde_json",
@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-utils"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -1009,9 +1009,9 @@ dependencies = [
 
 [[package]]
 name = "cmx-wasmdemo"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
- "cmx-plugin-sdk 0.1.1 (sparse+http://192.168.1.14:4000/cargo/index/)",
+ "cmx-plugin-sdk 0.1.1",
  "extism-pdk",
  "serde",
  "serde_json",
@@ -6189,12 +6189,12 @@ dependencies = [
 
 [[package]]
 name = "web-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "cmx-api",
  "cmx-buffer",
- "cmx-core 0.1.1",
+ "cmx-core 0.1.2",
  "cmx-database",
  "cmx-debug",
  "cmx-plugin",

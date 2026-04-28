@@ -89,6 +89,9 @@ cargo ws publish --allow-branch dev-service
 # 仅发布（不升级版本）
 cargo ws publish --publish-as-is --registry nora  --allow-branch dev-service  --allow-dirty --no-verify
 
+# 不创建git tag
+cargo ws publish  --registry nora  --allow-branch dev-service  --allow-dirty --no-verify --no-git-tag
+
 ```
 `--publish-as-is` 和普通的 `cargo ws publish` 最核心的区别在于：**是否会自动升级工作空间中 crate 的版本号**。
 
