@@ -8,6 +8,14 @@ use std::sync::OnceLock;
 
 use crate::runtime_invoker::RuntimeInvoker;
 
+/// 全局运行时错误类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GlobalRuntimeError(&'static str);
+
+impl GlobalRuntimeError {
+    pub const ALREADY_SET: Self = GlobalRuntimeError("运行时已初始化，无法重复设置");
+}
+
 /// 全局运行时存储器
 ///
 /// 用于在宿主函数中访问 WASM 运行时实例。
@@ -24,9 +32,10 @@ impl GlobalRuntime {
     ///
     /// # 返回值
     /// - `Ok(())`: 设置成功
-    /// - `Err(())`: 已设置过，无法重复设置
-    pub fn set(runtime: std::sync::Arc<dyn RuntimeInvoker>) -> Result<(), ()> {
-        RUNTIME.set(runtime).map_err(|_| ())
+    /// - `Err(GlobalRuntimeError)`: 已设置过，无法重复设置
+    #[allow(clippy::result_unit_err)]
+    pub fn set(runtime: std::sync::Arc<dyn RuntimeInvoker>) -> Result<(), GlobalRuntimeError> {
+        RUNTIME.set(runtime).map_err(|_| GlobalRuntimeError::ALREADY_SET)
     }
 
     /// 获取全局运行时实例
