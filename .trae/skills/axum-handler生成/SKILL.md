@@ -52,7 +52,7 @@ cmx-container 采用**双层结构体**模式处理请求参数：
 | 列表查询（list） | **POST** | `application/json` | `Json<cmx_core::ListParams<F>>` |
 | 分页查询（page） | **POST** | `application/json` | `Json<cmx_core::PageParams<F>>` |
 
-> **重要**：除 `get_by_id` 使用 **GET** 请求外，其他所有操作均使用post请求以及 **application/json** 请求体。
+> **重要**：除 `get_by_id` 使用 **GET** 请求外，其他所有操作均使用 POST 请求以及 **application/json** 请求体。
 
 ---
 
@@ -191,11 +191,59 @@ pub async fn xxx_delete(
 
 ---
 
-## 四、request.rs 过滤条件结构体规范
+## 四、request.rs 请求结构体规范
 
-### 4.1 API 层过滤结构体（必须带 `ToSchema`）
+### 4.1 API 层请求结构体（必须带 `ToSchema`）
 
-API 层需要定义自己的过滤结构体（与 domain 层解耦），必须派生 `ToSchema`：
+API 层需要定义自己的请求结构体（与 domain 层解耦），必须派生 `ToSchema`：
+
+```rust
+use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
+
+/// 插件安装请求
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PluginInstallRequest {
+    /// 插件来源
+    pub source: PluginSourceRequest,
+    /// 目标数据库ID
+    pub target_db_id: Option<String>,
+}
+
+/// 插件来源请求（使用 serde tag 枚举）
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum PluginSourceRequest {
+    /// 本地路径
+    Local {
+        /// 本地文件路径
+        path: String,
+    },
+    /// 远程 URL
+    Remote {
+        /// 远程 URL
+        url: String,
+        /// 校验和
+        checksum: Option<String>,
+    },
+    /// 注册表
+    Registry {
+        /// 注册表 URL
+        registry_url: String,
+        /// 包名
+        package_name: String,
+    },
+}
+
+/// 列表查询参数（使用 IntoParams 生成路径参数）
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct XxxListQuery {
+    /// 状态过滤
+    pub status: Option<String>,
+}
+```
+
+### 4.2 过滤条件结构体（必须带 `ToSchema`）
 
 ```rust
 use utoipa::ToSchema;
@@ -220,11 +268,12 @@ impl From<ApiXxxFilter> for domain_module::XxxFilter {
 }
 ```
 
-### 4.2 注意事项
+### 4.3 注意事项
 
-- API 层过滤字段使用 `Option<String>`，枚举字段在 `From` 转换时 parse
+- API 层请求/过滤字段使用 `Option<String>`，枚举字段在 `From` 转换时 parse
 - `#[serde(rename_all = "camelCase")]` 如果需要前端驼峰命名
 - domain 层的枚举类型需要实现 `std::str::FromStr` 以支持字符串解析
+- 使用 `#[serde(tag = "type")]` 实现带类型的枚举请求
 
 ---
 
@@ -307,3 +356,48 @@ use super::response::*;
 | `cmx-api/src/rest/handler.rs` | 通用 CRUD Handler 函数 |
 | `cmx-api/src/api_response.rs` | 统一响应结构 ApiResp 和 Pagination |
 | `cmx-api/src/rest/mod.rs` | REST 模块导出 |
+| `cmx-api/src/handlers/plugin/` | 实际 Handler 代码参考（plugin handler 实现） |
+| `cmx-api/src/handlers/plugin/request.rs` | 实际请求结构体参考（带 ToSchema 的 request 定义） |
+| `cmx-api/src/handlers/service/handler.rs` | 服务调用 Handler 参考（带详细文档注释） |
+
+---
+
+## 九、Handler 文件组织结构
+
+每个 handler 模块应包含以下文件：
+
+```
+handlers/
+  ├── xxx/
+  │   ├── mod.rs       # 模块导出和路由注册
+  │   ├── handler.rs   # Handler 函数实现
+  │   ├── request.rs   # 请求结构体定义（派生 ToSchema）
+  │   └── response.rs  # 响应结构体定义
+  └── mod.rs           # 所有 handler 模块的汇总导出
+```
+
+### mod.rs 示例
+
+```rust
+//! XXX 模块
+//!
+//! 提供 XXX 相关的 HTTP API
+
+pub mod handler;
+pub mod request;
+pub mod response;
+
+pub use handler::*;
+pub use request::*;
+pub use response::*;
+
+use crate::app_state::CmxAppState;
+use axum::Router;
+
+pub fn routes() -> Router<CmxAppState> {
+    Router::new()
+        .route("/xxx", post(xxx_create))
+        .route("/xxx/page", post(xxx_page))
+        .route("/xxx", get(xxx_get_by_id))
+}
+```
