@@ -452,7 +452,7 @@ impl TableDefineDbExecutor for PgTableDefineExecutor {
         let dialect = PostgresDdlDialect {
             prefer_db_type: true,
         };
-        let stmts = DdlDiff::diff_to_ddl(&dialect, &[current], &[define.clone()])
+        let stmts = DdlDiff::diff_to_ddl(&dialect, &[current], std::slice::from_ref(define))
             .map_err(|e| BaseError::DdlGeneration(format!("生成增量 DDL 失败: {}", e)))?;
 
         if stmts.is_empty() {

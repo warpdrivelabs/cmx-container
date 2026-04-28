@@ -44,6 +44,7 @@ pub struct Feature {
 }
 
 /// 功能管理器
+#[allow(dead_code)]
 pub struct FeatureManager {
     /// 功能注册表
     features: Arc<RwLock<HashMap<String, Feature>>>,

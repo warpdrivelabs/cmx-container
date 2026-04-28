@@ -51,7 +51,7 @@ use axum::{
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
-use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
 use tracing::error;
 use std::sync::Arc;
 
@@ -221,8 +221,10 @@ pub async fn service_call(
     let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::business_error(e.to_string()))?;
 
     //调用选项参数
-    let mut  invoke_options = InvokeOptions::default();
-    invoke_options.debug = req.debug;
+    let invoke_options = cmx_traits::InvokeOptions {
+        debug: req.debug,
+        ..Default::default()
+    };
 
     let invoke_result = runtime.invoke_with_options(&req.plugin_id, &req.function_name, &input_bytes,&invoke_options).await
         .map_err(|e| Error::business_error(format!("WASM 调用失败: {}", e)))?;

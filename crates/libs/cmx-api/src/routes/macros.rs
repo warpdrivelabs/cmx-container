@@ -314,31 +314,31 @@ macro_rules! register_crud_handlers_module {
             )
             .route(
                 concat!($prefix, "/create-many"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::create_many),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::create_many),
             )
             .route(
                 concat!($prefix, "/get"),
-                axum::routing::get(crate::routes::crud_handlers::$handlers_mod::get),
+                axum::routing::get($crate::routes::crud_handlers::$handlers_mod::get),
             )
             .route(
                 concat!($prefix, "/update"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::update),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::update),
             )
             .route(
                 concat!($prefix, "/update-many"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::update_many),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::update_many),
             )
             .route(
                 concat!($prefix, "/delete"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::delete),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::delete),
             )
             .route(
                 concat!($prefix, "/list"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::list),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::list),
             )
             .route(
                 concat!($prefix, "/page"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::page),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::page),
             )
     };
 }

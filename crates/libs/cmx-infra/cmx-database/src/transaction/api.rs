@@ -4,7 +4,6 @@
 /// - 通过事务ID操作事务的函数
 /// - 通过数据库ID和事务ID执行SQL操作的函数
 /// - 通过数据库ID和事务ID执行SQL查询的函数
-
 use futures::future::BoxFuture;
 use std::sync::OnceLock;
 use tokio::sync::mpsc;
@@ -187,11 +186,12 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_commit && txn_to_commit.is_some() {
-            let txn = txn_to_commit.unwrap();
-            txn.commit().await?;
-            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed).await;
-            get_txn_holder_registry().write().await.remove(txn_id);
+        if should_commit {
+            if let Some(txn) = txn_to_commit {
+                txn.commit().await?;
+                crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed).await;
+                get_txn_holder_registry().write().await.remove(txn_id);
+            }
         }
     } else {
         return Err(Error::NoTxn);
@@ -234,11 +234,12 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_rollback && txn_to_rollback.is_some() {
-            let txn = txn_to_rollback.unwrap();
-            txn.rollback().await?;
-            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack).await;
-            get_txn_holder_registry().write().await.remove(txn_id);
+        if should_rollback {
+            if let Some(txn) = txn_to_rollback {
+                txn.rollback().await?;
+                crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack).await;
+                get_txn_holder_registry().write().await.remove(txn_id);
+            }
         }
     } else {
         return Err(Error::NoTxn);

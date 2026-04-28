@@ -3,7 +3,7 @@
  * @Date: 2026-03-05 19:30:00
  * @Describe:
  * @LastEditors: yqs
- * @LastEditTime: 2026-03-05 19:58:24
+ * @LastEditTime: 2026-04-28 12:15:49
  */
 /// 监控模块，负责数据库连接池健康检查和事务超时监控
 use crate::transaction::{check_long_running_transactions, metadata::update_txn_status, registry::{get_txn_holder_by_id, get_txn_holder_registry}, TransactionStatus, TxnHolder};
@@ -73,21 +73,16 @@ async fn check_transaction_timeouts() {
 
         // 直接通过 txn_id 从注册表获取事务句柄并回滚
         if let Some(txn_holder_mutex) = get_txn_holder_by_id(&tx_meta.txn_id).await {
-            let mut should_rollback = false;
-            let mut txn_to_rollback: Option<TxnHolder> = None;
+            let txn_to_rollback: Option<TxnHolder>;
 
             // 获取锁并取出事务
             {
                 let mut txh_g = txn_holder_mutex.lock().await;
-                if let Some(txn_holder) = txh_g.take() {
-                    txn_to_rollback = Some(txn_holder);
-                    should_rollback = true;
-                }
+                txn_to_rollback = txh_g.take();
             }
 
             // 执行回滚
-            if should_rollback && txn_to_rollback.is_some() {
-                let txn = txn_to_rollback.unwrap();
+            if let Some(txn) = txn_to_rollback {
                 if let Err(e) = txn.rollback().await {
                     error!("回滚超时事务失败: txn_id={}, error={}", tx_meta.txn_id, e);
                 } else {

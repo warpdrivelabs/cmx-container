@@ -6,12 +6,11 @@
 /// - 事务元数据管理
 /// - 通过事务ID操作事务
 /// - 通过数据库ID和事务ID获取底层事务对象
-
 // 子模块
-mod core;
+pub mod core;
 pub mod metadata;
 pub mod registry;
-mod api;
+pub mod api;
 pub mod txcontext;
 
 // 导出核心类型和函数

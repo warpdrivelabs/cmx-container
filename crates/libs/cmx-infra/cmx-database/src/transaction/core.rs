@@ -1,9 +1,9 @@
-/// 事务核心模块，包含核心事务结构和实现
-///
-/// 该模块定义了事务的核心结构和基本操作，包括：
-/// - Dbx：数据库访问对象，支持事务管理
-/// - DbTransaction：统一的数据库事务类型，支持多种数据库
-/// - TxnHolder：事务持有器，管理事务和引用计数
+//! 事务核心模块，包含核心事务结构和实现
+//!
+//! 该模块定义了事务的核心结构和基本操作，包括：
+//! - Dbx：数据库访问对象，支持事务管理
+//! - DbTransaction：统一的数据库事务类型，支持多种数据库
+//! - TxnHolder：事务持有器，管理事务和引用计数
 
 use crate::connection::DbPool;
 use crate::error::{Error, Result};
@@ -307,17 +307,16 @@ impl Dbx {
         result?;
 
         // 如果需要回滚，执行回滚操作并更新事务状态
-        if should_rollback && txn_to_rollback.is_some() && txn_id.is_some() {
-            let txn = txn_to_rollback.unwrap();
-            let txn_id = txn_id.unwrap();
+        if should_rollback {
+            if let (Some(txn), Some(txn_id)) = (txn_to_rollback, txn_id) {
+                // 执行回滚操作
+                txn.rollback().await?;
 
-            // 执行回滚操作
-            txn.rollback().await?;
-
-            // 更新事务状态为已回滚
-            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack).await;
-            // 从全局TxnHolder注册表中移除
-            get_txn_holder_registry().write().await.remove(&txn_id);
+                // 更新事务状态为已回滚
+                crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack).await;
+                // 从全局TxnHolder注册表中移除
+                get_txn_holder_registry().write().await.remove(&txn_id);
+            }
         }
 
         Ok(())
@@ -364,17 +363,16 @@ impl Dbx {
         result?;
 
         // 如果需要提交，执行提交操作并更新事务状态
-        if should_commit && txn_to_commit.is_some() && txn_id.is_some() {
-            let txn = txn_to_commit.unwrap();
-            let txn_id = txn_id.unwrap();
+        if should_commit {
+            if let (Some(txn), Some(txn_id)) = (txn_to_commit, txn_id) {
+                // 执行提交操作
+                txn.commit().await?;
 
-            // 执行提交操作
-            txn.commit().await?;
-
-            // 更新事务状态为已提交
-            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed).await;
-            // 从全局TxnHolder注册表中移除
-            get_txn_holder_registry().write().await.remove(&txn_id);
+                // 更新事务状态为已提交
+                crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed).await;
+                // 从全局TxnHolder注册表中移除
+                get_txn_holder_registry().write().await.remove(&txn_id);
+            }
         }
 
         Ok(())

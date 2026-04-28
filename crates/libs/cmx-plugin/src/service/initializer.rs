@@ -77,6 +77,7 @@ pub struct PluginSyncResult {
 }
 
 /// 插件初始化器
+#[allow(dead_code)]
 pub struct PluginInitializer {
     repository: Arc<PluginRepository>,
     deployment_repository: Arc<DeploymentRepository>,
@@ -275,6 +276,7 @@ impl PluginInitializer {
     }
 
     /// 执行降级操作
+    #[allow(dead_code)]
     async fn execute_downgrade(&self, op: PluginOperation) -> Result<String, (String, String)> {
         match op {
             PluginOperation::Downgrade { plugin_id, from_version: _, to_version, source } => {

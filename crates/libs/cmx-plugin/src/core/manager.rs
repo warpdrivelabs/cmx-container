@@ -186,6 +186,7 @@ impl PluginManagerBuilder {
 /// - 管理共享的基础设施组件
 ///
 /// 具体的业务逻辑由各个 Service 实现。
+#[allow(dead_code)]
 pub struct PluginManager {
     /// 配置设置
     settings: PluginManagerSettings,

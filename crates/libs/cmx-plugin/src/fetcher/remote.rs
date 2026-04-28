@@ -173,6 +173,7 @@ impl RemoteFetcher {
     /// 验证 SHA256 校验和
     ///
     /// 验证下载文件的 SHA256 校验和。
+    #[allow(dead_code)]
     fn verify_sha256(&self, file_path: &Path, expected: &str) -> PluginResult<()> {
         use std::io::Read;
         use sha2::{Sha256, Digest};

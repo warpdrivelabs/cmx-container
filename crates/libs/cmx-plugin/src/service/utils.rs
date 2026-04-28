@@ -156,39 +156,40 @@ pub async fn save_plugin_table_metadata(
         let table_metadata_result = TableMetadataService::get_by_table_name(dbm,default_db_id.as_str(),
                                                                      table_def.table_name.as_str(),Some(db_id)).await;
 
-        if table_metadata_result.is_ok() && !table_metadata_result.as_ref().unwrap().is_empty(){
-            //存在  更新下
-            //先查询
-            let table_meta_defines_result = TableMetadataService::parse_metadata_record(&table_metadata_result.unwrap());
-             let record   = table_meta_defines_result.as_ref().unwrap().iter().next().unwrap();
+        if let Ok(metadata) = table_metadata_result {
+            if !metadata.is_empty() {
+                //存在  更新下
+                //先查询
+                let table_meta_defines_result = TableMetadataService::parse_metadata_record(&metadata);
+                let record   = table_meta_defines_result.as_ref().unwrap().iter().next().unwrap();
 
-            let table_define_primary_id = record.id.clone();
+                let table_define_primary_id = record.id.clone();
 
-            let update_info = TableMetadataForUpdate{
-                display_name: Some(table_def.display_name.clone()),
-                version: Some(version.to_string()),
-                domain_code: domain_code.clone(),
-                application_code: application_code.clone(),
-                module_code: moudule_code.clone(),
-                metadata: Some(serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null)),
-            };
-            TableMetadataService::update(dbm,plugin_id,default_db_id.as_str(),txn_id,Value::String(table_define_primary_id),update_info).await?;
+                let update_info = TableMetadataForUpdate{
+                    display_name: Some(table_def.display_name.clone()),
+                    version: Some(version.to_string()),
+                    domain_code: domain_code.clone(),
+                    application_code: application_code.clone(),
+                    module_code: moudule_code.clone(),
+                    metadata: Some(serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null)),
+                };
+                TableMetadataService::update(dbm,plugin_id,default_db_id.as_str(),txn_id,Value::String(table_define_primary_id),update_info).await?;
+            } else {
+                //不存在  新增
+                let create_info = TableMetadataForCreate{
+                    table_name: table_def.table_name.clone(),
+                    display_name: table_def.display_name.clone(),
+                    db_id: db_id.to_string(),
+                    plugin_id: plugin_id.to_string(),
+                    version: version.to_string(),
+                    domain_code: domain_code.clone().unwrap_or_default(),
+                    application_code: application_code.clone().unwrap_or_default(),
+                    module_code: moudule_code.clone().unwrap_or_default(),
+                    metadata: serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
 
-        }else{
-            //不存在  新增
-            let create_info = TableMetadataForCreate{
-                table_name: table_def.table_name.clone(),
-                display_name: table_def.display_name.clone(),
-                db_id: db_id.to_string(),
-                plugin_id: plugin_id.to_string(),
-                version: version.to_string(),
-                domain_code: domain_code.clone().unwrap_or_default(),
-                application_code: application_code.clone().unwrap_or_default(),
-                module_code: moudule_code.clone().unwrap_or_default(),
-                metadata: serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
-
-            };
-            TableMetadataService::create(dbm,default_db_id.as_str(),txn_id,create_info).await?;
+                };
+                TableMetadataService::create(dbm,default_db_id.as_str(),txn_id,create_info).await?;
+            }
         }
     }
 

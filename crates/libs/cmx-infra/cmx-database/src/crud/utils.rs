@@ -25,7 +25,9 @@ pub const FIELD_UPDATE_BY: &str = "update_by";
 /// # 参数
 /// * `fields` - SeaFields 字段集合
 /// * `user_id` - 用户 ID（用于审计字段）
-/// return 主键
+///
+/// # 返回值
+/// 主键
 pub fn prep_fields_for_create<MC>(fields: &mut SeaFields, user_id: Option<&str>) -> String
 where
     MC: DbBmc,
@@ -92,6 +94,7 @@ fn add_timestamps_for_create(fields: &mut SeaFields, user_id: Option<&str>) {
 /// # 参数
 /// * `fields` - 要添加时间戳字段的字段集合
 /// * `user_id` - 当前用户的ID，用作最后修改者ID
+#[allow(dead_code)]
 fn add_timestamps_for_update(fields: &mut SeaFields, user_id: Option<&str>) {
     let now = Utc::now();
     fields.push(SeaField::new(FIELD_UPDATE_BY, user_id));

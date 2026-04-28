@@ -141,7 +141,6 @@ impl Orchestrator {
         // ==================== 阶段3: 初始化执行上下文 ====================
         // SVRContext 是服务调用上下文，由外部（middleware/handler）创建并传入
         // 包含：initial_input（初始输入）、headers（请求头）、step_outputs（各步骤输出）、txn_id（事务ID）、time_in（请求时间）、request_id（请求ID）
-        let svr_context = svr_context;
 
         // 创建流程导航器：用于查找节点和边
         let flow = &orchestration.flow;

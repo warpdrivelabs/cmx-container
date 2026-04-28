@@ -1,4 +1,4 @@
-/// 事务元数据模块，用于管理事务的元数据和状态
+//! 事务元数据模块，用于管理事务的元数据和状态
 
 use std::sync::{Arc, OnceLock};
 use std::collections::HashMap;

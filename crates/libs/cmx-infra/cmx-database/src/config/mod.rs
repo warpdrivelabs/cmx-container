@@ -2,8 +2,6 @@ use std::str::FromStr;
 
 use cmx_utils::ConfigResult;
 
-/// 配置模块，包含数据库和连接池配置结构
-
 /// 数据库类型枚举
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]

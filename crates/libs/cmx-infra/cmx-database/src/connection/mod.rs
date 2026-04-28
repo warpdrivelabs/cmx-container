@@ -126,6 +126,7 @@ impl DbRegistry {
     }
 
     /// 更新数据库连接池配置（优雅关闭旧池）
+    #[allow(dead_code)]
     pub async fn update(&self, config: DbConfig) -> crate::Result<()> {
         let key = config.db_id.clone();
 

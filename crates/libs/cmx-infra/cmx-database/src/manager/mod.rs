@@ -212,6 +212,7 @@ impl DatabaseManager {
     // }
 
     /// 清理超时的事务
+    #[allow(dead_code)]
     async fn cleanup_stale_transactions(&self, timeout: std::time::Duration) {
         let stale = check_long_running_transactions(timeout).await;
         if stale.is_empty() {
