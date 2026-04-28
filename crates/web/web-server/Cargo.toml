@@ -35,12 +35,10 @@ tower-http = { workspace = true }
 tower-cookies = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
-# 日志订阅器
-tracing-subscriber = { workspace = true, features = ["env-filter", "json", "fmt"] }
+# 日志订阅器 自动处理日志桥接
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "fmt","tracing-log"] }
 # 日志追加器
 tracing-appender = { workspace = true }
-# 日志桥接
-tracing-log = { workspace = true }
 # 派生宏
 derive_more = { workspace = true }
 # 错误处理
