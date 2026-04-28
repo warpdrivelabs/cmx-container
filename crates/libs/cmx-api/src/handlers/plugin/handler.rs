@@ -317,7 +317,7 @@ pub async fn plugin_deploy(
         source,
         db_id: target_db_id,
         force_reinstall,
-        build_type: build_type,
+        build_type,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {

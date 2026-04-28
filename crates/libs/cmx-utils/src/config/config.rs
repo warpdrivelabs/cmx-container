@@ -64,7 +64,7 @@ impl ConfigBuilder {
     /// # 返回值
     /// 返回更新后的构建器实例
     pub fn add_toml_file_from_env(self, env_var: &str) -> Self {
-        if let Some(path) = std::env::var(env_var).ok() {
+        if let Ok(path) = std::env::var(env_var) {
             let path_buf = PathBuf::from(&path);
             let builder = self.inner.add_source(
                 config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
@@ -317,7 +317,7 @@ impl Config {
     pub fn get_as<T: DeserializeOwned>(&self, key: &str) -> ConfigResult<T> {
         self.inner
             .get::<T>(key)
-            .map_err(|e| ConfigError::from(e))
+            .map_err(ConfigError::from)
     }
 
     /// 获取配置值并转换为指定类型，如果不存在则返回默认值

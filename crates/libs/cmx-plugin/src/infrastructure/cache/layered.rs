@@ -119,15 +119,14 @@ impl LayeredCacheManager {
     /// 如果 L2 命中，会回填到 L1。
     pub async fn get(&self, key: &str) -> Option<CacheValue> {
         // 先查 L1 内存缓存
-        if self.strategy.enable_l1 {
-            if let Some(value) = self.memory_cache.get(key).await {
+        if self.strategy.enable_l1
+            && let Some(value) = self.memory_cache.get(key).await {
                 return Some(value);
             }
-        }
         
         // 再查 L2 Redis 缓存
-        if self.strategy.enable_l2 {
-            if let Some(ref redis) = self.redis_cache {
+        if self.strategy.enable_l2
+            && let Some(ref redis) = self.redis_cache {
                 // 尝试从 Redis 获取字符串值
                 if let Ok(Some(json_str)) = redis.get_string(key).await {
                     // 尝试解析为 JSON
@@ -149,7 +148,6 @@ impl LayeredCacheManager {
                     return Some(value);
                 }
             }
-        }
         
         None
     }
@@ -167,8 +165,8 @@ impl LayeredCacheManager {
         }
         
         // 设置 L2 Redis 缓存
-        if self.strategy.enable_l2 {
-            if let Some(ref redis) = self.redis_cache {
+        if self.strategy.enable_l2
+            && let Some(ref redis) = self.redis_cache {
                 match &value {
                     CacheValue::String(s) => {
                         let _ = redis.set_string(key, s, l2_ttl).await;
@@ -183,7 +181,6 @@ impl LayeredCacheManager {
                     }
                 }
             }
-        }
     }
     
     /// 删除缓存
@@ -194,11 +191,10 @@ impl LayeredCacheManager {
         self.memory_cache.remove(key).await;
         
         // 删除 L2 Redis 缓存
-        if self.strategy.enable_l2 {
-            if let Some(ref redis) = self.redis_cache {
+        if self.strategy.enable_l2
+            && let Some(ref redis) = self.redis_cache {
                 let _ = redis.delete(key).await;
             }
-        }
     }
     
     /// 清空所有缓存
@@ -244,13 +240,11 @@ impl LayeredCacheManager {
         }
         
         // 检查 L2
-        if self.strategy.enable_l2 {
-            if let Some(ref redis) = self.redis_cache {
-                if let Ok(true) = redis.exists(key).await {
+        if self.strategy.enable_l2
+            && let Some(ref redis) = self.redis_cache
+                && let Ok(true) = redis.exists(key).await {
                     return true;
                 }
-            }
-        }
         
         false
     }

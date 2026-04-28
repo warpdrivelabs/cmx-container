@@ -380,11 +380,10 @@ impl PluginRepository {
             .await
             .map_err(|e| PluginError::Database(format!("upsert插件记录失败: {}", e)))?;
 
-        if let Some(row) = result.iter().next() {
-            if let Some(DataValue::Bool(is_inserted)) = row.get(0) {
+        if let Some(row) = result.iter().next()
+            && let Some(DataValue::Bool(is_inserted)) = row.get(0) {
                 return Ok(*is_inserted);
             }
-        }
 
         Ok(false)
     }

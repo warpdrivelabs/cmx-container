@@ -72,7 +72,7 @@ pub fn parse_doc_comments(doc_comments: &[String]) -> Result<ParsedDoc> {
         }
         if lines.len() > 1 {
             result.description = Some(lines[1..].join("\n").trim().to_string());
-            if result.description.as_ref().map_or(true, |s| s.is_empty()) {
+            if result.description.as_ref().is_none_or(|s| s.is_empty()) {
                 result.description = None;
             }
         }
@@ -279,11 +279,10 @@ fn parse_list(content: &str) -> Vec<String> {
 /// 提取代码值
 fn extract_code_value(line: &str) -> Option<String> {
     // 查找反引号中的内容
-    if let Some(start) = line.find('`') {
-        if let Some(end) = line[start + 1..].find('`') {
+    if let Some(start) = line.find('`')
+        && let Some(end) = line[start + 1..].find('`') {
             return Some(line[start + 1..start + 1 + end].to_string());
         }
-    }
     None
 }
 
@@ -340,11 +339,10 @@ fn parse_examples(content: &str) -> Vec<ExampleInfo> {
     }
 
     // 如果没有解析到结构化示例，尝试解析简单的输入输出格式
-    if examples.is_empty() {
-        if let Some(example) = parse_simple_example(content) {
+    if examples.is_empty()
+        && let Some(example) = parse_simple_example(content) {
             examples.push(example);
         }
-    }
 
     examples
 }

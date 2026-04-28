@@ -33,19 +33,19 @@ pub async fn init_datasources() {
 
     let db_manager = get_default_db_manager();
 
-    if let Err(e) = register_datasources(&db_manager, configs.clone()).await {
+    if let Err(e) = register_datasources(db_manager, configs.clone()).await {
         error!("注册配置文件数据源失败: {}", e);
         panic!("注册配置文件数据源失败: {}", e);
     }
 
     let default_db_id = db_manager.get_default_db_id().await;
 
-    if let Err(e) = persist_datasource_configs(&db_manager, &default_db_id, configs).await {
+    if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, configs).await {
         error!("持久化数据源配置失败: {}", e);
         panic!("持久化数据源配置失败: {}", e);
     }
 
-    let mut active_datasources = match load_active_datasources(&db_manager, &default_db_id).await {
+    let mut active_datasources = match load_active_datasources(db_manager, &default_db_id).await {
         Ok(datasources) => datasources,
         Err(e) => {
             error!("加载有效数据源失败: {}", e);
@@ -63,7 +63,7 @@ pub async fn init_datasources() {
 
     info!("从数据库加载到 {} 个有效数据源", active_datasources.len());
 
-    if let Err(e) = register_datasources(&db_manager, active_datasources).await {
+    if let Err(e) = register_datasources(db_manager, active_datasources).await {
         error!("注册数据库中的数据源失败: {}", e);
     }
 

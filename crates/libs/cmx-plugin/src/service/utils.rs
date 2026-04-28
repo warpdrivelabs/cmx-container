@@ -94,8 +94,8 @@ pub async fn create_plugin_tables(
                 );
             }
             // 数据条数校验警告
-            if let Some(db_count) = result.db_row_count {
-                if db_count < result.file_row_count {
+            if let Some(db_count) = result.db_row_count
+                && db_count < result.file_row_count {
                     tracing::warn!(
                         "种子数据条数不一致: 表={}, 文件={}条, 数据库={}条",
                         result.table_name,
@@ -103,7 +103,6 @@ pub async fn create_plugin_tables(
                         db_count,
                     );
                 }
-            }
         }
     }
 

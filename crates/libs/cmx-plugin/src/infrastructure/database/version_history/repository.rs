@@ -61,7 +61,7 @@ impl VersionHistoryRepository {
                 record.wasm_path.clone().into(),
                 record.is_current.into(),
                 record.installed_at.into(),
-                record.uninstalled_at.clone().into(),
+                record.uninstalled_at.into(),
                 record.zip_source_url.clone().into(),
                 record.zip_source_type.clone().into(),
                 record.plugin_type.clone().into(),
@@ -135,7 +135,7 @@ impl VersionHistoryRepository {
                 record.wasm_path.clone().into(),
                 record.is_current.into(),
                 record.installed_at.into(),
-                record.uninstalled_at.clone().into(),
+                record.uninstalled_at.into(),
                 record.zip_source_url.clone().into(),
                 record.zip_source_type.clone().into(),
                 record.plugin_type.clone().into(),
@@ -181,11 +181,10 @@ impl VersionHistoryRepository {
             .await
             .map_err(|e| PluginError::Database(format!("upsert版本历史失败: {}", e)))?;
 
-        if let Some(row) = result.iter().next() {
-            if let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0) {
+        if let Some(row) = result.iter().next()
+            && let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0) {
                 return Ok(*is_inserted);
             }
-        }
 
         Ok(false)
     }
@@ -213,11 +212,11 @@ impl VersionHistoryRepository {
         }
 
         if let Some(ref uninstalled_at) = fields.uninstalled_at {
-            query.value("uninstalled_at", uninstalled_at.clone());
+            query.value("uninstalled_at", *uninstalled_at);
         }
 
         if let Some(ref update_time) = fields.update_time {
-            query.value("update_time", update_time.clone());
+            query.value("update_time", *update_time);
         }
 
         if let Some(ref update_by) = fields.update_by {

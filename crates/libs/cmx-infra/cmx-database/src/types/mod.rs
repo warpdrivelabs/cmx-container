@@ -448,7 +448,7 @@ impl QueryBuilder {
                         sql.push(')');
                     },
                     InsertValues::Select(s) => {
-                        sql.push_str(" ");
+                        sql.push(' ');
                         sql.push_str(s);
                     },
                 }

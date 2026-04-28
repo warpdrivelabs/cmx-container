@@ -77,7 +77,7 @@ impl DatabaseManager {
     }
 
     pub async fn get_default_db_id(&self) -> String {
-        self.default_db_id.read().await.clone().into()
+        self.default_db_id.read().await.clone()
     }
 
     /// 注册数据源
@@ -87,7 +87,7 @@ impl DatabaseManager {
             *write_guard = db_config.db_id.clone();
         }
 
-        Ok(self.pool_manager.register(db_config).await?)
+        self.pool_manager.register(db_config).await
     }
 
     /// 注销数据源
@@ -365,6 +365,12 @@ impl DatabaseManager {
     /// 回滚事务
     pub async fn rollback_transaction(&self, txn_id: &str) -> Result<()> {
         crate::transaction::rollback_txn_by_id(txn_id).await
+    }
+}
+
+impl Default for PoolManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

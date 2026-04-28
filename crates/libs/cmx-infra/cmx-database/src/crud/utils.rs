@@ -31,8 +31,8 @@ where
     MC: DbBmc,
 {
     // 添加 owner_id
-    if MC::has_owner_id() {
-        if let Some(uid) = user_id {
+    if MC::has_owner_id()
+        && let Some(uid) = user_id {
             let field: SeaField = (
                 "owner_id",
                 SimpleExpr::Value(sea_query::Value::String(Some(uid.to_string().into()))),
@@ -40,7 +40,6 @@ where
                 .into();
             fields.push(field);
         }
-    }
     if MC::has_timestamps() {
         add_timestamps_for_create(fields, user_id);
     }
@@ -138,8 +137,8 @@ where
         }
 
         // 尝试提取字段值中的字符串
-        if let Some(sea_val) = field.sea_value() {
-            if let Some(str_val) = extract_string_from_sea_value(sea_val) {
+        if let Some(sea_val) = field.sea_value()
+            && let Some(str_val) = extract_string_from_sea_value(sea_val) {
                 match crypto.encrypt(&str_val) {
                     Ok(encrypted) => {
                         // 将字段值替换为加密后的字符串
@@ -152,7 +151,6 @@ where
                     }
                 }
             }
-        }
     }
 
     SeaFields::new(vec)
@@ -214,11 +212,10 @@ pub fn decrypt_dataset_fields(dataset: &mut DataSet, fields: &[&str]) {
                 Some(DataValue::String(s)) => crypto.decrypt(s).ok().map(DataValue::String),
                 _ => None,
             };
-            if let Some(new_val) = decrypted {
-                if let Some(value) = row.get_mut(col_idx) {
+            if let Some(new_val) = decrypted
+                && let Some(value) = row.get_mut(col_idx) {
                     *value = new_val;
                 }
-            }
         }
     }
 }

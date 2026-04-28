@@ -19,6 +19,12 @@ pub struct KeyValue {
 }
 
 
+impl Default for KeyValue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyValue {
     // 创建一个新的 KeyValue 实例
     pub fn new() -> Self {

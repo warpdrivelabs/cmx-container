@@ -97,7 +97,7 @@ impl SnowflakeGenerator {
             } else {
                 let _old_seq = self.sequence.swap(0, Ordering::Release);
                 self.last_timestamp.store(timestamp, Ordering::Release);
-                let id = (timestamp << 22) | (self.node_id << 12) | 0;
+                let id = (timestamp << 22) | (self.node_id << 12);
                 return id;
             }
         }

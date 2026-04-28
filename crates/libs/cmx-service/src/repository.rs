@@ -6,7 +6,6 @@ use cmx_core::model::service::ServiceDefinition;
 use cmx_database::DatabaseManager;
 use serde_json::json;
 use std::sync::Arc;
-use utoipa::openapi::RefOr::T;
 use uuid::Uuid;
 
 use crate::error::ServiceError;
@@ -35,7 +34,7 @@ impl ServiceRepository {
     pub fn new(db_manager: Arc<DatabaseManager>, default_db_id: String) -> Self {
         Self {
             db_manager,
-            default_db_id: default_db_id,
+            default_db_id,
         }
     }
 
@@ -272,7 +271,7 @@ impl ServiceRepository {
     /// * `service_key` - 服务唯一标识
     /// * `txn_id` - 事务id
     /// * `version` - 服务版本
-    pub async fn delete_service(&self, service_key: &str,txn_id: Option<&str>, version: Option<&str>) -> Result<(), ServiceError> {
+    pub async fn delete_service(&self, service_key: &str,_txn_id: Option<&str>, _version: Option<&str>) -> Result<(), ServiceError> {
         let sql_version = r#"
             DELETE FROM cmx_service_define_version WHERE service_key = $1
         "#;
@@ -462,15 +461,14 @@ impl ServiceRepository {
         let mut params: Vec<serde_json::Value> = Vec::new();
         let mut param_index = 1;
 
-        if let Some(ref keyword) = filter.keyword {
-            if !keyword.is_empty() {
+        if let Some(ref keyword) = filter.keyword
+            && !keyword.is_empty() {
                 where_clauses.push(format!("(s.service_key LIKE ${} OR S.service_name LIKE ${} )", param_index,param_index+1));
                 params.push(json!(format!("%{}%", keyword)));
                 params.push(json!(format!("%{}%", keyword)));
                 param_index += 2;
 
             }
-        }
 
 
 

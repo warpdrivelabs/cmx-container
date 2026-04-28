@@ -18,7 +18,7 @@
 //! 5. 更新数据库记录
 //! 6. 记录审计日志
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -327,7 +327,7 @@ impl RollbackService {
     /// # 返回值
     ///
     /// 返回解析出的版本号字符串。
-    fn parse_version_from_backup_path(&self, path: &PathBuf) -> PluginResult<String> {
+    fn parse_version_from_backup_path(&self, path: &Path) -> PluginResult<String> {
         let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         let parts: Vec<&str> = file_name.splitn(2, '_').collect();
@@ -377,7 +377,7 @@ impl RollbackService {
     /// # 错误
     ///
     /// - `PluginError::Rollback`: 删除备份失败
-    pub async fn delete_backup(&self, backup_path: &PathBuf) -> PluginResult<()> {
+    pub async fn delete_backup(&self, backup_path: &Path) -> PluginResult<()> {
         self.deps
             .backup_manager
             .delete_backup(backup_path)

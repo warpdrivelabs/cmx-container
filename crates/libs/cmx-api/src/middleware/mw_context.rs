@@ -6,7 +6,7 @@ use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
 use chrono::Utc;
-use cmx_core::model::service::context::{svrkey, SVRContext};
+use cmx_core::model::service::context::SVRContext;
 use cmx_utils::UuidGenerator;
 use tracing::debug;
 

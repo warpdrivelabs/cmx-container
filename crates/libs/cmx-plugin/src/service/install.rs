@@ -452,7 +452,7 @@ impl InstallService {
         .with_new_value(install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
 
-        let _ = self.deps.audit_logger.log(audit_record).await?;
+        self.deps.audit_logger.log(audit_record).await?;
 
         // 步骤13: 发布安装完成事件
         let payload = PluginLifecyclePayload::new(&plugin_id, &install_version)

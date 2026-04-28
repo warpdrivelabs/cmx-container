@@ -310,7 +310,7 @@ macro_rules! register_crud_handlers_module {
         $router
             .route(
                 concat!($prefix, "/create"),
-                axum::routing::post(crate::routes::crud_handlers::$handlers_mod::create),
+                axum::routing::post($crate::routes::crud_handlers::$handlers_mod::create),
             )
             .route(
                 concat!($prefix, "/create-many"),

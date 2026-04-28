@@ -89,7 +89,7 @@ impl RedisConfig {
             .unwrap_or(default_max_idle_time().unwrap() as i64);
 
         RedisConfig {
-            url: url,
+            url,
             pool_size: pool_size as usize,
             connection_timeout: connection_timeout as u64,
             operation_timeout: operation_timeout as u64,

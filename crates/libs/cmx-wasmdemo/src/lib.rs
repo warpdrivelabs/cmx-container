@@ -328,7 +328,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 
     // ==================== 测试数据库 ====================
     let query_request = DbRequest {
-        sql: format!("SELECT * from cmx_meta_table_define_version"),
+        sql: "SELECT * from cmx_meta_table_define_version".to_string(),
         params: None,
         dataset_id: None,
         db_id: None,

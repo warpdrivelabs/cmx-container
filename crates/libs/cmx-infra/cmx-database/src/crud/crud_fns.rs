@@ -108,13 +108,12 @@ where
             .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|ref e| {
-             if let Error::Sqlx(err) = e {
-                 if let sqlx::Error::Database( e) = err
+             if let Error::Sqlx(err) = e
+                 && let sqlx::Error::Database( e) = err
                      && e.code() == Some("23505".into())
                  {
                      return ServiceError::business_error("数据已存在");
                  }
-            }
 
                 error!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e))

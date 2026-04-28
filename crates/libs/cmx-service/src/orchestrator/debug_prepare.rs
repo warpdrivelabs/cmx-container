@@ -102,8 +102,8 @@ impl<'a> DebugPrepare<'a> {
             initial_input.clone(),
         ).await;
 
-        if let Some(ref debug_params) = execute_option.debug_options.debug_params {
-            if debug_params.get("isDebugSelfPlugin").map(|v| v == "1").unwrap_or(false) {
+        if let Some(ref debug_params) = execute_option.debug_options.debug_params
+            && debug_params.get("isDebugSelfPlugin").map(|v| v == "1").unwrap_or(false) {
                 debug!("[debug-prepare] isDebugSelfPlugin is true, calling /debug interface");
 
                 if let Some(session) = cmx_debug::get_active_session() {
@@ -128,7 +128,6 @@ impl<'a> DebugPrepare<'a> {
                     }
                 }
             }
-        }
 
 
         Ok(DebugPrepareResult {

@@ -106,6 +106,7 @@ pub struct ExecutionContext {
 /// 控制编排执行的附加行为，如是否返回步骤数据、是否开启调试模式。
 /// 通过此参数实现生产环境（精简响应）和调试环境（详细响应）的区分。
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ExecuteOptions {
     /// 是否返回 steps 数据
     /// - false: 仅返回最终结果，steps 为空数组（生产环境推荐，减少数据传输）
@@ -116,14 +117,6 @@ pub struct ExecuteOptions {
     pub debug_options: DebugOptions,
 }
 
-impl Default for ExecuteOptions {
-    fn default() -> Self {
-        Self {
-            include_steps: false,
-            debug_options: DebugOptions::default(),
-        }
-    }
-}
 
 impl ExecuteOptions {
     /// 创建执行选项

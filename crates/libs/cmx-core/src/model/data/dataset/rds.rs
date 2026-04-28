@@ -684,11 +684,10 @@ fn row_from_value(v: serde_json::Value, schema: &Schema) -> Result<Row, String> 
     }
     let mut children = HashMap::new();
     for (k, val) in obj {
-        if schema.get_index(&k).is_none() {
-            if let Ok(ds) = serde_json::from_value::<DataSet>(val) {
+        if schema.get_index(&k).is_none()
+            && let Ok(ds) = serde_json::from_value::<DataSet>(val) {
                 children.insert(k, ds);
             }
-        }
     }
     Ok(Row { values, children })
 }

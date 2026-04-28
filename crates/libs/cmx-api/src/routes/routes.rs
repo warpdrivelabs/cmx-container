@@ -40,7 +40,6 @@ fn with_api_prefix(router: Router<CmxAppState>) -> Router<CmxAppState> {
 /// ```
 ///
 /// # 注册的路由
-
 pub fn api_routes() -> Router<CmxAppState> {
     let router = Router::new();
 
@@ -69,9 +68,9 @@ pub fn api_routes() -> Router<CmxAppState> {
     let router = router.merge(debug::DebugModule.routes());
 
     // 注册开发工具路由（使用 ModuleRoutes）
-    let router = router.merge(dev::DevModule.routes());
+    
 
-    router
+    router.merge(dev::DevModule.routes())
     // 统一添加 /api 前缀
     // with_api_prefix(router)
 }

@@ -51,10 +51,8 @@ use axum::{
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
-use cmx_service::{GlobalServiceRegistry, ServiceError};
 use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
 use tracing::error;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 // ==================== 函数直接调用 Handler ====================
@@ -290,8 +288,6 @@ pub async fn service_call(
 /// - `error`: 错误信息（失败时）
 /// - `debug_triggered`: 是否触发了调试暂停
 /// - `debug_prepare_result`: 调试准备结果（触发调试暂停时）
-///
-
 async fn execute_service_inner(
     state: &CmxAppState,
     service_key: &str,
@@ -322,7 +318,7 @@ async fn execute_service_inner(
     ).await
         .map_err(|e| {
             error!("服务{}执行失败: {:?}", service_key, e);
-            return  Error::business_error(format!("服务执行失败: {}", e));
+            Error::business_error(format!("服务执行失败: {}", e))
         })?;
 
     let response = ServiceExecuteResponse {

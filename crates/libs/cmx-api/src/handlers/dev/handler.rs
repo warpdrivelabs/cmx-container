@@ -7,7 +7,7 @@ use percent_encoding::percent_encode;
 use percent_encoding::NON_ALPHANUMERIC;
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::info;
 use zip::ZipArchive;
 
@@ -60,7 +60,7 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
         
         let path = entry.path();
         
-        if path.extension().map_or(false, |ext| ext == "zip") {
+        if path.extension().is_some_and(|ext| ext == "zip") {
             let template_name = path
                 .file_stem()
                 .and_then(|name| name.to_str())
@@ -71,7 +71,7 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
             let modified_time = metadata
                 .as_ref()
                 .and_then(|m| m.modified().ok())
-                .map(|time| chrono::DateTime::from(time));
+                .map(chrono::DateTime::from);
             let file_size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
 
             templates.push(TemplateInfo {
@@ -177,13 +177,12 @@ pub async fn create_project(
                 crate::error::Error::InternalError(format!("创建目录失败: {}", e))
             })?;
         } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
+            if let Some(p) = outpath.parent()
+                && !p.exists() {
                     fs::create_dir_all(p).map_err(|e| {
                         crate::error::Error::InternalError(format!("创建父目录失败: {}", e))
                     })?;
                 }
-            }
             let mut outfile = fs::File::create(&outpath).map_err(|e| {
                 crate::error::Error::InternalError(format!("创建文件失败: {}", e))
             })?;
@@ -200,8 +199,8 @@ pub async fn create_project(
 
     // 步骤 6: 渲染模板文件
     fn process_template_dir(
-        src_dir: &PathBuf,
-        target_dir: &PathBuf,
+        src_dir: &Path,
+        target_dir: &Path,
         req: &CreateProjectRequest,
     ) -> Result<()> {
         for entry in fs::read_dir(src_dir)
@@ -221,8 +220,8 @@ pub async fn create_project(
                 process_template_dir(&path, &new_target_dir, req)?;
             } else {
                 let file_name = path.file_name().unwrap().to_str().unwrap();
-                let target_file = if file_name.ends_with(".hbs") {
-                    target_dir.join(&file_name[..file_name.len() - 4])
+                let target_file = if let Some(stripped) = file_name.strip_suffix(".hbs") {
+                    target_dir.join(stripped)
                 } else {
                     target_dir.join(file_name)
                 };

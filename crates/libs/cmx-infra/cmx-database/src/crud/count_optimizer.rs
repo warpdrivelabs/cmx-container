@@ -139,10 +139,10 @@ fn append_where_condition(select: &mut Select, additional_where: &str) {
     let dialect = PostgreSqlDialect {};
     let expr_str = format!("SELECT 1 WHERE {}", additional_where);
 
-    if let Ok(statements) = Parser::parse_sql(&dialect, &expr_str) {
-        if let Some(Statement::Query(query)) = statements.into_iter().next() {
-            if let SetExpr::Select(inner_select) = *query.body {
-                if let Some(selection) = inner_select.selection {
+    if let Ok(statements) = Parser::parse_sql(&dialect, &expr_str)
+        && let Some(Statement::Query(query)) = statements.into_iter().next()
+            && let SetExpr::Select(inner_select) = *query.body
+                && let Some(selection) = inner_select.selection {
                     select.selection = Some(match &select.selection {
                         Some(existing) => Expr::BinaryOp {
                             left: Box::new(existing.clone()),
@@ -152,9 +152,6 @@ fn append_where_condition(select: &mut Select, additional_where: &str) {
                         None => selection,
                     });
                 }
-            }
-        }
-    }
 }
 
 /// 优化 JOIN 子句（移除未使用的 LEFT JOIN）

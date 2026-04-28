@@ -3,7 +3,6 @@
 //! 提供插件调试会话管理等 API
 
 use axum::Json;
-use tracing::info;
 
 use crate::api_response::ApiResp;
 use crate::error::Result;

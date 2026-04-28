@@ -120,11 +120,7 @@ impl CustomQueryService {
 
             let sql = temp_query.to_string(PostgresQueryBuilder);
 
-            let where_clause = if let Some(pos) = sql.find("WHERE") {
-                Some(sql[pos + 5..].trim().to_string())
-            } else {
-                None
-            };
+            let where_clause = sql.find("WHERE").map(|pos| sql[pos + 5..].trim().to_string());
 
             Ok(where_clause)
         } else {

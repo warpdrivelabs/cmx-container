@@ -356,7 +356,7 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
                 let result = match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
-                            .map_err(|e| Error::InvalidParams(e))?;
+                            .map_err(Error::InvalidParams)?;
                         txn.execute_with_datavalues(&sql, &values).await?
                     },
                     SqlParams::DataValues(values) => {
@@ -374,7 +374,7 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
                 match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
-                            .map_err(|e| Error::InvalidParams(e))?;
+                            .map_err(Error::InvalidParams)?;
                         execute_with_datavalues_no_txn(&dbx, &sql, &values).await
                     },
                     SqlParams::DataValues(values) => {
@@ -473,7 +473,7 @@ pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str,
                 let result = match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
-                            .map_err(|e| Error::InvalidParams(e))?;
+                            .map_err(Error::InvalidParams)?;
                         txn.query_with_datavalues(&sql, &values, &dataset_id).await?
                     },
                     SqlParams::DataValues(values) => {
@@ -491,7 +491,7 @@ pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str,
                 match params {
                     SqlParams::Json(json) => {
                         let values = json_to_data_values(json)
-                            .map_err(|e| Error::InvalidParams(e))?;
+                            .map_err(Error::InvalidParams)?;
                         query_with_datavalues_no_txn(&dbx, &sql, &values, &dataset_id).await
                     },
                     SqlParams::DataValues(values) => {

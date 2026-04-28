@@ -95,7 +95,7 @@ pub fn build_version_create_params(
 ) -> VersionCreateParams {
     let plugin_type = plugin_def.map(|d| d.r#type.clone());
     let source_path = plugin_def.and_then(|d| d.source_path.clone());
-    let description = plugin_def.and_then(|d| d.description.clone());
+    let _description = plugin_def.and_then(|d| d.description.clone());
     VersionCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),

@@ -75,11 +75,10 @@ impl RemoteFetcher {
             .map(|s| s.collect())
             .unwrap_or_default();
 
-        if let Some(filename) = path_segments.last() {
-            if !filename.is_empty() {
+        if let Some(filename) = path_segments.last()
+            && !filename.is_empty() {
                 return Ok(filename.to_string());
             }
-        }
 
         // 如果无法提取，生成随机文件名
         Ok(format!("plugin_{}.zip", uuid::Uuid::new_v4()))

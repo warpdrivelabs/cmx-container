@@ -36,13 +36,11 @@ pub fn parse_rust_file(content: &str) -> Result<Vec<ParsedFunction>> {
     let mut functions = Vec::new();
 
     for item in &file.items {
-        if let Item::Fn(fn_item) = item {
-            if has_plugin_fn_attribute(&fn_item.attrs) {
-                if let Some(parsed) = parse_plugin_function(fn_item)? {
+        if let Item::Fn(fn_item) = item
+            && has_plugin_fn_attribute(&fn_item.attrs)
+                && let Some(parsed) = parse_plugin_function(fn_item)? {
                     functions.push(parsed);
                 }
-            }
-        }
     }
 
     Ok(functions)
@@ -99,13 +97,11 @@ fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {
         .filter_map(|attr| {
             if attr.path().is_ident("doc") {
                 let meta = &attr.meta;
-                if let syn::Meta::NameValue(nv) = meta {
-                    if let syn::Expr::Lit(lit) = &nv.value {
-                        if let syn::Lit::Str(lit_str) = &lit.lit {
+                if let syn::Meta::NameValue(nv) = meta
+                    && let syn::Expr::Lit(lit) = &nv.value
+                        && let syn::Lit::Str(lit_str) = &lit.lit {
                             return Some(lit_str.value());
                         }
-                    }
-                }
             }
             None
         })
@@ -115,15 +111,12 @@ fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {
 /// 提取 #[doc_type = "..."] 属性值
 fn extract_doc_type(attrs: &[Attribute]) -> String {
     for attr in attrs {
-        if attr.path().is_ident("doc_type") {
-            if let syn::Meta::NameValue(nv) = &attr.meta {
-                if let syn::Expr::Lit(lit) = &nv.value {
-                    if let syn::Lit::Str(lit_str) = &lit.lit {
+        if attr.path().is_ident("doc_type")
+            && let syn::Meta::NameValue(nv) = &attr.meta
+                && let syn::Expr::Lit(lit) = &nv.value
+                    && let syn::Lit::Str(lit_str) = &lit.lit {
                         return lit_str.value();
                     }
-                }
-            }
-        }
     }
     // 默认类型为 "func"
     "func".to_string()

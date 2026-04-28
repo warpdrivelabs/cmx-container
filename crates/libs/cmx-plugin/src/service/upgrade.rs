@@ -191,14 +191,13 @@ impl UpgradeService {
             .unwrap_or_else(|| "1.0.0".to_string());
 
         // 步骤6: 版本检查
-        if !request.force {
-            if new_version <= old_version {
+        if !request.force
+            && new_version <= old_version {
                 return Err(PluginError::Upgrade(format!(
                     "升级版本必须大于当前版本: 当前 {}, 新版本 {}",
                     old_version, new_version
                 )));
             }
-        }
 
         let plugin_id = request.plugin_id.clone();
 

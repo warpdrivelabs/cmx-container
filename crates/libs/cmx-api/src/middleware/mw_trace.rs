@@ -168,8 +168,8 @@ fn sanitize_body(body: &[u8]) -> String {
         return sanitize_json_value(&json).to_string();
     }
 
-    if let Ok(s) = std::str::from_utf8(body) {
-        if s.contains('=') && !s.contains('{') && !s.contains('[') {
+    if let Ok(s) = std::str::from_utf8(body)
+        && s.contains('=') && !s.contains('{') && !s.contains('[') {
             let params: Vec<_> = s
                 .split('&')
                 .filter_map(|pair| {
@@ -185,7 +185,6 @@ fn sanitize_body(body: &[u8]) -> String {
             }
             return format!("{}... (truncated)", params.join("&"));
         }
-    }
 
     if body.iter().take(100).any(|&b| b == 0 || b > 127) {
         return format!("<binary data: {} bytes>", body.len());

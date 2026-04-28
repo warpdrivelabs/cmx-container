@@ -180,7 +180,7 @@ impl PgSeedDataExecutor {
             info!(
                 "执行批次 {}/{}: 表={}, {} 行",
                 batch_idx + 1,
-                (rows.len() + self.batch_size - 1) / self.batch_size,
+                rows.len().div_ceil(self.batch_size),
                 table_name,
                 batch.len()
             );
@@ -300,15 +300,14 @@ impl PgSeedDataExecutor {
             .await
         {
             Ok(ds) => {
-                if let Some(row) = ds.rows.first() {
-                    if let Some(val) = row.get(0) {
+                if let Some(row) = ds.rows.first()
+                    && let Some(val) = row.get(0) {
                         return match val {
                             cmx_core::model::cell::DataValue::Int(v) => Some(*v as usize),
                             cmx_core::model::cell::DataValue::String(s) => s.parse().ok(),
                             _ => None,
                         };
                     }
-                }
                 None
             }
             Err(e) => {

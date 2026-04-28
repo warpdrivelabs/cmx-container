@@ -7,11 +7,10 @@ use crate::config::{CacheConfig, LockConfig, RedisConfig};
 use crate::error::{Error, Result};
 use std::sync::{Arc, OnceLock};
 
-///! 分布式锁模块入口
+// 分布式锁模块入口
 
 /// 作者: AI Assistant
 /// 日期: 2026-03-16
-
 /// 创建分布式锁管理器
 pub fn create_lock_manager(client: RedisClient) -> LockManager {
     LockManager::new_with_default_config(client)

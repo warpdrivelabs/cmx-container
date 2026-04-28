@@ -189,15 +189,14 @@ impl SecurityValidator {
     fn validate_package_structure(&self, package_path: &Path, result: &mut ValidationResult) {
         if package_path.is_file() {
             // ZIP 文件
-            if let Some(ext) = package_path.extension() {
-                if ext != "zip" {
+            if let Some(ext) = package_path.extension()
+                && ext != "zip" {
                     result.add_error(format!(
                         "不支持的插件包格式: {:?}",
                         ext
                     ));
                     return;
                 }
-            }
 
             // 验证 ZIP 内容
             self.validate_zip_contents(package_path, result);
@@ -453,18 +452,16 @@ impl SecurityValidator {
         }
 
         // 验证 ID 格式
-        if let Some(id) = plugin.get("id").and_then(|v| v.as_str()) {
-            if !self.is_valid_plugin_id(id) {
+        if let Some(id) = plugin.get("id").and_then(|v| v.as_str())
+            && !self.is_valid_plugin_id(id) {
                 result.add_error(format!("无效的插件 ID 格式: {}", id));
             }
-        }
 
         // 验证版本格式
-        if let Some(version) = plugin.get("version").and_then(|v| v.as_str()) {
-            if !self.is_valid_version(version) {
+        if let Some(version) = plugin.get("version").and_then(|v| v.as_str())
+            && !self.is_valid_version(version) {
                 result.add_warning(format!("版本格式可能无效: {}", version));
             }
-        }
 
         // 验证依赖格式（可选）
         if let Some(deps) = plugin.get("dependencies").and_then(|v| v.as_array()) {

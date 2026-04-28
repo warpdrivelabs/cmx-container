@@ -62,7 +62,7 @@ impl ServiceQuery for ServiceQueryImpl {
             self.registry.register(service_info, Some(orchestration)).await;
         }
 
-        Ok(service_def.map(|def| ServiceInfo::from(def)))
+        Ok(service_def.map(ServiceInfo::from))
     }
 
     /// 根据插件ID获取所有服务
@@ -130,11 +130,10 @@ impl ServiceQuery for ServiceQueryImpl {
 
         let mut active = Vec::new();
         for key in all_keys {
-            if let Some(service) = self.registry.get(&key).await {
-                if service.status == 1 {
+            if let Some(service) = self.registry.get(&key).await
+                && service.status == 1 {
                     active.push(service);
                 }
-            }
         }
 
         Ok(active)
@@ -167,14 +166,13 @@ impl ServiceQuery for ServiceQueryImpl {
                 let versions = self.repository.get_service_versions(&svc.service_key).await
                     .map_err(|e| TraitError::Internal(e.to_string()))?;
 
-                if let Some((version, _)) = versions.first() {
-                    if let Some(config) = self.repository.get_service_config(&svc.service_key, version).await
+                if let Some((version, _)) = versions.first()
+                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version).await
                         .map_err(|e| TraitError::Internal(e.to_string()))? {
                         let orch: ServiceOrchestration = serde_json::from_str(&config)
                             .map_err(|e| TraitError::Internal(e.to_string()))?;
                         return Ok(Some(orch));
                     }
-                }
                 Ok(None)
             }
             None => Ok(None),

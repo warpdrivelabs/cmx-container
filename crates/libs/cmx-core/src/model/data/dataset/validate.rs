@@ -56,15 +56,14 @@ fn validate_row(row: &Row, schema: &Schema, row_index: Option<usize>) -> Result<
     }
 
     for (i, value) in row.values.iter().enumerate() {
-        if let Some(field) = schema.fields.get(i) {
-            if !check_type_compatible(value, &field.field_type) {
+        if let Some(field) = schema.fields.get(i)
+            && !check_type_compatible(value, &field.field_type) {
                 return Err(DataSetError::TypeMismatch {
                     field_name: field.name.clone(),
                     expected: field.field_type.clone(),
                     actual: format!("{:?}", value),
                 });
             }
-        }
     }
 
     Ok(())

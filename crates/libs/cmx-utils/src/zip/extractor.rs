@@ -68,13 +68,12 @@ impl ZipExtractor {
                     .recursive(true)
                     .create(&outpath)?;
             } else {
-                if let Some(parent) = outpath.parent() {
-                    if !parent.exists() {
+                if let Some(parent) = outpath.parent()
+                    && !parent.exists() {
                         DirBuilder::new()
                             .recursive(true)
                             .create(parent)?;
                     }
-                }
 
                 let mut outfile = File::create(&outpath)?;
                 std::io::copy(&mut file, &mut outfile)?;
@@ -131,13 +130,12 @@ impl ZipExtractor {
                     .recursive(true)
                     .create(&outpath)?;
             } else {
-                if let Some(parent) = outpath.parent() {
-                    if !parent.exists() {
+                if let Some(parent) = outpath.parent()
+                    && !parent.exists() {
                         DirBuilder::new()
                             .recursive(true)
                             .create(parent)?;
                     }
-                }
 
                 let mut outfile = File::create(&outpath)?;
                 std::io::copy(&mut file, &mut outfile)?;
@@ -188,13 +186,12 @@ impl ZipExtractor {
 
         let mut zip_file = archive.by_name(file_name)?;
 
-        if let Some(parent) = output_path.parent() {
-            if !parent.exists() {
+        if let Some(parent) = output_path.parent()
+            && !parent.exists() {
                 DirBuilder::new()
                     .recursive(true)
                     .create(parent)?;
             }
-        }
 
         let mut outfile = File::create(output_path)?;
         std::io::copy(&mut zip_file, &mut outfile)?;

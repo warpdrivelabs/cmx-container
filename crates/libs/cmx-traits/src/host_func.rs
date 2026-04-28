@@ -17,6 +17,7 @@ use crate::error::HostFuncError;
 ///
 /// 描述宿主函数的参数类型，与 Extism 的 ValType 对应。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ValType {
     /// 32位整数
     I32,
@@ -27,6 +28,7 @@ pub enum ValType {
     /// 64位浮点数
     F64,
     /// 指针（通常是 I64）
+    #[default]
     Ptr,
 }
 
@@ -45,11 +47,6 @@ impl ValType {
     }
 }
 
-impl Default for ValType {
-    fn default() -> Self {
-        ValType::Ptr
-    }
-}
 
 /// 宿主函数定义
 ///

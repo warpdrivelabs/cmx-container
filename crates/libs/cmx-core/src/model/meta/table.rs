@@ -141,18 +141,15 @@ pub struct ColumnDefine {
 /// 索引类型枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum IndexKind {
     /// 唯一索引
     Unique,
     /// 普通索引
+    #[default]
     Normal,
 }
 
-impl Default for IndexKind {
-    fn default() -> Self {
-        IndexKind::Normal
-    }
-}
 
 /// 单条表索引定义
 #[derive(Debug, Clone, Serialize, Deserialize)]

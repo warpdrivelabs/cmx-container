@@ -80,7 +80,7 @@ impl InvokeOptions {
 // 调用链使用 "plugin_id/function_name" 作为 key，用于检测函数级别的循环调用
 // 例如 A.a → B.b → A.a 这种递归调用
 thread_local! {
-    static CALL_DEPTH: RefCell<u32> = RefCell::new(0);
+    static CALL_DEPTH: RefCell<u32> = const { RefCell::new(0) };
     static CALL_CHAIN: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
 
@@ -127,15 +127,12 @@ impl InvokeContext {
             Ok(depth)
         });
 
-        match current_depth {
-            Err(limit) => return Err(InvokeGuardError::DepthExceeded {
-                current: limit,
-                max: limit,
-                plugin_id: plugin_id.to_string(),
-                function_name: function_name.to_string(),
-            }),
-            Ok(_) => {}
-        }
+        if let Err(limit) = current_depth { return Err(InvokeGuardError::DepthExceeded {
+            current: limit,
+            max: limit,
+            plugin_id: plugin_id.to_string(),
+            function_name: function_name.to_string(),
+        }) }
 
         // 检查循环调用（基于 plugin_id/function_name 组合，检测函数级别递归）
         // 例如 A.a → B.b → A.a 会触发循环检测

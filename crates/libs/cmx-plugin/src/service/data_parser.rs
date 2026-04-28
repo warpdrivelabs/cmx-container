@@ -6,7 +6,7 @@
 
 use std::path::Path;
 use cmx_core::model::service::{ServiceOrchestration, ServiceDefinition};
-use crate::error::{PluginError, PluginResult};
+use crate::error::PluginResult;
 use uuid::Uuid;
 
 /// 服务数据解析器
@@ -150,7 +150,7 @@ impl ServiceDataParser {
     /// # 错误
     ///
     /// 返回验证失败的具体错误信息
-    pub fn validate_orchestration(orchestration: &ServiceOrchestration) -> PluginResult<()> {
+    pub fn validate_orchestration(_orchestration: &ServiceOrchestration) -> PluginResult<()> {
         // // 检查节点列表是否为空
         // if orchestration.flow.nodes.is_empty() {
         //     return Err(PluginError::Plugin("编排节点列表为空".to_string()));

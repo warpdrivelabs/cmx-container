@@ -115,11 +115,10 @@ impl ServiceLifecycleListener {
             Ok(services) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 for service in &services {
-                    if !service.config.is_empty() {
-                        if let Ok(orch) = serde_json::from_str::<serde_json::Value>(&service.config) {
+                    if !service.config.is_empty()
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(&service.config) {
                             orchestrations.insert(service.service_key.clone(), orch);
                         }
-                    }
                 }
 
                 registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
@@ -160,13 +159,11 @@ impl ServiceLifecycleListener {
                 let service_infos: Vec<_> = service_defs
                     .into_iter()
                     .map(|def| {
-                        if let Some(ref config) = def.config {
-                            if !config.is_empty() {
-                                if let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
+                        if let Some(ref config) = def.config
+                            && !config.is_empty()
+                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                                     orchestrations.insert(def.service_key.clone(), orch);
                                 }
-                            }
-                        }
                         cmx_core::model::service::ServiceInfo::from(def)
                     })
                     .collect();
@@ -237,13 +234,11 @@ impl ServiceLifecycleListener {
                 let service_infos: Vec<_> = service_defs
                     .into_iter()
                     .map(|def| {
-                        if let Some(ref config) = def.config {
-                            if !config.is_empty() {
-                                if let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
+                        if let Some(ref config) = def.config
+                            && !config.is_empty()
+                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                                     orchestrations.insert(def.service_key.clone(), orch);
                                 }
-                            }
-                        }
                         cmx_core::model::service::ServiceInfo::from(def)
                     })
                     .collect();

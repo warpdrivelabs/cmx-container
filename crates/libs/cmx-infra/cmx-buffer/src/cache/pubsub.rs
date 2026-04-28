@@ -6,11 +6,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use futures_util::StreamExt;
 
-///! 缓存操作模块 - 发布/订阅操作
+// 缓存操作模块 - 发布/订阅操作
 
 /// 作者: AI Assistant
 /// 日期: 2026-03-16
-
+///
 /// 发布/订阅操作器
 pub struct PubSubOps {
     client: RedisClient,

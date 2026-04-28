@@ -64,11 +64,10 @@ impl ServiceRegistry {
         self.services.write().await.remove(service_key);
         self.orchestration_cache.write().await.remove(service_key);
 
-        if let Ok(mut map) = self.plugin_services.try_write() {
-            if let Some(keys) = map.get_mut(plugin_id) {
+        if let Ok(mut map) = self.plugin_services.try_write()
+            && let Some(keys) = map.get_mut(plugin_id) {
                 keys.retain(|k| k != service_key);
             }
-        }
     }
 
     /// 获取服务信息

@@ -46,30 +46,28 @@ impl TempDirCleanup {
     ///
     /// 提前清理临时目录，而不是等待 Drop。
     pub fn cleanup(&mut self) {
-        if let Some(ref path) = self.path {
-            if path.exists() {
+        if let Some(ref path) = self.path
+            && path.exists() {
                 if let Err(e) = std::fs::remove_dir_all(path) {
                     tracing::warn!("清理临时目录失败: {} - {}", path.display(), e);
                 } else {
                     tracing::debug!("已清理临时目录: {}", path.display());
                 }
             }
-        }
         self.path = None;
     }
 }
 
 impl Drop for TempDirCleanup {
     fn drop(&mut self) {
-        if let Some(ref path) = self.path {
-            if path.exists() {
+        if let Some(ref path) = self.path
+            && path.exists() {
                 if let Err(e) = std::fs::remove_dir_all(path) {
                     tracing::warn!("清理临时目录失败: {} - {}", path.display(), e);
                 } else {
                     tracing::debug!("已清理临时目录: {}", path.display());
                 }
             }
-        }
     }
 }
 

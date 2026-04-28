@@ -146,17 +146,15 @@ impl<'de> Deserialize<'de> for DataValue {
                     return Ok(DataValue::Uuid(uuid));
                 }
                 // 尝试解析为 base64 编码的二进制数据（通过 B64: 前缀识别）
-                if let Some(encoded) = s.strip_prefix("B64:") {
-                    if let Ok(bytes) = BASE64.decode(encoded) {
+                if let Some(encoded) = s.strip_prefix("B64:")
+                    && let Ok(bytes) = BASE64.decode(encoded) {
                         return Ok(DataValue::Binary(bytes));
                     }
-                }
                 // 尝试解析为 JSON（如果是以 { 或 [ 开头）
-                if s.starts_with('{') || s.starts_with('[') {
-                    if serde_json::from_str::<JsonValue>(&s).is_ok() {
+                if (s.starts_with('{') || s.starts_with('['))
+                    && serde_json::from_str::<JsonValue>(&s).is_ok() {
                         return Ok(DataValue::Json(s));
                     }
-                }
                 Ok(DataValue::String(s))
             }
             JsonValue::Array(arr) => {

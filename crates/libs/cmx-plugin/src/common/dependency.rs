@@ -41,18 +41,16 @@ impl DependencyUtils {
         let mut dependents = Vec::new();
 
         for plugin in all_plugins {
-            if let Some(ref metadata) = plugin.metadata {
-                if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
+            if let Some(ref metadata) = plugin.metadata
+                && let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
                     for dep in deps {
-                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
-                            if dep_id == plugin_id {
+                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str())
+                            && dep_id == plugin_id {
                                 dependents.push(plugin.plugin_id.clone());
                                 break;
                             }
-                        }
                     }
                 }
-            }
         }
 
         Ok(dependents)
@@ -74,18 +72,16 @@ impl DependencyUtils {
                 continue;
             }
 
-            if let Some(ref metadata) = plugin.metadata {
-                if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
+            if let Some(ref metadata) = plugin.metadata
+                && let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
                     for dep in deps {
-                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
-                            if dep_id == plugin_id {
+                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str())
+                            && dep_id == plugin_id {
                                 dependents.push(plugin.plugin_id.clone());
                                 break;
                             }
-                        }
                     }
                 }
-            }
         }
 
         Ok(dependents)
@@ -107,8 +103,8 @@ impl DependencyUtils {
 
         let mut inactive_deps = Vec::new();
 
-        if let Some(ref metadata) = plugin.metadata {
-            if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
+        if let Some(ref metadata) = plugin.metadata
+            && let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
                 for dep in deps {
                     if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
                         if let Some(dep_plugin) = self.deps.repository.find_plugin(dep_id).await? {
@@ -121,7 +117,6 @@ impl DependencyUtils {
                     }
                 }
             }
-        }
 
         Ok(inactive_deps)
     }
@@ -168,23 +163,17 @@ impl DependencyUtils {
                 continue;
             }
 
-            if let Some(ref constraint_str) = dep.version_constraint {
-                if let Ok(constraint) = crate::domain::version::VersionConstraint::parse(constraint_str)
-                {
-                    if let Some(plugin_info) = get_plugin_info(&dep.plugin_id).await? {
-                        if let Ok(installed_version) =
+            if let Some(ref constraint_str) = dep.version_constraint
+                && let Ok(constraint) = crate::domain::version::VersionConstraint::parse(constraint_str)
+                    && let Some(plugin_info) = get_plugin_info(&dep.plugin_id).await?
+                        && let Ok(installed_version) =
                             crate::domain::version::SemanticVersion::parse(&plugin_info.version)
-                        {
-                            if !constraint.satisfies(&installed_version) {
+                            && !constraint.satisfies(&installed_version) {
                                 result.add_conflict(DependencyConflict {
                                     plugin_id: dep.plugin_id.clone(),
                                     constraints: vec![(plugin_def.id.clone(), constraint)],
                                 });
                             }
-                        }
-                    }
-                }
-            }
         }
 
         Ok(result)

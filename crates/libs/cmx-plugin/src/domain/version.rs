@@ -49,7 +49,7 @@ impl SemanticVersion {
         let pre_release = parts.get(1).map(|s| PreRelease::parse(s)).transpose()?;
         
         let nums: Vec<&str> = main_part.split('.').collect();
-        if nums.len() < 1 || nums.len() > 3 {
+        if nums.is_empty() || nums.len() > 3 {
             return Err(VersionParseError::InvalidFormat);
         }
         
@@ -216,25 +216,25 @@ impl VersionConstraint {
     /// 解析版本约束字符串
     pub fn parse(constraint: &str) -> Result<Self, VersionParseError> {
         let constraint = constraint.trim();
-        
-        let (relation, version_str) = if constraint.starts_with(">=") {
-            (VersionRelation::GreaterThanOrEqual, constraint[2..].trim())
-        } else if constraint.starts_with("<=") {
-            (VersionRelation::LessThanOrEqual, constraint[2..].trim())
-        } else if constraint.starts_with('>') {
-            (VersionRelation::GreaterThan, constraint[1..].trim())
-        } else if constraint.starts_with('<') {
-            (VersionRelation::LessThan, constraint[1..].trim())
-        } else if constraint.starts_with('=') {
-            (VersionRelation::Equal, constraint[1..].trim())
-        } else if constraint.starts_with('^') {
-            (VersionRelation::Compatible, constraint[1..].trim())
-        } else if constraint.starts_with('~') {
-            (VersionRelation::Approximately, constraint[1..].trim())
+
+        let (relation, version_str) = if let Some(stripped) = constraint.strip_prefix(">=") {
+            (VersionRelation::GreaterThanOrEqual, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix("<=") {
+            (VersionRelation::LessThanOrEqual, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix('>') {
+            (VersionRelation::GreaterThan, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix('<') {
+            (VersionRelation::LessThan, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix('=') {
+            (VersionRelation::Equal, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix('^') {
+            (VersionRelation::Compatible, stripped.trim())
+        } else if let Some(stripped) = constraint.strip_prefix('~') {
+            (VersionRelation::Approximately, stripped.trim())
         } else {
             (VersionRelation::Equal, constraint)
         };
-        
+
         let version = SemanticVersion::parse(version_str)?;
         Ok(Self { relation, version })
     }

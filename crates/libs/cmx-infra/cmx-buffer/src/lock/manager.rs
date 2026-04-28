@@ -7,11 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
-///! 分布式锁管理器
+// 分布式锁管理器
 
 /// 作者: AI Assistant
 /// 日期: 2026-03-16
-
 /// 分布式锁管理器
 #[derive(Clone)]
 pub struct LockManager {
@@ -440,14 +439,10 @@ impl LockGuard {
                     Err(_) => break,
                 };
 
-                let ttl: i64 = match redis::cmd("TTL")
+                let ttl: i64 = redis::cmd("TTL")
                     .arg(&lock_key)
                     .query_async(&mut *conn)
-                    .await
-                {
-                    Ok(v) => v,
-                    Err(_) => -1,
-                };
+                    .await.unwrap_or(-1);
 
                 if ttl < 0 {
                     break;

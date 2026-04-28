@@ -509,8 +509,8 @@ impl ActivateService {
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(plugin_id))?;
 
-        if let Some(ref metadata) = plugin.metadata {
-            if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
+        if let Some(ref metadata) = plugin.metadata
+            && let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
                 for dep in deps {
                     if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
                         let installed = self.deps.repository.plugin_exists(dep_id).await?;
@@ -524,7 +524,6 @@ impl ActivateService {
                     }
                 }
             }
-        }
 
         Ok(result)
     }
@@ -553,18 +552,16 @@ impl ActivateService {
                 continue;
             }
 
-            if let Some(ref metadata) = plugin.metadata {
-                if let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
+            if let Some(ref metadata) = plugin.metadata
+                && let Some(deps) = metadata.get("dependencies").and_then(|d| d.as_array()) {
                     for dep in deps {
-                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str()) {
-                            if dep_id == plugin_id {
+                        if let Some(dep_id) = dep.get("plugin_id").and_then(|id| id.as_str())
+                            && dep_id == plugin_id {
                                 dependents.push(plugin.plugin_id.clone());
                                 break;
                             }
-                        }
                     }
                 }
-            }
         }
 
         Ok(dependents)
@@ -591,8 +588,8 @@ impl ActivateService {
         plugin_id: &str,
         plugin: &crate::infrastructure::database::repository::PluginRecord,
     ) -> PluginResult<()> {
-        if let Some(ref metadata) = plugin.metadata {
-            if let Some(services) = metadata.get("services").and_then(|s| s.as_array()) {
+        if let Some(ref metadata) = plugin.metadata
+            && let Some(services) = metadata.get("services").and_then(|s| s.as_array()) {
                 for service in services {
                     let service_name = service
                         .get("name")
@@ -620,7 +617,6 @@ impl ActivateService {
                     tracing::info!("已注册服务: {}.{}", plugin_id, service_name);
                 }
             }
-        }
 
         Ok(())
     }

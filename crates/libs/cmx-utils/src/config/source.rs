@@ -39,21 +39,18 @@ impl CommandLineSource {
         let mut iter = args.peekable();
 
         while let Some(arg) = iter.next() {
-            if arg.starts_with("--") {
-                let arg_content = &arg[2..];
-
+            if let Some(arg_content) = arg.strip_prefix("--") {
                 if let Some(eq_pos) = arg_content.find('=') {
                     let key = arg_content[..eq_pos].to_string();
                     let value = arg_content[eq_pos + 1..].to_string();
                     config_args.insert(key, value);
-                } else if let Some(next_arg) = iter.peek() {
-                    if !next_arg.starts_with("--") {
+                } else if let Some(next_arg) = iter.peek()
+                    && !next_arg.starts_with("--") {
                         let key = arg_content.to_string();
                         let value = next_arg.clone();
                         config_args.insert(key, value);
                         iter.next();
                     }
-                }
             }
         }
 

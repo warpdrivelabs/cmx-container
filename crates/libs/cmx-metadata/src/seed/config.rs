@@ -96,7 +96,7 @@ impl SeedDataSummary {
     /// 是否有数据条数不一致的警告
     pub fn has_warnings(&self) -> bool {
         self.table_results.iter().any(|r| {
-            r.db_row_count.map_or(false, |db_count| db_count < r.file_row_count)
+            r.db_row_count.is_some_and(|db_count| db_count < r.file_row_count)
         })
     }
 

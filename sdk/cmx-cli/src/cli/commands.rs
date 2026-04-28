@@ -216,12 +216,11 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
         let path = Path::new(&output_path);
 
         // 如果父目录不存在，则创建目录
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty() && !parent.exists() {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("无法创建目录: {}", parent.display()))?;
             }
-        }
 
         fs::write(&output_path, &json)
             .with_context(|| format!("无法写入文件: {}", output_path))?;
@@ -356,7 +355,7 @@ fn collect_rust_files(paths: &[String], exclude: Option<&str>) -> Result<Vec<Str
     for path_str in paths {
         let path = Path::new(path_str);
 
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "rs") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "rs") {
             files.push(path_str.clone());
         } else if path.is_dir() {
             for entry in WalkDir::new(path)
@@ -365,15 +364,14 @@ fn collect_rust_files(paths: &[String], exclude: Option<&str>) -> Result<Vec<Str
                 .filter_map(|e| e.ok())
             {
                 let entry_path = entry.path();
-                if entry_path.extension().map_or(false, |ext| ext == "rs") {
+                if entry_path.extension().is_some_and(|ext| ext == "rs") {
                     let file_path = entry_path.to_string_lossy().to_string();
 
                     // 检查排除模式
-                    if let Some(exclude_pattern) = exclude {
-                        if file_path.contains(exclude_pattern) {
+                    if let Some(exclude_pattern) = exclude
+                        && file_path.contains(exclude_pattern) {
                             continue;
                         }
-                    }
 
                     files.push(file_path);
                 }
@@ -398,9 +396,9 @@ fn get_plugin_info(
             path.join("Cargo.toml")
         };
 
-        if cargo_toml_path.exists() {
-            if let Ok(content) = fs::read_to_string(&cargo_toml_path) {
-                if let Ok(value) = content.parse::<toml::Value>() {
+        if cargo_toml_path.exists()
+            && let Ok(content) = fs::read_to_string(&cargo_toml_path)
+                && let Ok(value) = content.parse::<toml::Value>() {
                     let name = override_name.map(|s| s.to_string()).unwrap_or_else(|| {
                         value
                             .get("package")
@@ -430,8 +428,6 @@ fn get_plugin_info(
 
                     return Ok((name, version, description));
                 }
-            }
-        }
     }
 
     // 默认值
@@ -449,12 +445,12 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
     
     loop {
         let workspace_cargo = current.join("Cargo.toml");
-        if workspace_cargo.exists() {
-            if let Ok(content) = fs::read_to_string(&workspace_cargo) {
-                if let Ok(value) = content.parse::<toml::Value>() {
+        if workspace_cargo.exists()
+            && let Ok(content) = fs::read_to_string(&workspace_cargo)
+                && let Ok(value) = content.parse::<toml::Value>() {
                     // 检查是否是 workspace
-                    if value.get("workspace").is_some() {
-                        if let Some(version) = value
+                    if value.get("workspace").is_some()
+                        && let Some(version) = value
                             .get("workspace")
                             .and_then(|w| w.get("package"))
                             .and_then(|p| p.get("version"))
@@ -462,10 +458,7 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
                         {
                             return Some(version.to_string());
                         }
-                    }
                 }
-            }
-        }
         
         current = current.parent()?;
     }

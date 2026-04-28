@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 /// 服务调用上下文 key 常量
 pub mod svrkey {
     /// 请求进入时间 key
-    pub const KEY_TIME_IN: &'static str = "cmx_time_in";
+    pub const KEY_TIME_IN: &str = "cmx_time_in";
     /// 请求ID key
-    pub const KEY_REQUEST_ID: &'static str = "cmx_request_id";
+    pub const KEY_REQUEST_ID: &str = "cmx_request_id";
 }
 
 /// 服务调用上下文

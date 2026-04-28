@@ -87,11 +87,10 @@ impl ParamValue {
                 }
 
                 // 6. 尝试解析为 JSON（以 { 或 [ 开头）
-                if s.starts_with('{') || s.starts_with('[') {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                if (s.starts_with('{') || s.starts_with('['))
+                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
                         return ParamValue::Json(v);
                     }
-                }
 
                 // 默认作为字符串
                 ParamValue::String(s)
@@ -366,11 +365,10 @@ impl ResultConverter {
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
-            if let Ok(s) = row.try_get::<String, _>(index) {
-                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+            if let Ok(s) = row.try_get::<String, _>(index)
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
                     return DataValue::Date(date);
                 }
-            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
@@ -445,11 +443,10 @@ impl ResultConverter {
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
-            if let Ok(s) = row.try_get::<String, _>(index) {
-                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+            if let Ok(s) = row.try_get::<String, _>(index)
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
                     return DataValue::Date(date);
                 }
-            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
@@ -517,11 +514,10 @@ impl ResultConverter {
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
-            if let Ok(s) = row.try_get::<String, _>(index) {
-                if let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+            if let Ok(s) = row.try_get::<String, _>(index)
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
                     return DataValue::Date(date);
                 }
-            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）

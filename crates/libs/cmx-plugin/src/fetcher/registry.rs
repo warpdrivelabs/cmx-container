@@ -389,15 +389,12 @@ impl RegistryFetcher {
 
     /// 提取文件名
     fn extract_filename(&self, url: &str, package_name: &str, version: &str) -> String {
-        if let Ok(parsed) = url::Url::parse(url) {
-            if let Some(segments) = parsed.path_segments() {
-                if let Some(filename) = segments.last() {
-                    if !filename.is_empty() {
+        if let Ok(parsed) = url::Url::parse(url)
+            && let Some(mut segments) = parsed.path_segments()
+                && let Some(filename) = segments.next_back()
+                    && !filename.is_empty() {
                         return filename.to_string();
                     }
-                }
-            }
-        }
 
         format!("{}-{}.zip", package_name, version)
     }

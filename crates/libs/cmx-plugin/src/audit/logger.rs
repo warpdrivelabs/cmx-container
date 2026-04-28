@@ -51,6 +51,7 @@ impl Default for AuditLoggerConfig {
 }
 
 /// 审计日志记录器
+#[derive(Default)]
 pub struct AuditLogger {
     /// 配置
     config: AuditLoggerConfig,
@@ -113,7 +114,7 @@ impl AuditLogger {
                 record.error_message.clone().into(),
                 record.stack_trace.clone().into(),
                 record.started_at.into(),
-                record.completed_at.clone().into(),
+                record.completed_at.into(),
                 record.duration_ms.into(),
                 now.into(),
                 now.into(),
@@ -410,10 +411,3 @@ impl AuditLogger {
     }
 }
 
-impl Default for AuditLogger {
-    fn default() -> Self {
-        Self {
-            config: AuditLoggerConfig::default(),
-        }
-    }
-}
