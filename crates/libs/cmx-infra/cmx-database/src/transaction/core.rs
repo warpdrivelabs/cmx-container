@@ -307,8 +307,8 @@ impl Dbx {
         result?;
 
         // 如果需要回滚，执行回滚操作并更新事务状态
-        if should_rollback {
-            if let (Some(txn), Some(txn_id)) = (txn_to_rollback, txn_id) {
+        if should_rollback
+            && let (Some(txn), Some(txn_id)) = (txn_to_rollback, txn_id) {
                 // 执行回滚操作
                 txn.rollback().await?;
 
@@ -317,7 +317,6 @@ impl Dbx {
                 // 从全局TxnHolder注册表中移除
                 get_txn_holder_registry().write().await.remove(&txn_id);
             }
-        }
 
         Ok(())
     }
@@ -363,8 +362,8 @@ impl Dbx {
         result?;
 
         // 如果需要提交，执行提交操作并更新事务状态
-        if should_commit {
-            if let (Some(txn), Some(txn_id)) = (txn_to_commit, txn_id) {
+        if should_commit
+            && let (Some(txn), Some(txn_id)) = (txn_to_commit, txn_id) {
                 // 执行提交操作
                 txn.commit().await?;
 
@@ -373,7 +372,6 @@ impl Dbx {
                 // 从全局TxnHolder注册表中移除
                 get_txn_holder_registry().write().await.remove(&txn_id);
             }
-        }
 
         Ok(())
     }

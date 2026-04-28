@@ -18,11 +18,6 @@ use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// 将模块路由注册到 /api 前缀下
-fn with_api_prefix(router: Router<CmxAppState>) -> Router<CmxAppState> {
-    Router::new().nest("/api", router)
-}
-
 /// 注册所有 API 路由
 ///
 /// # 参数

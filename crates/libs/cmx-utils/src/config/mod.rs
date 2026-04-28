@@ -28,9 +28,9 @@ pub mod error;
 pub mod source;
 pub mod value;
 
-mod config;
+mod config_impl;
 
-pub use config::{Config, ConfigBuilder, ConfigManager, DefaultConfigLoader};
+pub use config_impl::{Config, ConfigBuilder, ConfigManager, DefaultConfigLoader};
 pub use error::{ConfigError, ConfigResult};
 pub use source::CommandLineSource;
 pub use value::{ConfigStore, ConfigValue, FromConfigValue};

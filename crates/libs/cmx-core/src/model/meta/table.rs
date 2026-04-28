@@ -60,7 +60,7 @@ pub enum FieldType {
 ///
 /// 与 [`FieldType`] 的区别：
 /// - `FieldType` 是枚举，仅表示类型
-/// `Field` 是结构体，包含名称和类型，用于需要字段元数据的场景
+/// - `Field` 是结构体，包含名称和类型，用于需要字段元数据的场景
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Field {
     /// 字段名称

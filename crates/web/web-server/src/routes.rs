@@ -4,7 +4,7 @@
 
 use axum::Router;
 use cmx_api::CmxAppState;
-use cmx_api::routes::routes::{api_routes, swagger_routes};
+use cmx_api::routes::routes_impl::{api_routes, swagger_routes};
 
 /// 配置所有 API 路由
 ///

@@ -186,13 +186,12 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_commit {
-            if let Some(txn) = txn_to_commit {
+        if should_commit
+            && let Some(txn) = txn_to_commit {
                 txn.commit().await?;
                 crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed).await;
                 get_txn_holder_registry().write().await.remove(txn_id);
             }
-        }
     } else {
         return Err(Error::NoTxn);
     }
@@ -234,13 +233,12 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_rollback {
-            if let Some(txn) = txn_to_rollback {
+        if should_rollback
+            && let Some(txn) = txn_to_rollback {
                 txn.rollback().await?;
                 crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack).await;
                 get_txn_holder_registry().write().await.remove(txn_id);
             }
-        }
     } else {
         return Err(Error::NoTxn);
     }

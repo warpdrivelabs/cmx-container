@@ -3,7 +3,7 @@
 
 pub mod crud_handlers;
 pub mod macros;
-pub mod routes;
+pub mod routes_impl;
 pub mod traits;
 
 
