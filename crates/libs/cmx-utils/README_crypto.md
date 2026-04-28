@@ -1,53 +1,108 @@
 # CMX 加解密模块
 
-一个基于 AES-256-GCM 的企业级字段加解密库，提供透明的字段级加解密能力，适用于数据库敏感信息保护。
+一个企业级可扩展的字段加解密库，支持多种加密算法，提供透明的字段级加解密能力，适用于数据库敏感信息保护。
 
 ## 设计思想
 
 ### 核心理念
 
-1. **企业级安全**：采用 AES-256-GCM 认证加密，密文自带认证标签，防篡改
-2. **透明加解密**：对业务代码无感，通过声明式配置自动完成加解密
-3. **向后兼容**：非加密格式的值原样返回，兼容已有的明文数据
-4. **零侵入扩展**：通过 trait 扩展机制，无需修改现有 CRUD 代码
+1. **可扩展架构**：通过 `Cipher` trait 抽象加密算法，可随时扩展新的加密算法
+2. **企业级安全**：内置 AES-256-GCM 认证加密，同时保证机密性和完整性
+3. **透明加解密**：对业务代码无感，通过声明式配置自动完成加解密
+4. **向后兼容**：非加密格式的值原样返回，兼容已有的明文数据
 
-### 加密格式
+### 密文格式
 
-加密后的密文格式为 `ENC(BASE64_NONCE.BASE64_CIPHERTEXT)`，其中：
-- `NONCE`：12 字节随机数，每次加密不同
-- `CIPHERTEXT`：包含密文和 16 字节认证标签
-- `ENC(...)` 前缀用于标识密文，非加密值原样返回
+所有算法的密文统一使用双层包装格式：
+
+```text
+ENC(ALGO(NONCE.CIPHERTEXT))
+```
+
+| 层次 | 示例 | 说明 |
+|------|------|------|
+| 外层 | `ENC(`...`)` | 统一标识，所有加密值都有此前缀 |
+| 算法层 | `AESGCM(`...`)` | 标识具体算法（如 AESGCM、CHACHA） |
+| 数据层 | `NONCE.CIPHERTEXT` | Nonce 和密文（Base64 编码） |
+
+例如：`ENC(AESGCM(abCD12.xyZ789==))`
+
+### 模块文件结构
+
+```
+src/crypto/
+├── mod.rs      # 模块入口，导出公开 API
+├── cipher.rs   # Cipher trait 定义，算法接口规范
+├── error.rs    # Error 和 Result 类型定义
+├── service.rs  # CryptoService 加解密服务入口
+└── aes_gcm.rs # AES-256-GCM 算法实现
+```
+
+## 核心架构
+
+```
+┌─────────────────────────────────────────┐
+│              CryptoService                │
+│              (service.rs)                │
+│  (统一入口，对外提供加解密接口)           │
+└─────────────────┬───────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│           Box<dyn Cipher>                 │
+│              (cipher.rs)                  │
+│  (算法抽象层，支持运行时切换)             │
+└──────────┬──────────────────────────────┘
+           │
+     ┌─────┴─────┐
+     ▼           ▼
+┌─────────┐ ┌───────────┐
+│ Aes256Gcm│ │ ChaCha20  │  ← 未来可扩展更多算法
+│ (aes_gcm)│ │ Poly1305  │
+└─────────┘ └───────────┘
+```
 
 ## 功能特性
 
-### 1. AES-256-GCM 认证加密
+### 1. Cipher trait - 算法抽象层
+
+所有加密算法实现统一的 `Cipher` trait：
 
 ```rust
-use cmx_utils::crypto::CryptoService;
+use cmx_utils::crypto::{Cipher, CipherMeta};
 
-// 初始化（通常在应用启动时调用一次）
-CryptoService::init("your-32-byte-secret-key-here")?;
+pub trait Cipher: Send + Sync {
+    /// 算法元信息
+    fn meta(&self) -> CipherMeta;
 
-// 加密
-let ciphertext = crypto.encrypt("sensitive data")?;
-// 输出: ENC(BASE64_NONCE.BASE64_CIPHERTEXT)
+    /// 加密（返回内层格式，如 AESGCM(NONCE.CIPHERTEXT)）
+    fn encrypt(&self, plaintext: &str) -> Result<String>;
 
-// 解密
-let plaintext = crypto.decrypt(&ciphertext)?;
-// 输出: sensitive data
+    /// 解密（接收完整 ENC(...) 格式，内部自行解析）
+    fn decrypt(&self, ciphertext: &str) -> Result<String>;
+
+    /// 检查是否为自己的格式
+    fn is_my_format(&self, ciphertext: &str) -> bool;
+}
 ```
 
-### 2. 全局单例访问
+### 2. AES-256-GCM 认证加密
 
 ```rust
-use cmx_utils::crypto::CryptoService;
+use cmx_utils::crypto::{CryptoService, Aes256GcmCipher};
 
-// 获取全局实例（需先调用 init）
-let crypto = CryptoService::global()?;
+// 方式一：使用默认算法（AES-256-GCM）初始化
+CryptoService::init("your-32-byte-secret-key-here!");
 
-// 使用全局实例加解密
-let encrypted = crypto.encrypt("password")?;
-let decrypted = crypto.decrypt(&encrypted)?;
+// 方式二：手动指定算法
+CryptoService::init_with(Aes256GcmCipher::new("your-key"));
+
+// 加密
+let encrypted = CryptoService::global()?.encrypt("sensitive data")?;
+// 输出: ENC(AESGCM(NONCE.CIPHERTEXT))
+
+// 解密
+let decrypted = CryptoService::global()?.decrypt(&encrypted)?;
 ```
 
 ### 3. 环境变量初始化
@@ -56,7 +111,7 @@ let decrypted = crypto.decrypt(&encrypted)?;
 use cmx_utils::crypto::CryptoService;
 
 // 从环境变量 CMX_ENCRYPT_KEY 读取密钥并初始化
-CryptoService::init_from_env()?;
+CryptoService::init_from_env();
 ```
 
 ### 4. 向后兼容
@@ -73,8 +128,47 @@ let result = crypto.decrypt("plaintext-value")?;
 ```rust
 // 密钥不足 32 字节时，尾部填充 0x00
 // 密钥超过 32 字节时，截断到 32 字节
-CryptoService::init("short-key")?;  // 填充为 32 字节
-CryptoService::init("very-long-secret-key-over-32-bytes")?;  // 截断为 32 字节
+CryptoService::init("short-key");  // 填充为 32 字节
+CryptoService::init("very-long-secret-key-over-32-bytes");  // 截断为 32 字节
+```
+
+## 扩展新算法
+
+### Step 1: 创建算法文件
+
+在 `src/crypto/` 下创建新文件，如 `chacha20.rs`：
+
+```rust
+// src/crypto/chacha20.rs
+use crate::crypto::cipher::{Cipher, CipherMeta};
+use crate::crypto::error::{Error, Result};
+
+pub struct ChaCha20PolyCipher { /* ... */ }
+
+impl Cipher for ChaCha20PolyCipher {
+    fn meta(&self) -> CipherMeta {
+        CipherMeta { name: "ChaCha20-Poly1305", prefix: "CHACHA(" }
+    }
+    fn encrypt(&self, p: &str) -> Result<String> { /* ... */ }
+    fn decrypt(&self, c: &str) -> Result<String> { /* ... */ }
+}
+```
+
+### Step 2: 注册模块
+
+在 `mod.rs` 中添加：
+
+```rust
+pub mod chacha20;
+```
+
+### Step 3: 使用新算法
+
+```rust
+use cmx_utils::crypto::CryptoService;
+use crate::crypto::chacha20::ChaCha20PolyCipher;
+
+CryptoService::init_with(ChaCha20PolyCipher::new("32-byte-key-here!!!"));
 ```
 
 ## 在数据库 CRUD 中使用
@@ -145,20 +239,53 @@ impl DbBmc for UserBmc {
 pub struct CryptoService;
 
 impl CryptoService {
-    /// 使用指定密钥初始化全局实例
-    pub fn init(key: &str) -> Result<(), Error>
+    /// 使用默认算法（AES-256-GCM）初始化全局实例
+    pub fn init(key: &str);
 
-    /// 从环境变量 CMX_ENCRYPT_KEY 初始化
-    pub fn init_from_env() -> Result<(), Error>
+    /// 使用指定算法初始化全局实例
+    pub fn init_with<C: Cipher + 'static>(cipher: C);
+
+    /// 从环境变量 CMX_ENCRYPT_KEY 初始化（默认算法）
+    pub fn init_from_env();
 
     /// 获取全局实例（需先调用 init）
-    pub fn global() -> Result<&'static CryptoService, Error>
+    pub fn global() -> Result<&'static CryptoService>;
 
-    /// 加密明文，返回 ENC(NONCE.CIPHERTEXT) 格式字符串
-    pub fn encrypt(&self, plaintext: &str) -> Result<String, Error>
+    /// 获取当前加密算法的元信息
+    pub fn algorithm(&self) -> CipherMeta;
+
+    /// 加密明文，返回 ENC(ALGO(NONCE.CIPHERTEXT)) 格式字符串
+    pub fn encrypt(&self, plaintext: &str) -> Result<String>;
 
     /// 解密密文，非 ENC(...) 格式值原样返回
-    pub fn decrypt(&self, ciphertext: &str) -> Result<String, Error>
+    pub fn decrypt(&self, ciphertext: &str) -> Result<String>;
+}
+```
+
+### CipherMeta
+
+```rust
+#[derive(Debug, Clone)]
+pub struct CipherMeta {
+    /// 算法名称，如 "AES-256-GCM"
+    pub name: &'static str,
+    /// 密文内层前缀标识，如 "AESGCM("
+    pub prefix: &'static str,
+}
+```
+
+### Error 错误类型
+
+```rust
+pub enum Error {
+    /// 加密操作失败
+    EncryptionFailed(String),
+    /// 解密操作失败
+    DecryptionFailed(String),
+    /// 加密格式无效
+    InvalidFormat(String),
+    /// 全局实例未初始化
+    NotInitialized,
 }
 ```
 
@@ -195,11 +322,10 @@ $env:CMX_ENCRYPT_KEY="your-32-byte-secret-key-here!"
 ```rust
 use cmx_utils::crypto::CryptoService;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     // 在应用启动时初始化加密服务
-    CryptoService::init("your-32-byte-secret-key-here!")?;
+    CryptoService::init("your-32-byte-secret-key-here!");
     // ... 其余代码 ...
-    Ok(())
 }
 ```
 
@@ -263,8 +389,9 @@ let list = service.list(filter).await?;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 最先初始化加密服务
-    CryptoService::init_from_env()
-        .map_err(|e| eprintln!("加密服务初始化失败: {}", e));
+    if let Err(e) = CryptoService::init_from_env() {
+        tracing::warn!("加密服务初始化失败: {}", e);
+    }
 
     // 然后初始化其他组件
     init_datasources().await?;
@@ -308,8 +435,10 @@ use cmx_utils::crypto::{CryptoService, Error};
 fn main() {
     match CryptoService::init("key") {
         Ok(()) => println!("加密服务初始化成功"),
-        Err(Error::CryptoFailed(msg)) => eprintln!("加密失败: {}", msg),
-        Err(Error::KeyEmpty) => eprintln!("密钥不能为空"),
+        Err(Error::NotInitialized) => println!("未初始化"),
+        Err(Error::InvalidFormat(msg)) => println!("格式错误: {}", msg),
+        Err(Error::EncryptionFailed(msg)) => println!("加密失败: {}", msg),
+        Err(Error::DecryptionFailed(msg)) => println!("解密失败: {}", msg),
     }
 }
 ```
@@ -341,7 +470,13 @@ if let Err(e) = CryptoService::init_from_env() {
 
 ### Q: 加密后的数据占用多少空间？
 
-A: 加密后的数据比原始数据多约 40 字节：`ENC(` 前缀（4字节）+ BASE64(NONCE) ~16字节 + BASE64(CIPHERTEXT) ~原始数据长度 + `)` 结尾（1字节）。
+A: 加密后的数据比原始数据多约 40+ 字节。格式为 `ENC(AESGCM(NONCE.CIPHERTEXT))`：
+- `ENC(` 前缀：5 字节
+- `AESGCM(` 前缀：8 字节
+- BASE64(NONCE)：16 字节
+- `.` 分隔符：1 字节
+- BASE64(CIPHERTEXT)：约原始数据长度 × 1.37
+- `))` 后缀：2 字节
 
 ### Q: 可以加密哪些类型的数据？
 
@@ -355,7 +490,23 @@ A:
 3. 后台迁移：将现有明文字段值读取后重新写入（自动加密存储）
 4. 确认所有数据都是密文格式
 
+### Q: 如何切换到其他加密算法？
+
+A:
+```rust
+// 例如切换到 ChaCha20-Poly1305
+CryptoService::init_with(ChaCha20PolyCipher::new("your-32-byte-key-here!!!"));
+```
+
 ## 更新日志
+
+### v0.2.0 (2026-04-27)
+
+- 新增 `Cipher` trait 抽象层，支持可扩展的加密算法架构
+- 新增 `CryptoService::init_with()` 方法，支持指定任意加密算法
+- 密文格式升级为双层包装：`ENC(ALGO(NONCE.CIPHERTEXT))`
+- `CipherMeta::name` 和 `prefix` 改为 `&'static str` 类型
+- `CryptoService::algorithm()` 返回值从引用改为值类型
 
 ### v0.1.0 (2026-04-27)
 

@@ -57,13 +57,13 @@ impl SysDatasourceService {
                     warn!("数据源注册失败: {}, 错误: {}", data.db_id, e);
                     tx.rollback().await
                         .map_err(|e| Error::internal_error(format!("回滚事务失败: {}", e)))?;
-                    return Err(Error::internal_error(format!("数据源注册失败: {}", e)));
+                    return Err(Error::business_error(format!("数据源注册失败: {}", e)));
                 }
             }
         }
 
         tx.commit().await
-            .map_err(|e| Error::internal_error(format!("提交事务失败: {}", e)))?;
+            .map_err(|e| Error::business_error(format!("提交事务失败: {}", e)))?;
 
         Ok(result)
     }
@@ -93,7 +93,7 @@ impl SysDatasourceService {
         );
 
         let tx = mm.get_transaction_context().begin_with_guard(db_id).await
-            .map_err(|e| Error::internal_error(format!("开启事务失败: {}", e)))?;
+            .map_err(|e| Error::business_error(format!("开启事务失败: {}", e)))?;
 
         let old_data = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Some(tx.txn_id()), Value::String(id.to_string())).await?;
 
@@ -122,8 +122,8 @@ impl SysDatasourceService {
                     Err(e) => {
                         warn!("数据源重新注册失败: {}", e);
                         tx.rollback().await
-                            .map_err(|e| Error::internal_error(format!("回滚事务失败: {}", e)))?;
-                        return Err(Error::internal_error(format!("数据源更新失败: {}", e)));
+                            .map_err(|e| Error::business_error(format!("回滚事务失败: {}", e)))?;
+                        return Err(Error::business_error(format!("数据源更新失败: {}", e)));
                     }
                 }
             }
@@ -132,7 +132,7 @@ impl SysDatasourceService {
         }
 
         tx.commit().await
-            .map_err(|e| Error::internal_error(format!("提交事务失败: {}", e)))?;
+            .map_err(|e| Error::business_error(format!("提交事务失败: {}", e)))?;
 
         Ok(result)
     }
@@ -198,7 +198,7 @@ impl SysDatasourceService {
         );
 
         mm.health_check(db_id).await.map_err(|e| {
-            Error::internal_error(format!("数据源连接测试失败: {}", e))
+            Error::business_error(format!("数据源连接测试失败: {}", e))
         })
     }
 
