@@ -26,7 +26,6 @@ use chrono::Utc;
 use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
 use cmx_traits::{plugin_events, PluginLifecyclePayload};
-use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -212,7 +211,7 @@ impl InstallService {
                     message: "插件已安装".to_string(),
                 });
             } else {
-                warn!("插件 {} 已部署，但未注册到registry", plugin_id);
+                tracing::warn!("插件 {} 已部署，但未注册到registry", plugin_id);
             }
             return Err(PluginError::plugin_already_exists(&plugin_id));
         }

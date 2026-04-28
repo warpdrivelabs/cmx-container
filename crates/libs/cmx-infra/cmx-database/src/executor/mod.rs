@@ -1,8 +1,3 @@
-use log::warn;
-/// 结果转换模块，用于处理SQLx查询结果到DataSet的转换
-///
-/// 该模块提供了独立的结果转换功能，不依赖于 DbTransaction
-
 use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_core::model::cell::{DataValue, Field, FieldType};
 use sqlx::{Row as SqlxRow, Column};
@@ -584,7 +579,7 @@ impl ResultConverter {
         } else if type_name_lower.contains("array") {
             FieldType::Array
         } else {
-            warn!("未处理的数据库字段类型: {}", type_name);
+            tracing::warn!("未处理的数据库字段类型: {}", type_name);
             FieldType::Unknown
         }
     }

@@ -94,6 +94,8 @@ thiserror = "2.0"
 tracing = "0.1"
 # tracing-subscriber: 日志订阅器，收集和导出日志事件，支持环境过滤
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# tracing-log: 将 log crate 的日志桥接到 tracing 系统
+tracing-log = "0.2"
 
 # ============================================
 # 内存与字节处理

@@ -143,7 +143,7 @@ impl DbRegistry {
             if let Some(pool) = pools.get(&key) {
                 let timeout = std::time::Duration::from_secs(30);
                 if !pool.wait_for_idle(timeout).await {
-                    log::warn!("等待旧连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
+                    tracing::warn!("等待旧连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
                 }
             }
         }

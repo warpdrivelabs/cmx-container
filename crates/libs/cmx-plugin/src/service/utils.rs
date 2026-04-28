@@ -120,7 +120,7 @@ pub async fn create_plugin_tables(
         )
         .await
         {
-            log::error!("保存表元数据失败: {}", e);
+            tracing::error!("保存表元数据失败: {}", e);
             return Err(e);
         }
 

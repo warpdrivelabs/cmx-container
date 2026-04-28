@@ -1,4 +1,3 @@
-use log::{error, warn};
 /// 数据库管理器模块
 ///
 /// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
@@ -94,7 +93,7 @@ impl DatabaseManager {
     /// 注销数据源
     pub async fn unregister_data_source(&self, db_id: &str) -> Result<()> {
         if db_id == self.default_db_id.read().await.as_str() {
-            warn!("默认数据源不能删除");
+            tracing::warn!("默认数据源不能删除");
             return Err(Error::DefaultDbSourceCantDelete(
                 "默认数据源不能删除".into(),
             ));
@@ -219,17 +218,17 @@ impl DatabaseManager {
             return;
         }
 
-        warn!("发现 {} 个超时事务待清理", stale.len());
+        tracing::warn!("发现 {} 个超时事务待清理", stale.len());
         for meta in stale {
-            warn!(
+            tracing::warn!(
                 "清理超时事务: txn_id={}, db_id={}, elapsed={:?}",
                 meta.txn_id,
                 meta.db_id,
                 meta.create_time.elapsed()
             );
             match self.rollback_transaction(&meta.txn_id).await {
-                Ok(_) => info!("超时事务已回滚: {}", meta.txn_id),
-                Err(e) => error!("清理事务失败: txn_id={}, error={}", meta.txn_id, e),
+                Ok(_) => tracing::info!("超时事务已回滚: {}", meta.txn_id),
+                Err(e) => tracing::error!("清理事务失败: txn_id={}, error={}", meta.txn_id, e),
             }
         }
     }

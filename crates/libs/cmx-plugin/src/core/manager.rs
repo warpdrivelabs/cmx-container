@@ -500,13 +500,13 @@ impl PluginManager {
         self.storage
             .remove_dir(&self.settings.temp_root)
             .unwrap_or_else(|e| {
-                log::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
+                tracing::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
             });
 
         // 启动时同步插件：对比 cmx_plugin 和 cmx_plugin_deployments
         // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
         let sync_result = self.plugin_initializer.sync_plugins().await?;
-        log::info!(
+        tracing::info!(
             "插件同步完成: 安装={}, 升级={}, 降级={}, 卸载={}, 跳过={}, 失败={}",
             sync_result.installed.len(),
             sync_result.upgraded.len(),
@@ -516,7 +516,7 @@ impl PluginManager {
             sync_result.failed.len()
         );
         for (plugin_id, err) in &sync_result.failed {
-            log::error!("插件 {} 同步失败: {}", plugin_id, err);
+            tracing::error!("插件 {} 同步失败: {}", plugin_id, err);
         }
 
         *initialized = true;

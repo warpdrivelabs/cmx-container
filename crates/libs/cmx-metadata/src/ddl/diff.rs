@@ -20,7 +20,7 @@
 //! ```
 
 use std::collections::HashMap;
-use tracing::log::info;
+use tracing::info;
 use cmx_core::model::cell::{ColumnDefine, IndexDefine, TableDefine};
 use crate::MetadataError;
 use super::DdlDialect;

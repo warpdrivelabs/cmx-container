@@ -1,25 +1,18 @@
 //! 加解密模块错误类型定义
+use thiserror::Error;
 
 /// 加解密模块的结果类型别名
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// 加解密模块的自定义错误枚举
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-	/// 加密操作失败
-	EncryptionFailed(String),
-	/// 解密操作失败
-	DecryptionFailed(String),
-	/// 加密格式无效（不匹配任何已注册算法）
-	InvalidFormat(String),
-	/// 全局实例未初始化
-	NotInitialized,
+    #[error("加密操作失败: {0}")]
+    EncryptionFailed(String),
+    #[error("解密操作失败: {0}")]
+    DecryptionFailed(String),
+    #[error("加密格式无效（不匹配任何已注册算法）: {0}")]
+    InvalidFormat(String),
+    #[error("全局实例未初始化")]
+    NotInitialized,
 }
-
-impl core::fmt::Display for Error {
-	fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
-		write!(fmt, "{self:?}")
-	}
-}
-
-impl std::error::Error for Error {}

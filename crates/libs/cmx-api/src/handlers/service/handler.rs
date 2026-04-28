@@ -53,7 +53,7 @@ use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
 use cmx_service::{GlobalServiceRegistry, ServiceError};
 use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
-use log::error;
+use tracing::error;
 use std::collections::HashMap;
 use std::sync::Arc;
 

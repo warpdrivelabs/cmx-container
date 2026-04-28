@@ -7,7 +7,6 @@
 
 use futures::future::BoxFuture;
 use std::sync::OnceLock;
-use log::{warn};
 use tokio::sync::mpsc;
 use crate::error::{Error, Result};
 use crate::transaction::core::{Dbx, DbTransaction};
@@ -137,7 +136,7 @@ impl TransactionGuard {
 impl Drop for TransactionGuard {
     fn drop(&mut self) {
         if !self.committed {
-            warn!("TransactionGuard 析构，txnID: {}", self.txn_id);
+            tracing::warn!("TransactionGuard 析构，txnID: {}", self.txn_id);
             let txn_id = self.txn_id.clone();
             let sender = get_cleanup_sender();
             let _ = sender.try_send(TxnCleanupCommand::Rollback(txn_id));

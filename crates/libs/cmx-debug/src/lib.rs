@@ -127,7 +127,7 @@ pub fn is_debugger_attached(target_pid: u32) -> bool {
         return false;
     }
 
-    log::info!("[cmx-debug] Found lldb/codelldb PIDs: {:?}", lldb_pids);
+    tracing::info!("[cmx-debug] Found lldb/codelldb PIDs: {:?}", lldb_pids);
 
     for pid in &lldb_pids {
         if let Ok(lsof_output) = std::process::Command::new("lsof")
@@ -136,7 +136,7 @@ pub fn is_debugger_attached(target_pid: u32) -> bool {
         {
             let lsof_str = String::from_utf8_lossy(&lsof_output.stdout);
             if lsof_str.contains("cmx-container") {
-                log::info!("[cmx-debug] lldb进程 {} 通过lsof附加到了cmx-container", pid);
+                tracing::info!("[cmx-debug] lldb进程 {} 通过lsof附加到了cmx-container", pid);
                 return true;
             }
         }
@@ -145,7 +145,7 @@ pub fn is_debugger_attached(target_pid: u32) -> bool {
                 if let Ok(link) = std::fs::read_link(fd.path()) {
                     let link_str = link.to_string_lossy();
                     if link_str.contains(&target_pid.to_string()) {
-                        log::info!(
+                        tracing::info!(
                             "[cmx-debug] lldb进程 {} 通过fd附加到目标进程 {}",
                             pid,
                             target_pid
@@ -157,7 +157,7 @@ pub fn is_debugger_attached(target_pid: u32) -> bool {
         }
     }
 
-    log::info!("[cmx-debug] lldb进程存在但未附加到目标进程，保守返回true");
+    tracing::info!("[cmx-debug] lldb进程存在但未附加到目标进程，保守返回true");
     true
 }
 
@@ -174,7 +174,7 @@ pub fn cleanup_dead_sessions() {
         //     active_count
         // );
     }
-    sessions.retain(|session_id, session| {
+    sessions.retain(|_session_id, session| {
         let attached = is_debugger_attached(session.cmx_pid);
         if session.is_protected {
             if attached {
@@ -212,7 +212,7 @@ pub fn cleanup_dead_sessions() {
 
 pub fn init() {
     start_cleanup_thread();
-    log::info!("[cmx-debug] Debug session manager initialized");
+    tracing::info!("[cmx-debug] Debug session manager initialized");
 }
 
 pub fn get_code_server_url() -> String {
@@ -223,7 +223,7 @@ pub fn get_code_server_url() -> String {
 pub async fn get_code_server_url_async() -> String {
     if let Ok(url) = std::env::var("CODE_SERVER_URL") {
         if !url.is_empty() {
-            log::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
+            tracing::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
             return url;
         }
     }
@@ -231,7 +231,7 @@ pub async fn get_code_server_url_async() -> String {
     let plugin_port = std::env::var("PLUGIN_PORT").unwrap_or_else(|_| "9000".to_string());
     let url = format!("http://localhost:{}/config", plugin_port);
 
-    log::info!("[cmx-debug] Fetching code_server_url from: {}", url);
+    tracing::info!("[cmx-debug] Fetching code_server_url from: {}", url);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
@@ -242,7 +242,7 @@ pub async fn get_code_server_url_async() -> String {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
                 {
-                    log::info!(
+                    tracing::info!(
                         "[cmx-debug] Got code_server_url from config: {}",
                         code_server_url
                     );
@@ -252,7 +252,7 @@ pub async fn get_code_server_url_async() -> String {
         }
     }
 
-    log::warn!("[cmx-debug] Failed to get code_server_url, using default");
+    tracing::warn!("[cmx-debug] Failed to get code_server_url, using default");
     "https://dev.cloudmatrix.one:18080".to_string()
 }
 
