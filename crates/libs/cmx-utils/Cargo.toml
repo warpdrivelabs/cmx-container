@@ -24,7 +24,7 @@ rand = { workspace = true }
 aes-gcm = { workspace = true }
 # 时间处理
 time = { workspace = true }
-# 唯一标识符
+# 唯一标识符  fast-rng，使用更快的随机数生成器来加速 v4 UUID 的生成
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 # 配置管理
 config = { workspace = true }
