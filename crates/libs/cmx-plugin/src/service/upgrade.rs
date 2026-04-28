@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::audit::logger::AuditLogger;
-use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
+use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps, DependencyUtils, DependencyUtilsDeps};
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
@@ -105,6 +105,7 @@ pub struct UpgradeServiceDeps {
 pub struct UpgradeService {
     deps: UpgradeServiceDeps,
     package_utils: PackageUtils,
+    dependency_utils: DependencyUtils,
 }
 
 impl UpgradeService {
@@ -115,9 +116,14 @@ impl UpgradeService {
             temp_root: deps.temp_root.clone(),
             storage: Some(deps.storage.clone()),
         });
+        let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
+            repository: deps.repository.clone(),
+            registry: deps.registry.clone(),
+        });
         Self {
             deps,
             package_utils,
+            dependency_utils,
         }
     }
 
@@ -200,6 +206,23 @@ impl UpgradeService {
             }
 
         let plugin_id = request.plugin_id.clone();
+
+        // 步骤6.5: 检查依赖
+        let dep_result = self
+            .dependency_utils
+            .check_plugin_dependencies(&plugin_def)
+            .await?;
+        if !dep_result.satisfied {
+            let missing: Vec<String> = dep_result
+                .missing
+                .iter()
+                .map(|m| format!("{} ({})", m.plugin_id, m.required_by))
+                .collect();
+            return Err(PluginError::Dependency(format!(
+                "缺少依赖插件: {}",
+                missing.join(", ")
+            )));
+        }
 
         // 步骤7: 创建新版本目录 (plugin_id/new_version/)
         let install_path = self.deps.plugin_root.join(&plugin_id).join(&new_version);

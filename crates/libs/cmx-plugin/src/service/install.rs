@@ -117,6 +117,7 @@ impl InstallService {
         });
         let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
             repository: deps.repository.clone(),
+            registry: deps.registry.clone(),
         });
         Self {
             deps,
@@ -217,46 +218,9 @@ impl InstallService {
         }
 
         // 步骤5: 检查依赖
-        let registry = self.deps.registry.clone();
-        let repository = self.deps.repository.clone();
         let dep_result = self
             .dependency_utils
-            .check_plugin_dependencies(&plugin_def, |plugin_id| {
-                let registry = registry.clone();
-                let repository = repository.clone();
-                let plugin_id = plugin_id.to_string();
-                async move {
-                    {
-                        let registry = registry.read().await;
-                        if let Some(info) = registry.get(&plugin_id) {
-                            return Ok(Some(info.clone()));
-                        }
-                    }
-                    if let Some(record) = repository.find_plugin(&plugin_id).await? {
-                        let info = PluginInfo {
-                            id: record.plugin_id,
-                            name: record.name,
-                            version: record.version,
-                            description: record.description,
-                            author: record.vendor_name,
-                            source: PluginSource::Local {
-                                path: PathBuf::from(&record.install_path),
-                            },
-                            status: PluginStatus::Installed,
-                            installed_at: Some(record.create_time),
-                            updated_at: Some(record.update_time),
-                            install_path: PathBuf::from(&record.install_path),
-                            domain_code: record.domain_code.unwrap_or_default(),
-                            application_code: record.application_code.unwrap_or_default(),
-                            module_code: record.module_code.unwrap_or_default(),
-                            plugin_type: record.plugin_type.clone().unwrap_or_default(),
-                            source_path: record.source_path.clone(),
-                        };
-                        return Ok(Some(info));
-                    }
-                    Ok(None)
-                }
-            })
+            .check_plugin_dependencies(&plugin_def)
             .await?;
         if !dep_result.satisfied {
             let missing: Vec<String> = dep_result

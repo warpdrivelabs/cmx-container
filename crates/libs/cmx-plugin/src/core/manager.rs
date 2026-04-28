@@ -323,6 +323,7 @@ impl PluginManager {
 
         let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
             repository: repository.clone(),
+            registry: registry.clone(),
         });
 
         let service_utils = ServiceUtils::new(ServiceUtilsDeps {
