@@ -47,4 +47,11 @@ pub trait DbBmc {
     fn has_owner_id() -> bool {
         false
     }
+
+    /// 声明需要加密存储的字段名列表
+    /// 返回字段名数组，如 &["db_url", "password"]
+    /// 默认返回空数组，表示无加密字段（向后兼容）
+    fn encrypted_fields() -> &'static [&'static str] {
+        &[]
+    }
 }

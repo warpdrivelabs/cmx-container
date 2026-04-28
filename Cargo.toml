@@ -149,6 +149,14 @@ dotenvy = "0.15"
 uuid={version = "1.21"}
 regex = "1"
 
+# ============================================
+# 加密与安全
+# ============================================
+# aes-gcm: AES-GCM 对称加密算法
+aes-gcm = "0.10"
+# URL 解析库
+url = "2.5"
+
 # HTTP 客户端
 reqwest = { version = "0.12",default-features = false, features = ["json","rustls-tls"] }
 

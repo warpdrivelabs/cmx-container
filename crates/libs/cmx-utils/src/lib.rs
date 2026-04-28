@@ -47,6 +47,7 @@
 
 pub mod b64;
 pub mod config;
+pub mod crypto;
 pub mod host_functions;
 pub mod id;
 pub mod time;

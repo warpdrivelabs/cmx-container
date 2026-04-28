@@ -180,6 +180,7 @@ impl SysDatasourceService {
             db_id: Some(OpValsString(vec![OpValString::Eq(target_db_id.to_string())])),
             db_type: None,
             default_flag: None,
+            source: None,
             status: None,
             archived: None,
         };

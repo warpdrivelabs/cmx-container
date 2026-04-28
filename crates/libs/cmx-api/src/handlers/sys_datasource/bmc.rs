@@ -25,4 +25,9 @@ impl DbBmc for SysDatasourceBmc {
     fn has_owner_id() -> bool {
         false
     }
+
+    /// 需要加解密的字段列表
+    fn encrypted_fields() -> &'static [&'static str] {
+        &["db_url"]
+    }
 }

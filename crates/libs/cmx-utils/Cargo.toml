@@ -20,6 +20,8 @@ walkdir = "2.5"
 fs-err = "2.2"
 # rand: 随机数生成
 rand = "0.8"
+# aes-gcm: AES-256-GCM 对称加密
+aes-gcm = { workspace = true }
 
 time = { workspace = true }
 uuid = { workspace = true ,features = ["v4","fast-rng"]}

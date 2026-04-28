@@ -31,6 +31,9 @@ pub struct SysDatasource {
     /// 是否默认;0否1是
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_flag: Option<i32>,
+    /// 数据源来源：config-配置文件, manual-手动维护
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// 最大连接数
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_connections: Option<i32>,
@@ -112,6 +115,10 @@ fn default_health_check_timeout() -> Option<i64> {
     Some(5)
 }
 
+fn default_source() -> Option<String> {
+    Some("manual".to_string())
+}
+
 /// 创建请求 DTO
 ///
 /// 用于创建 SysDatasource 的请求数据，包含完整的数据库连接配置
@@ -132,6 +139,9 @@ pub struct SysDatasourceForCreate {
     /// 是否默认数据源；0否1是
     #[serde(default = "default_default_flag")]
     pub default_flag: Option<i32>,
+    /// 数据源来源：config-配置文件, manual-手动维护
+    #[serde(default = "default_source")]
+    pub source: Option<String>,
     /// 最大连接数
     #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,
@@ -180,6 +190,9 @@ pub struct SysDatasourceForUpdate {
     /// 是否默认；0否1是
     #[serde(default = "default_default_flag")]
     pub default_flag: Option<i32>,
+    /// 数据源来源：config-配置文件, manual-手动维护
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// 最大连接数
     #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,

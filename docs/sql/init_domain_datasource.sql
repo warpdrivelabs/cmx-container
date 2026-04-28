@@ -142,6 +142,7 @@ CREATE TABLE cmx_sys_datasource(
                                    health_check_interval INTEGER,
                                    health_check_timeout INTEGER,
                                    default_flag INTEGER,
+                                   source VARCHAR(20) ,
                                    status int4 DEFAULT  1,
                                    archived int4 DEFAULT  0,
                                    create_time timestamp DEFAULT  CURRENT_TIMESTAMP,
@@ -168,6 +169,7 @@ COMMENT ON COLUMN cmx_sys_datasource.max_lifetime IS '最大生命周期（秒�
 COMMENT ON COLUMN cmx_sys_datasource.health_check_interval IS '健康检查间隔（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.health_check_timeout IS '健康检查超时（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.default_flag IS '是否默认;0否1是';
+COMMENT ON COLUMN cmx_sys_datasource.source IS '数据源来源：config-配置文件, manual-手动维护';
 COMMENT ON COLUMN cmx_sys_datasource.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_sys_datasource.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_sys_datasource.create_time IS '创建时间';

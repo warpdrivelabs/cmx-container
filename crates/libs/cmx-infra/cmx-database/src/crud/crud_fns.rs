@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::{DatabaseManager, Error};
 use crate::crud::error::{ServiceError, Result};
-use crate::crud::{DbBmc, prep_fields_for_create, prep_fields_for_update};
+use crate::crud::{DbBmc, prep_fields_for_create, prep_fields_for_update, encrypt_sea_fields, decrypt_dataset_fields};
 use cmx_core::UpdatePayload;
 use cmx_core::model::data::dataset::{DataSet, Schema};
 use modql::SIden;
@@ -90,6 +90,8 @@ where
         let mut fields = data.not_none_sea_fields();
         //主键值
         let pk_value = prep_fields_for_create::<MC>(&mut fields, None);
+        // 写入前对加密字段进行加密处理
+        let fields = encrypt_sea_fields::<MC>(fields);
 
         let (columns, sea_values) = fields.for_sea_insert();
         let mut query = Query::insert();
@@ -152,6 +154,8 @@ where
         for item in data {
             let mut fields = item.not_none_sea_fields();
             prep_fields_for_create::<MC>(&mut fields, None);
+            // 写入前对加密字段进行加密处理
+            let fields = encrypt_sea_fields::<MC>(fields);
             let (columns, sea_values) = fields.for_sea_insert();
 
             query
@@ -206,7 +210,7 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let dataset = mm
+        let mut dataset = mm
             .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
@@ -219,6 +223,8 @@ where
                 );
                 ServiceError::internal_error(format!("查询失败 [{}]: {}", MC::TABLE, e))
             })?;
+
+        decrypt_dataset_fields(&mut dataset, MC::encrypted_fields());
 
         let row_count = dataset.iter().count();
         debug!("{:<12} - 查询返回 {} 行", "CRUD", row_count);
@@ -251,6 +257,8 @@ where
 
         let mut fields = data.not_none_sea_fields();
         prep_fields_for_update::<MC>(&mut fields, None);
+        // 更新前对加密字段进行加密处理
+        let fields = encrypt_sea_fields::<MC>(fields);
 
         let fields = fields.for_sea_update();
         let mut query = Query::update();
@@ -325,6 +333,8 @@ where
         for item in data {
             let mut fields = item.data.not_none_sea_fields();
             prep_fields_for_update::<MC>(&mut fields, None);
+            // 更新前对加密字段进行加密处理
+            let fields = encrypt_sea_fields::<MC>(fields);
 
             let fields = fields.for_sea_update();
             let mut query = Query::update();
@@ -452,13 +462,15 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let dataset = mm
+        let mut dataset = mm
             .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 列表查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::internal_error(format!("列表查询失败 [{}]: {}", MC::TABLE, e))
             })?;
+
+        decrypt_dataset_fields(&mut dataset, MC::encrypted_fields());
 
         let row_count = dataset.iter().count();
         debug!("{:<12} - 列表查询返回 {} 行", "CRUD", row_count);
@@ -509,13 +521,15 @@ where
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
-        let dataset = mm
+        let mut dataset = mm
             .query_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values, MC::TABLE)
             .await
             .map_err(|e| {
                 warn!("{:<12} - 分页查询失败: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::internal_error(format!("分页查询失败 [{}]: {}", MC::TABLE, e))
             })?;
+
+        decrypt_dataset_fields(&mut dataset, MC::encrypted_fields());
 
         let row_count = dataset.iter().count();
         let total = Self::count(mm, db_id, txn_id, filters).await?;

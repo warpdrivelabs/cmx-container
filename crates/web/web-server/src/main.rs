@@ -83,6 +83,9 @@ async fn main() -> Result<()> {
 
     // 初始化全局配置
     init_global_config();
+    // 初始化加密服务（从环境变量 CMX_ENCRYPT_KEY 读取密钥）
+    cmx_utils::crypto::CryptoService::init_from_env();
+    info!("加密服务初始化完成");
     // 初始化数据库数据源
     init_datasources().await;
     // 初始化 Redis 缓存

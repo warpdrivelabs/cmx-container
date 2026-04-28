@@ -134,4 +134,57 @@ impl DbConfig {
     pub fn list_from_config(config: &cmx_utils::Config) -> ConfigResult<Vec<Self>> {
         config.get_as("databases")
     }
+
+    /// 从 db_url 解析数据库名称
+    ///
+    /// 对于 PostgreSQL/MySQL：从 URL 的 path 部分提取数据库名（去掉前导 `/`）
+    /// 对于 SQLite：返回 None
+    ///
+    /// # 返回值
+    /// 解析成功返回数据库名称，解析失败或为 SQLite 类型时返回 None
+    pub fn parse_db_name(&self) -> Option<String> {
+        // SQLite 不支持从 URL 解析数据库名
+        if self.db_type == DbType::Sqlite {
+            return None;
+        }
+        let parsed = url::Url::parse(&self.db_url).ok()?;
+        // 从 URL path 中提取数据库名，去掉前导 '/'
+        let path = parsed.path();
+        let db_name = path.trim_start_matches('/');
+        if db_name.is_empty() {
+            return None;
+        }
+        Some(db_name.to_string())
+    }
+
+    /// 从 db_url 解析数据库主机地址
+    ///
+    /// # 返回值
+    /// 解析成功返回主机地址字符串，解析失败返回 None
+    pub fn parse_db_host(&self) -> Option<String> {
+        let parsed = url::Url::parse(&self.db_url).ok()?;
+        parsed.host_str().map(|s| s.to_string())
+    }
+
+    /// 从 db_url 解析数据库端口号
+    ///
+    /// # 返回值
+    /// 解析成功返回端口号，URL 中未指定端口或解析失败返回 None
+    pub fn parse_db_port(&self) -> Option<u16> {
+        let parsed = url::Url::parse(&self.db_url).ok()?;
+        parsed.port()
+    }
+
+    /// 从 db_url 解析数据库用户名
+    ///
+    /// # 返回值
+    /// 解析成功返回用户名字符串，URL 中未包含用户名或解析失败返回 None
+    pub fn parse_db_user(&self) -> Option<String> {
+        let parsed = url::Url::parse(&self.db_url).ok()?;
+        let username = parsed.username();
+        if username.is_empty() {
+            return None;
+        }
+        Some(username.to_string())
+    }
 }

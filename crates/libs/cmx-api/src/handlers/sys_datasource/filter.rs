@@ -18,6 +18,8 @@ pub struct SysDatasourceFilter {
     pub db_type: Option<OpValsString>,
     /// 默认标志过滤
     pub default_flag: Option<OpValsInt64>,
+    /// 数据源来源过滤
+    pub source: Option<OpValsString>,
     /// 状态过滤
     pub status: Option<OpValsInt64>,
     /// 归档标志过滤

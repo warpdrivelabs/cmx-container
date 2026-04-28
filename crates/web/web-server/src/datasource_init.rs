@@ -254,6 +254,8 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
         max_lifetime: Some(config.pool_config.max_lifetime as i64),
         health_check_interval: Some(config.health_check_interval as i64),
         health_check_timeout: Some(config.health_check_timeout as i64),
+        // 数据源来源：config-配置文件
+        source: Some("config".to_string()),
         status: 1,
     }
 }
@@ -276,6 +278,8 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
         max_lifetime: Some(config.pool_config.max_lifetime as i64),
         health_check_interval: Some(config.health_check_interval as i64),
         health_check_timeout: Some(config.health_check_timeout as i64),
+        // 数据源来源：config-配置文件
+        source: Some("config".to_string()),
         status: 1,
         archived: Some(0),
     }
@@ -298,6 +302,13 @@ fn build_dbconfig_from_row(
     let db_id = get_string_field(row, schema, "db_id")?;
     let db_type_str = get_string_field(row, schema, "db_type")?;
     let db_url = get_string_field(row, schema, "db_url")?;
+
+    // 防御性解密：GenericCrudService 已自动解密 db_url，
+    // 但此处为防御性处理，以防未来直接 SQL 查询的场景
+    let decrypted = cmx_utils::crypto::CryptoService::global()
+        .ok()
+        .and_then(|c| c.decrypt(&db_url).ok());
+    let db_url = decrypted.unwrap_or(db_url);
 
     let db_type = cmx_database::config::DbType::from_str(&db_type_str).ok()?;
 
