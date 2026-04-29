@@ -209,7 +209,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 事务/批量操作 | 批量处理、事务管理 | 如果支持事务必须包含 |
 | 生命周期 | 初始化、关闭、清理 | ✅ 必须 |
 | 监控/指标 | 获取状态、统计信息 | 如果有监控必须包含 |
-| 完整示例 | 从头到尾的完整使用流程 | ✅ 必须 |
 
 ### 3.6 常见问题解答 (FAQ)
 
@@ -355,39 +354,6 @@ match result {
 }
 ```
 
-### 6.4 完整示例规范
-
-每个 README 必须包含一个"完整示例"章节，展示从初始化到实际使用的完整流程：
-
-```markdown
-### 完整示例
-
-以下是一个完整的 {功能} 使用示例：
-
-```rust
-use crate_name::{ComponentA, ComponentB, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 初始化配置
-    let config = Config::builder()
-        .with_option("value1")
-        .with_option("value2")
-        .build();
-
-    // 2. 创建组件
-    let component = ComponentA::new(config);
-
-    // 3. 执行操作
-    let result = component.process().await?;
-
-    // 4. 输出结果
-    println!("Result: {:?}", result);
-
-    Ok(())
-}
-```
-```
 
 ---
 
@@ -415,7 +381,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [ ] **每个场景是否有完整可运行的代码？**
 - [ ] **代码是否包含中文注释？**
 - [ ] **是否包含错误处理示例？**
-- [ ] **是否包含完整示例？**
 - [ ] **代码示例是否覆盖主要 API？**
 
 ---
