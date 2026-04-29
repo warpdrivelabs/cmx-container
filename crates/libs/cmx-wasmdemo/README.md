@@ -13,6 +13,9 @@
 ```bash
 # 编译为 WASM 目标
 cargo build --release --target wasm32-unknown-unknown
+
+cargo build --target wasm32-wasip1
+
 ```
 
 ### 核心示例

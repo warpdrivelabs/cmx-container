@@ -30,11 +30,8 @@ impl PluginHostFunctions {
     ///
     /// 通过 GlobalRuntime 调用目标插件的 WASM 导出函数。
     /// 自动受到深度限制、循环检测和超时控制的三层防护。
-    ///
-    /// 注意：此函数在 spawn_blocking 线程中被调用（因为宿主函数回调
-    /// 在 plugin.call() 的执行线程中），所以可以直接使用 block_on。
-    fn do_call_service(&self, input: String) -> Result<String, HostFuncError> {
-        let req: ServiceCallRequest = match serde_json::from_str(&input) {
+    fn do_call_service(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+        let req: ServiceCallRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
@@ -43,7 +40,6 @@ impl PluginHostFunctions {
         let runtime = GlobalRuntime::get();
         let input_bytes = req.input.as_bytes();
 
-        // 当前已在 spawn_blocking 线程中，直接使用 block_on 调用 async 方法
         let rt = tokio::runtime::Handle::current();
         let result: Result<WasmInvokeResult, _> = rt.block_on(async {
             runtime.invoke(
@@ -70,21 +66,26 @@ impl PluginHostFunctions {
         }
     }
 
-    /// 获取插件信息
-    fn do_get_info(&self, _input: String) -> Result<String, HostFuncError> {
-        let info = PluginInfoResponse {
-            plugin_id: "current_plugin".to_string(),
-            db_id: "default".to_string(),
-            txn_id: None,
-            request_id: "default".to_string(),
-            tenant_id: None,
-        };
-        Ok(serde_json::to_string(&info).unwrap_or_default())
-    }
+    // /// 获取插件信息
+    // ///
+    // /// 注意：当前宿主函数回调运行在 spawn_blocking 线程中，
+    // /// 无法获取当前插件的运行时上下文信息（plugin_id、request_id 等）。
+    // /// 需要通过 Extism SDK 的 identity 机制或上下文传递来实现，
+    // /// 暂返回未实现提示。
+    // fn do_get_info(&self, _input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+    //     let info = PluginInfoResponse {
+    //         plugin_id: String::new(),
+    //         db_id: String::new(),
+    //         txn_id: None,
+    //         request_id: String::new(),
+    //         tenant_id: None,
+    //     };
+    //     Ok(rmp_serde::to_vec(&info).unwrap_or_default())
+    // }
 
-    /// 构建成功响应
-    fn ok_response(output: Option<String>, elapsed_us: Option<u64>) -> String {
-        serde_json::to_string(&ServiceCallResponse {
+    /// 构建成功响应（MsgPack 编码）
+    fn ok_response(output: Option<String>, elapsed_us: Option<u64>) -> Vec<u8> {
+        rmp_serde::to_vec(&ServiceCallResponse {
             success: true,
             output,
             elapsed_us,
@@ -93,9 +94,9 @@ impl PluginHostFunctions {
         .unwrap_or_default()
     }
 
-    /// 构建错误响应
-    fn err_response(msg: String) -> String {
-        serde_json::to_string(&ServiceCallResponse {
+    /// 构建错误响应（MsgPack 编码）
+    fn err_response(msg: String) -> Vec<u8> {
+        rmp_serde::to_vec(&ServiceCallResponse {
             success: false,
             output: None,
             elapsed_us: None,
@@ -120,16 +121,16 @@ impl HostFunctionProvider for PluginHostFunctions {
     /// 返回提供的宿主函数列表
     fn functions(&self) -> Vec<HostFunctionDef> {
         vec![
-            HostFunctionDef::json_fn("call_service", "cmx:plugin"),
+            HostFunctionDef::msgpack_fn("call_service", "cmx:plugin"),
             HostFunctionDef::no_input("get_info", "cmx:plugin", &[ValType::Ptr]),
         ]
     }
 
     /// 调用宿主函数
-    fn call(&self, name: &str, input: String) -> Result<String, HostFuncError> {
+    fn call(&self, name: &str, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         match name {
             "call_service" => self.do_call_service(input),
-            "get_info" => self.do_get_info(input),
+            // "get_info" => self.do_get_info(input),
             _ => Err(HostFuncError::invalid_function(name)),
         }
     }

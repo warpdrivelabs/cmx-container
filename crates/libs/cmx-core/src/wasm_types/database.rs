@@ -36,7 +36,8 @@ pub struct DbResponse {
     /// 是否成功
     pub success: bool,
     /// 影响行数(写操作返回)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub affected_rows: Option<u64>,
     /// 查询结果数据集(查询操作返回)
     // #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +46,7 @@ pub struct DbResponse {
     // #[serde(skip_serializing_if = "Option::is_none")]
     pub txn_id: Option<String>,
     /// 错误信息
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub error: Option<String>,
 }

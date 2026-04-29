@@ -172,7 +172,7 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
     // 写入缓存
     let set_response = HostCaller::cache_set(
         &request.name,
-        &request.count.to_string(),
+        serde_json::Value::String(request.count.to_string()),
         Some(3600),
     )?;
 
@@ -313,7 +313,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     let _ = HostCaller::log_info("测试缓存写入");
 
     // ==================== 测试缓存写入 ====================
-    match HostCaller::cache_set(&request.name, &request.count.to_string(), Some(3600)) {
+    match HostCaller::cache_set(&request.name, serde_json::Value::String(request.count.to_string()), Some(3600)) {
         Ok(_) => results.push("缓存写入测试: 成功".to_string()),
         Err(e) => results.push(format!("缓存写入测试失败: {}", e)),
     }
@@ -755,6 +755,7 @@ pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
         "txn_id": input.context.txn_id,
         "message": "服务编排执行完成",
     });
+
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
 }

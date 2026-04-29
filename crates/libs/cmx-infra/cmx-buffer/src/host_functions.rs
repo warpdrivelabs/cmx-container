@@ -23,21 +23,20 @@ impl BufferHostFunctions {
     /// 构建带插件隔离前缀的缓存键
     ///
     /// 格式：`plugin:{plugin_id}:{key}`
-    fn build_key(plugin_id: &str, key: &str) -> String {
-        format!("plugin:{}:{}", plugin_id, key)
+    fn build_key( key: &str) -> String {
+        key.to_string()
     }
 
     /// 执行缓存读取
-    fn do_cache_get(&self, input: String) -> Result<String, HostFuncError> {
-        let req: CacheGetRequest = match serde_json::from_str(&input) {
+    fn do_cache_get(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+        let req: CacheGetRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key("default", &req.key);
+        let full_key = Self::build_key( &req.key);
 
-        // 当前已在 spawn_blocking 线程中，直接使用 block_on
         let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
@@ -46,31 +45,34 @@ impl BufferHostFunctions {
         };
 
         match result {
-            Ok(Some(value)) => Ok(Self::ok_response(Some(value), Some(true))),
+            Ok(Some(value)) => {
+                let json_value: serde_json::Value = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
+                Ok(Self::ok_response(Some(json_value), Some(true)))
+            }
             Ok(None) => Ok(Self::ok_response(None, Some(false))),
             Err(e) => Ok(Self::err_response(e.to_string())),
         }
     }
 
     /// 执行缓存写入
-    fn do_cache_set(&self, input: String) -> Result<String, HostFuncError> {
-        let req: CacheSetRequest = match serde_json::from_str(&input) {
+    fn do_cache_set(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+        let req: CacheSetRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key("default", &req.key);
+        let full_key = Self::build_key( &req.key);
         let ttl = req.ttl_seconds;
+        let value_str = req.value.to_string();
 
-        // 当前已在 spawn_blocking 线程中，直接使用 block_on
         let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Some(ttl_secs) = ttl {
-                    cache.ops().set_ex(&full_key, &req.value, std::time::Duration::from_secs(ttl_secs)).await
+                    cache.ops().set_ex(&full_key, &value_str, std::time::Duration::from_secs(ttl_secs)).await
                 } else {
-                    cache.ops().set(&full_key, &req.value).await
+                    cache.ops().set(&full_key, &value_str).await
                 }
             })
         };
@@ -82,16 +84,15 @@ impl BufferHostFunctions {
     }
 
     /// 执行缓存删除
-    fn do_cache_delete(&self, input: String) -> Result<String, HostFuncError> {
-        let req: CacheGetRequest = match serde_json::from_str(&input) {
+    fn do_cache_delete(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+        let req: CacheGetRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response(format!("解析请求失败: {}", e))),
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key("default", &req.key);
+        let full_key = Self::build_key( &req.key);
 
-        // 当前已在 spawn_blocking 线程中，直接使用 block_on
         let result = {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
@@ -105,9 +106,9 @@ impl BufferHostFunctions {
         }
     }
 
-    /// 构建成功响应
-    fn ok_response(value: Option<String>, exists: Option<bool>) -> String {
-        serde_json::to_string(&CacheResponse {
+    /// 构建成功响应（MsgPack 编码）
+    fn ok_response(value: Option<serde_json::Value>, exists: Option<bool>) -> Vec<u8> {
+        rmp_serde::to_vec(&CacheResponse {
             success: true,
             value,
             exists,
@@ -116,9 +117,9 @@ impl BufferHostFunctions {
         .unwrap_or_default()
     }
 
-    /// 构建错误响应
-    fn err_response(msg: String) -> String {
-        serde_json::to_string(&CacheResponse {
+    /// 构建错误响应（MsgPack 编码）
+    fn err_response(msg: String) -> Vec<u8> {
+        rmp_serde::to_vec(&CacheResponse {
             success: false,
             value: None,
             exists: None,
@@ -143,14 +144,14 @@ impl HostFunctionProvider for BufferHostFunctions {
     /// 返回提供的宿主函数列表
     fn functions(&self) -> Vec<HostFunctionDef> {
         vec![
-            HostFunctionDef::json_fn("cache_get", "cmx:buffer"),
-            HostFunctionDef::json_fn("cache_set", "cmx:buffer"),
-            HostFunctionDef::json_fn("cache_delete", "cmx:buffer"),
+            HostFunctionDef::msgpack_fn("cache_get", "cmx:buffer"),
+            HostFunctionDef::msgpack_fn("cache_set", "cmx:buffer"),
+            HostFunctionDef::msgpack_fn("cache_delete", "cmx:buffer"),
         ]
     }
 
     /// 调用宿主函数
-    fn call(&self, name: &str, input: String) -> Result<String, HostFuncError> {
+    fn call(&self, name: &str, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         match name {
             "cache_get" => self.do_cache_get(input),
             "cache_set" => self.do_cache_set(input),

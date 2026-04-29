@@ -20,6 +20,8 @@ bb8-redis = { workspace = true }
 serde = { workspace = true }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
+# MessagePack 序列化/反序列化
+rmp-serde = { workspace = true }
 # 异步运行时
 tokio = { workspace = true }
 # 日志追踪

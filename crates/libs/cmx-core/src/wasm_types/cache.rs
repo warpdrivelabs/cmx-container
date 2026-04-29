@@ -20,8 +20,8 @@ pub struct CacheGetRequest {
 pub struct CacheSetRequest {
     /// 缓存键
     pub key: String,
-    /// 缓存值
-    pub value: String,
+    /// 缓存值（使用 serde_json::Value 支持任意 JSON 类型）
+    pub value: serde_json::Value,
     /// 过期时间(秒)
     #[serde(default)]
     pub ttl_seconds: Option<u64>,
@@ -34,8 +34,8 @@ pub struct CacheSetRequest {
 pub struct CacheResponse {
     /// 是否成功
     pub success: bool,
-    /// 缓存值(读取操作返回)
-    pub value: Option<String>,
+    /// 缓存值(读取操作返回，使用 serde_json::Value 支持任意 JSON 类型)
+    pub value: Option<serde_json::Value>,
     /// 是否存在
     pub exists: Option<bool>,
     /// 错误信息

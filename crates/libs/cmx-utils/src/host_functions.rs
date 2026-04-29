@@ -41,23 +41,26 @@ impl HostFunctionProvider for LoggingHostFunctions {
     }
 
     /// 调用宿主函数
-    fn call(&self, name: &str, input: String) -> Result<String, HostFuncError> {
+    ///
+    /// 日志函数的输入为 UTF-8 文本，从 Vec<u8> 解码为 String 后输出。
+    fn call(&self, name: &str, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
+        let message = String::from_utf8(input).unwrap_or_default();
         match name {
             "log_info" => {
-                tracing::info!("[WASM] {}", input);
-                Ok(String::new())
+                tracing::info!("[WASM] {}", message);
+                Ok(Vec::new())
             }
             "log_error" => {
-                tracing::error!("[WASM] {}", input);
-                Ok(String::new())
+                tracing::error!("[WASM] {}", message);
+                Ok(Vec::new())
             }
             "log_debug" => {
-                tracing::debug!("[WASM] {}", input);
-                Ok(String::new())
+                tracing::debug!("[WASM] {}", message);
+                Ok(Vec::new())
             }
             "log_warn" => {
-                tracing::warn!("[WASM] {}", input);
-                Ok(String::new())
+                tracing::warn!("[WASM] {}", message);
+                Ok(Vec::new())
             }
             _ => Err(HostFuncError::invalid_function(name)),
         }

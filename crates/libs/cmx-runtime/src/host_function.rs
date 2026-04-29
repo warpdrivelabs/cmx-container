@@ -52,41 +52,37 @@ impl HostFunctionContext {
 /// # Extism 内存交互
 ///
 /// - `plugin.memory_get_val(&inputs[0])`: 从 Extism 线性内存读取输入
-///   inputs[0] 是 i64 类型的内存偏移量（PTR），Extism 自动解码为 String
-/// - `plugin.memory_set_val(&mut outputs[0], output_str)`: 将结果写入 Extism 线性内存
-///   outputs[0] 也是 i64 类型的 PTR，Extism 自动编码字符串并返回偏移量
+///   inputs[0] 是 i64 类型的内存偏移量（PTR），Extism 自动解码为 Vec<u8>
+/// - `plugin.memory_set_val(&mut outputs[0], output_bytes)`: 将结果写入 Extism 线性内存
+///   outputs[0] 也是 i64 类型的 PTR，Extism 自动编码字节并返回偏移量
 ///
 /// # 错误处理
 ///
-/// 业务逻辑调用失败时，返回 JSON 格式的错误信息：
-/// `{"success":false,"error":"错误描述"}`
+/// 业务逻辑调用失败时，返回 MsgPack 编码的错误信息
 fn host_function_wrapper(
-    // current_plugin: 当前正在执行的插件实例，提供内存读写接口
     plugin: &mut CurrentPlugin,
-    // inputs: 输入参数数组，每个元素是 Extism Val（i64 类型的内存偏移量）
     inputs: &[extism::Val],
-    // outputs: 输出参数数组，用于写入返回值
     outputs: &mut [extism::Val],
-    // user_data: 携带 HostFunctionContext 的用户数据
     user_data: UserData<HostFunctionContext>,
 ) -> Result<(), extism::Error> {
     let ctx = user_data.get()?;
     let guard = ctx.lock().unwrap();
-
     // memory_get_val: 从 Extism 线性内存中读取输入
-    // 将 i64 偏移量处的数据解码为 String
-    let input: String = plugin.memory_get_val(&inputs[0]).unwrap_or_default();
+    // 将 i64 偏移量处的数据解码为 字节数组
+    let input: Vec<u8> = plugin.memory_get_val(&inputs[0]).unwrap_or_default();
 
     let result = guard.provider.call(&guard.func_name, input);
 
-    let output_str = match result {
+    let output_bytes = match result {
         Ok(output) => output,
-        Err(e) => format!(r#"{{"success":false,"error":"{}"}}"#, e),
+        Err(e) => {
+            let err_resp = serde_json::json!({"success": false, "error": e.to_string()});
+            rmp_serde::to_vec(&err_resp).unwrap_or_default()
+        }
     };
-
-    // memory_set_val: 将输出字符串编码并写入 Extism 线性内存
+    // memory_set_val: 将输出字节数组编码并写入 Extism 线性内存
     // 返回的 i64 偏移量会被写入 outputs[0]
-    plugin.memory_set_val(&mut outputs[0], output_str)?;
+    plugin.memory_set_val(&mut outputs[0], output_bytes)?;
 
     Ok(())
 }

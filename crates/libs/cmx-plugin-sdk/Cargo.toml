@@ -15,5 +15,7 @@ cmx-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
+# MessagePack 序列化/反序列化
+rmp-serde = { workspace = true }
 # 错误处理
 thiserror = { workspace = true }

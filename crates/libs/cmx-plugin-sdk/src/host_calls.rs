@@ -2,6 +2,7 @@
 //!
 //! 为 WASM 插件提供调用宿主函数的便捷封装。
 //! 使用 extism-pdk 的 `#[host_fn]` 宏声明宿主函数签名。
+//! 数据类函数使用 MsgPack (Vec<u8>) 编码，日志类函数使用 String 传递。
 
 use extism_pdk::*;
 use cmx_core::{
@@ -10,7 +11,7 @@ use cmx_core::{
     ServiceCallRequest, ServiceCallResponse,
 };
 
-// 声明日志宿主函数
+// 声明日志宿主函数（纯文本，保持 String 类型）
 #[host_fn("cmx:log")]
 extern "ExtismHost" {
     /// 记录信息日志
@@ -23,36 +24,37 @@ extern "ExtismHost" {
     fn log_warn(message: String) -> ();
 }
 
-// 声明数据库宿主函数
+// 声明数据库宿主函数（MsgPack 编码）
 #[host_fn("cmx:database")]
 extern "ExtismHost" {
     /// 执行数据库查询
-    fn db_query(request: String) -> String;
+    fn db_query(request: Vec<u8>) -> Vec<u8>;
     /// 执行数据库操作
-    fn db_execute(request: String) -> String;
+    fn db_execute(request: Vec<u8>) -> Vec<u8>;
 }
 
-// 声明缓存宿主函数
+// 声明缓存宿主函数（MsgPack 编码）
 #[host_fn("cmx:buffer")]
 extern "ExtismHost" {
     /// 获取缓存
-    fn cache_get(request: String) -> String;
+    fn cache_get(request: Vec<u8>) -> Vec<u8>;
     /// 设置缓存
-    fn cache_set(request: String) -> String;
+    fn cache_set(request: Vec<u8>) -> Vec<u8>;
     /// 删除缓存
-    fn cache_delete(request: String) -> String;
+    fn cache_delete(request: Vec<u8>) -> Vec<u8>;
 }
 
-// 声明插件间调用宿主函数
+// 声明插件间调用宿主函数（MsgPack 编码）
 #[host_fn("cmx:plugin")]
 extern "ExtismHost" {
     /// 调用其他插件的服务
-    fn call_service(request: String) -> String;
+    fn call_service(request: Vec<u8>) -> Vec<u8>;
 }
 
 /// 宿主函数调用器
 ///
-/// 提供便捷的方法来调用宿主函数
+/// 提供便捷的方法来调用宿主函数。
+/// 日志函数直接传递字符串，数据类函数使用 MsgPack 编码结构体。
 pub struct HostCaller;
 
 impl HostCaller {
@@ -82,17 +84,17 @@ impl HostCaller {
 
     /// 执行数据库查询
     pub fn db_query(request: DbRequest) -> Result<DbResponse, Error> {
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { db_query(json)? };
-        let response: DbResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { db_query(bytes)? };
+        let response: DbResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 
     /// 执行数据库操作
     pub fn db_execute(request: DbRequest) -> Result<DbResponse, Error> {
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { db_execute(json)? };
-        let response: DbResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { db_execute(bytes)? };
+        let response: DbResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 
@@ -101,22 +103,27 @@ impl HostCaller {
         let request = CacheGetRequest {
             key: key.to_string(),
         };
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { cache_get(json)? };
-        let response: CacheResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { cache_get(bytes)? };
+        let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 
     /// 设置缓存
-    pub fn cache_set(key: &str, value: &str, ttl_seconds: Option<u64>) -> Result<CacheResponse, Error> {
+    ///
+    /// # 参数
+    /// - `key`: 缓存键
+    /// - `value`: 缓存值（任意 JSON 可序列化的值）
+    /// - `ttl_seconds`: 可选的过期时间（秒）
+    pub fn cache_set(key: &str, value: serde_json::Value, ttl_seconds: Option<u64>) -> Result<CacheResponse, Error> {
         let request = CacheSetRequest {
             key: key.to_string(),
-            value: value.to_string(),
+            value,
             ttl_seconds,
         };
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { cache_set(json)? };
-        let response: CacheResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { cache_set(bytes)? };
+        let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 
@@ -125,9 +132,9 @@ impl HostCaller {
         let request = CacheGetRequest {
             key: key.to_string(),
         };
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { cache_delete(json)? };
-        let response: CacheResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { cache_delete(bytes)? };
+        let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 
@@ -142,9 +149,9 @@ impl HostCaller {
             function_name: function_name.to_string(),
             input: input.to_string(),
         };
-        let json = serde_json::to_string(&request)?;
-        let result = unsafe { call_service(json)? };
-        let response: ServiceCallResponse = serde_json::from_str(&result)?;
+        let bytes = rmp_serde::to_vec(&request)?;
+        let result = unsafe { call_service(bytes)? };
+        let response: ServiceCallResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
     }
 }

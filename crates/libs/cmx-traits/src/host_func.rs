@@ -99,8 +99,8 @@ impl HostFunctionDef {
         }
     }
 
-    /// 创建标准 JSON 函数定义（一个输入指针，一个输出指针）
-    pub fn json_fn(name: &'static str, namespace: &'static str) -> Self {
+    /// 创建标准 MsgPack 函数定义（一个输入指针，一个输出指针）
+    pub fn msgpack_fn(name: &'static str, namespace: &'static str) -> Self {
         Self {
             name,
             input_types: &[ValType::Ptr],
@@ -143,12 +143,12 @@ impl HostFunctionDef {
 ///
 ///     fn functions(&self) -> Vec<HostFunctionDef> {
 ///         vec![
-///             HostFunctionDef::json_fn("db_query", "cmx:database"),
-///             HostFunctionDef::json_fn("db_execute", "cmx:database"),
+///             HostFunctionDef::msgpack_fn("db_query", "cmx:database"),
+///             HostFunctionDef::msgpack_fn("db_execute", "cmx:database"),
 ///         ]
 ///     }
 ///
-///     fn call(&self, name: &str, input: String) -> Result<String, HostFuncError> {
+///     fn call(&self, name: &str, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
 ///         match name {
 ///             "db_query" => self.do_query(input),
 ///             "db_execute" => self.do_execute(input),
@@ -176,12 +176,12 @@ pub trait HostFunctionProvider: Send + Sync {
     /// # 参数
     ///
     /// - `name`: 函数名
-    /// - `input`: 输入数据（JSON 字符串）
+    /// - `input`: 输入数据（MsgPack 编码的字节）
     ///
     /// # 返回值
     ///
-    /// 返回输出数据（JSON 字符串），或错误。
-    fn call(&self, name: &str, input: String) -> Result<String, HostFuncError>;
+    /// 返回输出数据（MsgPack 编码的字节），或错误。
+    fn call(&self, name: &str, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError>;
 
     /// 列出该提供者注册的所有函数名
     ///
