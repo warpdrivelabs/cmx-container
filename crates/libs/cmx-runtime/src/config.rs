@@ -1,12 +1,18 @@
 //! Extism 引擎配置
 //!
 //! 定义引擎运行时参数，并提供从 ConfigManager（dev.toml）读取
-//! Fuel 限制等动态配置的能力。
+//! 各项动态配置的能力。
 //!
 //! # 配置项（dev.toml `[runtime]` 节）
 //!
 //! ```toml
 //! [runtime]
+//! # 内存限制（页数），每页 64KB，默认 4096 页（256MB）
+//! memory_max = 4096
+//! # 单次调用超时时间（秒），默认 30
+//! timeout = 30
+//! # 实例池最大实例数，默认使用 CPU 核心数
+//! pool_max_instances = 8
 //! # Fuel 限制（0 表示不限制，单位：Wasm 指令数）
 //! fuel_limit = 0
 //! ```
@@ -20,8 +26,7 @@ use crate::error::ExtismError;
 
 /// Extism 引擎配置
 ///
-/// 控制 WASM 运行时的核心参数。部分参数（Fuel 限制）
-/// 会从 ConfigManager（dev.toml）中读取并覆盖默认值。
+/// 控制 WASM 运行时的核心参数。所有参数均支持从 ConfigManager（dev.toml）覆盖。
 #[derive(Debug, Clone)]
 pub struct ExtismEngineConfig {
     /// 是否启用 WASI（WebAssembly System Interface），默认 true
@@ -67,6 +72,96 @@ impl Default for ExtismEngineConfig {
     }
 }
 
+/// 从 ConfigManager 读取 memory_max 配置
+///
+/// 读取 `runtime.memory_max` 配置项（页数）。
+/// 值必须 > 0，否则使用默认值。
+///
+/// # 返回值
+///
+/// - `Some(u32)`: 读取成功，返回配置值
+/// - `None`: ConfigManager 未初始化或配置无效，使用默认值
+fn read_memory_max() -> Option<u32> {
+    let s = ConfigManager::try_global()?.get_string("runtime.memory_max").ok()?;
+
+    match s.parse::<u32>() {
+        Ok(n) if n > 0 => Some(n),
+        Ok(n) => {
+            tracing::warn!("runtime.memory_max={} 无效（必须 > 0），使用默认值", n);
+            None
+        }
+        Err(_) => {
+            tracing::warn!("runtime.memory_max='{}' 解析失败，使用默认值", s);
+            None
+        }
+    }
+}
+
+/// 从 ConfigManager 读取 timeout 配置
+///
+/// 读取 `runtime.timeout` 配置项（秒）。
+/// 值必须 > 0，否则使用默认值。
+///
+/// # 返回值
+///
+/// - `Some(Duration)`: 读取成功，返回 Duration
+/// - `None`: ConfigManager 未初始化或配置无效，使用默认值
+fn read_timeout() -> Option<Duration> {
+    let s = ConfigManager::try_global()?.get_string("runtime.timeout").ok()?;
+
+    match s.parse::<u64>() {
+        Ok(n) if n > 0 => {
+            let d = Duration::from_secs(n);
+            tracing::info!("Timeout 配置: {} 秒", n);
+            Some(d)
+        }
+        Ok(n) => {
+            tracing::warn!("runtime.timeout={} 无效（必须 > 0），使用默认值", n);
+            None
+        }
+        Err(_) => {
+            tracing::warn!("runtime.timeout='{}' 解析失败，使用默认值", s);
+            None
+        }
+    }
+}
+
+/// 从 ConfigManager 读取 pool_max_instances 配置
+///
+/// 读取 `runtime.pool_max_instances` 配置项。
+/// 值必须 > 0，否则使用默认值。
+///
+/// # 返回值
+///
+/// - `Some(usize)`: 读取成功，返回配置值
+/// - `None`: ConfigManager 未初始化或配置无效，使用默认值
+fn read_pool_max_instances() -> Option<usize> {
+    let s = ConfigManager::try_global()?
+        .get_string("runtime.pool_max_instances")
+        .ok()?;
+
+    match s.parse::<usize>() {
+        Ok(n) if n > 0 => {
+            tracing::info!("Pool 最大实例数配置: {}", n);
+            Some(n)
+        }
+        Ok(n) => {
+            tracing::warn!(
+                "runtime.pool_max_instances={} 无效（必须 > 0），使用默认值",
+                n
+            );
+            None
+        }
+        Err(_) => {
+            tracing::warn!(
+                "runtime.pool_max_instances='{}' 解析失败，使用默认值",
+                s
+            );
+            None
+        }
+    }
+}
+
 /// 从 ConfigManager 读取 Fuel 限制配置
 ///
 /// 读取 `runtime.fuel_limit` 配置项（单位：Wasm 指令数）。
@@ -76,7 +171,7 @@ impl Default for ExtismEngineConfig {
 ///
 /// - `Some(u64)`: 启用 Fuel 限制，值为最大指令数
 /// - `None`: 不限制（配置为 0 或 ConfigManager 未初始化）
-pub fn read_fuel_limit() -> Option<u64> {
+fn read_fuel_limit() -> Option<u64> {
     let fuel_str = ConfigManager::try_global()?
         .get_string("runtime.fuel_limit")
         .ok()?;
@@ -99,8 +194,11 @@ pub fn read_fuel_limit() -> Option<u64> {
 
 /// 从 ConfigManager 加载运行时配置并构建 ExtismEngineConfig
 ///
-/// 以传入的基础配置为底，覆盖 ConfigManager 中的动态配置（Fuel），
-/// 返回最终生效的配置。
+/// 以传入的基础配置为底，依次从 ConfigManager 覆盖各项动态配置：
+/// - `runtime.memory_max`
+/// - `runtime.timeout`
+/// - `runtime.pool_max_instances`
+/// - `runtime.fuel_limit`
 ///
 /// # 参数
 ///
@@ -110,12 +208,23 @@ pub fn read_fuel_limit() -> Option<u64> {
 ///
 /// 成功返回最终生效的 `ExtismEngineConfig`
 pub fn load_runtime_config(mut base: ExtismEngineConfig) -> Result<ExtismEngineConfig, ExtismError> {
+    if let Some(v) = read_memory_max() {
+        base.memory_max = v;
+    }
+    if let Some(v) = read_timeout() {
+        base.timeout = v;
+    }
+    if let Some(v) = read_pool_max_instances() {
+        base.pool_max_instances = v;
+    }
     base.fuel_limit = read_fuel_limit();
 
     tracing::info!(
-        "Extism 引擎配置加载完成: fuel_limit={:?}, pool_max={}",
+        "Extism 引擎配置加载完成: memory_max={} 页, timeout={:?}, pool_max={}, fuel_limit={:?}",
+        base.memory_max,
+        base.timeout,
+        base.pool_max_instances,
         base.fuel_limit,
-        base.pool_max_instances
     );
 
     Ok(base)

@@ -51,3 +51,25 @@ url = "redis://192.168.1.14:6379/13"
 
 [node]
 node_id="0323"
+
+#WASM运行时相关配置
+[runtime]
+# 内存限制（页数），每页 64KB，默认 4096 页（256MB）
+memory_max = 4096
+# 单次调用超时时间（秒），默认 30
+timeout = 30
+# 实例池最大实例数，默认使用 CPU 核心数
+pool_max_instances = 8
+# Fuel 限制（0 表示不限制，单位：Wasm 指令数）
+fuel_limit = 0
+
+#插件相关配置
+[plugin]
+# 插件安装根目录
+install_root = "plugins/root"
+# 插件备份目录
+backup_root = "plugins/backup"
+# 插件解压临时目录
+temp_root = "plugins/temp"
+# 插件上传临时目录
+upload_root = "plugins/uploads"

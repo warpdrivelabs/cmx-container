@@ -67,6 +67,12 @@ url = "http://127.0.0.1:9000"
 
 #WASM运行时相关配置
 [runtime]
+# 内存限制（页数），每页 64KB，默认 4096 页（256MB）
+memory_max = 4096
+# 单次调用超时时间（秒），默认 30
+timeout = 30
+# 实例池最大实例数，默认使用 CPU 核心数
+pool_max_instances = 8
 # Fuel 限制（0 表示不限制，单位：Wasm 指令数）
 fuel_limit = 0
 
