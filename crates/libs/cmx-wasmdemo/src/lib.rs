@@ -827,5 +827,31 @@ pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
         "message": "服务编排执行完成",
     });
 
+    // 写入缓存
+    let set_response = HostCaller::cache_set(
+        "reids_key",
+        serde_json::Value::String("测试redis缓存".to_string()),
+        Some(3600),
+    )?;
+
+    HostCaller::log_info(&format!("缓存写入结果: {:?}", set_response))?;
+
+    let plugin_fun_request = PluginFunRequest {
+        plugin_id: "example_plugin".to_string(),
+        function_name: "count_vowels".to_string(),
+        input: serde_json::Value::String("aabbccddee".to_string()),
+        initial_input: None,
+        debug: None,
+    };
+
+    match HostCaller::call_plugin(plugin_fun_request) {
+        Ok(result) => {
+            HostCaller::log_info(&format!("调用指定插件成功: {:?}", result))?;
+        }
+        Err(e) => {
+            HostCaller::log_error(&format!("调用指定插件失败: {}", e))?;
+        }
+    };
+
     Ok(Msgpack(FunctionOutput::from_json(result)))
 }
