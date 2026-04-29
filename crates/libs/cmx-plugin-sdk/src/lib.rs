@@ -18,21 +18,21 @@
 //! pub fn my_function(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
 //!     // 获取当前步骤输入（字符串）
 //!     let current_input = input.as_str();
-//!     
+//!
 //!     // 解析为 JSON（如果输入是 JSON 格式）
 //!     let json_value = input.as_json_value();
-//!     
+//!
 //!     // 获取初始入参
 //!     let initial_input = &input.context.initial_input;
-//!     
+//!
 //!     // 获取请求头
 //!     let headers = &input.context.headers;
-//!     
+//!
 //!     // 获取前序步骤输出
 //!     if let Some(prev_output) = input.context.get_step_output("previous_node_id") {
 //!         // 使用前序步骤输出
 //!     }
-//!     
+//!
 //!     // 返回结果（使用辅助方法）
 //!     Ok(Json(FunctionOutput::from_json(serde_json::json!({
 //!         "status": "success",
@@ -57,7 +57,7 @@ pub use host_calls::HostCaller;
 pub use cmx_core::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
-    ServiceCallRequest, ServiceCallResponse,
+    PluginFunRequest, CallServiceRequest, CallServiceResponse,
 };
 
 // ==================== 错误类型 ====================

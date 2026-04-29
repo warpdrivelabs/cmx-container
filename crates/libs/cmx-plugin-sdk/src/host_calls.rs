@@ -8,8 +8,9 @@ use extism_pdk::*;
 use cmx_core::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
-    ServiceCallRequest, ServiceCallResponse,
+    PluginFunRequest, CallServiceRequest, CallServiceResponse,
 };
+use crate::error::PluginError;
 
 // 声明日志宿主函数（纯文本，保持 String 类型）
 #[host_fn("cmx:log")]
@@ -47,8 +48,25 @@ extern "ExtismHost" {
 // 声明插件间调用宿主函数（MsgPack 编码）
 #[host_fn("cmx:plugin")]
 extern "ExtismHost" {
-    /// 调用其他插件的服务
-    fn call_service(request: Vec<u8>) -> Vec<u8>;
+
+
+    /// 调用指定插件的指定函数
+    ///
+    /// # 参数
+    /// - `request`: PluginFunRequest 的 MsgPack 编码
+    ///
+    /// # 返回值
+    /// CallServiceResponse 的 MsgPack 编码
+    fn call_plugin(request: Vec<u8>) -> Vec<u8>;
+
+    /// 调用指定服务编排
+    ///
+    /// # 参数
+    /// - `request`: CallServiceRequest 的 MsgPack 编码
+    ///
+    /// # 返回值
+    /// CallServiceResponse 的 MsgPack 编码
+    fn call_service_by_key(request: Vec<u8>) -> Vec<u8>;
 }
 
 /// 宿主函数调用器
@@ -138,20 +156,45 @@ impl HostCaller {
         Ok(response)
     }
 
-    /// 调用其他插件的服务
-    pub fn call_service(
-        target_plugin_id: &str,
-        function_name: &str,
-        input: &str,
-    ) -> Result<ServiceCallResponse, Error> {
-        let request = ServiceCallRequest {
-            target_plugin_id: target_plugin_id.to_string(),
-            function_name: function_name.to_string(),
-            input: input.to_string(),
-        };
-        let bytes = rmp_serde::to_vec(&request)?;
-        let result = unsafe { call_service(bytes)? };
-        let response: ServiceCallResponse = rmp_serde::from_slice(&result)?;
-        Ok(response)
+
+
+    /// 调用指定插件的指定函数
+    ///
+    /// 类似于 API `/api/service/call`，在 WASM 插件上下文中调用另一个插件的函数。
+    ///
+    /// # 参数说明
+    /// - `request`: PluginFunRequest 请求结构体，包含目标插件ID、函数名和输入数据
+    ///
+    /// # 返回值说明
+    /// - `Ok(serde_json::Value)`: 函数执行结果
+    /// - `Err(Error)`: 调用失败，包含错误信息
+    pub fn call_plugin(request: PluginFunRequest) -> Result<serde_json::Value, PluginError> {
+        let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        let result = unsafe { call_plugin(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
+        let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
+        if !response.success {
+            return Err(PluginError::HostCallFailed(response.error.unwrap_or_default()));
+        }
+        Ok(response.output.unwrap_or(serde_json::Value::Null))
+    }
+
+    /// 调用指定服务编排
+    ///
+    /// 类似于 API `/api/service/execute`，在 WASM 插件上下文中执行一个完整的服务编排。
+    ///
+    /// # 参数说明
+    /// - `request`: CallServiceRequest 请求结构体，包含服务标识、输入数据和执行选项
+    ///
+    /// # 返回值说明
+    /// - `Ok(serde_json::Value)`: 服务执行的最终输出
+    /// - `Err(Error)`: 执行失败，包含错误信息
+    pub fn call_service_by_key(request: CallServiceRequest) -> Result<serde_json::Value, PluginError> {
+        let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        let result = unsafe { call_service_by_key(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
+        let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
+        if !response.success {
+            return Err(PluginError::HostCallFailed(response.error.unwrap_or_default()));
+        }
+        Ok(response.output.unwrap_or(serde_json::Value::Null))
     }
 }

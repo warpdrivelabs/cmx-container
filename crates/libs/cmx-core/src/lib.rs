@@ -7,8 +7,8 @@ pub use model::data::request::params::*;
 pub use model::service::*;
 pub use wasm_types::{
     DbRequest, DbResponse,
-    CacheGetRequest, CacheSetRequest, CacheResponse,
-    ServiceCallRequest, ServiceCallResponse, PluginInfoResponse,
+    CacheGetRequest, CacheSetRequest, CacheResponse, PluginInfoResponse,
+    PluginFunRequest, CallServiceRequest, CallServiceResponse,
     WasmContext,
     WasmFunctionRequest, WasmFunctionResponse,
 };
