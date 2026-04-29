@@ -1,426 +1,397 @@
-# CMX CLI - CMX 插件开发工具集
+# cmx-cli
 
-CMX CLI 是一个多功能的命令行工具，为 CMX 插件开发提供文档生成、插件管理等功能。
+> CMX 插件文档生成器 CLI，用于扫描 Rust 代码中的 `#[plugin_fn]` 属性函数并生成 JSON 格式的 API 文档。
 
-## 功能特性
+## 项目简介
 
-- 📄 **文档生成**：扫描 Rust 代码，识别 `#[plugin_fn]` 函数，生成 JSON 格式的 API 文档
-- 🔧 **插件管理**：初始化新插件项目、构建 WASM 插件（预留）
-- ✅ **文档验证**：验证生成的文档格式（预留）
+cmx-cli 是一个命令行工具，用于扫描 Rust 代码，识别 `#[plugin_fn]` 属性函数，解析文档注释并生成结构化的 JSON API 文档。
 
-## 安装
+## 快速开始
 
-### 方式一：源码编译（推荐）
+### 安装
 
 ```bash
-# 在项目根目录下编译
-cargo build -p cmx-cli --release
-
-# 可执行文件位于
-./target/release/cmx-cli
+cargo install cmx-cli
 ```
 
-### 方式二：安装到本地（全局使用）
+### 核心示例
 
 ```bash
-# 安装到 ~/.cargo/bin/ 或 %USERPROFILE%\.cargo\bin\
-cargo install --path sdk/cmx-cli
+# 扫描代码生成文档
+cmx-cli doc scan src/ --output docs/api.json
 
-# 安装后可以直接使用
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
+# 美化输出
+cmx-cli doc scan src/ --output docs/api.json --pretty
+
+# 初始化插件项目
+cmx-cli plugin new my-plugin
 ```
 
-### 方式三：添加到 PATH（便携使用）
+## 核心功能与特性
 
-```bash
-# Windows: 将编译后的可执行文件路径添加到系统 PATH
-# 或创建符号链接到已有 PATH 目录
+| 功能 | 说明 |
+|------|------|
+| 文档扫描 | 自动识别 `#[plugin_fn]` 属性函数 |
+| 文档解析 | 提取函数的文档注释 |
+| JSON 生成 | 生成结构化 JSON 文档 |
+| 插件初始化 | 创建新的插件项目 |
+| 自定义输出 | 支持指定输出文件和美化 JSON |
 
-# Linux/macOS:
-ln -s "$(pwd)/target/release/cmx-cli" ~/.local/bin/cmx-cli
-```
-
-## 快速开始（使用源码运行）
-
-无需编译，直接使用 `cargo run` 运行：
-
-```bash
-# 在项目根目录下运行
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
-
-# 查看帮助
-cargo run -p cmx-cli -- --help
-cargo run -p cmx-cli -- doc --help
-cargo run -p cmx-cli -- doc scan --help
-cargo run -p cmx-cli -- plugin --help
-```
-
-> **说明**：`--` 后面的参数会传递给 cmx-cli 程序。
-
-### 常用命令示例
-
-```bash
-# 生成 API 文档（自动创建 docs 目录）
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
-
-# 输出到控制台（不保存文件）
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --pretty
-
-# 验证文档格式
-cargo run -p cmx-cli -- doc validate ./docs/api.json
-
-# 创建新插件项目
-cargo run -p cmx-cli -- plugin new my-plugin
-```
-
-## 命令概览
+## 模块结构
 
 ```
 cmx-cli
-├── doc           # 文档相关命令
-│   ├── scan      # 扫描 Rust 代码，生成 WASM 函数文档
-│   └── validate  # 验证文档格式
-└── plugin        # 插件相关命令
-    ├── new       # 初始化新插件项目
-    ├── build     # 构建 WASM 插件（预留）
-    └── info      # 显示插件信息（预留）
+├── src/
+│   ├── lib.rs              # 库入口
+│   ├── main.rs             # 主程序入口
+│   ├── cli/
+│   │   ├── commands.rs     # 命令解析与执行
+│   │   └── mod.rs
+│   ├── generator/
+│   │   ├── json_gen.rs     # JSON 文档生成
+│   │   └── mod.rs
+│   ├── models/
+│   │   ├── doc_types.rs    # 数据模型定义
+│   │   └── mod.rs
+│   └── parser/
+│       ├── ast_parser.rs    # AST 解析器
+│       ├── doc_parser.rs    # 文档注释解析器
+│       └── mod.rs
+└── Cargo.toml
 ```
 
-## 使用方法
+## 使用指南
 
-### 帮助命令
-
-查看各层级命令的帮助信息：
+### 一、命令概述
 
 ```bash
-# 查看主命令帮助
-cmx-cli --help
+cmx-cli <COMMAND> [OPTIONS]
 
-# 查看文档命令帮助
-cmx-cli doc --help
-
-# 查看扫描命令帮助
-cmx-cli doc scan --help
-
-# 查看插件命令帮助
-cmx-cli plugin --help
-
-# 查看新建插件命令帮助
-cmx-cli plugin new --help
+可用命令：
+  doc       文档相关操作
+  plugin    插件相关操作
+  version   显示版本信息
+  help      显示帮助信息
 ```
 
-### 文档命令 (doc)
+### 二、文档扫描命令 (doc scan)
 
-#### 扫描生成文档 (doc scan)
+#### 2.1 基础用法
 
 ```bash
-# 扫描指定目录并输出到控制台
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo
+# 扫描单个目录
+cmx-cli doc scan src/
 
-# 扫描并输出到文件
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo -o ./docs/plugin-api.json
+# 扫描多个路径
+cmx-cli doc scan src/ lib/
 
-# 美化 JSON 输出
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
-
-# 扫描多个目录
-cmx-cli doc scan ./crates/libs/plugin1 ./crates/libs/plugin2 -o ./docs/api.json
-
-# 排除特定文件
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo --exclude "tests"
+# 指定输出文件
+cmx-cli doc scan src/ --output docs/api.json
 ```
 
-**参数说明：**
-
-| 参数 | 简写 | 说明 |
-|------|------|------|
-| `PATHS` | | 要扫描的目录或文件路径（支持多个） |
-| `--output` | `-o` | 输出文件路径，不指定则输出到 stdout |
-| `--pretty` | | 美化 JSON 输出 |
-| `--exclude` | | 排除的文件模式 |
-| `--plugin-name` | | 指定插件名称（默认从 Cargo.toml 读取） |
-
-> **注意**：如果输出文件的父目录不存在，将自动创建目录。
-
-#### 验证文档格式 (doc validate)
+#### 2.2 完整选项
 
 ```bash
-# 验证文档 JSON 格式
-cmx-cli doc validate ./docs/plugin-api.json
+cmx-cli doc scan <PATHS>... [OPTIONS]
+
+位置参数：
+  <PATHS>              要扫描的目录或文件路径
+
+选项：
+  -o, --output <FILE>     输出文件路径（默认为 stdout）
+  -p, --pretty            美化 JSON 输出
+  -e, --exclude <PATTERN> 排除匹配的文件模式（可重复）
+  -n, --plugin-name <NAME> 指定插件名称
+  --include-hidden        包含隐藏文件
+  -v, --verbose           详细输出模式
+  -h, --help              显示帮助信息
 ```
 
-### 插件命令 (plugin)
-
-#### 初始化新插件项目 (plugin new)
+#### 2.3 使用示例
 
 ```bash
-# 在当前目录创建新插件项目
+# 美化输出的完整示例
+cmx-cli doc scan src/ \
+  --output docs/plugin-api.json \
+  --pretty \
+  --plugin-name "my-plugin" \
+  --exclude "**/tests/**" \
+  --exclude "**/target/**" \
+  --verbose
+```
+
+### 三、插件初始化命令 (plugin new)
+
+#### 3.1 基础用法
+
+```bash
+# 在当前目录创建插件项目
 cmx-cli plugin new my-plugin
 
-# 在指定目录创建
-cmx-cli plugin new my-plugin -p ./plugins
+# 指定目录创建
+cmx-cli plugin new my-plugin --path ./plugins
 ```
 
-生成的项目结构：
-
-```
-my-plugin/
-├── Cargo.toml
-└── src/
-    └── lib.rs    # 包含示例函数模板
-```
-
-#### 构建 WASM 插件 (plugin build)
+#### 3.2 完整选项
 
 ```bash
-# 构建 WASM 插件（预留功能）
-cmx-cli plugin build ./my-plugin
+cmx-cli plugin new <NAME> [OPTIONS]
+
+位置参数：
+  <NAME>                  插件名称
+
+选项：
+  -p, --path <PATH>       目标路径（默认为当前目录）
+  -t, --template <TEMPLATE>  使用模板（basic, service, data-processor）
+  --no-git                 跳过 git 初始化
+  -h, --help              显示帮助信息
+```
+
+#### 3.3 模板类型
+
+```bash
+# 创建基础插件模板
+cmx-cli plugin new my-plugin -t basic
+
+# 创建服务类型插件
+cmx-cli plugin new my-service-plugin -t service
+
+# 创建数据处理插件
+cmx-cli plugin new my-data-plugin -t data-processor
+```
+
+### 四、插件构建命令 (plugin build)
+
+#### 4.1 构建插件
+
+```bash
+# 构建为 WASM
+cmx-cli plugin build
+
+# 指定目标目录
+cmx-cli plugin build --target ./dist
 
 # 发布模式构建
-cmx-cli plugin build ./my-plugin --release
+cmx-cli plugin build --release
 ```
 
-> **注意**：此功能尚未完全实现，请使用 `cargo build --target wasm32-unknown-unknown`
-
-#### 显示插件信息 (plugin info)
+#### 4.2 完整选项
 
 ```bash
-# 显示 WASM 插件信息（预留功能）
-cmx-cli plugin info ./target/my-plugin.wasm
+cmx-cli plugin build [OPTIONS]
+
+选项：
+  -t, --target <DIR>       输出目录
+  -r, --release           发布模式构建
+  -d, --debug             调试模式构建
+  --no-verify            跳过签名验证
+  -h, --help             显示帮助信息
 ```
 
-## 函数注释规范
+### 五、插件打包命令 (plugin package)
 
-为了让解析器正确提取文档信息，建议使用以下注释格式：
+#### 5.1 打包为 ZIP
 
-### 标准注释模板
+```bash
+# 打包当前插件
+cmx-cli plugin package
 
-```rust
-/// <简短描述>（必填，一行）
-///
-/// <详细描述>（可选，可多行）
-///
-/// # 输入
-///
-/// | 字段 | 类型 | 必填 | 说明 |
-/// |------|------|------|------|
-/// | `input.input` | string | 是 | 输入数据说明 |
-///
-/// # 输出
-///
-/// | 字段 | 类型 | 说明 |
-/// |------|------|------|
-/// | `result` | json | 输出数据说明 |
-///
-/// # 编码
-///
-/// - 输入编码: `msgpack`
-/// - 输出编码: `msgpack`
-///
-/// # 示例
-///
-/// **输入:**
-/// ```json
-/// {"input": "hello world", "context": {}}
-/// ```
-///
-/// **输出:**
-/// ```json
-/// {"result": "{\"count\":3}"}
-/// ```
-///
-/// # 错误
-///
-/// - `解析错误`: 输入 JSON 格式不正确
-///
-/// # 注意
-///
-/// - 特殊说明
-///
-/// # 类型标注
-///
-/// 使用 `#[doc_type = "func"]` 或 `#[doc_type = "branch_fn"]` 标注函数类型：
-/// - `func`（默认）：普通处理函数
-/// - `branch_fn`：分支函数
-#[plugin_fn]
-pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    // ...
-}
+# 指定输出文件
+cmx-cli plugin package --output ./my-plugin.zip
+
+# 包含额外文件
+cmx-cli plugin package --include "config/**" --include "static/**"
 ```
 
-### 标准节定义
+#### 5.2 完整选项
 
-| 节名称 | 必填 | 格式 | 说明 |
-|--------|------|------|------|
-| 简短描述 | ✅ | 纯文本 | 第一行，简洁描述函数功能 |
-| 详细描述 | ❌ | 纯文本 | 空行后的多行描述 |
-| `# 输入` | ✅ | Markdown 表格 | 输入参数说明 |
-| `# 输出` | ✅ | Markdown 表格 | 输出结果说明 |
-| `# 编码` | ❌ | 列表 | 编码方式（可从签名自动提取） |
-| `# 示例` | ✅ | 代码块 | 输入输出示例 |
-| `# 错误` | ❌ | 列表 | 可能的错误情况 |
-| `# 注意` | ❌ | 列表 | 特殊说明 |
+```bash
+cmx-cli plugin package [OPTIONS]
 
-## JSON 输出格式
+选项：
+  -o, --output <FILE>     输出文件路径
+  -i, --include <PATTERN> 包含匹配的文件（可重复）
+  --exclude <PATTERN>      排除匹配的文件（可重复）
+  -h, --help              显示帮助信息
+```
+
+### 六、生成文档格式
+
+#### 6.1 输出 JSON 结构
 
 ```json
 {
   "plugin": {
-    "name": "cmx-wasmdemo",
-    "version": "0.1.0",
-    "description": "CMX WASM 插件演示模块",
-    "generated_at": "2026-04-14T10:30:00Z"
+    "name": "my-plugin",
+    "version": "1.0.0",
+    "description": "我的插件"
   },
   "functions": [
     {
-      "name": "count_vowels",
-      "type": "func",
-      "summary": "统计字符串中的元音字母数量",
-      "description": "这是一个简单的字符串处理函数",
-      "input": {
-        "encoding": "msgpack",
-        "type": "FunctionInput",
-        "fields": [
-          {
-            "name": "input.input",
-            "type": "string",
-            "required": true,
-            "description": "要统计的字符串"
-          }
-        ]
-      },
-      "output": {
-        "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "json",
-            "description": "统计结果 JSON"
-          }
-        ]
-      },
-      "examples": [
+      "name": "process_data",
+      "description": "处理输入数据",
+      "parameters": [
         {
-          "input": "{\"input\": \"hello world\"}",
-          "output": "{\"result\": \"{\\\"count\\\":3}\"}"
+          "name": "input",
+          "type": "FunctionInput",
+          "required": true,
+          "description": "输入数据"
         }
       ],
-      "errors": [],
-      "notes": [],
-      "location": {
-        "file": "src/lib.rs",
-        "line": 97
+      "returns": {
+        "type": "FunctionOutput",
+        "description": "处理结果"
       }
+    }
+  ],
+  "generated_at": "2024-01-15T10:30:00Z",
+  "generator_version": "0.1.0"
+}
+```
+
+#### 6.2 函数文档结构
+
+```json
+{
+  "name": "function_name",
+  "description": "函数功能描述",
+  "input": {
+    "type": "FunctionInput",
+    "fields": [
+      {
+        "name": "input",
+        "type": "string",
+        "description": "当前步骤输入"
+      },
+      {
+        "name": "context",
+        "type": "SVRContext",
+        "description": "服务调用上下文"
+      }
+    ]
+  },
+  "output": {
+    "type": "FunctionOutput",
+    "fields": [
+      {
+        "name": "result",
+        "type": "Value",
+        "description": "函数执行结果"
+      }
+    ]
+  },
+  "examples": [
+    {
+      "title": "基础用法",
+      "code": "..."
     }
   ]
 }
 ```
 
-## 编码方式识别
+### 七、配置文件
 
-工具会自动从函数签名中识别编码方式：
+#### 7.1 项目配置 (.cmx-cli.toml)
 
-| 签名类型 | 编码方式 |
-|----------|----------|
-| `Json<T>` | json |
-| `Msgpack<T>` | msgpack |
-| 其他 | raw |
+```toml
+[project]
+name = "my-plugin"
+version = "1.0.0"
 
-## 函数类型识别
+[build]
+target = "wasm32-unknown-unknown"
+out_dir = "dist"
 
-工具支持识别 `#[doc_type]` 属性，自动为函数添加类型标识：
+[doc]
+output = "docs/api.json"
+include_private = false
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| 无 `#[doc_type]` 属性 | `func` | 普通处理函数 |
-| `#[doc_type = "func"]` | `func` | 普通处理函数（显式声明） |
-| `#[doc_type = "branch_fn"]` | `branch_fn` | 分支函数 |
+[package]
+include = ["**/*.wasm", "manifest.json"]
+exclude = ["**/*.rs", "**/target/**"]
+```
 
-### 分支函数示例
+#### 7.2 全局配置 (~/.cmx-cli/config.toml)
+
+```toml
+[defaults]
+plugin_template = "basic"
+output_format = "json"
+
+[paths]
+default_plugin_dir = "~/plugins"
+default_output_dir = "./docs"
+
+[build]
+rustup_target = "wasm32-unknown-unknown"
+```
+
+### 八、解析规则
+
+#### 8.1 函数识别规则
 
 ```rust
-/// 分支1处理函数
-///
-/// # 输入
-/// - `input.input`: 前序步骤的输出
-///
-/// # 输出
-/// - `result`: 处理结果
-#[doc_type = "branch_fn"]
+// ✅ 被识别的函数格式
 #[plugin_fn]
-pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    // ...
+pub fn my_function(Json(input): Json<FunctionInput>) -> FnResult<Json<FunctionOutput>> {
+}
+
+// ❌ 不被识别的函数格式（缺少 #[plugin_fn] 属性）
+pub fn helper_function() {
+}
+
+// ✅ 内部函数也会被解析文档
+/// 这是一个内部函数
+fn internal_helper() {
 }
 ```
 
-生成的 JSON 中该函数会包含 `"type": "branch_fn"`。
+#### 8.2 文档注释解析
 
-## 示例
+```rust
+/// 函数功能简述
+///
+/// # 参数
+/// - `input`: 输入数据
+/// - `context`: 上下文信息
+///
+/// # 返回值
+/// 返回处理结果
+///
+/// # 示例
+/// ```rust
+/// let result = my_function(data);
+/// ```
+#[plugin_fn]
+pub fn documented_function(/* ... */) -> /* ... */ {
+}
+```
 
-### 扫描 cmx-wasmdemo 项目
+### 九、常见问题
+
+#### 9.1 扫描不到函数
 
 ```bash
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo --pretty -o ./docs/wasmdemo-api.json
+# 检查是否正确添加了 #[plugin_fn] 属性
+# 确保函数是 pub 的
+# 使用 verbose 模式查看详细信息
+cmx-cli doc scan src/ --verbose
 ```
 
-输出：
-
-```
-文档已生成: ./docs/wasmdemo-api.json
-```
-
-### 创建新插件项目
+#### 9.2 输出格式错误
 
 ```bash
-cmx-cli plugin new my-awesome-plugin
+# 确保 Rust 代码可以正常编译
+# 检查是否有语法错误
+cargo check
 ```
 
-输出：
+#### 9.3 性能问题
 
+```bash
+# 对于大型项目，可以排除不需要的目录
+cmx-cli doc scan src/ \
+  --exclude "**/tests/**" \
+  --exclude "**/ benches/**" \
+  --exclude "**/target/**"
 ```
-✓ 插件项目已创建: ./my-awesome-plugin
-
-下一步:
-  cd my-awesome-plugin
-  cargo build --target wasm32-unknown-unknown
-```
-
-## 项目结构
-
-```
-sdk/cmx-cli/
-├── Cargo.toml
-├── README.md
-├── src/
-│   ├── main.rs           # CLI 入口
-│   ├── lib.rs            # 库入口
-│   ├── parser/
-│   │   ├── mod.rs
-│   │   ├── ast_parser.rs # AST 解析器
-│   │   └── doc_parser.rs # 文档注释解析器
-│   ├── generator/
-│   │   ├── mod.rs
-│   │   └── json_gen.rs   # JSON 生成器
-│   ├── models/
-│   │   ├── mod.rs
-│   │   └── doc_types.rs  # 文档类型定义
-│   └── cli/
-│       ├── mod.rs
-│       └── commands.rs   # CLI 命令
-└── tests/
-    └── integration_test.rs
-```
-
-## 依赖
-
-- `syn` - Rust 源码解析
-- `clap` - 命令行参数解析
-- `serde` / `serde_json` - JSON 序列化
-- `pulldown-cmark` - Markdown 解析
-- `walkdir` - 目录遍历
-- `toml` - TOML 解析
-
-## 许可证
-
-MIT License

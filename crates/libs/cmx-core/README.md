@@ -1,325 +1,524 @@
 # cmx-core
 
-**cmx-core** 是企业级 ERP 系统的核心库，提供领域模型、数据结构和插件系统的完整实现。
+> CMX 核心数据模型和类型定义模块。
 
-## 📦 模块结构
+## 项目简介
 
-```
-cmx-core/
-├── model/          # 数据模型层
-│   ├── cell/       # 单元格数据值类型系统
-│   ├── data/       # 业务数据传输对象
-│   │   ├── request/    # 请求接口定义
-│   │   ├── response/   # 响应接口定义
-│   │   ├── context/    # 上下文管理
-│   │   └── dataset/    # 行式数据集（支持嵌套结构）
-│   ├── meta/       # 元数据定义
-│   │   ├── base/       # 基础元数据
-│   │   ├── fields/     # 字段定义
-│   │   ├── tables/     # 表定义
+cmx-core 是 cmx-container 项目的核心数据模型层，定义了服务编排、插件系统、数据库操作等模块所需的基础数据结构和类型。
 
-│   ├── domain/     # 领域驱动设计
-│   │   ├── entity/     # 领域实体
-│   │   └── manager/    # 实体管理器
-│   └── cell.rs     # 核心数据类型定义
-└── plugin/         # 插件系统
-    ├── def.rs      # 插件定义与清单
-    └── registry.rs # 插件注册表与验签
+## 快速开始
+
+### 安装
+
+```toml
+[dependencies]
+cmx-core = "0.1.0"
 ```
 
-## 🎯 核心功能
-
-### 1. **统一数据值类型系统** ([cell.rs](file:///crates/libs/cmx-core/src/model/cell.rs))
-
-提供高精度的数据类型支持，适用于 ERP 复杂业务场景：
-
-- **基础类型**: `Null`, `Bool`, `Int`, `Float`, `String`, `Decimal`
-- **时间类型**: `DateTime<Utc>`, `NaiveDate`
-- **优化类型**: `SmolStr` (小字符串优化，减少堆分配)
-- **序列化支持**: 完整的 serde 序列化/反序列化
+### 核心示例
 
 ```rust
-// 使用示例
-let value = DataValue::from(42i32);
-let decimal_val = DataValue::from(Decimal::new(100, 2));
-let date_val = DataValue::from(Utc::now());
-```
-
-### 2. **行式数据集** ([dataset](file:///crates/libs/cmx-core/src/model/data/dataset/mod.rs))
-
-高性能内存数据集，支持嵌套数据结构：
-
-- **Schema 优化**: O(1) 字段查找（维护 name->index 映射）
-- **嵌套支持**: Row 可包含子 DataSet，适合主从表结构
-- **零拷贝读取**: 高效的数据访问模式
-- **序列化友好**: 直接序列化为 JSON，前端友好
-
-```rust
-// 订单头 + 订单行嵌套示例
-let mut lines_ds = DataSet::empty("order_lines", line_schema);
-lines_ds.add_row(Row::new(vec![10.into(), "Mat-A".into(), 5.into()]));
-
-header_row.add_child("order_lines", lines_ds);
-```
-
-### 3. **元数据系统** ([meta](file:///crates/libs/cmx-core/src/model/meta/mod.rs))
-
-完整的数据库表元数据定义：
-
-- **TableDefine**: 表结构定义（列、索引、主键、分区等）
-- **ColumnDefine**: 列定义（类型、约束、外键、多语言支持）
-- **IndexDefine**: 索引定义（唯一索引、复合索引）
-- **多语言支持**: i18n 字段级别的多语言翻译
-- **分区表支持**: RANGE/LIST/HASH/INTERVAL 分区
-
-```rust
-// 表定义示例
-let table_define = TableDefine {
-    table_name: "sale_order".to_string(),
-    display_name: "销售订单".to_string(),
-    columns: vec![/* ... */],
-    primary_keys: vec!["id".to_string()],
-    indexes: vec![/* ... */],
-    i18n: true, // 支持多语言
-    ..default
+use cmx_core::{
+    FunctionInput, FunctionOutput, SVRContext,
+    DbRequest, DbResponse,
+    ServiceCallRequest, ServiceCallResponse,
 };
 ```
 
-### 4. **请求 - 响应框架** ([request](file:///crates/libs/cmx-core/src/model/data/request/mod.rs), [response](file:///crates/libs/cmx-core/src/model/data/response/mod.rs))
+## 核心功能与特性
 
-标准化的服务调用接口：
+| 模块 | 说明 |
+|------|------|
+| `model` | 核心业务数据模型 |
+| `wasm_types` | WASM 运行时相关类型 |
+| `error` | 错误类型定义 |
+
+## 模块结构
+
+```
+cmx-core
+├── src/
+│   ├── lib.rs              # 库入口
+│   ├── error.rs            # 错误类型定义
+│   ├── model/              # 业务数据模型
+│   │   ├── data/           # 数据操作模型
+│   │   ├── domain/         # 领域模型
+│   │   ├── meta/           # 元数据模型
+│   │   └── service/        # 服务编排模型
+│   └── wasm_types/         # WASM 类型定义
+│       ├── mod.rs
+│       ├── cache.rs
+│       ├── common.rs
+│       ├── context.rs
+│       ├── database.rs
+│       ├── plugin.rs
+└── Cargo.toml
+```
+
+## 使用指南
+
+### 一、函数输入输出类型
+
+#### 1.1 FunctionInput 结构体
 
 ```rust
-// 请求 trait
-pub trait CMXRequest: Any + Send + Sync {
-    fn get_request_id(&self) -> &str;
-    fn get_service_name(&self) -> &str;
-    fn get_function_name(&self) -> &str;
-    fn get_parameters(&self) -> &str;
-    fn get_headers(&self) -> &HashMap<String, String>;
-    fn get_timeout(&self) -> u64;
-    fn set_timeout(&mut self, timeout: u64);
-    fn add_header(&mut self, key: String, value: String);
+use cmx_core::{FunctionInput, FunctionOutput, SVRContext};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+
+/// 函数输入结构体 — 固定入参格式
+/// 所有服务编排中的函数都使用此结构体作为入参
+let mut context = SVRContext::new(json!("initial input"));
+context.headers.insert("Authorization".to_string(), "Bearer token".to_string());
+
+let mut binary_data = HashMap::new();
+binary_data.insert("file".to_string(), vec![0x00, 0xFF, 0x12]);
+
+let input = FunctionInput {
+    input: json!({"action": "process", "data": "test"}),
+    context,
+    binary_data,
+};
+```
+
+#### 1.2 FunctionOutput 结构体
+
+```rust
+use cmx_core::FunctionOutput;
+
+/// 函数输出结构体 — 固定出参格式
+let mut output = FunctionOutput::success(json!({
+    "result": "processed",
+    "id": "12345"
+}));
+
+// 添加二进制数据
+output.add_binary("thumbnail", vec![0x00, 0x01, 0x02]);
+```
+
+#### 1.3 SVRContext 结构体
+
+```rust
+use cmx_core::{SVRContext, FunctionInput};
+use serde_json::json;
+
+/// 服务调用上下文 — 在服务编排中持续传递
+let mut context = SVRContext::new(json!({
+    "user_id": 123,
+    "request_id": "req-001"
+}));
+
+// 设置事务 ID（用于事务框）
+context.set_txn_id("tx-456");
+
+// 添加 HTTP 请求头
+context.headers.insert("Content-Type".to_string(), "application/json".to_string());
+
+// 添加前序步骤输出
+context.set_step_output("step_1", json!({"status": "ok", "data": "result1"}));
+context.set_step_output("step_2", json!({"status": "ok", "data": "result2"}));
+
+// 从 FunctionInput 获取上下文
+fn process(input: &FunctionInput) {
+    let initial = &input.context.initial_input;
+    let headers = &input.context.headers;
+    let txn_id = &input.context.txn_id;
+
+    // 获取前序步骤输出
+    if let Some(step1_output) = input.context.get_step_output("step_1") {
+        println!("Step 1 result: {:?}", step1_output);
+    }
 }
-
-// 响应 trait
-pub trait CMXResponse: Any + Send + Sync {
-    fn get_request_id(&self) -> &str;
-    fn get_status_code(&self) -> i32;
-    fn get_data(&self) -> Option<&str>;
-    fn get_error(&self) -> Option<&str>;
-}
 ```
 
-**设计亮点**:
-- 使用 `Any` trait 支持运行时类型识别和向下转型
-- `Send + Sync` 确保多线程安全
-- 适合插件系统、动态加载等反射场景
+### 二、WASM 类型定义
 
-### 5. **插件系统** ([plugin](file:///crates/libs/cmx-core/src/plugin/mod.rs))
-
-基于 WASM 的插件架构，支持安全的插件加载和验签：
-
-#### 插件定义 ([PluginDefinition](file:///crates/libs/cmx-core/src/plugin/def.rs#L42))
-
-```json
-{
-  "id": "com.example.sales",
-  "name": "销售管理插件",
-  "version": "1.0.0",
-  "main_file": "target/sales.wasm",
-  "table_config_files": ["tables/sale_order.json"],
-  "supported_databases": ["postgres", "mysql"],
-  "domain_code": "SALES",
-  "development_languages": ["rust"]
-}
-```
-
-#### 装配清单 ([PluginManifest](file:///crates/libs/cmx-core/src/plugin/def.rs#L123))
-
-ZIP 格式的插件包，包含：
-- **manifest.json**: 装配清单（含签名）
-- **WASM 二进制**: 插件逻辑
-- **表定义 JSON**: 数据库表配置
-- **其他资源**: 静态文件、配置等
-
-#### 安全特性
-
-- **数字签名**: Ed25519 签名防篡改
-- **验签机制**: 加载前验证插件完整性
-- **信任链**: 基于公钥标识的密钥管理
+#### 2.1 DbRequest 数据库请求
 
 ```rust
-// 插件注册表使用
-let registry = PluginRegistry::new();
-registry.load_plugin("plugin.zip", VerifySignatureConfig::Strict)?;
+use cmx_core::wasm_types::{DbRequest, ParamValue};
+
+/// 数据库请求结构体
+let db_req = DbRequest {
+    sql: "SELECT id, name, email FROM users WHERE id = $1 AND status = $2".to_string(),
+    params: Some(vec![
+        ParamValue::Int64(123),
+        ParamValue::String("active".to_string()),
+    ]),
+    dataset_id: Some("default".to_string()),
+    db_id: Some("postgres".to_string()),
+    txn_id: Some("tx-789".to_string()),
+};
 ```
 
-## 🔧 技术栈
-
-### 核心依赖
-
-| 类别 | 库 | 用途 |
-|------|---|------|
-| **序列化** | serde, serde_json | 数据序列化框架 |
-| **日期时间** | chrono | 日期时间处理（支持 serde） |
-| **数值计算** | rust_decimal, bigdecimal | 高精度十进制运算 |
-| **字符串优化** | smol_str | 小字符串内联存储（≤22 字节） |
-| **错误处理** | thiserror | 自定义错误类型 |
-| **唯一 ID** | uuid | UUID v4 生成 |
-| **加密** | ed25519-dalek, base64 | 数字签名与编码 |
-| **压缩** | zip | ZIP 文件处理 |
-
-### 异步与工具
-
-- **futures, tokio-stream, tokio-util**: 异步编程工具
-- **proc-macro2, quote, syn**: 过程宏支持
-- **strum**: 枚举字符串转换
-- **lazy_static, once_cell**: 延迟初始化
-
-## 🏗️ 设计哲学
-
-### 1. **性能优先**
-
-- Schema 使用 HashMap 实现 O(1) 字段查找
-- SmolStr 优化短字符串，减少堆分配
-- 零拷贝设计，避免不必要的数据复制
-
-### 2. **类型安全**
-
-- 强类型枚举 `DataValue` 替代动态 JSON
-- 编译时类型检查，减少运行时错误
-- 完整的序列化/反序列化支持
-
-### 3. **扩展性**
-
-- Trait-based 设计（CMXRequest/CMXResponse）
-- 插件化架构，支持热插拔
-- 元数据驱动，支持动态表结构
-
-### 4. **安全性**
-
-- 插件签名验签机制
-- 多线程安全（Send + Sync）
-- 严格的类型转换和验证
-
-## 📝 使用示例
-
-### 创建数据集
+#### 2.2 DbResponse 数据库响应
 
 ```rust
-use cmx_core::model::data::dataset::{DataSet, Row, Schema, Field};
-use cmx_core::model::cell::{FieldType, DataValue};
-use std::sync::Arc;
+use cmx_core::wasm_types::DbResponse;
 
-// 定义 Schema
-let schema = Arc::new(Schema::new("users", vec![
-    Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-    Field { name: "name".into(), field_type: FieldType::String, label: "姓名".into() },
-]));
-
-// 创建数据集
-let mut ds = DataSet::empty("user_list", schema.clone());
-ds.add_row(Row::new(vec![1.into(), "张三".into()]));
-ds.add_row(Row::new(vec![2.into(), "李四".into()]));
-
-// 序列化为 JSON
-let json = serde_json::to_string_pretty(&ds).unwrap();
+/// 数据库响应结构体
+let db_resp = DbResponse {
+    rows: vec![
+        serde_json::json!({"id": 123, "name": "张三", "email": "zhangsan@example.com"}),
+        serde_json::json!({"id": 456, "name": "李四", "email": "lisi@example.com"}),
+    ],
+    rows_affected: 0,
+    last_insert_id: None,
+};
 ```
 
-### 定义表结构
+#### 2.3 CacheRequest 缓存请求
 
 ```rust
-use cmx_core::model::cell::{TableDefine, ColumnDefine, FieldType, IndexDefine, IndexKind};
+use cmx_core::wasm_types::CacheRequest;
 
+/// 缓存获取请求
+let cache_get = CacheRequest {
+    key: "user:123".to_string(),
+    value: None,
+    ttl_seconds: None,
+};
+
+/// 缓存设置请求
+let cache_set = CacheRequest {
+    key: "user:123".to_string(),
+    value: Some(r#"{"name":"张三","age":30}"#.to_string()),
+    ttl_seconds: Some(3600),
+};
+```
+
+#### 2.4 ServiceCallRequest 服务调用请求
+
+```rust
+use cmx_core::wasm_types::ServiceCallRequest;
+
+/// 服务调用请求结构体
+let call_req = ServiceCallRequest {
+    service_id: "user-service".to_string(),
+    function_name: "get_user".to_string(),
+    input: json!({"user_id": 123}),
+    trace_id: Some("trace-001".to_string()),
+    timeout_ms: Some(5000),
+};
+```
+
+### 三、宿主函数类型
+
+#### 3.1 HostFunctionInput
+
+```rust
+use cmx_core::wasm_types::HostFunctionInput;
+
+/// 宿主函数输入
+let host_input = HostFunctionInput {
+    func_name: "db_query".to_string(),
+    args: vec![
+        serde_json::json!({"sql": "SELECT * FROM users"}),
+    ],
+};
+```
+
+#### 3.2 HostFunctionOutput
+
+```rust
+use cmx_core::wasm_types::HostFunctionOutput;
+
+/// 宿主函数输出
+let host_output = HostFunctionOutput {
+    success: true,
+    result: Some(json!({"rows": [], "count": 0})),
+    error: None,
+};
+```
+
+### 四、领域模型
+
+#### 4.1 Entity 实体
+
+```rust
+use cmx_core::model::domain::{Entity, EntityId};
+
+/// 领域实体
+let entity = Entity {
+    id: EntityId::new("user", 123),
+    name: "张三".to_string(),
+    created_at: chrono::Utc::now(),
+    updated_at: chrono::Utc::now(),
+    metadata: HashMap::new(),
+};
+```
+
+#### 4.2 Plugin 插件
+
+```rust
+use cmx_core::model::domain::Plugin;
+use cmx_core::model::domain::plugin::PluginStatus;
+
+/// 插件信息
+let plugin = Plugin {
+    id: "my-plugin".to_string(),
+    name: "我的插件".to_string(),
+    version: "1.0.0".to_string(),
+    status: PluginStatus::Active,
+    install_path: "/plugins/my-plugin/1.0.0".to_string(),
+    manifest: None,
+};
+```
+
+### 五、服务编排模型
+
+#### 5.1 ServiceOrchestration
+
+```rust
+use cmx_core::model::service::{ServiceOrchestration, ServiceNode};
+
+/// 服务编排定义
+let orchestration = ServiceOrchestration {
+    id: "order-service".to_string(),
+    name: "订单服务".to_string(),
+    version: "1.0.0".to_string(),
+    nodes: vec![
+        ServiceNode {
+            id: "start".to_string(),
+            node_type: "start".to_string(),
+            next: Some("validate".to_string()),
+            ..Default::default()
+        },
+        ServiceNode {
+            id: "validate".to_string(),
+            node_type: "func".to_string(),
+            plugin: Some("validator-plugin".to_string()),
+            function: Some("validate".to_string()),
+            next: Some("process".to_string()),
+            ..Default::default()
+        },
+        ServiceNode {
+            id: "process".to_string(),
+            node_type: "func".to_string(),
+            plugin: Some("order-plugin".to_string()),
+            function: Some("create_order".to_string()),
+            next: Some("end".to_string()),
+            ..Default::default()
+        },
+        ServiceNode {
+            id: "end".to_string(),
+            node_type: "end".to_string(),
+            ..Default::default()
+        },
+    ],
+};
+```
+
+#### 5.2 FlowExecution 流程执行
+
+```rust
+use cmx_core::model::service::{FlowExecution, FlowStatus, StepResult};
+
+/// 流程执行记录
+let execution = FlowExecution {
+    id: "exec-001".to_string(),
+    orchestration_id: "order-service".to_string(),
+    status: FlowStatus::Running,
+    current_node: "validate".to_string(),
+    started_at: chrono::Utc::now(),
+    finished_at: None,
+    step_results: vec![
+        StepResult {
+            node_id: "start".to_string(),
+            status: "completed".to_string(),
+            input: json!({}),
+            output: json!({}),
+            started_at: chrono::Utc::now(),
+            finished_at: chrono::Utc::now(),
+            error: None,
+        },
+    ],
+    context: serde_json::json!({}),
+};
+```
+
+### 六、元数据模型
+
+#### 6.1 TableDefine 表定义
+
+```rust
+use cmx_core::model::meta::{TableDefine, ColumnDefine, ColumnType};
+
+/// 表定义
 let table = TableDefine {
-    table_name: "sale_order".to_string(),
-    display_name: "销售订单".to_string(),
+    name: "users".to_string(),
+    schema: Some("public".to_string()),
     columns: vec![
         ColumnDefine {
             name: "id".to_string(),
-            label: "订单 ID".to_string(),
-            field_type: FieldType::Int,
+            column_type: ColumnType::BigInt,
+            nullable: false,
+            default_value: None,
             is_primary_key: true,
-            is_nullable: false,
-            ..Default::default()
+            is_auto_increment: true,
         },
         ColumnDefine {
-            name: "doc_no".to_string(),
-            label: "单据号".to_string(),
-            field_type: FieldType::String,
-            length: Some(30),
-            ..Default::default()
+            name: "name".to_string(),
+            column_type: ColumnType::Varchar(255),
+            nullable: false,
+            default_value: None,
+            is_primary_key: false,
+            is_auto_increment: false,
+        },
+        ColumnDefine {
+            name: "email".to_string(),
+            column_type: ColumnType::Varchar(255),
+            nullable: false,
+            default_value: None,
+            is_primary_key: false,
+            is_auto_increment: false,
+        },
+        ColumnDefine {
+            name: "created_at".to_string(),
+            column_type: ColumnType::Timestamp,
+            nullable: false,
+            default_value: Some("NOW()".to_string()),
+            is_primary_key: false,
+            is_auto_increment: false,
         },
     ],
-    primary_keys: vec!["id".to_string()],
-    indexes: vec![
-        IndexDefine {
-            name: "uk_doc_no".to_string(),
-            columns: vec!["doc_no".to_string()],
-            kind: IndexKind::Unique,
-        }
-    ],
-    i18n: true, // 支持多语言
-    ..Default::default()
+    indexes: vec![],
+    foreign_keys: vec![],
 };
 ```
 
-### 插件加载
+### 七、错误类型
+
+#### 7.1 CoreError
 
 ```rust
-use cmx_core::plugin::{PluginRegistry, VerifySignatureConfig};
+use cmx_core::error::CoreError;
 
-let registry = PluginRegistry::new();
-
-// 加载并验证插件签名
-match registry.load_plugin("my_plugin.zip", VerifySignatureConfig::Strict) {
-    Ok(plugin_id) => println!("插件加载成功：{}", plugin_id),
-    Err(e) => eprintln!("插件加载失败：{:?}", e),
+match result {
+    Ok(value) => println!("Result: {:?}", value),
+    Err(e) => {
+        match e {
+            CoreError::NotFound(msg) => {
+                eprintln!("Resource not found: {}", msg);
+            }
+            CoreError::InvalidInput(msg) => {
+                eprintln!("Invalid input: {}", msg);
+            }
+            CoreError::SerializationFailed(msg) => {
+                eprintln!("Serialization failed: {}", msg);
+            }
+            CoreError::DeserializationFailed(msg) => {
+                eprintln!("Deserialization failed: {}", msg);
+            }
+            CoreError::Internal(msg) => {
+                eprintln!("Internal error: {}", msg);
+            }
+        }
+    }
 }
 ```
 
-## 🎓 关键概念
-
-### DataValue vs serde_json::Value
-
-| 特性 | DataValue | serde_json::Value |
-|------|-----------|-------------------|
-| **类型精度** | 保留 Decimal/DateTime 类型 | 全部转为 JSON 类型 |
-| **性能** | 栈上存储，零拷贝 | 堆分配为主 |
-| **类型安全** | 强类型枚举 | 动态类型 |
-| **适用场景** | 业务逻辑处理 | 数据交换 |
-
-### Schema 优化原理
+### 八、完整使用示例
 
 ```rust
-// 传统方式：O(n) 查找
-fields.iter().find(|f| f.name == "target")
+use cmx_core::{
+    FunctionInput, FunctionOutput, SVRContext,
+    wasm_types::{DbRequest, DbResponse, ParamValue, CacheRequest, ServiceCallRequest},
+    error::CoreError,
+};
+use serde_json::json;
+use std::collections::HashMap;
 
-// cmx-core 方式：O(1) 查找
-schema.get_index("target") // HashMap 查找
+/// 服务编排函数示例
+fn process_order(input: &FunctionInput) -> Result<FunctionOutput, CoreError> {
+    // 1. 解析输入
+    let order_data = input.parse_json::<OrderInput>()?;
+
+    // 2. 检查缓存
+    let cache_key = format!("order:{}", order_data.order_id);
+    if let Some(cached) = check_cache(&cache_key)? {
+        return Ok(FunctionOutput::success(cached));
+    }
+
+    // 3. 验证数据
+    validate_order(&order_data)?;
+
+    // 4. 数据库操作
+    let db_req = DbRequest {
+        sql: "INSERT INTO orders (user_id, total, status) VALUES ($1, $2, $3) RETURNING id".to_string(),
+        params: Some(vec![
+            ParamValue::Int64(order_data.user_id),
+            ParamValue::Float(order_data.total),
+            ParamValue::String("pending".to_string()),
+        ]),
+        dataset_id: None,
+        db_id: None,
+        txn_id: None,
+    };
+
+    let db_resp = execute_db(db_req)?;
+    let order_id = db_resp.last_insert_id
+        .ok_or_else(|| CoreError::Internal("Failed to get order ID".to_string()))?;
+
+    // 5. 构造结果
+    let result = json!({
+        "order_id": order_id,
+        "status": "created",
+        "created_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    // 6. 写入缓存
+    set_cache(&cache_key, &result)?;
+
+    // 7. 更新上下文中的步骤输出
+    let mut output = FunctionOutput::success(result);
+    output.context.set_step_output("create_order", json!({"order_id": order_id}));
+
+    Ok(output)
+}
+
+/// 订单输入数据
+#[derive(serde::Deserialize)]
+struct OrderInput {
+    order_id: Option<i64>,
+    user_id: i64,
+    items: Vec<OrderItem>,
+    total: f64,
+}
+
+#[derive(serde::Deserialize)]
+struct OrderItem {
+    product_id: String,
+    quantity: i32,
+    price: f64,
+}
+
+fn validate_order(order: &OrderInput) -> Result<(), CoreError> {
+    if order.items.is_empty() {
+        return Err(CoreError::InvalidInput("Order must have at least one item".to_string()));
+    }
+    if order.total <= 0.0 {
+        return Err(CoreError::InvalidInput("Order total must be positive".to_string()));
+    }
+    Ok(())
+}
+
+fn check_cache(key: &str) -> Result<Option<serde_json::Value>, CoreError> {
+    // 实际实现中调用缓存服务
+    Ok(None)
+}
+
+fn set_cache(key: &str, value: &serde_json::Value) -> Result<(), CoreError> {
+    // 实际实现中调用缓存服务
+    Ok(())
+}
+
+fn execute_db(req: DbRequest) -> Result<DbResponse, CoreError> {
+    // 实际实现中调用数据库服务
+    Ok(DbResponse {
+        rows: vec![],
+        rows_affected: 1,
+        last_insert_id: Some(12345),
+    })
+}
 ```
-
-### 插件签名流程
-
-1. **提取载荷**: 从 PluginManifest 提取不含签名的部分
-2. **规范序列化**: 转为规范 JSON 字节（键顺序固定）
-3. **数字签名**: 使用私钥对字节签名（Ed25519）
-4. **Base64 编码**: 将签名转为字符串存入 manifest
-5. **验签**: 反向流程验证完整性
-
-## 📚 后续扩展
-
-- [ ] 增加数组类型支持 `Array(Vec<DataValue>)`
-- [ ] 增加二进制类型支持 `Binary(Vec<u8>)`
-- [ ] 完善查询构建器集成（sea-query）
-- [ ] 增加数据验证规则引擎
-- [ ] 支持更多数据库方言
-
-## 🤝 贡献指南
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
-
-与主项目保持一致
