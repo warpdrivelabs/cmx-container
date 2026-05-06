@@ -83,7 +83,7 @@ impl PluginHostFunctions {
                     serde_json::Value::Null
                 } else {
                     rmp_serde::from_slice(&invoke_result.output)
-                        .unwrap_or_else(|_| serde_json::Value::Null)
+                        .unwrap_or(serde_json::Value::Null)
                 };
                 Ok(Self::ok_response_msgpack(Some(output), Some(invoke_result.elapsed_us)))
             }
@@ -146,7 +146,7 @@ impl PluginHostFunctions {
     fn ok_response_msgpack(output: Option<serde_json::Value>, elapsed_us: Option<u64>) -> Vec<u8> {
         rmp_serde::to_vec(&CallServiceResponse {
             success: true,
-            output: output,
+            output,
             elapsed_us,
             error: None,
         })
