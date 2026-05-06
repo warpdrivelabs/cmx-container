@@ -331,31 +331,7 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
-/// 演示插件间调用
-///
-/// 调用其他插件的服务。
-///
-/// # 输入处理
-/// - `input.input`: JSON 格式的 DemoRequest，传递给目标插件
-///
-/// # 输出
-/// - `result`: JSON 格式的调用结果
-#[plugin_fn]
-pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    // 解析业务参数（input.input 现在是 Value）
-    let request: DemoRequest = serde_json::from_value(input.input.clone())
-        .unwrap_or(DemoRequest {
-            name: "default".to_string(),
-            count: 0,
-        });
 
-//todo 插件函数调用和服务调用
-
-
-
-    Ok(Msgpack(FunctionOutput::new(serde_json::Value::String("插件调用成功".to_string()))))
-
-}
 
 /// 综合测试入口
 ///

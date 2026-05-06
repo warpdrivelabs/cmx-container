@@ -56,6 +56,7 @@
 
 use extism_pdk::*;
 use cmx_plugin_sdk::{FunctionInput, FunctionOutput, HostCaller, DbRequest};
+use cmx_plugin_sdk::{PluginFunRequest, CallServiceRequest};
 use serde::{Deserialize, Serialize};
 
 // ==================== 业务数据结构 ====================
@@ -111,6 +112,97 @@ pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
 
     // 返回标准出参
     Ok(Msgpack(FunctionOutput::from_json(result)))
+}
+
+/// 演示调用指定插件的指定函数
+///
+/// 展示如何使用 HostCaller::call_plugin 调用其他插件的函数。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的 DemoRequest
+///
+/// # 输出
+/// - `result`: JSON 格式的调用结果
+#[plugin_fn]
+pub fn demo_call_plugin(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
+        .unwrap_or(DemoRequest {
+            name: "default".to_string(),
+            count: 0,
+        });
+
+    let plugin_request = PluginFunRequest {
+        plugin_id: "target-plugin".to_string(),
+        function_name: "some_function".to_string(),
+        input: serde_json::json!({"name": request.name, "count": request.count}),
+        initial_input: None,
+        debug: Some(false),
+    };
+
+    match HostCaller::call_plugin(plugin_request) {
+        Ok(result) => {
+            HostCaller::log_info(&format!("调用指定插件成功: {:?}", result))?;
+            let response = DemoResponse {
+                message: format!("调用成功: {:?}", result),
+                total: request.count,
+            };
+            Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+        }
+        Err(e) => {
+            HostCaller::log_error(&format!("调用指定插件失败: {}", e))?;
+            let response = DemoResponse {
+                message: format!("调用失败: {}", e),
+                total: 0,
+            };
+            Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+        }
+    }
+}
+
+/// 演示调用指定服务编排
+///
+/// 展示如何使用 HostCaller::call_service_by_key 执行服务编排。
+///
+/// # 输入处理
+/// - `input.input`: JSON 格式的 DemoRequest
+///
+/// # 输出
+/// - `result`: JSON 格式的服务执行结果
+#[plugin_fn]
+pub fn demo_call_service_by_key(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
+    let request: DemoRequest = serde_json::from_value(input.input.clone())
+        .unwrap_or(DemoRequest {
+            name: "default".to_string(),
+            count: 0,
+        });
+
+    let service_request = CallServiceRequest {
+        service_key: "my-domain/my-service".to_string(),
+        input: serde_json::json!({"name": request.name, "count": request.count}),
+        include_steps: Some(false),
+        debug: Some(false),
+        debug_node_id: None,
+        debug_params: None,
+    };
+
+    match HostCaller::call_service_by_key(service_request) {
+        Ok(result) => {
+            HostCaller::log_info(&format!("调用服务编排成功: {:?}", result))?;
+            let response = DemoResponse {
+                message: format!("服务执行成功: {:?}", result),
+                total: request.count,
+            };
+            Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+        }
+        Err(e) => {
+            HostCaller::log_error(&format!("调用服务编排失败: {}", e))?;
+            let response = DemoResponse {
+                message: format!("服务执行失败: {}", e),
+                total: 0,
+            };
+            Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
+        }
+    }
 }
 
 /// 演示日志功能
@@ -172,7 +264,7 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
     // 写入缓存
     let set_response = HostCaller::cache_set(
         &request.name,
-        &request.count.to_string(),
+        serde_json::Value::String(request.count.to_string()),
         Some(3600),
     )?;
 
@@ -239,43 +331,7 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
 }
 
-/// 演示插件间调用
-///
-/// 调用其他插件的服务。
-///
-/// # 输入处理
-/// - `input.input`: JSON 格式的 DemoRequest，传递给目标插件
-///
-/// # 输出
-/// - `result`: JSON 格式的调用结果
-#[plugin_fn]
-pub fn demo_plugin_call(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    // 解析业务参数（input.input 现在是 Value）
-    let request: DemoRequest = serde_json::from_value(input.input.clone())
-        .unwrap_or(DemoRequest {
-            name: "default".to_string(),
-            count: 0,
-        });
 
-    // 调用其他插件
-    let input_json = serde_json::to_string(&request)?;
-    let plugin_response = HostCaller::call_service(
-        "other-plugin",
-        "some_function",
-        &input_json,
-    )?;
-
-    HostCaller::log_info(&format!("插件调用结果: {:?}", plugin_response))?;
-
-    // 构建响应
-    let response = DemoResponse {
-        message: format!("插件调用成功: {:?}", plugin_response),
-        total: request.count,
-    };
-
-    // 返回标准出参
-    Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&response)?)))
-}
 
 /// 综合测试入口
 ///
@@ -313,7 +369,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     let _ = HostCaller::log_info("测试缓存写入");
 
     // ==================== 测试缓存写入 ====================
-    match HostCaller::cache_set(&request.name, &request.count.to_string(), Some(3600)) {
+    match HostCaller::cache_set(&request.name, serde_json::Value::String(request.count.to_string()), Some(3600)) {
         Ok(_) => results.push("缓存写入测试: 成功".to_string()),
         Err(e) => results.push(format!("缓存写入测试失败: {}", e)),
     }
@@ -328,7 +384,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
 
     // ==================== 测试数据库 ====================
     let query_request = DbRequest {
-        sql: format!("SELECT * from cmx_meta_table_define_version"),
+        sql: "SELECT * from cmx_meta_table_define_version".to_string(),
         params: None,
         dataset_id: None,
         db_id: None,
@@ -341,16 +397,7 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     let _ = HostCaller::log_info("测试插件调用");
 
     // ==================== 测试插件调用 ====================
-    let input_json = serde_json::to_string(&request)?;
-    match HostCaller::call_service(
-        "other-plugin",
-        "some_function",
-        &input_json,
-    ) {
-        Ok(resp) => results.push(format!("插件调用测试: {:?}", resp)),
-        Err(e) => results.push(format!("插件调用测试失败: {}", e)),
-    }
-    // let _ = HostCaller::log_info(serde_json::to_string(&results).unwrap().as_str());
+
 
     // 返回标准出参
     Ok(Msgpack(FunctionOutput::from_json(serde_json::to_value(&results)?)))
@@ -755,6 +802,32 @@ pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
         "txn_id": input.context.txn_id,
         "message": "服务编排执行完成",
     });
+
+    // 写入缓存
+    let set_response = HostCaller::cache_set(
+        "reids_key",
+        serde_json::Value::String("测试redis缓存".to_string()),
+        Some(3600),
+    )?;
+
+    HostCaller::log_info(&format!("缓存写入结果: {:?}", set_response))?;
+
+    let plugin_fun_request = PluginFunRequest {
+        plugin_id: "example_plugin".to_string(),
+        function_name: "count_vowels".to_string(),
+        input: serde_json::Value::String("aabbccddee".to_string()),
+        initial_input: None,
+        debug: None,
+    };
+
+    match HostCaller::call_plugin(plugin_fun_request) {
+        Ok(result) => {
+            HostCaller::log_info(&format!("调用指定插件成功: {:?}", result))?;
+        }
+        Err(e) => {
+            HostCaller::log_error(&format!("调用指定插件失败: {}", e))?;
+        }
+    };
 
     Ok(Msgpack(FunctionOutput::from_json(result)))
 }
