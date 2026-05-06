@@ -3,12 +3,15 @@
 //! 提供模板管理等 API
 
 use axum::Json;
+use cmx_database::get_default_db_manager;
 use percent_encoding::percent_encode;
 use percent_encoding::NON_ALPHANUMERIC;
+use serde_json::json;
+use std::convert::TryFrom;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 use zip::ZipArchive;
 
 use crate::api_response::ApiResp;
@@ -245,7 +248,8 @@ pub async fn create_project(
                         .replace("{{description}}", req.description.as_deref().unwrap_or(""))
                         .replace("{{domain_code}}", req.domain_code.as_deref().unwrap_or(""))
                         .replace("{{application_code}}", req.application_code.as_deref().unwrap_or(""))
-                        .replace("{{module_code}}", req.module_code.as_deref().unwrap_or(""));
+                        .replace("{{module_code}}", req.module_code.as_deref().unwrap_or(""))
+                        .replace("{{datasource_id}}", req.datasource_id.as_deref().unwrap_or(""));
 
                     let mut file = fs::File::create(&target_file).map_err(|e| {
                         crate::error::Error::InternalError(format!("创建文件失败: {}", e))
@@ -264,6 +268,12 @@ pub async fn create_project(
     }
 
     process_template_dir(&extract_dir, &target_dir, &req)?;
+
+    if let Some(datasource_id) = &req.datasource_id {
+        if !datasource_id.is_empty() {
+            create_vscode_settings(&target_dir, datasource_id).await?;
+        }
+    }
 
     // 清理临时目录
     let _ = fs::remove_dir_all(&temp_dir);
@@ -284,4 +294,115 @@ pub async fn create_project(
         message: Some("项目创建成功".to_string()),
         project_url: Some(project_url),
     }))
+}
+
+async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Result<()> {
+    info!("[api] create_vscode_settings called for datasource_id: {}", datasource_id);
+
+    let db_manager = get_default_db_manager();
+
+    let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
+    let params = json!([datasource_id]);
+
+    let dataset = db_manager
+        .query_sql_with_json("default", None, sql, params, "datasource_query")
+        .await
+        .map_err(|e| crate::error::Error::InternalError(
+            format!("查询数据源失败: {}", e)
+        ))?;
+
+    if let Some(row) = dataset.iter().next() {
+        let db_url = row.get_by_name(&dataset.schema, "db_url")
+            .and_then(|v| String::try_from(v.clone()).ok())
+            .ok_or_else(|| crate::error::Error::InternalError(
+                "无法获取 db_url".to_string()
+            ))?;
+
+        let db_type = row.get_by_name(&dataset.schema, "db_type")
+            .and_then(|v| String::try_from(v.clone()).ok())
+            .ok_or_else(|| crate::error::Error::InternalError(
+                "无法获取 db_type".to_string()
+            ))?;
+
+        let driver = match db_type.to_lowercase().as_str() {
+            "postgres" | "postgresql" => "PostgreSQL",
+            "mysql" => "MySQL",
+            "sqlite" | "sqlite3" => "SQLite",
+            _ => &db_type,
+        };
+
+        let new_connection = json!({
+            "driver": driver,
+            "name": datasource_id,
+            "connectionString": db_url,
+            "previewLimit": 50
+        });
+
+        let vscode_dir = target_dir.join(".vscode");
+        fs::create_dir_all(&vscode_dir)
+            .map_err(|e| crate::error::Error::InternalError(
+                format!("创建 .vscode 目录失败: {}", e)
+            ))?;
+
+        let settings_path = vscode_dir.join("settings.json");
+
+        let mut settings_content = if settings_path.exists() {
+            let existing_content = fs::read_to_string(&settings_path)
+                .map_err(|e| crate::error::Error::InternalError(
+                    format!("读取现有 settings.json 失败: {}", e)
+                ))?;
+
+            serde_json::from_str::<serde_json::Value>(&existing_content)
+                .unwrap_or_else(|_| json!({}))
+        } else {
+            json!({
+                "sqltools": {
+                    "connections": []
+                }
+            })
+        };
+
+        let connections = if let Some(sqltools) = settings_content.get_mut("sqltools") {
+            if let Some(conns) = sqltools.get_mut("connections") {
+                conns.take()
+            } else {
+                json!([])
+            }
+        } else {
+            json!([])
+        };
+
+        let mut connections_arr = if let Some(arr) = connections.as_array() {
+            arr.clone()
+        } else {
+            vec![]
+        };
+
+        let connection_exists = connections_arr.iter().any(|conn| {
+            conn.get("name") == Some(&serde_json::Value::String(datasource_id.to_string()))
+        });
+
+        if !connection_exists {
+            connections_arr.push(new_connection);
+            settings_content["sqltools"]["connections"] = json!(connections_arr);
+        } else {
+            info!("[api] 数据源 {} 已存在于 settings.json 中，跳过", datasource_id);
+        }
+
+        let final_content = serde_json::to_string_pretty(&settings_content)
+            .map_err(|e| crate::error::Error::InternalError(
+                format!("序列化 settings.json 失败: {}", e)
+            ))?;
+
+        fs::write(&settings_path, final_content)
+            .map_err(|e| crate::error::Error::InternalError(
+                format!("写入 settings.json 失败: {}", e)
+            ))?;
+
+        info!("[api] 创建/更新 .vscode/settings.json 成功");
+    } else {
+        warn!("[api] 未找到数据源: {}", datasource_id);
+    }
+
+    Ok(())
 }
