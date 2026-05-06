@@ -122,6 +122,8 @@ pub struct PluginDefinition {
     /// 插件提供的服务列表
     #[serde(default)]
     pub services: Vec<PluginService>,
+    /// 数据源ID
+    pub datasource_id: Option<String>,
 }
 
 /// 用于签名的装配清单载荷（不含签名字段，字段顺序固定以保证序列化稳定）。

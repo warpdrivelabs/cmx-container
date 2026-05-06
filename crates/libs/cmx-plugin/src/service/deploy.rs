@@ -133,7 +133,7 @@ impl DeployService {
     ///    - 新版本 = 旧版本 && force_reinstall → 先 UninstallService 再 InstallService
     ///    - 新版本 = 旧版本 && !force_reinstall → 返回 AlreadyInstalled
     ///    - 新版本 < 旧版本 → 返回错误
-    pub async fn deploy(&self, request: DeployRequest) -> PluginResult<DeployResponse> {
+    pub async fn deploy(&self, mut request: DeployRequest) -> PluginResult<DeployResponse> {
         // 步骤1: 获取插件包
         let package_path = self
             .package_utils
@@ -169,6 +169,10 @@ impl DeployService {
             .version
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
+        //如果request中的数据库id为none,使用plugin_def中的datasource_id
+        if request.db_id.is_none() {
+            request.db_id = plugin_def.datasource_id.clone();
+        }
 
         // 步骤5: 查询当前安装状态
         let existing_plugin = self.deps.repository.find_plugin(&plugin_id).await?;
