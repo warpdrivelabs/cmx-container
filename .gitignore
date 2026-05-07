@@ -18,3 +18,4 @@
 /crates/tests/
 /Cargo.lock
 /cache/
+crates/libs/cmx-dev/templates/wasm-plugin-template.zip
