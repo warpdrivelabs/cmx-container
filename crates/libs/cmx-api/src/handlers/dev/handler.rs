@@ -300,18 +300,9 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
     info!("[api] create_vscode_settings called for datasource_id: {}", datasource_id);
 
     let db_manager = get_default_db_manager();
-    let default_db_id =db_manager.get_default_db_id().await;
+    let default_db_id = db_manager.get_default_db_id().await;
 
-    // let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
-    // let params = json!([datasource_id]);
-
-    let dataset = SysDatasourceService::get_by_db_id(db_manager, &default_db_id, &datasource_id).await?;
-    // let dataset = db_manager
-    //     .query_sql_with_json(default_db_id.as_str(), None, sql, params, "datasource_query")
-    //     .await
-    //     .map_err(|e| crate::error::Error::InternalError(
-    //         format!("查询数据源失败: {}", e)
-    //     ))?;
+    let dataset = SysDatasourceService::get_by_db_id(db_manager, &default_db_id, datasource_id).await?;
 
     if let Some(row) = dataset.iter().next() {
         let db_url = row.get_by_name(&dataset.schema, "db_url")
@@ -348,7 +339,7 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
 
         let settings_path = vscode_dir.join("settings.json");
 
-        let mut settings_content = if settings_path.exists() {
+        let mut settings_content: serde_json::Value = if settings_path.exists() {
             let existing_content = fs::read_to_string(&settings_path)
                 .map_err(|e| crate::error::Error::InternalError(
                     format!("读取现有 settings.json 失败: {}", e)
@@ -357,36 +348,24 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
             serde_json::from_str::<serde_json::Value>(&existing_content)
                 .unwrap_or_else(|_| json!({}))
         } else {
-            json!({
-                "sqltools": {
-                    "connections": []
-                }
-            })
+            json!({})
         };
 
-        let connections = if let Some(sqltools) = settings_content.get_mut("sqltools") {
-            if let Some(conns) = sqltools.get_mut("connections") {
-                conns.take()
-            } else {
-                json!([])
-            }
-        } else {
-            json!([])
-        };
+        let connections_key = "sqltools.connections";
+        let connections = settings_content
+            .get(connections_key)
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.clone())
+            .unwrap_or_default();
 
-        let mut connections_arr = if let Some(arr) = connections.as_array() {
-            arr.clone()
-        } else {
-            vec![]
-        };
-
-        let connection_exists = connections_arr.iter().any(|conn| {
+        let connection_exists = connections.iter().any(|conn| {
             conn.get("name") == Some(&serde_json::Value::String(datasource_id.to_string()))
         });
 
         if !connection_exists {
-            connections_arr.push(new_connection);
-            settings_content["sqltools"]["connections"] = json!(connections_arr);
+            let mut new_connections = connections;
+            new_connections.push(new_connection);
+            settings_content[connections_key] = json!(new_connections);
         } else {
             info!("[api] 数据源 {} 已存在于 settings.json 中，跳过", datasource_id);
         }
