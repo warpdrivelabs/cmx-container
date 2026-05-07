@@ -302,8 +302,8 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
     let db_manager = get_default_db_manager();
     let default_db_id =db_manager.get_default_db_id().await;
 
-    let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
-    let params = json!([datasource_id]);
+    // let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
+    // let params = json!([datasource_id]);
 
     let dataset = SysDatasourceService::get_by_db_id(db_manager, &default_db_id, &datasource_id).await?;
     // let dataset = db_manager
