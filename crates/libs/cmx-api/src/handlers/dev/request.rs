@@ -22,4 +22,6 @@ pub struct CreateProjectRequest {
     pub application_code: Option<String>,
     /// 模块编码（可选）
     pub module_code: Option<String>,
+    /// 数据源ID（可选）
+    pub datasource_id: Option<String>,
 }
