@@ -88,7 +88,7 @@ cargo ws publish --allow-branch dev-service
 要手动更改下类似cmx-core = { path = "crates/libs/cmx-core",version = "0.1.3" ,registry = "nora"}的版本号
 ```bash
 # 仅发布（不升级版本）
-cargo ws publish --publish-as-is --registry nora  --allow-branch dev-service  --allow-dirty --no-verify
+cargo ws publish --publish-as-is --registry nora  --allow-branch dev-service  --allow-dirty --no-verify  --no-git-tag
 
 # 不创建git tag
 cargo ws publish  --registry nora  --allow-branch dev-service  --allow-dirty --no-verify --no-git-tag

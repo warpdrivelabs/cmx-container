@@ -25,7 +25,7 @@ resolver = "2"
 # Workspace 包级别的元数据配置
 [workspace.package]
 # 项目版本号
-version = "0.1.3"
+version = "0.1.4"
 # Rust Edition 版本，决定可用的语法特性
 edition = "2024"
 # 项目作者列表
@@ -34,29 +34,29 @@ authors = ["skylake@pansoft.com"]
 # Workspace 依赖统一管理，所有成员 crate 可共享这些依赖
 [workspace.dependencies]
 # 内部依赖 - 核心库
-cmx-core = { path = "crates/libs/cmx-core", version = "0.1.3", registry = "nora" }
+cmx-core = { path = "crates/libs/cmx-core", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 工具库
-cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.3", registry = "nora" }
+cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.4", registry = "nora" }
 # 内部依赖 - API
-cmx-api = { path = "crates/libs/cmx-api", version = "0.1.3", registry = "nora" }
+cmx-api = { path = "crates/libs/cmx-api", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 数据库
-cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.3", registry = "nora" }
+cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 缓存
-cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.3", registry = "nora" }
+cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 元数据
-cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.3", registry = "nora" }
+cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 插件
-cmx-plugin = { path = "crates/libs/cmx-plugin", version = "0.1.3", registry = "nora" }
+cmx-plugin = { path = "crates/libs/cmx-plugin", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 特征定义
-cmx-traits = { path = "crates/libs/cmx-traits", version = "0.1.3", registry = "nora" }
+cmx-traits = { path = "crates/libs/cmx-traits", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 运行时
-cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.3", registry = "nora" }
+cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 服务
-cmx-service = { path = "crates/libs/cmx-service", version = "0.1.3", registry = "nora" }
+cmx-service = { path = "crates/libs/cmx-service", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 插件SDK
-cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.3", registry = "nora" }
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 调试
-cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.3", registry = "nora" }
+cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.4", registry = "nora" }
 
 # 异步运行时 - tokio 提供完整的异步编程支持
 tokio = { version = "1.41", features = ["full"] }
