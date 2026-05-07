@@ -17,7 +17,7 @@ use zip::ZipArchive;
 use crate::api_response::ApiResp;
 use crate::error::Result;
 use cmx_utils::ConfigManager;
-
+use crate::handlers::sys_datasource::SysDatasourceService;
 use super::request::CreateProjectRequest;
 use super::response::{CreateProjectResponse, TemplateInfo};
 
@@ -305,12 +305,13 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
     let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
     let params = json!([datasource_id]);
 
-    let dataset = db_manager
-        .query_sql_with_json(default_db_id.as_str(), None, sql, params, "datasource_query")
-        .await
-        .map_err(|e| crate::error::Error::InternalError(
-            format!("查询数据源失败: {}", e)
-        ))?;
+    let dataset = SysDatasourceService::get_by_db_id(db_manager, &default_db_id, &datasource_id).await?;
+    // let dataset = db_manager
+    //     .query_sql_with_json(default_db_id.as_str(), None, sql, params, "datasource_query")
+    //     .await
+    //     .map_err(|e| crate::error::Error::InternalError(
+    //         format!("查询数据源失败: {}", e)
+    //     ))?;
 
     if let Some(row) = dataset.iter().next() {
         let db_url = row.get_by_name(&dataset.schema, "db_url")
