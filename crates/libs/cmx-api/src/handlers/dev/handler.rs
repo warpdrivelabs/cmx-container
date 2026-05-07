@@ -327,7 +327,7 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
         let new_connection = json!({
             "driver": driver,
             "name": datasource_id,
-            "connectionString": db_url,
+            "connectString": db_url,
             "previewLimit": 50
         });
 
