@@ -675,3 +675,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+`sqlx` **支持**通过连接字符串指定 PostgreSQL 的默认 Schema，但**不能直接使用 `currentSchema` 这个参数名**。
+
+`sqlx` 底层使用的是 PostgreSQL 官方的 `libpq` 驱动协议。在 `libpq` 的标准中，指定搜索路径（Schema）的参数是 `options`，而不是 `currentSchema`（`currentSchema` 通常是 JDBC 或其他特定驱动使用的参数）。
+
+在 `sqlx` 中，你需要使用以下格式来指定 Schema：
+
+```text
+postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx?options=-c%20search_path%3Dmyschema
+```
+
+### 💡 参数拆解说明
+由于 URL 中不能直接包含空格和等号，需要进行 URL 编码：
+* `options=`：`libpq` 用于传递 PostgreSQL 后端启动参数的标准选项。
+* `-c`：表示设置一个配置参数。
+* `search_path=myschema`：PostgreSQL 中用于指定 Schema 搜索路径的真实配置。
+* **URL 编码转换**：`-c search_path=myschema` 经过编码后，空格变成了 `%20`，等号变成了 `%3D`，最终拼接为 `-c%20search_path%3Dmyschema`。
+
+### 🔧 另一种推荐做法
+如果你不想把连接字符串写得这么复杂，也可以在建立 `sqlx` 连接池后，通过执行一条 SQL 语句来动态设置当前会话的 Schema：
+
+```rust
+use sqlx::PgPool;
+
+async fn set_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
+    // 在获取连接后，先执行设置 search_path 的命令
+    sqlx::query("SET search_path TO myschema")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+```
+
+**总结：** 如果你必须写在 `.env` 或连接字符串里，请使用 `?options=-c%20search_path%3D你的模式名`；如果在代码里灵活控制，使用 `SET search_path` 语句会更加直观。
