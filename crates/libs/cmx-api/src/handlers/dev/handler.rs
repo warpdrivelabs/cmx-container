@@ -37,13 +37,13 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
     info!("[api] list_templates called");
 
     let config = ConfigManager::global();
-    
+
     let templates_path = config
         .get_string("templates.path")
         .map_err(|e| crate::error::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
 
     let templates_dir = PathBuf::from(&templates_path);
-    
+
     if !templates_dir.exists() {
         return Err(crate::error::Error::InternalError(format!(
             "模板目录不存在: {}",
@@ -60,9 +60,9 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
         let entry = entry.map_err(|e| {
             crate::error::Error::InternalError(format!("读取目录项失败: {}", e))
         })?;
-        
+
         let path = entry.path();
-        
+
         if path.extension().is_some_and(|ext| ext == "zip") {
             let template_name = path
                 .file_stem()
@@ -139,7 +139,7 @@ pub async fn create_project(
         .map_err(|e| crate::error::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
 
     let template_zip_path = PathBuf::from(&templates_path).join(format!("{}.zip", req.template));
-    
+
     if !template_zip_path.exists() {
         return Ok(Json(CreateProjectResponse {
             code: -1,
@@ -156,7 +156,7 @@ pub async fn create_project(
     // 步骤 4: 解压模板
     let template_zip_data = fs::read(&template_zip_path)
         .map_err(|e| crate::error::Error::InternalError(format!("读取模板文件失败: {}", e)))?;
-    
+
     let reader = std::io::Cursor::new(template_zip_data);
     let mut archive = ZipArchive::new(reader)
         .map_err(|e| crate::error::Error::InternalError(format!("解析ZIP文件失败: {}", e)))?;
@@ -169,7 +169,7 @@ pub async fn create_project(
         let mut file = archive.by_index(i).map_err(|e| {
             crate::error::Error::InternalError(format!("读取ZIP条目失败: {}", e))
         })?;
-        
+
         let outpath = match file.enclosed_name() {
             Some(path) => extract_dir.join(path),
             None => continue,
@@ -213,7 +213,7 @@ pub async fn create_project(
                 crate::error::Error::InternalError(format!("读取目录项失败: {}", e))
             })?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 let dir_name = path.file_name().unwrap().to_str().unwrap();
                 let new_target_dir = target_dir.join(dir_name);
@@ -282,13 +282,13 @@ pub async fn create_project(
     let code_server_url = config
         .get_string("code_server.url")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
-    
+
     let target_path_str = target_dir.to_string_lossy().to_string();
     let encoded_path = percent_encode(target_path_str.as_bytes(), NON_ALPHANUMERIC);
     let project_url = format!("{}?folder={}", code_server_url, encoded_path);
 
     info!("[api] create_project success: project_url={}", project_url);
-    
+
     Ok(Json(CreateProjectResponse {
         code: 0,
         message: Some("项目创建成功".to_string()),
@@ -300,12 +300,13 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
     info!("[api] create_vscode_settings called for datasource_id: {}", datasource_id);
 
     let db_manager = get_default_db_manager();
+    let default_db_id =db_manager.get_default_db_id().await;
 
     let sql = "SELECT db_url, db_type FROM cmx_sys_datasource WHERE db_id = $1";
     let params = json!([datasource_id]);
 
     let dataset = db_manager
-        .query_sql_with_json("default", None, sql, params, "datasource_query")
+        .query_sql_with_json(default_db_id.as_str(), None, sql, params, "datasource_query")
         .await
         .map_err(|e| crate::error::Error::InternalError(
             format!("查询数据源失败: {}", e)
