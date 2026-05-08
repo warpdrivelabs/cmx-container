@@ -269,11 +269,10 @@ pub async fn create_project(
 
     process_template_dir(&extract_dir, &target_dir, &req)?;
 
-    if let Some(datasource_id) = &req.datasource_id {
-        if !datasource_id.is_empty() {
+    if let Some(datasource_id) = &req.datasource_id
+        && !datasource_id.is_empty() {
             create_vscode_settings(&target_dir, datasource_id).await?;
         }
-    }
 
     // 清理临时目录
     let _ = fs::remove_dir_all(&temp_dir);
@@ -354,8 +353,7 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
         let connections_key = "sqltools.connections";
         let connections = settings_content
             .get(connections_key)
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.clone())
+            .and_then(|v| v.as_array()).cloned()
             .unwrap_or_default();
 
         let connection_exists = connections.iter().any(|conn| {

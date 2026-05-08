@@ -221,12 +221,11 @@ pub fn get_code_server_url() -> String {
 }
 
 pub async fn get_code_server_url_async() -> String {
-    if let Ok(url) = std::env::var("CODE_SERVER_URL") {
-        if !url.is_empty() {
+    if let Ok(url) = std::env::var("CODE_SERVER_URL")
+        && !url.is_empty() {
             tracing::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
             return url;
         }
-    }
 
     let plugin_port = std::env::var("PLUGIN_PORT").unwrap_or_else(|_| "9000".to_string());
     let url = format!("http://localhost:{}/config", plugin_port);
@@ -237,10 +236,10 @@ pub async fn get_code_server_url_async() -> String {
         .timeout(std::time::Duration::from_secs(2))
         .build();
 
-    if let Ok(client) = client {
-        if let Ok(resp) = client.get(&url).send().await {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
+    if let Ok(client) = client
+        && let Ok(resp) = client.get(&url).send().await
+            && let Ok(json) = resp.json::<serde_json::Value>().await
+                && let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
                 {
                     tracing::info!(
                         "[cmx-debug] Got code_server_url from config: {}",
@@ -248,9 +247,6 @@ pub async fn get_code_server_url_async() -> String {
                     );
                     return code_server_url.to_string();
                 }
-            }
-        }
-    }
 
     tracing::warn!("[cmx-debug] Failed to get code_server_url, using default");
     "https://dev.cloudmatrix.one:18080".to_string()
@@ -261,9 +257,13 @@ pub fn call_plugin_function(
     func_name: &str,
     input: &JsonValue,
 ) -> Result<JsonValue> {
-    std::env::set_var("EXTISM_DEBUG", "1");
+    unsafe {
+        std::env::set_var("EXTISM_DEBUG", "1");
+    }
     let mut plugin = PluginBuilder::new(wasm_bytes).with_wasi(true).build()?;
-    std::env::remove_var("EXTISM_DEBUG");
+    unsafe {
+        std::env::remove_var("EXTISM_DEBUG");
+    }
 
     let input_bytes = serde_json::to_vec(input)?;
     let result = plugin.call::<&[u8], &[u8]>(func_name, &input_bytes)?;

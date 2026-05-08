@@ -13,13 +13,11 @@ pub fn find_plugin_dir_by_id(plugin_id: &str) -> Option<PathBuf> {
     }
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let path = entry.path();
-        if path.is_dir() {
-            if let Some((id, _, _)) = get_plugin_info_from_manifest(&path) {
-                if id == plugin_id {
+        if path.is_dir()
+            && let Some((id, _, _)) = get_plugin_info_from_manifest(&path)
+                && id == plugin_id {
                     return Some(path);
                 }
-            }
-        }
     }
     None
 }
@@ -40,16 +38,14 @@ pub fn find_wasm_file(dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn read_plugin_json(dir: &Path) -> Option<serde_json::Value> {
-    if let Ok(content) = std::fs::read_to_string(dir.join("manifest.json")) {
-        if let Ok(json) = serde_json::from_str(&content) {
+    if let Ok(content) = std::fs::read_to_string(dir.join("manifest.json"))
+        && let Ok(json) = serde_json::from_str(&content) {
             return Some(json);
         }
-    }
-    if let Ok(content) = std::fs::read_to_string(dir.join("cmx-plugin.json")) {
-        if let Ok(json) = serde_json::from_str(&content) {
+    if let Ok(content) = std::fs::read_to_string(dir.join("cmx-plugin.json"))
+        && let Ok(json) = serde_json::from_str(&content) {
             return Some(json);
         }
-    }
     None
 }
 
@@ -76,11 +72,10 @@ fn find_manifest_file(dir: &Path) -> Option<PathBuf> {
     }
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_manifest_file(&path) {
+        if path.is_dir()
+            && let Some(found) = find_manifest_file(&path) {
                 return Some(found);
             }
-        }
     }
     None
 }
