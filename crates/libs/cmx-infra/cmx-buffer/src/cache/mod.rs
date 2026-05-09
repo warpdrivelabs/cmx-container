@@ -148,6 +148,23 @@ impl GlobalCacheManager {
         )
     }
 
+    /// 使用已有的 RedisClient 初始化全局缓存管理器
+    ///
+    /// 适用于需要共享 RedisClient 的场景（如与 GlobalLockManager 共用同一连接池）。
+    ///
+    /// # 参数
+    /// * `client` - 已创建的 Redis 客户端实例
+    ///
+    /// # 返回值
+    /// * 初始化结果
+    pub fn initialize_with_client(client: RedisClient) -> Result<()> {
+        let cache_manager = CacheManager::new(client);
+        GLOBAL_CACHE_MANAGER
+            .set(Arc::new(cache_manager))
+            .map_err(|_| Error::ConfigError("全局缓存管理器已初始化".to_string()))?;
+        Ok(())
+    }
+
     /// 检查是否已初始化
     ///
     /// # 返回值

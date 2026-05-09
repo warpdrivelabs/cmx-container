@@ -15,7 +15,7 @@
 //! - 插件管理器初始化
 //! - 服务管理器初始化
 
-use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
+use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisClient, RedisConfig};
 use cmx_database::get_default_db_manager;
 use cmx_utils::{ ConfigBuilder, ConfigManager, ConfigResult};
 use serde::Deserialize;
@@ -81,6 +81,8 @@ impl WebConfig {
 
 /// 初始化缓存
 ///
+/// 创建唯一的 RedisClient，由 GlobalCacheManager 和 GlobalLockManager 共享，
+/// 避免创建多个独立的 bb8 连接池。
 pub async fn init_cache() {
     let config = ConfigManager::global();
     let _url_value = match config.get("redis.url") {
@@ -91,15 +93,18 @@ pub async fn init_cache() {
         }
     };
 
-    // let redis_config = RedisConfig::from_config(config);
     let redis_config = config.get_as::<RedisConfig>("redis").unwrap();
 
-    GlobalCacheManager::initialize(redis_config.clone())
+    // 创建唯一的 RedisClient 实例，共享给 CacheManager 和 LockManager
+    let client = RedisClient::new(redis_config)
         .await
+        .expect("Redis 客户端创建失败");
+
+    GlobalCacheManager::initialize_with_client(client.clone())
         .expect("redis初始化失败");
     info!("redis缓存初始化完成");
-    GlobalLockManager::initialize(redis_config)
-        .await
+
+    GlobalLockManager::initialize_with_client(client)
         .expect("redis分布式锁初始化失败");
     info!("redis分布式锁初始化完成");
 }
@@ -177,7 +182,7 @@ pub async fn init_plugins() {
         backup_root: PathBuf::from(backup_root),
         temp_root: PathBuf::from(temp_root),
         default_database_id: default_db_id,
-        node_id: ConfigManager::global().get_string("node.node_id").unwrap_or("default".to_string()),
+        node_id: ConfigManager::global().get_string("node.node_id").ok(),
         ..Default::default()
     };
 

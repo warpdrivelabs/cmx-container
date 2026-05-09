@@ -86,4 +86,21 @@ impl GlobalLockManager {
         GLOBAL_LOCK_MANAGER.get().is_some()
     }
 
+    /// 使用已有的 RedisClient 初始化全局锁管理器
+    ///
+    /// 适用于需要共享 RedisClient 的场景（如与 GlobalCacheManager 共用同一连接池）。
+    ///
+    /// # 参数
+    /// * `client` - 已创建的 Redis 客户端实例
+    ///
+    /// # 返回值
+    /// * 初始化结果
+    pub fn initialize_with_client(client: RedisClient) -> Result<()> {
+        let lock_manager = LockManager::new_with_default_config(client);
+        GLOBAL_LOCK_MANAGER
+            .set(Arc::new(lock_manager))
+            .map_err(|_| Error::ConfigError("全局锁管理器已初始化".to_string()))?;
+        Ok(())
+    }
+
 }

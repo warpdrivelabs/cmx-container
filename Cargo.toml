@@ -166,7 +166,7 @@ strum_macros = "0.27"
 # Base64 编码/解码
 base64 = "0.22"
 # Redis 客户端
-redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script"] }
+redis = { version = "0.27", features = ["aio", "tokio-comp", "rustls", "script", "keep-alive"] }
 # 连接池管理
 bb8 = "0.8"
 # Redis 连接池
