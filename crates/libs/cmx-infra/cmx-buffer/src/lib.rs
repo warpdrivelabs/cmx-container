@@ -13,13 +13,13 @@ pub mod lock;
 pub mod logging;
 
 pub use cache::{
-    CacheManager, CacheOps, GlobalCacheManager,
-    PubSubMessage, PubSubOps, SetOps, SharedSubscriber,
-    SortedSetOps, Subscriber, SubscriberBuilder, TtlOps,
+    CacheManager, CacheOps, ChannelHandler, FnChannelHandler, GlobalCacheManager,
+    GlobalSubscriber, GlobalSubscriberManager, PubSubOps, SetOps,
+    SortedSetOps, TtlOps,
 };
 pub use client::{
     create_shared_client, get_client, get_client_mut, GlobalRedisClient, RedisClient,
-    RedisConnectionRef, SharedRedisClient,
+    RedisConnectionRef, SharedRedisClient, SubscriberConnection,
 };
 pub use config::{CacheConfig, LockConfig, RedisConfig, RedisMode};
 pub use error::{Error, Result};

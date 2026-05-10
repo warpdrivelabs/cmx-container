@@ -48,9 +48,19 @@ pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20,
 [redis]
 url = "redis://192.168.137.95:32496/13"
 #url = "redis://192.168.1.14:6379/13"
+# Redis 运行模式：standalone（单机）或 cluster（集群）
+# mode = "standalone"
+# 集群节点地址（集群模式时必填，逗号分隔）
+# cluster_urls = "redis://node1:6379,redis://node2:6379,redis://node3:6379"
+# Pub/Sub 心跳间隔（秒），0 表示禁用
+# heartbeat_interval = 30
+# 启动时自动订阅的频道（逗号分隔，需填写完整频道名，不会自动加前缀）
+# subscribe_channels = "cmx:plugin:changed"
+# 启动时自动订阅的模式（逗号分隔，支持通配符 * ? []，需填写完整模式，不会自动加前缀）
+# subscribe_patterns = "cmx:*"
 
-[node]
-node_id="0323"
+#[node]
+#node_id="0323"
 
 [templates]
 # 模板目录路径

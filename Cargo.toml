@@ -122,6 +122,8 @@ tower-cookies = "0.11"
 
 # 派生宏 - 派生宏库
 derive_more = { version = "1.0.0-beta", features = ["from", "display"] }
+# 并发 HashMap
+dashmap = "6"
 # 配置管理
 config = { version = "0.15", features = ["toml", "yaml", "json"] }
 # 环境变量 - .env 文件加载

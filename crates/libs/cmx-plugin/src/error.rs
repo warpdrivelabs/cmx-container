@@ -189,7 +189,7 @@ pub enum PluginError {
 
     /// 缓存错误
     #[error("缓存错误: {0}")]
-    Cache(String),
+    Cache(#[from] cmx_buffer::Error),
 
     /// 存储错误
     #[error("存储错误: {0}")]

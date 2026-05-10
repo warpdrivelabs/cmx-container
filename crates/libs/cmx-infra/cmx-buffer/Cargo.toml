@@ -36,3 +36,5 @@ async-trait = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 # Futures 工具
 futures-util = { workspace = true }
+# 并发 HashMap
+dashmap = { workspace = true }

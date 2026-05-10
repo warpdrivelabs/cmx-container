@@ -39,6 +39,12 @@ pub struct RedisConfig {
     /// 默认键前缀
     #[serde(default = "default_key_prefix")]
     pub key_prefix: String,
+    /// 启动时自动订阅的频道列表
+    #[serde(default)]
+    pub subscribe_channels: Vec<String>,
+    /// 启动时自动订阅的模式列表
+    #[serde(default)]
+    pub subscribe_patterns: Vec<String>,
 }
 
 fn default_heartbeat_interval() -> u64 {
@@ -68,6 +74,8 @@ impl RedisConfig {
             connection_timeout: default_connection_timeout(),
             operation_timeout: default_operation_timeout(),
             key_prefix: default_key_prefix(),
+            subscribe_channels: Vec::new(),
+            subscribe_patterns: Vec::new(),
         }
     }
 
@@ -82,6 +90,8 @@ impl RedisConfig {
             connection_timeout: default_connection_timeout(),
             operation_timeout: default_operation_timeout(),
             key_prefix: default_key_prefix(),
+            subscribe_channels: Vec::new(),
+            subscribe_patterns: Vec::new(),
         }
     }
 
@@ -113,6 +123,16 @@ impl RedisConfig {
             .get_int("redis.operation_timeout")
             .unwrap_or(default_operation_timeout() as i64);
 
+        let subscribe_channels = config
+            .get_string("redis.subscribe_channels")
+            .map(|s| s.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect())
+            .unwrap_or_default();
+
+        let subscribe_patterns = config
+            .get_string("redis.subscribe_patterns")
+            .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+            .unwrap_or_default();
+
         RedisConfig {
             url,
             mode,
@@ -121,6 +141,8 @@ impl RedisConfig {
             connection_timeout: connection_timeout as u64,
             operation_timeout: operation_timeout as u64,
             key_prefix: default_key_prefix(),
+            subscribe_channels,
+            subscribe_patterns,
         }
     }
 
@@ -157,6 +179,18 @@ impl RedisConfig {
     /// 设置键前缀
     pub fn with_key_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.key_prefix = prefix.into();
+        self
+    }
+
+    /// 设置启动时自动订阅的频道列表
+    pub fn with_subscribe_channels(mut self, channels: Vec<String>) -> Self {
+        self.subscribe_channels = channels;
+        self
+    }
+
+    /// 设置启动时自动订阅的模式列表
+    pub fn with_subscribe_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.subscribe_patterns = patterns;
         self
     }
 

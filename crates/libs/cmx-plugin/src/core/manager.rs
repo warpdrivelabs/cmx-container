@@ -517,7 +517,7 @@ impl PluginManager {
         }
 
         // 启动 Redis Pub/Sub 订阅，监听跨实例插件变更通知
-        // 使用自动重连机制：连接断开后等待并重新订阅
+        // 使用 GlobalSubscriber 统一管理订阅，内置自动重连和自动重新订阅
         if let Some(ref _pubsub) = self.plugin_notifier {
             let handler = crate::service::plugin_sync::PluginChangeHandler::new(
                 self.repository.clone(),
@@ -528,48 +528,37 @@ impl PluginManager {
             );
             let handler = Arc::new(handler);
 
-            let cache_manager = cmx_buffer::GlobalCacheManager::get();
-            let redis_url = cache_manager.client().config().url.clone();
-            let full_channel = cache_manager.client().build_key(crate::cluster::notification::PLUGIN_CHANGE_CHANNEL);
+            let full_channel = crate::cluster::notification::PLUGIN_CHANGE_CHANNEL.to_string();
 
-            tokio::spawn(async move {
-                let mut retry_count: u32 = 0;
-                loop {
-                    match cmx_buffer::Subscriber::new(&redis_url, vec![full_channel.clone()]).await {
-                        Ok(mut subscriber) => {
-                            retry_count = 0;
-                            tracing::info!("已启动插件变更通知订阅");
-                            while let Some(msg) = subscriber.recv().await {
-                                tracing::trace!(
-                                    channel = %msg.channel,
-                                    payload = %msg.payload,
-                                    "收到 Redis Pub/Sub 消息"
-                                );
-                                match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&msg.payload) {
-                                    Ok(notification) => {
-                                        tracing::debug!(
-                                            plugin_id = %notification.plugin_id,
-                                            action = ?notification.action,
-                                            timestamp = %notification.timestamp,
-                                            "收到插件变更通知，开始处理"
-                                        );
-                                        handler.handle(&notification).await;
-                                    }
-                                    Err(e) => {
-                                        tracing::debug!("解析插件变更通知失败: {}", e);
-                                    }
-                                }
-                            }
-                            tracing::info!("插件变更订阅连接断开，将自动重连");
+            // 初始化全局订阅者
+            if !cmx_buffer::GlobalSubscriberManager::is_initialized() {
+                cmx_buffer::GlobalSubscriberManager::initialize().await?;
+            }
+
+            let subscriber = cmx_buffer::GlobalSubscriberManager::get();
+            subscriber.register_channel_fn(&full_channel, move |channel, payload| {
+                tracing::debug!(channel = %channel, "收到 Redis Pub/Sub 消息");
+                let handler = handler.clone();
+                let payload = payload.to_string();
+                tokio::spawn(async move {
+                    match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&payload) {
+                        Ok(notification) => {
+                            tracing::debug!(
+                                plugin_id = %notification.plugin_id,
+                                action = ?notification.action,
+                                timestamp = %notification.timestamp,
+                                "收到插件变更通知，开始处理"
+                            );
+                            handler.handle(&notification).await;
                         }
                         Err(e) => {
-                            retry_count += 1;
-                            tracing::error!("启动插件变更订阅失败(第{}次): {}，将重试", retry_count, e);
+                            tracing::debug!("解析插件变更通知失败: {}", e);
                         }
                     }
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                }
-            });
+                });
+            }).await?;
+
+            tracing::info!("已启动插件变更通知订阅（GlobalSubscriber + 自动重连）");
         }
 
         *initialized = true;

@@ -9,7 +9,10 @@ pub mod sorted_set;
 pub mod ttl;
 
 pub use ops::CacheOps;
-pub use pubsub::{PubSubMessage, PubSubOps, SharedSubscriber, Subscriber, SubscriberBuilder};
+pub use pubsub::{
+    ChannelHandler, FnChannelHandler, GlobalSubscriber, GlobalSubscriberManager,
+    PubSubOps,
+};
 pub use set::SetOps;
 pub use sorted_set::SortedSetOps;
 pub use ttl::TtlOps;

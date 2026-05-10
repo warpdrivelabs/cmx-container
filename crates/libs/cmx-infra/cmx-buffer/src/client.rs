@@ -53,6 +53,73 @@ impl redis::aio::ConnectionLike for RedisConnectionRef {
     }
 }
 
+/// 订阅专用连接，独立于主连接
+///
+/// 单机模式：ConnectionManager + set_automatic_resubscription()
+///   → 自动检测断线（Disconnection push）+ 自动重新订阅
+/// 集群模式：ClusterConnection + 内置 SubscriptionTracker
+///   → 需要心跳 PING 触发重连 + 自动重新订阅
+pub enum SubscriberConnection {
+    /// 单机模式 - ConnectionManager（自带断线重连 + 自动重新订阅）
+    Standalone(redis::aio::ConnectionManager),
+    /// 集群模式 - ClusterConnection（自带重连 + SubscriptionTracker 自动重新订阅）
+    Cluster(redis::cluster_async::ClusterConnection),
+}
+
+impl SubscriberConnection {
+    /// 订阅频道
+    pub async fn subscribe(&mut self, channel: &str) -> Result<()> {
+        match self {
+            Self::Standalone(conn) => {
+                conn.subscribe(channel).await?;
+            }
+            Self::Cluster(conn) => {
+                conn.subscribe(channel).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 取消订阅频道
+    pub async fn unsubscribe(&mut self, channel: &str) -> Result<()> {
+        match self {
+            Self::Standalone(conn) => {
+                conn.unsubscribe(channel).await?;
+            }
+            Self::Cluster(conn) => {
+                conn.unsubscribe(channel).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 模式订阅
+    pub async fn psubscribe(&mut self, pattern: &str) -> Result<()> {
+        match self {
+            Self::Standalone(conn) => {
+                conn.psubscribe(pattern).await?;
+            }
+            Self::Cluster(conn) => {
+                conn.psubscribe(pattern).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 取消模式订阅
+    pub async fn punsubscribe(&mut self, pattern: &str) -> Result<()> {
+        match self {
+            Self::Standalone(conn) => {
+                conn.punsubscribe(pattern).await?;
+            }
+            Self::Cluster(conn) => {
+                conn.punsubscribe(pattern).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Redis 客户端包装器
 ///
 /// 使用 redis-rs 原生异步连接，无需外部连接池。
@@ -175,6 +242,67 @@ impl RedisClient {
     pub async fn close(&self) -> Result<()> {
         info!("关闭 Redis 连接");
         Ok(())
+    }
+
+    /// 创建专用的 Pub/Sub 订阅连接（带 push_sender）
+    ///
+    /// 此连接独立于主连接，专用于订阅和接收推送消息。
+    /// 使用 RESP3 协议 + push_sender 统一单机和集群的消息接收。
+    /// 内置自动重连和自动重新订阅机制。
+    pub async fn create_subscriber_connection(
+        &self,
+    ) -> Result<(
+        SubscriberConnection,
+        tokio::sync::mpsc::UnboundedReceiver<redis::PushInfo>,
+    )> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        match self.config.mode {
+            RedisMode::Standalone => {
+                info!("创建 Pub/Sub 订阅连接（单机 - ConnectionManager + 自动重新订阅）");
+                let url = Self::ensure_resp3_url(&self.config.url);
+                let client = redis::Client::open(url.as_str())
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                let conn_manager = client
+                    .get_connection_manager_with_config(
+                        redis::aio::ConnectionManagerConfig::new()
+                            .set_push_sender(tx)
+                            .set_automatic_resubscription(),
+                    )
+                    .await
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                Ok((SubscriberConnection::Standalone(conn_manager), rx))
+            }
+            RedisMode::Cluster => {
+                if self.config.cluster_urls.is_empty() {
+                    return Err(Error::ConfigError(
+                        "集群模式需要至少一个节点地址 (cluster_urls)".to_string(),
+                    ));
+                }
+                info!("创建 Pub/Sub 订阅连接（集群 - ClusterConnection + 内置 SubscriptionTracker）");
+                let urls: Vec<&str> = self.config.cluster_urls.iter().map(|s| s.as_str()).collect();
+                let cluster_client = redis::cluster::ClusterClientBuilder::new(urls)
+                    .use_protocol(redis::ProtocolVersion::RESP3)
+                    .push_sender(tx)
+                    .build()
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                let cluster_conn = cluster_client
+                    .get_async_connection()
+                    .await
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                Ok((SubscriberConnection::Cluster(cluster_conn), rx))
+            }
+        }
+    }
+
+    /// 确保 URL 包含 protocol=3 参数
+    fn ensure_resp3_url(url: &str) -> String {
+        if url.contains("protocol=3") {
+            url.to_string()
+        } else if url.contains('?') {
+            format!("{}&protocol=3", url)
+        } else {
+            format!("{}?protocol=3", url)
+        }
     }
 }
 
