@@ -35,7 +35,7 @@ impl SortedSetOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("ZADD", &full_key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
 
         let mut cmd = redis::cmd("ZADD");
         cmd.arg(&full_key);
@@ -43,7 +43,7 @@ impl SortedSetOps {
             cmd.arg(score).arg(member);
         }
 
-        let added: u64 = cmd.query_async(&mut *conn)
+        let added: u64 = cmd.query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -64,12 +64,12 @@ impl SortedSetOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("ZADD", &full_key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let added: u64 = redis::cmd("ZADD")
             .arg(&full_key)
             .arg(score)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -89,13 +89,13 @@ impl SortedSetOps {
     pub async fn zadd_nx(&self, key: &str, score: f64, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let added: u64 = redis::cmd("ZADD")
             .arg(&full_key)
             .arg("NX")
             .arg(score)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -114,13 +114,13 @@ impl SortedSetOps {
     pub async fn zadd_xx(&self, key: &str, score: f64, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let updated: u64 = redis::cmd("ZADD")
             .arg(&full_key)
             .arg("XX")
             .arg(score)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -139,14 +139,14 @@ impl SortedSetOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("ZREM", &full_key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_key.clone())
             .chain(members.iter().map(|s| s.to_string()))
             .collect();
 
         let removed: u64 = redis::cmd("ZREM")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -165,11 +165,11 @@ impl SortedSetOps {
     pub async fn zrem_one(&self, key: &str, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let removed: u64 = redis::cmd("ZREM")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -188,12 +188,12 @@ impl SortedSetOps {
     pub async fn zrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("ZRANGE")
             .arg(&full_key)
             .arg(start)
             .arg(stop)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -212,13 +212,13 @@ impl SortedSetOps {
     pub async fn zrange_with_scores(&self, key: &str, start: i64, stop: i64) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<(String, f64)> = redis::cmd("ZRANGE")
             .arg(&full_key)
             .arg(start)
             .arg(stop)
             .arg("WITHSCORES")
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -237,12 +237,12 @@ impl SortedSetOps {
     pub async fn zrevrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("ZREVRANGE")
             .arg(&full_key)
             .arg(start)
             .arg(stop)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -261,13 +261,13 @@ impl SortedSetOps {
     pub async fn zrevrange_with_scores(&self, key: &str, start: i64, stop: i64) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<(String, f64)> = redis::cmd("ZREVRANGE")
             .arg(&full_key)
             .arg(start)
             .arg(stop)
             .arg("WITHSCORES")
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -286,12 +286,12 @@ impl SortedSetOps {
     pub async fn zrangebyscore(&self, key: &str, min: f64, max: f64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("ZRANGEBYSCORE")
             .arg(&full_key)
             .arg(min)
             .arg(max)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -312,7 +312,7 @@ impl SortedSetOps {
     pub async fn zrangebyscore_limit(&self, key: &str, min: f64, max: f64, offset: i64, count: i64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("ZRANGEBYSCORE")
             .arg(&full_key)
             .arg(min)
@@ -320,7 +320,7 @@ impl SortedSetOps {
             .arg("LIMIT")
             .arg(offset)
             .arg(count)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -338,11 +338,11 @@ impl SortedSetOps {
     pub async fn zscore(&self, key: &str, member: &str) -> Result<Option<f64>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let score: Option<f64> = redis::cmd("ZSCORE")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -360,11 +360,11 @@ impl SortedSetOps {
     pub async fn zrank(&self, key: &str, member: &str) -> Result<Option<u64>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let rank: Option<u64> = redis::cmd("ZRANK")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -382,11 +382,11 @@ impl SortedSetOps {
     pub async fn zrevrank(&self, key: &str, member: &str) -> Result<Option<u64>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let rank: Option<u64> = redis::cmd("ZREVRANK")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -403,10 +403,10 @@ impl SortedSetOps {
     pub async fn zcard(&self, key: &str) -> Result<u64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let count: u64 = redis::cmd("ZCARD")
             .arg(&full_key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -425,12 +425,12 @@ impl SortedSetOps {
     pub async fn zcount(&self, key: &str, min: f64, max: f64) -> Result<u64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let count: u64 = redis::cmd("ZCOUNT")
             .arg(&full_key)
             .arg(min)
             .arg(max)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -449,12 +449,12 @@ impl SortedSetOps {
     pub async fn zincrby(&self, key: &str, delta: f64, member: &str) -> Result<f64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let new_score: f64 = redis::cmd("ZINCRBY")
             .arg(&full_key)
             .arg(delta)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -473,12 +473,12 @@ impl SortedSetOps {
     pub async fn zremrangebyrank(&self, key: &str, start: i64, stop: i64) -> Result<u64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let removed: u64 = redis::cmd("ZREMRANGEBYRANK")
             .arg(&full_key)
             .arg(start)
             .arg(stop)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -497,12 +497,12 @@ impl SortedSetOps {
     pub async fn zremrangebyscore(&self, key: &str, min: f64, max: f64) -> Result<u64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let removed: u64 = redis::cmd("ZREMRANGEBYSCORE")
             .arg(&full_key)
             .arg(min)
             .arg(max)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -520,11 +520,11 @@ impl SortedSetOps {
     pub async fn zpopmin(&self, key: &str, count: u64) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<(String, f64)> = redis::cmd("ZPOPMIN")
             .arg(&full_key)
             .arg(count)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -542,11 +542,11 @@ impl SortedSetOps {
     pub async fn zpopmax(&self, key: &str, count: u64) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<(String, f64)> = redis::cmd("ZPOPMAX")
             .arg(&full_key)
             .arg(count)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -565,12 +565,12 @@ impl SortedSetOps {
         let full_dest = self.client.build_key(dest);
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let count: u64 = redis::cmd("ZUNIONSTORE")
             .arg(&full_dest)
             .arg(full_keys.len())
             .arg(full_keys.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -589,12 +589,12 @@ impl SortedSetOps {
         let full_dest = self.client.build_key(dest);
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let count: u64 = redis::cmd("ZINTERSTORE")
             .arg(&full_dest)
             .arg(full_keys.len())
             .arg(full_keys.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 

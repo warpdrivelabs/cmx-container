@@ -1,16 +1,13 @@
 use crate::client::RedisClient;
 use crate::error::{Error, Result};
 use crate::logging::OperationTimer;
+use futures_util::StreamExt;
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
-use futures_util::StreamExt;
+use tracing::{info, warn};
 
-// 缓存操作模块 - 发布/订阅操作
-
-/// 作者: AI Assistant
-/// 日期: 2026-03-16
-///
 /// 发布/订阅操作器
 pub struct PubSubOps {
     client: RedisClient,
@@ -28,22 +25,15 @@ impl PubSubOps {
     }
 
     /// 向频道发布消息
-    ///
-    /// # 参数
-    /// * `channel` - 频道名称
-    /// * `message` - 要发布的消息
-    ///
-    /// # 返回值
-    /// * `Result<u64>` - 接收到消息的订阅者数量
     pub async fn publish(&self, channel: &str, message: &str) -> Result<u64> {
         let full_channel = self.client.build_key(channel);
         let timer = OperationTimer::new("PUBLISH", &full_channel);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let subscribers: u64 = redis::cmd("PUBLISH")
             .arg(&full_channel)
             .arg(message)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -52,27 +42,14 @@ impl PubSubOps {
     }
 
     /// 向频道发布JSON可序列化的消息
-    ///
-    /// # 参数
-    /// * `channel` - 频道名称
-    /// * `message` - 要发布的可序列化消息
-    ///
-    /// # 返回值
-    /// * `Result<u64>` - 接收到消息的订阅者数量
     pub async fn publish_json<T: Serialize>(&self, channel: &str, message: &T) -> Result<u64> {
         let json = serde_json::to_string(message)?;
         self.publish(channel, &json).await
     }
 
     /// 获取匹配模式的活动频道列表
-    ///
-    /// # 参数
-    /// * `pattern` - 可选的匹配模式
-    ///
-    /// # 返回值
-    /// * `Result<Vec<String>>` - 活动频道名称列表
     pub async fn pubsub_channels(&self, pattern: Option<&str>) -> Result<Vec<String>> {
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
 
         let mut cmd = redis::cmd("PUBSUB");
         cmd.arg("CHANNELS");
@@ -80,7 +57,8 @@ impl PubSubOps {
             cmd.arg(p);
         }
 
-        let channels: Vec<String> = cmd.query_async(&mut *conn)
+        let channels: Vec<String> = cmd
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -88,18 +66,13 @@ impl PubSubOps {
     }
 
     /// 获取频道的订阅者数量
-    ///
-    /// # 参数
-    /// * `channels` - 频道名称数组
-    ///
-    /// # 返回值
-    /// * `Result<Vec<(String, u64)>>` - 频道及其订阅者数量的元组列表
     pub async fn pubsub_numsub(&self, channels: &[&str]) -> Result<Vec<(String, u64)>> {
-        let full_channels: Vec<String> = channels.iter()
+        let full_channels: Vec<String> = channels
+            .iter()
             .map(|c| self.client.build_key(c))
             .collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
 
         let mut cmd = redis::cmd("PUBSUB");
         cmd.arg("NUMSUB");
@@ -107,7 +80,8 @@ impl PubSubOps {
             cmd.arg(ch);
         }
 
-        let result: Vec<(String, u64)> = cmd.query_async(&mut *conn)
+        let result: Vec<(String, u64)> = cmd
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -115,15 +89,12 @@ impl PubSubOps {
     }
 
     /// 获取模式订阅的数量
-    ///
-    /// # 返回值
-    /// * `Result<u64>` - 使用模式匹配订阅的客户端总数
     pub async fn pubsub_numpat(&self) -> Result<u64> {
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
 
         let count: u64 = redis::cmd("PUBSUB")
             .arg("NUMPAT")
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -140,89 +111,152 @@ pub struct PubSubMessage {
     pub payload: String,
 }
 
-/// 订阅者
+/// 订阅者构建器
+pub struct SubscriberBuilder {
+    url: String,
+    channels: Vec<String>,
+    patterns: Vec<String>,
+    heartbeat_interval: Duration,
+}
+
+impl SubscriberBuilder {
+    /// 创建新的订阅者构建器
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            channels: Vec::new(),
+            patterns: Vec::new(),
+            heartbeat_interval: Duration::from_secs(30),
+        }
+    }
+
+    /// 设置要订阅的频道
+    pub fn channels(mut self, channels: Vec<String>) -> Self {
+        self.channels = channels;
+        self
+    }
+
+    /// 设置要订阅的模式
+    pub fn patterns(mut self, patterns: Vec<String>) -> Self {
+        self.patterns = patterns;
+        self
+    }
+
+    /// 设置心跳间隔
+    pub fn heartbeat_interval(mut self, interval: Duration) -> Self {
+        self.heartbeat_interval = interval;
+        self
+    }
+
+    /// 构建订阅者
+    pub async fn build(self) -> Result<Subscriber> {
+        let client = redis::Client::open(self.url.as_str())?;
+        let pubsub = client.get_async_pubsub().await?;
+
+        let (mut sink, stream) = pubsub.split();
+
+        for channel in &self.channels {
+            sink.subscribe(channel).await.map_err(|e| {
+                Error::PubSubError(format!("订阅频道 {} 失败: {}", channel, e))
+            })?;
+        }
+        for pattern in &self.patterns {
+            sink.psubscribe(pattern).await.map_err(|e| {
+                Error::PubSubError(format!("订阅模式 {} 失败: {}", pattern, e))
+            })?;
+        }
+
+        let (tx, rx) = mpsc::channel(100);
+
+        let heartbeat_handle = Self::spawn_heartbeat(sink, self.heartbeat_interval);
+        let msg_handle = Self::spawn_message_reader(stream, tx);
+
+        Ok(Subscriber {
+            rx,
+            heartbeat_handle,
+            msg_handle,
+        })
+    }
+
+    /// 启动心跳任务
+    fn spawn_heartbeat(
+        mut sink: redis::aio::PubSubSink,
+        interval: Duration,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(interval);
+            loop {
+                interval.tick().await;
+                match sink.ping::<redis::Value>().await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!(error = %e, "PubSub 心跳失败，连接可能已断开");
+                        break;
+                    }
+                }
+            }
+        })
+    }
+
+    /// 启动消息读取任务
+    fn spawn_message_reader(
+        stream: redis::aio::PubSubStream,
+        tx: mpsc::Sender<PubSubMessage>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut stream = Box::pin(stream);
+            while let Some(msg) = stream.next().await {
+                let channel = msg.get_channel_name().to_string();
+                if let Ok(payload) = msg.get_payload::<String>()
+                    && tx.send(PubSubMessage { channel, payload }).await.is_err()
+                {
+                    break;
+                }
+            }
+            info!("PubSub 消息读取任务结束");
+        })
+    }
+}
+
+/// 订阅者（带心跳保活）
 pub struct Subscriber {
     rx: mpsc::Receiver<PubSubMessage>,
-    _handle: tokio::task::JoinHandle<()>,
+    heartbeat_handle: tokio::task::JoinHandle<()>,
+    msg_handle: tokio::task::JoinHandle<()>,
 }
 
 impl Subscriber {
-    /// 为给定频道创建新的订阅者
-    ///
-    /// # 参数
-    /// * `url` - Redis 服务器连接 URL
-    /// * `channels` - 要订阅的频道列表
-    ///
-    /// # 返回值
-    /// * `Result<Self>` - 订阅者实例
+    /// 为给定频道创建新的订阅者（默认 30 秒心跳）
     pub async fn new(url: &str, channels: Vec<String>) -> Result<Self> {
-        let client = redis::Client::open(url)?;
-        let mut pubsub = client.get_async_pubsub().await?;
-
-        for channel in &channels {
-            pubsub.subscribe(channel).await?;
-        }
-
-        let (tx, rx) = mpsc::channel(100);
-
-        let handle = tokio::spawn(async move {
-            let mut stream = pubsub.on_message();
-            while let Some(msg) = stream.next().await {
-                let channel = msg.get_channel_name().to_string();
-                if let Ok(payload) = msg.get_payload::<String>() {
-                    let _ = tx.send(PubSubMessage { channel, payload }).await;
-                }
-            }
-        });
-
-        Ok(Self { rx, _handle: handle })
+        SubscriberBuilder::new(url)
+            .channels(channels)
+            .build()
+            .await
     }
 
-    /// 使用模式匹配创建订阅者
-    ///
-    /// # 参数
-    /// * `url` - Redis 服务器连接 URL
-    /// * `patterns` - 要订阅的模式列表
-    ///
-    /// # 返回值
-    /// * `Result<Self>` - 订阅者实例
+    /// 使用模式匹配创建订阅者（默认 30 秒心跳）
     pub async fn with_patterns(url: &str, patterns: Vec<String>) -> Result<Self> {
-        let client = redis::Client::open(url)?;
-        let mut pubsub = client.get_async_pubsub().await?;
-
-        for pattern in &patterns {
-            pubsub.psubscribe(pattern).await?;
-        }
-
-        let (tx, rx) = mpsc::channel(100);
-
-        let handle = tokio::spawn(async move {
-            let mut stream = pubsub.on_message();
-            while let Some(msg) = stream.next().await {
-                let channel = msg.get_channel_name().to_string();
-                if let Ok(payload) = msg.get_payload::<String>() {
-                    let _ = tx.send(PubSubMessage { channel, payload }).await;
-                }
-            }
-        });
-
-        Ok(Self { rx, _handle: handle })
+        SubscriberBuilder::new(url)
+            .patterns(patterns)
+            .build()
+            .await
     }
 
     /// 接收下一条消息
-    ///
-    /// # 返回值
-    /// * `Option<PubSubMessage>` - 如果有消息则返回Some(消息)，否则返回None
     pub async fn recv(&mut self) -> Option<PubSubMessage> {
         self.rx.recv().await
     }
 
     /// 尝试接收消息（非阻塞）
-    ///
-    /// # 返回值
-    /// * `Option<PubSubMessage>` - 如果有消息则返回Some(消息)，否则返回None
     pub fn try_recv(&mut self) -> Option<PubSubMessage> {
         self.rx.try_recv().ok()
+    }
+}
+
+impl Drop for Subscriber {
+    fn drop(&mut self) {
+        self.heartbeat_handle.abort();
+        self.msg_handle.abort();
     }
 }
 
@@ -233,13 +267,6 @@ pub struct SharedSubscriber {
 
 impl SharedSubscriber {
     /// 创建新的共享订阅者
-    ///
-    /// # 参数
-    /// * `url` - Redis 服务器连接 URL
-    /// * `channels` - 要订阅的频道列表
-    ///
-    /// # 返回值
-    /// * `Result<Self>` - 共享订阅者实例
     pub async fn new(url: &str, channels: Vec<String>) -> Result<Self> {
         let subscriber = Subscriber::new(url, channels).await?;
         Ok(Self {
@@ -248,9 +275,6 @@ impl SharedSubscriber {
     }
 
     /// 接收下一条消息
-    ///
-    /// # 返回值
-    /// * `Option<PubSubMessage>` - 如果有消息则返回Some(消息)，否则返回None
     pub async fn recv(&self) -> Option<PubSubMessage> {
         self.inner.lock().await.recv().await
     }

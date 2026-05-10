@@ -12,7 +12,6 @@ use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::storage::TempDirCleanup;
@@ -21,6 +20,7 @@ use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
 use crate::service::data_parser::ServiceParseParams;
 use chrono::Utc;
+use cmx_buffer::LockManager;
 use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
 use cmx_traits::{plugin_events, PluginLifecyclePayload};
@@ -65,8 +65,6 @@ pub struct UpgradeResponse {
 pub struct UpgradeServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 部署仓库
-    pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
 
@@ -90,14 +88,16 @@ pub struct UpgradeServiceDeps {
     pub temp_root: PathBuf,
     /// 默认数据库ID
     pub default_database_id: String,
-    /// 节点ID
-    pub node_id: String,
     /// 节点名称
     pub node_name: Option<String>,
     /// 节点类型
     pub node_type: Option<String>,
     /// 服务存储
     pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
+    /// 跨实例插件变更通知器
+    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
+    /// 分布式锁管理器
+    pub lock_manager: Option<Arc<LockManager>>,
 }
 
 /// 升级服务
@@ -143,22 +143,7 @@ impl UpgradeService {
 
         let old_version = plugin.version.clone();
 
-        // 步骤2: 检查节点部署记录（用于验证插件是否已部署在此节点）
-        let _existing_deployment = self
-            .deps
-            .deployment_repository
-            .find_deployment(&request.plugin_id, &self.deps.node_id, &old_version)
-            .await?;
-
-        if _existing_deployment.is_none() {
-            return Err(PluginError::invalid_state(
-                &request.plugin_id,
-                "not_deployed",
-                "节点未部署此插件，请使用安装功能",
-            ));
-        }
-
-        // 步骤3: 获取新版本插件包
+        // 步骤2: 获取新版本插件包
         let package_path = self
             .package_utils
             .fetch_package(
@@ -245,17 +230,55 @@ impl UpgradeService {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
-        // 步骤9: 创建数据库表
-        crate::service::utils::create_plugin_tables(
-            &target_db_id,
-            &plugin_id,
-            &new_version,
-            &install_path,
-            &plugin_def,
-            Some(txn_guard.txn_id())
-
-        )
-        .await?;
+        // DDL 操作使用 try_lock 非阻塞分布式锁保护：
+        // - 获取成功 → 本实例负责创建/升级表，完成后立即释放锁
+        // - 获取失败 → 其他实例正在操作，跳过 DDL（DML 使用 upsert 天然幂等）
+        // - 锁服务异常 → 降级继续创建表（保证可用性）
+        let lock_key = format!("plugin:ddl:{}", plugin_id);
+        if let Some(ref lock_manager) = self.deps.lock_manager {
+            match lock_manager.try_lock_with_value(&lock_key).await {
+                Ok((true, Some(lock_value))) => {
+                    tracing::info!("获取DDL锁成功，本实例负责创建/升级表: {}", plugin_id);
+                    crate::service::utils::create_plugin_tables(
+                        &target_db_id,
+                        &plugin_id,
+                        &new_version,
+                        &install_path,
+                        &plugin_def,
+                        None,
+                    )
+                    .await?;
+                    if let Err(e) = lock_manager.unlock_with_value(&lock_key, &lock_value).await {
+                        tracing::debug!("释放DDL锁失败（将等待TTL过期）: {}", e);
+                    }
+                }
+                Ok(_) => {
+                    tracing::info!("其他实例正在创建/升级表，跳过DDL: {}", plugin_id);
+                }
+                Err(e) => {
+                    tracing::warn!("锁服务异常: {}，继续创建/升级表", e);
+                    crate::service::utils::create_plugin_tables(
+                        &target_db_id,
+                        &plugin_id,
+                        &new_version,
+                        &install_path,
+                        &plugin_def,
+                        None,
+                    )
+                    .await?;
+                }
+            }
+        } else {
+            crate::service::utils::create_plugin_tables(
+                &target_db_id,
+                &plugin_id,
+                &new_version,
+                &install_path,
+                &plugin_def,
+                Some(txn_guard.txn_id())
+            )
+            .await?;
+        }
 
         // 步骤10: 保存数据库记录
         // 使用辅助函数构建记录
@@ -323,30 +346,6 @@ impl UpgradeService {
         //     )
         //     .await?;
 
-        // 步骤12: 插入 cmx_plugin_deployments 节点部署记录
-        // 检查该节点是否已有此版本的部署记录
-        let existing_deployment_for_new_version = self
-            .deps
-            .deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id, &new_version)
-            .await?;
-
-        if existing_deployment_for_new_version.is_none() {
-            // 节点上没有新版本的部署记录，插入新记录
-            // 注意：同一插件可以在一个节点上安装多个版本，所以这里只插入不更新旧版本
-            let deployment_record = super::record_builder::build_deployment_create_params(
-                &plugin_id,
-                &self.deps.node_id,
-                self.deps.node_type.as_deref(),
-                &new_version,
-            );
-            self.deps
-                .deployment_repository
-                .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
-                .await?;
-        }
-        // 如果已存在新版本部署记录，无需重复插入
-
         // 步骤13: 更新注册表
         {
             let mut registry = self.deps.registry.write().await;
@@ -395,7 +394,6 @@ impl UpgradeService {
         .with_details(serde_json::json!({
             "old_version": old_version,
             "new_version": new_version,
-            "node_id": self.deps.node_id,
         }))
         .with_old_value(old_version.clone())
         .with_new_value(new_version.clone())
@@ -432,6 +430,12 @@ impl UpgradeService {
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
+
+        // 发布跨实例变更通知
+        if let Some(notifier) = &self.deps.plugin_notifier {
+            notifier.notify_changed(&plugin_id).await;
+        }
+
         // 步骤16: 发布升级完成事件
         let payload = PluginLifecyclePayload::new(&plugin_id, &new_version)
             .with_old_version(&old_version)
@@ -483,7 +487,6 @@ impl Default for UpgradeService {
 
         Self::new(UpgradeServiceDeps {
             repository: Arc::new(PluginRepository::default()),
-            deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(Path::new(""))),
@@ -495,10 +498,11 @@ impl Default for UpgradeService {
             plugin_root: PathBuf::from("./plugins"),
             temp_root: PathBuf::from("./temp"),
             default_database_id: "default".to_string(),
-            node_id: "default".to_string(),
             node_name: None,
             node_type: None,
             service_storage,
+            plugin_notifier: None,
+            lock_manager: None,
         })
     }
 }

@@ -45,6 +45,10 @@ pub enum Error {
     #[error("锁冲突: {0}")]
     LockConflictError(String),
 
+    /// Pub/Sub 相关错误
+    #[error("Pub/Sub 错误: {0}")]
+    PubSubError(String),
+
     /// 未知错误
     #[error("未知错误: {0}")]
     UnknownError(String),

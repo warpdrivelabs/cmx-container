@@ -17,7 +17,6 @@ use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::file::FileStorage;
@@ -78,8 +77,6 @@ pub struct DeployResponse {
 pub struct DeployServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 部署仓库
-    pub deployment_repository: Arc<DeploymentRepository>,
     /// 缓存管理器
     pub cache: Arc<LayeredCacheManager>,
     /// 文件存储
@@ -96,8 +93,6 @@ pub struct DeployServiceDeps {
     pub plugin_root: PathBuf,
     /// 临时目录
     pub temp_root: PathBuf,
-    /// 节点ID
-    pub node_id: String,
 }
 
 /// 部署服务

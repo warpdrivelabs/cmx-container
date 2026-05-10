@@ -6,7 +6,7 @@
 //!
 //! 启动时需要完成以下工作：
 //! 1. 从 cmx_plugin 表获取期望安装的插件列表
-//! 2. 从 cmx_plugin_deployments 表获取当前节点已部署的插件版本
+//! 2. 扫描本地文件系统获取已安装的插件版本
 //! 3. 对比得出需要执行的操作（安装/升级/降级/卸载）
 //! 4. 根据 zip_source 构建 PluginSource 并执行操作
 //! 5. 最后初始化内存中的 contexts
@@ -14,12 +14,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-
+use tracing::log;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
 use crate::error::PluginResult;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::service::downgrade::{DowngradeRequest, DowngradeService};
@@ -50,7 +49,7 @@ pub enum PluginOperation {
         to_version: String,
         source: PluginSource,
     },
-    /// 需要卸载
+    /// 需要卸载（清理本地文件）
     Uninstall {
         plugin_id: String,
         version: String,
@@ -80,7 +79,6 @@ pub struct PluginSyncResult {
 #[allow(dead_code)]
 pub struct PluginInitializer {
     repository: Arc<PluginRepository>,
-    deployment_repository: Arc<DeploymentRepository>,
     version_history_repository: Arc<VersionHistoryRepository>,
     registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
     contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
@@ -88,14 +86,13 @@ pub struct PluginInitializer {
     upgrade_service: UpgradeService,
     downgrade_service: DowngradeService,
     uninstall_service: UninstallService,
-    node_id: String,
+    plugin_root: PathBuf,
 }
 
 impl PluginInitializer {
     /// 创建新的插件初始化器
     pub fn new(
         repository: Arc<PluginRepository>,
-        deployment_repository: Arc<DeploymentRepository>,
         version_history_repository: Arc<VersionHistoryRepository>,
         registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
         contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
@@ -103,11 +100,10 @@ impl PluginInitializer {
         upgrade_service: UpgradeService,
         downgrade_service: DowngradeService,
         uninstall_service: UninstallService,
-        node_id: String,
+        plugin_root: PathBuf,
     ) -> Self {
         Self {
             repository,
-            deployment_repository,
             version_history_repository,
             registry,
             contexts,
@@ -115,7 +111,7 @@ impl PluginInitializer {
             upgrade_service,
             downgrade_service,
             uninstall_service,
-            node_id,
+            plugin_root,
         }
     }
 
@@ -123,7 +119,7 @@ impl PluginInitializer {
     ///
     /// 这是启动时的主要同步入口：
     /// 1. 查询 cmx_plugin 获取期望插件
-    /// 2. 查询 cmx_plugin_deployments 获取当前节点部署
+    /// 2. 扫描本地文件系统获取已安装版本
     /// 3. 对比生成操作计划
     /// 4. 执行计划
     /// 5. 加载 contexts
@@ -144,48 +140,49 @@ impl PluginInitializer {
             .map(|p| (p.plugin_id.clone(), (p.version.clone(), p.zip_source_url.clone(), p.zip_source_type.clone())))
             .collect();
 
-        // 步骤2: 查询 cmx_plugin_deployments 获取当前节点的部署
-        let current_deployments = self.deployment_repository.list_node_deployments(&self.node_id).await?;
-
-        // 按 plugin_id 取最高版本（同一插件可能有多条部署记录）
-        let mut deployed_map: HashMap<String, String> = HashMap::new();
-        for d in &current_deployments {
-            if let Some(existing_version) = deployed_map.get(&d.plugin_id) {
-                if &d.version > existing_version {
-                    deployed_map.insert(d.plugin_id.clone(), d.version.clone());
-                }
-            } else {
-                deployed_map.insert(d.plugin_id.clone(), d.version.clone());
-            }
-        }
+        // 步骤2: 扫描本地文件系统获取已安装的插件版本
+        let local_plugins = self.scan_local_plugins().await?;
 
         // 步骤3: 生成操作计划
         let mut install_ops = Vec::new();
         let mut upgrade_ops = Vec::new();
+        let mut downgrade_ops = Vec::new();
         let mut uninstall_ops = Vec::new();
 
-        // 遍历期望插件，决定安装/升级
+        // 遍历期望插件,决定安装/升级/降级
         for (plugin_id, (expected_version, zip_source_url, zip_source_type)) in &expected_map {
             let source = build_plugin_source(
                 zip_source_url.as_deref(),
                 zip_source_type.as_deref()
             );
 
-            if let Some(deployed_version) = deployed_map.get(plugin_id) {
-                if expected_version > deployed_version {
-                    // 期望版本高于已部署版本，需要升级
+            if let Some(local_version) = local_plugins.get(plugin_id) {
+                if expected_version > local_version {
+                    // 期望版本高于本地版本,需要升级
+                    log::info!("📦 插件 [{}] 需要升级: {} -> {}", plugin_id, local_version, expected_version);
                     upgrade_ops.push(PluginOperation::Upgrade {
                         plugin_id: plugin_id.clone(),
-                        from_version: deployed_version.clone(),
+                        from_version: local_version.clone(),
+                        to_version: expected_version.clone(),
+                        source,
+                    });
+                } else if expected_version < local_version {
+                    // 期望版本低于本地版本,需要降级
+                    log::info!("⬇️  插件 [{}] 需要降级: {} -> {}", plugin_id, local_version, expected_version);
+                    downgrade_ops.push(PluginOperation::Downgrade {
+                        plugin_id: plugin_id.clone(),
+                        from_version: local_version.clone(),
                         to_version: expected_version.clone(),
                         source,
                     });
                 } else {
-                    // 期望版本 <= 已部署版本，无需操作
+                    // 版本一致,跳过
+                    log::debug!("✅ 插件 [{}] 版本一致 ({}), 无需操作", plugin_id, expected_version);
                     result.skipped.push(plugin_id.clone());
                 }
             } else {
-                // 节点上没有部署，需要安装
+                // 本地不存在,需要安装
+                log::info!("🆕 插件 [{}] 需要安装: 版本 {}", plugin_id, expected_version);
                 install_ops.push(PluginOperation::Install {
                     plugin_id: plugin_id.clone(),
                     version: expected_version.clone(),
@@ -194,9 +191,10 @@ impl PluginInitializer {
             }
         }
 
-        // 遍历已部署但不在期望列表中的插件，需要卸载
-        for (plugin_id, deployed_version) in &deployed_map {
+        // 遍历本地存在但数据库不存在的插件,需要卸载(清理)
+        for (plugin_id, deployed_version) in &local_plugins {
             if !expected_map.contains_key(plugin_id) {
+                log::info!("🗑️  插件 [{}] 需要卸载: 版本 {}", plugin_id, deployed_version);
                 uninstall_ops.push(PluginOperation::Uninstall {
                     plugin_id: plugin_id.clone(),
                     version: deployed_version.clone(),
@@ -220,6 +218,14 @@ impl PluginInitializer {
             }
         }
 
+        // 执行降级
+        for op in downgrade_ops {
+            match self.execute_downgrade(op).await {
+                Ok(plugin_id) => result.downgraded.push(plugin_id),
+                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
+            }
+        }
+
         // 执行卸载
         for op in uninstall_ops {
             match self.execute_uninstall(op).await {
@@ -232,6 +238,57 @@ impl PluginInitializer {
         self.load_contexts().await?;
 
         Ok(result)
+    }
+
+    /// 扫描本地文件系统，获取已安装的插件版本
+    ///
+    /// 目录结构: ${plugin_root}/${plugin_id}/${version}/
+    /// 只要版本目录存在且包含 manifest.json，视为已安装
+    async fn scan_local_plugins(&self) -> PluginResult<HashMap<String, String>> {
+        let mut local_plugins = HashMap::new();
+
+        if !self.plugin_root.exists() {
+            return Ok(local_plugins);
+        }
+
+        let mut entries = match tokio::fs::read_dir(&self.plugin_root).await {
+            Ok(entries) => entries,
+            Err(_) => return Ok(local_plugins),
+        };
+
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if !entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+
+            let plugin_id = entry.file_name().to_string_lossy().to_string();
+            let plugin_path = entry.path();
+
+            let mut version_dir_entries = match tokio::fs::read_dir(&plugin_path).await {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let mut max_version = String::new();
+            while let Ok(Some(version_entry)) = version_dir_entries.next_entry().await {
+                if !version_entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+
+                let version = version_entry.file_name().to_string_lossy().to_string();
+                // 检查是否包含 manifest.json（验证是有效安装）
+                let manifest_path = version_entry.path().join("manifest.json");
+                if manifest_path.exists() && version > max_version {
+                    max_version = version;
+                }
+            }
+
+            if !max_version.is_empty() {
+                local_plugins.insert(plugin_id, max_version);
+            }
+        }
+
+        Ok(local_plugins)
     }
 
     /// 执行安装操作
@@ -276,7 +333,6 @@ impl PluginInitializer {
     }
 
     /// 执行降级操作
-    #[allow(dead_code)]
     async fn execute_downgrade(&self, op: PluginOperation) -> Result<String, (String, String)> {
         match op {
             PluginOperation::Downgrade { plugin_id, from_version: _, to_version, source } => {

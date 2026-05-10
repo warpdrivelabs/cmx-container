@@ -24,10 +24,10 @@ async fn setup_client() -> RedisClient {
 
 async fn cleanup_key(client: &RedisClient, key: &str) {
     let full_key = client.build_key(key);
-    let mut conn = client.get_connection().await.unwrap();
+    let mut conn = client.get_connection();
     let _: () = redis::cmd("DEL")
         .arg(&full_key)
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .unwrap_or(());
 }

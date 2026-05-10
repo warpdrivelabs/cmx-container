@@ -14,7 +14,6 @@ use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::storage::backup::BackupManager;
@@ -23,6 +22,7 @@ use crate::infrastructure::storage::TempDirCleanup;
 use crate::security::validator::SecurityValidator;
 use crate::service::data_parser::ServiceParseParams;
 use chrono::Utc;
+use cmx_buffer::LockManager;
 use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
 use cmx_traits::{plugin_events, PluginLifecyclePayload};
@@ -65,8 +65,6 @@ pub struct InstallResponse {
 pub struct InstallServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 部署仓库
-    pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
@@ -89,14 +87,16 @@ pub struct InstallServiceDeps {
     pub temp_root: PathBuf,
     /// 默认数据库ID
     pub default_database_id: String,
-    /// 节点ID
-    pub node_id: String,
     /// 节点名称
     pub node_name: Option<String>,
     /// 节点类型
     pub node_type: Option<String>,
     /// 服务存储
     pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
+    /// 跨实例变更通知器
+    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
+    /// 分布式锁管理器
+    pub lock_manager: Option<Arc<LockManager>>,
 }
 
 /// 安装服务
@@ -187,34 +187,44 @@ impl InstallService {
             .clone()
             .unwrap_or_else(|| "1.0.0".to_string());
 
-        // 步骤4: 检查当前节点此插件版本是否已安装
-        let existing_deployment = self
-            .deps
-            .deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
-            .await?;
-
-        if let Some(_node_deploment) = existing_deployment {
+        // 步骤4: 检查插件是否已安装（通过 registry + 数据库双重检查）
+        {
             let registry = self.deps.registry.read().await;
             if let Some(info) = registry.get(&plugin_id) {
-                if info.clone().version > install_version {
+                if info.version == install_version {
+                    return Ok(InstallResponse {
+                        plugin_id,
+                        install_path: info.install_path.clone(),
+                        success: true,
+                        version: install_version,
+                        message: "插件已安装相同版本".to_string(),
+                    });
+                } else if info.version > install_version {
                     return Err(PluginError::Install(format!(
                         "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
                         plugin_id, info.version, install_version
                     )));
                 }
+                // 版本 < 要安装版本，继续安装流程（升级场景）
+            }
+        }
 
+        // 数据库层面也检查
+        if let Some(existing) = self.deps.repository.find_plugin(&plugin_id).await? {
+            if existing.version == install_version {
                 return Ok(InstallResponse {
                     plugin_id,
-                    install_path: info.install_path.clone(),
+                    install_path: PathBuf::from(&existing.install_path),
                     success: true,
                     version: install_version,
-                    message: "插件已安装".to_string(),
+                    message: "插件已安装相同版本".to_string(),
                 });
-            } else {
-                tracing::warn!("插件 {} 已部署，但未注册到registry", plugin_id);
+            } else if existing.version > install_version {
+                return Err(PluginError::Install(format!(
+                    "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
+                    plugin_id, existing.version, install_version
+                )));
             }
-            return Err(PluginError::plugin_already_exists(&plugin_id));
         }
 
         // 步骤5: 检查依赖
@@ -259,23 +269,64 @@ impl InstallService {
             .begin_with_guard(default_db_id.clone().as_str())
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
-
+        // DDL 操作使用 try_lock 非阻塞分布式锁保护：
+        // - 获取成功 → 本实例负责创建表，完成后立即释放锁
+        // - 获取失败 → 其他实例正在创建表，跳过 DDL（DML 使用 upsert 天然幂等）
+        // - 锁服务异常 → 降级继续创建表（保证可用性）
         if !plugin_def.table_config_files.is_empty() {
             // PostgreSQL 的行为：
             // 一旦事务中任何语句失败，整个事务进入 "aborted" 状态
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
             // 所以 DDL 语句不要在事务中执行
-            crate::service::utils::create_plugin_tables(
-                &target_db_id,
-                &plugin_id,
-                &install_version,
-                &install_path,
-                &plugin_def,
-                Some(txn_guard.txn_id()),
-            )
-            .await?;
+            let lock_key = format!("plugin:ddl:{}", plugin_id);
+            if let Some(ref lock_manager) = self.deps.lock_manager {
+                match lock_manager.try_lock_with_value(&lock_key).await {
+                    Ok((true, Some(lock_value))) => {
+                        tracing::info!("获取DDL锁成功，本实例负责创建表: {}", plugin_id);
+                        crate::service::utils::create_plugin_tables(
+                            &target_db_id,
+                            &plugin_id,
+                            &install_version,
+                            &install_path,
+                            &plugin_def,
+                            Some(txn_guard.txn_id()),
+                        )
+                        .await?;
+                        if let Err(e) = lock_manager.unlock_with_value(&lock_key, &lock_value).await {
+                            tracing::debug!("释放DDL锁失败（将等待TTL过期）: {}", e);
+                        }
+                    }
+                    Ok(_) => {
+                        tracing::info!("其他实例正在创建表，跳过DDL: {}", plugin_id);
+                    }
+                    Err(e) => {
+                        tracing::warn!("锁服务异常: {}，继续创建表", e);
+                        crate::service::utils::create_plugin_tables(
+                            &target_db_id,
+                            &plugin_id,
+                            &install_version,
+                            &install_path,
+                            &plugin_def,
+                            None,
+                        )
+                        .await?;
+                    }
+                }
+            } else {
+                crate::service::utils::create_plugin_tables(
+                    &target_db_id,
+                    &plugin_id,
+                    &install_version,
+                    &install_path,
+                    &plugin_def,
+                    None,
+                )
+                .await?;
+            }
         }
+
+
 
         // 步骤9: 保存数据库记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
@@ -340,26 +391,6 @@ impl InstallService {
             )
             .await?;
 
-        // 步骤9.3: 插入 cmx_plugin_deployments 节点部署记录
-        let existing_deployment_for_version = self
-            .deps
-            .deployment_repository
-            .find_deployment(&plugin_id, &self.deps.node_id, &install_version)
-            .await?;
-
-        if existing_deployment_for_version.is_none() {
-            let deployment_record = super::record_builder::build_deployment_create_params(
-                &plugin_id,
-                &self.deps.node_id,
-                self.deps.node_type.as_deref(),
-                &install_version,
-            );
-            self.deps
-                .deployment_repository
-                .insert_deployment(&deployment_record, Some(txn_guard.txn_id()))
-                .await?;
-        }
-
         // 步骤10: 注册插件
         let plugin_info = PluginInfo {
             id: plugin_id.clone(),
@@ -407,11 +438,9 @@ impl InstallService {
             plugin_id.clone(),
             crate::audit::record::OperationType::Install,
         )
-        .with_node_id(self.deps.node_id.clone())
         .with_details(serde_json::json!({
             "version": install_version,
             "install_path": install_path.to_string_lossy().to_string(),
-            "node_id": self.deps.node_id,
         }))
         .with_new_value(install_path.to_string_lossy().to_string())
         .with_completed(duration_ms);
@@ -454,6 +483,11 @@ impl InstallService {
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
+
+        // 发布跨实例变更通知
+        if let Some(notifier) = &self.deps.plugin_notifier {
+            notifier.notify_changed(&plugin_id).await;
+        }
 
         //发布事件
         GlobalEventBus::get()
@@ -500,7 +534,6 @@ impl Default for InstallService {
 
         Self::new(InstallServiceDeps {
             repository: Arc::new(PluginRepository::default()),
-            deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             storage: Arc::new(FileStorage::new(Path::new(""))),
@@ -512,10 +545,11 @@ impl Default for InstallService {
             plugin_root: PathBuf::from("./plugins"),
             temp_root: PathBuf::from("./temp"),
             default_database_id: "default".to_string(),
-            node_id: "default".to_string(),
             node_name: None,
             node_type: None,
             service_storage,
+            plugin_notifier: None,
+            lock_manager: None,
         })
     }
 }

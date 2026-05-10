@@ -50,7 +50,6 @@ use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginFilter, PluginInfo, PluginSource, PluginStatus};
 use crate::error::PluginResult;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::storage::backup::BackupManager;
@@ -226,6 +225,8 @@ pub struct PluginManager {
     node_manager: Option<Arc<NodeManager>>,
     /// 部署协调器
     deployment_coordinator: Option<Arc<DeploymentCoordinator>>,
+    /// 插件变更通知器（可选）
+    plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
 
     // 服务组件
     /// 安装服务
@@ -271,16 +272,16 @@ impl PluginManager {
     async fn from_builder(builder: PluginManagerBuilder) -> PluginResult<Self> {
         let settings = builder.settings;
 
+        // 创建插件变更通知器（如果 Redis Pub/Sub 可用）
+        let pubsub_for_notifier = builder.pubsub.clone();
+        let plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>> =
+            pubsub_for_notifier.map(|ps| Arc::new(crate::cluster::notification::PluginNotifier::new(ps)));
+
         let db_manager = builder
             .db_manager
             .unwrap_or_else(|| Arc::new(DatabaseManager::new(Default::default())));
 
         let repository = Arc::new(PluginRepository::new(
-            db_manager.clone(),
-            settings.default_database_id.clone(),
-        ));
-
-        let deployment_repository = Arc::new(DeploymentRepository::new(
             db_manager.clone(),
             settings.default_database_id.clone(),
         ));
@@ -305,7 +306,7 @@ impl PluginManager {
         let audit_logger_config = AuditLoggerConfig::new(
             db_manager.clone(),
             settings.default_database_id.clone(),
-            settings.node_id.clone(),
+            settings.node_id.clone().unwrap_or_else(|| "default".to_string()),
         );
         let audit_logger = Arc::new(AuditLogger::new(audit_logger_config));
 
@@ -333,7 +334,6 @@ impl PluginManager {
         let install_service = crate::service::install::InstallService::new(
             crate::service::install::InstallServiceDeps {
                 repository: repository.clone(),
-                deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
@@ -345,17 +345,17 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
                 default_database_id: settings.default_database_id.clone(),
-                node_id: settings.node_id.clone(),
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
-                service_storage: GlobalServiceStorage::get().clone()
+                service_storage: GlobalServiceStorage::get().clone(),
+                plugin_notifier: plugin_notifier.clone(),
+                lock_manager: builder.lock_manager.clone(),
             },
         );
 
         let upgrade_service = crate::service::upgrade::UpgradeService::new(
             crate::service::upgrade::UpgradeServiceDeps {
                 repository: repository.clone(),
-                deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
@@ -367,10 +367,11 @@ impl PluginManager {
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
                 default_database_id: settings.default_database_id.clone(),
-                node_id: settings.node_id.clone(),
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
-                service_storage: GlobalServiceStorage::get().clone()
+                service_storage: GlobalServiceStorage::get().clone(),
+                plugin_notifier: plugin_notifier.clone(),
+                lock_manager: builder.lock_manager.clone(),
             },
         );
 
@@ -389,30 +390,28 @@ impl PluginManager {
         let uninstall_service = crate::service::uninstall::UninstallService::new(
             crate::service::uninstall::UninstallServiceDeps {
                 repository: repository.clone(),
-                deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 contexts: contexts.clone(),
-                node_id: settings.node_id.clone(),
-                service_storage: GlobalServiceStorage::get().clone()
+                service_storage: GlobalServiceStorage::get().clone(),
+                plugin_notifier: plugin_notifier.clone(),
             },
         );
 
         let downgrade_service = crate::service::downgrade::DowngradeService::new(
             crate::service::downgrade::DowngradeServiceDeps {
                 repository: repository.clone(),
-                deployment_repository: deployment_repository.clone(),
                 version_history_repository: version_history_repository.clone(),
                 cache: cache.clone(),
                 audit_logger: audit_logger.clone(),
                 registry: registry.clone(),
                 plugin_root: settings.plugin_root.clone(),
-                node_id: settings.node_id.clone(),
                 default_database_id: settings.default_database_id.clone(),
                 service_query: GlobalServiceQuery::get().clone(),
-                service_storage: GlobalServiceStorage::get().clone()
+                service_storage: GlobalServiceStorage::get().clone(),
+                plugin_notifier: plugin_notifier.clone(),
             },
         );
 
@@ -430,7 +429,6 @@ impl PluginManager {
         let deploy_service =
             crate::service::deploy::DeployService::new(crate::service::deploy::DeployServiceDeps {
                 repository: repository.clone(),
-                deployment_repository: deployment_repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 security_validator: security_validator.clone(),
@@ -439,13 +437,11 @@ impl PluginManager {
                 uninstall_service: uninstall_service.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
-                node_id: settings.node_id.clone(),
             });
 
         // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
         let plugin_initializer = crate::service::initializer::PluginInitializer::new(
             repository.clone(),
-            deployment_repository.clone(),
             version_history_repository.clone(),
             registry.clone(),
             contexts.clone(),
@@ -453,7 +449,7 @@ impl PluginManager {
             upgrade_service.clone(),
             downgrade_service.clone(),
             uninstall_service.clone(),
-            settings.node_id.clone(),
+            settings.plugin_root.clone(),
         );
 
         let manager = Self {
@@ -470,6 +466,7 @@ impl PluginManager {
             audit_logger,
             node_manager,
             deployment_coordinator,
+            plugin_notifier,
             install_service,
             upgrade_service,
             activate_service,
@@ -503,7 +500,7 @@ impl PluginManager {
                 tracing::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
             });
 
-        // 启动时同步插件：对比 cmx_plugin 和 cmx_plugin_deployments
+        // 启动时同步插件：对比 cmx_plugin 表与本地文件系统
         // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
         let sync_result = self.plugin_initializer.sync_plugins().await?;
         tracing::info!(
@@ -517,6 +514,62 @@ impl PluginManager {
         );
         for (plugin_id, err) in &sync_result.failed {
             tracing::error!("插件 {} 同步失败: {}", plugin_id, err);
+        }
+
+        // 启动 Redis Pub/Sub 订阅，监听跨实例插件变更通知
+        // 使用自动重连机制：连接断开后等待并重新订阅
+        if let Some(ref _pubsub) = self.plugin_notifier {
+            let handler = crate::service::plugin_sync::PluginChangeHandler::new(
+                self.repository.clone(),
+                self.deploy_service.clone(),
+                self.settings.plugin_root.clone(),
+                self.registry.clone(),
+                self.contexts.clone(),
+            );
+            let handler = Arc::new(handler);
+
+            let cache_manager = cmx_buffer::GlobalCacheManager::get();
+            let redis_url = cache_manager.client().config().url.clone();
+            let full_channel = cache_manager.client().build_key(crate::cluster::notification::PLUGIN_CHANGE_CHANNEL);
+
+            tokio::spawn(async move {
+                let mut retry_count: u32 = 0;
+                loop {
+                    match cmx_buffer::Subscriber::new(&redis_url, vec![full_channel.clone()]).await {
+                        Ok(mut subscriber) => {
+                            retry_count = 0;
+                            tracing::info!("已启动插件变更通知订阅");
+                            while let Some(msg) = subscriber.recv().await {
+                                tracing::trace!(
+                                    channel = %msg.channel,
+                                    payload = %msg.payload,
+                                    "收到 Redis Pub/Sub 消息"
+                                );
+                                match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&msg.payload) {
+                                    Ok(notification) => {
+                                        tracing::debug!(
+                                            plugin_id = %notification.plugin_id,
+                                            action = ?notification.action,
+                                            timestamp = %notification.timestamp,
+                                            "收到插件变更通知，开始处理"
+                                        );
+                                        handler.handle(&notification).await;
+                                    }
+                                    Err(e) => {
+                                        tracing::debug!("解析插件变更通知失败: {}", e);
+                                    }
+                                }
+                            }
+                            tracing::info!("插件变更订阅连接断开，将自动重连");
+                        }
+                        Err(e) => {
+                            retry_count += 1;
+                            tracing::error!("启动插件变更订阅失败(第{}次): {}，将重试", retry_count, e);
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
+            });
         }
 
         *initialized = true;

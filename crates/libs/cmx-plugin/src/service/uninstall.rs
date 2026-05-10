@@ -12,7 +12,6 @@ use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use cmx_traits::{plugin_events, PluginLifecyclePayload};
@@ -46,8 +45,6 @@ pub struct UninstallResponse {
 pub struct UninstallServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 部署仓库
-    pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
@@ -58,10 +55,10 @@ pub struct UninstallServiceDeps {
     pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
     /// 插件上下文映射
     pub contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
-    /// 节点ID
-    pub node_id: String,
     /// 服务存储
     pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
+    /// 跨实例插件变更通知器
+    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
 }
 
 /// 卸载服务
@@ -80,15 +77,13 @@ impl UninstallService {
     ///
     /// 卸载流程:
     /// 1. 检查插件存在
-    /// 2. 检查节点部署记录
-    /// 3. 从内存注册表删除
-    /// 4. 清除插件上下文
-    /// 5. 物理删除 cmx_plugin_deployments 部署记录
-    /// 6. 物理删除 cmx_plugin_versions 版本历史记录
-    /// 7. 物理删除 cmx_plugin 主表记录
-    /// 8. 清除缓存
-    /// 9. 记录审计日志
-    /// 10. 发布卸载事件
+    /// 2. 从内存注册表删除
+    /// 3. 清除插件上下文
+    /// 4. 物理删除 cmx_plugin_versions 版本历史记录
+    /// 5. 物理删除 cmx_plugin 主表记录
+    /// 6. 清除缓存
+    /// 7. 记录审计日志
+    /// 8. 发布卸载事件
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
         let start_time = std::time::Instant::now();
 
@@ -101,21 +96,6 @@ impl UninstallService {
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         let version = plugin.version.clone();
-
-        // 步骤2: 检查节点部署记录
-        let existing_deployment = self
-            .deps
-            .deployment_repository
-            .find_deployment(&request.plugin_id, &self.deps.node_id, &version)
-            .await?;
-
-        if existing_deployment.is_none() {
-            return Err(PluginError::invalid_state(
-                &request.plugin_id,
-                "not_deployed",
-                "节点未部署此插件",
-            ));
-        }
 
         let plugin_id = request.plugin_id.clone();
 
@@ -131,13 +111,7 @@ impl UninstallService {
             contexts.remove(&plugin_id);
         }
 
-        // 步骤5: 物理删除 cmx_plugin_deployments 部署记录
-        self.deps
-            .deployment_repository
-            .delete_deployments_by_plugin_id(&plugin_id, None)
-            .await?;
-
-        // 步骤6: 物理删除 cmx_plugin_versions 版本历史记录
+        // 步骤5: 物理删除 cmx_plugin_versions 版本历史记录
         self.deps
             .version_history_repository
             .delete_versions_by_plugin_id(&plugin_id, None)
@@ -190,13 +164,15 @@ impl UninstallService {
         )
         .with_details(serde_json::json!({
             "version": version,
-            "node_id": self.deps.node_id,
         }))
         .with_old_value(version.clone())
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-
+        // 发布跨实例移除通知
+        if let Some(notifier) = &self.deps.plugin_notifier {
+            notifier.notify_removed(&plugin_id).await;
+        }
 
         // 步骤10.2: 发布卸载事件（通知其他节点）
         let payload = PluginLifecyclePayload::new(&plugin_id, &version);
@@ -230,13 +206,12 @@ impl Default for UninstallService {
 
         Self::new(UninstallServiceDeps {
             repository: Arc::new(PluginRepository::default()),
-            deployment_repository: Arc::new(DeploymentRepository::default()),
             version_history_repository: Arc::new(VersionHistoryRepository::default()),
             cache: Arc::new(LayeredCacheManager::default()),
             audit_logger: Arc::new(AuditLogger::default()),
             registry: Arc::new(tokio::sync::RwLock::new(PluginRegistry::new())),
             contexts: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
-            node_id: "default".to_string(),
+            plugin_notifier: None,
             service_storage,
         })
     }

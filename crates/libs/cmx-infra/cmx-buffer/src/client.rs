@@ -1,36 +1,72 @@
 //! Redis 客户端封装模块
 //!
-//! 提供 `RedisClient` 结构体，用于封装 bb8 连接池和 Redis 操作。
+//! 提供 `RedisClient` 结构体，使用 redis-rs 原生异步连接（MultiplexedConnection/ClusterConnection），
+//! 无需外部连接池。连接 handle 可低成本 Clone，天然支持高并发。
 
-use crate::config::{CacheConfig, LockConfig, RedisConfig};
+use crate::config::{CacheConfig, LockConfig, RedisConfig, RedisMode};
 use crate::error::{Error, Result};
 use crate::logging::ConnLog;
-use bb8::Pool;
-use bb8_redis::RedisConnectionManager;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-/// Redis 客户端包装器（使用 bb8 连接池）
+/// Redis 异步连接引用，统一封装单机和集群连接
 ///
-/// 封装了 Redis 连接池和配置，提供缓存操作和锁管理功能。
+/// 两种变体都实现了 `redis::aio::ConnectionLike` trait，
+/// 通过为枚举实现该 trait，所有 `query_async` 调用无需关心底层连接类型。
+#[derive(Clone)]
+pub enum RedisConnectionRef {
+    /// 单机模式 - 使用 ConnectionManager（自带断线重连）
+    Standalone(redis::aio::ConnectionManager),
+    /// 集群模式 - 使用 ClusterConnection（自带重连和路由）
+    Cluster(redis::cluster_async::ClusterConnection),
+}
+
+impl redis::aio::ConnectionLike for RedisConnectionRef {
+    fn req_packed_command<'a>(
+        &'a mut self,
+        cmd: &'a redis::Cmd,
+    ) -> redis::RedisFuture<'a, redis::Value> {
+        match self {
+            Self::Standalone(conn) => conn.req_packed_command(cmd),
+            Self::Cluster(conn) => conn.req_packed_command(cmd),
+        }
+    }
+
+    fn req_packed_commands<'a>(
+        &'a mut self,
+        cmd: &'a redis::Pipeline,
+        offset: usize,
+        count: usize,
+    ) -> redis::RedisFuture<'a, Vec<redis::Value>> {
+        match self {
+            Self::Standalone(conn) => conn.req_packed_commands(cmd, offset, count),
+            Self::Cluster(conn) => conn.req_packed_commands(cmd, offset, count),
+        }
+    }
+
+    fn get_db(&self) -> i64 {
+        match self {
+            Self::Standalone(conn) => conn.get_db(),
+            Self::Cluster(conn) => conn.get_db(),
+        }
+    }
+}
+
+/// Redis 客户端包装器
+///
+/// 使用 redis-rs 原生异步连接，无需外部连接池。
+/// `MultiplexedConnection` 线程安全且可低成本克隆，天然支持高并发。
 #[derive(Clone)]
 pub struct RedisClient {
-    pool: Pool<RedisConnectionManager>,
+    connection: RedisConnectionRef,
     config: RedisConfig,
     cache_config: CacheConfig,
     lock_config: LockConfig,
 }
 
 impl RedisClient {
-    /// 从配置创建新的 Redis 客户端（使用默认配置）
-    ///
-    /// # 参数
-    /// * `config` - Redis 配置
-    ///
-    /// # 返回值
-    /// * 成功返回 `RedisClient`
-    /// * 失败返回 `Error`
+    /// 从配置创建新的 Redis 客户端（使用默认缓存和锁配置）
     pub async fn new(config: RedisConfig) -> Result<Self> {
         let cache_config = CacheConfig::new();
         let lock_config = LockConfig::new();
@@ -43,34 +79,58 @@ impl RedisClient {
         cache_config: CacheConfig,
         lock_config: LockConfig,
     ) -> Result<Self> {
-        info!(
-            url = %config.url,
-            pool_size = config.pool_size,
-            "创建 Redis 客户端（bb8 连接池）"
-        );
-
-        let manager = RedisConnectionManager::new(config.url.as_str())
-            .map_err(|e| Error::ConnectionError(e.to_string()))?;
-
-        let pool = Pool::builder()
-            .max_size(config.pool_size as u32)
-            .build(manager)
-            .await
-            .map_err(|e| Error::PoolError(e.to_string()))?;
-
-        ConnLog::connected(&config.url);
+        let connection = Self::create_connection(&config).await?;
 
         Ok(Self {
-            pool,
+            connection,
             config,
             cache_config,
             lock_config,
         })
     }
 
-    /// 获取连接池
-    pub fn pool(&self) -> &Pool<RedisConnectionManager> {
-        &self.pool
+    /// 根据配置创建对应的连接
+    async fn create_connection(config: &RedisConfig) -> Result<RedisConnectionRef> {
+        match config.mode {
+            RedisMode::Standalone => {
+                info!(url = %config.url, "创建 Redis 单机连接（ConnectionManager）");
+                let client = redis::Client::open(config.url.as_str())
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                let conn_manager = client
+                    .get_connection_manager()
+                    .await
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                ConnLog::connected(&config.url);
+                Ok(RedisConnectionRef::Standalone(conn_manager))
+            }
+            RedisMode::Cluster => {
+                let urls = if config.cluster_urls.is_empty() {
+                    return Err(Error::ConfigError(
+                        "集群模式需要至少一个节点地址 (cluster_urls)".to_string(),
+                    ));
+                } else {
+                    &config.cluster_urls
+                };
+                info!(urls = ?urls, "创建 Redis 集群连接（ClusterConnection）");
+                let urls_str: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
+                let cluster_client = redis::cluster::ClusterClient::new(urls_str)
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                let cluster_conn = cluster_client
+                    .get_async_connection()
+                    .await
+                    .map_err(|e| Error::ConnectionError(e.to_string()))?;
+                ConnLog::connected(&format!("cluster://{:?}", urls));
+                Ok(RedisConnectionRef::Cluster(cluster_conn))
+            }
+        }
+    }
+
+    /// 获取连接引用（clone，无需 await）
+    ///
+    /// `MultiplexedConnection` 和 `ClusterConnection` 都是可低成本克隆的，
+    /// 克隆后共享底层 TCP 连接，天然支持并发使用。
+    pub fn get_connection(&self) -> RedisConnectionRef {
+        self.connection.clone()
     }
 
     /// 获取配置
@@ -104,30 +164,50 @@ impl RedisClient {
 
     /// 检查连接是否有效
     pub async fn is_connected(&self) -> bool {
-        if let Ok(mut conn) = self.pool.get().await {
-            let result: std::result::Result<String, redis::RedisError> = redis::cmd("PING")
-                .query_async(&mut *conn)
-                .await;
-            return result.is_ok();
-        }
-        false
+        let mut conn = self.get_connection();
+        let result: std::result::Result<String, redis::RedisError> = redis::cmd("PING")
+            .query_async(&mut conn)
+            .await;
+        result.is_ok()
     }
 
-    /// 关闭连接池
+    /// 关闭连接
     pub async fn close(&self) -> Result<()> {
-        info!("关闭 Redis 连接池");
-        drop(self.pool.clone());
+        info!("关闭 Redis 连接");
         Ok(())
-    }
-
-    /// 获取连接（从连接池获取）
-    pub async fn get_connection(&self) -> Result<bb8::PooledConnection<'_, RedisConnectionManager>> {
-        self.pool.get().await.map_err(|e| Error::PoolError(e.to_string()))
     }
 }
 
 /// 线程安全的 Redis 客户端
 pub type SharedRedisClient = Arc<RwLock<RedisClient>>;
+
+/// 全局 Redis 客户端单例
+pub struct GlobalRedisClient;
+
+static GLOBAL_REDIS_CLIENT: std::sync::OnceLock<SharedRedisClient> = std::sync::OnceLock::new();
+
+impl GlobalRedisClient {
+    /// 初始化全局 Redis 客户端
+    pub async fn initialize(config: RedisConfig) -> Result<()> {
+        let client = RedisClient::new(config).await?;
+        GLOBAL_REDIS_CLIENT
+            .set(Arc::new(RwLock::new(client)))
+            .map_err(|_| Error::ConfigError("全局 Redis 客户端已初始化".to_string()))?;
+        Ok(())
+    }
+
+    /// 获取全局 Redis 客户端
+    pub fn get() -> &'static SharedRedisClient {
+        GLOBAL_REDIS_CLIENT
+            .get()
+            .expect("全局 Redis 客户端未初始化，请先调用 GlobalRedisClient::initialize()")
+    }
+
+    /// 检查是否已初始化
+    pub fn is_initialized() -> bool {
+        GLOBAL_REDIS_CLIENT.get().is_some()
+    }
+}
 
 /// 创建共享的 Redis 客户端
 pub async fn create_shared_client(config: RedisConfig) -> Result<SharedRedisClient> {

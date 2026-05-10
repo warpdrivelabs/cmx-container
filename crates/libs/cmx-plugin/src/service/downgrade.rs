@@ -14,7 +14,6 @@ use cmx_database::get_default_db_manager;
 use cmx_traits::{GlobalEventBus, plugin_events, PluginLifecyclePayload, ServiceQuery, ServiceStorage};
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::deployment::DeploymentRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::audit::logger::AuditLogger;
@@ -56,8 +55,6 @@ pub struct DowngradeResponse {
 pub struct DowngradeServiceDeps {
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 部署仓库
-    pub deployment_repository: Arc<DeploymentRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
     /// 缓存管理器
@@ -68,14 +65,14 @@ pub struct DowngradeServiceDeps {
     pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
     /// 安装根目录
     pub plugin_root: PathBuf,
-    /// 节点ID
-    pub node_id: String,
     /// 默认数据库ID
     pub default_database_id: String,
     /// 服务查询（用于查询插件的服务定义）
     pub service_query: Arc<dyn ServiceQuery>,
     /// 服务存储（用于更新服务定义版本）
     pub service_storage: Arc<dyn ServiceStorage>,
+    /// 跨实例插件变更通知器
+    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
 
 }
 
@@ -95,13 +92,11 @@ impl DowngradeService {
     ///
     /// 降级流程（只切换版本目录，不涉及文件拷贝）:
     /// 1. 检查插件存在
-    /// 2. 检查节点部署记录
-    /// 3. 查找目标版本信息
-    /// 4. 更新 cmx_plugin_versions
-    /// 5. 更新 cmx_plugin_deployments
-    /// 6. 更新 cmx_plugin 主表
-    /// 7. 更新注册表
-    /// 8. 更新缓存
+    /// 2. 查找目标版本信息
+    /// 3. 更新 cmx_plugin_versions
+    /// 4. 更新 cmx_plugin 主表
+    /// 5. 更新注册表
+    /// 6. 更新缓存
     /// 9. 记录审计日志
     /// 10. 发布降级事件
     pub async fn downgrade(&self, request: DowngradeRequest) -> PluginResult<DowngradeResponse> {
@@ -117,20 +112,7 @@ impl DowngradeService {
 
         let old_version = plugin.version.clone();
 
-        // 步骤2: 检查节点部署记录
-        let existing_deployment = self.deps.deployment_repository
-            .find_deployment(&request.plugin_id, &self.deps.node_id, &old_version)
-            .await?;
-
-        if existing_deployment.is_none() {
-            return Err(PluginError::invalid_state(
-                &request.plugin_id,
-                "not_deployed",
-                "节点未部署此插件",
-            ));
-        }
-
-        // 步骤3: 查找目标版本信息
+        // 步骤2: 查找目标版本信息
         let target_version_record = self.deps.version_history_repository
             .find_version(&request.plugin_id, &request.target_version,None)
             .await?
@@ -164,19 +146,7 @@ impl DowngradeService {
             )
             .await?;
 
-        // 步骤5: 更新 cmx_plugin_deployments 节点部署记录, fixme 不能更新，表里已经有旧版本的数据了
-        // if let Some(deployment) = existing_deployment {
-        //     let update_fields = crate::infrastructure::database::deployment::DeploymentUpdateParams {
-        //         version: Some(request.target_version.clone()),
-        //         status: Some("deployed".to_string()),
-        //         ..Default::default()
-        //     };
-        //     self.deps.deployment_repository
-        //         .update_deployment(&deployment.id, &update_fields, Some(txn_guard.txn_id()))
-        //         .await?;
-        // }
-
-        // 步骤6: 更新 cmx_plugin 主表
+        // 步骤5: 更新 cmx_plugin 主表
         let fields = crate::infrastructure::database::repository::PluginUpdateParams {
             version: Some(request.target_version.clone()),
             wasm_path: Some(target_version_record.wasm_path.clone()),
@@ -309,7 +279,6 @@ impl DowngradeService {
         .with_details(serde_json::json!({
             "old_version": old_version,
             "new_version": request.target_version,
-            "node_id": self.deps.node_id,
         }))
         .with_old_value(old_version.clone())
         .with_new_value(request.target_version.clone())
@@ -321,6 +290,11 @@ impl DowngradeService {
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
+
+        // 发布跨实例变更通知
+        if let Some(notifier) = &self.deps.plugin_notifier {
+            notifier.notify_changed(&plugin_id).await;
+        }
 
         // 步骤11: 发布降级完成事件
         let payload = PluginLifecyclePayload::new(&plugin_id, &request.target_version)

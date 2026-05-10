@@ -6,14 +6,30 @@ use cmx_utils::Config;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+/// Redis 运行模式
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum RedisMode {
+    /// 单机模式
+    #[default]
+    Standalone,
+    /// 集群模式
+    Cluster,
+}
+
 /// Redis 连接配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedisConfig {
-    /// Redis 连接地址 (redis://host:port)
+    /// Redis 连接地址 (redis://host:port)，单机模式使用
     pub url: String,
-    /// 连接池大小
-    #[serde(default = "default_pool_size")]
-    pub pool_size: usize,
+    /// Redis 运行模式（单机或集群）
+    #[serde(default)]
+    pub mode: RedisMode,
+    /// 集群节点地址列表，集群模式使用
+    #[serde(default)]
+    pub cluster_urls: Vec<String>,
+    /// Pub/Sub 心跳间隔（秒），0 表示禁用心跳
+    #[serde(default = "default_heartbeat_interval")]
+    pub heartbeat_interval: u64,
     /// 连接超时时间（秒）
     #[serde(default = "default_connection_timeout")]
     pub connection_timeout: u64,
@@ -23,16 +39,10 @@ pub struct RedisConfig {
     /// 默认键前缀
     #[serde(default = "default_key_prefix")]
     pub key_prefix: String,
-    /// 最小空闲连接数
-    #[serde(default = "default_min_idle")]
-    pub min_idle: Option<usize>,
-    /// 连接最大空闲时间（秒）
-    #[serde(default = "default_max_idle_time")]
-    pub max_idle_time: Option<u64>,
 }
 
-fn default_pool_size() -> usize {
-    10
+fn default_heartbeat_interval() -> u64 {
+    30
 }
 
 fn default_connection_timeout() -> u64 {
@@ -47,61 +57,88 @@ fn default_key_prefix() -> String {
     "cmx:".to_string()
 }
 
-fn default_min_idle() -> Option<usize> {
-    Some(2)
-}
-
-fn default_max_idle_time() -> Option<u64> {
-    Some(300)
-}
-
 impl RedisConfig {
-    /// 创建新的 Redis 配置
+    /// 创建新的 Redis 配置（单机模式）
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             url: url.into(),
-            pool_size: default_pool_size(),
+            mode: RedisMode::Standalone,
+            cluster_urls: Vec::new(),
+            heartbeat_interval: default_heartbeat_interval(),
             connection_timeout: default_connection_timeout(),
             operation_timeout: default_operation_timeout(),
             key_prefix: default_key_prefix(),
-            min_idle: default_min_idle(),
-            max_idle_time: default_max_idle_time(),
         }
     }
 
+    /// 创建集群模式的 Redis 配置
+    pub fn new_cluster(urls: Vec<String>) -> Self {
+        let url = urls.first().cloned().unwrap_or_default();
+        Self {
+            url,
+            mode: RedisMode::Cluster,
+            cluster_urls: urls,
+            heartbeat_interval: default_heartbeat_interval(),
+            connection_timeout: default_connection_timeout(),
+            operation_timeout: default_operation_timeout(),
+            key_prefix: default_key_prefix(),
+        }
+    }
+
+    /// 从通用 Config 读取 Redis 配置
     pub fn from_config(config: &Config) -> Self {
         let url = config.get_string("redis.url").unwrap();
 
-        let pool_size = config
-            .get_int("redis.pool_size")
-            .unwrap_or(default_pool_size() as i64);
+        let mode_str = config
+            .get_string("redis.mode")
+            .unwrap_or_else(|_| "standalone".to_string());
+        let mode = match mode_str.to_lowercase().as_str() {
+            "cluster" => RedisMode::Cluster,
+            _ => RedisMode::Standalone,
+        };
+
+        let cluster_urls = config
+            .get_string("redis.cluster_urls")
+            .map(|s| s.split(',').map(|u| u.trim().to_string()).collect())
+            .unwrap_or_default();
+
+        let heartbeat_interval = config
+            .get_int("redis.heartbeat_interval")
+            .unwrap_or(default_heartbeat_interval() as i64);
+
         let connection_timeout = config
             .get_int("redis.connection_timeout")
             .unwrap_or(default_connection_timeout() as i64);
         let operation_timeout = config
             .get_int("redis.operation_timeout")
             .unwrap_or(default_operation_timeout() as i64);
-        let min_idle = config
-            .get_int("redis.min_idle")
-            .unwrap_or(default_min_idle().unwrap() as i64);
-        let max_idle_time = config
-            .get_int("redis.max_idle_time")
-            .unwrap_or(default_max_idle_time().unwrap() as i64);
 
         RedisConfig {
             url,
-            pool_size: pool_size as usize,
+            mode,
+            cluster_urls,
+            heartbeat_interval: heartbeat_interval as u64,
             connection_timeout: connection_timeout as u64,
             operation_timeout: operation_timeout as u64,
             key_prefix: default_key_prefix(),
-            min_idle: Some(min_idle as usize),
-            max_idle_time: Some(max_idle_time as u64),
         }
     }
 
-    /// 设置连接池大小
-    pub fn with_pool_size(mut self, size: usize) -> Self {
-        self.pool_size = size;
+    /// 设置运行模式
+    pub fn with_mode(mut self, mode: RedisMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// 设置集群节点地址
+    pub fn with_cluster_urls(mut self, urls: Vec<String>) -> Self {
+        self.cluster_urls = urls;
+        self
+    }
+
+    /// 设置 Pub/Sub 心跳间隔（秒）
+    pub fn with_heartbeat_interval(mut self, secs: u64) -> Self {
+        self.heartbeat_interval = secs;
         self
     }
 
@@ -131,6 +168,16 @@ impl RedisConfig {
     /// 获取操作超时 Duration
     pub fn operation_timeout_duration(&self) -> Duration {
         Duration::from_secs(self.operation_timeout)
+    }
+
+    /// 获取心跳间隔 Duration
+    pub fn heartbeat_interval_duration(&self) -> Duration {
+        Duration::from_secs(self.heartbeat_interval)
+    }
+
+    /// 判断是否为集群模式
+    pub fn is_cluster(&self) -> bool {
+        self.mode == RedisMode::Cluster
     }
 }
 

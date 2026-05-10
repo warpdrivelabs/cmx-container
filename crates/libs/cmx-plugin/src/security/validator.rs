@@ -532,7 +532,7 @@ impl SecurityValidator {
     fn verify_signature_with_info(&self, package_path: &Path, sig: &SignatureInfo, result: &mut ValidationResult) {
         // 读取 manifest 文件作为待验证数据
         let manifest_path = if package_path.is_dir() {
-            package_path.join("plugin.json")
+            package_path.join("manifest.json")
         } else {
             result.add_error("无法验证签名：需要目录形式的插件包".to_string());
             return;

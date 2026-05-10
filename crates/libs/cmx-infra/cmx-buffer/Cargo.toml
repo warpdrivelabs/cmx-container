@@ -12,10 +12,6 @@ cmx-traits = { workspace = true }
 cmx-core = { workspace = true }
 # Redis 客户端
 redis = { workspace = true }
-# 连接池管理
-bb8 = { workspace = true }
-# Redis 连接池
-bb8-redis = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化

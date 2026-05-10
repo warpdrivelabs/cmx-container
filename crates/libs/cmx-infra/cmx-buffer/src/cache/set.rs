@@ -35,14 +35,14 @@ impl SetOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("SADD", &full_key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_key.clone())
             .chain(members.iter().map(|s| s.to_string()))
             .collect();
 
         let added: u64 = redis::cmd("SADD")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -61,11 +61,11 @@ impl SetOps {
     pub async fn sadd_one(&self, key: &str, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let added: u64 = redis::cmd("SADD")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -84,14 +84,14 @@ impl SetOps {
         let full_key = self.client.build_key(key);
         let timer = OperationTimer::new("SREM", &full_key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_key.clone())
             .chain(members.iter().map(|s| s.to_string()))
             .collect();
 
         let removed: u64 = redis::cmd("SREM")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -110,11 +110,11 @@ impl SetOps {
     pub async fn srem_one(&self, key: &str, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let removed: u64 = redis::cmd("SREM")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -131,10 +131,10 @@ impl SetOps {
     pub async fn smembers(&self, key: &str) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("SMEMBERS")
             .arg(&full_key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -152,11 +152,11 @@ impl SetOps {
     pub async fn sismember(&self, key: &str, member: &str) -> Result<bool> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let exists: bool = redis::cmd("SISMEMBER")
             .arg(&full_key)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -174,13 +174,13 @@ impl SetOps {
     pub async fn smismember(&self, key: &str, members: &[&str]) -> Result<Vec<bool>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let mut cmd = redis::cmd("SMISMEMBER");
         cmd.arg(&full_key);
         for m in members {
             cmd.arg(m);
         }
-        let results: Vec<i32> = cmd.query_async(&mut *conn).await.map_err(Error::from)?;
+        let results: Vec<i32> = cmd.query_async(&mut conn).await.map_err(Error::from)?;
         Ok(results.into_iter().map(|v| v == 1).collect())
     }
 
@@ -194,10 +194,10 @@ impl SetOps {
     pub async fn scard(&self, key: &str) -> Result<u64> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let count: u64 = redis::cmd("SCARD")
             .arg(&full_key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -214,10 +214,10 @@ impl SetOps {
     pub async fn spop(&self, key: &str) -> Result<Option<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let member: Option<String> = redis::cmd("SPOP")
             .arg(&full_key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -235,11 +235,11 @@ impl SetOps {
     pub async fn spop_count(&self, key: &str, count: u64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("SPOP")
             .arg(&full_key)
             .arg(count)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -256,10 +256,10 @@ impl SetOps {
     pub async fn srandmember(&self, key: &str) -> Result<Option<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let member: Option<String> = redis::cmd("SRANDMEMBER")
             .arg(&full_key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -277,11 +277,11 @@ impl SetOps {
     pub async fn srandmember_count(&self, key: &str, count: i64) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let members: Vec<String> = redis::cmd("SRANDMEMBER")
             .arg(&full_key)
             .arg(count)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -298,10 +298,10 @@ impl SetOps {
     pub async fn sdiff(&self, keys: &[&str]) -> Result<Vec<String>> {
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let diff: Vec<String> = redis::cmd("SDIFF")
             .arg(full_keys.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -318,10 +318,10 @@ impl SetOps {
     pub async fn sinter(&self, keys: &[&str]) -> Result<Vec<String>> {
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let inter: Vec<String> = redis::cmd("SINTER")
             .arg(full_keys.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -338,10 +338,10 @@ impl SetOps {
     pub async fn sunion(&self, keys: &[&str]) -> Result<Vec<String>> {
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let union: Vec<String> = redis::cmd("SUNION")
             .arg(full_keys.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -360,14 +360,14 @@ impl SetOps {
         let full_dest = self.client.build_key(dest);
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_dest.clone())
             .chain(full_keys)
             .collect();
 
         let count: u64 = redis::cmd("SDIFFSTORE")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -386,14 +386,14 @@ impl SetOps {
         let full_dest = self.client.build_key(dest);
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_dest.clone())
             .chain(full_keys)
             .collect();
 
         let count: u64 = redis::cmd("SINTERSTORE")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -412,14 +412,14 @@ impl SetOps {
         let full_dest = self.client.build_key(dest);
         let full_keys: Vec<String> = keys.iter().map(|k| self.client.build_key(k)).collect();
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let args: Vec<String> = std::iter::once(full_dest.clone())
             .chain(full_keys)
             .collect();
 
         let count: u64 = redis::cmd("SUNIONSTORE")
             .arg(args.as_slice())
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 
@@ -439,12 +439,12 @@ impl SetOps {
         let full_source = self.client.build_key(source);
         let full_dest = self.client.build_key(dest);
 
-        let mut conn = self.client.get_connection().await?;
+        let mut conn = self.client.get_connection();
         let moved: bool = redis::cmd("SMOVE")
             .arg(&full_source)
             .arg(&full_dest)
             .arg(member)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(Error::from)?;
 

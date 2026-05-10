@@ -83,7 +83,7 @@ pub use infrastructure::messaging::queue::{MessageQueue, Message, MessageQueueMa
 // 导出集群模块类型
 pub use cluster::node::{NodeManager, NodeInfo, NodeStatus};
 pub use cluster::deployment::{DeploymentCoordinator, DeploymentStrategy, DeploymentStatus, DeploymentTask};
-pub use cluster::sync::{SyncManager, PluginStateRecord};
+pub use cluster::notification::{PluginNotifier, PluginChangeNotification, PluginChangeAction};
 
 // 导出安全模块类型
 pub use security::validator::{SecurityValidator, ValidationResult};

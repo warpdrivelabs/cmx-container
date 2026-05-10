@@ -4,7 +4,15 @@
 
 ## 项目简介
 
-cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实现，提供缓存操作、分布式锁、发布订阅等功能。
+cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实现，支持单机和集群两种模式，提供缓存操作、分布式锁、发布订阅等功能。
+
+## 特性
+
+- **多模式支持**：支持单机和集群两种 Redis 部署模式
+- **高性能连接**：基于 redis-rs 原生异步多路复用连接（无需外部连接池）
+- **分布式锁**：支持原子获取、自动续期、安全释放
+- **发布订阅**：支持心跳保活机制，避免连接静默断开
+- **丰富操作**：支持字符串、集合、有序集合、TTL 等常用 Redis 数据结构
 
 ## 快速开始
 
@@ -15,7 +23,7 @@ cmx-buffer 是 cmx-container 项目的缓存和锁管理层，基于 Redis 实�
 cmx-buffer = "0.1.0"
 ```
 
-### 核心示例
+### 基础示例
 
 ```rust
 use cmx_buffer::{create_redis_client, CacheManager};
@@ -27,16 +35,6 @@ cache.ops().set("key", "value").await?;
 let value: Option<String> = cache.ops().get("key").await?;
 ```
 
-## 核心功能与特性
-
-| 功能 | 说明 |
-|------|------|
-| 缓存操作 | 提供字符串、集合、有序集合、发布/订阅等操作 |
-| 分布式锁 | 基于 Redis 的分布式锁，支持自动续期 |
-| 客户端封装 | 基于 bb8 连接池的 Redis 客户端封装 |
-| 配置管理 | 支持灵活的 Redis 配置、缓存配置和锁配置 |
-| 连接池 | 高效的连接池管理机制 |
-
 ## 模块结构
 
 ```
@@ -44,7 +42,6 @@ cmx-buffer
 ├── src/
 │   ├── lib.rs              # 库入口
 │   ├── cache/              # 缓存操作模块
-│   │   ├── mod.rs
 │   │   ├── ops.rs          # 缓存操作接口
 │   │   ├── pubsub.rs       # 发布/订阅功能
 │   │   ├── set.rs          # 集合操作
@@ -53,406 +50,607 @@ cmx-buffer
 │   ├── client.rs           # Redis 客户端封装
 │   ├── config.rs           # 配置结构定义
 │   ├── error.rs            # 错误类型定义
-│   ├── host_functions.rs   # 主机函数支持
 │   ├── lock/               # 分布式锁模块
 │   │   └── manager.rs      # 锁管理器
 │   └── logging.rs          # 日志记录工具
 └── Cargo.toml
 ```
 
-## 使用指南
+## 一、Redis 配置
 
-### 一、Redis 客户端初始化
+### 1.1 单机模式
 
-#### 1.1 基础连接
+单机模式是最简单的部署方式，适用于大多数使用场景。
+
+**通过 URL 创建（最简单）：**
 
 ```rust
-use cmx_buffer::{create_redis_client, RedisClient};
+use cmx_buffer::RedisConfig;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    println!("Connected to Redis");
+let config = RedisConfig::new("redis://127.0.0.1:6379");
+let client = RedisClient::new(config).await?;
+```
 
-    Ok(())
+**通过 Builder 模式配置：**
+
+```rust
+use cmx_buffer::{RedisConfig, RedisMode};
+
+let config = RedisConfig::new("redis://127.0.0.1:6379")
+    .with_key_prefix("app:")                      // 键前缀，默认 "cmx:"
+    .with_connection_timeout(5)                   // 连接超时（秒），默认 5
+    .with_operation_timeout(3)                    // 操作超时（秒），默认 3
+    .with_heartbeat_interval(30);                 // Pub/Sub 心跳间隔（秒），默认 30
+
+let client = RedisClient::new(config).await?;
+```
+
+**通过配置文件读取：**
+
+```toml
+[redis]
+url = "redis://127.0.0.1:6379"
+mode = "standalone"
+key_prefix = "myapp:"
+connection_timeout = 5
+operation_timeout = 3
+heartbeat_interval = 30
+```
+
+### 1.2 集群模式
+
+集群模式适用于需要高可用和水平扩展的生产环境。
+
+**配置集群节点：**
+
+```rust
+use cmx_buffer::{RedisConfig, RedisMode};
+
+let config = RedisConfig::new_cluster(vec![
+    "redis://192.168.1.10:6379".to_string(),
+    "redis://192.168.1.11:6379".to_string(),
+    "redis://192.168.1.12:6379".to_string(),
+])
+.with_key_prefix("cluster:");
+
+let client = RedisClient::new(config).await?;
+```
+
+`RedisConfig::new_cluster()` 会自动设置 `mode = RedisMode::Cluster`，`url` 字段使用第一个节点地址。
+
+**通过配置文件读取集群配置：**
+
+```toml
+[redis]
+url = "redis://192.168.1.10:6379"
+mode = "cluster"
+cluster_urls = "redis://192.168.1.10:6379,redis://192.168.1.11:6379,redis://192.168.1.12:6379"
+key_prefix = "cluster:"
+```
+
+> **注意**：集群模式下 `cluster_urls` 至少需要包含一个有效的节点地址。客户端会自动通过 `CLUSTER SLOTS` 命令发现其他节点。
+
+### 1.3 单机 vs 集群模式对比
+
+| 特性 | 单机模式 | 集群模式 |
+|------|----------|----------|
+| 部署复杂度 | 低 | 高 |
+| 适用场景 | 开发、测试、小规模生产 | 大规模生产、高可用 |
+| 数据分片 | 不支持 | 自动分片（16384 槽位） |
+| 故障转移 | 手动 | 自动 |
+| 键前缀 | 支持 | 支持 |
+| 连接类型 | `ConnectionManager` | `ClusterConnection` |
+| 适用规模 | 单节点 | 多节点集群 |
+
+### 1.4 键前缀说明
+
+所有键操作会自动添加前缀，便于在同一个 Redis 实例中隔离不同应用的数据：
+
+```rust
+let config = RedisConfig::new("redis://127.0.0.1:6379")
+    .with_key_prefix("myapp:");
+
+let client = RedisClient::new(config).await?;
+let cache = CacheManager::new(client);
+
+cache.ops().set("user:1", "Alice").await?;
+// 实际存储的键为：myapp:user:1
+```
+
+## 二、缓存管理器
+
+### 2.1 初始化
+
+```rust
+use cmx_buffer::{RedisClient, CacheManager, RedisConfig};
+
+async fn init_cache() -> cmx_buffer::Result<CacheManager> {
+    let config = RedisConfig::new("redis://127.0.0.1:6379")
+        .with_key_prefix("app:");
+    let client = RedisClient::new(config).await?;
+    let cache = CacheManager::new(client);
+    Ok(cache)
 }
 ```
 
-#### 1.2 连接池配置
-
-```rust
-use cmx_buffer::{create_redis_client_with_config, RedisConfig};
-
-let config = RedisConfig::builder()
-    .with_url("redis://127.0.0.1:6379")
-    .with_pool_size(10)
-    .with_timeout(5)
-    .with_database(0)
-    .with_password(None)
-    .build();
-
-let client = create_redis_client_with_config(config).await?;
-```
-
-#### 1.3 集群连接
-
-```rust
-use cmx_buffer::{create_redis_cluster, RedisClusterConfig};
-
-let config = RedisClusterConfig::new(vec![
-    "redis://127.0.0.1:7001",
-    "redis://127.0.0.1:7002",
-    "redis://127.0.0.1:7003",
-]);
-
-let client = create_redis_cluster(config).await?;
-```
-
-### 二、缓存管理器
-
-#### 2.1 创建缓存管理器
-
-```rust
-use cmx_buffer::{create_redis_client, CacheManager};
-
-let client = create_redis_client("redis://127.0.0.1:6379").await?;
-let cache = CacheManager::new(client);
-```
-
-#### 2.2 字符串操作
+### 2.2 字符串操作
 
 ```rust
 use cmx_buffer::CacheManager;
 
-async fn string_operations(cache: &CacheManager) -> Result<(), Box<dyn std::error::Error>> {
+async fn string_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
     // 设置单个键值
     cache.ops().set("key1", "value1").await?;
 
-    // 设置带 TTL 的键值
-    cache.ops().set_ex("key2", "value2", 3600).await?;
-
-    // 设置nx（键不存在时才设置）
-    cache.ops().set_nx("key3", "value3").await?;
+    // 设置带 TTL 的键值（秒）
+    cache.ops().set_ex("key2", "value2", std::time::Duration::from_secs(3600)).await?;
 
     // 获取值
     let value: Option<String> = cache.ops().get("key1").await?;
     println!("key1 = {:?}", value);
 
     // 批量获取
-    let values: Vec<Option<String>> = cache.ops().mget(&["key1", "key2", "key3"]).await?;
+    let values: Vec<Option<String>> = cache.ops().mget(&["key1", "key2"]).await?;
 
     // 删除键
-    cache.ops().del("key1").await?;
+    let deleted = cache.ops().del("key1").await?;
+    println!("Deleted: {}", deleted);
 
     // 批量删除
-    cache.ops().mdel(&["key2", "key3"]).await?;
+    cache.ops().del_batch(&["key2", "key3"]).await?;
 
     // 键是否存在
-    let exists: bool = cache.ops().exists("key1").await?;
-
-    Ok(())
-}
-```
-
-#### 2.3 自增自减
-
-```rust
-use cmx_buffer::CacheManager;
-
-async fn counter_operations(cache: &CacheManager) -> Result<(), Box<dyn std::error::Error>> {
-    // 设置计数器
-    cache.ops().set("counter", "0").await?;
+    let exists = cache.ops().exists("key1").await?;
 
     // 自增
+    cache.ops().set("counter", "0").await?;
     let new_val: i64 = cache.ops().incr("counter", 1).await?;
-    println!("Counter: {}", new_val);
-
-    // 自增指定数值
-    let new_val: i64 = cache.ops().incr("counter", 5).await?;
     println!("Counter: {}", new_val);
 
     // 自减
     let new_val: i64 = cache.ops().decr("counter", 2).await?;
-    println!("Counter: {}", new_val);
 
     Ok(())
 }
 ```
 
-### 三、TTL 操作
+### 2.3 序列化操作
+
+支持 JSON 序列化，适合存储复杂结构：
 
 ```rust
 use cmx_buffer::CacheManager;
+use serde::{Serialize, Deserialize};
 
-async fn ttl_operations(cache: &CacheManager) -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Serialize, Deserialize)]
+struct User {
+    name: String,
+    email: String,
+}
+
+async fn serialized_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
+    let user = User {
+        name: "Alice".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+
+    // 自动序列化为 JSON
+    cache.ops().set_serialized("user:1", &user).await?;
+
+    // 自动反序列化
+    let loaded: Option<User> = cache.ops().get_deserialized("user:1").await?;
+    println!("User: {:?}", loaded);
+
+    Ok(())
+}
+```
+
+## 三、TTL 操作
+
+```rust
+use cmx_buffer::CacheManager;
+use std::time::Duration;
+
+async fn ttl_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
     // 设置带 TTL 的键
-    cache.ops().set_ex("temp_key", "temp_value", 60).await?;
+    cache.ops().set_ex("temp_key", "temp_value", Duration::from_secs(60)).await?;
 
-    // 获取 TTL
-    let ttl: i64 = cache.ttl().ttl("temp_key").await?;
-    println!("TTL: {} seconds", ttl);
+    // 获取 TTL（秒）
+    let ttl: Option<std::time::Duration> = cache.ttl().ttl("temp_key").await?;
+    println!("TTL: {:?}", ttl);
 
     // 设置 TTL
-    cache.ttl().expire("temp_key", 120).await?;
+    cache.ttl().expire("temp_key", Duration::from_secs(120)).await?;
 
     // 移除 TTL（永不过期）
     cache.ttl().persist("temp_key").await?;
 
-    // 获取键的剩余生存时间（毫秒）
-    let ttl_ms: i64 = cache.ttl().pttl("temp_key").await?;
+    // 获取精确 TTL（毫秒）
+    let pttl: Option<std::time::Duration> = cache.ttl().pttl("temp_key").await?;
+
+    // 设置带 TTL 的值（组合操作）
+    cache.ttl().set_with_ttl("session:abc", "data", Duration::from_secs(1800)).await?;
+
+    // 仅当不存在时设置
+    cache.ttl().setnx("unique_key", "value").await?;
+    cache.ttl().setnx_ex("unique_key_with_ttl", "value", Duration::from_secs(60)).await?;
 
     Ok(())
 }
 ```
 
-### 四、集合操作
+## 四、集合操作
 
 ```rust
 use cmx_buffer::CacheManager;
 
-async fn set_operations(cache: &CacheManager) -> Result<(), Box<dyn std::error::Error>> {
-    // 添加元素到集合
-    cache.set().sadd("my_set", "member1").await?;
-    cache.set().sadd("my_set", &["member2", "member3", "member4"]).await?;
+async fn set_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
+    // 添加元素
+    cache.set().sadd_one("my_set", "member1").await?;
+    cache.set().sadd("my_set", &["member2", "member3"]).await?;
 
     // 获取集合所有成员
     let members: Vec<String> = cache.set().smembers("my_set").await?;
 
     // 检查元素是否在集合中
-    let is_member: bool = cache.set().sismember("my_set", "member1").await?;
+    let is_member = cache.set().sismember("my_set", "member1").await?;
 
-    // 获取集合基数（元素个数）
-    let cardinality: i64 = cache.set().scard("my_set").await?;
+    // 批量检查
+    let results: Vec<bool> = cache.set().smismember("my_set", &["member1", "member4"]).await?;
 
-    // 随机获取元素
-    let random: Option<String> = cache.set().srandmember("my_set", 1).await?;
+    // 获取集合基数
+    let count: i64 = cache.set().scard("my_set").await?;
 
-    // 随机弹出一个元素
+    // 随机获取
+    let random: Vec<String> = cache.set().srandmember_count("my_set", 2).await?;
+
+    // 随机弹出
     let popped: Option<String> = cache.set().spop("my_set").await?;
 
-    // 从集合中移除元素
-    cache.set().srem("my_set", "member1").await?;
+    // 移除元素
+    cache.set().srem_one("my_set", "member1").await?;
+    cache.set().srem("my_set", &["member2", "member3"]).await?;
+
+    // 集合运算
+    cache.set().sadd("set_a", &["a", "b", "c"]).await?;
+    cache.set().sadd("set_b", &["b", "c", "d"]).await?;
+
+    let diff: Vec<String> = cache.set().sdiff(&["set_a", "set_b"]).await?; // [a]
+    let sinter: Vec<String> = cache.set().sinter(&["set_a", "set_b"]).await?; // [b, c]
+    let sunion: Vec<String> = cache.set().sunion(&["set_a", "set_b"]).await?; // [a, b, c, d]
+
+    // 集合运算并存储
+    cache.set().sdiffstore("result", &["set_a", "set_b"]).await?;
+    cache.set().sinterstore("result", &["set_a", "set_b"]).await?;
+    cache.set().sunionstore("result", &["set_a", "set_b"]).await?;
+
+    // 移动元素
+    cache.set().smove("set_a", "set_b", "a").await?;
 
     Ok(())
 }
 ```
 
-### 五、有序集合操作
+## 五、有序集合操作
 
 ```rust
 use cmx_buffer::CacheManager;
 
-async fn sorted_set_operations(cache: &CacheManager) -> Result<(), Box<dyn std::error::Error>> {
+async fn sorted_set_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
     // 添加元素（带分数）
-    cache.sorted_set().zadd("leaderboard", "player1", 100.0).await?;
-    cache.sorted_set().zadd("leaderboard", "player2", 85.0).await?;
-    cache.sorted_set().zadd("leaderboard", "player3", 92.0).await?;
+    cache.sorted_set().zadd_one("leaderboard", "player1", 100.0).await?;
+    cache.sorted_set().zadd("leaderboard", &[("player2", 85.0), ("player3", 92.0)]).await?;
 
-    // 按分数范围获取成员
-    let members: Vec<(String, f64)> = cache.sorted_set()
+    // 按排名范围获取（从小到大）
+    let members: Vec<String> = cache.sorted_set().zrange("leaderboard", 0, -1).await?;
+
+    // 按排名范围获取（带分数）
+    let with_scores: Vec<(String, f64)> = cache.sorted_set()
         .zrange_with_scores("leaderboard", 0, -1)
         .await?;
 
-    // 获取排名（从高到低）
-    let rank: Option<i64> = cache.sorted_set().zrevrank("leaderboard", "player1").await?;
+    // 按分数范围获取
+    let in_range: Vec<String> = cache.sorted_set()
+        .zrangebyscore("leaderboard", 80.0, 100.0)
+        .await?;
+
+    // 带分数和 LIMIT
+    let limited: Vec<(String, f64)> = cache.sorted_set()
+        .zrangebyscore_limit("leaderboard", 0.0, 100.0, 0, 10)
+        .await?;
+
+    // 获取排名（0 = 最低分）
+    let rank: Option<i64> = cache.sorted_set().zrank("leaderboard", "player1").await?;
+
+    // 获取逆序排名（0 = 最高分）
+    let rev_rank: Option<i64> = cache.sorted_set().zrevrank("leaderboard", "player1").await?;
 
     // 获取分数
     let score: Option<f64> = cache.sorted_set().zscore("leaderboard", "player1").await?;
 
-    // 按分数范围查询
-    let members: Vec<String> = cache.sorted_set()
-        .zrangebyscore("leaderboard", 80.0, 100.0)
-        .await?;
-
     // 增加分数
     cache.sorted_set().zincrby("leaderboard", "player1", 10.0).await?;
 
-    // 按排名删除
-    cache.sorted_set().zremrangebyrank("leaderboard", 0, 0).await?;
+    // 获取集合基数
+    let count: i64 = cache.sorted_set().zcard("leaderboard").await?;
+
+    // 获取分数在范围内的成员数
+    let count: i64 = cache.sorted_set().zcount("leaderboard", 80.0, 100.0).await?;
+
+    // 移除元素
+    cache.sorted_set().zrem_one("leaderboard", "player1").await?;
+    cache.sorted_set().zrem("leaderboard", &["player2", "player3"]).await?;
+
+    // 按排名范围移除
+    cache.sorted_set().zremrangebyrank("leaderboard", 0, 0).await?; // 移除最低分
+
+    // 按分数范围移除
+    cache.sorted_set().zremrangebyscore("leaderboard", 0.0, 50.0).await?;
+
+    // 弹出一个或多个最低/最高分
+    let min_members: Vec<(String, f64)> = cache.sorted_set().zpopmin("leaderboard", 1).await?;
+    let max_members: Vec<(String, f64)> = cache.sorted_set().zpopmax("leaderboard", 1).await?;
+
+    // 集合运算
+    cache.sorted_set().zunionstore("result", &["set1", "set2"]).await?;
+    cache.sorted_set().zinterstore("result", &["set1", "set2"]).await?;
 
     Ok(())
 }
 ```
 
-### 六、分布式锁
+## 六、发布订阅
 
-#### 6.1 基础使用
+### 6.1 发布消息
 
 ```rust
-use cmx_buffer::{create_redis_client, LockManager};
+use cmx_buffer::CacheManager;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    let lock_manager = LockManager::new(client);
+async fn publish_operations(cache: &CacheManager) -> cmx_buffer::Result<()> {
+    // 发布到频道
+    let subscribers = cache.pubsub().publish("news", "Breaking news!").await?;
+    println!("Subscribers: {}", subscribers);
 
-    // 获取锁
-    let lock_guard = lock_manager.acquire("my_lock").await?;
-    println!("Lock acquired: {}", lock_guard.key());
+    // 发布 JSON 消息
+    let data = serde_json::json!({"type": "alert", "msg": "Test"});
+    cache.pubsub().publish_json("notifications", &data).await?;
 
-    // 执行关键操作
-    do_critical_work().await?;
+    // 获取匹配模式的频道
+    let channels: Vec<String> = cache.pubsub().pubsub_channels(Some("news:*")).await?;
 
-    // 释放锁（自动调用，或者超出作用域自动释放）
-    drop(lock_guard);
+    // 获取频道订阅者数量
+    let numsub: Vec<(String, u64)> = cache.pubsub().pubsub_numsub(&["news", "sports"]).await?;
+
+    // 获取模式订阅数量
+    let numpat: u64 = cache.pubsub().pubsub_numpat().await?;
 
     Ok(())
 }
 ```
 
-#### 6.2 带超时获取锁
+### 6.2 订阅频道（带心跳）
+
+`Subscriber` 使用独立连接订阅频道，支持心跳保活，避免长时间无消息时连接被断开。
 
 ```rust
-use cmx_buffer::{create_redis_client, LockManager, LockOptions};
+use cmx_buffer::{Subscriber, PubSubMessage};
+use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    let lock_manager = LockManager::new(client);
+async fn subscribe_channels() -> cmx_buffer::Result<()> {
+    let mut subscriber = Subscriber::new(
+        "redis://127.0.0.1:6379",
+        vec!["news".to_string(), "sports".to_string()],
+    ).await?;
 
-    // 配置锁选项
-    let options = LockOptions::builder()
-        .with_timeout(30)           // 锁超时时间（秒）
-        .with_retry_times(3)        // 重试次数
-        .with_retry_interval(100)   // 重试间隔（毫秒）
-        .with_auto_renew(true)      // 自动续期
-        .build();
+    println!("已订阅 news 和 sports 频道");
 
-    // 尝试获取锁
-    match lock_manager.acquire_with_options("resource_lock", options).await {
-        Ok(lock_guard) => {
-            println!("Lock acquired!");
-            // 使用锁
-            do_work().await?;
-            // 锁会在 drop 时自动释放
-        }
-        Err(_) => {
-            println!("Failed to acquire lock");
-        }
+    // 接收消息
+    while let Some(msg) = subscriber.recv().await {
+        println!("[{}] {}", msg.channel, msg.payload);
     }
 
     Ok(())
 }
 ```
 
-#### 6.3 锁自动续期
+**使用 SubscriberBuilder 精细控制：**
 
 ```rust
-use cmx_buffer::{create_redis_client, LockManager};
+use cmx_buffer::{SubscriberBuilder, PubSubMessage};
+use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    let lock_manager = LockManager::new(client);
-
-    // 创建一个会自动续期的锁
-    let lock_guard = lock_manager
-        .acquire_with_ttl("long_running_task", 60)  // 60秒超时
+async fn advanced_subscribe() -> cmx_buffer::Result<()> {
+    let mut subscriber = SubscriberBuilder::new("redis://127.0.0.1:6379")
+        .channels(vec!["news".to_string()])          // 订阅的频道
+        .patterns(vec!["user:*".to_string()])         // 订阅的模式
+        .heartbeat_interval(Duration::from_secs(20))  // 心跳间隔（秒），默认 30
+        .build()
         .await?;
+
+    while let Some(msg) = subscriber.recv().await {
+        println!("[{}] {}", msg.channel, msg.payload);
+    }
+
+    Ok(())
+}
+```
+
+> **心跳机制**：Subscriber 内部会定时（默认 30 秒）向 Redis 发送 PING 命令保活。如果心跳失败，会自动断开连接并终止消息接收任务。长时间运行的订阅服务建议开启心跳。
+
+**使用 SharedSubscriber 跨任务共享订阅：**
+
+```rust
+use cmx_buffer::SharedSubscriber;
+
+async fn shared_subscribe() -> cmx_buffer::Result<()> {
+    let subscriber = SharedSubscriber::new(
+        "redis://127.0.0.1:6379",
+        vec!["updates".to_string()],
+    ).await?;
+
+    // clone 跨任务使用
+    let sub2 = subscriber.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = sub2.recv().await {
+            println!("Task2: [{}] {}", msg.channel, msg.payload);
+        }
+    });
+
+    while let Some(msg) = subscriber.recv().await {
+        println!("Task1: [{}] {}", msg.channel, msg.payload);
+    }
+
+    Ok(())
+}
+```
+
+## 七、分布式锁
+
+### 7.1 基础使用
+
+```rust
+use cmx_buffer::{RedisClient, LockManager, RedisConfig};
+use std::time::Duration;
+
+async fn basic_lock_usage() -> cmx_buffer::Result<()> {
+    let config = RedisConfig::new("redis://127.0.0.1:6379");
+    let client = RedisClient::new(config).await?;
+    let lock_manager = LockManager::new_with_default_config(client);
+
+    // 尝试获取锁（不阻塞）
+    let (acquired, guard) = lock_manager.try_lock("my_resource").await?;
+    if acquired {
+        println!("获取锁成功: {}", guard.lock_key());
+        // 执行关键操作
+        do_work().await?;
+    } else {
+        println!("锁已被占用");
+    }
+
+    // 锁超出作用域时自动释放，或手动 drop
+    drop(guard);
+
+    Ok(())
+}
+```
+
+### 7.2 带重试的锁获取
+
+```rust
+async fn acquire_with_retry(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
+    // 自动重试获取锁
+    let guard = lock_manager.lock("my_resource").await?;
+    println!("锁获取成功，自动续期已开启");
 
     // 执行长时间任务（锁会自动续期）
     run_long_task().await?;
 
-    // 手动完成时释放锁
-    lock_guard.release().await?;
-
     Ok(())
 }
 ```
 
-### 七、发布订阅
+### 7.3 锁自动续期
 
-#### 7.1 发布消息
-
-```rust
-use cmx_buffer::{create_redis_client, PubSubManager};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    let pubsub = PubSubManager::new(client);
-
-    // 发布消息到频道
-    pubsub.publish("news", "Breaking news content").await?;
-    pubsub.publish("notifications", r#"{"type":"alert","msg":"Test"}"#).await?;
-
-    // 发布到多个频道
-    pubsub.publish_many(&[("channel1", "msg1"), ("channel2", "msg2")]).await?;
-
-    Ok(())
-}
-```
-
-#### 7.2 订阅频道
+`LockGuard` 支持后台自动续期，适用于执行时间不确定的长任务：
 
 ```rust
-use cmx_buffer::{create_redis_client, PubSubManager, SubscriptionHandler};
-use async_trait::async_trait;
-use std::sync::Arc;
-
-struct MyHandler;
-
-#[async_trait]
-impl SubscriptionHandler for MyHandler {
-    async fn handle(&self, channel: &str, message: &str) {
-        println!("[{}] {}", channel, message);
+async fn auto_renew_lock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
+    let (acquired, guard) = lock_manager.try_lock("long_task").await?;
+    if !acquired {
+        return Err("无法获取锁".into());
     }
-}
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = create_redis_client("redis://127.0.0.1:6379").await?;
-    let pubsub = PubSubManager::new(client);
+    // 启动自动续期任务
+    guard.start_auto_renew_task();
 
-    let handler: Arc<dyn SubscriptionHandler> = Arc::new(MyHandler {});
+    // 执行长时间任务，锁会自动续期
+    run_long_task().await?;
 
-    // 订阅单个频道
-    pubsub.subscribe("news", handler.clone()).await?;
-
-    // 订阅多个频道
-    pubsub.subscribe_many(&["notifications", "alerts"], handler.clone()).await?;
-
-    // 使用模式匹配订阅
-    pubsub.psubscribe("user:*", handler.clone()).await?;
-
-    // 取消订阅
-    pubsub.unsubscribe("news").await?;
-    pubsub.punsubscribe("user:*").await?;
+    // 手动释放（也可等 guard 超出作用域自动释放）
+    guard.unlock().await?;
 
     Ok(())
 }
 ```
 
-### 八、错误处理
+### 7.4 安全释放锁
+
+释放锁时使用 Lua 脚本验证所有权，确保不会误删他人的锁：
 
 ```rust
-use cmx_buffer::{BufferError, CacheManager};
+async fn safe_unlock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
+    let (acquired, guard) = lock_manager.try_lock("safe_resource").await?;
+    if !acquired {
+        return Err("无法获取锁".into());
+    }
 
-async fn handle_errors() -> Result<(), Box<dyn std::error::Error>> {
-    let result = cache.ops().get("nonexistent_key").await;
+    // 执行业务逻辑...
 
-    match result {
-        Ok(Some(value)) => println!("Value: {}", value),
+    // 安全释放（验证锁值后才删除）
+    lock_manager.unlock_with_value(&guard.lock_key(), &guard.lock_value()).await?;
+
+    Ok(())
+}
+```
+
+### 7.5 锁配置
+
+```rust
+use cmx_buffer::{LockConfig, RedisClient, LockManager, RedisConfig};
+
+async fn configure_lock() -> cmx_buffer::Result<()> {
+    let lock_config = LockConfig::new()
+        .with_expire(60)           // 锁过期时间（秒），默认 30
+        .with_retry_times(5)        // 重试次数，默认 3
+        .with_retry_interval(200);  // 重试间隔（毫秒），默认 200
+
+    let redis_config = RedisConfig::new("redis://127.0.0.1:6379");
+    let client = RedisClient::new(redis_config).await?;
+    let lock_manager = LockManager::new(client, lock_config);
+
+    let guard = lock_manager.lock("resource").await?;
+
+    Ok(())
+}
+```
+
+## 八、错误处理
+
+```rust
+use cmx_buffer::{Error, Result};
+
+async fn handle_errors() -> Result<()> {
+    // 缓存操作可能返回的错误类型
+    let value = cache.ops().get("key").await;
+
+    match value {
+        Ok(Some(v)) => println!("Value: {}", v),
         Ok(None) => println!("Key not found"),
         Err(e) => {
             match e {
-                BufferError::ConnectionFailed(msg) => {
-                    eprintln!("Redis connection failed: {}", msg);
+                Error::ConnectionError(msg) => {
+                    eprintln!("Redis 连接失败: {}", msg);
                 }
-                BufferError::Timeout => {
-                    eprintln!("Operation timed out");
+                Error::TimeoutError(msg) => {
+                    eprintln!("操作超时: {}", msg);
                 }
-                BufferError::KeyNotFound(key) => {
-                    eprintln!("Key not found: {}", key);
+                Error::OperationError(msg) => {
+                    eprintln!("操作失败: {}", msg);
                 }
-                BufferError::SerializationFailed(msg) => {
-                    eprintln!("Serialization failed: {}", msg);
+                Error::LockError(msg) => {
+                    eprintln!("锁错误: {}", msg);
                 }
-                BufferError::LockAcquisitionFailed(key) => {
-                    eprintln!("Failed to acquire lock: {}", key);
+                Error::LockConflictError(msg) => {
+                    eprintln!("锁冲突: {}", msg);
                 }
-                BufferError::LockReleasedByOther => {
-                    eprintln!("Lock was released by another process");
+                Error::SerializeError(msg) => {
+                    eprintln!("序列化失败: {}", msg);
+                }
+                Error::PubSubError(msg) => {
+                    eprintln!("Pub/Sub 错误: {}", msg);
+                }
+                _ => {
+                    eprintln!("未知错误: {}", e);
                 }
             }
         }
@@ -462,56 +660,122 @@ async fn handle_errors() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 九、完整示例
+## 九、全局单例
+
+cmx-buffer 提供全局单例管理器，方便在应用各处访问缓存和锁：
+
+```rust
+use cmx_buffer::{GlobalCacheManager, GlobalLockManager, RedisConfig};
+
+async fn init_global() -> cmx_buffer::Result<()> {
+    let redis_config = RedisConfig::new("redis://127.0.0.1:6379")
+        .with_key_prefix("app:");
+
+    // 初始化全局缓存管理器
+    GlobalCacheManager::initialize(redis_config.clone()).await?;
+
+    // 初始化全局锁管理器
+    GlobalLockManager::initialize(redis_config).await?;
+
+    // 在应用任意位置访问
+    let cache = GlobalCacheManager::get();
+    cache.ops().set("key", "value").await?;
+
+    Ok(())
+}
+```
+
+## 十、完整示例
 
 ```rust
 use cmx_buffer::{
-    create_redis_client, CacheManager, LockManager,
-    RedisConfig, CacheConfig, LockConfig,
+    RedisConfig, RedisClient, CacheManager, LockManager,
 };
-use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 配置 Redis 连接
-    let redis_config = RedisConfig::builder()
-        .with_url("redis://127.0.0.1:6379")
-        .with_pool_size(10)
-        .with_timeout(5)
-        .build();
+async fn main() -> cmx_buffer::Result<()> {
+    // 1. 配置并创建客户端（单机模式）
+    let config = RedisConfig::new("redis://127.0.0.1:6379")
+        .with_key_prefix("demo:")
+        .with_heartbeat_interval(30);
 
-    let client = create_redis_client_with_config(redis_config).await?;
+    let client = RedisClient::new(config).await?;
+    println!("已连接到 Redis");
 
     // 2. 创建缓存管理器
     let cache = CacheManager::new(client.clone());
 
-    // 3. 创建锁管理器
-    let lock_manager = LockManager::new(client.clone());
+    // 3. 基本缓存操作
+    cache.ops().set("user:1", "Alice").await?;
+    cache.ops().set_ex("session:abc", "xyz", Duration::from_secs(3600)).await?;
 
-    // 4. 使用缓存
-    cache.ops().set("user:001", r#"{"name":"张三","email":"zhangsan@example.com"}"#).await?;
+    let user = cache.ops().get("user:1").await?;
+    println!("User: {:?}", user);
 
-    let user_json: Option<String> = cache.ops().get("user:001").await?;
-    println!("User: {:?}", user_json);
+    // 4. 使用分布式锁保护关键操作
+    let lock_manager = LockManager::new_with_default_config(client.clone());
+    let guard = lock_manager.lock("order:12345").await?;
 
-    // 5. 使用分布式锁
-    let lock_guard = lock_manager.acquire("process:order:12345").await?;
-
-    // 在锁保护下执行操作
+    println!("已获取锁，正在处理订单...");
     process_order(12345).await?;
+    println!("订单处理完成");
 
-    // 6. 释放锁
-    lock_guard.release().await?;
+    // 锁自动释放
 
-    println!("All operations completed");
+    // 5. 集合操作
+    cache.set().sadd("online_users", &["alice", "bob", "charlie"]).await?;
+    let users: Vec<String> = cache.set().smembers("online_users").await?;
+    println!("在线用户: {:?}", users);
+
+    // 6. 有序集合（排行榜）
+    cache.sorted_set().zadd("leaderboard", "Alice", 1500.0).await?;
+    cache.sorted_set().zadd("leaderboard", "Bob", 1200.0).await?;
+    cache.sorted_set().zadd("leaderboard", "Charlie", 1800.0).await?;
+
+    let top3: Vec<(String, f64)> = cache.sorted_set()
+        .zrange_with_scores("leaderboard", 0, 2)
+        .await?;
+    println!("排行榜前三: {:?}", top3);
+
+    println!("所有操作完成");
     Ok(())
 }
 
-async fn process_order(order_id: i64) -> Result<(), Box<dyn std::error::Error>> {
-    // 处理订单逻辑
-    println!("Processing order: {}", order_id);
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    println!("Order processed: {}", order_id);
+async fn process_order(order_id: i64) -> cmx_buffer::Result<()> {
+    println!("正在处理订单 #{}", order_id);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    println!("订单 #{} 处理完成", order_id);
+    Ok(())
+}
+```
+
+**集群模式示例：**
+
+```rust
+use cmx_buffer::{RedisConfig, RedisClient, CacheManager};
+
+#[tokio::main]
+async fn main() -> cmx_buffer::Result<()> {
+    // 创建集群配置
+    let config = RedisConfig::new_cluster(vec![
+        "redis://192.168.1.10:6379".to_string(),
+        "redis://192.168.1.11:6379".to_string(),
+        "redis://192.168.1.12:6379".to_string(),
+    ])
+    .with_key_prefix("cluster:")
+    .with_heartbeat_interval(30);
+
+    let client = RedisClient::new(config).await?;
+    println!("已连接到 Redis 集群");
+
+    let cache = CacheManager::new(client);
+
+    // 集群模式下自动路由到正确的节点
+    cache.ops().set("key", "value").await?;
+    let value = cache.ops().get("key").await?;
+
+    println!("Value: {:?}", value);
     Ok(())
 }
 ```

@@ -9,7 +9,7 @@ pub mod sorted_set;
 pub mod ttl;
 
 pub use ops::CacheOps;
-pub use pubsub::{PubSubMessage, PubSubOps, SharedSubscriber, Subscriber};
+pub use pubsub::{PubSubMessage, PubSubOps, SharedSubscriber, Subscriber, SubscriberBuilder};
 pub use set::SetOps;
 pub use sorted_set::SortedSetOps;
 pub use ttl::TtlOps;
@@ -28,66 +28,40 @@ pub struct CacheManager {
 
 impl CacheManager {
     /// 创建新的缓存管理器
-    ///
-    /// # 参数
-    /// * `client` - Redis 客户端实例
-    ///
-    /// # 返回值
-    /// * 缓存管理器实例
     pub fn new(client: RedisClient) -> Self {
         Self { client }
     }
 
     /// 获取字符串缓存操作器
-    ///
-    /// # 返回值
-    /// * CacheOps 实例，用于基本的字符串缓存操作
     pub fn ops(&self) -> CacheOps {
         CacheOps::new(self.client.clone())
     }
 
     /// 获取 TTL 操作器
-    ///
-    /// # 返回值
-    /// * TtlOps 实例，用于管理键的过期时间
     pub fn ttl(&self) -> TtlOps {
         TtlOps::new(self.client.clone())
     }
 
     /// 获取有序集合操作器
-    ///
-    /// # 返回值
-    /// * SortedSetOps 实例，用于有序集合操作
     pub fn sorted_set(&self) -> SortedSetOps {
         SortedSetOps::new(self.client.clone())
     }
 
     /// 获取集合操作器
-    ///
-    /// # 返回值
-    /// * SetOps 实例，用于集合操作
     pub fn set(&self) -> SetOps {
         SetOps::new(self.client.clone())
     }
 
     /// 获取发布/订阅操作器
-    ///
-    /// # 返回值
-    /// * PubSubOps 实例，用于发布/订阅操作
     pub fn pubsub(&self) -> PubSubOps {
         PubSubOps::new(self.client.clone())
     }
 
     /// 获取内部客户端引用
-    ///
-    /// # 返回值
-    /// * Redis 客户端引用
     pub fn client(&self) -> &RedisClient {
         &self.client
     }
 }
-
-// ==================== 全局单例 ====================
 
 static GLOBAL_CACHE_MANAGER: OnceLock<Arc<CacheManager>> = OnceLock::new();
 
@@ -96,12 +70,6 @@ pub struct GlobalCacheManager;
 
 impl GlobalCacheManager {
     /// 初始化全局缓存管理器
-    ///
-    /// # 参数
-    /// * `redis_config` - Redis 配置
-    ///
-    /// # 返回值
-    /// * 初始化结果
     pub async fn initialize(redis_config: RedisConfig) -> Result<()> {
         let client = RedisClient::new(redis_config).await?;
         let cache_manager = CacheManager::new(client);
@@ -113,14 +81,6 @@ impl GlobalCacheManager {
     }
 
     /// 初始化全局缓存管理器（带配置）
-    ///
-    /// # 参数
-    /// * `redis_config` - Redis 配置
-    /// * `cache_config` - 缓存配置
-    /// * `lock_config` - 锁配置
-    ///
-    /// # 返回值
-    /// * 初始化结果
     pub async fn initialize_with_configs(
         redis_config: RedisConfig,
         cache_config: CacheConfig,
@@ -136,12 +96,6 @@ impl GlobalCacheManager {
     }
 
     /// 获取全局缓存管理器引用
-    ///
-    /// # 返回值
-    /// * 缓存管理器引用
-    ///
-    /// # Panics
-    /// 如果未初始化则 panic
     pub fn get() -> &'static Arc<CacheManager> {
         GLOBAL_CACHE_MANAGER.get().expect(
             "缓存管理器未初始化，请先调用 GlobalCacheManager::initialize() 或 GlobalCacheManager::initialize_with_configs()"
@@ -149,14 +103,6 @@ impl GlobalCacheManager {
     }
 
     /// 使用已有的 RedisClient 初始化全局缓存管理器
-    ///
-    /// 适用于需要共享 RedisClient 的场景（如与 GlobalLockManager 共用同一连接池）。
-    ///
-    /// # 参数
-    /// * `client` - 已创建的 Redis 客户端实例
-    ///
-    /// # 返回值
-    /// * 初始化结果
     pub fn initialize_with_client(client: RedisClient) -> Result<()> {
         let cache_manager = CacheManager::new(client);
         GLOBAL_CACHE_MANAGER
@@ -166,9 +112,6 @@ impl GlobalCacheManager {
     }
 
     /// 检查是否已初始化
-    ///
-    /// # 返回值
-    /// * 是否已初始化
     pub fn is_initialized() -> bool {
         GLOBAL_CACHE_MANAGER.get().is_some()
     }

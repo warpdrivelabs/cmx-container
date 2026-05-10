@@ -6,18 +6,16 @@ mod tests {
     fn test_redis_config_default() {
         let config = RedisConfig::default();
         assert_eq!(config.url, "redis://127.0.0.1:6379");
-        assert_eq!(config.pool_size, 10);
+        assert_eq!(config.mode, cmx_buffer::config::RedisMode::Standalone);
         assert_eq!(config.key_prefix, "cmx:");
     }
 
     #[test]
     fn test_redis_config_builder() {
         let config = RedisConfig::new("redis://localhost:6379")
-            .with_pool_size(20)
             .with_key_prefix("app:");
         
         assert_eq!(config.url, "redis://localhost:6379");
-        assert_eq!(config.pool_size, 20);
         assert_eq!(config.key_prefix, "app:");
     }
 
