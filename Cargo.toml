@@ -11,6 +11,7 @@ members = [
     "crates/libs/cmx-service",
     "crates/libs/cmx-infra/cmx-database",
     "crates/libs/cmx-infra/cmx-buffer",
+    "crates/libs/cmx-infra/cmx-nacos",
     "crates/web/web-server",
     "crates/libs/cmx-api",
     "crates/libs/cmx-plugin-sdk",
@@ -57,6 +58,8 @@ cmx-service = { path = "crates/libs/cmx-service", version = "0.1.4", registry = 
 cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.4", registry = "nora" }
 # 内部依赖 - 调试
 cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.4", registry = "nora" }
+# 内部依赖 - Nacos
+cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.4", registry = "nora" }
 
 # 异步运行时 - tokio 提供完整的异步编程支持
 tokio = { version = "1.41", features = ["full"] }
@@ -211,6 +214,10 @@ fs-err = "2.2"
 walkdir = "2.5"
 # 随机数生成
 rand = "0.8"
+# 微服务注册与配置中心
+nacos-sdk = "0.5"
+# 获取本机IP地址
+local-ip-address = "0.6"
 
 [profile.dev]
 # 优化级别：0=关闭，1=基本，2=中等，3=激进
