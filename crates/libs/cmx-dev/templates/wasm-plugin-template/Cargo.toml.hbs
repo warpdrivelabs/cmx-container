@@ -15,11 +15,11 @@ cmx-plugin-sdk = { version = "0.1.5", registry = "nora", default-features = fals
 serde = { version = "1.0", features = ["derive"] }
 # JSON 序列化/反序列化
 serde_json = "1.0"
-
+# 时间处理 - 日期时间库，支持日期时间的解析、计算和格式化
+chrono = { version = "0.4", features = ["serde"] }
 [dev-dependencies]
 # Mock 测试框架
 mockall = "0.11"
-
 [features]
 # Extism 特性 — 编译 Wasm 时开启
 extism = ["extism-pdk", "cmx-plugin-sdk/extism"]
