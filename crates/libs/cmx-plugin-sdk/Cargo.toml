@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Extism PDK
-extism-pdk = "1.4.1"
+extism-pdk = { version = "1.4.1", optional = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
 # 序列化框架
@@ -16,6 +16,10 @@ serde = { workspace = true, features = ["derive"] }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
 # MessagePack 序列化/反序列化
-rmp-serde = { workspace = true }
+rmp-serde = { workspace = true, optional = true }
 # 错误处理
 thiserror = { workspace = true }
+
+[features]
+default = ["extism"]
+extism = ["extism-pdk", "rmp-serde"]
