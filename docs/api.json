@@ -1,8 +1,8 @@
 {
   "plugin": {
     "name": "cmx-wasmdemo",
-    "version": "0.1.1",
-    "generated_at": "2026-04-23T05:50:59.041292400+00:00"
+    "version": "0.1.0",
+    "generated_at": "2026-05-11T09:25:56.917979100+00:00"
   },
   "functions": [
     {
@@ -39,8 +39,8 @@
         }
       ],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 97
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 71
       }
     },
     {
@@ -65,8 +65,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 127
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 89
       }
     },
     {
@@ -103,8 +103,8 @@
         }
       ],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 164
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 109
       }
     },
     {
@@ -136,41 +136,44 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 209
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 128
       }
     },
     {
-      "name": "demo_plugin_call",
+      "name": "demo_call_plugin",
       "type": "func",
-      "summary": "演示插件间调用",
-      "description": "调用其他插件的服务。",
+      "summary": "demo_call_plugin",
       "input": {
         "encoding": "msgpack",
-        "type": "FunctionInput",
-        "fields": [
-          {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的 DemoRequest，传递给目标插件"
-          }
-        ]
+        "type": "FunctionInput"
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的调用结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 252
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 135
+      }
+    },
+    {
+      "name": "demo_call_service_by_key",
+      "type": "func",
+      "summary": "demo_call_service_by_key",
+      "input": {
+        "encoding": "msgpack",
+        "type": "FunctionInput"
+      },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput"
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 142
       }
     },
     {
@@ -202,8 +205,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 297
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 165
       }
     },
     {
@@ -240,8 +243,8 @@
         }
       ],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 377
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 189
       }
     },
     {
@@ -278,8 +281,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 413
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 205
       }
     },
     {
@@ -316,8 +319,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 437
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 222
       }
     },
     {
@@ -354,8 +357,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 461
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 240
       }
     },
     {
@@ -392,8 +395,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 486
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 258
       }
     },
     {
@@ -430,8 +433,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 516
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 276
       }
     },
     {
@@ -468,8 +471,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 572
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 294
       }
     },
     {
@@ -506,8 +509,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 628
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 312
       }
     },
     {
@@ -544,8 +547,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 683
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 330
       }
     },
     {
@@ -582,8 +585,8 @@
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\lib.rs",
-        "line": 736
+        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
+        "line": 347
       }
     }
   ]

@@ -1045,8 +1045,9 @@ dependencies = [
 
 [[package]]
 name = "cmx-wasmdemo"
-version = "0.1.4"
+version = "0.1.0"
 dependencies = [
+ "chrono",
  "cmx-plugin-sdk",
  "extism-pdk",
  "mockall",

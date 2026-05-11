@@ -21,6 +21,15 @@ pub struct DemoResponse {
     pub total: u32,
 }
 
+impl Default for DemoResponse {
+    fn default() -> Self {
+        Self {
+            message: String::new(),
+            total: 0,
+        }
+    }
+}
+
 //route_check 使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteInput {
