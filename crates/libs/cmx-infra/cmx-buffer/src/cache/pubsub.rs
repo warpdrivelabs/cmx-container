@@ -116,9 +116,12 @@ pub trait ChannelHandler: Send + Sync {
     async fn handle(&self, channel: &str, payload: &str);
 }
 
+/// 频道消息处理函数类型
+type ChannelHandlerFn = Box<dyn Fn(&str, &str) + Send + Sync>;
+
 /// 基于闭包的频道处理器
 pub struct FnChannelHandler {
-    f: Box<dyn Fn(&str, &str) + Send + Sync>,
+    f: ChannelHandlerFn,
 }
 
 impl FnChannelHandler {
@@ -145,6 +148,7 @@ pub struct GlobalSubscriber {
     /// 订阅专用连接
     conn: Arc<tokio::sync::Mutex<SubscriberConnection>>,
     /// Redis 客户端（用于断线时创建新订阅连接）
+    #[allow(dead_code)]
     client: RedisClient,
     /// 频道处理器注册表（Arc 包裹，确保分发任务和注册方法共享同一实例）
     handlers: Arc<DashMap<String, Arc<dyn ChannelHandler>>>,

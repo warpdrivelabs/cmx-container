@@ -12,7 +12,6 @@ use std::path::Path;
 
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::error;
 use cmx_core::model::cell::TableDefine;
 use crate::MetadataError;
 
@@ -24,6 +23,7 @@ use crate::MetadataError;
 /// - 顶层数组 `[ TableDefine, ... ]` 格式
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[allow(dead_code)]
 enum TableDefinesRoot {
     /// 单个表定义
     // Single(Box<TableDefine>),
