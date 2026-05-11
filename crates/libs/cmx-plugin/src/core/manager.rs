@@ -487,7 +487,7 @@ impl PluginManager {
 
     /// 初始化插件管理器
     ///
-    /// 执行系统表初始化、缓存预热等操作。
+    /// 执行系统表初始化、自动安装、缓存预热等操作。
     pub async fn initialize(&self) -> PluginResult<()> {
         let mut initialized = self.initialized.write().await;
         if *initialized {
@@ -499,6 +499,41 @@ impl PluginManager {
             .unwrap_or_else(|e| {
                 tracing::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
             });
+
+        // 执行自动安装：在 sync_plugins 之前，确保配置中声明的插件已安装
+        if self.settings.auto_install.enabled {
+            let auto_install_service = crate::service::auto_install::AutoInstallService::new(
+                self.repository.clone(),
+                self.install_service.clone(),
+                self.upgrade_service.clone(),
+            );
+            let result = auto_install_service.run(&self.settings.auto_install).await;
+            match result {
+                Ok(r) => {
+                    tracing::info!(
+                        "插件自动安装完成: 安装={}, 升级={}, 跳过={}, 失败={}",
+                        r.installed.len(),
+                        r.upgraded.len(),
+                        r.skipped.len(),
+                        r.failed.len()
+                    );
+                    for (plugin_id, err) in &r.failed {
+                        tracing::error!("插件 {} 自动安装失败: {}", plugin_id, err);
+                    }
+                    if r.has_critical_failure {
+                        return Err(crate::error::PluginError::Install(
+                            "关键插件自动安装失败，终止启动".to_string(),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    return Err(crate::error::PluginError::Install(format!(
+                        "插件自动安装执行失败: {:?}",
+                        e
+                    )));
+                }
+            }
+        }
 
         // 启动时同步插件：对比 cmx_plugin 表与本地文件系统
         // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
@@ -543,7 +578,7 @@ impl PluginManager {
                 tokio::spawn(async move {
                     match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&payload) {
                         Ok(notification) => {
-                            tracing::debug!(
+                            tracing::info!(
                                 plugin_id = %notification.plugin_id,
                                 action = ?notification.action,
                                 timestamp = %notification.timestamp,

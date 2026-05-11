@@ -17,6 +17,7 @@ pub mod types;
 // 导出错误类型，确保所有模块都可以使用crate::Error
 pub mod error;
 pub mod crud;
+pub mod migration;
 
 pub use error::{Error, Result};
 
@@ -30,6 +31,11 @@ pub use transaction::{check_long_running_transactions, cleanup_completed_transac
 pub use connection::{DbPool};
 
 pub use host_functions::DatabaseHostFunctions;
+
+pub use migration::{
+    MigrationError, MigrationLoader, MigrationRecord, MigrationResult, MigrationRunner,
+    MigrationStatus as DbMigrationStatus, MigrationSummary, PendingMigration,
+};
 
 
 

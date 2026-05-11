@@ -13,7 +13,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
-use crate::config::{init_cache, init_datasources, init_global_config, init_plugins, init_runtime, init_services};
+use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, shutdown_nacos};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -80,15 +80,17 @@ async fn main() -> Result<()> {
     // 保持 guard 活跃直至程序结束，确保日志写入完成
     std::mem::forget(guard);
 
-    // 初始化全局配置
-    init_global_config();
+    // 初始化全局配置（含 Nacos 远程配置覆盖）
+    init_global_config_with_nacos().await;
     // 初始化加密服务（从环境变量 CMX_ENCRYPT_KEY 读取密钥）
     cmx_utils::crypto::CryptoService::init_from_env();
     info!("加密服务初始化完成");
-    // 初始化数据库数据源
-    init_datasources().await;
+
     // 初始化 Redis 缓存
     init_cache().await;
+    // 初始化数据库数据源（内部会在注册连接后自动执行数据库迁移）
+    init_datasources().await;
+
     // 获取 Web 服务器配置
     let web_config = web_config();
 
@@ -148,7 +150,7 @@ async fn main() -> Result<()> {
         .await
         .map_err(|e| Error::ServerSetup(format!("Failed to bind address: {}", e)))?;
 
-    // 启动服务器
+    // 启动服务器（带优雅关闭支持）
     info!("{}", "=".repeat(60));
     info!("🚀 {:<44} 🚀", "Web 服务器启动成功");
     info!("{}", "=".repeat(60));
@@ -157,10 +159,48 @@ async fn main() -> Result<()> {
     info!("   日志目录：{}", log_dir);
     info!("{}", "-".repeat(60));
 
-    // 启动服务器
+    // 使用 with_graceful_shutdown 监听 Ctrl+C 信号
     axum::serve(listener, routes_all.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| Error::ServerSetup(format!("Server failed: {}", e)))?;
 
+    // 优雅关闭：从 Nacos 注销服务实例
+    info!("开始优雅关闭...");
+    shutdown_nacos().await;
+    info!("服务已优雅关闭");
+
     Ok(())
+}
+
+/// 监听优雅关闭信号
+///
+/// 监听 Ctrl+C (SIGINT) 和 SIGTERM 信号，
+/// 收到信号后触发 graceful shutdown
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("收到 Ctrl+C 信号，开始优雅关闭...");
+        },
+        _ = terminate => {
+            info!("收到 SIGTERM 信号，开始优雅关闭...");
+        },
+    }
 }

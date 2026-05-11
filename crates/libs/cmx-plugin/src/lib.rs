@@ -37,6 +37,7 @@ pub mod security;
 pub mod service;
 pub mod cluster;
 pub mod audit;
+pub mod marketplace;
 pub mod traits_impl;
 
 // 导出错误类型
@@ -69,6 +70,7 @@ pub use service::upgrade::UpgradeService;
 pub use service::downgrade::DowngradeService;
 pub use service::rollback::RollbackService;
 pub use service::deploy::{DeployAction, DeployRequest, DeployResponse};
+pub use service::auto_install::{AutoInstallService, AutoInstallConfig, AutoInstallPlugin, AutoInstallResult, InstallAction};
 
 // 导出基础设施模块类型
 pub use infrastructure::database::schema::SchemaManager;
@@ -110,6 +112,15 @@ pub use fetcher::remote::RemoteFetcher;
 pub use fetcher::registry::{RegistryFetcher, RegistryInfo, RegistryPackageDetail, RegistrySearchResult};
 
 pub use host_functions::PluginHostFunctions;
+
+// 导出插件市场模块类型
+pub use marketplace::model::{
+    MarketplacePlugin, MarketplacePluginVersion, MarketplaceDownloadStats,
+    MarketplaceRating, MarketplaceFilter, CategoryInfo,
+};
+pub use marketplace::repository::MarketplaceRepository;
+pub use marketplace::service::MarketplaceService;
+pub use marketplace::stats::StatsService;
 
 // ==================== 全局单例 ====================
 

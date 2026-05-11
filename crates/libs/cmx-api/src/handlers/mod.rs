@@ -13,6 +13,7 @@ pub mod application;
 pub mod debug;
 pub mod dev;
 pub mod domain;
+pub mod marketplace;
 pub mod module;
 pub mod plugin;
 pub mod service;

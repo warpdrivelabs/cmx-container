@@ -11,6 +11,8 @@
 use std::path::Path;
 
 use serde::Deserialize;
+use serde_json::Value;
+use tracing::error;
 use cmx_core::model::cell::TableDefine;
 use crate::MetadataError;
 
@@ -68,12 +70,22 @@ pub fn load_table_define_from_path(path: &Path) -> Result<TableDefine, MetadataE
 /// * 成功返回 `Vec<TableDefine>`
 /// * 失败返回 `MetadataError`
 pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError> {
-    let root: TableDefinesRoot = serde_json::from_str(s)?;
-    Ok(match root {
-        // TableDefinesRoot::Single(t) => vec![*t],
-        TableDefinesRoot::Multi { tables } => tables,
-        TableDefinesRoot::Array(arr) => arr,
-    })
+    // let root: TableDefinesRoot = serde_json::from_str(s)?;
+    // Ok(match root {
+    //     // TableDefinesRoot::Single(t) => vec![*t],
+    //     TableDefinesRoot::Multi { tables } => tables,
+    //     TableDefinesRoot::Array(arr) => arr,
+    // })
+
+    let json_value: Value = serde_json::from_str(s)?;
+
+    // 链式调用：取值 -> 转数组 -> 转结构体
+    // 注意：这里需要处理 Result 的转换，稍微复杂一点点，但逻辑很顺
+    json_value
+        .get("tables")
+        .ok_or_else(|| MetadataError::ConfigNotFound("缺少 tables 字段".to_string())) // 转为 Result
+        .and_then(|v| serde_json::from_value(v.clone()).map_err(MetadataError::from)) // 执行转换
+
 }
 
 /// 从 JSON 文件路径读取多个表定义

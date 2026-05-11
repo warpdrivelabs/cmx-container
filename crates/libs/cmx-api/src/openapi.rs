@@ -86,6 +86,20 @@ use utoipa::OpenApi;
         crate::handlers::service::handler::delete_service,
         crate::handlers::service::handler::service_exists,
 
+        // Marketplace handlers
+        crate::handlers::marketplace::handler::marketplace_plugin_page,
+        crate::handlers::marketplace::handler::marketplace_plugin_get_by_id,
+        crate::handlers::marketplace::handler::marketplace_plugin_publish,
+        crate::handlers::marketplace::handler::marketplace_plugin_update,
+        crate::handlers::marketplace::handler::marketplace_plugin_delete,
+        crate::handlers::marketplace::handler::marketplace_plugin_version_list,
+        crate::handlers::marketplace::handler::marketplace_plugin_version_get_by_id,
+        crate::handlers::marketplace::handler::marketplace_plugin_install,
+        crate::handlers::marketplace::handler::marketplace_plugin_rate,
+        crate::handlers::marketplace::handler::marketplace_plugin_rating_list,
+        crate::handlers::marketplace::handler::marketplace_category_list,
+        crate::handlers::marketplace::handler::marketplace_trending_list,
+
     ),
     components(
         schemas(
@@ -131,6 +145,23 @@ use utoipa::OpenApi;
             crate::handlers::service::models::ServiceDeleteQuery,
             crate::handlers::service::models::ServiceListItem,
             crate::handlers::service::models::ServiceDetailResponse,
+            // Marketplace models
+            crate::handlers::marketplace::request::MarketplacePluginFilter,
+            crate::handlers::marketplace::request::MarketplaceVersionFilter,
+            crate::handlers::marketplace::request::MarketplaceRatingFilter,
+            crate::handlers::marketplace::request::MarketInstallRequest,
+            crate::handlers::marketplace::request::PublishPluginRequest,
+            crate::handlers::marketplace::request::UpdateMarketplacePluginRequest,
+            crate::handlers::marketplace::request::DeleteMarketplacePluginRequest,
+            crate::handlers::marketplace::request::RatePluginRequest,
+            crate::handlers::marketplace::request::TrendingFilter,
+            crate::handlers::marketplace::request::MarketplaceCategoryFilter,
+            crate::handlers::marketplace::response::MarketplacePluginResponse,
+            crate::handlers::marketplace::response::MarketplaceVersionResponse,
+            crate::handlers::marketplace::response::MarketplacePluginDetailResponse,
+            crate::handlers::marketplace::response::MarketInstallResponse,
+            crate::handlers::marketplace::response::MarketplaceRatingResponse,
+            crate::handlers::marketplace::response::CategoryResponse,
         )
     )
 )]

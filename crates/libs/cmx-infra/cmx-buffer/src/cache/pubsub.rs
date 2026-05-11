@@ -156,9 +156,9 @@ pub struct GlobalSubscriber {
     tasks: tokio::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>,
 }
 
-/// 重连退避策略
-const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
-const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
+// /// 重连退避策略
+// const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
+// const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 
 impl GlobalSubscriber {
     /// 从 RedisClient 创建全局订阅者
@@ -292,8 +292,8 @@ impl GlobalSubscriber {
         &self,
         rx: tokio::sync::mpsc::UnboundedReceiver<redis::PushInfo>,
     ) {
-        let conn = self.conn.clone();
-        let client = self.client.clone();
+        // let conn = self.conn.clone();
+        // let client = self.client.clone();
         let handlers = self.handlers.clone();
         let pattern_handlers = self.pattern_handlers.clone();
 

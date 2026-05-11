@@ -320,7 +320,7 @@ impl NodeManager {
         F: std::future::Future<Output = crate::error::PluginResult<T>>,
     {
         if let Some(ref lock_manager) = self.lock_manager {
-            let _guard = lock_manager.lock(lock_key).await
+            let _guard = lock_manager.lock(lock_key, cmx_buffer::LockOptions::default()).await
                 .map_err(|e| crate::error::PluginError::Node(format!("获取分布式锁失败: {}", e)))?;
             
             f.await

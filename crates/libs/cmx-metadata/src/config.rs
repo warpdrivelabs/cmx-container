@@ -18,7 +18,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-
+use tracing::error;
 use cmx_core::model::cell::TableDefine;
 use cmx_core::model::meta::plugin::{TableDefinesConfig, SeedDataConfig};
 use crate::loader::load_table_defines_from_path;

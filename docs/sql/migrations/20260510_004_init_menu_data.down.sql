@@ -1,0 +1,5 @@
+-- 回滚菜单数据初始化
+-- 按逆序删除模块、应用、域数据
+DELETE FROM cmx_module WHERE id LIKE '1898765432100000%';
+DELETE FROM cmx_application WHERE id LIKE '18987654321000000%';
+DELETE FROM cmx_domain WHERE id LIKE '189876543210000000%';

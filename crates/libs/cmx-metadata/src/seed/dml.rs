@@ -6,12 +6,44 @@ use cmx_core::model::cell::{ColumnDefine, FieldType};
 use crate::MetadataError;
 
 /// 将 serde_json::Value 转义为 SQL 字面量
+///
+/// 对于时间类型字段，若字符串值为空，则返回 NULL 而非生成无效语法。
 fn escape_sql_value(value: &serde_json::Value, field_type: &FieldType) -> String {
     match value {
         serde_json::Value::Null => "NULL".to_string(),
         serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::String(s) => format!("'{}'", escape_string(s)),
+        serde_json::Value::Number(n) => {
+            // DateTime 类型：数字被解析为 Number，需要转为 PostgreSQL 时间函数
+            if matches!(field_type, FieldType::DateTime) {
+                // Unix 时间戳（毫秒/秒）转为 TIMESTAMP
+                if let Some(v) = n.as_i64() {
+                    if v > 1_000_000_000_000 {
+                        format!("to_timestamp({})", v as f64 / 1000.0)
+                    } else {
+                        format!("to_timestamp({})", v as f64)
+                    }
+                } else if let Some(v) = n.as_f64() {
+                    format!("to_timestamp({})", v)
+                } else {
+                    n.to_string()
+                }
+            } else {
+                n.to_string()
+            }
+        }
+        serde_json::Value::String(s) => {
+            // 空字符串对于时间类型返回 NULL，避免生成无效语法
+            if s.is_empty() {
+                return "NULL".to_string();
+            }
+            let escaped = escape_string(s);
+            // 根据字段类型添加适当的 PostgreSQL 类型转换
+            match field_type {
+                FieldType::Date => format!("'{}'::date", escaped),
+                FieldType::DateTime => format!("'{}'::timestamptz", escaped),
+                _ => format!("'{}'", escaped),
+            }
+        }
         serde_json::Value::Array(arr) => {
             format!("'{}'", escape_string(&serde_json::to_string(arr).unwrap_or_default()))
         }
@@ -71,8 +103,25 @@ pub fn generate_pg_insert_or_upsert(
         _ => format!("\"{}\"", table_name),
     };
 
+    // 收集所有需要插入的列（排除有默认值且数据中不存在的列）
+    let insertable_columns: Vec<&ColumnDefine> = columns
+        .iter()
+        .filter(|col| {
+            // 如果行数据中包含该列，则需要插入
+            if rows.iter().any(|row| row.get(&col.name).is_some()) {
+                return true;
+            }
+            // 行数据中不包含该列，但有默认值，则跳过（让数据库使用默认值）
+            if col.default_value.is_some() {
+                return false;
+            }
+            // 没有默认值，则插入 NULL（列必须可为空或主键有默认值）
+            true
+        })
+        .collect();
+
     // 构建列名列表
-    let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+    let column_names: Vec<&str> = insertable_columns.iter().map(|c| c.name.as_str()).collect();
     let col_list = column_names
         .iter()
         .map(|c| format!("\"{}\"", c))
@@ -82,7 +131,7 @@ pub fn generate_pg_insert_or_upsert(
     // 构建 VALUES 子句
     let mut values_list = Vec::with_capacity(rows.len());
     for row in rows {
-        let values: Vec<String> = columns
+        let values: Vec<String> = insertable_columns
             .iter()
             .map(|col| {
                 let value = row.get(&col.name).unwrap_or(&serde_json::Value::Null);
@@ -108,8 +157,8 @@ pub fn generate_pg_insert_or_upsert(
             .collect::<Vec<_>>()
             .join(", ");
 
-        // 排除冲突列，只更新其他列
-        let update_columns: Vec<String> = columns
+        // 只更新插入的列，不更新跳过的列（有默认值的列）
+        let update_columns: Vec<String> = insertable_columns
             .iter()
             .filter(|c| !conflict_columns.contains(&c.name))
             .map(|c| {

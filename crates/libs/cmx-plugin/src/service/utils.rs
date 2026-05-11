@@ -68,6 +68,7 @@ pub async fn create_plugin_tables(
     // 执行种子数据初始化
     let all_seed_configs = table_config_manager.collect_seed_configs();
     if !all_seed_configs.is_empty() {
+        tracing::info!("插件 {} 开始执行种子数据初始化，数据文件数{}", plugin_id, &all_seed_configs.len());
         let seed_executor = PgSeedDataExecutor::new(db_id, None);
         let summary = seed_executor
             .execute_all_seed_data(&table_defs, &all_seed_configs, install_path)
@@ -104,6 +105,8 @@ pub async fn create_plugin_tables(
                     );
                 }
         }
+    }else{
+        tracing::info!("插件 {} 没有种子数据", plugin_id);
     }
 
         if let Err(e) = save_plugin_table_metadata(

@@ -11,3 +11,4 @@ pub mod record_builder;
 pub mod initializer;
 pub mod data_parser;
 pub mod service_parser;
+pub mod auto_install;

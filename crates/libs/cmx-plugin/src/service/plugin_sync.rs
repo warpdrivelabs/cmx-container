@@ -95,7 +95,7 @@ impl PluginChangeHandler {
         // 检查本地是否已是最新版本
         let local_path = self.plugin_root.join(plugin_id).join(&db_plugin.version);
         if local_path.exists() {
-            tracing::debug!(
+            tracing::info!(
                 "插件 {} 版本 {} 本地已存在，跳过同步",
                 plugin_id,
                 db_plugin.version

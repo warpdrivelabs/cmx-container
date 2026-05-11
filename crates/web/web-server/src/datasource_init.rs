@@ -14,9 +14,10 @@ use tracing::{error, info, warn};
 /// 初始化数据源（主入口）
 ///
 /// 执行流程:
-/// 1. 持久化配置文件中的数据源到数据库
-/// 2. 从数据库加载有效数据源
-/// 3. 注册到内存
+/// 1. 注册配置文件中的数据源连接
+/// 2. 持久化配置文件中的数据源到数据库
+/// 3. 从数据库加载有效数据源
+/// 4. 注册到内存
 pub async fn init_datasources() {
     info!("开始初始化数据源...");
 
@@ -33,6 +34,7 @@ pub async fn init_datasources() {
 
     let db_manager = get_default_db_manager();
 
+    // 阶段1：注册配置文件中的数据源连接（创建连接池）
     if let Err(e) = register_datasources(db_manager, configs.clone()).await {
         error!("注册配置文件数据源失败: {}", e);
         panic!("注册配置文件数据源失败: {}", e);
@@ -40,11 +42,16 @@ pub async fn init_datasources() {
 
     let default_db_id = db_manager.get_default_db_id().await;
 
+    // 阶段2：执行数据库迁移（确保表结构已创建，再进行持久化）
+    crate::config::init_database_migrations().await;
+
+    // 阶段3：持久化配置文件中的数据源到数据库
     if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, configs).await {
         error!("持久化数据源配置失败: {}", e);
         panic!("持久化数据源配置失败: {}", e);
     }
 
+    // 阶段4：从数据库加载有效数据源并注册
     let mut active_datasources = match load_active_datasources(db_manager, &default_db_id).await {
         Ok(datasources) => datasources,
         Err(e) => {

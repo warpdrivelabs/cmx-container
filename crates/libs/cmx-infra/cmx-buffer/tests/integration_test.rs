@@ -3,7 +3,7 @@
 
 use cmx_buffer::cache::CacheManager;
 use cmx_buffer::config::{LockConfig, RedisConfig};
-use cmx_buffer::lock::LockManager;
+use cmx_buffer::lock::{LockManager, LockOptions};
 use cmx_buffer::RedisClient;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -321,7 +321,7 @@ async fn test_lock_guard() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     // 获取锁守卫
-    let _guard = lock_manager.lock(key).await.unwrap();
+    let _guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
     
     // 验证锁存在
     let is_locked = lock_manager.is_locked(key).await.unwrap();
@@ -348,7 +348,7 @@ async fn test_lock_extend() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     // 获取锁
-    let guard = lock_manager.lock(key).await.unwrap();
+    let guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
     
     // 延长锁时间
     guard.extend(Duration::from_secs(10)).await.unwrap();
@@ -373,7 +373,7 @@ async fn test_lock_auto_release() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     {
-        let _guard = lock_manager.lock(key).await.unwrap();
+        let _guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
         assert!(lock_manager.is_locked(key).await.unwrap());
     }
     

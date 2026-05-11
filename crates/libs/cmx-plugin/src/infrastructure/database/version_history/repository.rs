@@ -349,7 +349,7 @@ impl VersionHistoryRepository {
 
         dbg!(plugin_id,version);
         let existing = self.find_version(plugin_id, version,txn_id).await?;
-        dbg!(&existing);
+        // dbg!(&existing);
 
         if let Some(ref record) = existing {
             let update_fields = VersionUpdateParams {

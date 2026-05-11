@@ -9,6 +9,36 @@ use uuid::Uuid;
 
 // 分布式锁管理器
 
+/// 锁获取选项，用于在 lock 调用时覆盖全局配置
+///
+/// 未设置的字段将使用全局 LockConfig 中的默认值
+#[derive(Debug, Clone, Default)]
+pub struct LockOptions {
+    /// 自定义重试次数，None 使用全局配置
+    pub retry_times: Option<u32>,
+    /// 自定义重试间隔，None 使用全局配置
+    pub retry_interval: Option<Duration>,
+}
+
+impl LockOptions {
+    /// 创建空的锁选项（全部使用全局配置）
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 设置重试次数
+    pub fn with_retry_times(mut self, times: u32) -> Self {
+        self.retry_times = Some(times);
+        self
+    }
+
+    /// 设置重试间隔
+    pub fn with_retry_interval(mut self, interval: Duration) -> Self {
+        self.retry_interval = Some(interval);
+        self
+    }
+}
+
 /// 作者: AI Assistant
 /// 日期: 2026-03-16
 /// 分布式锁管理器
@@ -35,6 +65,11 @@ impl LockManager {
     /// 获取配置
     pub fn config(&self) -> &LockConfig {
         &self.config
+    }
+
+    /// 获取 Redis 客户端引用
+    pub fn client(&self) -> &RedisClient {
+        &self.client
     }
 
     /// 构建锁的键名
@@ -97,15 +132,32 @@ impl LockManager {
     ///
     /// # 参数
     /// * `key` - 锁键
+    /// * `options` - 锁获取选项，用于覆盖全局配置的重试次数和重试间隔
     ///
     /// # 返回值
     /// * `Result<LockGuard>` - 锁守卫
-    pub async fn lock(&self, key: &str) -> Result<LockGuard> {
+    ///
+    /// # 示例
+    /// ```ignore
+    /// // 使用全局配置
+    /// let guard = lock_manager.lock("my_key", LockOptions::default()).await?;
+    ///
+    /// // 自定义重试次数和间隔
+    /// let guard = lock_manager.lock("my_key", LockOptions::new()
+    ///     .with_retry_times(5)
+    ///     .with_retry_interval(Duration::from_millis(500)))
+    ///     .await?;
+    /// ```
+    pub async fn lock(&self, key: &str, options: impl Into<LockOptions>) -> Result<LockGuard> {
+        let options = options.into();
         let lock_key = self.build_lock_key(key);
-        
-        for attempt in 0..self.config.retry_times {
+
+        let retry_times = options.retry_times.unwrap_or(self.config.retry_times);
+        let retry_interval = options.retry_interval.unwrap_or(self.config.retry_interval_duration());
+
+        for attempt in 0..retry_times {
             let (success, lock_value) = self.try_lock_with_value(key).await?;
-            
+
             if success {
                 let guard = LockGuard::new(
                     key.to_string(),
@@ -113,23 +165,22 @@ impl LockManager {
                     self.client.clone(),
                     self.config.clone(),
                 );
-                
+
                 guard.start_auto_renew_task().await;
-                
+
                 return Ok(guard);
             }
-            
-            if attempt < self.config.retry_times - 1 {
+
+            if attempt < retry_times - 1 {
                 LockLog::lock_failed(&lock_key, "重试获取锁");
-                tokio::time::sleep(self.config.retry_interval_duration()).await;
+                tokio::time::sleep(retry_interval).await;
             }
         }
-        
+
         LockLog::lock_conflict(&lock_key);
         Err(Error::LockConflictError(format!(
             "获取锁失败: {}, 已重试 {} 次",
-            lock_key,
-            self.config.retry_times
+            lock_key, retry_times
         )))
     }
 

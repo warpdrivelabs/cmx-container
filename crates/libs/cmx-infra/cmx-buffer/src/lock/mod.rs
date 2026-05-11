@@ -1,6 +1,6 @@
 pub mod manager;
 
-pub use manager::{LockGuard, LockManager};
+pub use manager::{LockGuard, LockManager, LockOptions};
 
 use crate::client::RedisClient;
 use crate::config::{CacheConfig, LockConfig, RedisConfig};

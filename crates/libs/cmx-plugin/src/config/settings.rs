@@ -33,6 +33,9 @@ pub struct PluginManagerSettings {
     pub node_name: Option<String>,
     /// 节点类型
     pub node_type: Option<String>,
+    /// 自动安装配置
+    #[serde(default)]
+    pub auto_install: crate::service::auto_install::AutoInstallConfig,
 }
 
 impl Default for PluginManagerSettings {
@@ -50,6 +53,7 @@ impl Default for PluginManagerSettings {
             node_id: None,
             node_name: None,
             node_type: None,
+            auto_install: crate::service::auto_install::AutoInstallConfig::default(),
         }
     }
 }

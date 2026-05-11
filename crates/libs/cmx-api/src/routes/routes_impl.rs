@@ -7,6 +7,7 @@ use crate::handlers::application;
 use crate::handlers::debug;
 use crate::handlers::dev;
 use crate::handlers::domain;
+use crate::handlers::marketplace;
 use crate::handlers::module;
 use crate::handlers::plugin;
 use crate::handlers::service;
@@ -61,6 +62,9 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册调试路由（使用 ModuleRoutes）
     let router = router.merge(debug::DebugModule.routes());
+
+    // 注册插件市场路由（使用 ModuleRoutes）
+    let router = router.merge(marketplace::MarketplaceModule.routes());
 
     // 注册开发工具路由（使用 ModuleRoutes）
     

@@ -24,7 +24,8 @@ pub use client::{
 pub use config::{CacheConfig, LockConfig, RedisConfig, RedisMode};
 pub use error::{Error, Result};
 pub use lock::{
-    create_lock_manager, create_lock_manager_with_config, GlobalLockManager, LockGuard, LockManager,
+    create_lock_manager, create_lock_manager_with_config, GlobalLockManager, LockGuard,
+    LockManager, LockOptions,
 };
 
 pub use host_functions::BufferHostFunctions;

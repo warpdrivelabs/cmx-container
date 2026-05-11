@@ -70,12 +70,12 @@ impl PluginNotifier {
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
             Ok(subscribers) => {
                 tracing::info!(
-                    "已发布插件变更通知: {} (订阅者: {})",
+                    "已发布插件变更通知到redis: {} (订阅者: {})",
                     plugin_id, subscribers
                 );
             }
             Err(e) => {
-                tracing::error!("发布插件变更通知失败: {} - {}", plugin_id, e);
+                tracing::error!("发布插件变更通知到redis失败: {} - {}", plugin_id, e);
             }
         }
     }

@@ -106,6 +106,11 @@ fn load_seed_data_from_csv(
         for (col_idx, header) in headers.iter().enumerate() {
             let value_str = record.get(col_idx).unwrap_or("").trim();
 
+            // 空字符串：不插入该列（让 DML 生成器根据默认值决定是否包含）
+            if value_str.is_empty() {
+                continue;
+            }
+
             // 根据列定义的类型进行转换
             let json_value = if let Some(field_type) = col_type_map.get(header.as_str()) {
                 convert_csv_value(value_str, field_type)

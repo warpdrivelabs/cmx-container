@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+# 内部依赖 - 缓存
+cmx-buffer = { workspace = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
 # 内部依赖 - 工具库
@@ -52,3 +54,5 @@ sqlparser = { workspace = true }
 regex = { workspace = true }
 # URL 解析
 url = { workspace = true }
+# SHA256 校验和计算
+sha2 = { workspace = true }
