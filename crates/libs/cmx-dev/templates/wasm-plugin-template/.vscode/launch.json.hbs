@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug All Tests",
+      "cargo": {
+        "args": ["test", "--no-run"],
+        "filter": {
+          "name": "{{project_name}}",
+          "kind": "lib"
+        }
+      },
+      "args": ["--no-capture"],
+      "sourceLanguages": ["rust"],
+      "cwd": "${workspaceFolder}",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Specific Test",
+      "cargo": {
+        "args": ["test", "--no-run"],
+        "filter": {
+          "name": "{{project_name}}",
+          "kind": "lib"
+        }
+      },
+      "args": ["${input:testName}", "--no-capture"],
+      "sourceLanguages": ["rust"],
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testName",
+      "type": "promptString",
+      "description": "Test function name",
+      "default": "test_count_vowels"
+    }
+  ]
+}
