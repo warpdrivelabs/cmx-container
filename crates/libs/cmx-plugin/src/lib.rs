@@ -115,8 +115,12 @@ pub use host_functions::PluginHostFunctions;
 
 // 导出插件市场模块类型
 pub use marketplace::model::{
-    MarketplacePlugin, MarketplacePluginVersion, MarketplaceDownloadStats,
-    MarketplaceRating, MarketplaceFilter, CategoryInfo,
+    MarketplacePlugin, MarketplacePluginForCreate, MarketplacePluginForUpdate,
+    MarketplacePluginVersion, MarketplacePluginVersionForCreate,
+    MarketplaceDownloadStats, MarketplaceRating, MarketplaceRatingForCreate,
+    MarketplacePluginFilter, MarketplacePluginVersionFilter, MarketplaceRatingFilter,
+    MarketplacePluginBmc, MarketplacePluginVersionBmc, MarketplaceRatingBmc,
+    CategoryInfo,
 };
 pub use marketplace::repository::MarketplaceRepository;
 pub use marketplace::service::MarketplaceService;

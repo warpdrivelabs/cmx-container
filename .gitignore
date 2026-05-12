@@ -1,7 +1,7 @@
 /.idea/
 /target/
 /backup/
-/example/
+#/example/
 /examples/
 /plugins/
 /sweep.timestamp

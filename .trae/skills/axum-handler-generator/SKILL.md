@@ -116,12 +116,12 @@ use crate::rest::handler;
 
 pub fn routes() -> Router<CmxAppState> {
     Router::new()
-        .route("/xxx", post(handler::create::<XxxBmc, XxxEntity>))
+        .route("/xxx/create", post(handler::create::<XxxBmc, XxxEntity>))
         .route("/xxx/list", post(handler::list::<XxxBmc, XxxFilter>))
         .route("/xxx/page", post(handler::page::<XxxBmc, XxxFilter>))
-        .route("/xxx", get(handler::get_by_id::<XxxBmc>))
-        .route("/xxx", post(handler::update::<XxxBmc, XxxEntity>))
-        .route("/xxx", post(handler::delete::<XxxBmc>))
+        .route("/xxx/get", get(handler::get_by_id::<XxxBmc>))
+        .route("/xxx/update", post(handler::update::<XxxBmc, XxxEntity>))
+        .route("/delete", post(handler::delete::<XxxBmc>))
 }
 ```
 
@@ -304,19 +304,42 @@ ApiResp::ok_with_pagination(data, page, page_size, total)
 
 ## 六、路由注册规范
 
-在 `mod.rs` 中注册路由时，注意 HTTP 方法与操作的对应关系：
+### 6.1 路由路径命名规范
+
+**每个操作必须使用独立的路径**，严禁不同操作共享同一路径仅靠 HTTP 方法区分。
 
 ```rust
 use axum::routing::{get, post};
 
 pub fn routes() -> Router<CmxAppState> {
     Router::new()
-        .route("/xxx", post(xxx_create))        // 创建 → POST
-        .route("/xxx/list", post(xxx_list))      // 列表 → POST (json body)
-        .route("/xxx/page", post(xxx_page))      // 分页 → POST (json body)
-        .route("/xxx", get(xxx_get_by_id))       // 查询单条 → GET
-        .route("/xxx", post(xxx_update))         // 更新 → POST
-        .route("/xxx", post(xxx_delete))         // 删除 → POST
+        .route("/xxx/create", post(xxx_create))       // 创建 → POST
+        .route("/xxx/list", post(xxx_list))            // 列表 → POST (json body)
+        .route("/xxx/page", post(xxx_page))            // 分页 → POST (json body)
+        .route("/xxx/get", get(xxx_get_by_id))         // 查询单条 → GET
+        .route("/xxx/update", post(xxx_update))        // 更新 → POST
+        .route("/xxx/delete", post(xxx_delete))        // 删除 → POST
+}
+```
+
+> **重要**：路径必须语义明确，如 `/plugin/get`、`/plugin/publish`、`/plugin/update`。
+> 禁止 `/plugin` 同时用于 GET(详情) 和 POST(发布)，这会导致路由冲突和语义混乱。
+
+### 6.2 使用通用 CRUD Handler 的路由
+
+当实体可以通过 `modql` + `GenericCrudService` 直接操作时：
+
+```rust
+use crate::rest::handler;
+
+pub fn routes() -> Router<CmxAppState> {
+    Router::new()
+        .route("/xxx/create", post(handler::create::<XxxBmc, XxxForCreate>))
+        .route("/xxx/list", post(handler::list::<XxxBmc, XxxFilter>))
+        .route("/xxx/page", post(handler::page::<XxxBmc, XxxFilter>))
+        .route("/xxx/get", get(handler::get_by_id::<XxxBmc>))
+        .route("/xxx/update", post(handler::update::<XxxBmc, XxxForUpdate>))
+        .route("/xxx/delete", post(handler::delete::<XxxBmc>))
 }
 ```
 
@@ -396,8 +419,209 @@ use axum::Router;
 
 pub fn routes() -> Router<CmxAppState> {
     Router::new()
-        .route("/xxx", post(xxx_create))
+        .route("/xxx/create", post(xxx_create))
         .route("/xxx/page", post(xxx_page))
-        .route("/xxx", get(xxx_get_by_id))
+        .route("/xxx/get", get(xxx_get_by_id))
 }
 ```
+
+---
+
+## 十、modql + GenericCrudService 使用规范
+
+> 当实体不涉及多表 JOIN 操作时，**必须**使用 `modql` + `GenericCrudService` 实现 CRUD，
+> 禁止手写 SQL。只有涉及多表 JOIN 或复杂聚合查询时才允许自定义 SQL。
+
+### 10.1 实体结构体（Entity）
+
+使用 `#[derive(Fields)]` 让 modql 自动生成字段元数据。每种操作定义独立的结构体：
+
+```rust
+use modql::field::Fields;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+/// 完整实体（查询返回用）
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+pub struct XxxEntity {
+    pub id: String,
+    pub code: String,
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub archived: Option<i32>,
+    pub create_time: Option<String>,
+    pub update_time: Option<String>,
+    pub create_by: Option<String>,
+    pub create_name: Option<String>,
+    pub update_by: Option<String>,
+    pub update_name: Option<String>,
+}
+
+/// 创建请求 DTO（不含自动生成字段）
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+pub struct XxxForCreate {
+    pub code: String,
+    pub name: Option<String>,
+}
+
+/// 更新请求 DTO（所有字段可选，仅更新提供的字段）
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+pub struct XxxForUpdate {
+    pub name: Option<String>,
+    pub status: Option<String>,
+}
+```
+
+**要点**：
+- `ForCreate` 不包含 `id`、`create_time`、`update_time` 等自动生成字段（GenericCrudService 自动处理）
+- `ForUpdate` 所有字段都是 `Option`，GenericCrudService 只更新非 None 的字段
+- `Fields` derive 宏让结构体实现 `HasSeaFields`，GenericCrudService 通过它构建 INSERT/UPDATE SQL
+
+### 10.2 过滤器结构体（Filter）
+
+使用 `#[derive(FilterNodes)]` 让 modql 自动实现 `IntoFilterNodes` trait：
+
+```rust
+use modql::filter::{FilterNodes, OpValsString, OpValsInt64};
+use serde::Deserialize;
+
+#[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
+pub struct XxxFilter {
+    pub code: Option<OpValsString>,
+    pub name: Option<OpValsString>,
+    pub status: Option<OpValsString>,
+    pub archived: Option<OpValsInt64>,
+}
+```
+
+**字段类型映射**：
+| 数据库类型 | Filter 字段类型 | 支持的操作符 |
+|-----------|----------------|-------------|
+| varchar/text | `Option<OpValsString>` | Eq, Not, In, NotIn, Contains, StartsWith, EndsWith, ContainsCi, Empty, Null 等 |
+| int4/int8 | `Option<OpValsInt64>` | Eq, Not, In, NotIn, Lt, Lte, Gt, Gte, Null |
+| bool | `Option<OpValsBool>` | Eq, Not, Null |
+| float/double | `Option<OpValsFloat64>` | Eq, Not, In, NotIn, Lt, Lte, Gt, Gte, Null |
+
+**前端 JSON 调用示例**：
+```json
+{
+    "filter": {
+        "name": {"$contains": "test"},
+        "status": {"$eq": "published"},
+        "archived": {"$eq": 0}
+    },
+    "page": 1,
+    "size": 20
+}
+```
+
+**多表 JOIN 时指定表别名**：
+```rust
+#[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
+pub struct XxxFilter {
+    #[modql(rel = "a")]
+    pub code: Option<OpValsString>,
+    #[modql(rel = "a")]
+    pub name: Option<OpValsString>,
+}
+```
+
+### 10.3 Bmc 结构体（表映射）
+
+实现 `DbBmc` trait 告诉 GenericCrudService 表名和主键列：
+
+```rust
+use cmx_database::crud::DbBmc;
+
+pub struct XxxBmc;
+
+impl DbBmc for XxxBmc {
+    const TABLE: &'static str = "cmx_xxx";
+    const PK_COLUMN: &'static str = "id";
+}
+```
+
+**DbBmc 可配置项**：
+| 方法 | 默认值 | 说明 |
+|------|--------|------|
+| `TABLE` | （必须指定） | 表名 |
+| `PK_COLUMN` | `"code"` | 主键列名 |
+| `has_timestamps()` | `true` | 是否自动填充 create_time/update_time |
+| `has_owner_id()` | `false` | 是否自动填充 owner_id |
+| `encrypted_fields()` | `&[]` | 需要加解密的字段列表 |
+
+### 10.4 Service 层使用 GenericCrudService
+
+```rust
+use cmx_database::crud::GenericCrudService;
+use cmx_database::get_default_db_manager;
+
+impl XxxService {
+    pub async fn create(mm: &DatabaseManager, db_id: &str, data: XxxForCreate) -> Result<DataSet> {
+        GenericCrudService::<XxxBmc>::create(mm, db_id, None, data).await
+    }
+
+    pub async fn get(mm: &DatabaseManager, db_id: &str, id: &str) -> Result<DataSet> {
+        GenericCrudService::<XxxBmc>::get(mm, db_id, None, id.into()).await
+    }
+
+    pub async fn update(mm: &DatabaseManager, db_id: &str, id: Value, data: XxxForUpdate) -> Result<DataSet> {
+        GenericCrudService::<XxxBmc>::update(mm, db_id, None, id, data).await
+    }
+
+    pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<Value>) -> Result<DataSet> {
+        GenericCrudService::<XxxBmc>::delete(mm, db_id, None, ids).await
+    }
+
+    pub async fn page(
+        mm: &DatabaseManager, db_id: &str,
+        filters: Option<Vec<XxxFilter>>,
+        list_options: ListOptions,
+    ) -> Result<(DataSet, i64)> {
+        GenericCrudService::<XxxBmc, XxxFilter>::page(
+            mm, db_id, None, filters, list_options,
+        ).await
+    }
+}
+```
+
+### 10.5 Service 方法参数规范
+
+**严禁**将多个参数平铺到函数签名中。**必须**使用结构体传递：
+
+```rust
+// ❌ 错误：参数平铺，臃肿且难以维护
+pub async fn publish_plugin(
+    &self,
+    plugin_id: String,
+    name: Option<String>,
+    description: Option<String>,
+    category: Option<String>,
+    // ... 20+ 个参数
+) -> PluginResult<MarketplacePlugin>
+
+// ✅ 正确：使用结构体参数
+pub async fn publish_plugin(
+    &self,
+    req: PublishPluginRequest,
+) -> PluginResult<MarketplacePlugin>
+```
+
+### 10.6 何时使用 GenericCrudService vs 自定义 SQL
+
+| 场景 | 推荐方式 |
+|------|---------|
+| 单表 CRUD（增删改查） | `GenericCrudService` |
+| 单表分页/列表查询 | `GenericCrudService::page/list` + `FilterNodes` |
+| 多表 JOIN 查询 | `CustomQueryService::page_custom` + `FilterNodes` |
+| INSERT ... ON CONFLICT（UPSERT） | 自定义 SQL |
+| 聚合统计（GROUP BY / SUM / AVG） | 自定义 SQL |
+| 跨表事务操作 | 自定义 SQL + 事务 |
+
+### 10.7 新增实体的完整步骤
+
+1. **定义 Entity**：创建 `ForCreate` / `ForUpdate` 结构体，derive `Fields`
+2. **定义 Filter**：derive `FilterNodes`，使用 `OpValsString`/`OpValsInt64` 等类型
+3. **定义 Bmc**：实现 `DbBmc` trait，指定 `TABLE`、`PK_COLUMN`
+4. **注册路由**：使用通用 `handler::*` 函数 + 泛型参数
+5. **（可选）自定义 Service**：包装 `GenericCrudService` 并添加自定义业务逻辑

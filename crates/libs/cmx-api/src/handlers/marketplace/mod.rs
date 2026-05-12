@@ -1,71 +1,81 @@
-//! 插件市场 API 模块
+//! 插件市场 API 模块。
 //!
-//! 提供插件市场的 HTTP API，包括：
-//! - 插件的发布、查询、更新、删除
-//! - 版本管理
-//! - 从市场安装插件
-//! - 评分和评论
-//! - 分类和热门统计
+//! 提供插件市场相关的所有 REST API 端点。
+//!
+//! # API 路由
+//!
+//! 所有路由前缀：`/api/marketplace`
+//!
+//! | 路由 | 方法 | 端点说明 |
+//! |------|------|---------|
+//! | `/plugin/page` | POST | 分页查询插件列表 |
+//! | `/plugin/get` | GET | 查询插件详情 |
+//! | `/plugin/publish` | POST | 发布插件到市场 |
+//! | `/plugin/update` | POST | 更新插件信息 |
+//! | `/plugin/delete` | POST | 删除插件（逻辑删除） |
+//! | `/plugin/version/list` | POST | 查询插件版本列表 |
+//! | `/plugin/version/get` | GET | 查询版本详情 |
+//! | `/plugin/install` | POST | 从市场安装插件 |
+//! | `/plugin/rate` | POST | 对插件评分 |
+//! | `/plugin/rating/list` | POST | 查询评分列表 |
+//! | `/category/list` | POST | 查询分类统计 |
+//! | `/stats/trending/list` | POST | 查询热门插件 |
+//!
+//! # 路由设计原则
+//!
+//! 每个操作使用独立语义路径（如 `/plugin/get`、`/plugin/publish`），
+//! 禁止同一路径用不同 HTTP 方法区分不同操作。
 
 pub mod handler;
 pub mod request;
 pub mod response;
 
+pub use handler::*;
+pub use request::*;
+pub use response::*;
+
+use crate::app_state::CmxAppState;
 use axum::routing::{get, post};
 use axum::Router;
 
-use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 
-pub use handler::{
-    marketplace_category_list, marketplace_plugin_delete, marketplace_plugin_get_by_id,
-    marketplace_plugin_install, marketplace_plugin_page, marketplace_plugin_publish,
-    marketplace_plugin_rate, marketplace_plugin_rating_list, marketplace_plugin_update,
-    marketplace_plugin_version_get_by_id, marketplace_plugin_version_list,
-    marketplace_trending_list,
-};
-
-/// 内部路由（不含前缀）
+/// 定义插件市场内部子路由。
+///
+/// 聚合所有插件市场相关的路由路径。
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
-        // 分页查询插件
         .route("/plugin/page", post(marketplace_plugin_page))
-        // 查询单条插件
-        .route("/plugin", get(marketplace_plugin_get_by_id))
-        // 发布插件
-        .route("/plugin", post(marketplace_plugin_publish))
-        // 更新插件
+        .route("/plugin/get", get(marketplace_plugin_get_by_id))
+        .route("/plugin/publish", post(marketplace_plugin_publish))
         .route("/plugin/update", post(marketplace_plugin_update))
-        // 删除插件
         .route("/plugin/delete", post(marketplace_plugin_delete))
-        // 版本列表
         .route("/plugin/version/list", post(marketplace_plugin_version_list))
-        // 版本详情
-        .route("/plugin/version", get(marketplace_plugin_version_get_by_id))
-        // 从市场安装
+        .route("/plugin/version/get", get(marketplace_plugin_version_get_by_id))
         .route("/plugin/install", post(marketplace_plugin_install))
-        // 评分
         .route("/plugin/rate", post(marketplace_plugin_rate))
-        // 评分列表
         .route("/plugin/rating/list", post(marketplace_plugin_rating_list))
-        // 分类列表
         .route("/category/list", post(marketplace_category_list))
-        // 热门插件
         .route("/stats/trending/list", post(marketplace_trending_list))
 }
 
-/// Marketplace 模块路由
+/// 插件市场路由模块。
+///
+/// 实现 `ModuleRoutes` trait，注册到全局路由树。
 pub struct MarketplaceModule;
 
 impl ModuleRoutes for MarketplaceModule {
+    /// 返回聚合了所有插件市场路由的 Router。
     fn routes(self) -> Router<CmxAppState> {
         Router::new().nest("/marketplace", inner_routes())
     }
 
+    /// 路由前缀（用于 OpenAPI 文档）。
     fn prefix() -> &'static str {
-        "marketplace"
+        "/marketplace"
     }
 
+    /// 模块名称（用于日志和调试）。
     fn module_name(&self) -> &'static str {
         "marketplace"
     }
