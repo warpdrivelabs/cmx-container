@@ -217,6 +217,7 @@ impl NacosClient {
         group: &str,
     ) -> Result<NacosConfigSource, NacosError> {
         let content = self.get_config(data_id, group).await?;
+        tracing::info!("已获取的远程配置信息为: {}/{}", group, content);
         NacosConfigSource::from_toml_str(&content)
     }
 
