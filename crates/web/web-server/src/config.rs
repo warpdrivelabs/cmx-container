@@ -47,26 +47,26 @@ pub fn get_nacos_client() -> Option<&'static NacosClient> {
     GLOBAL_NACOS_CLIENT.get()
 }
 
-/// 初始化全局配置（传统方式，不含 Nacos）
-#[allow(dead_code)]
-pub fn init_global_config() {
-    info!("加载环境变量和配置文件信息...");
-    ConfigManager::initialize(|| {
-        ConfigBuilder::new()
-            .add_toml_file_from_env("CONFIG_FILE")
-            .add_env()
-            // .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
-            .build()
-    })
-    .unwrap();
-    info!("打印所有配置和环境变量键值对...");
-    for key in ConfigManager::global().keys() {
-        if "Path" == key {
-            continue;
-        }
-        info!("{:?}: {:?}", key, ConfigManager::global().get(&key));
-    }
-}
+// /// 初始化全局配置（传统方式，不含 Nacos）
+// #[allow(dead_code)]
+// pub fn init_global_config() {
+//     info!("加载环境变量和配置文件信息...");
+//     ConfigManager::initialize(|| {
+//         ConfigBuilder::new()
+//             .add_toml_file_from_env("CONFIG_FILE")
+//             .add_env()
+//             // .add_source(CommandLineSource::from_args(std::env::args().skip(1)))
+//             .build()
+//     })
+//     .unwrap();
+//     info!("打印所有配置和环境变量键值对...");
+//     for key in ConfigManager::global().keys() {
+//         if "Path" == key {
+//             continue;
+//         }
+//         info!("{:?}: {:?}", key, ConfigManager::global().get(&key));
+//     }
+// }
 
 /// 初始化全局配置（含 Nacos 远程配置覆盖）
 ///
