@@ -1,0 +1,48 @@
+# config/docker.toml - Docker 环境配置模板
+# 注意：Nacos 连接信息通过环境变量（NACOS_* 前缀）注入，不在此文件中配置
+
+# Web 静态文件目录
+web_folder = "/app/web-folder"
+
+[[databases]]
+db_id = "primary"
+db_type = "postgres"
+db_url = "postgresql://postgres:postgres@postgres:5432/postgres"
+default = true
+
+[databases.pool_config]
+max_connections = 20
+min_connections = 5
+connect_timeout = 30
+idle_timeout = 600
+max_lifetime = 1800
+health_check_interval = 60
+health_check_timeout = 5
+
+[redis]
+url = "redis://redis:6379/13"
+
+[plugin]
+install_root = "/app/plugins/root"
+backup_root = "/app/plugins/backup"
+temp_root = "/app/plugins/temp"
+upload_root = "/app/plugins/uploads"
+
+[plugin.auto_install]
+enabled = false
+
+[runtime]
+memory_max = 4096
+timeout = 30
+pool_max_instances = 8
+fuel_limit = 0
+
+[migration]
+dir = "/app/docs/sql/migrations"
+lock_timeout = 60
+
+[templates]
+path = "/app/templates"
+
+[code_server]
+url = "https://dev.cloudmatrix.one:18080/"
