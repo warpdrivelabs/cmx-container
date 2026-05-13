@@ -15,7 +15,7 @@ use crate::handlers::sys_datasource;
 use crate::handlers::table_metadata;
 use crate::openapi::ApiDoc;
 use crate::routes::traits::ModuleRoutes;
-use axum::Router;
+use axum::{Json, Router, routing::get};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -69,7 +69,12 @@ pub fn api_routes() -> Router<CmxAppState> {
     // 注册开发工具路由（使用 ModuleRoutes）
     
 
-    router.merge(dev::DevModule.routes())
+    let mut router = router.merge(dev::DevModule.routes());
+
+    // 注册健康检查路由（无需认证，供 Docker HEALTHCHECK 和负载均衡器使用）
+    router = router.route("/health", get(health_check));
+
+    router
     // 统一添加 /api 前缀
     // with_api_prefix(router)
 }
@@ -88,4 +93,13 @@ pub fn api_routes() -> Router<CmxAppState> {
 pub fn swagger_routes() -> Router {
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+}
+
+/// 健康检查处理器
+///
+/// 返回服务运行状态，供 Docker HEALTHCHECK 和负载均衡器探测使用
+pub async fn health_check() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok"
+    }))
 }
