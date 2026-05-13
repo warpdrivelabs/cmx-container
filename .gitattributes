@@ -1,0 +1,9 @@
+# 让 Git 自动处理换行符
+* text=auto
+# 确保脚本文件在 Linux 下有正确的换行符
+*.sh text eol=lf
+# 确保 Windows 配置文件有正确的换行符
+*.bat text eol=crlf
+# 明确标记二进制文件，防止被误转换
+*.jpg binary
+*.png binary
