@@ -359,7 +359,7 @@ impl<H: HostFunctions> PluginCore<H> {
             "message": "服务编排执行完成",
         });
         let _set_response = self.host.cache_set(
-            "reids_key",
+            "redis_key",
             serde_json::Value::String("测试redis缓存".to_string()),
             Some(3600),
         )?;

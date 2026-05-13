@@ -7,10 +7,6 @@
       "name": "Debug All Tests",
       "cargo": {
         "args": ["test", "--no-run"],
-        "filter": {
-          "name": "{{project_name}}",
-          "kind": "lib"
-        }
       },
       "args": ["--no-capture"],
       "sourceLanguages": ["rust"],
@@ -23,10 +19,6 @@
       "name": "Debug Specific Test",
       "cargo": {
         "args": ["test", "--no-run"],
-        "filter": {
-          "name": "{{project_name}}",
-          "kind": "lib"
-        }
       },
       "args": ["${input:testName}", "--no-capture"],
       "sourceLanguages": ["rust"],
