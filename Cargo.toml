@@ -12,6 +12,7 @@ members = [
     "crates/libs/cmx-infra/cmx-database",
     "crates/libs/cmx-infra/cmx-buffer",
     "crates/libs/cmx-infra/cmx-nacos",
+    "crates/libs/cmx-infra/cmx-storage",
     "crates/web/web-server",
     "crates/libs/cmx-api",
     "crates/libs/cmx-plugin-sdk",
@@ -60,6 +61,16 @@ cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.5", regis
 cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.5", registry = "nora" }
 # 内部依赖 - Nacos
 cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.5", registry = "nora" }
+# 内部依赖 - 存储
+cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.5", registry = "nora" }
+# 对象存储访问层
+opendal = { version = "0.55", features = ["services-s3", "services-fs"] }
+# 文件 MIME Type 魔数检测
+infer = "0.19"
+# 基于扩展名的 MIME Type 推断
+mime_guess = "2"
+# MIME 类型
+mime = "0.3"
 
 # 异步运行时 - tokio 提供完整的异步编程支持
 tokio = { version = "1.41", features = ["full"] }
@@ -97,7 +108,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # 内存分配 - Arena 内存分配器，快速 bump 指针分配，适合短期 allocations
 bumpalo = { version = "3.16", features = ["collections", "allocator-api2"] }
 # 字节缓冲区 - 高效处理字节数据，常用于网络和 I/O
-bytes = "1.8"
+bytes = { version = "1.8", features = ["serde"] }
 
 # WebAssembly 运行时 - 支持加载和执行 WASM 模块
 wasmtime = "39.0.1"

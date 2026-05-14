@@ -442,7 +442,6 @@ pub struct MarketplacePluginFilter {
 }
 
 /// 插件版本查询过滤器。
-
 ///
 /// # Examples
 ///
@@ -467,7 +466,6 @@ pub struct MarketplacePluginVersionFilter {
 }
 
 /// 插件评分查询过滤器。
-
 ///
 /// # Examples
 ///
