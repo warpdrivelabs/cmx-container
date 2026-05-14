@@ -11,6 +11,7 @@ use crate::handlers::marketplace;
 use crate::handlers::module;
 use crate::handlers::plugin;
 use crate::handlers::service;
+use crate::handlers::storage;
 use crate::handlers::sys_datasource;
 use crate::handlers::table_metadata;
 use crate::openapi::ApiDoc;
@@ -65,6 +66,9 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册插件市场路由（使用 ModuleRoutes）
     let router = router.merge(marketplace::MarketplaceModule.routes());
+
+    // 注册文件存储路由（使用 ModuleRoutes）
+    let router = router.merge(storage::StorageModule.routes());
 
     // 注册开发工具路由（使用 ModuleRoutes）
     

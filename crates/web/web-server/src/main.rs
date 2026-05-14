@@ -13,7 +13,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
-use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, shutdown_nacos};
+use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_storage, shutdown_nacos};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -91,6 +91,9 @@ async fn main() -> Result<()> {
     // 初始化数据库数据源（内部会在注册连接后自动执行数据库迁移）
     init_datasources().await;
 
+    // 初始化文件存储服务（必须在 init_datasources 之后）
+    init_storage().await;
+
     // 获取 Web 服务器配置
     let web_config = web_config();
 
@@ -118,7 +121,8 @@ async fn main() -> Result<()> {
         .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
         .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker())
         .with_service_query(GlobalServiceQuery::get().clone())
-        .with_service_storage(GlobalServiceStorage::get().clone());
+        .with_service_storage(GlobalServiceStorage::get().clone())
+        .with_storage_service(cmx_storage::global::GlobalStorageService::get().service().clone());
 
     // -- 配置 API 路由
     let api_routes = routes::routes().with_state(app_state);

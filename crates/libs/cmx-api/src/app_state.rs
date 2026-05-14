@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
+use cmx_storage::service::StorageService;
 
 /// CMX 应用程序状态
 ///
@@ -32,6 +33,8 @@ pub struct CmxAppState {
     service_query: Option<Arc<dyn ServiceQuery>>,
     /// 服务存储（trait 对象）
     service_storage: Option<Arc<dyn ServiceStorage>>,
+    /// 存储服务（trait 对象）
+    storage_service: Option<Arc<dyn StorageService>>,
 }
 
 /// 内部状态结构
@@ -56,6 +59,7 @@ impl CmxAppState {
             runtime_invoker: None,
             service_query: None,
             service_storage: None,
+            storage_service: None,
         }
     }
 
@@ -99,6 +103,11 @@ impl CmxAppState {
         self
     }
 
+    pub fn with_storage_service(mut self, service: Arc<dyn StorageService>) -> Self {
+        self.storage_service = Some(service);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -135,6 +144,10 @@ impl CmxAppState {
         self.service_storage.as_ref()
     }
 
+    pub fn storage_service(&self) -> Option<&Arc<dyn StorageService>> {
+        self.storage_service.as_ref()
+    }
+
     /// 检查是否已完全初始化
     ///
     /// 返回 true 表示 plugin_query 和 runtime_invoker 都已设置。
@@ -151,6 +164,18 @@ impl Clone for CmxAppState {
             runtime_invoker: self.runtime_invoker.clone(),
             service_query: self.service_query.clone(),
             service_storage: self.service_storage.clone(),
+            storage_service: self.storage_service.clone(),
+        }
+    }
+}
+
+impl axum::extract::FromRef<CmxAppState> for cmx_storage::handler::AppState {
+    fn from_ref(state: &CmxAppState) -> Self {
+        Self {
+            storage_service: state
+                .storage_service()
+                .cloned()
+                .expect("storage_service 未初始化"),
         }
     }
 }

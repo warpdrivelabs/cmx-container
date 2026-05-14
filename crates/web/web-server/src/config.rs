@@ -527,3 +527,33 @@ pub async fn init_services() {
     info!("生命周期监听器已注册");
     info!("服务管理器初始化完成");
 }
+
+/// 初始化文件存储服务
+///
+/// 从全局配置中加载存储配置，创建 `StorageManager` 和 `DefaultStorageService`，
+/// 并注册到 `GlobalStorageService` 全局单例。
+///
+/// 必须在 `init_datasources` 之后调用，因为存储服务依赖数据库进行文件元信息管理。
+pub async fn init_storage() {
+    use cmx_storage::config::StorageManagerConfig;
+    use cmx_storage::global::GlobalStorageService;
+    use cmx_storage::manager::StorageManager;
+    use cmx_storage::service::DefaultStorageService;
+
+    info!("初始化文件存储服务...");
+
+    let config = ConfigManager::global();
+    let storage_config = StorageManagerConfig::from_config(config)
+        .expect("存储配置加载失败");
+
+    let manager = Arc::new(
+        StorageManager::new(&storage_config).expect("存储管理器初始化失败"),
+    );
+
+    let service: Arc<dyn cmx_storage::service::StorageService> =
+        Arc::new(DefaultStorageService::new(manager));
+
+    GlobalStorageService::initialize(service).expect("存储服务全局初始化失败");
+
+    info!("文件存储服务初始化完成");
+}

@@ -115,3 +115,33 @@ enabled = false
 dir = "docs/sql/migrations1"
 # 分布式锁超时时间（秒）
 lock_timeout = 60
+
+# ============================================
+# 文件存储配置
+# ============================================
+[storage]
+default_platform = "local-1"
+
+# 本地文件系统存储
+[[storage.instances]]
+platform = "local-1"
+storage_type = "local"
+enable_storage = true
+domain = "http://localhost:8080/files/"
+base_path = "uploads"
+storage_path = "./storage"
+enable_access = true
+path_patterns = "**/*"
+
+# MinIO (S3 兼容) 存储
+[[storage.instances]]
+platform = "amazon-s3-1"
+storage_type = "s3"
+enable_storage = true
+access_key = "jRszdym59WToFPfmvr7O"
+secret_key = "6C5a6ZRWhdilLu7JLq43IbTST41rpT0XV1aanuIG"
+region = "us-east-1"
+endpoint = "http://192.168.254.204:9000/"
+bucket_name = "gateway-core-data"
+domain = "http://192.168.254.204:9001/"
+base_path = "cmx-server/"

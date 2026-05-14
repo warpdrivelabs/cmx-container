@@ -27,6 +27,8 @@ cmx-service = { workspace = true }
 cmx-debug = { workspace = true }
 # 内部依赖 - Nacos
 cmx-nacos = { workspace = true }
+# 内部依赖 - 存储
+cmx-storage = { workspace = true }
 # 获取本机IP地址
 local-ip-address = { workspace = true }
 # Web 框架 - HTTP 服务器

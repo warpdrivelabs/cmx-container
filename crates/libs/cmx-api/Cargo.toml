@@ -27,6 +27,8 @@ cmx-traits = { workspace = true }
 cmx-service = { workspace = true }
 # 内部依赖 - 调试
 cmx-debug = { workspace = true }
+# 内部依赖 - 存储
+cmx-storage = { workspace = true }
 # 异步运行时
 tokio = { workspace = true }
 # SQL 查询构建器

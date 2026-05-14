@@ -761,6 +761,7 @@ dependencies = [
  "cmx-metadata",
  "cmx-plugin",
  "cmx-service",
+    "cmx-storage",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -1051,6 +1052,7 @@ dependencies = [
     "tracing",
     "url",
     "urlencoding",
+    "utoipa",
     "uuid",
     "zip 2.4.2",
 ]
@@ -6777,6 +6779,7 @@ dependencies = [
  "cmx-plugin",
  "cmx-runtime",
  "cmx-service",
+    "cmx-storage",
  "cmx-traits",
  "cmx-utils",
  "derive_more",

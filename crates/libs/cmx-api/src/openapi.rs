@@ -99,8 +99,21 @@ use utoipa::OpenApi;
         crate::handlers::marketplace::handler::marketplace_plugin_rating_list,
         crate::handlers::marketplace::handler::marketplace_category_list,
         crate::handlers::marketplace::handler::marketplace_trending_list,
-
+        // Storage handlers
+        cmx_storage::handler::upload_handler,
+        cmx_storage::handler::download_handler,
+        cmx_storage::handler::batch_download_handler,
+        cmx_storage::handler::file_info_handler,
+        cmx_storage::handler::delete_handler,
+        cmx_storage::handler::page_handler,
+        cmx_storage::handler::presign_download_handler,
+        cmx_storage::handler::presign_upload_handler,
+        cmx_storage::handler::multipart_init_handler,
+        cmx_storage::handler::multipart_part_handler,
+        cmx_storage::handler::multipart_complete_handler,
+        cmx_storage::handler::multipart_abort_handler,
     ),
+
     components(
         schemas(
             crate::handlers::domain::Domain,
@@ -161,6 +174,30 @@ use utoipa::OpenApi;
             crate::handlers::marketplace::response::MarketInstallResponse,
             crate::handlers::marketplace::response::MarketplaceRatingResponse,
             crate::handlers::marketplace::response::CategoryResponse,
+            // Storage schemas
+            cmx_storage::types::FileInfo,
+            cmx_storage::types::FileQuery,
+            cmx_storage::types::FilePage,
+            cmx_storage::types::MultipartSession,
+            cmx_storage::types::PartInfo,
+            cmx_storage::types::PresignUploadResult,
+            cmx_storage::types::PresignUploadRequest,
+            cmx_storage::handler::ApiResponse<cmx_storage::types::FileInfo>,
+            cmx_storage::handler::ApiResponse<cmx_storage::types::FilePage>,
+            cmx_storage::handler::ApiResponse<cmx_storage::types::MultipartSession>,
+            cmx_storage::handler::ApiResponse<cmx_storage::types::PartInfo>,
+            cmx_storage::handler::ApiResponse<cmx_storage::types::PresignUploadResult>,
+            cmx_storage::handler::ApiResponse<String>,
+            cmx_storage::handler::DownloadQuery,
+            cmx_storage::handler::FileInfoQuery,
+            cmx_storage::handler::DeleteQuery,
+            cmx_storage::handler::BatchDownloadRequest,
+            cmx_storage::handler::PresignDownloadRequest,
+            cmx_storage::handler::PresignUploadBody,
+            cmx_storage::handler::MultipartInitBody,
+            cmx_storage::handler::MultipartPartBody,
+            cmx_storage::handler::MultipartCompleteBody,
+            cmx_storage::handler::MultipartAbortBody,
         )
     )
 )]

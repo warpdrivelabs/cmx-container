@@ -33,7 +33,8 @@ impl NacosConfigSource {
     pub fn from_toml_str(content: &str) -> Result<Self, NacosError> {
         let toml_value: toml::Value = toml::from_str(content)
             .map_err(|e| NacosError::ConfigParseFailed(format!("TOML 解析失败: {}", e)))?;
-        let mut values = Self::toml_to_config_map(toml_value);
+        // let mut values = Self::toml_to_config_map(toml_value);
+        let values = Self::toml_to_config_map(toml_value);
 
         // 过滤掉不应被远程配置覆盖的启动参数
         // values.remove("nacos");

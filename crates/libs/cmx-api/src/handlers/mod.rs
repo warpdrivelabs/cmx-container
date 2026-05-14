@@ -17,5 +17,6 @@ pub mod marketplace;
 pub mod module;
 pub mod plugin;
 pub mod service;
+pub mod storage;
 pub mod sys_datasource;
 pub mod table_metadata;

@@ -1,0 +1,62 @@
+[package]
+name = "cmx-storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# 内部依赖 - 工具库
+cmx-utils = { workspace = true }
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 内部依赖 - 数据库
+cmx-database = { workspace = true }
+# 对象存储访问层
+opendal = { workspace = true }
+# 查询过滤器
+modql = { workspace = true }
+# 查询构建器
+sea-query = { workspace = true }
+# 字节处理
+bytes = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# 错误处理
+anyhow = { workspace = true }
+# 时间处理
+chrono = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4"] }
+# 文件 MIME Type 魔数检测
+infer = { workspace = true }
+# 基于扩展名的 MIME Type 推断
+mime_guess = { workspace = true }
+# MIME 类型
+mime = { workspace = true }
+# Web 框架
+axum = { workspace = true }
+# 正则表达式
+regex = { workspace = true }
+# Futures
+futures = { workspace = true }
+# 并发 HashMap
+dashmap = { workspace = true }
+# MD5 哈希
+md5 = { workspace = true }
+# URL 编码
+urlencoding = { workspace = true }
+# URL 解析
+url = { workspace = true }
+# ZIP 压缩
+zip = { workspace = true }
+# API 文档生成
+utoipa = { workspace = true }
