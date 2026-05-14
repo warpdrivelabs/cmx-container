@@ -194,18 +194,18 @@ pub struct MultipartAbortBody {
 // /// 返回配置好的 axum Router。
 // pub fn create_router(state: AppState) -> Router {
 //     Router::new()
-//         .route("/api/v1/storage/upload", post(upload_handler))
-//         .route("/api/v1/storage/download", get(download_handler))
-//         .route("/api/v1/storage/batch-download", post(batch_download_handler))
-//         .route("/api/v1/storage/info", get(file_info_handler))
-//         .route("/api/v1/storage/delete", delete(delete_handler))
-//         .route("/api/v1/storage/page", post(page_handler))
-//         .route("/api/v1/storage/presign-download", post(presign_download_handler))
-//         .route("/api/v1/storage/presign-upload", post(presign_upload_handler))
-//         .route("/api/v1/storage/multipart/init", post(multipart_init_handler))
-//         .route("/api/v1/storage/multipart/part", post(multipart_part_handler))
-//         .route("/api/v1/storage/multipart/complete", post(multipart_complete_handler))
-//         .route("/api/v1/storage/multipart/abort", post(multipart_abort_handler))
+//         .route("/api/storage/upload", post(upload_handler))
+//         .route("/api/storage/download", get(download_handler))
+//         .route("/api/storage/batch-download", post(batch_download_handler))
+//         .route("/api/storage/info", get(file_info_handler))
+//         .route("/api/storage/delete", delete(delete_handler))
+//         .route("/api/storage/page", post(page_handler))
+//         .route("/api/storage/presign-download", post(presign_download_handler))
+//         .route("/api/storage/presign-upload", post(presign_upload_handler))
+//         .route("/api/storage/multipart/init", post(multipart_init_handler))
+//         .route("/api/storage/multipart/part", post(multipart_part_handler))
+//         .route("/api/storage/multipart/complete", post(multipart_complete_handler))
+//         .route("/api/storage/multipart/abort", post(multipart_abort_handler))
 //         .with_state(state)
 // }
 
@@ -231,7 +231,7 @@ pub struct MultipartAbortBody {
 /// 当未找到上传文件字段或存储服务上传失败时返回错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/upload",
+    path = "/api/storage/upload",
     tag = "文件存储",
     request_body(content = UploadForm, description = "文件上传表单", content_type = "multipart/form-data"
     ),
@@ -322,7 +322,7 @@ pub async fn upload_handler(
 /// 当文件不存在或下载失败时返回错误响应。
 #[utoipa::path(
     get,
-    path = "/api/v1/storage/download",
+    path = "/api/storage/download",
     tag = "文件存储",
     params(
         ("file_id" = String, Path, description = "文件唯一标识"),
@@ -376,7 +376,7 @@ pub async fn download_handler(
 /// 当文件列表为空或 ZIP 打包失败时返回错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/batch-download",
+    path = "/api/storage/batch-download",
     tag = "文件存储",
     request_body = BatchDownloadRequest,
     responses(
@@ -490,7 +490,7 @@ fn sanitize_filename(filename: &str) -> String {
 /// 当文件不存在时返回 404 错误响应。
 #[utoipa::path(
     get,
-    path = "/api/v1/storage/info",
+    path = "/api/storage/info",
     tag = "文件存储",
     params(
         ("file_id" = String, Query, description = "文件唯一标识")
@@ -529,7 +529,7 @@ pub async fn file_info_handler(
 /// 当文件删除失败时返回 500 错误响应。
 #[utoipa::path(
     delete,
-    path = "/api/v1/storage/delete",
+    path = "/api/storage/delete",
     tag = "文件存储",
     params(
         ("file_id" = String, Query, description = "文件唯一标识")
@@ -567,7 +567,7 @@ pub async fn delete_handler(
 /// 当查询失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/page",
+    path = "/api/storage/page",
     tag = "文件存储",
     request_body = FileQuery,
     responses(
@@ -603,7 +603,7 @@ pub async fn page_handler(
 /// 当预签名生成失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/presign-download",
+    path = "/api/storage/presign-download",
     tag = "文件存储",
     request_body = PresignDownloadRequest,
     responses(
@@ -640,7 +640,7 @@ pub async fn presign_download_handler(
 /// 当预签名生成失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/presign-upload",
+    path = "/api/storage/presign-upload",
     tag = "文件存储",
     request_body = PresignUploadBody,
     responses(
@@ -682,7 +682,7 @@ pub async fn presign_upload_handler(
 /// 当初始化失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/multipart/init",
+    path = "/api/storage/multipart/init",
     tag = "文件存储",
     request_body = MultipartInitBody,
     responses(
@@ -726,7 +726,7 @@ pub async fn multipart_init_handler(
 /// 当回调处理失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/multipart/part",
+    path = "/api/storage/multipart/part",
     tag = "文件存储",
     request_body = MultipartPartBody,
     responses(
@@ -768,7 +768,7 @@ pub async fn multipart_part_handler(
 /// 当合并失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/multipart/complete",
+    path = "/api/storage/multipart/complete",
     tag = "文件存储",
     request_body = MultipartCompleteBody,
     responses(
@@ -804,7 +804,7 @@ pub async fn multipart_complete_handler(
 /// 当取消操作失败时返回 500 错误响应。
 #[utoipa::path(
     post,
-    path = "/api/v1/storage/multipart/abort",
+    path = "/api/storage/multipart/abort",
     tag = "文件存储",
     request_body = MultipartAbortBody,
     responses(
