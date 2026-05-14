@@ -20,4 +20,4 @@
 /cache/
 crates/libs/cmx-dev/templates/wasm-plugin-template.zip
 /example/redis-rs/
-/example/rust-modql/
+#/example/rust-modql/

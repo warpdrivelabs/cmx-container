@@ -10,11 +10,9 @@ use std::time::Duration;
 
 use axum::{
     Json,
-    Router,
     extract::{Multipart, Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post, delete},
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};

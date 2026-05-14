@@ -46,14 +46,30 @@ where
         add_timestamps_for_create(fields, user_id);
     }
 
-    // 添加主键
-    let pk_value = snowflake_id_str();
-    let field: SeaField = (
-        MC::PK_COLUMN,
-        SimpleExpr::Value(sea_query::Value::String(Some(pk_value.clone().into()))),
-    )
-        .into();
-    fields.push(field);
+    // 添加主键（如果 fields 中已包含主键字段且有值，则复用；否则自动生成）
+    let pk_column = MC::PK_COLUMN;
+    let old_fields = std::mem::replace(fields, SeaFields::new(vec![]));
+    let mut fields_vec = old_fields.into_vec();
+    let pk_value = match fields_vec.iter().find(|f| f.iden.to_string() == pk_column) {
+        Some(existing) => {
+            if let Some(sea_query::Value::String(Some(s))) = existing.sea_value().cloned() {
+                s.to_string()
+            } else {
+                snowflake_id_str()
+            }
+        }
+        None => {
+            let pk_value = snowflake_id_str();
+            let field: SeaField = (
+                pk_column,
+                SimpleExpr::Value(sea_query::Value::String(Some(pk_value.clone().into()))),
+            )
+                .into();
+            fields_vec.push(field);
+            pk_value
+        }
+    };
+    *fields = SeaFields::new(fields_vec);
     pk_value
 }
 
