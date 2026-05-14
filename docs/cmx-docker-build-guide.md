@@ -38,10 +38,10 @@ cmx-web 支持通过 Docker 容器化部署，提供一致的运行环境、便�
 .\docker\scripts\build-docker.ps1
 
 # 构建指定版本
-.\docker\scripts\build-docker.ps1 -Version "1.0.0"
+.\docker\scripts\build-docker.ps1 -Version "0.0.1"
 
 # 构建并推送到镜像仓库
-.\docker\scripts\build-docker.ps1 -Version "1.0.0" -Registry "registry.example.com"
+.\docker\scripts\build-docker.ps1 -Version "0.0.1" -Registry "registry.example.com"
 ```
 
 **Linux/macOS：**
@@ -52,10 +52,10 @@ chmod +x docker/scripts/build-docker.sh
 ./docker/scripts/build-docker.sh
 
 # 构建指定版本
-./docker/scripts/build-docker.sh 1.0.0
+./docker/scripts/build-docker.sh 0.0.1
 
 # 构建并推送到镜像仓库
-./docker/scripts/build-docker.sh 1.0.0 registry.example.com
+./docker/scripts/build-docker.sh 0.0.1 registry.example.com
 ```
 
 ### 3.2 手动构建
@@ -161,7 +161,7 @@ docker compose up -d cmx-web
 
 ```bash
 # 设置版本号
-export VERSION=1.0.0
+export VERSION=0.0.1
 
 # 设置加密密钥（必须修改）
 export CMX_ENCRYPT_KEY=your_production_key
