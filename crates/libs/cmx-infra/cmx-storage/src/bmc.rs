@@ -1,6 +1,6 @@
 //! 数据库表元信息和实体定义
 //!
-//! 定义 `file_detail` 和 `file_part_detail` 表的 `DbBmc` 实现，
+//! 定义 `cmx_file_detail` 和 `cmx_file_part_detail` 表的 `DbBmc` 实现，
 //! 以及对应的创建/更新/过滤实体类型。
 
 use cmx_database::crud::DbBmc;
@@ -10,27 +10,27 @@ use serde::{Deserialize, Serialize};
 
 /// 文件详情表的数据库操作元信息
 ///
-/// 提供 `file_detail` 表的表名和主键列名。
+/// 提供 `cmx_file_detail` 表的表名和主键列名。
 pub struct FileDetailBmc;
 
 impl DbBmc for FileDetailBmc {
-    const TABLE: &'static str = "file_detail";
+    const TABLE: &'static str = "cmx_file_detail";
     const PK_COLUMN: &'static str = "id";
 }
 
 /// 文件分片信息表的数据库操作元信息
 ///
-/// 提供 `file_part_detail` 表的表名和主键列名。
+/// 提供 `cmx_file_part_detail` 表的表名和主键列名。
 pub struct FilePartDetailBmc;
 
 impl DbBmc for FilePartDetailBmc {
-    const TABLE: &'static str = "file_part_detail";
+    const TABLE: &'static str = "cmx_file_part_detail";
     const PK_COLUMN: &'static str = "id";
 }
 
 /// 文件详情创建实体
 ///
-/// 用于向 `file_detail` 表插入新记录。
+/// 用于向 `cmx_file_detail` 表插入新记录。
 /// 所有字段均为 `Option` 类型，可根据需要选择性设置。
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, Default)]
 pub struct FileDetailForCreate {
@@ -92,7 +92,7 @@ pub struct FileDetailForCreate {
 
 /// 文件详情更新实体
 ///
-/// 用于更新 `file_detail` 表的现有记录。
+/// 用于更新 `cmx_file_detail` 表的现有记录。
 /// 只包含可更新字段，未指定的字段不会被修改。
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct FileDetailForUpdate {
@@ -120,7 +120,7 @@ pub struct FileDetailForUpdate {
 
 /// 文件分片创建实体
 ///
-/// 用于向 `file_part_detail` 表插入新分片记录。
+/// 用于向 `cmx_file_part_detail` 表插入新分片记录。
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 pub struct FilePartDetailForCreate {
     /// 分片唯一标识（UUID）
@@ -141,7 +141,7 @@ pub struct FilePartDetailForCreate {
 
 /// 文件详情过滤器
 ///
-/// 用于构建 `file_detail` 表的查询条件。
+/// 用于构建 `cmx_file_detail` 表的查询条件。
 #[derive(Debug, Clone, Deserialize, FilterNodes, Default)]
 pub struct FileDetailFilter {
     /// 文件 ID 过滤
@@ -173,7 +173,7 @@ impl FileDetailFilter {
 
 /// 文件分片过滤器
 ///
-/// 用于构建 `file_part_detail` 表的查询条件。
+/// 用于构建 `cmx_file_part_detail` 表的查询条件。
 #[derive(Debug, Clone, Deserialize, FilterNodes, Default)]
 pub struct FilePartDetailFilter {
     /// 分片 ID 过滤

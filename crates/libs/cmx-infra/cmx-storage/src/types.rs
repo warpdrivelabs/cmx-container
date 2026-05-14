@@ -354,7 +354,7 @@ pub struct PresignUploadResult {
 
 /// 文件详情数据库模型
 ///
-/// 对应 `file_detail` 表，用于与数据库交互。
+/// 对应 `cmx_file_detail` 表，用于与数据库交互。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDetail {
     /// 主键 ID
@@ -463,7 +463,7 @@ impl FileDetail {
 
 /// 文件分片信息数据库模型
 ///
-/// 对应 `file_part_detail` 表，用于记录分片上传的每个分片信息。
+/// 对应 `cmx_file_part_detail` 表，用于记录分片上传的每个分片信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilePartDetail {
     /// 主键 ID
