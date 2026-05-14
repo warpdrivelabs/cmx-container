@@ -1,0 +1,14 @@
+[source.crates-io]
+replace-with = 'aliyun'
+
+[source.aliyun]
+registry = "sparse+https://mirrors.aliyun.com/crates.io-index/"
+
+[registries.nora]
+index = "sparse+http://192.168.1.14:4000/cargo/index/"
+
+[http]
+check-revoke = false
+
+[net]
+git-fetch-with-cli = true
