@@ -18,6 +18,8 @@ cmx-utils = { workspace = true }
 cmx-traits = { workspace = true }
 # 内部依赖 - 服务
 cmx-service = { workspace = true }
+# 内部依赖 - 存储服务
+cmx-storage = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化

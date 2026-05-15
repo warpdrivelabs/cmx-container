@@ -7,11 +7,11 @@
 //!
 //! API 路由前缀：`/api/marketplace`
 
-use axum::extract::{Query, State};
+use axum::extract::{Multipart, Query, State};
 use axum::Json;
 use cmx_database::get_default_db_manager;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::api_response::ApiResp;
 use crate::app_state::CmxAppState;
@@ -109,6 +109,7 @@ fn convert_version_to_response(version: cmx_plugin::MarketplacePluginVersion) ->
         changelog: version.changelog,
         release_notes: version.release_notes,
         download_url: version.download_url,
+        storage_file_id: version.storage_file_id,
         package_size: version.package_size,
         checksum: version.checksum,
         min_platform_version: version.min_platform_version,
@@ -260,13 +261,19 @@ pub async fn marketplace_plugin_get_by_id(
 /// 发布 Handler
 ///
 /// 如果插件已存在（根据 plugin_id 判断），则更新插件信息并创建新版本；
-/// 如果插件不存在，则创建新插件记录
+/// 如果插件不存在，则创建新插件记录。
+///
+/// 使用 multipart/form-data 接收请求：
+/// - `plugin_info`: JSON 字符串，包含插件元信息
+/// - `file`: 二进制文件，插件包（.zip/.wasm）
+///
+/// 文件上传到 cmx-storage 后，自动获取 file_id、URL、大小和校验和。
 ///
 /// # Arguments
 ///
 /// * `_cmx_state` - 应用状态（框架注入）
 /// * `_svr_ctx` - 服务器上下文（框架注入）
-/// * `req` - 发布请求，包含插件基本信息和版本信息
+/// * `multipart` - multipart 表单数据
 ///
 /// # Returns
 ///
@@ -274,11 +281,12 @@ pub async fn marketplace_plugin_get_by_id(
 ///
 /// # Errors
 ///
-/// * `Error::internal_error` - 发布失败时返回
+/// * `Error::bad_request` - 缺少必要字段时返回
+/// * `Error::internal_error` - 上传或发布失败时返回
 #[utoipa::path(
     post,
     path = "/api/marketplace/plugin/publish",
-    request_body = PublishPluginRequest,
+    request_body(content_type = "multipart/form-data"),
     responses(
         (status = 200, description = "发布成功", body = ApiResp<MarketplacePluginResponse>)
     ),
@@ -287,9 +295,72 @@ pub async fn marketplace_plugin_get_by_id(
 pub async fn marketplace_plugin_publish(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Json(req): Json<PublishPluginRequest>,
+    mut multipart: Multipart,
 ) -> Result<Json<ApiResp<MarketplacePluginResponse>>> {
-    info!("发布插件到市场: plugin_id={}, version={}", req.plugin_id, req.version);
+    let mut plugin_info_str: Option<String> = None;
+    let mut file_data: Option<bytes::Bytes> = None;
+    let mut file_name = String::new();
+    let mut file_content_type: Option<String> = None;
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let field_name = field.name().unwrap_or("").to_string();
+        match field_name.as_str() {
+            "plugin_info" => {
+                let text = field.text().await.map_err(|e| {
+                    Error::bad_request(format!("读取 plugin_info 字段失败: {}", e))
+                })?;
+                plugin_info_str = Some(text);
+            }
+            "file" => {
+                file_name = field
+                    .file_name()
+                    .unwrap_or("plugin.zip")
+                    .to_string();
+                file_content_type = field.content_type().map(String::from);
+                file_data = Some(field.bytes().await.map_err(|e| {
+                    Error::bad_request(format!("读取 file 字段失败: {}", e))
+                })?);
+            }
+            _ => {}
+        }
+    }
+
+    let info_str =
+        plugin_info_str.ok_or_else(|| Error::bad_request("缺少 plugin_info 字段"))?;
+    let req: PublishPluginRequest =
+        serde_json::from_str(&info_str).map_err(|e| {
+            Error::bad_request(format!("解析 plugin_info JSON 失败: {}", e))
+        })?;
+    let file_bytes =
+        file_data.ok_or_else(|| Error::bad_request("缺少 file 字段"))?;
+
+    info!(
+        "发布插件到市场: plugin_id={}, version={}, file={} ({} bytes)",
+        req.plugin_id,
+        req.version,
+        file_name,
+        file_bytes.len()
+    );
+
+    let storage_service = cmx_storage::global::GlobalStorageService::get().service();
+    let upload_request = cmx_storage::types::UploadRequest {
+        data: file_bytes,
+        original_filename: Some(file_name.clone()),
+        content_type: file_content_type.or(Some("application/zip".to_string())),
+        object_type: Some("marketplace_plugin".to_string()),
+        object_id: Some(req.plugin_id.clone()),
+        platform: None,
+        user_metadata: None,
+        acl: None,
+    };
+    let file_info = storage_service.upload(upload_request).await.map_err(|e| {
+        Error::internal_error(format!("上传插件包到存储失败: {}", e))
+    })?;
+
+    info!(
+        "插件包已上传到 cmx-storage: file_id={}, url={}, size={}",
+        file_info.id, file_info.url, file_info.size
+    );
 
     let plugin_req = MarketplacePluginForCreate {
         plugin_id: req.plugin_id.clone(),
@@ -321,9 +392,10 @@ pub async fn marketplace_plugin_publish(
         version_rank: Some(0),
         changelog: req.changelog,
         release_notes: req.release_notes,
-        download_url: req.download_url,
-        package_size: req.package_size,
-        checksum: req.checksum,
+        download_url: Some(file_info.url),
+        storage_file_id: Some(file_info.id),
+        package_size: Some(file_info.size),
+        checksum: file_info.hash_info,
         min_platform_version: req.min_platform_version,
         max_platform_version: req.max_platform_version,
         dependencies: None,
@@ -550,8 +622,10 @@ pub async fn marketplace_plugin_version_get_by_id(
 
 /// 从市场安装 Handler
 ///
-/// 根据 plugin_id 和可选的 version 从市场下载并安装插件
-/// 安装后自动记录下载和安装统计
+/// 根据 plugin_id 和可选的 version 从市场下载并安装插件。
+/// 优先使用 cmx-storage 的 storage_file_id 下载插件包，
+/// 若 storage_file_id 不存在（兼容旧数据），降级使用 download_url。
+/// 安装后自动记录下载和安装统计。
 ///
 /// # Arguments
 ///
@@ -595,17 +669,27 @@ pub async fn marketplace_plugin_install(
 
     let version_info = version_info.ok_or_else(|| Error::not_found("版本不存在"))?;
 
-    let download_url = version_info
-        .download_url
-        .clone()
-        .ok_or_else(|| Error::bad_request("该版本没有提供下载地址"))?;
+    let source = if let Some(ref storage_file_id) = version_info.storage_file_id {
+        info!("使用 cmx-storage 下载插件包: file_id={}", storage_file_id);
+        cmx_plugin::domain::plugin::PluginSource::Storage {
+            file_id: storage_file_id.clone(),
+            checksum: version_info.checksum.clone(),
+        }
+    } else {
+        warn!("storage_file_id 不存在，降级使用 download_url");
+        let download_url = version_info
+            .download_url
+            .clone()
+            .ok_or_else(|| Error::bad_request("该版本没有提供下载地址"))?;
+        cmx_plugin::domain::plugin::PluginSource::Remote {
+            url: download_url,
+            checksum: version_info.checksum.clone(),
+        }
+    };
 
     let manager = cmx_plugin::GlobalPluginManager::get();
     let install_req = cmx_plugin::service::install::InstallRequest {
-        source: cmx_plugin::domain::plugin::PluginSource::Remote {
-            url: download_url.clone(),
-            checksum: version_info.checksum.clone(),
-        },
+        source,
         db_id: req.db_id.clone(),
         auto_activate: req.auto_activate,
         version_constraint: None,

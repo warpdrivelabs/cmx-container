@@ -69,3 +69,5 @@ rmp-serde = { workspace = true }
 zip = { workspace = true }
 # URL 编码
 percent-encoding = { workspace = true }
+# 字节处理
+bytes = { workspace = true }

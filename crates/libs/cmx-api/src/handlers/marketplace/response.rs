@@ -99,6 +99,8 @@ pub struct MarketplaceVersionResponse {
     pub release_notes: Option<String>,
     /// 下载地址。
     pub download_url: Option<String>,
+    /// cmx-storage 文件唯一标识。
+    pub storage_file_id: Option<String>,
     /// 包大小（字节）。
     pub package_size: Option<i64>,
     /// 校验和。

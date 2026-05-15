@@ -231,7 +231,7 @@ impl MarketplaceRepository {
     ) -> PluginResult<Vec<MarketplacePluginVersion>> {
         let sql = r#"
             SELECT id, plugin_id, version, version_rank, changelog,
-                   release_notes, download_url, package_size, checksum,
+                   release_notes, download_url, storage_file_id, package_size, checksum,
                    min_platform_version, max_platform_version, dependencies,
                    compatibility, status, is_latest, is_stable,
                    download_count, published_at, archived,
@@ -283,7 +283,7 @@ impl MarketplaceRepository {
     ) -> PluginResult<Option<MarketplacePluginVersion>> {
         let sql = r#"
             SELECT id, plugin_id, version, version_rank, changelog,
-                   release_notes, download_url, package_size, checksum,
+                   release_notes, download_url, storage_file_id, package_size, checksum,
                    min_platform_version, max_platform_version, dependencies,
                    compatibility, status, is_latest, is_stable,
                    download_count, published_at, archived,
@@ -336,7 +336,7 @@ impl MarketplaceRepository {
     ) -> PluginResult<Option<MarketplacePluginVersion>> {
         let sql = r#"
             SELECT id, plugin_id, version, version_rank, changelog,
-                   release_notes, download_url, package_size, checksum,
+                   release_notes, download_url, storage_file_id, package_size, checksum,
                    min_platform_version, max_platform_version, dependencies,
                    compatibility, status, is_latest, is_stable,
                    download_count, published_at, archived,
@@ -393,7 +393,7 @@ impl MarketplaceRepository {
     ) -> PluginResult<Option<MarketplacePluginVersion>> {
         let sql = r#"
             SELECT id, plugin_id, version, version_rank, changelog,
-                   release_notes, download_url, package_size, checksum,
+                   release_notes, download_url, storage_file_id, package_size, checksum,
                    min_platform_version, max_platform_version, dependencies,
                    compatibility, status, is_latest, is_stable,
                    download_count, published_at, archived,
@@ -796,6 +796,7 @@ impl MarketplaceRepository {
             changelog: row.get_by_name_as(schema, "changelog"),
             release_notes: row.get_by_name_as(schema, "release_notes"),
             download_url: row.get_by_name_as(schema, "download_url"),
+            storage_file_id: row.get_by_name_as(schema, "storage_file_id"),
             package_size: row.get_by_name_as(schema, "package_size"),
             checksum: row.get_by_name_as(schema, "checksum"),
             min_platform_version: row.get_by_name_as(schema, "min_platform_version"),

@@ -70,6 +70,11 @@ pub enum PluginSource {
         registry_url: Option<String>,
         package_name: String,
     },
+    /// cmx-storage 存储
+    Storage {
+        file_id: String,
+        checksum: Option<String>,
+    },
 }
 
 /// 插件状态

@@ -29,6 +29,13 @@ pub enum PluginSource {
         /// 版本约束
         version_constraint: Option<String>,
     },
+    /// cmx-storage 存储
+    Storage {
+        /// 文件唯一标识
+        file_id: String,
+        /// 校验和
+        checksum: Option<String>,
+    },
 }
 
 impl PluginSource {
@@ -50,6 +57,11 @@ impl PluginSource {
             version_constraint,
         }
     }
+
+    /// 创建存储来源
+    pub fn storage(file_id: String, checksum: Option<String>) -> Self {
+        Self::Storage { file_id, checksum }
+    }
     
     /// 检查是否为本地来源
     pub fn is_local(&self) -> bool {
@@ -65,6 +77,11 @@ impl PluginSource {
     pub fn is_registry(&self) -> bool {
         matches!(self, PluginSource::Registry { .. })
     }
+
+    /// 检查是否为存储来源
+    pub fn is_storage(&self) -> bool {
+        matches!(self, PluginSource::Storage { .. })
+    }
 }
 
 /// 来源类型
@@ -76,6 +93,8 @@ pub enum SourceType {
     Remote,
     /// 注册表
     Registry,
+    /// 存储
+    Storage,
 }
 
 impl PluginSource {
@@ -85,6 +104,7 @@ impl PluginSource {
             PluginSource::Local { .. } => SourceType::Local,
             PluginSource::Remote { .. } => SourceType::Remote,
             PluginSource::Registry { .. } => SourceType::Registry,
+            PluginSource::Storage { .. } => SourceType::Storage,
         }
     }
 }

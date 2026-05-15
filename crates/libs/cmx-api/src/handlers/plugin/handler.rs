@@ -387,6 +387,9 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
             package_name,
             ..
         } => (Some("registry".to_string()), Some(package_name.clone())),
+        cmx_plugin::domain::plugin::PluginSource::Storage { file_id, .. } => {
+            (Some("storage".to_string()), Some(file_id.clone()))
+        }
     };
 
     PluginInfoResponse {

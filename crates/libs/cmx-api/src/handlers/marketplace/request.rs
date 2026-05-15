@@ -49,12 +49,6 @@ pub struct PublishPluginRequest {
     pub plugin_type: Option<String>,
     /// 插件版本号（必填，遵循语义化版本规范）。
     pub version: String,
-    /// 插件包下载 URL。
-    pub download_url: Option<String>,
-    /// 插件包大小（字节）。
-    pub package_size: Option<i64>,
-    /// 插件包校验和（SHA256）。
-    pub checksum: Option<String>,
     /// 变更日志。
     pub changelog: Option<String>,
     /// 发布说明。

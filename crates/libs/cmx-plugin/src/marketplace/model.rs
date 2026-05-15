@@ -212,6 +212,8 @@ pub struct MarketplacePluginVersion {
     pub release_notes: Option<String>,
     /// 插件包下载 URL。
     pub download_url: Option<String>,
+    /// cmx-storage 文件唯一标识，关联 cmx_file_detail.id。
+    pub storage_file_id: Option<String>,
     /// 插件包大小（字节）。
     pub package_size: Option<i64>,
     /// 插件包校验和（SHA256，用于安全验证）。
@@ -267,6 +269,8 @@ pub struct MarketplacePluginVersionForCreate {
     pub release_notes: Option<String>,
     /// 插件包下载 URL。
     pub download_url: Option<String>,
+    /// cmx-storage 文件唯一标识，关联 cmx_file_detail.id。
+    pub storage_file_id: Option<String>,
     /// 插件包大小（字节）。
     pub package_size: Option<i64>,
     /// 插件包校验和（SHA256）。

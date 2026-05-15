@@ -469,6 +469,9 @@ fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>
             let url = registry_url.as_ref().map(|s| s.as_str()).unwrap_or(package_name);
             (Some("registry".to_string()), Some(url.to_string()))
         }
+        PluginSource::Storage { file_id, .. } => {
+            (Some("storage".to_string()), Some(file_id.clone()))
+        }
     }
 }
 

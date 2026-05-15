@@ -760,6 +760,7 @@ name = "cmx-api"
 version = "0.1.5"
 dependencies = [
  "axum 0.8.8",
+    "bytes",
  "chrono",
  "cmx-core",
  "cmx-database",
@@ -947,6 +948,7 @@ dependencies = [
  "cmx-database",
  "cmx-metadata",
  "cmx-service",
+    "cmx-storage",
  "cmx-traits",
  "cmx-utils",
  "derive_more",

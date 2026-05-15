@@ -158,6 +158,19 @@ impl PackageUtils {
                     .await
                     .map_err(|e| { tracing::error!("从注册表获取插件包失败: {} - {}", error_context, e); e })
             }
+            PluginSource::Storage { file_id, checksum } => {
+                let fetcher = crate::fetcher::storage::StorageFetcher::new(self.deps.temp_root.clone());
+                fetcher
+                    .fetch(&crate::fetcher::source::PluginSource::storage(
+                        file_id.clone(),
+                        checksum.clone(),
+                    ))
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("从存储服务获取插件包失败: {} - {}", error_context, e);
+                        e
+                    })
+            }
         }
     }
 
