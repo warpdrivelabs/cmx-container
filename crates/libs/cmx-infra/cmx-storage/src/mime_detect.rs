@@ -80,3 +80,38 @@ pub fn mime_from_extension(extension: &str) -> String {
         .map(|m| m.to_string())
         .unwrap_or_else(|| "application/octet-stream".to_string())
 }
+
+/// 判断 MIME 类型是否为图片
+///
+/// # Arguments
+///
+/// * `content_type` - MIME 类型字符串
+///
+/// # Returns
+///
+/// 若为图片类型返回 `true`，否则返回 `false`。
+pub fn is_image(content_type: &str) -> bool {
+    content_type.starts_with("image/")
+}
+
+/// 判断 MIME 类型是否为支持生成缩略图的图片格式
+///
+/// 支持 JPEG、PNG、GIF、WebP、BMP 格式。
+///
+/// # Arguments
+///
+/// * `content_type` - MIME 类型字符串
+///
+/// # Returns
+///
+/// 若为支持缩略图的图片格式返回 `true`，否则返回 `false`。
+pub fn is_thumbnail_supported(content_type: &str) -> bool {
+    matches!(
+        content_type,
+        "image/jpeg"
+            | "image/png"
+            | "image/gif"
+            | "image/webp"
+            | "image/bmp"
+    )
+}

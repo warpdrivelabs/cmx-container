@@ -6,28 +6,33 @@
 use chrono::Local;
 use uuid::Uuid;
 
+use crate::config::StorageType;
+
 /// 生成文件存储路径
 ///
-/// 根据基础路径、对象类型和扩展名生成唯一的存储路径。
+/// 根据基础路径、对象类型、扩展名和存储类型生成唯一的存储路径。
 ///
 /// # Arguments
 ///
 /// * `base_path` - 存储路径的基础前缀
 /// * `object_type` - 对象类型，用于分组管理（如 `"avatar"`、`"document"`）
 /// * `extension` - 文件扩展名（可带或不带点号）
+/// * `storage_type` - 存储类型，决定日期目录格式
 ///
 /// # Returns
 ///
 /// 返回元组 `(完整路径, 文件名)`：
-/// - 完整路径格式：`{base_path}/{object_type}/{yyyy/MM/dd}/{uuid}.{ext}`
+/// - Local: `{base_path}/{object_type}/{yyyyMM}/{uuid}.{ext}`
+/// - S3: `{base_path}/{object_type}/{yyyy/MM/dd}/{uuid}.{ext}`
 /// - 文件名格式：`{uuid}.{ext}`
 ///
 /// # Examples
 ///
 /// ```
 /// use cmx_storage::path_gen::generate_storage_path;
+/// use cmx_storage::config::StorageType;
 ///
-/// let (path, filename) = generate_storage_path("s3/", Some("avatar"), "jpg");
+/// let (path, filename) = generate_storage_path("s3/", Some("avatar"), "jpg", &StorageType::S3);
 /// assert!(path.starts_with("s3/avatar/20"));
 /// assert!(filename.ends_with(".jpg"));
 /// ```
@@ -35,9 +40,13 @@ pub fn generate_storage_path(
     base_path: &str,
     object_type: Option<&str>,
     extension: &str,
+    storage_type: &StorageType,
 ) -> (String, String) {
     let now = Local::now();
-    let date_path = now.format("%Y/%m/%d").to_string();
+    let date_path = match storage_type {
+        StorageType::Local => now.format("%Y%m").to_string(),
+        StorageType::S3 => now.format("%Y/%m/%d").to_string(),
+    };
     let file_id = Uuid::new_v4().to_string();
 
     let object_type_path = object_type.unwrap_or("default");
@@ -99,6 +108,7 @@ pub fn extract_extension(filename: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::StorageType;
 
     #[test]
     fn test_extract_extension() {
@@ -109,10 +119,17 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_storage_path() {
-        let (path, filename) = generate_storage_path("s3/", Some("avatar"), "jpg");
-        assert!(path.starts_with("s3/avatar/"));
+    fn test_generate_storage_path_s3() {
+        let (path, filename) = generate_storage_path("s3/", Some("avatar"), "jpg", &StorageType::S3);
+        assert!(path.starts_with("s3/avatar/20"));
         assert!(filename.ends_with(".jpg"));
         assert!(filename.len() > 36);
+    }
+
+    #[test]
+    fn test_generate_storage_path_local() {
+        let (path, filename) = generate_storage_path("uploads/", Some("avatar"), "jpg", &StorageType::Local);
+        assert!(path.starts_with("uploads/avatar/202"));
+        assert!(filename.ends_with(".jpg"));
     }
 }

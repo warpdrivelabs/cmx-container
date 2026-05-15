@@ -56,8 +56,6 @@ pub struct FileDetailForCreate {
     pub platform: Option<String>,
     /// 缩略图访问 URL
     pub th_url: Option<String>,
-    /// 缩略图存储路径
-    pub th_path: Option<String>,
     /// 缩略图文件名
     pub th_filename: Option<String>,
     /// 缩略图大小（字节）
@@ -106,8 +104,6 @@ pub struct FileDetailForUpdate {
     pub upload_status: Option<i32>,
     /// 缩略图访问 URL
     pub th_url: Option<String>,
-    /// 缩略图存储路径
-    pub th_path: Option<String>,
     /// 缩略图文件名
     pub th_filename: Option<String>,
     /// 缩略图大小（字节）

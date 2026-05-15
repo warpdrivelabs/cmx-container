@@ -103,6 +103,7 @@ impl MultipartManager {
             &config.base_path,
             request.object_type.as_deref(),
             &ext,
+            &config.storage_type,
         );
 
         let access_url = config.get_access_url(&storage_path);
@@ -258,7 +259,6 @@ impl MultipartManager {
             size: None,
             filename: None,
             th_url: None,
-            th_path: None,
             th_filename: None,
             th_size: None,
             th_content_type: None,
@@ -287,7 +287,6 @@ impl MultipartManager {
             content_type: updated_row.get_by_name_as(updated_schema, "content_type"),
             platform: updated_row.get_by_name_as(updated_schema, "platform").unwrap_or_default(),
             th_url: updated_row.get_by_name_as(updated_schema, "th_url"),
-            th_path: updated_row.get_by_name_as(updated_schema, "th_path"),
             th_filename: updated_row.get_by_name_as(updated_schema, "th_filename"),
             th_size: updated_row.get_by_name_as(updated_schema, "th_size"),
             th_content_type: updated_row.get_by_name_as(updated_schema, "th_content_type"),

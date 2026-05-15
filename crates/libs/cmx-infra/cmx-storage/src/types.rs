@@ -38,8 +38,6 @@ pub struct FileInfo {
     pub platform: String,
     /// 缩略图访问 URL
     pub th_url: Option<String>,
-    /// 缩略图存储路径
-    pub th_path: Option<String>,
     /// 缩略图文件名
     pub th_filename: Option<String>,
     /// 缩略图文件大小（字节）
@@ -379,8 +377,6 @@ pub struct FileDetail {
     pub platform: Option<String>,
     /// 缩略图访问 URL
     pub th_url: Option<String>,
-    /// 缩略图存储路径
-    pub th_path: Option<String>,
     /// 缩略图文件名
     pub th_filename: Option<String>,
     /// 缩略图大小（字节）
@@ -446,7 +442,6 @@ impl FileDetail {
             content_type: self.content_type.clone(),
             platform: self.platform.clone().unwrap_or_default(),
             th_url: self.th_url.clone(),
-            th_path: self.th_path.clone(),
             th_filename: self.th_filename.clone(),
             th_size: self.th_size,
             th_content_type: self.th_content_type.clone(),

@@ -73,7 +73,7 @@ println!("文件上传成功: {}", file_info.url);
 |------------|------------------------------------------|
 | 多平台存储      | 支持 Local 文件系统、S3、MinIO、腾讯云 COS、阿里云 OSS 等 |
 | 秒传         | 基于 MD5 哈希检测文件是否已存在，实现秒传                  |
-| 缩略图        | 支持上传文件时附带缩略图信息                           |
+| 缩略图自动生成    | 上传图片时自动生成 200x200 JPEG 缩略图并上传到 OSS       |
 | 预签名 URL    | 支持生成下载/上传的临时签名 URL（S3 后端）                |
 | 分片上传       | 支持大文件分片上传和断点续传                           |
 | 跨平台复制      | 支持不同存储平台间的文件复制                           |
@@ -717,6 +717,29 @@ match service.upload(request).await {
 
 详细 DDL 参见 `example/sqlexample/oss_pg.sql`（PostgreSQL）和 `example/sqlexample/oss.sql`（MySQL）。
 
+## 缩略图自动生成
+
+上传图片文件时，系统会自动生成缩略图：
+
+- **触发条件**：MIME 类型为 `image/jpeg`、`image/png`、`image/gif`、`image/webp`、`image/bmp`
+- **缩略图尺寸**：最大 200x200，保持原始宽高比
+- **输出格式**：统一为 JPEG
+- **存储路径**：`{base_path}/thumbnails/thumb_{file_id}.jpg`
+- **容错**：缩略图生成或上传失败不会影响主文件上传，仅记录 warn 日志
+
+上传成功后，`FileInfo` 中的 `th_url`、`th_filename`、`th_size`、`th_content_type` 字段会自动填充，同时更新数据库记录。
+
+## 存储路径格式
+
+不同存储类型使用不同的日期目录格式：
+
+| 存储类型  | 路径格式                                                  | 示例                                   |
+|-------|-------------------------------------------------------|--------------------------------------|
+| Local | `{base_path}/{object_type}/{yyyyMM}/{uuid}.{ext}`     | `uploads/avatar/202605/a1b2c3d4.jpg` |
+| S3    | `{base_path}/{object_type}/{yyyy/MM/dd}/{uuid}.{ext}` | `s3/avatar/2026/05/15/a1b2c3d4.jpg`  |
+
+Local 存储使用年月（`yyyyMM`）作为目录层级，简化目录结构；S3 存储保持年月日（`yyyy/MM/dd`）的细粒度目录结构。
+
 ## 常见问题
 
 ### Q: 如何选择 Local 和 S3 存储类型？
@@ -752,3 +775,12 @@ match service.upload(request).await {
 - 上传超大文件（超过 100MB）
 - 网络不稳定环境（支持断点续传）
 - 需要前端直传 OSS 的场景（通过预签名 URL）
+
+### Q: 缩略图生成失败会影响文件上传吗？
+
+**A**: 不会。缩略图生成和上传采用容错设计：
+
+1. 非图片文件不触发缩略图生成
+2. 图片解码失败仅记录 warn 日志，返回 `None`
+3. 缩略图上传到 OSS 失败也仅记录 warn 日志
+4. 主文件上传流程不受任何影响

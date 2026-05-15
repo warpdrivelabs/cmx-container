@@ -3,6 +3,7 @@
 //! 提供组合存储后端和数据库操作的高级文件服务。
 //! 参考 Java FileStorageService 的设计模式。
 
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +19,7 @@ use urlencoding::encode;
 use crate::bmc::*;
 use crate::error::{Error, Result};
 use crate::manager::StorageManager;
-use crate::mime_detect::detect_mime;
+use crate::mime_detect::{detect_mime, is_thumbnail_supported};
 use crate::path_gen::{extract_extension, generate_storage_path};
 use crate::types::*;
 
@@ -43,23 +44,6 @@ pub trait StorageService: Send + Sync + 'static {
     /// * 当存储后端操作失败时返回错误
     /// * 当数据库操作失败时返回错误
     async fn upload(&self, request: UploadRequest) -> Result<FileInfo>;
-
-    /// 上传文件（含缩略图）
-    ///
-    /// # Arguments
-    ///
-    /// * `request` - 上传请求
-    /// * `thumbnail` - 缩略图数据
-    ///
-    /// # Returns
-    ///
-    /// 成功时返回包含缩略图信息的文件信息。
-    ///
-    /// # Errors
-    ///
-    /// * 当存储后端操作失败时返回错误
-    /// * 当数据库操作失败时返回错误
-    async fn upload_with_thumbnail(&self, request: UploadRequest, thumbnail: ThumbnailData) -> Result<FileInfo>;
 
     /// 下载文件
     ///
@@ -279,39 +263,78 @@ pub trait StorageService: Send + Sync + 'static {
     async fn abort_multipart_upload(&self, session_id: &str) -> Result<()>;
 }
 
-/// 默认存储服务实现
+/// 默认存储服务实现。
+///
+/// 组合 `StorageManager`（多平台后端管理）和 `GenericCrudService`（数据库操作），
+/// 提供 `StorageService` trait 的完整实现。
 pub struct DefaultStorageService {
-    /// 存储管理器
+    /// 存储管理器，管理多个存储后端实例
     manager: Arc<StorageManager>,
 }
 
 impl DefaultStorageService {
-    /// 创建默认存储服务
+    /// 创建默认存储服务。
+    ///
+    /// # Arguments
+    ///
+    /// * `manager` - 存储管理器实例，管理所有已配置的存储后端。
     pub fn new(manager: Arc<StorageManager>) -> Self {
         Self { manager }
     }
 
-    /// 计算 MD5 哈希
+    /// 计算给定数据的 MD5 哈希值。
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - 待计算哈希的二进制数据。
+    ///
+    /// # Returns
+    ///
+    /// 返回小写十六进制格式的 MD5 哈希字符串。
     fn compute_md5(data: &[u8]) -> String {
         let digest = md5::compute(data);
         format!("{:x}", digest)
     }
 
-    /// 构建 Content-Disposition 头（RFC 5987）
+    /// 构建 Content-Disposition 响应头（RFC 5987）。
+    ///
+    /// 同时提供 `filename` 和 `filename*` 参数，兼容旧客户端和支持 Unicode 的客户端。
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - 原始文件名。
+    ///
+    /// # Returns
+    ///
+    /// 符合 RFC 5987 规范的 Content-Disposition 头字符串。
     #[allow(dead_code)]
     fn build_content_disposition(filename: &str) -> String {
         let encoded = encode(filename);
         format!("attachment; filename=\"{}\"; filename*=UTF-8''{}", filename, encoded)
     }
 
-    /// 获取数据库管理器和默认 db_id
+    /// 获取全局数据库管理器实例和默认数据库 ID。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回数据库管理器静态引用和默认 `db_id` 的元组。
     async fn get_db() -> Result<(&'static cmx_database::DatabaseManager, String)> {
         let mm = get_default_db_manager();
         let db_id = mm.get_default_db_id().await;
         Ok((mm, db_id))
     }
 
-    /// 从 DataSet 中提取单个 FileDetail
+    /// 从 `DataSet` 中提取单个 `FileDetail` 记录。
+    ///
+    /// 取 `DataSet` 的第一行数据，按列名映射为 `FileDetail` 结构体。
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset` - 数据库查询返回的数据集。
+    ///
+    /// # Returns
+    ///
+    /// 数据集非空时返回 `Some(FileDetail)`，否则返回 `None`。
     fn dataset_to_file_detail(dataset: &DataSet) -> Option<crate::types::FileDetail> {
         let row = dataset.iter().next()?;
         let schema = &dataset.schema;
@@ -327,7 +350,6 @@ impl DefaultStorageService {
             content_type: row.get_by_name_as(schema, "content_type"),
             platform: row.get_by_name_as(schema, "platform"),
             th_url: row.get_by_name_as(schema, "th_url"),
-            th_path: row.get_by_name_as(schema, "th_path"),
             th_filename: row.get_by_name_as(schema, "th_filename"),
             th_size: row.get_by_name_as(schema, "th_size"),
             th_content_type: row.get_by_name_as(schema, "th_content_type"),
@@ -353,7 +375,19 @@ impl DefaultStorageService {
         })
     }
 
-    /// 根据主键查询文件详情
+    /// 根据主键查询文件详情。
+    ///
+    /// # Arguments
+    ///
+    /// * `file_id` - 文件唯一标识。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `FileDetail`。
+    ///
+    /// # Errors
+    ///
+    /// 当文件不存在时返回 `NotFoundError`。
     async fn find_file_detail(file_id: &str) -> Result<crate::types::FileDetail> {
         let (mm, db_id) = Self::get_db().await?;
         let dataset = GenericCrudService::<FileDetailBmc>::get(
@@ -366,7 +400,23 @@ impl DefaultStorageService {
             .ok_or_else(|| Error::NotFoundError(format!("文件不存在: {}", file_id)))
     }
 
-    /// 创建文件数据库记录
+    /// 创建文件数据库记录。
+    ///
+    /// 将 `FileInfo` 中的所有字段（包括缩略图信息）写入 `cmx_file_detail` 表。
+    ///
+    /// # Arguments
+    ///
+    /// * `file_info` - 文件信息，缩略图字段为 `None` 时对应列写入 NULL。
+    /// * `_request` - 原始上传请求（保留用于后续扩展）。
+    /// * `md5_hash` - 文件 MD5 哈希值，存入 `hash_info` 字段。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回从数据库回读的 `FileDetail` 记录。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库插入失败时返回 `UploadError`。
     async fn create_file_record(
         file_info: &FileInfo,
         _request: &UploadRequest,
@@ -389,11 +439,10 @@ impl DefaultStorageService {
             user_metadata: file_info.user_metadata.clone(),
             hash_info: Some(serde_json::json!({"md5": md5_hash}).to_string()),
             upload_status: Some(0),
-            th_url: None,
-            th_path: None,
-            th_filename: None,
-            th_size: None,
-            th_content_type: None,
+            th_url: file_info.th_url.clone(),
+            th_filename: file_info.th_filename.clone(),
+            th_size: file_info.th_size,
+            th_content_type: file_info.th_content_type.clone(),
             metadata: None,
             th_metadata: None,
             th_user_metadata: None,
@@ -411,7 +460,19 @@ impl DefaultStorageService {
             .ok_or_else(|| Error::UploadError("创建文件数据库记录失败".to_string()))
     }
 
-    /// 尝试秒传：根据 hash_info 和 platform 查找已有文件
+    /// 尝试秒传，根据 `hash_info` 和 `platform` 查找已有文件。
+    ///
+    /// 在数据库中查找具有相同 MD5 哈希且相同存储平台的未归档文件，
+    /// 若存在则可直接复用其存储路径，无需重复上传物理文件。
+    ///
+    /// # Arguments
+    ///
+    /// * `hash_info` - 文件的 JSON 格式哈希信息（包含 MD5）。
+    /// * `platform` - 存储平台标识。
+    ///
+    /// # Returns
+    ///
+    /// 找到匹配文件时返回 `Some(FileInfo)`，否则返回 `None`。
     async fn try_instant_upload(hash_info: &str, platform: &str) -> Result<Option<FileInfo>> {
         let (mm, db_id) = Self::get_db().await?;
         let filter = FileDetailFilter {
@@ -444,18 +505,64 @@ impl DefaultStorageService {
         }
         Ok(None)
     }
+
+    /// 生成图片缩略图
+    ///
+    /// 使用 `image` crate 解码原始图片并生成最大 200x200 的缩略图（保持宽高比），
+    /// 输出 JPEG 格式。
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - 原始图片二进制数据
+    /// * `content_type` - 原始图片 MIME 类型
+    ///
+    /// # Returns
+    ///
+    /// 成功返回 `Ok(Some(ThumbnailData))`，非图片或生成失败返回 `Ok(None)`（不报错）。
+    fn generate_thumbnail(data: &[u8], content_type: &str) -> Option<ThumbnailData> {
+        if !is_thumbnail_supported(content_type) {
+            return None;
+        }
+
+        let img = match image::load_from_memory(data) {
+            Ok(img) => img,
+            Err(e) => {
+                tracing::warn!("缩略图生成失败（解码错误）: {}", e);
+                return None;
+            }
+        };
+
+        let thumb = img.thumbnail(200, 200);
+
+        let mut buffer = Vec::new();
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            if let Err(e) = thumb.write_to(&mut cursor, image::ImageFormat::Jpeg) {
+                tracing::warn!("缩略图编码失败: {}", e);
+                return None;
+            }
+        }
+
+        Some(ThumbnailData {
+            data: bytes::Bytes::from(buffer),
+            content_type: "image/jpeg".to_string(),
+        })
+    }
 }
 
 #[async_trait]
 impl StorageService for DefaultStorageService {
     async fn upload(&self, request: UploadRequest) -> Result<FileInfo> {
+        // ── 第一步：计算文件哈希，用于秒传检测 ──
         let md5_hash = Self::compute_md5(&request.data);
         let hash_info = serde_json::json!({"md5": md5_hash}).to_string();
 
+        // 确定目标存储平台：请求指定 > 默认平台
         let platform = request.platform.clone()
             .or_else(|| self.manager.get_default_platform().map(|s| s.to_string()))
             .unwrap_or_default();
 
+        // ── 第二步：秒传检测，相同 MD5 + 相同平台则复用已有记录 ──
         if let Some(existing) = Self::try_instant_upload(&hash_info, &platform).await? {
             info!(hash = %md5_hash, existing_id = %existing.id, "秒传命中");
             let mut file_info = existing.clone();
@@ -466,10 +573,12 @@ impl StorageService for DefaultStorageService {
             return Self::create_file_record(&file_info, &request, &md5_hash).await.map(|d| d.to_file_info());
         }
 
+        // ── 第三步：获取存储后端和配置 ──
         let backend = self.manager.get_backend(Some(&platform))?;
         let config = self.manager.get_config(backend.platform())
             .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", backend.platform())))?;
 
+        // ── 第四步：检测 MIME 类型和扩展名 ──
         let content_type = detect_mime(
             &request.data,
             request.original_filename.as_deref(),
@@ -481,12 +590,15 @@ impl StorageService for DefaultStorageService {
             .map(extract_extension)
             .unwrap_or_default();
 
+        // 根据存储类型生成路径：Local 用 yyyyMM，S3 用 yyyy/MM/dd
         let (storage_path, filename) = generate_storage_path(
             &config.base_path,
             request.object_type.as_deref(),
             &ext,
+            &config.storage_type,
         );
 
+        // ── 第五步：上传原始文件到存储后端 ──
         let write_opts = WriteOptions {
             content_type: Some(content_type.clone()),
             content_disposition: None,
@@ -498,9 +610,46 @@ impl StorageService for DefaultStorageService {
         backend.write(&storage_path, request.data.clone(), write_opts).await?;
 
         let access_url = config.get_access_url(&storage_path);
+        let file_id = uuid::Uuid::new_v4().to_string();
 
+        // ── 第六步：如果是图片，生成缩略图并上传到同目录 ──
+        // 缩略图命名规则：{原图文件名}.min.jpg，与原图存放在同一目录
+        let mut th_url = None;
+        let mut th_filename = None;
+        let mut th_size = None;
+        let mut th_content_type = None;
+
+        if let Some(thumbnail) = Self::generate_thumbnail(&request.data, &content_type) {
+            let th_name = format!("{}.min.jpg", filename);
+            let th_storage_path = format!("{}/{}", storage_path.rfind('/').map(|i| &storage_path[..i]).unwrap_or(""), th_name);
+            let th_storage_path = th_storage_path.trim_start_matches('/');
+
+            let th_write_opts = WriteOptions {
+                content_type: Some("image/jpeg".to_string()),
+                content_disposition: None,
+                cache_control: None,
+                user_metadata: None,
+                acl: None,
+            };
+
+            match backend.write(th_storage_path, thumbnail.data.clone(), th_write_opts).await {
+                Ok(_) => {
+                    info!("缩略图上传成功，大小: {} bytes", thumbnail.data.len());
+                    th_url = Some(config.get_access_url(th_storage_path));
+                    th_filename = Some(th_name);
+                    th_size = Some(thumbnail.data.len() as i64);
+                    th_content_type = Some("image/jpeg".to_string());
+                }
+                Err(e) => {
+                    // 缩略图上传失败不影响主文件，仅记录 warn 日志
+                    tracing::warn!("缩略图上传失败（不影响主文件）: {}", e);
+                }
+            }
+        }
+
+        // ── 第七步：组装 FileInfo 并一次性写入数据库（包含缩略图信息） ──
         let file_info = FileInfo {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: file_id.clone(),
             url: access_url,
             size: request.data.len() as i64,
             filename,
@@ -510,11 +659,10 @@ impl StorageService for DefaultStorageService {
             ext: Some(if ext.starts_with('.') { ext.clone() } else { format!(".{}", ext) }),
             content_type: Some(content_type),
             platform: backend.platform().to_string(),
-            th_url: None,
-            th_path: None,
-            th_filename: None,
-            th_size: None,
-            th_content_type: None,
+            th_url,
+            th_filename,
+            th_size,
+            th_content_type,
             object_id: request.object_id.clone(),
             object_type: request.object_type.clone(),
             user_metadata: request.user_metadata.as_ref().map(|m| {
@@ -531,67 +679,6 @@ impl StorageService for DefaultStorageService {
         info!(file_id = %file_info.id, platform = %file_info.platform, size = file_info.size, "文件上传成功");
 
         Ok(file_info)
-    }
-
-    async fn upload_with_thumbnail(&self, request: UploadRequest, thumbnail: ThumbnailData) -> Result<FileInfo> {
-        let file_info = self.upload(request).await?;
-
-        let platform = file_info.platform.clone();
-        let backend = self.manager.get_backend(Some(&platform))?;
-        let config = self.manager.get_config(&platform)
-            .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", platform)))?;
-
-        let ext = match thumbnail.content_type.as_str() {
-            "image/png" => "png",
-            "image/gif" => "gif",
-            "image/webp" => "webp",
-            _ => "jpg",
-        };
-        let th_filename = format!("thumb_{}.{}", file_info.id, ext);
-        let base_path = config.base_path.trim_end_matches('/');
-        let th_path = if base_path.is_empty() {
-            format!("thumbnails/{}", th_filename)
-        } else {
-            format!("{}/thumbnails/{}", base_path, th_filename)
-        };
-
-        let write_opts = WriteOptions {
-            content_type: Some(thumbnail.content_type.clone()),
-            content_disposition: None,
-            cache_control: None,
-            user_metadata: None,
-            acl: None,
-        };
-        backend.write(&th_path, thumbnail.data.clone(), write_opts).await?;
-
-        let (mm, db_id) = Self::get_db().await?;
-        let update_data = FileDetailForUpdate {
-            th_url: Some(config.get_access_url(&th_path)),
-            th_path: Some(th_path.clone()),
-            th_filename: Some(th_filename.clone()),
-            th_size: Some(thumbnail.data.len() as i64),
-            th_content_type: Some(thumbnail.content_type.clone()),
-            url: None,
-            size: None,
-            filename: None,
-            upload_status: None,
-            archived: None,
-        };
-
-        GenericCrudService::<FileDetailBmc>::update(
-            mm, &db_id, None, Value::String(file_info.id.clone()), update_data,
-        )
-            .await
-            .map_err(Error::from)?;
-
-        let mut result = file_info;
-        result.th_url = Some(config.get_access_url(&th_path));
-        result.th_path = Some(th_path);
-        result.th_filename = Some(th_filename);
-        result.th_size = Some(thumbnail.data.len() as i64);
-        result.th_content_type = Some(thumbnail.content_type);
-
-        Ok(result)
     }
 
     async fn download(&self, file_id: &str) -> Result<FileDownload> {
@@ -621,13 +708,16 @@ impl StorageService for DefaultStorageService {
     async fn download_thumbnail(&self, file_id: &str) -> Result<FileDownload> {
         let detail = Self::find_file_detail(file_id).await?;
 
-        let th_path = detail.th_path.as_deref()
-            .ok_or_else(|| Error::NotFoundError(format!("缩略图路径不存在: {}", file_id)))?;
+        let src_path = detail.path.as_deref()
+            .ok_or_else(|| Error::NotFoundError(format!("文件存储路径不存在: {}", file_id)))?;
+
+        // 缩略图路径 = 原图路径 + ".min.jpg"
+        let th_path = format!("{}.min.jpg", src_path);
 
         let backend = self.manager.get_backend(detail.platform.as_deref())?;
-        let data = backend.read(th_path).await?;
+        let data = backend.read(&th_path).await?;
 
-        let content_type = detail.th_content_type.clone().unwrap_or_else(|| "image/png".to_string());
+        let content_type = detail.th_content_type.clone().unwrap_or_else(|| "image/jpeg".to_string());
         let file_info = detail.to_file_info();
 
         Ok(FileDownload {
@@ -657,7 +747,6 @@ impl StorageService for DefaultStorageService {
             filename: None,
             upload_status: None,
             th_url: None,
-            th_path: None,
             th_filename: None,
             th_size: None,
             th_content_type: None,
@@ -744,7 +833,6 @@ impl StorageService for DefaultStorageService {
                     content_type: row.get_by_name_as(schema, "content_type"),
                     platform: row.get_by_name_as(schema, "platform").unwrap_or_default(),
                     th_url: row.get_by_name_as(schema, "th_url"),
-                    th_path: row.get_by_name_as(schema, "th_path"),
                     th_filename: row.get_by_name_as(schema, "th_filename"),
                     th_size: row.get_by_name_as(schema, "th_size"),
                     th_content_type: row.get_by_name_as(schema, "th_content_type"),
@@ -800,7 +888,7 @@ impl StorageService for DefaultStorageService {
             .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", backend.platform())))?;
 
         let ext = extract_extension(&request.filename);
-        let (storage_path, _filename) = generate_storage_path(&config.base_path, None, &ext);
+        let (storage_path, _filename) = generate_storage_path(&config.base_path, None, &ext, &config.storage_type);
 
         let url = backend.presign_write(&storage_path, expires).await?;
 
@@ -846,6 +934,7 @@ impl StorageService for DefaultStorageService {
             &target_config.base_path,
             detail.object_type.as_deref(),
             ext,
+            &target_config.storage_type,
         );
 
         if src_backend.platform() == target_backend.platform() {
@@ -916,6 +1005,7 @@ impl StorageService for DefaultStorageService {
             &config.base_path,
             request.object_type.as_deref(),
             &ext,
+            &config.storage_type,
         );
 
         let access_url = config.get_access_url(&storage_path);
@@ -1036,7 +1126,6 @@ impl StorageService for DefaultStorageService {
             size: None,
             filename: None,
             th_url: None,
-            th_path: None,
             th_filename: None,
             th_size: None,
             th_content_type: None,

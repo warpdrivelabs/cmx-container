@@ -58,5 +58,7 @@ urlencoding = { workspace = true }
 url = { workspace = true }
 # ZIP 压缩
 zip = { workspace = true }
+# 图像处理
+image = { workspace = true }
 # API 文档生成
 utoipa = { workspace = true }

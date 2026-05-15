@@ -199,6 +199,8 @@ sha1 = "0.10"
 md5 = "0.7"
 # TOML 解析
 toml = "0.8"
+# 图像处理
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 # ZIP 压缩
 zip = "2"
 # SQL 解析器
