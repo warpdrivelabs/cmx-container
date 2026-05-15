@@ -1,5 +1,8 @@
 # 让 Git 自动处理换行符
-* text=auto
+#* text=auto
+# 将所有文本文件统一为 LF，无论是在 Linux 还是 Windows 上
+* text=auto eol=lf
+
 # 确保脚本文件在 Linux 下有正确的换行符
 *.sh text eol=lf
 # 确保 Windows 配置文件有正确的换行符

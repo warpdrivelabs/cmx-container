@@ -112,7 +112,9 @@ enabled = false
 #数据库迁移相关配置
 [migration]
 # 迁移文件目录
-dir = "docs/sql/migrations1"
+dir = "docs/sql/migrations"
+# 校验文件内容是否被修改，默认值true
+validate_checksum = false
 # 分布式锁超时时间（秒）
 lock_timeout = 60
 

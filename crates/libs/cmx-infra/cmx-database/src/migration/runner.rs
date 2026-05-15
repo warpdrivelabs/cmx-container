@@ -38,6 +38,8 @@ pub struct MigrationRunner {
     lock_wait_timeout: u64,
     /// 等待锁时的轮询间隔（秒）
     lock_poll_interval: u64,
+    /// 是否校验迁移文件校验和
+    validate_checksum: bool,
 }
 
 impl MigrationRunner {
@@ -63,6 +65,7 @@ impl MigrationRunner {
             lock_timeout: 60,
             lock_wait_timeout: 120,
             lock_poll_interval: 3,
+            validate_checksum: true,
         }
     }
 
@@ -99,6 +102,18 @@ impl MigrationRunner {
     /// * `interval` - 轮询间隔（秒），默认3秒
     pub fn with_lock_poll_interval(mut self, interval: u64) -> Self {
         self.lock_poll_interval = interval;
+        self
+    }
+
+    /// 设置是否校验迁移文件校验和
+    ///
+    /// # 参数
+    /// * `validate` - 是否校验，默认为 true
+    ///
+    /// 设置为 false 时，只要 cmx_schema_migrations 表中有记录，
+    /// 就认为该迁移已执行，不会再校验文件内容是否被修改
+    pub fn with_validate_checksum(mut self, validate: bool) -> Self {
+        self.validate_checksum = validate;
         self
     }
 
@@ -159,21 +174,25 @@ impl MigrationRunner {
             executed.iter().map(|r| r.version.clone()).collect();
 
         // 5. 校验和验证
-        let validation = self.validate_checksums(&all_migrations, &executed)?;
-        if !validation.is_valid {
-            for mismatch in &validation.mismatches {
-                error!(
-                    version = %mismatch.version,
-                    recorded = %mismatch.recorded,
-                    actual = %mismatch.actual,
-                    "校验和不匹配"
-                );
+        if self.validate_checksum {
+            let validation = self.validate_checksums(&all_migrations, &executed)?;
+            if !validation.is_valid {
+                for mismatch in &validation.mismatches {
+                    error!(
+                        version = %mismatch.version,
+                        recorded = %mismatch.recorded,
+                        actual = %mismatch.actual,
+                        "校验和不匹配"
+                    );
+                }
+                return Err(MigrationError::ChecksumMismatch {
+                    version: validation.mismatches[0].version.clone(),
+                    recorded: validation.mismatches[0].recorded.clone(),
+                    actual: validation.mismatches[0].actual.clone(),
+                });
             }
-            return Err(MigrationError::ChecksumMismatch {
-                version: validation.mismatches[0].version.clone(),
-                recorded: validation.mismatches[0].recorded.clone(),
-                actual: validation.mismatches[0].actual.clone(),
-            });
+        } else {
+            debug!("已跳过迁移文件校验和验证");
         }
 
         // 6. 过滤待执行迁移

@@ -340,6 +340,11 @@ pub async fn init_database_migrations() {
         runner
     };
 
+    let validate_checksum = ConfigManager::global()
+        .get_bool("migration.validate_checksum")
+        .unwrap_or(true);
+    let runner = runner.with_validate_checksum(validate_checksum);
+
     match runner.run_pending_migrations().await {
         Ok(summary) => {
             info!(
