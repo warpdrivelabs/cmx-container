@@ -10,7 +10,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::GenericCrudService;
-use cmx_database::get_default_db_manager;
 use modql::filter::{ListOptions, OpValString, OpValsString};
 use serde_json::Value;
 use tracing::info;
@@ -270,6 +269,8 @@ pub trait StorageService: Send + Sync + 'static {
 pub struct DefaultStorageService {
     /// 存储管理器，管理多个存储后端实例
     manager: Arc<StorageManager>,
+    /// 数据库管理器
+    db: &'static cmx_database::DatabaseManager,
 }
 
 impl DefaultStorageService {
@@ -278,8 +279,9 @@ impl DefaultStorageService {
     /// # Arguments
     ///
     /// * `manager` - 存储管理器实例，管理所有已配置的存储后端。
-    pub fn new(manager: Arc<StorageManager>) -> Self {
-        Self { manager }
+    /// * `db` - 数据库管理器实例。
+    pub fn new(manager: Arc<StorageManager>, db: &'static cmx_database::DatabaseManager) -> Self {
+        Self { manager, db }
     }
 
     /// 计算给定数据的 MD5 哈希值。
@@ -313,15 +315,9 @@ impl DefaultStorageService {
         format!("attachment; filename=\"{}\"; filename*=UTF-8''{}", filename, encoded)
     }
 
-    /// 获取全局数据库管理器实例和默认数据库 ID。
-    ///
-    /// # Returns
-    ///
-    /// 成功时返回数据库管理器静态引用和默认 `db_id` 的元组。
-    async fn get_db() -> Result<(&'static cmx_database::DatabaseManager, String)> {
-        let mm = get_default_db_manager();
-        let db_id = mm.get_default_db_id().await;
-        Ok((mm, db_id))
+    async fn get_db(&self) -> Result<(&'static cmx_database::DatabaseManager, String)> {
+        let db_id = self.db.get_default_db_id().await;
+        Ok((self.db, db_id))
     }
 
     /// 从 `DataSet` 中提取单个 `FileDetail` 记录。
@@ -335,10 +331,25 @@ impl DefaultStorageService {
     /// # Returns
     ///
     /// 数据集非空时返回 `Some(FileDetail)`，否则返回 `None`。
-    fn dataset_to_file_detail(dataset: &DataSet) -> Option<crate::types::FileDetail> {
+    fn dataset_to_file_detail(dataset: &DataSet) -> Option<crate::bmc::FileDetail> {
         let row = dataset.iter().next()?;
         let schema = &dataset.schema;
-        Some(crate::types::FileDetail {
+        Some(Self::row_to_file_detail(row, schema))
+    }
+
+    fn dataset_to_file_details(dataset: &DataSet) -> Vec<crate::bmc::FileDetail> {
+        let schema = &dataset.schema;
+        dataset
+            .iter()
+            .map(|row| Self::row_to_file_detail(row, schema))
+            .collect()
+    }
+
+    fn row_to_file_detail(
+        row: &cmx_core::model::data::dataset::rds::Row,
+        schema: &cmx_core::model::data::dataset::Schema,
+    ) -> crate::bmc::FileDetail {
+        crate::bmc::FileDetail {
             id: row.get_by_name_as(schema, "id").unwrap_or_default(),
             url: row.get_by_name_as(schema, "url").unwrap_or_default(),
             size: row.get_by_name_as(schema, "size"),
@@ -366,13 +377,15 @@ impl DefaultStorageService {
             upload_id: row.get_by_name_as(schema, "upload_id"),
             upload_status: row.get_by_name_as(schema, "upload_status"),
             archived: row.get_by_name_as(schema, "archived"),
-            create_time: None,
-            update_time: None,
+            create_time: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "create_time")
+                .map(|dt| dt.naive_utc()),
+            update_time: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "update_time")
+                .map(|dt| dt.naive_utc()),
             create_by: row.get_by_name_as(schema, "create_by"),
             create_name: row.get_by_name_as(schema, "create_name"),
             update_by: row.get_by_name_as(schema, "update_by"),
             update_name: row.get_by_name_as(schema, "update_name"),
-        })
+        }
     }
 
     /// 根据主键查询文件详情。
@@ -388,8 +401,8 @@ impl DefaultStorageService {
     /// # Errors
     ///
     /// 当文件不存在时返回 `NotFoundError`。
-    async fn find_file_detail(file_id: &str) -> Result<crate::types::FileDetail> {
-        let (mm, db_id) = Self::get_db().await?;
+    async fn find_file_detail(&self, file_id: &str) -> Result<crate::bmc::FileDetail> {
+        let (mm, db_id) = self.get_db().await?;
         let dataset = GenericCrudService::<FileDetailBmc>::get(
             mm, &db_id, None, Value::String(file_id.to_string()),
         )
@@ -418,11 +431,12 @@ impl DefaultStorageService {
     ///
     /// 当数据库插入失败时返回 `UploadError`。
     async fn create_file_record(
+        &self,
         file_info: &FileInfo,
         _request: &UploadRequest,
         md5_hash: &str,
-    ) -> Result<crate::types::FileDetail> {
-        let (mm, db_id) = Self::get_db().await?;
+    ) -> Result<crate::bmc::FileDetail> {
+        let (mm, db_id) = self.get_db().await?;
         let data = FileDetailForCreate {
             id: Some(file_info.id.clone()),
             url: Some(file_info.url.clone()),
@@ -473,8 +487,8 @@ impl DefaultStorageService {
     /// # Returns
     ///
     /// 找到匹配文件时返回 `Some(FileInfo)`，否则返回 `None`。
-    async fn try_instant_upload(hash_info: &str, platform: &str) -> Result<Option<FileInfo>> {
-        let (mm, db_id) = Self::get_db().await?;
+    async fn try_instant_upload(&self, hash_info: &str, platform: &str) -> Result<Option<FileInfo>> {
+        let (mm, db_id) = self.get_db().await?;
         let filter = FileDetailFilter {
             hash_info: Some(OpValsString(vec![OpValString::Eq(hash_info.to_string())])),
             platform: Some(OpValsString(vec![OpValString::Eq(platform.to_string())])),
@@ -563,14 +577,14 @@ impl StorageService for DefaultStorageService {
             .unwrap_or_default();
 
         // ── 第二步：秒传检测，相同 MD5 + 相同平台则复用已有记录 ──
-        if let Some(existing) = Self::try_instant_upload(&hash_info, &platform).await? {
+        if let Some(existing) = self.try_instant_upload(&hash_info, &platform).await? {
             info!(hash = %md5_hash, existing_id = %existing.id, "秒传命中");
             let mut file_info = existing.clone();
             file_info.id = uuid::Uuid::new_v4().to_string();
             file_info.original_filename = request.original_filename.clone();
             file_info.object_id = request.object_id.clone();
             file_info.object_type = request.object_type.clone();
-            return Self::create_file_record(&file_info, &request, &md5_hash).await.map(|d| d.to_file_info());
+            return self.create_file_record(&file_info, &request, &md5_hash).await.map(|d| d.to_file_info());
         }
 
         // ── 第三步：获取存储后端和配置 ──
@@ -674,7 +688,7 @@ impl StorageService for DefaultStorageService {
             create_time: Some(chrono::Local::now().naive_utc()),
         };
 
-        Self::create_file_record(&file_info, &request, &md5_hash).await?;
+        self.create_file_record(&file_info, &request, &md5_hash).await?;
 
         info!(file_id = %file_info.id, platform = %file_info.platform, size = file_info.size, "文件上传成功");
 
@@ -682,7 +696,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn download(&self, file_id: &str) -> Result<FileDownload> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
         let file_info = detail.to_file_info();
 
         let path = detail.path.as_deref()
@@ -706,7 +720,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn download_thumbnail(&self, file_id: &str) -> Result<FileDownload> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
 
         let src_path = detail.path.as_deref()
             .ok_or_else(|| Error::NotFoundError(format!("文件存储路径不存在: {}", file_id)))?;
@@ -730,7 +744,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn delete(&self, file_id: &str) -> Result<()> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
 
         if let Some(path) = detail.path.as_deref() {
             let platform = detail.platform.as_deref().unwrap_or("");
@@ -739,7 +753,7 @@ impl StorageService for DefaultStorageService {
             }
         }
 
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
         let update_data = FileDetailForUpdate {
             archived: Some(1),
             url: None,
@@ -770,12 +784,12 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn get_file_info(&self, file_id: &str) -> Result<FileInfo> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
         Ok(detail.to_file_info())
     }
 
     async fn list_files(&self, query: FileQuery) -> Result<FilePage> {
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
 
         let mut filter = FileDetailFilter {
             id: None,
@@ -817,34 +831,9 @@ impl StorageService for DefaultStorageService {
             .await
             .map_err(Error::from)?;
 
-        let items: Vec<FileInfo> = dataset
-            .iter()
-            .map(|row| {
-                let schema = &dataset.schema;
-                FileInfo {
-                    id: row.get_by_name_as(schema, "id").unwrap_or_default(),
-                    url: row.get_by_name_as(schema, "url").unwrap_or_default(),
-                    size: row.get_by_name_as(schema, "size").unwrap_or(0),
-                    filename: row.get_by_name_as(schema, "filename").unwrap_or_default(),
-                    original_filename: row.get_by_name_as(schema, "original_filename"),
-                    base_path: row.get_by_name_as(schema, "base_path"),
-                    path: row.get_by_name_as(schema, "path"),
-                    ext: row.get_by_name_as(schema, "ext"),
-                    content_type: row.get_by_name_as(schema, "content_type"),
-                    platform: row.get_by_name_as(schema, "platform").unwrap_or_default(),
-                    th_url: row.get_by_name_as(schema, "th_url"),
-                    th_filename: row.get_by_name_as(schema, "th_filename"),
-                    th_size: row.get_by_name_as(schema, "th_size"),
-                    th_content_type: row.get_by_name_as(schema, "th_content_type"),
-                    object_id: row.get_by_name_as(schema, "object_id"),
-                    object_type: row.get_by_name_as(schema, "object_type"),
-                    user_metadata: row.get_by_name_as(schema, "user_metadata"),
-                    hash_info: row.get_by_name_as(schema, "hash_info"),
-                    upload_id: row.get_by_name_as(schema, "upload_id"),
-                    upload_status: row.get_by_name_as(schema, "upload_status"),
-                    create_time: None,
-                }
-            })
+        let items: Vec<FileInfo> = Self::dataset_to_file_details(&dataset)
+            .into_iter()
+            .map(|d| d.to_file_info())
             .collect();
 
         Ok(FilePage {
@@ -856,7 +845,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn exists(&self, file_id: &str) -> Result<bool> {
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
         let result = GenericCrudService::<FileDetailBmc>::get(
             mm, &db_id, None, Value::String(file_id.to_string()),
         )
@@ -869,7 +858,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn presign_download(&self, file_id: &str, expires: Duration) -> Result<String> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
 
         let path = detail.path.as_deref()
             .ok_or_else(|| Error::PresignError(format!("文件 {} 无存储路径", file_id)))?;
@@ -895,7 +884,7 @@ impl StorageService for DefaultStorageService {
         let file_id = uuid::Uuid::new_v4().to_string();
         let access_url = config.get_access_url(&storage_path);
 
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
         let data = FileDetailForCreate {
             id: Some(file_id.clone()),
             url: Some(access_url),
@@ -917,7 +906,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn copy_file(&self, file_id: &str, target_platform: Option<&str>) -> Result<FileInfo> {
-        let detail = Self::find_file_detail(file_id).await?;
+        let detail = self.find_file_detail(file_id).await?;
 
         let src_path = detail.path.as_deref()
             .ok_or_else(|| Error::CopyError(format!("源文件 {} 无存储路径", file_id)))?;
@@ -954,7 +943,7 @@ impl StorageService for DefaultStorageService {
         let access_url = target_config.get_access_url(&target_path);
         let new_id = uuid::Uuid::new_v4().to_string();
 
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
         let data = FileDetailForCreate {
             id: Some(new_id.clone()),
             url: Some(access_url),
@@ -1010,7 +999,7 @@ impl StorageService for DefaultStorageService {
 
         let access_url = config.get_access_url(&storage_path);
 
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
         let data = FileDetailForCreate {
             id: Some(file_id.clone()),
             url: Some(access_url),
@@ -1051,7 +1040,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn upload_part(&self, session_id: &str, part: PartData) -> Result<PartInfo> {
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
 
         let filter = FileDetailFilter {
             upload_id: Some(OpValsString(vec![OpValString::Eq(session_id.to_string())])),
@@ -1098,7 +1087,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn complete_multipart_upload(&self, session_id: &str) -> Result<FileInfo> {
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
 
         let filter = FileDetailFilter {
             upload_id: Some(OpValsString(vec![OpValString::Eq(session_id.to_string())])),
@@ -1143,7 +1132,7 @@ impl StorageService for DefaultStorageService {
     }
 
     async fn abort_multipart_upload(&self, session_id: &str) -> Result<()> {
-        let (mm, db_id) = Self::get_db().await?;
+        let (mm, db_id) = self.get_db().await?;
 
         let filter = FileDetailFilter {
             upload_id: Some(OpValsString(vec![OpValString::Eq(session_id.to_string())])),
@@ -1163,34 +1152,36 @@ impl StorageService for DefaultStorageService {
             .map_err(Error::from)?;
 
         if let Some(detail) = Self::dataset_to_file_detail(&dataset) {
+            let file_id = detail.id.clone();
+
+            let filter_parts = FilePartDetailFilter {
+                upload_id: Some(OpValsString(vec![OpValString::Eq(session_id.to_string())])),
+                ..Default::default()
+            };
+            let list_opts_parts = ListOptions {
+                limit: Some(10000),
+                offset: Some(0),
+                order_bys: None,
+            };
+            let (parts_dataset, _) = GenericCrudService::<FilePartDetailBmc, FilePartDetailFilter>::page(
+                mm, &db_id, None, Some(vec![filter_parts]), list_opts_parts,
+            )
+                .await
+                .map_err(Error::from)?;
+
             if let Some(path) = detail.path.as_deref() {
                 let platform = detail.platform.as_deref().unwrap_or("");
                 if let Ok(backend) = self.manager.get_backend(Some(platform)) {
-                    for i in 1..=10000u32 {
-                        let part_path = format!("{}.part.{}", path, i);
-                        if backend.delete(&part_path).await.is_err() {
-                            break;
+                    for row in parts_dataset.iter() {
+                        let schema = &parts_dataset.schema;
+                        if let Some(part_number) = row.get_by_name_as::<i32>(schema, "part_number") {
+                            let part_path = format!("{}.part.{}", path, part_number);
+                            let _ = backend.delete(&part_path).await;
                         }
                     }
                 }
             }
 
-            let file_id = detail.id.clone();
-
-            let filter_parts = FileDetailFilter {
-                upload_id: Some(OpValsString(vec![OpValString::Eq(session_id.to_string())])),
-                ..Default::default()
-            };
-            let list_opts_parts = ListOptions {
-                limit: Some(1000),
-                offset: Some(0),
-                order_bys: None,
-            };
-            let (parts_dataset, _) = GenericCrudService::<FilePartDetailBmc, FileDetailFilter>::page(
-                mm, &db_id, None, Some(vec![filter_parts]), list_opts_parts,
-            )
-                .await
-                .map_err(Error::from)?;
             for row in parts_dataset.iter() {
                 let schema = &parts_dataset.schema;
                 if let Some(part_id) = row.get_by_name_as::<String>(schema, "id") {

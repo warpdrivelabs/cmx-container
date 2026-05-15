@@ -28,7 +28,6 @@ pub mod global;
 pub mod handler;
 pub mod manager;
 pub mod mime_detect;
-pub mod multipart;
 pub mod path_gen;
 pub mod service;
 pub mod types;

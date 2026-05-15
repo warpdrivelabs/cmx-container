@@ -14,7 +14,7 @@ cmx-database = { workspace = true }
 opendal = { workspace = true }
 # 查询过滤器
 modql = { workspace = true }
-# 查询构建器
+# 查询构建器（modql derive 宏间接依赖）
 sea-query = { workspace = true }
 # 字节处理
 bytes = { workspace = true }
@@ -44,18 +44,12 @@ mime_guess = { workspace = true }
 mime = { workspace = true }
 # Web 框架
 axum = { workspace = true }
-# 正则表达式
-regex = { workspace = true }
-# Futures
-futures = { workspace = true }
 # 并发 HashMap
 dashmap = { workspace = true }
 # MD5 哈希
 md5 = { workspace = true }
 # URL 编码
 urlencoding = { workspace = true }
-# URL 解析
-url = { workspace = true }
 # ZIP 压缩
 zip = { workspace = true }
 # 图像处理

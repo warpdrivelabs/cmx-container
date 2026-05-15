@@ -555,8 +555,9 @@ pub async fn init_storage() {
         StorageManager::new(&storage_config).expect("存储管理器初始化失败"),
     );
 
+    let db_manager = get_default_db_manager();
     let service: Arc<dyn cmx_storage::service::StorageService> =
-        Arc::new(DefaultStorageService::new(manager));
+        Arc::new(DefaultStorageService::new(manager, db_manager));
 
     GlobalStorageService::initialize(service).expect("存储服务全局初始化失败");
 
