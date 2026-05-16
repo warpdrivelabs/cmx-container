@@ -15,7 +15,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-pub use cmx_api_types::ApiResp;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use zip::write::SimpleFileOptions;
@@ -23,6 +22,7 @@ use zip::ZipWriter;
 
 use crate::service::StorageService;
 use crate::types::*;
+pub use crate::ApiResp;
 
 /// 应用共享状态
 ///
@@ -146,34 +146,6 @@ pub struct MultipartAbortBody {
     pub upload_id: String,
 }
 
-// /// 创建存储模块的 axum 路由
-// ///
-// /// 注册所有文件存储相关的 REST API 端点。
-// ///
-// /// # Arguments
-// ///
-// /// * `state` - 应用共享状态
-// ///
-// /// # Returns
-// ///
-// /// 返回配置好的 axum Router。
-// pub fn create_router(state: AppState) -> Router {
-//     Router::new()
-//         .route("/api/storage/upload", post(upload_handler))
-//         .route("/api/storage/download", get(download_handler))
-//         .route("/api/storage/batch-download", post(batch_download_handler))
-//         .route("/api/storage/info", get(file_info_handler))
-//         .route("/api/storage/delete", delete(delete_handler))
-//         .route("/api/storage/page", post(page_handler))
-//         .route("/api/storage/presign-download", post(presign_download_handler))
-//         .route("/api/storage/presign-upload", post(presign_upload_handler))
-//         .route("/api/storage/multipart/init", post(multipart_init_handler))
-//         .route("/api/storage/multipart/part", post(multipart_part_handler))
-//         .route("/api/storage/multipart/complete", post(multipart_complete_handler))
-//         .route("/api/storage/multipart/abort", post(multipart_abort_handler))
-//         .with_state(state)
-// }
-
 /// 上传文件 handler
 ///
 /// 从 multipart 表单中提取文件数据和所有元信息并调用存储服务完成上传。
@@ -181,11 +153,7 @@ pub struct MultipartAbortBody {
 /// # Arguments
 ///
 /// * `state` - 应用共享状态
-/// * `multipart` - multipart 表单数据，包含：
-///   - `file` - 文件二进制数据（必需）
-///   - `object_type` - 文件关联对象类型（可选）
-///   - `object_id` - 文件关联对象 ID（可选）
-///   - `platform` - 存储平台标识（可选）
+/// * `multipart` - multipart 表单数据
 ///
 /// # Returns
 ///
@@ -193,7 +161,7 @@ pub struct MultipartAbortBody {
 ///
 /// # Errors
 ///
-/// 当未找到上传文件字段或存储服务上传失败时返回错误响应。
+/// 当未找到上传文件字段或存储服务上传失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/upload",
@@ -201,9 +169,7 @@ pub struct MultipartAbortBody {
     request_body(content = UploadForm, description = "文件上传表单", content_type = "multipart/form-data"
     ),
     responses(
-        (status = 200, description = "上传成功", body = ApiResp<FileInfo>),
-        (status = 400, description = "请求错误"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "上传成功", body = ApiResp<FileInfo>)
     )
 )]
 pub async fn upload_handler(
@@ -224,7 +190,7 @@ pub async fn upload_handler(
                 match field.bytes().await {
                     Ok(bytes) => file_data = Some(bytes),
                     Err(e) => {
-                        return error_response(StatusCode::BAD_REQUEST, &format!("读取文件失败: {}", e));
+                        return biz_err(&format!("读取文件失败: {}", e));
                     }
                 }
             }
@@ -249,7 +215,7 @@ pub async fn upload_handler(
 
     let data = match file_data {
         Some(d) => d,
-        None => return error_response(StatusCode::BAD_REQUEST, "未找到上传文件"),
+        None => return biz_err("未找到上传文件"),
     };
 
     let request = UploadRequest {
@@ -265,7 +231,7 @@ pub async fn upload_handler(
 
     match state.storage_service.upload(request).await {
         Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("文件上传失败: {}", e)),
     }
 }
 
@@ -284,7 +250,7 @@ pub async fn upload_handler(
 ///
 /// # Errors
 ///
-/// 当文件不存在或下载失败时返回错误响应。
+/// 当文件不存在或下载失败时返回业务错误。
 #[utoipa::path(
     get,
     path = "/api/storage/download",
@@ -294,9 +260,7 @@ pub async fn upload_handler(
         ("thumbnail" = Option<String>, Query, description = "是否下载缩略图（1 表示下载缩略图）", nullable = true)
     ),
     responses(
-        (status = 200, description = "下载成功", content_type = "application/octet-stream"),
-        (status = 404, description = "文件不存在"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "下载成功", content_type = "application/octet-stream")
     )
 )]
 pub async fn download_handler(
@@ -319,7 +283,7 @@ pub async fn download_handler(
                 .body(download.data.into())
                 .unwrap()
         }
-        Err(e) => error_response(StatusCode::NOT_FOUND, &e.to_string()),
+        Err(e) => biz_err(&format!("文件下载失败: {}", e)),
     }
 }
 
@@ -338,17 +302,14 @@ pub async fn download_handler(
 ///
 /// # Errors
 ///
-/// 当文件列表为空或 ZIP 打包失败时返回错误响应。
+/// 当文件列表为空或 ZIP 打包失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/batch-download",
     tag = "文件存储",
     request_body = BatchDownloadRequest,
     responses(
-        (status = 200, description = "ZIP 包下载成功", content_type = "application/zip"),
-        (status = 400, description = "请求错误"),
-        (status = 404, description = "没有可下载的文件"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "ZIP 包下载成功", content_type = "application/zip")
     )
 )]
 pub async fn batch_download_handler(
@@ -356,7 +317,7 @@ pub async fn batch_download_handler(
     Json(body): Json<BatchDownloadRequest>,
 ) -> impl IntoResponse {
     if body.file_ids.is_empty() {
-        return error_response(StatusCode::BAD_REQUEST, "文件ID列表为空");
+        return biz_err("文件ID列表为空");
     }
 
     let mut file_data_list: Vec<(String, Bytes, String)> = Vec::new();
@@ -374,7 +335,7 @@ pub async fn batch_download_handler(
     }
 
     if file_data_list.is_empty() {
-        return error_response(StatusCode::NOT_FOUND, "没有可下载的文件");
+        return biz_err("没有可下载的文件");
     }
 
     let mut buffer = Vec::new();
@@ -389,17 +350,17 @@ pub async fn batch_download_handler(
             let name = sanitize_filename(filename);
             if let Err(e) = zip.start_file(name, options) {
                 tracing::error!(error = %e, "创建ZIP文件失败");
-                return error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("创建ZIP文件失败: {}", e));
+                return biz_err(&format!("创建ZIP文件失败: {}", e));
             }
             if let Err(e) = zip.write_all(data) {
                 tracing::error!(error = %e, "写入ZIP数据失败");
-                return error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("写入ZIP数据失败: {}", e));
+                return biz_err(&format!("写入ZIP数据失败: {}", e));
             }
         }
 
         if let Err(e) = zip.finish() {
             tracing::error!(error = %e, "完成ZIP文件失败");
-            return error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("完成ZIP文件失败: {}", e));
+            return biz_err(&format!("完成ZIP文件失败: {}", e));
         }
     }
 
@@ -452,7 +413,7 @@ fn sanitize_filename(filename: &str) -> String {
 ///
 /// # Errors
 ///
-/// 当文件不存在时返回 404 错误响应。
+/// 当文件不存在时返回业务错误。
 #[utoipa::path(
     get,
     path = "/api/storage/info",
@@ -461,9 +422,7 @@ fn sanitize_filename(filename: &str) -> String {
         ("file_id" = String, Query, description = "文件唯一标识")
     ),
     responses(
-        (status = 200, description = "获取成功", body = ApiResp<FileInfo>),
-        (status = 404, description = "文件不存在"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "获取成功", body = ApiResp<FileInfo>)
     )
 )]
 pub async fn file_info_handler(
@@ -472,7 +431,7 @@ pub async fn file_info_handler(
 ) -> impl IntoResponse {
     match state.storage_service.get_file_info(&query.file_id).await {
         Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
-        Err(e) => error_response(StatusCode::NOT_FOUND, &e.to_string()),
+        Err(e) => biz_err(&format!("获取文件信息失败: {}", e)),
     }
 }
 
@@ -491,7 +450,7 @@ pub async fn file_info_handler(
 ///
 /// # Errors
 ///
-/// 当文件删除失败时返回 500 错误响应。
+/// 当文件删除失败时返回业务错误。
 #[utoipa::path(
     delete,
     path = "/api/storage/delete",
@@ -500,8 +459,7 @@ pub async fn file_info_handler(
         ("file_id" = String, Query, description = "文件唯一标识")
     ),
     responses(
-        (status = 200, description = "删除成功"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "删除成功")
     )
 )]
 pub async fn delete_handler(
@@ -510,7 +468,7 @@ pub async fn delete_handler(
 ) -> impl IntoResponse {
     match state.storage_service.delete(&query.file_id).await {
         Ok(()) => Json(ApiResp::<()>::ok_no_data()).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("文件删除失败: {}", e)),
     }
 }
 
@@ -529,15 +487,14 @@ pub async fn delete_handler(
 ///
 /// # Errors
 ///
-/// 当查询失败时返回 500 错误响应。
+/// 当查询失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/page",
     tag = "文件存储",
     request_body = FileQuery,
     responses(
-        (status = 200, description = "查询成功", body = ApiResp<FilePage>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "查询成功", body = ApiResp<FilePage>)
     )
 )]
 pub async fn page_handler(
@@ -546,7 +503,7 @@ pub async fn page_handler(
 ) -> impl IntoResponse {
     match state.storage_service.list_files(query).await {
         Ok(page) => Json(ApiResp::ok(page)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("分页查询失败: {}", e)),
     }
 }
 
@@ -565,15 +522,14 @@ pub async fn page_handler(
 ///
 /// # Errors
 ///
-/// 当预签名生成失败时返回 500 错误响应。
+/// 当预签名生成失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/presign-download",
     tag = "文件存储",
     request_body = PresignDownloadRequest,
     responses(
-        (status = 200, description = "生成成功", body = ApiResp<String>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "生成成功", body = ApiResp<String>)
     )
 )]
 pub async fn presign_download_handler(
@@ -583,7 +539,7 @@ pub async fn presign_download_handler(
     let expires = Duration::from_secs(body.expires.unwrap_or(3600));
     match state.storage_service.presign_download(&body.file_id, expires).await {
         Ok(url) => Json(ApiResp::ok(url)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("生成预签名下载URL失败: {}", e)),
     }
 }
 
@@ -602,15 +558,14 @@ pub async fn presign_download_handler(
 ///
 /// # Errors
 ///
-/// 当预签名生成失败时返回 500 错误响应。
+/// 当预签名生成失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/presign-upload",
     tag = "文件存储",
     request_body = PresignUploadBody,
     responses(
-        (status = 200, description = "生成成功", body = ApiResp<PresignUploadResult>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "生成成功", body = ApiResp<PresignUploadResult>)
     )
 )]
 pub async fn presign_upload_handler(
@@ -625,7 +580,7 @@ pub async fn presign_upload_handler(
     };
     match state.storage_service.presign_upload(request, expires).await {
         Ok(result) => Json(ApiResp::ok(result)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("生成预签名上传URL失败: {}", e)),
     }
 }
 
@@ -644,15 +599,14 @@ pub async fn presign_upload_handler(
 ///
 /// # Errors
 ///
-/// 当初始化失败时返回 500 错误响应。
+/// 当初始化失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/multipart/init",
     tag = "文件存储",
     request_body = MultipartInitBody,
     responses(
-        (status = 200, description = "初始化成功", body = ApiResp<MultipartSession>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "初始化成功", body = ApiResp<MultipartSession>)
     )
 )]
 pub async fn multipart_init_handler(
@@ -669,7 +623,7 @@ pub async fn multipart_init_handler(
     };
     match state.storage_service.init_multipart_upload(request).await {
         Ok(session) => Json(ApiResp::ok(session)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("分片上传初始化失败: {}", e)),
     }
 }
 
@@ -688,15 +642,14 @@ pub async fn multipart_init_handler(
 ///
 /// # Errors
 ///
-/// 当回调处理失败时返回 500 错误响应。
+/// 当回调处理失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/multipart/part",
     tag = "文件存储",
     request_body = MultipartPartBody,
     responses(
-        (status = 200, description = "记录成功", body = ApiResp<PartInfo>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "记录成功", body = ApiResp<PartInfo>)
     )
 )]
 pub async fn multipart_part_handler(
@@ -711,7 +664,7 @@ pub async fn multipart_part_handler(
     };
     match state.storage_service.upload_part(&body.upload_id, part).await {
         Ok(info) => Json(ApiResp::ok(info)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("分片上传回调失败: {}", e)),
     }
 }
 
@@ -730,15 +683,14 @@ pub async fn multipart_part_handler(
 ///
 /// # Errors
 ///
-/// 当合并失败时返回 500 错误响应。
+/// 当合并失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/multipart/complete",
     tag = "文件存储",
     request_body = MultipartCompleteBody,
     responses(
-        (status = 200, description = "完成成功", body = ApiResp<FileInfo>),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "完成成功", body = ApiResp<FileInfo>)
     )
 )]
 pub async fn multipart_complete_handler(
@@ -747,7 +699,7 @@ pub async fn multipart_complete_handler(
 ) -> impl IntoResponse {
     match state.storage_service.complete_multipart_upload(&body.upload_id).await {
         Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("完成分片上传失败: {}", e)),
     }
 }
 
@@ -766,15 +718,14 @@ pub async fn multipart_complete_handler(
 ///
 /// # Errors
 ///
-/// 当取消操作失败时返回 500 错误响应。
+/// 当取消操作失败时返回业务错误。
 #[utoipa::path(
     post,
     path = "/api/storage/multipart/abort",
     tag = "文件存储",
     request_body = MultipartAbortBody,
     responses(
-        (status = 200, description = "取消成功"),
-        (status = 500, description = "服务器错误")
+        (status = 200, description = "取消成功")
     )
 )]
 pub async fn multipart_abort_handler(
@@ -783,28 +734,22 @@ pub async fn multipart_abort_handler(
 ) -> impl IntoResponse {
     match state.storage_service.abort_multipart_upload(&body.upload_id).await {
         Ok(()) => Json(ApiResp::<()>::ok_no_data()).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => biz_err(&format!("取消分片上传失败: {}", e)),
     }
 }
 
-/// 构建错误响应
+/// 构建业务错误响应
 ///
-/// 将 HTTP 状态码和错误消息封装为统一 JSON 响应格式。
+/// 返回 HTTP 200 + `{"code": 1, "msg": "..."}` 格式的响应，
+/// 与 `Error::business_error()` 的 `IntoResponse` 实现一致。
 ///
 /// # Arguments
 ///
-/// * `status` - HTTP 状态码
-/// * `message` - 错误消息
+/// * `msg` - 错误消息
 ///
 /// # Returns
 ///
-/// JSON 格式的错误响应。
-fn error_response(status: StatusCode, message: &str) -> Response {
-    let body = ApiResp::<String> {
-        code: status.as_u16(),
-        msg: message.to_string(),
-        data: None,
-        pagination: None,
-    };
-    (status, Json(body)).into_response()
+/// HTTP 200 + JSON 业务错误响应。
+fn biz_err(msg: &str) -> Response {
+    cmx_api_types::Error::business_error(msg).into_response()
 }

@@ -762,7 +762,7 @@ dependencies = [
  "axum 0.8.8",
  "bytes",
  "chrono",
-    "cmx-api-types",
+ "cmx-api-types",
  "cmx-core",
  "cmx-database",
  "cmx-debug",
@@ -799,16 +799,16 @@ dependencies = [
 name = "cmx-api-types"
 version = "0.1.5"
 dependencies = [
-    "axum 0.8.8",
-    "cmx-core",
-    "cmx-database",
-    "modql",
-    "serde",
-    "serde_json",
-    "thiserror 2.0.18",
-    "tracing",
-    "utoipa",
-    "validator",
+ "axum 0.8.8",
+ "cmx-core",
+ "cmx-database",
+ "modql",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+ "utoipa",
+ "validator",
 ]
 
 [[package]]
@@ -1057,7 +1057,7 @@ dependencies = [
  "axum 0.8.8",
  "bytes",
  "chrono",
-    "cmx-api-types",
+ "cmx-api-types",
  "cmx-core",
  "cmx-database",
  "cmx-utils",

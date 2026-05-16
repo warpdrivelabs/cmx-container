@@ -32,4 +32,5 @@ pub mod path_gen;
 pub mod service;
 pub mod types;
 
+pub use cmx_api_types::ApiResp;
 pub use error::{Error, Result};
