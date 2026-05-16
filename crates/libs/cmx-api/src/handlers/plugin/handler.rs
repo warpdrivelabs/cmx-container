@@ -10,9 +10,9 @@ use axum::Json;
 use chrono::DateTime;
 use tracing::{debug, info};
 use cmx_utils::ConfigManager;
-use crate::api_response::ApiResp;
+use crate::ApiResp;
 use crate::app_state::CmxAppState;
-use crate::error::Result;
+use crate::Result;
 use crate::middleware::CmxSvrContext;
 use crate::rest::PageParamsDoc;
 use super::request::*;
@@ -75,7 +75,7 @@ pub async fn plugin_install(
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("插件安装失败: {}", e))
+        crate::Error::InternalError(format!("插件安装失败: {}", e))
     })?;
 
     let resp = InstallResponse {
@@ -118,7 +118,7 @@ pub async fn plugin_uninstall(
     };
 
     let result = manager.uninstall(uninstall_req).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("插件卸载失败: {}", e))
+        crate::Error::InternalError(format!("插件卸载失败: {}", e))
     })?;
 
     let resp = UninstallResponse {
@@ -162,7 +162,7 @@ pub async fn plugin_upgrade(
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("插件升级失败: {}", e))
+        crate::Error::InternalError(format!("插件升级失败: {}", e))
     })?;
 
     let resp = UpgradeResponse {
@@ -206,7 +206,7 @@ pub async fn plugin_downgrade(
     };
 
     let result = manager.downgrade(downgrade_req).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("插件降级失败: {}", e))
+        crate::Error::InternalError(format!("插件降级失败: {}", e))
     })?;
 
     let resp = DowngradeResponse {
@@ -259,30 +259,30 @@ pub async fn plugin_deploy(
     let mut build_type:Option<String> = None;
 
     while let Some(field) = multipart.next_field().await
-        .map_err(|e| crate::error::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
+        .map_err(|e| crate::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
     {
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
             "file" => {
                 let data = field.bytes().await
-                    .map_err(|e| crate::error::Error::BadRequest(format!("读取文件失败: {}", e)))?;
+                    .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {}", e)))?;
                 file_bytes = Some(data.to_vec());
             }
             "target_db_id" => {
                 let val = field.text().await
-                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 target_db_id 失败: {}", e)))?;
+                    .map_err(|e| crate::Error::BadRequest(format!("读取 target_db_id 失败: {}", e)))?;
                 if !val.is_empty() {
                     target_db_id = Some(val);
                 }
             }
             "force_reinstall" => {
                 let val = field.text().await
-                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e)))?;
+                    .map_err(|e| crate::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e)))?;
                 force_reinstall = val == "true" || val == "1";
             }
             "build_type" => {
                 let val = field.text().await
-                    .map_err(|e| crate::error::Error::BadRequest(format!("读取 build_type 失败: {}", e)))?;
+                    .map_err(|e| crate::Error::BadRequest(format!("读取 build_type 失败: {}", e)))?;
                 build_type = Some(val);
             }
             _ => {}
@@ -290,22 +290,22 @@ pub async fn plugin_deploy(
     }
 
     let file_bytes = file_bytes.ok_or_else(|| {
-        crate::error::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string())
+        crate::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string())
     })?;
 
     // 确保上传目录存在
     tokio::fs::create_dir_all(&uploads_dir).await
-        .map_err(|e| crate::error::Error::InternalError(format!("创建上传目录失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("创建上传目录失败: {}", e)))?;
 
     // 使用 UUID 重命名保存 zip 文件
     let file_name = format!("{}.zip", uuid::Uuid::new_v4());
     let file_path = uploads_dir.join(&file_name);
     tokio::fs::write(&file_path, &file_bytes).await
-        .map_err(|e| crate::error::Error::InternalError(format!("保存文件失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
     // 构建 PluginSource::Local（使用绝对路径，避免 LocalFetcher 拼接 plugin_root 前缀）
     let abs_path = std::fs::canonicalize(&file_path)
-        .map_err(|e| crate::error::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
     let source = cmx_plugin::domain::plugin::PluginSource::Local {
         path: abs_path.clone(),
     };
@@ -321,7 +321,7 @@ pub async fn plugin_deploy(
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("插件部署失败: {}", e))
+        crate::Error::InternalError(format!("插件部署失败: {}", e))
     })?;
 
     let resp = PluginDeployResponse {
@@ -452,7 +452,7 @@ pub async fn plugin_list(
         .unwrap_or_default()
         .into();
     let plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
+        crate::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
 
     let plugin_responses: Vec<PluginInfoResponse> = plugins
@@ -490,12 +490,12 @@ pub async fn plugin_get(
     let manager = cmx_plugin::GlobalPluginManager::get();
 
     let plugin = manager.get_plugin(&params.plugin_id).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("获取插件详情失败: {}", e))
+        crate::Error::InternalError(format!("获取插件详情失败: {}", e))
     })?;
 
     match plugin {
         Some(info) => Ok(Json(ApiResp::ok(convert_plugin_info(info)))),
-        // None => Err(crate::error::Error::NotFound(format!("插件 {} 不存在", params.plugin_id))),
+        // None => Err(crate::Error::NotFound(format!("插件 {} 不存在", params.plugin_id))),
         None => Ok(Json(ApiResp::fail(1, "插件不存在"))),
     }
 }
@@ -529,7 +529,7 @@ pub async fn plugin_page(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
     let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
-        crate::error::Error::InternalError(format!("获取插件列表失败: {}", e))
+        crate::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
 
     let total = all_plugins.len() as u64;
@@ -576,7 +576,7 @@ pub async fn plugin_exists(
 ) -> Result<Json<ApiResp<String>>> {
     let manager = cmx_plugin::GlobalPluginManager::get();
     let exists = manager.repository().plugin_exists(&query.plugin_id).await
-        .map_err(|e| crate::error::Error::internal_error(format!("查询插件存在性失败: {}", e)))?;
+        .map_err(|e| crate::Error::internal_error(format!("查询插件存在性失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
 }

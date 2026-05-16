@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }
+# 内部依赖 - API 通用类型
+cmx-api-types = { workspace = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
 # 内部依赖 - 数据库

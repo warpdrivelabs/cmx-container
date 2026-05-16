@@ -3,8 +3,8 @@
 //! 展示如何扩展 GenericCrudService 实现自定义业务逻辑
 
 use super::{DomainBmc, DomainFilter, DomainTreeNodeData};
-use crate::error::{Error, Result};
-use crate::rest::TreeNode;
+use crate::{Error, Result};
+use crate::TreeNode;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 use cmx_database::crud::GenericCrudService;

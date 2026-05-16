@@ -11,9 +11,9 @@ use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
-use crate::api_response::ApiResp;
+use crate::ApiResp;
 use crate::app_state::CmxAppState;
-use crate::error::Result;
+use crate::Result;
 use crate::handlers::module::ModuleFilter;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
@@ -42,7 +42,7 @@ use crate::rest::header_parse::get_db_id_from_header;
 #[utoipa::path(
     post,
     path = "/api/module/custom-page",
-    request_body = crate::rest::param_doc::PageParamsDoc<serde_json::Value>,
+    request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),
@@ -90,7 +90,7 @@ pub async fn module_custom_page(
         "cmx_module",
     )
     .await
-    .map_err(|e| crate::error::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,

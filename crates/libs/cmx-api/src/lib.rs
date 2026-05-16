@@ -10,8 +10,12 @@
 //! 提供 Web API 开发所需的基础组件，包括错误处理、响应封装、中间件和通用 CRUD 框架。
 
 pub mod middleware;
-pub mod error;
-pub mod api_response;
+// pub mod error;
+// pub mod api_response;
+
+pub use cmx_api_types::{ApiResp, Pagination, UnitResp, ErrCode, Error, Result};
+pub use cmx_api_types::{PageParamsDoc, ListParamsDoc, UpdatePayloadDoc, DeletePayloadDoc, GetParamsDoc};
+pub use cmx_api_types::{TreeNode, TreeNodeData};
 
 /// REST 协议层模块
 pub mod rest;
@@ -30,8 +34,6 @@ pub mod openapi;
 
 
 pub use rest::{ handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
-pub use error::{Error, Result};
-pub use api_response::{ApiResp, Pagination};
 pub use app_state::{CmxAppState, AppStateInner};
 pub use openapi::ApiDoc;
 

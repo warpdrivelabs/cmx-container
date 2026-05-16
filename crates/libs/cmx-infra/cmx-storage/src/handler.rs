@@ -15,7 +15,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use serde::{Deserialize, Serialize};
+pub use cmx_api_types::ApiResp;
+use serde::Deserialize;
 use utoipa::ToSchema;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
@@ -31,40 +32,6 @@ use crate::types::*;
 pub struct AppState {
     /// 存储服务实例
     pub storage_service: Arc<dyn StorageService>,
-}
-
-/// 统一 API 响应格式
-///
-/// 所有 REST API 均使用此结构返回 JSON 响应，
-/// 包含状态码、消息和可选的数据载荷。
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct ApiResponse<T: Serialize> {
-    /// 业务状态码
-    pub code: i32,
-    /// 响应消息
-    pub message: String,
-    /// 响应数据载荷
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
-}
-
-impl<T: Serialize> ApiResponse<T> {
-    /// 构建成功响应
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - 响应数据
-    ///
-    /// # Returns
-    ///
-    /// 返回业务状态码为 200 的成功响应。
-    pub fn ok(data: T) -> Self {
-        Self {
-            code: 200,
-            message: "success".to_string(),
-            data: Some(data),
-        }
-    }
 }
 
 /// 文件上传表单参数
@@ -234,7 +201,7 @@ pub struct MultipartAbortBody {
     request_body(content = UploadForm, description = "文件上传表单", content_type = "multipart/form-data"
     ),
     responses(
-        (status = 200, description = "上传成功", body = ApiResponse<FileInfo>),
+        (status = 200, description = "上传成功", body = ApiResp<FileInfo>),
         (status = 400, description = "请求错误"),
         (status = 500, description = "服务器错误")
     )
@@ -297,7 +264,7 @@ pub async fn upload_handler(
     };
 
     match state.storage_service.upload(request).await {
-        Ok(file_info) => Json(ApiResponse::ok(file_info)).into_response(),
+        Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -494,7 +461,7 @@ fn sanitize_filename(filename: &str) -> String {
         ("file_id" = String, Query, description = "文件唯一标识")
     ),
     responses(
-        (status = 200, description = "获取成功", body = ApiResponse<FileInfo>),
+        (status = 200, description = "获取成功", body = ApiResp<FileInfo>),
         (status = 404, description = "文件不存在"),
         (status = 500, description = "服务器错误")
     )
@@ -504,7 +471,7 @@ pub async fn file_info_handler(
     Query(query): Query<FileInfoQuery>,
 ) -> impl IntoResponse {
     match state.storage_service.get_file_info(&query.file_id).await {
-        Ok(file_info) => Json(ApiResponse::ok(file_info)).into_response(),
+        Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
         Err(e) => error_response(StatusCode::NOT_FOUND, &e.to_string()),
     }
 }
@@ -542,7 +509,7 @@ pub async fn delete_handler(
     Query(query): Query<DeleteQuery>,
 ) -> impl IntoResponse {
     match state.storage_service.delete(&query.file_id).await {
-        Ok(()) => Json(ApiResponse::<()>::ok(())).into_response(),
+        Ok(()) => Json(ApiResp::<()>::ok_no_data()).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -569,7 +536,7 @@ pub async fn delete_handler(
     tag = "文件存储",
     request_body = FileQuery,
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<FilePage>),
+        (status = 200, description = "查询成功", body = ApiResp<FilePage>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -578,7 +545,7 @@ pub async fn page_handler(
     Json(query): Json<FileQuery>,
 ) -> impl IntoResponse {
     match state.storage_service.list_files(query).await {
-        Ok(page) => Json(ApiResponse::ok(page)).into_response(),
+        Ok(page) => Json(ApiResp::ok(page)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -605,7 +572,7 @@ pub async fn page_handler(
     tag = "文件存储",
     request_body = PresignDownloadRequest,
     responses(
-        (status = 200, description = "生成成功", body = ApiResponse<String>),
+        (status = 200, description = "生成成功", body = ApiResp<String>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -615,7 +582,7 @@ pub async fn presign_download_handler(
 ) -> impl IntoResponse {
     let expires = Duration::from_secs(body.expires.unwrap_or(3600));
     match state.storage_service.presign_download(&body.file_id, expires).await {
-        Ok(url) => Json(ApiResponse::ok(url)).into_response(),
+        Ok(url) => Json(ApiResp::ok(url)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -642,7 +609,7 @@ pub async fn presign_download_handler(
     tag = "文件存储",
     request_body = PresignUploadBody,
     responses(
-        (status = 200, description = "生成成功", body = ApiResponse<PresignUploadResult>),
+        (status = 200, description = "生成成功", body = ApiResp<PresignUploadResult>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -657,7 +624,7 @@ pub async fn presign_upload_handler(
         platform: body.platform,
     };
     match state.storage_service.presign_upload(request, expires).await {
-        Ok(result) => Json(ApiResponse::ok(result)).into_response(),
+        Ok(result) => Json(ApiResp::ok(result)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -684,7 +651,7 @@ pub async fn presign_upload_handler(
     tag = "文件存储",
     request_body = MultipartInitBody,
     responses(
-        (status = 200, description = "初始化成功", body = ApiResponse<MultipartSession>),
+        (status = 200, description = "初始化成功", body = ApiResp<MultipartSession>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -701,7 +668,7 @@ pub async fn multipart_init_handler(
         platform: body.platform,
     };
     match state.storage_service.init_multipart_upload(request).await {
-        Ok(session) => Json(ApiResponse::ok(session)).into_response(),
+        Ok(session) => Json(ApiResp::ok(session)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -728,7 +695,7 @@ pub async fn multipart_init_handler(
     tag = "文件存储",
     request_body = MultipartPartBody,
     responses(
-        (status = 200, description = "记录成功", body = ApiResponse<PartInfo>),
+        (status = 200, description = "记录成功", body = ApiResp<PartInfo>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -743,7 +710,7 @@ pub async fn multipart_part_handler(
         part_size: body.part_size,
     };
     match state.storage_service.upload_part(&body.upload_id, part).await {
-        Ok(info) => Json(ApiResponse::ok(info)).into_response(),
+        Ok(info) => Json(ApiResp::ok(info)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -770,7 +737,7 @@ pub async fn multipart_part_handler(
     tag = "文件存储",
     request_body = MultipartCompleteBody,
     responses(
-        (status = 200, description = "完成成功", body = ApiResponse<FileInfo>),
+        (status = 200, description = "完成成功", body = ApiResp<FileInfo>),
         (status = 500, description = "服务器错误")
     )
 )]
@@ -779,7 +746,7 @@ pub async fn multipart_complete_handler(
     Json(body): Json<MultipartCompleteBody>,
 ) -> impl IntoResponse {
     match state.storage_service.complete_multipart_upload(&body.upload_id).await {
-        Ok(file_info) => Json(ApiResponse::ok(file_info)).into_response(),
+        Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -815,7 +782,7 @@ pub async fn multipart_abort_handler(
     Json(body): Json<MultipartAbortBody>,
 ) -> impl IntoResponse {
     match state.storage_service.abort_multipart_upload(&body.upload_id).await {
-        Ok(()) => Json(ApiResponse::<()>::ok(())).into_response(),
+        Ok(()) => Json(ApiResp::<()>::ok_no_data()).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -833,10 +800,11 @@ pub async fn multipart_abort_handler(
 ///
 /// JSON 格式的错误响应。
 fn error_response(status: StatusCode, message: &str) -> Response {
-    let body = ApiResponse::<String> {
-        code: status.as_u16() as i32,
-        message: message.to_string(),
+    let body = ApiResp::<String> {
+        code: status.as_u16(),
+        msg: message.to_string(),
         data: None,
+        pagination: None,
     };
     (status, Json(body)).into_response()
 }

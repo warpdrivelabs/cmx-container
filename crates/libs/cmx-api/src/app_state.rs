@@ -33,7 +33,6 @@ pub struct CmxAppState {
     service_query: Option<Arc<dyn ServiceQuery>>,
     /// 服务存储（trait 对象）
     service_storage: Option<Arc<dyn ServiceStorage>>,
-    /// 存储服务（trait 对象）
     storage_service: Option<Arc<dyn StorageService>>,
 }
 
@@ -165,17 +164,6 @@ impl Clone for CmxAppState {
             service_query: self.service_query.clone(),
             service_storage: self.service_storage.clone(),
             storage_service: self.storage_service.clone(),
-        }
-    }
-}
-
-impl axum::extract::FromRef<CmxAppState> for cmx_storage::handler::AppState {
-    fn from_ref(state: &CmxAppState) -> Self {
-        Self {
-            storage_service: state
-                .storage_service()
-                .cloned()
-                .expect("storage_service 未初始化"),
         }
     }
 }

@@ -12,7 +12,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use crate::error::Error;
+use crate::Error;
 
 /// 限流配置
 #[derive(Debug, Clone)]

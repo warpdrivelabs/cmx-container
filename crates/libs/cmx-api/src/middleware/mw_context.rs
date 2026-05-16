@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::{Error, Result};
 use axum::body::Body;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;

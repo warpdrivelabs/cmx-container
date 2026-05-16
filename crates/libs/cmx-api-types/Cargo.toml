@@ -1,0 +1,30 @@
+[package]
+name = "cmx-api-types"
+version = "0.1.5"
+edition = "2024"
+authors = ["skylake@pansoft.com"]
+
+[dependencies]
+# 序列化框架
+serde = { workspace = true }
+# JSON 处理
+serde_json = { workspace = true }
+# OpenAPI 文档生成
+utoipa = { workspace = true, features = ["uuid", "chrono"] }
+# HTTP 框架
+axum = { workspace = true }
+# 参数校验
+validator = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# 日志
+tracing = { workspace = true }
+# modql 依赖
+modql = { workspace = true }
+# 内部依赖 - 核心类型
+cmx-core = { workspace = true }
+# 内部依赖 - 数据库错误转换
+cmx-database = { workspace = true }
+
+[lib]
+path = "src/lib.rs"

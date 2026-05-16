@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 use zip::ZipArchive;
 
-use crate::api_response::ApiResp;
-use crate::error::Result;
+use crate::ApiResp;
+use crate::Result;
 use cmx_utils::ConfigManager;
 use crate::handlers::sys_datasource::SysDatasourceService;
 use super::request::CreateProjectRequest;
@@ -40,12 +40,12 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
 
     let templates_path = config
         .get_string("templates.path")
-        .map_err(|e| crate::error::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
 
     let templates_dir = PathBuf::from(&templates_path);
 
     if !templates_dir.exists() {
-        return Err(crate::error::Error::InternalError(format!(
+        return Err(crate::Error::InternalError(format!(
             "模板目录不存在: {}",
             templates_path
         )));
@@ -54,11 +54,11 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
     let mut templates = Vec::new();
 
     let entries = fs::read_dir(&templates_dir)
-        .map_err(|e| crate::error::Error::InternalError(format!("读取模板目录失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("读取模板目录失败: {}", e)))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| {
-            crate::error::Error::InternalError(format!("读取目录项失败: {}", e))
+            crate::Error::InternalError(format!("读取目录项失败: {}", e))
         })?;
 
         let path = entry.path();
@@ -136,7 +136,7 @@ pub async fn create_project(
     let config = ConfigManager::global();
     let templates_path = config
         .get_string("templates.path")
-        .map_err(|e| crate::error::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("读取模板路径配置失败: {}", e)))?;
 
     let template_zip_path = PathBuf::from(&templates_path).join(format!("{}.zip", req.template));
 
@@ -151,23 +151,23 @@ pub async fn create_project(
     // 步骤 3: 创建临时目录
     let temp_dir = std::env::temp_dir().join(format!("cmx_template_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir)
-        .map_err(|e| crate::error::Error::InternalError(format!("创建临时目录失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("创建临时目录失败: {}", e)))?;
 
     // 步骤 4: 解压模板
     let template_zip_data = fs::read(&template_zip_path)
-        .map_err(|e| crate::error::Error::InternalError(format!("读取模板文件失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("读取模板文件失败: {}", e)))?;
 
     let reader = std::io::Cursor::new(template_zip_data);
     let mut archive = ZipArchive::new(reader)
-        .map_err(|e| crate::error::Error::InternalError(format!("解析ZIP文件失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("解析ZIP文件失败: {}", e)))?;
 
     let extract_dir = temp_dir.join("template");
     fs::create_dir_all(&extract_dir)
-        .map_err(|e| crate::error::Error::InternalError(format!("创建解压目录失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("创建解压目录失败: {}", e)))?;
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| {
-            crate::error::Error::InternalError(format!("读取ZIP条目失败: {}", e))
+            crate::Error::InternalError(format!("读取ZIP条目失败: {}", e))
         })?;
 
         let outpath = match file.enclosed_name() {
@@ -177,20 +177,20 @@ pub async fn create_project(
 
         if file.name().ends_with('/') {
             fs::create_dir_all(&outpath).map_err(|e| {
-                crate::error::Error::InternalError(format!("创建目录失败: {}", e))
+                crate::Error::InternalError(format!("创建目录失败: {}", e))
             })?;
         } else {
             if let Some(p) = outpath.parent()
                 && !p.exists() {
                     fs::create_dir_all(p).map_err(|e| {
-                        crate::error::Error::InternalError(format!("创建父目录失败: {}", e))
+                        crate::Error::InternalError(format!("创建父目录失败: {}", e))
                     })?;
                 }
             let mut outfile = fs::File::create(&outpath).map_err(|e| {
-                crate::error::Error::InternalError(format!("创建文件失败: {}", e))
+                crate::Error::InternalError(format!("创建文件失败: {}", e))
             })?;
             std::io::copy(&mut file, &mut outfile).map_err(|e| {
-                crate::error::Error::InternalError(format!("写入文件失败: {}", e))
+                crate::Error::InternalError(format!("写入文件失败: {}", e))
             })?;
         }
     }
@@ -198,7 +198,7 @@ pub async fn create_project(
     // 步骤 5: 创建项目目录
     let target_dir = PathBuf::from(&req.path).join(&req.id);
     fs::create_dir_all(&target_dir)
-        .map_err(|e| crate::error::Error::InternalError(format!("创建项目目录失败: {}", e)))?;
+        .map_err(|e| crate::Error::InternalError(format!("创建项目目录失败: {}", e)))?;
 
     // 步骤 6: 渲染模板文件
     fn process_template_dir(
@@ -207,10 +207,10 @@ pub async fn create_project(
         req: &CreateProjectRequest,
     ) -> Result<()> {
         for entry in fs::read_dir(src_dir)
-            .map_err(|e| crate::error::Error::InternalError(format!("读取目录失败: {}", e)))?
+            .map_err(|e| crate::Error::InternalError(format!("读取目录失败: {}", e)))?
         {
             let entry = entry.map_err(|e| {
-                crate::error::Error::InternalError(format!("读取目录项失败: {}", e))
+                crate::Error::InternalError(format!("读取目录项失败: {}", e))
             })?;
             let path = entry.path();
 
@@ -218,7 +218,7 @@ pub async fn create_project(
                 let dir_name = path.file_name().unwrap().to_str().unwrap();
                 let new_target_dir = target_dir.join(dir_name);
                 fs::create_dir_all(&new_target_dir).map_err(|e| {
-                    crate::error::Error::InternalError(format!("创建目录失败: {}", e))
+                    crate::Error::InternalError(format!("创建目录失败: {}", e))
                 })?;
                 process_template_dir(&path, &new_target_dir, req)?;
             } else {
@@ -233,11 +233,11 @@ pub async fn create_project(
                     let mut content = String::new();
                     fs::File::open(&path)
                         .map_err(|e| {
-                            crate::error::Error::InternalError(format!("打开模板文件失败: {}", e))
+                            crate::Error::InternalError(format!("打开模板文件失败: {}", e))
                         })?
                         .read_to_string(&mut content)
                         .map_err(|e| {
-                            crate::error::Error::InternalError(format!("读取模板文件失败: {}", e))
+                            crate::Error::InternalError(format!("读取模板文件失败: {}", e))
                         })?;
 
                     let content = content
@@ -252,14 +252,14 @@ pub async fn create_project(
                         .replace("{{datasource_id}}", req.datasource_id.as_deref().unwrap_or(""));
 
                     let mut file = fs::File::create(&target_file).map_err(|e| {
-                        crate::error::Error::InternalError(format!("创建文件失败: {}", e))
+                        crate::Error::InternalError(format!("创建文件失败: {}", e))
                     })?;
                     file.write_all(content.as_bytes()).map_err(|e| {
-                        crate::error::Error::InternalError(format!("写入文件失败: {}", e))
+                        crate::Error::InternalError(format!("写入文件失败: {}", e))
                     })?;
                 } else {
                     fs::copy(&path, &target_file).map_err(|e| {
-                        crate::error::Error::InternalError(format!("复制文件失败: {}", e))
+                        crate::Error::InternalError(format!("复制文件失败: {}", e))
                     })?;
                 }
             }
@@ -306,13 +306,13 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
     if let Some(row) = dataset.iter().next() {
         let db_url = row.get_by_name(&dataset.schema, "db_url")
             .and_then(|v| String::try_from(v.clone()).ok())
-            .ok_or_else(|| crate::error::Error::InternalError(
+            .ok_or_else(|| crate::Error::InternalError(
                 "无法获取 db_url".to_string()
             ))?;
 
         let db_type = row.get_by_name(&dataset.schema, "db_type")
             .and_then(|v| String::try_from(v.clone()).ok())
-            .ok_or_else(|| crate::error::Error::InternalError(
+            .ok_or_else(|| crate::Error::InternalError(
                 "无法获取 db_type".to_string()
             ))?;
 
@@ -332,7 +332,7 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
 
         let vscode_dir = target_dir.join(".vscode");
         fs::create_dir_all(&vscode_dir)
-            .map_err(|e| crate::error::Error::InternalError(
+            .map_err(|e| crate::Error::InternalError(
                 format!("创建 .vscode 目录失败: {}", e)
             ))?;
 
@@ -340,7 +340,7 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
 
         let mut settings_content: serde_json::Value = if settings_path.exists() {
             let existing_content = fs::read_to_string(&settings_path)
-                .map_err(|e| crate::error::Error::InternalError(
+                .map_err(|e| crate::Error::InternalError(
                     format!("读取现有 settings.json 失败: {}", e)
                 ))?;
 
@@ -369,12 +369,12 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
         }
 
         let final_content = serde_json::to_string_pretty(&settings_content)
-            .map_err(|e| crate::error::Error::InternalError(
+            .map_err(|e| crate::Error::InternalError(
                 format!("序列化 settings.json 失败: {}", e)
             ))?;
 
         fs::write(&settings_path, final_content)
-            .map_err(|e| crate::error::Error::InternalError(
+            .map_err(|e| crate::Error::InternalError(
                 format!("写入 settings.json 失败: {}", e)
             ))?;
 

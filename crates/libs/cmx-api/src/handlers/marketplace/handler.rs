@@ -13,9 +13,9 @@ use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::api_response::ApiResp;
+use crate::ApiResp;
 use crate::app_state::CmxAppState;
-use crate::error::{Error, Result};
+use crate::{Error, Result};
 use crate::middleware::CmxSvrContext;
 use crate::rest::PageParamsDoc;
 use super::request::*;
@@ -436,7 +436,7 @@ pub async fn marketplace_plugin_publish(
     path = "/api/marketplace/plugin/update",
     request_body = UpdateMarketplacePluginRequest,
     responses(
-        (status = 200, description = "更新成功", body = crate::api_response::UnitResp)
+        (status = 200, description = "更新成功", body = crate::UnitResp)
     ),
     tag = "MarketplacePlugin"
 )]
@@ -444,7 +444,7 @@ pub async fn marketplace_plugin_update(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<UpdateMarketplacePluginRequest>,
-) -> Result<Json<crate::api_response::UnitResp>> {
+) -> Result<Json<crate::UnitResp>> {
     debug!("更新市场插件信息: plugin_id={}", req.plugin_id);
 
     let update_data = MarketplacePluginForUpdate {
@@ -476,7 +476,7 @@ pub async fn marketplace_plugin_update(
         .await
         .map_err(|e| Error::internal_error(format!("更新市场插件失败: {}", e)))?;
 
-    Ok(Json(crate::api_response::UnitResp::msg("更新成功")))
+    Ok(Json(crate::UnitResp::msg("更新成功")))
 }
 
 /// 删除 Handler
@@ -501,7 +501,7 @@ pub async fn marketplace_plugin_update(
     path = "/api/marketplace/plugin/delete",
     request_body = DeleteMarketplacePluginRequest,
     responses(
-        (status = 200, description = "删除成功", body = crate::api_response::UnitResp)
+        (status = 200, description = "删除成功", body = crate::UnitResp)
     ),
     tag = "MarketplacePlugin"
 )]
@@ -509,7 +509,7 @@ pub async fn marketplace_plugin_delete(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<DeleteMarketplacePluginRequest>,
-) -> Result<Json<crate::api_response::UnitResp>> {
+) -> Result<Json<crate::UnitResp>> {
     info!("删除市场插件: plugin_id={}", req.plugin_id);
 
     let service = get_marketplace_service().await;
@@ -518,7 +518,7 @@ pub async fn marketplace_plugin_delete(
         .await
         .map_err(|e| Error::internal_error(format!("删除市场插件失败: {}", e)))?;
 
-    Ok(Json(crate::api_response::UnitResp::msg("删除成功")))
+    Ok(Json(crate::UnitResp::msg("删除成功")))
 }
 
 /// 版本列表查询 Handler
@@ -742,7 +742,7 @@ pub async fn marketplace_plugin_install(
     path = "/api/marketplace/plugin/rate",
     request_body = RatePluginRequest,
     responses(
-        (status = 200, description = "评分成功", body = crate::api_response::UnitResp)
+        (status = 200, description = "评分成功", body = crate::UnitResp)
     ),
     tag = "MarketplacePlugin"
 )]
@@ -750,7 +750,7 @@ pub async fn marketplace_plugin_rate(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<RatePluginRequest>,
-) -> Result<Json<crate::api_response::UnitResp>> {
+) -> Result<Json<crate::UnitResp>> {
     info!("插件评分: plugin_id={}, rating={}", req.plugin_id, req.rating);
 
     let rate_req = MarketplaceRatingForCreate {
@@ -767,7 +767,7 @@ pub async fn marketplace_plugin_rate(
         .await
         .map_err(|e| Error::internal_error(format!("评分失败: {}", e)))?;
 
-    Ok(Json(crate::api_response::UnitResp::msg("评分成功")))
+    Ok(Json(crate::UnitResp::msg("评分成功")))
 }
 
 /// 评分列表查询 Handler

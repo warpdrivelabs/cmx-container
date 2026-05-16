@@ -67,12 +67,12 @@ macro_rules! declare_crud_handlers {
             use axum::Json;
             use cmx_core::model::data::dataset::DataSet;
             use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
-            use $crate::api_response::ApiResp;
+            use $crate::ApiResp;
             use $crate::app_state::CmxAppState;
-            use $crate::error::Result;
+            use $crate::Result;
             use $crate::middleware::CmxSvrContext;
-            use $crate::rest::param_doc::{
-                DeletePayloadDoc, ListParamsDoc, PageParamsDoc,UpdatePayloadDoc
+            use $crate::{
+                DeletePayloadDoc, ListParamsDoc, PageParamsDoc, UpdatePayloadDoc
             };
 
             /// 创建实体 Handler

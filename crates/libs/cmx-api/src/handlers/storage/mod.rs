@@ -7,16 +7,27 @@
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 use axum::Router;
+use axum::extract::FromRef;
 use axum::routing::{delete, get, post};
 
 use cmx_storage::handler::{
     batch_download_handler, delete_handler, download_handler, file_info_handler,
     multipart_abort_handler, multipart_complete_handler, multipart_init_handler,
     multipart_part_handler, page_handler, presign_download_handler, presign_upload_handler,
-    upload_handler,
+    upload_handler, AppState,
 };
 
-/// Storage 模块路由
+impl FromRef<CmxAppState> for AppState {
+    fn from_ref(state: &CmxAppState) -> Self {
+        let storage_service = state
+            .storage_service()
+            .expect("storage_service 未初始化");
+        Self {
+            storage_service: storage_service.clone(),
+        }
+    }
+}
+
 pub struct StorageModule;
 
 impl ModuleRoutes for StorageModule {

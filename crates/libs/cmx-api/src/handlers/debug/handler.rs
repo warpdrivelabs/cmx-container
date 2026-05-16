@@ -4,8 +4,8 @@
 
 use axum::Json;
 
-use crate::api_response::ApiResp;
-use crate::error::Result;
+use crate::ApiResp;
+use crate::Result;
 
 use super::response::CurrentDebugSessionResponse;
 

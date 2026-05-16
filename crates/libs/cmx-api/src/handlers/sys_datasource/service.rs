@@ -2,7 +2,7 @@
 //!
 //! 实现数据源的 CRUD 操作，并动态管理数据库连接池
 
-use crate::error::{Error, Result};
+use crate::{Error, Result};
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::{DatabaseManager, DbConfig, PoolConfig};
 use cmx_database::config::DbType;

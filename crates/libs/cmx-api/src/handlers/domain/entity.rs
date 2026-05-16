@@ -1,7 +1,7 @@
 //! Domain 实体定义
 //!
 //! 定义 Domain 实体的数据结构，包括完整实体和创建/更新 DTO
-use crate::rest::TreeNodeData;
+use crate::TreeNodeData;
 use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;

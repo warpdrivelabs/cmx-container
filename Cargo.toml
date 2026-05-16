@@ -15,6 +15,7 @@ members = [
     "crates/libs/cmx-infra/cmx-storage",
     "crates/web/web-server",
     "crates/libs/cmx-api",
+    "crates/libs/cmx-api-types",
     "crates/libs/cmx-plugin-sdk",
     "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-debug",
@@ -41,6 +42,8 @@ cmx-core = { path = "crates/libs/cmx-core", version = "0.1.5", registry = "nora"
 cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.5", registry = "nora" }
 # 内部依赖 - API
 cmx-api = { path = "crates/libs/cmx-api", version = "0.1.5", registry = "nora" }
+# 内部依赖 - API 通用类型
+cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.5", registry = "nora" }
 # 内部依赖 - 数据库
 cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.5", registry = "nora" }
 # 内部依赖 - 缓存

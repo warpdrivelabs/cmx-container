@@ -40,9 +40,9 @@ use super::models::{
     ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
     ServiceListItem, ServiceOrchestrationError,
 };
-use crate::api_response::ApiResp;
+use crate::ApiResp;
 use crate::app_state::CmxAppState;
-use crate::error::Error;
+use crate::Error;
 use crate::middleware::CmxSvrContext;
 use axum::{
     extract::{Path, Query, State},
@@ -781,7 +781,7 @@ pub async fn get_services_by_plugin(
 #[utoipa::path(
     post,
     path = "/api/service/page",
-    request_body = crate::rest::param_doc::PageParamsDoc<serde_json::Value>,
+    request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "分页查询成功", body = ApiResp<Vec<ServiceListItem>>)
     ),
@@ -868,21 +868,21 @@ pub async fn page_services(
     path = "/api/service/delete",
     request_body = crate::handlers::service::models::ServiceDeleteQuery,
     responses(
-        (status = 200, description = "删除服务成功", body = crate::api_response::UnitResp)
+        (status = 200, description = "删除服务成功", body = crate::UnitResp)
     ),
     tag = "Service"
 )]
 pub async fn delete_service(
     State(state): State<CmxAppState>,
     Json(req): Json<crate::handlers::service::models::ServiceDeleteQuery>,
-) -> Result<Json<crate::api_response::UnitResp>, Error> {
+) -> Result<Json<crate::UnitResp>, Error> {
     let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
     service_storage.delete_service(&req.service_key, None, None).await
         .map_err(|e| Error::business_error(format!("删除服务失败: {}", e)))?;
 
-    Ok(Json(crate::api_response::UnitResp::msg("删除成功")))
+    Ok(Json(crate::UnitResp::msg("删除成功")))
 }
 
 /// 查询服务是否存在
