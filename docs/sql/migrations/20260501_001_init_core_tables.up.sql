@@ -1,31 +1,57 @@
 -- =============================================
--- cmx-container 数据库定义 (DDL)
--- 包含：域/应用/模块/数据源表、插件表、服务表、插件市场表、文件存储表
+-- 初始化核心表
 -- =============================================
 
 -- =============================================
 -- 1. 域表 (cmx_domain)
 -- =============================================
-DROP TABLE IF EXISTS cmx_domain;
-CREATE TABLE cmx_domain
+CREATE TABLE IF NOT EXISTS cmx_domain
 (
-    id          VARCHAR(64)  NOT NULL,
-    code        VARCHAR(64)  NOT NULL,
-    name        VARCHAR(200) NOT NULL,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    code VARCHAR
+(
+    64
+) NOT NULL,
+    name VARCHAR
+(
+    200
+) NOT NULL,
     description TEXT,
-    type        VARCHAR(50),
-    tags        TEXT,
-    sort_order  INT4      DEFAULT 0,
-    status      INT4      DEFAULT 1,
-    archived    INT4      DEFAULT 0,
+    type VARCHAR
+(
+    50
+),
+    tags TEXT,
+    sort_order INT4 DEFAULT 0,
+    status INT4 DEFAULT 1,
+    archived INT4 DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by   VARCHAR(100),
-    create_name VARCHAR(100),
-    update_by   VARCHAR(100),
-    update_name VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_domain IS '域表';
@@ -60,32 +86,62 @@ ON COLUMN cmx_domain.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_domain.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_core_domain_code ON cmx_domain (code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_coredomain_code ON cmx_domain(code);
 
 -- =============================================
 -- 2. 应用表 (cmx_application)
 -- =============================================
-DROP TABLE IF EXISTS cmx_application;
-CREATE TABLE cmx_application
+CREATE TABLE IF NOT EXISTS cmx_application
 (
-    id          VARCHAR(64)  NOT NULL,
-    code        VARCHAR(64)  NOT NULL,
-    domain_code VARCHAR(64)  NOT NULL,
-    name        VARCHAR(200) NOT NULL,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    code VARCHAR
+(
+    64
+) NOT NULL,
+    domain_code VARCHAR
+(
+    64
+) NOT NULL,
+    name VARCHAR
+(
+    200
+) NOT NULL,
     description TEXT,
-    type        VARCHAR(50),
-    tags        TEXT,
-    sort_order  INT4      DEFAULT 0,
-    status      INT4      DEFAULT 1,
-    archived    INT4      DEFAULT 0,
+    type VARCHAR
+(
+    50
+),
+    tags TEXT,
+    sort_order INT4 DEFAULT 0,
+    status INT4 DEFAULT 1,
+    archived INT4 DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by   VARCHAR(100),
-    create_name VARCHAR(100),
-    update_by   VARCHAR(100),
-    update_name VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_application IS '应用表';
@@ -122,33 +178,66 @@ ON COLUMN cmx_application.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_application.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_coreapplication_code ON cmx_application (code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_coreapplication_code ON cmx_application(code);
 
 -- =============================================
 -- 3. 模块表 (cmx_module)
 -- =============================================
-DROP TABLE IF EXISTS cmx_module;
-CREATE TABLE cmx_module
+CREATE TABLE IF NOT EXISTS cmx_module
 (
-    id               VARCHAR(64)  NOT NULL,
-    code             VARCHAR(64)  NOT NULL,
-    domain_code      VARCHAR(64)  NOT NULL,
-    application_code VARCHAR(64)  NOT NULL,
-    name             VARCHAR(200) NOT NULL,
-    description      TEXT,
-    type             VARCHAR(50),
-    tags             TEXT,
-    sort_order       INT4      DEFAULT 0,
-    status           INT4      DEFAULT 1,
-    archived         INT4      DEFAULT 0,
-    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by        VARCHAR(100),
-    create_name      VARCHAR(100),
-    update_by        VARCHAR(100),
-    update_name      VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    code VARCHAR
+(
+    64
+) NOT NULL,
+    domain_code VARCHAR
+(
+    64
+) NOT NULL,
+    application_code VARCHAR
+(
+    64
+) NOT NULL,
+    name VARCHAR
+(
+    200
+) NOT NULL,
+    description TEXT,
+    type VARCHAR
+(
+    50
+),
+    tags TEXT,
+    sort_order INT4 DEFAULT 0,
+    status INT4 DEFAULT 1,
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_module IS '模块表';
@@ -187,39 +276,75 @@ ON COLUMN cmx_module.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_module.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_coremodule_code ON cmx_module (code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_coremodule_code ON cmx_module(code);
 
 -- =============================================
 -- 4. 数据源表 (cmx_sys_datasource)
 -- =============================================
-DROP TABLE IF EXISTS cmx_sys_datasource;
-CREATE TABLE cmx_sys_datasource
+CREATE TABLE IF NOT EXISTS cmx_sys_datasource
 (
-    id                    VARCHAR(64)  NOT NULL,
-    db_id                 VARCHAR(64),
-    db_schema             VARCHAR(64),
-    description           VARCHAR(255),
-    db_type               VARCHAR(255) NOT NULL,
-    db_url                VARCHAR(255),
-    max_connections       INTEGER,
-    min_connections       INTEGER,
-    connect_timeout       INTEGER,
-    idle_timeout          INTEGER,
-    max_lifetime          INTEGER,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    db_id VARCHAR
+(
+    64
+),
+    db_schema VARCHAR
+(
+    64
+),
+    description VARCHAR
+(
+    255
+),
+    db_type VARCHAR
+(
+    255
+) NOT NULL,
+    db_url VARCHAR
+(
+    255
+),
+    max_connections INTEGER,
+    min_connections INTEGER,
+    connect_timeout INTEGER,
+    idle_timeout INTEGER,
+    max_lifetime INTEGER,
     health_check_interval INTEGER,
-    health_check_timeout  INTEGER,
-    default_flag          INTEGER,
-    source                VARCHAR(20),
-    status                INT4      DEFAULT 1,
-    archived              INT4      DEFAULT 0,
-    create_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by             VARCHAR(100),
-    create_name           VARCHAR(100),
-    update_by             VARCHAR(100),
-    update_name           VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    health_check_timeout INTEGER,
+    default_flag INTEGER,
+    source VARCHAR
+(
+    20
+),
+    status INT4 DEFAULT 1,
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_sys_datasource IS 'cmx数据源管理';
@@ -270,48 +395,118 @@ ON COLUMN cmx_sys_datasource.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_sys_datasource.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_datasource_db_id ON cmx_sys_datasource (db_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_datasource_db_id ON cmx_sys_datasource(db_id);
 
 -- =============================================
 -- 5. 插件注册表 (cmx_plugin)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin;
-CREATE TABLE cmx_plugin
+CREATE TABLE IF NOT EXISTS cmx_plugin
 (
-    id                    VARCHAR(64)              NOT NULL,
-    plugin_id             VARCHAR(255)             NOT NULL,
-    name                  VARCHAR(500)             NOT NULL,
-    version               VARCHAR(50)              NOT NULL,
-    wasm_path             TEXT                     NOT NULL,
-    install_path          TEXT                     NOT NULL,
-    db_id                 VARCHAR(100),
-    status                VARCHAR(30)                       DEFAULT 'installed',
-    is_system             BOOLEAN                           DEFAULT FALSE,
-    is_locked             BOOLEAN                           DEFAULT FALSE,
-    domain_code           VARCHAR(64),
-    application_code      VARCHAR(64),
-    module_code           VARCHAR(64),
-    vendor_name           VARCHAR(255),
-    vendor_url            TEXT,
-    vendor_contact        VARCHAR(255),
-    metadata              JSONB,
-    signature_algorithm   VARCHAR(50),
-    signer_key_id         VARCHAR(255),
-    zip_source_url        VARCHAR(500),
-    zip_source_type       VARCHAR(30),
-    create_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived              INT4                     NOT NULL DEFAULT 0,
-    create_by             VARCHAR(100),
-    create_name           VARCHAR(100),
-    update_by             VARCHAR(100),
-    update_name           VARCHAR(100),
-    plugin_type           VARCHAR(50),
-    source_path           VARCHAR(500),
-    description           TEXT,
-    marketplace_source_id VARCHAR(64),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    255
+) NOT NULL,
+    name VARCHAR
+(
+    500
+) NOT NULL,
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    wasm_path TEXT NOT NULL,
+    install_path TEXT NOT NULL,
+    db_id VARCHAR
+(
+    100
+),
+    status VARCHAR
+(
+    30
+) DEFAULT 'installed',
+    is_system BOOLEAN DEFAULT FALSE,
+    is_locked BOOLEAN DEFAULT FALSE,
+    domain_code VARCHAR
+(
+    64
+),
+    application_code VARCHAR
+(
+    64
+),
+    module_code VARCHAR
+(
+    64
+),
+    vendor_name VARCHAR
+(
+    255
+),
+    vendor_url TEXT,
+    vendor_contact VARCHAR
+(
+    255
+),
+    metadata JSONB,
+    signature_algorithm VARCHAR
+(
+    50
+),
+    signer_key_id VARCHAR
+(
+    255
+),
+    zip_source_url VARCHAR
+(
+    500
+),
+    zip_source_type VARCHAR
+(
+    30
+),
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    plugin_type VARCHAR
+(
+    50
+),
+    source_path VARCHAR
+(
+    500
+),
+    description TEXT,
+    marketplace_source_id VARCHAR
+(
+    64
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin IS '插件注册主表：存储所有已安装插件的核心信息基线版本';
@@ -380,39 +575,80 @@ ON COLUMN cmx_plugin.description IS '插件描述信息';
 COMMENT
 ON COLUMN cmx_plugin.marketplace_source_id IS '市场版本来源ID，关联 cmx_marketplace_plugin_version.id，非市场安装时为 NULL';
 
-CREATE INDEX idx_plugin_domain_app_module ON cmx_plugin (domain_code, application_code, module_code);
-ALTER TABLE cmx_plugin
-    ADD CONSTRAINT uk_cmx_plugin_plugin_id UNIQUE (plugin_id);
+CREATE INDEX IF NOT EXISTS idx_plugin_domain_app_module ON cmx_plugin(domain_code, application_code, module_code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_plugin_id ON cmx_plugin(plugin_id);
 
 -- =============================================
 -- 6. 版本历史表 (cmx_plugin_versions)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_versions;
-CREATE TABLE cmx_plugin_versions
+CREATE TABLE IF NOT EXISTS cmx_plugin_versions
 (
-    id                    VARCHAR(64)              NOT NULL,
-    plugin_id             VARCHAR(64)              NOT NULL,
-    version               VARCHAR(50)              NOT NULL,
-    install_path          TEXT                     NOT NULL,
-    wasm_path             TEXT                     NOT NULL,
-    is_current            BOOLEAN                  NOT NULL DEFAULT FALSE,
-    installed_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    uninstalled_at        TIMESTAMP WITH TIME ZONE,
-    zip_source_url        VARCHAR(500),
-    zip_source_type       VARCHAR(30),
-    build_type            VARCHAR(30),
-    create_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived              INT4                     NOT NULL DEFAULT 0,
-    create_by             VARCHAR(100),
-    create_name           VARCHAR(100),
-    update_by             VARCHAR(100),
-    update_name           VARCHAR(100),
-    plugin_type           VARCHAR(50),
-    source_path           VARCHAR(500),
-    marketplace_source_id VARCHAR(64),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    install_path TEXT NOT NULL,
+    wasm_path TEXT NOT NULL,
+    is_current BOOLEAN NOT NULL DEFAULT FALSE,
+    installed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    uninstalled_at TIMESTAMP
+                           WITH TIME ZONE,
+                               zip_source_url VARCHAR (500),
+    zip_source_type VARCHAR
+(
+    30
+),
+    build_type VARCHAR
+(
+    30
+),
+    create_time TIMESTAMP
+                           WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                           WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    plugin_type VARCHAR
+(
+    50
+),
+    source_path VARCHAR
+(
+    500
+),
+    marketplace_source_id VARCHAR
+(
+    64
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_versions IS '插件版本历史表：记录插件的版本历史';
@@ -459,37 +695,79 @@ ON COLUMN cmx_plugin_versions.source_path IS '源码路径';
 COMMENT
 ON COLUMN cmx_plugin_versions.marketplace_source_id IS '市场版本来源ID，关联 cmx_marketplace_plugin_version.id';
 
-CREATE INDEX idx_version_plugin ON cmx_plugin_versions (plugin_id);
-CREATE INDEX idx_version_current ON cmx_plugin_versions (plugin_id, is_current) WHERE is_current = TRUE;
-ALTER TABLE cmx_plugin_versions
-    ADD CONSTRAINT uk_cmx_plugin_versions_plugin_version UNIQUE (plugin_id, version);
+CREATE INDEX IF NOT EXISTS idx_version_plugin ON cmx_plugin_versions(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_version_current ON cmx_plugin_versions(plugin_id, is_current) WHERE is_current = TRUE;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_versions_plugin_version ON cmx_plugin_versions(plugin_id, version);
 
 -- =============================================
 -- 7. 依赖关系表 (cmx_plugin_dependencies)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_dependencies;
-CREATE TABLE cmx_plugin_dependencies
+CREATE TABLE IF NOT EXISTS cmx_plugin_dependencies
 (
-    id                   VARCHAR(64)              NOT NULL,
-    plugin_id            VARCHAR(64)              NOT NULL,
-    dependency_plugin_id VARCHAR(255)             NOT NULL,
-    dependency_name      VARCHAR(500),
-    version_constraint   VARCHAR(100),
-    min_version          VARCHAR(50),
-    max_version          VARCHAR(50),
-    is_optional          BOOLEAN                  NOT NULL DEFAULT FALSE,
-    is_dev               BOOLEAN                  NOT NULL DEFAULT FALSE,
-    resolved_version     VARCHAR(50),
-    resolution_status    VARCHAR(30),
-    create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived             INT4                     NOT NULL DEFAULT 0,
-    create_by            VARCHAR(100),
-    create_name          VARCHAR(100),
-    update_by            VARCHAR(100),
-    update_name          VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    dependency_plugin_id VARCHAR
+(
+    255
+) NOT NULL,
+    dependency_name VARCHAR
+(
+    500
+),
+    version_constraint VARCHAR
+(
+    100
+),
+    min_version VARCHAR
+(
+    50
+),
+    max_version VARCHAR
+(
+    50
+),
+    is_optional BOOLEAN NOT NULL DEFAULT FALSE,
+    is_dev BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_version VARCHAR
+(
+    50
+),
+    resolution_status VARCHAR
+(
+    30
+),
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_dependencies IS '插件依赖关系表：记录插件之间的依赖关系';
@@ -528,35 +806,72 @@ ON COLUMN cmx_plugin_dependencies.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_plugin_dependencies.update_name IS '更新人名称';
 
-CREATE INDEX idx_dep_plugin ON cmx_plugin_dependencies (plugin_id);
-CREATE INDEX idx_dep_resolved ON cmx_plugin_dependencies (plugin_id, resolution_status);
+CREATE INDEX IF NOT EXISTS idx_dep_plugin ON cmx_plugin_dependencies(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_dep_resolved ON cmx_plugin_dependencies(plugin_id, resolution_status);
 
 -- =============================================
 -- 8. 节点部署记录表 (cmx_plugin_deployments)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_deployments;
-CREATE TABLE cmx_plugin_deployments
+CREATE TABLE IF NOT EXISTS cmx_plugin_deployments
 (
-    id            VARCHAR(64)              NOT NULL,
-    plugin_id     VARCHAR(64)              NOT NULL,
-    node_id       VARCHAR(100)             NOT NULL,
-    node_type     VARCHAR(50),
-    version       VARCHAR(50)              NOT NULL,
-    status        VARCHAR(30),
-    progress      INTEGER                           DEFAULT 0,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    node_id VARCHAR
+(
+    100
+) NOT NULL,
+    node_type VARCHAR
+(
+    50
+),
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    status VARCHAR
+(
+    30
+),
+    progress INTEGER DEFAULT 0,
     error_message TEXT,
     error_details TEXT,
-    create_time   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived      INT4                     NOT NULL DEFAULT 0,
-    create_by     VARCHAR(100),
-    create_name   VARCHAR(100),
-    update_by     VARCHAR(100),
-    update_name   VARCHAR(100),
-    plugin_type   VARCHAR(50),
-    source_path   TEXT,
-    PRIMARY KEY (id)
-);
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    plugin_type VARCHAR
+(
+    50
+),
+    source_path TEXT,
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_deployments IS '节点插件部署记录表：记录插件在各个节点上的部署状态';
@@ -597,43 +912,82 @@ ON COLUMN cmx_plugin_deployments.plugin_type IS '插件类型: wasm/rhai';
 COMMENT
 ON COLUMN cmx_plugin_deployments.source_path IS '源码路径';
 
-CREATE INDEX idx_deploy_plugin ON cmx_plugin_deployments (plugin_id);
-CREATE INDEX idx_deploy_node ON cmx_plugin_deployments (node_id);
-CREATE INDEX idx_deploy_status ON cmx_plugin_deployments (status);
-ALTER TABLE cmx_plugin_deployments
-    ADD CONSTRAINT uk_cmx_plugin_deployments_plugin_node_version UNIQUE (plugin_id, node_id, version);
+CREATE INDEX IF NOT EXISTS idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_deploy_node ON cmx_plugin_deployments(node_id);
+CREATE INDEX IF NOT EXISTS idx_deploy_status ON cmx_plugin_deployments(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_deployments_plugin_node_version ON cmx_plugin_deployments(plugin_id, node_id, version);
 
 -- =============================================
 -- 9. 审计日志表 (cmx_plugin_audit_log)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_audit_log;
-CREATE TABLE cmx_plugin_audit_log
+CREATE TABLE IF NOT EXISTS cmx_plugin_audit_log
 (
-    id               VARCHAR(64)              NOT NULL,
-    plugin_id        VARCHAR(64),
-    node_id          VARCHAR(64),
-    version          VARCHAR(64),
-    deployment_id    VARCHAR(64),
-    operation_type   VARCHAR(50)              NOT NULL,
-    operation_status VARCHAR(30)              NOT NULL,
-    request_id       VARCHAR(100),
-    details          TEXT,
-    old_value        TEXT,
-    new_value        TEXT,
-    error_code       VARCHAR(50),
-    error_message    TEXT,
-    stack_trace      TEXT,
-    started_at       TIMESTAMP WITH TIME ZONE,
-    completed_at     TIMESTAMP WITH TIME ZONE,
-    duration_ms      BIGINT,
-    create_time      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived         INT4                     NOT NULL DEFAULT 0,
-    create_by        VARCHAR(100),
-    create_name      VARCHAR(100),
-    update_by        VARCHAR(100),
-    update_name      VARCHAR(100)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+),
+    node_id VARCHAR
+(
+    64
+),
+    version VARCHAR
+(
+    64
+),
+    deployment_id VARCHAR
+(
+    64
+),
+    operation_type VARCHAR
+(
+    50
+) NOT NULL,
+    operation_status VARCHAR
+(
+    30
+) NOT NULL,
+    request_id VARCHAR
+(
+    100
+),
+    details TEXT,
+    old_value TEXT,
+    new_value TEXT,
+    error_code VARCHAR
+(
+    50
+),
+    error_message TEXT,
+    stack_trace TEXT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    duration_ms BIGINT,
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_audit_log IS '审计日志表：记录插件操作日志';
@@ -686,42 +1040,76 @@ ON COLUMN cmx_plugin_audit_log.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_plugin_audit_log.update_name IS '更新人名称';
 
-CREATE INDEX idx_audit_plugin ON cmx_plugin_audit_log (plugin_id);
-CREATE INDEX idx_audit_node ON cmx_plugin_audit_log (node_id);
-CREATE INDEX idx_audit_operation ON cmx_plugin_audit_log (operation_type);
-CREATE INDEX idx_audit_timestamp ON cmx_plugin_audit_log (started_at);
-CREATE INDEX idx_audit_request ON cmx_plugin_audit_log (request_id);
+CREATE INDEX IF NOT EXISTS idx_audit_plugin ON cmx_plugin_audit_log(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_audit_node ON cmx_plugin_audit_log(node_id);
+CREATE INDEX IF NOT EXISTS idx_audit_operation ON cmx_plugin_audit_log(operation_type);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON cmx_plugin_audit_log(started_at);
+CREATE INDEX IF NOT EXISTS idx_audit_request ON cmx_plugin_audit_log(request_id);
 
 -- =============================================
 -- 10. 系统默认插件配置表 (cmx_system_plugins)
 -- =============================================
-DROP TABLE IF EXISTS cmx_system_plugins;
-CREATE TABLE cmx_system_plugins
+CREATE TABLE IF NOT EXISTS cmx_system_plugins
 (
-    id                  VARCHAR(64)              NOT NULL,
-    plugin_id           VARCHAR(255)             NOT NULL,
-    name                VARCHAR(500)             NOT NULL,
-    version             VARCHAR(50)              NOT NULL,
-    install_order       INTEGER                  NOT NULL DEFAULT 0,
-    is_optional         BOOLEAN                  NOT NULL DEFAULT FALSE,
-    is_critical         BOOLEAN                  NOT NULL DEFAULT FALSE,
-    retry_count         INTEGER                  NOT NULL DEFAULT 3,
-    retry_delay_seconds INTEGER                  NOT NULL DEFAULT 10,
-    wait_for_plugins    VARCHAR(255),
-    source_type         VARCHAR(30)              NOT NULL,
-    source_path         TEXT,
-    source_url          TEXT,
-    status              VARCHAR(30)              NOT NULL DEFAULT 'pending',
-    last_installed_at   TIMESTAMP WITH TIME ZONE,
-    install_attempts    INTEGER                  NOT NULL DEFAULT 0,
-    create_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived            INT4                     NOT NULL DEFAULT 0,
-    create_by           VARCHAR(100),
-    create_name         VARCHAR(100),
-    update_by           VARCHAR(100),
-    update_name         VARCHAR(100)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    255
+) NOT NULL,
+    name VARCHAR
+(
+    500
+) NOT NULL,
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    install_order INTEGER NOT NULL DEFAULT 0,
+    is_optional BOOLEAN NOT NULL DEFAULT FALSE,
+    is_critical BOOLEAN NOT NULL DEFAULT FALSE,
+    retry_count INTEGER NOT NULL DEFAULT 3,
+    retry_delay_seconds INTEGER NOT NULL DEFAULT 10,
+    wait_for_plugins VARCHAR
+(
+    255
+),
+    source_type VARCHAR
+(
+    30
+) NOT NULL,
+    source_path TEXT,
+    source_url TEXT,
+    status VARCHAR
+(
+    30
+) NOT NULL DEFAULT 'pending',
+    last_installed_at TIMESTAMP WITH TIME ZONE,
+    install_attempts INTEGER NOT NULL DEFAULT 0,
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+)
+    );
 
 COMMENT
 ON TABLE cmx_system_plugins IS '系统默认插件配置表：配置系统启动时需要自动安装的插件';
@@ -768,37 +1156,70 @@ ON COLUMN cmx_system_plugins.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_system_plugins.update_name IS '更新人名称';
 
-CREATE INDEX idx_system_plugin_order ON cmx_system_plugins (install_order);
-CREATE INDEX idx_system_plugin_status ON cmx_system_plugins (status);
+CREATE INDEX IF NOT EXISTS idx_system_plugin_order ON cmx_system_plugins(install_order);
+CREATE INDEX IF NOT EXISTS idx_system_plugin_status ON cmx_system_plugins(status);
 
 -- =============================================
 -- 11. 节点信息表 (cmx_plugin_nodes)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_nodes;
-CREATE TABLE cmx_plugin_nodes
+CREATE TABLE IF NOT EXISTS cmx_plugin_nodes
 (
-    node_id                VARCHAR(64)              NOT NULL,
-    node_name              VARCHAR(255)             NOT NULL,
-    node_type              VARCHAR(30)              NOT NULL,
-    status                 VARCHAR(30)              NOT NULL,
-    is_active              BOOLEAN                  NOT NULL DEFAULT TRUE,
-    host                   VARCHAR(255)             NOT NULL,
-    port                   INTEGER                  NOT NULL,
-    protocol               VARCHAR(10)              NOT NULL DEFAULT 'http',
-    capabilities           TEXT,
-    last_health_check      TIMESTAMP WITH TIME ZONE,
-    health_check_interval  INTEGER                  NOT NULL DEFAULT 30,
-    plugin_manager_version VARCHAR(50),
-    registered_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    last_seen_at           TIMESTAMP WITH TIME ZONE,
-    create_time            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived               INT4                     NOT NULL DEFAULT 0,
-    create_by              VARCHAR(100),
-    create_name            VARCHAR(100),
-    update_by              VARCHAR(100),
-    update_name            VARCHAR(100)
-);
+    node_id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    node_name VARCHAR
+(
+    255
+) NOT NULL,
+    node_type VARCHAR
+(
+    30
+) NOT NULL,
+    status VARCHAR
+(
+    30
+) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    host VARCHAR
+(
+    255
+) NOT NULL,
+    port INTEGER NOT NULL,
+    protocol VARCHAR
+(
+    10
+) NOT NULL DEFAULT 'http',
+    capabilities TEXT,
+    last_health_check TIMESTAMP WITH TIME ZONE,
+                                    health_check_interval INTEGER NOT NULL DEFAULT 30,
+                                    plugin_manager_version VARCHAR (50),
+    registered_at TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMP WITH TIME ZONE,
+    create_time TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_nodes IS '节点信息表：记录集群中的节点信息';
@@ -845,32 +1266,66 @@ ON COLUMN cmx_plugin_nodes.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_plugin_nodes.update_name IS '更新人名称';
 
-CREATE INDEX idx_node_status ON cmx_plugin_nodes (status);
-CREATE INDEX idx_node_type ON cmx_plugin_nodes (node_type);
+CREATE INDEX IF NOT EXISTS idx_node_status ON cmx_plugin_nodes(status);
+CREATE INDEX IF NOT EXISTS idx_node_type ON cmx_plugin_nodes(node_type);
 
 -- =============================================
 -- 12. 插件功能表 (cmx_plugin_features)
 -- =============================================
-DROP TABLE IF EXISTS cmx_plugin_features;
-CREATE TABLE cmx_plugin_features
+CREATE TABLE IF NOT EXISTS cmx_plugin_features
 (
-    id             VARCHAR(64)              NOT NULL,
-    plugin_id      VARCHAR(64)              NOT NULL,
-    plugin_version VARCHAR(50)              NOT NULL,
-    feature_id     VARCHAR(255)             NOT NULL,
-    feature_name   VARCHAR(500)             NOT NULL,
-    feature_type   VARCHAR(50)              NOT NULL,
-    description    TEXT,
-    config         JSONB,
-    status         VARCHAR(30)              NOT NULL DEFAULT 'active',
-    create_time    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    update_time    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    archived       INT4                     NOT NULL DEFAULT 0,
-    create_by      VARCHAR(100),
-    create_name    VARCHAR(100),
-    update_by      VARCHAR(100),
-    update_name    VARCHAR(100)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_version VARCHAR
+(
+    50
+) NOT NULL,
+    feature_id VARCHAR
+(
+    255
+) NOT NULL,
+    feature_name VARCHAR
+(
+    500
+) NOT NULL,
+    feature_type VARCHAR
+(
+    50
+) NOT NULL,
+    description TEXT,
+    config JSONB,
+    status VARCHAR
+(
+    30
+) NOT NULL DEFAULT 'active',
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+)
+    );
 
 COMMENT
 ON TABLE cmx_plugin_features IS '插件功能表';
@@ -910,27 +1365,69 @@ ON COLUMN cmx_plugin_features.update_name IS '更新人名称';
 -- =============================================
 -- 13. 表定义元数据表 (cmx_meta_table_define)
 -- =============================================
-DROP TABLE IF EXISTS cmx_meta_table_define;
-CREATE TABLE cmx_meta_table_define
+CREATE TABLE IF NOT EXISTS cmx_meta_table_define
 (
-    id               VARCHAR(64) NOT NULL,
-    table_name       VARCHAR(100),
-    display_name     VARCHAR(100),
-    db_id            VARCHAR(100),
-    plugin_id        VARCHAR(64),
-    version          VARCHAR(50),
-    domain_code      VARCHAR(100),
-    application_code VARCHAR(100),
-    module_code      VARCHAR(100),
-    archived         INT4      DEFAULT 0,
-    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by        VARCHAR(100),
-    create_name      VARCHAR(100),
-    update_by        VARCHAR(100),
-    update_name      VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    table_name VARCHAR
+(
+    100
+),
+    display_name VARCHAR
+(
+    100
+),
+    db_id VARCHAR
+(
+    100
+),
+    plugin_id VARCHAR
+(
+    64
+),
+    version VARCHAR
+(
+    50
+),
+    domain_code VARCHAR
+(
+    100
+),
+    application_code VARCHAR
+(
+    100
+),
+    module_code VARCHAR
+(
+    100
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_meta_table_define IS '表定义元数据';
@@ -970,28 +1467,70 @@ ON COLUMN cmx_meta_table_define.update_name IS '更新人名称';
 -- =============================================
 -- 14. 表定义元数据版本表 (cmx_meta_table_define_version)
 -- =============================================
-DROP TABLE IF EXISTS cmx_meta_table_define_version;
-CREATE TABLE cmx_meta_table_define_version
+CREATE TABLE IF NOT EXISTS cmx_meta_table_define_version
 (
-    id               VARCHAR(64) NOT NULL,
-    table_name       VARCHAR(100),
-    display_name     VARCHAR(100),
-    db_id            VARCHAR(100),
-    plugin_id        VARCHAR(64),
-    version          VARCHAR(50),
-    domain_code      VARCHAR(100),
-    application_code VARCHAR(100),
-    module_code      VARCHAR(100),
-    metadata         JSONB,
-    archived         INT4      DEFAULT 0,
-    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by        VARCHAR(100),
-    create_name      VARCHAR(100),
-    update_by        VARCHAR(100),
-    update_name      VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    table_name VARCHAR
+(
+    100
+),
+    display_name VARCHAR
+(
+    100
+),
+    db_id VARCHAR
+(
+    100
+),
+    plugin_id VARCHAR
+(
+    64
+),
+    version VARCHAR
+(
+    50
+),
+    domain_code VARCHAR
+(
+    100
+),
+    application_code VARCHAR
+(
+    100
+),
+    module_code VARCHAR
+(
+    100
+),
+    metadata JSONB,
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_meta_table_define_version IS '表元数据版本表';
@@ -1033,28 +1572,70 @@ ON COLUMN cmx_meta_table_define_version.update_name IS '更新人名称';
 -- =============================================
 -- 15. 服务定义表 (cmx_service_define)
 -- =============================================
-DROP TABLE IF EXISTS cmx_service_define;
-CREATE TABLE cmx_service_define
+CREATE TABLE IF NOT EXISTS cmx_service_define
 (
-    id               VARCHAR(64)  NOT NULL,
-    service_key      VARCHAR(100) NOT NULL,
-    service_name     VARCHAR(100),
-    description      VARCHAR(255),
-    plugin_id        VARCHAR(64),
-    domain_code      VARCHAR(64),
-    application_code VARCHAR(64),
-    module_code      VARCHAR(64),
-    status           INT4      DEFAULT 1,
-    version          VARCHAR(50),
-    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by        VARCHAR(100),
-    create_name      VARCHAR(100),
-    update_by        VARCHAR(100),
-    update_name      VARCHAR(100),
-    archived         INT4      DEFAULT 0,
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    service_key VARCHAR
+(
+    100
+) NOT NULL,
+    service_name VARCHAR
+(
+    100
+),
+    description VARCHAR
+(
+    255
+),
+    plugin_id VARCHAR
+(
+    64
+),
+    domain_code VARCHAR
+(
+    64
+),
+    application_code VARCHAR
+(
+    64
+),
+    module_code VARCHAR
+(
+    64
+),
+    status INT4 DEFAULT 1,
+    version VARCHAR
+(
+    50
+),
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    archived INT4 DEFAULT 0,
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_service_define IS '服务定义表';
@@ -1093,29 +1674,59 @@ ON COLUMN cmx_service_define.update_name IS '更新人名称';
 COMMENT
 ON COLUMN cmx_service_define.archived IS '归档标志：0-未归档，1-已归档';
 
-CREATE UNIQUE INDEX uk_cmx_service_define_key ON cmx_service_define (service_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_service_define_key ON cmx_service_define(service_key);
 
 -- =============================================
 -- 16. 服务定义版本表 (cmx_service_define_version)
 -- =============================================
-DROP TABLE IF EXISTS cmx_service_define_version;
-CREATE TABLE cmx_service_define_version
+CREATE TABLE IF NOT EXISTS cmx_service_define_version
 (
-    id             VARCHAR(64) NOT NULL,
-    service_key    VARCHAR(100),
-    version        VARCHAR(50),
-    plugin_id      VARCHAR(64),
-    plugin_version VARCHAR(50),
-    config         TEXT,
-    create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by      VARCHAR(100),
-    create_name    VARCHAR(100),
-    update_by      VARCHAR(100),
-    update_name    VARCHAR(100),
-    archived       INT4      DEFAULT 0,
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    service_key VARCHAR
+(
+    100
+),
+    version VARCHAR
+(
+    50
+),
+    plugin_id VARCHAR
+(
+    64
+),
+    plugin_version VARCHAR
+(
+    50
+),
+    config TEXT,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    archived INT4 DEFAULT 0,
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_service_define_version IS '服务定义版本表';
@@ -1146,50 +1757,122 @@ ON COLUMN cmx_service_define_version.update_name IS '更新人名称';
 COMMENT
 ON COLUMN cmx_service_define_version.archived IS '归档标志：0-未归档，1-已归档';
 
-CREATE INDEX cmx_service_define_version_service_key_index ON cmx_service_define_version (service_key);
+CREATE INDEX IF NOT EXISTS cmx_service_define_version_service_key_index ON cmx_service_define_version(service_key);
 
 -- =============================================
 -- 17. 插件市场 - 插件主表 (cmx_marketplace_plugin)
 -- =============================================
-DROP TABLE IF EXISTS cmx_marketplace_plugin;
-CREATE TABLE cmx_marketplace_plugin
+CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin
 (
-    id                VARCHAR(64)  NOT NULL,
-    plugin_id         VARCHAR(128) NOT NULL,
-    name              VARCHAR(256),
-    description       TEXT,
-    short_description VARCHAR(512),
-    icon_url          VARCHAR(512),
-    category          VARCHAR(64),
-    tags              JSONB,
-    vendor_name       VARCHAR(128),
-    vendor_url        VARCHAR(512),
-    vendor_contact    VARCHAR(256),
-    license_type      VARCHAR(32),
-    homepage_url      VARCHAR(512),
-    documentation_url VARCHAR(512),
-    repository_url    VARCHAR(512),
-    status            VARCHAR(32),
-    is_featured       INT2,
-    is_official       INT2,
-    avg_rating        DECIMAL(3, 2),
-    rating_count      INT4,
-    download_count    INT8,
-    install_count     INT8,
-    domain_code       VARCHAR(64),
-    application_code  VARCHAR(64),
-    module_code       VARCHAR(64),
-    plugin_type       VARCHAR(32),
-    archived          INT4      DEFAULT 0,
-    create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by         VARCHAR(100),
-    create_name       VARCHAR(100),
-    update_by         VARCHAR(100),
-    update_name       VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    name VARCHAR
+(
+    256
+),
+    description TEXT,
+    short_description VARCHAR
+(
+    512
+),
+    icon_url VARCHAR
+(
+    512
+),
+    category VARCHAR
+(
+    64
+),
+    tags JSONB,
+    vendor_name VARCHAR
+(
+    128
+),
+    vendor_url VARCHAR
+(
+    512
+),
+    vendor_contact VARCHAR
+(
+    256
+),
+    license_type VARCHAR
+(
+    32
+),
+    homepage_url VARCHAR
+(
+    512
+),
+    documentation_url VARCHAR
+(
+    512
+),
+    repository_url VARCHAR
+(
+    512
+),
+    status VARCHAR
+(
+    32
+),
+    is_featured INT2,
+    is_official INT2,
+    avg_rating DECIMAL
+(
+    3,
+    2
+),
+    rating_count INT4,
+    download_count INT8,
+    install_count INT8,
+    domain_code VARCHAR
+(
+    64
+),
+    application_code VARCHAR
+(
+    64
+),
+    module_code VARCHAR
+(
+    64
+),
+    plugin_type VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_marketplace_plugin IS '插件市场-插件主表';
@@ -1260,48 +1943,96 @@ ON COLUMN cmx_marketplace_plugin.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_marketplace_plugin.update_name IS '更新人姓名';
 
-CREATE INDEX idx_mp_category ON cmx_marketplace_plugin (category);
-CREATE INDEX idx_mp_status ON cmx_marketplace_plugin (status);
-CREATE INDEX idx_mp_featured ON cmx_marketplace_plugin (is_featured) WHERE is_featured = 1;
-CREATE INDEX idx_mp_download_count ON cmx_marketplace_plugin (download_count DESC);
-CREATE INDEX idx_mp_rating ON cmx_marketplace_plugin (avg_rating DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_plugin_id ON cmx_marketplace_plugin(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_mp_category ON cmx_marketplace_plugin(category);
+CREATE INDEX IF NOT EXISTS idx_mp_status ON cmx_marketplace_plugin(status);
+CREATE INDEX IF NOT EXISTS idx_mp_featured ON cmx_marketplace_plugin(is_featured) WHERE is_featured = 1;
+CREATE INDEX IF NOT EXISTS idx_mp_download_count ON cmx_marketplace_plugin(download_count DESC);
+CREATE INDEX IF NOT EXISTS idx_mp_rating ON cmx_marketplace_plugin(avg_rating DESC);
 
 -- =============================================
 -- 18. 插件市场 - 版本表 (cmx_marketplace_plugin_version)
 -- =============================================
-DROP TABLE IF EXISTS cmx_marketplace_plugin_version;
-CREATE TABLE cmx_marketplace_plugin_version
+CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin_version
 (
-    id                   VARCHAR(64)  NOT NULL,
-    plugin_id            VARCHAR(128) NOT NULL,
-    version              VARCHAR(64)  NOT NULL,
-    version_rank         INT4,
-    changelog            TEXT,
-    release_notes        TEXT,
-    download_url         VARCHAR(512),
-    package_size         INT8,
-    checksum             VARCHAR(128),
-    min_platform_version VARCHAR(32),
-    max_platform_version VARCHAR(32),
-    dependencies         JSONB,
-    compatibility        JSONB,
-    status               VARCHAR(32),
-    is_latest            INT2,
-    is_stable            INT2,
-    download_count       INT8,
-    published_at         TIMESTAMP,
-    storage_file_id      VARCHAR(64),
-    archived             INT4      DEFAULT 0,
-    create_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by            VARCHAR(100),
-    create_name          VARCHAR(100),
-    update_by            VARCHAR(100),
-    update_name          VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version),
-    CONSTRAINT fk_mpversion_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    version VARCHAR
+(
+    64
+) NOT NULL,
+    version_rank INT4,
+    changelog TEXT,
+    release_notes TEXT,
+    download_url VARCHAR
+(
+    512
+),
+    package_size INT8,
+    checksum VARCHAR
+(
+    128
+),
+    min_platform_version VARCHAR
+(
+    32
+),
+    max_platform_version VARCHAR
+(
+    32
+),
+    dependencies JSONB,
+    compatibility JSONB,
+    status VARCHAR
+(
+    32
+),
+    is_latest INT2,
+    is_stable INT2,
+    download_count INT8,
+    published_at TIMESTAMP,
+    storage_file_id VARCHAR
+(
+    64
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    CONSTRAINT fk_mpversion_plugin FOREIGN KEY
+(
+    plugin_id
+) REFERENCES cmx_marketplace_plugin
+(
+    plugin_id
+) ON DELETE CASCADE
+    );
 
 COMMENT
 ON TABLE cmx_marketplace_plugin_version IS '插件市场-版本表';
@@ -1358,33 +2089,70 @@ ON COLUMN cmx_marketplace_plugin_version.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_marketplace_plugin_version.update_name IS '更新人姓名';
 
-CREATE INDEX idx_mpv_plugin_id ON cmx_marketplace_plugin_version (plugin_id);
-CREATE INDEX idx_mpv_latest ON cmx_marketplace_plugin_version (plugin_id, is_latest) WHERE is_latest = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_plugin_version ON cmx_marketplace_plugin_version(plugin_id, version);
+CREATE INDEX IF NOT EXISTS idx_mpv_plugin_id ON cmx_marketplace_plugin_version(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_mpv_latest ON cmx_marketplace_plugin_version(plugin_id, is_latest) WHERE is_latest = 1;
 
 -- =============================================
 -- 19. 插件市场 - 下载统计表 (cmx_marketplace_download_stats)
 -- =============================================
-DROP TABLE IF EXISTS cmx_marketplace_download_stats;
-CREATE TABLE cmx_marketplace_download_stats
+CREATE TABLE IF NOT EXISTS cmx_marketplace_download_stats
 (
-    id             VARCHAR(64)  NOT NULL,
-    plugin_id      VARCHAR(128) NOT NULL,
-    version        VARCHAR(64),
-    download_date  DATE,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    version VARCHAR
+(
+    64
+),
+    download_date DATE,
     download_count INT4,
-    install_count  INT4,
-    source_type    VARCHAR(32),
-    region         VARCHAR(32),
-    archived       INT4      DEFAULT 0,
-    create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by      VARCHAR(100),
-    create_name    VARCHAR(100),
-    update_by      VARCHAR(100),
-    update_name    VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version, download_date, source_type)
-);
+    install_count INT4,
+    source_type VARCHAR
+(
+    32
+),
+    region VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    CONSTRAINT fk_dstats_plugin FOREIGN KEY
+(
+    plugin_id
+) REFERENCES cmx_marketplace_plugin
+(
+    plugin_id
+) ON DELETE CASCADE
+    );
 
 COMMENT
 ON TABLE cmx_marketplace_download_stats IS '插件市场-下载统计表';
@@ -1419,31 +2187,57 @@ ON COLUMN cmx_marketplace_download_stats.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_marketplace_download_stats.update_name IS '更新人姓名';
 
-CREATE INDEX idx_dstats_date ON cmx_marketplace_download_stats (download_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_download_stats ON cmx_marketplace_download_stats(plugin_id, version, download_date, source_type);
+CREATE INDEX IF NOT EXISTS idx_dstats_date ON cmx_marketplace_download_stats(download_date);
 
 -- =============================================
 -- 20. 插件市场 - 评分表 (cmx_marketplace_rating)
 -- =============================================
-DROP TABLE IF EXISTS cmx_marketplace_rating;
-CREATE TABLE cmx_marketplace_rating
+CREATE TABLE IF NOT EXISTS cmx_marketplace_rating
 (
-    id          VARCHAR(64)  NOT NULL,
-    plugin_id   VARCHAR(128) NOT NULL,
-    user_id     VARCHAR(128) NOT NULL,
-    rating      INT4,
-    review      TEXT,
-    status      VARCHAR(32),
-    archived    INT4      DEFAULT 0,
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    user_id VARCHAR
+(
+    128
+) NOT NULL,
+    rating INT4,
+    review TEXT,
+    status VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by   VARCHAR(100),
-    create_name VARCHAR(100),
-    update_by   VARCHAR(100),
-    update_name VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, user_id),
-    CONSTRAINT fk_rating_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
-);
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_marketplace_rating IS '插件市场-评分表';
@@ -1474,49 +2268,116 @@ ON COLUMN cmx_marketplace_rating.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_marketplace_rating.update_name IS '更新人姓名';
 
-CREATE INDEX idx_rating_plugin ON cmx_marketplace_rating (plugin_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_rating ON cmx_marketplace_rating(plugin_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_rating_plugin ON cmx_marketplace_rating(plugin_id);
 
 -- =============================================
 -- 21. 文件详情表 (cmx_file_detail)
 -- =============================================
-DROP TABLE IF EXISTS cmx_file_detail;
-CREATE TABLE cmx_file_detail
+CREATE TABLE IF NOT EXISTS cmx_file_detail
 (
-    id                VARCHAR(64)  NOT NULL,
-    url               VARCHAR(512) NOT NULL,
-    size              BIGINT,
-    filename          VARCHAR(256),
-    original_filename VARCHAR(256),
-    base_path         VARCHAR(256),
-    path              VARCHAR(256),
-    ext               VARCHAR(32),
-    content_type      VARCHAR(128),
-    platform          VARCHAR(32),
-    th_url            VARCHAR(512),
-    th_filename       VARCHAR(256),
-    th_size           BIGINT,
-    th_content_type   VARCHAR(128),
-    object_id         VARCHAR(64),
-    object_type       VARCHAR(32),
-    metadata          TEXT,
-    user_metadata     TEXT,
-    th_metadata       TEXT,
-    th_user_metadata  TEXT,
-    attr              TEXT,
-    file_acl          VARCHAR(32),
-    th_file_acl       VARCHAR(32),
-    hash_info         TEXT,
-    upload_id         VARCHAR(128),
-    upload_status     INTEGER,
-    archived          INTEGER   DEFAULT 0,
-    create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by         VARCHAR(100),
-    create_name       VARCHAR(100),
-    update_by         VARCHAR(100),
-    update_name       VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    url VARCHAR
+(
+    512
+) NOT NULL,
+    size BIGINT,
+    filename VARCHAR
+(
+    256
+),
+    original_filename VARCHAR
+(
+    256
+),
+    base_path VARCHAR
+(
+    256
+),
+    path VARCHAR
+(
+    256
+),
+    ext VARCHAR
+(
+    32
+),
+    content_type VARCHAR
+(
+    128
+),
+    platform VARCHAR
+(
+    32
+),
+    th_url VARCHAR
+(
+    512
+),
+    th_filename VARCHAR
+(
+    256
+),
+    th_size BIGINT,
+    th_content_type VARCHAR
+(
+    128
+),
+    object_id VARCHAR
+(
+    64
+),
+    object_type VARCHAR
+(
+    32
+),
+    metadata TEXT,
+    user_metadata TEXT,
+    th_metadata TEXT,
+    th_user_metadata TEXT,
+    attr TEXT,
+    file_acl VARCHAR
+(
+    32
+),
+    th_file_acl VARCHAR
+(
+    32
+),
+    hash_info TEXT,
+    upload_id VARCHAR
+(
+    128
+),
+    upload_status INTEGER,
+    archived INTEGER DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_file_detail IS '文件详情表';
@@ -1587,32 +2448,59 @@ ON COLUMN cmx_file_detail.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_file_detail.update_name IS '更新人姓名';
 
-CREATE INDEX idx_file_detail_platform ON cmx_file_detail (platform);
-CREATE INDEX idx_file_detail_object_type ON cmx_file_detail (object_type);
-CREATE INDEX idx_file_detail_upload_id ON cmx_file_detail (upload_id);
+CREATE INDEX IF NOT EXISTS idx_file_detail_platform ON cmx_file_detail(platform);
+CREATE INDEX IF NOT EXISTS idx_file_detail_object_type ON cmx_file_detail(object_type);
+CREATE INDEX IF NOT EXISTS idx_file_detail_upload_id ON cmx_file_detail(upload_id);
 
 -- =============================================
 -- 22. 文件分片信息表 (cmx_file_part_detail)
 -- =============================================
-DROP TABLE IF EXISTS cmx_file_part_detail;
-CREATE TABLE cmx_file_part_detail
+CREATE TABLE IF NOT EXISTS cmx_file_part_detail
 (
-    id          VARCHAR(64) NOT NULL,
-    platform    VARCHAR(32),
-    upload_id   VARCHAR(128),
-    e_tag       VARCHAR(255),
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    platform VARCHAR
+(
+    32
+),
+    upload_id VARCHAR
+(
+    128
+),
+    e_tag VARCHAR
+(
+    255
+),
     part_number INTEGER,
-    part_size   BIGINT,
-    hash_info   TEXT,
-    archived    INTEGER   DEFAULT 0,
+    part_size BIGINT,
+    hash_info TEXT,
+    archived INTEGER DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by   VARCHAR(100),
-    create_name VARCHAR(100),
-    update_by   VARCHAR(100),
-    update_name VARCHAR(100),
-    PRIMARY KEY (id)
-);
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
 
 COMMENT
 ON TABLE cmx_file_part_detail IS '文件分片信息表，仅在手动分片上传时使用';
@@ -1645,4 +2533,167 @@ ON COLUMN cmx_file_part_detail.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_file_part_detail.update_name IS '更新人姓名';
 
-CREATE INDEX idx_file_part_detail_upload_id ON cmx_file_part_detail (upload_id);
+CREATE INDEX IF NOT EXISTS idx_file_part_detail_upload_id ON cmx_file_part_detail(upload_id);
+
+-- =============================================
+-- 初始数据
+-- =============================================
+
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000001', 'FIN', '资金与价值流领域', '企业的记账本，所有业务最终化为货币数字流入此领域', 'business',
+        1, 1, 0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000002', 'LOG', '物流与供应链领域', '管理实物资产的买入、存放和流转', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000003', 'SAL', '营收与客户领域', '企业的赚钱引擎', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000004', 'MFG', '制造与工程领域', '把原材料变成可以卖出去的成品', 'business', 4, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000005', 'HCM', '组织与人力领域', '企业的社会网络', 'business', 5, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000006', 'XAP', '跨应用基座领域', '公共底层领域，为全系统提供主数据和公共服务', 'technical', 6, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000011', 'FI', 'FIN', '财务会计', '对外报告，满足税务审计合规要求', 'product', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000012', 'CO', 'FIN', '管理会计', '对内分析，算清部门和产品的盈亏', 'product', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000013', 'MM', 'LOG', '物料管理', '采购、库存、发票校验', 'product', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000014', 'EWM', 'LOG', '仓储管理', '管理物理货架与仓库作业', 'product', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000015', 'SD', 'SAL', '销售与分销', '销售订单、交货、开票与定价', 'product', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000016', 'PP', 'MFG', '生产计划', '物料需求运算、车间排程', 'product', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000017', 'QPM', 'MFG', '质量管理与设备维护', '质量检验与设备维护', 'product', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000018', 'HRM', 'HCM', '人力资源管理', '组织、人事、薪资、考勤', 'product', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000019', 'BP', 'XAP', '商业伙伴主数据', '统一管理客户、供应商、联系人', 'platform', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000020', 'MDM', 'XAP', '物料主数据', '物料基本信息与分类，全系统共享', 'platform', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000021', 'CA', 'XAP', '跨应用组件', '分类系统、文档管理、权限管理', 'platform', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000101', 'GL', 'FIN', 'FI', '总账', '总分类账管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000102', 'AR', 'FIN', 'FI', '应收账款', '应收账款管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000103', 'AP', 'FIN', 'FI', '应付账款', '应付账款管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000104', 'AA', 'FIN', 'FI', '固定资产', '固定资产核算', 'business', 4, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000105', 'CCA', 'FIN', 'CO', '成本中心会计', '成本中心核算', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000106', 'PCA', 'FIN', 'CO', '利润中心会计', '利润中心核算', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000107', 'IO', 'FIN', 'CO', '内部订单', '内部订单管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000108', 'PUR', 'LOG', 'MM', '采购管理', '采购流程管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000109', 'INV', 'LOG', 'MM', '库存管理', '库存数量与价值管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000110', 'IV', 'LOG', 'MM', '发票校验', '采购发票校验', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000111', 'INB', 'LOG', 'EWM', '入库管理', '入库流程管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000112', 'OUT', 'LOG', 'EWM', '出库管理', '出库流程管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000113', 'BIN', 'LOG', 'EWM', '货位管理', '仓库货位管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000114', 'SOM', 'SAL', 'SD', '销售订单管理', '销售订单全流程管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000115', 'DLM', 'SAL', 'SD', '交货管理', '交货流程管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000116', 'BLM', 'SAL', 'SD', '开票管理', '开票流程管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000117', 'PRM', 'SAL', 'SD', '定价管理', '定价策略管理', 'business', 4, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000118', 'BOM', 'MFG', 'PP', '物料清单', '物料清单管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000119', 'RTG', 'MFG', 'PP', '工艺路线', '工艺路线管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000120', 'PROD', 'MFG', 'PP', '生产订单', '生产订单管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000121', 'QI', 'MFG', 'QPM', '质量检验', '质量检验管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000122', 'PM', 'MFG', 'QPM', '设备维护', '设备维护管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000123', 'FL', 'MFG', 'QPM', '功能位置', '功能位置管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000124', 'OM', 'HCM', 'HRM', '组织管理', '组织架构管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000125', 'PAM', 'HCM', 'HRM', '人事管理', '人事信息管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000126', 'PAY', 'HCM', 'HRM', '薪资管理', '薪资核算管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000127', 'TA', 'HCM', 'HRM', '考勤管理', '考勤记录管理', 'business', 4, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000128', 'CUS', 'XAP', 'BP', '客户管理', '客户信息管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000129', 'VEN', 'XAP', 'BP', '供应商管理', '供应商信息管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000130', 'CON', 'XAP', 'BP', '联系人管理', '联系人信息管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000131', 'MBI', 'XAP', 'MDM', '物料基本信息', '物料基本信息管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000132', 'MCL', 'XAP', 'MDM', '物料分类', '物料分类管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000133', 'CLS', 'XAP', 'CA', '分类系统', '分类体系管理', 'business', 1, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000134', 'DMS', 'XAP', 'CA', '文档管理', '文档存储与管理', 'business', 2, 1,
+        0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
+VALUES ('1898765432100000135', 'AUTH', 'XAP', 'CA', '权限管理', '权限配置与管理', 'business', 3, 1,
+        0) ON CONFLICT (id) DO NOTHING;
