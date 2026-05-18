@@ -42,23 +42,20 @@ pub struct AutoInstallPlugin {
     pub plugin_id: String,
     /// 期望版本
     pub version: String,
-    /// 来源类型：local / url / registry
+    /// 来源类型：local / remote / marketplace / storage
     pub source_type: String,
-    /// 来源路径（local 模式的文件路径）
-    #[serde(default)]
-    pub source_path: Option<String>,
-    /// 来源URL（url/registry 模式）
-    #[serde(default)]
-    pub source_url: Option<String>,
+    /// 来源地址（根据 source_type 解释为不同含义）
+    /// - local: 文件系统路径
+    /// - remote: 远程 URL
+    /// - marketplace: 插件 ID
+    /// - storage: 文件 ID
+    pub source_path: String,
     /// 是否关键插件（安装失败阻止启动）
     #[serde(default)]
     pub is_critical: bool,
     /// 目标数据库ID
     #[serde(default)]
     pub db_id: Option<String>,
-    /// 是否自动激活
-    #[serde(default = "default_true")]
-    pub auto_activate: bool,
     /// 安装超时时间（秒）
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
@@ -236,7 +233,7 @@ impl AutoInstallService {
                 let request = InstallRequest {
                     source,
                     db_id: config.db_id.clone(),
-                    auto_activate: config.auto_activate,
+                    auto_activate: true,
                     version_constraint: None,
                     build_type: None,
                     marketplace_source_id: None,
@@ -249,22 +246,22 @@ impl AutoInstallService {
 
     /// 根据配置构建 PluginSource
     ///
-    /// 将配置中的 source_type、source_path、source_url 转换为 PluginSource 枚举。
+    /// 将配置中的 source_type 和 source_path 转换为 PluginSource 枚举。
     fn build_source(&self, config: &AutoInstallPlugin) -> PluginSource {
         match config.source_type.as_str() {
             "local" => PluginSource::Local {
-                path: PathBuf::from(config.source_path.as_deref().unwrap_or_default()),
+                path: PathBuf::from(&config.source_path),
             },
             "url" | "remote" => PluginSource::Remote {
-                url: config.source_url.clone().unwrap_or_default(),
+                url: config.source_path.clone(),
                 checksum: None,
             },
             "registry" | "marketplace" => PluginSource::Marketplace {
                 marketplace_url: None,
-                plugin_id: config.source_url.clone().unwrap_or_default(),
+                plugin_id: config.source_path.clone(),
             },
             "storage" => PluginSource::Storage {
-                file_id: config.source_url.clone().unwrap_or_default(),
+                file_id: config.source_path.clone(),
                 checksum: None,
             },
             _ => {
@@ -273,7 +270,7 @@ impl AutoInstallService {
                     config.source_type
                 );
                 PluginSource::Local {
-                    path: PathBuf::from(config.source_path.as_deref().unwrap_or_default()),
+                    path: PathBuf::from(&config.source_path),
                 }
             }
         }

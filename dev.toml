@@ -102,6 +102,7 @@ upload_root = "plugins/uploads"
 [plugin.auto_install]
 enabled = false
 
+# 本地文件来源示例
 # [[plugin.auto_install.plugins]]
 # plugin_id = "cmx-debug"
 # version = "1.0.0"

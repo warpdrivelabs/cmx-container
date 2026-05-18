@@ -306,8 +306,8 @@ is_critical = true
 
 - `plugin_id`: 插件唯一标识符
 - `version`: 插件版本号
-- `source_type`: 插件来源类型 (`local` / `remote` / `marketplace`)
-- `source_path`: 插件包路径（local 类型时使用）
+- `source_type`: 插件来源类型 (`local` / `remote` / `marketplace`/`storage`)
+- `source_path`: 插件包路径（文件路径或者url）
 - `is_critical`: 是否为关键插件，关键插件安装失败会导致应用启动失败
 
 ---
