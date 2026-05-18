@@ -2,270 +2,264 @@ ALTER TABLE cmx_marketplace_plugin_version
     ADD COLUMN IF NOT EXISTS storage_file_id VARCHAR (64);
 
 COMMENT
-ON COLUMN cmx_marketplace_plugin_version.storage_file_id
-IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
-
+ON COLUMN cmx_marketplace_plugin_version.storage_file_id IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
 
 CREATE TABLE IF NOT EXISTS cmx_file_detail
 (
     id
-    varchar
+    VARCHAR
 (
     64
-) not null
-    constraint pk_file_detail
-    primary key,
-    url varchar
+) NOT NULL CONSTRAINT pk_file_detail PRIMARY KEY,
+    url VARCHAR
 (
     512
-) not null,
-    size bigint,
-    filename varchar
+) NOT NULL,
+    size BIGINT,
+    filename VARCHAR
 (
     256
 ),
-    original_filename varchar
+    original_filename VARCHAR
 (
     256
 ),
-    base_path varchar
+    base_path VARCHAR
 (
     256
 ),
-    path varchar
+    path VARCHAR
 (
     256
 ),
-    ext varchar
+    ext VARCHAR
 (
     32
 ),
-    content_type varchar
+    content_type VARCHAR
 (
     128
 ),
-    platform varchar
+    platform VARCHAR
 (
     32
 ),
-    th_url varchar
+    th_url VARCHAR
 (
     512
 ),
-    th_filename varchar
+    th_filename VARCHAR
 (
     256
 ),
-    th_size bigint,
-    th_content_type varchar
+    th_size BIGINT,
+    th_content_type VARCHAR
 (
     128
 ),
-    object_id varchar
+    object_id VARCHAR
 (
     64
 ),
-    object_type varchar
+    object_type VARCHAR
 (
     32
 ),
-    metadata text,
-    user_metadata text,
-    th_metadata text,
-    th_user_metadata text,
-    attr text,
-    file_acl varchar
+    metadata TEXT,
+    user_metadata TEXT,
+    th_metadata TEXT,
+    th_user_metadata TEXT,
+    attr TEXT,
+    file_acl VARCHAR
 (
     32
 ),
-    th_file_acl varchar
+    th_file_acl VARCHAR
 (
     32
 ),
-    hash_info text,
-    upload_id varchar
+    hash_info TEXT,
+    upload_id VARCHAR
 (
     128
 ),
-    upload_status integer,
-    archived integer default 0,
-    create_time timestamp default CURRENT_TIMESTAMP,
-    update_time timestamp default CURRENT_TIMESTAMP,
-    create_by varchar
+    upload_status INTEGER,
+    archived INTEGER DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
 (
     100
 ),
-    create_name varchar
+    create_name VARCHAR
 (
     100
 ),
-    update_by varchar
+    update_by VARCHAR
 (
     100
 ),
-    update_name varchar
+    update_name VARCHAR
 (
     100
 )
     );
 
-comment
-on table cmx_file_detail is '文件详情表';
+COMMENT
+ON TABLE cmx_file_detail IS '文件详情表';
+COMMENT
+ON COLUMN cmx_file_detail.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_file_detail.url IS '文件访问地址';
+COMMENT
+ON COLUMN cmx_file_detail.size IS '文件大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_detail.filename IS '文件名称';
+COMMENT
+ON COLUMN cmx_file_detail.original_filename IS '原始文件名';
+COMMENT
+ON COLUMN cmx_file_detail.base_path IS '基础存储路径';
+COMMENT
+ON COLUMN cmx_file_detail.path IS '存储路径';
+COMMENT
+ON COLUMN cmx_file_detail.ext IS '文件扩展名';
+COMMENT
+ON COLUMN cmx_file_detail.content_type IS 'MIME类型';
+COMMENT
+ON COLUMN cmx_file_detail.platform IS '存储平台标识';
+COMMENT
+ON COLUMN cmx_file_detail.th_url IS '缩略图访问路径';
+COMMENT
+ON COLUMN cmx_file_detail.th_filename IS '缩略图名称';
+COMMENT
+ON COLUMN cmx_file_detail.th_size IS '缩略图大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_detail.th_content_type IS '缩略图MIME类型';
+COMMENT
+ON COLUMN cmx_file_detail.object_id IS '文件所属对象ID';
+COMMENT
+ON COLUMN cmx_file_detail.object_type IS '文件所属对象类型';
+COMMENT
+ON COLUMN cmx_file_detail.metadata IS '文件元数据';
+COMMENT
+ON COLUMN cmx_file_detail.user_metadata IS '文件用户元数据';
+COMMENT
+ON COLUMN cmx_file_detail.th_metadata IS '缩略图元数据';
+COMMENT
+ON COLUMN cmx_file_detail.th_user_metadata IS '缩略图用户元数据';
+COMMENT
+ON COLUMN cmx_file_detail.attr IS '附加属性';
+COMMENT
+ON COLUMN cmx_file_detail.file_acl IS '文件ACL';
+COMMENT
+ON COLUMN cmx_file_detail.th_file_acl IS '缩略图文件ACL';
+COMMENT
+ON COLUMN cmx_file_detail.hash_info IS '哈希信息（JSON格式，含MD5等）';
+COMMENT
+ON COLUMN cmx_file_detail.upload_id IS '上传ID，仅在手动分片上传时使用';
+COMMENT
+ON COLUMN cmx_file_detail.upload_status IS '上传状态：0-普通上传，1-初始化完成，2-上传完成';
+COMMENT
+ON COLUMN cmx_file_detail.archived IS '是否归档：0-否，1-是';
+COMMENT
+ON COLUMN cmx_file_detail.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_file_detail.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_file_detail.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_file_detail.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_file_detail.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_file_detail.update_name IS '更新人姓名';
 
-comment
-on column cmx_file_detail.id is '主键ID';
-comment
-on column cmx_file_detail.url is '文件访问地址';
-comment
-on column cmx_file_detail.size is '文件大小，单位字节';
-comment
-on column cmx_file_detail.filename is '文件名称';
-comment
-on column cmx_file_detail.original_filename is '原始文件名';
-comment
-on column cmx_file_detail.base_path is '基础存储路径';
-comment
-on column cmx_file_detail.path is '存储路径';
-comment
-on column cmx_file_detail.ext is '文件扩展名';
-comment
-on column cmx_file_detail.content_type is 'MIME类型';
-comment
-on column cmx_file_detail.platform is '存储平台标识';
-comment
-on column cmx_file_detail.th_url is '缩略图访问路径';
-comment
-on column cmx_file_detail.th_filename is '缩略图名称';
-comment
-on column cmx_file_detail.th_size is '缩略图大小，单位字节';
-comment
-on column cmx_file_detail.th_content_type is '缩略图MIME类型';
-comment
-on column cmx_file_detail.object_id is '文件所属对象ID';
-comment
-on column cmx_file_detail.object_type is '文件所属对象类型';
-comment
-on column cmx_file_detail.metadata is '文件元数据';
-comment
-on column cmx_file_detail.user_metadata is '文件用户元数据';
-comment
-on column cmx_file_detail.th_metadata is '缩略图元数据';
-comment
-on column cmx_file_detail.th_user_metadata is '缩略图用户元数据';
-comment
-on column cmx_file_detail.attr is '附加属性';
-comment
-on column cmx_file_detail.file_acl is '文件ACL';
-comment
-on column cmx_file_detail.th_file_acl is '缩略图文件ACL';
-comment
-on column cmx_file_detail.hash_info is '哈希信息（JSON格式，含MD5等）';
-comment
-on column cmx_file_detail.upload_id is '上传ID，仅在手动分片上传时使用';
-comment
-on column cmx_file_detail.upload_status is '上传状态：0-普通上传，1-初始化完成，2-上传完成';
-comment
-on column cmx_file_detail.archived is '是否归档：0-否，1-是';
-comment
-on column cmx_file_detail.create_time is '创建时间';
-comment
-on column cmx_file_detail.update_time is '更新时间';
-comment
-on column cmx_file_detail.create_by is '创建人ID';
-comment
-on column cmx_file_detail.create_name is '创建人姓名';
-comment
-on column cmx_file_detail.update_by is '更新人ID';
-comment
-on column cmx_file_detail.update_name is '更新人姓名';
-
-CREATE INDEX IF NOT EXISTS idx_file_detail_platform
-    on cmx_file_detail (platform);
-
-CREATE INDEX IF NOT EXISTS idx_file_detail_object_type
-    on cmx_file_detail (object_type);
-
-CREATE INDEX IF NOT EXISTS idx_file_detail_upload_id
-    on cmx_file_detail (upload_id);
+CREATE INDEX IF NOT EXISTS idx_file_detail_platform ON cmx_file_detail (platform);
+CREATE INDEX IF NOT EXISTS idx_file_detail_object_type ON cmx_file_detail (object_type);
+CREATE INDEX IF NOT EXISTS idx_file_detail_upload_id ON cmx_file_detail (upload_id);
 
 CREATE TABLE IF NOT EXISTS cmx_file_part_detail
 (
     id
-    varchar
+    VARCHAR
 (
     64
-) not null
-    constraint pk_file_part_detail
-    primary key,
-    platform varchar
+) NOT NULL CONSTRAINT pk_file_part_detail PRIMARY KEY,
+    platform VARCHAR
 (
     32
 ),
-    upload_id varchar
+    upload_id VARCHAR
 (
     128
 ),
-    e_tag varchar
+    e_tag VARCHAR
 (
     255
 ),
-    part_number integer,
-    part_size bigint,
-    hash_info text,
-    archived integer default 0,
-    create_time timestamp default CURRENT_TIMESTAMP,
-    update_time timestamp default CURRENT_TIMESTAMP,
-    create_by varchar
+    part_number INTEGER,
+    part_size BIGINT,
+    hash_info TEXT,
+    archived INTEGER DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
 (
     100
 ),
-    create_name varchar
+    create_name VARCHAR
 (
     100
 ),
-    update_by varchar
+    update_by VARCHAR
 (
     100
 ),
-    update_name varchar
+    update_name VARCHAR
 (
     100
 )
     );
 
-comment
-on table cmx_file_part_detail is '文件分片信息表，仅在手动分片上传时使用';
+COMMENT
+ON TABLE cmx_file_part_detail IS '文件分片信息表，仅在手动分片上传时使用';
+COMMENT
+ON COLUMN cmx_file_part_detail.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.platform IS '存储平台标识';
+COMMENT
+ON COLUMN cmx_file_part_detail.upload_id IS '上传ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.e_tag IS '分片ETag';
+COMMENT
+ON COLUMN cmx_file_part_detail.part_number IS '分片号';
+COMMENT
+ON COLUMN cmx_file_part_detail.part_size IS '分片大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_part_detail.hash_info IS '哈希信息';
+COMMENT
+ON COLUMN cmx_file_part_detail.archived IS '是否归档：0-否，1-是';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_name IS '更新人姓名';
 
-comment
-on column cmx_file_part_detail.id is '主键ID';
-comment
-on column cmx_file_part_detail.platform is '存储平台标识';
-comment
-on column cmx_file_part_detail.upload_id is '上传ID';
-comment
-on column cmx_file_part_detail.e_tag is '分片ETag';
-comment
-on column cmx_file_part_detail.part_number is '分片号';
-comment
-on column cmx_file_part_detail.part_size is '分片大小，单位字节';
-comment
-on column cmx_file_part_detail.hash_info is '哈希信息';
-comment
-on column cmx_file_part_detail.archived is '是否归档：0-否，1-是';
-comment
-on column cmx_file_part_detail.create_time is '创建时间';
-comment
-on column cmx_file_part_detail.update_time is '更新时间';
-comment
-on column cmx_file_part_detail.create_by is '创建人ID';
-comment
-on column cmx_file_part_detail.create_name is '创建人姓名';
-comment
-on column cmx_file_part_detail.update_by is '更新人ID';
-comment
-on column cmx_file_part_detail.update_name is '更新人姓名';
+CREATE INDEX IF NOT EXISTS idx_file_part_detail_upload_id ON cmx_file_part_detail (upload_id);
 
-CREATE INDEX IF NOT EXISTS idx_file_part_detail_upload_id
-    on cmx_file_part_detail (upload_id);
+ALTER TABLE cmx_plugin
+    ADD COLUMN marketplace_source_id VARCHAR(64);
+COMMENT
+ON COLUMN cmx_plugin.marketplace_source_id IS '市场版本来源ID，关联 cmx_marketplace_plugin_version.id，非市场安装时为 NULL';
 
-        
+ALTER TABLE cmx_plugin_versions
+    ADD COLUMN marketplace_source_id VARCHAR(64);
+COMMENT
+ON COLUMN cmx_plugin_versions.marketplace_source_id IS '市场版本来源ID，关联 cmx_marketplace_plugin_version.id';
