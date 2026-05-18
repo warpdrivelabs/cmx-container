@@ -1,0 +1,231 @@
+# ============================================
+# CMX Container 应用配置文件模板
+# ============================================
+# 本文件为完整的配置模板，包含所有可用配置项及默认值说明
+# 复制此文件为 config.toml 或 dev.toml 使用
+
+# ============================================
+# Web 服务配置
+# ============================================
+# Web 静态文件目录（必需）
+web_folder = "./web-folder"
+
+# ============================================
+# 数据库配置
+# ============================================
+# databases 是一个数组，可以配置多个数据源
+# 每个数据源必须有一个唯一的 db_id 作为标识
+
+[[databases]]
+# 数据源唯一标识符（必需，用于程序内部引用）
+db_id = "primary"
+# 数据库类型：postgres | mysql | sqlite（必需）
+db_type = "postgres"
+# 数据库连接 URL（必需）
+# 格式: <driver>://<user>:<password>@<host>:<port>/<database>
+db_url = "postgresql://postgres:postgres@localhost:5432/cmx"
+# 是否为默认数据库，默认为 false
+# 多个数据源时只有一个应为 true
+default = true
+# 数据库 schema（可选，PostgreSQL 默认为 public）
+# db_schema = "public"
+
+# 连接池配置（可选，使用默认值时可省略）
+[databases.pool_config]
+# 最大连接数（可选，默认 10，生产环境建议 20-50，测试环境为 1）
+max_connections = 20
+# 最小空闲连接数（可选，默认 2）
+min_connections = 5
+# 连接超时时间（秒，可选，默认 30）
+connect_timeout = 30
+# 空闲连接超时时间（秒，可选，默认 600）
+# 空闲连接在此时间后会被关闭
+idle_timeout = 600
+# 连接最大生命周期（秒，可选，默认 1800）
+# 连接存活超过此时间后会被替换
+max_lifetime = 1800
+
+# 健康检查配置（可选）
+# 健康检查间隔（秒，可选，默认 60）
+health_check_interval = 60
+# 健康检查超时时间（秒，可选，默认 5）
+health_check_timeout = 5
+
+# 第二个数据源示例（可选，根据需要添加更多数据源）
+# [[databases]]
+# db_id = "secondary"
+# db_type = "postgres"
+# db_url = "postgresql://user:password@192.168.1.100:5432/cmx"
+# default = false
+# [databases.pool_config]
+# max_connections = 10
+# min_connections = 2
+# connect_timeout = 30
+# idle_timeout = 600
+# max_lifetime = 1800
+# health_check_interval = 60
+# health_check_timeout = 5
+
+# ============================================
+# Redis 配置
+# ============================================
+[redis]
+# Redis 连接地址（必需，格式: redis://host:port/db）
+url = "redis://localhost:6379/13"
+# Redis 运行模式：standalone（单机）或 cluster（集群），可选，默认 standalone
+# mode = "standalone"
+# 集群节点地址（集群模式时必填，逗号分隔）
+# cluster_urls = "redis://node1:6379,redis://node2:6379,redis://node3:6379"
+# Pub/Sub 心跳间隔（秒），0 表示禁用，可选，默认 30
+# heartbeat_interval = 30
+# 连接超时时间（秒），可选，默认 5
+# connection_timeout = 5
+# 操作超时时间（秒），可选，默认 3
+# operation_timeout = 3
+# 默认键前缀，可选，默认 "cmx:"
+# key_prefix = "cmx:"
+# 启动时自动订阅的频道（逗号分隔，需填写完整频道名，不会自动加前缀）
+# subscribe_channels = "cmx:plugin:changed"
+# 启动时自动订阅的模式（逗号分隔，支持通配符 * ? []，需填写完整模式，不会自动加前缀）
+# subscribe_patterns = "cmx:*"
+
+
+
+# ============================================
+# 模板配置
+# ============================================
+[templates]
+# 模板目录路径（可选，默认 "crates/libs/cmx-dev/templates"）
+path = "crates/libs/cmx-dev/templates"
+
+# ============================================
+# Code Server 配置
+# ============================================
+[code_server]
+# code-server 服务 URL（可选，用于在线开发功能）
+url = "https://dev.cloudmatrix.one:18080/"
+
+# Code Server 扩展服务器配置（可选，用于自调试）
+[code_server_extension_server]
+url = "http://127.0.0.1:9000"
+
+# ============================================
+# WASM 运行时配置
+# ============================================
+[runtime]
+# 内存限制（页数），每页 64KB，可选，默认 4096 页（256MB）
+memory_max = 4096
+# 单次调用超时时间（秒），可选，默认 30
+timeout = 30
+# 实例池最大实例数，可选，默认使用 CPU 核心数
+pool_max_instances = 8
+# Fuel 限制（0 表示不限制），单位：Wasm 指令数，可选，默认 0
+# 设置此值可防止死循环和恶意代码消耗过多 CPU
+fuel_limit = 0
+
+# ============================================
+# 插件配置
+# ============================================
+[plugin]
+# 插件安装根目录（必需）
+install_root = "plugins/root"
+# 插件备份目录（必需，用于插件升级时备份旧版本）
+backup_root = "plugins/backup"
+# 插件解压临时目录（必需）
+temp_root = "plugins/temp"
+# 插件上传临时目录（必需）
+upload_root = "plugins/uploads"
+
+# 自动安装配置（可选）
+[plugin.auto_install]
+# 是否启用自动安装，可选，默认 false
+enabled = false
+# 自动安装的插件列表（enabled 为 true 时生效）
+# [[plugin.auto_install.plugins]]
+# plugin_id = "cmx-debug"
+# version = "1.0.0"
+# source_type = "local"
+# source_path = "plugins/source/cmx-debug.zip"
+# 是否为关键插件，关键插件安装失败会导致应用启动失败
+# is_critical = true
+
+# ============================================
+# 数据库迁移配置
+# ============================================
+[migration]
+# 迁移文件目录（必需，存放 SQL 迁移文件）
+dir = "docs/sql/migrations"
+# 校验文件内容是否被修改，可选，默认 true
+# 启用后会校验迁移文件的 MD5 校验和，防止手动修改导致的不一致
+validate_checksum = true
+# 分布式锁超时时间（秒），可选，默认 60
+# 多节点部署时用于防止并发执行迁移
+lock_timeout = 60
+
+# ============================================
+# 文件存储配置
+# ============================================
+[storage]
+# 默认存储平台标识符（可选，不设置则自动选择第一个已启用的存储实例）
+default_platform = "local-1"
+
+# 本地文件系统存储示例
+[[storage.instances]]
+# 存储平台唯一标识符（必需）
+platform = "local-1"
+# 存储类型：local（本地文件系统）或 s3（S3 兼容对象存储），必需
+storage_type = "local"
+# 是否启用该存储平台，可选，默认 true
+enable_storage = true
+# 文件访问基础域名，注意应以 / 结尾（可选）
+# 用于拼接生成文件的访问 URL
+domain = "http://localhost:8080/files/"
+# 存储路径基础前缀，所有上传文件路径都会以此为前缀（可选）
+base_path = "uploads"
+# 是否启用直接访问，可选，默认 false
+# 启用后可通过 storage_path 直接访问文件
+enable_access = true
+# 文件路径匹配模式（可选）
+path_patterns = "**/*"
+# 本地存储物理根目录路径，仅 local 类型生效
+storage_path = "./storage"
+
+# MinIO / S3 兼容对象存储示例
+# [[storage.instances]]
+# platform = "amazon-s3-1"
+# storage_type = "s3"
+# enable_storage = true
+# S3 Access Key ID
+# access_key = "your-access-key"
+# S3 Secret Access Key
+# secret_key = "your-secret-key"
+# S3 区域，如 us-east-1
+# region = "us-east-1"
+# S3 API 端点 URL，支持 MinIO、腾讯云 COS、阿里云 OSS 等
+# endpoint = "http://localhost:9000/"
+# S3 桶名称
+# bucket_name = "my-bucket"
+# 文件访问基础域名
+# domain = "http://localhost:9000/"
+# 存储路径基础前缀
+# base_path = "app/"
+
+# ============================================
+# Nacos 配置（通过环境变量注入，不在此文件中配置）
+# ============================================
+# Nacos 相关配置必须通过环境变量注入，不支持在 TOML 文件中配置
+# 这是出于安全考虑，防止远程配置覆盖敏感连接信息
+#
+# 支持的环境变量：
+# NACOS_ENABLED              - 是否启用 Nacos（true/false）
+# NACOS_SERVER_ADDR          - Nacos 服务器地址（如 127.0.0.1:8848）
+# NACOS_NAMESPACE            - Nacos 命名空间（默认 public）
+# NACOS_APP_NAME             - 应用名称（默认 cmx-web）
+# NACOS_USERNAME             - Nacos 认证用户名（可选）
+# NACOS_PASSWORD             - Nacos 认证密码（可选）
+# NACOS_NAMING_ENABLED       - 是否启用服务注册（默认 true）
+# NACOS_NAMING_SERVICE_NAME  - 注册的服务名称（默认 cmx-web）
+# NACOS_NAMING_GROUP_NAME    - 服务分组（默认 DEFAULT_GROUP）
+# NACOS_CONFIG_ENABLED       - 是否启用配置中心（默认 false）
+# NACOS_CONFIG_DATA_ID       - 配置中心 Data ID
+# NACOS_CONFIG_GROUP         - 配置中心 Group（默认 DEFAULT_GROUP）

@@ -1,0 +1,573 @@
+# CMX Container 配置手册
+
+本文档详细介绍 CMX Container 应用的所有配置项，包括配置含义、默认值、使用建议等信息。
+
+---
+
+## 目录
+
+- [Web 服务配置](#web-服务配置)
+- [数据库配置](#数据库配置)
+- [Redis 配置](#redis-配置)
+- [WASM 运行时配置](#wasm-运行时配置)
+- [插件配置](#插件配置)
+- [数据库迁移配置](#数据库迁移配置)
+- [文件存储配置](#文件存储配置)
+- [模板配置](#模板配置)
+- [Code Server 配置](#code-server-配置)
+- [节点配置](#节点配置)
+- [Nacos 配置](#nacos-配置)
+- [配置优先级](#配置优先级)
+- [配置文件位置](#配置文件位置)
+
+---
+
+## Web 服务配置
+
+### `web_folder`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: Web 静态文件目录路径，用于存放前端静态资源
+- **示例**: `"/app/web-folder"` 或 `"./web-folder"`
+
+---
+
+## 数据库配置
+
+### `[[databases]]`
+
+数据库配置数组，支持配置多个数据源。
+
+#### `db_id`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 数据源唯一标识符，用于程序内部引用不同的数据库
+- **示例**: `"primary"`, `"secondary"`, `"postgres2"`
+
+#### `db_type`
+
+- **类型**: String (enum)
+- **必需**: 是
+- **说明**: 数据库类型
+- **可选值**:
+    - `postgres` / `postgresql` / `pgsql` - PostgreSQL
+    - `mysql` / `mariadb` - MySQL
+    - `sqlite` / `sqlite3` - SQLite
+- **示例**: `"postgres"`
+
+#### `db_url`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 数据库连接 URL
+- **格式**: `<driver>://<user>:<password>@<host>:<port>/<database>`
+- **示例**: `"postgresql://postgres:postgres@192.168.1.100:5432/cmx"`
+
+#### `default`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否为默认数据库。多个数据源时只能有一个为 `true`
+
+#### `db_schema`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"public"` (PostgreSQL)
+- **说明**: 数据库 schema 名称，主要用于 PostgreSQL
+
+---
+
+### `[databases.pool_config]`
+
+连接池配置。
+
+#### `max_connections`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `10`（测试环境为 `1`）
+- **说明**: 连接池最大连接数
+- **建议**: 生产环境建议 `20-50`，根据并发量调整
+
+#### `min_connections`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `2`
+- **说明**: 连接池最小空闲连接数
+
+#### `connect_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: 获取连接的超时时间
+
+#### `idle_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `600`
+- **说明**: 空闲连接超时时间，超过此时间的空闲连接会被关闭
+
+#### `max_lifetime`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `1800`
+- **说明**: 连接最大生命周期，超过此时间的连接会被替换
+
+---
+
+### 健康检查配置
+
+#### `health_check_interval`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `60`
+- **说明**: 健康检查间隔时间
+
+#### `health_check_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `5`
+- **说明**: 健康检查超时时间
+
+---
+
+## Redis 配置
+
+### `[redis]`
+
+#### `url`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: Redis 连接地址
+- **格式**: `redis://<host>:<port>/<db>`
+- **示例**: `"redis://localhost:6379/13"`
+
+#### `mode`
+
+- **类型**: String (enum)
+- **必需**: 否
+- **默认值**: `"standalone"`
+- **说明**: Redis 运行模式
+- **可选值**:
+    - `standalone` - 单机模式
+    - `cluster` - 集群模式
+
+#### `cluster_urls`
+
+- **类型**: Array of String
+- **必需**: 集群模式时必填
+- **说明**: 集群节点地址列表，逗号分隔
+- **示例**: `"redis://node1:6379,redis://node2:6379,redis://node3:6379"`
+
+#### `heartbeat_interval`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: Pub/Sub 心跳间隔，`0` 表示禁用心跳
+
+#### `connection_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `5`
+- **说明**: 连接超时时间
+
+#### `operation_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `3`
+- **说明**: 操作超时时间
+
+#### `key_prefix`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"cmx:"`
+- **说明**: 默认键前缀
+
+#### `subscribe_channels`
+
+- **类型**: Array of String
+- **必需**: 否
+- **默认值**: `[]`
+- **说明**: 启动时自动订阅的频道列表，需填写完整频道名，不会自动加前缀
+
+#### `subscribe_patterns`
+
+- **类型**: Array of String
+- **必需**: 否
+- **默认值**: `[]`
+- **说明**: 启动时自动订阅的模式列表，支持通配符 `* ? []`，需填写完整模式
+
+---
+
+## WASM 运行时配置
+
+### `[runtime]`
+
+#### `memory_max`
+
+- **类型**: Integer (页数)
+- **必需**: 否
+- **默认值**: `4096` (256MB)
+- **说明**: 内存限制，每页 64KB
+- **计算公式**: 内存大小 = 页数 × 64KB
+- **示例**: `4096` 页 = 256MB
+
+#### `timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: 单次调用超时时间
+
+#### `pool_max_instances`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: CPU 核心数
+- **说明**: 实例池最大实例数
+
+#### `fuel_limit`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `0` (不限制)
+- **说明**: Fuel 限制（单位：Wasm 指令数），设置为 `0` 表示不限制
+- **用途**: 防止死循环和恶意代码消耗过多 CPU
+
+---
+
+## 插件配置
+
+### `[plugin]`
+
+#### `install_root`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 插件安装根目录
+- **示例**: `"plugins/root"` 或 `/app/plugins/root`
+
+#### `backup_root`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 插件备份目录，用于插件升级时备份旧版本
+
+#### `temp_root`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 插件解压临时目录
+
+#### `upload_root`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 插件上传临时目录
+
+---
+
+### `[plugin.auto_install]`
+
+自动安装配置。
+
+#### `enabled`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否启用自动安装
+
+#### 自动安装插件列表
+
+```toml
+[[plugin.auto_install.plugins]]
+plugin_id = "cmx-debug"
+version = "1.0.0"
+source_type = "local"
+source_path = "plugins/source/cmx-debug.zip"
+is_critical = true
+```
+
+- `plugin_id`: 插件唯一标识符
+- `version`: 插件版本号
+- `source_type`: 插件来源类型 (`local` / `remote` / `marketplace`)
+- `source_path`: 插件包路径（local 类型时使用）
+- `is_critical`: 是否为关键插件，关键插件安装失败会导致应用启动失败
+
+---
+
+## 数据库迁移配置
+
+### `[migration]`
+
+#### `dir`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 迁移文件目录路径
+- **示例**: `"docs/sql/migrations"` 或 `/app/docs/sql/migrations`
+
+#### `validate_checksum`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `true`
+- **说明**: 是否校验文件内容是否被修改
+- **用途**: 启用后会校验迁移文件的 MD5 校验和，防止手动修改导致的不一致
+
+#### `lock_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `60`
+- **说明**: 分布式锁超时时间，多节点部署时用于防止并发执行迁移
+
+---
+
+## 文件存储配置
+
+### `[storage]`
+
+#### `default_platform`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: 默认存储平台标识符，不设置则自动选择第一个已启用的存储实例
+
+---
+
+### `[[storage.instances]]`
+
+存储实例配置数组，支持配置多个存储平台。
+
+#### `platform`
+
+- **类型**: String
+- **必需**: 是
+- **说明**: 存储平台唯一标识符
+- **示例**: `"local-1"`, `"amazon-s3-1"`
+
+#### `storage_type`
+
+- **类型**: String (enum)
+- **必需**: 是
+- **说明**: 存储类型
+- **可选值**:
+    - `local` - 本地文件系统存储
+    - `s3` - S3 兼容对象存储
+
+#### `enable_storage`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `true`
+- **说明**: 是否启用该存储平台
+
+#### `domain`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: 文件访问基础域名，注意应以 `/` 结尾
+- **用途**: 用于拼接生成文件的访问 URL
+- **示例**: `"http://localhost:8080/files/"`
+
+#### `base_path`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`
+- **说明**: 存储路径基础前缀，所有上传文件路径都会以此为前缀
+
+---
+
+### Local 类型字段
+
+#### `enable_access`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否启用直接访问
+- **用途**: 启用后可通过 `storage_path` 直接访问文件，线上环境建议使用 Nginx 代理
+
+#### `path_patterns`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: 文件路径匹配模式
+- **示例**: `"**/*"`
+
+#### `storage_path`
+
+- **类型**: String
+- **必需**: Local 类型时必填
+- **说明**: 本地存储的物理根目录路径
+- **示例**: `"./storage"` 或 `/app/storage`
+
+---
+
+### S3 类型字段
+
+#### `access_key`
+
+- **类型**: String
+- **必需**: S3 类型时必填
+- **说明**: S3 Access Key ID
+
+#### `secret_key`
+
+- **类型**: String
+- **必需**: S3 类型时必填
+- **说明**: S3 Secret Access Key
+
+#### `region`
+
+- **类型**: String
+- **必需**: S3 类型时必填
+- **说明**: S3 区域
+- **示例**: `"us-east-1"`, `"ap-northeast-1"`
+
+#### `endpoint`
+
+- **类型**: String
+- **必需**: S3 类型时可选
+- **说明**: S3 API 端点 URL，支持 MinIO、腾讯云 COS、阿里云 OSS 等 S3 兼容服务
+- **示例**: `"http://localhost:9000/"`, `"http://192.168.1.100:9000/"`
+
+#### `bucket_name`
+
+- **类型**: String
+- **必需**: S3 类型时必填
+- **说明**: S3 桶名称
+
+---
+
+## 模板配置
+
+### `[templates]`
+
+#### `path`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"crates/libs/cmx-dev/templates"`
+- **说明**: 模板目录路径
+
+---
+
+## Code Server 配置
+
+### `[code_server]`
+
+#### `url`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: code-server 服务 URL，用于在线开发功能
+
+---
+
+### `[code_server_extension_server]`
+
+#### `url`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: Code Server 扩展服务器 URL，用于自调试
+
+---
+
+## 节点配置
+
+### `[node]`
+
+#### `node_id`
+
+- **类型**: String
+- **必需**: 否
+- **说明**: 节点唯一标识符，用于分布式迁移锁等场景
+
+---
+
+## Nacos 配置
+
+> **重要**: Nacos 相关配置必须通过环境变量注入，不支持在 TOML 文件中配置。这是出于安全考虑，防止远程配置覆盖敏感连接信息。
+
+### 环境变量列表
+
+| 环境变量                        | 类型      | 默认值              | 说明              |
+|-----------------------------|---------|------------------|-----------------|
+| `NACOS_ENABLED`             | Boolean | `false`          | 是否启用 Nacos      |
+| `NACOS_SERVER_ADDR`         | String  | `127.0.0.1:8848` | Nacos 服务器地址     |
+| `NACOS_NAMESPACE`           | String  | `""` (public)    | Nacos 命名空间      |
+| `NACOS_APP_NAME`            | String  | `cmx-web`        | 应用名称            |
+| `NACOS_USERNAME`            | String  | -                | Nacos 认证用户名（可选） |
+| `NACOS_PASSWORD`            | String  | -                | Nacos 认证密码（可选）  |
+| `NACOS_NAMING_ENABLED`      | Boolean | `true`           | 是否启用服务注册        |
+| `NACOS_NAMING_SERVICE_NAME` | String  | `cmx-web`        | 注册的服务名称         |
+| `NACOS_NAMING_GROUP_NAME`   | String  | `DEFAULT_GROUP`  | 服务分组            |
+| `NACOS_CONFIG_ENABLED`      | Boolean | `false`          | 是否启用配置中心        |
+| `NACOS_CONFIG_DATA_ID`      | String  | -                | 配置中心 Data ID    |
+| `NACOS_CONFIG_GROUP`        | String  | `DEFAULT_GROUP`  | 配置中心 Group      |
+
+---
+
+## 配置优先级
+
+配置优先级从高到低：
+
+1. **环境变量** - 最高优先级，不可被覆盖
+2. **Nacos 远程配置** - 从 Nacos 配置中心拉取的配置
+3. **本地 TOML 文件** - 配置文件中的配置
+4. **代码默认值** - 代码中定义的默认值
+
+---
+
+## 配置文件位置
+
+### 开发环境
+
+配置文件通常位于项目根目录：
+
+- `dev.toml` - 开发环境配置
+- `config.toml` - 通用配置文件
+
+### Docker 环境
+
+```bash
+./config/
+├── docker.toml          # Docker 环境配置文件
+└── ...
+```
+
+容器内默认配置文件路径：`/app/config/docker.toml`
+
+### 指定配置文件
+
+通过 `CONFIG_FILE` 环境变量指定：
+
+```bash
+CONFIG_FILE=/path/to/config.toml ./cmx-server
+```
+
+---
+
+## 完整配置示例
+
+详见 [config_template.toml](../config/config_template.toml)

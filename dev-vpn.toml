@@ -49,8 +49,7 @@ pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20,
 #url = "redis://192.168.137.95:32496/13"
 url = "redis://192.168.1.14:6379/13"
 
-[node]
-node_id="0323"
+
 
 #WASM运行时相关配置
 [runtime]
