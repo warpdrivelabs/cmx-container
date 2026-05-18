@@ -333,6 +333,9 @@ impl ResultConverter {
             if let Ok(v) = row.try_get::<i64, _>(index) {
                 return DataValue::Int(v);
             }
+            if let Ok(v) = row.try_get::<i16, _>(index) {
+                return DataValue::Int(v as i64);
+            }
             DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
             row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
@@ -413,6 +416,9 @@ impl ResultConverter {
             if let Ok(v) = row.try_get::<i64, _>(index) {
                 return DataValue::Int(v);
             }
+            if let Ok(v) = row.try_get::<i16, _>(index) {
+                return DataValue::Int(v as i64);
+            }
             DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
             row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
@@ -490,6 +496,9 @@ impl ResultConverter {
             }
             if let Ok(v) = row.try_get::<i64, _>(index) {
                 return DataValue::Int(v);
+            }
+            if let Ok(v) = row.try_get::<i16, _>(index) {
+                return DataValue::Int(v as i64);
             }
             DataValue::Null
         } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
