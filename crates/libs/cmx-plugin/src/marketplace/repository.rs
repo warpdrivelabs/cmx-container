@@ -250,7 +250,7 @@ impl MarketplaceRepository {
                 None,
                 sql,
                 params,
-                "list_marketplace_versions",
+                "cmx_marketplace_plugin_version",
             )
             .await
             .map_err(|e| PluginError::Database(format!("查询市场版本列表失败: {}", e)))?;
@@ -460,6 +460,7 @@ impl MarketplaceRepository {
                 status = COALESCE($14::varchar, status),
                 is_latest = COALESCE($15::smallint, is_latest),
                 is_stable = COALESCE($16::smallint, is_stable),
+                published_at = COALESCE($17::timestamp, published_at),
                 update_time = NOW()
             WHERE plugin_id = $1::varchar AND version = $2::varchar AND archived = 0
         "#;
@@ -481,6 +482,7 @@ impl MarketplaceRepository {
             data.status,
             data.is_latest,
             data.is_stable,
+            data.published_at,
         ]);
 
         self.db_manager
@@ -943,8 +945,8 @@ impl MarketplaceRepository {
             dependencies,
             compatibility,
             status: row.get_by_name_as(schema, "status"),
-            is_latest: row.get_by_name_as::<i32>(schema, "is_latest").map(|v| v as i16),
-            is_stable: row.get_by_name_as::<i32>(schema, "is_stable").map(|v| v as i16),
+            is_latest: row.get_by_name_as::<i64>(schema, "is_latest").map(|v| v as i16),
+            is_stable: row.get_by_name_as::<i64>(schema, "is_stable").map(|v| v as i16),
             download_count: row.get_by_name_as(schema, "download_count"),
             published_at: row.get_by_name_as(schema, "published_at"),
             archived: row.get_by_name_as(schema, "archived"),

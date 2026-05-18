@@ -117,9 +117,9 @@ fn convert_version_to_response(version: cmx_plugin::MarketplacePluginVersion) ->
         dependencies: version.dependencies,
         compatibility: version.compatibility,
         status: version.status,
-        is_latest: version.is_latest,
-        is_stable: version.is_stable,
-        download_count: version.download_count,
+        is_latest: version.is_latest.unwrap_or(0),
+        is_stable: version.is_stable.unwrap_or(0),
+        download_count: version.download_count.unwrap_or(0),
         published_at: version.published_at,
         create_time: version.create_time,
         update_time: version.update_time,
@@ -403,6 +403,7 @@ pub async fn marketplace_plugin_publish(
         status: Some("published".to_string()),
         is_latest: Some(1),
         is_stable: Some(1),
+        published_at: Some(chrono::Utc::now()),
         allow_version_overwrite: false,
     };
 

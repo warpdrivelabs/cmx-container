@@ -289,6 +289,8 @@ pub struct MarketplacePluginVersionForCreate {
     pub is_latest: Option<i16>,
     /// 是否为稳定版本。
     pub is_stable: Option<i16>,
+    /// 发布时间（UTC）。
+    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
     /// 是否允许覆盖发布同一版本（默认 false，为 true 时更新已有版本记录而非插入）。
     #[serde(default)]
     #[field(skip)]

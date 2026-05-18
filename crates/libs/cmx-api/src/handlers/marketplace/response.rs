@@ -115,12 +115,12 @@ pub struct MarketplaceVersionResponse {
     pub compatibility: Option<serde_json::Value>,
     /// 状态。
     pub status: Option<String>,
-    /// 是否最新版本。
-    pub is_latest: Option<i16>,
-    /// 是否稳定版。
-    pub is_stable: Option<i16>,
+    /// 是否最新版本（0-否，1-是）。
+    pub is_latest: i16,
+    /// 是否稳定版（0-否，1-是）。
+    pub is_stable: i16,
     /// 版本下载量。
-    pub download_count: Option<i64>,
+    pub download_count: i64,
     /// 发布时间。
     pub published_at: Option<DateTime<Utc>>,
     /// 创建时间。

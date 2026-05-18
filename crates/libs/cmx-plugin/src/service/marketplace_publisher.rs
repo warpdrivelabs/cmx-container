@@ -128,6 +128,7 @@ impl MarketplacePublisher {
             status: Some("published".to_string()),
             is_latest: Some(1),
             is_stable: Some(1),
+            published_at: Some(chrono::Utc::now()),
             allow_version_overwrite: true,
         };
 
