@@ -8,7 +8,11 @@ use tokio::sync::RwLock;
 
 
 use crate::config::{DbConfig, DbType};
+use crate::executor::{ResultConverter, bind_data_value_mysql, bind_data_value_postgres, bind_data_value_sqlite};
 use crate::transaction::Dbx;
+use cmx_core::model::cell::DataValue;
+use cmx_core::model::data::dataset::DataSet;
+use sea_query_binder::SqlxValues;
 use sqlx::{MySql, Pool, Postgres, Sqlite};
 use tracing::info;
 
@@ -21,6 +25,253 @@ pub enum DbPool {
     MySql(Pool<MySql>),
     /// SQLite连接池
     Sqlite(Pool<Sqlite>),
+}
+
+impl DbPool {
+    /// 在连接池上执行无参数的 SQL 语句并返回受影响的行数。
+    ///
+    /// 在底层根据数据库类型（PostgreSQL、MySQL、SQLite）自动分发到对应的 sqlx 运行时执行。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 语句，不包含参数占位符。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回受影响的行数（`u64`）。对 SELECT 类语句返回 0。
+    ///
+    /// # Errors
+    ///
+    /// 返回底层的 sqlx 执行错误，包括连接失败、SQL 语法错误等。
+    pub async fn execute(&self, sql: &str) -> crate::Result<u64> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let result = sqlx::query(sql).execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+            DbPool::MySql(pool) => {
+                let result = sqlx::query(sql).execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+            DbPool::Sqlite(pool) => {
+                let result = sqlx::query(sql).execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+        }
+    }
+
+    /// 在连接池上执行无参数的 SQL 查询并返回 DataSet。
+    ///
+    /// 在底层根据数据库类型自动选择对应的结果转换器，将 sqlx 行数据转换为统一的 DataSet 格式。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 查询语句，不包含参数占位符。
+    /// * `dataset_id` - 查询结果的唯一标识，用于构建返回的 DataSet schema。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含查询结果的 `DataSet`。空结果集返回空 DataSet（schema 列信息仍保留）。
+    ///
+    /// # Errors
+    ///
+    /// 返回底层的 sqlx 执行错误或结果转换错误。
+    pub async fn query(&self, sql: &str, dataset_id: &str) -> crate::Result<DataSet> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
+            }
+            DbPool::MySql(pool) => {
+                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
+            }
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
+            }
+        }
+    }
+
+    /// 在连接池上执行带 DataValue 参数的 SQL 语句并返回受影响的行数。
+    ///
+    /// 根据数据库类型选择对应的参数绑定函数，将 DataValue 参数安全地绑定到 SQL 语句中。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 语句，包含 `?` 占位符。
+    /// * `params` - DataValue 数组，每个元素按顺序绑定到 SQL 中的占位符。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回受影响的行数（`u64`）。
+    ///
+    /// # Errors
+    ///
+    /// * 参数数量与占位符不匹配时返回 sqlx 错误。
+    /// * 参数类型与数据库不兼容时返回 sqlx 错误。
+    pub async fn execute_with_datavalues(
+        &self,
+        sql: &str,
+        params: &[DataValue],
+    ) -> crate::Result<u64> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_postgres(query, param);
+                }
+                let result = query.execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+            DbPool::MySql(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_mysql(query, param);
+                }
+                let result = query.execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+            DbPool::Sqlite(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_sqlite(query, param);
+                }
+                let result = query.execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+        }
+    }
+
+    /// 在连接池上执行带 DataValue 参数的 SQL 查询并返回 DataSet。
+    ///
+    /// 根据数据库类型选择对应的参数绑定函数和结果转换器，完成从参数绑定到结果转换的全流程。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 查询语句，包含 `?` 占位符。
+    /// * `params` - DataValue 数组，每个元素按顺序绑定到 SQL 中的占位符。
+    /// * `dataset_id` - 查询结果的唯一标识，用于构建返回的 DataSet schema。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含查询结果的 `DataSet`。空结果集返回空 DataSet。
+    ///
+    /// # Errors
+    ///
+    /// * 参数数量与占位符不匹配时返回 sqlx 错误。
+    /// * 参数类型与数据库不兼容时返回 sqlx 错误。
+    pub async fn query_with_datavalues(
+        &self,
+        sql: &str,
+        params: &[DataValue],
+        dataset_id: &str,
+    ) -> crate::Result<DataSet> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_postgres(query, param);
+                }
+                let rows = query.fetch_all(pool).await?;
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
+            }
+            DbPool::MySql(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_mysql(query, param);
+                }
+                let rows = query.fetch_all(pool).await?;
+                Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
+            }
+            DbPool::Sqlite(pool) => {
+                let mut query = sqlx::query(sql);
+                for param in params {
+                    query = bind_data_value_sqlite(query, param);
+                }
+                let rows = query.fetch_all(pool).await?;
+                Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
+            }
+        }
+    }
+
+    /// 在连接池上执行带 sea-query-binder SqlxValues 参数的 SQL 语句。
+    ///
+    /// 使用 sea-query 的参数绑定机制，适用于通过 sea-query 构建器生成的 SQL 和参数。
+    /// 目前仅支持 PostgreSQL；MySQL 和 SQLite 返回不支持的错误。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 语句。
+    /// * `params` - sea-query-binder 的 `SqlxValues`，包含预绑定的参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回受影响的行数（`u64`）。
+    ///
+    /// # Errors
+    ///
+    /// * `Error::InvalidParams` - MySQL 或 SQLite 数据库不支持 sea-query 参数绑定。
+    /// * 底层的 sqlx 执行错误。
+    pub async fn execute_with_sqlxvalues(
+        &self,
+        sql: &str,
+        params: SqlxValues,
+    ) -> crate::Result<u64> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let query = sqlx::query_with(sql, params);
+                let result = query.execute(pool).await?;
+                Ok(result.rows_affected())
+            }
+            DbPool::MySql(_) => Err(crate::Error::InvalidParams(
+                "MySql not supported with sea-query yet".to_string(),
+            )),
+            DbPool::Sqlite(_) => Err(crate::Error::InvalidParams(
+                "Sqlite not supported with sea-query yet".to_string(),
+            )),
+        }
+    }
+
+    /// 在连接池上执行带 sea-query-binder SqlxValues 参数的 SQL 查询并返回 DataSet。
+    ///
+    /// 使用 sea-query 的参数绑定机制，适用于通过 sea-query 构建器生成的 SQL 和参数。
+    /// 目前仅支持 PostgreSQL；MySQL 和 SQLite 返回不支持的错误。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 待执行的 SQL 查询语句。
+    /// * `params` - sea-query-binder 的 `SqlxValues`，包含预绑定的参数。
+    /// * `dataset_id` - 查询结果的唯一标识，用于构建返回的 DataSet schema。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含查询结果的 `DataSet`。
+    ///
+    /// # Errors
+    ///
+    /// * `Error::InvalidParams` - MySQL 或 SQLite 数据库不支持 sea-query 参数绑定。
+    /// * 底层的 sqlx 执行错误。
+    pub async fn query_with_sqlxvalues(
+        &self,
+        sql: &str,
+        params: SqlxValues,
+        dataset_id: &str,
+    ) -> crate::Result<DataSet> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let query = sqlx::query_with(sql, params);
+                let rows = query.fetch_all(pool).await?;
+                Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
+            }
+            DbPool::MySql(_) => Err(crate::Error::InvalidParams(
+                "MySql not supported with sea-query yet".to_string(),
+            )),
+            DbPool::Sqlite(_) => Err(crate::Error::InvalidParams(
+                "Sqlite not supported with sea-query yet".to_string(),
+            )),
+        }
+    }
 }
 
 /// 数据库连接池 trait

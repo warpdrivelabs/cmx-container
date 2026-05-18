@@ -18,35 +18,53 @@ cargo run --bin web-server
 ### 核心示例
 
 服务器在 `0.0.0.0:8080` 启动，自动加载：
-- 全局配置（从 `CONFIG_FILE` 环境变量指定路径读取）
+
+- 全局配置（支持 Nacos 远程配置覆盖）
 - 数据库连接池
-- Redis 缓存
-- WASM 运行时
+- Redis 缓存和分布式锁
+- WASM 运行时（Extism）
 - 插件管理器
+- 文件存储服务
+- 服务管理器（延迟加载）
 
 ## 核心功能与特性
 
-| 功能 | 说明 |
-|------|------|
+| 功能       | 说明                                   |
+|----------|--------------------------------------|
 | API 路由管理 | 基于 Axum 的现代 Web 框架实现路由，支持 RESTful 接口 |
-| 插件系统 | 支持运行时插件加载与管理，具备热插拔能力 |
-| 中间件支持 | 提供 CORS、Cookie 管理、请求追踪、访问日志等中间件 |
-| 服务管理器 | 延迟加载服务组件，提升系统启动效率 |
-| 分布式缓存 | 基于 Redis 实现缓存和分布式锁 |
-| 异步运行时 | 基于 Tokio，支持高并发处理 |
-| 调试支持 | 集成调试功能，支持运行时调试信息获取 |
+| 插件系统     | 支持运行时插件加载与管理，具备热插拔能力                 |
+| 中间件支持    | 提供 CORS、Cookie 管理、请求追踪、访问日志等中间件      |
+| 服务管理器    | 延迟加载服务组件，提升系统启动效率                    |
+| 分布式缓存    | 基于 Redis 实现缓存和分布式锁                   |
+| WASM 运行时 | 基于 Extism 的 WebAssembly 运行时          |
+| 异步运行时    | 基于 Tokio，支持高并发处理                     |
+| 调试支持     | 集成调试功能，支持运行时调试信息获取                   |
+| 配置中心     | 支持 Nacos 配置中心，实现配置热更新                |
+
+### Features
+
+| Feature   | 默认启用 | 说明   |
+|-----------|------|------|
+| `default` | ✅    | 基础功能 |
 
 ## 模块结构
 
-```
+```text
 web-server
 ├── src/
-│   ├── main.rs              # 程序入口
-│   ├── config.rs            # 配置加载和初始化
-│   ├── datasource_init.rs   # 数据源初始化
+│   ├── main.rs              # 程序入口，初始化和启动逻辑
 │   ├── error.rs             # 错误类型定义
-│   ├── plugins.rs           # 插件系统
-│   └── routes.rs            # API 路由定义
+│   ├── routes.rs            # API 路由定义
+│   └── config/              # 配置模块
+│       ├── mod.rs           # 模块导出和 WebConfig
+│       ├── cache.rs         # Redis 缓存初始化
+│       ├── datasource.rs    # 数据源初始化
+│       ├── migration.rs     # 数据库迁移
+│       ├── nacos.rs         # Nacos 配置中心
+│       ├── plugins.rs       # 插件管理器
+│       ├── runtime.rs       # WASM 运行时
+│       ├── services.rs      # 服务管理器
+│       └── storage.rs       # 文件存储
 └── Cargo.toml
 ```
 
@@ -54,24 +72,58 @@ web-server
 
 ### `main.rs`
 
-主要职责：
-1. 初始化环境变量和日志系统
-2. 加载并初始化数据库、缓存、插件和各种服务
-3. 配置 Web 服务器的路由和中间件
-4. 启动服务器监听端口
+应用程序主模块，负责初始化和启动服务器。
+
+初始化顺序：
+
+1. 日志系统（控制台 + 文件双输出）
+2. 全局配置（含 Nacos 远程配置覆盖）
+3. 加密服务
+4. Redis 缓存
+5. 数据库数据源
+6. 文件存储
+7. 调试会话
+8. WASM 运行时
+9. 全局事件总线
+10. 服务管理器
+11. 插件管理器
 
 ### `routes.rs`
 
 负责路由的统一管理，注册 `/api` 下的所有路由以及 Swagger 路由。
 
-### `config.rs`
+### `config` 模块
 
-负责初始化：
-- 全局配置加载
-- Redis 缓存
-- WASM 运行时
-- 插件和全局事件总线
-- 服务管理器
+提供应用程序初始化所需的各项配置功能：
+
+| 子模块          | 功能                 |
+|--------------|--------------------|
+| `cache`      | Redis 缓存和分布式锁初始化   |
+| `datasource` | 数据源配置加载、持久化和注册     |
+| `migration`  | 数据库迁移执行            |
+| `nacos`      | Nacos 连接、配置拉取、服务注册 |
+| `plugins`    | 插件管理器初始化           |
+| `runtime`    | WASM 运行时和宿主函数注册    |
+| `services`   | 服务仓储和生命周期管理        |
+| `storage`    | 文件存储服务初始化          |
+
+### `error` 模块
+
+定义应用程序级别的错误类型：
+
+```rust
+pub enum Error {
+    ConfigError(String),      // 配置加载、解析或验证失败
+    ServerSetup(String),      // 服务器启动设置、地址绑定失败
+    DatasourceInit(String),   // 数据源连接、注册或初始化失败
+    RuntimeInit(String),      // WASM 运行时引擎、宿主函数注册失败
+    PluginInit(String),      // 插件管理器初始化失败
+    ServiceInit(String),     // 服务管理器初始化失败
+    StorageInit(String),     // 存储配置加载或服务初始化失败
+    Migration(String),       // 数据库迁移执行失败
+    Io(#[from] std::io::Error), // IO 操作失败
+}
+```
 
 ## 使用指南
 
@@ -93,24 +145,24 @@ redis.url=redis://127.0.0.1:6379
 plugin.install_root=plugins
 ```
 
-#### 1.2 可选的环境变量
+#### 1.2 Nacos 配置（可选）
 
 ```bash
-# 数据库配置
-database.url=postgresql://user:pass@localhost:5432/cmx
-database.max_connections=20
+# Nacos 连接配置
+NACOS_ENABLED=true
+NACOS_HOST=127.0.0.1
+NACOS_PORT=8848
+NACOS_USERNAME=nacos
+NACOS_PASSWORD=nacos
 
-# 日志配置
-RUST_LOG=info
-RUST_LOG_FORMAT=json
+# Nacos 命名服务
+NACOS_NAMING_ENABLED=true
+NACOS_NAMING_REGISTER_IP=true
 
-# 服务器配置
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-
-# CORS 配置
-CORS_ALLOWED_ORIGINS=http://localhost:3000
-CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE
+# Nacos 配置中心
+NACOS_CONFIG_ENABLED=true
+NACOS_CONFIG_DATA_ID=cmx-config
+NACOS_CONFIG_GROUP=DEFAULT_GROUP
 ```
 
 #### 1.3 配置文件示例 (config/default.toml)
@@ -160,21 +212,6 @@ cargo build --release --bin web-server
 
 # 或使用 nohup
 nohup ./target/release/web-server > server.log 2>&1 &
-```
-
-#### 2.3 Docker 部署
-
-```dockerfile
-FROM rust:latest as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release --bin web-server
-
-FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/web-server /usr/local/bin/
-COPY config/ /etc/cmx/
-EXPOSE 8080
-CMD ["web-server"]
 ```
 
 ### 三、API 路由
@@ -256,16 +293,7 @@ curl -X DELETE http://localhost:8080/api/debug/sessions/{session_id}
 
 #### 4.1 CORS 中间件
 
-服务器默认配置了 CORS 中间件，支持跨域请求：
-
-```toml
-[cors]
-allowed_origins = ["http://localhost:3000"]
-allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-allowed_headers = ["Content-Type", "Authorization"]
-expose_headers = ["X-Request-Id"]
-max_age = 3600
-```
+服务器默认配置了 CORS 中间件，支持跨域请求。
 
 #### 4.2 请求追踪中间件
 
@@ -279,14 +307,9 @@ X-Request-Id: req-abc123
 X-Trace-Id: trace-xyz789
 ```
 
-#### 4.3 限流中间件
+#### 4.3 请求体大小限制
 
-```toml
-[rate_limit]
-enabled = true
-requests_per_minute = 100
-burst = 20
-```
+默认限制 100MB 请求体。
 
 ### 五、Swagger API 文档
 
@@ -300,6 +323,11 @@ curl http://localhost:8080/swagger/openapi.json -o openapi.json
 ### 六、日志配置
 
 #### 6.1 日志格式
+
+双层输出：
+
+- 控制台：简洁格式，带颜色，便于开发调试
+- 文件：JSON 格式，便于日志收集系统解析
 
 ```json
 {
@@ -346,13 +374,6 @@ max_lifetime = 3600
 ```bash
 # 获取连接池状态
 curl http://localhost:8080/api/admin/db/pool
-
-# 响应示例
-{
-  "total_connections": 20,
-  "idle_connections": 15,
-  "waiting_requests": 0
-}
 ```
 
 ### 八、缓存配置
@@ -362,72 +383,43 @@ curl http://localhost:8080/api/admin/db/pool
 ```toml
 [redis]
 url = "redis://127.0.0.1:6379"
-pool_size = 10
-timeout = 5
 ```
 
-#### 8.2 缓存操作 API
+### 九、优雅关闭
+
+服务器支持优雅关闭：
 
 ```bash
-# 设置缓存
-curl -X POST http://localhost:8080/api/cache \
-  -H "Content-Type: application/json" \
-  -d '{"key": "user:001", "value": "{\"name\":\"test\"}", "ttl": 3600}'
+# 发送 SIGTERM 信号
+kill -TERM <pid>
 
-# 获取缓存
-curl http://localhost:8080/api/cache/user:001
-
-# 删除缓存
-curl -X DELETE http://localhost:8080/api/cache/user:001
+# 或 Ctrl+C
 ```
 
-### 九、安全配置
+关闭流程：
 
-#### 9.1 安全响应头
+1. 停止接收新请求
+2. 等待现有请求处理完成
+3. 关闭数据库连接池
+4. 从 Nacos 注销服务实例
+5. 关闭日志系统
 
-服务器自动添加以下安全响应头：
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+### 十、错误处理
 
-#### 9.2 认证配置
+服务器初始化过程中可能遇到以下错误：
 
-```toml
-[auth]
-enabled = true
-jwt_secret = "your-secret-key"
-token_expiry = 3600
-```
+```rust
+// 配置错误
+Error::ConfigError("无法从配置管理器获取 redis.url")
 
-### 十、监控与健康检查
+// 服务器设置错误
+Error::ServerSetup("绑定地址失败: Address already in use")
 
-#### 10.1 健康检查端点
+// 数据源初始化错误
+Error::DatasourceInit("注册数据源失败: Connection refused")
 
-```bash
-# 基础健康检查
-curl http://localhost:8080/api/health
-
-# 详细健康检查（包含依赖）
-curl http://localhost:8080/api/health/detailed
-
-# 响应示例
-{
-  "status": "healthy",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "components": {
-    "database": "healthy",
-    "redis": "healthy",
-    "plugins": "healthy"
-  }
-}
-```
-
-#### 10.2 指标端点
-
-```bash
-# Prometheus 格式指标
-curl http://localhost:8080/metrics
+// WASM 运行时错误
+Error::RuntimeInit("Extism 引擎初始化失败")
 ```
 
 ### 十一、常见问题
@@ -450,7 +442,17 @@ RUST_LOG=debug cargo run --bin web-server 2>&1 | grep plugin
 unzip -t /path/to/plugin.zip
 ```
 
-#### 11.3 性能问题
+#### 11.3 Nacos 连接失败
+
+```bash
+# 检查 Nacos 服务是否运行
+curl http://127.0.0.1:8848/nacos/v1/console/health
+
+# 如果 Nacos 不可用，可禁用它
+NACOS_ENABLED=false
+```
+
+#### 11.4 性能问题
 
 ```bash
 # 启用性能分析

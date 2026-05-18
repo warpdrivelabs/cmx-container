@@ -1,6 +1,6 @@
 //! 数据源初始化模块
 //!
-//! 负责数据源配置的持久化、查询和动态加载
+//! 负责数据源配置的持久化、查询和动态加载。
 
 use cmx_api::handlers::sys_datasource::{
     SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
@@ -9,92 +9,88 @@ use cmx_database::crud::GenericCrudService;
 use cmx_database::{DatabaseManager, DbConfig, get_default_db_manager};
 use cmx_utils::ConfigManager;
 use modql::filter::{OpValInt64, OpValString, OpValsInt64, OpValsString};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
+
+use crate::Error;
 
 /// 初始化数据源（主入口）
 ///
-/// 执行流程:
-/// 1. 注册配置文件中的数据源连接
-/// 2. 持久化配置文件中的数据源到数据库
-/// 3. 从数据库加载有效数据源
-/// 4. 注册到内存
-pub async fn init_datasources() {
+/// 执行以下流程：
+/// 1. 从配置加载数据源配置
+/// 2. 注册配置文件中的数据源连接
+/// 3. 执行数据库迁移
+/// 4. 持久化配置文件中的数据源到数据库
+/// 5. 从数据库加载有效数据源
+/// 6. 注册到内存
+///
+/// # Errors
+///
+/// * `Error::DatasourceInit` - 数据源初始化失败
+pub async fn init_datasources() -> crate::Result<()> {
     info!("开始初始化数据源...");
 
     let config = ConfigManager::global();
-    let configs: Vec<DbConfig> = match config.get_as("databases") {
-        Ok(configs) => configs,
-        Err(e) => {
-            error!("无法从配置管理器获取 databases 配置: {:?}", e);
-            panic!("无法获取数据库配置: {:?}", e);
-        }
-    };
+    let configs: Vec<DbConfig> = config.get_as("databases")
+        .map_err(|e| Error::DatasourceInit(format!("无法从配置管理器获取 databases 配置: {}", e)))?;
 
     info!("成功解析到 {} 个数据源配置", configs.len());
 
     let db_manager = get_default_db_manager();
 
-    // 阶段1：注册配置文件中的数据源连接（创建连接池）
     if let Err(e) = register_datasources(db_manager, configs.clone()).await {
-        error!("注册配置文件数据源失败: {}", e);
-        panic!("注册配置文件数据源失败: {}", e);
+        return Err(Error::DatasourceInit(format!(
+            "注册配置文件数据源失败: {}", e
+        )));
     }
 
     let default_db_id = db_manager.get_default_db_id().await;
 
-    // 阶段2：执行数据库迁移（确保表结构已创建，再进行持久化）
-    crate::config::init_database_migrations().await;
+    crate::config::init_database_migrations().await?;
 
-    // 阶段3：持久化配置文件中的数据源到数据库
     if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, configs).await {
-        error!("持久化数据源配置失败: {}", e);
-        panic!("持久化数据源配置失败: {}", e);
+        return Err(Error::DatasourceInit(format!(
+            "持久化数据源配置失败: {}", e
+        )));
     }
 
-    // 阶段4：从数据库加载有效数据源并注册
-    let mut active_datasources = match load_active_datasources(db_manager, &default_db_id).await {
-        Ok(datasources) => datasources,
-        Err(e) => {
-            error!("加载有效数据源失败: {}", e);
-            panic!("加载有效数据源失败: {}", e);
-        }
-    };
-    //排除配置文件中的数据源（异步过滤）
+    let active_datasources = load_active_datasources(db_manager, &default_db_id).await?;
+
+    // 过滤掉配置文件中的数据源（只保留数据库中的数据源）
     let mut filtered_datasources = Vec::new();
     for config in active_datasources {
         if db_manager.get_db(config.db_id.as_str()).await.is_err() {
             filtered_datasources.push(config);
         }
     }
-    active_datasources = filtered_datasources;
 
-    info!("从数据库加载到 {} 个有效数据源", active_datasources.len());
+    info!("从数据库加载到 {} 个有效数据源", filtered_datasources.len());
 
-    if let Err(e) = register_datasources(db_manager, active_datasources).await {
-        error!("注册数据库中的数据源失败: {}", e);
+    if let Err(e) = register_datasources(db_manager, filtered_datasources).await {
+        warn!("注册数据库中的数据源失败: {}", e);
     }
 
     info!("数据源初始化完成");
+    Ok(())
 }
 
 /// 持久化数据源配置到数据库
 ///
-/// 参数:
-/// - mm: 数据库管理器
-/// - db_id: 默认数据库ID
-/// - configs: 配置文件中的数据源配置列表
-///
-/// 逻辑:
-/// - 遍历配置文件中的每个数据源
-/// - 检查 db_id 是否已存在
+/// 检查每个 db_id 是否已存在于数据库中：
 /// - 存在则用配置文件信息更新数据库记录
 /// - 不存在则插入新记录
-/// - 使用 UPSERT 语义保证幂等性
+///
+/// 使用 UPSERT 语义保证幂等性。
+///
+/// # Arguments
+///
+/// * `mm` - 数据库管理器
+/// * `db_id` - 默认数据库ID
+/// * `configs` - 配置文件中的数据源配置列表
 async fn persist_datasource_configs(
     mm: &DatabaseManager,
     db_id: &str,
     configs: Vec<DbConfig>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     info!("开始持久化数据源配置...");
 
     for config in configs {
@@ -110,31 +106,27 @@ async fn persist_datasource_configs(
             Some(vec![filter]),
             None,
         )
-        .await
-        .map_err(|e| format!("查询数据源失败: {}", e))?;
+            .await
+            .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
 
         let entity_for_update = dbconfig_to_entity_for_update(&config);
 
         if existing.iter().count() > 0 {
-            let row = existing.iter().next();
-            if let Some(data_row) = row {
+            if let Some(data_row) = existing.iter().next() {
                 let id = data_row.get_by_name(&existing.schema, "id");
                 if let Some(cmx_core::model::cell::DataValue::String(id_str)) = id {
-                    match GenericCrudService::<SysDatasourceBmc>::update(
+                    GenericCrudService::<SysDatasourceBmc>::update(
                         mm,
                         db_id,
                         None,
                         serde_json::Value::String(id_str.clone()),
                         entity_for_update,
                     )
-                    .await
-                    {
-                        Ok(_) => info!("成功更新数据源: {}", config.db_id),
-                        Err(e) => {
-                            warn!("更新数据源 {} 失败: {}", config.db_id, e);
-                            return Err(format!("更新数据源失败: {}", e));
-                        }
-                    }
+                        .await
+                        .map_err(|e| Error::DatasourceInit(format!(
+                            "更新数据源 {} 失败: {}", config.db_id, e
+                        )))?;
+                    info!("成功更新数据源: {}", config.db_id);
                 }
             }
             continue;
@@ -142,13 +134,12 @@ async fn persist_datasource_configs(
 
         let entity = dbconfig_to_entity(&config);
 
-        match GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, None, entity).await {
-            Ok(_) => info!("成功持久化数据源: {}", config.db_id),
-            Err(e) => {
-                warn!("持久化数据源 {} 失败: {}", config.db_id, e);
-                return Err(format!("持久化数据源失败: {}", e));
-            }
-        }
+        GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, None, entity)
+            .await
+            .map_err(|e| Error::DatasourceInit(format!(
+                "持久化数据源 {} 失败: {}", config.db_id, e
+            )))?;
+        info!("成功持久化数据源: {}", config.db_id);
     }
 
     info!("数据源配置持久化完成");
@@ -157,16 +148,20 @@ async fn persist_datasource_configs(
 
 /// 从数据库加载启用的数据源
 ///
-/// 参数:
-/// - mm: 数据库管理器
-/// - db_id: 默认数据库ID
+/// 查询条件：status=1（启用）且 archived=0（未归档）。
 ///
-/// 返回:
-/// - 启用状态(status=1)的数据源列表
+/// # Arguments
+///
+/// * `mm` - 数据库管理器
+/// * `db_id` - 默认数据库ID
+///
+/// # Returns
+///
+/// 满足条件的数据源配置列表。
 async fn load_active_datasources(
     mm: &DatabaseManager,
     db_id: &str,
-) -> Result<Vec<DbConfig>, String> {
+) -> crate::Result<Vec<DbConfig>> {
     info!("开始加载有效数据源...");
 
     let filter = SysDatasourceFilter {
@@ -182,16 +177,17 @@ async fn load_active_datasources(
         Some(vec![filter]),
         None,
     )
-    .await
-    .map_err(|e| format!("查询数据源失败: {}", e))?;
+        .await
+        .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
 
     let mut datasources = Vec::new();
     let schema = &dataset.schema;
 
     for row in dataset.iter() {
-        match build_dbconfig_from_row(row, schema) {
-            Some(config) => datasources.push(config),
-            None => warn!("解析数据源配置失败，跳过"),
+        if let Some(config) = build_dbconfig_from_row(row, schema) {
+            datasources.push(config);
+        } else {
+            warn!("解析数据源配置失败，跳过");
         }
     }
 
@@ -201,15 +197,13 @@ async fn load_active_datasources(
 
 /// 注册数据源到内存
 ///
-/// 参数:
-/// - mm: 数据库管理器
-/// - configs: 数据源配置列表
+/// 遍历配置列表，调用 `db_manager.register_data_source` 注册每个数据源。
 ///
-/// 逻辑:
-/// - 遍历配置列表
-/// - 调用 db_manager.register_data_source
-/// - 记录成功/失败日志
-async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> Result<(), String> {
+/// # Arguments
+///
+/// * `mm` - 数据库管理器
+/// * `configs` - 待注册的数据源配置列表
+async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> crate::Result<()> {
     info!("开始注册数据源到内存...");
 
     let mut success_count = 0;
@@ -237,7 +231,7 @@ async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> R
     );
 
     if fail_count > 0 {
-        Err(format!("有 {} 个数据源注册失败", fail_count))
+        Err(Error::DatasourceInit(format!("有 {} 个数据源注册失败", fail_count)))
     } else {
         Ok(())
     }
@@ -245,7 +239,11 @@ async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> R
 
 /// 将 DbConfig 转换为 SysDatasourceForCreate
 ///
-/// 用于持久化时的数据转换
+/// 用于创建新数据源记录时的数据转换。
+///
+/// # Arguments
+///
+/// * `config` - 数据源配置
 fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
     SysDatasourceForCreate {
         db_id: config.db_id.clone(),
@@ -261,7 +259,6 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
         max_lifetime: Some(config.pool_config.max_lifetime as i64),
         health_check_interval: Some(config.health_check_interval as i64),
         health_check_timeout: Some(config.health_check_timeout as i64),
-        // 数据源来源：config-配置文件
         source: Some("config".to_string()),
         status: 1,
     }
@@ -269,7 +266,11 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
 
 /// 将 DbConfig 转换为 SysDatasourceForUpdate
 ///
-/// 用于更新时的数据转换
+/// 用于更新数据源记录时的数据转换。
+///
+/// # Arguments
+///
+/// * `config` - 数据源配置
 fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
     SysDatasourceForUpdate {
         db_id: Some(config.db_id.clone()),
@@ -285,7 +286,6 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
         max_lifetime: Some(config.pool_config.max_lifetime as i64),
         health_check_interval: Some(config.health_check_interval as i64),
         health_check_timeout: Some(config.health_check_timeout as i64),
-        // 数据源来源：config-配置文件
         source: Some("config".to_string()),
         status: 1,
         archived: Some(0),
@@ -294,12 +294,13 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
 
 /// 从数据集行构建 DbConfig
 ///
-/// 参数:
-/// - row: 数据行
-/// - schema: 数据集模式
+/// GenericCrudService 已自动解密 db_url，此处为防御性处理，
+/// 以防未来直接 SQL 查询的场景。
 ///
-/// 返回:
-/// - 成功返回 DbConfig，失败返回 None
+/// # Arguments
+///
+/// * `row` - 数据行
+/// * `schema` - 数据集模式
 fn build_dbconfig_from_row(
     row: &cmx_core::model::data::dataset::Row,
     schema: &cmx_core::model::data::dataset::Schema,
@@ -310,8 +311,7 @@ fn build_dbconfig_from_row(
     let db_type_str = get_string_field(row, schema, "db_type")?;
     let db_url = get_string_field(row, schema, "db_url")?;
 
-    // 防御性解密：GenericCrudService 已自动解密 db_url，
-    // 但此处为防御性处理，以防未来直接 SQL 查询的场景
+    // 防御性解密：GenericCrudService 已自动解密 db_url
     let decrypted = cmx_utils::crypto::CryptoService::global()
         .ok()
         .and_then(|c| c.decrypt(&db_url).ok());
@@ -351,6 +351,12 @@ fn build_dbconfig_from_row(
 }
 
 /// 从数据行获取字符串字段
+///
+/// # Arguments
+///
+/// * `row` - 数据行
+/// * `schema` - 数据集模式
+/// * `field_name` - 字段名称
 fn get_string_field(
     row: &cmx_core::model::data::dataset::Row,
     schema: &cmx_core::model::data::dataset::Schema,
@@ -362,6 +368,12 @@ fn get_string_field(
 }
 
 /// 从数据行获取整数字段
+///
+/// # Arguments
+///
+/// * `row` - 数据行
+/// * `schema` - 数据集模式
+/// * `field_name` - 字段名称
 fn get_int_field(
     row: &cmx_core::model::data::dataset::Row,
     schema: &cmx_core::model::data::dataset::Schema,
