@@ -51,6 +51,9 @@ pub struct DeployRequest {
     pub force_reinstall: bool,
     /// 构建类型 debug release
     pub  build_type : Option<String>,
+    /// 是否发布到插件市场
+    #[serde(default)]
+    pub publish_to_marketplace: bool,
 }
 
 /// 部署响应
@@ -70,6 +73,9 @@ pub struct DeployResponse {
     pub success: bool,
     /// 消息
     pub message: String,
+    /// 市场发布信息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marketplace_publish: Option<super::marketplace_publisher::MarketplacePublishInfo>,
 }
 
 /// 部署服务依赖
@@ -169,29 +175,43 @@ impl DeployService {
             request.db_id = plugin_def.datasource_id.clone();
         }
 
-        // 步骤5: 查询当前安装状态
+        let mut marketplace_source_id: Option<String> = None;
+        let mut marketplace_publish_info: Option<super::marketplace_publisher::MarketplacePublishInfo> = None;
+
+        if request.publish_to_marketplace {
+            let publish_req = super::marketplace_publisher::PublishFromDeployRequest {
+                plugin_id: plugin_id.clone(),
+                version: new_version.clone(),
+                plugin_def: plugin_def.clone(),
+                zip_file_path: package_path.clone(),
+            };
+            let result = super::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req).await?;
+            marketplace_source_id = Some(result.marketplace_version_id.clone());
+            marketplace_publish_info = Some(result.into());
+        }
+
         let existing_plugin = self.deps.repository.find_plugin(&plugin_id).await?;
 
         match existing_plugin {
             None => {
-                // 未安装 → 执行安装
-                self.execute_install(&request, &plugin_id, &new_version).await
+                let mut resp = self.execute_install(&request, &plugin_id, &new_version, marketplace_source_id.as_deref()).await?;
+                resp.marketplace_publish = marketplace_publish_info;
+                Ok(resp)
             }
             Some(record) => {
                 let old_version = record.version.clone();
                 match new_version.cmp(&old_version) {
                     std::cmp::Ordering::Greater => {
-                        // 新版本 > 旧版本 → 执行升级
-                        self.execute_upgrade(&request, &plugin_id, &old_version, &new_version)
-                            .await
+                        let mut resp = self.execute_upgrade(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
+                        resp.marketplace_publish = marketplace_publish_info;
+                        Ok(resp)
                     }
                     std::cmp::Ordering::Equal => {
                         if request.force_reinstall {
-                            // 版本相同 + 覆盖安装 → 先卸载再安装
-                            self.execute_reinstall(&request, &plugin_id, &old_version, &new_version)
-                                .await
+                            let mut resp = self.execute_reinstall(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
+                            resp.marketplace_publish = marketplace_publish_info;
+                            Ok(resp)
                         } else {
-                            // 版本相同 + 不覆盖 → 返回已安装
                             Ok(DeployResponse {
                                 plugin_id,
                                 action: DeployAction::AlreadyInstalled,
@@ -200,11 +220,11 @@ impl DeployService {
                                 install_path: PathBuf::from(&record.install_path),
                                 success: true,
                                 message: "插件已安装相同版本，无需操作".to_string(),
+                                marketplace_publish: marketplace_publish_info,
                             })
                         }
                     }
                     std::cmp::Ordering::Less => {
-                        // 新版本 < 旧版本 → 返回错误
                         Err(PluginError::Deploy(format!(
                             "待安装版本 {} 低于已安装版本 {}，请使用降级接口",
                             new_version, old_version
@@ -221,6 +241,7 @@ impl DeployService {
         request: &DeployRequest,
         _plugin_id: &str,
         _new_version: &str,
+        marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
         let install_req = super::install::InstallRequest {
             source: request.source.clone(),
@@ -228,6 +249,7 @@ impl DeployService {
             auto_activate: false,
             version_constraint: None,
             build_type: request.build_type.clone(),
+            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -240,6 +262,7 @@ impl DeployService {
             install_path: result.install_path,
             success: true,
             message: result.message,
+            marketplace_publish: None,
         })
     }
 
@@ -250,6 +273,7 @@ impl DeployService {
         plugin_id: &str,
         _old_version: &str,
         _new_version: &str,
+        marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
         let upgrade_req = super::upgrade::UpgradeRequest {
             plugin_id: plugin_id.to_string(),
@@ -258,6 +282,7 @@ impl DeployService {
             force: false,
             operator: Some("system".to_string()),
             build_type: request.build_type.clone(),
+            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
@@ -270,6 +295,7 @@ impl DeployService {
             install_path: PathBuf::new(),
             success: true,
             message: "插件升级成功".to_string(),
+            marketplace_publish: None,
         })
     }
 
@@ -280,6 +306,7 @@ impl DeployService {
         plugin_id: &str,
         old_version: &str,
         _new_version: &str,
+        marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
         // 先卸载
         let uninstall_req = super::uninstall::UninstallRequest {
@@ -297,6 +324,7 @@ impl DeployService {
             auto_activate: false,
             version_constraint: None,
             build_type: request.build_type.clone(),
+            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -309,6 +337,7 @@ impl DeployService {
             install_path: result.install_path,
             success: true,
             message: "插件覆盖安装成功".to_string(),
+            marketplace_publish: None,
         })
     }
 }

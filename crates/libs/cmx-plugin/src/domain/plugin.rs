@@ -65,10 +65,12 @@ pub enum PluginSource {
         url: String,
         checksum: Option<String>,
     },
-    /// 远程注册表，可以认为是插件市场？
-    Registry {
-        registry_url: Option<String>,
-        package_name: String,
+    /// 插件市场。
+    Marketplace {
+        /// 市场服务地址。
+        marketplace_url: Option<String>,
+        /// 插件业务 ID。
+        plugin_id: String,
     },
     /// cmx-storage 存储
     Storage {

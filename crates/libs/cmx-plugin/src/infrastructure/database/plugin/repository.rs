@@ -96,6 +96,7 @@ impl PluginRepository {
                 "zip_source_type",
                 "plugin_type",
                 "source_path",
+                "marketplace_source_id",
                 "create_time",
                 "update_time",
             ])
@@ -124,6 +125,7 @@ impl PluginRepository {
                 record.zip_source_type.clone().into(),
                 record.plugin_type.clone().into(),
                 record.source_path.clone().into(),
+                record.marketplace_source_id.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
             ])
@@ -219,6 +221,9 @@ impl PluginRepository {
         if let Some(ref v) = fields.source_path {
             query.value("source_path", v.clone());
         }
+        if let Some(ref v) = fields.marketplace_source_id {
+            query.value("marketplace_source_id", v.clone());
+        }
         if let Some(ref v) = fields.update_by {
             query.value("update_by", v.clone());
         }
@@ -298,6 +303,7 @@ impl PluginRepository {
                 Alias::new("zip_source_type"),
                 Alias::new("plugin_type"),
                 Alias::new("source_path"),
+                Alias::new("marketplace_source_id"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -331,6 +337,7 @@ impl PluginRepository {
                 record.zip_source_type.clone().into(),
                 record.plugin_type.clone().into(),
                 record.source_path.clone().into(),
+                record.marketplace_source_id.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -363,6 +370,7 @@ impl PluginRepository {
                 Alias::new("zip_source_type"),
                 Alias::new("plugin_type"),
                 Alias::new("source_path"),
+                Alias::new("marketplace_source_id"),
                 Alias::new("update_time"),
                 Alias::new("update_by"),
                 Alias::new("update_name"),
@@ -625,6 +633,7 @@ impl PluginRepository {
                 zip_source_type: row.get_by_name_as(schema, "zip_source_type"),
                 plugin_type: row.get_by_name_as(schema, "plugin_type"),
                 source_path: row.get_by_name_as(schema, "source_path"),
+                marketplace_source_id: row.get_by_name_as(schema, "marketplace_source_id"),
                 create_time: get_datetime_default("create_time", Utc::now),
                 update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),

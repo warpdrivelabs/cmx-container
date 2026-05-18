@@ -289,6 +289,10 @@ pub struct MarketplacePluginVersionForCreate {
     pub is_latest: Option<i16>,
     /// 是否为稳定版本。
     pub is_stable: Option<i16>,
+    /// 是否允许覆盖发布同一版本（默认 false，为 true 时更新已有版本记录而非插入）。
+    #[serde(default)]
+    #[field(skip)]
+    pub allow_version_overwrite: bool,
 }
 
 // ============================================================================
@@ -491,6 +495,40 @@ pub struct MarketplaceRatingFilter {
     pub status: Option<OpValsString>,
     /// 归档状态（精确匹配）。
     pub archived: Option<OpValsInt64>,
+}
+
+/// 插件更新信息。
+///
+/// 用于检查更新接口返回，包含已安装插件的当前版本和市场最新版本信息。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginUpdateInfo {
+    /// 插件业务 ID。
+    pub plugin_id: String,
+    /// 插件名称。
+    pub plugin_name: Option<String>,
+    /// 当前安装版本号。
+    pub current_version: String,
+    /// 当前安装版本的市场来源 ID。
+    pub current_marketplace_source_id: Option<String>,
+    /// 市场最新版本号。
+    pub latest_version: String,
+    /// 市场最新版本详情。
+    pub latest_version_info: MarketplacePluginVersion,
+    /// 是否有更新可用。
+    pub has_update: bool,
+}
+
+/// 从市场安装插件的请求。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketInstallRequest {
+    /// 插件业务 ID。
+    pub plugin_id: String,
+    /// 要安装的版本号，为 `None` 时安装最新稳定版。
+    pub version: Option<String>,
+    /// 目标数据库 ID，为 `None` 时使用默认数据库。
+    pub db_id: Option<String>,
+    /// 安装后是否自动激活。
+    pub auto_activate: Option<bool>,
 }
 
 // ============================================================================

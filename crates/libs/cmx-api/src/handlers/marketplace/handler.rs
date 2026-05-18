@@ -403,6 +403,7 @@ pub async fn marketplace_plugin_publish(
         status: Some("published".to_string()),
         is_latest: Some(1),
         is_stable: Some(1),
+        allow_version_overwrite: false,
     };
 
     let service = get_marketplace_service().await;
@@ -660,54 +661,17 @@ pub async fn marketplace_plugin_install(
 
     let service = get_marketplace_service().await;
 
-    let version_info = if let Some(ref version) = req.version {
-        service.get_version(&req.plugin_id, version).await
-    } else {
-        service.get_latest_stable_version(&req.plugin_id).await
-    }
-    .map_err(|e| Error::internal_error(format!("查询版本信息失败: {}", e)))?;
-
-    let version_info = version_info.ok_or_else(|| Error::not_found("版本不存在"))?;
-
-    let source = if let Some(ref storage_file_id) = version_info.storage_file_id {
-        info!("使用 cmx-storage 下载插件包: file_id={}", storage_file_id);
-        cmx_plugin::domain::plugin::PluginSource::Storage {
-            file_id: storage_file_id.clone(),
-            checksum: version_info.checksum.clone(),
-        }
-    } else {
-        warn!("storage_file_id 不存在，降级使用 download_url");
-        let download_url = version_info
-            .download_url
-            .clone()
-            .ok_or_else(|| Error::bad_request("该版本没有提供下载地址"))?;
-        cmx_plugin::domain::plugin::PluginSource::Remote {
-            url: download_url,
-            checksum: version_info.checksum.clone(),
-        }
+    let install_req = cmx_plugin::marketplace::model::MarketInstallRequest {
+        plugin_id: req.plugin_id,
+        version: req.version,
+        db_id: req.db_id,
+        auto_activate: Some(req.auto_activate),
     };
 
-    let manager = cmx_plugin::GlobalPluginManager::get();
-    let install_req = cmx_plugin::service::install::InstallRequest {
-        source,
-        db_id: req.db_id.clone(),
-        auto_activate: req.auto_activate,
-        version_constraint: None,
-        build_type: None,
-    };
-
-    let result = manager
-        .install(install_req)
+    let result = service
+        .install_from_marketplace(&install_req)
         .await
         .map_err(|e| Error::internal_error(format!("插件安装失败: {}", e)))?;
-
-    let version_str = &version_info.version;
-    if let Err(e) = service.record_download(&req.plugin_id, version_str, "marketplace").await {
-        tracing::warn!("记录下载统计失败: {}", e);
-    }
-    if let Err(e) = service.record_install(&req.plugin_id).await {
-        tracing::warn!("记录安装统计失败: {}", e);
-    }
 
     let response = MarketInstallResponse {
         plugin_id: result.plugin_id,
@@ -924,4 +888,207 @@ pub async fn marketplace_trending_list(
         .collect();
 
     Ok(Json(ApiResp::ok(responses)))
+}
+
+/// 从市场升级插件。
+///
+/// # Arguments
+///
+/// * `_cmx_state` - 应用状态（框架注入）。
+/// * `_svr_ctx` - 服务器上下文（框架注入）。
+/// * `req` - 升级请求，包含 `plugin_id`、`target_version`、`force`。
+///
+/// # Returns
+///
+/// 升级成功返回 `ApiResp<MarketUpgradeResponse>`。
+///
+/// # Errors
+///
+/// 升级失败时返回内部错误。
+#[utoipa::path(
+    post,
+    path = "/api/marketplace/plugin/upgrade",
+    request_body = MarketUpgradeRequest,
+    responses(
+        (status = 200, description = "升级成功", body = ApiResp<MarketUpgradeResponse>)
+    ),
+    tag = "MarketplacePlugin"
+)]
+pub async fn marketplace_plugin_upgrade(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Json(req): Json<MarketUpgradeRequest>,
+) -> Result<Json<ApiResp<MarketUpgradeResponse>>> {
+    info!("从市场升级插件: plugin_id={}, target_version={:?}", req.plugin_id, req.target_version);
+
+    let service = get_marketplace_service().await;
+
+    let result = service
+        .upgrade_from_marketplace(&req.plugin_id, req.target_version.as_deref(), req.force)
+        .await
+        .map_err(|e| Error::internal_error(format!("插件升级失败: {}", e)))?;
+
+    let response = MarketUpgradeResponse {
+        plugin_id: result.plugin_id,
+        old_version: Some(result.old_version),
+        new_version: Some(result.new_version),
+        success: result.success,
+        message: Some(result.message),
+    };
+
+    Ok(Json(ApiResp::ok(response)))
+}
+
+/// 检查已安装插件的市场更新。
+///
+/// # Arguments
+///
+/// * `_cmx_state` - 应用状态（框架注入）。
+/// * `_svr_ctx` - 服务器上下文（框架注入）。
+/// * `req` - 检查更新请求，可选指定 `plugin_ids`。
+///
+/// # Returns
+///
+/// 检查完成返回 `ApiResp<CheckUpdatesResponse>`。
+///
+/// # Errors
+///
+/// 检查更新失败时返回内部错误。
+#[utoipa::path(
+    post,
+    path = "/api/marketplace/plugin/check-updates",
+    request_body = CheckUpdatesRequest,
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<CheckUpdatesResponse>)
+    ),
+    tag = "MarketplacePlugin"
+)]
+pub async fn marketplace_plugin_check_updates(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Json(req): Json<CheckUpdatesRequest>,
+) -> Result<Json<ApiResp<CheckUpdatesResponse>>> {
+    info!("检查插件更新: plugin_ids={:?}", req.plugin_ids);
+
+    let manager = cmx_plugin::GlobalPluginManager::get();
+    let filter = cmx_plugin::domain::plugin::PluginFilter {
+        status: None,
+        name: None,
+        domain_code: None,
+        application_code: None,
+        module_code: None,
+    };
+    let all_plugins = manager
+        .repository()
+        .list_plugins(&filter)
+        .await
+        .map_err(|e| Error::internal_error(format!("查询已安装插件失败: {}", e)))?;
+
+    let plugins_to_check: Vec<_> = if let Some(ref ids) = req.plugin_ids {
+        all_plugins
+            .into_iter()
+            .filter(|p| ids.contains(&p.plugin_id))
+            .collect()
+    } else {
+        all_plugins
+    };
+
+    let service = get_marketplace_service().await;
+    let updates = service
+        .check_updates(&plugins_to_check)
+        .await
+        .map_err(|e| Error::internal_error(format!("检查更新失败: {}", e)))?;
+
+    let response = CheckUpdatesResponse {
+        updates: updates
+            .iter()
+            .map(|u| PluginUpdateInfoResponse {
+                plugin_id: u.plugin_id.clone(),
+                plugin_name: u.plugin_name.clone(),
+                current_version: u.current_version.clone(),
+                current_marketplace_source_id: u.current_marketplace_source_id.clone(),
+                latest_version: u.latest_version.clone(),
+                has_update: u.has_update,
+            })
+            .collect(),
+        checked_at: chrono::Utc::now().to_rfc3339(),
+    };
+    Ok(Json(ApiResp::ok(response)))
+}
+
+/// 下载插件包。
+///
+/// 通过 `storage_file_id` 从 cmx-storage 获取文件并返回文件流，
+/// 用于外部客户端（独立部署场景）下载插件包。
+///
+/// # Arguments
+///
+/// * `_cmx_state` - 应用状态（框架注入）。
+/// * `_svr_ctx` - 服务器上下文（框架注入）。
+/// * `params` - 下载查询参数，包含 `plugin_id` 和可选 `version`。
+///
+/// # Returns
+///
+/// 插件包文件流（`application/octet-stream`）。
+///
+/// # Errors
+///
+/// 版本不存在或文件不可用时返回错误。
+#[utoipa::path(
+    get,
+    path = "/api/marketplace/plugin/download",
+    params(MarketDownloadParams),
+    responses(
+        (status = 200, description = "下载成功"),
+        (status = 404, description = "版本不存在"),
+        (status = 503, description = "版本文件暂不可用")
+    ),
+    tag = "MarketplacePlugin"
+)]
+pub async fn marketplace_plugin_download(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Query(params): Query<MarketDownloadParams>,
+) -> Result<axum::response::Response> {
+    info!("下载插件包: plugin_id={}, version={:?}", params.plugin_id, params.version);
+
+    let service = get_marketplace_service().await;
+    let version_info = if let Some(ref version) = params.version {
+        service.get_version(&params.plugin_id, version).await
+    } else {
+        service.get_latest_stable_version(&params.plugin_id).await
+    }
+        .map_err(|e| Error::internal_error(format!("查询版本信息失败: {}", e)))?;
+
+    let version_info = version_info.ok_or_else(|| Error::not_found("版本不存在"))?;
+
+    let storage_file_id = version_info
+        .storage_file_id
+        .ok_or_else(|| Error::internal_error("版本文件暂不可用"))?;
+
+    let storage_service = cmx_storage::global::GlobalStorageService::get().service();
+    let file_download = storage_service
+        .download(&storage_file_id)
+        .await
+        .map_err(|e| Error::internal_error(format!("下载文件失败: {}", e)))?;
+
+    if let Err(e) = service
+        .record_download(&params.plugin_id, &version_info.version, "download_api")
+        .await
+    {
+        warn!("记录下载统计失败: {}", e);
+    }
+
+    let filename = format!("{}-{}.zip", params.plugin_id, version_info.version);
+    let body = axum::body::Body::from(file_download.data);
+
+    Ok(axum::response::Response::builder()
+        .status(200)
+        .header("Content-Type", "application/octet-stream")
+        .header(
+            "Content-Disposition",
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(body)
+        .unwrap())
 }

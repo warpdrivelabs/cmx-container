@@ -43,6 +43,10 @@ pub struct MarketplaceService {
 }
 
 impl MarketplaceService {
+    pub fn repo(&self) -> &super::repository::MarketplaceRepository {
+        &self.repo
+    }
+
     /// 创建新的 MarketplaceService 实例。
     ///
     /// # Arguments
@@ -92,11 +96,23 @@ impl MarketplaceService {
         version_req: MarketplacePluginVersionForCreate,
     ) -> PluginResult<MarketplacePlugin> {
         info!(
-            "发布插件到市场: plugin_id={}, version={}",
-            plugin_req.plugin_id, version_req.version
+            "发布插件到市场: plugin_id={}, version={}, allow_overwrite={}",
+            plugin_req.plugin_id, version_req.version, version_req.allow_version_overwrite
         );
 
         let saved_plugin_id = plugin_req.plugin_id.clone();
+
+        let existing_version = self
+            .repo
+            .get_version(&plugin_req.plugin_id, &version_req.version)
+            .await?;
+
+        if existing_version.is_some() && !version_req.allow_version_overwrite {
+            return Err(PluginError::Plugin(format!(
+                "版本 {} 已存在，如需覆盖发布请开启 allow_version_overwrite",
+                version_req.version
+            )));
+        }
 
         let existing = self.repo.get_plugin_by_plugin_id(&plugin_req.plugin_id).await?;
 
@@ -126,7 +142,7 @@ impl MarketplaceService {
             self.repo.update_plugin_by_plugin_id(&plugin_req.plugin_id, &update_data).await?;
             let updated = self.repo.get_plugin_by_plugin_id(&plugin_req.plugin_id).await?;
             let plugin = updated.unwrap();
-            self.create_version(version_req).await?;
+            self.upsert_version(&version_req).await?;
             return Ok(plugin);
         }
 
@@ -139,7 +155,7 @@ impl MarketplaceService {
         .await
         .map_err(|e| PluginError::Database(format!("创建插件记录失败: {}", e)))?;
 
-        self.create_version(version_req).await?;
+        self.upsert_version(&version_req).await?;
 
         let plugin = self
             .repo
@@ -174,6 +190,46 @@ impl MarketplaceService {
         .await
         .map_err(|e| PluginError::Database(format!("创建版本记录失败: {}", e)))?;
         Ok(())
+    }
+
+    /// 插入或更新版本记录。
+    ///
+    /// 根据 `allow_version_overwrite` 标志决定行为：
+    /// - 版本不存在 → 直接插入
+    /// - 版本已存在 + `allow_version_overwrite=true` → 更新已有记录
+    /// - 版本已存在 + `allow_version_overwrite=false` → 返回错误
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - 版本创建请求，包含版本号、下载地址等。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库操作失败时返回错误。
+    pub async fn upsert_version(
+        &self,
+        req: &MarketplacePluginVersionForCreate,
+    ) -> PluginResult<()> {
+        let existing = self.repo.get_version(&req.plugin_id, &req.version).await?;
+
+        if existing.is_some() {
+            if !req.allow_version_overwrite {
+                return Err(PluginError::Plugin(format!(
+                    "版本 {} 已存在，如需覆盖发布请开启 allow_version_overwrite",
+                    req.version
+                )));
+            }
+            debug!(
+                "覆盖更新版本: plugin_id={}, version={}",
+                req.plugin_id, req.version
+            );
+            self.repo
+                .update_version_by_plugin_id_and_version(&req.plugin_id, &req.version, &req)
+                .await?;
+            return Ok(());
+        }
+
+        self.create_version(req.clone()).await
     }
 
     /// 更新插件市场信息。
@@ -576,6 +632,223 @@ impl MarketplaceService {
         self.repo.increment_install_count(plugin_id).await
     }
 
+    /// 从插件市场安装插件。
+    ///
+    /// 查询市场版本信息，构建 `PluginSource`（`storage_file_id` 优先，`download_url` 降级），
+    /// 调用 `InstallService` 执行实际安装，并记录下载和安装统计。
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - 市场安装请求，包含 `plugin_id`、`version`、`db_id`、`auto_activate`。
+    ///
+    /// # Returns
+    ///
+    /// 安装成功时返回 `InstallResponse`，包含插件 ID、安装路径和版本信息。
+    ///
+    /// # Errors
+    ///
+    /// * `PluginError::NotFound` - 市场版本不存在。
+    /// * `PluginError::Plugin` - 版本缺少 `storage_file_id` 和 `download_url`。
+    /// * `PluginError::Install` - 安装过程失败。
+    pub async fn install_from_marketplace(
+        &self,
+        req: &super::model::MarketInstallRequest,
+    ) -> PluginResult<crate::service::install::InstallResponse> {
+        use crate::domain::plugin::PluginSource;
+        use crate::GlobalPluginManager;
+
+        let version_info = if let Some(ref version) = req.version {
+            self.get_version(&req.plugin_id, version).await?
+        } else {
+            self.get_latest_stable_version(&req.plugin_id).await?
+        };
+
+        let version_info = version_info.ok_or_else(|| {
+            PluginError::NotFound(format!(
+                "市场版本不存在: plugin_id={}, version={:?}",
+                req.plugin_id, req.version
+            ))
+        })?;
+
+        let source = if let Some(ref file_id) = version_info.storage_file_id {
+            PluginSource::Storage {
+                file_id: file_id.clone(),
+                checksum: version_info.checksum.clone(),
+            }
+        } else if let Some(ref url) = version_info.download_url {
+            PluginSource::Remote {
+                url: url.clone(),
+                checksum: version_info.checksum.clone(),
+            }
+        } else {
+            return Err(PluginError::Plugin(format!(
+                "市场版本 '{}' 缺少 storage_file_id 和 download_url",
+                version_info.version
+            )));
+        };
+
+        let manager = GlobalPluginManager::get();
+        let install_req = crate::service::install::InstallRequest {
+            source,
+            db_id: req.db_id.clone(),
+            auto_activate: req.auto_activate.unwrap_or(false),
+            version_constraint: None,
+            build_type: None,
+            marketplace_source_id: Some(version_info.id.clone()),
+        };
+
+        let result = manager.install(install_req).await?;
+
+        if let Err(e) = self
+            .record_download(&req.plugin_id, &version_info.version, "marketplace")
+            .await
+        {
+            tracing::warn!("记录下载统计失败: {}", e);
+        }
+        if let Err(e) = self.record_install(&req.plugin_id).await {
+            tracing::warn!("记录安装统计失败: {}", e);
+        }
+
+        Ok(result)
+    }
+
+    /// 从插件市场升级插件。
+    ///
+    /// 查询市场版本信息，构建 `PluginSource`，调用 `UpgradeService` 执行升级，
+    /// 并记录下载统计。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 要升级的插件业务 ID。
+    /// * `target_version` - 目标版本号，为 `None` 时升级到最新稳定版。
+    /// * `force` - 是否强制升级（忽略版本检查）。
+    ///
+    /// # Returns
+    ///
+    /// 升级成功时返回 `UpgradeResponse`，包含旧版本和新版本信息。
+    ///
+    /// # Errors
+    ///
+    /// * `PluginError::NotFound` - 市场版本不存在。
+    /// * `PluginError::Plugin` - 版本缺少 `storage_file_id` 和 `download_url`。
+    /// * `PluginError::Upgrade` - 升级过程失败。
+    pub async fn upgrade_from_marketplace(
+        &self,
+        plugin_id: &str,
+        target_version: Option<&str>,
+        force: bool,
+    ) -> PluginResult<crate::service::upgrade::UpgradeResponse> {
+        use crate::domain::plugin::PluginSource;
+        use crate::GlobalPluginManager;
+
+        let version_info = if let Some(version) = target_version {
+            self.get_version(plugin_id, version).await?
+        } else {
+            self.get_latest_stable_version(plugin_id).await?
+        };
+
+        let version_info = version_info.ok_or_else(|| {
+            PluginError::NotFound(format!("市场版本不存在: plugin_id={}", plugin_id))
+        })?;
+
+        let source = if let Some(ref file_id) = version_info.storage_file_id {
+            PluginSource::Storage {
+                file_id: file_id.clone(),
+                checksum: version_info.checksum.clone(),
+            }
+        } else if let Some(ref url) = version_info.download_url {
+            PluginSource::Remote {
+                url: url.clone(),
+                checksum: version_info.checksum.clone(),
+            }
+        } else {
+            return Err(PluginError::Plugin(format!(
+                "市场版本 '{}' 缺少 storage_file_id 和 download_url",
+                version_info.version
+            )));
+        };
+
+        let manager = GlobalPluginManager::get();
+        let upgrade_req = crate::service::upgrade::UpgradeRequest {
+            plugin_id: plugin_id.to_string(),
+            source,
+            version_constraint: None,
+            force,
+            operator: None,
+            build_type: None,
+            marketplace_source_id: Some(version_info.id.clone()),
+        };
+
+        let result = manager.upgrade(upgrade_req).await?;
+
+        if let Err(e) = self
+            .record_download(plugin_id, &version_info.version, "marketplace")
+            .await
+        {
+            tracing::warn!("记录下载统计失败: {}", e);
+        }
+
+        Ok(result)
+    }
+
+    /// 检查已安装插件在市场中的更新。
+    ///
+    /// 批量查询市场最新版本，使用 `SemanticVersion` 逐个比较版本号，
+    /// 返回有更新可用的插件列表。
+    ///
+    /// # Arguments
+    ///
+    /// * `installed_plugins` - 已安装插件记录列表。
+    ///
+    /// # Returns
+    ///
+    /// 有更新可用的插件信息列表，包含当前版本和最新市场版本。
+    ///
+    /// # Errors
+    ///
+    /// * `PluginError::Database` - 数据库查询失败。
+    pub async fn check_updates(
+        &self,
+        installed_plugins: &[crate::infrastructure::database::plugin::model::PluginRecord],
+    ) -> PluginResult<Vec<super::model::PluginUpdateInfo>> {
+        use crate::domain::version::SemanticVersion;
+
+        let plugin_ids: Vec<String> =
+            installed_plugins.iter().map(|p| p.plugin_id.clone()).collect();
+        let latest_versions = self.repo.get_latest_versions_batch(&plugin_ids).await?;
+
+        let mut updates = Vec::new();
+        for plugin in installed_plugins {
+            if let Some(latest) = latest_versions.get(&plugin.plugin_id) {
+                let current = match SemanticVersion::parse(&plugin.version) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let latest_ver = match SemanticVersion::parse(&latest.version) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let version_outdated = latest_ver > current;
+                let source_mismatch = match (&plugin.marketplace_source_id, &latest.id) {
+                    (Some(current_id), latest_id) => current_id != latest_id,
+                    (None, _) => true,
+                };
+                let has_update = version_outdated || source_mismatch;
+                updates.push(super::model::PluginUpdateInfo {
+                    plugin_id: plugin.plugin_id.clone(),
+                    plugin_name: Some(plugin.name.clone()),
+                    current_version: plugin.version.clone(),
+                    current_marketplace_source_id: plugin.marketplace_source_id.clone(),
+                    latest_version: latest.version.clone(),
+                    latest_version_info: latest.clone(),
+                    has_update,
+                });
+            }
+        }
+
+        Ok(updates)
+    }
+
     // =========================================================================
     // 私有辅助方法
     // =========================================================================
@@ -682,4 +955,16 @@ impl MarketplaceService {
             update_name: row.get_by_name_as(schema, "update_name"),
         }
     }
+}
+
+pub async fn get_marketplace_service() -> MarketplaceService {
+    let db_manager = cmx_database::get_default_db_manager();
+    let default_db_id = db_manager.get_default_db_id().await;
+
+    let repo = Arc::new(super::repository::MarketplaceRepository::new(
+        db_manager.clone(),
+        default_db_id.clone(),
+    ));
+    let stats_service = Arc::new(super::stats::StatsService::new(repo.clone()));
+    MarketplaceService::new(repo, stats_service, db_manager.clone(), default_db_id)
 }

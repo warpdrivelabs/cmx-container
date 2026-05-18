@@ -115,6 +115,7 @@ impl PluginChangeHandler {
             db_id: Some(db_plugin.db_id.clone()),
             force_reinstall: false,
             build_type: None,
+            publish_to_marketplace: false,
         };
 
         match self.deploy_service.deploy(request).await {
@@ -197,6 +198,7 @@ impl PluginChangeHandler {
                         db_id: None,
                         force_reinstall: false,
                         build_type: None,
+                        publish_to_marketplace: false,
                     };
 
                     match self.deploy_service.deploy(request).await {

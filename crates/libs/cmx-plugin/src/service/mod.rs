@@ -1,4 +1,5 @@
 pub mod install;
+pub mod marketplace_publisher;
 pub mod uninstall;
 pub mod activate;
 pub mod upgrade;

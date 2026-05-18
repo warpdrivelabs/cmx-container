@@ -959,6 +959,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64",
+ "bytes",
  "chrono",
  "cmx-buffer",
  "cmx-core",

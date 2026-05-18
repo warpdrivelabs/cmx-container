@@ -146,11 +146,12 @@ impl DowngradeService {
             )
             .await?;
 
-        // 步骤5: 更新 cmx_plugin 主表
+        // 步骤5: 更新 cmx_plugin 主表（含回写 marketplace_source_id）
         let fields = crate::infrastructure::database::repository::PluginUpdateParams {
             version: Some(request.target_version.clone()),
             wasm_path: Some(target_version_record.wasm_path.clone()),
             install_path: Some(target_version_record.install_path.clone()),
+            marketplace_source_id: target_version_record.marketplace_source_id.clone(),
             ..Default::default()
         };
         self.deps.repository.update_plugin(&plugin_id, &fields, Some(txn_guard.txn_id())).await?;

@@ -197,3 +197,47 @@ pub struct CategoryResponse {
     /// 该分类下的插件数量。
     pub count: i64,
 }
+
+/// 从市场升级插件的响应。
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketUpgradeResponse {
+    /// 插件业务 ID。
+    pub plugin_id: String,
+    /// 升级前的版本号。
+    pub old_version: Option<String>,
+    /// 升级后的版本号。
+    pub new_version: Option<String>,
+    /// 是否升级成功。
+    pub success: bool,
+    /// 响应消息。
+    pub message: Option<String>,
+}
+
+/// 检查插件更新的响应。
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckUpdatesResponse {
+    /// 有更新可用的插件列表。
+    pub updates: Vec<PluginUpdateInfoResponse>,
+    /// 检查时间（ISO 8601 格式）。
+    pub checked_at: String,
+}
+
+/// 插件更新信息响应。
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUpdateInfoResponse {
+    /// 插件业务 ID。
+    pub plugin_id: String,
+    /// 插件名称。
+    pub plugin_name: Option<String>,
+    /// 当前安装版本号。
+    pub current_version: String,
+    /// 当前安装版本的市场来源 ID。
+    pub current_marketplace_source_id: Option<String>,
+    /// 市场最新版本号。
+    pub latest_version: String,
+    /// 是否有更新可用。
+    pub has_update: bool,
+}

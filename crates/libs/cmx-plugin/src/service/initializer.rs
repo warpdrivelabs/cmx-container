@@ -301,6 +301,7 @@ impl PluginInitializer {
                     auto_activate: false,
                     version_constraint: None,
                     build_type: None,
+                    marketplace_source_id: None,
                 };
                 match self.install_service.install(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -322,6 +323,7 @@ impl PluginInitializer {
                     force: false,
                     operator: Some("system".to_string()),
                     build_type: None,
+                    marketplace_source_id: None,
                 };
                 match self.upgrade_service.upgrade(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -420,11 +422,17 @@ pub fn build_plugin_source(zip_source_url: Option<&str>, zip_source_type: Option
             let url = zip_source_url.unwrap_or_default().to_string();
             PluginSource::Remote { url, checksum: None }
         }
-        Some("registry") => {
-            let package_name = zip_source_url.unwrap_or_default().to_string();
-            PluginSource::Registry {
-                registry_url: None,
-                package_name,
+        Some("registry") | Some("marketplace") => {
+            let plugin_id = zip_source_url.unwrap_or_default().to_string();
+            PluginSource::Marketplace {
+                marketplace_url: None,
+                plugin_id,
+            }
+        }
+        Some("storage") => {
+            PluginSource::Storage {
+                file_id: zip_source_url.unwrap_or_default().to_string(),
+                checksum: None,
             }
         }
         _ => {

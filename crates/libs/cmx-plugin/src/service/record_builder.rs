@@ -12,7 +12,7 @@ use crate::infrastructure::database::deployment::DeploymentCreateParams;
 use crate::infrastructure::database::plugin::PluginCreateParams;
 use crate::infrastructure::database::version_history::VersionCreateParams;
 
-/// 构建插件创建参数
+/// 构建插件创建参数。
 ///
 /// # 参数
 /// - `plugin_def`: 插件定义
@@ -21,6 +21,7 @@ use crate::infrastructure::database::version_history::VersionCreateParams;
 /// - `db_id`: 数据库ID
 /// - `zip_source_url`: 插件ZIP包来源地址
 /// - `zip_source_type`: 插件来源类型
+/// - `marketplace_source_id`: 市场版本来源 ID
 ///
 /// # 返回
 /// 插件创建参数（仅数据库列字段，不含 JOIN 补充字段）
@@ -31,6 +32,7 @@ pub fn build_plugin_create_params(
     db_id: &str,
     zip_source_url: Option<&str>,
     zip_source_type: Option<&str>,
+    marketplace_source_id: Option<&str>,
 ) -> PluginCreateParams {
     PluginCreateParams {
         id: Uuid::new_v4().to_string(),
@@ -60,6 +62,7 @@ pub fn build_plugin_create_params(
         zip_source_type: zip_source_type.map(|s| s.to_string()),
         plugin_type: Some(plugin_def.r#type.clone()),
         source_path: plugin_def.source_path.clone(),
+        marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
@@ -70,7 +73,7 @@ pub fn build_plugin_create_params(
     }
 }
 
-/// 构建版本历史创建参数
+/// 构建版本历史创建参数。
 ///
 /// # 参数
 /// - `plugin_id`: 插件ID
@@ -80,6 +83,8 @@ pub fn build_plugin_create_params(
 /// - `zip_source_url`: 插件ZIP包来源地址
 /// - `zip_source_type`: 插件来源类型
 /// - `plugin_def`: 插件定义（用于获取 plugin_type 和 source_path）
+/// - `build_type`: 构建类型（debug/release）
+/// - `marketplace_source_id`: 市场版本来源 ID
 ///
 /// # 返回
 /// 版本历史创建参数
@@ -92,6 +97,7 @@ pub fn build_version_create_params(
     zip_source_type: Option<&str>,
     plugin_def: Option<&PluginDefinition>,
     build_type: &str,
+    marketplace_source_id: Option<&str>,
 ) -> VersionCreateParams {
     let plugin_type = plugin_def.map(|d| d.r#type.clone());
     let source_path = plugin_def.and_then(|d| d.source_path.clone());
@@ -110,6 +116,7 @@ pub fn build_version_create_params(
         plugin_type,
         source_path,
         build_type: build_type.to_string(),
+        marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,

@@ -38,6 +38,8 @@ base64 = { workspace = true }
 url = { workspace = true }
 # 异步运行时
 tokio = { workspace = true, features = ["fs", "io-util"] }
+# 字节处理
+bytes = { workspace = true }
 # HTTP 客户端
 reqwest = { workspace = true }
 # 异步 trait

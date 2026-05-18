@@ -43,6 +43,8 @@ pub struct UpgradeRequest {
     pub operator: Option<String>,
     /// 构建类型 debug release
     pub  build_type : Option<String>,
+    /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
+    pub marketplace_source_id: Option<String>,
 }
 
 /// 升级响应
@@ -142,6 +144,19 @@ impl UpgradeService {
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
         let old_version = plugin.version.clone();
+
+        if plugin.marketplace_source_id.is_some() && request.marketplace_source_id.is_none() {
+            tracing::warn!(
+                "插件 {} 来自市场（source_id={}），建议通过市场升级接口进行升级",
+                request.plugin_id,
+                plugin.marketplace_source_id.as_deref().unwrap_or_default()
+            );
+        }
+
+        let effective_marketplace_source_id = request
+            .marketplace_source_id
+            .clone()
+            .or_else(|| plugin.marketplace_source_id.clone());
 
         // 步骤2: 获取新版本插件包
         let package_path = self
@@ -290,6 +305,7 @@ impl UpgradeService {
             &target_db_id,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
+            effective_marketplace_source_id.as_deref(),
         );
 
         // 步骤10.1: Upsert 插件记录（cmx_plugin）
@@ -309,6 +325,7 @@ impl UpgradeService {
             zip_source_type.as_deref(),
             Some(&plugin_def),
             build_type.as_str(),
+            effective_marketplace_source_id.as_deref(),
         );
         self.deps
             .version_history_repository
@@ -463,11 +480,11 @@ fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>
             (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
         }
         PluginSource::Remote { url, .. } => {
-            (Some("url".to_string()), Some(url.clone()))
+            (Some("remote".to_string()), Some(url.clone()))
         }
-        PluginSource::Registry { registry_url, package_name } => {
-            let url = registry_url.as_ref().map(|s| s.as_str()).unwrap_or(package_name);
-            (Some("registry".to_string()), Some(url.to_string()))
+        PluginSource::Marketplace { marketplace_url, plugin_id } => {
+            let url = marketplace_url.as_ref().map(|s| s.as_str()).unwrap_or(plugin_id);
+            (Some("marketplace".to_string()), Some(url.to_string()))
         }
         PluginSource::Storage { file_id, .. } => {
             (Some("storage".to_string()), Some(file_id.clone()))

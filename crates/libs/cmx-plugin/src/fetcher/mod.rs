@@ -1,5 +1,5 @@
 pub mod source;
 pub mod local;
 pub mod remote;
-pub mod registry;
+pub mod marketplace_fetcher;
 pub mod storage;

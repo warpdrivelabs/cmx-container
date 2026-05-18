@@ -43,6 +43,8 @@ pub struct InstallRequest {
     pub version_constraint: Option<String>,
     /// 构建类型 debug release
     pub build_type: Option<String>,
+    /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
+    pub marketplace_source_id: Option<String>,
 }
 
 /// 安装响应
@@ -337,6 +339,7 @@ impl InstallService {
             &target_db_id,
             zip_source_url.as_deref(),
             zip_source_type.as_deref(),
+            request.marketplace_source_id.as_deref(),
         );
 
         // 查询数据库是否已经有基线插件了
@@ -373,6 +376,7 @@ impl InstallService {
             zip_source_type.as_deref(),
             Some(&plugin_def),
             build_type.as_str(),
+            request.marketplace_source_id.as_deref(),
         );
         self.deps
             .version_history_repository
@@ -510,11 +514,11 @@ fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>
             (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
         }
         PluginSource::Remote { url, .. } => {
-            (Some("url".to_string()), Some(url.clone()))
+            (Some("remote".to_string()), Some(url.clone()))
         }
-        PluginSource::Registry { registry_url, package_name } => {
-            let url = registry_url.as_ref().map(|s| s.as_str()).unwrap_or(package_name);
-            (Some("registry".to_string()), Some(url.to_string()))
+        PluginSource::Marketplace { marketplace_url, plugin_id } => {
+            let url = marketplace_url.as_ref().map(|s| s.as_str()).unwrap_or(plugin_id);
+            (Some("marketplace".to_string()), Some(url.to_string()))
         }
         PluginSource::Storage { file_id, .. } => {
             (Some("storage".to_string()), Some(file_id.clone()))

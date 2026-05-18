@@ -83,9 +83,246 @@ pub struct Task {
 `#[derive(Fields)]` 提供以下方法：
 
 - `Task::field_names()` - 返回字段名列表
-- `Task::field_refs()` - 返回 FieldRef 列表
+- `Task::field_refs()` - 返回 FieldRef 列表（已废弃，使用 field_metas）
+- `Task::field_metas()` - 返回 FieldMetas（包含完整元信息）
 - `Task::sea_column_refs()` - 返回 sea-query ColumnRef（需启用 with-sea-query）
 - `Task::sea_idens()` - 返回 sea-query DynIden（需启用 with-sea-query）
+- `Task::sea_column_refs_with_rel(rel)` - 返回带指定关系的 ColumnRef（需启用 with-sea-query）
+- `task.not_none_sea_fields()` - 返回非 None 值的 SeaFields（需启用 with-sea-query）
+- `task.all_sea_fields()` - 返回所有字段的 SeaFields（需启用 with-sea-query）
+- `Task::sea_apply_select_columns(&mut select)` - 自动应用 SELECT 列（含别名）（需启用 with-sea-query）
+
+## 宏属性完整参考
+
+### `#[derive(Fields)]` 属性
+
+注册的属性标签：`field`（字段级）、`modql`（结构体级）
+
+#### 结构体级属性 `#[modql(...)]`
+
+| 属性                            | 类型       | 说明                            | 示例                                   |
+|-------------------------------|----------|-------------------------------|--------------------------------------|
+| `rel = "table_name"`          | `String` | 为所有字段设置默认关系（表名），字段级 `rel` 可覆盖 | `#[modql(rel = "todo_table")]`       |
+| `names_as_consts`             | 标志       | 为每个字段名生成常量，常量名 = 字段名大写        | `#[modql(names_as_consts)]`          |
+| `names_as_consts = "PREFIX_"` | `String` | 为每个字段名生成带前缀的常量                | `#[modql(names_as_consts = "COL_")]` |
+
+**`names_as_consts` 示例：**
+
+```rust
+#[derive(Fields)]
+#[modql(names_as_consts)]
+pub struct Todo {
+  pub id: i64,
+  pub title: String,
+}
+// 生成: Todo::ID = "id", Todo::TITLE = "title"
+
+#[derive(Fields)]
+#[modql(names_as_consts = "COL_")]
+pub struct Project {
+  pub id: i64,
+  pub name: String,
+}
+// 生成: Project::COL_ID = "id", Project::COL_NAME = "name"
+```
+
+#### 字段级属性 `#[field(...)]`
+
+| 属性                   | 类型       | 说明                                                                | 示例                                |
+|----------------------|----------|-------------------------------------------------------------------|-----------------------------------|
+| `skip`               | 标志       | 排除该字段，不参与 Fields 输出（被跳过的字段在 SqliteFromRow 中使用 Default::default()） | `#[field(skip)]`                  |
+| `name = "col_name"`  | `String` | 重命名字段，将结构体属性名映射为不同的列名                                             | `#[field(name = "description")]`  |
+| `rel = "table_name"` | `String` | 覆盖结构体级 `rel`，为该字段指定独立的关系（表名）                                      | `#[field(rel = "special_table")]` |
+| `cast_as = "type"`   | `String` | 在 sea-query 中对值进行类型转换（`CAST(value AS type)`）（需 with-sea-query）    | `#[field(cast_as = "integer")]`   |
+
+**`#[field(...)]` 综合示例：**
+
+```rust
+#[derive(Debug, Default, Fields)]
+#[modql(rel = "todo_table")]
+pub struct Todo {
+  pub id: i64,
+
+  // 覆盖结构体 rel，并重命名列
+  #[field(rel = "special_todo_table", name = "special_title_col")]
+  pub title: String,
+
+  // 仅重命名列（desc -> description）
+  #[field(name = "description")]
+  pub desc: Option<String>,
+
+  // 跳过该字段，不参与 Fields 输出
+  #[field(skip)]
+  pub other: Option<String>,
+}
+// field_names() => ["id", "special_title_col", "description"]
+// field_metas() 中 rel 分别为: Some("todo_table"), Some("special_todo_table"), Some("todo_table")
+```
+
+---
+
+### `#[derive(FilterNodes)]` 属性
+
+注册的属性标签：`modql`（字段级和结构体级）
+
+#### 结构体级属性 `#[modql(...)]`
+
+| 属性                   | 类型       | 说明                              | 示例                           |
+|----------------------|----------|---------------------------------|------------------------------|
+| `rel = "table_name"` | `String` | 为所有过滤字段设置默认关系（表名），字段级 `rel` 可覆盖 | `#[modql(rel = "task_tbl")]` |
+
+#### 字段级属性 `#[modql(...)]`
+
+| 属性                                | 类型       | 说明                                                                          | 示例                                                      |
+|-----------------------------------|----------|-----------------------------------------------------------------------------|---------------------------------------------------------|
+| `rel = "table_name"`              | `String` | 覆盖结构体级 `rel`，为该过滤字段指定独立的关系（表名）                                              | `#[modql(rel = "foo_rel")]`                             |
+| `cast_as = "type"`                | `String` | 对 sea-query 值进行类型转换（`CAST(value AS type)`）（需 with-sea-query）                | `#[modql(cast_as = "integer")]`                         |
+| `cast_column_as = "type"`         | `String` | 对 sea-query 列进行类型转换（`CAST(column AS type)`）（需 with-sea-query）               | `#[modql(cast_column_as = "text")]`                     |
+| `to_sea_condition_fn = "fn_name"` | `String` | 自定义函数：将 `OpValValue` 转换为 `sea_query::ConditionExpression`（需 with-sea-query） | `#[modql(to_sea_condition_fn = "my_to_sea_condition")]` |
+| `to_sea_value_fn = "fn_name"`     | `String` | 自定义函数：将 `serde_json::Value` 转换为 `sea_query::Value`（需 with-sea-query）        | `#[modql(to_sea_value_fn = "my_to_sea_value")]`         |
+
+**`to_sea_condition_fn` 签名：**
+
+```rust
+fn my_to_sea_condition(col: &ColumnRef, op_val_value: OpValValue) -> SeaResult<ConditionExpression>
+```
+
+**`to_sea_value_fn` 签名：**
+
+```rust
+fn my_to_sea_value(json_value: serde_json::Value) -> SeaResult<sea_query::Value>
+```
+
+> **注意：** `to_sea_condition_fn` 和 `to_sea_value_fn` 互斥，不能同时使用。它们仅适用于 `OpValsValue` 类型的字段。
+
+**`#[derive(FilterNodes)]` 综合示例：**
+
+```rust
+#[derive(Clone, FilterNodes, Default)]
+#[modql(rel = "task_tbl")]
+pub struct TaskFilter {
+  id: Option<OpValsInt64>,
+
+  // 对列进行类型转换: CAST("task_tbl"."title" AS text) = ?
+  #[modql(cast_column_as = "text")]
+  title: Option<OpValsString>,
+
+  // 覆盖结构体 rel
+  #[modql(rel = "foo_rel")]
+  label: Option<OpValsString>,
+
+  // 自定义 sea-query 条件转换函数
+  #[modql(to_sea_condition_fn = "my_to_sea_condition")]
+  ctime: Option<OpValsValue>,
+}
+```
+
+---
+
+### `#[derive(SeaFieldValue)]` 属性（需 with-sea-query）
+
+无字段属性。仅支持以下类型：
+
+- **单元素元组结构体**：自动实现 `From<T> for sea_query::Value` 和 `sea_query::Nullable`
+  - 支持的内部类型：`bool`, `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `String`, `char`
+- **简单枚举**（仅含无数据变体）：变体名作为 `sea_query::Value::String` 的值
+
+```rust
+#[derive(modql::field::SeaFieldValue)]
+pub struct EpochTime(pub i64);
+// 生成: impl From<EpochTime> for sea_query::Value { ... }
+// 生成: impl sea_query::Nullable for EpochTime { ... }
+
+#[derive(modql::field::SeaFieldValue)]
+pub enum Kind {
+  Md,
+  Pdf,
+  Unknown,
+}
+// 生成: impl From<Kind> for sea_query::Value { ... } (变体名作为字符串值)
+```
+
+---
+
+### `#[derive(SqliteFromRow)]` 属性（需 with-rusqlite）
+
+注册的属性标签：`field`（字段级）、`fields`（结构体级）
+
+复用 `#[field(...)]` 属性（与 `Fields` 宏相同）：
+
+| 属性                   | 类型       | 说明                               | 示例                               |
+|----------------------|----------|----------------------------------|----------------------------------|
+| `skip`               | 标志       | 跳过该字段，使用 `Default::default()` 填充 | `#[field(skip)]`                 |
+| `name = "col_name"`  | `String` | 重命名列                             | `#[field(name = "description")]` |
+| `rel = "table_name"` | `String` | 设置关系                             | `#[field(rel = "table")]`        |
+| `cast_as = "type"`   | `String` | 类型转换                             | `#[field(cast_as = "integer")]`  |
+
+生成的方法：
+
+- `sqlite_from_row(row: &rusqlite::Row) -> Result<Self>` - 从完整行构建
+- `sqlite_from_row_partial(row: &rusqlite::Row, prop_names: &[&str]) -> Result<Self>` - 从部分列构建（Option 字段若不在
+  prop_names 中则为 None）
+
+> **已废弃别名：** `FromSqliteRow` → 请使用 `SqliteFromRow`
+
+---
+
+### `#[derive(SqliteFromValue)]` 属性（需 with-rusqlite）
+
+无字段属性。仅支持以下类型：
+
+- **单元素元组结构体**：自动实现 `rusqlite::types::FromSql`
+- **简单枚举**（仅含无数据变体）：变体名作为字符串从 SQLite 读取
+
+```rust
+#[derive(SqliteFromValue)]
+pub struct SimpleId(i64);
+
+#[derive(SqliteFromValue)]
+pub enum DItemKind {
+  Md,
+  Pdf,
+  Unknown,
+}
+```
+
+> **已废弃别名：** `FromSqliteValue` → 请使用 `SqliteFromValue`
+
+---
+
+### `#[derive(SqliteToValue)]` 属性（需 with-rusqlite）
+
+无字段属性。仅支持以下类型：
+
+- **单元素元组结构体**：自动实现 `rusqlite::types::ToSql`
+- **简单枚举**（仅含无数据变体）：变体名作为字符串写入 SQLite
+
+```rust
+#[derive(SqliteToValue)]
+pub struct SimpleId(i64);
+
+#[derive(SqliteToValue)]
+pub enum DItemKind {
+  Md,
+  Pdf,
+  Unknown,
+}
+```
+
+> **已废弃别名：** `ToSqliteValue` → 请使用 `SqliteToValue`
+
+---
+
+### 宏属性速查表
+
+| 宏                 | 结构体属性                            | 字段属性                                                                           | Feature        |
+|-------------------|----------------------------------|--------------------------------------------------------------------------------|----------------|
+| `Fields`          | `#[modql(rel, names_as_consts)]` | `#[field(skip, name, rel, cast_as)]`                                           | -              |
+| `FilterNodes`     | `#[modql(rel)]`                  | `#[modql(rel, cast_as, cast_column_as, to_sea_condition_fn, to_sea_value_fn)]` | -              |
+| `SeaFieldValue`   | 无                                | 无                                                                              | with-sea-query |
+| `SqliteFromRow`   | 复用 `#[field(...)]`               | `#[field(skip, name, rel, cast_as)]`                                           | with-rusqlite  |
+| `SqliteFromValue` | 无                                | 无                                                                              | with-rusqlite  |
+| `SqliteToValue`   | 无                                | 无                                                                              | with-rusqlite  |
 
 ### 4. ListOptions（分页和排序）
 

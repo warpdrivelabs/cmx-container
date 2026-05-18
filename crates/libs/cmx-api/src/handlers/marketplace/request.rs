@@ -140,6 +140,34 @@ pub struct RatePluginRequest {
     pub review: Option<String>,
 }
 
+/// 从市场升级插件的请求。
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MarketUpgradeRequest {
+    /// 要升级的插件业务 ID。
+    pub plugin_id: String,
+    /// 目标版本号，为 `None` 时升级到最新稳定版。
+    pub target_version: Option<String>,
+    /// 是否强制升级（忽略版本检查）。
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// 检查插件更新的请求。
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CheckUpdatesRequest {
+    /// 要检查的插件 ID 列表，为 `None` 时检查所有已安装插件。
+    pub plugin_ids: Option<Vec<String>>,
+}
+
+/// 插件包下载查询参数。
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct MarketDownloadParams {
+    /// 插件业务 ID。
+    pub plugin_id: String,
+    /// 版本号，为 `None` 时下载最新稳定版。
+    pub version: Option<String>,
+}
+
 /// 热门插件查询过滤条件。
 #[derive(Debug, Deserialize, ToSchema, Default, Clone)]
 pub struct TrendingFilter {

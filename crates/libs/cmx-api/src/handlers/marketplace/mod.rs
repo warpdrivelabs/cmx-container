@@ -18,6 +18,9 @@
 //! | `/plugin/install` | POST | 从市场安装插件 |
 //! | `/plugin/rate` | POST | 对插件评分 |
 //! | `/plugin/rating/list` | POST | 查询评分列表 |
+//! | `/plugin/upgrade` | POST | 从市场升级插件 |
+//! | `/plugin/check-updates` | POST | 检查插件更新 |
+//! | `/plugin/download` | GET | 下载插件包 |
 //! | `/category/list` | POST | 查询分类统计 |
 //! | `/stats/trending/list` | POST | 查询热门插件 |
 //!
@@ -53,6 +56,9 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/plugin/version/list", post(marketplace_plugin_version_list))
         .route("/plugin/version/get", get(marketplace_plugin_version_get_by_id))
         .route("/plugin/install", post(marketplace_plugin_install))
+        .route("/plugin/upgrade", post(marketplace_plugin_upgrade))
+        .route("/plugin/check-updates", post(marketplace_plugin_check_updates))
+        .route("/plugin/download", get(marketplace_plugin_download))
         .route("/plugin/rate", post(marketplace_plugin_rate))
         .route("/plugin/rating/list", post(marketplace_plugin_rating_list))
         .route("/category/list", post(marketplace_category_list))

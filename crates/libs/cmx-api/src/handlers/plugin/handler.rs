@@ -32,13 +32,13 @@ fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::Plug
                 checksum: checksum.clone(),
             }
         }
-        PluginSourceRequest::Registry {
-            registry_url,
-            package_name,
+        PluginSourceRequest::Marketplace {
+            marketplace_url,
+            plugin_id,
         } => {
-            cmx_plugin::domain::plugin::PluginSource::Registry {
-                registry_url: Some(registry_url.clone()),
-                package_name: package_name.clone(),
+            cmx_plugin::domain::plugin::PluginSource::Marketplace {
+                marketplace_url: Some(marketplace_url.clone()),
+                plugin_id: plugin_id.clone(),
             }
         }
     }
@@ -72,6 +72,7 @@ pub async fn plugin_install(
         auto_activate: false,
         version_constraint: None,
         build_type: None,
+        marketplace_source_id: None,
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
@@ -159,6 +160,7 @@ pub async fn plugin_upgrade(
         force: req.force.unwrap_or(false),
         operator: req.operator,
         build_type: None,
+        marketplace_source_id: None,
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
@@ -257,6 +259,7 @@ pub async fn plugin_deploy(
     let mut force_reinstall: bool = false;
     //构建类型 debug /release
     let mut build_type:Option<String> = None;
+    let mut publish_to_marketplace: Option<bool> = None;
 
     while let Some(field) = multipart.next_field().await
         .map_err(|e| crate::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
@@ -284,6 +287,10 @@ pub async fn plugin_deploy(
                 let val = field.text().await
                     .map_err(|e| crate::Error::BadRequest(format!("读取 build_type 失败: {}", e)))?;
                 build_type = Some(val);
+            }
+            "publish_to_marketplace" => {
+                let text = field.text().await.map_err(|e| crate::Error::internal_error(format!("读取字段失败: {}", e)))?;
+                publish_to_marketplace = text.parse().ok();
             }
             _ => {}
         }
@@ -318,6 +325,7 @@ pub async fn plugin_deploy(
         db_id: target_db_id,
         force_reinstall,
         build_type,
+        publish_to_marketplace: publish_to_marketplace.unwrap_or(true),
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {
@@ -332,6 +340,12 @@ pub async fn plugin_deploy(
         install_path: result.install_path.to_string_lossy().to_string(),
         success: result.success,
         message: Some(result.message),
+        marketplace_publish: result.marketplace_publish.map(|info| MarketplacePublishInfoResponse {
+            marketplace_plugin_id: info.marketplace_plugin_id,
+            marketplace_version_id: info.marketplace_version_id,
+            storage_file_id: info.storage_file_id,
+            is_new_plugin: info.is_new_plugin,
+        }),
     };
 
     Ok(Json(ApiResp::ok(resp)))
@@ -383,10 +397,10 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         cmx_plugin::domain::plugin::PluginSource::Remote { url, .. } => {
             (Some("remote".to_string()), Some(url.clone()))
         }
-        cmx_plugin::domain::plugin::PluginSource::Registry {
-            package_name,
+        cmx_plugin::domain::plugin::PluginSource::Marketplace {
+            plugin_id,
             ..
-        } => (Some("registry".to_string()), Some(package_name.clone())),
+        } => (Some("marketplace".to_string()), Some(plugin_id.clone())),
         cmx_plugin::domain::plugin::PluginSource::Storage { file_id, .. } => {
             (Some("storage".to_string()), Some(file_id.clone()))
         }

@@ -1,6 +1,6 @@
-//! 注册表获取模块
+//! 插件市场获取模块
 //!
-//! 从远程插件注册表获取插件
+//! 从远程插件市场获取插件
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use super::source::PluginSource;
 use crate::error::{PluginError, PluginResult};
 
-/// 插件注册表信息
+/// 插件市场信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryInfo {
-    /// 注册表URL
+pub struct MarketplaceSourceInfo {
+    /// 插件市场URL
     pub url: String,
     /// 插件名称
     pub name: String,
@@ -38,8 +38,8 @@ pub struct RegistryInfo {
     pub keywords: Vec<String>,
 }
 
-impl RegistryInfo {
-    /// 创建新的注册表信息
+impl MarketplaceSourceInfo {
+    /// 创建新的插件市场信息
     pub fn new(url: String) -> Self {
         Self {
             url,
@@ -57,9 +57,9 @@ impl RegistryInfo {
     }
 }
 
-/// 注册表包版本信息
+/// 插件市场包版本信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryPackageVersion {
+pub struct MarketplacePackageVersion {
     /// 版本号
     pub version: String,
     /// 下载URL
@@ -76,9 +76,9 @@ pub struct RegistryPackageVersion {
     pub is_latest: bool,
 }
 
-/// 注册表包详情
+/// 插件市场包详情
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryPackageDetail {
+pub struct MarketplacePackageDetail {
     /// 包名
     pub name: String,
     /// 最新版本
@@ -96,15 +96,15 @@ pub struct RegistryPackageDetail {
     pub keywords: Vec<String>,
     /// 所有版本
     #[serde(default)]
-    pub versions: Vec<RegistryPackageVersion>,
+    pub versions: Vec<MarketplacePackageVersion>,
     /// 下载统计
     #[serde(default)]
     pub downloads: Option<u64>,
 }
 
-/// 注册表搜索结果
+/// 插件市场搜索结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistrySearchResult {
+pub struct MarketplaceSearchResult {
     /// 包名
     pub name: String,
     /// 版本
@@ -121,19 +121,19 @@ pub struct RegistrySearchResult {
     pub downloads: Option<u64>,
 }
 
-/// 注册表插件获取器
-pub struct RegistryFetcher {
-    /// 注册表信息
-    registry_info: RegistryInfo,
+/// 插件市场获取器
+pub struct MarketplaceFetcher {
+    /// 插件市场信息
+    registry_info: MarketplaceSourceInfo,
     /// 临时目录
     temp_dir: PathBuf,
     /// HTTP 客户端
     client: reqwest::Client,
 }
 
-impl RegistryFetcher {
-    /// 创建新的注册表获取器
-    pub fn new(registry_info: RegistryInfo, temp_dir: PathBuf) -> Self {
+impl MarketplaceFetcher {
+    /// 创建新的插件市场获取器
+    pub fn new(registry_info: MarketplaceSourceInfo, temp_dir: PathBuf) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .user_agent("CMX-Plugin-Manager/1.0")
@@ -150,55 +150,55 @@ impl RegistryFetcher {
     /// 获取插件
     pub async fn fetch(&self, source: &PluginSource) -> PluginResult<PathBuf> {
         match source {
-            PluginSource::Registry {
-                registry_url,
-                package_name,
+            PluginSource::Marketplace {
+                marketplace_url,
+                plugin_id,
                 version_constraint,
             } => {
-                let info = self.resolve_package(registry_url, package_name, version_constraint).await?;
+                let info = self.resolve_package(marketplace_url, plugin_id, version_constraint).await?;
                 self.download_package(&info).await
             }
-            _ => Err(PluginError::Fetcher("来源类型不是注册表".to_string())),
+            _ => Err(PluginError::Fetcher("来源类型不是插件市场".to_string())),
         }
     }
 
     /// 根据名称获取插件
-    pub async fn fetch_by_name(&self, package_name: &str, version_constraint: Option<String>) -> PluginResult<PathBuf> {
-        let info = self.resolve_package(&self.registry_info.url, package_name, &version_constraint).await?;
+    pub async fn fetch_by_name(&self, plugin_id: &str, version_constraint: Option<String>) -> PluginResult<PathBuf> {
+        let info = self.resolve_package(&self.registry_info.url, plugin_id, &version_constraint).await?;
         self.download_package(&info).await
     }
 
     /// 解析包信息
     ///
-    /// 从注册表查询包信息，获取下载URL和校验和。
+    /// 从插件市场查询包信息，获取下载URL和校验和。
     pub async fn resolve_package(
         &self,
-        registry_url: &str,
-        package_name: &str,
+        marketplace_url: &str,
+        plugin_id: &str,
         version_constraint: &Option<String>,
-    ) -> PluginResult<RegistryInfo> {
-        let url = self.build_package_url(registry_url, package_name);
+    ) -> PluginResult<MarketplaceSourceInfo> {
+        let url = self.build_package_url(marketplace_url, plugin_id);
 
-        tracing::info!("查询注册表: {}", url);
+        tracing::info!("查询插件市场: {}", url);
 
         let response = self.client.get(&url)
             .send()
             .await
-            .map_err(|e| PluginError::Fetcher(format!("请求注册表失败: {}", e)))?;
+            .map_err(|e| PluginError::Fetcher(format!("请求插件市场失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("注册表响应错误: {} - {}", response.status(), package_name)));
+            return Err(PluginError::Fetcher(format!("插件市场响应错误: {} - {}", response.status(), plugin_id)));
         }
 
-        let detail: RegistryPackageDetail = response.json()
+        let detail: MarketplacePackageDetail = response.json()
             .await
-            .map_err(|e| PluginError::Fetcher(format!("解析注册表响应失败: {}", e)))?;
+            .map_err(|e| PluginError::Fetcher(format!("解析插件市场响应失败: {}", e)))?;
 
         let version_info = self.select_version(&detail, version_constraint)?;
 
-        let info = RegistryInfo {
-            url: registry_url.to_string(),
-            name: package_name.to_string(),
+        let info = MarketplaceSourceInfo {
+            url: marketplace_url.to_string(),
+            name: plugin_id.to_string(),
             version: version_info.version.clone(),
             download_url: version_info.download_url.clone(),
             checksum: version_info.checksum.clone(),
@@ -212,7 +212,7 @@ impl RegistryFetcher {
 
         tracing::info!(
             "解析包成功: {}@{} -> {}",
-            package_name,
+            plugin_id,
             info.version,
             info.download_url
         );
@@ -223,7 +223,7 @@ impl RegistryFetcher {
     /// 下载包
     ///
     /// 从下载URL下载插件包到临时目录。
-    pub async fn download_package(&self, info: &RegistryInfo) -> PluginResult<PathBuf> {
+    pub async fn download_package(&self, info: &MarketplaceSourceInfo) -> PluginResult<PathBuf> {
         if info.download_url.is_empty() {
             return Err(PluginError::Fetcher("下载URL为空".to_string()));
         }
@@ -272,11 +272,11 @@ impl RegistryFetcher {
 
     /// 搜索插件
     ///
-    /// 在注册表中搜索插件。
-    pub async fn search(&self, registry_url: &str, query: &str) -> PluginResult<Vec<RegistrySearchResult>> {
-        let url = self.build_search_url(registry_url, query);
+    /// 在插件市场中搜索插件。
+    pub async fn search(&self, marketplace_url: &str, query: &str) -> PluginResult<Vec<MarketplaceSearchResult>> {
+        let url = self.build_search_url(marketplace_url, query);
 
-        tracing::info!("搜索注册表: {}", url);
+        tracing::info!("搜索插件市场: {}", url);
 
         let response = self.client.get(&url)
             .send()
@@ -287,7 +287,7 @@ impl RegistryFetcher {
             return Err(PluginError::Fetcher(format!("搜索响应错误: {}", response.status())));
         }
 
-        let results: Vec<RegistrySearchResult> = response.json()
+        let results: Vec<MarketplaceSearchResult> = response.json()
             .await
             .map_err(|e| PluginError::Fetcher(format!("解析搜索结果失败: {}", e)))?;
 
@@ -298,9 +298,9 @@ impl RegistryFetcher {
 
     /// 获取插件详情
     ///
-    /// 获取插件在注册表中的详细信息。
-    pub async fn get_package_info(&self, registry_url: &str, package_name: &str) -> PluginResult<RegistryPackageDetail> {
-        let url = self.build_package_url(registry_url, package_name);
+    /// 获取插件在插件市场中的详细信息。
+    pub async fn get_package_info(&self, marketplace_url: &str, plugin_id: &str) -> PluginResult<MarketplacePackageDetail> {
+        let url = self.build_package_url(marketplace_url, plugin_id);
 
         tracing::info!("获取包详情: {}", url);
 
@@ -313,7 +313,7 @@ impl RegistryFetcher {
             return Err(PluginError::Fetcher(format!("获取详情响应错误: {}", response.status())));
         }
 
-        let detail: RegistryPackageDetail = response.json()
+        let detail: MarketplacePackageDetail = response.json()
             .await
             .map_err(|e| PluginError::Fetcher(format!("解析包详情失败: {}", e)))?;
 
@@ -323,24 +323,24 @@ impl RegistryFetcher {
     }
 
     /// 构建包URL
-    fn build_package_url(&self, registry_url: &str, package_name: &str) -> String {
-        let base = registry_url.trim_end_matches('/');
-        format!("{}/packages/{}", base, package_name)
+    fn build_package_url(&self, marketplace_url: &str, plugin_id: &str) -> String {
+        let base = marketplace_url.trim_end_matches('/');
+        format!("{}/api/marketplace/plugin/download?plugin_id={}", base, plugin_id)
     }
 
     /// 构建搜索URL
-    fn build_search_url(&self, registry_url: &str, query: &str) -> String {
-        let base = registry_url.trim_end_matches('/');
+    fn build_search_url(&self, marketplace_url: &str, query: &str) -> String {
+        let base = marketplace_url.trim_end_matches('/');
         let encoded = urlencoding::encode(query);
-        format!("{}/search?q={}", base, encoded)
+        format!("{}/api/marketplace/plugin/search?q={}", base, encoded)
     }
 
     /// 选择版本
     fn select_version(
         &self,
-        detail: &RegistryPackageDetail,
+        detail: &MarketplacePackageDetail,
         version_constraint: &Option<String>,
-    ) -> PluginResult<RegistryPackageVersion> {
+    ) -> PluginResult<MarketplacePackageVersion> {
         if detail.versions.is_empty() {
             return Err(PluginError::Fetcher(format!("包 {} 没有可用版本", detail.name)));
         }
@@ -388,15 +388,15 @@ impl RegistryFetcher {
     }
 
     /// 提取文件名
-    fn extract_filename(&self, url: &str, package_name: &str, version: &str) -> String {
+    fn extract_filename(&self, url: &str, plugin_id: &str, version: &str) -> String {
         if let Ok(parsed) = url::Url::parse(url)
             && let Some(mut segments) = parsed.path_segments()
-                && let Some(filename) = segments.next_back()
-                    && !filename.is_empty() {
-                        return filename.to_string();
-                    }
+            && let Some(filename) = segments.next_back()
+            && !filename.is_empty() {
+            return filename.to_string();
+        }
 
-        format!("{}-{}.zip", package_name, version)
+        format!("{}-{}.zip", plugin_id, version)
     }
 
     /// 验证校验和
@@ -444,29 +444,29 @@ mod tests {
 
     #[test]
     fn test_registry_info_new() {
-        let info = RegistryInfo::new("https://registry.example.com".to_string());
+        let info = MarketplaceSourceInfo::new("https://registry.example.com".to_string());
         assert_eq!(info.url, "https://registry.example.com");
         assert!(info.name.is_empty());
     }
 
     #[test]
     fn test_extract_filename() {
-        let fetcher = RegistryFetcher::new(
-            RegistryInfo::new("https://registry.example.com".to_string()),
+        let fetcher = MarketplaceFetcher::new(
+            MarketplaceSourceInfo::new("https://registry.example.com".to_string()),
             PathBuf::from("/tmp"),
         );
 
         let filename = fetcher.extract_filename(
             "https://example.com/packages/my-plugin-1.0.0.zip",
             "my-plugin",
-            "1.0.0"
+            "1.0.0",
         );
         assert_eq!(filename, "my-plugin-1.0.0.zip");
 
         let filename = fetcher.extract_filename(
             "https://example.com/download",
             "my-plugin",
-            "1.0.0"
+            "1.0.0",
         );
         assert_eq!(filename, "my-plugin-1.0.0.zip");
     }

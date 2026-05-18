@@ -30,12 +30,12 @@ pub enum PluginSourceRequest {
         /// 校验和
         checksum: Option<String>,
     },
-    /// 注册表
-    Registry {
-        /// 注册表 URL
-        registry_url: String,
-        /// 包名
-        package_name: String,
+    /// 插件市场
+    Marketplace {
+        /// 市场 URL
+        marketplace_url: String,
+        /// 插件ID
+        plugin_id: String,
     },
 }
 
@@ -95,6 +95,8 @@ pub struct PluginDeployRequest {
 
     /// 是否覆盖安装 (可选，默认 false)
     pub force_reinstall: Option<bool>,
+
+    pub publish_to_marketplace: Option<bool>,
 }
 
 

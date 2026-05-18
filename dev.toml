@@ -41,6 +41,7 @@ health_check_timeout = 5
 db_id = "postgres2"
 db_type = "postgres"
 db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
+#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
 default = false
 health_check_interval = 30
 health_check_timeout = 3

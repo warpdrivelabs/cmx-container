@@ -37,6 +37,8 @@ pub struct VersionRecord {
     pub plugin_type: Option<String>,
     /// 源码路径
     pub source_path: Option<String>,
+    /// 市场版本来源 ID。
+    pub marketplace_source_id: Option<String>,
     /// 创建时间
     pub create_time: DateTime<Utc>,
     /// 更新时间
@@ -87,6 +89,8 @@ pub struct VersionCreateParams {
     /// 构建类型 debug/release
     pub build_type: String,
 
+    /// 市场版本来源 ID。
+    pub marketplace_source_id: Option<String>,
 
     /// 创建时间
     pub create_time: DateTime<Utc>,

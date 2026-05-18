@@ -65,6 +65,8 @@ pub struct PluginRecord {
     pub plugin_type: Option<String>,
     /// 源码路径 (对应列: source_path)
     pub source_path: Option<String>,
+    /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
+    pub marketplace_source_id: Option<String>,
     /// 创建时间 (对应列: create_time)
     pub create_time: DateTime<Utc>,
     /// 更新时间 (对应列: update_time)
@@ -143,6 +145,8 @@ pub struct PluginCreateParams {
     pub plugin_type: Option<String>,
     /// 源码路径
     pub source_path: Option<String>,
+    /// 市场版本来源 ID。
+    pub marketplace_source_id: Option<String>,
     /// 创建时间
     pub create_time: DateTime<Utc>,
     /// 更新时间
@@ -189,6 +193,7 @@ impl PluginCreateParams {
             zip_source_type: self.zip_source_type.clone(),
             plugin_type: self.plugin_type.clone(),
             source_path: self.source_path.clone(),
+            marketplace_source_id: self.marketplace_source_id.clone(),
             create_time: self.create_time,
             update_time: self.update_time,
             archived: self.archived,
@@ -253,6 +258,8 @@ pub struct PluginUpdateParams {
     pub plugin_type: Option<String>,
     /// 源码路径
     pub source_path: Option<String>,
+    /// 市场版本来源 ID。
+    pub marketplace_source_id: Option<String>,
     /// 更新人ID
     pub update_by: Option<String>,
     /// 更新人名称

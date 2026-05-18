@@ -221,6 +221,7 @@ impl AutoInstallService {
                     force: false,
                     operator: Some("auto_install".to_string()),
                     build_type: None,
+                    marketplace_source_id: None,
                 };
                 self.upgrade_service.upgrade(request).await?;
                 Ok(InstallAction::Upgraded)
@@ -238,6 +239,7 @@ impl AutoInstallService {
                     auto_activate: config.auto_activate,
                     version_constraint: None,
                     build_type: None,
+                    marketplace_source_id: None,
                 };
                 self.install_service.install(request).await?;
                 Ok(InstallAction::Installed)
@@ -257,9 +259,13 @@ impl AutoInstallService {
                 url: config.source_url.clone().unwrap_or_default(),
                 checksum: None,
             },
-            "registry" => PluginSource::Registry {
-                registry_url: None,
-                package_name: config.source_url.clone().unwrap_or_default(),
+            "registry" | "marketplace" => PluginSource::Marketplace {
+                marketplace_url: None,
+                plugin_id: config.source_url.clone().unwrap_or_default(),
+            },
+            "storage" => PluginSource::Storage {
+                file_id: config.source_url.clone().unwrap_or_default(),
+                checksum: None,
             },
             _ => {
                 warn!(

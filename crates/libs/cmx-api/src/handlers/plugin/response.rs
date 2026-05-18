@@ -58,7 +58,7 @@ pub struct PluginInfoResponse {
     pub vendor_contact: Option<String>,
     /// 扩展元数据
     pub metadata: Option<serde_json::Value>,
-    /// 来源类型: local, url, registry
+    /// 来源类型: local, url, marketplace
     pub source_type: Option<String>,
     /// 来源URL
     pub source_url: Option<String>,
@@ -161,6 +161,8 @@ pub struct PluginDeployResponse {
     pub success: bool,
     /// 消息
     pub message: Option<String>,
+
+    pub marketplace_publish: Option<MarketplacePublishInfoResponse>,
 }
 
 /// 插件函数响应
@@ -176,4 +178,13 @@ pub struct PluginFunctionsResponse {
     pub plugin_version: String,
     /// 插件函数列表（JSON 格式的 api.json 内容）
     pub functions: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketplacePublishInfoResponse {
+    pub marketplace_plugin_id: String,
+    pub marketplace_version_id: String,
+    pub storage_file_id: String,
+    pub is_new_plugin: bool,
 }

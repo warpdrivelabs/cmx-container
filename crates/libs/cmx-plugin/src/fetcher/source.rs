@@ -20,13 +20,13 @@ pub enum PluginSource {
         /// 校验和
         checksum: Option<String>,
     },
-    /// 注册表
-    Registry {
-        /// 注册表URL
-        registry_url: String,
-        /// 包名
-        package_name: String,
-        /// 版本约束
+    /// 插件市场。
+    Marketplace {
+        /// 市场服务地址。
+        marketplace_url: String,
+        /// 插件ID。
+        plugin_id: String,
+        /// 版本约束。
         version_constraint: Option<String>,
     },
     /// cmx-storage 存储
@@ -48,12 +48,12 @@ impl PluginSource {
     pub fn remote(url: String, checksum: Option<String>) -> Self {
         Self::Remote { url, checksum }
     }
-    
-    /// 创建注册表来源
-    pub fn registry(registry_url: String, package_name: String, version_constraint: Option<String>) -> Self {
-        Self::Registry {
-            registry_url,
-            package_name,
+
+    /// 创建插件市场来源。
+    pub fn marketplace(marketplace_url: String, plugin_id: String, version_constraint: Option<String>) -> Self {
+        Self::Marketplace {
+            marketplace_url,
+            plugin_id,
             version_constraint,
         }
     }
@@ -72,10 +72,10 @@ impl PluginSource {
     pub fn is_remote(&self) -> bool {
         matches!(self, PluginSource::Remote { .. })
     }
-    
-    /// 检查是否为注册表来源
-    pub fn is_registry(&self) -> bool {
-        matches!(self, PluginSource::Registry { .. })
+
+    /// 检查是否为插件市场来源。
+    pub fn is_marketplace(&self) -> bool {
+        matches!(self, PluginSource::Marketplace { .. })
     }
 
     /// 检查是否为存储来源
@@ -91,8 +91,8 @@ pub enum SourceType {
     Local,
     /// 远程
     Remote,
-    /// 注册表
-    Registry,
+    /// 插件市场。
+    Marketplace,
     /// 存储
     Storage,
 }
@@ -103,7 +103,7 @@ impl PluginSource {
         match self {
             PluginSource::Local { .. } => SourceType::Local,
             PluginSource::Remote { .. } => SourceType::Remote,
-            PluginSource::Registry { .. } => SourceType::Registry,
+            PluginSource::Marketplace { .. } => SourceType::Marketplace,
             PluginSource::Storage { .. } => SourceType::Storage,
         }
     }

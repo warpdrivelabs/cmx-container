@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use super::model::{
     CategoryInfo, MarketplacePlugin, MarketplacePluginForUpdate, MarketplacePluginVersion,
-    MarketplaceRatingForCreate,
+    MarketplacePluginVersionForCreate, MarketplaceRatingForCreate,
 };
 use crate::error::{PluginError, PluginResult};
 
@@ -128,28 +128,28 @@ impl MarketplaceRepository {
     ) -> PluginResult<()> {
         let sql = r#"
             UPDATE cmx_marketplace_plugin SET
-                name = COALESCE($2, name),
-                description = COALESCE($3, description),
-                short_description = COALESCE($4, short_description),
-                icon_url = COALESCE($5, icon_url),
-                category = COALESCE($6, category),
+                name = COALESCE($2::varchar, name),
+                description = COALESCE($3::text, description),
+                short_description = COALESCE($4::varchar, short_description),
+                icon_url = COALESCE($5::varchar, icon_url),
+                category = COALESCE($6::varchar, category),
                 tags = COALESCE($7::jsonb, tags),
-                vendor_name = COALESCE($8, vendor_name),
-                vendor_url = COALESCE($9, vendor_url),
-                vendor_contact = COALESCE($10, vendor_contact),
-                license_type = COALESCE($11, license_type),
-                homepage_url = COALESCE($12, homepage_url),
-                documentation_url = COALESCE($13, documentation_url),
-                repository_url = COALESCE($14, repository_url),
-                status = COALESCE($15, status),
-                is_featured = COALESCE($16, is_featured),
-                is_official = COALESCE($17, is_official),
-                domain_code = COALESCE($18, domain_code),
-                application_code = COALESCE($19, application_code),
-                module_code = COALESCE($20, module_code),
-                plugin_type = COALESCE($21, plugin_type),
+                vendor_name = COALESCE($8::varchar, vendor_name),
+                vendor_url = COALESCE($9::varchar, vendor_url),
+                vendor_contact = COALESCE($10::varchar, vendor_contact),
+                license_type = COALESCE($11::varchar, license_type),
+                homepage_url = COALESCE($12::varchar, homepage_url),
+                documentation_url = COALESCE($13::varchar, documentation_url),
+                repository_url = COALESCE($14::varchar, repository_url),
+                status = COALESCE($15::varchar, status),
+                is_featured = COALESCE($16::smallint, is_featured),
+                is_official = COALESCE($17::smallint, is_official),
+                domain_code = COALESCE($18::varchar, domain_code),
+                application_code = COALESCE($19::varchar, application_code),
+                module_code = COALESCE($20::varchar, module_code),
+                plugin_type = COALESCE($21::varchar, plugin_type),
                 update_time = NOW()
-            WHERE plugin_id = $1
+            WHERE plugin_id = $1::varchar
         "#;
 
         let params = json!([
@@ -423,6 +423,72 @@ impl MarketplaceRepository {
         let row = result.iter().next().unwrap();
         let schema = result.schema.as_ref();
         Ok(Some(Self::row_to_version(row, schema)))
+    }
+
+    /// 更新版本记录。
+    ///
+    /// 根据 plugin_id + version 定位已有版本记录，使用 COALESCE 部分更新非 None 字段。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件业务 ID。
+    /// * `version` - 版本号。
+    /// * `data` - 版本创建请求（字段复用，非 None 字段参与更新）。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库操作失败时返回错误。
+    pub async fn update_version_by_plugin_id_and_version(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        data: &MarketplacePluginVersionForCreate,
+    ) -> PluginResult<()> {
+        let sql = r#"
+            UPDATE cmx_marketplace_plugin_version SET
+                version_rank = COALESCE($3::int4, version_rank),
+                changelog = COALESCE($4::text, changelog),
+                release_notes = COALESCE($5::text, release_notes),
+                download_url = COALESCE($6::varchar, download_url),
+                storage_file_id = COALESCE($7::varchar, storage_file_id),
+                package_size = COALESCE($8::int8, package_size),
+                checksum = COALESCE($9::varchar, checksum),
+                min_platform_version = COALESCE($10::varchar, min_platform_version),
+                max_platform_version = COALESCE($11::varchar, max_platform_version),
+                dependencies = COALESCE($12::jsonb, dependencies),
+                compatibility = COALESCE($13::jsonb, compatibility),
+                status = COALESCE($14::varchar, status),
+                is_latest = COALESCE($15::smallint, is_latest),
+                is_stable = COALESCE($16::smallint, is_stable),
+                update_time = NOW()
+            WHERE plugin_id = $1::varchar AND version = $2::varchar AND archived = 0
+        "#;
+
+        let params = json!([
+            plugin_id,
+            version,
+            data.version_rank,
+            data.changelog,
+            data.release_notes,
+            data.download_url,
+            data.storage_file_id,
+            data.package_size,
+            data.checksum,
+            data.min_platform_version,
+            data.max_platform_version,
+            data.dependencies,
+            data.compatibility,
+            data.status,
+            data.is_latest,
+            data.is_stable,
+        ]);
+
+        self.db_manager
+            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .await
+            .map_err(|e| PluginError::Database(format!("更新市场版本记录失败: {}", e)))?;
+
+        Ok(())
     }
 
     /// 插入或更新评分记录。
@@ -705,6 +771,79 @@ impl MarketplaceRepository {
         }
 
         Ok(categories)
+    }
+
+    /// 重置指定插件所有版本的 `is_latest` 标志为 0。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件业务 ID。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库操作失败时返回错误。
+    pub async fn reset_is_latest(&self, plugin_id: &str) -> PluginResult<()> {
+        let sql = r#"
+            UPDATE cmx_marketplace_plugin_version
+            SET is_latest = 0, update_time = NOW()
+            WHERE plugin_id = $1
+        "#;
+        let params = json!([plugin_id]);
+        self.db_manager
+            .execute_sql_with_json(&self.default_db_id, None, sql, params)
+            .await
+            .map_err(|e| PluginError::Database(format!("重置is_latest失败: {}", e)))?;
+        Ok(())
+    }
+
+    /// 批量查询多个插件的最新发布版本。
+    ///
+    /// 使用 `DISTINCT ON` 按 `plugin_id` 去重，返回每个插件的最新版本。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_ids` - 插件业务 ID 列表。
+    ///
+    /// # Returns
+    ///
+    /// 以 `plugin_id` 为键、最新版本信息为值的哈希表。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库操作失败时返回错误。
+    pub async fn get_latest_versions_batch(
+        &self,
+        plugin_ids: &[String],
+    ) -> PluginResult<std::collections::HashMap<String, MarketplacePluginVersion>> {
+        if plugin_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let sql = r#"
+            SELECT DISTINCT ON (plugin_id)
+                id, plugin_id, version, version_rank, changelog,
+                release_notes, download_url, storage_file_id, package_size, checksum,
+                min_platform_version, max_platform_version, dependencies,
+                compatibility, status, is_latest, is_stable,
+                download_count, published_at, archived,
+                create_time, update_time, create_by, create_name,
+                update_by, update_name
+            FROM cmx_marketplace_plugin_version
+            WHERE plugin_id = ANY($1) AND status = 'published' AND archived = 0
+            ORDER BY plugin_id, version_rank DESC
+        "#;
+        let params = json![plugin_ids];
+        let result = self
+            .db_manager
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_latest_versions_batch")
+            .await
+            .map_err(|e| PluginError::Database(format!("批量查询最新版本失败: {}", e)))?;
+        let schema = result.schema.as_ref();
+        let mut map = std::collections::HashMap::new();
+        for row in result.iter() {
+            let version = Self::row_to_version(row, schema);
+            map.insert(version.plugin_id.clone(), version);
+        }
+        Ok(map)
     }
 
     // =========================================================================

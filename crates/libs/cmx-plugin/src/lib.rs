@@ -109,7 +109,7 @@ pub use audit::record::{AuditRecord, OperationType as AuditOperationType, Operat
 pub use fetcher::source::PluginSource as FetcherPluginSource;
 pub use fetcher::local::LocalFetcher;
 pub use fetcher::remote::RemoteFetcher;
-pub use fetcher::registry::{RegistryFetcher, RegistryInfo, RegistryPackageDetail, RegistrySearchResult};
+pub use fetcher::marketplace_fetcher::{MarketplaceFetcher, MarketplaceSourceInfo, MarketplacePackageDetail, MarketplaceSearchResult};
 
 pub use host_functions::PluginHostFunctions;
 

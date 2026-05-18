@@ -141,22 +141,25 @@ impl PackageUtils {
                     .await
                     .map_err(|e| { tracing::error!("获取远程插件包失败: {} - {}", error_context, e); e })
             }
-            PluginSource::Registry {
-                registry_url,
-                package_name,
+            PluginSource::Marketplace {
+                marketplace_url,
+                plugin_id,
             } => {
-                let registry_info = crate::fetcher::registry::RegistryInfo::new(
-                    registry_url.clone().unwrap_or_default(),
+                let marketplace_source_info = crate::fetcher::marketplace_fetcher::MarketplaceSourceInfo::new(
+                    marketplace_url.clone().unwrap_or_default(),
                 );
-                let fetcher = crate::fetcher::registry::RegistryFetcher::new(
-                    registry_info,
+                let fetcher = crate::fetcher::marketplace_fetcher::MarketplaceFetcher::new(
+                    marketplace_source_info,
                     self.deps.temp_root.clone(),
                 );
 
                 fetcher
-                    .fetch_by_name(package_name, version_constraint.map(|s| s.to_string()))
+                    .fetch_by_name(plugin_id, version_constraint.map(|s| s.to_string()))
                     .await
-                    .map_err(|e| { tracing::error!("从注册表获取插件包失败: {} - {}", error_context, e); e })
+                    .map_err(|e| {
+                        tracing::error!("从插件市场获取插件包失败: {} - {}", error_context, e);
+                        e
+                    })
             }
             PluginSource::Storage { file_id, checksum } => {
                 let fetcher = crate::fetcher::storage::StorageFetcher::new(self.deps.temp_root.clone());
