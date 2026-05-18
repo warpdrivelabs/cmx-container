@@ -109,6 +109,7 @@ enabled = false
 # source_path = "plugins/source/cmx-debug.zip"
 # is_critical = true
 
+
 #数据库迁移相关配置
 [migration]
 # 迁移文件目录
@@ -122,11 +123,11 @@ lock_timeout = 60
 # 文件存储配置
 # ============================================
 [storage]
-default_platform = "local-1"
+default_platform = "minio"
 
 # 本地文件系统存储
 [[storage.instances]]
-platform = "local-1"
+platform = "local"
 storage_type = "local"
 enable_storage = true
 domain = "http://localhost:8080/files/"
@@ -137,7 +138,7 @@ path_patterns = "**/*"
 
 # MinIO (S3 兼容) 存储
 [[storage.instances]]
-platform = "amazon-s3-1"
+platform = "minio"
 storage_type = "s3"
 enable_storage = true
 access_key = "jRszdym59WToFPfmvr7O"
