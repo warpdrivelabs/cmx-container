@@ -15,19 +15,10 @@ pub struct DemoRequest {
 }
 
 /// 示例响应 — 用于演示函数的业务结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DemoResponse {
     pub message: String,
     pub total: u32,
-}
-
-impl Default for DemoResponse {
-    fn default() -> Self {
-        Self {
-            message: String::new(),
-            total: 0,
-        }
-    }
 }
 
 //route_check 使用

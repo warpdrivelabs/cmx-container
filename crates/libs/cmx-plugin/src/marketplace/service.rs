@@ -224,7 +224,7 @@ impl MarketplaceService {
                 req.plugin_id, req.version
             );
             self.repo
-                .update_version_by_plugin_id_and_version(&req.plugin_id, &req.version, &req)
+                .update_version_by_plugin_id_and_version(&req.plugin_id, &req.version, req)
                 .await?;
             return Ok(());
         }

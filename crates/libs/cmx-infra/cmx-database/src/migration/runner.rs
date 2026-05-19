@@ -699,15 +699,13 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
                 statements.push(&sql[last_pos..byte_pos]);
                 last_pos = byte_pos + 1;
             }
-            '-' => {
-                if iter.peek().map(|&(_, c)| c) == Some('-') {
-                    iter.next();
-                    while let Some(&(_, c)) = iter.peek() {
-                        if c == '\n' {
-                            break;
-                        }
-                        iter.next();
+            '-' if iter.peek().map(|&(_, c)| c) == Some('-') => {
+                iter.next();
+                while let Some(&(_, c)) = iter.peek() {
+                    if c == '\n' {
+                        break;
                     }
+                    iter.next();
                 }
             }
             _ => {}
