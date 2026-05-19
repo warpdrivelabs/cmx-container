@@ -15,6 +15,7 @@ use crate::config::{init_cache, init_datasources, init_global_config_with_nacos,
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
+use cmx_utils::ConfigManager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -142,14 +143,26 @@ async fn main() -> Result<()> {
         tower_http::services::ServeDir::new(&web_config.web_folder),
     ));
 
-    let listener = TcpListener::bind("0.0.0.0:8080")
+    let server_host = ConfigManager::global()
+        .get_string("server.host")
+        .unwrap_or_else(|_| "0.0.0.0".to_string());
+    let server_port: u16 = ConfigManager::global()
+        .get_string("server.port")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()
+        .unwrap_or(8080);
+
+    let listener = TcpListener::bind(format!("{}:{}", server_host, server_port))
         .await
         .map_err(|e| Error::ServerSetup(format!("绑定地址失败: {}", e)))?;
+
+    let actual_port = listener.local_addr()?.port();
 
     info!("{}", "=".repeat(60));
     info!("🚀 {:<44} 🚀", "Web 服务器启动成功");
     info!("{}", "=".repeat(60));
-    info!("   监听地址：{:?}", listener.local_addr().unwrap());
+    info!("   监听地址：{}:{}", server_host, actual_port);
+    info!("   (配置端口：{})", server_port);
     info!("   静态文件目录：{}", web_config.web_folder);
     info!("   日志目录：{}", log_dir);
     info!("{}", "-".repeat(60));

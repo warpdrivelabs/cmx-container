@@ -47,7 +47,7 @@ pub struct AutoInstallPlugin {
     /// 来源地址（根据 source_type 解释为不同含义）
     /// - local: 文件系统路径
     /// - remote: 远程 URL
-    /// - marketplace: 插件 ID
+    /// - marketplace: 插件市场地址 例如 http://marketplace.yunext.com
     /// - storage: 文件 ID
     pub source_path: String,
     /// 是否关键插件（安装失败阻止启动）
@@ -257,8 +257,9 @@ impl AutoInstallService {
                 checksum: None,
             },
             "registry" | "marketplace" => PluginSource::Marketplace {
-                marketplace_url: None,
-                plugin_id: config.source_path.clone(),
+                //fixme:这里需要填写插件服务的地址
+                marketplace_url: Some(config.source_path.clone()),
+                plugin_id: config.plugin_id.clone(),
             },
             "storage" => PluginSource::Storage {
                 file_id: config.source_path.clone(),

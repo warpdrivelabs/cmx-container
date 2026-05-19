@@ -99,6 +99,9 @@ use utoipa::OpenApi;
         crate::handlers::marketplace::handler::marketplace_plugin_rating_list,
         crate::handlers::marketplace::handler::marketplace_category_list,
         crate::handlers::marketplace::handler::marketplace_trending_list,
+        crate::handlers::marketplace::handler::marketplace_plugin_upgrade,
+        crate::handlers::marketplace::handler::marketplace_plugin_check_updates,
+        crate::handlers::marketplace::handler::marketplace_plugin_download,
         // Storage handlers
         cmx_storage::handler::upload_handler,
         cmx_storage::handler::download_handler,
