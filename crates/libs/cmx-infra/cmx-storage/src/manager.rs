@@ -153,4 +153,26 @@ impl StorageManager {
     pub fn has_platform(&self, platform: &str) -> bool {
         self.backends.contains_key(platform)
     }
+
+    /// 获取所有启用直接访问的本地存储配置。
+    ///
+    /// 筛选条件：`storage_type == Local` 且 `enable_access == true`。
+    /// 用于为本地存储注册 axum 静态文件服务路由。
+    ///
+    /// # Returns
+    ///
+    /// 返回满足条件的配置列表，每项包含 `path_patterns`（路由路径）和 `storage_path`（物理目录）。
+    pub fn get_local_access_configs(&self) -> Vec<(&str, &str)> {
+        self.configs
+            .iter()
+            .filter(|(_, cfg)| {
+                cfg.storage_type == crate::config::StorageType::Local && cfg.enable_access
+            })
+            .filter_map(|(_, cfg)| {
+                let path_pattern = cfg.path_patterns.as_deref()?;
+                let storage_path = cfg.storage_path.as_deref()?;
+                Some((path_pattern, storage_path))
+            })
+            .collect()
+    }
 }

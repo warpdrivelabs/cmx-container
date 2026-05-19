@@ -244,9 +244,9 @@ enable_storage = true
 access_key = "your-access-key"
 secret_key = "your-secret-key"
 region = "us-east-1"
-endpoint = "http://192.168.254.204:9000/"
-bucket_name = "gateway-core-data"
-domain = "http://192.168.254.204:9001/"
+endpoint = "http://192.168.1.14:9000/"
+bucket_name = "cmx-bucket"
+domain = "http://192.168.1.14:9000/"
 base_path = "portalcenter/"
 ```
 
@@ -733,10 +733,10 @@ match service.upload(request).await {
 
 不同存储类型使用不同的日期目录格式：
 
-| 存储类型  | 路径格式                                                  | 示例                                   |
-|-------|-------------------------------------------------------|--------------------------------------|
-| Local | `{base_path}/{object_type}/{yyyyMM}/{uuid}.{ext}`     | `uploads/avatar/202605/a1b2c3d4.jpg` |
-| S3    | `{base_path}/{object_type}/{yyyy/MM/dd}/{uuid}.{ext}` | `s3/avatar/2026/05/15/a1b2c3d4.jpg`  |
+| 存储类型  | 路径格式                                                | 示例                                   |
+|-------|-----------------------------------------------------|--------------------------------------|
+| Local | `{base_path}/{object_type}/{yyyyMM}/{uuid}.{ext}`   | `uploads/avatar/202605/a1b2c3d4.jpg` |
+| S3    | `{base_path}/{object_type}/{yyyyMMdd}/{uuid}.{ext}` | `s3/avatar/2026/05/15/a1b2c3d4.jpg`  |
 
 Local 存储使用年月（`yyyyMM`）作为目录层级，简化目录结构；S3 存储保持年月日（`yyyy/MM/dd`）的细粒度目录结构。
 

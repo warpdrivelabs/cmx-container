@@ -18,6 +18,9 @@ pub use crate::Error;
 /// 从全局配置中加载存储配置，创建 `StorageManager` 和 `DefaultStorageService`，
 /// 并注册到 `GlobalStorageService` 全局单例。
 ///
+/// 同时，对于所有 `enable_access=true` 的本地存储实例，将其 `path_patterns` 和
+/// `storage_path` 保存到全局，供 main.rs 注册 axum 静态文件服务路由。
+///
 /// 必须在 `init_datasources` 之后调用，因为存储服务依赖数据库进行文件元信息管理。
 ///
 /// # Returns
@@ -36,12 +39,27 @@ pub async fn init_storage() -> crate::Result<()> {
             .map_err(|e| Error::StorageInit(format!("存储管理器初始化失败: {}", e)))?
     );
 
+    // 收集本地存储的静态文件访问配置
+    let local_access_configs: Vec<(String, String)> = manager
+        .get_local_access_configs()
+        .into_iter()
+        .map(|(pattern, path)| (pattern.to_string(), path.to_string()))
+        .collect();
+
     let db_manager = get_default_db_manager();
     let service: Arc<dyn cmx_storage::service::StorageService> =
         Arc::new(DefaultStorageService::new(manager, db_manager));
 
     GlobalStorageService::initialize(service)
         .map_err(|e| Error::StorageInit(format!("存储服务全局初始化失败: {}", e)))?;
+
+    // 注册本地文件静态访问配置
+    if !local_access_configs.is_empty() {
+        for (pattern, path) in &local_access_configs {
+            info!("注册本地文件静态访问路由: {} -> {}", pattern, path);
+        }
+        GlobalStorageService::init_local_access_configs(local_access_configs);
+    }
 
     info!("文件存储服务初始化完成");
 

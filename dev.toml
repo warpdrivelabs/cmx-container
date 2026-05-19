@@ -144,17 +144,17 @@ domain = "http://localhost:8080/files/"
 base_path = "uploads"
 storage_path = "./storage"
 enable_access = true
-path_patterns = "**/*"
+path_patterns = "/file/**"
 
 # MinIO (S3 兼容) 存储
 [[storage.instances]]
 platform = "minio"
 storage_type = "s3"
 enable_storage = true
-access_key = "jRszdym59WToFPfmvr7O"
-secret_key = "6C5a6ZRWhdilLu7JLq43IbTST41rpT0XV1aanuIG"
+access_key = "Wa8GQ78My7d0b4AedpLS"
+secret_key = "3T0IYmsQP0OeBqKZ1jB5tk3pLmMD3ZT97AnNFIXV"
 region = "us-east-1"
-endpoint = "http://192.168.254.204:9000/"
-bucket_name = "gateway-core-data"
-#domain = "http://192.168.254.204:9001/"
-#base_path = "cmx-server/"
+endpoint = "http://192.168.1.14:9000/"
+bucket_name = "cmx-bucket"
+domain = "http://192.168.1.14:9000/"
+base_path = "cmx-server/"

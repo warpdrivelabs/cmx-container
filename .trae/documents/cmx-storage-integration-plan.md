@@ -88,12 +88,12 @@ path_patterns = "**/*"
 platform = "amazon-s3-1"
 storage_type = "s3"
 enable_storage = true
-access_key = "jRszdym59WToFPfmvr7O"
-secret_key = "6C5a6ZRWhdilLu7JLq43IbTST41rpT0XV1aanuIG"
+access_key = "Wa8GQ78My7d0b4AedpLS"
+secret_key = "3T0IYmsQP0OeBqKZ1jB5tk3pLmMD3ZT97AnNFIXV"
 region = "us-east-1"
-endpoint = "http://192.168.254.204:9000/"
-bucket_name = "gateway-core-data"
-domain = "http://192.168.254.204:9001/"
+endpoint = "http://192.168.1.14:9000/"
+bucket_name = "cmx-bucket"
+domain = "http://192.168.1.14:9000/"
 base_path = "portalcenter/"
 ```
 
@@ -271,12 +271,12 @@ path_patterns = "**/*"
 platform = "amazon-s3-1"
 storage_type = "s3"
 enable_storage = true
-access_key = "jRszdym59WToFPfmvr7O"
-secret_key = "6C5a6ZRWhdilLu7JLq43IbTST41rpT0XV1aanuIG"
+access_key = "Wa8GQ78My7d0b4AedpLS"
+secret_key = "3T0IYmsQP0OeBqKZ1jB5tk3pLmMD3ZT97AnNFIXV"
 region = "us-east-1"
-endpoint = "http://192.168.254.204:9000/"
-bucket_name = "gateway-core-data"
-domain = "http://192.168.254.204:9001/"
+endpoint = "http://192.168.1.14:9000/"
+bucket_name = "cmx-bucket"
+domain = "http://192.168.1.14:9000/"
 base_path = "portalcenter/"
 ```
 
@@ -301,12 +301,12 @@ instances: vec![
         platform: "amazon-s3-1",
         storage_type: S3,
         enable_storage: true,
-        access_key: Some("jRszdym59WToFPfmvr7O"),
-        secret_key: Some("6C5a6ZRWhdilLu7JLq43IbTST41rpT0XV1aanuIG"),
+        access_key: Some("Wa8GQ78My7d0b4AedpLS"),
+        secret_key: Some("3T0IYmsQP0OeBqKZ1jB5tk3pLmMD3ZT97AnNFIXV"),
         region: Some("us-east-1"),
-        endpoint: Some("http://192.168.254.204:9000/"),
-        bucket_name: Some("gateway-core-data"),
-        domain: Some("http://192.168.254.204:9001/"),
+        endpoint: Some("http://192.168.1.14:9000/"),
+        bucket_name: Some("cmx-bucket"),
+        domain: Some("http://192.168.1.14:9000/"),
         base_path: "portalcenter/",
         ..Default::default()  // Local 字段为 None/false
     },

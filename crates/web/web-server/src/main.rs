@@ -143,6 +143,26 @@ async fn main() -> Result<()> {
         tower_http::services::ServeDir::new(&web_config.web_folder),
     ));
 
+    // 注册本地存储的静态文件访问路由（path_patterns → storage_path）
+    let routes_all = {
+        let mut router = routes_all;
+        for (pattern, storage_path) in cmx_storage::global::GlobalStorageService::local_access_configs() {
+            // 从 pattern（如 "/file/**"）提取路由前缀（如 "/file"）
+            let prefix = pattern.split_once('*').map(|(p, _)| p).unwrap_or(pattern);
+            let prefix = prefix.trim_end_matches('/');
+            if prefix.is_empty() {
+                continue;
+            }
+            info!("挂载本地存储静态文件路由: {} -> {}", prefix, storage_path);
+            let serve_dir: axum::Router<()> = axum::Router::new()
+                .fallback_service(axum::routing::get_service(
+                    tower_http::services::ServeDir::new(storage_path),
+                ));
+            router = router.nest(prefix, serve_dir);
+        }
+        router
+    };
+
     let server_host = ConfigManager::global()
         .get_string("server.host")
         .unwrap_or_else(|_| "0.0.0.0".to_string());

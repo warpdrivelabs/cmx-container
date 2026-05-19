@@ -23,7 +23,7 @@ use crate::config::StorageType;
 ///
 /// 返回元组 `(完整路径, 文件名)`：
 /// - Local: `{base_path}/{object_type}/{yyyyMM}/{uuid}.{ext}`
-/// - S3: `{base_path}/{object_type}/{yyyy/MM/dd}/{uuid}.{ext}`
+/// - S3: `{base_path}/{object_type}/{yyyyMMdd}/{uuid}.{ext}`
 /// - 文件名格式：`{uuid}.{ext}`
 ///
 /// # Examples
@@ -45,7 +45,7 @@ pub fn generate_storage_path(
     let now = Local::now();
     let date_path = match storage_type {
         StorageType::Local => now.format("%Y%m").to_string(),
-        StorageType::S3 => now.format("%Y/%m/%d").to_string(),
+        StorageType::S3 => now.format("%Y%m%d").to_string(),
     };
     let file_id = Uuid::new_v4().to_string();
 
