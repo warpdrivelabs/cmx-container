@@ -125,9 +125,15 @@ async fn register_nacos_service(client: &NacosClient) {
         .parse()
         .unwrap_or(8080);
 
-    let ip = local_ip_address::local_ip()
-        .map(|addr| addr.to_string())
-        .unwrap_or_else(|_| "127.0.0.1".to_string());
+    let ip = ConfigManager::global()
+        .get_string("server.ip")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            local_ip_address::local_ip()
+                .map(|addr| addr.to_string())
+                .unwrap_or_else(|_| "127.0.0.1".to_string())
+        });
 
     match client.register_service(&ip, port).await {
         Ok(_) => {
