@@ -177,24 +177,22 @@ impl StorageInstanceConfig {
                 }
             }
             StorageType::S3 => {
-                // S3 类型：拼接 domain + bucket + path
+
                 // S3 bucket 有两种 URL 风格：
                 // 1. 路径风格：http://endpoint/bucket/path  （如 MinIO 自建服务）
                 // 2. 虚拟主机风格：http://bucket.endpoint/path （如 AWS S3,需要有域名才行）
-                // 此处采用路径风格：endpoint + bucket + base_path + relative_path
-
-                // 采用路径风格：http://endpoint/bucket/base_path/path
+                // 此处采用路径风格
                 // 注意：endpoint 需包含协议和端口（如 http://192.168.1.14:9000）
                 // MinIO 自建服务或 IP 访问只能使用路径风格，无法使用虚拟主机风格
-
+                // path 已由 generate_storage_path 包含 base_path，无需重复拼接
+                // URL 格式：http://endpoint/bucket/path
                 if let Some(domain) = domain {
                     let domain = domain.trim_end_matches('/');
                     let bucket = self.bucket_name.as_deref().unwrap_or("");
-                    format!("{}/{}/{}/{}", domain, bucket, self.base_path, path)
+                    format!("{}/{}/{}", domain, bucket, path)
                 } else {
-                    // 无 domain 时返回 bucket + base_path + path
                     let bucket = self.bucket_name.as_deref().unwrap_or("");
-                    format!("{}/{}/{}", bucket, self.base_path, path)
+                    format!("{}/{}", bucket, path)
                 }
             }
         }
