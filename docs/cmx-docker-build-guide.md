@@ -1,20 +1,21 @@
-# CMX-Web Docker 镜像构建与部署指南
+# CMX-Container Docker 镜像构建与部署指南
 
 ## 1. 概述
 
-cmx-web 支持通过 Docker 容器化部署，提供一致的运行环境、便捷的扩缩容和版本管理。本文档涵盖镜像构建、本地开发、生产部署的完整流程。
+cmx-container 支持通过 Docker 容器化部署，提供一致的运行环境、便捷的扩缩容和版本管理。本文档涵盖镜像构建、本地开发、生产部署的完整流程。
 
 ### 相关文件
 
-| 文件 | 说明 |
-|------|------|
-| `docker/Dockerfile` | 多阶段构建定义（cargo-chef 缓存优化） |
-| `docker/.dockerignore` | 构建上下文排除规则 |
-| `docker/docker-compose.yml` | 开发环境编排（cmx-web + PostgreSQL + Redis + r-nacos） |
-| `docker/docker-compose.prod.yml` | 生产环境编排（多副本 + 资源限制） |
-| `config/docker.toml` | 容器内配置模板 |
-| `docker/scripts/build-docker.sh` | Linux/macOS 构建脚本 |
-| `docker/scripts/build-docker.ps1` | Windows PowerShell 构建脚本 |
+| 文件                                | 说明                                                   |
+|-----------------------------------|------------------------------------------------------|
+| `docker/Dockerfile`               | 多阶段构建定义（cargo-chef 缓存优化）                             |
+| `.dockerignore`                   | 构建上下文排除规则（项目根目录）                                     |
+| `docker/docker-compose.local.yml` | 本地开发环境编排                                             |
+| `docker/docker-compose.yml`       | 开发环境编排（cmx-container + PostgreSQL + Redis + r-nacos） |
+| `docker/docker-compose.prod.yml`  | 生产环境编排（多副本 + 资源限制）                                   |
+| `config/docker.toml`              | 容器内配置模板                                              |
+| `docker/scripts/build-docker.sh`  | Linux/macOS 构建脚本                                     |
+| `docker/scripts/build-docker.ps1` | Windows PowerShell 构建脚本                              |
 
 ---
 
@@ -24,6 +25,7 @@ cmx-web 支持通过 Docker 容器化部署，提供一致的运行环境、便�
 - Docker Compose V2（`docker compose` 命令）
 - 至少 4GB 可用内存（Rust 编译需要）
 - 至少 10GB 可用磁盘空间
+- Harbor 镜像仓库访问认证（如需推送镜像）
 
 ---
 
@@ -34,55 +36,83 @@ cmx-web 支持通过 Docker 容器化部署，提供一致的运行环境、便�
 **Windows (PowerShell)：**
 
 ```powershell
+cd docker/scripts
+
 # 构建最新版本
-.\docker\scripts\build-docker.ps1
+.\build-docker.ps1
 
 # 构建指定版本
-.\docker\scripts\build-docker.ps1 -Version "0.0.1"
+.\build-docker.ps1 -Version "0.0.1"
 
-# 构建并推送到镜像仓库
-.\docker\scripts\build-docker.ps1 -Version "0.0.1" -Registry "registry.example.com"
+# 构建并推送到 Harbor
+.\build-docker.ps1 -Version "0.0.1" -Push
+
+# 推送前清理同名镜像
+.\build-docker.ps1 -Version "0.0.1" -Push -Clean
 ```
 
 **Linux/macOS：**
 
 ```bash
+cd docker/scripts
+
 # 构建最新版本
-chmod +x docker/scripts/build-docker.sh
-./docker/scripts/build-docker.sh
+chmod +x build-docker.sh
+./build-docker.sh
 
 # 构建指定版本
-./docker/scripts/build-docker.sh 0.0.1
+./build-docker.sh 0.0.1
 
-# 构建并推送到镜像仓库
-./docker/scripts/build-docker.sh 0.0.1 registry.example.com
+# 构建并推送到 Harbor
+./build-docker.sh 0.0.1 --push
+
+# 推送前清理同名镜像
+./build-docker.sh 0.0.1 --push --clean
 ```
 
-### 3.2 手动构建
+### 3.2 脚本参数说明
+
+| 参数             | 类型   | 说明                               |
+|----------------|------|----------------------------------|
+| `VERSION`      | 位置参数 | 镜像版本号，默认 `latest`                |
+| `--push`       | 选项   | 构建完成后推送到 Harbor                  |
+| `--clean`      | 选项   | 推送前清理同名远程镜像                      |
+| `--harbor URL` | 选项   | 指定 Harbor 地址，默认 `192.168.137.94` |
+
+### 3.3 镜像地址
+
+| 类型        | 地址格式                                       |
+|-----------|--------------------------------------------|
+| 本地镜像      | `cmx-container:VERSION`                    |
+| Harbor 镜像 | `192.168.137.94/cmx/cmx-container:VERSION` |
+
+### 3.4 Harbor 登录
+
+首次推送镜像前需要登录：
 
 ```bash
-docker build -t cmx-web:latest .
+docker login 192.168.137.94
+# 输入用户名和密码
 ```
 
-### 3.3 多平台构建
+### 3.5 多平台构建
 
 如需构建 `linux/amd64` + `linux/arm64` 双平台镜像：
 
 ```bash
-# 创建 buildx 构建器（首次使用）
 docker buildx create --name cmx-builder --use
 
-# 构建并推送多平台镜像
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
-    -t cmx-web:latest \
+    -t 192.168.137.94/cmx/cmx-container:latest \
+    -f docker/Dockerfile \
     --push \
     .
 ```
 
 > **注意**：多平台构建必须配合 `--push` 使用，无法直接加载到本地。
 
-### 3.4 构建缓存说明
+### 3.6 构建缓存说明
 
 Dockerfile 采用 `cargo-chef` 实现依赖层缓存，构建流程分为 4 个阶段：
 
@@ -102,46 +132,40 @@ Dockerfile 采用 `cargo-chef` 实现依赖层缓存，构建流程分为 4 个�
 ### 4.1 启动全套服务
 
 ```bash
-docker compose up -d
+cd docker
+docker compose -f docker-compose.local.yml up -d
 ```
 
-这将启动 4 个服务：
+### 4.2 环境变量配置
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| cmx-web | 8080 | Web 应用 |
-| postgres | 5432 | PostgreSQL 16 数据库 |
-| redis | 6379 | Redis 7 缓存 |
-| nacos | 8848, 9848 | r-nacos 注册与配置中心 |
-
-### 4.2 启用 Nacos
-
-默认 Nacos 未启用。如需启用，创建 `.env` 文件或设置环境变量：
+在 `docker/` 目录下创建 `.env` 文件（如需要）：
 
 ```bash
-export NACOS_ENABLED=true
-export NACOS_NAMING_ENABLED=true
-export NACOS_CONFIG_ENABLED=true
-docker compose up -d
+# 加密密钥（必须）
+CMX_ENCRYPT_KEY=your_dev_key
+
+# Nacos 配置
+NACOS_ENABLED=true
+NACOS_SERVER_ADDR=192.168.1.14:8848
 ```
 
 ### 4.3 查看日志
 
 ```bash
 # 查看所有服务日志
-docker compose logs -f
+docker compose -f docker-compose.local.yml logs -f
 
-# 仅查看 cmx-web 日志
-docker compose logs -f cmx-web
+# 仅查看 cmx-container 日志
+docker compose -f docker-compose.local.yml logs -f cmx-container
 ```
 
 ### 4.4 停止服务
 
 ```bash
-docker compose down
+docker compose -f docker-compose.local.yml down
 
 # 停止并删除数据卷（重置所有数据）
-docker compose down -v
+docker compose -f docker-compose.local.yml down -v
 ```
 
 ### 4.5 重新构建
@@ -149,8 +173,9 @@ docker compose down -v
 修改源码后需要重新构建镜像：
 
 ```bash
-docker compose build cmx-web
-docker compose up -d cmx-web
+cd docker
+docker compose -f docker-compose.local.yml build cmx-container
+docker compose -f docker-compose.local.yml up -d cmx-container
 ```
 
 ---
@@ -160,26 +185,29 @@ docker compose up -d cmx-web
 ### 5.1 使用生产编排文件
 
 ```bash
+cd docker
+
 # 设置版本号
 export VERSION=0.0.1
 
 # 设置加密密钥（必须修改）
 export CMX_ENCRYPT_KEY=your_production_key
 
-# 启动生产环境
-docker compose -f docker/docker-compose.prod.yml up -d
+# 启动生产环境（使用远程 Harbor 镜像）
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 5.2 生产环境差异
 
-| 配置项 | 开发环境 | 生产环境 |
-|--------|----------|----------|
-| 日志级别 | `info` | `warn` |
-| Nacos | 默认禁用 | 默认启用 |
-| 副本数 | 1 | 2 |
-| CPU 限制 | 无 | 2 核 |
-| 内存限制 | 无 | 2GB |
-| 重启策略 | `unless-stopped` | `always` |
+| 配置项    | 开发环境             | 生产环境      |
+|--------|------------------|-----------|
+| 镜像来源   | 本地构建             | Harbor 仓库 |
+| 日志级别   | `info`           | `warn`    |
+| Nacos  | 默认禁用             | 默认启用      |
+| 副本数    | 1                | 2         |
+| CPU 限制 | 无                | 2 核       |
+| 内存限制   | 无                | 2GB       |
+| 重启策略   | `unless-stopped` | `always`  |
 
 ### 5.3 配置文件挂载
 
@@ -248,11 +276,7 @@ dir = "/app/docs/sql/migrations"
 容器内置健康检查端点：
 
 ```bash
-# 检查服务状态
 curl http://localhost:8080/api/health
-
-# 返回示例
-{"status":"ok"}
 ```
 
 Docker 自动健康检查配置：
@@ -265,7 +289,7 @@ Docker 自动健康检查配置：
 手动检查容器健康状态：
 
 ```bash
-docker inspect --format='{{.State.Health.Status}}' cmx-web
+docker inspect --format='{{.State.Health.Status}}' cmx-container
 ```
 
 ---
@@ -311,7 +335,7 @@ Rust 编译过程内存消耗较大。如果构建时 OOM，可增加 Docker 的
 检查以下几点：
 
 1. 数据库 URL 中的主机名应使用 Docker Compose 服务名 `postgres`，而非 `localhost`
-2. 确保 PostgreSQL 健康检查通过后再启动 cmx-web（`depends_on` + `condition: service_healthy`）
+2. 确保 PostgreSQL 健康检查通过后再启动 cmx-container（`depends_on` + `condition: service_healthy`）
 3. 首次启动时 PostgreSQL 需要初始化，可能需要等待 10-30 秒
 
 ### 9.4 容器无法连接 Redis
@@ -325,22 +349,25 @@ Rust 编译过程内存消耗较大。如果构建时 OOM，可增加 Docker 的
 - Nacos 启动较慢，可能需要等待 15-30 秒
 - Nacos 连接失败不会阻止应用启动，仅记录警告日志
 
-### 9.6 插件目录为空
+### 9.6 日志目录权限问题
 
-插件目录 `/app/plugins` 通过 Volume 挂载，首次启动时为空。可通过以下方式安装插件：
+容器使用非 root 用户 `cmx` 运行。确保宿主机挂载的目录权限正确：
 
-1. 在配置文件中启用自动安装（`[plugin.auto_install]`）
-2. 通过 API 接口上传安装
-3. 从插件市场安装
+```bash
+# 推荐使用 named volumes（docker-compose 已配置）
+docker compose -f docker-compose.local.yml up -d
+# Docker 自动管理权限
+```
 
 ### 9.7 查看容器内日志
 
 ```bash
 # Docker 标准输出日志
-docker compose logs cmx-web
+docker compose logs cmx-container
 
-# 容器内文件日志（挂载到宿主机 ./logs/ 目录）
-ls ./logs/
+# Named volumes 方式无法直接访问宿主机文件
+# 使用 docker volume inspect 查看 volume 位置
+docker volume inspect cmx-container_cmx-logs
 ```
 
 ---
