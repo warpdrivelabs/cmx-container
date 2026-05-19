@@ -144,7 +144,7 @@ domain = "http://localhost:8080/files/"
 base_path = "uploads"
 storage_path = "./storage"
 enable_access = true
-path_patterns = "/file/**"
+path_patterns = "/files/**"
 
 # MinIO (S3 兼容) 存储
 [[storage.instances]]
