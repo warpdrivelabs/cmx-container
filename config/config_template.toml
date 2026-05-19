@@ -234,11 +234,11 @@ storage_path = "./storage"
 # NACOS_ENABLED              - 是否启用 Nacos（true/false）
 # NACOS_SERVER_ADDR          - Nacos 服务器地址（如 127.0.0.1:8848）
 # NACOS_NAMESPACE            - Nacos 命名空间（默认 public）
-# NACOS_APP_NAME             - 应用名称（默认 cmx-web）
+# NACOS_APP_NAME             - 应用名称（默认 cmx-container）
 # NACOS_USERNAME             - Nacos 认证用户名（可选）
 # NACOS_PASSWORD             - Nacos 认证密码（可选）
 # NACOS_NAMING_ENABLED       - 是否启用服务注册（默认 true）
-# NACOS_NAMING_SERVICE_NAME  - 注册的服务名称（默认 cmx-web）
+# NACOS_NAMING_SERVICE_NAME  - 注册的服务名称（默认 cmx-server）
 # NACOS_NAMING_GROUP_NAME    - 服务分组（默认 DEFAULT_GROUP）
 # NACOS_CONFIG_ENABLED       - 是否启用配置中心（默认 false）
 # NACOS_CONFIG_DATA_ID       - 配置中心 Data ID

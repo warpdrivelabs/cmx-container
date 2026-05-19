@@ -555,11 +555,11 @@ is_critical = true
 | `NACOS_ENABLED`             | Boolean | `false`          | 是否启用 Nacos      |
 | `NACOS_SERVER_ADDR`         | String  | `127.0.0.1:8848` | Nacos 服务器地址     |
 | `NACOS_NAMESPACE`           | String  | `""` (public)    | Nacos 命名空间      |
-| `NACOS_APP_NAME`            | String  | `cmx-web`        | 应用名称            |
+| `NACOS_APP_NAME`            | String  | `cmx-container`  | 应用名称            |
 | `NACOS_USERNAME`            | String  | -                | Nacos 认证用户名（可选） |
 | `NACOS_PASSWORD`            | String  | -                | Nacos 认证密码（可选）  |
 | `NACOS_NAMING_ENABLED`      | Boolean | `true`           | 是否启用服务注册        |
-| `NACOS_NAMING_SERVICE_NAME` | String  | `cmx-web`        | 注册的服务名称         |
+| `NACOS_NAMING_SERVICE_NAME` | String  | `cmx-server`     | 注册的服务名称         |
 | `NACOS_NAMING_GROUP_NAME`   | String  | `DEFAULT_GROUP`  | 服务分组            |
 | `NACOS_CONFIG_ENABLED`      | Boolean | `false`          | 是否启用配置中心        |
 | `NACOS_CONFIG_DATA_ID`      | String  | -                | 配置中心 Data ID    |

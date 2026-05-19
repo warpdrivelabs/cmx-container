@@ -99,12 +99,12 @@ fn default_server_addr() -> String {
 
 /// 默认应用名称
 fn default_app_name() -> String {
-    "cmx-web".to_string()
+    "cmx-container".to_string()
 }
 
 /// 默认服务名称
 fn default_service_name() -> String {
-    "cmx-web".to_string()
+    "cmx-server".to_string()
 }
 
 /// 默认分组
