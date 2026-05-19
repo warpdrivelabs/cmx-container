@@ -150,27 +150,53 @@ impl StorageManagerConfig {
 }
 
 impl StorageInstanceConfig {
-    /// 获取文件的完整访问 URL
+    /// 拼接文件访问 URL。
     ///
-    /// 根据配置的基础域名和文件路径拼接完整的访问地址。
+    /// 对于 Local 类型：直接拼接 `domain + path`。
+    /// 对于 S3 类型：拼接 `domain + bucket_name + path`（S3 路径格式要求包含 bucket）。
     ///
     /// # Arguments
     ///
-    /// * `path` - 文件的存储路径（不含域名部分）
+    /// * `path` - 文件的存储路径（不含域名和 bucket 部分）
     ///
     /// # Returns
     ///
     /// 拼接后的完整访问 URL。
     pub fn get_access_url(&self, path: &str) -> String {
-        if let Some(ref domain) = self.domain {
-            let domain = if domain.ends_with('/') {
-                domain.clone()
-            } else {
-                format!("{}/", domain)
-            };
-            format!("{}{}", domain, path.trim_start_matches('/'))
-        } else {
-            path.to_string()
+        let domain = self.domain.as_deref();
+        let path = path.trim_start_matches('/');
+
+        match self.storage_type {
+            StorageType::Local => {
+                // Local 类型：直接拼接 domain + path
+                if let Some(domain) = domain {
+                    let domain = if domain.ends_with('/') { domain } else { &format!("{}/", domain) };
+                    format!("{}{}", domain, path)
+                } else {
+                    path.to_string()
+                }
+            }
+            StorageType::S3 => {
+                // S3 类型：拼接 domain + bucket + path
+                // S3 bucket 有两种 URL 风格：
+                // 1. 路径风格：http://endpoint/bucket/path  （如 MinIO 自建服务）
+                // 2. 虚拟主机风格：http://bucket.endpoint/path （如 AWS S3,需要有域名才行）
+                // 此处采用路径风格：endpoint + bucket + base_path + relative_path
+
+                // 采用路径风格：http://endpoint/bucket/base_path/path
+                // 注意：endpoint 需包含协议和端口（如 http://192.168.1.14:9000）
+                // MinIO 自建服务或 IP 访问只能使用路径风格，无法使用虚拟主机风格
+
+                if let Some(domain) = domain {
+                    let domain = domain.trim_end_matches('/');
+                    let bucket = self.bucket_name.as_deref().unwrap_or("");
+                    format!("{}/{}/{}/{}", domain, bucket, self.base_path, path)
+                } else {
+                    // 无 domain 时返回 bucket + base_path + path
+                    let bucket = self.bucket_name.as_deref().unwrap_or("");
+                    format!("{}/{}/{}", bucket, self.base_path, path)
+                }
+            }
         }
     }
 

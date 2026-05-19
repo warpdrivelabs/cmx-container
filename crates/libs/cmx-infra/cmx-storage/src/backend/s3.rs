@@ -64,10 +64,8 @@ impl S3Backend {
             builder = builder.secret_access_key(sk);
         }
 
-        let base_path = config.base_path.trim_end_matches('/');
-        if !base_path.is_empty() {
-            builder = builder.root(&format!("{}/", base_path));
-        }
+        // 注意：base_path 不设置到 OpenDAL root 中，由应用层 generate_storage_path 统一管理路径。
+        // 这样 S3 backend 的存储路径 = base_path + 相对路径，与 URL 拼接逻辑保持一致。
 
         let operator = Operator::new(builder)
             .map_err(|e| Error::ConfigError(format!("创建S3存储后端失败: {}", e)))?
