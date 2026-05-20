@@ -68,13 +68,14 @@ async fn main() -> Result<()> {
 
     // 控制台日志层：简洁格式，带颜色，便于开发调试
     let console_layer = fmt::layer()
+        .compact()
         .with_writer(std::io::stdout)
         .with_ansi(true)
         .with_target(false)
         .with_file(true)
         .with_line_number(true)
-        .with_thread_names(true)
-        .with_thread_ids(true)
+        // .with_thread_names(true)
+        // .with_thread_ids(true)
         .compact();
 
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
