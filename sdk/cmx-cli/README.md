@@ -12,6 +12,11 @@ cmx-cli 是一个命令行工具，用于扫描 Rust 代码，识别 `#[plugin_f
 
 ```bash
 cargo install cmx-cli
+
+#从私有仓库安装
+cargo install --registry nora cmx-cli
+
+
 ```
 
 ### 核心示例
