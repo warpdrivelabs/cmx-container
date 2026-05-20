@@ -24,6 +24,7 @@ pub struct PublishFromDeployResult {
     pub marketplace_version_id: String,
     pub storage_file_id: String,
     pub is_new_plugin: bool,
+    pub file_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,7 +118,7 @@ impl MarketplacePublisher {
             version_rank: Some(0),
             changelog: None,
             release_notes: None,
-            download_url: Some(file_info.url),
+            download_url: Some(file_info.url.clone()),
             storage_file_id: Some(file_info.id.clone()),
             package_size: Some(file_info.size),
             checksum: file_info.hash_info,
@@ -146,6 +147,7 @@ impl MarketplacePublisher {
             marketplace_version_id: version_info.id,
             storage_file_id: file_info.id,
             is_new_plugin,
+            file_url: file_info.url.clone(),
         })
     }
 }

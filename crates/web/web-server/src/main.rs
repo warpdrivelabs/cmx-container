@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
     let console_layer = fmt::layer()
         .compact()
         .with_writer(std::io::stdout)
-        .with_ansi(true)
+        .with_ansi(false)
         .with_target(false)
         .with_file(true)
         .with_line_number(true)

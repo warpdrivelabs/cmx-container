@@ -186,9 +186,19 @@ impl DeployService {
                 zip_file_path: package_path.clone(),
             };
             let result = super::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req).await?;
+            let file_url = result.file_url.clone();
             marketplace_source_id = Some(result.marketplace_version_id.clone());
             marketplace_publish_info = Some(result.into());
+
+            // 发布到市场后，将 source 构造为 remote url
+            if matches!(request.source, PluginSource::Local { .. }) {
+                request.source = PluginSource::Remote {
+                    url: file_url,
+                    checksum: None,
+                };
+            }
         }
+
 
         let existing_plugin = self.deps.repository.find_plugin(&plugin_id).await?;
 
