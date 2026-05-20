@@ -1,5 +1,5 @@
-[build]
-target = "wasm32-wasip1"
+#[build]
+#target = "wasm32-wasip1"
 
 [source.crates-io]
 replace-with = 'aliyun'
