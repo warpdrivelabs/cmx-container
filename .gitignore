@@ -18,7 +18,7 @@
 /crates/tests/
 /Cargo.lock
 /cache/
-crates/libs/cmx-dev/templates/wasm-plugin-template.zip
+#crates/libs/cmx-dev/templates/wasm-plugin-template.zip
 /example/redis-rs/
 /example/rust-modql/
 /storage/

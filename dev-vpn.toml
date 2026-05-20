@@ -1,4 +1,13 @@
 # ============================================
+# 服务器配置
+# ============================================
+[server]
+# 监听地址
+host = "0.0.0.0"
+# 监听端口
+port = 8080
+
+# ============================================
 # 数据源配置数组
 # ============================================
 # databases 是一个数组，可以配置多个数据源
@@ -10,8 +19,9 @@ db_id = "primary"
 # 数据库类型：postgres | mysql | sqlite（必需）
 db_type = "postgres"
 # 数据库连接 URL（必需）
-db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
-#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
+#db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
+#db_url = "postgresql://postgres:postgres@192.168.137.80:5432/cmx"
+db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = true
 
@@ -39,7 +49,7 @@ health_check_timeout = 5
 [[databases]]
 db_id = "postgres2"
 db_type = "postgres"
-db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
+db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 default = false
 health_check_interval = 30
 health_check_timeout = 3
@@ -47,8 +57,33 @@ pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20,
 
 [redis]
 #url = "redis://192.168.137.95:32496/13"
-url = "redis://192.168.1.14:6379/13"
+url = "redis://192.168.157.46:6379/12"
 
+# Redis 运行模式：standalone（单机）或 cluster（集群）
+# mode = "standalone"
+# 集群节点地址（集群模式时必填，逗号分隔）
+# cluster_urls = "redis://node1:6379,redis://node2:6379,redis://node3:6379"
+# Pub/Sub 心跳间隔（秒），0 表示禁用
+# heartbeat_interval = 30
+# 启动时自动订阅的频道（逗号分隔，需填写完整频道名，不会自动加前缀）
+# subscribe_channels = "cmx:plugin:changed"
+# 启动时自动订阅的模式（逗号分隔，支持通配符 * ? []，需填写完整模式，不会自动加前缀）
+# subscribe_patterns = "cmx:*"
+
+
+
+[templates]
+# 模板目录路径
+path = "crates/libs/cmx-dev/templates"
+
+[code_server]
+# code-server URL
+#url = "https://dev.cloudmatrix.one:18080/"
+url = "http://127.0.0.1:8081/"
+
+[code_server_extension_server]
+# code-server 扩展服务器 URL，用于自调试
+url = "http://127.0.0.1:9000"
 
 
 #WASM运行时相关配置
@@ -72,3 +107,55 @@ backup_root = "plugins/backup"
 temp_root = "plugins/temp"
 # 插件上传临时目录
 upload_root = "plugins/uploads"
+
+# 自动安装配置
+[plugin.auto_install]
+enabled = false
+
+# 本地文件来源示例
+# [[plugin.auto_install.plugins]]
+# plugin_id = "cmx-debug"
+# version = "1.0.0"
+# source_type = "local"
+# source_path = "plugins/source/cmx-debug.zip"
+# is_critical = true
+
+
+#数据库迁移相关配置
+[migration]
+# 迁移文件目录
+dir = "docs/sql/migrations"
+# 校验文件内容是否被修改，默认值true
+validate_checksum = false
+# 分布式锁超时时间（秒）
+lock_timeout = 60
+
+# ============================================
+# 文件存储配置
+# ============================================
+[storage]
+default_platform = "local"
+
+# 本地文件系统存储
+[[storage.instances]]
+platform = "local"
+storage_type = "local"
+enable_storage = true
+domain = "http://localhost:8080/files/"
+base_path = "uploads"
+storage_path = "./storage"
+enable_access = true
+path_patterns = "/files/**"
+
+# MinIO (S3 兼容) 存储
+[[storage.instances]]
+platform = "minio"
+storage_type = "s3"
+enable_storage = true
+access_key = "Wa8GQ78My7d0b4AedpLS"
+secret_key = "3T0IYmsQP0OeBqKZ1jB5tk3pLmMD3ZT97AnNFIXV"
+region = "us-east-1"
+endpoint = "http://192.168.157.46:9000/"
+bucket_name = "cmx-bucket"
+domain = "http://192.168.157.46:9000/"
+base_path = "cmx-server/"
