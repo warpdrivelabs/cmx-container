@@ -5,7 +5,8 @@ replace-with = 'aliyun'
 registry = "sparse+https://mirrors.aliyun.com/crates.io-index/"
 
 [registries.nora]
-index = "sparse+http://192.168.1.14:4000/cargo/index/"
+#index = "sparse+http://192.168.1.14:4000/cargo/index/"
+index = "sparse+http://192.168.157.46:4000/cargo/index/"
 
 [http]
 check-revoke = false
