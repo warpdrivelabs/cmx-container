@@ -356,14 +356,15 @@ impl MigrationRunner {
         while start.elapsed() < timeout {
             sleep(poll_interval).await;
 
-            match lock_manager.try_lock_with_value(MIGRATION_LOCK_KEY).await {
-                Ok((true, _)) => {
-                    // 获取到锁，说明其他节点已释放（迁移完成）
-                    // 立即释放锁，不再执行迁移
-                    info!("其他节点已完成数据库迁移，锁已释放");
+            // 只检查锁是否存在，不尝试获取锁
+            // 获取锁意味着"我要执行迁移"，而等待者只是观察者
+            match lock_manager.is_locked(MIGRATION_LOCK_KEY).await {
+                Ok(false) => {
+                    // 锁不存在，说明其他节点已释放（迁移完成）
+                    info!("其他节点已完成数据库迁移");
                     return true;
                 }
-                Ok((false, _)) => {
+                Ok(true) => {
                     debug!(
                         "迁移锁仍被持有，继续等待（已等待 {}秒）",
                         start.elapsed().as_secs()
