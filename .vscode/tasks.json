@@ -16,6 +16,10 @@
             "group": {
                 "kind": "build",
                 "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "clear": true
             }
         },
         {
@@ -31,7 +35,92 @@
             "problemMatcher": [
                 "$rustc"
             ],
-            "group": "build"
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "clear": true
+            }
+        },
+        {
+            "label": "cargo run web-server (dev)",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "run",
+                "--bin=web-server"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "env": {
+                "RUST_LOG": "debug",
+                "RUST_BACKTRACE": "1"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": false
+            }
+        },
+        {
+            "label": "cargo run web-server with config",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "run",
+                "--bin=web-server"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "env": {
+                "RUST_LOG": "debug",
+                "RUST_BACKTRACE": "1",
+                "CONFIG_FILE": "config.toml"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": false
+            }
+        },
+        {
+            "label": "cargo clippy web-server",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "clippy",
+                "--bin=web-server",
+                "--package=web-server",
+                "--",
+                "-D",
+                "warnings"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "clear": true
+            }
+        },
+        {
+            "label": "cargo test web-server",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "test",
+                "--bin=web-server",
+                "--package=web-server"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "clear": true
+            }
         }
     ]
 }

@@ -2,20 +2,66 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Rust Program",       // 配置的名称，显示在调试面板下拉菜单中
-      "type": "lldb",                     // 固定设置为 "lldb"，告诉 VS Code 使用 CodeLLDB 扩展[citation:1][citation:8][citation:9]
-      "request": "launch",                // "launch" 表示启动一个新程序进行调试
-      "program": "${workspaceFolder}/target/debug/wev-server.exe", // 重要：替换成你的可执行文件路径
-      "args": [],                         // 程序运行时需要的命令行参数，没有则留空
-      "cwd": "${workspaceFolder}",        // 程序运行时的工作目录，通常设为项目根目录
-      "cargo": {                          // 这个配置块让 CodeLLDB 在调试前自动调用 cargo build
+      "name": "Debug web-server",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/web-server",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "cargo": {
         "args": [
           "build",
-          "--bin=web-server"           // 如果你的项目有多个二进制文件，请在这里指定
+          "--bin=web-server"
         ]
       },
-      // 如果你使用了之前讨论的 settings.json 配置，这个 sourceLanguages 不是必须的，
-      // 但加上它可以提供更好的语言提示。
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": [
+        "rust"
+      ]
+    },
+    {
+      "name": "Debug web-server (with config)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/web-server",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=web-server"
+        ]
+      },
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1",
+        "CONFIG_FILE": "config.toml"
+      },
+      "sourceLanguages": [
+        "rust"
+      ]
+    },
+    {
+      "name": "Release web-server",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/release/web-server",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "cargo": {
+        "args": [
+          "build",
+          "--release",
+          "--bin=web-server"
+        ]
+      },
+      "env": {
+        "RUST_LOG": "info",
+        "CONFIG_FILE": "config.toml"
+      },
       "sourceLanguages": ["rust"]
     }
   ]
