@@ -132,7 +132,7 @@ async fn get_plugin_info(
             return Ok(Some(info.clone()));
         }
     }
-    if let Some(record) = repository.find_plugin(plugin_id).await? {
+    if let Some(record) = repository.find_plugin(plugin_id, "default").await? {
         let info = PluginInfo {
             id: record.plugin_id,
             name: record.name,
@@ -151,6 +151,7 @@ async fn get_plugin_info(
             module_code: record.module_code.unwrap_or_default(),
             plugin_type: record.plugin_type.clone().unwrap_or_default(),
             source_path: record.source_path.clone(),
+            app_id: record.app_id,
         };
         return Ok(Some(info));
     }

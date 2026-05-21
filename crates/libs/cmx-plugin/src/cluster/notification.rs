@@ -25,6 +25,10 @@ pub enum PluginChangeAction {
     Changed,
     /// 插件已卸载
     Removed,
+    /// 插件运行时加载
+    RuntimeLoad,
+    /// 插件运行时卸载
+    RuntimeUnload,
 }
 
 /// 插件变更通知（极简设计，不携带业务数据）
@@ -36,6 +40,10 @@ pub struct PluginChangeNotification {
     pub action: PluginChangeAction,
     /// 通知时间
     pub timestamp: DateTime<Utc>,
+    /// 插件版本（用于运行时加载/卸载通知）
+    pub version: Option<String>,
+    /// 应用ID（用于通知过滤，仅匹配的实例处理）
+    pub app_id: Option<String>,
 }
 
 /// 插件变更通知器
@@ -65,6 +73,8 @@ impl PluginNotifier {
             plugin_id: plugin_id.to_string(),
             action: PluginChangeAction::Changed,
             timestamp: Utc::now(),
+            version: None,
+            app_id: None,
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
@@ -89,6 +99,8 @@ impl PluginNotifier {
             plugin_id: plugin_id.to_string(),
             action: PluginChangeAction::Removed,
             timestamp: Utc::now(),
+            version: None,
+            app_id: None,
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
@@ -100,6 +112,64 @@ impl PluginNotifier {
             }
             Err(e) => {
                 tracing::error!("发布插件移除通知失败: {} - {}", plugin_id, e);
+            }
+        }
+    }
+
+    /// 发布插件运行时加载通知
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 加载的插件ID
+    /// * `version` - 插件版本
+    /// * `app_id` - 目标应用ID
+    pub async fn notify_runtime_load(&self, plugin_id: &str, version: &str, app_id: &str) {
+        let notification = PluginChangeNotification {
+            plugin_id: plugin_id.to_string(),
+            action: PluginChangeAction::RuntimeLoad,
+            timestamp: Utc::now(),
+            version: Some(version.to_string()),
+            app_id: Some(app_id.to_string()),
+        };
+
+        match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
+            Ok(subscribers) => {
+                tracing::info!(
+                    "已发布插件运行时加载通知: {} v{} (订阅者: {})",
+                    plugin_id, version, subscribers
+                );
+            }
+            Err(e) => {
+                tracing::error!("发布插件运行时加载通知失败: {} - {}", plugin_id, e);
+            }
+        }
+    }
+
+    /// 发布插件运行时卸载通知
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 卸载的插件ID
+    /// * `version` - 插件版本
+    /// * `app_id` - 目标应用ID
+    pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
+        let notification = PluginChangeNotification {
+            plugin_id: plugin_id.to_string(),
+            action: PluginChangeAction::RuntimeUnload,
+            timestamp: Utc::now(),
+            version: Some(version.to_string()),
+            app_id: Some(app_id.to_string()),
+        };
+
+        match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
+            Ok(subscribers) => {
+                tracing::info!(
+                    "已发布插件运行时卸载通知: {} v{} (订阅者: {})",
+                    plugin_id, version, subscribers
+                );
+            }
+            Err(e) => {
+                tracing::error!("发布插件运行时卸载通知失败: {} - {}", plugin_id, e);
             }
         }
     }

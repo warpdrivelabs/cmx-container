@@ -78,11 +78,11 @@ impl ServiceRepository {
     ) -> Result<(), ServiceError> {
         let sql = r#"
             INSERT INTO cmx_service_define (
-                id, service_key, service_name, description, plugin_id,
+                id, app_id, service_key, service_name, description, plugin_id,
                 status, version, domain_code, application_code, module_code,
                 create_time, update_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-            ON CONFLICT (service_key) DO UPDATE SET
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+            ON CONFLICT (app_id, service_key) DO UPDATE SET
                 service_name = EXCLUDED.service_name,
                 description = EXCLUDED.description,
                 plugin_id = EXCLUDED.plugin_id,
@@ -96,6 +96,7 @@ impl ServiceRepository {
 
         let params = json!([
             service.id,
+            service.app_id,
             service.service_key,
             service.service_name,
             service.description,
@@ -151,6 +152,7 @@ impl ServiceRepository {
                 let schema = result.schema.as_ref();
                 Ok(Some(ServiceDefinition {
                     id: r.get_by_name_as(schema, "id").unwrap_or_default(),
+                    app_id: r.get_by_name_as(schema, "app_id").unwrap_or_default(),
                     service_key: r.get_by_name_as(schema, "service_key").unwrap_or_default(),
                     service_name: r.get_by_name_as(schema, "service_name").unwrap_or_default(),
                     description: r.get_by_name_as(schema, "description").unwrap_or_default(),
@@ -194,6 +196,7 @@ impl ServiceRepository {
         for row in result.iter() {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
                 service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
                 service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
                 description: row.get_by_name_as(schema, "description").unwrap_or_default(),
@@ -221,19 +224,18 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回该插件下所有服务定义列表（包含最新版本的 config）
-    pub async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
+    pub async fn get_services_by_plugin(&self, plugin_id: &str, app_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
-            SELECT d.id, d.service_key, d.service_name, d.description, d.plugin_id,
+            SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
                    d.create_time, d.update_time, dv.config
             FROM cmx_service_define d
             LEFT JOIN cmx_service_define_version dv ON d.service_key = dv.service_key
              and d.version = dv.plugin_version
-            WHERE d.plugin_id = $1
+            WHERE d.plugin_id = $1 AND d.app_id = $2
             ORDER BY d.create_time DESC
         "#;
-
-        let params = json!([plugin_id]);
+        let params = json!([plugin_id, app_id]);
 
         let result = self.db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "get_services_by_plugin")
@@ -245,6 +247,7 @@ impl ServiceRepository {
         for row in result.iter() {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
                 service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
                 service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
                 description: row.get_by_name_as(schema, "description").unwrap_or_default(),
@@ -268,21 +271,30 @@ impl ServiceRepository {
     /// 删除服务定义及其所有版本（物理删除）
     ///
     /// # 参数
+    /// 删除服务定义及其所有版本（按 service_key 和 app_id）
+    ///
+    /// # Arguments
+    ///
     /// * `service_key` - 服务唯一标识
-    /// * `txn_id` - 事务id
-    /// * `version` - 服务版本
-    pub async fn delete_service(&self, service_key: &str,_txn_id: Option<&str>, _version: Option<&str>) -> Result<(), ServiceError> {
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `_version` - 服务版本（保留参数，暂未使用）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `ServiceError::DatabaseError`
+    pub async fn delete_service(&self, service_key: &str, app_id: &str, _txn_id: Option<&str>, _version: Option<&str>) -> Result<(), ServiceError> {
         let sql_version = r#"
-            DELETE FROM cmx_service_define_version WHERE service_key = $1
+            DELETE FROM cmx_service_define_version WHERE service_key = $1 AND app_id = $2
         "#;
-        let params = json!([service_key]);
+        let params = json!([service_key, app_id]);
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, None, sql_version, params.clone())
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
         let sql_define = r#"
-            DELETE FROM cmx_service_define WHERE service_key = $1
+            DELETE FROM cmx_service_define WHERE service_key = $1 AND app_id = $2
         "#;
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, None, sql_define, params)
@@ -292,14 +304,21 @@ impl ServiceRepository {
         Ok(())
     }
 
-    /// 根据插件ID删除所有服务（物理删除）
+    /// 根据插件ID删除所有服务（物理删除，按 plugin_id 和 app_id）
     ///
-    /// # 参数
-    /// * `plugin_id` - 插件ID
-    pub async fn delete_services_by_plugin(&self, plugin_id: &str,txn_id: Option<&str>) -> Result<(), ServiceError> {
-        let services = self.get_services_by_plugin(plugin_id).await?;
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `ServiceError::DatabaseError`
+    pub async fn delete_services_by_plugin(&self, plugin_id: &str, app_id: &str, txn_id: Option<&str>) -> Result<(), ServiceError> {
+        let services = self.get_services_by_plugin(plugin_id, app_id).await?;
         for service in services {
-            self.delete_service(&service.service_key, txn_id, None).await?;
+            self.delete_service(&service.service_key, app_id, txn_id, None).await?;
         }
         Ok(())
     }
@@ -561,6 +580,7 @@ impl ServiceRepository {
         for row in result.iter() {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
                 service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
                 service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
                 description: row.get_by_name_as(schema, "description").unwrap_or_default(),

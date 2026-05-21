@@ -12,6 +12,7 @@
 pub mod handler;
 pub mod request;
 pub mod response;
+pub mod control;
 
 use axum::routing::{get, post};
 use axum::Router;

@@ -45,6 +45,9 @@ pub struct InstallRequest {
     pub build_type: Option<String>,
     /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
     pub marketplace_source_id: Option<String>,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 安装响应
@@ -149,6 +152,7 @@ impl InstallService {
         let start_time = std::time::Instant::now();
 
         let build_type = request.build_type.unwrap_or("release".to_string());
+        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
 
         // 步骤1: 获取插件包（zip 或文件夹）
         let package_path = self
@@ -212,7 +216,7 @@ impl InstallService {
         }
 
         // 数据库层面也检查
-        if let Some(existing) = self.deps.repository.find_plugin(&plugin_id).await? {
+        if let Some(existing) = self.deps.repository.find_plugin(&plugin_id, &app_id).await? {
             if existing.version == install_version {
                 return Ok(InstallResponse {
                     plugin_id,
@@ -281,7 +285,7 @@ impl InstallService {
             // 此后所有新 SQL 都会被拒绝，并返回 25P02 错误
             // 必须显式执行 ROLLBACK 才能退出这个状态
             // 所以 DDL 语句不要在事务中执行
-            let lock_key = format!("plugin:ddl:{}", plugin_id);
+            let lock_key = format!("plugin:operation:{}", plugin_id);
             if let Some(ref lock_manager) = self.deps.lock_manager {
                 match lock_manager.try_lock_with_value(&lock_key).await {
                     Ok((true, Some(lock_value))) => {
@@ -289,6 +293,7 @@ impl InstallService {
                         crate::service::utils::create_plugin_tables(
                             &target_db_id,
                             &plugin_id,
+                            &app_id,
                             &install_version,
                             &install_path,
                             &plugin_def,
@@ -307,6 +312,7 @@ impl InstallService {
                         crate::service::utils::create_plugin_tables(
                             &target_db_id,
                             &plugin_id,
+                            &app_id,
                             &install_version,
                             &install_path,
                             &plugin_def,
@@ -319,6 +325,7 @@ impl InstallService {
                 crate::service::utils::create_plugin_tables(
                     &target_db_id,
                     &plugin_id,
+                    &app_id,
                     &install_version,
                     &install_path,
                     &plugin_def,
@@ -332,14 +339,18 @@ impl InstallService {
 
         // 步骤9: 保存数据库记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
+        let source_info = super::record_builder::PluginSourceInfo::new(
+            zip_source_url.as_deref(),
+            zip_source_type.as_deref(),
+            request.marketplace_source_id.as_deref(),
+        );
         let db_record = super::record_builder::build_plugin_create_params(
             &plugin_def,
             &install_version,
             &install_path,
             &target_db_id,
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
-            request.marketplace_source_id.as_deref(),
+            &source_info,
+            &app_id,
         );
 
         // 查询数据库是否已经有基线插件了
@@ -369,14 +380,13 @@ impl InstallService {
         let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
         let version_record = super::record_builder::build_version_create_params(
             &plugin_id,
+            &app_id,
             &install_version,
             &install_path.to_string_lossy(),
             &wasm_path,
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
+            &source_info,
             Some(&plugin_def),
             build_type.as_str(),
-            request.marketplace_source_id.as_deref(),
         );
         self.deps
             .version_history_repository
@@ -388,6 +398,7 @@ impl InstallService {
             .version_history_repository
             .set_current_version(
                 &plugin_id,
+                &app_id,
                 &install_version,
                 install_path.to_string_lossy().to_string().as_str(),
                 wasm_path.as_str(),
@@ -412,6 +423,7 @@ impl InstallService {
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
             plugin_type: plugin_def.r#type.clone(),
             source_path: plugin_def.source_path.clone(),
+            app_id: app_id.clone(),
         };
         {
             let mut registry = self.deps.registry.write().await;
@@ -452,7 +464,7 @@ impl InstallService {
         self.deps.audit_logger.log(audit_record).await?;
 
         // 步骤13: 发布安装完成事件
-        let payload = PluginLifecyclePayload::new(&plugin_id, &install_version)
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &install_version)
             .with_install_path(install_path.clone())
             .with_wasm_path(PathBuf::from(&wasm_path));
 
@@ -462,6 +474,7 @@ impl InstallService {
         let parse_params = ServiceParseParams {
             plugin_id: plugin_id.clone(),
             plugin_version: install_version.clone(),
+            app_id: app_id.clone(),
             domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
@@ -494,6 +507,9 @@ impl InstallService {
         }
 
         //发布事件
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &install_version)
+            .with_install_path(install_path.clone());
+
         GlobalEventBus::get()
             .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
             .await;

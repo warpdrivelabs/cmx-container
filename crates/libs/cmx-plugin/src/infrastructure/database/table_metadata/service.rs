@@ -96,6 +96,8 @@ impl TableMetadataService {
         ));
         main_fields.push(SeaField::new("module_code", data.module_code.clone()));
         main_fields.push(SeaField::new("archived", archived));
+        main_fields.push(SeaField::new("ddl_status", "pending".to_string()));
+        main_fields.push(SeaField::new("app_id", data.app_id.clone().unwrap_or_else(|| "default".to_string())));
         main_fields.push(SeaField::new("create_time", now));
         main_fields.push(SeaField::new("update_time", now));
 
@@ -628,18 +630,27 @@ impl TableMetadataService {
 
     /// 根据 plugin_id 更新 version 字段
     ///
-    /// 更新 cmx_meta_table_define
-    /// 指定 plugin_id version 字段
+    /// 更新 cmx_meta_table_define 的 version 字段（按 plugin_id 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器
+    /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `new_version` - 新的版本号
     pub async fn update_version_by_plugin_id(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
         plugin_id: &str,
+        app_id: &str,
         new_version: &str,
     ) -> PluginResult<u64> {
         info!(
-            "{:<12} - TableMetadataService::update_version_by_plugin_id - plugin_id: {}, new_version: {}",
-            "SERVICE", plugin_id, new_version
+            "{:<12} - TableMetadataService::update_version_by_plugin_id - plugin_id: {}, app_id: {}, new_version: {}",
+            "SERVICE", plugin_id, app_id, new_version
         );
 
         let now = Utc::now();
@@ -650,7 +661,8 @@ impl TableMetadataService {
             .table(TableMetadataBmc::table_ref())
             .value("version", new_version)
             .value("update_time", now)
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (main_sql, main_sql_values) = main_query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
@@ -670,26 +682,36 @@ impl TableMetadataService {
         Ok(1)
     }
 
-    /// 根据 plugin_id 删除表元数据
+    /// 根据 plugin_id 删除表元数据（按 plugin_id 和 app_id）
     ///
     /// 同时物理删除 cmx_meta_table_define 和 cmx_meta_table_define_version
-    /// 两个表中指定 plugin_id 对应的所有记录
+    /// 两个表中指定 plugin_id 和 app_id 对应的所有记录
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器
+    /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
     pub async fn delete_by_plugin_id(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
         plugin_id: &str,
+        app_id: &str,
     ) -> PluginResult<u64> {
         info!(
-            "{:<12} - TableMetadataService::delete_by_plugin_id - plugin_id: {}",
-            "SERVICE", plugin_id
+            "{:<12} - TableMetadataService::delete_by_plugin_id - plugin_id: {}, app_id: {}",
+            "SERVICE", plugin_id, app_id
         );
 
-        // 先删除版本表 cmx_meta_table_define_version 中对应 plugin_id 的记录
+        // 先删除版本表 cmx_meta_table_define_version 中对应 plugin_id 和 app_id 的记录
         let mut version_delete = Query::delete();
         version_delete
             .from_table("cmx_meta_table_define_version")
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (version_sql, version_sql_values) = version_delete.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
@@ -707,11 +729,12 @@ impl TableMetadataService {
                 ))
             })?;
 
-        // 再删除主表 cmx_meta_table_define 中对应 plugin_id 的记录
+        // 再删除主表 cmx_meta_table_define 中对应 plugin_id 和 app_id 的记录
         let mut main_delete = Query::delete();
         main_delete
             .from_table("cmx_meta_table_define")
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (main_sql, main_sql_values) = main_delete.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
@@ -905,6 +928,8 @@ impl TableMetadataService {
                     .get_by_name_as::<serde_json::Value>(schema, "metadata")
                     .unwrap_or(serde_json::Value::Null),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
+                ddl_status: row.get_by_name_as(schema, "ddl_status"),
+                app_id: row.get_by_name_as(schema, "app_id"),
                 create_time: row
                     .get_by_name_as(schema, "create_time")
                     .unwrap_or_else(Utc::now),

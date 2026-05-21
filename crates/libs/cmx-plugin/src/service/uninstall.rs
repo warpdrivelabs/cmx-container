@@ -27,6 +27,9 @@ pub struct UninstallRequest {
     pub force: bool,
     /// 操作者
     pub operator: String,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 卸载响应
@@ -87,11 +90,14 @@ impl UninstallService {
     pub async fn uninstall(&self, request: UninstallRequest) -> PluginResult<UninstallResponse> {
         let start_time = std::time::Instant::now();
 
+        // 从请求中获取 app_id，使用默认值 "default"
+        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+
         // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, &app_id)
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -114,11 +120,11 @@ impl UninstallService {
         // 步骤5: 物理删除 cmx_plugin_versions 版本历史记录
         self.deps
             .version_history_repository
-            .delete_versions_by_plugin_id(&plugin_id, None)
+            .delete_versions_by_plugin_id(&plugin_id, &app_id, None)
             .await?;
 
         // 步骤7: 物理删除 cmx_plugin 主表记录
-        self.deps.repository.delete_plugin(&plugin_id).await?;
+        self.deps.repository.delete_plugin(&plugin_id, &app_id).await?;
 
         // 步骤7.1: 物理删除 cmx_meta_table_define 和 cmx_meta_table_define_version 对应 plugin_id 的数据
         {
@@ -129,12 +135,13 @@ impl UninstallService {
                 default_db_id.as_str(),
                 None,
                 &plugin_id,
+                &app_id,
             )
             .await
             .map_err(|e| PluginError::Database(format!("删除表元数据失败: {}", e)))?;
         }
         // 7.2: 清理此插件关联的服务定义
-        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id,None).await {
+        if let Err(e) = self.deps.service_storage.delete_services_by_plugin(&plugin_id, &app_id, None).await {
             warn!("清理插件 {} 的服务定义失败: {:?}", plugin_id, e);
         } else {
             info!("已清理插件 {} 的服务定义", plugin_id);
@@ -175,7 +182,7 @@ impl UninstallService {
         }
 
         // 步骤10.2: 发布卸载事件（通知其他节点）
-        let payload = PluginLifecyclePayload::new(&plugin_id, &version);
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
 
         GlobalEventBus::get()
             .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())

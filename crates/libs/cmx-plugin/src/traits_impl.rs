@@ -58,6 +58,7 @@ impl From<PluginRecord> for PluginSnapshot {
 impl From<TraitsPluginFilter> for DomainPluginFilter {
     fn from(filter: TraitsPluginFilter) -> Self {
         Self {
+            app_id: None,
             status: filter.status.and_then(|s| s.parse().ok()),
             name: filter.name,
             domain_code: filter.domain_code,
@@ -74,7 +75,7 @@ impl PluginQuery for PluginManager {
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
         // 先从数据库查询完整记录（包含 wasm_path）
         let record = self.repository()
-            .find_plugin(plugin_id)
+            .find_plugin(plugin_id, &self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
@@ -118,7 +119,7 @@ impl PluginQuery for PluginManager {
     async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError> {
         // 从数据库获取完整记录
         let record = self.repository()
-            .find_plugin(plugin_id)
+            .find_plugin(plugin_id, &self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
@@ -152,7 +153,7 @@ impl PluginQuery for PluginManager {
         // 转换结果，补充 wasm_path
         let mut snapshots = Vec::new();
         for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id).await {
+            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, &self.app_id()).await {
                 snapshots.push(PluginSnapshot::from(record));
             } else {
                 snapshots.push(PluginSnapshot::from(info));
@@ -171,7 +172,7 @@ impl PluginQuery for PluginManager {
         // 转换结果，补充 wasm_path
         let mut snapshots = Vec::new();
         for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id).await {
+            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, &self.app_id()).await {
                 snapshots.push(PluginSnapshot::from(record));
             } else {
                 snapshots.push(PluginSnapshot::from(info));

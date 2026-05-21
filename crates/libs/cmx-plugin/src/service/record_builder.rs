@@ -12,30 +12,65 @@ use crate::infrastructure::database::deployment::DeploymentCreateParams;
 use crate::infrastructure::database::plugin::PluginCreateParams;
 use crate::infrastructure::database::version_history::VersionCreateParams;
 
+/// 插件来源信息。
+///
+/// 描述插件包的来源类型和位置。
+#[derive(Debug, Clone)]
+pub struct PluginSourceInfo {
+    /// 插件ZIP包来源地址
+    pub zip_source_url: Option<String>,
+    /// 插件来源类型
+    pub zip_source_type: Option<String>,
+    /// 市场版本来源ID
+    pub marketplace_source_id: Option<String>,
+}
+
+impl PluginSourceInfo {
+    /// 从可选的字符串引用创建来源信息。
+    ///
+    /// # Arguments
+    ///
+    /// * `zip_source_url` - ZIP包来源地址
+    /// * `zip_source_type` - 来源类型
+    /// * `marketplace_source_id` - 市场来源ID
+    pub fn new(
+        zip_source_url: Option<&str>,
+        zip_source_type: Option<&str>,
+        marketplace_source_id: Option<&str>,
+    ) -> Self {
+        Self {
+            zip_source_url: zip_source_url.map(|s| s.to_string()),
+            zip_source_type: zip_source_type.map(|s| s.to_string()),
+            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+        }
+    }
+}
+
 /// 构建插件创建参数。
 ///
-/// # 参数
-/// - `plugin_def`: 插件定义
-/// - `version`: 插件版本
-/// - `install_path`: 安装路径
-/// - `db_id`: 数据库ID
-/// - `zip_source_url`: 插件ZIP包来源地址
-/// - `zip_source_type`: 插件来源类型
-/// - `marketplace_source_id`: 市场版本来源 ID
+/// # Arguments
 ///
-/// # 返回
+/// * `plugin_def` - 插件定义
+/// * `version` - 插件版本
+/// * `install_path` - 安装路径
+/// * `db_id` - 数据库ID
+/// * `source_info` - 插件来源信息
+/// * `app_id` - 应用ID
+///
+/// # Returns
+///
 /// 插件创建参数（仅数据库列字段，不含 JOIN 补充字段）
 pub fn build_plugin_create_params(
     plugin_def: &PluginDefinition,
     version: &str,
     install_path: &Path,
     db_id: &str,
-    zip_source_url: Option<&str>,
-    zip_source_type: Option<&str>,
-    marketplace_source_id: Option<&str>,
+    source_info: &PluginSourceInfo,
+    app_id: &str,
 ) -> PluginCreateParams {
     PluginCreateParams {
         id: Uuid::new_v4().to_string(),
+        app_id: app_id.to_string(),
         plugin_id: plugin_def.id.clone(),
         name: plugin_def.name.clone(),
         description: plugin_def.description.clone(),
@@ -58,11 +93,13 @@ pub fn build_plugin_create_params(
         metadata: None,
         signature_algorithm: None,
         signer_key_id: None,
-        zip_source_url: zip_source_url.map(|s| s.to_string()),
-        zip_source_type: zip_source_type.map(|s| s.to_string()),
+        zip_source_url: source_info.zip_source_url.clone(),
+        zip_source_type: source_info.zip_source_type.clone(),
         plugin_type: Some(plugin_def.r#type.clone()),
         source_path: plugin_def.source_path.clone(),
-        marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+        marketplace_source_id: source_info.marketplace_source_id.clone(),
+        storage_key: None,
+        storage_checksum: None,
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
@@ -75,29 +112,29 @@ pub fn build_plugin_create_params(
 
 /// 构建版本历史创建参数。
 ///
-/// # 参数
-/// - `plugin_id`: 插件ID
-/// - `version`: 版本号
-/// - `install_path`: 安装路径
-/// - `wasm_path`: WASM文件路径
-/// - `zip_source_url`: 插件ZIP包来源地址
-/// - `zip_source_type`: 插件来源类型
-/// - `plugin_def`: 插件定义（用于获取 plugin_type 和 source_path）
-/// - `build_type`: 构建类型（debug/release）
-/// - `marketplace_source_id`: 市场版本来源 ID
+/// # Arguments
 ///
-/// # 返回
+/// * `plugin_id` - 插件ID
+/// * `app_id` - 应用隔离标识
+/// * `version` - 版本号
+/// * `install_path` - 安装路径
+/// * `wasm_path` - WASM文件路径
+/// * `source_info` - 版本来源信息
+/// * `plugin_def` - 插件定义（用于获取 plugin_type 和 source_path）
+/// * `build_type` - 构建类型（debug/release）
+///
+/// # Returns
+///
 /// 版本历史创建参数
 pub fn build_version_create_params(
     plugin_id: &str,
+    app_id: &str,
     version: &str,
     install_path: &str,
     wasm_path: &str,
-    zip_source_url: Option<&str>,
-    zip_source_type: Option<&str>,
+    source_info: &PluginSourceInfo,
     plugin_def: Option<&PluginDefinition>,
     build_type: &str,
-    marketplace_source_id: Option<&str>,
 ) -> VersionCreateParams {
     let plugin_type = plugin_def.map(|d| d.r#type.clone());
     let source_path = plugin_def.and_then(|d| d.source_path.clone());
@@ -105,18 +142,19 @@ pub fn build_version_create_params(
     VersionCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),
+        app_id: app_id.to_string(),
         version: version.to_string(),
         install_path: install_path.to_string(),
         wasm_path: wasm_path.to_string(),
         is_current: true,
         installed_at: Utc::now(),
         uninstalled_at: None,
-        zip_source_url: zip_source_url.map(|s| s.to_string()),
-        zip_source_type: zip_source_type.map(|s| s.to_string()),
+        zip_source_url: source_info.zip_source_url.clone(),
+        zip_source_type: source_info.zip_source_type.clone(),
         plugin_type,
         source_path,
         build_type: build_type.to_string(),
-        marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+        marketplace_source_id: source_info.marketplace_source_id.clone(),
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
@@ -131,6 +169,7 @@ pub fn build_version_create_params(
 ///
 /// # 参数
 /// - `plugin_id`: 插件ID
+/// - `app_id`: 应用隔离标识
 /// - `node_id`: 节点ID
 /// - `node_type`: 节点类型
 /// - `version`: 版本号
@@ -139,6 +178,7 @@ pub fn build_version_create_params(
 /// 部署创建参数
 pub fn build_deployment_create_params(
     plugin_id: &str,
+    app_id: &str,
     node_id: &str,
     node_type: Option<&str>,
     version: &str,
@@ -146,6 +186,7 @@ pub fn build_deployment_create_params(
     DeploymentCreateParams {
         id: Uuid::new_v4().to_string(),
         plugin_id: plugin_id.to_string(),
+        app_id: app_id.to_string(),
         node_id: node_id.to_string(),
         node_type: node_type.map(|s| s.to_string()),
         version: version.to_string(),

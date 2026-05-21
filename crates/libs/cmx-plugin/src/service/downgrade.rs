@@ -33,6 +33,9 @@ pub struct DowngradeRequest {
     pub source: Option<PluginSource>,
     /// 操作者
     pub operator: Option<String>,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 降级响应
@@ -102,11 +105,13 @@ impl DowngradeService {
     pub async fn downgrade(&self, request: DowngradeRequest) -> PluginResult<DowngradeResponse> {
         let start_time = std::time::Instant::now();
 
+        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+
         // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, &app_id)
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -114,7 +119,7 @@ impl DowngradeService {
 
         // 步骤2: 查找目标版本信息
         let target_version_record = self.deps.version_history_repository
-            .find_version(&request.plugin_id, &request.target_version,None)
+            .find_version(&request.plugin_id, &app_id, &request.target_version, None)
             .await?
             .ok_or_else(|| {
                 PluginError::Downgrade(format!("未找到版本 {} 的记录", request.target_version))
@@ -139,6 +144,7 @@ impl DowngradeService {
         self.deps.version_history_repository
             .set_current_version(
                 &plugin_id,
+                &app_id,
                 &request.target_version,
                 &target_version_record.install_path,
                 &target_version_record.wasm_path,
@@ -154,7 +160,7 @@ impl DowngradeService {
             marketplace_source_id: target_version_record.marketplace_source_id.clone(),
             ..Default::default()
         };
-        self.deps.repository.update_plugin(&plugin_id, &fields, Some(txn_guard.txn_id())).await?;
+        self.deps.repository.update_plugin(&plugin_id, &app_id, &fields, Some(txn_guard.txn_id())).await?;
 
         // 步骤6.1: 更新 cmx_meta_table_define  version 字段
         {
@@ -164,6 +170,7 @@ impl DowngradeService {
                 default_db_id.as_str(),
                 Some(txn_guard.txn_id()),
                 &plugin_id,
+                &app_id,
                 &request.target_version,
             )
             .await
@@ -179,6 +186,7 @@ impl DowngradeService {
             let parse_params = ServiceParseParams {
                 plugin_id: plugin_id.clone(),
                 plugin_version: request.target_version.clone(),
+                app_id: app_id.clone(),
                 domain_code: plugin.domain_code.clone().unwrap_or_default(),
                 application_code: plugin.application_code.clone().unwrap_or_default(),
                 module_code: plugin.module_code.clone().unwrap_or_default(),
@@ -204,7 +212,7 @@ impl DowngradeService {
                 if !old_service_keys.contains(&service.service_key) {
                     // 服务在旧版本中不存在，应该删除
                     self.deps.service_storage
-                        .delete_service(&service.service_key, Some(txn_guard.txn_id()), None)
+                        .delete_service(&service.service_key, &app_id, Some(txn_guard.txn_id()), None)
                         .await
                         .map_err(|e| PluginError::Database(format!("删除服务定义 {} 失败: {}", service.service_key, e)))?;
                     deleted_count += 1;
@@ -259,6 +267,7 @@ impl DowngradeService {
             module_code: plugin.module_code.unwrap_or_default(),
             plugin_type: target_version_record.plugin_type.clone().unwrap_or_default(),
             source_path: target_version_record.source_path.clone(),
+            app_id: plugin.app_id.clone(),
         };
         self.deps
             .cache
@@ -298,7 +307,7 @@ impl DowngradeService {
         }
 
         // 步骤11: 发布降级完成事件
-        let payload = PluginLifecyclePayload::new(&plugin_id, &request.target_version)
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &request.target_version)
             .with_old_version(&old_version)
             .with_install_path(PathBuf::from(&target_version_record.install_path))
             .with_wasm_path(PathBuf::from(&target_version_record.wasm_path));

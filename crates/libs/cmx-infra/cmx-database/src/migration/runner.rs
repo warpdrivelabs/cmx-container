@@ -28,10 +28,10 @@ pub struct MigrationRunner {
     default_db_id: String,
     /// 分布式锁管理器（可选）
     lock_manager: Option<Arc<cmx_buffer::LockManager>>,
-    /// 当前节点ID
-    node_id: String,
     /// 迁移文件目录路径
     migration_dir: PathBuf,
+    /// 是否启用迁移
+    enabled: bool,
     /// 锁超时时间（秒）
     lock_timeout: u64,
     /// 获取锁失败后的等待超时（秒）
@@ -49,19 +49,17 @@ impl MigrationRunner {
     /// * `db` - 数据库管理器实例
     /// * `default_db_id` - 默认数据库ID
     /// * `migration_dir` - 迁移文件目录路径
-    /// * `node_id` - 当前节点ID
     pub fn new(
         db: Arc<DatabaseManager>,
         default_db_id: String,
         migration_dir: PathBuf,
-        node_id: String,
     ) -> Self {
         Self {
             db,
             default_db_id,
             lock_manager: None,
-            node_id,
             migration_dir,
+            enabled: false,
             lock_timeout: 60,
             lock_wait_timeout: 120,
             lock_poll_interval: 3,
@@ -117,18 +115,40 @@ impl MigrationRunner {
         self
     }
 
+    /// 设置是否启用迁移
+    ///
+    /// # 参数
+    /// * `enabled` - 是否启用，默认为 false
+    ///
+    /// 设置为 false 时，跳过迁移执行，直接返回
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
     /// 执行所有待执行的迁移
     ///
     /// 流程：
-    /// 1. 确保迁移表存在
-    /// 2. 尝试获取分布式锁
-    /// 3. 加载迁移文件
-    /// 4. 查询已执行迁移
-    /// 5. 校验和验证
-    /// 6. 过滤待执行迁移
-    /// 7. 依次执行
-    /// 8. 返回执行摘要
+    /// 1. 检查是否启用迁移
+    /// 2. 确保迁移表存在
+    /// 3. 尝试获取分布式锁
+    /// 4. 加载迁移文件
+    /// 5. 查询已执行迁移
+    /// 6. 校验和验证
+    /// 7. 过滤待执行迁移
+    /// 8. 依次执行
+    /// 9. 返回执行摘要
     pub async fn run_pending_migrations(&self) -> MigrationResult<MigrationSummary> {
+        // 0. 检查是否启用迁移
+        if !self.enabled {
+            debug!("数据库迁移已禁用，跳过迁移执行");
+            return Ok(MigrationSummary {
+                executed_count: 0,
+                skipped_count: 0,
+                failed: Vec::new(),
+            });
+        }
+
         // 1. 确保迁移表存在
         self.ensure_migration_table().await?;
 
@@ -170,8 +190,19 @@ impl MigrationRunner {
 
         // 4. 查询已执行迁移
         let executed = self.get_executed_migrations().await?;
-        let executed_versions: std::collections::HashSet<String> =
-            executed.iter().map(|r| r.version.clone()).collect();
+
+        // 分离成功和失败的迁移版本
+        let successful_versions: std::collections::HashSet<String> = executed
+            .iter()
+            .filter(|r| r.status == MigrationStatus::Success)
+            .map(|r| r.version.clone())
+            .collect();
+
+        let failed_versions: std::collections::HashSet<String> = executed
+            .iter()
+            .filter(|r| r.status == MigrationStatus::Failed)
+            .map(|r| r.version.clone())
+            .collect();
 
         // 5. 校验和验证
         if self.validate_checksum {
@@ -196,14 +227,19 @@ impl MigrationRunner {
         }
 
         // 6. 过滤待执行迁移
+        // 跳过已成功的迁移，但重新执行失败的迁移
         let pending: Vec<&PendingMigration> = all_migrations
             .iter()
-            .filter(|m| !executed_versions.contains(&m.version))
+            .filter(|m| !successful_versions.contains(&m.version))
             .collect();
 
-        let skipped_count = all_migrations.len() - pending.len();
+        let skipped_count = successful_versions.len();
+        let retry_count = failed_versions.len();
         if skipped_count > 0 {
-            info!("跳过 {} 个已执行的迁移", skipped_count);
+            info!("跳过 {} 个已成功的迁移", skipped_count);
+        }
+        if retry_count > 0 {
+            info!("重新执行 {} 个失败的迁移", retry_count);
         }
 
         // 7. 依次执行
@@ -211,11 +247,20 @@ impl MigrationRunner {
         let mut failed = Vec::new();
 
         for migration in &pending {
-            info!(
-                version = %migration.version,
-                name = %migration.name,
-                "开始执行迁移"
-            );
+            let is_retry = failed_versions.contains(&migration.version);
+            if is_retry {
+                info!(
+                    version = %migration.version,
+                    name = %migration.name,
+                    "重新执行失败的迁移"
+                );
+            } else {
+                info!(
+                    version = %migration.version,
+                    name = %migration.name,
+                    "开始执行迁移"
+                );
+            }
 
             match self.execute_migration(migration).await {
                 Ok(duration_ms) => {
@@ -356,15 +401,14 @@ impl MigrationRunner {
         while start.elapsed() < timeout {
             sleep(poll_interval).await;
 
-            // 只检查锁是否存在，不尝试获取锁
-            // 获取锁意味着"我要执行迁移"，而等待者只是观察者
-            match lock_manager.is_locked(MIGRATION_LOCK_KEY).await {
-                Ok(false) => {
-                    // 锁不存在，说明其他节点已释放（迁移完成）
-                    info!("其他节点已完成数据库迁移");
+            match lock_manager.try_lock_with_value(MIGRATION_LOCK_KEY).await {
+                Ok((true, _)) => {
+                    // 获取到锁，说明其他节点已释放（迁移完成）
+                    // 立即释放锁，不再执行迁移
+                    info!("其他节点已完成数据库迁移，锁已释放");
                     return true;
                 }
-                Ok(true) => {
+                Ok((false, _)) => {
                     debug!(
                         "迁移锁仍被持有，继续等待（已等待 {}秒）",
                         start.elapsed().as_secs()
@@ -600,7 +644,7 @@ impl MigrationRunner {
             migration.name,
             migration.checksum,
             status.to_string(),
-            self.node_id,
+            "".to_string(),
             execution_time_ms,
             error_message
         ]);
@@ -700,13 +744,15 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
                 statements.push(&sql[last_pos..byte_pos]);
                 last_pos = byte_pos + 1;
             }
-            '-' if iter.peek().map(|&(_, c)| c) == Some('-') => {
-                iter.next();
-                while let Some(&(_, c)) = iter.peek() {
-                    if c == '\n' {
-                        break;
-                    }
+            '-' => {
+                if iter.peek().map(|&(_, c)| c) == Some('-') {
                     iter.next();
+                    while let Some(&(_, c)) = iter.peek() {
+                        if c == '\n' {
+                            break;
+                        }
+                        iter.next();
+                    }
                 }
             }
             _ => {}

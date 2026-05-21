@@ -45,6 +45,9 @@ pub struct UpgradeRequest {
     pub  build_type : Option<String>,
     /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
     pub marketplace_source_id: Option<String>,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 升级响应
@@ -133,13 +136,14 @@ impl UpgradeService {
     pub async fn upgrade(&self, request: UpgradeRequest) -> PluginResult<UpgradeResponse> {
         let start_time = std::time::Instant::now();
         let build_type = request.build_type.unwrap_or("release".to_string());
+        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
 
 
         // 步骤1: 检查插件存在
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, &app_id)
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -257,6 +261,7 @@ impl UpgradeService {
                     crate::service::utils::create_plugin_tables(
                         &target_db_id,
                         &plugin_id,
+                        &app_id,
                         &new_version,
                         &install_path,
                         &plugin_def,
@@ -275,6 +280,7 @@ impl UpgradeService {
                     crate::service::utils::create_plugin_tables(
                         &target_db_id,
                         &plugin_id,
+                        &app_id,
                         &new_version,
                         &install_path,
                         &plugin_def,
@@ -287,6 +293,7 @@ impl UpgradeService {
             crate::service::utils::create_plugin_tables(
                 &target_db_id,
                 &plugin_id,
+                &app_id,
                 &new_version,
                 &install_path,
                 &plugin_def,
@@ -298,14 +305,18 @@ impl UpgradeService {
         // 步骤10: 保存数据库记录
         // 使用辅助函数构建记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
+        let source_info = super::record_builder::PluginSourceInfo::new(
+            zip_source_url.as_deref(),
+            zip_source_type.as_deref(),
+            effective_marketplace_source_id.as_deref(),
+        );
         let db_record = super::record_builder::build_plugin_create_params(
             &plugin_def,
             &new_version,
             &install_path,
             &target_db_id,
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
-            effective_marketplace_source_id.as_deref(),
+            &source_info,
+            &app_id,
         );
 
         // 步骤10.1: Upsert 插件记录（cmx_plugin）
@@ -318,14 +329,13 @@ impl UpgradeService {
         let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
         let version_record = super::record_builder::build_version_create_params(
             &plugin_id,
+            &app_id,
             &new_version,
             &install_path.to_string_lossy(),
             &wasm_path,
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
+            &source_info,
             Some(&plugin_def),
             build_type.as_str(),
-            effective_marketplace_source_id.as_deref(),
         );
         self.deps
             .version_history_repository
@@ -335,7 +345,7 @@ impl UpgradeService {
         // 标记当前版本
         self.deps
             .version_history_repository
-            .set_current_version(&plugin_id, new_version.as_str(),
+            .set_current_version(&plugin_id, &app_id, new_version.as_str(),
                                  install_path.to_string_lossy().to_string().as_str(),
                                  wasm_path.as_str(),
                                  Some(txn_guard.txn_id())).await?;
@@ -390,6 +400,7 @@ impl UpgradeService {
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
             plugin_type: plugin_def.r#type.clone(),
             source_path: plugin_def.source_path.clone(),
+            app_id: app_id.clone(),
         };
         self.deps
             .cache
@@ -423,6 +434,7 @@ impl UpgradeService {
         let parse_params = ServiceParseParams {
             plugin_id: plugin_id.clone(),
             plugin_version: new_version.clone(),
+            app_id: app_id.clone(),
             domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
@@ -454,7 +466,7 @@ impl UpgradeService {
         }
 
         // 步骤16: 发布升级完成事件
-        let payload = PluginLifecyclePayload::new(&plugin_id, &new_version)
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &new_version)
             .with_old_version(&old_version)
             .with_install_path(install_path.clone())
             .with_wasm_path(PathBuf::from(&wasm_path));

@@ -978,6 +978,7 @@ pub async fn marketplace_plugin_check_updates(
         domain_code: None,
         application_code: None,
         module_code: None,
+        app_id: None,
     };
     let all_plugins = manager
         .repository()

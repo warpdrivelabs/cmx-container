@@ -23,6 +23,7 @@ use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::service::deploy::{DeployRequest, DeployService};
 use crate::service::initializer::build_plugin_source;
+use crate::service::runtime_loader::RuntimeLoader;
 
 /// 插件变更通知处理器
 ///
@@ -40,6 +41,10 @@ pub struct PluginChangeHandler {
     registry: Arc<RwLock<PluginRegistry>>,
     /// 插件上下文映射
     contexts: Arc<RwLock<HashMap<String, PluginContext>>>,
+    /// 当前应用ID，用于过滤非本应用的通知
+    app_id: String,
+    /// 运行时加载器
+    runtime_loader: Arc<RuntimeLoader>,
 }
 
 impl PluginChangeHandler {
@@ -50,6 +55,8 @@ impl PluginChangeHandler {
         plugin_root: PathBuf,
         registry: Arc<RwLock<PluginRegistry>>,
         contexts: Arc<RwLock<HashMap<String, PluginContext>>>,
+        app_id: String,
+        runtime_loader: Arc<RuntimeLoader>,
     ) -> Self {
         Self {
             repository,
@@ -57,17 +64,57 @@ impl PluginChangeHandler {
             plugin_root,
             registry,
             contexts,
+            app_id,
+            runtime_loader,
         }
     }
 
     /// 处理插件变更通知
     pub async fn handle(&self, notification: &PluginChangeNotification) {
+        if let Some(ref notification_app_id) = notification.app_id {
+            if notification_app_id != &self.app_id {
+                tracing::debug!(
+                    "Ignoring notification for different app_id: {}",
+                    notification_app_id
+                );
+                return;
+            }
+        }
+
         match &notification.action {
             PluginChangeAction::Changed => {
                 self.handle_plugin_changed(&notification.plugin_id).await;
             }
             PluginChangeAction::Removed => {
                 self.handle_plugin_removed(&notification.plugin_id).await;
+            }
+            PluginChangeAction::RuntimeLoad => {
+                let version = notification.version.as_deref().unwrap_or("unknown");
+                tracing::info!(
+                    "Received RuntimeLoad notification for plugin: {}, version: {}",
+                    notification.plugin_id,
+                    version
+                );
+                if let Err(e) = self.runtime_loader.load_plugin(&notification.plugin_id, version).await {
+                    tracing::error!(
+                        "RuntimeLoad failed for plugin {}: {}",
+                        notification.plugin_id,
+                        e
+                    );
+                }
+            }
+            PluginChangeAction::RuntimeUnload => {
+                tracing::info!(
+                    "Received RuntimeUnload notification for plugin: {}",
+                    notification.plugin_id
+                );
+                if let Err(e) = self.runtime_loader.unload_plugin(&notification.plugin_id).await {
+                    tracing::error!(
+                        "RuntimeUnload failed for plugin {}: {}",
+                        notification.plugin_id,
+                        e
+                    );
+                }
             }
         }
     }
@@ -76,24 +123,32 @@ impl PluginChangeHandler {
     ///
     /// 从数据库查询最新版本，与本地文件系统对比后执行操作。
     async fn handle_plugin_changed(&self, plugin_id: &str) {
-        // 从数据库查询最新插件记录
-        let db_plugin = match self.repository.find_plugin(plugin_id).await {
-            Ok(Some(p)) => p,
-            Ok(None) => {
-                tracing::warn!(
-                    "收到插件 {} 变更通知，但数据库中未找到记录",
-                    plugin_id
-                );
-                return;
-            }
+        // 从数据库查询最新插件记录（使用 app_id 过滤）
+        let filter = crate::domain::plugin::PluginFilter {
+            app_id: Some(self.app_id.clone()),
+            ..Default::default()
+        };
+        let records = match self.repository.list_plugins(&filter).await {
+            Ok(records) => records,
             Err(e) => {
                 tracing::error!("查询插件 {} 失败: {}", plugin_id, e);
                 return;
             }
         };
+        let db_plugin = match records.iter().find(|r| r.plugin_id == plugin_id) {
+            Some(p) => p.clone(),
+            None => {
+                tracing::warn!(
+                    "收到插件 {} 变更通知，但数据库中未找到记录 (app_id={})",
+                    plugin_id,
+                    self.app_id
+                );
+                return;
+            }
+        };
 
-        // 检查本地是否已是最新版本
-        let local_path = self.plugin_root.join(plugin_id).join(&db_plugin.version);
+        // 检查本地是否已是最新版本（使用 app_id 目录）
+        let local_path = self.plugin_root.join(&self.app_id).join(plugin_id).join(&db_plugin.version);
         if local_path.exists() {
             tracing::info!(
                 "插件 {} 版本 {} 本地已存在，跳过同步",
@@ -116,6 +171,7 @@ impl PluginChangeHandler {
             force_reinstall: false,
             build_type: None,
             publish_to_marketplace: false,
+            app_id: Some(self.app_id.clone()),
         };
 
         match self.deploy_service.deploy(request).await {
@@ -149,8 +205,8 @@ impl PluginChangeHandler {
             contexts.remove(plugin_id);
         }
 
-        // 清理本地文件目录
-        let plugin_dir = self.plugin_root.join(plugin_id);
+        // 清理本地文件目录（使用 app_id 目录）
+        let plugin_dir = self.plugin_root.join(&self.app_id).join(plugin_id);
         if plugin_dir.exists() {
             if let Err(e) = tokio::fs::remove_dir_all(&plugin_dir).await {
                 tracing::error!("清理插件 {} 本地文件失败: {}", plugin_id, e);
@@ -199,6 +255,7 @@ impl PluginChangeHandler {
                         force_reinstall: false,
                         build_type: None,
                         publish_to_marketplace: false,
+                        app_id: Some(self.app_id.clone()),
                     };
 
                     match self.deploy_service.deploy(request).await {

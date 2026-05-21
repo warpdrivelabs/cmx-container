@@ -54,6 +54,9 @@ pub struct DeployRequest {
     /// 是否发布到插件市场
     #[serde(default)]
     pub publish_to_marketplace: bool,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 部署响应
@@ -200,7 +203,7 @@ impl DeployService {
         }
 
 
-        let existing_plugin = self.deps.repository.find_plugin(&plugin_id).await?;
+        let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or("default")).await?;
 
         match existing_plugin {
             None => {
@@ -260,6 +263,7 @@ impl DeployService {
             version_constraint: None,
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+            app_id: request.app_id.clone(),
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -293,6 +297,7 @@ impl DeployService {
             operator: Some("system".to_string()),
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+            app_id: request.app_id.clone(),
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
@@ -323,6 +328,7 @@ impl DeployService {
             plugin_id: plugin_id.to_string(),
             force: true,
             operator: "system".to_string(),
+            app_id: request.app_id.clone(),
         };
 
         self.deps.uninstall_service.uninstall(uninstall_req).await?;
@@ -335,6 +341,7 @@ impl DeployService {
             version_constraint: None,
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+            app_id: request.app_id.clone(),
         };
 
         let result = self.deps.install_service.install(install_req).await?;

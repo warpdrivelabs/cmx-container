@@ -879,7 +879,10 @@ pub async fn delete_service(
     let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
-    service_storage.delete_service(&req.service_key, None, None).await
+    // 从环境变量读取 app_id，默认值为 "default"
+    let app_id = std::env::var("APP_ID").unwrap_or_else(|_| "default".to_string());
+
+    service_storage.delete_service(&req.service_key, &app_id, None, None).await
         .map_err(|e| Error::business_error(format!("删除服务失败: {}", e)))?;
 
     Ok(Json(crate::UnitResp::msg("删除成功")))

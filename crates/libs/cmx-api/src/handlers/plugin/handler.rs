@@ -19,7 +19,7 @@ use super::request::*;
 use super::response::*;
 
 /// 从请求转换为 cmx_plugin 的 PluginSource
-fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::PluginSource {
+pub fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::PluginSource {
     match req {
         PluginSourceRequest::Local { path } => {
             cmx_plugin::domain::plugin::PluginSource::Local {
@@ -66,6 +66,7 @@ pub async fn plugin_install(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: convert_source(&req.source),
         db_id: req.target_db_id,
@@ -73,6 +74,7 @@ pub async fn plugin_install(
         version_constraint: None,
         build_type: None,
         marketplace_source_id: None,
+        app_id: Some(app_id),
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
@@ -112,10 +114,12 @@ pub async fn plugin_uninstall(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let uninstall_req = cmx_plugin::service::uninstall::UninstallRequest {
         plugin_id: req.plugin_id.clone(),
         force: req.force.unwrap_or(false),
         operator: "system".to_string(),
+        app_id: Some(app_id),
     };
 
     let result = manager.uninstall(uninstall_req).await.map_err(|e| {
@@ -153,6 +157,7 @@ pub async fn plugin_upgrade(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let upgrade_req = cmx_plugin::service::upgrade::UpgradeRequest {
         plugin_id: req.plugin_id.clone(),
         source: convert_source(&req.source),
@@ -161,6 +166,7 @@ pub async fn plugin_upgrade(
         operator: req.operator,
         build_type: None,
         marketplace_source_id: None,
+        app_id: Some(app_id),
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
@@ -200,11 +206,13 @@ pub async fn plugin_downgrade(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let downgrade_req = cmx_plugin::service::downgrade::DowngradeRequest {
         plugin_id: req.plugin_id.clone(),
         target_version: req.target_version.clone(),
         source: None,
         operator: req.operator,
+        app_id: Some(app_id),
     };
 
     let result = manager.downgrade(downgrade_req).await.map_err(|e| {
@@ -320,12 +328,14 @@ pub async fn plugin_deploy(
     // 调用 PluginManager.deploy()
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let deploy_req = cmx_plugin::DeployRequest {
         source,
         db_id: target_db_id,
         force_reinstall,
         build_type,
         publish_to_marketplace: publish_to_marketplace.unwrap_or(true),
+        app_id: Some(app_id),
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {

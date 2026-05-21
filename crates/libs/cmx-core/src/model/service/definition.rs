@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct ServiceDefinition {
     /// 主键ID
     pub id: String,
+    /// 应用隔离标识
+    pub app_id: String,
     /// 服务唯一标识（来自 JSON 的 code 字段）
     pub service_key: String,
     /// 服务名称
@@ -48,6 +50,8 @@ pub struct ServiceDefinition {
 pub struct ServiceInfo {
     /// 主键ID
     pub id: String,
+    /// 应用隔离标识
+    pub app_id: String,
     /// 服务唯一标识
     pub service_key: String,
     /// 服务名称
@@ -86,6 +90,7 @@ impl From<ServiceDefinition> for ServiceInfo {
     fn from(def: ServiceDefinition) -> Self {
         Self {
             id: def.id,
+            app_id: def.app_id,
             service_key: def.service_key,
             service_name: def.service_name,
             description: def.description,
@@ -108,6 +113,7 @@ impl From<ServiceInfo> for ServiceDefinition {
     fn from(info: ServiceInfo) -> Self {
         Self {
             id: info.id,
+            app_id: info.app_id,
             service_key: info.service_key,
             service_name: info.service_name,
             description: info.description,

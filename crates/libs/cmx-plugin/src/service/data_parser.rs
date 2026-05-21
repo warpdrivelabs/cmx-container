@@ -26,6 +26,8 @@ pub struct ServiceParseParams {
     pub plugin_id: String,
     /// 插件版本
     pub plugin_version: String,
+    /// 应用隔离标识
+    pub app_id: String,
     /// 域编码
     pub domain_code: String,
     /// 应用编码
@@ -231,6 +233,7 @@ impl ServiceDataParser {
         // 构造型服务定义结构体
         Ok(ServiceDefinition {
             id: Uuid::new_v4().to_string(),  // 生成新的 UUID 作为主键
+            app_id: params.app_id.clone(),
             service_key,
             service_name: orchestration.name.clone(),
             description: orchestration.description.clone(),

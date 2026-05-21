@@ -52,6 +52,10 @@ pub struct RollbackRequest {
     /// 回滚完成后是否自动激活插件。
     /// 如果回滚前插件已激活，回滚后将自动激活。
     pub auto_activate: bool,
+
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// 回滚响应
@@ -203,11 +207,13 @@ impl RollbackService {
     pub async fn rollback(&self, request: RollbackRequest) -> PluginResult<RollbackResponse> {
         let start_time = std::time::Instant::now();
 
+        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+
         // 步骤1：检查插件存在
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, &app_id)
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -238,7 +244,7 @@ impl RollbackService {
         if was_activated {
             self.deps
                 .repository
-                .update_plugin_status(&request.plugin_id, "deactivated")
+                .update_plugin_status(&request.plugin_id, &app_id, "deactivated")
                 .await?;
         }
 
@@ -264,6 +270,7 @@ impl RollbackService {
             .repository
             .update_plugin(
                 &request.plugin_id,
+                &app_id,
                 &crate::infrastructure::database::repository::PluginUpdateParams {
                     version: Some(to_version.clone()),
                     status: Some(if request.auto_activate || was_activated {

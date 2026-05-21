@@ -80,10 +80,22 @@ impl DeploymentRepository {
         Ok(())
     }
 
-    /// 更新部署记录
+    /// 更新部署记录（通过主键 ID 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - 部署记录主键 ID
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `fields` - 要更新的字段
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn update_deployment(
         &self,
         id: &str,
+        app_id: &str,
         fields: &DeploymentUpdateParams,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
@@ -131,6 +143,7 @@ impl DeploymentRepository {
         }
 
         query.and_where(sea_query::Expr::col("id").eq(id));
+        query.and_where(sea_query::Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -142,15 +155,31 @@ impl DeploymentRepository {
         Ok(())
     }
 
-    /// 查询节点上的插件部署
+    /// 查询节点上的插件部署（按 plugin_id、app_id、node_id 和 version）
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `node_id` - 节点标识
+    /// * `version` - 版本号
+    ///
+    /// # Returns
+    ///
+    /// 找到则返回 `Some(DeploymentRecord)`，否则返回 `None`。
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn find_deployment(
         &self,
         plugin_id: &str,
+        app_id: &str,
         node_id: &str,
         version: &str,
     ) -> PluginResult<Option<DeploymentRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND node_id = $2 AND version = $3 AND status != 'uninstalled' AND archived = 0";
-        let params = serde_json::json!([plugin_id, node_id, version]);
+        let sql = "SELECT * FROM cmx_plugin_deployments WHERE plugin_id = $1 AND app_id = $2 AND node_id = $3 AND version = $4 AND status != 'uninstalled' AND archived = 0";
+        let params = serde_json::json!([plugin_id, app_id, node_id, version]);
 
         let result = self
             .db_manager
@@ -197,16 +226,29 @@ impl DeploymentRepository {
         Self::parse_deployment_record(&result)
     }
 
-    /// 删除节点上的插件部署
+    /// 删除节点上的插件部署（按 plugin_id、app_id 和 node_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `node_id` - 节点标识
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn delete_deployment(
         &self,
         plugin_id: &str,
+        app_id: &str,
         node_id: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         let mut query = Query::delete();
         query.from_table("cmx_plugin_deployments");
         query.and_where(sea_query::Expr::col("plugin_id").eq(plugin_id));
+        query.and_where(sea_query::Expr::col("app_id").eq(app_id));
         query.and_where(sea_query::Expr::col("node_id").eq(node_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
@@ -219,15 +261,27 @@ impl DeploymentRepository {
         Ok(())
     }
 
-    /// 物理删除插件的所有部署记录
+    /// 物理删除插件的所有部署记录（按 plugin_id 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn delete_deployments_by_plugin_id(
         &self,
         plugin_id: &str,
+        app_id: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         let mut query = Query::delete();
         query.from_table("cmx_plugin_deployments");
         query.and_where(sea_query::Expr::col("plugin_id").eq(plugin_id));
+        query.and_where(sea_query::Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 

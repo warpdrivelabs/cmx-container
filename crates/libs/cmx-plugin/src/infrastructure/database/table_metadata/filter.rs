@@ -32,6 +32,9 @@ pub struct TableMetadataFilter {
     pub module_code: Option<OpValsString>,
     /// 按归档状态过滤
     pub archived: Option<OpValsInt64>,
+    /// 按DDL执行状态过滤
+    #[modql(rel = "cmx_meta_table_define")]
+    pub ddl_status: Option<OpValsString>,
 }
 
 /// 表元数据版本查询过滤器

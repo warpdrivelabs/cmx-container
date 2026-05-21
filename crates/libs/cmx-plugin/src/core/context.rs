@@ -13,6 +13,8 @@ use crate::domain::plugin::PluginStatus;
 pub struct PluginContext {
     /// 插件ID
     pub plugin_id: String,
+    /// 应用ID
+    pub app_id: String,
     /// 插件版本
     pub version: String,
     /// 插件状态
@@ -38,6 +40,7 @@ impl PluginContext {
     pub fn new(plugin_id: String, version: String) -> Self {
         Self {
             plugin_id,
+            app_id: "default".to_string(),
             version,
             status: PluginStatus::Installed,
             db_id: String::new(),
@@ -54,6 +57,7 @@ impl PluginContext {
     pub fn from_definition(def: &cmx_core::model::meta::plugin::PluginDefinition, install_path: &Path) -> Self {
         Self {
             plugin_id: def.id.clone(),
+            app_id: "default".to_string(),
             version: def.version.clone().unwrap_or_else(|| "1.0.0".to_string()),
             status: PluginStatus::Installed,
             db_id: String::new(),
@@ -70,6 +74,7 @@ impl PluginContext {
     pub fn from_db_record(record: &crate::infrastructure::database::plugin::PluginRecord) -> Self {
         Self {
             plugin_id: record.plugin_id.clone(),
+            app_id: record.app_id.clone(),
             version: record.version.clone(),
             status: match record.status.as_str() {
                 "installed" => PluginStatus::Installed,

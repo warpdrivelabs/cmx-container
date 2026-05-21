@@ -69,6 +69,9 @@ pub struct PluginFilter {
 
     /// 按模块编码筛选
     pub module_code: Option<String>,
+
+    /// 按应用ID筛选
+    pub app_id: Option<String>,
 }
 
 /// 插件查询 trait

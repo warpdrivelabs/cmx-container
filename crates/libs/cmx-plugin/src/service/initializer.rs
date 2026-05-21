@@ -14,7 +14,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::log;
+use tracing::{error, info, log};
+use tracing::log::__private_api::log;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
@@ -75,6 +76,32 @@ pub struct PluginSyncResult {
     pub failed: Vec<(String, String)>,
 }
 
+/// 插件初始化器依赖配置。
+///
+/// 参考其他 Service 的 Deps 模式，统一管理初始化器依赖的组件。
+pub struct PluginInitializerDeps {
+    /// 插件数据仓库
+    pub repository: Arc<PluginRepository>,
+    /// 版本历史仓库
+    pub version_history_repository: Arc<VersionHistoryRepository>,
+    /// 插件注册表
+    pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
+    /// 插件上下文映射
+    pub contexts: Arc<tokio::sync::RwLock<HashMap<String, PluginContext>>>,
+    /// 安装服务
+    pub install_service: InstallService,
+    /// 升级服务
+    pub upgrade_service: UpgradeService,
+    /// 降级服务
+    pub downgrade_service: DowngradeService,
+    /// 卸载服务
+    pub uninstall_service: UninstallService,
+    /// 插件根目录
+    pub plugin_root: PathBuf,
+    /// 应用隔离标识
+    pub app_id: String,
+}
+
 /// 插件初始化器
 #[allow(dead_code)]
 pub struct PluginInitializer {
@@ -87,31 +114,31 @@ pub struct PluginInitializer {
     downgrade_service: DowngradeService,
     uninstall_service: UninstallService,
     plugin_root: PathBuf,
+    app_id: String,
 }
 
 impl PluginInitializer {
-    /// 创建新的插件初始化器
-    pub fn new(
-        repository: Arc<PluginRepository>,
-        version_history_repository: Arc<VersionHistoryRepository>,
-        registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
-        contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
-        install_service: InstallService,
-        upgrade_service: UpgradeService,
-        downgrade_service: DowngradeService,
-        uninstall_service: UninstallService,
-        plugin_root: PathBuf,
-    ) -> Self {
+    /// 创建新的插件初始化器。
+    ///
+    /// # Arguments
+    ///
+    /// * `deps` - 初始化器依赖配置
+    ///
+    /// # Returns
+    ///
+    /// 返回初始化后的 `PluginInitializer` 实例。
+    pub fn new(deps: PluginInitializerDeps) -> Self {
         Self {
-            repository,
-            version_history_repository,
-            registry,
-            contexts,
-            install_service,
-            upgrade_service,
-            downgrade_service,
-            uninstall_service,
-            plugin_root,
+            repository: deps.repository,
+            version_history_repository: deps.version_history_repository,
+            registry: deps.registry,
+            contexts: deps.contexts,
+            install_service: deps.install_service,
+            upgrade_service: deps.upgrade_service,
+            downgrade_service: deps.downgrade_service,
+            uninstall_service: deps.uninstall_service,
+            plugin_root: deps.plugin_root,
+            app_id: deps.app_id,
         }
     }
 
@@ -133,8 +160,12 @@ impl PluginInitializer {
             failed: Vec::new(),
         };
 
-        // 步骤1: 查询 cmx_plugin 获取所有需要安装的插件
-        let expected_plugins = self.repository.list_plugins(&crate::domain::plugin::PluginFilter::default()).await?;
+        // 步骤1: 查询 cmx_plugin 获取当前 app_id 下需要安装的插件
+        let filter = crate::domain::plugin::PluginFilter {
+            app_id: Some(self.app_id.clone()),
+            ..Default::default()
+        };
+        let expected_plugins = self.repository.list_plugins(&filter).await?;
         let expected_map: HashMap<String, (String, Option<String>, Option<String>)> = expected_plugins
             .iter()
             .map(|p| (p.plugin_id.clone(), (p.version.clone(), p.zip_source_url.clone(), p.zip_source_type.clone())))
@@ -194,7 +225,7 @@ impl PluginInitializer {
         // 遍历本地存在但数据库不存在的插件,需要卸载(清理)
         for (plugin_id, deployed_version) in &local_plugins {
             if !expected_map.contains_key(plugin_id) {
-                log::info!("🗑️  插件 [{}] 需要卸载: 版本 {}", plugin_id, deployed_version);
+                info!("插件 [{}] 需要卸载: 版本 {}", plugin_id, deployed_version);
                 uninstall_ops.push(PluginOperation::Uninstall {
                     plugin_id: plugin_id.clone(),
                     version: deployed_version.clone(),
@@ -302,10 +333,14 @@ impl PluginInitializer {
                     version_constraint: None,
                     build_type: None,
                     marketplace_source_id: None,
+                    app_id: Some(self.app_id.clone()),
                 };
                 match self.install_service.install(request).await {
                     Ok(_) => Ok(plugin_id),
-                    Err(e) => Err((plugin_id, e.to_string())),
+                    Err(e) => {
+                        error!("Failed to install plugin [{}]: {}", plugin_id, e);
+                        Err((plugin_id, e.to_string()))
+                    },
                 }
             }
             _ => Err((String::new(), "Invalid operation".to_string())),
@@ -324,10 +359,14 @@ impl PluginInitializer {
                     operator: Some("system".to_string()),
                     build_type: None,
                     marketplace_source_id: None,
+                    app_id: Some(self.app_id.clone()),
                 };
                 match self.upgrade_service.upgrade(request).await {
                     Ok(_) => Ok(plugin_id),
-                    Err(e) => Err((plugin_id, e.to_string())),
+                    Err(e) => {
+                        error!("Failed to upgrade plugin [{}]: {}", plugin_id, e);
+                        Err((plugin_id, e.to_string()))
+                    },
                 }
             }
             _ => Err((String::new(), "Invalid operation".to_string())),
@@ -343,10 +382,14 @@ impl PluginInitializer {
                     target_version: to_version,
                     source: Some(source),
                     operator: Some("system".to_string()),
+                    app_id: Some(self.app_id.clone()),
                 };
                 match self.downgrade_service.downgrade(request).await {
                     Ok(_) => Ok(plugin_id),
-                    Err(e) => Err((plugin_id, e.to_string())),
+                    Err(e) => {
+                        error!("Failed to downgrade plugin [{}]: {}", plugin_id, e);
+                        Err((plugin_id, e.to_string()))
+                    },
                 }
             }
             _ => Err((String::new(), "Invalid operation".to_string())),
@@ -361,10 +404,19 @@ impl PluginInitializer {
                     plugin_id: plugin_id.clone(),
                     force: false,
                     operator: "system".to_string(),
+                    app_id: Some(self.app_id.clone()),
                 };
                 match self.uninstall_service.uninstall(request).await {
                     Ok(_) => Ok(plugin_id),
-                    Err(e) => Err((plugin_id, e.to_string())),
+                    Err(e) => {
+                        error!("Failed to uninstall plugin: {}", e);
+
+                        Err((plugin_id, e.to_string()))
+                    }
+
+
+
+
                 }
             }
             _ => Err((String::new(), "Invalid operation".to_string())),
@@ -373,7 +425,11 @@ impl PluginInitializer {
 
     /// 加载插件上下文到内存
     async fn load_contexts(&self) -> PluginResult<()> {
-        let records = self.repository.list_plugins(&crate::domain::plugin::PluginFilter::default()).await?;
+        let filter = crate::domain::plugin::PluginFilter {
+            app_id: Some(self.app_id.clone()),
+            ..Default::default()
+        };
+        let records = self.repository.list_plugins(&filter).await?;
 
         let mut registry = self.registry.write().await;
         let mut contexts = self.contexts.write().await;
@@ -403,6 +459,7 @@ impl PluginInitializer {
                 module_code: record.module_code.unwrap_or_default(),
                 plugin_type: record.plugin_type.clone().unwrap_or_default(),
                 source_path: record.source_path.clone(),
+                app_id: record.app_id.clone(),
             };
             registry.register(info);
         }

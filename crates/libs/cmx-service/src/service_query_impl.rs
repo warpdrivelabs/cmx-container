@@ -21,6 +21,8 @@ pub struct ServiceQueryImpl {
     repository: Arc<ServiceRepository>,
     /// 服务注册中心（内存缓存）
     registry: Arc<ServiceRegistry>,
+    /// 应用隔离标识
+    app_id: String,
 }
 
 impl ServiceQueryImpl {
@@ -29,8 +31,9 @@ impl ServiceQueryImpl {
     /// # 参数
     /// * `repository` - 服务仓储
     /// * `registry` - 服务注册中心
-    pub fn new(repository: Arc<ServiceRepository>, registry: Arc<ServiceRegistry>) -> Self {
-        Self { repository, registry }
+    /// * `app_id` - 应用隔离标识
+    pub fn new(repository: Arc<ServiceRepository>, registry: Arc<ServiceRegistry>, app_id: String) -> Self {
+        Self { repository, registry, app_id }
     }
 }
 
@@ -80,7 +83,7 @@ impl ServiceQuery for ServiceQueryImpl {
             return Ok(cached_services);
         }
 
-        let service_defs = self.repository.get_services_by_plugin(plugin_id).await
+        let service_defs = self.repository.get_services_by_plugin(plugin_id, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         for def in &service_defs {

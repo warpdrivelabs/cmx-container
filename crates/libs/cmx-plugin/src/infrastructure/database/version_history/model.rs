@@ -64,6 +64,8 @@ pub struct VersionCreateParams {
     pub id: String,
     /// 关联插件ID
     pub plugin_id: String,
+    /// 应用隔离标识
+    pub app_id: String,
     /// 版本号
     pub version: String,
 

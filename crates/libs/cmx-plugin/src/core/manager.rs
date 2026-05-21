@@ -189,6 +189,8 @@ impl PluginManagerBuilder {
 pub struct PluginManager {
     /// 配置设置
     settings: PluginManagerSettings,
+    /// 应用ID
+    app_id: String,
 
     // 核心组件
     /// 插件注册表
@@ -245,9 +247,15 @@ pub struct PluginManager {
     /// 部署服务（智能安装/升级）
     deploy_service: crate::service::deploy::DeployService,
 
+    /// 管控服务（集中式插件管理，不触发本地运行时加载）
+    control_service: crate::service::control::ControlService,
+
     // 初始化组件
     /// 插件初始化器（用于启动时同步）
     plugin_initializer: crate::service::initializer::PluginInitializer,
+
+    /// 运行时加载器（处理 RuntimeLoad/RuntimeUnload 通知）
+    runtime_loader: Arc<crate::service::runtime_loader::RuntimeLoader>,
 
     // 通用工具
     /// 依赖检查工具
@@ -439,21 +447,47 @@ impl PluginManager {
                 temp_root: settings.temp_root.clone(),
             });
 
-        // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
-        let plugin_initializer = crate::service::initializer::PluginInitializer::new(
-            repository.clone(),
-            version_history_repository.clone(),
-            registry.clone(),
-            contexts.clone(),
+        let control_service = crate::service::control::ControlService::new(
             install_service.clone(),
             upgrade_service.clone(),
             downgrade_service.clone(),
             uninstall_service.clone(),
-            settings.plugin_root.clone(),
+            plugin_notifier.clone(),
+            settings.app_id.clone(),
+            repository.clone(),
         );
+
+        // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
+        let plugin_initializer = crate::service::initializer::PluginInitializer::new(
+            crate::service::initializer::PluginInitializerDeps {
+                repository: repository.clone(),
+                version_history_repository: version_history_repository.clone(),
+                registry: registry.clone(),
+                contexts: contexts.clone(),
+                install_service: install_service.clone(),
+                upgrade_service: upgrade_service.clone(),
+                downgrade_service: downgrade_service.clone(),
+                uninstall_service: uninstall_service.clone(),
+                plugin_root: settings.plugin_root.clone(),
+                app_id: settings.app_id.clone(),
+            }
+        );
+
+        let runtime_loader = Arc::new(
+            crate::service::runtime_loader::RuntimeLoader::new(
+                repository.clone(),
+                registry.clone(),
+                contexts.clone(),
+                settings.plugin_root.clone(),
+                settings.app_id.clone(),
+            ),
+        );
+
+        let app_id = settings.app_id.clone();
 
         let manager = Self {
             settings,
+            app_id,
             registry,
             contexts,
             repository,
@@ -474,7 +508,9 @@ impl PluginManager {
             downgrade_service,
             rollback_service,
             deploy_service,
+            control_service,
             plugin_initializer,
+            runtime_loader,
             dependency_utils,
             service_utils,
             initialized: Arc::new(RwLock::new(false)),
@@ -506,6 +542,7 @@ impl PluginManager {
                 self.repository.clone(),
                 self.install_service.clone(),
                 self.upgrade_service.clone(),
+                self.app_id.clone(),
             );
             let result = auto_install_service.run(&self.settings.auto_install).await;
             match result {
@@ -560,6 +597,8 @@ impl PluginManager {
                 self.settings.plugin_root.clone(),
                 self.registry.clone(),
                 self.contexts.clone(),
+                self.settings.app_id.clone(),
+                self.runtime_loader.clone(),
             );
             let handler = Arc::new(handler);
 
@@ -594,6 +633,24 @@ impl PluginManager {
             }).await?;
 
             tracing::info!("已启动插件变更通知订阅（GlobalSubscriber + 自动重连）");
+        }
+
+        // 启动定时对账任务（对比 DB 与本地 Registry，自动补偿差异）
+        if self.settings.reconciliation_interval_secs > 0 {
+            let recon = crate::service::reconciliation::ReconciliationTask::new(
+                self.repository.clone(),
+                self.registry.clone(),
+                self.runtime_loader.clone(),
+                self.settings.app_id.clone(),
+                self.settings.reconciliation_interval_secs,
+            );
+            let recon = Arc::new(recon);
+            recon.start();
+            tracing::info!(
+                "已启动插件定时对账任务（间隔 {}s, app_id={}）",
+                self.settings.reconciliation_interval_secs,
+                self.settings.app_id
+            );
         }
 
         *initialized = true;
@@ -735,7 +792,7 @@ impl PluginManager {
             }
         }
 
-        if let Some(record) = self.repository.find_plugin(plugin_id).await? {
+        if let Some(record) = self.repository.find_plugin(plugin_id, &self.app_id).await? {
             let info = PluginInfo {
                 id: record.plugin_id,
                 name: record.name,
@@ -754,6 +811,7 @@ impl PluginManager {
                 module_code: record.module_code.unwrap_or_default(),
                 plugin_type: record.plugin_type.unwrap_or_default(),
                 source_path: record.source_path,
+                app_id: record.app_id,
             };
             return Ok(Some(info));
         }
@@ -848,6 +906,21 @@ impl PluginManager {
     /// 获取配置设置
     pub fn settings(&self) -> &PluginManagerSettings {
         &self.settings
+    }
+
+    /// 获取应用ID
+    pub fn app_id(&self) -> &str {
+        &self.app_id
+    }
+
+    /// 获取运行时加载器
+    pub fn runtime_loader(&self) -> &Arc<crate::service::runtime_loader::RuntimeLoader> {
+        &self.runtime_loader
+    }
+
+    /// 获取管控服务
+    pub fn control_service(&self) -> &crate::service::control::ControlService {
+        &self.control_service
     }
 
     /// 关闭插件管理器

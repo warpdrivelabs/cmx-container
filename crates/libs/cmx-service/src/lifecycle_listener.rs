@@ -153,7 +153,7 @@ impl ServiceLifecycleListener {
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
         // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
-        match repository.get_services_by_plugin(&event.plugin_id).await {
+        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 let service_infos: Vec<_> = service_defs
@@ -228,7 +228,7 @@ impl ServiceLifecycleListener {
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
         // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
-        match repository.get_services_by_plugin(&event.plugin_id).await {
+        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 let service_infos: Vec<_> = service_defs

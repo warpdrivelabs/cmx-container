@@ -34,6 +34,9 @@ pub mod plugin_events {
 /// 在插件生命周期变更时携带的事件数据。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginLifecyclePayload {
+    /// 应用隔离标识
+    #[serde(default)]
+    pub app_id: String,
     /// 插件ID
     pub plugin_id: String,
     /// 当前版本
@@ -54,12 +57,14 @@ pub struct PluginLifecyclePayload {
 impl PluginLifecyclePayload {
     /// 创建新的生命周期事件载荷
     ///
-    /// # 参数
+    /// # Arguments
     ///
+    /// * `app_id` - 应用隔离标识
     /// * `plugin_id` - 插件ID
     /// * `version` - 插件版本
-    pub fn new(plugin_id: impl Into<String>, version: impl Into<String>) -> Self {
+    pub fn new(app_id: impl Into<String>, plugin_id: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
+            app_id: app_id.into(),
             plugin_id: plugin_id.into(),
             version: version.into(),
             old_version: None,

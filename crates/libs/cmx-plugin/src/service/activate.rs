@@ -267,7 +267,7 @@ impl ActivateService {
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, "default")
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -317,7 +317,7 @@ impl ActivateService {
         // 步骤6: 更新状态
         self.deps
             .repository
-            .update_plugin_status(&request.plugin_id, "activated")
+            .update_plugin_status(&request.plugin_id, "default", "activated")
             .await?;
 
         {
@@ -406,7 +406,7 @@ impl ActivateService {
         let plugin = self
             .deps
             .repository
-            .find_plugin(&request.plugin_id)
+            .find_plugin(&request.plugin_id, "default")
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(&request.plugin_id))?;
 
@@ -446,7 +446,7 @@ impl ActivateService {
         // 步骤6: 更新状态
         self.deps
             .repository
-            .update_plugin_status(&request.plugin_id, "deactivated")
+            .update_plugin_status(&request.plugin_id, "default", "deactivated")
             .await?;
 
         {
@@ -505,7 +505,7 @@ impl ActivateService {
         let plugin = self
             .deps
             .repository
-            .find_plugin(plugin_id)
+            .find_plugin(plugin_id, "default")
             .await?
             .ok_or_else(|| PluginError::plugin_not_found(plugin_id))?;
 

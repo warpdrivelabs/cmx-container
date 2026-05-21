@@ -20,6 +20,7 @@ pub struct TableMetadataVersion {
     pub module_code: String,
     pub metadata: serde_json::Value,
     pub archived: i32,
+    pub app_id: Option<String>,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
     pub create_by: Option<String>,
@@ -42,6 +43,8 @@ pub struct TableMetadataDetail {
     pub module_code: String,
     pub metadata: serde_json::Value,
     pub archived: i32,
+    pub ddl_status: Option<String>,
+    pub app_id: Option<String>,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
     pub create_by: Option<String>,
@@ -62,6 +65,8 @@ pub struct TableMetadataForCreate {
     pub application_code: String,
     pub module_code: String,
     pub metadata: serde_json::Value,
+    /// 应用ID（可选，默认值由数据库层设置）
+    pub app_id: Option<String>,
 }
 
 /// 更新请求 DTO

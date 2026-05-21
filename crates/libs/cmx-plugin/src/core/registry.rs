@@ -57,6 +57,11 @@ impl PluginRegistry {
         self.plugins.values().cloned().collect()
     }
 
+    /// 列出所有插件ID。
+    pub fn list_plugin_ids(&self) -> Vec<String> {
+        self.plugins.keys().cloned().collect()
+    }
+
     /// 按状态筛选插件
     ///
     /// 返回指定状态的插件列表。
@@ -100,7 +105,9 @@ impl PluginRegistry {
                     matches = matches && p.name.to_lowercase().contains(&name.to_lowercase());
                 }
 
-
+                if let Some(ref app_id) = filter.app_id {
+                    matches = matches && p.app_id == *app_id;
+                }
 
                 matches
             })

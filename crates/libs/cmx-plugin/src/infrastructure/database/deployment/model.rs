@@ -60,6 +60,8 @@ pub struct DeploymentCreateParams {
     pub id: String,
     /// 关联插件ID
     pub plugin_id: String,
+    /// 应用隔离标识
+    pub app_id: String,
     /// 节点标识
     pub node_id: String,
     /// 节点类型

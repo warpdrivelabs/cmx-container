@@ -5,6 +5,10 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
+fn default_app_id() -> String {
+    "default".to_string()
+}
+
 /// 插件信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginInfo {
@@ -38,6 +42,9 @@ pub struct PluginInfo {
     pub application_code: String,
     /// 模块编码
     pub module_code: String,
+    /// 应用ID
+    #[serde(default = "default_app_id")]
+    pub app_id: String,
 
     // /// 创建时间
     // pub create_time: DateTime<Utc>,
@@ -124,6 +131,8 @@ impl std::str::FromStr for PluginStatus {
 /// 插件筛选条件
 #[derive(Debug, Clone, Default,Serialize,Deserialize)]
 pub struct PluginFilter {
+    /// 按应用ID筛选
+    pub app_id: Option<String>,
     /// 按状态筛选
     pub status: Option<PluginStatus>,
     /// 按名称筛选（模糊匹配）

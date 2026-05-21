@@ -25,15 +25,11 @@ pub async fn init_database_migrations() -> crate::Result<()> {
     let migration_dir = ConfigManager::global()
         .get_string("migration.dir")
         .unwrap_or("docs/sql/migrations".to_string());
-    let node_id = ConfigManager::global()
-        .get_string("node.node_id")
-        .unwrap_or("default".to_string());
 
     let runner = MigrationRunner::new(
         db_manager.clone(),
         default_db_id,
         std::path::PathBuf::from(migration_dir),
-        node_id,
     );
 
     let runner = if GlobalLockManager::is_initialized() {
@@ -41,6 +37,11 @@ pub async fn init_database_migrations() -> crate::Result<()> {
     } else {
         runner
     };
+
+    let enabled = ConfigManager::global()
+        .get_bool("migration.enabled")
+        .unwrap_or(false);
+    let runner = runner.with_enabled(enabled);
 
     let validate_checksum = ConfigManager::global()
         .get_bool("migration.validate_checksum")

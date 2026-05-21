@@ -6,6 +6,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
+fn default_app_id() -> String {
+    "default".to_string()
+}
+
+fn default_reconciliation_interval() -> u64 {
+    60
+}
+
 /// 插件管理器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManagerSettings {
@@ -33,6 +41,12 @@ pub struct PluginManagerSettings {
     pub node_name: Option<String>,
     /// 节点类型
     pub node_type: Option<String>,
+    /// 应用ID
+    #[serde(default = "default_app_id")]
+    pub app_id: String,
+    /// 对账间隔（秒），0 表示禁用定时对账
+    #[serde(default = "default_reconciliation_interval")]
+    pub reconciliation_interval_secs: u64,
     /// 自动安装配置
     #[serde(default)]
     pub auto_install: crate::service::auto_install::AutoInstallConfig,
@@ -53,6 +67,8 @@ impl Default for PluginManagerSettings {
             node_id: None,
             node_name: None,
             node_type: None,
+            app_id: default_app_id(),
+            reconciliation_interval_secs: default_reconciliation_interval(),
             auto_install: crate::service::auto_install::AutoInstallConfig::default(),
         }
     }
