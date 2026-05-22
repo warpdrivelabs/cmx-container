@@ -43,7 +43,7 @@ pub struct PluginChangeNotification {
     /// 插件版本（用于运行时加载/卸载通知）
     pub version: Option<String>,
     /// 应用ID（用于通知过滤，仅匹配的实例处理）
-    pub app_id: Option<String>,
+    pub app_id: String,
 }
 
 /// 插件变更通知器
@@ -68,13 +68,13 @@ impl PluginNotifier {
     ///
     /// # 参数
     /// * `plugin_id` - 变更的插件ID
-    pub async fn notify_changed(&self, plugin_id: &str) {
+    pub async fn notify_changed(&self, plugin_id: &str, version: &str, app_id: &str) {
         let notification = PluginChangeNotification {
             plugin_id: plugin_id.to_string(),
             action: PluginChangeAction::Changed,
             timestamp: Utc::now(),
-            version: None,
-            app_id: None,
+            version: Some(version.to_string()),
+            app_id: app_id.to_string(),
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
@@ -94,13 +94,14 @@ impl PluginNotifier {
     ///
     /// # 参数
     /// * `plugin_id` - 被移除的插件ID
-    pub async fn notify_removed(&self, plugin_id: &str) {
+    /// * `app_id` - 应用ID
+    pub async fn notify_removed(&self, plugin_id: &str, app_id: &str) {
         let notification = PluginChangeNotification {
             plugin_id: plugin_id.to_string(),
             action: PluginChangeAction::Removed,
             timestamp: Utc::now(),
             version: None,
-            app_id: None,
+            app_id: app_id.to_string(),
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
@@ -129,7 +130,7 @@ impl PluginNotifier {
             action: PluginChangeAction::RuntimeLoad,
             timestamp: Utc::now(),
             version: Some(version.to_string()),
-            app_id: Some(app_id.to_string()),
+            app_id: app_id.to_string(),
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
@@ -158,7 +159,7 @@ impl PluginNotifier {
             action: PluginChangeAction::RuntimeUnload,
             timestamp: Utc::now(),
             version: Some(version.to_string()),
-            app_id: Some(app_id.to_string()),
+            app_id: app_id.to_string(),
         };
 
         match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
