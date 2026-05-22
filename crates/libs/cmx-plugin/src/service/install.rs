@@ -505,14 +505,15 @@ impl InstallService {
         // 条件发布跨实例变更通知
         if send_event {
             if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_changed(&plugin_id).await;
+                notifier.notify_changed(&plugin_id, &install_version, &app_id).await;
             }
         }
 
         // 条件发布事件
         if send_event {
             let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &install_version)
-                .with_install_path(install_path.clone());
+                .with_install_path(install_path.clone())
+                .with_wasm_path(PathBuf::from(&wasm_path));
 
             GlobalEventBus::get()
                 .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())

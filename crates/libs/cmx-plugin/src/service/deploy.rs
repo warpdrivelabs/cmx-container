@@ -39,6 +39,10 @@ pub enum DeployAction {
     AlreadyInstalled,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// 部署请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeployRequest {
@@ -57,6 +61,9 @@ pub struct DeployRequest {
     /// 应用ID
     #[serde(default)]
     pub app_id: Option<String>,
+    /// 是否发布事件通知
+    #[serde(default = "default_true")]
+    pub send_event: bool,
 }
 
 /// 部署响应
@@ -264,7 +271,7 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
-            send_event: true,
+            send_event: request.send_event,
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -299,7 +306,7 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
-            send_event: true,
+            send_event: request.send_event,
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;

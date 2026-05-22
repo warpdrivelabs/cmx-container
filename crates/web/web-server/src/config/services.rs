@@ -44,7 +44,7 @@ pub async fn init_services() -> crate::Result<()> {
     GlobalServiceRegistry::set(registry.clone())
         .map_err(|e| Error::ServiceInit(format!("初始化服务注册中心失败: {}", e)))?;
 
-    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone(), app_id)) as Arc<dyn ServiceQuery>;
+    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone(), app_id.clone())) as Arc<dyn ServiceQuery>;
     let service_storage = Arc::new(ServiceStorageImpl::new(repository.clone())) as Arc<dyn ServiceStorage>;
 
     GlobalServiceQuery::set(service_query.clone())
@@ -59,11 +59,13 @@ pub async fn init_services() -> crate::Result<()> {
         GlobalServiceQuery::get().clone(),
         repository.clone(),
         GlobalServiceRegistry::get().clone(),
+        app_id.clone(),
     );
     service_listener.register().await;
 
     let runtime_listener = RuntimeLifecycleListener::new(
-        cmx_runtime::GlobalExtismEngine::get_as_invoker()
+        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+        app_id,
     );
     runtime_listener.register().await;
 

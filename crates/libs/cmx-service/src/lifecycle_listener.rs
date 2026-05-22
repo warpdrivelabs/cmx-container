@@ -18,6 +18,8 @@ pub struct ServiceLifecycleListener {
     repository: Arc<ServiceRepository>,
     /// 服务注册表（内存缓存）
     service_registry: Arc<ServiceRegistry>,
+    /// 应用ID（仅处理匹配的事件）
+    app_id: String,
 }
 
 impl ServiceLifecycleListener {
@@ -32,11 +34,13 @@ impl ServiceLifecycleListener {
         service_query: Arc<dyn ServiceQuery>,
         repository: Arc<ServiceRepository>,
         service_registry: Arc<ServiceRegistry>,
+        app_id: String,
     ) -> Self {
         Self {
             service_query,
             repository,
             service_registry,
+            app_id,
         }
     }
 
@@ -47,11 +51,20 @@ impl ServiceLifecycleListener {
         // 订阅安装事件
         let query = self.service_query.clone();
         let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
             let query = query.clone();
             let registry = registry.clone();
+            let app_id = app_id.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "Ignoring event for different app_id: {} (expected: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
                     Self::handle_installed(query, registry, event).await;
                 }
             });
@@ -61,11 +74,20 @@ impl ServiceLifecycleListener {
         // 订阅升级事件
         let repository = self.repository.clone();
         let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
             let repository = repository.clone();
             let registry = registry.clone();
+            let app_id = app_id.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "Ignoring event for different app_id: {} (expected: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
                     Self::handle_upgraded(repository, registry, event).await;
                 }
             });
@@ -74,10 +96,19 @@ impl ServiceLifecycleListener {
 
         // 订阅卸载事件
         let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
             let registry = registry.clone();
+            let app_id = app_id.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "Ignoring event for different app_id: {} (expected: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
                     Self::handle_uninstalled(registry, event).await;
                 }
             });
@@ -87,11 +118,20 @@ impl ServiceLifecycleListener {
         // 订阅降级事件
         let repository = self.repository.clone();
         let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
         let handler: EventHandler = Arc::new(move |_topic, payload| {
             let repository = repository.clone();
             let registry = registry.clone();
+            let app_id = app_id.clone();
             tokio::spawn(async move {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "Ignoring event for different app_id: {} (expected: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
                     Self::handle_downgraded(repository, registry, event).await;
                 }
             });

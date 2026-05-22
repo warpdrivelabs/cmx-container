@@ -2,7 +2,7 @@
 //!
 //! 处理插件卸载流程，提供完整的插件卸载功能。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use cmx_traits::GlobalEventBus;
@@ -187,13 +187,15 @@ impl UninstallService {
         // 条件发布跨实例移除通知
         if send_event {
             if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_removed(&plugin_id).await;
+                notifier.notify_removed(&plugin_id, &app_id).await;
             }
         }
 
         // 条件发布卸载事件（通知其他节点）
         if send_event {
-            let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
+            let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version)
+                .with_install_path(PathBuf::from(&plugin.install_path))
+                .with_wasm_path(PathBuf::from(&plugin.wasm_path));
 
             GlobalEventBus::get()
                 .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())

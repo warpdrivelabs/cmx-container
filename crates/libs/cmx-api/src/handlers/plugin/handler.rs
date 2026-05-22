@@ -340,6 +340,7 @@ pub async fn plugin_deploy(
         build_type,
         publish_to_marketplace: publish_to_marketplace.unwrap_or(true),
         app_id: Some(app_id),
+        send_event: true,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {

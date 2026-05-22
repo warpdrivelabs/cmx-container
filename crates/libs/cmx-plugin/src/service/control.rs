@@ -16,6 +16,8 @@ use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::TempDirCleanup;
+use cmx_traits::{GlobalEventBus, plugin_events, PluginLifecyclePayload};
+
 use crate::service::downgrade::{DowngradeRequest, DowngradeService};
 use crate::service::install::{InstallRequest, InstallService};
 use crate::service::uninstall::UninstallService;
@@ -260,6 +262,12 @@ impl ControlService {
 
                 let result = self.deps.install_service.install(install_req).await?;
 
+                let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.version)
+                    .with_install_path(PathBuf::from(&result.install_path));
+                GlobalEventBus::get()
+                    .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+                    .await;
+
                 // 发布 RuntimeLoad 通知
                 if let Some(ref notifier) = self.deps.notifier {
                     notifier.notify_runtime_load(&result.plugin_id, &result.version, &app_id).await;
@@ -298,6 +306,12 @@ impl ControlService {
                         };
 
                         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
+
+                        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
+                            .with_old_version(&result.old_version);
+                        GlobalEventBus::get()
+                            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
+                            .await;
 
                         // 发布 RuntimeLoad 通知
                         if let Some(ref notifier) = self.deps.notifier {
@@ -356,6 +370,12 @@ impl ControlService {
 
         let result = self.deps.install_service.install(install_req).await?;
 
+        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.version)
+            .with_install_path(PathBuf::from(&result.install_path));
+        GlobalEventBus::get()
+            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
+
         // 发布 RuntimeLoad 通知
         if let Some(ref notifier) = self.deps.notifier {
             notifier.notify_runtime_load(&result.plugin_id, &result.version, &app_id).await;
@@ -393,6 +413,12 @@ impl ControlService {
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
 
+        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
+            .with_old_version(&result.old_version);
+        GlobalEventBus::get()
+            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
+            .await;
+
         // 发布 RuntimeLoad 通知
         if let Some(ref notifier) = self.deps.notifier {
             notifier.notify_runtime_load(&result.plugin_id, &result.new_version, &app_id).await;
@@ -426,6 +452,12 @@ impl ControlService {
 
         let result = self.deps.downgrade_service.downgrade(downgrade_req).await?;
 
+        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
+            .with_old_version(&result.old_version);
+        GlobalEventBus::get()
+            .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap())
+            .await;
+
         // 发布 RuntimeLoad 通知
         if let Some(ref notifier) = self.deps.notifier {
             notifier.notify_runtime_load(&result.plugin_id, &result.new_version, &app_id).await;
@@ -448,7 +480,12 @@ impl ControlService {
         let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
         let plugin_id = req.plugin_id.clone();
 
-        // 先执行实际卸载（数据库清理）
+        let existing = self.deps.repository.find_plugin(&plugin_id, &app_id).await?;
+        let version = existing
+            .as_ref()
+            .map(|p| p.version.clone())
+            .unwrap_or_default();
+
         let uninstall_req = crate::service::uninstall::UninstallRequest {
             plugin_id: plugin_id.clone(),
             force: false,
@@ -463,9 +500,13 @@ impl ControlService {
             .await
             .map_err(|e| PluginError::Uninstall(format!("管控卸载失败: {}", e)))?;
 
-        // 完成后发布 RuntimeUnload 通知
+        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
+        GlobalEventBus::get()
+            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
+
         if let Some(ref notifier) = self.deps.notifier {
-            notifier.notify_runtime_unload(&plugin_id, "", &app_id).await;
+            notifier.notify_runtime_unload(&plugin_id, &version, &app_id).await;
         }
 
         Ok(())
