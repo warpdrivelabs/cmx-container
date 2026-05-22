@@ -448,13 +448,30 @@ impl PluginManager {
             });
 
         let control_service = crate::service::control::ControlService::new(
-            install_service.clone(),
-            upgrade_service.clone(),
-            downgrade_service.clone(),
-            uninstall_service.clone(),
-            plugin_notifier.clone(),
-            settings.app_id.clone(),
-            repository.clone(),
+            crate::service::control::ControlServiceDeps {
+                install_service: install_service.clone(),
+                upgrade_service: upgrade_service.clone(),
+                downgrade_service: downgrade_service.clone(),
+                uninstall_service: uninstall_service.clone(),
+                notifier: plugin_notifier.clone(),
+                app_id: settings.app_id.clone(),
+                repository: repository.clone(),
+                plugin_root: settings.plugin_root.clone(),
+                temp_root: settings.temp_root.clone(),
+                storage: storage.clone(),
+            }
+        );
+
+
+        let runtime_loader = Arc::new(
+            crate::service::runtime_loader::RuntimeLoader::new(
+                repository.clone(),
+                registry.clone(),
+                contexts.clone(),
+                settings.plugin_root.clone(),
+                settings.app_id.clone(),
+                settings.temp_root.clone(),
+            ),
         );
 
         // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
@@ -473,15 +490,7 @@ impl PluginManager {
             }
         );
 
-        let runtime_loader = Arc::new(
-            crate::service::runtime_loader::RuntimeLoader::new(
-                repository.clone(),
-                registry.clone(),
-                contexts.clone(),
-                settings.plugin_root.clone(),
-                settings.app_id.clone(),
-            ),
-        );
+
 
         let app_id = settings.app_id.clone();
 
@@ -536,57 +545,59 @@ impl PluginManager {
                 tracing::error!("删除临时目录{:?}失败: {}", &self.settings.temp_root, e)
             });
 
-        // 执行自动安装：在 sync_plugins 之前，确保配置中声明的插件已安装
-        if self.settings.auto_install.enabled {
-            let auto_install_service = crate::service::auto_install::AutoInstallService::new(
-                self.repository.clone(),
-                self.install_service.clone(),
-                self.upgrade_service.clone(),
-                self.app_id.clone(),
-            );
-            let result = auto_install_service.run(&self.settings.auto_install).await;
-            match result {
-                Ok(r) => {
-                    tracing::info!(
-                        "插件自动安装完成: 安装={}, 升级={}, 跳过={}, 失败={}",
-                        r.installed.len(),
-                        r.upgraded.len(),
-                        r.skipped.len(),
-                        r.failed.len()
-                    );
-                    for (plugin_id, err) in &r.failed {
-                        tracing::error!("插件 {} 自动安装失败: {}", plugin_id, err);
-                    }
-                    if r.has_critical_failure {
-                        return Err(crate::error::PluginError::Install(
-                            "关键插件自动安装失败，终止启动".to_string(),
-                        ));
-                    }
-                }
-                Err(e) => {
-                    return Err(crate::error::PluginError::Install(format!(
-                        "插件自动安装执行失败: {:?}",
-                        e
-                    )));
-                }
-            }
-        }
+        // // 执行自动安装：在 sync_plugins 之前，确保配置中声明的插件已安装
+        // if self.settings.auto_install.enabled {
+        //     let auto_install_service = crate::service::auto_install::AutoInstallService::new(
+        //         self.repository.clone(),
+        //         self.install_service.clone(),
+        //         self.upgrade_service.clone(),
+        //         self.app_id.clone(),
+        //     );
+        //     let result = auto_install_service.run(&self.settings.auto_install).await;
+        //     match result {
+        //         Ok(r) => {
+        //             tracing::info!(
+        //                 "插件自动安装完成: 安装={}, 升级={}, 跳过={}, 失败={}",
+        //                 r.installed.len(),
+        //                 r.upgraded.len(),
+        //                 r.skipped.len(),
+        //                 r.failed.len()
+        //             );
+        //             for (plugin_id, err) in &r.failed {
+        //                 tracing::error!("插件 {} 自动安装失败: {}", plugin_id, err);
+        //             }
+        //             if r.has_critical_failure {
+        //                 return Err(crate::error::PluginError::Install(
+        //                     "关键插件自动安装失败，终止启动".to_string(),
+        //                 ));
+        //             }
+        //         }
+        //         Err(e) => {
+        //             return Err(crate::error::PluginError::Install(format!(
+        //                 "插件自动安装执行失败: {:?}",
+        //                 e
+        //             )));
+        //         }
+        //     }
+        // }
+        //
+        // // 启动时同步插件：对比 cmx_plugin 表与本地文件系统
+        // // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
+        // let sync_result = self.plugin_initializer.sync_plugins().await?;
+        // tracing::info!(
+        //     "插件同步完成: 安装={}, 升级={}, 降级={}, 卸载={}, 跳过={}, 失败={}",
+        //     sync_result.installed.len(),
+        //     sync_result.upgraded.len(),
+        //     sync_result.downgraded.len(),
+        //     sync_result.uninstalled.len(),
+        //     sync_result.skipped.len(),
+        //     sync_result.failed.len()
+        // );
+        // for (plugin_id, err) in &sync_result.failed {
+        //     tracing::error!("插件 {} 同步失败: {}", plugin_id, err);
+        // }
 
-        // 启动时同步插件：对比 cmx_plugin 表与本地文件系统
-        // 执行安装/升级/降级/卸载操作，然后加载 contexts 到内存
-        let sync_result = self.plugin_initializer.sync_plugins().await?;
-        tracing::info!(
-            "插件同步完成: 安装={}, 升级={}, 降级={}, 卸载={}, 跳过={}, 失败={}",
-            sync_result.installed.len(),
-            sync_result.upgraded.len(),
-            sync_result.downgraded.len(),
-            sync_result.uninstalled.len(),
-            sync_result.skipped.len(),
-            sync_result.failed.len()
-        );
-        for (plugin_id, err) in &sync_result.failed {
-            tracing::error!("插件 {} 同步失败: {}", plugin_id, err);
-        }
+
 
         // 启动 Redis Pub/Sub 订阅，监听跨实例插件变更通知
         // 使用 GlobalSubscriber 统一管理订阅，内置自动重连和自动重新订阅
@@ -645,12 +656,16 @@ impl PluginManager {
                 self.settings.reconciliation_interval_secs,
             );
             let recon = Arc::new(recon);
-            recon.start();
+            recon.clone().start();
             tracing::info!(
                 "已启动插件定时对账任务（间隔 {}s, app_id={}）",
                 self.settings.reconciliation_interval_secs,
                 self.settings.app_id
             );
+
+            //5.22 yqs启动初始化不在执行插件的ddl等逻辑，只执行插件下载解压
+            // self.runtime_loader().
+            recon.clone().reconcile().await?;
         }
 
         *initialized = true;

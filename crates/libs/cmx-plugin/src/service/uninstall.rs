@@ -30,6 +30,13 @@ pub struct UninstallRequest {
     /// 应用ID
     #[serde(default)]
     pub app_id: Option<String>,
+    /// 是否发送事件通知（管控接口调用时设为 false）
+    #[serde(default = "default_true")]
+    pub send_event: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// 卸载响应
@@ -92,6 +99,7 @@ impl UninstallService {
 
         // 从请求中获取 app_id，使用默认值 "default"
         let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let send_event = request.send_event;
 
         // 步骤1: 检查插件存在
         let plugin = self
@@ -176,17 +184,21 @@ impl UninstallService {
         .with_completed(duration_ms);
         let _ = self.deps.audit_logger.log(audit_record).await;
 
-        // 发布跨实例移除通知
-        if let Some(notifier) = &self.deps.plugin_notifier {
-            notifier.notify_removed(&plugin_id).await;
+        // 条件发布跨实例移除通知
+        if send_event {
+            if let Some(notifier) = &self.deps.plugin_notifier {
+                notifier.notify_removed(&plugin_id).await;
+            }
         }
 
-        // 步骤10.2: 发布卸载事件（通知其他节点）
-        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
+        // 条件发布卸载事件（通知其他节点）
+        if send_event {
+            let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
 
-        GlobalEventBus::get()
-            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
-            .await;
+            GlobalEventBus::get()
+                .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+                .await;
+        }
 
 
 

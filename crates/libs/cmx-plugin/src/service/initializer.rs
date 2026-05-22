@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, log};
-use tracing::log::__private_api::log;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
@@ -334,6 +333,7 @@ impl PluginInitializer {
                     build_type: None,
                     marketplace_source_id: None,
                     app_id: Some(self.app_id.clone()),
+                    send_event: true,
                 };
                 match self.install_service.install(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -360,6 +360,7 @@ impl PluginInitializer {
                     build_type: None,
                     marketplace_source_id: None,
                     app_id: Some(self.app_id.clone()),
+                    send_event: true,
                 };
                 match self.upgrade_service.upgrade(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -383,6 +384,7 @@ impl PluginInitializer {
                     source: Some(source),
                     operator: Some("system".to_string()),
                     app_id: Some(self.app_id.clone()),
+                    send_event: true,
                 };
                 match self.downgrade_service.downgrade(request).await {
                     Ok(_) => Ok(plugin_id),
@@ -405,6 +407,7 @@ impl PluginInitializer {
                     force: false,
                     operator: "system".to_string(),
                     app_id: Some(self.app_id.clone()),
+                    send_event: true,
                 };
                 match self.uninstall_service.uninstall(request).await {
                     Ok(_) => Ok(plugin_id),

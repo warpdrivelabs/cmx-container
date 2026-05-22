@@ -75,6 +75,7 @@ pub async fn plugin_install(
         build_type: None,
         marketplace_source_id: None,
         app_id: Some(app_id),
+        send_event: true,
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
@@ -120,6 +121,7 @@ pub async fn plugin_uninstall(
         force: req.force.unwrap_or(false),
         operator: "system".to_string(),
         app_id: Some(app_id),
+        send_event: true,
     };
 
     let result = manager.uninstall(uninstall_req).await.map_err(|e| {
@@ -167,6 +169,7 @@ pub async fn plugin_upgrade(
         build_type: None,
         marketplace_source_id: None,
         app_id: Some(app_id),
+        send_event: true,
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
@@ -213,6 +216,7 @@ pub async fn plugin_downgrade(
         source: None,
         operator: req.operator,
         app_id: Some(app_id),
+        send_event: true,
     };
 
     let result = manager.downgrade(downgrade_req).await.map_err(|e| {

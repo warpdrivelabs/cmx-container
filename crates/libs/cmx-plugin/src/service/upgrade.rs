@@ -48,6 +48,13 @@ pub struct UpgradeRequest {
     /// 应用ID
     #[serde(default)]
     pub app_id: Option<String>,
+    /// 是否发送事件通知（管控接口调用时设为 false）
+    #[serde(default = "default_true")]
+    pub send_event: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// 升级响应
@@ -137,6 +144,7 @@ impl UpgradeService {
         let start_time = std::time::Instant::now();
         let build_type = request.build_type.unwrap_or("release".to_string());
         let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let send_event = request.send_event;
 
 
         // 步骤1: 检查插件存在
@@ -460,20 +468,24 @@ impl UpgradeService {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
-        // 发布跨实例变更通知
-        if let Some(notifier) = &self.deps.plugin_notifier {
-            notifier.notify_changed(&plugin_id).await;
+        // 条件发布跨实例变更通知
+        if send_event {
+            if let Some(notifier) = &self.deps.plugin_notifier {
+                notifier.notify_changed(&plugin_id).await;
+            }
         }
 
-        // 步骤16: 发布升级完成事件
-        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &new_version)
-            .with_old_version(&old_version)
-            .with_install_path(install_path.clone())
-            .with_wasm_path(PathBuf::from(&wasm_path));
+        // 条件发布升级完成事件
+        if send_event {
+            let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &new_version)
+                .with_old_version(&old_version)
+                .with_install_path(install_path.clone())
+                .with_wasm_path(PathBuf::from(&wasm_path));
 
-        GlobalEventBus::get()
-            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
-            .await;
+            GlobalEventBus::get()
+                .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
+                .await;
+        }
 
         Ok(UpgradeResponse {
             plugin_id,

@@ -3,12 +3,9 @@
 //! 提供集中式管控接口，仅执行 DDL/DML + 文件推送，
 //! 不触发本地运行时加载，完成后发布 RuntimeLoad 通知。
 
-use std::path::PathBuf;
-
 use axum::extract::{Multipart, State};
 use axum::Json;
 use tracing::info;
-use cmx_utils::ConfigManager;
 use crate::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::Result;
@@ -19,8 +16,8 @@ use super::super::handler::convert_source;
 
 /// 管控部署（multipart 上传 ZIP，自动判断安装/升级）
 ///
-/// 仅执行 DDL/DML + 对象存储上传，不触发本地运行时加载，
-/// 完成后发布 RuntimeLoad 通知到集群。
+/// 上传插件 ZIP 至对象存储（cmx-storage），构建 Storage 类型 PluginSource，
+/// 仅执行 DDL/DML，不触发本地运行时加载，完成后发布 RuntimeLoad 通知到集群。
 #[utoipa::path(
     post,
     path = "/api/plugin/control/deploy",
@@ -40,12 +37,8 @@ pub async fn control_deploy(
 ) -> Result<Json<ApiResp<ControlActionResponse>>> {
     info!("管控部署请求（文件上传）");
 
-    let uploads_root = ConfigManager::global()
-        .get_string("plugin.upload_root")
-        .unwrap_or("plugins/uploads".to_string());
-
-    let uploads_dir = PathBuf::from(uploads_root);
     let mut file_bytes: Option<Vec<u8>> = None;
+    let mut file_name: Option<String> = None;
     let mut target_db_id: Option<String> = None;
     let mut build_type: Option<String> = None;
     let mut app_id: Option<String> = None;
@@ -58,11 +51,16 @@ pub async fn control_deploy(
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
             "file" => {
+                let file_name_val = field
+                    .file_name()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "plugin.zip".to_string());
                 let data = field
                     .bytes()
                     .await
                     .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {}", e)))?;
                 file_bytes = Some(data.to_vec());
+                file_name = Some(file_name_val);
             }
             "target_db_id" => {
                 let val = field
@@ -93,26 +91,38 @@ pub async fn control_deploy(
         }
     }
 
-    let _file_bytes = file_bytes.ok_or_else(|| {
+    let file_bytes = file_bytes.ok_or_else(|| {
         crate::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string())
     })?;
 
-    tokio::fs::create_dir_all(&uploads_dir)
-        .await
-        .map_err(|e| crate::Error::InternalError(format!("创建上传目录失败: {}", e)))?;
-
-    let file_name = format!("{}.zip", uuid::Uuid::new_v4());
-    let file_path = uploads_dir.join(&file_name);
-    tokio::fs::write(&file_path, &_file_bytes)
-        .await
-        .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
-
-    let abs_path = std::fs::canonicalize(&file_path)
-        .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
-    let source = cmx_plugin::domain::plugin::PluginSource::Local { path: abs_path };
-
     let manager = cmx_plugin::GlobalPluginManager::get();
     let effective_app_id = app_id.unwrap_or_else(|| manager.app_id().to_string());
+
+    // 上传插件文件至对象存储（cmx-storage）
+    let storage_service = cmx_storage::global::GlobalStorageService::get().service();
+    let upload_request = cmx_storage::types::UploadRequest {
+        data: file_bytes.into(),
+        original_filename: file_name.clone(),
+        content_type: Some("application/zip".to_string()),
+        object_type: Some("control_plugin".to_string()),
+        object_id: Some(effective_app_id.clone()),
+        platform: None,
+        user_metadata: None,
+        acl: None,
+    };
+    let file_info = storage_service.upload(upload_request).await
+        .map_err(|e| crate::Error::InternalError(format!("上传插件文件至对象存储失败: {}", e)))?;
+
+    info!(
+        "管控部署: 插件文件已上传至对象存储, file_id={}, size={}",
+        file_info.id, file_info.size
+    );
+
+    // 构建 Storage 类型 PluginSource
+    let source = cmx_plugin::domain::plugin::PluginSource::Storage {
+        file_id: file_info.id.clone(),
+        checksum: file_info.hash_info.clone(),
+    };
 
     let control_req = cmx_plugin::service::control::ControlDeployRequest {
         source,

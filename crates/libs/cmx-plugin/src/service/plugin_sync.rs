@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-
+use cmx_traits::{plugin_events, GlobalEventBus, PluginLifecyclePayload};
 use crate::cluster::notification::{PluginChangeAction, PluginChangeNotification};
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;

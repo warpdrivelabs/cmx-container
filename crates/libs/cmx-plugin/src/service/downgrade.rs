@@ -36,6 +36,13 @@ pub struct DowngradeRequest {
     /// 应用ID
     #[serde(default)]
     pub app_id: Option<String>,
+    /// 是否发送事件通知（管控接口调用时设为 false）
+    #[serde(default = "default_true")]
+    pub send_event: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// 降级响应
@@ -106,6 +113,7 @@ impl DowngradeService {
         let start_time = std::time::Instant::now();
 
         let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let send_event = request.send_event;
 
         // 步骤1: 检查插件存在
         let plugin = self
@@ -301,20 +309,24 @@ impl DowngradeService {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
-        // 发布跨实例变更通知
-        if let Some(notifier) = &self.deps.plugin_notifier {
-            notifier.notify_changed(&plugin_id).await;
+        // 条件发布跨实例变更通知
+        if send_event {
+            if let Some(notifier) = &self.deps.plugin_notifier {
+                notifier.notify_changed(&plugin_id).await;
+            }
         }
 
-        // 步骤11: 发布降级完成事件
-        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &request.target_version)
-            .with_old_version(&old_version)
-            .with_install_path(PathBuf::from(&target_version_record.install_path))
-            .with_wasm_path(PathBuf::from(&target_version_record.wasm_path));
+        // 条件发布降级完成事件
+        if send_event {
+            let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &request.target_version)
+                .with_old_version(&old_version)
+                .with_install_path(PathBuf::from(&target_version_record.install_path))
+                .with_wasm_path(PathBuf::from(&target_version_record.wasm_path));
 
-        GlobalEventBus::get()
-            .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap())
-            .await;
+            GlobalEventBus::get()
+                .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap())
+                .await;
+        }
 
         Ok(DowngradeResponse {
             plugin_id,

@@ -696,6 +696,7 @@ impl MarketplaceService {
             build_type: None,
             marketplace_source_id: Some(version_info.id.clone()),
             app_id: None,
+            send_event: true,
         };
 
         let result = manager.install(install_req).await?;
@@ -779,6 +780,7 @@ impl MarketplaceService {
             build_type: None,
             marketplace_source_id: Some(version_info.id.clone()),
             app_id: None,
+            send_event: true,
         };
 
         let result = manager.upgrade(upgrade_req).await?;

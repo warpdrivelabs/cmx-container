@@ -264,6 +264,7 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
+            send_event: true,
         };
 
         let result = self.deps.install_service.install(install_req).await?;
@@ -298,6 +299,7 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
+            send_event: true,
         };
 
         let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
@@ -329,6 +331,7 @@ impl DeployService {
             force: true,
             operator: "system".to_string(),
             app_id: request.app_id.clone(),
+            send_event: true,
         };
 
         self.deps.uninstall_service.uninstall(uninstall_req).await?;
@@ -342,6 +345,7 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
+            send_event: true,
         };
 
         let result = self.deps.install_service.install(install_req).await?;

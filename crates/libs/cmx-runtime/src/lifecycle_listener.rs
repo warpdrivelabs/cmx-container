@@ -64,6 +64,7 @@ impl RuntimeLifecycleListener {
 
     /// 处理升级事件：清除 WASM 实例缓存
     async fn handle_upgraded(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
+        //todo 0522 没有使用appid,好像也用不到
         info!("处理插件升级事件，清除 WASM 缓存: {} {} -> {}", 
             event.plugin_id, event.old_version.as_deref().unwrap_or("?"), event.version);
         
@@ -75,6 +76,8 @@ impl RuntimeLifecycleListener {
 
     /// 处理卸载事件：清除 WASM 实例缓存
     async fn handle_uninstalled(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
+        //todo 0522 没有使用appid
+
         info!("处理插件卸载事件，清除 WASM 缓存: {} v{}", event.plugin_id, event.version);
         
         match invoker.unload_module(&event.plugin_id).await {
