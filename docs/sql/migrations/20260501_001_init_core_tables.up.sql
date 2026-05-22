@@ -84,7 +84,7 @@ COMMENT
 ON COLUMN cmx_domain.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_domain.update_name IS '更新人名称';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_domain_code ON cmx_domain(code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_core_domain_code ON cmx_domain(code);
 
 -- =============================================
 -- 2. 应用表 (cmx_application)
@@ -174,7 +174,7 @@ COMMENT
 ON COLUMN cmx_application.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_application.update_name IS '更新人名称';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_application_code ON cmx_application(code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_core_application_code ON cmx_application(code);
 
 -- =============================================
 -- 3. 模块表 (cmx_module)
@@ -270,7 +270,7 @@ COMMENT
 ON COLUMN cmx_module.update_by IS '更新人ID';
 COMMENT
 ON COLUMN cmx_module.update_name IS '更新人名称';
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_module_code ON cmx_module(code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_core_module_code ON cmx_module(code);
 
 -- =============================================
 -- 4. 数据源表 (cmx_sys_datasource)
@@ -690,96 +690,218 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_versions_plugin_version ON cmx_p
 -- =============================================
 -- 7. 依赖关系表 (cmx_plugin_dependencies)
 -- =============================================
--- CREATE TABLE IF NOT EXISTS cmx_plugin_dependencies (
---     id                    VARCHAR(64)           NOT NULL,
---     plugin_id             VARCHAR(64)            NOT NULL,
---     dependency_plugin_id  VARCHAR(255)           NOT NULL,
---     dependency_name       VARCHAR(500),
---     version_constraint    VARCHAR(100),
---     min_version           VARCHAR(50),
---     max_version           VARCHAR(50),
---     is_optional           BOOLEAN                NOT NULL DEFAULT FALSE,
---     is_dev                BOOLEAN                NOT NULL DEFAULT FALSE,
---     resolved_version      VARCHAR(50),
---     resolution_status     VARCHAR(30),
---     create_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     update_time           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     archived              INT4                   NOT NULL DEFAULT 0,
---     create_by             VARCHAR(100),
---     create_name           VARCHAR(100),
---     update_by             VARCHAR(100),
---     update_name           VARCHAR(100),
---     PRIMARY KEY (id)
--- );
--- COMMENT ON TABLE cmx_plugin_dependencies IS '插件依赖关系表';
--- COMMENT ON COLUMN cmx_plugin_dependencies.id IS '主键ID';
--- COMMENT ON COLUMN cmx_plugin_dependencies.plugin_id IS '关联插件ID';
--- COMMENT ON COLUMN cmx_plugin_dependencies.dependency_plugin_id IS '依赖的插件ID';
--- COMMENT ON COLUMN cmx_plugin_dependencies.dependency_name IS '依赖的插件名称';
--- COMMENT ON COLUMN cmx_plugin_dependencies.version_constraint IS '版本约束';
--- COMMENT ON COLUMN cmx_plugin_dependencies.min_version IS '最小版本';
--- COMMENT ON COLUMN cmx_plugin_dependencies.max_version IS '最大版本';
--- COMMENT ON COLUMN cmx_plugin_dependencies.is_optional IS '是否可选';
--- COMMENT ON COLUMN cmx_plugin_dependencies.is_dev IS '是否开发依赖';
--- COMMENT ON COLUMN cmx_plugin_dependencies.resolved_version IS '已解析版本';
--- COMMENT ON COLUMN cmx_plugin_dependencies.resolution_status IS '解析状态: resolved/conflict/missing';
--- COMMENT ON COLUMN cmx_plugin_dependencies.create_time IS '创建时间';
--- COMMENT ON COLUMN cmx_plugin_dependencies.update_time IS '更新时间';
--- COMMENT ON COLUMN cmx_plugin_dependencies.archived IS '归档标志';
--- COMMENT ON COLUMN cmx_plugin_dependencies.create_by IS '创建人ID';
--- COMMENT ON COLUMN cmx_plugin_dependencies.create_name IS '创建人名称';
--- COMMENT ON COLUMN cmx_plugin_dependencies.update_by IS '更新人ID';
--- COMMENT ON COLUMN cmx_plugin_dependencies.update_name IS '更新人名称';
--- CREATE INDEX IF NOT EXISTS idx_dep_plugin ON cmx_plugin_dependencies(plugin_id);
--- CREATE INDEX IF NOT EXISTS idx_dep_resolved ON cmx_plugin_dependencies(plugin_id, resolution_status);
---
--- -- =============================================
--- -- 8. 节点部署记录表 (cmx_plugin_deployments)
--- -- =============================================
--- CREATE TABLE IF NOT EXISTS cmx_plugin_deployments (
---     id              VARCHAR(64)           NOT NULL,
---     plugin_id       VARCHAR(64)           NOT NULL,
---     node_id         VARCHAR(100)          NOT NULL,
---     node_type       VARCHAR(50),
---     version         VARCHAR(50)            NOT NULL,
---     status          VARCHAR(30),
---     progress        INTEGER               DEFAULT 0,
---     error_message   TEXT,
---     error_details   TEXT,
---     create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     archived        INT4                  NOT NULL DEFAULT 0,
---     create_by       VARCHAR(100),
---     create_name     VARCHAR(100),
---     update_by       VARCHAR(100),
---     update_name     VARCHAR(100),
---     plugin_type     VARCHAR(50),
---     source_path     TEXT,
---     PRIMARY KEY (id)
--- );
--- COMMENT ON TABLE cmx_plugin_deployments IS '节点部署记录表';
--- COMMENT ON COLUMN cmx_plugin_deployments.id IS '主键ID';
--- COMMENT ON COLUMN cmx_plugin_deployments.plugin_id IS '关联插件ID';
--- COMMENT ON COLUMN cmx_plugin_deployments.node_id IS '节点ID';
--- COMMENT ON COLUMN cmx_plugin_deployments.node_type IS '节点类型';
--- COMMENT ON COLUMN cmx_plugin_deployments.version IS '版本';
--- COMMENT ON COLUMN cmx_plugin_deployments.status IS '状态';
--- COMMENT ON COLUMN cmx_plugin_deployments.progress IS '进度';
--- COMMENT ON COLUMN cmx_plugin_deployments.error_message IS '错误信息';
--- COMMENT ON COLUMN cmx_plugin_deployments.error_details IS '错误详情';
--- COMMENT ON COLUMN cmx_plugin_deployments.create_time IS '创建时间';
--- COMMENT ON COLUMN cmx_plugin_deployments.update_time IS '更新时间';
--- COMMENT ON COLUMN cmx_plugin_deployments.archived IS '归档标志';
--- COMMENT ON COLUMN cmx_plugin_deployments.create_by IS '创建人ID';
--- COMMENT ON COLUMN cmx_plugin_deployments.create_name IS '创建人名称';
--- COMMENT ON COLUMN cmx_plugin_deployments.update_by IS '更新人ID';
--- COMMENT ON COLUMN cmx_plugin_deployments.update_name IS '更新人名称';
--- COMMENT ON COLUMN cmx_plugin_deployments.plugin_type IS '插件类型';
--- COMMENT ON COLUMN cmx_plugin_deployments.source_path IS '源码路径';
--- CREATE INDEX IF NOT EXISTS idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
--- CREATE INDEX IF NOT EXISTS idx_deploy_node ON cmx_plugin_deployments(node_id);
--- CREATE INDEX IF NOT EXISTS idx_deploy_status ON cmx_plugin_deployments(status);
--- CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_deployments_plugin_node_version ON cmx_plugin_deployments(plugin_id, node_id, version);
+CREATE TABLE IF NOT EXISTS cmx_plugin_dependencies
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    dependency_plugin_id VARCHAR
+(
+    255
+) NOT NULL,
+    dependency_name VARCHAR
+(
+    500
+),
+    version_constraint VARCHAR
+(
+    100
+),
+    min_version VARCHAR
+(
+    50
+),
+    max_version VARCHAR
+(
+    50
+),
+    is_optional BOOLEAN NOT NULL DEFAULT FALSE,
+    is_dev BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_version VARCHAR
+(
+    50
+),
+    resolution_status VARCHAR
+(
+    30
+),
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
+COMMENT
+ON TABLE cmx_plugin_dependencies IS '插件依赖关系表';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.plugin_id IS '关联插件ID';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.dependency_plugin_id IS '依赖的插件ID';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.dependency_name IS '依赖的插件名称';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.version_constraint IS '版本约束';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.min_version IS '最小版本';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.max_version IS '最大版本';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.is_optional IS '是否可选';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.is_dev IS '是否开发依赖';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.resolved_version IS '已解析版本';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.resolution_status IS '解析状态: resolved/conflict/missing';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.archived IS '归档标志';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.create_name IS '创建人名称';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_plugin_dependencies.update_name IS '更新人名称';
+CREATE INDEX IF NOT EXISTS idx_dep_plugin ON cmx_plugin_dependencies(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_dep_resolved ON cmx_plugin_dependencies(plugin_id, resolution_status);
+
+-- =============================================
+-- 8. 节点部署记录表 (cmx_plugin_deployments)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_plugin_deployments
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    node_id VARCHAR
+(
+    100
+) NOT NULL,
+    node_type VARCHAR
+(
+    50
+),
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    status VARCHAR
+(
+    30
+),
+    progress INTEGER DEFAULT 0,
+    error_message TEXT,
+    error_details TEXT,
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    plugin_type VARCHAR
+(
+    50
+),
+    source_path TEXT,
+    PRIMARY KEY
+(
+    id
+)
+    );
+COMMENT
+ON TABLE cmx_plugin_deployments IS '节点部署记录表';
+COMMENT
+ON COLUMN cmx_plugin_deployments.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_plugin_deployments.plugin_id IS '关联插件ID';
+COMMENT
+ON COLUMN cmx_plugin_deployments.node_id IS '节点ID';
+COMMENT
+ON COLUMN cmx_plugin_deployments.node_type IS '节点类型';
+COMMENT
+ON COLUMN cmx_plugin_deployments.version IS '版本';
+COMMENT
+ON COLUMN cmx_plugin_deployments.status IS '状态';
+COMMENT
+ON COLUMN cmx_plugin_deployments.progress IS '进度';
+COMMENT
+ON COLUMN cmx_plugin_deployments.error_message IS '错误信息';
+COMMENT
+ON COLUMN cmx_plugin_deployments.error_details IS '错误详情';
+COMMENT
+ON COLUMN cmx_plugin_deployments.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_plugin_deployments.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_plugin_deployments.archived IS '归档标志';
+COMMENT
+ON COLUMN cmx_plugin_deployments.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_plugin_deployments.create_name IS '创建人名称';
+COMMENT
+ON COLUMN cmx_plugin_deployments.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_plugin_deployments.update_name IS '更新人名称';
+COMMENT
+ON COLUMN cmx_plugin_deployments.plugin_type IS '插件类型';
+COMMENT
+ON COLUMN cmx_plugin_deployments.source_path IS '源码路径';
+CREATE INDEX IF NOT EXISTS idx_deploy_plugin ON cmx_plugin_deployments(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_deploy_node ON cmx_plugin_deployments(node_id);
+CREATE INDEX IF NOT EXISTS idx_deploy_status ON cmx_plugin_deployments(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_deployments_plugin_node_version ON cmx_plugin_deployments(plugin_id, node_id, version);
 
 -- =============================================
 -- 9. 审计日志表 (cmx_plugin_audit_log)
@@ -915,150 +1037,329 @@ CREATE INDEX IF NOT EXISTS idx_audit_request ON cmx_plugin_audit_log(request_id)
 -- =============================================
 -- 10. 系统默认插件配置表 (cmx_system_plugins)
 -- =============================================
--- CREATE TABLE IF NOT EXISTS cmx_system_plugins (
---     id                   VARCHAR(64)           NOT NULL,
---     plugin_id            VARCHAR(255)          NOT NULL,
---     name                 VARCHAR(500)          NOT NULL,
---     version              VARCHAR(50)           NOT NULL,
---     install_order        INTEGER               NOT NULL DEFAULT 0,
---     is_optional          BOOLEAN               NOT NULL DEFAULT FALSE,
---     is_critical          BOOLEAN               NOT NULL DEFAULT FALSE,
---     retry_count          INTEGER               NOT NULL DEFAULT 3,
---     retry_delay_seconds  INTEGER               NOT NULL DEFAULT 10,
---     wait_for_plugins    VARCHAR(255),
---     source_type          VARCHAR(30)           NOT NULL,
---     source_path          TEXT,
---     source_url           TEXT,
---     status               VARCHAR(30)           NOT NULL DEFAULT 'pending',
---     last_installed_at    TIMESTAMP WITH TIME ZONE,
---     install_attempts     INTEGER               NOT NULL DEFAULT 0,
---     create_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     update_time          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     archived             INT4                  NOT NULL DEFAULT 0,
---     create_by            VARCHAR(100),
---     create_name          VARCHAR(100),
---     update_by            VARCHAR(100),
---     update_name          VARCHAR(100),
---     PRIMARY KEY (id)
--- );
--- COMMENT ON TABLE cmx_system_plugins IS '系统默认插件配置表';
--- COMMENT ON COLUMN cmx_system_plugins.id IS '主键ID';
--- COMMENT ON COLUMN cmx_system_plugins.plugin_id IS '插件ID';
--- COMMENT ON COLUMN cmx_system_plugins.name IS '名称';
--- COMMENT ON COLUMN cmx_system_plugins.version IS '版本';
--- COMMENT ON COLUMN cmx_system_plugins.install_order IS '安装顺序';
--- COMMENT ON COLUMN cmx_system_plugins.is_optional IS '是否可选';
--- COMMENT ON COLUMN cmx_system_plugins.is_critical IS '是否关键';
--- COMMENT ON COLUMN cmx_system_plugins.retry_count IS '重试次数';
--- COMMENT ON COLUMN cmx_system_plugins.retry_delay_seconds IS '重试间隔';
--- COMMENT ON COLUMN cmx_system_plugins.wait_for_plugins IS '等待插件';
--- COMMENT ON COLUMN cmx_system_plugins.source_type IS '来源: bundled/url';
--- COMMENT ON COLUMN cmx_system_plugins.source_path IS '路径';
--- COMMENT ON COLUMN cmx_system_plugins.source_url IS 'URL';
--- COMMENT ON COLUMN cmx_system_plugins.status IS '状态';
--- COMMENT ON COLUMN cmx_system_plugins.last_installed_at IS '最后安装时间';
--- COMMENT ON COLUMN cmx_system_plugins.install_attempts IS '安装次数';
--- COMMENT ON COLUMN cmx_system_plugins.create_time IS '创建时间';
--- COMMENT ON COLUMN cmx_system_plugins.update_time IS '更新时间';
--- COMMENT ON COLUMN cmx_system_plugins.archived IS '归档标志';
--- COMMENT ON COLUMN cmx_system_plugins.create_by IS '创建人ID';
--- COMMENT ON COLUMN cmx_system_plugins.create_name IS '创建人名称';
--- COMMENT ON COLUMN cmx_system_plugins.update_by IS '更新人ID';
--- COMMENT ON COLUMN cmx_system_plugins.update_name IS '更新人名称';
--- CREATE INDEX IF NOT EXISTS idx_system_plugin_order ON cmx_system_plugins(install_order);
--- CREATE INDEX IF NOT EXISTS idx_system_plugin_status ON cmx_system_plugins(status);
---
--- -- =============================================
--- -- 11. 节点信息表 (cmx_plugin_nodes)
--- -- =============================================
--- CREATE TABLE IF NOT EXISTS cmx_plugin_nodes (
---     node_id                  VARCHAR(64)           NOT NULL,
---     node_name               VARCHAR(255)          NOT NULL,
---     node_type               VARCHAR(30)           NOT NULL,
---     status                  VARCHAR(30)           NOT NULL,
---     is_active               BOOLEAN               NOT NULL DEFAULT TRUE,
---     host                    VARCHAR(255)          NOT NULL,
---     port                    INTEGER               NOT NULL,
---     protocol                VARCHAR(10)           NOT NULL DEFAULT 'http',
---     capabilities            TEXT,
---     last_health_check       TIMESTAMP WITH TIME ZONE,
---     health_check_interval   INTEGER               NOT NULL DEFAULT 30,
---     plugin_manager_version  VARCHAR(50),
---     registered_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     last_seen_at           TIMESTAMP WITH TIME ZONE,
---     create_time             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     update_time             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     archived                INT4                  NOT NULL DEFAULT 0,
---     create_by               VARCHAR(100),
---     create_name             VARCHAR(100),
---     update_by               VARCHAR(100),
---     update_name             VARCHAR(100),
---     PRIMARY KEY (node_id)
--- );
--- COMMENT ON TABLE cmx_plugin_nodes IS '节点信息表';
--- COMMENT ON COLUMN cmx_plugin_nodes.node_id IS '节点ID';
--- COMMENT ON COLUMN cmx_plugin_nodes.node_name IS '节点名称';
--- COMMENT ON COLUMN cmx_plugin_nodes.node_type IS '节点类型';
--- COMMENT ON COLUMN cmx_plugin_nodes.status IS '状态: online/offline/maintenance';
--- COMMENT ON COLUMN cmx_plugin_nodes.is_active IS '是否激活';
--- COMMENT ON COLUMN cmx_plugin_nodes.host IS '主机地址';
--- COMMENT ON COLUMN cmx_plugin_nodes.port IS '端口';
--- COMMENT ON COLUMN cmx_plugin_nodes.protocol IS '协议';
--- COMMENT ON COLUMN cmx_plugin_nodes.capabilities IS '节点能力';
--- COMMENT ON COLUMN cmx_plugin_nodes.last_health_check IS '最后健康检查';
--- COMMENT ON COLUMN cmx_plugin_nodes.health_check_interval IS '健康检查间隔';
--- COMMENT ON COLUMN cmx_plugin_nodes.plugin_manager_version IS '管理器版本';
--- COMMENT ON COLUMN cmx_plugin_nodes.registered_at IS '注册时间';
--- COMMENT ON COLUMN cmx_plugin_nodes.last_seen_at IS '最后可见时间';
--- COMMENT ON COLUMN cmx_plugin_nodes.create_time IS '创建时间';
--- COMMENT ON COLUMN cmx_plugin_nodes.update_time IS '更新时间';
--- COMMENT ON COLUMN cmx_plugin_nodes.archived IS '归档标志';
--- COMMENT ON COLUMN cmx_plugin_nodes.create_by IS '创建人ID';
--- COMMENT ON COLUMN cmx_plugin_nodes.create_name IS '创建人名称';
--- COMMENT ON COLUMN cmx_plugin_nodes.update_by IS '更新人ID';
--- COMMENT ON COLUMN cmx_plugin_nodes.update_name IS '更新人名称';
--- CREATE INDEX IF NOT EXISTS idx_node_status ON cmx_plugin_nodes(status);
--- CREATE INDEX IF NOT EXISTS idx_node_type ON cmx_plugin_nodes(node_type);
---
--- -- =============================================
--- -- 12. 插件功能表 (cmx_plugin_features)
--- -- =============================================
--- CREATE TABLE IF NOT EXISTS cmx_plugin_features (
---     id              VARCHAR(64)           NOT NULL,
---     plugin_id       VARCHAR(64)           NOT NULL,
---     plugin_version  VARCHAR(50)           NOT NULL,
---     feature_id      VARCHAR(255)          NOT NULL,
---     feature_name    VARCHAR(500)          NOT NULL,
---     feature_type    VARCHAR(50)           NOT NULL,
---     description     TEXT,
---     config          JSONB,
---     status          VARCHAR(30)           NOT NULL DEFAULT 'active',
---     create_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     update_time     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
---     archived        INT4                  NOT NULL DEFAULT 0,
---     create_by       VARCHAR(100),
---     create_name     VARCHAR(100),
---     update_by       VARCHAR(100),
---     update_name     VARCHAR(100),
---     PRIMARY KEY (id)
--- );
--- COMMENT ON TABLE cmx_plugin_features IS '插件功能表';
--- COMMENT ON COLUMN cmx_plugin_features.id IS '主键ID';
--- COMMENT ON COLUMN cmx_plugin_features.plugin_id IS '关联插件ID';
--- COMMENT ON COLUMN cmx_plugin_features.plugin_version IS '插件版本';
--- COMMENT ON COLUMN cmx_plugin_features.feature_id IS '功能ID';
--- COMMENT ON COLUMN cmx_plugin_features.feature_name IS '功能名称';
--- COMMENT ON COLUMN cmx_plugin_features.feature_type IS '功能类型: service/event_handler/scheduler/api';
--- COMMENT ON COLUMN cmx_plugin_features.description IS '描述';
--- COMMENT ON COLUMN cmx_plugin_features.config IS '配置';
--- COMMENT ON COLUMN cmx_plugin_features.status IS '状态: active/inactive/error';
--- COMMENT ON COLUMN cmx_plugin_features.create_time IS '创建时间';
--- COMMENT ON COLUMN cmx_plugin_features.update_time IS '更新时间';
--- COMMENT ON COLUMN cmx_plugin_features.archived IS '归档标志';
--- COMMENT ON COLUMN cmx_plugin_features.create_by IS '创建人ID';
--- COMMENT ON COLUMN cmx_plugin_features.create_name IS '创建人名称';
--- COMMENT ON COLUMN cmx_plugin_features.update_by IS '更新人ID';
--- COMMENT ON COLUMN cmx_plugin_features.update_name IS '更新人名称';
+CREATE TABLE IF NOT EXISTS cmx_system_plugins
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    255
+) NOT NULL,
+    name VARCHAR
+(
+    500
+) NOT NULL,
+    version VARCHAR
+(
+    50
+) NOT NULL,
+    install_order INTEGER NOT NULL DEFAULT 0,
+    is_optional BOOLEAN NOT NULL DEFAULT FALSE,
+    is_critical BOOLEAN NOT NULL DEFAULT FALSE,
+    retry_count INTEGER NOT NULL DEFAULT 3,
+    retry_delay_seconds INTEGER NOT NULL DEFAULT 10,
+    wait_for_plugins VARCHAR
+(
+    255
+),
+    source_type VARCHAR
+(
+    30
+) NOT NULL,
+    source_path TEXT,
+    source_url TEXT,
+    status VARCHAR
+(
+    30
+) NOT NULL DEFAULT 'pending',
+    last_installed_at TIMESTAMP WITH TIME ZONE,
+    install_attempts INTEGER NOT NULL DEFAULT 0,
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
+COMMENT
+ON TABLE cmx_system_plugins IS '系统默认插件配置表';
+COMMENT
+ON COLUMN cmx_system_plugins.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_system_plugins.plugin_id IS '插件ID';
+COMMENT
+ON COLUMN cmx_system_plugins.name IS '名称';
+COMMENT
+ON COLUMN cmx_system_plugins.version IS '版本';
+COMMENT
+ON COLUMN cmx_system_plugins.install_order IS '安装顺序';
+COMMENT
+ON COLUMN cmx_system_plugins.is_optional IS '是否可选';
+COMMENT
+ON COLUMN cmx_system_plugins.is_critical IS '是否关键';
+COMMENT
+ON COLUMN cmx_system_plugins.retry_count IS '重试次数';
+COMMENT
+ON COLUMN cmx_system_plugins.retry_delay_seconds IS '重试间隔';
+COMMENT
+ON COLUMN cmx_system_plugins.wait_for_plugins IS '等待插件';
+COMMENT
+ON COLUMN cmx_system_plugins.source_type IS '来源: bundled/url';
+COMMENT
+ON COLUMN cmx_system_plugins.source_path IS '路径';
+COMMENT
+ON COLUMN cmx_system_plugins.source_url IS 'URL';
+COMMENT
+ON COLUMN cmx_system_plugins.status IS '状态';
+COMMENT
+ON COLUMN cmx_system_plugins.last_installed_at IS '最后安装时间';
+COMMENT
+ON COLUMN cmx_system_plugins.install_attempts IS '安装次数';
+COMMENT
+ON COLUMN cmx_system_plugins.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_system_plugins.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_system_plugins.archived IS '归档标志';
+COMMENT
+ON COLUMN cmx_system_plugins.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_system_plugins.create_name IS '创建人名称';
+COMMENT
+ON COLUMN cmx_system_plugins.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_system_plugins.update_name IS '更新人名称';
+CREATE INDEX IF NOT EXISTS idx_system_plugin_order ON cmx_system_plugins(install_order);
+CREATE INDEX IF NOT EXISTS idx_system_plugin_status ON cmx_system_plugins(status);
+
+-- =============================================
+-- 11. 节点信息表 (cmx_plugin_nodes)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_plugin_nodes
+(
+    node_id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    node_name VARCHAR
+(
+    255
+) NOT NULL,
+    node_type VARCHAR
+(
+    30
+) NOT NULL,
+    status VARCHAR
+(
+    30
+) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    host VARCHAR
+(
+    255
+) NOT NULL,
+    port INTEGER NOT NULL,
+    protocol VARCHAR
+(
+    10
+) NOT NULL DEFAULT 'http',
+    capabilities TEXT,
+    last_health_check TIMESTAMP WITH TIME ZONE,
+                                    health_check_interval INTEGER NOT NULL DEFAULT 30,
+                                    plugin_manager_version VARCHAR (50),
+    registered_at TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMP WITH TIME ZONE,
+    create_time TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                                WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    node_id
+)
+    );
+COMMENT
+ON TABLE cmx_plugin_nodes IS '节点信息表';
+COMMENT
+ON COLUMN cmx_plugin_nodes.node_id IS '节点ID';
+COMMENT
+ON COLUMN cmx_plugin_nodes.node_name IS '节点名称';
+COMMENT
+ON COLUMN cmx_plugin_nodes.node_type IS '节点类型';
+COMMENT
+ON COLUMN cmx_plugin_nodes.status IS '状态: online/offline/maintenance';
+COMMENT
+ON COLUMN cmx_plugin_nodes.is_active IS '是否激活';
+COMMENT
+ON COLUMN cmx_plugin_nodes.host IS '主机地址';
+COMMENT
+ON COLUMN cmx_plugin_nodes.port IS '端口';
+COMMENT
+ON COLUMN cmx_plugin_nodes.protocol IS '协议';
+COMMENT
+ON COLUMN cmx_plugin_nodes.capabilities IS '节点能力';
+COMMENT
+ON COLUMN cmx_plugin_nodes.last_health_check IS '最后健康检查';
+COMMENT
+ON COLUMN cmx_plugin_nodes.health_check_interval IS '健康检查间隔';
+COMMENT
+ON COLUMN cmx_plugin_nodes.plugin_manager_version IS '管理器版本';
+COMMENT
+ON COLUMN cmx_plugin_nodes.registered_at IS '注册时间';
+COMMENT
+ON COLUMN cmx_plugin_nodes.last_seen_at IS '最后可见时间';
+COMMENT
+ON COLUMN cmx_plugin_nodes.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_plugin_nodes.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_plugin_nodes.archived IS '归档标志';
+COMMENT
+ON COLUMN cmx_plugin_nodes.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_plugin_nodes.create_name IS '创建人名称';
+COMMENT
+ON COLUMN cmx_plugin_nodes.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_plugin_nodes.update_name IS '更新人名称';
+CREATE INDEX IF NOT EXISTS idx_node_status ON cmx_plugin_nodes(status);
+CREATE INDEX IF NOT EXISTS idx_node_type ON cmx_plugin_nodes(node_type);
+
+-- =============================================
+-- 12. 插件功能表 (cmx_plugin_features)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_plugin_features
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_version VARCHAR
+(
+    50
+) NOT NULL,
+    feature_id VARCHAR
+(
+    255
+) NOT NULL,
+    feature_name VARCHAR
+(
+    500
+) NOT NULL,
+    feature_type VARCHAR
+(
+    50
+) NOT NULL,
+    description TEXT,
+    config JSONB,
+    status VARCHAR
+(
+    30
+) NOT NULL DEFAULT 'active',
+    create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    update_time TIMESTAMP
+                          WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    archived INT4 NOT NULL DEFAULT 0,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
+COMMENT
+ON TABLE cmx_plugin_features IS '插件功能表';
+COMMENT
+ON COLUMN cmx_plugin_features.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_plugin_features.plugin_id IS '关联插件ID';
+COMMENT
+ON COLUMN cmx_plugin_features.plugin_version IS '插件版本';
+COMMENT
+ON COLUMN cmx_plugin_features.feature_id IS '功能ID';
+COMMENT
+ON COLUMN cmx_plugin_features.feature_name IS '功能名称';
+COMMENT
+ON COLUMN cmx_plugin_features.feature_type IS '功能类型: service/event_handler/scheduler/api';
+COMMENT
+ON COLUMN cmx_plugin_features.description IS '描述';
+COMMENT
+ON COLUMN cmx_plugin_features.config IS '配置';
+COMMENT
+ON COLUMN cmx_plugin_features.status IS '状态: active/inactive/error';
+COMMENT
+ON COLUMN cmx_plugin_features.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_plugin_features.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_plugin_features.archived IS '归档标志';
+COMMENT
+ON COLUMN cmx_plugin_features.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_plugin_features.create_name IS '创建人名称';
+COMMENT
+ON COLUMN cmx_plugin_features.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_plugin_features.update_name IS '更新人名称';
 
 -- =============================================
 -- 13. 表定义元数据表 (cmx_meta_table_define)
@@ -1450,6 +1751,800 @@ ON COLUMN cmx_service_define_version.update_name IS '更新人名称';
 COMMENT
 ON COLUMN cmx_service_define_version.archived IS '归档标志';
 CREATE INDEX IF NOT EXISTS idx_service_version_key ON cmx_service_define_version(service_key);
+
+-- =============================================
+-- 17. 插件市场 - 插件主表 (cmx_marketplace_plugin)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    name VARCHAR
+(
+    256
+),
+    description TEXT,
+    short_description VARCHAR
+(
+    512
+),
+    icon_url VARCHAR
+(
+    512
+),
+    category VARCHAR
+(
+    64
+),
+    tags JSONB,
+    vendor_name VARCHAR
+(
+    128
+),
+    vendor_url VARCHAR
+(
+    512
+),
+    vendor_contact VARCHAR
+(
+    256
+),
+    license_type VARCHAR
+(
+    32
+),
+    homepage_url VARCHAR
+(
+    512
+),
+    documentation_url VARCHAR
+(
+    512
+),
+    repository_url VARCHAR
+(
+    512
+),
+    status VARCHAR
+(
+    32
+),
+    is_featured INT2,
+    is_official INT2,
+    avg_rating DECIMAL
+(
+    3,
+    2
+),
+    rating_count INT4,
+    download_count INT8,
+    install_count INT8,
+    domain_code VARCHAR
+(
+    64
+),
+    application_code VARCHAR
+(
+    64
+),
+    module_code VARCHAR
+(
+    64
+),
+    plugin_type VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    UNIQUE
+(
+    plugin_id
+)
+    );
+
+COMMENT
+ON TABLE cmx_marketplace_plugin IS '插件市场-插件主表';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.id IS '主键';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.plugin_id IS '插件唯一标识';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.name IS '插件名称';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.description IS '插件详细描述';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.short_description IS '简短描述';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.icon_url IS '图标URL';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.category IS '分类（如：数据集成、业务逻辑、工具类）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.tags IS '标签列表（JSON数组）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.vendor_name IS '供应商名称';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.vendor_url IS '供应商主页';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.vendor_contact IS '联系方式';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.license_type IS '许可证类型（MIT/Apache/Commercial/Free）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.homepage_url IS '插件主页';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.documentation_url IS '文档地址';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.repository_url IS '代码仓库地址';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.status IS '状态（draft/published/deprecated/archived）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.is_featured IS '是否推荐（1是/0否）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.is_official IS '是否官方插件（1是/0否）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.avg_rating IS '平均评分（1.00-5.00）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.rating_count IS '评分数量';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.download_count IS '总下载量';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.install_count IS '总安装量';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.domain_code IS '所属域编码';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.application_code IS '所属应用编码';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.module_code IS '所属模块编码';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.plugin_type IS '插件类型';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.archived IS '归档标记（0未归档/1已归档）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_marketplace_plugin.update_name IS '更新人姓名';
+
+CREATE INDEX idx_mp_category ON cmx_marketplace_plugin (category);
+CREATE INDEX idx_mp_status ON cmx_marketplace_plugin (status);
+CREATE INDEX idx_mp_featured ON cmx_marketplace_plugin (is_featured) WHERE is_featured = 1;
+CREATE INDEX idx_mp_download_count ON cmx_marketplace_plugin (download_count DESC);
+CREATE INDEX idx_mp_rating ON cmx_marketplace_plugin (avg_rating DESC);
+
+-- =============================================
+-- 18. 插件市场 - 版本表 (cmx_marketplace_plugin_version)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin_version
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    version VARCHAR
+(
+    64
+) NOT NULL,
+    version_rank INT4,
+    changelog TEXT,
+    release_notes TEXT,
+    download_url VARCHAR
+(
+    512
+),
+    package_size INT8,
+    checksum VARCHAR
+(
+    128
+),
+    min_platform_version VARCHAR
+(
+    32
+),
+    max_platform_version VARCHAR
+(
+    32
+),
+    dependencies JSONB,
+    compatibility JSONB,
+    status VARCHAR
+(
+    32
+),
+    is_latest INT2,
+    is_stable INT2,
+    download_count INT8,
+    published_at TIMESTAMP,
+    storage_file_id VARCHAR
+(
+    64
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    UNIQUE
+(
+    plugin_id,
+    version
+),
+    CONSTRAINT fk_mpversion_plugin FOREIGN KEY
+(
+    plugin_id
+) REFERENCES cmx_marketplace_plugin
+(
+    plugin_id
+) ON DELETE CASCADE
+    );
+
+COMMENT
+ON TABLE cmx_marketplace_plugin_version IS '插件市场-版本表';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.id IS '主键';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.plugin_id IS '插件ID';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.version IS '版本号（语义化版本）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.version_rank IS '版本排序值（用于版本比较）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.changelog IS '变更日志';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.release_notes IS '发布说明';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.download_url IS '下载地址';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.package_size IS '包大小（字节）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.checksum IS '校验和（SHA256）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.min_platform_version IS '最低平台版本要求';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.max_platform_version IS '最高平台版本要求';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.dependencies IS '依赖列表（JSON数组）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.compatibility IS '兼容性信息（JSON对象）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.status IS '状态（draft/published/deprecated）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.is_latest IS '是否最新版本（1是/0否）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.is_stable IS '是否稳定版（1是/0否）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.download_count IS '版本下载量';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.published_at IS '发布时间';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.storage_file_id IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.archived IS '归档标记（0未归档/1已归档）';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_marketplace_plugin_version.update_name IS '更新人姓名';
+
+CREATE INDEX idx_mpv_plugin_id ON cmx_marketplace_plugin_version (plugin_id);
+CREATE INDEX idx_mpv_latest ON cmx_marketplace_plugin_version (plugin_id, is_latest) WHERE is_latest = 1;
+
+-- =============================================
+-- 19. 插件市场 - 下载统计表 (cmx_marketplace_download_stats)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_marketplace_download_stats
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    version VARCHAR
+(
+    64
+),
+    download_date DATE,
+    download_count INT4,
+    install_count INT4,
+    source_type VARCHAR
+(
+    32
+),
+    region VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    UNIQUE
+(
+    plugin_id,
+    version,
+    download_date,
+    source_type
+)
+    );
+
+COMMENT
+ON TABLE cmx_marketplace_download_stats IS '插件市场-下载统计表';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.id IS '主键';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.plugin_id IS '插件ID';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.version IS '版本号';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.download_date IS '下载日期';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.download_count IS '当日下载量';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.install_count IS '当日安装量';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.source_type IS '来源类型（api/cli/marketplace）';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.region IS '地区';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.archived IS '归档标记（0未归档/1已归档）';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_marketplace_download_stats.update_name IS '更新人姓名';
+
+CREATE INDEX idx_dstats_date ON cmx_marketplace_download_stats (download_date);
+
+-- =============================================
+-- 20. 插件市场 - 评分表 (cmx_marketplace_rating)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_marketplace_rating
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    plugin_id VARCHAR
+(
+    128
+) NOT NULL,
+    user_id VARCHAR
+(
+    128
+) NOT NULL,
+    rating INT4,
+    review TEXT,
+    status VARCHAR
+(
+    32
+),
+    archived INT4 DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+),
+    UNIQUE
+(
+    plugin_id,
+    user_id
+),
+    CONSTRAINT fk_rating_plugin FOREIGN KEY
+(
+    plugin_id
+) REFERENCES cmx_marketplace_plugin
+(
+    plugin_id
+) ON DELETE CASCADE
+    );
+
+COMMENT
+ON TABLE cmx_marketplace_rating IS '插件市场-评分表';
+COMMENT
+ON COLUMN cmx_marketplace_rating.id IS '主键';
+COMMENT
+ON COLUMN cmx_marketplace_rating.plugin_id IS '插件ID';
+COMMENT
+ON COLUMN cmx_marketplace_rating.user_id IS '用户ID';
+COMMENT
+ON COLUMN cmx_marketplace_rating.rating IS '评分（1-5）';
+COMMENT
+ON COLUMN cmx_marketplace_rating.review IS '评论内容';
+COMMENT
+ON COLUMN cmx_marketplace_rating.status IS '状态（pending/approved/rejected）';
+COMMENT
+ON COLUMN cmx_marketplace_rating.archived IS '归档标记（0未归档/1已归档）';
+COMMENT
+ON COLUMN cmx_marketplace_rating.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_marketplace_rating.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_marketplace_rating.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_marketplace_rating.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_marketplace_rating.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_marketplace_rating.update_name IS '更新人姓名';
+
+CREATE INDEX idx_rating_plugin ON cmx_marketplace_rating (plugin_id);
+
+-- =============================================
+-- 21. 文件详情表 (cmx_file_detail)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_file_detail
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    url VARCHAR
+(
+    512
+) NOT NULL,
+    size BIGINT,
+    filename VARCHAR
+(
+    256
+),
+    original_filename VARCHAR
+(
+    256
+),
+    base_path VARCHAR
+(
+    256
+),
+    path VARCHAR
+(
+    256
+),
+    ext VARCHAR
+(
+    32
+),
+    content_type VARCHAR
+(
+    128
+),
+    platform VARCHAR
+(
+    32
+),
+    th_url VARCHAR
+(
+    512
+),
+    th_filename VARCHAR
+(
+    256
+),
+    th_size BIGINT,
+    th_content_type VARCHAR
+(
+    128
+),
+    object_id VARCHAR
+(
+    64
+),
+    object_type VARCHAR
+(
+    32
+),
+    metadata TEXT,
+    user_metadata TEXT,
+    th_metadata TEXT,
+    th_user_metadata TEXT,
+    attr TEXT,
+    file_acl VARCHAR
+(
+    32
+),
+    th_file_acl VARCHAR
+(
+    32
+),
+    hash_info TEXT,
+    upload_id VARCHAR
+(
+    128
+),
+    upload_status INTEGER,
+    archived INTEGER DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
+
+COMMENT
+ON TABLE cmx_file_detail IS '文件详情表';
+COMMENT
+ON COLUMN cmx_file_detail.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_file_detail.url IS '文件访问地址';
+COMMENT
+ON COLUMN cmx_file_detail.size IS '文件大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_detail.filename IS '文件名称';
+COMMENT
+ON COLUMN cmx_file_detail.original_filename IS '原始文件名';
+COMMENT
+ON COLUMN cmx_file_detail.base_path IS '基础存储路径';
+COMMENT
+ON COLUMN cmx_file_detail.path IS '存储路径';
+COMMENT
+ON COLUMN cmx_file_detail.ext IS '文件扩展名';
+COMMENT
+ON COLUMN cmx_file_detail.content_type IS 'MIME类型';
+COMMENT
+ON COLUMN cmx_file_detail.platform IS '存储平台标识';
+COMMENT
+ON COLUMN cmx_file_detail.th_url IS '缩略图访问路径';
+COMMENT
+ON COLUMN cmx_file_detail.th_filename IS '缩略图名称';
+COMMENT
+ON COLUMN cmx_file_detail.th_size IS '缩略图大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_detail.th_content_type IS '缩略图MIME类型';
+COMMENT
+ON COLUMN cmx_file_detail.object_id IS '文件所属对象ID';
+COMMENT
+ON COLUMN cmx_file_detail.object_type IS '文件所属对象类型';
+COMMENT
+ON COLUMN cmx_file_detail.metadata IS '文件元数据';
+COMMENT
+ON COLUMN cmx_file_detail.user_metadata IS '文件用户元数据';
+COMMENT
+ON COLUMN cmx_file_detail.th_metadata IS '缩略图元数据';
+COMMENT
+ON COLUMN cmx_file_detail.th_user_metadata IS '缩略图用户元数据';
+COMMENT
+ON COLUMN cmx_file_detail.attr IS '附加属性';
+COMMENT
+ON COLUMN cmx_file_detail.file_acl IS '文件ACL';
+COMMENT
+ON COLUMN cmx_file_detail.th_file_acl IS '缩略图文件ACL';
+COMMENT
+ON COLUMN cmx_file_detail.hash_info IS '哈希信息（JSON格式，含MD5等）';
+COMMENT
+ON COLUMN cmx_file_detail.upload_id IS '上传ID，仅在手动分片上传时使用';
+COMMENT
+ON COLUMN cmx_file_detail.upload_status IS '上传状态：0-普通上传，1-初始化完成，2-上传完成';
+COMMENT
+ON COLUMN cmx_file_detail.archived IS '是否归档：0-否，1-是';
+COMMENT
+ON COLUMN cmx_file_detail.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_file_detail.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_file_detail.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_file_detail.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_file_detail.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_file_detail.update_name IS '更新人姓名';
+
+CREATE INDEX idx_file_detail_platform ON cmx_file_detail (platform);
+CREATE INDEX idx_file_detail_object_type ON cmx_file_detail (object_type);
+CREATE INDEX idx_file_detail_upload_id ON cmx_file_detail (upload_id);
+
+-- =============================================
+-- 22. 文件分片信息表 (cmx_file_part_detail)
+-- =============================================
+CREATE TABLE IF NOT EXISTS cmx_file_part_detail
+(
+    id
+    VARCHAR
+(
+    64
+) NOT NULL,
+    platform VARCHAR
+(
+    32
+),
+    upload_id VARCHAR
+(
+    128
+),
+    e_tag VARCHAR
+(
+    255
+),
+    part_number INTEGER,
+    part_size BIGINT,
+    hash_info TEXT,
+    archived INTEGER DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by VARCHAR
+(
+    100
+),
+    create_name VARCHAR
+(
+    100
+),
+    update_by VARCHAR
+(
+    100
+),
+    update_name VARCHAR
+(
+    100
+),
+    PRIMARY KEY
+(
+    id
+)
+    );
+
+COMMENT
+ON TABLE cmx_file_part_detail IS '文件分片信息表，仅在手动分片上传时使用';
+COMMENT
+ON COLUMN cmx_file_part_detail.id IS '主键ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.platform IS '存储平台标识';
+COMMENT
+ON COLUMN cmx_file_part_detail.upload_id IS '上传ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.e_tag IS '分片ETag';
+COMMENT
+ON COLUMN cmx_file_part_detail.part_number IS '分片号';
+COMMENT
+ON COLUMN cmx_file_part_detail.part_size IS '分片大小，单位字节';
+COMMENT
+ON COLUMN cmx_file_part_detail.hash_info IS '哈希信息';
+COMMENT
+ON COLUMN cmx_file_part_detail.archived IS '是否归档：0-否，1-是';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_time IS '创建时间';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_time IS '更新时间';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_by IS '创建人ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.create_name IS '创建人姓名';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_by IS '更新人ID';
+COMMENT
+ON COLUMN cmx_file_part_detail.update_name IS '更新人姓名';
+
+CREATE INDEX idx_file_part_detail_upload_id ON cmx_file_part_detail (upload_id);
+
 
 -- =============================================
 -- 初始数据
