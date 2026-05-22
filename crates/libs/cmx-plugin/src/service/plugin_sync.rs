@@ -14,7 +14,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-use cmx_traits::{plugin_events, GlobalEventBus, PluginLifecyclePayload};
+
+use cmx_traits::{GlobalEventBus, PluginLifecyclePayload, plugin_events};
 use crate::cluster::notification::{PluginChangeAction, PluginChangeNotification};
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
@@ -71,14 +72,12 @@ impl PluginChangeHandler {
 
     /// 处理插件变更通知
     pub async fn handle(&self, notification: &PluginChangeNotification) {
-        if let Some(ref notification_app_id) = notification.app_id {
-            if notification_app_id != &self.app_id {
-                tracing::debug!(
-                    "Ignoring notification for different app_id: {}",
-                    notification_app_id
-                );
-                return;
-            }
+        if notification.app_id != self.app_id {
+            tracing::debug!(
+                "Ignoring notification for different app_id: {}",
+                notification.app_id
+            );
+            return;
         }
 
         match &notification.action {
@@ -101,6 +100,15 @@ impl PluginChangeHandler {
                         notification.plugin_id,
                         e
                     );
+                } else {
+                    let payload = PluginLifecyclePayload::new(
+                        &self.app_id,
+                        &notification.plugin_id,
+                        version,
+                    );
+                    GlobalEventBus::get()
+                        .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+                        .await;
                 }
             }
             PluginChangeAction::RuntimeUnload => {
@@ -114,6 +122,16 @@ impl PluginChangeHandler {
                         notification.plugin_id,
                         e
                     );
+                } else {
+                    let version = notification.version.as_deref().unwrap_or("");
+                    let payload = PluginLifecyclePayload::new(
+                        &self.app_id,
+                        &notification.plugin_id,
+                        version,
+                    );
+                    GlobalEventBus::get()
+                        .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+                        .await;
                 }
             }
         }
@@ -123,26 +141,18 @@ impl PluginChangeHandler {
     ///
     /// 从数据库查询最新版本，与本地文件系统对比后执行操作。
     async fn handle_plugin_changed(&self, plugin_id: &str) {
-        // 从数据库查询最新插件记录（使用 app_id 过滤）
-        let filter = crate::domain::plugin::PluginFilter {
-            app_id: Some(self.app_id.clone()),
-            ..Default::default()
-        };
-        let records = match self.repository.list_plugins(&filter).await {
-            Ok(records) => records,
-            Err(e) => {
-                tracing::error!("查询插件 {} 失败: {}", plugin_id, e);
-                return;
-            }
-        };
-        let db_plugin = match records.iter().find(|r| r.plugin_id == plugin_id) {
-            Some(p) => p.clone(),
-            None => {
+        let db_plugin = match self.repository.find_plugin(plugin_id, &self.app_id).await {
+            Ok(Some(p)) => p,
+            Ok(None) => {
                 tracing::warn!(
                     "收到插件 {} 变更通知，但数据库中未找到记录 (app_id={})",
                     plugin_id,
                     self.app_id
                 );
+                return;
+            }
+            Err(e) => {
+                tracing::error!("查询插件 {} 失败: {}", plugin_id, e);
                 return;
             }
         };
@@ -164,7 +174,6 @@ impl PluginChangeHandler {
             db_plugin.zip_source_type.as_deref(),
         );
 
-        // 执行部署（自动判断安装/升级）
         let request = DeployRequest {
             source,
             db_id: Some(db_plugin.db_id.clone()),
@@ -172,6 +181,7 @@ impl PluginChangeHandler {
             build_type: None,
             publish_to_marketplace: false,
             app_id: Some(self.app_id.clone()),
+            send_event: false,
         };
 
         match self.deploy_service.deploy(request).await {
@@ -182,6 +192,31 @@ impl PluginChangeHandler {
                     result.old_version.as_deref().unwrap_or("无"),
                     result.new_version
                 );
+
+                let mut payload = PluginLifecyclePayload::new(
+                    &self.app_id,
+                    &result.plugin_id,
+                    &result.new_version,
+                )
+                    .with_install_path(result.install_path);
+
+                let event_name = match result.action {
+                    crate::service::deploy::DeployAction::Install => {
+                        plugin_events::INSTALLED
+                    }
+                    crate::service::deploy::DeployAction::Upgrade
+                    | crate::service::deploy::DeployAction::Reinstall => {
+                        payload = payload.with_old_version(
+                            result.old_version.as_deref().unwrap_or("unknown"),
+                        );
+                        plugin_events::UPGRADED
+                    }
+                    _ => return,
+                };
+
+                GlobalEventBus::get()
+                    .publish(event_name, serde_json::to_value(&payload).unwrap())
+                    .await;
             }
             Err(e) => {
                 tracing::error!("插件 {} 远程同步失败: {}", plugin_id, e);
@@ -193,19 +228,16 @@ impl PluginChangeHandler {
     ///
     /// 从内存中移除插件信息，清理本地文件。
     async fn handle_plugin_removed(&self, plugin_id: &str) {
-        // 从内存注册表移除
         {
             let mut registry = self.registry.write().await;
             registry.unregister(plugin_id);
         }
 
-        // 从上下文映射移除
         {
             let mut contexts = self.contexts.write().await;
             contexts.remove(plugin_id);
         }
 
-        // 清理本地文件目录（使用 app_id 目录）
         let plugin_dir = self.plugin_root.join(&self.app_id).join(plugin_id);
         if plugin_dir.exists() {
             if let Err(e) = tokio::fs::remove_dir_all(&plugin_dir).await {
@@ -214,6 +246,11 @@ impl PluginChangeHandler {
                 tracing::info!("已清理插件 {} 本地文件", plugin_id);
             }
         }
+
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, "");
+        GlobalEventBus::get()
+            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
     }
 
     /// 全量同步（启动时或收到全量同步请求时调用）
@@ -256,6 +293,7 @@ impl PluginChangeHandler {
                         build_type: None,
                         publish_to_marketplace: false,
                         app_id: Some(self.app_id.clone()),
+                        send_event: false,
                     };
 
                     match self.deploy_service.deploy(request).await {
@@ -274,7 +312,7 @@ impl PluginChangeHandler {
         // 清理本地存在但数据库不存在的插件
         for plugin_id in local_plugins.keys() {
             if !expected_map.contains_key(plugin_id) {
-                let plugin_dir = self.plugin_root.join(plugin_id);
+                let plugin_dir = self.plugin_root.join(&self.app_id).join(plugin_id);
                 if let Err(e) = tokio::fs::remove_dir_all(&plugin_dir).await {
                     tracing::error!("清理插件 {} 本地文件失败: {}", plugin_id, e);
                 }
@@ -292,11 +330,12 @@ impl PluginChangeHandler {
     async fn scan_local_plugins(&self) -> PluginResult<HashMap<String, String>> {
         let mut local_plugins = HashMap::new();
 
-        if !self.plugin_root.exists() {
+        let scan_dir = self.plugin_root.join(&self.app_id);
+        if !scan_dir.exists() {
             return Ok(local_plugins);
         }
 
-        let mut entries = match tokio::fs::read_dir(&self.plugin_root).await {
+        let mut entries = match tokio::fs::read_dir(&scan_dir).await {
             Ok(entries) => entries,
             Err(_) => return Ok(local_plugins),
         };
