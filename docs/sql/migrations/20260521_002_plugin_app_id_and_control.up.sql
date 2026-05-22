@@ -15,12 +15,9 @@ DROP INDEX IF EXISTS uk_cmx_plugin_plugin_id;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_app_plugin ON cmx_plugin(app_id, plugin_id);
 CREATE INDEX IF NOT EXISTS idx_plugin_app_id ON cmx_plugin(app_id);
 
-COMMENT
-ON COLUMN cmx_plugin.app_id IS '应用隔离标识，用于多租户或多应用场景下的插件隔离';
-COMMENT
-ON COLUMN cmx_plugin.storage_key IS '存储键，标识插件包在存储系统中的唯一键';
-COMMENT
-ON COLUMN cmx_plugin.storage_checksum IS '存储校验和，用于验证插件包完整性';
+COMMENT ON COLUMN cmx_plugin.app_id IS '应用隔离标识，用于多租户或多应用场景下的插件隔离';
+COMMENT ON COLUMN cmx_plugin.storage_key IS '存储键，标识插件包在存储系统中的唯一键';
+COMMENT ON COLUMN cmx_plugin.storage_checksum IS '存储校验和，用于验证插件包完整性';
 
 -- =============================================
 -- 2. cmx_service_define 表变更
@@ -32,8 +29,7 @@ DROP INDEX IF EXISTS uk_cmx_service_define_key;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_service_define_app_key ON cmx_service_define(app_id, service_key);
 CREATE INDEX IF NOT EXISTS idx_service_define_app_id ON cmx_service_define(app_id);
 
-COMMENT
-ON COLUMN cmx_service_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务隔离';
+COMMENT ON COLUMN cmx_service_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务隔离';
 
 -- =============================================
 -- 3. cmx_plugin_versions 表变更
@@ -43,8 +39,7 @@ ALTER TABLE cmx_plugin_versions
 
 CREATE INDEX IF NOT EXISTS idx_plugin_versions_app_id ON cmx_plugin_versions(app_id);
 
-COMMENT
-ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多租户或多应用场景下的版本隔离';
+COMMENT ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多租户或多应用场景下的版本隔离';
 
 -- 删除旧的唯一约束并添加新的（包含 app_id）
 
@@ -98,8 +93,7 @@ ALTER TABLE cmx_service_define_version
 
 CREATE INDEX IF NOT EXISTS idx_service_define_version_app_id ON cmx_service_define_version(app_id);
 
-COMMENT
-ON COLUMN cmx_service_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务版本隔离';
+COMMENT ON COLUMN cmx_service_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的服务版本隔离';
 
 -- =============================================
 -- 8. cmx_meta_table_define 表变更
@@ -110,10 +104,8 @@ ALTER TABLE cmx_meta_table_define
 
 CREATE INDEX IF NOT EXISTS idx_meta_table_define_app_id ON cmx_meta_table_define(app_id);
 
-COMMENT
-ON COLUMN cmx_meta_table_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据隔离';
-COMMENT
-ON COLUMN cmx_meta_table_define.ddl_status IS 'DDL执行状态: pending(待执行), executing(执行中), completed(已完成), failed(执行失败)';
+COMMENT ON COLUMN cmx_meta_table_define.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据隔离';
+COMMENT ON COLUMN cmx_meta_table_define.ddl_status IS 'DDL执行状态: pending(待执行), executing(执行中), completed(已完成), failed(执行失败)';
 
 -- =============================================
 -- 9. cmx_meta_table_define_version 表变更
@@ -123,8 +115,7 @@ ALTER TABLE cmx_meta_table_define_version
 
 CREATE INDEX IF NOT EXISTS idx_meta_table_define_version_app_id ON cmx_meta_table_define_version(app_id);
 
-COMMENT
-ON COLUMN cmx_meta_table_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据版本隔离';
+COMMENT ON COLUMN cmx_meta_table_define_version.app_id IS '应用隔离标识，用于多租户或多应用场景下的元数据版本隔离';
 
 -- -- =============================================
 -- -- 10. cmx_system_plugins 表变更
@@ -145,8 +136,7 @@ ALTER TABLE cmx_plugin_audit_log
 
 CREATE INDEX IF NOT EXISTS idx_audit_app_id ON cmx_plugin_audit_log(app_id);
 
-COMMENT
-ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多租户或多应用场景下的审计日志隔离';
+COMMENT ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多租户或多应用场景下的审计日志隔离';
 
 -- -- =============================================
 -- -- 12. cmx_plugin_nodes 表变更
