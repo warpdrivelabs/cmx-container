@@ -57,6 +57,10 @@ use crate::infrastructure::storage::file::FileStorage;
 use crate::runtime::activation::ActivationManager;
 use crate::runtime::service_registry::ServiceRegistry;
 use crate::security::validator::SecurityValidator;
+use crate::service::event_publisher::EventPublisher;
+use crate::service::executor::PluginOperationExecutor;
+use crate::service::persistence::PluginPersistence;
+use crate::service::runtime_ops::{RuntimeOps, RuntimeOpsDeps};
 use cmx_buffer::{CacheManager, GlobalCacheManager, GlobalLockManager, LockManager, PubSubOps};
 use cmx_database::{DatabaseManager, get_default_db_manager};
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -254,8 +258,17 @@ pub struct PluginManager {
     /// 插件初始化器（用于启动时同步）
     plugin_initializer: crate::service::initializer::PluginInitializer,
 
-    /// 运行时加载器（处理 RuntimeLoad/RuntimeUnload 通知）
+    /// 运行时加载器（已废弃，保留向后兼容，新代码请使用 runtime_ops）
+    #[allow(deprecated)]
     runtime_loader: Arc<crate::service::runtime_loader::RuntimeLoader>,
+
+    // 新架构组件
+    /// 运行时操作层（内存注册/卸载、缓存更新、文件同步）
+    runtime_ops: Arc<RuntimeOps>,
+    /// 统一事件发布器
+    event_publisher: EventPublisher,
+    /// 插件操作编排器（统一编排持久化→运行时→事件发布）
+    executor: Arc<PluginOperationExecutor>,
 
     // 通用工具
     /// 依赖检查工具
@@ -340,7 +353,45 @@ impl PluginManager {
             service_registry: service_registry.clone(),
         });
 
-        let install_service = crate::service::install::InstallService::new(
+        let activate_service = crate::service::activate::ActivateService::new(
+            crate::service::activate::ActivateServiceDeps {
+                repository: repository.clone(),
+                cache: cache.clone(),
+                storage: storage.clone(),
+                audit_logger: audit_logger.clone(),
+                activation_manager: activation_manager.clone(),
+                service_registry: service_registry.clone(),
+                contexts: contexts.clone(),
+            },
+        );
+
+        let rollback_service = crate::service::rollback::RollbackService::new(
+            crate::service::rollback::RollbackServiceDeps {
+                repository: repository.clone(),
+                cache: cache.clone(),
+                storage: storage.clone(),
+                backup_manager: backup_manager.clone(),
+                audit_logger: audit_logger.clone(),
+                contexts: contexts.clone(),
+            },
+        );
+
+        #[allow(deprecated)]
+        let runtime_loader = Arc::new(
+            crate::service::runtime_loader::RuntimeLoader::new(
+                repository.clone(),
+                registry.clone(),
+                contexts.clone(),
+                settings.plugin_root.clone(),
+                settings.app_id.clone(),
+                settings.temp_root.clone(),
+            ),
+        );
+
+        // 创建新架构组件
+        let event_publisher = EventPublisher::new(plugin_notifier.clone());
+
+        let persistence = PluginPersistence::new(
             crate::service::install::InstallServiceDeps {
                 repository: repository.clone(),
                 version_history_repository: version_history_repository.clone(),
@@ -357,136 +408,72 @@ impl PluginManager {
                 node_name: settings.node_name.clone(),
                 node_type: settings.node_type.clone(),
                 service_storage: GlobalServiceStorage::get().clone(),
-                plugin_notifier: plugin_notifier.clone(),
-                lock_manager: builder.lock_manager.clone(),
-            },
-        );
-
-        let upgrade_service = crate::service::upgrade::UpgradeService::new(
-            crate::service::upgrade::UpgradeServiceDeps {
-                repository: repository.clone(),
-                version_history_repository: version_history_repository.clone(),
-                cache: cache.clone(),
-                storage: storage.clone(),
-                backup_manager: backup_manager.clone(),
-                security_validator: security_validator.clone(),
-                audit_logger: audit_logger.clone(),
-                registry: registry.clone(),
-                contexts: contexts.clone(),
-                plugin_root: settings.plugin_root.clone(),
-                temp_root: settings.temp_root.clone(),
-                default_database_id: settings.default_database_id.clone(),
-                node_name: settings.node_name.clone(),
-                node_type: settings.node_type.clone(),
-                service_storage: GlobalServiceStorage::get().clone(),
-                plugin_notifier: plugin_notifier.clone(),
-                lock_manager: builder.lock_manager.clone(),
-            },
-        );
-
-        let activate_service = crate::service::activate::ActivateService::new(
-            crate::service::activate::ActivateServiceDeps {
-                repository: repository.clone(),
-                cache: cache.clone(),
-                storage: storage.clone(),
-                audit_logger: audit_logger.clone(),
-                activation_manager: activation_manager.clone(),
-                service_registry: service_registry.clone(),
-                contexts: contexts.clone(),
-            },
-        );
-
-        let uninstall_service = crate::service::uninstall::UninstallService::new(
-            crate::service::uninstall::UninstallServiceDeps {
-                repository: repository.clone(),
-                version_history_repository: version_history_repository.clone(),
-                cache: cache.clone(),
-                audit_logger: audit_logger.clone(),
-                registry: registry.clone(),
-                contexts: contexts.clone(),
-                service_storage: GlobalServiceStorage::get().clone(),
-                plugin_notifier: plugin_notifier.clone(),
-            },
-        );
-
-        let downgrade_service = crate::service::downgrade::DowngradeService::new(
-            crate::service::downgrade::DowngradeServiceDeps {
-                repository: repository.clone(),
-                version_history_repository: version_history_repository.clone(),
-                cache: cache.clone(),
-                audit_logger: audit_logger.clone(),
-                registry: registry.clone(),
-                plugin_root: settings.plugin_root.clone(),
-                default_database_id: settings.default_database_id.clone(),
                 service_query: GlobalServiceQuery::get().clone(),
-                service_storage: GlobalServiceStorage::get().clone(),
                 plugin_notifier: plugin_notifier.clone(),
+                lock_manager: builder.lock_manager.clone(),
             },
         );
 
-        let rollback_service = crate::service::rollback::RollbackService::new(
-            crate::service::rollback::RollbackServiceDeps {
-                repository: repository.clone(),
-                cache: cache.clone(),
-                storage: storage.clone(),
-                backup_manager: backup_manager.clone(),
-                audit_logger: audit_logger.clone(),
-                contexts: contexts.clone(),
-            },
-        );
+        let runtime_ops = Arc::new(RuntimeOps::new(RuntimeOpsDeps {
+            repository: repository.clone(),
+            registry: registry.clone(),
+            contexts: contexts.clone(),
+            cache: cache.clone(),
+            plugin_root: settings.plugin_root.clone(),
+            temp_root: settings.temp_root.clone(),
+            app_id: settings.app_id.clone(),
+        }));
+
+        let executor = Arc::new(PluginOperationExecutor::new(
+            persistence,
+            runtime_ops.clone(),
+            event_publisher.clone(),
+            audit_logger.clone(),
+        ));
+
+        let install_service = crate::service::install::InstallService::new(executor.clone());
+
+        let upgrade_service = crate::service::upgrade::UpgradeService::new(executor.clone());
+
+        let uninstall_service = crate::service::uninstall::UninstallService::new(executor.clone());
+
+        let downgrade_service = crate::service::downgrade::DowngradeService::new(executor.clone());
 
         let deploy_service =
             crate::service::deploy::DeployService::new(crate::service::deploy::DeployServiceDeps {
+                executor: executor.clone(),
                 repository: repository.clone(),
                 cache: cache.clone(),
                 storage: storage.clone(),
                 security_validator: security_validator.clone(),
-                install_service: install_service.clone(),
-                upgrade_service: upgrade_service.clone(),
-                uninstall_service: uninstall_service.clone(),
-                plugin_notifier: plugin_notifier.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
+                app_id: settings.app_id.clone(),
             });
 
-        let control_service = crate::service::control::ControlService::new(
-            crate::service::control::ControlServiceDeps {
-                install_service: install_service.clone(),
-                upgrade_service: upgrade_service.clone(),
-                downgrade_service: downgrade_service.clone(),
-                uninstall_service: uninstall_service.clone(),
-                notifier: plugin_notifier.clone(),
-                app_id: settings.app_id.clone(),
+        let control_service = {
+            let deps = crate::service::control::ControlServiceDeps {
+                executor: executor.clone(),
                 repository: repository.clone(),
-                plugin_root: settings.plugin_root.clone(),
-                temp_root: settings.temp_root.clone(),
-                storage: storage.clone(),
-            }
-        );
-
-
-        let runtime_loader = Arc::new(
-            crate::service::runtime_loader::RuntimeLoader::new(
-                repository.clone(),
-                registry.clone(),
-                contexts.clone(),
-                settings.plugin_root.clone(),
-                settings.app_id.clone(),
-                settings.temp_root.clone(),
-            ),
-        );
+                app_id: settings.app_id.clone(),
+            };
+            let package_utils = crate::common::PackageUtils::new(
+                crate::common::PackageUtilsDeps {
+                    plugin_root: settings.plugin_root.clone(),
+                    temp_root: settings.temp_root.clone(),
+                    storage: Some(storage.clone()),
+                },
+            );
+            crate::service::control::ControlService::with_package_utils(deps, package_utils)
+        };
 
         // 创建插件初始化器（在 manager 之前创建，使用 clone 避免 move）
         let plugin_initializer = crate::service::initializer::PluginInitializer::new(
             crate::service::initializer::PluginInitializerDeps {
                 repository: repository.clone(),
                 version_history_repository: version_history_repository.clone(),
-                registry: registry.clone(),
-                contexts: contexts.clone(),
-                install_service: install_service.clone(),
-                upgrade_service: upgrade_service.clone(),
-                downgrade_service: downgrade_service.clone(),
-                uninstall_service: uninstall_service.clone(),
+                runtime: runtime_ops.clone(),
+                event_publisher: event_publisher.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 app_id: settings.app_id.clone(),
             }
@@ -522,6 +509,9 @@ impl PluginManager {
             control_service,
             plugin_initializer,
             runtime_loader,
+            runtime_ops,
+            event_publisher,
+            executor,
             dependency_utils,
             service_utils,
             initialized: Arc::new(RwLock::new(false)),
@@ -607,13 +597,11 @@ impl PluginManager {
         if let Some(ref notifier) = self.plugin_notifier {
             let handler = crate::service::plugin_sync::PluginChangeHandler::new(
                 self.repository.clone(),
-                self.deploy_service.clone(),
+                self.runtime_ops.clone(),
+                self.event_publisher.clone(),
                 self.settings.plugin_root.clone(),
-                self.registry.clone(),
-                self.contexts.clone(),
                 self.settings.app_id.clone(),
                 notifier.instance_id().to_string(),
-                self.runtime_loader.clone(),
             );
             let handler = Arc::new(handler);
 
@@ -655,7 +643,8 @@ impl PluginManager {
             let recon = crate::service::reconciliation::ReconciliationTask::new(
                 self.repository.clone(),
                 self.registry.clone(),
-                self.runtime_loader.clone(),
+                self.runtime_ops.clone(),
+                self.event_publisher.clone(),
                 self.settings.app_id.clone(),
                 self.settings.reconciliation_interval_secs,
                 self.settings.plugin_root.clone(),
@@ -933,9 +922,25 @@ impl PluginManager {
         &self.app_id
     }
 
-    /// 获取运行时加载器
+    /// 获取运行时加载器（已废弃，请使用 runtime_ops()）
+    #[allow(deprecated)]
     pub fn runtime_loader(&self) -> &Arc<crate::service::runtime_loader::RuntimeLoader> {
         &self.runtime_loader
+    }
+
+    /// 获取运行时操作层
+    pub fn runtime_ops(&self) -> &Arc<RuntimeOps> {
+        &self.runtime_ops
+    }
+
+    /// 获取统一事件发布器
+    pub fn event_publisher(&self) -> &EventPublisher {
+        &self.event_publisher
+    }
+
+    /// 获取插件操作编排器
+    pub fn executor(&self) -> &Arc<PluginOperationExecutor> {
+        &self.executor
     }
 
     /// 获取管控服务

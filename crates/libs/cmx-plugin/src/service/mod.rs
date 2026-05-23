@@ -16,3 +16,7 @@ pub mod auto_install;
 pub mod control;
 pub mod runtime_loader;
 pub mod reconciliation;
+pub mod event_publisher;
+pub mod persistence;
+pub mod runtime_ops;
+pub mod executor;

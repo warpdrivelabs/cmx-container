@@ -22,10 +22,6 @@ use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
 
-use super::install::InstallService;
-use super::uninstall::UninstallService;
-use super::upgrade::UpgradeService;
-
 /// 部署操作类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DeployAction {
@@ -95,6 +91,8 @@ pub struct DeployResponse {
 /// 部署服务依赖
 #[derive(Clone)]
 pub struct DeployServiceDeps {
+    /// 插件操作编排器
+    pub executor: Arc<crate::service::executor::PluginOperationExecutor>,
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
     /// 缓存管理器
@@ -103,24 +101,18 @@ pub struct DeployServiceDeps {
     pub storage: Arc<FileStorage>,
     /// 安全验证器
     pub security_validator: Arc<SecurityValidator>,
-    /// 安装服务
-    pub install_service: InstallService,
-    /// 升级服务
-    pub upgrade_service: UpgradeService,
-    /// 卸载服务
-    pub uninstall_service: UninstallService,
-    /// 插件变更通知器
-    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
     /// 插件安装根目录
     pub plugin_root: PathBuf,
     /// 临时目录
     pub temp_root: PathBuf,
+    /// 当前应用 ID
+    pub app_id: String,
 }
 
 /// 部署服务
 ///
 /// 负责智能判断插件操作类型（安装/升级/覆盖安装），
-/// 并分发到对应的 Service 执行实际操作。
+/// 并分发到 PluginOperationExecutor 执行实际操作。
 #[derive(Clone)]
 pub struct DeployService {
     deps: DeployServiceDeps,
@@ -145,9 +137,9 @@ impl DeployService {
     /// 2. 安全验证 + 元数据解析（获取 plugin_id 和 version）
     /// 3. 查询当前插件安装状态和版本
     /// 4. 版本比较，分发到对应操作：
-    ///    - 未安装 → 调用 InstallService
-    ///    - 新版本 > 旧版本 → 调用 UpgradeService
-    ///    - 新版本 = 旧版本 && force_reinstall → 先 UninstallService 再 InstallService
+    ///    - 未安装 → 调用 executor.execute_install
+    ///    - 新版本 > 旧版本 → 调用 executor.execute_upgrade
+    ///    - 新版本 = 旧版本 && force_reinstall → 调用 executor.execute_reinstall
     ///    - 新版本 = 旧版本 && !force_reinstall → 返回 AlreadyInstalled
     ///    - 新版本 < 旧版本 → 返回错误
     pub async fn deploy(&self, mut request: DeployRequest) -> PluginResult<DeployResponse> {
@@ -191,7 +183,7 @@ impl DeployService {
             request.db_id = plugin_def.datasource_id.clone();
         }
 
-        let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or("default")).await?;
+        let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or(&self.deps.app_id)).await?;
 
         match existing_plugin {
             None => {
@@ -272,7 +264,7 @@ impl DeployService {
             send_event: request.send_event,
         };
 
-        let result = self.deps.install_service.install(install_req).await?;
+        let result = self.deps.executor.execute_install(install_req).await?;
 
         Ok(DeployResponse {
             plugin_id: result.plugin_id,
@@ -307,7 +299,7 @@ impl DeployService {
             send_event: request.send_event,
         };
 
-        let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
+        let result = self.deps.executor.execute_upgrade(upgrade_req).await?;
 
         Ok(DeployResponse {
             plugin_id: result.plugin_id,
@@ -323,73 +315,18 @@ impl DeployService {
 
     /// 执行覆盖安装操作（先卸载再安装）。
     ///
-    /// 中间卸载和安装都不发事件，最后统一发布 REINSTALLED 事件。
+    /// 由 executor 统一编排卸载+安装+事件发布的完整流程。
     async fn execute_reinstall(
         &self,
         request: &DeployRequest,
         plugin_id: &str,
         old_version: &str,
         _new_version: &str,
-        marketplace_source_id: Option<&str>,
+        _marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
-        // 先卸载（中间步骤不发事件，避免其他节点误以为插件被卸载）
-        let uninstall_req = super::uninstall::UninstallRequest {
-            plugin_id: plugin_id.to_string(),
-            force: true,
-            operator: "system".to_string(),
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-
-        self.deps.uninstall_service.uninstall(uninstall_req).await?;
-
-        // 再安装（中间步骤不发事件）
-        let install_req = super::install::InstallRequest {
-            source: request.source.clone(),
-            db_id: request.db_id.clone(),
-            auto_activate: false,
-            version_constraint: None,
-            build_type: request.build_type.clone(),
-            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-
-        let result = self.deps.install_service.install(install_req).await?;
-
-        // 统一发布 REINSTALLED 事件
-        if request.send_event {
-            let app_id = request.app_id.as_deref().unwrap_or("default");
-            let payload = cmx_traits::PluginLifecyclePayload::new(
-                app_id,
-                &result.plugin_id,
-                &result.version,
-            )
-            .with_old_version(old_version)
-            .with_install_path(std::path::PathBuf::from(&result.install_path));
-
-            cmx_traits::GlobalEventBus::get()
-                .publish(
-                    cmx_traits::plugin_events::REINSTALLED,
-                    serde_json::to_value(&payload).unwrap(),
-                )
-                .await;
-
-            // 发布 Redis 跨实例通知
-            if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_reinstalled(&result.plugin_id, &result.version, app_id).await;
-            }
-        }
-
-        Ok(DeployResponse {
-            plugin_id: result.plugin_id,
-            action: DeployAction::Reinstall,
-            old_version: Some(old_version.to_string()),
-            new_version: result.version,
-            install_path: result.install_path,
-            success: true,
-            message: "插件覆盖安装成功".to_string(),
-            marketplace_publish: None,
-        })
+        self.deps
+            .executor
+            .execute_reinstall(request.clone(), plugin_id, old_version)
+            .await
     }
 }

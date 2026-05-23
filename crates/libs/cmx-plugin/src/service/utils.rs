@@ -3,8 +3,10 @@
 //! 提供插件服务共用的工具函数
 
 use std::path::Path;
+use std::sync::Arc;
 
 use serde_json::Value;
+use cmx_buffer::LockManager;
 use cmx_metadata::TableDefineDbExecutor;
 use cmx_core::model::cell::TableDefine;
 use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
@@ -249,6 +251,71 @@ pub async fn save_plugin_table_metadata(
                 TableMetadataService::create(dbm, default_db_id.as_str(), ctx.txn_id.as_deref(), create_info).await?;
             }
         }
+    }
+
+    Ok(())
+}
+
+/// 执行 DDL 操作（带分布式锁保护）。
+///
+/// 使用 `try_lock` 非阻塞分布式锁保护 DDL 操作，确保多实例下
+/// 只有一个实例执行 DDL。DML 使用 upsert 天然幂等，无需锁保护。
+///
+/// # Arguments
+///
+/// * `lock_manager` - 分布式锁管理器，为 `None` 时直接执行 DDL
+/// * `target_db_id` - 目标数据库 ID
+/// * `plugin_id` - 插件 ID
+/// * `app_id` - 应用 ID
+/// * `version` - 插件版本
+/// * `install_path` - 安装路径
+/// * `plugin_def` - 插件定义
+/// * `txn_id` - 事务 ID，为 `None` 时 DDL 不在事务内执行
+pub async fn execute_ddl_with_lock(
+    lock_manager: &Option<Arc<LockManager>>,
+    target_db_id: &str,
+    plugin_id: &str,
+    app_id: &str,
+    version: &str,
+    install_path: &Path,
+    plugin_def: &PluginDefinition,
+    txn_id: Option<&str>,
+) -> PluginResult<()> {
+    // 无表配置时直接返回，避免不必要的锁操作
+    if plugin_def.table_config_files.is_empty() {
+        return Ok(());
+    }
+
+    let lock_key = format!("plugin:ddl:{}", plugin_id);
+
+    if let Some(lm) = lock_manager {
+        match lm.try_lock_with_value(&lock_key).await {
+            Ok((true, Some(lock_value))) => {
+                tracing::info!("获取DDL锁成功，本实例负责创建/升级表: {}", plugin_id);
+                create_plugin_tables(
+                    target_db_id, plugin_id, app_id, version,
+                    install_path, plugin_def, txn_id,
+                ).await?;
+                if let Err(e) = lm.unlock_with_value(&lock_key, &lock_value).await {
+                    tracing::debug!("释放DDL锁失败（将等待TTL过期）: {}", e);
+                }
+            }
+            Ok(_) => {
+                tracing::info!("其他实例正在创建/升级表，跳过DDL: {}", plugin_id);
+            }
+            Err(e) => {
+                tracing::warn!("锁服务异常: {}，继续创建/升级表", e);
+                create_plugin_tables(
+                    target_db_id, plugin_id, app_id, version,
+                    install_path, plugin_def, None,
+                ).await?;
+            }
+        }
+    } else {
+        create_plugin_tables(
+            target_db_id, plugin_id, app_id, version,
+            install_path, plugin_def, txn_id,
+        ).await?;
     }
 
     Ok(())

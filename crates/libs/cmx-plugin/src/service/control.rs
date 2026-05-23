@@ -9,19 +9,12 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::cluster::notification::PluginNotifier;
 use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
 use crate::domain::plugin::PluginFilter;
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::storage::file::FileStorage;
 use crate::infrastructure::storage::TempDirCleanup;
-use cmx_traits::{GlobalEventBus, plugin_events, PluginLifecyclePayload};
-
-use crate::service::downgrade::{DowngradeRequest, DowngradeService};
-use crate::service::install::{InstallRequest, InstallService};
-use crate::service::uninstall::UninstallService;
-use crate::service::upgrade::{UpgradeRequest, UpgradeService};
+use crate::service::executor::PluginOperationExecutor;
 
 /// 管控部署请求。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,35 +91,20 @@ pub struct ControlDeployResponse {
 }
 
 /// 管控服务依赖
-#[derive(Clone)]
 pub struct ControlServiceDeps {
-    /// 安装服务
-    pub install_service: InstallService,
-    /// 升级服务
-    pub upgrade_service: UpgradeService,
-    /// 降级服务
-    pub downgrade_service: DowngradeService,
-    /// 卸载服务
-    pub uninstall_service: UninstallService,
-    /// 插件变更通知器
-    pub notifier: Option<Arc<PluginNotifier>>,
-    /// 应用ID
-    pub app_id: String,
+    /// 插件操作编排器
+    pub executor: Arc<PluginOperationExecutor>,
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
-    /// 插件安装根目录
-    pub plugin_root: PathBuf,
-    /// 临时目录
-    pub temp_root: PathBuf,
-    /// 文件存储
-    pub storage: Arc<FileStorage>,
+    /// 应用ID
+    pub app_id: String,
 }
 
 /// 插件管控服务。
 ///
-/// 封装已有的 InstallService/UpgradeService，但跳过本地运行时加载
-/// （不注册 Registry、不加载 Service/WASM），完成 DDL/DML 后上传
-/// 文件至对象存储，并发布 RuntimeLoad 通知。
+/// 通过 PluginOperationExecutor 统一编排持久化 → 运行时 → 事件发布流程，
+/// 管控模式仅执行 DDL/DML 操作，不触发本地运行时加载，
+/// 完成后由 executor 内部发布 RuntimeLoad 通知。
 ///
 /// ## 版本一致性约束
 ///
@@ -135,7 +113,7 @@ pub struct ControlServiceDeps {
 pub struct ControlService {
     /// 依赖注入
     deps: ControlServiceDeps,
-    /// 包处理工具
+    /// 包处理工具（仅 deploy 方法使用，用于解析插件包元数据）
     package_utils: PackageUtils,
 }
 
@@ -143,10 +121,21 @@ impl ControlService {
     /// 创建管控服务实例。
     pub fn new(deps: ControlServiceDeps) -> Self {
         let package_utils = PackageUtils::new(PackageUtilsDeps {
-            plugin_root: deps.plugin_root.clone(),
-            temp_root: deps.temp_root.clone(),
-            storage: Some(deps.storage.clone()),
+            plugin_root: PathBuf::from("/tmp/cmx_plugin_control"),
+            temp_root: PathBuf::from("/tmp/cmx_plugin_control_tmp"),
+            storage: None,
         });
+        Self {
+            deps,
+            package_utils,
+        }
+    }
+
+    /// 创建管控服务实例（带包处理依赖）。
+    ///
+    /// deploy 方法需要 PackageUtils 来获取和解析插件包元数据，
+    /// 以决定执行安装、升级还是覆盖安装。
+    pub fn with_package_utils(deps: ControlServiceDeps, package_utils: PackageUtils) -> Self {
         Self {
             deps,
             package_utils,
@@ -191,18 +180,15 @@ impl ControlService {
         Ok(())
     }
 
-    /// 管控部署（自动判断安装/升级）。
+    /// 管控部署（自动判断安装/升级/覆盖安装）。
     ///
     /// 完整流程：
     /// 1. 获取并解压插件包到临时目录
     /// 2. 解析元数据（获取 plugin_id 和 version）
     /// 3. 查询当前插件安装状态
-    /// 4. 根据状态决定调用 InstallService 或 UpgradeService
-    ///
-    /// 所有底层服务调用均传入 `send_event=false`，
-    /// 由管控服务统一发布 RuntimeLoad 通知。
+    /// 4. 根据状态决定调用 executor 的对应管控方法
     pub async fn deploy(&self, req: ControlDeployRequest) -> PluginResult<ControlDeployResponse> {
-        let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
+        let app_id = req.app_id.clone().unwrap_or_else(|| self.deps.app_id.clone());
 
         // 步骤1: 获取插件包
         let package_path = self
@@ -211,10 +197,7 @@ impl ControlService {
             .await?;
 
         // 步骤2: 解压到临时目录
-        let temp_dir = self
-            .deps
-            .temp_root
-            .join(format!("plugin_control_{}", uuid::Uuid::new_v4()));
+        let temp_dir = PathBuf::from(format!("/tmp/plugin_control_{}", uuid::Uuid::new_v4()));
         let (extract_path, needs_cleanup) = self
             .package_utils
             .prepare_package_for_validation(&package_path, &temp_dir, "管控部署")?;
@@ -243,98 +226,72 @@ impl ControlService {
 
         match existing_plugin {
             None => {
-                // 未安装，执行安装
+                // 未安装，执行管控安装
                 info!(
                     "管控部署: 插件 {} 未安装，执行安装流程, version={}",
                     plugin_id, new_version
                 );
 
-                let install_req = InstallRequest {
+                let control_req = ControlInstallRequest {
                     source: req.source.clone(),
                     db_id: req.db_id.or(plugin_def.datasource_id.clone()),
-                    auto_activate: false,
-                    version_constraint: None,
                     build_type: req.build_type.clone(),
-                    marketplace_source_id: None,
                     app_id: Some(app_id.clone()),
-                    send_event: false,
                 };
 
-                let result = self.deps.install_service.install(install_req).await?;
-
-                let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.version)
-                    .with_install_path(PathBuf::from(&result.install_path));
-                GlobalEventBus::get()
-                    .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
-                    .await;
-
-                // 发布 RuntimeLoad 通知
-                if let Some(ref notifier) = self.deps.notifier {
-                    notifier.notify_runtime_load(&result.plugin_id, &result.version, &app_id).await;
-                }
-
-                Ok(ControlDeployResponse {
-                    plugin_id: result.plugin_id,
-                    version: result.version,
-                    action: "installed".to_string(),
-                    app_id,
-                })
+                self.deps.executor.execute_control_install(control_req).await
             }
             Some(existing) => {
                 // 已安装，判断版本关系
                 let old_version = &existing.version;
 
-                // 版本比较
                 match new_version.cmp(old_version) {
                     std::cmp::Ordering::Greater => {
-                        // 新版本 > 旧版本，执行升级
+                        // 新版本 > 旧版本，执行管控升级
                         info!(
                             "管控部署: 插件 {} 已安装 version={}，目标 version={}，执行升级",
                             plugin_id, old_version, new_version
                         );
 
-                        let upgrade_req = UpgradeRequest {
+                        let control_req = ControlUpgradeRequest {
                             plugin_id: plugin_id.clone(),
+                            target_version: new_version.clone(),
                             source: req.source.clone(),
-                            version_constraint: None,
-                            force: false,
-                            operator: None,
                             build_type: req.build_type.clone(),
-                            marketplace_source_id: None,
                             app_id: Some(app_id.clone()),
-                            send_event: false,
                         };
 
-                        let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
+                        self.deps.executor.execute_control_upgrade(control_req).await
+                    }
+                    std::cmp::Ordering::Equal => {
+                        // 版本相同，执行覆盖安装
+                        info!(
+                            "管控部署: 插件 {} 已安装相同版本 {}, 执行覆盖安装",
+                            plugin_id, new_version
+                        );
 
-                        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
-                            .with_old_version(&result.old_version);
-                        GlobalEventBus::get()
-                            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
-                            .await;
+                        let deploy_req = crate::service::deploy::DeployRequest {
+                            source: req.source.clone(),
+                            db_id: req.db_id.or(plugin_def.datasource_id.clone()),
+                            force_reinstall: true,
+                            build_type: req.build_type.clone(),
+                            publish_to_marketplace: false,
+                            app_id: Some(app_id.clone()),
+                            send_event: false,
+                            marketplace_source_id: None,
+                            marketplace_publish_info: None,
+                        };
 
-                        // 发布 RuntimeLoad 通知
-                        if let Some(ref notifier) = self.deps.notifier {
-                            notifier.notify_runtime_load(&result.plugin_id, &result.new_version, &app_id).await;
-                        }
+                        let result = self
+                            .deps
+                            .executor
+                            .execute_reinstall(deploy_req, &plugin_id, old_version)
+                            .await?;
 
                         Ok(ControlDeployResponse {
                             plugin_id: result.plugin_id,
                             version: result.new_version,
-                            action: "upgraded".to_string(),
-                            app_id,
-                        })
-                    }
-                    std::cmp::Ordering::Equal => {
-                        // 版本相同，返回已安装
-                        info!(
-                            "管控部署: 插件 {} 已安装相同版本 {}, 无需操作",
-                            plugin_id, new_version
-                        );
-                        Ok(ControlDeployResponse {
-                            plugin_id,
-                            version: new_version,
-                            action: "already_installed".to_string(),
+                            action: "reinstalled".to_string(),
                             app_id,
                         })
                     }
@@ -353,162 +310,41 @@ impl ControlService {
     /// 管控安装。
     ///
     /// 安装前校验版本一致性，确保同一插件在所有 app_id 下版本相同。
-    /// 底层服务调用传入 `send_event=false`，由管控服务统一发布通知。
+    /// 事件发布由 executor 内部统一处理。
     pub async fn install(&self, req: ControlInstallRequest) -> PluginResult<ControlDeployResponse> {
-        let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
-
-        let install_req = InstallRequest {
-            source: req.source,
-            db_id: req.db_id,
-            auto_activate: false,
-            version_constraint: None,
-            build_type: req.build_type,
-            marketplace_source_id: None,
-            app_id: Some(app_id.clone()),
-            send_event: false,
-        };
-
-        let result = self.deps.install_service.install(install_req).await?;
-
-        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.version)
-            .with_install_path(PathBuf::from(&result.install_path));
-        GlobalEventBus::get()
-            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
-            .await;
-
-        // 发布 RuntimeLoad 通知
-        if let Some(ref notifier) = self.deps.notifier {
-            notifier.notify_runtime_load(&result.plugin_id, &result.version, &app_id).await;
-        }
-
-        Ok(ControlDeployResponse {
-            plugin_id: result.plugin_id,
-            version: result.version,
-            action: "installed".to_string(),
-            app_id,
-        })
+        self.deps.executor.execute_control_install(req).await
     }
 
     /// 管控升级。
     ///
     /// 升级前校验版本一致性。
-    /// 底层服务调用传入 `send_event=false`，由管控服务统一发布通知。
+    /// 事件发布由 executor 内部统一处理。
     pub async fn upgrade(&self, req: ControlUpgradeRequest) -> PluginResult<ControlDeployResponse> {
-        let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
+        let app_id = req.app_id.clone().unwrap_or_else(|| self.deps.app_id.clone());
 
         // 升级前先校验版本一致性（使用目标版本）
         self.check_version_consistency(&req.plugin_id, &req.target_version, &app_id).await?;
 
-        let upgrade_req = UpgradeRequest {
-            plugin_id: req.plugin_id.clone(),
-            source: req.source,
-            version_constraint: None,
-            force: false,
-            operator: None,
-            build_type: req.build_type,
-            marketplace_source_id: None,
-            app_id: Some(app_id.clone()),
-            send_event: false,
-        };
-
-        let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
-
-        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
-            .with_old_version(&result.old_version);
-        GlobalEventBus::get()
-            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap())
-            .await;
-
-        // 发布 RuntimeLoad 通知
-        if let Some(ref notifier) = self.deps.notifier {
-            notifier.notify_runtime_load(&result.plugin_id, &result.new_version, &app_id).await;
-        }
-
-        Ok(ControlDeployResponse {
-            plugin_id: result.plugin_id,
-            version: result.new_version,
-            action: "upgraded".to_string(),
-            app_id,
-        })
+        self.deps.executor.execute_control_upgrade(req).await
     }
 
     /// 管控降级。
     ///
     /// 降级前校验版本一致性。
-    /// 底层服务调用传入 `send_event=false`，由管控服务统一发布通知。
+    /// 事件发布由 executor 内部统一处理。
     pub async fn downgrade(&self, req: ControlDowngradeRequest) -> PluginResult<ControlDeployResponse> {
-        let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
+        let app_id = req.app_id.clone().unwrap_or_else(|| self.deps.app_id.clone());
 
         self.check_version_consistency(&req.plugin_id, &req.target_version, &app_id).await?;
 
-        let downgrade_req = DowngradeRequest {
-            plugin_id: req.plugin_id.clone(),
-            target_version: req.target_version,
-            source: None,
-            operator: None,
-            app_id: Some(app_id.clone()),
-            send_event: false,
-        };
-
-        let result = self.deps.downgrade_service.downgrade(downgrade_req).await?;
-
-        let payload = PluginLifecyclePayload::new(&app_id, &result.plugin_id, &result.new_version)
-            .with_old_version(&result.old_version);
-        GlobalEventBus::get()
-            .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap())
-            .await;
-
-        // 发布 RuntimeLoad 通知
-        if let Some(ref notifier) = self.deps.notifier {
-            notifier.notify_runtime_load(&result.plugin_id, &result.new_version, &app_id).await;
-        }
-
-        Ok(ControlDeployResponse {
-            plugin_id: result.plugin_id,
-            version: result.new_version,
-            action: "downgraded".to_string(),
-            app_id,
-        })
+        self.deps.executor.execute_control_downgrade(req).await
     }
 
     /// 管控卸载。
     ///
     /// 执行数据库清理（删除 cmx_plugin 记录、版本历史、服务定义），
-    /// 完成后发布 RuntimeUnload 通知。
-    /// 底层服务调用传入 `send_event=false`，由管控服务统一发布通知。
+    /// 完成后由 executor 内部发布 RuntimeUnload 通知。
     pub async fn uninstall(&self, req: ControlUninstallRequest) -> PluginResult<()> {
-        let app_id = req.app_id.unwrap_or_else(|| self.deps.app_id.clone());
-        let plugin_id = req.plugin_id.clone();
-
-        let existing = self.deps.repository.find_plugin(&plugin_id, &app_id).await?;
-        let version = existing
-            .as_ref()
-            .map(|p| p.version.clone())
-            .unwrap_or_default();
-
-        let uninstall_req = crate::service::uninstall::UninstallRequest {
-            plugin_id: plugin_id.clone(),
-            force: false,
-            operator: "control-service".to_string(),
-            app_id: Some(app_id.clone()),
-            send_event: false,
-        };
-
-        self.deps
-            .uninstall_service
-            .uninstall(uninstall_req)
-            .await
-            .map_err(|e| PluginError::Uninstall(format!("管控卸载失败: {}", e)))?;
-
-        let payload = PluginLifecyclePayload::new(&app_id, &plugin_id, &version);
-        GlobalEventBus::get()
-            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
-            .await;
-
-        if let Some(ref notifier) = self.deps.notifier {
-            notifier.notify_runtime_unload(&plugin_id, &version, &app_id).await;
-        }
-
-        Ok(())
+        self.deps.executor.execute_control_uninstall(req).await
     }
 }

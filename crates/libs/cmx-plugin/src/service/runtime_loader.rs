@@ -1,7 +1,12 @@
-//! 插件运行时加载器。
+//! 插件运行时加载器（已废弃）。
 //!
-//! 负责从多种来源（Local/Remote/Marketplace/Storage）下载插件文件到本地
+//! **已废弃**：此模块的功能已合并到 `runtime_ops.rs` 中的 `RuntimeOps`。
+//! 新代码应使用 `RuntimeOps` 替代 `RuntimeLoader`。
+//!
+//! 原始功能：从多种来源（Local/Remote/Marketplace/Storage）下载插件文件到本地
 //! 并加载 Service 和 WASM 运行时，不执行任何数据库变更操作。
+
+#![deprecated(note = "已废弃，请使用 `RuntimeOps` 替代")]
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,7 +20,7 @@ use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginFilter, PluginInfo, PluginSource, PluginStatus};
 use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
-use crate::service::initializer::build_plugin_source;
+use crate::common::source_utils::build_plugin_source;
 
 /// 插件运行时加载器。
 ///

@@ -8,23 +8,22 @@
 //! 1. 从 cmx_plugin 表获取期望安装的插件列表
 //! 2. 扫描本地文件系统获取已安装的插件版本
 //! 3. 对比得出需要执行的操作（安装/升级/降级/卸载）
-//! 4. 根据 zip_source 构建 PluginSource 并执行操作
+//! 4. 通过 RuntimeOps 执行运行时同步（单写原则：启动仅做运行时同步，不操作数据库）
 //! 5. 最后初始化内存中的 contexts
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{error, info, log};
-use crate::core::context::PluginContext;
-use crate::core::registry::PluginRegistry;
-use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
+
+use tracing::{error, info};
+
+use crate::common::scanner::scan_local_plugins;
+use crate::domain::plugin::PluginFilter;
 use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::service::downgrade::{DowngradeRequest, DowngradeService};
-use crate::service::install::{InstallRequest, InstallService};
-use crate::service::uninstall::{UninstallRequest, UninstallService};
-use crate::service::upgrade::{UpgradeRequest, UpgradeService};
+use crate::service::event_publisher::EventPublisher;
+use crate::service::runtime_ops::RuntimeOps;
 
 /// 插件操作计划
 #[derive(Debug, Clone)]
@@ -33,21 +32,18 @@ pub enum PluginOperation {
     Install {
         plugin_id: String,
         version: String,
-        source: PluginSource,
     },
     /// 需要升级
     Upgrade {
         plugin_id: String,
         from_version: String,
         to_version: String,
-        source: PluginSource,
     },
     /// 需要降级
     Downgrade {
         plugin_id: String,
         from_version: String,
         to_version: String,
-        source: PluginSource,
     },
     /// 需要卸载（清理本地文件）
     Uninstall {
@@ -83,21 +79,13 @@ pub struct PluginInitializerDeps {
     pub repository: Arc<PluginRepository>,
     /// 版本历史仓库
     pub version_history_repository: Arc<VersionHistoryRepository>,
-    /// 插件注册表
-    pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
-    /// 插件上下文映射
-    pub contexts: Arc<tokio::sync::RwLock<HashMap<String, PluginContext>>>,
-    /// 安装服务
-    pub install_service: InstallService,
-    /// 升级服务
-    pub upgrade_service: UpgradeService,
-    /// 降级服务
-    pub downgrade_service: DowngradeService,
-    /// 卸载服务
-    pub uninstall_service: UninstallService,
+    /// 运行时操作层
+    pub runtime: Arc<RuntimeOps>,
+    /// 统一事件发布器
+    pub event_publisher: EventPublisher,
     /// 插件根目录
     pub plugin_root: PathBuf,
-    /// 应用隔离标识
+    /// 应用隔离标识，用于过滤非本应用的插件
     pub app_id: String,
 }
 
@@ -106,12 +94,8 @@ pub struct PluginInitializerDeps {
 pub struct PluginInitializer {
     repository: Arc<PluginRepository>,
     version_history_repository: Arc<VersionHistoryRepository>,
-    registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
-    contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
-    install_service: InstallService,
-    upgrade_service: UpgradeService,
-    downgrade_service: DowngradeService,
-    uninstall_service: UninstallService,
+    runtime: Arc<RuntimeOps>,
+    event_publisher: EventPublisher,
     plugin_root: PathBuf,
     app_id: String,
 }
@@ -130,12 +114,8 @@ impl PluginInitializer {
         Self {
             repository: deps.repository,
             version_history_repository: deps.version_history_repository,
-            registry: deps.registry,
-            contexts: deps.contexts,
-            install_service: deps.install_service,
-            upgrade_service: deps.upgrade_service,
-            downgrade_service: deps.downgrade_service,
-            uninstall_service: deps.uninstall_service,
+            runtime: deps.runtime,
+            event_publisher: deps.event_publisher,
             plugin_root: deps.plugin_root,
             app_id: deps.app_id,
         }
@@ -147,7 +127,7 @@ impl PluginInitializer {
     /// 1. 查询 cmx_plugin 获取期望插件
     /// 2. 扫描本地文件系统获取已安装版本
     /// 3. 对比生成操作计划
-    /// 4. 执行计划
+    /// 4. 通过 RuntimeOps 执行运行时同步（单写原则）
     /// 5. 加载 contexts
     pub async fn sync_plugins(&self) -> PluginResult<PluginSyncResult> {
         let mut result = PluginSyncResult {
@@ -160,107 +140,89 @@ impl PluginInitializer {
         };
 
         // 步骤1: 查询 cmx_plugin 获取当前 app_id 下需要安装的插件
-        let filter = crate::domain::plugin::PluginFilter {
+        let filter = PluginFilter {
             app_id: Some(self.app_id.clone()),
             ..Default::default()
         };
         let expected_plugins = self.repository.list_plugins(&filter).await?;
-        let expected_map: HashMap<String, (String, Option<String>, Option<String>)> = expected_plugins
+        let expected_map: HashMap<String, String> = expected_plugins
             .iter()
-            .map(|p| (p.plugin_id.clone(), (p.version.clone(), p.zip_source_url.clone(), p.zip_source_type.clone())))
+            .map(|p| (p.plugin_id.clone(), p.version.clone()))
             .collect();
 
         // 步骤2: 扫描本地文件系统获取已安装的插件版本
-        let local_plugins = self.scan_local_plugins().await?;
+        let local_plugins = scan_local_plugins(&self.plugin_root, &self.app_id).await?;
 
         // 步骤3: 生成操作计划
-        let mut install_ops = Vec::new();
-        let mut upgrade_ops = Vec::new();
-        let mut downgrade_ops = Vec::new();
+        let mut sync_ops = Vec::new(); // 需要同步的插件（安装或版本不一致）
         let mut uninstall_ops = Vec::new();
 
-        // 遍历期望插件,决定安装/升级/降级
-        for (plugin_id, (expected_version, zip_source_url, zip_source_type)) in &expected_map {
-            let source = build_plugin_source(
-                zip_source_url.as_deref(),
-                zip_source_type.as_deref()
-            );
-
+        // 遍历期望插件，决定安装/版本同步
+        for (plugin_id, expected_version) in &expected_map {
             if let Some(local_version) = local_plugins.get(plugin_id) {
-                if expected_version > local_version {
-                    // 期望版本高于本地版本,需要升级
-                    log::info!("📦 插件 [{}] 需要升级: {} -> {}", plugin_id, local_version, expected_version);
-                    upgrade_ops.push(PluginOperation::Upgrade {
-                        plugin_id: plugin_id.clone(),
-                        from_version: local_version.clone(),
-                        to_version: expected_version.clone(),
-                        source,
-                    });
-                } else if expected_version < local_version {
-                    // 期望版本低于本地版本,需要降级
-                    log::info!("⬇️  插件 [{}] 需要降级: {} -> {}", plugin_id, local_version, expected_version);
-                    downgrade_ops.push(PluginOperation::Downgrade {
-                        plugin_id: plugin_id.clone(),
-                        from_version: local_version.clone(),
-                        to_version: expected_version.clone(),
-                        source,
-                    });
+                if local_version != expected_version {
+                    // 版本不一致，需要重新同步（不区分升级/降级，避免字符串字典序比较的 Bug）
+                    // NOTE: 使用等值比较（!=）而非大小比较（> / <），因为字符串字典序
+                    // 无法正确处理语义化版本（如 "9.0.0" > "10.0.0" 为 true）。
+                    // 启动同步不需要区分升级/降级方向，只需确保版本一致即可。
+                    info!(
+                        plugin_id = plugin_id,
+                        local_version = local_version,
+                        expected_version = expected_version,
+                        "插件版本不一致，需要重新同步"
+                    );
+                    sync_ops.push((plugin_id.clone(), expected_version.clone()));
                 } else {
-                    // 版本一致,跳过
-                    log::debug!("✅ 插件 [{}] 版本一致 ({}), 无需操作", plugin_id, expected_version);
+                    // 版本一致，跳过
+                    info!(
+                        plugin_id = plugin_id,
+                        version = expected_version,
+                        "插件版本一致，无需操作"
+                    );
                     result.skipped.push(plugin_id.clone());
                 }
             } else {
-                // 本地不存在,需要安装
-                log::info!("🆕 插件 [{}] 需要安装: 版本 {}", plugin_id, expected_version);
-                install_ops.push(PluginOperation::Install {
-                    plugin_id: plugin_id.clone(),
-                    version: expected_version.clone(),
-                    source,
-                });
+                // 本地不存在，需要安装
+                info!(
+                    plugin_id = plugin_id,
+                    version = expected_version,
+                    "插件需要安装"
+                );
+                sync_ops.push((plugin_id.clone(), expected_version.clone()));
             }
         }
 
-        // 遍历本地存在但数据库不存在的插件,需要卸载(清理)
+        // 遍历本地存在但数据库不存在的插件，需要卸载(清理)
         for (plugin_id, deployed_version) in &local_plugins {
             if !expected_map.contains_key(plugin_id) {
-                info!("插件 [{}] 需要卸载: 版本 {}", plugin_id, deployed_version);
-                uninstall_ops.push(PluginOperation::Uninstall {
-                    plugin_id: plugin_id.clone(),
-                    version: deployed_version.clone(),
-                });
+                info!(
+                    plugin_id = plugin_id,
+                    version = deployed_version,
+                    "插件需要卸载"
+                );
+                uninstall_ops.push(plugin_id.clone());
             }
         }
 
-        // 步骤4: 执行计划 - 先处理安装
-        for op in install_ops {
-            match self.execute_install(op).await {
-                Ok(plugin_id) => result.installed.push(plugin_id),
-                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
+        // 步骤4: 通过 RuntimeOps 执行运行时同步（单写原则：启动仅做运行时同步，不操作数据库）
+        for (plugin_id, version) in &sync_ops {
+            match self.runtime.sync_and_register(plugin_id, version).await {
+                Ok(()) => result.installed.push(plugin_id.clone()),
+                Err(e) => {
+                    error!(plugin_id = plugin_id, error = %e, "插件同步失败");
+                    result.failed.push((plugin_id.clone(), e.to_string()));
+                }
             }
         }
 
-        // 执行升级
-        for op in upgrade_ops {
-            match self.execute_upgrade(op).await {
-                Ok(plugin_id) => result.upgraded.push(plugin_id),
-                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
-            }
-        }
-
-        // 执行降级
-        for op in downgrade_ops {
-            match self.execute_downgrade(op).await {
-                Ok(plugin_id) => result.downgraded.push(plugin_id),
-                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
-            }
-        }
-
-        // 执行卸载
-        for op in uninstall_ops {
-            match self.execute_uninstall(op).await {
-                Ok(plugin_id) => result.uninstalled.push(plugin_id),
-                Err((plugin_id, err)) => result.failed.push((plugin_id, err)),
+        // 卸载使用 unregister_and_cleanup
+        for plugin_id in &uninstall_ops {
+            match self.runtime.unregister_and_cleanup(plugin_id).await {
+                Ok(()) => result.uninstalled.push(plugin_id.clone()),
+                Err(e) => {
+                    error!(plugin_id = plugin_id, error = %e, "插件卸载清理失败");
+                    result.failed.push((plugin_id.clone(), e.to_string()));
+                }
             }
         }
 
@@ -270,234 +232,27 @@ impl PluginInitializer {
         Ok(result)
     }
 
-    /// 扫描本地文件系统，获取已安装的插件版本
-    ///
-    /// 目录结构: ${plugin_root}/${plugin_id}/${version}/
-    /// 只要版本目录存在且包含 manifest.json，视为已安装
-    async fn scan_local_plugins(&self) -> PluginResult<HashMap<String, String>> {
-        let mut local_plugins = HashMap::new();
-
-        if !self.plugin_root.exists() {
-            return Ok(local_plugins);
-        }
-
-        let mut entries = match tokio::fs::read_dir(&self.plugin_root).await {
-            Ok(entries) => entries,
-            Err(_) => return Ok(local_plugins),
-        };
-
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            if !entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                continue;
-            }
-
-            let plugin_id = entry.file_name().to_string_lossy().to_string();
-            let plugin_path = entry.path();
-
-            let mut version_dir_entries = match tokio::fs::read_dir(&plugin_path).await {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            let mut max_version = String::new();
-            while let Ok(Some(version_entry)) = version_dir_entries.next_entry().await {
-                if !version_entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-
-                let version = version_entry.file_name().to_string_lossy().to_string();
-                // 检查是否包含 manifest.json（验证是有效安装）
-                let manifest_path = version_entry.path().join("manifest.json");
-                if manifest_path.exists() && version > max_version {
-                    max_version = version;
-                }
-            }
-
-            if !max_version.is_empty() {
-                local_plugins.insert(plugin_id, max_version);
-            }
-        }
-
-        Ok(local_plugins)
-    }
-
-    /// 执行安装操作
-    async fn execute_install(&self, op: PluginOperation) -> Result<String, (String, String)> {
-        match op {
-            PluginOperation::Install { plugin_id, version: _, source } => {
-                let request = InstallRequest {
-                    source,
-                    db_id: None,
-                    auto_activate: false,
-                    version_constraint: None,
-                    build_type: None,
-                    marketplace_source_id: None,
-                    app_id: Some(self.app_id.clone()),
-                    send_event: true,
-                };
-                match self.install_service.install(request).await {
-                    Ok(_) => Ok(plugin_id),
-                    Err(e) => {
-                        error!("Failed to install plugin [{}]: {}", plugin_id, e);
-                        Err((plugin_id, e.to_string()))
-                    },
-                }
-            }
-            _ => Err((String::new(), "Invalid operation".to_string())),
-        }
-    }
-
-    /// 执行升级操作
-    async fn execute_upgrade(&self, op: PluginOperation) -> Result<String, (String, String)> {
-        match op {
-            PluginOperation::Upgrade { plugin_id, from_version: _, to_version: _, source } => {
-                let request = UpgradeRequest {
-                    plugin_id: plugin_id.clone(),
-                    source,
-                    version_constraint: None,
-                    force: false,
-                    operator: Some("system".to_string()),
-                    build_type: None,
-                    marketplace_source_id: None,
-                    app_id: Some(self.app_id.clone()),
-                    send_event: true,
-                };
-                match self.upgrade_service.upgrade(request).await {
-                    Ok(_) => Ok(plugin_id),
-                    Err(e) => {
-                        error!("Failed to upgrade plugin [{}]: {}", plugin_id, e);
-                        Err((plugin_id, e.to_string()))
-                    },
-                }
-            }
-            _ => Err((String::new(), "Invalid operation".to_string())),
-        }
-    }
-
-    /// 执行降级操作
-    async fn execute_downgrade(&self, op: PluginOperation) -> Result<String, (String, String)> {
-        match op {
-            PluginOperation::Downgrade { plugin_id, from_version: _, to_version, source } => {
-                let request = DowngradeRequest {
-                    plugin_id: plugin_id.clone(),
-                    target_version: to_version,
-                    source: Some(source),
-                    operator: Some("system".to_string()),
-                    app_id: Some(self.app_id.clone()),
-                    send_event: true,
-                };
-                match self.downgrade_service.downgrade(request).await {
-                    Ok(_) => Ok(plugin_id),
-                    Err(e) => {
-                        error!("Failed to downgrade plugin [{}]: {}", plugin_id, e);
-                        Err((plugin_id, e.to_string()))
-                    },
-                }
-            }
-            _ => Err((String::new(), "Invalid operation".to_string())),
-        }
-    }
-
-    /// 执行卸载操作
-    async fn execute_uninstall(&self, op: PluginOperation) -> Result<String, (String, String)> {
-        match op {
-            PluginOperation::Uninstall { plugin_id, version: _ } => {
-                let request = UninstallRequest {
-                    plugin_id: plugin_id.clone(),
-                    force: false,
-                    operator: "system".to_string(),
-                    app_id: Some(self.app_id.clone()),
-                    send_event: true,
-                };
-                match self.uninstall_service.uninstall(request).await {
-                    Ok(_) => Ok(plugin_id),
-                    Err(e) => {
-                        error!("Failed to uninstall plugin: {}", e);
-
-                        Err((plugin_id, e.to_string()))
-                    }
-
-
-
-
-                }
-            }
-            _ => Err((String::new(), "Invalid operation".to_string())),
-        }
-    }
-
     /// 加载插件上下文到内存
-   pub async fn load_contexts(&self) -> PluginResult<()> {
-        let filter = crate::domain::plugin::PluginFilter {
+    ///
+    /// 通过 RuntimeOps 的 register_from_db 将数据库中的插件注册到运行时。
+    pub async fn load_contexts(&self) -> PluginResult<()> {
+        let filter = PluginFilter {
             app_id: Some(self.app_id.clone()),
             ..Default::default()
         };
         let records = self.repository.list_plugins(&filter).await?;
 
-        let mut registry = self.registry.write().await;
-        let mut contexts = self.contexts.write().await;
-
-        for record in records {
-            let context = PluginContext::from_db_record(&record);
-            contexts.insert(record.plugin_id.clone(), context);
-
-            let source = build_plugin_source(
-                record.zip_source_url.as_deref(),
-                record.zip_source_type.as_deref()
-            );
-
-            let info = PluginInfo {
-                id: record.plugin_id.clone(),
-                name: record.name.clone(),
-                version: record.version.clone(),
-                description: record.description.clone(),
-                author: record.vendor_name.clone(),
-                source,
-                status: PluginStatus::Installed,
-                installed_at: Some(record.create_time),
-                updated_at: Some(record.update_time),
-                install_path: PathBuf::from(&record.install_path),
-                domain_code: record.domain_code.unwrap_or_default(),
-                application_code: record.application_code.unwrap_or_default(),
-                module_code: record.module_code.unwrap_or_default(),
-                plugin_type: record.plugin_type.clone().unwrap_or_default(),
-                source_path: record.source_path.clone(),
-                app_id: record.app_id.clone(),
-            };
-            registry.register(info);
+        for record in &records {
+            if let Err(e) = self.runtime.register_from_db(&record.plugin_id, &record.version).await {
+                error!(
+                    plugin_id = %record.plugin_id,
+                    version = %record.version,
+                    error = %e,
+                    "从数据库注册插件到运行时失败"
+                );
+            }
         }
 
         Ok(())
-    }
-}
-
-/// 根据 zip_source 构建 PluginSource
-pub fn build_plugin_source(zip_source_url: Option<&str>, zip_source_type: Option<&str>) -> PluginSource {
-    match zip_source_type {
-        Some("local") => {
-            let path = zip_source_url.map(PathBuf::from).unwrap_or_default();
-            PluginSource::Local { path }
-        }
-        Some("url") | Some("remote") => {
-            let url = zip_source_url.unwrap_or_default().to_string();
-            PluginSource::Remote { url, checksum: None }
-        }
-        Some("registry") | Some("marketplace") => {
-            let plugin_id = zip_source_url.unwrap_or_default().to_string();
-            PluginSource::Marketplace {
-                marketplace_url: None,
-                plugin_id,
-            }
-        }
-        Some("storage") => {
-            PluginSource::Storage {
-                file_id: zip_source_url.unwrap_or_default().to_string(),
-                checksum: None,
-            }
-        }
-        _ => {
-            let path = zip_source_url.map(PathBuf::from).unwrap_or_default();
-            PluginSource::Local { path }
-        }
     }
 }
