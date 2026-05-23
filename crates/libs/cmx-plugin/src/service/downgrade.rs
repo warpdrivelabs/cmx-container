@@ -312,7 +312,7 @@ impl DowngradeService {
         // 条件发布跨实例变更通知
         if send_event {
             if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_changed(&plugin_id, &request.target_version, &app_id).await;
+                notifier.notify_downgraded(&plugin_id, &request.target_version, &app_id).await;
             }
         }
 

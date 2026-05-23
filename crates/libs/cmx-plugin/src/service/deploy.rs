@@ -377,7 +377,7 @@ impl DeployService {
 
             // 发布 Redis 跨实例通知
             if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_changed(&result.plugin_id, &result.version, app_id).await;
+                notifier.notify_reinstalled(&result.plugin_id, &result.version, app_id).await;
             }
         }
 

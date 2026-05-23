@@ -44,6 +44,8 @@ pub struct PluginChangeHandler {
     contexts: Arc<RwLock<HashMap<String, PluginContext>>>,
     /// 当前应用ID，用于过滤非本应用的通知
     app_id: String,
+    /// 当前实例ID，用于跳过自己发出的通知
+    instance_id: String,
     /// 运行时加载器
     runtime_loader: Arc<RuntimeLoader>,
 }
@@ -57,6 +59,7 @@ impl PluginChangeHandler {
         registry: Arc<RwLock<PluginRegistry>>,
         contexts: Arc<RwLock<HashMap<String, PluginContext>>>,
         app_id: String,
+        instance_id: String,
         runtime_loader: Arc<RuntimeLoader>,
     ) -> Self {
         Self {
@@ -66,12 +69,26 @@ impl PluginChangeHandler {
             registry,
             contexts,
             app_id,
+            instance_id,
             runtime_loader,
         }
     }
 
     /// 处理插件变更通知
     pub async fn handle(&self, notification: &PluginChangeNotification) {
+        // 跳过自己发出的通知，避免重复处理
+        if notification.instance_id == self.instance_id {
+            tracing::info!(
+                "跳过处理自身发出的redis通知: {} {:?} (instance_id={})",
+                notification.plugin_id, notification.action, notification.instance_id
+            );
+            return;
+        }
+        tracing::debug!(
+            "收到插件变更redis通知: {} {:?} (instance_id={})",
+            notification.plugin_id, notification.action, notification.instance_id
+        );
+
         if notification.app_id != self.app_id {
             tracing::debug!(
                 "Ignoring notification for different app_id: {}",
@@ -81,8 +98,13 @@ impl PluginChangeHandler {
         }
 
         match &notification.action {
-            PluginChangeAction::Changed => {
+            PluginChangeAction::Installed
+            | PluginChangeAction::Upgraded
+            | PluginChangeAction::Downgraded => {
                 self.handle_plugin_changed(notification).await;
+            }
+            PluginChangeAction::Reinstalled => {
+                self.handle_plugin_reinstalled(notification).await;
             }
             PluginChangeAction::Removed => {
                 self.handle_plugin_removed(notification).await;
@@ -162,21 +184,20 @@ impl PluginChangeHandler {
                 )
                     .with_install_path(result.install_path);
 
-                let event_name = match result.action {
-                    crate::service::deploy::DeployAction::Install => {
-                        plugin_events::INSTALLED
-                    }
-                    crate::service::deploy::DeployAction::Upgrade => {
+                // 直接从通知 Action 映射 GlobalEventBus 事件
+                let event_name = match notification.action {
+                    PluginChangeAction::Installed => plugin_events::INSTALLED,
+                    PluginChangeAction::Upgraded => {
                         payload = payload.with_old_version(
                             result.old_version.as_deref().unwrap_or("unknown"),
                         );
                         plugin_events::UPGRADED
                     }
-                    crate::service::deploy::DeployAction::Reinstall => {
+                    PluginChangeAction::Downgraded => {
                         payload = payload.with_old_version(
                             result.old_version.as_deref().unwrap_or("unknown"),
                         );
-                        plugin_events::REINSTALLED
+                        plugin_events::DOWNGRADED
                     }
                     _ => return,
                 };
@@ -187,6 +208,80 @@ impl PluginChangeHandler {
             }
             Err(e) => {
                 tracing::error!("插件 {} 远程同步失败: {}", plugin_id, e);
+            }
+        }
+    }
+
+    /// 处理插件覆盖安装。
+    ///
+    /// 与 handle_plugin_changed 不同，此方法**不检查本地路径是否存在**，
+    /// 强制重新部署，因为发送方已经删掉旧文件重新安装了。
+    async fn handle_plugin_reinstalled(&self, notification: &PluginChangeNotification) {
+        let plugin_id = &notification.plugin_id;
+        let db_plugin = match self.repository.find_plugin(plugin_id, &self.app_id).await {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                tracing::warn!(
+                    "收到插件 {} 覆盖安装通知，但数据库中未找到记录 (app_id={})",
+                    plugin_id,
+                    self.app_id
+                );
+                return;
+            }
+            Err(e) => {
+                tracing::error!("查询插件 {} 失败: {}", plugin_id, e);
+                return;
+            }
+        };
+
+        // 不检查本地路径是否存在，强制重新部署
+        tracing::info!(
+            "收到插件 {} 覆盖安装通知，强制重新同步 (app_id={})",
+            plugin_id,
+            self.app_id
+        );
+
+        let source = build_plugin_source(
+            db_plugin.zip_source_url.as_deref(),
+            db_plugin.zip_source_type.as_deref(),
+        );
+
+        let request = DeployRequest {
+            source,
+            db_id: Some(db_plugin.db_id.clone()),
+            force_reinstall: true,
+            build_type: None,
+            publish_to_marketplace: false,
+            app_id: Some(self.app_id.clone()),
+            send_event: false,
+            marketplace_source_id: None,
+            marketplace_publish_info: None,
+        };
+
+        match self.deploy_service.deploy(request).await {
+            Ok(result) => {
+                tracing::info!(
+                    "插件 {} 覆盖安装同步完成: {} -> {},msg={}",
+                    plugin_id,
+                    result.old_version.as_deref().unwrap_or("无"),
+                    result.new_version,
+                    result.message
+                );
+
+                let payload = PluginLifecyclePayload::new(
+                    &self.app_id,
+                    &result.plugin_id,
+                    &result.new_version,
+                )
+                    .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
+                    .with_install_path(result.install_path);
+
+                GlobalEventBus::get()
+                    .publish(plugin_events::REINSTALLED, serde_json::to_value(&payload).unwrap())
+                    .await;
+            }
+            Err(e) => {
+                tracing::error!("插件 {} 覆盖安装同步失败: {}", plugin_id, e);
             }
         }
     }
@@ -215,7 +310,7 @@ impl PluginChangeHandler {
             }
         }
 
-        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, "");
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, &notification.version);
         GlobalEventBus::get()
             .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
             .await;
@@ -226,7 +321,7 @@ impl PluginChangeHandler {
     /// 将插件加载到 WASM 运行时并注册到内存中。
     async fn handle_runtime_load(&self, notification: &PluginChangeNotification) {
         let plugin_id = &notification.plugin_id;
-        let version = notification.version.as_deref().unwrap_or("unknown");
+        let version = &notification.version;
 
         tracing::info!(
             "Received RuntimeLoad notification for plugin: {}, version: {}",
@@ -250,7 +345,7 @@ impl PluginChangeHandler {
     /// 将插件从 WASM 运行时和内存中移除。
     async fn handle_runtime_unload(&self, notification: &PluginChangeNotification) {
         let plugin_id = &notification.plugin_id;
-        let version = notification.version.as_deref().unwrap_or("");
+        let version = &notification.version;
 
         tracing::info!(
             "Received RuntimeUnload notification for plugin: {}",

@@ -282,8 +282,9 @@ impl PluginManager {
 
         // 创建插件变更通知器（如果 Redis Pub/Sub 可用）
         let pubsub_for_notifier = builder.pubsub.clone();
+        let instance_id = uuid::Uuid::new_v4().to_string();
         let plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>> =
-            pubsub_for_notifier.map(|ps| Arc::new(crate::cluster::notification::PluginNotifier::new(ps)));
+            pubsub_for_notifier.map(|ps| Arc::new(crate::cluster::notification::PluginNotifier::new(ps, instance_id.clone())));
 
         let db_manager = builder
             .db_manager
@@ -603,7 +604,7 @@ impl PluginManager {
 
         // 启动 Redis Pub/Sub 订阅，监听跨实例插件变更通知
         // 使用 GlobalSubscriber 统一管理订阅，内置自动重连和自动重新订阅
-        if let Some(ref _pubsub) = self.plugin_notifier {
+        if let Some(ref notifier) = self.plugin_notifier {
             let handler = crate::service::plugin_sync::PluginChangeHandler::new(
                 self.repository.clone(),
                 self.deploy_service.clone(),
@@ -611,6 +612,7 @@ impl PluginManager {
                 self.registry.clone(),
                 self.contexts.clone(),
                 self.settings.app_id.clone(),
+                notifier.instance_id().to_string(),
                 self.runtime_loader.clone(),
             );
             let handler = Arc::new(handler);
@@ -630,12 +632,12 @@ impl PluginManager {
                 tokio::spawn(async move {
                     match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&payload) {
                         Ok(notification) => {
-                            tracing::info!(
-                                plugin_id = %notification.plugin_id,
-                                action = ?notification.action,
-                                timestamp = %notification.timestamp,
-                                "收到插件变更通知，开始处理"
-                            );
+                            // tracing::info!(
+                            //     plugin_id = %notification.plugin_id,
+                            //     action = ?notification.action,
+                            //     timestamp = %notification.timestamp,
+                            //     "收到插件变更通知，开始处理"
+                            // );
                             handler.handle(&notification).await;
                         }
                         Err(e) => {

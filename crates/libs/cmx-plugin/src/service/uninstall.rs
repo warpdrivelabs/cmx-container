@@ -186,7 +186,7 @@ impl UninstallService {
         // 条件发布跨实例移除通知
         if send_event {
             if let Some(notifier) = &self.deps.plugin_notifier {
-                notifier.notify_removed(&plugin_id, &app_id).await;
+                notifier.notify_removed(&plugin_id, &version, &app_id).await;
             }
         }
 
