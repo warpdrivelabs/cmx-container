@@ -166,12 +166,17 @@ impl PluginChangeHandler {
                     crate::service::deploy::DeployAction::Install => {
                         plugin_events::INSTALLED
                     }
-                    crate::service::deploy::DeployAction::Upgrade
-                    | crate::service::deploy::DeployAction::Reinstall => {
+                    crate::service::deploy::DeployAction::Upgrade => {
                         payload = payload.with_old_version(
                             result.old_version.as_deref().unwrap_or("unknown"),
                         );
                         plugin_events::UPGRADED
+                    }
+                    crate::service::deploy::DeployAction::Reinstall => {
+                        payload = payload.with_old_version(
+                            result.old_version.as_deref().unwrap_or("unknown"),
+                        );
+                        plugin_events::REINSTALLED
                     }
                     _ => return,
                 };
@@ -236,7 +241,7 @@ impl PluginChangeHandler {
 
         let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
         GlobalEventBus::get()
-            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+            .publish(plugin_events::LOADED, serde_json::to_value(&payload).unwrap())
             .await;
     }
 
@@ -259,7 +264,7 @@ impl PluginChangeHandler {
 
         let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
         GlobalEventBus::get()
-            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+            .publish(plugin_events::UNLOADED, serde_json::to_value(&payload).unwrap())
             .await;
     }
 

@@ -146,7 +146,80 @@ impl ServiceLifecycleListener {
         });
         GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
 
-        info!("服务生命周期监听器已注册 (app_id={}, 订阅: 安装/升级/卸载/降级)", self.app_id);
+        // 订阅覆盖安装事件
+        let repository = self.repository.clone();
+        let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let repository = repository.clone();
+            let registry = registry.clone();
+            let app_id = app_id.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "忽略不同应用的覆盖安装事件: app_id={} (当前应用: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
+                    Self::handle_reinstalled(repository, registry, event).await;
+                } else {
+                    error!("解析插件覆盖安装事件载荷失败");
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::REINSTALLED, handler).await;
+
+        // 订阅运行时加载事件
+        let query = self.service_query.clone();
+        let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let query = query.clone();
+            let registry = registry.clone();
+            let app_id = app_id.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "忽略不同应用的加载事件: app_id={} (当前应用: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
+                    Self::handle_loaded(query, registry, event).await;
+                } else {
+                    error!("解析插件加载事件载荷失败");
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::LOADED, handler).await;
+
+        // 订阅运行时卸载事件
+        let registry = self.service_registry.clone();
+        let app_id = self.app_id.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let registry = registry.clone();
+            let app_id = app_id.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
+                    Self::handle_unloaded(registry, event).await;
+                } else {
+                    error!("解析插件卸载事件载荷失败");
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::UNLOADED, handler).await;
+
+        info!("服务生命周期监听器已注册 (app_id={}, 订阅: 安装/升级/卸载/降级/覆盖安装/加载/卸载)", self.app_id);
     }
 
     /// 处理安装事件：从数据库加载服务定义到缓存
@@ -338,6 +411,134 @@ impl ServiceLifecycleListener {
                     event.plugin_id, e, event.app_id
                 );
             }
+        }
+    }
+
+    /// 处理覆盖安装事件：清除旧缓存，强制从数据库加载最新服务定义。
+    ///
+    /// 逻辑与 UPGRADED/DOWNGRADED 相同。
+    async fn handle_reinstalled(
+        repository: Arc<ServiceRepository>,
+        registry: Arc<ServiceRegistry>,
+        event: PluginLifecyclePayload,
+    ) {
+        info!(
+            "处理插件覆盖安装事件: {} {} -> {} (app_id={})",
+            event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"),
+            event.version,
+            event.app_id
+        );
+
+        // 先清空该插件在缓存中的数据
+        let existing_services = registry.get_by_plugin(&event.plugin_id).await;
+        let removed_count = existing_services.len();
+        for service in &existing_services {
+            registry.unregister(&service.service_key, &event.plugin_id).await;
+        }
+        if removed_count > 0 {
+            info!(
+                "插件 {} 覆盖安装前已清理 {} 个旧服务缓存 (app_id={})",
+                event.plugin_id, removed_count, event.app_id
+            );
+        }
+
+        // 强制从数据库加载最新服务定义
+        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
+            Ok(service_defs) => {
+                let mut orchestrations = std::collections::HashMap::new();
+                let service_infos: Vec<_> = service_defs
+                    .into_iter()
+                    .map(|def| {
+                        if let Some(ref config) = def.config
+                            && !config.is_empty()
+                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
+                                    orchestrations.insert(def.service_key.clone(), orch);
+                                }
+                        cmx_core::model::service::ServiceInfo::from(def)
+                    })
+                    .collect();
+
+                let service_count = service_infos.len();
+                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                info!(
+                    "插件 {} 覆盖安装后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
+                    event.plugin_id, service_count, event.app_id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "覆盖安装后加载插件 {} 服务定义失败: {} (app_id={})",
+                    event.plugin_id, e, event.app_id
+                );
+            }
+        }
+    }
+
+    /// 处理运行时加载事件：从数据库加载服务定义到缓存。
+    ///
+    /// 与 INSTALLED 类似，但语义上是"运行时加载"而非"安装"。
+    async fn handle_loaded(
+        query: Arc<dyn ServiceQuery>,
+        registry: Arc<ServiceRegistry>,
+        event: PluginLifecyclePayload,
+    ) {
+        info!(
+            "处理插件加载事件: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
+        );
+
+        match query.get_services_by_plugin(&event.plugin_id).await {
+            Ok(services) => {
+                let mut orchestrations = std::collections::HashMap::new();
+                for service in &services {
+                    if !service.config.is_empty()
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(&service.config) {
+                            orchestrations.insert(service.service_key.clone(), orch);
+                        }
+                }
+
+                let service_count = services.len();
+                registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
+                info!(
+                    "插件 {} 服务定义已加载到缓存，共 {} 个服务 (app_id={})",
+                    event.plugin_id, service_count, event.app_id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "加载插件 {} 服务定义失败: {} (app_id={})",
+                    event.plugin_id, e, event.app_id
+                );
+            }
+        }
+    }
+
+    /// 处理运行时卸载事件：清理服务定义缓存。
+    ///
+    /// 与 UNINSTALLED 类似，但语义上是"运行时卸载"而非"卸载"。
+    async fn handle_unloaded(registry: Arc<ServiceRegistry>, event: PluginLifecyclePayload) {
+        info!(
+            "处理插件卸载事件: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
+        );
+
+        let services = registry.get_by_plugin(&event.plugin_id).await;
+
+        if services.is_empty() {
+            info!(
+                "插件 {} 的服务缓存为空，跳过缓存清理 (app_id={})",
+                event.plugin_id, event.app_id
+            );
+        } else {
+            let count = services.len();
+            for service in &services {
+                registry.unregister(&service.service_key, &event.plugin_id).await;
+            }
+            info!(
+                "插件 {} 服务定义已从缓存清理，共清理 {} 个服务 (app_id={})",
+                event.plugin_id, count, event.app_id
+            );
         }
     }
 }

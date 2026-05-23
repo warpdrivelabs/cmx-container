@@ -109,6 +109,8 @@ pub struct DeployServiceDeps {
     pub upgrade_service: UpgradeService,
     /// 卸载服务
     pub uninstall_service: UninstallService,
+    /// 插件变更通知器
+    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
     /// 插件安装根目录
     pub plugin_root: PathBuf,
     /// 临时目录
@@ -319,7 +321,9 @@ impl DeployService {
         })
     }
 
-    /// 执行覆盖安装操作（先卸载再安装）
+    /// 执行覆盖安装操作（先卸载再安装）。
+    ///
+    /// 中间卸载和安装都不发事件，最后统一发布 REINSTALLED 事件。
     async fn execute_reinstall(
         &self,
         request: &DeployRequest,
@@ -328,18 +332,18 @@ impl DeployService {
         _new_version: &str,
         marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
-        // 先卸载
+        // 先卸载（中间步骤不发事件，避免其他节点误以为插件被卸载）
         let uninstall_req = super::uninstall::UninstallRequest {
             plugin_id: plugin_id.to_string(),
             force: true,
             operator: "system".to_string(),
             app_id: request.app_id.clone(),
-            send_event: true,
+            send_event: false,
         };
 
         self.deps.uninstall_service.uninstall(uninstall_req).await?;
 
-        // 再安装
+        // 再安装（中间步骤不发事件）
         let install_req = super::install::InstallRequest {
             source: request.source.clone(),
             db_id: request.db_id.clone(),
@@ -348,10 +352,34 @@ impl DeployService {
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
             app_id: request.app_id.clone(),
-            send_event: true,
+            send_event: false,
         };
 
         let result = self.deps.install_service.install(install_req).await?;
+
+        // 统一发布 REINSTALLED 事件
+        if request.send_event {
+            let app_id = request.app_id.as_deref().unwrap_or("default");
+            let payload = cmx_traits::PluginLifecyclePayload::new(
+                app_id,
+                &result.plugin_id,
+                &result.version,
+            )
+            .with_old_version(old_version)
+            .with_install_path(std::path::PathBuf::from(&result.install_path));
+
+            cmx_traits::GlobalEventBus::get()
+                .publish(
+                    cmx_traits::plugin_events::REINSTALLED,
+                    serde_json::to_value(&payload).unwrap(),
+                )
+                .await;
+
+            // 发布 Redis 跨实例通知
+            if let Some(notifier) = &self.deps.plugin_notifier {
+                notifier.notify_changed(&result.plugin_id, &result.version, app_id).await;
+            }
+        }
 
         Ok(DeployResponse {
             plugin_id: result.plugin_id,

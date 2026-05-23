@@ -443,6 +443,7 @@ impl PluginManager {
                 install_service: install_service.clone(),
                 upgrade_service: upgrade_service.clone(),
                 uninstall_service: uninstall_service.clone(),
+                plugin_notifier: plugin_notifier.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 temp_root: settings.temp_root.clone(),
             });

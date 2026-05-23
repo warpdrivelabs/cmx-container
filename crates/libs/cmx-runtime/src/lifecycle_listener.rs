@@ -107,7 +107,53 @@ impl RuntimeLifecycleListener {
         });
         GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
 
-        info!("运行时生命周期监听器已注册 (app_id={}, 订阅: 升级/卸载/降级)", self.app_id);
+        // 订阅覆盖安装事件
+        let invoker = self.runtime_invoker.clone();
+        let app_id = self.app_id.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let invoker = invoker.clone();
+            let app_id = app_id.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "忽略不同应用的覆盖安装事件: app_id={} (当前应用: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
+                    Self::handle_reinstalled(invoker, event).await;
+                } else {
+                    warn!("解析插件覆盖安装事件载荷失败");
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::REINSTALLED, handler).await;
+
+        // 订阅运行时卸载事件
+        let invoker = self.runtime_invoker.clone();
+        let app_id = self.app_id.clone();
+        let handler: EventHandler = Arc::new(move |_topic, payload| {
+            let invoker = invoker.clone();
+            let app_id = app_id.clone();
+            tokio::spawn(async move {
+                if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
+                    if event.app_id != app_id {
+                        tracing::debug!(
+                            "忽略不同应用的运行时卸载事件: app_id={} (当前应用: {})",
+                            event.app_id, app_id
+                        );
+                        return;
+                    }
+                    Self::handle_unloaded(invoker, event).await;
+                } else {
+                    warn!("解析插件运行时卸载事件载荷失败");
+                }
+            });
+        });
+        GlobalEventBus::get().subscribe(plugin_events::UNLOADED, handler).await;
+
+        info!("运行时生命周期监听器已注册 (app_id={}, 订阅: 升级/卸载/降级/覆盖安装/运行时卸载)", self.app_id);
     }
 
     /// 处理升级事件：清除 WASM 实例缓存。
@@ -147,6 +193,35 @@ impl RuntimeLifecycleListener {
             event.old_version.as_deref().unwrap_or("?"),
             event.version,
             event.app_id
+        );
+
+        match invoker.unload_module(&event.plugin_id).await {
+            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
+            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+        }
+    }
+
+    /// 处理覆盖安装事件：清除 WASM 实例缓存。
+    async fn handle_reinstalled(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
+        info!(
+            "处理插件覆盖安装事件，清除 WASM 缓存: {} {} -> {} (app_id={})",
+            event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"),
+            event.version,
+            event.app_id
+        );
+
+        match invoker.unload_module(&event.plugin_id).await {
+            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
+            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+        }
+    }
+
+    /// 处理运行时卸载事件：清除 WASM 实例缓存。
+    async fn handle_unloaded(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
+        info!(
+            "处理插件运行时卸载事件，清除 WASM 缓存: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
         );
 
         match invoker.unload_module(&event.plugin_id).await {

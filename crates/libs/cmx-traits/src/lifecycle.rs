@@ -19,12 +19,12 @@ pub mod plugin_events {
     pub const UNINSTALLED: &str = "plugin.uninstalled";
     /// 插件已降级
     pub const DOWNGRADED: &str = "plugin.downgraded";
-    
-    // 暂时注释，暂无此功能
-    // /// 插件已激活
-    // pub const ACTIVATED: &str = "plugin.activated";
-    // /// 插件已停用
-    // pub const DEACTIVATED: &str = "plugin.deactivated";
+    /// 插件已覆盖安装（先卸载再安装的原子操作）
+    pub const REINSTALLED: &str = "plugin.reinstalled";
+    /// 插件已加载到运行时（WASM + 注册表）
+    pub const LOADED: &str = "plugin.loaded";
+    /// 插件已从运行时卸载（WASM + 注册表）
+    pub const UNLOADED: &str = "plugin.unloaded";
 }
 
 // ==================== 事件载荷 ====================
