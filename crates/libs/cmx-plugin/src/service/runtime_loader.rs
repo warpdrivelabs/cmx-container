@@ -195,9 +195,6 @@ impl RuntimeLoader {
             self.app_id
         );
 
-        // TODO: Notify WASM Runtime to unload
-        // TODO: Notify Service Registry to remove service definitions
-
         Ok(())
     }
 
