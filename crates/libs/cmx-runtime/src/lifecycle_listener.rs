@@ -48,12 +48,14 @@ impl RuntimeLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的升级事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_upgraded(invoker, event).await;
+                } else {
+                    warn!("解析插件升级事件载荷失败");
                 }
             });
         });
@@ -69,12 +71,14 @@ impl RuntimeLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_uninstalled(invoker, event).await;
+                } else {
+                    warn!("解析插件卸载事件载荷失败");
                 }
             });
         });
@@ -90,53 +94,64 @@ impl RuntimeLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的降级事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_downgraded(invoker, event).await;
+                } else {
+                    warn!("解析插件降级事件载荷失败");
                 }
             });
         });
         GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
 
-        info!("运行时生命周期监听器已注册");
+        info!("运行时生命周期监听器已注册 (app_id={}, 订阅: 升级/卸载/降级)", self.app_id);
     }
 
     /// 处理升级事件：清除 WASM 实例缓存。
     async fn handle_upgraded(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
-        info!("处理插件升级事件，清除 WASM 缓存: {} {} -> {}",
-            event.plugin_id, event.old_version.as_deref().unwrap_or("?"), event.version);
+        info!(
+            "处理插件升级事件，清除 WASM 缓存: {} {} -> {} (app_id={})",
+            event.plugin_id,
+            event.old_version.as_deref().unwrap_or("?"),
+            event.version,
+            event.app_id
+        );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存", event.plugin_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {}", event.plugin_id, e),
+            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
+            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
         }
     }
 
     /// 处理卸载事件：清除 WASM 实例缓存。
     async fn handle_uninstalled(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
-        info!("处理插件卸载事件，清除 WASM 缓存: {} v{}", event.plugin_id, event.version);
+        info!(
+            "处理插件卸载事件，清除 WASM 缓存: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
+        );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存", event.plugin_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {}", event.plugin_id, e),
+            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
+            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
         }
     }
 
     /// 处理降级事件：清除 WASM 实例缓存。
     async fn handle_downgraded(invoker: Arc<dyn RuntimeInvoker>, event: PluginLifecyclePayload) {
         info!(
-            "处理插件降级事件，清除 WASM 缓存: {} {} -> {}",
+            "处理插件降级事件，清除 WASM 缓存: {} {} -> {} (app_id={})",
             event.plugin_id,
             event.old_version.as_deref().unwrap_or("?"),
-            event.version
+            event.version,
+            event.app_id
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存", event.plugin_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {}", event.plugin_id, e),
+            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
+            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
         }
     }
 }

@@ -60,12 +60,14 @@ impl ServiceLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的安装事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_installed(query, registry, event).await;
+                } else {
+                    error!("解析插件安装事件载荷失败");
                 }
             });
         });
@@ -83,12 +85,14 @@ impl ServiceLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的升级事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_upgraded(repository, registry, event).await;
+                } else {
+                    error!("解析插件升级事件载荷失败");
                 }
             });
         });
@@ -104,12 +108,14 @@ impl ServiceLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_uninstalled(registry, event).await;
+                } else {
+                    error!("解析插件卸载事件载荷失败");
                 }
             });
         });
@@ -127,18 +133,20 @@ impl ServiceLifecycleListener {
                 if let Ok(event) = serde_json::from_value::<PluginLifecyclePayload>(payload) {
                     if event.app_id != app_id {
                         tracing::debug!(
-                            "Ignoring event for different app_id: {} (expected: {})",
+                            "忽略不同应用的降级事件: app_id={} (当前应用: {})",
                             event.app_id, app_id
                         );
                         return;
                     }
                     Self::handle_downgraded(repository, registry, event).await;
+                } else {
+                    error!("解析插件降级事件载荷失败");
                 }
             });
         });
         GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
 
-        info!("服务生命周期监听器已注册");
+        info!("服务生命周期监听器已注册 (app_id={}, 订阅: 安装/升级/卸载/降级)", self.app_id);
     }
 
     /// 处理安装事件：从数据库加载服务定义到缓存
@@ -149,7 +157,10 @@ impl ServiceLifecycleListener {
         registry: Arc<ServiceRegistry>,
         event: PluginLifecyclePayload,
     ) {
-        info!("处理插件安装事件: {} v{}", event.plugin_id, event.version);
+        info!(
+            "处理插件安装事件: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
+        );
 
         match query.get_services_by_plugin(&event.plugin_id).await {
             Ok(services) => {
@@ -161,11 +172,18 @@ impl ServiceLifecycleListener {
                         }
                 }
 
+                let service_count = services.len();
                 registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
-                info!("插件 {} 服务定义已加载到缓存", event.plugin_id);
+                info!(
+                    "插件 {} 服务定义已加载到缓存，共 {} 个服务 (app_id={})",
+                    event.plugin_id, service_count, event.app_id
+                );
             }
             Err(e) => {
-                error!("加载插件 {} 服务定义失败: {}", event.plugin_id, e);
+                error!(
+                    "加载插件 {} 服务定义失败: {} (app_id={})",
+                    event.plugin_id, e, event.app_id
+                );
             }
         }
     }
@@ -179,20 +197,27 @@ impl ServiceLifecycleListener {
         event: PluginLifecyclePayload,
     ) {
         info!(
-            "处理插件升级事件: {} {} -> {}",
+            "处理插件升级事件: {} {} -> {} (app_id={})",
             event.plugin_id,
             event.old_version.as_deref().unwrap_or("?"),
-            event.version
+            event.version,
+            event.app_id
         );
 
         // 先清空该插件在缓存中的数据，确保使用数据库最新数据
         let existing_services = registry.get_by_plugin(&event.plugin_id).await;
+        let removed_count = existing_services.len();
         for service in &existing_services {
             registry.unregister(&service.service_key, &event.plugin_id).await;
         }
+        if removed_count > 0 {
+            info!(
+                "插件 {} 升级前已清理 {} 个旧服务缓存 (app_id={})",
+                event.plugin_id, removed_count, event.app_id
+            );
+        }
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
-        // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
         match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
@@ -208,11 +233,18 @@ impl ServiceLifecycleListener {
                     })
                     .collect();
 
+                let service_count = service_infos.len();
                 registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
-                info!("插件 {} 服务定义已更新到缓存", event.plugin_id);
+                info!(
+                    "插件 {} 升级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
+                    event.plugin_id, service_count, event.app_id
+                );
             }
             Err(e) => {
-                error!("加载插件 {} 服务定义失败: {}", event.plugin_id, e);
+                error!(
+                    "升级后加载插件 {} 服务定义失败: {} (app_id={})",
+                    event.plugin_id, e, event.app_id
+                );
             }
         }
     }
@@ -223,23 +255,26 @@ impl ServiceLifecycleListener {
     /// 这里只负责清理内存缓存。如果缓存为空，说明服务从未被加载到缓存，
     /// 这是正常的，跳过清理即可。
     async fn handle_uninstalled(registry: Arc<ServiceRegistry>, event: PluginLifecyclePayload) {
-        info!("处理插件卸载事件: {} v{}", event.plugin_id, event.version);
+        info!(
+            "处理插件卸载事件: {} v{} (app_id={})",
+            event.plugin_id, event.version, event.app_id
+        );
 
         let services = registry.get_by_plugin(&event.plugin_id).await;
 
         if services.is_empty() {
             info!(
-                "插件 {} 的服务缓存为空，跳过缓存清理（服务可能从未被加载）",
-                event.plugin_id
+                "插件 {} 的服务缓存为空，跳过缓存清理 (app_id={})",
+                event.plugin_id, event.app_id
             );
         } else {
+            let count = services.len();
             for service in &services {
                 registry.unregister(&service.service_key, &event.plugin_id).await;
             }
             info!(
-                "插件 {} 服务定义已从缓存清理，共清理 {} 个服务",
-                event.plugin_id,
-                services.len()
+                "插件 {} 服务定义已从缓存清理，共清理 {} 个服务 (app_id={})",
+                event.plugin_id, count, event.app_id
             );
         }
     }
@@ -254,20 +289,27 @@ impl ServiceLifecycleListener {
         event: PluginLifecyclePayload,
     ) {
         info!(
-            "处理插件降级事件: {} {} -> {}",
+            "处理插件降级事件: {} {} -> {} (app_id={})",
             event.plugin_id,
             event.old_version.as_deref().unwrap_or("?"),
-            event.version
+            event.version,
+            event.app_id
         );
 
         // 先清空该插件在缓存中的数据，确保使用数据库最新数据
         let existing_services = registry.get_by_plugin(&event.plugin_id).await;
+        let removed_count = existing_services.len();
         for service in &existing_services {
             registry.unregister(&service.service_key, &event.plugin_id).await;
         }
+        if removed_count > 0 {
+            info!(
+                "插件 {} 降级前已清理 {} 个旧服务缓存 (app_id={})",
+                event.plugin_id, removed_count, event.app_id
+            );
+        }
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
-        // repository.get_services_by_plugin 返回 Vec<ServiceDefinition>，需要转换为 Vec<ServiceInfo>
         match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
@@ -283,11 +325,18 @@ impl ServiceLifecycleListener {
                     })
                     .collect();
 
+                let service_count = service_infos.len();
                 registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
-                info!("插件 {} 服务定义已更新到缓存（降级后）", event.plugin_id);
+                info!(
+                    "插件 {} 降级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
+                    event.plugin_id, service_count, event.app_id
+                );
             }
             Err(e) => {
-                error!("加载插件 {} 服务定义失败: {}", event.plugin_id, e);
+                error!(
+                    "降级后加载插件 {} 服务定义失败: {} (app_id={})",
+                    event.plugin_id, e, event.app_id
+                );
             }
         }
     }

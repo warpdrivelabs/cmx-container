@@ -655,6 +655,7 @@ impl PluginManager {
                 self.runtime_loader.clone(),
                 self.settings.app_id.clone(),
                 self.settings.reconciliation_interval_secs,
+                self.settings.plugin_root.clone(),
             );
             let recon = Arc::new(recon);
             recon.clone().start();
