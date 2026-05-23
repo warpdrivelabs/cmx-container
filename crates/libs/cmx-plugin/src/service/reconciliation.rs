@@ -55,12 +55,18 @@ impl ReconciliationTask {
     /// 启动定时对账任务。
     pub fn start(self: Arc<Self>) {
         tokio::spawn(async move {
+            //interval 的首次触发是立即的
+            // tokio::time::interval 的设计逻辑是：
+            // 首次调用 tick().await 会立即返回，后续调用才会等待指定间隔。
+            // 这意味着：
+            // 创建 interval 后，第一次 interval.tick().await 不会等待，直接执行后续代码。
+            // 第二次及之后的 tick().await 才会等待 self.interval（60 秒）。
             let mut interval = tokio::time::interval(self.interval);
             loop {
                 interval.tick().await;
                 if let Err(e) = self.reconcile().await {
                     tracing::error!(
-                        "Plugin reconciliation failed (app_id={}): {}",
+                        "插件对账失败 (app_id={}): {}",
                         self.app_id,
                         e
                     );
@@ -75,6 +81,7 @@ impl ReconciliationTask {
     /// - DB 中存在但 Registry 中缺失的插件：调用 `RuntimeLoader::load_plugin()`
     /// - Registry 中存在但 DB 中不存在的插件：调用 `RuntimeLoader::unload_plugin()`
     pub async fn reconcile(&self) -> crate::error::PluginResult<ReconcileResult> {
+        tracing::info!("开始对账 (app_id={})", self.app_id);
         let mut result = ReconcileResult::default();
 
         let filter = PluginFilter {
@@ -100,7 +107,7 @@ impl ReconciliationTask {
         for (plugin_id, version) in &db_plugin_ids {
             if !registry_plugin_ids.contains(plugin_id) {
                 tracing::info!(
-                    "Reconciliation: loading missing plugin {} v{} (app_id={})",
+                    "对账: 加载缺失插件 {} v{} (app_id={})",
                     plugin_id,
                     version,
                     self.app_id
@@ -111,7 +118,7 @@ impl ReconciliationTask {
                     }
                     Err(e) => {
                         tracing::error!(
-                            "Reconciliation: failed to load plugin {}: {}",
+                            "对账: 加载插件 {} 失败: {}",
                             plugin_id,
                             e
                         );
@@ -124,7 +131,7 @@ impl ReconciliationTask {
         for plugin_id in &registry_plugin_ids {
             if !db_plugin_ids.contains_key(plugin_id) {
                 tracing::info!(
-                    "Reconciliation: unloading orphan plugin {} (app_id={})",
+                    "对账: 卸载孤立插件 {} (app_id={})",
                     plugin_id,
                     self.app_id
                 );
@@ -134,7 +141,7 @@ impl ReconciliationTask {
                     }
                     Err(e) => {
                         tracing::error!(
-                            "Reconciliation: failed to unload plugin {}: {}",
+                            "对账: 卸载插件 {} 失败: {}",
                             plugin_id,
                             e
                         );
@@ -146,7 +153,7 @@ impl ReconciliationTask {
 
         if !result.loaded.is_empty() || !result.unloaded.is_empty() || !result.failed.is_empty() {
             tracing::info!(
-                "Reconciliation complete (app_id={}): loaded={}, unloaded={}, failed={}",
+                "对账完成 (app_id={}): 加载={}, 卸载={}, 失败={}",
                 self.app_id,
                 result.loaded.len(),
                 result.unloaded.len(),

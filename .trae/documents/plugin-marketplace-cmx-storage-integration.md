@@ -69,8 +69,7 @@
 ALTER TABLE cmx_marketplace_plugin_version
     ADD COLUMN IF NOT EXISTS storage_file_id VARCHAR (64);
 
-COMMENT
-ON COLUMN cmx_marketplace_plugin_version.storage_file_id
+COMMENT ON COLUMN cmx_marketplace_plugin_version.storage_file_id
 IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
 ```
 
@@ -84,8 +83,7 @@ IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
 ALTER TABLE cmx_marketplace_plugin_version
     ADD COLUMN IF NOT EXISTS storage_file_id VARCHAR (64);
 
-COMMENT
-ON COLUMN cmx_marketplace_plugin_version.storage_file_id
+COMMENT ON COLUMN cmx_marketplace_plugin_version.storage_file_id
 IS 'cmx-storage 文件唯一标识，关联 cmx_file_detail.id';
 ```
 

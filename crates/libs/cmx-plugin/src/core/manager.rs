@@ -597,7 +597,8 @@ impl PluginManager {
         //     tracing::error!("插件 {} 同步失败: {}", plugin_id, err);
         // }
 
-
+        // 0522加载 数据库插件到context和registry
+        self.plugin_initializer.load_contexts().await?;
 
         // 启动 Redis Pub/Sub 订阅，监听跨实例插件变更通知
         // 使用 GlobalSubscriber 统一管理订阅，内置自动重连和自动重新订阅
@@ -665,7 +666,7 @@ impl PluginManager {
 
             //5.22 yqs启动初始化不在执行插件的ddl等逻辑，只执行插件下载解压
             // self.runtime_loader().
-            recon.clone().reconcile().await?;
+            // recon.clone().reconcile().await?;
         }
 
         *initialized = true;

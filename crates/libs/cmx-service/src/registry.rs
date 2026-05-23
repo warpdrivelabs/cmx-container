@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
+use tracing::info;
 use cmx_core::model::service::ServiceInfo;
 
 /// 服务注册中心
@@ -42,6 +42,7 @@ impl ServiceRegistry {
     pub async fn register(&self, service: ServiceInfo, orchestration: Option<serde_json::Value>) {
         let service_key = service.service_key.clone();
         let plugin_id = service.plugin_id.clone();
+        info!("注册插件{}服务：{}",&plugin_id, &service_key);
 
         self.services.write().await.insert(service_key.clone(), service);
 

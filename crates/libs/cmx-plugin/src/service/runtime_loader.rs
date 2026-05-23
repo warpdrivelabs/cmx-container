@@ -165,8 +165,7 @@ impl RuntimeLoader {
             self.app_id
         );
 
-        // TODO: Notify WASM Runtime to hot-load (will be implemented with lifecycle events)
-        // TODO: Notify Service Registry to load service definitions from DB
+
 
         Ok(())
     }

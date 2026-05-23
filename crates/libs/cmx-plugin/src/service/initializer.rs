@@ -427,7 +427,7 @@ impl PluginInitializer {
     }
 
     /// 加载插件上下文到内存
-    async fn load_contexts(&self) -> PluginResult<()> {
+   pub async fn load_contexts(&self) -> PluginResult<()> {
         let filter = crate::domain::plugin::PluginFilter {
             app_id: Some(self.app_id.clone()),
             ..Default::default()

@@ -5,7 +5,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cmx_traits::GlobalEventBus;
 use cmx_database::get_default_db_manager;
 use crate::audit::logger::AuditLogger;
 use crate::core::context::PluginContext;
@@ -14,9 +13,9 @@ use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::cache::layered::LayeredCacheManager;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use cmx_traits::{plugin_events, PluginLifecyclePayload};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
+use cmx_traits::{plugin_events, GlobalEventBus, PluginLifecyclePayload};
 
 /// 卸载请求
 #[derive(Debug, Clone, Serialize, Deserialize)]

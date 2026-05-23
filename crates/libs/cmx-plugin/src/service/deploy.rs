@@ -64,6 +64,10 @@ pub struct DeployRequest {
     /// 是否发布事件通知
     #[serde(default = "default_true")]
     pub send_event: bool,
+    /// 插件市场版本ID（由 handler 发布后传入）
+    pub marketplace_source_id: Option<String>,
+    /// 插件市场发布信息（由 handler 发布后传入）
+    pub marketplace_publish_info: Option<super::marketplace_publisher::MarketplacePublishInfo>,
 }
 
 /// 部署响应
@@ -185,51 +189,43 @@ impl DeployService {
             request.db_id = plugin_def.datasource_id.clone();
         }
 
-        let mut marketplace_source_id: Option<String> = None;
-        let mut marketplace_publish_info: Option<super::marketplace_publisher::MarketplacePublishInfo> = None;
-
-        if request.publish_to_marketplace {
-            let publish_req = super::marketplace_publisher::PublishFromDeployRequest {
-                plugin_id: plugin_id.clone(),
-                version: new_version.clone(),
-                plugin_def: plugin_def.clone(),
-                zip_file_path: package_path.clone(),
-            };
-            let result = super::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req).await?;
-            let file_url = result.file_url.clone();
-            marketplace_source_id = Some(result.marketplace_version_id.clone());
-            marketplace_publish_info = Some(result.into());
-
-            // 发布到市场后，将 source 构造为 remote url
-            if matches!(request.source, PluginSource::Local { .. }) {
-                request.source = PluginSource::Remote {
-                    url: file_url,
-                    checksum: None,
-                };
-            }
-        }
-
-
         let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or("default")).await?;
 
         match existing_plugin {
             None => {
-                let mut resp = self.execute_install(&request, &plugin_id, &new_version, marketplace_source_id.as_deref()).await?;
-                resp.marketplace_publish = marketplace_publish_info;
+                let mut resp = self.execute_install(
+                    &request,
+                    &plugin_id,
+                    &new_version,
+                    request.marketplace_source_id.as_deref(),
+                ).await?;
+                resp.marketplace_publish = request.marketplace_publish_info.clone();
                 Ok(resp)
             }
             Some(record) => {
                 let old_version = record.version.clone();
                 match new_version.cmp(&old_version) {
                     std::cmp::Ordering::Greater => {
-                        let mut resp = self.execute_upgrade(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
-                        resp.marketplace_publish = marketplace_publish_info;
+                        let mut resp = self.execute_upgrade(
+                            &request,
+                            &plugin_id,
+                            &old_version,
+                            &new_version,
+                            request.marketplace_source_id.as_deref(),
+                        ).await?;
+                        resp.marketplace_publish = request.marketplace_publish_info.clone();
                         Ok(resp)
                     }
                     std::cmp::Ordering::Equal => {
                         if request.force_reinstall {
-                            let mut resp = self.execute_reinstall(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
-                            resp.marketplace_publish = marketplace_publish_info;
+                            let mut resp = self.execute_reinstall(
+                                &request,
+                                &plugin_id,
+                                &old_version,
+                                &new_version,
+                                request.marketplace_source_id.as_deref(),
+                            ).await?;
+                            resp.marketplace_publish = request.marketplace_publish_info.clone();
                             Ok(resp)
                         } else {
                             Ok(DeployResponse {
@@ -240,7 +236,7 @@ impl DeployService {
                                 install_path: PathBuf::from(&record.install_path),
                                 success: true,
                                 message: "插件已安装相同版本，无需操作".to_string(),
-                                marketplace_publish: marketplace_publish_info,
+                                marketplace_publish: request.marketplace_publish_info.clone(),
                             })
                         }
                     }

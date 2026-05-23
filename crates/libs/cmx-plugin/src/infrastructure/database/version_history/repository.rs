@@ -383,7 +383,7 @@ impl VersionHistoryRepository {
     ) -> PluginResult<()> {
         self.mark_all_not_current(plugin_id, app_id, txn_id).await?;
 
-        dbg!(plugin_id,version);
+        // dbg!(plugin_id,version);
         let existing = self.find_version(plugin_id, app_id, version, txn_id).await?;
         // dbg!(&existing);
 

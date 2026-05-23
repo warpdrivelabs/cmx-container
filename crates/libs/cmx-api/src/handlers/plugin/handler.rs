@@ -322,14 +322,56 @@ pub async fn plugin_deploy(
     tokio::fs::write(&file_path, &file_bytes).await
         .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
-    // 构建 PluginSource::Local（使用绝对路径，避免 LocalFetcher 拼接 plugin_root 前缀）
     let abs_path = std::fs::canonicalize(&file_path)
         .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
-    let source = cmx_plugin::domain::plugin::PluginSource::Local {
-        path: abs_path.clone(),
-    };
 
-    // 调用 PluginManager.deploy()
+    // 如果需要发布到市场，先解析插件定义并发布
+    let marketplace_source_id: Option<String>;
+    let marketplace_publish_info: Option<cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo>;
+    let source: cmx_plugin::domain::plugin::PluginSource;
+
+    if publish_to_marketplace.unwrap_or(false) {
+        let plugin_def = tokio::task::spawn_blocking({
+            let abs_path = abs_path.clone();
+            move || cmx_plugin::common::DefinitionUtils::parse_from_zip(&abs_path)
+        })
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("解析插件定义失败: {}", e)))?
+        .map_err(|e| crate::Error::InternalError(format!("解析插件定义失败: {}", e)))?;
+
+        let publish_req = cmx_plugin::service::marketplace_publisher::PublishFromDeployRequest {
+            plugin_id: plugin_def.id.clone(),
+            version: plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+            plugin_def: plugin_def.clone(),
+            zip_file_path: abs_path.clone(),
+        };
+
+        let result = cmx_plugin::service::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req)
+            .await
+            .map_err(|e| crate::Error::InternalError(format!("发布到插件市场失败: {}", e)))?;
+
+        // 先取需要的数据，再消费 result
+        let file_url = result.file_url.clone();
+        let marketplace_version_id = result.marketplace_version_id.clone();
+
+        marketplace_source_id = Some(marketplace_version_id);
+        marketplace_publish_info = Some(result.into());
+
+        // 发布后使用 Remote source
+        source = cmx_plugin::domain::plugin::PluginSource::Remote {
+            url: file_url,
+            checksum: None,
+        };
+    } else {
+        marketplace_source_id = None;
+        marketplace_publish_info = None;
+
+        // 未发布则使用 Local source
+        source = cmx_plugin::domain::plugin::PluginSource::Local {
+            path: abs_path,
+        };
+    }
+
     let manager = cmx_plugin::GlobalPluginManager::get();
 
     let app_id = manager.app_id().to_string();
@@ -338,9 +380,11 @@ pub async fn plugin_deploy(
         db_id: target_db_id,
         force_reinstall,
         build_type,
-        publish_to_marketplace: publish_to_marketplace.unwrap_or(true),
+        publish_to_marketplace: false,
         app_id: Some(app_id),
         send_event: true,
+        marketplace_source_id,
+        marketplace_publish_info,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {

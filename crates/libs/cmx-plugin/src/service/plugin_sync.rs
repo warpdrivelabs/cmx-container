@@ -82,65 +82,25 @@ impl PluginChangeHandler {
 
         match &notification.action {
             PluginChangeAction::Changed => {
-                self.handle_plugin_changed(&notification.plugin_id).await;
+                self.handle_plugin_changed(notification).await;
             }
             PluginChangeAction::Removed => {
-                self.handle_plugin_removed(&notification.plugin_id).await;
+                self.handle_plugin_removed(notification).await;
             }
             PluginChangeAction::RuntimeLoad => {
-                let version = notification.version.as_deref().unwrap_or("unknown");
-                tracing::info!(
-                    "Received RuntimeLoad notification for plugin: {}, version: {}",
-                    notification.plugin_id,
-                    version
-                );
-                if let Err(e) = self.runtime_loader.load_plugin(&notification.plugin_id, version).await {
-                    tracing::error!(
-                        "RuntimeLoad failed for plugin {}: {}",
-                        notification.plugin_id,
-                        e
-                    );
-                } else {
-                    let payload = PluginLifecyclePayload::new(
-                        &self.app_id,
-                        &notification.plugin_id,
-                        version,
-                    );
-                    GlobalEventBus::get()
-                        .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
-                        .await;
-                }
+                self.handle_runtime_load(notification).await;
             }
             PluginChangeAction::RuntimeUnload => {
-                tracing::info!(
-                    "Received RuntimeUnload notification for plugin: {}",
-                    notification.plugin_id
-                );
-                if let Err(e) = self.runtime_loader.unload_plugin(&notification.plugin_id).await {
-                    tracing::error!(
-                        "RuntimeUnload failed for plugin {}: {}",
-                        notification.plugin_id,
-                        e
-                    );
-                } else {
-                    let version = notification.version.as_deref().unwrap_or("");
-                    let payload = PluginLifecyclePayload::new(
-                        &self.app_id,
-                        &notification.plugin_id,
-                        version,
-                    );
-                    GlobalEventBus::get()
-                        .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
-                        .await;
-                }
+                self.handle_runtime_unload(notification).await;
             }
         }
     }
 
-    /// 处理插件变更（安装/升级/降级）
+    /// 处理插件变更（安装/升级/降级）。
     ///
     /// 从数据库查询最新版本，与本地文件系统对比后执行操作。
-    async fn handle_plugin_changed(&self, plugin_id: &str) {
+    async fn handle_plugin_changed(&self, notification: &PluginChangeNotification) {
+        let plugin_id = &notification.plugin_id;
         let db_plugin = match self.repository.find_plugin(plugin_id, &self.app_id).await {
             Ok(Some(p)) => p,
             Ok(None) => {
@@ -157,7 +117,6 @@ impl PluginChangeHandler {
             }
         };
 
-        // 检查本地是否已是最新版本（使用 app_id 目录）
         let local_path = self.plugin_root.join(&self.app_id).join(plugin_id).join(&db_plugin.version);
         if local_path.exists() {
             tracing::info!(
@@ -182,15 +141,18 @@ impl PluginChangeHandler {
             publish_to_marketplace: false,
             app_id: Some(self.app_id.clone()),
             send_event: false,
+            marketplace_source_id: None,
+            marketplace_publish_info: None,
         };
 
         match self.deploy_service.deploy(request).await {
             Ok(result) => {
                 tracing::info!(
-                    "插件 {} 远程同步完成: {} -> {}",
+                    "插件 {} 远程同步完成: {} -> {},msg={}",
                     plugin_id,
                     result.old_version.as_deref().unwrap_or("无"),
-                    result.new_version
+                    result.new_version,
+                    result.message
                 );
 
                 let mut payload = PluginLifecyclePayload::new(
@@ -224,10 +186,11 @@ impl PluginChangeHandler {
         }
     }
 
-    /// 处理插件移除
+    /// 处理插件移除。
     ///
     /// 从内存中移除插件信息，清理本地文件。
-    async fn handle_plugin_removed(&self, plugin_id: &str) {
+    async fn handle_plugin_removed(&self, notification: &PluginChangeNotification) {
+        let plugin_id = &notification.plugin_id;
         {
             let mut registry = self.registry.write().await;
             registry.unregister(plugin_id);
@@ -248,6 +211,53 @@ impl PluginChangeHandler {
         }
 
         let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, "");
+        GlobalEventBus::get()
+            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
+    }
+
+    /// 处理运行时加载。
+    ///
+    /// 将插件加载到 WASM 运行时并注册到内存中。
+    async fn handle_runtime_load(&self, notification: &PluginChangeNotification) {
+        let plugin_id = &notification.plugin_id;
+        let version = notification.version.as_deref().unwrap_or("unknown");
+
+        tracing::info!(
+            "Received RuntimeLoad notification for plugin: {}, version: {}",
+            plugin_id,
+            version
+        );
+
+        if let Err(e) = self.runtime_loader.load_plugin(plugin_id, version).await {
+            tracing::error!("RuntimeLoad failed for plugin {}: {}", plugin_id, e);
+            return;
+        }
+
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
+        GlobalEventBus::get()
+            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap())
+            .await;
+    }
+
+    /// 处理运行时卸载。
+    ///
+    /// 将插件从 WASM 运行时和内存中移除。
+    async fn handle_runtime_unload(&self, notification: &PluginChangeNotification) {
+        let plugin_id = &notification.plugin_id;
+        let version = notification.version.as_deref().unwrap_or("");
+
+        tracing::info!(
+            "Received RuntimeUnload notification for plugin: {}",
+            plugin_id
+        );
+
+        if let Err(e) = self.runtime_loader.unload_plugin(plugin_id).await {
+            tracing::error!("RuntimeUnload failed for plugin {}: {}", plugin_id, e);
+            return;
+        }
+
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
         GlobalEventBus::get()
             .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap())
             .await;
@@ -294,6 +304,8 @@ impl PluginChangeHandler {
                         publish_to_marketplace: false,
                         app_id: Some(self.app_id.clone()),
                         send_event: false,
+                        marketplace_source_id: None,
+                        marketplace_publish_info: None,
                     };
 
                     match self.deploy_service.deploy(request).await {

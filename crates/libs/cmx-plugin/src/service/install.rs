@@ -258,8 +258,8 @@ impl InstallService {
             )));
         }
 
-        // 步骤6: 创建安装目录 (plugin_id/version/)
-        let install_path = self.deps.plugin_root.join(&plugin_id).join(&install_version);
+        // 步骤6: 创建安装目录 (app_id/plugin_id/version/)
+        let install_path = self.deps.plugin_root.join(&app_id).join(&plugin_id).join(&install_version);
         if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
