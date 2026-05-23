@@ -4,12 +4,6 @@
 
 use std::sync::Arc;
 
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::audit::logger::AuditLogger;
-use crate::core::context::PluginContext;
-use crate::core::registry::PluginRegistry;
 use serde::{Deserialize, Serialize};
 
 /// 卸载请求
@@ -42,27 +36,6 @@ pub struct UninstallResponse {
     pub success: bool,
     /// 消息
     pub message: String,
-}
-
-/// 卸载服务依赖
-#[derive(Clone)]
-pub struct UninstallServiceDeps {
-    /// 数据仓库
-    pub repository: Arc<PluginRepository>,
-    /// 版本历史仓库
-    pub version_history_repository: Arc<VersionHistoryRepository>,
-    /// 缓存管理器
-    pub cache: Arc<LayeredCacheManager>,
-    /// 审计日志
-    pub audit_logger: Arc<AuditLogger>,
-    /// 插件注册表
-    pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
-    /// 插件上下文映射
-    pub contexts: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PluginContext>>>,
-    /// 服务存储
-    pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
-    /// 跨实例插件变更通知器
-    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
 }
 
 /// 卸载服务

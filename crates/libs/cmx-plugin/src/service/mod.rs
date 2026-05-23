@@ -1,10 +1,8 @@
 pub mod install;
 pub mod marketplace_publisher;
 pub mod uninstall;
-pub mod activate;
 pub mod upgrade;
 pub mod downgrade;
-pub mod rollback;
 pub mod plugin_sync;
 pub mod deploy;
 pub mod utils;
@@ -14,7 +12,6 @@ pub mod data_parser;
 pub mod service_parser;
 pub mod auto_install;
 pub mod control;
-pub mod runtime_loader;
 pub mod reconciliation;
 pub mod event_publisher;
 pub mod persistence;

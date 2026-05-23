@@ -8,7 +8,6 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::PluginDefinition;
-use crate::infrastructure::database::deployment::DeploymentCreateParams;
 use crate::infrastructure::database::plugin::PluginCreateParams;
 use crate::infrastructure::database::version_history::VersionCreateParams;
 
@@ -158,43 +157,6 @@ pub fn build_version_create_params(
         create_time: Utc::now(),
         update_time: Utc::now(),
         archived: 0,
-        create_by: None,
-        create_name: None,
-        update_by: None,
-        update_name: None,
-    }
-}
-
-/// 构建部署创建参数
-///
-/// # 参数
-/// - `plugin_id`: 插件ID
-/// - `app_id`: 应用隔离标识
-/// - `node_id`: 节点ID
-/// - `node_type`: 节点类型
-/// - `version`: 版本号
-///
-/// # 返回
-/// 部署创建参数
-pub fn build_deployment_create_params(
-    plugin_id: &str,
-    app_id: &str,
-    node_id: &str,
-    node_type: Option<&str>,
-    version: &str,
-) -> DeploymentCreateParams {
-    DeploymentCreateParams {
-        id: Uuid::new_v4().to_string(),
-        plugin_id: plugin_id.to_string(),
-        app_id: app_id.to_string(),
-        node_id: node_id.to_string(),
-        node_type: node_type.map(|s| s.to_string()),
-        version: version.to_string(),
-        status: "deployed".to_string(),
-        progress: 100,
-        archived: 0,
-        plugin_type: None,
-        source_path: None,
         create_by: None,
         create_name: None,
         update_by: None,

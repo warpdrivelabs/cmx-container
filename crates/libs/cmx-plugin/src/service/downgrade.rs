@@ -4,17 +4,10 @@
 //!
 //! 降级只是切换版本目录，不涉及文件拷贝。
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use cmx_traits::{ServiceQuery, ServiceStorage};
 use crate::domain::plugin::PluginSource;
-use crate::infrastructure::cache::layered::LayeredCacheManager;
-use crate::infrastructure::database::repository::PluginRepository;
-use crate::infrastructure::database::version_history::VersionHistoryRepository;
-use crate::audit::logger::AuditLogger;
-use crate::core::registry::PluginRegistry;
 
 /// 降级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,32 +45,6 @@ pub struct DowngradeResponse {
     pub success: bool,
     /// 消息
     pub message: String,
-}
-
-/// 降级服务依赖
-#[derive(Clone)]
-pub struct DowngradeServiceDeps {
-    /// 数据仓库
-    pub repository: Arc<PluginRepository>,
-    /// 版本历史仓库
-    pub version_history_repository: Arc<VersionHistoryRepository>,
-    /// 缓存管理器
-    pub cache: Arc<LayeredCacheManager>,
-    /// 审计日志
-    pub audit_logger: Arc<AuditLogger>,
-    /// 插件注册表
-    pub registry: Arc<tokio::sync::RwLock<PluginRegistry>>,
-    /// 安装根目录
-    pub plugin_root: PathBuf,
-    /// 默认数据库ID
-    pub default_database_id: String,
-    /// 服务查询（用于查询插件的服务定义）
-    pub service_query: Arc<dyn ServiceQuery>,
-    /// 服务存储（用于更新服务定义版本）
-    pub service_storage: Arc<dyn ServiceStorage>,
-    /// 跨实例插件变更通知器
-    pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
-
 }
 
 /// 降级服务
