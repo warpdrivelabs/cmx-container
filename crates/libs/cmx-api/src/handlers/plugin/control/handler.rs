@@ -1,3 +1,4 @@
+/*
 //! 插件管控 HTTP Handler
 //!
 //! 提供集中式管控接口，仅执行 DDL/DML + 文件推送，
@@ -304,3 +305,4 @@ pub async fn control_uninstall(
 
     Ok(Json(ApiResp::ok(format!("插件 {} 已提交卸载", req.plugin_id))))
 }
+*/

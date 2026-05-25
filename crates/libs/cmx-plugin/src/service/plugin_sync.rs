@@ -110,12 +110,12 @@ impl PluginChangeHandler {
             PluginChangeAction::Removed => {
                 self.handle_plugin_removed(notification).await;
             }
-            PluginChangeAction::RuntimeLoad => {
-                self.handle_runtime_load(notification).await;
-            }
-            PluginChangeAction::RuntimeUnload => {
-                self.handle_runtime_unload(notification).await;
-            }
+            // PluginChangeAction::RuntimeLoad => {
+            //     self.handle_runtime_load(notification).await;
+            // }
+            // PluginChangeAction::RuntimeUnload => {
+            //     self.handle_runtime_unload(notification).await;
+            // }
         }
     }
 
@@ -239,118 +239,118 @@ impl PluginChangeHandler {
         self.event_publisher.publish_local_event(plugin_events::UNINSTALLED, payload).await;
     }
 
-    /// 处理运行时加载。
-    ///
-    /// 从数据库查询插件信息，下载文件（如需）并注册到内存。
-    async fn handle_runtime_load(&self, notification: &PluginChangeNotification) {
-        let plugin_id = &notification.plugin_id;
-        let version = &notification.version;
+    // /// 处理运行时加载。
+    // ///
+    // /// 从数据库查询插件信息，下载文件（如需）并注册到内存。
+    // async fn handle_runtime_load(&self, notification: &PluginChangeNotification) {
+    //     let plugin_id = &notification.plugin_id;
+    //     let version = &notification.version;
+    //
+    //     tracing::info!(
+    //         "收到 RuntimeLoad 通知: plugin={}, version={}",
+    //         plugin_id,
+    //         version
+    //     );
+    //
+    //     // 1. 从数据库查询并注册到内存（幂等操作）
+    //     if let Err(e) = self.runtime.sync_and_register(plugin_id, version).await {
+    //         tracing::error!("RuntimeLoad 失败: plugin={}, error={}", plugin_id, e);
+    //         return;
+    //     }
+    //
+    //     // 2. 发布进程内事件
+    //     let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
+    //     self.event_publisher.publish_local_event(plugin_events::LOADED, payload).await;
+    // }
+    //
+    // /// 处理运行时卸载。
+    // ///
+    // /// 从内存中注销插件。不操作数据库。
+    // async fn handle_runtime_unload(&self, notification: &PluginChangeNotification) {
+    //     let plugin_id = &notification.plugin_id;
+    //     let version = &notification.version;
+    //
+    //     tracing::info!(
+    //         "收到 RuntimeUnload 通知: plugin={}",
+    //         plugin_id
+    //     );
+    //
+    //     // 1. 从内存注销（幂等操作）
+    //     if let Err(e) = self.runtime.unregister_plugin(plugin_id).await {
+    //         tracing::error!("RuntimeUnload 失败: plugin={}, error={}", plugin_id, e);
+    //         return;
+    //     }
+    //
+    //     // 2. 发布进程内事件
+    //     let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
+    //     self.event_publisher.publish_local_event(plugin_events::UNLOADED, payload).await;
+    // }
 
-        tracing::info!(
-            "收到 RuntimeLoad 通知: plugin={}, version={}",
-            plugin_id,
-            version
-        );
-
-        // 1. 从数据库查询并注册到内存（幂等操作）
-        if let Err(e) = self.runtime.sync_and_register(plugin_id, version).await {
-            tracing::error!("RuntimeLoad 失败: plugin={}, error={}", plugin_id, e);
-            return;
-        }
-
-        // 2. 发布进程内事件
-        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
-        self.event_publisher.publish_local_event(plugin_events::LOADED, payload).await;
-    }
-
-    /// 处理运行时卸载。
-    ///
-    /// 从内存中注销插件。不操作数据库。
-    async fn handle_runtime_unload(&self, notification: &PluginChangeNotification) {
-        let plugin_id = &notification.plugin_id;
-        let version = &notification.version;
-
-        tracing::info!(
-            "收到 RuntimeUnload 通知: plugin={}",
-            plugin_id
-        );
-
-        // 1. 从内存注销（幂等操作）
-        if let Err(e) = self.runtime.unregister_plugin(plugin_id).await {
-            tracing::error!("RuntimeUnload 失败: plugin={}, error={}", plugin_id, e);
-            return;
-        }
-
-        // 2. 发布进程内事件
-        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, version);
-        self.event_publisher.publish_local_event(plugin_events::UNLOADED, payload).await;
-    }
-
-    /// 全量同步（启动时或收到全量同步请求时调用）
-    ///
-    /// 对比数据库中所有插件与本地文件系统状态，执行差异同步。
-    /// 仅做运行时同步（下载文件 + 内存注册/卸载），不操作数据库。
-    pub async fn full_sync(&self) -> PluginResult<SyncResult> {
-        let mut result = SyncResult::default();
-
-        // 1. 查询数据库中所有期望的插件（按当前 app_id 过滤，避免处理其他应用的插件）
-        let filter = crate::domain::plugin::PluginFilter {
-            app_id: Some(self.app_id.clone()),
-            ..Default::default()
-        };
-        let expected_plugins = self.repository.list_plugins(&filter).await?;
-        let expected_map: HashMap<String, String> = expected_plugins
-            .iter()
-            .map(|p| (p.plugin_id.clone(), p.version.clone()))
-            .collect();
-
-        // 2. 扫描本地文件系统
-        let local_plugins = scan_local_plugins(&self.plugin_root, &self.app_id).await?;
-
-        // 3. 同步缺失或版本不一致的插件
-        for (plugin_id, version) in &expected_map {
-            let local_version = local_plugins.get(plugin_id);
-
-            match local_version {
-                Some(ver) if ver == version => {
-                    result.synced.push(plugin_id.clone());
-                }
-                Some(_) | None => {
-                    // 本地版本不一致或不存在，使用 RuntimeOps 同步
-                    match self.runtime.sync_and_register(plugin_id, version).await {
-                        Ok(_) => {
-                            result.synced.push(plugin_id.clone());
-                        }
-                        Err(e) => {
-                            tracing::error!("插件 {} 全量同步失败: {}", plugin_id, e);
-                            result.failed.push((plugin_id.clone(), e.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. 清理本地存在但数据库不存在的插件
-        for plugin_id in local_plugins.keys() {
-            if !expected_map.contains_key(plugin_id) {
-                if let Err(e) = self.runtime.unregister_and_cleanup(plugin_id).await {
-                    tracing::error!("清理插件 {} 运行时状态失败: {}", plugin_id, e);
-                }
-                result.cleaned.push(plugin_id.clone());
-            }
-        }
-
-        Ok(result)
-    }
+    // /// 全量同步（启动时或收到全量同步请求时调用）
+    // ///
+    // /// 对比数据库中所有插件与本地文件系统状态，执行差异同步。
+    // /// 仅做运行时同步（下载文件 + 内存注册/卸载），不操作数据库。
+    // pub async fn full_sync(&self) -> PluginResult<SyncResult> {
+    //     let mut result = SyncResult::default();
+    //
+    //     // 1. 查询数据库中所有期望的插件（按当前 app_id 过滤，避免处理其他应用的插件）
+    //     let filter = crate::domain::plugin::PluginFilter {
+    //         app_id: Some(self.app_id.clone()),
+    //         ..Default::default()
+    //     };
+    //     let expected_plugins = self.repository.list_plugins(&filter).await?;
+    //     let expected_map: HashMap<String, String> = expected_plugins
+    //         .iter()
+    //         .map(|p| (p.plugin_id.clone(), p.version.clone()))
+    //         .collect();
+    //
+    //     // 2. 扫描本地文件系统
+    //     let local_plugins = scan_local_plugins(&self.plugin_root, &self.app_id).await?;
+    //
+    //     // 3. 同步缺失或版本不一致的插件
+    //     for (plugin_id, version) in &expected_map {
+    //         let local_version = local_plugins.get(plugin_id);
+    //
+    //         match local_version {
+    //             Some(ver) if ver == version => {
+    //                 result.synced.push(plugin_id.clone());
+    //             }
+    //             Some(_) | None => {
+    //                 // 本地版本不一致或不存在，使用 RuntimeOps 同步
+    //                 match self.runtime.sync_and_register(plugin_id, version).await {
+    //                     Ok(_) => {
+    //                         result.synced.push(plugin_id.clone());
+    //                     }
+    //                     Err(e) => {
+    //                         tracing::error!("插件 {} 全量同步失败: {}", plugin_id, e);
+    //                         result.failed.push((plugin_id.clone(), e.to_string()));
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    //
+    //     // 4. 清理本地存在但数据库不存在的插件
+    //     for plugin_id in local_plugins.keys() {
+    //         if !expected_map.contains_key(plugin_id) {
+    //             if let Err(e) = self.runtime.unregister_and_cleanup(plugin_id).await {
+    //                 tracing::error!("清理插件 {} 运行时状态失败: {}", plugin_id, e);
+    //             }
+    //             result.cleaned.push(plugin_id.clone());
+    //         }
+    //     }
+    //
+    //     Ok(result)
+    // }
 }
 
-/// 同步结果
-#[derive(Debug, Clone, Default)]
-pub struct SyncResult {
-    /// 已同步的插件列表
-    pub synced: Vec<String>,
-    /// 清理的插件列表
-    pub cleaned: Vec<String>,
-    /// 失败的插件及错误信息
-    pub failed: Vec<(String, String)>,
-}
+// /// 同步结果
+// #[derive(Debug, Clone, Default)]
+// pub struct SyncResult {
+//     /// 已同步的插件列表
+//     pub synced: Vec<String>,
+//     /// 清理的插件列表
+//     pub cleaned: Vec<String>,
+//     /// 失败的插件及错误信息
+//     pub failed: Vec<(String, String)>,
+// }

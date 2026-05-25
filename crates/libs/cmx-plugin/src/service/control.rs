@@ -1,3 +1,4 @@
+/*
 //! 插件管控服务。
 //!
 //! 提供集中式插件元数据初始化能力，仅执行 DDL/DML 操作，
@@ -348,3 +349,4 @@ impl ControlService {
         self.deps.executor.execute_control_uninstall(req).await
     }
 }
+*/

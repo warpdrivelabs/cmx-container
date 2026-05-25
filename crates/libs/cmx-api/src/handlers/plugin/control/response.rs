@@ -1,3 +1,4 @@
+/*
 //! 插件管控 API 响应结构体
 //!
 //! 定义管控操作的响应格式
@@ -17,3 +18,4 @@ pub struct ControlActionResponse {
     /// 应用ID
     pub app_id: String,
 }
+*/

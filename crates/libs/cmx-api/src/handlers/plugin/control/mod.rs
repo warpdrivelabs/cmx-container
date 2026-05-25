@@ -1,3 +1,4 @@
+/*
 //! 插件管控 API 模块
 //!
 //! 提供集中式管控接口，仅执行 DDL/DML + 文件推送，
@@ -45,3 +46,4 @@ impl ModuleRoutes for PluginControlModule {
         "plugin-control"
     }
 }
+*/

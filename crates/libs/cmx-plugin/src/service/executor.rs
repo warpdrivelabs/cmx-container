@@ -328,7 +328,8 @@ impl PluginOperationExecutor {
     }
 
     // ===== 管控操作 =====
-
+    // [已禁用] 管控模式已被禁用，相关代码保留在此注释块中
+    /*
     /// 管控安装（持久化 + 本地运行时 + 审计 + 进程内事件 + RuntimeLoad 通知）。
     ///
     /// 管控模式与本地操作的区别：
@@ -613,4 +614,5 @@ impl PluginOperationExecutor {
 
         Ok(())
     }
+    */
 }

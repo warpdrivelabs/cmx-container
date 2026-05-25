@@ -56,7 +56,7 @@ pub fn api_routes() -> Router<CmxAppState> {
     let router = router.merge(plugin::PluginModule.routes());
 
     // 注册插件管控路由（使用 ModuleRoutes）
-    let router = router.merge(plugin::control::PluginControlModule.routes());
+    // let router = router.merge(plugin::control::PluginControlModule.routes());
 
     // 注册表元数据查询路由（使用 ModuleRoutes）
     let router = router.merge(table_metadata::TableMetadataModule.routes());

@@ -66,10 +66,10 @@ pub use service::uninstall::UninstallService;
 pub use service::upgrade::UpgradeService;
 pub use service::downgrade::DowngradeService;
 pub use service::deploy::{DeployAction, DeployRequest, DeployResponse};
-pub use service::control::{
-    ControlService, ControlDeployRequest, ControlDeployResponse, ControlInstallRequest,
-    ControlUpgradeRequest, ControlDowngradeRequest, ControlUninstallRequest,
-};
+// pub use service::control::{
+//     ControlService, ControlDeployRequest, ControlDeployResponse, ControlInstallRequest,
+//     ControlUpgradeRequest, ControlDowngradeRequest, ControlUninstallRequest,
+// };
 pub use service::auto_install::{AutoInstallService, AutoInstallConfig, AutoInstallPlugin, AutoInstallResult, InstallAction};
 
 // 导出基础设施模块类型

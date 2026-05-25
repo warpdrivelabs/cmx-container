@@ -11,7 +11,7 @@ pub mod initializer;
 pub mod data_parser;
 pub mod service_parser;
 pub mod auto_install;
-pub mod control;
+// pub mod control;
 pub mod reconciliation;
 pub mod event_publisher;
 pub mod persistence;

@@ -41,11 +41,11 @@ pub enum PluginChangeAction {
     /// 插件卸载
     Removed,
 
-    // === 运行时变更（仅内存状态变更，其他实例只需加载/卸载运行时） ===
-    /// 插件运行时加载
-    RuntimeLoad,
-    /// 插件运行时卸载
-    RuntimeUnload,
+    // // === 运行时变更（仅内存状态变更，其他实例只需加载/卸载运行时） ===
+    // /// 插件运行时加载
+    // RuntimeLoad,
+    // /// 插件运行时卸载
+    // RuntimeUnload,
 }
 
 /// 插件变更通知
@@ -149,15 +149,15 @@ impl PluginNotifier {
         self.publish(self.build_notification(plugin_id, PluginChangeAction::Removed, version, app_id)).await;
     }
 
-    // === 运行时变更通知 ===
-
-    /// 发布插件运行时加载通知
-    pub async fn notify_runtime_load(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::RuntimeLoad, version, app_id)).await;
-    }
-
-    /// 发布插件运行时卸载通知
-    pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::RuntimeUnload, version, app_id)).await;
-    }
+    // // === 运行时变更通知 ===
+    //
+    // /// 发布插件运行时加载通知
+    // pub async fn notify_runtime_load(&self, plugin_id: &str, version: &str, app_id: &str) {
+    //     self.publish(self.build_notification(plugin_id, PluginChangeAction::RuntimeLoad, version, app_id)).await;
+    // }
+    //
+    // /// 发布插件运行时卸载通知
+    // pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
+    //     self.publish(self.build_notification(plugin_id, PluginChangeAction::RuntimeUnload, version, app_id)).await;
+    // }
 }

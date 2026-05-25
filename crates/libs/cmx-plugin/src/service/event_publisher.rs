@@ -138,19 +138,19 @@ impl EventPublisher {
             .await;
     }
 
-    /// 仅发布 Redis 运行时加载通知（管控模式使用）。
-    pub async fn notify_runtime_load(&self, plugin_id: &str, version: &str, app_id: &str) {
-        // 管控模式使用：仅通知其他节点加载插件到运行时，不发布完整生命周期事件
-        if let Some(notifier) = &self.notifier {
-            notifier.notify_runtime_load(plugin_id, version, app_id).await;
-        }
-    }
-
-    /// 仅发布 Redis 运行时卸载通知（管控模式使用）。
-    pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
-        // 管控模式使用：仅通知其他节点从运行时卸载插件，不发布完整生命周期事件
-        if let Some(notifier) = &self.notifier {
-            notifier.notify_runtime_unload(plugin_id, version, app_id).await;
-        }
-    }
+    // /// 仅发布 Redis 运行时加载通知（管控模式使用）。
+    // pub async fn notify_runtime_load(&self, plugin_id: &str, version: &str, app_id: &str) {
+    //     // 管控模式使用：仅通知其他节点加载插件到运行时，不发布完整生命周期事件
+    //     if let Some(notifier) = &self.notifier {
+    //         notifier.notify_runtime_load(plugin_id, version, app_id).await;
+    //     }
+    // }
+    // 
+    // /// 仅发布 Redis 运行时卸载通知（管控模式使用）。
+    // pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
+    //     // 管控模式使用：仅通知其他节点从运行时卸载插件，不发布完整生命周期事件
+    //     if let Some(notifier) = &self.notifier {
+    //         notifier.notify_runtime_unload(plugin_id, version, app_id).await;
+    //     }
+    // }
 }

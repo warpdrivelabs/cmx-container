@@ -1,3 +1,4 @@
+/*
 //! 插件管控 API 请求结构体
 //!
 //! 定义管控部署、安装、升级、降级、卸载操作的请求参数
@@ -63,3 +64,4 @@ pub struct ControlUninstallRequest {
     /// 应用ID
     pub app_id: Option<String>,
 }
+*/

@@ -165,8 +165,8 @@ pub struct PluginManager {
     /// 部署服务（智能安装/升级）
     deploy_service: crate::service::deploy::DeployService,
 
-    /// 管控服务（集中式插件管理，不触发本地运行时加载）
-    control_service: crate::service::control::ControlService,
+    // /// 管控服务（集中式插件管理，不触发本地运行时加载）
+    // control_service: crate::service::control::ControlService,
 
     // 初始化组件
     /// 插件初始化器（用于启动时同步）
@@ -322,21 +322,21 @@ impl PluginManager {
                 app_id: settings.app_id.clone(),
             });
 
-        let control_service = {
-            let deps = crate::service::control::ControlServiceDeps {
-                executor: executor.clone(),
-                repository: repository.clone(),
-                app_id: settings.app_id.clone(),
-            };
-            let package_utils = crate::common::PackageUtils::new(
-                crate::common::PackageUtilsDeps {
-                    plugin_root: settings.plugin_root.clone(),
-                    temp_root: settings.temp_root.clone(),
-                    storage: Some(storage.clone()),
-                },
-            );
-            crate::service::control::ControlService::with_package_utils(deps, package_utils)
-        };
+        // let control_service = {
+        //     let deps = crate::service::control::ControlServiceDeps {
+        //         executor: executor.clone(),
+        //         repository: repository.clone(),
+        //         app_id: settings.app_id.clone(),
+        //     };
+        //     let package_utils = crate::common::PackageUtils::new(
+        //         crate::common::PackageUtilsDeps {
+        //             plugin_root: settings.plugin_root.clone(),
+        //             temp_root: settings.temp_root.clone(),
+        //             storage: Some(storage.clone()),
+        //         },
+        //     );
+        //     crate::service::control::ControlService::with_package_utils(deps, package_utils)
+        // };
 
         // 创建插件初始化器
         let plugin_initializer = crate::service::initializer::PluginInitializer::new(
@@ -372,7 +372,7 @@ impl PluginManager {
             uninstall_service,
             downgrade_service,
             deploy_service,
-            control_service,
+            // control_service,
             plugin_initializer,
             runtime_ops,
             event_publisher,
@@ -634,9 +634,9 @@ impl PluginManager {
     }
 
     /// 获取管控服务
-    pub fn control_service(&self) -> &crate::service::control::ControlService {
-        &self.control_service
-    }
+    // pub fn control_service(&self) -> &crate::service::control::ControlService {
+    //     &self.control_service
+    // }
 
     /// 关闭插件管理器
     pub async fn shutdown(&self) -> PluginResult<()> {
