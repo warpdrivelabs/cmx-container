@@ -261,13 +261,13 @@ impl PluginPersistence {
             .repository
             .get_baseline_version(&plugin_id)
             .await?;
-        if let Some(ref db_version) = baseline_version {
-            if install_version < *db_version {
-                return Err(PluginError::Install(format!(
-                    "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
-                    plugin_id, db_version, install_version
-                )));
-            }
+        if let Some(ref db_version) = baseline_version
+            && install_version < *db_version
+        {
+            return Err(PluginError::Install(format!(
+                "插件 {} 已安装版本 {}，要降级到 {} 请使用降级功能",
+                plugin_id, db_version, install_version
+            )));
         }
 
         // 14. Upsert 插件记录

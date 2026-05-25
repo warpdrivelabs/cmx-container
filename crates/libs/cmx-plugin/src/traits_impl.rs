@@ -75,7 +75,7 @@ impl PluginQuery for PluginManager {
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
         // 先从数据库查询完整记录（包含 wasm_path）
         let record = self.repository()
-            .find_plugin(plugin_id, &self.app_id())
+            .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
@@ -118,7 +118,7 @@ impl PluginQuery for PluginManager {
     async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError> {
         // 从数据库获取完整记录
         let record = self.repository()
-            .find_plugin(plugin_id, &self.app_id())
+            .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 

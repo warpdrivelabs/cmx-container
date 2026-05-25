@@ -565,7 +565,7 @@ impl LockGuard {
     /// # Returns
     ///
     /// 成功返回 `Ok(())`，失败时返回错误（已释放或 Redis 异常）。
-    pub async fn unlock(mut self) -> Result<()> {
+    pub async fn unlock(self) -> Result<()> {
         if !self.released.swap(true, Ordering::SeqCst) {
             let manager = LockManager::new(self.client.clone(), self.config.clone());
             manager

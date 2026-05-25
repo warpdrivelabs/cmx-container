@@ -10,14 +10,11 @@
 //! - 所有操作天然幂等（已注册则跳过、已卸载则忽略）
 //! - 不需要分布式锁或请求去重
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use cmx_traits::{PluginLifecyclePayload, plugin_events};
 use crate::cluster::notification::{PluginChangeAction, PluginChangeNotification};
-use crate::common::scanner::scan_local_plugins;
-use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::service::event_publisher::EventPublisher;
 use crate::service::runtime_ops::RuntimeOps;
@@ -46,6 +43,7 @@ pub struct PluginChangeHandler {
     /// 统一事件发布器（仅发布进程内事件）
     event_publisher: EventPublisher,
     /// 插件根目录
+    #[allow(dead_code)]
     plugin_root: PathBuf,
     /// 当前应用ID，用于过滤非本应用的通知
     app_id: String,

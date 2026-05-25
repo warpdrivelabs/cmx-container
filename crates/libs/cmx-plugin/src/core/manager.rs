@@ -617,11 +617,6 @@ impl PluginManager {
         &self.executor
     }
 
-    /// 获取管控服务
-    // pub fn control_service(&self) -> &crate::service::control::ControlService {
-    //     &self.control_service
-    // }
-
     /// 关闭插件管理器
     pub async fn shutdown(&self) -> PluginResult<()> {
         tracing::info!("插件管理器关闭");
