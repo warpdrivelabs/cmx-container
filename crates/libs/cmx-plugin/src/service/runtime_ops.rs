@@ -165,19 +165,15 @@ impl RuntimeOps {
         // 1. 幂等检查：已注册且版本一致则跳过
         {
             let registry = self.deps.registry.read().await;
-            if let Some(existing) = registry.get(plugin_id) {
-                if existing.version == version {
-                    tracing::info!(
-                        plugin_id = plugin_id,
-                        version = version,
-                        "插件已注册且版本一致，跳过同步注册"
-                    );
-                    return Ok(());
-                }
+            if let Some(existing) = registry.get(plugin_id) && existing.version == version {
+                tracing::info!(
+                    plugin_id = plugin_id,
+                    version = version,
+                    "插件已注册且版本一致，跳过同步注册"
+                );
+                return Ok(());
             }
         }
-
-        // 2. 查询数据库获取来源信息
         let record = self
             .deps
             .repository

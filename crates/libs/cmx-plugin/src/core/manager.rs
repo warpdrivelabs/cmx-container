@@ -238,12 +238,9 @@ impl PluginManager {
         let registry = Arc::new(RwLock::new(PluginRegistry::new()));
         let contexts = Arc::new(RwLock::new(HashMap::new()));
 
-        let node_manager =
-            if let Some(ref cluster_settings) = settings.cluster {
-                Some(Arc::new(NodeManager::new(cluster_settings.node_id.clone())))
-            } else {
-                None
-            };
+        let node_manager = settings.cluster.as_ref().map(|cluster_settings| {
+            Arc::new(NodeManager::new(cluster_settings.node_id.clone()))
+        });
 
         let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
             repository: repository.clone(),

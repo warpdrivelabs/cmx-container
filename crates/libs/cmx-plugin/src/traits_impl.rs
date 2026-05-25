@@ -139,28 +139,28 @@ impl PluginQuery for PluginManager {
         }
     }
 
-    /// 列出所有已激活的插件快照
-    async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError> {
-        // 使用 filter 筛选已激活的插件
-        let domain_filter = DomainPluginFilter {
-            status: Some(PluginStatus::Activated),
-            ..Default::default()
-        };
-        let infos = self.list_plugins(&domain_filter).await
-            .map_err(|e| TraitError::Internal(format!("查询插件列表失败: {}", e)))?;
-
-        // 转换结果，补充 wasm_path
-        let mut snapshots = Vec::new();
-        for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, &self.app_id()).await {
-                snapshots.push(PluginSnapshot::from(record));
-            } else {
-                snapshots.push(PluginSnapshot::from(info));
-            }
-        }
-
-        Ok(snapshots)
-    }
+    // /// 列出所有已激活的插件快照
+    // async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError> {
+    //     // 使用 filter 筛选已激活的插件
+    //     let domain_filter = DomainPluginFilter {
+    //         status: Some(PluginStatus::Activated),
+    //         ..Default::default()
+    //     };
+    //     let infos = self.list_plugins(&domain_filter).await
+    //         .map_err(|e| TraitError::Internal(format!("查询插件列表失败: {}", e)))?;
+    //
+    //     // 转换结果，补充 wasm_path
+    //     let mut snapshots = Vec::new();
+    //     for info in infos {
+    //         if let Ok(Some(record)) = self.repository().find_plugin(&info.id, self.app_id()).await {
+    //             snapshots.push(PluginSnapshot::from(record));
+    //         } else {
+    //             snapshots.push(PluginSnapshot::from(info));
+    //         }
+    //     }
+    //
+    //     Ok(snapshots)
+    // }
 
     /// 根据筛选条件查询插件列表
     async fn list_plugins(&self, filter: &TraitsPluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
@@ -171,7 +171,7 @@ impl PluginQuery for PluginManager {
         // 转换结果，补充 wasm_path
         let mut snapshots = Vec::new();
         for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, &self.app_id()).await {
+            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, self.app_id()).await {
                 snapshots.push(PluginSnapshot::from(record));
             } else {
                 snapshots.push(PluginSnapshot::from(info));

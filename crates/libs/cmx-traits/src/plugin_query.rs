@@ -127,8 +127,8 @@ pub trait PluginQuery: Send + Sync {
     /// 插件不存在或未配置 WASM 路径时返回错误。
     async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError>;
 
-    /// 列出所有已激活的插件快照
-    async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError>;
+    // /// 列出所有已激活的插件快照
+    // async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError>;
 
     /// 根据筛选条件查询插件列表
     ///
