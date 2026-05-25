@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use cmx_traits::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot, TraitError};
 
 use crate::core::manager::PluginManager;
-use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo, PluginStatus};
+use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo};
 use crate::infrastructure::database::plugin::model::PluginRecord;
 
 /// 从 PluginInfo 转换为 PluginSnapshot
