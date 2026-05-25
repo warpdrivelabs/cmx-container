@@ -23,7 +23,6 @@ mod tests {
     fn test_lock_config_default() {
         let config = LockConfig::default();
         assert_eq!(config.expire_seconds, 30);
-        assert_eq!(config.retry_times, 3);
         assert_eq!(config.retry_interval_ms, 200);
     }
 
@@ -31,11 +30,9 @@ mod tests {
     fn test_lock_config_builder() {
         let config = LockConfig::new()
             .with_expire(60)
-            .with_retry_times(5)
             .with_retry_interval(500);
         
         assert_eq!(config.expire_seconds, 60);
-        assert_eq!(config.retry_times, 5);
         assert_eq!(config.retry_interval_ms, 500);
     }
 
