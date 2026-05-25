@@ -289,18 +289,15 @@ pub async fn execute_ddl_with_lock(
     let lock_key = format!("plugin:ddl:{}", plugin_id);
 
     if let Some(lm) = lock_manager {
-        match lm.try_lock_with_value(&lock_key).await {
-            Ok((true, Some(lock_value))) => {
+        match lm.try_lock(&lock_key).await {
+            Ok(Some(_guard)) => {
                 tracing::info!("获取DDL锁成功，本实例负责创建/升级表: {}", plugin_id);
                 create_plugin_tables(
                     target_db_id, plugin_id, app_id, version,
                     install_path, plugin_def, txn_id,
                 ).await?;
-                if let Err(e) = lm.unlock_with_value(&lock_key, &lock_value).await {
-                    tracing::debug!("释放DDL锁失败（将等待TTL过期）: {}", e);
-                }
             }
-            Ok(_) => {
+            Ok(None) => {
                 tracing::info!("其他实例正在创建/升级表，跳过DDL: {}", plugin_id);
             }
             Err(e) => {

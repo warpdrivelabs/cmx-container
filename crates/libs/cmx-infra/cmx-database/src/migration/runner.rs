@@ -335,10 +335,7 @@ impl MigrationRunner {
 
     /// 尝试获取迁移分布式锁
     ///
-    /// 使用 LockManager.try_lock() 非阻塞检查，
-    /// 尝试非阻塞获取迁移锁
-    ///
-    /// 使用 try_lock_with_value 一次性获取锁值，成功则创建 LockGuard。
+    /// 使用 LockManager.try_lock() 非阻塞获取迁移锁。
     ///
     /// # 返回值
     /// * `Ok(Some(LockGuard))` - 成功获取锁
@@ -355,20 +352,12 @@ impl MigrationRunner {
             }
         };
 
-        // 非阻塞获取锁（SET NX EX）
-        match lock_manager.try_lock_with_value(MIGRATION_LOCK_KEY).await {
-            Ok((true, lock_value)) => {
-                let guard = cmx_buffer::LockGuard::new(
-                    MIGRATION_LOCK_KEY.to_string(),
-                    lock_value.unwrap_or_default(),
-                    lock_manager.client().clone(),
-                    lock_manager.config().clone(),
-                );
-                guard.start_auto_renew_task().await;
+        match lock_manager.try_lock(MIGRATION_LOCK_KEY).await {
+            Ok(Some(guard)) => {
                 info!("成功获取数据库迁移分布式锁");
                 Ok(Some(guard))
             }
-            Ok((false, _)) => {
+            Ok(None) => {
                 info!("其他节点正在执行数据库迁移，获取锁失败，进入等待模式");
                 Ok(None)
             }
@@ -401,14 +390,12 @@ impl MigrationRunner {
         while start.elapsed() < timeout {
             sleep(poll_interval).await;
 
-            match lock_manager.try_lock_with_value(MIGRATION_LOCK_KEY).await {
-                Ok((true, _)) => {
-                    // 获取到锁，说明其他节点已释放（迁移完成）
-                    // 立即释放锁，不再执行迁移
+            match lock_manager.is_locked(MIGRATION_LOCK_KEY).await {
+                Ok(false) => {
                     info!("其他节点已完成数据库迁移，锁已释放");
                     return true;
                 }
-                Ok((false, _)) => {
+                Ok(true) => {
                     debug!(
                         "迁移锁仍被持有，继续等待（已等待 {}秒）",
                         start.elapsed().as_secs()
