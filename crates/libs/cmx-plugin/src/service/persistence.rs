@@ -879,7 +879,6 @@ impl PluginPersistence {
             force: true,
             operator: "system".to_string(),
             app_id: Some(app_id.clone()),
-            send_event: false,
         };
         self.uninstall_persist(uninstall_req).await?;
 
@@ -892,7 +891,6 @@ impl PluginPersistence {
             build_type: request.build_type.clone(),
             marketplace_source_id: request.marketplace_source_id.clone(),
             app_id: Some(app_id),
-            send_event: false,
         };
         let result = self.install_persist(install_req).await?;
 

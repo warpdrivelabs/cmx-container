@@ -225,7 +225,6 @@ impl AutoInstallService {
                     build_type: None,
                     marketplace_source_id: None,
                     app_id: Some(self.app_id.clone()),
-                    send_event: true,
                 };
                 self.upgrade_service.upgrade(request).await?;
                 Ok(InstallAction::Upgraded)
@@ -245,7 +244,6 @@ impl AutoInstallService {
                     build_type: None,
                     marketplace_source_id: None,
                     app_id: Some(self.app_id.clone()),
-                    send_event: true,
                 };
                 self.install_service.install(request).await?;
                 Ok(InstallAction::Installed)

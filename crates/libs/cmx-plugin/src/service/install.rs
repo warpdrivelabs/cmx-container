@@ -41,13 +41,6 @@ pub struct InstallRequest {
     /// 应用ID
     #[serde(default)]
     pub app_id: Option<String>,
-    /// 是否发送事件通知（管控接口调用时设为 false）
-    #[serde(default = "default_true")]
-    pub send_event: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 /// 安装响应
