@@ -330,7 +330,7 @@ pub async fn plugin_deploy(
     let marketplace_publish_info: Option<cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo>;
     let source: cmx_plugin::domain::plugin::PluginSource;
 
-    if publish_to_marketplace.unwrap_or(false) {
+    if publish_to_marketplace.unwrap_or(true) {
         let plugin_def = tokio::task::spawn_blocking({
             let abs_path = abs_path.clone();
             move || cmx_plugin::common::DefinitionUtils::parse_from_zip(&abs_path)

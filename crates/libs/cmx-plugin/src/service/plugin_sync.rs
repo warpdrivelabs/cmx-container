@@ -253,7 +253,7 @@ impl PluginChangeHandler {
         );
 
         // 1. 从数据库查询并注册到内存（幂等操作）
-        if let Err(e) = self.runtime.register_from_db(plugin_id, version).await {
+        if let Err(e) = self.runtime.sync_and_register(plugin_id, version).await {
             tracing::error!("RuntimeLoad 失败: plugin={}, error={}", plugin_id, e);
             return;
         }

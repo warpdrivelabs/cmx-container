@@ -139,7 +139,7 @@ impl ReconciliationTask {
                     version,
                     self.app_id
                 );
-                match self.runtime.register_from_db(plugin_id, version).await {
+                match self.runtime.sync_and_register(plugin_id, version).await {
                     Ok(()) => {
                         result.loaded.push(plugin_id.clone());
                     }

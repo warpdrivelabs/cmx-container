@@ -243,7 +243,7 @@ impl PluginInitializer {
         let records = self.repository.list_plugins(&filter).await?;
 
         for record in &records {
-            if let Err(e) = self.runtime.register_from_db(&record.plugin_id, &record.version).await {
+            if let Err(e) = self.runtime.sync_and_register(&record.plugin_id, &record.version).await {
                 error!(
                     plugin_id = %record.plugin_id,
                     version = %record.version,
