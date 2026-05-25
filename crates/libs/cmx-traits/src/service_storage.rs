@@ -6,6 +6,18 @@
 use crate::error::TraitError;
 use cmx_core::model::service::ServiceDefinition;
 
+/// 保存服务版本的参数
+#[derive(Debug, Clone)]
+pub struct SaveServiceVersionParams<'a> {
+    pub service_key: &'a str,
+    pub app_id: &'a str,
+    pub version: &'a str,
+    pub plugin_id: &'a str,
+    pub plugin_version: &'a str,
+    pub config: &'a str,
+    pub txn_id: Option<&'a str>,
+}
+
 /// 服务存储 trait
 ///
 /// 定义服务定义的存储接口，用于 cmx-plugin 存储插件安装时解析出的服务定义。
@@ -31,25 +43,14 @@ pub trait ServiceStorage: Send + Sync {
     /// 保存服务版本
     ///
     /// # 参数
-    /// * `service_key` - 服务唯一标识
-    /// * `version` - 版本号
-    /// * `plugin_id` - 插件ID
-    /// * `plugin_version` - 插件版本
-    /// * `config` - 编排配置 JSON
-    /// * `db_id` - 数据库ID
-    /// * `txn_id` - 事务ID（可选）
+    /// * `params` - 保存参数，包含 service_key, app_id, version, plugin_id, plugin_version, config, txn_id
     ///
     /// # 返回值
     /// * `Ok(())` - 保存成功
     /// * `Err(TraitError)` - 保存失败
     async fn save_service_version(
         &self,
-        service_key: &str,
-        version: &str,
-        plugin_id: &str,
-        plugin_version: &str,
-        config: &str,
-        txn_id: Option<&str>,
+        params: SaveServiceVersionParams<'_>,
     ) -> Result<(), TraitError>;
 
     /// 删除服务定义及其所有版本（物理删除）
@@ -81,10 +82,11 @@ pub trait ServiceStorage: Send + Sync {
     /// # 参数
     /// * `service_key` - 服务唯一标识
     /// * `version` - 版本号
+    /// * `app_id` - 应用隔离标识
     ///
     /// # 返回值
     /// * `Ok(Some(config))` - 找到配置
     /// * `Ok(None)` - 配置不存在
     /// * `Err(TraitError)` - 查询失败
-    async fn get_service_config(&self, service_key: &str, version: &str) -> Result<Option<String>, TraitError>;
+    async fn get_service_config(&self, service_key: &str, version: &str, app_id: &str) -> Result<Option<String>, TraitError>;
 }

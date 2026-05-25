@@ -53,7 +53,7 @@ impl ServiceQuery for ServiceQueryImpl {
             return Ok(Some(service));
         }
 
-        let service_def = self.repository.get_service(service_key).await
+        let service_def = self.repository.get_service(service_key, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         if let Some(def) = &service_def {
@@ -108,7 +108,7 @@ impl ServiceQuery for ServiceQueryImpl {
         let all_keys = self.registry.get_all_keys().await;
 
         if all_keys.is_empty() {
-            let all_services = self.repository.list_services().await
+            let all_services = self.repository.list_services(&self.app_id).await
                 .map_err(|e| TraitError::Internal(e.to_string()))?;
 
             let mut active = Vec::new();
@@ -161,16 +161,16 @@ impl ServiceQuery for ServiceQueryImpl {
             }
         }
 
-        let service = self.repository.get_service(service_key).await
+        let service = self.repository.get_service(service_key, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         match service {
             Some(svc) => {
-                let versions = self.repository.get_service_versions(&svc.service_key).await
+                let versions = self.repository.get_service_versions(&svc.service_key, &self.app_id).await
                     .map_err(|e| TraitError::Internal(e.to_string()))?;
 
                 if let Some((version, _)) = versions.first()
-                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version).await
+                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version, &self.app_id).await
                         .map_err(|e| TraitError::Internal(e.to_string()))? {
                         let orch: ServiceOrchestration = serde_json::from_str(&config)
                             .map_err(|e| TraitError::Internal(e.to_string()))?;
@@ -196,10 +196,13 @@ impl ServiceQuery for ServiceQueryImpl {
     /// 返回分页结果
     async fn page_services(
         &self,
-        filter: ServicePageFilter,
+        mut filter: ServicePageFilter,
         page: u64,
         size: u64,
     ) -> Result<ServicePageResult, TraitError> {
+        if filter.app_id.is_none() {
+            filter.app_id = Some(self.app_id.clone());
+        }
         let (items, total) = self.repository.page_services(&filter, page, size).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 

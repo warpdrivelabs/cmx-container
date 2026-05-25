@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::sync::Arc;
 use cmx_core::model::service::ServiceDefinition;
+use cmx_traits::SaveServiceVersionParams;
 use crate::error::{PluginError, PluginResult};
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
 
@@ -100,12 +101,15 @@ pub async fn parse_and_save_services(
 
         // 保存服务版本
         if let Err(e) = service_storage.save_service_version(
-            &svc.definition.service_key,
-            &params.plugin_version,
-            &params.plugin_id,
-            &params.plugin_version,
-            &config,
-            txn_id,
+            SaveServiceVersionParams {
+                service_key: &svc.definition.service_key,
+                app_id: &params.app_id,
+                version: &params.plugin_version,
+                plugin_id: &params.plugin_id,
+                plugin_version: &params.plugin_version,
+                config: &config,
+                txn_id,
+            },
         ).await {
             tracing::error!(
                 "保存服务版本 {}:{} 失败: {:?}",

@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::{ServiceStorage, TraitError};
+use cmx_traits::{ServiceStorage, SaveServiceVersionParams, TraitError};
 
 use crate::repository::ServiceRepository;
 
@@ -53,30 +53,20 @@ impl ServiceStorage for ServiceStorageImpl {
     /// 保存服务版本
     ///
     /// # 参数
-    /// * `service_key` - 服务唯一标识
-    /// * `version` - 服务版本号
-    /// * `plugin_id` - 所属插件ID
-    /// * `plugin_version` - 所属插件版本
-    /// * `config` - 编排配置 JSON 字符串
-    /// * `db_id` - 数据库ID
-    /// * `txn_id` - 事务ID（可选）
+    /// * `params` - 保存参数
     async fn save_service_version(
         &self,
-        service_key: &str,
-        version: &str,
-        plugin_id: &str,
-        plugin_version: &str,
-        config: &str,
-        txn_id: Option<&str>,
+        params: SaveServiceVersionParams<'_>,
     ) -> Result<(), TraitError> {
         self.repository
             .save_service_version_with_txn(
-                service_key,
-                version,
-                plugin_id,
-                plugin_version,
-                config,
-                txn_id,
+                params.service_key,
+                params.app_id,
+                params.version,
+                params.plugin_id,
+                params.plugin_version,
+                params.config,
+                params.txn_id,
             )
             .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
@@ -114,6 +104,7 @@ impl ServiceStorage for ServiceStorageImpl {
     /// # 参数
     /// * `service_key` - 服务唯一标识
     /// * `version` - 服务版本号
+    /// * `app_id` - 应用隔离标识
     ///
     /// # 返回值
     /// 返回编排配置 JSON 字符串，如果不存在则返回 None
@@ -121,9 +112,10 @@ impl ServiceStorage for ServiceStorageImpl {
         &self,
         service_key: &str,
         version: &str,
+        app_id: &str,
     ) -> Result<Option<String>, TraitError> {
         self.repository
-            .get_service_config(service_key, version)
+            .get_service_config(service_key, version, app_id)
             .await
             .map_err(|e| TraitError::Internal(e.to_string()))
     }

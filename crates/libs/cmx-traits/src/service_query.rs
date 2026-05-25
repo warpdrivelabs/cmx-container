@@ -12,6 +12,7 @@ use serde::Deserialize;
 /// 支持多条件组合查询服务列表
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ServicePageFilter {
+    pub app_id: Option<String>,
     /// 服务 key 或者服务名模糊查询
     pub keyword: Option<String>,
     /// 插件 ID 精确匹配
