@@ -44,11 +44,10 @@ COMMENT ON COLUMN cmx_plugin_versions.app_id IS '应用隔离标识，用于多�
 -- 删除旧的唯一约束并添加新的（包含 app_id）
 
 DROP INDEX IF EXISTS uk_cmx_plugin_versions_plugin_version;
-drop index idx_version_plugin;
-drop index idx_version_current;
+drop index IF EXISTS idx_version_plugin;
+drop index IF EXISTS idx_version_current;
 alter table cmx_plugin_versions
-drop
-constraint IF EXISTS uk_cmx_plugin_versions_plugin_version;
+drop constraint IF EXISTS uk_cmx_plugin_versions_plugin_version;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_versions_plugin_version ON cmx_plugin_versions(plugin_id, app_id, version);
 
