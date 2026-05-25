@@ -109,10 +109,9 @@ impl PluginQuery for PluginManager {
         Ok(info.is_some())
     }
 
-    /// 检查插件是否已激活
-    async fn is_active(&self, plugin_id: &str) -> Result<bool, TraitError> {
-        self.is_plugin_activated(plugin_id).await
-            .map_err(|e| TraitError::Internal(format!("检查激活状态失败: {}", e)))
+    /// 检查插件是否已激活（当前总是返回 false，插件激活功能未实现）
+    async fn is_active(&self, _plugin_id: &str) -> Result<bool, TraitError> {
+        Ok(false)
     }
 
     /// 获取插件的 WASM 文件绝对路径

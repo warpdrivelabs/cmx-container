@@ -45,7 +45,6 @@ async fn init() {
 | ZIP 加载 | 从 ZIP 包加载插件，支持 Local/Remote/Marketplace 三种来源 |
 | 签名验证 | Ed25519 签名安全验证 |
 | 生命周期管理 | 安装、卸载、升级、降级、覆盖安装（智能部署） |
-| 管控模式 | 仅执行 DDL/DML，不触发本地运行时加载，通过 RuntimeLoad/RuntimeUnload 通知其他节点 |
 | 集群同步 | 基于 Redis Pub/Sub 的跨实例通知 + 定时对账任务 |
 | 对账补偿 | DB vs Registry vs 本地文件三层状态对比，自动补偿差异 |
 | 审计日志 | 操作审计记录，支持按插件/操作/时间范围过滤 |
@@ -73,7 +72,6 @@ cmx-plugin
 │   ├── downgrade.rs        # 降级服务
 │   ├── uninstall.rs        # 卸载服务
 │   ├── deploy.rs           # 部署服务（智能安装/升级/覆盖安装）
-│   ├── control.rs          # 管控服务（DDL/DML only + RuntimeLoad 通知）
 │   ├── plugin_sync.rs      # Redis 通知处理器（跨实例运行时同步）
 │   ├── reconciliation.rs   # 定时对账任务
 │   ├── initializer.rs      # 启动时插件同步
@@ -134,10 +132,9 @@ cmx-plugin
 
 ### PluginOperationExecutor
 
-插件操作编排器，统一编排 **持久化 → 运行时 → 审计日志 → 事件发布** 的完整流程。提供两种操作模式：
+插件操作编排器，统一编排 **持久化 → 运行时 → 审计日志 → 事件发布** 的完整流程。
 
-- **本地操作**（`execute_install` 等）：当前节点接收 API 请求后执行，发布完整的 GlobalEventBus 事件 + Redis 跨实例通知
-- **管控操作**（`execute_control_install` 等）：仅执行 DDL/DML，不触发本地运行时加载，发布 RuntimeLoad/RuntimeUnload 通知
+当前节点接收 API 请求后执行完整流程，发布 GlobalEventBus 事件 + Redis 跨实例通知。
 
 ### RuntimeOps
 
@@ -161,10 +158,6 @@ cmx-plugin
 ### EventPublisher
 
 统一事件发布器，封装 GlobalEventBus（进程内事件）和 Redis PluginNotifier（跨实例通知）。
-
-### ControlService
-
-管控服务，提供集中式插件元数据初始化能力，仅执行 DDL/DML 操作，不触发本地运行时加载。完成后由 executor 发布 RuntimeLoad 通知。
 
 ## 使用指南
 
@@ -404,89 +397,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 四、管控服务（分布式 DDL 单独执行）
+### 四、分布式架构：插件同步与 DDL 执行
 
-管控服务是分布式架构的核心组件，解决"只有当前节点操作数据库和执行 DDL，其他节点仅做运行时同步"的需求。
-
-#### 4.1 管控部署
-
-```rust
-use cmx_plugin::{GlobalPluginManager, ControlDeployRequest, PluginSource};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = GlobalPluginManager::get();
-    let control = manager.control_service();
-
-    let request = ControlDeployRequest {
-        source: PluginSource::Local {
-            path: std::path::PathBuf::from("/tmp/my-plugin.zip"),
-        },
-        db_id: None,
-        build_type: Some("release".to_string()),
-        app_id: Some("my-app".to_string()),
-    };
-
-    let response = control.deploy(request).await?;
-    println!("管控部署完成: plugin_id={}, action={}", response.plugin_id, response.action);
-
-    Ok(())
-}
-```
-
-#### 4.2 管控升级
-
-```rust
-use cmx_plugin::{GlobalPluginManager, ControlUpgradeRequest, PluginSource};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = GlobalPluginManager::get();
-    let control = manager.control_service();
-
-    let request = ControlUpgradeRequest {
-        plugin_id: "my-plugin".to_string(),
-        target_version: "2.0.0".to_string(),
-        source: PluginSource::Remote {
-            url: "https://plugins.example.com/my-plugin-2.0.0.zip".to_string(),
-            checksum: None,
-        },
-        build_type: None,
-        app_id: Some("my-app".to_string()),
-    };
-
-    let response = control.upgrade(request).await?;
-    println!("管控升级完成: version={}, action={}", response.version, response.action);
-
-    Ok(())
-}
-```
-
-#### 4.3 管控卸载
-
-```rust
-use cmx_plugin::{GlobalPluginManager, ControlUninstallRequest};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let manager = GlobalPluginManager::get();
-    let control = manager.control_service();
-
-    let request = ControlUninstallRequest {
-        plugin_id: "my-plugin".to_string(),
-        app_id: Some("my-app".to_string()),
-    };
-
-    control.uninstall(request).await?;
-    println!("管控卸载完成");
-
-    Ok(())
-}
-```
-
-### 五、分布式架构：插件同步与 DDL 单独执行
-
-#### 5.1 架构概览
+#### 4.1 架构概览
 
 cmx-plugin 采用**单一写入原则**的分布式架构：
 
@@ -494,13 +407,13 @@ cmx-plugin 采用**单一写入原则**的分布式架构：
 ┌─────────────────────────────────────────────────────────────┐
 │                    Node A (API 接收节点)                      │
 │                                                              │
-│  API 请求 → ControlService → Executor                        │
+│  API 请求 → DeployService → Executor                         │
 │                              ├─ 1. Persistence (DDL + DML)   │
 │                              ├─ 2. RuntimeOps (内存注册)      │
 │                              ├─ 3. AuditLogger (审计日志)     │
 │                              └─ 4. EventPublisher            │
 │                                   ├─ GlobalEventBus (进程内)  │
-│                                   └─ Redis: RuntimeLoad      │
+│                                   └─ Redis: Installed 等     │
 └──────────────────────────┬──────────────────────────────────┘
                            │ Redis Pub/Sub
                            ▼
@@ -508,9 +421,8 @@ cmx-plugin 采用**单一写入原则**的分布式架构：
 │                    Node B (其他节点)                          │
 │                                                              │
 │  PluginChangeHandler                                         │
-│  ├─ 收到 RuntimeLoad 通知                                    │
-│  ├─ RuntimeOps.register_from_db() (从 DB 查询 + 内存注册)    │
-│  ├─ RuntimeOps.sync_plugin_files() (下载文件，如需)          │
+│  ├─ 收到 Installed/Upgraded/Removed 通知                     │
+│  ├─ RuntimeOps.sync_and_register() (同步文件 + 内存注册)     │
 │  └─ EventPublisher.publish_local_event() (进程内事件)        │
 │                                                              │
 │  ❌ 不操作数据库                                             │
@@ -518,18 +430,7 @@ cmx-plugin 采用**单一写入原则**的分布式架构：
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### 5.2 两种操作模式对比
-
-| 维度 | 本地操作（execute_install 等） | 管控操作（execute_control_install 等） |
-|------|------|------|
-| 持久化 | 完整 DDL + DML | 完整 DDL + DML |
-| 运行时 | 本地注册 | 本地注册 |
-| 审计日志 | 标记普通模式 | 标记 `"mode": "control"` |
-| 进程内事件 | GlobalEventBus 完整事件 | GlobalEventBus 完整事件 |
-| Redis 通知 | Installed/Upgraded/Removed 等 | **RuntimeLoad/RuntimeUnload** |
-| 其他节点行为 | 全量同步（文件 + DB + 内存） | **仅运行时同步**（下载文件 + 内存注册） |
-
-#### 5.3 通知分类
+#### 4.2 通知分类
 
 Redis 通知分为**持久化变更**和**运行时变更**两类：
 
@@ -541,27 +442,25 @@ Redis 通知分为**持久化变更**和**运行时变更**两类：
 - `Removed`：插件卸载
 
 **运行时变更**（仅内存状态变更，其他实例只需加载/卸载运行时）：
-- `RuntimeLoad`：插件运行时加载（管控模式使用）
-- `RuntimeUnload`：插件运行时卸载（管控模式使用）
+- `RuntimeLoad`：插件运行时加载
+- `RuntimeUnload`：插件运行时卸载
 
-#### 5.4 跨实例同步流程
+#### 4.3 跨实例同步流程
 
 ```rust
-// Node A：管控安装插件
+// Node A：安装插件
 // 1. Executor 执行持久化（DDL + DML）
 // 2. Executor 执行本地运行时注册
-// 3. EventPublisher 发布 RuntimeLoad 通知到 Redis
+// 3. EventPublisher 发布 Installed 通知到 Redis
 
-// Node B：收到 RuntimeLoad 通知
+// Node B：收到 Installed 通知
 // 1. PluginChangeHandler 跳过自身发出的通知（instance_id 过滤）
 // 2. 过滤非本应用的通知（app_id 过滤）
-// 3. RuntimeOps.register_from_db()：从数据库查询插件记录
-// 4. RuntimeOps.sync_plugin_files()：如本地文件不存在，从来源下载
-// 5. 注册到 Registry + Contexts
-// 6. EventPublisher.publish_local_event()：发布进程内 LOADED 事件
+// 3. RuntimeOps.sync_and_register()：从数据库查询插件记录，同步文件并注册到内存
+// 4. EventPublisher.publish_local_event()：发布进程内 INSTALLED 事件
 ```
 
-#### 5.5 对账任务
+#### 4.4 对账任务
 
 定时对账任务对比 **DB vs Registry vs 本地文件** 三层状态，自动补偿差异：
 
@@ -576,7 +475,7 @@ Redis 通知分为**持久化变更**和**运行时变更**两类：
 
 对账任务仅做运行时同步（下载文件 + 内存注册/卸载），**不操作数据库**。
 
-#### 5.6 启动时同步
+#### 4.5 启动时同步
 
 程序启动时，`PluginInitializer` 执行以下流程：
 
@@ -586,9 +485,9 @@ Redis 通知分为**持久化变更**和**运行时变更**两类：
 4. 通过 `RuntimeOps` 执行运行时同步（**单写原则**：启动仅做运行时同步，不操作数据库）
 5. 加载 contexts 到内存
 
-### 六、插件查询
+### 五、插件查询
 
-#### 6.1 查询插件信息
+#### 5.1 查询插件信息
 
 ```rust
 use cmx_plugin::GlobalPluginManager;
@@ -615,7 +514,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 七、错误处理
+### 六、错误处理
 
 ```rust
 use cmx_plugin::PluginError;
@@ -651,7 +550,7 @@ match result {
 }
 ```
 
-### 八、完整示例
+### 七、完整示例
 
 ```rust
 use cmx_plugin::{
@@ -703,10 +602,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ## 常见问题
-
-### Q: 管控模式和本地模式有什么区别？
-
-**A**: 管控模式（ControlService）仅执行 DDL/DML 操作，不触发本地运行时加载，完成后通过 Redis 发布 `RuntimeLoad` 通知，让其他节点仅做运行时同步（下载文件 + 内存注册），不操作数据库。本地模式（DeployService）执行完整流程，并通过 Redis 发布 `Installed/Upgraded` 等通知，其他节点会全量同步。
 
 ### Q: 覆盖安装（Reinstall）是原子操作吗？
 

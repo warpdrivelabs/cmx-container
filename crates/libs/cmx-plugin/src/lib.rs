@@ -89,7 +89,6 @@ pub use security::validator::{SecurityValidator, ValidationResult};
 pub use security::signature::SignatureValidator;
 
 // 导出运行时模块类型
-pub use runtime::activation::ActivationManager;
 pub use runtime::service_registry::{ServiceRegistry, ServiceDefinition, ServiceHandle};
 
 // 导出配置模块类型

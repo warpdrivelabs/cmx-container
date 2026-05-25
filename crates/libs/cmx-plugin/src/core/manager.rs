@@ -29,7 +29,6 @@ use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
-use crate::runtime::activation::ActivationManager;
 use crate::runtime::service_registry::ServiceRegistry;
 use crate::security::validator::SecurityValidator;
 use crate::service::event_publisher::EventPublisher;
@@ -137,8 +136,6 @@ pub struct PluginManager {
     security_validator: Arc<SecurityValidator>,
 
     // 运行时组件
-    /// 激活管理器
-    activation_manager: Arc<ActivationManager>,
     /// 服务注册表
     service_registry: Arc<ServiceRegistry>,
 
@@ -228,8 +225,6 @@ impl PluginManager {
         let backup_manager = Arc::new(BackupManager::new(settings.backup_root.clone()));
 
         let security_validator = Arc::new(SecurityValidator::new());
-
-        let activation_manager = Arc::new(ActivationManager::new());
 
         let service_registry = Arc::new(ServiceRegistry::new());
 
@@ -362,7 +357,6 @@ impl PluginManager {
             storage,
             backup_manager,
             security_validator,
-            activation_manager,
             service_registry,
             audit_logger,
             node_manager,
@@ -571,11 +565,6 @@ impl PluginManager {
         Ok(registry.contains(plugin_id))
     }
 
-    /// 检查插件是否已激活
-    pub async fn is_plugin_activated(&self, plugin_id: &str) -> PluginResult<bool> {
-        Ok(self.activation_manager.is_active(plugin_id).await)
-    }
-
     // ==================== 组件访问器 ====================
 
     /// 获取数据仓库
@@ -586,11 +575,6 @@ impl PluginManager {
     /// 获取缓存管理器
     pub fn cache(&self) -> &Arc<LayeredCacheManager> {
         &self.cache
-    }
-
-    /// 获取激活管理器
-    pub fn activation_manager(&self) -> &Arc<ActivationManager> {
-        &self.activation_manager
     }
 
     /// 获取服务注册表
@@ -640,7 +624,6 @@ impl PluginManager {
 
     /// 关闭插件管理器
     pub async fn shutdown(&self) -> PluginResult<()> {
-        let _active_plugins = self.activation_manager.get_active_plugins().await;
         tracing::info!("插件管理器关闭");
         Ok(())
     }
