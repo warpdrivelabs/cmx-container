@@ -7,15 +7,24 @@ use crate::error::TraitError;
 use cmx_core::model::service::ServiceDefinition;
 
 /// 保存服务版本的参数
+///
+/// 用于在插件安装/升级时保存服务版本信息到 cmx_service_define_version 表。
 #[derive(Debug, Clone)]
-pub struct SaveServiceVersionParams<'a> {
-    pub service_key: &'a str,
-    pub app_id: &'a str,
-    pub version: &'a str,
-    pub plugin_id: &'a str,
-    pub plugin_version: &'a str,
-    pub config: &'a str,
-    pub txn_id: Option<&'a str>,
+pub struct SaveServiceVersionParams {
+    /// 服务唯一标识
+    pub service_key: String,
+    /// 应用隔离标识，用于多租户/多应用场景隔离
+    pub app_id: String,
+    /// 服务版本号（通常等于插件版本号）
+    pub version: String,
+    /// 所属插件 ID
+    pub plugin_id: String,
+    /// 所属插件版本号
+    pub plugin_version: String,
+    /// 服务编排配置 JSON 字符串
+    pub config: String,
+    /// 事务 ID（可选，用于跨表事务一致性）
+    pub txn_id: Option<String>,
 }
 
 /// 服务存储 trait
@@ -50,7 +59,7 @@ pub trait ServiceStorage: Send + Sync {
     /// * `Err(TraitError)` - 保存失败
     async fn save_service_version(
         &self,
-        params: SaveServiceVersionParams<'_>,
+        params: SaveServiceVersionParams,
     ) -> Result<(), TraitError>;
 
     /// 删除服务定义及其所有版本（物理删除）

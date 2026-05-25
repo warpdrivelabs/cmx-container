@@ -102,13 +102,13 @@ pub async fn parse_and_save_services(
         // 保存服务版本
         if let Err(e) = service_storage.save_service_version(
             SaveServiceVersionParams {
-                service_key: &svc.definition.service_key,
-                app_id: &params.app_id,
-                version: &params.plugin_version,
-                plugin_id: &params.plugin_id,
-                plugin_version: &params.plugin_version,
-                config: &config,
-                txn_id,
+                service_key: svc.definition.service_key.clone(),
+                app_id: params.app_id.clone(),
+                version: params.plugin_version.clone(),
+                plugin_id: params.plugin_id.clone(),
+                plugin_version: params.plugin_version.clone(),
+                config,
+                txn_id: txn_id.map(|s| s.to_string()),
             },
         ).await {
             tracing::error!(

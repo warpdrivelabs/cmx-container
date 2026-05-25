@@ -56,17 +56,17 @@ impl ServiceStorage for ServiceStorageImpl {
     /// * `params` - 保存参数
     async fn save_service_version(
         &self,
-        params: SaveServiceVersionParams<'_>,
+        params: SaveServiceVersionParams,
     ) -> Result<(), TraitError> {
         self.repository
             .save_service_version_with_txn(
-                params.service_key,
-                params.app_id,
-                params.version,
-                params.plugin_id,
-                params.plugin_version,
-                params.config,
-                params.txn_id,
+                &params.service_key,
+                &params.app_id,
+                &params.version,
+                &params.plugin_id,
+                &params.plugin_version,
+                &params.config,
+                params.txn_id.as_deref(),
             )
             .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
