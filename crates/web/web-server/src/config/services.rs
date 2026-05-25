@@ -11,7 +11,6 @@ use cmx_traits::{ServiceQuery, ServiceStorage};
 use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::info;
-use cmx_utils::ConfigManager;
 pub use crate::Error;
 
 /// 初始化服务管理器。
@@ -35,9 +34,11 @@ pub async fn init_services() -> crate::Result<()> {
     let default_db_id = get_default_db_manager().get_default_db_id().await;
 
     // 从配置读取 app_id，默认值为 "default"
-    let app_id = ConfigManager::global()
-        .get_string("plugin.app_id")
-        .unwrap_or("default".to_string());
+    // let app_id = ConfigManager::global()
+    //     .get_string("plugin.app_id")
+    //     .unwrap_or("default".to_string());
+    let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+
     let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id));
     let registry = Arc::new(ServiceRegistry::new());
 

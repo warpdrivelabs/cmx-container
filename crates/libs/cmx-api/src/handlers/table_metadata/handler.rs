@@ -5,6 +5,7 @@
 use axum::http::HeaderMap;
 use axum::extract::{Query, State};
 use axum::Json;
+use modql::filter::OpValsString;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_core::model::data::request::params::GetParams;
 use cmx_database::get_default_db_manager;
@@ -70,7 +71,7 @@ pub async fn table_metadata_get_by_id(
     tag = "TableMetadata"
 )]
 pub async fn table_metadata_list(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<cmx_core::ListParams<TableMetadataFilter>>,
@@ -86,6 +87,15 @@ pub async fn table_metadata_list(
     if params.filters.is_none() || params.filters.unwrap().is_empty() {
         filters = None;
     }
+    let app_id = cmx_state.app_id().await;
+    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，直接跳过
+    if let Some(filters_vec) = &mut filters {
+        for filter in filters_vec.iter_mut() {
+            // get_or_insert 完美替代 if is_none() 的逻辑
+            filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
+        }
+    }
+
     let dataset =
         TableMetadataService::list(mm, &db_id, filters, Some(list_options))
             .await
@@ -107,7 +117,7 @@ pub async fn table_metadata_list(
     tag = "TableMetadata"
 )]
 pub async fn table_metadata_page(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Json(params): Json<cmx_core::PageParams<TableMetadataFilter>>,
@@ -126,6 +136,16 @@ pub async fn table_metadata_page(
     if let Some(filter) = params.filter.clone() {
         filters = Some(vec![filter]);
     }
+
+    let app_id = cmx_state.app_id().await;
+    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，直接跳过
+    if let Some(filters_vec) = &mut filters {
+        for filter in filters_vec.iter_mut() {
+            // get_or_insert 完美替代 if is_none() 的逻辑
+            filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
+        }
+    }
+
     let (dataset, total) =
         TableMetadataService::page(mm, &db_id, filters, list_options)
             .await
@@ -152,15 +172,16 @@ pub async fn table_metadata_page(
     tag = "TableMetadata"
 )]
 pub async fn table_metadata_get_by_name(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Query(params): Query<TableMetadataGetByNameQuery>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
+    let app_id = cmx_state.app_id().await;
 
-    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None)
+    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
         .await
         .map_err(|e| crate::Error::InternalError(format!("根据表名查询失败: {}", e)))?;
 
@@ -204,8 +225,9 @@ pub async fn table_metadata_exists(
 ) -> Result<Json<ApiResp<String>>> {
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
+    let app_id = _cmx_state.app_id().await;
 
-    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None)
+    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
         .await
         .map_err(|e| crate::Error::InternalError(format!("查询表存在性失败: {}", e)))?;
 

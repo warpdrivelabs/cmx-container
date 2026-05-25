@@ -36,9 +36,11 @@ pub async fn init_plugins() -> crate::Result<()> {
         .get_as::<cmx_plugin::AutoInstallConfig>("plugin.auto_install")
         .unwrap_or_default();
 
-    let app_id = ConfigManager::global()
-        .get_string("plugin.app_id")
-        .unwrap_or("default".to_string());
+    // let app_id = ConfigManager::global()
+    //     .get_string("plugin.app_id")
+    //     .unwrap_or("default".to_string());
+    let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+
 
     let reconciliation_interval_secs = ConfigManager::global()
         .get_as::<u64>("plugin.reconciliation_interval_secs")

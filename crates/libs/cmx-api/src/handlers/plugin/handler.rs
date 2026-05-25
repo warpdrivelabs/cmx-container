@@ -508,7 +508,7 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
     tag = "Plugin"
 )]
 pub async fn plugin_list(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(params): Json<cmx_core::ListParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<PluginListResponse>>> {
@@ -516,9 +516,15 @@ pub async fn plugin_list(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
-    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
         .into();
+
+    let app_id = cmx_state.app_id().await;
+    if filter.app_id==None {
+        filter.app_id = Some(app_id);
+    }
+
     let plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
         crate::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
@@ -581,7 +587,7 @@ pub async fn plugin_get(
     tag = "Plugin"
 )]
 pub async fn plugin_page(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(params): Json<cmx_core::PageParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<Vec<PluginInfoResponse>>>> {
@@ -591,9 +597,14 @@ pub async fn plugin_page(
     let page_size = params.get_size() as u64;
     let skip = params.get_offset() as usize;
 
-    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
         .into();
+
+    let app_id = cmx_state.app_id().await;
+    if filter.app_id==None {
+        filter.app_id = Some(app_id);
+    }
 
     let manager = cmx_plugin::GlobalPluginManager::get();
     let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {

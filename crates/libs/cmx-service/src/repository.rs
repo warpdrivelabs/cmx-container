@@ -238,11 +238,11 @@ impl ServiceRepository {
                    d.create_time, d.update_time, dv.config
             FROM cmx_service_define d
             LEFT JOIN cmx_service_define_version dv ON d.service_key = dv.service_key
-             and d.version = dv.plugin_version
-            WHERE d.plugin_id = $1 AND d.app_id = $2
+             and d.version = dv.plugin_version and dv.app_id = $2
+            WHERE d.plugin_id = $1 AND d.app_id = $3
             ORDER BY d.create_time DESC
         "#;
-        let params = json!([plugin_id, app_id]);
+        let params = json!([plugin_id, app_id,app_id]);
 
         let result = self.db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "get_services_by_plugin")
@@ -534,6 +534,7 @@ impl ServiceRepository {
             param_index += 1;
         }
 
+
         let where_clause = if where_clauses.is_empty() {
             String::new()
         } else {
@@ -578,7 +579,7 @@ impl ServiceRepository {
             LEFT JOIN cmx_domain d ON s.domain_code = d.code
             LEFT JOIN cmx_application a ON s.application_code = a.code
             LEFT JOIN cmx_module m ON s.module_code = m.code
-            LEFT JOIN cmx_plugin p ON s.plugin_id = p.plugin_id
+            LEFT JOIN cmx_plugin p ON s.plugin_id = p.plugin_id and p.app_id = s.app_id
             {}
             ORDER BY s.update_time DESC
             LIMIT ${} OFFSET ${}

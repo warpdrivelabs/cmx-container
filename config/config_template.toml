@@ -149,9 +149,7 @@ backup_root = "plugins/backup"
 temp_root = "plugins/temp"
 # 插件上传临时目录（必需）
 upload_root = "plugins/uploads"
-# 应用隔离标识（可选，默认 "default"）
-# 同一镜像启动不同业务应用时通过此字段区分，每个实例设置不同的 app_id
-# app_id = "default"
+
 # 定时对账间隔（可选，单位：秒，默认 60）
 # 对比数据库与本地 Registry，自动补偿差异。设为 0 禁用。
 # reconciliation_interval_secs = 60

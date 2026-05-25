@@ -39,8 +39,8 @@ pub struct CmxAppState {
 /// 内部状态结构
 #[derive(Debug, Clone)]
 pub struct AppStateInner {
-    // /// 默认数据库 ID
-    // pub default_db_id: String,
+    /// 应用隔离标识，用于多租户/多应用场景隔离
+    pub app_id: String,
 }
 
 impl Default for CmxAppState {
@@ -52,8 +52,13 @@ impl Default for CmxAppState {
 impl CmxAppState {
     /// 创建新的 CmxAppState
     pub fn new() -> Self {
+        // let app_id = ConfigManager::global()
+        //     .get_string("plugin.app_id")
+        //     .unwrap_or("default".to_string());
+        let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+
         Self {
-            app_state: Arc::new(RwLock::new(AppStateInner {})),
+            app_state: Arc::new(RwLock::new(AppStateInner { app_id })),
             plugin_query: None,
             runtime_invoker: None,
             service_query: None,
@@ -145,6 +150,14 @@ impl CmxAppState {
 
     pub fn storage_service(&self) -> Option<&Arc<dyn StorageService>> {
         self.storage_service.as_ref()
+    }
+
+    /// 获取应用隔离标识
+    ///
+    /// 从 AppStateInner 中读取 app_id。
+    pub async fn app_id(&self) -> String {
+        let inner = self.app_state.read().await;
+        inner.app_id.clone()
     }
 
     /// 检查是否已完全初始化
