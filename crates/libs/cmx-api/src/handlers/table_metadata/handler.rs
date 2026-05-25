@@ -88,12 +88,16 @@ pub async fn table_metadata_list(
         filters = None;
     }
     let app_id = cmx_state.app_id().await;
-    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，直接跳过
+    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
-            // get_or_insert 完美替代 if is_none() 的逻辑
             filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
         }
+    } else {
+        // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
+        let mut default_filter = TableMetadataFilter::default();
+        default_filter.app_id = Some(OpValsString::from(app_id));
+        filters = Some(vec![default_filter]);
     }
 
     let dataset =
@@ -138,12 +142,16 @@ pub async fn table_metadata_page(
     }
 
     let app_id = cmx_state.app_id().await;
-    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，直接跳过
+    // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
-            // get_or_insert 完美替代 if is_none() 的逻辑
             filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
         }
+    } else {
+        // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
+        let mut default_filter = TableMetadataFilter::default();
+        default_filter.app_id = Some(OpValsString::from(app_id));
+        filters = Some(vec![default_filter]);
     }
 
     let (dataset, total) =
