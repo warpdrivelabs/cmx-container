@@ -26,6 +26,8 @@ pub mod global_runtime;
 pub mod invoke_context;
 pub mod service_query;
 pub mod service_storage;
+pub mod service_invoker;
+pub mod global_service_invoker;
 pub mod event_bus;
 
 // 统一导出
@@ -38,4 +40,6 @@ pub use global_runtime::GlobalRuntime;
 pub use invoke_context::{InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH};
 pub use service_query::{ServiceQuery, ServicePageFilter, ServicePageResult};
 pub use service_storage::{ServiceStorage, SaveServiceVersionParams};
+pub use service_invoker::{ServiceInvoker, ServiceInvokeOptions, ServiceInvokeResult};
+pub use global_service_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError};
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};

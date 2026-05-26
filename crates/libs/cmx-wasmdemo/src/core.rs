@@ -184,9 +184,9 @@ impl<H: HostFunctions> PluginCore<H> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
         let service_request = CallServiceRequest {
-            service_key: "my-domain/my-service".to_string(),
+            service_key: "bm".to_string(),
             input: serde_json::json!({"name": request.name, "count": request.count}),
-            include_steps: Some(false),
+            include_steps: Some(true),
             debug: Some(false),
             debug_node_id: None,
             debug_params: None,

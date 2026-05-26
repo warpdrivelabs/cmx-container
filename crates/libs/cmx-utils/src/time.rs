@@ -27,7 +27,8 @@ pub fn now_utc() -> OffsetDateTime {
 /// 
 /// 当前使用 unwrap() 方法，存在潜在的 panic 风险
 pub fn format_time(time: OffsetDateTime) -> String {
-	time.format(&Rfc3339).unwrap() // TODO: need to check if safe.
+	// fixme: need to check if safe.
+	time.format(&Rfc3339).unwrap()
 }
 
 /// 计算从当前 UTC 时间加上指定秒数后的时间，并格式化为字符串

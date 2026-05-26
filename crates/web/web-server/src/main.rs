@@ -12,7 +12,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
-use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_storage, shutdown_nacos};
+use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_nacos};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -127,6 +127,7 @@ async fn main() -> Result<()> {
 
     init_services().await?;
     init_plugins().await?;
+    init_service_invoker().await?;
 
     // 构建完整的 AppState，注入各子系统的 trait 实例
     let app_state = CmxAppState::new()

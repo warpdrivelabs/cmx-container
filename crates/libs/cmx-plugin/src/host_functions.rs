@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use tracing::{info, warn};
-use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions};
+use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions, GlobalServiceInvoker, ServiceInvokeOptions, ServiceInvokeResult};
 use cmx_core::{PluginFunRequest, CallServiceRequest, CallServiceResponse};
 use cmx_core::model::service::{FunctionInput, SVRContext};
 
@@ -115,12 +115,36 @@ impl PluginHostFunctions {
             Ok(r) => r,
             Err(e) => return Ok(Self::err_response_msgpack(format!("解析请求失败: {}", e))),
         };
-        warn!("[call_service_by_key] 服务: {} - 功能暂未实现，需要扩展 GlobalRuntime 支持", req.service_key);
-        //todo yqs 未实现服务调用
+        info!("[call_service_by_key] 服务: {}", req.service_key);
 
-        Ok(Self::err_response_msgpack(
-            "call_service_by_key 功能暂未实现，宿主函数上下文缺少 PluginQuery 和 ServiceQuery 访问能力".to_string()
-        ))
+        let invoker = GlobalServiceInvoker::get();
+        let options = ServiceInvokeOptions {
+            include_steps: req.include_steps.unwrap_or(false),
+            debug: req.debug.unwrap_or(false),
+            debug_node_id: req.debug_node_id.clone(),
+            debug_params: req.debug_params.clone(),
+        };
+
+        let rt = tokio::runtime::Handle::current();
+        let result: Result<ServiceInvokeResult, _> = rt.block_on(async {
+            invoker.invoke_service(&req.service_key, req.input, options).await
+        });
+
+        match result {
+            Ok(invoke_result) => {
+                if invoke_result.success {
+                    Ok(Self::ok_response_msgpack(invoke_result.output, invoke_result.elapsed_us))
+                } else {
+                    Ok(Self::err_response_msgpack(
+                        invoke_result.error.unwrap_or_else(|| "服务执行失败".to_string())
+                    ))
+                }
+            }
+            Err(e) => {
+                warn!("[call_service_by_key] 调用失败: {}", e);
+                Ok(Self::err_response_msgpack(e.to_string()))
+            }
+        }
     }
 
     // /// 获取插件信息

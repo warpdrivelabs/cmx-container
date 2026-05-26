@@ -33,6 +33,7 @@ pub mod repository;
 pub mod registry;
 pub mod service_query_impl;
 pub mod service_storage_impl;
+pub mod service_invoker_impl;
 pub mod lifecycle_listener;
 
 // [预留] handler / service / request 模块暂未启用
@@ -49,6 +50,7 @@ pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;
 pub use service_query_impl::ServiceQueryImpl;
 pub use service_storage_impl::ServiceStorageImpl;
+pub use service_invoker_impl::ServiceInvokerImpl;
 pub use lifecycle_listener::ServiceLifecycleListener;
 
 // [预留] 以下导出随 handler/service/request 模块暂未启用
