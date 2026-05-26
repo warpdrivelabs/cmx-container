@@ -1,15 +1,34 @@
 use crate::models::*;
 use crate::host_traits::HostFunctions;
 
+/// 插件核心实现。
+///
+/// 包含所有功能函数的业务逻辑实现，通过 `HostFunctions` trait
+/// 调用宿主提供的各种能力。
 pub struct PluginCore<H: HostFunctions> {
     host: H,
 }
 
 impl<H: HostFunctions> PluginCore<H> {
+    /// 创建一个新的插件核心实例。
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - 宿主功能实现，用于执行日志、缓存、数据库等操作。
     pub fn new(host: H) -> Self {
         Self { host }
     }
 
+    /// 统计输入字符串中的元音字母数量。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含待统计的字符串。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含统计结果的 `FunctionOutput`。
+    /// 失败时返回错误信息字符串。
     pub fn count_vowels(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let input_str = input.input.as_str().unwrap_or_default();
         let vowels = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U'];
@@ -22,18 +41,42 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 记录不同级别的日志信息。
+    ///
+    /// 调用宿主的日志函数，记录 info、error、debug、warn 四个级别的日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含日志记录结果的 `FunctionOutput`。
+    /// 失败时返回错误信息字符串。
     pub fn demo_log(&self, _input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("Hello from WASM demo!")?;
         self.host.log_error("This is an error from WASM demo!")?;
         self.host.log_debug("This is a debug message!")?;
         self.host.log_warn("This is a warning!")?;
         let response = DemoResponse {
-            message: "日志演示完成".to_string(),
+            message: "日志记录完成".to_string(),
             total: 4,
         };
         Ok(FunctionOutput::from_json(serde_json::to_value(&response).map_err(|e| e.to_string())?))
     }
 
+    /// 执行缓存的写入和读取操作。
+    ///
+    /// 调用宿主的缓存接口，将数据写入缓存后再读取验证。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DemoRequest` 格式的缓存键名和计数值。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含缓存操作结果的 `FunctionOutput`。
+    /// 失败时返回错误信息字符串。
     pub fn demo_cache(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
@@ -52,6 +95,18 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(serde_json::to_value(&response).map_err(|e| e.to_string())?))
     }
 
+    /// 执行数据库查询操作。
+    ///
+    /// 调用宿主的数据接接口，执行一条 SELECT 查询。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DemoRequest` 格式的查询参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含查询结果的 `FunctionOutput`。
+    /// 失败时返回错误信息字符串。
     pub fn demo_database(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
@@ -71,6 +126,18 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(serde_json::to_value(&response).map_err(|e| e.to_string())?))
     }
 
+    /// 调用指定插件。
+    ///
+    /// 通过宿主调用另一个指定的插件函数。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DemoRequest` 格式的请求参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含调用结果的 `FunctionOutput`。
+    /// 失败时返回包含错误信息的 `FunctionOutput`。
     pub fn demo_call_plugin(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
@@ -101,6 +168,18 @@ impl<H: HostFunctions> PluginCore<H> {
         }
     }
 
+    /// 调用服务编排。
+    ///
+    /// 通过宿主调用服务编排接口。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DemoRequest` 格式的请求参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含调用结果的 `FunctionOutput`。
+    /// 失败时返回包含错误信息的 `FunctionOutput`。
     pub fn demo_call_service_by_key(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
@@ -132,6 +211,17 @@ impl<H: HostFunctions> PluginCore<H> {
         }
     }
 
+    /// 执行多项功能测试。
+    ///
+    /// 依次执行日志、缓存、数据库等功能的测试。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DemoRequest` 格式的测试参数。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含各项测试结果的 `FunctionOutput`。
     pub fn run_all_demos(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
@@ -167,6 +257,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(serde_json::to_value(&results).map_err(|e| e.to_string())?))
     }
 
+    /// 路由判断函数。
+    ///
+    /// 根据输入的 route 字段决定返回哪个分支标识。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `RouteInput` 格式的路由参数。
+    ///
+    /// # Returns
+    ///
+    /// 返回 "1"、"2"、"3" 或 "4"，对应四个分支。
     pub fn route_check(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let route_input: RouteInput = serde_json::from_value(input.input.clone())
             .unwrap_or(RouteInput { route: "1".to_string() });
@@ -182,6 +283,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(serde_json::to_value(result).map_err(|e| e.to_string())?))
     }
 
+    /// 分支1处理函数。
+    ///
+    /// 处理分支1的业务逻辑。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含分支标识和处理结果的 `FunctionOutput`。
     pub fn branch_1_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("执行分支1处理")?;
         let result = serde_json::json!({
@@ -193,6 +305,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 分支2处理函数。
+    ///
+    /// 处理分支2的业务逻辑。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含分支标识和处理结果的 `FunctionOutput`。
     pub fn branch_2_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("执行分支2处理")?;
         let result = serde_json::json!({
@@ -204,6 +327,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 分支3处理函数。
+    ///
+    /// 处理分支3的业务逻辑。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含分支标识和处理结果的 `FunctionOutput`。
     pub fn branch_3_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("执行分支3处理")?;
         let result = serde_json::json!({
@@ -215,6 +349,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 合并结果函数。
+    ///
+    /// 合并各分支的处理结果，从上下文获取各分支的输出并合并。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含前序步骤的输出和各步骤的输出缓存。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含合并结果的 `FunctionOutput`。
     pub fn merge_result(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("执行合并结果处理")?;
         let branch_output = input.context.get_step_output("branch_1_func")
@@ -230,6 +375,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 事务插入函数。
+    ///
+    /// 在事务中执行插入操作，通过上下文获取事务ID确保在同一事务中执行。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `InsertData` 格式的插入数据。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含操作结果的 `FunctionOutput`。
     pub fn tx_insert(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
         self.host.log_info(&format!("执行事务插入, txn_id={:?}", txn_id))?;
@@ -257,6 +413,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 事务更新函数。
+    ///
+    /// 在事务中执行更新操作，通过上下文获取事务ID确保在同一事务中执行。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `UpdateData` 格式的更新数据。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含操作结果的 `FunctionOutput`。
     pub fn tx_update(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
         self.host.log_info(&format!("执行事务更新, txn_id={:?}", txn_id))?;
@@ -284,6 +451,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 事务查询函数。
+    ///
+    /// 在事务中执行查询操作，通过上下文获取事务ID确保在同一事务中执行。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `QueryData` 格式的查询条件。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含查询结果的 `FunctionOutput`。
     pub fn tx_query(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
         self.host.log_info(&format!("执行事务查询, txn_id={:?}", txn_id))?;
@@ -312,6 +490,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 事务删除函数。
+    ///
+    /// 在事务中执行删除操作，通过上下文获取事务ID确保在同一事务中执行。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含 `DeleteData` 格式的删除条件。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含操作结果的 `FunctionOutput`。
     pub fn tx_delete(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
         self.host.log_info(&format!("执行事务删除, txn_id={:?}", txn_id))?;
@@ -339,6 +528,17 @@ impl<H: HostFunctions> PluginCore<H> {
         Ok(FunctionOutput::from_json(result))
     }
 
+    /// 最终处理函数。
+    ///
+    /// 执行最终处理并返回结果，整合各步骤的输出。
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 函数输入，包含前序步骤的输出和各步骤的输出缓存。
+    ///
+    /// # Returns
+    ///
+    /// 返回包含最终结果的 `FunctionOutput`。
     pub fn final_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         self.host.log_info("执行最终处理")?;
         let merge_output = input.context.get_step_output("merge_func")

@@ -2,249 +2,301 @@
   "plugin": {
     "name": "cmx-wasmdemo",
     "version": "0.1.0",
-    "generated_at": "2026-05-11T09:25:56.917979100+00:00"
+    "generated_at": "2026-05-26T03:00:09.408282011+00:00"
   },
   "functions": [
     {
       "name": "count_vowels",
       "type": "func",
       "summary": "统计字符串中的元音字母数量",
-      "description": "这是一个简单的字符串处理函数，演示标准入参出参的使用。",
+      "description": "这是一个简单的字符串处理函数，展示标准入参出参的使用方式。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "要统计的字符串"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含待统计的字符串"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的统计结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
-      "examples": [
-        {
-          "input": "`{\"input\"",
-          "output": "`{\"result\""
-        }
-      ],
+      "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 71
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 80
       }
     },
     {
       "name": "demo_log",
       "type": "func",
-      "summary": "演示日志功能",
-      "description": "调用宿主的日志函数，记录不同级别的日志信息。\n此函数不需要业务输入，直接执行日志演示。",
+      "summary": "记录不同级别的日志信息",
+      "description": "调用宿主的日志函数，记录 info、error、debug、warn 四个级别的日志。",
       "input": {
         "encoding": "msgpack",
-        "type": "FunctionInput"
-      },
-      "output": {
-        "encoding": "msgpack",
-        "type": "FunctionOutput",
+        "type": "FunctionInput",
         "fields": [
           {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的演示结果"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入"
           }
         ]
       },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput"
+      },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 89
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 98
       }
     },
     {
       "name": "demo_cache",
       "type": "func",
-      "summary": "演示缓存功能",
-      "description": "演示缓存的写入、读取和删除操作。",
+      "summary": "执行缓存的写入和读取操作",
+      "description": "调用宿主的缓存接口，将数据写入缓存后再读取验证。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的 DemoRequest，包含 name 和 count"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DemoRequest` 格式的缓存键名和计数值",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "请求名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的操作结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
-      "examples": [
-        {
-          "input": "`{\"input\"",
-          "output": "`{\"result\""
-        }
-      ],
+      "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 109
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 116
       }
     },
     {
       "name": "demo_database",
       "type": "func",
-      "summary": "演示数据库查询功能",
-      "description": "执行一个简单的数据库查询。",
+      "summary": "执行数据库查询操作",
+      "description": "调用宿主的数据接接口，执行一条 SELECT 查询。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的 DemoRequest，用于构建 SQL"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DemoRequest` 格式的查询参数",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "请求名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的查询结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 128
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 134
       }
     },
     {
       "name": "demo_call_plugin",
       "type": "func",
-      "summary": "demo_call_plugin",
-      "input": {
-        "encoding": "msgpack",
-        "type": "FunctionInput"
-      },
-      "output": {
-        "encoding": "msgpack",
-        "type": "FunctionOutput"
-      },
-      "examples": [],
-      "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 135
-      }
-    },
-    {
-      "name": "demo_call_service_by_key",
-      "type": "func",
-      "summary": "demo_call_service_by_key",
-      "input": {
-        "encoding": "msgpack",
-        "type": "FunctionInput"
-      },
-      "output": {
-        "encoding": "msgpack",
-        "type": "FunctionOutput"
-      },
-      "examples": [],
-      "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 142
-      }
-    },
-    {
-      "name": "run_all_demos",
-      "type": "func",
-      "summary": "综合测试入口",
-      "description": "执行所有演示功能，用于验证插件环境是否正常。",
+      "summary": "调用指定插件",
+      "description": "通过宿主调用另一个指定的插件函数。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的 DemoRequest，用于测试参数传递"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DemoRequest` 格式的请求参数",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "请求名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 数组，包含各项测试的结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 165
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 153
+      }
+    },
+    {
+      "name": "demo_call_service_by_key",
+      "type": "func",
+      "summary": "调用服务编排",
+      "description": "通过宿主调用服务编排接口。",
+      "input": {
+        "encoding": "msgpack",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DemoRequest` 格式的请求参数",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "请求名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
+          }
+        ]
+      },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput"
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 172
+      }
+    },
+    {
+      "name": "run_all_demos",
+      "type": "func",
+      "summary": "执行多项功能测试",
+      "description": "依次执行日志、缓存、数据库等功能的测试。",
+      "input": {
+        "encoding": "msgpack",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DemoRequest` 格式的测试参数",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "请求名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
+          }
+        ]
+      },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput"
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 190
       }
     },
     {
       "name": "route_check",
       "type": "branch_fn",
       "summary": "路由判断函数",
-      "description": "根据输入的 route 字段决定返回哪个分支标识。\n用于 skylake-switch 节点，返回值对应 options 中的选项。",
+      "description": "根据输入的 route 字段决定返回哪个分支标识。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式，包含 route 字段"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `RouteInput` 格式的路由参数",
+            "properties": [
+              {
+                "name": "route",
+                "type": "string",
+                "required": true,
+                "description": "路由标识，取值为 \"1\"、\"2\"、\"3\" 或 \"4\""
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "返回 \"1\"、\"2\" 或 \"3\"，对应三个分支"
-          }
-        ]
+        "type": "FunctionOutput"
       },
-      "examples": [
-        {
-          "input": "`{\"input\"",
-          "output": "`{\"result\""
-        }
-      ],
+      "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 189
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 211
       }
     },
     {
@@ -257,32 +309,21 @@
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "前序步骤的输出"
-          },
-          {
-            "name": "input.context.initial_input",
-            "type": "unknown",
-            "description": "初始入参"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含前序步骤的输出和初始入参"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 205
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 229
       }
     },
     {
@@ -295,32 +336,21 @@
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的业务数据"
-          },
-          {
-            "name": "input.context.initial_input",
-            "type": "unknown",
-            "description": "初始入参"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含前序步骤的输出和初始入参"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 222
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 247
       }
     },
     {
@@ -333,260 +363,251 @@
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的业务数据"
-          },
-          {
-            "name": "input.context.initial_input",
-            "type": "unknown",
-            "description": "初始入参"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含前序步骤的输出和初始入参"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的处理结果，包含 branch 字段标识来源"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 240
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 265
       }
     },
     {
       "name": "merge_result",
       "type": "func",
       "summary": "合并结果函数",
-      "description": "合并各分支的处理结果。\n可以通过 step_outputs 获取各分支的输出。",
+      "description": "合并各分支的处理结果，从上下文获取各分支的输出并合并。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "前序步骤的输出"
-          },
-          {
-            "name": "input.context.step_outputs",
-            "type": "unknown",
-            "description": "各步骤的输出缓存"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的合并结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 258
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 283
       }
     },
     {
       "name": "tx_insert",
       "type": "func",
       "summary": "事务插入函数",
-      "description": "在事务中执行插入操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "description": "在事务中执行插入操作，通过上下文获取事务ID确保在同一事务中执行。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的插入数据"
-          },
-          {
-            "name": "input.context.txn_id",
-            "type": "unknown",
-            "description": "事务ID（由事务框设置）"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `InsertData` 格式的插入数据",
+            "properties": [
+              {
+                "name": "table",
+                "type": "string",
+                "required": true,
+                "description": "表名"
+              },
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "名称字段值"
+              },
+              {
+                "name": "value",
+                "type": "integer",
+                "required": true,
+                "description": "数值字段值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的操作结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 276
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 301
       }
     },
     {
       "name": "tx_update",
       "type": "func",
       "summary": "事务更新函数",
-      "description": "在事务中执行更新操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "description": "在事务中执行更新操作，通过上下文获取事务ID确保在同一事务中执行。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的更新数据"
-          },
-          {
-            "name": "input.context.txn_id",
-            "type": "unknown",
-            "description": "事务ID（由事务框设置）"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `UpdateData` 格式的更新数据",
+            "properties": [
+              {
+                "name": "table",
+                "type": "string",
+                "required": true,
+                "description": "表名"
+              },
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "名称字段值"
+              },
+              {
+                "name": "value",
+                "type": "integer",
+                "required": true,
+                "description": "数值字段值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的操作结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 294
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 319
       }
     },
     {
       "name": "tx_query",
       "type": "func",
       "summary": "事务查询函数",
-      "description": "在事务中执行查询操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "description": "在事务中执行查询操作，通过上下文获取事务ID确保在同一事务中执行。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的查询条件"
-          },
-          {
-            "name": "input.context.txn_id",
-            "type": "unknown",
-            "description": "事务ID（由事务框设置）"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `QueryData` 格式的查询条件",
+            "properties": [
+              {
+                "name": "table",
+                "type": "string",
+                "required": true,
+                "description": "表名"
+              },
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "名称字段值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的查询结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 312
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 337
       }
     },
     {
       "name": "tx_delete",
       "type": "func",
       "summary": "事务删除函数",
-      "description": "在事务中执行删除操作。\n通过 context.txn_id 获取事务ID，确保在同一事务中执行。",
+      "description": "在事务中执行删除操作，通过上下文获取事务ID确保在同一事务中执行。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "JSON 格式的删除条件"
-          },
-          {
-            "name": "input.context.txn_id",
-            "type": "unknown",
-            "description": "事务ID（由事务框设置）"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含 `DeleteData` 格式的删除条件",
+            "properties": [
+              {
+                "name": "table",
+                "type": "string",
+                "required": true,
+                "description": "表名"
+              },
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "名称字段值"
+              }
+            ]
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的操作结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 330
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 355
       }
     },
     {
       "name": "final_process",
       "type": "func",
       "summary": "最终处理函数",
-      "description": "最终处理并返回结果。",
+      "description": "执行最终处理并返回结果，整合各步骤的输出。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
         "fields": [
           {
-            "name": "input.input",
-            "type": "unknown",
-            "description": "前序步骤的输出"
-          },
-          {
-            "name": "input.context.step_outputs",
-            "type": "unknown",
-            "description": "各步骤的输出缓存"
+            "name": "input",
+            "type": "object",
+            "required": true,
+            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存"
           }
         ]
       },
       "output": {
         "encoding": "msgpack",
-        "type": "FunctionOutput",
-        "fields": [
-          {
-            "name": "result",
-            "type": "unknown",
-            "description": "JSON 格式的最终结果"
-          }
-        ]
+        "type": "FunctionOutput"
       },
       "examples": [],
       "location": {
-        "file": "./crates/libs/cmx-wasmdemo\\src\\extism_layer.rs",
-        "line": 347
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 373
       }
     }
   ]

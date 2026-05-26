@@ -26,6 +26,10 @@ pub struct ParsedDoc {
     pub errors: Vec<String>,
     /// 注意事项
     pub notes: Vec<String>,
+    /// Panic 场景说明
+    pub panics: Vec<String>,
+    /// Safety 说明
+    pub safety: Option<String>,
 }
 
 /// 字段信息
@@ -35,10 +39,16 @@ pub struct FieldInfo {
     pub name: String,
     /// 字段类型
     pub type_name: String,
+    /// 格式
+    pub format: Option<String>,
     /// 是否必填
     pub required: Option<bool>,
     /// 字段说明
     pub description: String,
+    /// 子属性（用于 object 类型）
+    pub sub_fields: Vec<FieldInfo>,
+    /// 数组元素类型（用于 array 类型）
+    pub items: Option<Box<FieldInfo>>,
 }
 
 /// 示例信息
@@ -48,6 +58,38 @@ pub struct ExampleInfo {
     pub input: String,
     /// 输出
     pub output: String,
+}
+
+/// 标准化章节名称
+fn normalize_section_name(name: &str) -> String {
+    match name.trim().to_lowercase().as_str() {
+        // Arguments 变体
+        "arguments" | "argument" | "参数" | "输入" | "输入处理" => "Arguments".to_string(),
+
+        // Returns 变体
+        "returns" | "return" | "返回值" | "输出" => "Returns".to_string(),
+
+        // Errors 变体
+        "errors" | "error" | "错误" | "错误说明" => "Errors".to_string(),
+
+        // Panics
+        "panics" | "panic" | "panic 场景" => "Panics".to_string(),
+
+        // Safety
+        "safety" => "Safety".to_string(),
+
+        // Examples
+        "examples" | "example" | "示例" => "Examples".to_string(),
+
+        // Notes
+        "notes" | "note" | "注意" | "注意事项" => "Notes".to_string(),
+
+        // 编码
+        "编码" | "encoding" => "Encoding".to_string(),
+
+        // 其他保持原样
+        other => other.to_string(),
+    }
 }
 
 /// 解析文档注释
@@ -61,39 +103,46 @@ pub fn parse_doc_comments(doc_comments: &[String]) -> Result<ParsedDoc> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // 解析各节
+    // 解析各节（使用标准化名称）
     let sections = parse_sections(&full_doc);
 
     // 提取简短描述和详细描述
     if let Some(main) = sections.get("") {
         let lines: Vec<&str> = main.lines().collect();
         if !lines.is_empty() {
-            result.summary = lines[0].to_string();
+            // 摘要取第一行，移除末尾句号
+            result.summary = lines[0].trim_end_matches('.').trim_end_matches('。').to_string();
         }
         if lines.len() > 1 {
-            result.description = Some(lines[1..].join("\n").trim().to_string());
-            if result.description.as_ref().is_none_or(|s| s.is_empty()) {
-                result.description = None;
+            let desc_lines: Vec<&str> = lines[1..]
+                .iter()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !desc_lines.is_empty() {
+                result.description = Some(desc_lines.join("\n"));
             }
         }
     }
 
-    // 解析输入节
-    if let Some(input) = sections.get("输入") {
-        result.input_fields = parse_table_or_list(input);
-    }
-    // 兼容旧的 "# 输入处理" 格式
-    if let Some(input) = sections.get("输入处理") {
-        result.input_fields = parse_table_or_list(input);
+    // 解析输入节 (Arguments / 输入)
+    if let Some(input) = sections.get("Arguments") {
+        result.input_fields = parse_nested_fields(input);
+    } else if let Some(input) = sections.get("输入") {
+        result.input_fields = parse_nested_fields(input);
+    } else if let Some(input) = sections.get("输入处理") {
+        result.input_fields = parse_nested_fields(input);
     }
 
-    // 解析输出节
-    if let Some(output) = sections.get("输出") {
-        result.output_fields = parse_table_or_list(output);
+    // 解析输出节 (Returns / 输出)
+    if let Some(output) = sections.get("Returns") {
+        result.output_fields = parse_nested_fields(output);
+    } else if let Some(output) = sections.get("输出") {
+        result.output_fields = parse_nested_fields(output);
     }
 
     // 解析编码节
-    if let Some(encoding) = sections.get("编码") {
+    if let Some(encoding) = sections.get("Encoding") {
         for line in encoding.lines() {
             let line = line.trim();
             if line.starts_with("- 输入编码:") || line.starts_with("* 输入编码:") {
@@ -104,19 +153,38 @@ pub fn parse_doc_comments(doc_comments: &[String]) -> Result<ParsedDoc> {
         }
     }
 
-    // 解析示例节
-    if let Some(example) = sections.get("示例") {
+    // 解析示例节 (Examples / 示例)
+    if let Some(example) = sections.get("Examples") {
+        result.examples = parse_examples(example);
+    } else if let Some(example) = sections.get("示例") {
         result.examples = parse_examples(example);
     }
 
-    // 解析错误节
-    if let Some(errors) = sections.get("错误") {
+    // 解析错误节 (Errors / 错误)
+    if let Some(errors) = sections.get("Errors") {
+        result.errors = parse_list(errors);
+    } else if let Some(errors) = sections.get("错误") {
         result.errors = parse_list(errors);
     }
 
-    // 解析注意事项节
-    if let Some(notes) = sections.get("注意") {
+    // 解析注意事项节 (Notes / 注意)
+    if let Some(notes) = sections.get("Notes") {
         result.notes = parse_list(notes);
+    } else if let Some(notes) = sections.get("注意") {
+        result.notes = parse_list(notes);
+    }
+
+    // 解析 Panic 场景节
+    if let Some(panics) = sections.get("Panics") {
+        result.panics = parse_list(panics);
+    }
+
+    // 解析 Safety 节
+    if let Some(safety) = sections.get("Safety") {
+        let safety_content = safety.trim().to_string();
+        if !safety_content.is_empty() {
+            result.safety = Some(safety_content);
+        }
     }
 
     Ok(result)
@@ -138,9 +206,9 @@ fn parse_sections(doc: &str) -> std::collections::HashMap<String, String> {
                 sections.insert(current_section.clone(), current_content.trim().to_string());
             }
 
-            // 解析新节标题
+            // 解析新节标题，并标准化名称
             let title = trimmed.trim_start_matches('#').trim().to_string();
-            current_section = title;
+            current_section = normalize_section_name(&title).to_string();
             current_content = String::new();
         } else {
             if !current_content.is_empty() || !trimmed.is_empty() {
@@ -218,8 +286,11 @@ fn parse_table(content: &str) -> Vec<FieldInfo> {
             fields.push(FieldInfo {
                 name,
                 type_name,
+                format: None,
                 required,
                 description,
+                sub_fields: Vec::new(),
+                items: None,
             });
         }
     }
@@ -244,14 +315,184 @@ fn parse_field_list(content: &str) -> Vec<FieldInfo> {
                 fields.push(FieldInfo {
                     name,
                     type_name: "unknown".to_string(),
+                    format: None,
                     required: None,
                     description,
+                    sub_fields: Vec::new(),
+                    items: None,
                 });
             }
         }
     }
 
     fields
+}
+
+/// 解析嵌套结构字段（支持通过缩进表示层级）
+fn parse_nested_fields(content: &str) -> Vec<FieldInfo> {
+    // 首先尝试解析 Markdown 表格
+    if content.contains('|') && content.contains("---") {
+        return parse_table(content);
+    }
+
+    let mut root_fields = Vec::new();
+    let mut stack: Vec<(usize, usize)> = Vec::new(); // (indent_level, field_index_in_parent)
+
+    let lines: Vec<&str> = content.lines().collect();
+
+    for line in &lines {
+        let trimmed_line = line.trim();
+
+        // 跳过空行
+        if trimmed_line.is_empty() {
+            continue;
+        }
+
+        // 计算缩进级别（每2空格为一级）
+        let indent = (line.len() - line.trim_start().len()) / 2;
+
+        // 解析字段行
+        if let Some(field) = parse_field_line(trimmed_line) {
+            // 弹出比当前缩进更深的所有字段
+            while let Some((prev_indent, _)) = stack.last() {
+                if *prev_indent >= indent {
+                    stack.pop();
+                } else {
+                    break;
+                }
+            }
+
+            // 将字段添加到正确的父级
+            if stack.is_empty() {
+                root_fields.push(field);
+            } else {
+                let (_, parent_idx) = stack.last().unwrap();
+                root_fields[*parent_idx].sub_fields.push(field);
+            }
+
+            // 将当前字段压入栈（用于接收后续的子字段）
+            let field_idx = if stack.is_empty() {
+                root_fields.len() - 1
+            } else {
+                root_fields[stack.last().unwrap().1].sub_fields.len() - 1
+            };
+            stack.push((indent, field_idx));
+        }
+    }
+
+    root_fields
+}
+
+/// 解析单行字段
+fn parse_field_line(line: &str) -> Option<FieldInfo> {
+    let trimmed = line.trim();
+
+    // 跳过非列表行
+    if !trimmed.starts_with("- ") && !trimmed.starts_with("* ") {
+        return None;
+    }
+
+    let rest = trimmed[2..].trim();
+
+    // 解析 "* `name` - description" 或 "* `name`: description" 格式
+    if let Some(name_end) = rest.find(" - ") {
+        let name = clean_field_name(&rest[..name_end]);
+        let description = rest[name_end + 3..].trim().to_string();
+        let (type_name, format) = extract_type_from_description(&description);
+
+        return Some(FieldInfo {
+            name,
+            type_name,
+            format,
+            required: None,
+            description,
+            sub_fields: Vec::new(),
+            items: None,
+        });
+    }
+
+    if let Some(colon_pos) = rest.find(':') {
+        let name = clean_field_name(&rest[..colon_pos]);
+        let description = rest[colon_pos + 1..].trim().to_string();
+        let (type_name, format) = extract_type_from_description(&description);
+
+        return Some(FieldInfo {
+            name,
+            type_name,
+            format,
+            required: None,
+            description,
+            sub_fields: Vec::new(),
+            items: None,
+        });
+    }
+
+    // 如果没有分隔符，整个内容作为描述
+    if !rest.is_empty() {
+        let (type_name, format) = extract_type_from_description(rest);
+        return Some(FieldInfo {
+            name: String::new(),
+            type_name,
+            format,
+            required: None,
+            description: rest.to_string(),
+            sub_fields: Vec::new(),
+            items: None,
+        });
+    }
+
+    None
+}
+
+/// 从描述中提取类型信息
+fn extract_type_from_description(desc: &str) -> (String, Option<String>) {
+    // 尝试匹配 "TypeName description" 或 "TypeName - description"
+    // 类型名通常以大写字母开头，包含字母、数字、下划线
+
+    let desc = desc.trim();
+
+    // 匹配类型名前的空白或短横线
+    if let Some(dash_pos) = desc.find(" - ") {
+        let type_part = desc[..dash_pos].trim();
+        if is_type_name(type_part) {
+            return (type_part.to_string(), None);
+        }
+    }
+
+    // 尝试匹配开头的类型名（以大写字母开头）
+    let mut type_end = 0;
+    for (i, c) in desc.char_indices() {
+        if i == 0 && !c.is_ascii_uppercase() {
+            break;
+        }
+        if !c.is_alphanumeric() && c != '_' && c != '<' && c != '>' && c != '&' && c != '(' && c != ')' {
+            break;
+        }
+        type_end = i + c.len_utf8();
+    }
+
+    if type_end > 0 && type_end < desc.len() {
+        let type_name = desc[..type_end].trim().to_string();
+        if !type_name.is_empty() && (is_type_name(&type_name) || type_name.contains('<')) {
+            return (type_name, None);
+        }
+    }
+
+    ("unknown".to_string(), None)
+}
+
+/// 判断是否是类型名
+fn is_type_name(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let mut chars = s.chars();
+    // 必须以大写字母开头
+    if !chars.next().unwrap().is_ascii_uppercase() {
+        return false;
+    }
+    // 其余字符必须是字母、数字或下划线
+    chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// 清理字段名（移除反引号）
@@ -374,10 +615,10 @@ mod tests {
 
     #[test]
     fn test_parse_sections() {
-        let doc = "简短描述\n\n详细描述\n\n# 输入\n\n| 字段 | 类型 |\n|------|------|\n| name | string |";
+        let doc = "简短描述\n\n详细描述\n\n# Arguments\n\n| 字段 | 类型 |\n|------|------|\n| name | string |";
         let sections = parse_sections(doc);
         assert!(sections.contains_key(""));
-        assert!(sections.contains_key("输入"));
+        assert!(sections.contains_key("Arguments"));
     }
 
     #[test]

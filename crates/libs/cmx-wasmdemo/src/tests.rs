@@ -54,7 +54,7 @@ fn test_demo_log() {
     let input = make_input(serde_json::json!(null));
     let result = core.demo_log(&input).unwrap();
     let parsed: DemoResponse = serde_json::from_value(result.result).unwrap_or_default();
-    assert_eq!(parsed.message, "日志演示完成");
+    assert_eq!(parsed.message, "日志记录完成");
     assert_eq!(parsed.total, 4);
 }
 
