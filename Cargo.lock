@@ -757,7 +757,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cmx-api"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "axum 0.8.8",
  "bytes",
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-api-types"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "axum 0.8.8",
  "cmx-core",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-buffer"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -836,7 +836,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64",
  "chrono",
@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-database"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64",
  "chrono",
@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-debug"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "extism",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-metadata"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-trait",
  "chrono",
@@ -939,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-nacos"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cmx-utils",
  "config",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin-sdk"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cmx-core",
  "extism-pdk",
@@ -1008,7 +1008,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-runtime"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-trait",
  "cmx-core",
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-service"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-storage"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1083,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-traits"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1098,7 +1098,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-utils"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -6861,7 +6861,7 @@ dependencies = [
 
 [[package]]
 name = "web-server"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "axum 0.8.8",
  "chrono",
