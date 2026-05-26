@@ -110,6 +110,7 @@ impl VersionHistoryRepository {
             .columns(vec![
                 Alias::new("id"),
                 Alias::new("plugin_id"),
+                Alias::new("app_id"),
                 Alias::new("version"),
                 Alias::new("install_path"),
                 Alias::new("wasm_path"),
@@ -133,6 +134,7 @@ impl VersionHistoryRepository {
             .values_panic(vec![
                 record.id.clone().into(),
                 record.plugin_id.clone().into(),
+                record.app_id.clone().into(),
                 record.version.clone().into(),
                 record.install_path.clone().into(),
                 record.wasm_path.clone().into(),
@@ -156,6 +158,7 @@ impl VersionHistoryRepository {
 
         let on_conflict = sea_query::OnConflict::columns(vec![
             Alias::new("plugin_id"),
+            Alias::new("app_id"),
             Alias::new("version"),
         ])
         .update_columns(vec![
@@ -194,10 +197,22 @@ impl VersionHistoryRepository {
         Ok(false)
     }
 
-    /// 更新版本历史记录（通过主键 ID）
+    /// 更新版本历史记录（通过主键 ID 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - 版本记录主键 ID
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `fields` - 要更新的字段
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn update_version(
         &self,
         id: &str,
+        app_id: &str,
         fields: &VersionUpdateParams,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
@@ -233,6 +248,7 @@ impl VersionHistoryRepository {
         }
 
         query.and_where(sea_query::Expr::col("id").eq(id));
+        query.and_where(sea_query::Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -244,14 +260,25 @@ impl VersionHistoryRepository {
         Ok(())
     }
 
-    /// 物理删除插件的所有版本历史记录
+    /// 物理删除插件的所有版本历史记录（按 plugin_id 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `txn_id` - 事务 ID（可选）
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
     pub async fn delete_versions_by_plugin_id(
         &self,
         plugin_id: &str,
+        app_id: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        let sql = "DELETE FROM cmx_plugin_versions WHERE plugin_id = $1";
-        let params = serde_json::json!([plugin_id]);
+        let sql = "DELETE FROM cmx_plugin_versions WHERE plugin_id = $1 AND app_id = $2";
+        let params = serde_json::json!([plugin_id, app_id]);
 
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
@@ -279,11 +306,12 @@ impl VersionHistoryRepository {
     pub async fn find_version(
         &self,
         plugin_id: &str,
+        app_id: &str,
         version: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<Option<VersionRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND version = $2";
-        let params = serde_json::json!([plugin_id, version]);
+        let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 AND app_id = $2 AND version = $3";
+        let params = serde_json::json!([plugin_id, app_id, version]);
 
         let result = self
             .db_manager
@@ -321,12 +349,14 @@ impl VersionHistoryRepository {
     pub async fn mark_all_not_current(
         &self,
         plugin_id: &str,
+        app_id: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         let mut query = Query::update();
         query.table("cmx_plugin_versions");
         query.value("is_current", false);
         query.and_where(sea_query::Expr::col("plugin_id").eq(plugin_id));
+        query.and_where(sea_query::Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -345,15 +375,16 @@ impl VersionHistoryRepository {
     pub async fn set_current_version(
         &self,
         plugin_id: &str,
+        app_id: &str,
         version: &str,
         install_path: &str,
         wasm_path: &str,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        self.mark_all_not_current(plugin_id, txn_id).await?;
+        self.mark_all_not_current(plugin_id, app_id, txn_id).await?;
 
-        dbg!(plugin_id,version);
-        let existing = self.find_version(plugin_id, version,txn_id).await?;
+        // dbg!(plugin_id,version);
+        let existing = self.find_version(plugin_id, app_id, version, txn_id).await?;
         // dbg!(&existing);
 
         if let Some(ref record) = existing {
@@ -368,11 +399,12 @@ impl VersionHistoryRepository {
                 update_by: None,
                 update_name: None,
             };
-            self.update_version(&record.id, &update_fields, txn_id).await?;
+            self.update_version(&record.id, app_id, &update_fields, txn_id).await?;
         } else {
             let record = VersionCreateParams {
                 id: uuid::Uuid::new_v4().to_string(),
                 plugin_id: plugin_id.to_string(),
+                app_id: app_id.to_string(),
                 version: version.to_string(),
                 install_path: install_path.to_string(),
                 wasm_path: wasm_path.to_string(),

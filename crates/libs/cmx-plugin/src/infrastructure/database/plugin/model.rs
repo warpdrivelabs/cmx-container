@@ -16,9 +16,11 @@ use serde::{Deserialize, Serialize};
 /// 来自 LEFT JOIN cmx_domain/application/module 的补充查询。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginRecord {
-    // === cmx_plugin 表字段 (29列) ===
+    // === cmx_plugin 表字段 (32列) ===
     /// 主键ID (对应列: id)
     pub id: String,
+    /// 应用ID (对应列: app_id)
+    pub app_id: String,
     /// 插件唯一标识 (对应列: plugin_id)
     pub plugin_id: String,
     /// 显示名称 (对应列: name)
@@ -67,6 +69,10 @@ pub struct PluginRecord {
     pub source_path: Option<String>,
     /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
     pub marketplace_source_id: Option<String>,
+    /// 存储键 (对应列: storage_key)
+    pub storage_key: Option<String>,
+    /// 存储校验和 (对应列: storage_checksum)
+    pub storage_checksum: Option<String>,
     /// 创建时间 (对应列: create_time)
     pub create_time: DateTime<Utc>,
     /// 更新时间 (对应列: update_time)
@@ -93,12 +99,14 @@ pub struct PluginRecord {
 
 /// 插件创建参数（用于 INSERT / UPSERT 操作）
 ///
-/// 仅包含写入数据库时需要的 30 个字段，
+/// 仅包含写入数据库时需要的 33 个字段，
 /// 不包含 JOIN 补充字段（domain_name/application_name/module_name）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginCreateParams {
     /// 主键ID
     pub id: String,
+    /// 应用ID
+    pub app_id: String,
     /// 插件唯一标识
     pub plugin_id: String,
     /// 显示名称
@@ -147,6 +155,10 @@ pub struct PluginCreateParams {
     pub source_path: Option<String>,
     /// 市场版本来源 ID。
     pub marketplace_source_id: Option<String>,
+    /// 存储键
+    pub storage_key: Option<String>,
+    /// 存储校验和
+    pub storage_checksum: Option<String>,
     /// 创建时间
     pub create_time: DateTime<Utc>,
     /// 更新时间
@@ -170,6 +182,7 @@ impl PluginCreateParams {
     pub fn to_record(&self) -> PluginRecord {
         PluginRecord {
             id: self.id.clone(),
+            app_id: self.app_id.clone(),
             plugin_id: self.plugin_id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
@@ -194,6 +207,8 @@ impl PluginCreateParams {
             plugin_type: self.plugin_type.clone(),
             source_path: self.source_path.clone(),
             marketplace_source_id: self.marketplace_source_id.clone(),
+            storage_key: self.storage_key.clone(),
+            storage_checksum: self.storage_checksum.clone(),
             create_time: self.create_time,
             update_time: self.update_time,
             archived: self.archived,
@@ -260,6 +275,12 @@ pub struct PluginUpdateParams {
     pub source_path: Option<String>,
     /// 市场版本来源 ID。
     pub marketplace_source_id: Option<String>,
+    /// 应用ID
+    pub app_id: Option<String>,
+    /// 存储键
+    pub storage_key: Option<String>,
+    /// 存储校验和
+    pub storage_checksum: Option<String>,
     /// 更新人ID
     pub update_by: Option<String>,
     /// 更新人名称

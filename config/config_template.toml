@@ -150,6 +150,10 @@ temp_root = "plugins/temp"
 # 插件上传临时目录（必需）
 upload_root = "plugins/uploads"
 
+# 定时对账间隔（可选，单位：秒，默认 60）
+# 对比数据库与本地 Registry，自动补偿差异。设为 0 禁用。
+# reconciliation_interval_secs = 60
+
 # 自动安装配置（可选）
 [plugin.auto_install]
 # 是否启用自动安装，可选，默认 false
@@ -167,6 +171,9 @@ enabled = false
 # 数据库迁移配置
 # ============================================
 [migration]
+# 是否启用迁移（可选，默认 false）
+# 启用后会在应用启动时自动执行待执行的数据库迁移
+enabled = false
 # 迁移文件目录（必需，存放 SQL 迁移文件）
 dir = "docs/sql/migrations"
 # 校验文件内容是否被修改，可选，默认 true

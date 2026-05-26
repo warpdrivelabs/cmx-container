@@ -227,9 +227,6 @@ pub struct LockConfig {
     /// 锁过期时间（秒）
     #[serde(default = "default_lock_expire")]
     pub expire_seconds: u64,
-    /// 获取锁重试次数
-    #[serde(default = "default_retry_times")]
-    pub retry_times: u32,
     /// 重试间隔（毫秒）
     #[serde(default = "default_retry_interval")]
     pub retry_interval_ms: u64,
@@ -240,10 +237,6 @@ pub struct LockConfig {
 
 fn default_lock_expire() -> u64 {
     30
-}
-
-fn default_retry_times() -> u32 {
-    3
 }
 
 fn default_retry_interval() -> u64 {
@@ -259,7 +252,6 @@ impl LockConfig {
     pub fn new() -> Self {
         Self {
             expire_seconds: default_lock_expire(),
-            retry_times: default_retry_times(),
             retry_interval_ms: default_retry_interval(),
             renew_threshold: default_renew_threshold(),
         }
@@ -268,12 +260,6 @@ impl LockConfig {
     /// 设置锁过期时间
     pub fn with_expire(mut self, seconds: u64) -> Self {
         self.expire_seconds = seconds;
-        self
-    }
-
-    /// 设置重试次数
-    pub fn with_retry_times(mut self, times: u32) -> Self {
-        self.retry_times = times;
         self
     }
 

@@ -29,6 +29,7 @@
 use std::path::Path;
 use cmx_core::model::meta::plugin::PluginManifest;
 use crate::error::{PluginError, PluginResult};
+use zip::ZipArchive;
 
 /// 插件定义工具
 ///
@@ -226,5 +227,43 @@ impl DefinitionUtils {
         }
 
         Ok(())
+    }
+
+    /// 从 ZIP 包直接解析插件定义。
+    ///
+    /// 将 ZIP 包解压到临时目录，解析 manifest.json，然后清理临时目录。
+    /// 适用于在调用 deploy 之前需要提前获取 plugin_id 和 version 的场景。
+    ///
+    /// # 参数
+    ///
+    /// * `zip_path` - ZIP 包文件的路径
+    ///
+    /// # 返回值
+    ///
+    /// 返回解析后的 `PluginDefinition` 对象。
+    ///
+    /// # 错误
+    ///
+    /// - `PluginError::Io` - ZIP 解压失败或 manifest.json 读取失败
+    /// - `PluginError::Metadata` - manifest.json 解析失败
+    pub fn parse_from_zip(zip_path: &Path) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
+        let temp_dir = std::env::temp_dir().join(format!("cmx_plugin_parse_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir)?;
+
+        // 解压 ZIP
+        let zip_file = std::fs::File::open(zip_path)?;
+        let mut zip_archive = ZipArchive::new(std::io::BufReader::new(zip_file))
+            .map_err(|e| PluginError::Zip(e.to_string()))?;
+
+        zip_archive.extract(&temp_dir)
+            .map_err(|e| PluginError::Zip(e.to_string()))?;
+
+        // 解析插件定义
+        let result = Self::parse_plugin_definition(&temp_dir);
+
+        // 清理临时目录
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        result
     }
 }

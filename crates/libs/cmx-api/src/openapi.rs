@@ -69,6 +69,12 @@ use utoipa::OpenApi;
         crate::handlers::plugin::handler::plugin_deploy,
         crate::handlers::plugin::handler::plugin_exists,
         crate::handlers::plugin::handler::plugin_functions,
+        // PluginControl handlers
+        // crate::handlers::plugin::control::handler::control_deploy,
+        // crate::handlers::plugin::control::handler::control_install,
+        // crate::handlers::plugin::control::handler::control_upgrade,
+        // crate::handlers::plugin::control::handler::control_downgrade,
+        // crate::handlers::plugin::control::handler::control_uninstall,
         // TableMetadata handlers
         crate::handlers::table_metadata::handler::table_metadata_list,
         crate::handlers::table_metadata::handler::table_metadata_page,
@@ -151,6 +157,13 @@ use utoipa::OpenApi;
             crate::handlers::plugin::response::DowngradeResponse,
             crate::handlers::plugin::response::PluginDeployResponse,
             crate::handlers::plugin::response::PluginFunctionsResponse,
+            // PluginControl schemas
+            // crate::handlers::plugin::control::request::ControlDeployRequest,
+            // crate::handlers::plugin::control::request::ControlInstallRequest,
+            // crate::handlers::plugin::control::request::ControlUpgradeRequest,
+            // crate::handlers::plugin::control::request::ControlDowngradeRequest,
+            // crate::handlers::plugin::control::request::ControlUninstallRequest,
+            // crate::handlers::plugin::control::response::ControlActionResponse,
             crate::Pagination,
             // cmx-api service models
             crate::handlers::service::models::FunctionCallRequest,

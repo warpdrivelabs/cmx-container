@@ -4,6 +4,7 @@
 
 mod config;
 mod error;
+mod format;
 mod routes;
 
 pub use self::error::{Error, Result};
@@ -21,7 +22,14 @@ use tower_cookies::CookieManagerLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{fmt, layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
+use format::CompactFormatter;
+use tracing_subscriber::{
+    fmt,
+    layer::SubscriberExt,
+    registry,
+    util::SubscriberInitExt,
+    EnvFilter,
+};
 
 /// 应用程序主函数
 ///
@@ -66,17 +74,24 @@ async fn main() -> Result<()> {
         .with_thread_ids(true)
         .json();
 
-    // 控制台日志层：简洁格式，带颜色，便于开发调试
+    // 控制台日志层：使用自定义格式化器，优化颜色和间距
     let console_layer = fmt::layer()
-        .compact()
+        .event_format(CompactFormatter)
         .with_writer(std::io::stdout)
-        .with_ansi(false)
-        .with_target(false)
-        .with_file(true)
-        .with_line_number(true)
-        // .with_thread_names(true)
-        // .with_thread_ids(true)
-        .compact();
+        .with_ansi(true);
+
+    // // 控制台日志层：简洁格式，带颜色，便于开发调试
+    // let console_layer = fmt::layer()
+    //     .compact()
+    //     .with_writer(std::io::stdout)
+    //     .with_ansi(true)
+    //     .with_target(false)
+    //     .with_file(true)
+    //     .with_line_number(true)
+    //     .with_thread_names(true)
+    //     .with_thread_ids(true)
+    //     .compact();
+
 
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));

@@ -58,6 +58,7 @@ impl TableMetadataService {
         version_fields.push(SeaField::new("module_code", data.module_code.clone()));
         version_fields.push(SeaField::new("metadata", data.metadata.clone()));
         version_fields.push(SeaField::new("archived", archived));
+        version_fields.push(SeaField::new("app_id", data.app_id.clone().unwrap_or_else(|| "default".to_string())));
         version_fields.push(SeaField::new("create_time", now));
         version_fields.push(SeaField::new("update_time", now));
 
@@ -96,6 +97,8 @@ impl TableMetadataService {
         ));
         main_fields.push(SeaField::new("module_code", data.module_code.clone()));
         main_fields.push(SeaField::new("archived", archived));
+        main_fields.push(SeaField::new("ddl_status", "pending".to_string()));
+        main_fields.push(SeaField::new("app_id", data.app_id.clone().unwrap_or_else(|| "default".to_string())));
         main_fields.push(SeaField::new("create_time", now));
         main_fields.push(SeaField::new("update_time", now));
 
@@ -138,6 +141,7 @@ impl TableMetadataService {
         let mut select = Query::select();
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
+            ("cmx_meta_table_define", "app_id"),
             ("cmx_meta_table_define", "table_name"),
             ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
@@ -171,6 +175,10 @@ impl TableMetadataService {
                 .add(
                     Expr::col(("cmx_meta_table_define", "version"))
                         .equals(("cmx_meta_table_define_version", "version")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "app_id"))
+                        .equals(("cmx_meta_table_define_version", "app_id")),
                 )
                 .add(
                     Expr::col(("cmx_meta_table_define", "db_id"))
@@ -191,21 +199,23 @@ impl TableMetadataService {
         Ok(dataset)
     }
 
-    /// 通过 table_name + db_id 获取详情
+    /// 通过 table_name + db_id + app_id 获取详情
     pub async fn get_by_table_name(
         mm: &DatabaseManager,
         db_id: &str,
         table_name: &str,
         target_db_id: Option<&str>,
+        app_id: &str,
     ) -> PluginResult<DataSet> {
         debug!(
-            "{:<12} - TableMetadataService::get_by_table_name - table_name: {}, db_id: {}",
-            "SERVICE", table_name, target_db_id.unwrap_or("")
+            "{:<12} - TableMetadataService::get_by_table_name - table_name: {}, app_id: {}",
+            "SERVICE", table_name, app_id
         );
 
         let mut select = Query::select();
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
+            ("cmx_meta_table_define", "app_id"),
             ("cmx_meta_table_define", "table_name"),
             ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
@@ -241,12 +251,17 @@ impl TableMetadataService {
                         .equals(("cmx_meta_table_define_version", "version")),
                 )
                 .add(
+                    Expr::col(("cmx_meta_table_define", "app_id"))
+                        .equals(("cmx_meta_table_define_version", "app_id")),
+                )
+                .add(
                     Expr::col(("cmx_meta_table_define", "db_id"))
                         .equals(("cmx_meta_table_define_version", "db_id")),
                 ),
         );
 
         select.and_where(Expr::col(("cmx_meta_table_define", "table_name")).eq(table_name));
+        select.and_where(Expr::col(("cmx_meta_table_define", "app_id")).eq(app_id));
         if target_db_id.is_some() {
             select.and_where(Expr::col(("cmx_meta_table_define", "db_id")).eq(target_db_id));
         }
@@ -374,7 +389,7 @@ impl TableMetadataService {
     /// 构建联查 SELECT 查询（公共基础）
     ///
     /// 主表 cmx_meta_table_define LEFT JOIN 四张表：
-    /// - cmx_meta_table_define_version: 通过 table_name + version + db_id 关联，取 metadata
+    /// - cmx_meta_table_define_version: 通过 table_name + version + db_id + app_id 关联，取 metadata
     /// - cmx_domain: 通过 domain_code = code 关联，取 name AS domain_name
     /// - cmx_application: 通过 application_code = code 关联，取 name AS application_name
     /// - cmx_module: 通过 module_code = code 关联，取 name AS module_name
@@ -382,6 +397,7 @@ impl TableMetadataService {
         let mut select = Query::select();
         select.from(TableMetadataBmc::table_ref()).columns(vec![
             ("cmx_meta_table_define", "id"),
+            ("cmx_meta_table_define", "app_id"),
             ("cmx_meta_table_define", "table_name"),
             ("cmx_meta_table_define", "display_name"),
             ("cmx_meta_table_define", "db_id"),
@@ -428,7 +444,8 @@ impl TableMetadataService {
             Condition::all()
                 .add(Expr::col(("cmx_meta_table_define", "table_name")).equals(("cmx_meta_table_define_version", "table_name")))
                 .add(Expr::col(("cmx_meta_table_define", "version")).equals(("cmx_meta_table_define_version", "version")))
-                .add(Expr::col(("cmx_meta_table_define", "db_id")).equals(("cmx_meta_table_define_version", "db_id"))),
+                .add(Expr::col(("cmx_meta_table_define", "db_id")).equals(("cmx_meta_table_define_version", "db_id")))
+                .add(Expr::col(("cmx_meta_table_define", "app_id")).equals(("cmx_meta_table_define_version", "app_id"))),
         );
 
         select.join(
@@ -455,7 +472,8 @@ impl TableMetadataService {
             sea_query::JoinType::LeftJoin,
             "cmx_plugin",
             Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "plugin_id")).equals(("cmx_plugin", "plugin_id"))),
+                .add(Expr::col(("cmx_meta_table_define", "plugin_id")).equals(("cmx_plugin", "plugin_id")))
+                .add(Expr::col(("cmx_meta_table_define", "app_id")).equals(("cmx_plugin", "app_id"))),
         );
 
         select
@@ -526,6 +544,7 @@ impl TableMetadataService {
             let table_name = record.table_name.clone();
             let display_name = record.display_name.clone();
             let target_db_id = record.db_id.clone();
+            let app_id = record.app_id.clone().unwrap_or_else(|| "default".to_string());
             let now = Utc::now();
             let mut main_fields = data.clone().not_none_sea_fields();
             main_fields.push(SeaField::new("update_time", now));
@@ -560,6 +579,7 @@ impl TableMetadataService {
                 &table_name,
                 &record.version,
                 &target_db_id,
+                &app_id,
             )
             .await?;
 
@@ -588,7 +608,7 @@ impl TableMetadataService {
             } else {
                 //新增
                 let version_id = snowflake_id_str();
-                let mut version_fields =data.clone().not_none_sea_fields();
+                let mut version_fields = data.clone().not_none_sea_fields();
                 version_fields.push(SeaField::new("id", version_id));
                 version_fields.push(SeaField::new("table_name", table_name));
                 version_fields.push(SeaField::new("display_name", display_name));
@@ -596,6 +616,7 @@ impl TableMetadataService {
                 version_fields.push(SeaField::new("plugin_id", plugin_id));
 
                 version_fields.push(SeaField::new("archived", record.archived));
+                version_fields.push(SeaField::new("app_id", app_id));
                 version_fields.push(SeaField::new("create_time", now));
                 version_fields.push(SeaField::new("update_time", now));
 
@@ -628,18 +649,27 @@ impl TableMetadataService {
 
     /// 根据 plugin_id 更新 version 字段
     ///
-    /// 更新 cmx_meta_table_define
-    /// 指定 plugin_id version 字段
+    /// 更新 cmx_meta_table_define 的 version 字段（按 plugin_id 和 app_id）
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器
+    /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    /// * `new_version` - 新的版本号
     pub async fn update_version_by_plugin_id(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
         plugin_id: &str,
+        app_id: &str,
         new_version: &str,
     ) -> PluginResult<u64> {
         info!(
-            "{:<12} - TableMetadataService::update_version_by_plugin_id - plugin_id: {}, new_version: {}",
-            "SERVICE", plugin_id, new_version
+            "{:<12} - TableMetadataService::update_version_by_plugin_id - plugin_id: {}, app_id: {}, new_version: {}",
+            "SERVICE", plugin_id, app_id, new_version
         );
 
         let now = Utc::now();
@@ -650,7 +680,8 @@ impl TableMetadataService {
             .table(TableMetadataBmc::table_ref())
             .value("version", new_version)
             .value("update_time", now)
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (main_sql, main_sql_values) = main_query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
@@ -670,26 +701,36 @@ impl TableMetadataService {
         Ok(1)
     }
 
-    /// 根据 plugin_id 删除表元数据
+    /// 根据 plugin_id 删除表元数据（按 plugin_id 和 app_id）
     ///
     /// 同时物理删除 cmx_meta_table_define 和 cmx_meta_table_define_version
-    /// 两个表中指定 plugin_id 对应的所有记录
+    /// 两个表中指定 plugin_id 和 app_id 对应的所有记录
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器
+    /// * `db_id` - 数据库 ID
+    /// * `txn_id` - 事务 ID（可选）
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
     pub async fn delete_by_plugin_id(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: Option<&str>,
         plugin_id: &str,
+        app_id: &str,
     ) -> PluginResult<u64> {
         info!(
-            "{:<12} - TableMetadataService::delete_by_plugin_id - plugin_id: {}",
-            "SERVICE", plugin_id
+            "{:<12} - TableMetadataService::delete_by_plugin_id - plugin_id: {}, app_id: {}",
+            "SERVICE", plugin_id, app_id
         );
 
-        // 先删除版本表 cmx_meta_table_define_version 中对应 plugin_id 的记录
+        // 先删除版本表 cmx_meta_table_define_version 中对应 plugin_id 和 app_id 的记录
         let mut version_delete = Query::delete();
         version_delete
             .from_table("cmx_meta_table_define_version")
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (version_sql, version_sql_values) = version_delete.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
@@ -707,11 +748,12 @@ impl TableMetadataService {
                 ))
             })?;
 
-        // 再删除主表 cmx_meta_table_define 中对应 plugin_id 的记录
+        // 再删除主表 cmx_meta_table_define 中对应 plugin_id 和 app_id 的记录
         let mut main_delete = Query::delete();
         main_delete
             .from_table("cmx_meta_table_define")
-            .and_where(Expr::col("plugin_id").eq(plugin_id));
+            .and_where(Expr::col("plugin_id").eq(plugin_id))
+            .and_where(Expr::col("app_id").eq(app_id));
 
         let (main_sql, main_sql_values) = main_delete.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", main_sql);
@@ -782,12 +824,21 @@ impl TableMetadataService {
                     })
                     .unwrap_or_default();
 
+                let app_id: String = record
+                    .get_by_name(existing.schema.as_ref(), "app_id")
+                    .and_then(|v| match v {
+                        cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| "default".to_string());
+
                 let mut version_delete = Query::delete();
                 version_delete
                     .from_table("cmx_meta_table_define_version")
                     .and_where(Expr::col("table_name").eq(&table_name))
                     .and_where(Expr::col("db_id").eq(&target_db_id))
-                    .and_where(Expr::col("version").eq(&version));
+                    .and_where(Expr::col("version").eq(&version))
+                    .and_where(Expr::col("app_id").eq(&app_id));
 
                 let (version_sql, version_sql_values) =
                     version_delete.build_sqlx(PostgresQueryBuilder);
@@ -816,16 +867,17 @@ impl TableMetadataService {
         Ok(total_affected)
     }
 
-    /// 查询表的所有版本历史
+    /// 查询表的所有版本历史（按 app_id 隔离）
     pub async fn list_versions(
         mm: &DatabaseManager,
         db_id: &str,
         table_name: &str,
         target_db_id: Option<&str>,
+        app_id: &str,
     ) -> PluginResult<DataSet> {
         debug!(
-            "{:<12} - TableMetadataService::list_versions - table_name: {}",
-            "SERVICE", table_name
+            "{:<12} - TableMetadataService::list_versions - table_name: {}, app_id: {}",
+            "SERVICE", table_name, app_id
         );
 
         let filter = TableMetadataVersionFilter {
@@ -835,6 +887,9 @@ impl TableMetadataService {
             db_id: target_db_id.map(|d| {
                 modql::filter::OpValsString(vec![modql::filter::OpValString::Eq(d.to_string())])
             }),
+            app_id: Some(modql::filter::OpValsString(vec![
+                modql::filter::OpValString::Eq(app_id.to_string()),
+            ])),
             plugin_id: None,
             version: None,
         };
@@ -857,12 +912,14 @@ impl TableMetadataService {
         table_name: &str,
         version: &str,
         target_db_id: &str,
+        app_id: &str,
     ) -> PluginResult<bool> {
         let mut select = Query::select();
         select.from(TableMetadataVersionBmc::table_ref()).expr(Expr::col("id").count());
         select.and_where(Expr::col("table_name").eq(table_name));
         select.and_where(Expr::col("version").eq(version));
         select.and_where(Expr::col("db_id").eq(target_db_id));
+        select.and_where(Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", sql);
@@ -905,6 +962,8 @@ impl TableMetadataService {
                     .get_by_name_as::<serde_json::Value>(schema, "metadata")
                     .unwrap_or(serde_json::Value::Null),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),
+                ddl_status: row.get_by_name_as(schema, "ddl_status"),
+                app_id: row.get_by_name_as(schema, "app_id"),
                 create_time: row
                     .get_by_name_as(schema, "create_time")
                     .unwrap_or_else(Utc::now),

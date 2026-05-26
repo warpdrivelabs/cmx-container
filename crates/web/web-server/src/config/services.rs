@@ -11,7 +11,6 @@ use cmx_traits::{ServiceQuery, ServiceStorage};
 use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::info;
-
 pub use crate::Error;
 
 /// 初始化服务管理器。
@@ -34,13 +33,19 @@ pub async fn init_services() -> crate::Result<()> {
     let db_manager = get_default_db_manager();
     let default_db_id = get_default_db_manager().get_default_db_id().await;
 
+    // 从配置读取 app_id，默认值为 "default"
+    // let app_id = ConfigManager::global()
+    //     .get_string("plugin.app_id")
+    //     .unwrap_or("default".to_string());
+    let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+
     let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id));
     let registry = Arc::new(ServiceRegistry::new());
 
     GlobalServiceRegistry::set(registry.clone())
         .map_err(|e| Error::ServiceInit(format!("初始化服务注册中心失败: {}", e)))?;
 
-    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone())) as Arc<dyn ServiceQuery>;
+    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone(), app_id.clone())) as Arc<dyn ServiceQuery>;
     let service_storage = Arc::new(ServiceStorageImpl::new(repository.clone())) as Arc<dyn ServiceStorage>;
 
     GlobalServiceQuery::set(service_query.clone())
@@ -55,11 +60,13 @@ pub async fn init_services() -> crate::Result<()> {
         GlobalServiceQuery::get().clone(),
         repository.clone(),
         GlobalServiceRegistry::get().clone(),
+        app_id.clone(),
     );
     service_listener.register().await;
 
     let runtime_listener = RuntimeLifecycleListener::new(
-        cmx_runtime::GlobalExtismEngine::get_as_invoker()
+        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+        app_id,
     );
     runtime_listener.register().await;
 

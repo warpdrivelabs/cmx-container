@@ -38,11 +38,36 @@ pool_max_instances = 8
 fuel_limit = 0
 
 [migration]
+# 是否启用迁移（可选，默认 false）
+# 启用后会执行待执行的数据库迁移
+enabled = false
 dir = "/app/docs/sql/migrations"
 lock_timeout = 60
+# 校验文件内容是否被修改，默认值true
+validate_checksum = false
 
 [templates]
 path = "/app/templates"
 
 [code_server]
 url = "https://dev.cloudmatrix.one:18080/"
+
+
+
+# ============================================
+# 文件存储配置
+# ============================================
+[storage]
+default_platform = "local"
+
+# 本地文件系统存储
+[[storage.instances]]
+platform = "local"
+storage_type = "local"
+enable_storage = true
+domain = "http://localhost:8080/files/"
+base_path = "uploads"
+storage_path = "./storage"
+enable_access = true
+path_patterns = "/files/**"
+

@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::sync::Arc;
 use cmx_core::model::service::ServiceDefinition;
+use cmx_traits::SaveServiceVersionParams;
 use crate::error::{PluginError, PluginResult};
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
 
@@ -71,7 +72,7 @@ pub async fn parse_and_save_services(
         }
     };
     //删除插件的服务在保存新服务，避免有的插件删除了数据库中还存在
-    if let Err(e) = service_storage.delete_services_by_plugin(params.plugin_id.as_str(),txn_id)
+    if let Err(e) = service_storage.delete_services_by_plugin(params.plugin_id.as_str(), &params.app_id, txn_id)
         .await {
         tracing::error!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e);
         return Err(PluginError::Plugin(format!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e)));
@@ -100,12 +101,15 @@ pub async fn parse_and_save_services(
 
         // 保存服务版本
         if let Err(e) = service_storage.save_service_version(
-            &svc.definition.service_key,
-            &params.plugin_version,
-            &params.plugin_id,
-            &params.plugin_version,
-            &config,
-            txn_id,
+            SaveServiceVersionParams {
+                service_key: svc.definition.service_key.clone(),
+                app_id: params.app_id.clone(),
+                version: params.plugin_version.clone(),
+                plugin_id: params.plugin_id.clone(),
+                plugin_version: params.plugin_version.clone(),
+                config,
+                txn_id: txn_id.map(|s| s.to_string()),
+            },
         ).await {
             tracing::error!(
                 "保存服务版本 {}:{} 失败: {:?}",

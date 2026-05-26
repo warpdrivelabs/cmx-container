@@ -45,16 +45,16 @@ health_check_interval = 60
 health_check_timeout = 5
 
 
-# 第二个数据源 - Postgres
-[[databases]]
-db_id = "postgres2"
-db_type = "postgres"
-db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
-#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
-default = false
-health_check_interval = 30
-health_check_timeout = 3
-pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
+## 第二个数据源 - Postgres
+#[[databases]]
+#db_id = "postgres2"
+#db_type = "postgres"
+#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
+##db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
+#default = false
+#health_check_interval = 30
+#health_check_timeout = 3
+#pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
 
 [redis]
 url = "redis://192.168.137.95:32496/13"
@@ -107,6 +107,10 @@ temp_root = "plugins/temp"
 # 插件上传临时目录
 upload_root = "plugins/uploads"
 
+# 定时对账间隔（秒），对比数据库与本地 Registry，自动补偿差异
+# 设为 0 禁用定时对账，默认 60
+# reconciliation_interval_secs = 60
+
 # 自动安装配置
 [plugin.auto_install]
 enabled = false
@@ -122,6 +126,9 @@ enabled = false
 
 #数据库迁移相关配置
 [migration]
+# 是否启用迁移（可选，默认 false）
+# 启用后会执行待执行的数据库迁移
+enabled = false
 # 迁移文件目录
 dir = "docs/sql/migrations"
 # 校验文件内容是否被修改，默认值true

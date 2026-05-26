@@ -3,7 +3,7 @@
 
 use cmx_buffer::cache::CacheManager;
 use cmx_buffer::config::{LockConfig, RedisConfig};
-use cmx_buffer::lock::{LockManager, LockOptions};
+use cmx_buffer::lock::LockManager;
 use cmx_buffer::RedisClient;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -290,22 +290,23 @@ async fn test_ttl_persist() {
 #[tokio::test]
 async fn test_lock_try_lock() {
     let client = setup_client().await;
-    let lock_config = LockConfig::new().with_expire(5).with_retry_times(1);
+    let lock_config = LockConfig::new().with_expire(5);
     let lock_manager = LockManager::new(client.clone(), lock_config);
     
     let key = "test_lock_try";
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     // 第一次获取锁
-    let result = lock_manager.try_lock(key).await.unwrap();
-    assert!(result);
+    let guard = lock_manager.try_lock(key).await.unwrap();
+    assert!(guard.is_some());
     
     // 第二次获取锁（应该失败）
     let result = lock_manager.try_lock(key).await.unwrap();
-    assert!(!result);
+    assert!(result.is_none());
     
-    // 释放锁
-    lock_manager.unlock(key).await.unwrap();
+    // 释放锁（Drop 自动释放）
+    drop(guard);
+    tokio::time::sleep(Duration::from_millis(100)).await;
     
     // 清理
     cleanup_key(&client, &format!("lock:{}", key)).await;
@@ -321,7 +322,7 @@ async fn test_lock_guard() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     // 获取锁守卫
-    let _guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
+    let _guard = lock_manager.lock(key).await.unwrap();
     
     // 验证锁存在
     let is_locked = lock_manager.is_locked(key).await.unwrap();
@@ -348,7 +349,7 @@ async fn test_lock_extend() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     // 获取锁
-    let guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
+    let guard = lock_manager.lock(key).await.unwrap();
     
     // 延长锁时间
     guard.extend(Duration::from_secs(10)).await.unwrap();
@@ -373,7 +374,7 @@ async fn test_lock_auto_release() {
     cleanup_key(&client, &format!("lock:{}", key)).await;
     
     {
-        let _guard = lock_manager.lock(key, LockOptions::default()).await.unwrap();
+        let _guard = lock_manager.lock(key).await.unwrap();
         assert!(lock_manager.is_locked(key).await.unwrap());
     }
     

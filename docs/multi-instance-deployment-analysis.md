@@ -1063,7 +1063,125 @@ cmx:plugin:sync                                 # Pub/Sub 频道
 
 ---
 
-## 十、变更记录
+## 十、生产环境插件部署方案（Production Plugin Deployment）
+
+### 10.1 设计目标
+
+生产环境多实例部署时，每个实例启动后需要自动将数据库中已注册的插件同步到本地运行时，确保：
+1. 内存 Registry 与数据库一致
+2. 本地文件（WASM 等）完整可用
+3. 不重复执行 DDL（建表 SQL 等由首次安装的实例负责）
+
+### 10.2 启动初始化流程
+
+当前启动流程（`PluginManager.initialize()`）：
+
+```
+1. load_contexts()        — 从数据库加载插件到内存 Registry 和 Contexts（不下载文件、不执行 DDL）
+2. 启动 Redis Pub/Sub     — 监听跨实例变更通知（PluginChangeHandler）
+3. 启动定时对账任务       — ReconciliationTask，对比 DB 与本地状态，补偿差异
+```
+
+**关键设计**：启动时不再执行 DDL 和文件下载，只做内存加载。文件下载推迟到对账任务触发。
+
+### 10.3 对账任务（ReconciliationTask）详细设计
+
+对账任务每 N 秒（默认 60s，最小 10s）执行一次，对比**数据库**、**内存 Registry** 和**本地文件系统**三层状态。
+
+#### 10.3.1 三层状态检查逻辑
+
+| DB 状态 | Registry 状态 | 本地文件状态 | 处理方式 |
+|---------|--------------|-------------|---------|
+| 存在 | 缺失 | - | `RuntimeLoader::load_plugin()` — 下载文件 + 注册内存 |
+| 存在 | 存在 | **缺失** | `RuntimeLoader::load_plugin()` — 下载文件（文件可能因容器重启丢失） |
+| 存在 | 存在 | 存在 | 无需操作 |
+| 缺失 | 存在 | - | `RuntimeLoader::unload_plugin()` — 卸载孤立插件 |
+
+#### 10.3.2 本地文件检查路径
+
+```
+{plugin_root}/{app_id}/{plugin_id}/{version}/
+```
+
+只要此目录不存在，即认为本地文件缺失，需要重新下载。
+
+#### 10.3.3 为什么需要检查本地文件
+
+**场景**：容器化部署时，Pod 重启后本地文件系统可能被清空（emptyDir 或新 Pod），但 `load_contexts()` 已将数据库记录加载到内存 Registry。此时：
+- Registry 中有插件信息 → 旧逻辑会跳过
+- 但本地没有 WASM 文件 → 插件实际无法运行
+
+**解决**：对账时增加本地文件检查，即使 Registry 中存在，本地文件缺失也要调用 `RuntimeLoader::load_plugin()` 重新下载。
+
+#### 10.3.4 RuntimeLoader::load_plugin() 行为
+
+`load_plugin()` 是幂等操作：
+1. 从数据库查询插件记录
+2. 检查本地路径 `{plugin_root}/{app_id}/{plugin_id}/{version}` 是否存在
+3. 若不存在，根据 `zip_source_type` 和 `zip_source_url` 下载并解压插件文件
+4. 构建 `PluginInfo` 注册到内存 Registry
+5. 构建 `PluginContext` 存入 contexts 映射
+
+**不执行 DDL**，仅负责文件下载和内存注册。
+
+#### 10.3.5 对账结果（ReconcileResult）
+
+```rust
+pub struct ReconcileResult {
+    /// 本次对账加载的插件（Registry 中缺失，已加载）
+    pub loaded: Vec<String>,
+    /// 本次对账同步的插件（Registry 中存在但本地文件缺失，已下载）
+    pub synced: Vec<String>,
+    /// 本次对账卸载的插件
+    pub unloaded: Vec<String>,
+    /// 本次对账失败的插件及错误信息
+    pub failed: Vec<(String, String)>,
+}
+```
+
+### 10.4 跨实例同步机制
+
+对账任务与 Redis Pub/Sub 通知互补：
+
+| 机制 | 触发方式 | 延迟 | 用途 |
+|------|---------|------|------|
+| PluginChangeHandler | 事件驱动（Redis Pub/Sub） | 实时 | 其他实例安装/升级/卸载插件时，实时同步 |
+| ReconciliationTask | 定时轮询 | 60s | 补偿事件丢失或文件丢失的差异 |
+
+两者共同确保 DB、内存 Registry、本地文件系统三者一致。
+
+### 10.5 完整数据流
+
+```
+实例启动
+  │
+  ├─ 1. load_contexts()
+  │     DB → Registry + Contexts（仅内存，无文件）
+  │
+  ├─ 2. Redis Pub/Sub 订阅
+  │     实时接收其他实例的插件变更通知
+  │
+  └─ 3. ReconciliationTask（首次立即执行，之后每 60s）
+        │
+        ├─ DB 有 + Registry 无 → load_plugin()（下载+注册）
+        ├─ DB 有 + Registry 有 + 本地文件无 → load_plugin()（下载文件）
+        ├─ DB 无 + Registry 有 → unload_plugin()（卸载）
+        └─ 全部一致 → 无操作
+```
+
+### 10.6 相关代码文件
+
+| 文件 | 用途 |
+|------|------|
+| `service/reconciliation.rs` | 定时对账任务 |
+| `service/runtime_loader.rs` | 运行时加载器（下载文件+注册内存，不执行 DDL） |
+| `service/plugin_sync.rs` | 跨实例变更通知处理 |
+| `service/initializer.rs` | 启动初始化（load_contexts） |
+| `core/manager.rs` | PluginManager 核心协调器 |
+
+---
+
+## 十一、变更记录
 
 | 日期 | 版本 | 变更内容 |
 |------|------|----------|
@@ -1071,3 +1189,4 @@ cmx:plugin:sync                                 # Pub/Sub 频道
 | 2026-05-08 | v1.1 | 新增跨节点同步详细设计（消息类型、锁、防重放、事件防循环） |
 | 2026-05-08 | v1.2 | 新增降级逻辑边界处理（本地无目标版本时回退到安装） |
 | 2026-05-08 | v1.3 | 修正事件防循环设计：使用 `instance_id` 替代 `node_id`，区分配置 vs 运行时标识 |
+| 2026-05-22 | v1.4 | 新增生产环境插件部署方案（第十章），完善对账任务三层状态检查（DB + Registry + 本地文件），增加本地文件缺失时自动下载逻辑 |

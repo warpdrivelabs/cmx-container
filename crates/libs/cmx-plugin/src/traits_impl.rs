@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use cmx_traits::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot, TraitError};
 
 use crate::core::manager::PluginManager;
-use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo, PluginStatus};
+use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo};
 use crate::infrastructure::database::plugin::model::PluginRecord;
 
 /// 从 PluginInfo 转换为 PluginSnapshot
@@ -58,6 +58,7 @@ impl From<PluginRecord> for PluginSnapshot {
 impl From<TraitsPluginFilter> for DomainPluginFilter {
     fn from(filter: TraitsPluginFilter) -> Self {
         Self {
+            app_id: None,
             status: filter.status.and_then(|s| s.parse().ok()),
             name: filter.name,
             domain_code: filter.domain_code,
@@ -74,7 +75,7 @@ impl PluginQuery for PluginManager {
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
         // 先从数据库查询完整记录（包含 wasm_path）
         let record = self.repository()
-            .find_plugin(plugin_id)
+            .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
@@ -108,17 +109,16 @@ impl PluginQuery for PluginManager {
         Ok(info.is_some())
     }
 
-    /// 检查插件是否已激活
-    async fn is_active(&self, plugin_id: &str) -> Result<bool, TraitError> {
-        self.is_plugin_activated(plugin_id).await
-            .map_err(|e| TraitError::Internal(format!("检查激活状态失败: {}", e)))
+    /// 检查插件是否已激活（当前总是返回 false，插件激活功能未实现）
+    async fn is_active(&self, _plugin_id: &str) -> Result<bool, TraitError> {
+        Ok(false)
     }
 
     /// 获取插件的 WASM 文件绝对路径
     async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError> {
         // 从数据库获取完整记录
         let record = self.repository()
-            .find_plugin(plugin_id)
+            .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
@@ -139,28 +139,28 @@ impl PluginQuery for PluginManager {
         }
     }
 
-    /// 列出所有已激活的插件快照
-    async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError> {
-        // 使用 filter 筛选已激活的插件
-        let domain_filter = DomainPluginFilter {
-            status: Some(PluginStatus::Activated),
-            ..Default::default()
-        };
-        let infos = self.list_plugins(&domain_filter).await
-            .map_err(|e| TraitError::Internal(format!("查询插件列表失败: {}", e)))?;
-
-        // 转换结果，补充 wasm_path
-        let mut snapshots = Vec::new();
-        for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id).await {
-                snapshots.push(PluginSnapshot::from(record));
-            } else {
-                snapshots.push(PluginSnapshot::from(info));
-            }
-        }
-
-        Ok(snapshots)
-    }
+    // /// 列出所有已激活的插件快照
+    // async fn list_active_plugins(&self) -> Result<Vec<PluginSnapshot>, TraitError> {
+    //     // 使用 filter 筛选已激活的插件
+    //     let domain_filter = DomainPluginFilter {
+    //         status: Some(PluginStatus::Activated),
+    //         ..Default::default()
+    //     };
+    //     let infos = self.list_plugins(&domain_filter).await
+    //         .map_err(|e| TraitError::Internal(format!("查询插件列表失败: {}", e)))?;
+    //
+    //     // 转换结果，补充 wasm_path
+    //     let mut snapshots = Vec::new();
+    //     for info in infos {
+    //         if let Ok(Some(record)) = self.repository().find_plugin(&info.id, self.app_id()).await {
+    //             snapshots.push(PluginSnapshot::from(record));
+    //         } else {
+    //             snapshots.push(PluginSnapshot::from(info));
+    //         }
+    //     }
+    //
+    //     Ok(snapshots)
+    // }
 
     /// 根据筛选条件查询插件列表
     async fn list_plugins(&self, filter: &TraitsPluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
@@ -171,7 +171,7 @@ impl PluginQuery for PluginManager {
         // 转换结果，补充 wasm_path
         let mut snapshots = Vec::new();
         for info in infos {
-            if let Ok(Some(record)) = self.repository().find_plugin(&info.id).await {
+            if let Ok(Some(record)) = self.repository().find_plugin(&info.id, self.app_id()).await {
                 snapshots.push(PluginSnapshot::from(record));
             } else {
                 snapshots.push(PluginSnapshot::from(info));

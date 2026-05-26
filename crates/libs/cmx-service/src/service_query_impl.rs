@@ -21,6 +21,8 @@ pub struct ServiceQueryImpl {
     repository: Arc<ServiceRepository>,
     /// 服务注册中心（内存缓存）
     registry: Arc<ServiceRegistry>,
+    /// 应用隔离标识
+    app_id: String,
 }
 
 impl ServiceQueryImpl {
@@ -29,8 +31,9 @@ impl ServiceQueryImpl {
     /// # 参数
     /// * `repository` - 服务仓储
     /// * `registry` - 服务注册中心
-    pub fn new(repository: Arc<ServiceRepository>, registry: Arc<ServiceRegistry>) -> Self {
-        Self { repository, registry }
+    /// * `app_id` - 应用隔离标识
+    pub fn new(repository: Arc<ServiceRepository>, registry: Arc<ServiceRegistry>, app_id: String) -> Self {
+        Self { repository, registry, app_id }
     }
 }
 
@@ -50,7 +53,7 @@ impl ServiceQuery for ServiceQueryImpl {
             return Ok(Some(service));
         }
 
-        let service_def = self.repository.get_service(service_key).await
+        let service_def = self.repository.get_service(service_key, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         if let Some(def) = &service_def {
@@ -80,7 +83,7 @@ impl ServiceQuery for ServiceQueryImpl {
             return Ok(cached_services);
         }
 
-        let service_defs = self.repository.get_services_by_plugin(plugin_id).await
+        let service_defs = self.repository.get_services_by_plugin(plugin_id, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         for def in &service_defs {
@@ -105,7 +108,7 @@ impl ServiceQuery for ServiceQueryImpl {
         let all_keys = self.registry.get_all_keys().await;
 
         if all_keys.is_empty() {
-            let all_services = self.repository.list_services().await
+            let all_services = self.repository.list_services(&self.app_id).await
                 .map_err(|e| TraitError::Internal(e.to_string()))?;
 
             let mut active = Vec::new();
@@ -158,16 +161,16 @@ impl ServiceQuery for ServiceQueryImpl {
             }
         }
 
-        let service = self.repository.get_service(service_key).await
+        let service = self.repository.get_service(service_key, &self.app_id).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         match service {
             Some(svc) => {
-                let versions = self.repository.get_service_versions(&svc.service_key).await
+                let versions = self.repository.get_service_versions(&svc.service_key, &self.app_id).await
                     .map_err(|e| TraitError::Internal(e.to_string()))?;
 
                 if let Some((version, _)) = versions.first()
-                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version).await
+                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version, &self.app_id).await
                         .map_err(|e| TraitError::Internal(e.to_string()))? {
                         let orch: ServiceOrchestration = serde_json::from_str(&config)
                             .map_err(|e| TraitError::Internal(e.to_string()))?;
@@ -193,10 +196,13 @@ impl ServiceQuery for ServiceQueryImpl {
     /// 返回分页结果
     async fn page_services(
         &self,
-        filter: ServicePageFilter,
+        mut filter: ServicePageFilter,
         page: u64,
         size: u64,
     ) -> Result<ServicePageResult, TraitError> {
+        if filter.app_id.is_none() {
+            filter.app_id = Some(self.app_id.clone());
+        }
         let (items, total) = self.repository.page_services(&filter, page, size).await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 

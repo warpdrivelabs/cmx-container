@@ -115,6 +115,8 @@ pub struct ApiPluginFilter {
     pub application_code: Option<String>,
     /// 按模块编码筛选
     pub module_code: Option<String>,
+    /// 按应用ID筛选
+    pub app_id: Option<String>,
 }
 
 /// 从 API 层过滤条件转换为 cmx-plugin 层过滤条件
@@ -128,6 +130,7 @@ impl From<ApiPluginFilter> for cmx_plugin::domain::plugin::PluginFilter {
             domain_code: api_filter.domain_code,
             application_code: api_filter.application_code,
             module_code: api_filter.module_code,
+            app_id: api_filter.app_id,
         }
     }
 }

@@ -22,10 +22,6 @@ use crate::infrastructure::storage::TempDirCleanup;
 use crate::infrastructure::storage::file::FileStorage;
 use crate::security::validator::SecurityValidator;
 
-use super::install::InstallService;
-use super::uninstall::UninstallService;
-use super::upgrade::UpgradeService;
-
 /// 部署操作类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DeployAction {
@@ -54,6 +50,13 @@ pub struct DeployRequest {
     /// 是否发布到插件市场
     #[serde(default)]
     pub publish_to_marketplace: bool,
+    /// 应用ID
+    #[serde(default)]
+    pub app_id: Option<String>,
+    /// 插件市场版本ID（由 handler 发布后传入）
+    pub marketplace_source_id: Option<String>,
+    /// 插件市场发布信息（由 handler 发布后传入）
+    pub marketplace_publish_info: Option<super::marketplace_publisher::MarketplacePublishInfo>,
 }
 
 /// 部署响应
@@ -81,6 +84,8 @@ pub struct DeployResponse {
 /// 部署服务依赖
 #[derive(Clone)]
 pub struct DeployServiceDeps {
+    /// 插件操作编排器
+    pub executor: Arc<crate::service::executor::PluginOperationExecutor>,
     /// 数据仓库
     pub repository: Arc<PluginRepository>,
     /// 缓存管理器
@@ -89,22 +94,18 @@ pub struct DeployServiceDeps {
     pub storage: Arc<FileStorage>,
     /// 安全验证器
     pub security_validator: Arc<SecurityValidator>,
-    /// 安装服务
-    pub install_service: InstallService,
-    /// 升级服务
-    pub upgrade_service: UpgradeService,
-    /// 卸载服务
-    pub uninstall_service: UninstallService,
     /// 插件安装根目录
     pub plugin_root: PathBuf,
     /// 临时目录
     pub temp_root: PathBuf,
+    /// 当前应用 ID
+    pub app_id: String,
 }
 
 /// 部署服务
 ///
 /// 负责智能判断插件操作类型（安装/升级/覆盖安装），
-/// 并分发到对应的 Service 执行实际操作。
+/// 并分发到 PluginOperationExecutor 执行实际操作。
 #[derive(Clone)]
 pub struct DeployService {
     deps: DeployServiceDeps,
@@ -129,9 +130,9 @@ impl DeployService {
     /// 2. 安全验证 + 元数据解析（获取 plugin_id 和 version）
     /// 3. 查询当前插件安装状态和版本
     /// 4. 版本比较，分发到对应操作：
-    ///    - 未安装 → 调用 InstallService
-    ///    - 新版本 > 旧版本 → 调用 UpgradeService
-    ///    - 新版本 = 旧版本 && force_reinstall → 先 UninstallService 再 InstallService
+    ///    - 未安装 → 调用 executor.execute_install
+    ///    - 新版本 > 旧版本 → 调用 executor.execute_upgrade
+    ///    - 新版本 = 旧版本 && force_reinstall → 调用 executor.execute_reinstall
     ///    - 新版本 = 旧版本 && !force_reinstall → 返回 AlreadyInstalled
     ///    - 新版本 < 旧版本 → 返回错误
     pub async fn deploy(&self, mut request: DeployRequest) -> PluginResult<DeployResponse> {
@@ -175,51 +176,43 @@ impl DeployService {
             request.db_id = plugin_def.datasource_id.clone();
         }
 
-        let mut marketplace_source_id: Option<String> = None;
-        let mut marketplace_publish_info: Option<super::marketplace_publisher::MarketplacePublishInfo> = None;
-
-        if request.publish_to_marketplace {
-            let publish_req = super::marketplace_publisher::PublishFromDeployRequest {
-                plugin_id: plugin_id.clone(),
-                version: new_version.clone(),
-                plugin_def: plugin_def.clone(),
-                zip_file_path: package_path.clone(),
-            };
-            let result = super::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req).await?;
-            let file_url = result.file_url.clone();
-            marketplace_source_id = Some(result.marketplace_version_id.clone());
-            marketplace_publish_info = Some(result.into());
-
-            // 发布到市场后，将 source 构造为 remote url
-            if matches!(request.source, PluginSource::Local { .. }) {
-                request.source = PluginSource::Remote {
-                    url: file_url,
-                    checksum: None,
-                };
-            }
-        }
-
-
-        let existing_plugin = self.deps.repository.find_plugin(&plugin_id).await?;
+        let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or(&self.deps.app_id)).await?;
 
         match existing_plugin {
             None => {
-                let mut resp = self.execute_install(&request, &plugin_id, &new_version, marketplace_source_id.as_deref()).await?;
-                resp.marketplace_publish = marketplace_publish_info;
+                let mut resp = self.execute_install(
+                    &request,
+                    &plugin_id,
+                    &new_version,
+                    request.marketplace_source_id.as_deref(),
+                ).await?;
+                resp.marketplace_publish = request.marketplace_publish_info.clone();
                 Ok(resp)
             }
             Some(record) => {
                 let old_version = record.version.clone();
                 match new_version.cmp(&old_version) {
                     std::cmp::Ordering::Greater => {
-                        let mut resp = self.execute_upgrade(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
-                        resp.marketplace_publish = marketplace_publish_info;
+                        let mut resp = self.execute_upgrade(
+                            &request,
+                            &plugin_id,
+                            &old_version,
+                            &new_version,
+                            request.marketplace_source_id.as_deref(),
+                        ).await?;
+                        resp.marketplace_publish = request.marketplace_publish_info.clone();
                         Ok(resp)
                     }
                     std::cmp::Ordering::Equal => {
                         if request.force_reinstall {
-                            let mut resp = self.execute_reinstall(&request, &plugin_id, &old_version, &new_version, marketplace_source_id.as_deref()).await?;
-                            resp.marketplace_publish = marketplace_publish_info;
+                            let mut resp = self.execute_reinstall(
+                                &request,
+                                &plugin_id,
+                                &old_version,
+                                &new_version,
+                                request.marketplace_source_id.as_deref(),
+                            ).await?;
+                            resp.marketplace_publish = request.marketplace_publish_info.clone();
                             Ok(resp)
                         } else {
                             Ok(DeployResponse {
@@ -230,7 +223,7 @@ impl DeployService {
                                 install_path: PathBuf::from(&record.install_path),
                                 success: true,
                                 message: "插件已安装相同版本，无需操作".to_string(),
-                                marketplace_publish: marketplace_publish_info,
+                                marketplace_publish: request.marketplace_publish_info.clone(),
                             })
                         }
                     }
@@ -260,9 +253,10 @@ impl DeployService {
             version_constraint: None,
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+            app_id: request.app_id.clone(),
         };
 
-        let result = self.deps.install_service.install(install_req).await?;
+        let result = self.deps.executor.execute_install(install_req).await?;
 
         Ok(DeployResponse {
             plugin_id: result.plugin_id,
@@ -293,9 +287,10 @@ impl DeployService {
             operator: Some("system".to_string()),
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
+            app_id: request.app_id.clone(),
         };
 
-        let result = self.deps.upgrade_service.upgrade(upgrade_req).await?;
+        let result = self.deps.executor.execute_upgrade(upgrade_req).await?;
 
         Ok(DeployResponse {
             plugin_id: result.plugin_id,
@@ -309,45 +304,20 @@ impl DeployService {
         })
     }
 
-    /// 执行覆盖安装操作（先卸载再安装）
+    /// 执行覆盖安装操作（先卸载再安装）。
+    ///
+    /// 由 executor 统一编排卸载+安装+事件发布的完整流程。
     async fn execute_reinstall(
         &self,
         request: &DeployRequest,
         plugin_id: &str,
         old_version: &str,
         _new_version: &str,
-        marketplace_source_id: Option<&str>,
+        _marketplace_source_id: Option<&str>,
     ) -> PluginResult<DeployResponse> {
-        // 先卸载
-        let uninstall_req = super::uninstall::UninstallRequest {
-            plugin_id: plugin_id.to_string(),
-            force: true,
-            operator: "system".to_string(),
-        };
-
-        self.deps.uninstall_service.uninstall(uninstall_req).await?;
-
-        // 再安装
-        let install_req = super::install::InstallRequest {
-            source: request.source.clone(),
-            db_id: request.db_id.clone(),
-            auto_activate: false,
-            version_constraint: None,
-            build_type: request.build_type.clone(),
-            marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
-        };
-
-        let result = self.deps.install_service.install(install_req).await?;
-
-        Ok(DeployResponse {
-            plugin_id: result.plugin_id,
-            action: DeployAction::Reinstall,
-            old_version: Some(old_version.to_string()),
-            new_version: result.version,
-            install_path: result.install_path,
-            success: true,
-            message: "插件覆盖安装成功".to_string(),
-            marketplace_publish: None,
-        })
+        self.deps
+            .executor
+            .execute_reinstall(request.clone(), plugin_id, old_version)
+            .await
     }
 }

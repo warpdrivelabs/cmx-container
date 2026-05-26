@@ -19,7 +19,7 @@ use super::request::*;
 use super::response::*;
 
 /// 从请求转换为 cmx_plugin 的 PluginSource
-fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::PluginSource {
+pub fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::PluginSource {
     match req {
         PluginSourceRequest::Local { path } => {
             cmx_plugin::domain::plugin::PluginSource::Local {
@@ -66,6 +66,7 @@ pub async fn plugin_install(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: convert_source(&req.source),
         db_id: req.target_db_id,
@@ -73,6 +74,7 @@ pub async fn plugin_install(
         version_constraint: None,
         build_type: None,
         marketplace_source_id: None,
+        app_id: Some(app_id),
     };
 
     let result = manager.install(install_req).await.map_err(|e| {
@@ -112,10 +114,12 @@ pub async fn plugin_uninstall(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let uninstall_req = cmx_plugin::service::uninstall::UninstallRequest {
         plugin_id: req.plugin_id.clone(),
         force: req.force.unwrap_or(false),
         operator: "system".to_string(),
+        app_id: Some(app_id),
     };
 
     let result = manager.uninstall(uninstall_req).await.map_err(|e| {
@@ -153,6 +157,7 @@ pub async fn plugin_upgrade(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let upgrade_req = cmx_plugin::service::upgrade::UpgradeRequest {
         plugin_id: req.plugin_id.clone(),
         source: convert_source(&req.source),
@@ -161,6 +166,7 @@ pub async fn plugin_upgrade(
         operator: req.operator,
         build_type: None,
         marketplace_source_id: None,
+        app_id: Some(app_id),
     };
 
     let result = manager.upgrade(upgrade_req).await.map_err(|e| {
@@ -200,11 +206,13 @@ pub async fn plugin_downgrade(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let downgrade_req = cmx_plugin::service::downgrade::DowngradeRequest {
         plugin_id: req.plugin_id.clone(),
         target_version: req.target_version.clone(),
         source: None,
         operator: req.operator,
+        app_id: Some(app_id),
     };
 
     let result = manager.downgrade(downgrade_req).await.map_err(|e| {
@@ -310,22 +318,68 @@ pub async fn plugin_deploy(
     tokio::fs::write(&file_path, &file_bytes).await
         .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
-    // 构建 PluginSource::Local（使用绝对路径，避免 LocalFetcher 拼接 plugin_root 前缀）
     let abs_path = std::fs::canonicalize(&file_path)
         .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
-    let source = cmx_plugin::domain::plugin::PluginSource::Local {
-        path: abs_path.clone(),
-    };
 
-    // 调用 PluginManager.deploy()
+    // 如果需要发布到市场，先解析插件定义并发布
+    let marketplace_source_id: Option<String>;
+    let marketplace_publish_info: Option<cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo>;
+    let source: cmx_plugin::domain::plugin::PluginSource;
+
+    if publish_to_marketplace.unwrap_or(true) {
+        let plugin_def = tokio::task::spawn_blocking({
+            let abs_path = abs_path.clone();
+            move || cmx_plugin::common::DefinitionUtils::parse_from_zip(&abs_path)
+        })
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("解析插件定义失败: {}", e)))?
+        .map_err(|e| crate::Error::InternalError(format!("解析插件定义失败: {}", e)))?;
+
+        let publish_req = cmx_plugin::service::marketplace_publisher::PublishFromDeployRequest {
+            plugin_id: plugin_def.id.clone(),
+            version: plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+            plugin_def: plugin_def.clone(),
+            zip_file_path: abs_path.clone(),
+        };
+
+        let result = cmx_plugin::service::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req)
+            .await
+            .map_err(|e| crate::Error::InternalError(format!("发布到插件市场失败: {}", e)))?;
+
+        // 先取需要的数据，再消费 result
+        let file_url = result.file_url.clone();
+        let marketplace_version_id = result.marketplace_version_id.clone();
+
+        marketplace_source_id = Some(marketplace_version_id);
+        marketplace_publish_info = Some(result.into());
+
+        // 发布后使用 Remote source
+        source = cmx_plugin::domain::plugin::PluginSource::Remote {
+            url: file_url,
+            checksum: None,
+        };
+    } else {
+        marketplace_source_id = None;
+        marketplace_publish_info = None;
+
+        // 未发布则使用 Local source
+        source = cmx_plugin::domain::plugin::PluginSource::Local {
+            path: abs_path,
+        };
+    }
+
     let manager = cmx_plugin::GlobalPluginManager::get();
 
+    let app_id = manager.app_id().to_string();
     let deploy_req = cmx_plugin::DeployRequest {
         source,
         db_id: target_db_id,
         force_reinstall,
         build_type,
-        publish_to_marketplace: publish_to_marketplace.unwrap_or(true),
+        publish_to_marketplace: false,
+        app_id: Some(app_id),
+        marketplace_source_id,
+        marketplace_publish_info,
     };
 
     let result = manager.deploy(deploy_req).await.map_err(|e| {
@@ -454,7 +508,7 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
     tag = "Plugin"
 )]
 pub async fn plugin_list(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(params): Json<cmx_core::ListParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<PluginListResponse>>> {
@@ -462,9 +516,15 @@ pub async fn plugin_list(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
-    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
         .into();
+
+    let app_id = cmx_state.app_id().await;
+    if filter.app_id==None {
+        filter.app_id = Some(app_id);
+    }
+
     let plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
         crate::Error::InternalError(format!("获取插件列表失败: {}", e))
     })?;
@@ -527,7 +587,7 @@ pub async fn plugin_get(
     tag = "Plugin"
 )]
 pub async fn plugin_page(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(params): Json<cmx_core::PageParams<super::request::ApiPluginFilter>>,
 ) -> Result<Json<ApiResp<Vec<PluginInfoResponse>>>> {
@@ -537,9 +597,14 @@ pub async fn plugin_page(
     let page_size = params.get_size() as u64;
     let skip = params.get_offset() as usize;
 
-    let filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
         .unwrap_or_default()
         .into();
+
+    let app_id = cmx_state.app_id().await;
+    if filter.app_id==None {
+        filter.app_id = Some(app_id);
+    }
 
     let manager = cmx_plugin::GlobalPluginManager::get();
     let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {

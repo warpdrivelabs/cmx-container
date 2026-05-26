@@ -54,48 +54,42 @@ pub use core::manager::PluginManager;
 pub use core::manager::PluginManagerBuilder;
 pub use core::registry::PluginRegistry;
 pub use core::context::PluginContext;
-pub use core::lifecycle::{LifecycleState, LifecycleStateMachine};
 
 // 导出领域模块类型
 pub use domain::plugin::{PluginInfo, PluginSource, PluginStatus, PluginFilter, PluginConfig, PluginDatabaseConfig};
 pub use domain::version::{SemanticVersion, PreRelease, VersionConstraint, VersionRelation, VersionParseError};
-pub use domain::dependency::{DependencyCheckResult, DependencyResolution, DependencyGraph, DependencyNode, Dependency, MissingDependency, DependencyConflict};
-pub use domain::status::{PluginStatus as DomainPluginStatus, StatusTransition};
+pub use domain::dependency::{DependencyCheckResult, DependencyResolution, Dependency, MissingDependency, DependencyConflict};
 
 // 导出服务模块类型
 pub use service::install::InstallService;
 pub use service::uninstall::UninstallService;
-pub use service::activate::ActivateService;
 pub use service::upgrade::UpgradeService;
 pub use service::downgrade::DowngradeService;
-pub use service::rollback::RollbackService;
 pub use service::deploy::{DeployAction, DeployRequest, DeployResponse};
+// pub use service::control::{
+//     ControlService, ControlDeployRequest, ControlDeployResponse, ControlInstallRequest,
+//     ControlUpgradeRequest, ControlDowngradeRequest, ControlUninstallRequest,
+// };
 pub use service::auto_install::{AutoInstallService, AutoInstallConfig, AutoInstallPlugin, AutoInstallResult, InstallAction};
 
 // 导出基础设施模块类型
 pub use infrastructure::database::schema::SchemaManager;
 pub use infrastructure::database::plugin::PluginRepository;
-pub use infrastructure::database::migration::{MigrationManager, MigrationStatus};
 pub use infrastructure::cache::memory::MemoryCache;
 pub use infrastructure::cache::layered::{LayeredCacheManager, CacheValue, CacheStrategy};
 pub use infrastructure::storage::file::FileStorage;
 pub use infrastructure::storage::backup::{BackupManager, BackupInfo};
-pub use infrastructure::messaging::queue::{MessageQueue, Message, MessageQueueManager};
 
 // 导出集群模块类型
 pub use cluster::node::{NodeManager, NodeInfo, NodeStatus};
-pub use cluster::deployment::{DeploymentCoordinator, DeploymentStrategy, DeploymentStatus, DeploymentTask};
 pub use cluster::notification::{PluginNotifier, PluginChangeNotification, PluginChangeAction};
 
 // 导出安全模块类型
 pub use security::validator::{SecurityValidator, ValidationResult};
 pub use security::signature::SignatureValidator;
-pub use security::permission::{PermissionManager, Permission};
 
 // 导出运行时模块类型
-pub use runtime::activation::ActivationManager;
 pub use runtime::service_registry::{ServiceRegistry, ServiceDefinition, ServiceHandle};
-pub use runtime::feature::{FeatureManager, Feature, FeatureType};
 
 // 导出配置模块类型
 pub use config::settings::{PluginManagerSettings, CacheSettings, ClusterSettings, PluginSettings};

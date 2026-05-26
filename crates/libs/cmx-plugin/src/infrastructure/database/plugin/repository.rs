@@ -73,6 +73,7 @@ impl PluginRepository {
             .into_table("cmx_plugin")
             .columns(vec![
                 "id",
+                "app_id",
                 "plugin_id",
                 "name",
                 "description",
@@ -97,11 +98,14 @@ impl PluginRepository {
                 "plugin_type",
                 "source_path",
                 "marketplace_source_id",
+                "storage_key",
+                "storage_checksum",
                 "create_time",
                 "update_time",
             ])
             .values(vec![
                 record.id.clone().into(),
+                record.app_id.clone().into(),
                 record.plugin_id.clone().into(),
                 record.name.clone().into(),
                 record.description.clone().into(),
@@ -126,6 +130,8 @@ impl PluginRepository {
                 record.plugin_type.clone().into(),
                 record.source_path.clone().into(),
                 record.marketplace_source_id.clone().into(),
+                record.storage_key.clone().into(),
+                record.storage_checksum.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
             ])
@@ -145,6 +151,7 @@ impl PluginRepository {
     pub async fn update_plugin(
         &self,
         plugin_id: &str,
+        app_id: &str,
         fields: &PluginUpdateParams,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
@@ -224,6 +231,15 @@ impl PluginRepository {
         if let Some(ref v) = fields.marketplace_source_id {
             query.value("marketplace_source_id", v.clone());
         }
+        if let Some(ref v) = fields.app_id {
+            query.value("app_id", v.clone());
+        }
+        if let Some(ref v) = fields.storage_key {
+            query.value("storage_key", v.clone());
+        }
+        if let Some(ref v) = fields.storage_checksum {
+            query.value("storage_checksum", v.clone());
+        }
         if let Some(ref v) = fields.update_by {
             query.value("update_by", v.clone());
         }
@@ -232,6 +248,7 @@ impl PluginRepository {
         }
 
         query.and_where(Expr::col("plugin_id").eq(plugin_id));
+        query.and_where(Expr::col("app_id").eq(app_id));
 
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
 
@@ -243,10 +260,19 @@ impl PluginRepository {
         Ok(())
     }
 
-    /// 删除插件记录
-    pub async fn delete_plugin(&self, plugin_id: &str) -> PluginResult<()> {
-        let sql = "DELETE FROM cmx_plugin WHERE plugin_id = $1";
-        let params = serde_json::json!([plugin_id]);
+    /// 删除插件记录（按 plugin_id 和 app_id 精确匹配）
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件唯一标识
+    /// * `app_id` - 应用隔离标识，用于多租户隔离
+    ///
+    /// # Errors
+    ///
+    /// 数据库执行失败时返回 `PluginError::Database`
+    pub async fn delete_plugin(&self, plugin_id: &str, app_id: &str) -> PluginResult<()> {
+        let sql = "DELETE FROM cmx_plugin WHERE plugin_id = $1 AND app_id = $2";
+        let params = serde_json::json!([plugin_id, app_id]);
 
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, None, sql, params)
@@ -258,7 +284,7 @@ impl PluginRepository {
 
     /// 插入或更新插件记录 (upsert)
     ///
-    /// 使用 ON CONFLICT (plugin_id) DO UPDATE 实现 upsert 语义
+    /// 使用 ON CONFLICT (app_id, plugin_id) DO UPDATE 实现 upsert 语义
     ///
     /// # 参数
     /// - `record`: 插件创建参数
@@ -280,6 +306,7 @@ impl PluginRepository {
             .into_table(Alias::new("cmx_plugin"))
             .columns(vec![
                 Alias::new("id"),
+                Alias::new("app_id"),
                 Alias::new("plugin_id"),
                 Alias::new("name"),
                 Alias::new("description"),
@@ -304,6 +331,8 @@ impl PluginRepository {
                 Alias::new("plugin_type"),
                 Alias::new("source_path"),
                 Alias::new("marketplace_source_id"),
+                Alias::new("storage_key"),
+                Alias::new("storage_checksum"),
                 Alias::new("create_time"),
                 Alias::new("update_time"),
                 Alias::new("archived"),
@@ -314,6 +343,7 @@ impl PluginRepository {
             ])
             .values_panic(vec![
                 record.id.clone().into(),
+                record.app_id.clone().into(),
                 record.plugin_id.clone().into(),
                 record.name.clone().into(),
                 record.description.clone().into(),
@@ -338,6 +368,8 @@ impl PluginRepository {
                 record.plugin_type.clone().into(),
                 record.source_path.clone().into(),
                 record.marketplace_source_id.clone().into(),
+                record.storage_key.clone().into(),
+                record.storage_checksum.clone().into(),
                 record.create_time.into(),
                 record.update_time.into(),
                 record.archived.into(),
@@ -347,7 +379,10 @@ impl PluginRepository {
                 record.update_name.clone().into(),
             ]);
 
-        let on_conflict = sea_query::OnConflict::column(Alias::new("plugin_id"))
+        let on_conflict = sea_query::OnConflict::columns(vec![
+            Alias::new("app_id"),
+            Alias::new("plugin_id"),
+        ])
             .update_columns(vec![
                 Alias::new("name"),
                 Alias::new("description"),
@@ -371,6 +406,8 @@ impl PluginRepository {
                 Alias::new("plugin_type"),
                 Alias::new("source_path"),
                 Alias::new("marketplace_source_id"),
+                Alias::new("storage_key"),
+                Alias::new("storage_checksum"),
                 Alias::new("update_time"),
                 Alias::new("update_by"),
                 Alias::new("update_name"),
@@ -397,7 +434,11 @@ impl PluginRepository {
     }
 
     /// 查询插件记录（带 JOIN 域/应用/模块名称）
-    pub async fn find_plugin(&self, plugin_id: &str) -> PluginResult<Option<PluginRecord>> {
+    ///
+    /// # 参数
+    /// * `plugin_id` - 插件ID
+    /// * `app_id` - 应用ID，用于多租户隔离
+    pub async fn find_plugin(&self, plugin_id: &str, app_id: &str) -> PluginResult<Option<PluginRecord>> {
         let sql = r#"
             SELECT p.*,
                    d.name AS domain_name,
@@ -407,9 +448,9 @@ impl PluginRepository {
             LEFT JOIN cmx_domain d ON p.domain_code = d.code
             LEFT JOIN cmx_application a ON p.application_code = a.code
             LEFT JOIN cmx_module m ON p.module_code = m.code
-            WHERE p.plugin_id = $1
+            WHERE p.plugin_id = $1 AND p.app_id = $2
         "#;
-        let params = serde_json::json!([plugin_id]);
+        let params = serde_json::json!([plugin_id, app_id]);
 
         let result = self
             .db_manager
@@ -449,6 +490,12 @@ impl PluginRepository {
         let mut conditions = Vec::new();
         let mut params = Vec::new();
         let mut param_index = 1;
+
+        if let Some(ref app_id) = filter.app_id {
+            conditions.push(format!("p.app_id = ${}", param_index));
+            params.push(serde_json::json!(app_id));
+            param_index += 1;
+        }
 
         if let Some(ref status) = filter.status {
             conditions.push(format!("p.status = ${}", param_index));
@@ -579,12 +626,48 @@ impl PluginRepository {
     }
 
     /// 更新插件状态
-    pub async fn update_plugin_status(&self, plugin_id: &str, status: &str) -> PluginResult<()> {
+    pub async fn update_plugin_status(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+        status: &str,
+    ) -> PluginResult<()> {
         let fields = PluginUpdateParams {
             status: Some(status.to_string()),
             ..Default::default()
         };
-        self.update_plugin(plugin_id, &fields, None).await
+        self.update_plugin(plugin_id, app_id, &fields, None).await
+    }
+
+    /// 检查插件 DDL 执行状态。
+    ///
+    /// 查询 `cmx_meta_table_define` 中指定插件的所有表定义，
+    /// 如果全部为 `completed` 则返回 `true`，否则返回 `false`。
+    pub async fn check_ddl_completed(&self, plugin_id: &str) -> PluginResult<bool> {
+        let sql = r#"
+            SELECT COUNT(*) as total,
+                   COUNT(*) FILTER (WHERE ddl_status = 'completed') as completed
+            FROM cmx_meta_table_define
+            WHERE plugin_id = $1
+        "#;
+        let params = serde_json::json!([plugin_id]);
+
+        let result = self
+            .db_manager
+            .query_sql_with_json(&self.default_db_id, None, sql, params, "ddl_status_check")
+            .await
+            .map_err(|e| PluginError::Database(format!("查询 ddl_status 失败: {}", e)))?;
+
+        if result.row_count() == 0 {
+            return Ok(true);
+        }
+
+        let row = result.iter().next().unwrap();
+        let schema = result.schema.as_ref();
+        let total: i64 = row.get_by_name_as(schema, "total").unwrap_or(0);
+        let completed: i64 = row.get_by_name_as(schema, "completed").unwrap_or(0);
+
+        Ok(total == 0 || total == completed)
     }
 
     /// 解析插件记录（从 DataSet 转换为 PluginRecord）
@@ -601,6 +684,7 @@ impl PluginRepository {
 
             let record = PluginRecord {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
+                app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 name: row.get_by_name_as(schema, "name").unwrap_or_default(),
                 description: row.get_by_name_as(schema, "description"),
@@ -634,6 +718,8 @@ impl PluginRepository {
                 plugin_type: row.get_by_name_as(schema, "plugin_type"),
                 source_path: row.get_by_name_as(schema, "source_path"),
                 marketplace_source_id: row.get_by_name_as(schema, "marketplace_source_id"),
+                storage_key: row.get_by_name_as(schema, "storage_key"),
+                storage_checksum: row.get_by_name_as(schema, "storage_checksum"),
                 create_time: get_datetime_default("create_time", Utc::now),
                 update_time: get_datetime_default("update_time", Utc::now),
                 archived: row.get_by_name_as(schema, "archived").unwrap_or(0),

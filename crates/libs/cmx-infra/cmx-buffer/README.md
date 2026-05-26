@@ -506,88 +506,91 @@ async fn shared_subscribe() -> cmx_buffer::Result<()> {
 
 ## 七、分布式锁
 
-### 7.1 基础使用
+> 详细文档请参阅 [DISTRIBUTED_LOCK.md](./DISTRIBUTED_LOCK.md)
+
+### 7.1 核心概念
+
+cmx-buffer 分布式锁参考 Redisson 设计，提供 RAII 自动释放 + 可选看门狗自动续期机制：
+
+| 方法 | 等待行为 | 返回值 | 看门狗 |
+|------|----------|--------|--------|
+| `lock(key)` | 无限等待 | `Result<LockGuard>` | 启用 |
+| `lock_with_options(key, opts)` | 无限等待 | `Result<LockGuard>` | 由 `lease_time` 控制 |
+| `try_lock(key)` | 不等待 | `Result<Option<LockGuard>>` | 启用 |
+| `try_lock_with_options(key, opts)` | 可控 | `Result<Option<LockGuard>>` | 由 `lease_time` 控制 |
+
+### 7.2 基础使用
 
 ```rust
 use cmx_buffer::{RedisClient, LockManager, RedisConfig};
-use std::time::Duration;
 
 async fn basic_lock_usage() -> cmx_buffer::Result<()> {
     let config = RedisConfig::new("redis://127.0.0.1:6379");
     let client = RedisClient::new(config).await?;
     let lock_manager = LockManager::new_with_default_config(client);
 
-    // 尝试获取锁（不阻塞）
-    let (acquired, guard) = lock_manager.try_lock("my_resource").await?;
-    if acquired {
-        println!("获取锁成功: {}", guard.lock_key());
-        // 执行关键操作
-        do_work().await?;
-    } else {
-        println!("锁已被占用");
+    // 非阻塞获取锁
+    match lock_manager.try_lock("my_resource").await {
+        Ok(Some(_guard)) => {
+            println!("获取锁成功");
+            // 执行关键操作...
+            // _guard Drop 时自动释放锁，无需手动 unlock
+        }
+        Ok(None) => println!("锁已被占用"),
+        Err(e) => println!("锁服务异常: {}", e),
     }
-
-    // 锁超出作用域时自动释放，或手动 drop
-    drop(guard);
 
     Ok(())
 }
 ```
 
-### 7.2 带重试的锁获取
+### 7.3 阻塞式获取锁（带重试）
 
 ```rust
-async fn acquire_with_retry(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
-    // 自动重试获取锁
-    let guard = lock_manager.lock("my_resource").await?;
-    println!("锁获取成功，自动续期已开启");
+use cmx_buffer::LockManager;
+
+async fn blocking_lock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
+    // 自动重试获取锁（默认重试 3 次，间隔 200ms）
+    let _guard = lock_manager.lock("my_resource").await?;
+    println!("锁获取成功，看门狗自动续期已开启");
 
     // 执行长时间任务（锁会自动续期）
     run_long_task().await?;
 
+    // _guard Drop 时自动释放
     Ok(())
 }
 ```
 
-### 7.3 锁自动续期
-
-`LockGuard` 支持后台自动续期，适用于执行时间不确定的长任务：
+### 7.4 自定义锁选项
 
 ```rust
-async fn auto_renew_lock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
-    let (acquired, guard) = lock_manager.try_lock("long_task").await?;
-    if !acquired {
-        return Err("无法获取锁".into());
+use cmx_buffer::{LockManager, LockOptions};
+use std::time::Duration;
+
+async fn custom_options(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
+    // lock + leaseTime：无限等待，锁只持有 10 秒（禁用看门狗）
+    let _guard = lock_manager
+        .lock_with_options("short_task", LockOptions::new()
+            .with_lease_time(Duration::from_secs(10)))
+        .await?;
+
+    // tryLock + waitTime：最多等 5 秒，获取不到就放弃
+    match lock_manager
+        .try_lock_with_options("order_task", LockOptions::new()
+            .with_wait_time(Duration::from_secs(5)))
+        .await?
+    {
+        Some(_guard) => tracing::info!("5 秒内获取锁成功"),
+        None => tracing::warn!("等待 5 秒未获取锁，放弃"),
     }
 
-    // 启动自动续期任务
-    guard.start_auto_renew_task();
-
-    // 执行长时间任务，锁会自动续期
-    run_long_task().await?;
-
-    // 手动释放（也可等 guard 超出作用域自动释放）
-    guard.unlock().await?;
-
-    Ok(())
-}
-```
-
-### 7.4 安全释放锁
-
-释放锁时使用 Lua 脚本验证所有权，确保不会误删他人的锁：
-
-```rust
-async fn safe_unlock(lock_manager: &LockManager) -> cmx_buffer::Result<()> {
-    let (acquired, guard) = lock_manager.try_lock("safe_resource").await?;
-    if !acquired {
-        return Err("无法获取锁".into());
-    }
-
-    // 执行业务逻辑...
-
-    // 安全释放（验证锁值后才删除）
-    lock_manager.unlock_with_value(&guard.lock_key(), &guard.lock_value()).await?;
+    // tryLock + waitTime + leaseTime：最多等 3 秒，锁持有 10 秒
+    let _guard = lock_manager
+        .try_lock_with_options("quick_task", LockOptions::new()
+            .with_wait_time(Duration::from_secs(3))
+            .with_lease_time(Duration::from_secs(10)))
+        .await?;
 
     Ok(())
 }
@@ -600,7 +603,7 @@ use cmx_buffer::{LockConfig, RedisClient, LockManager, RedisConfig};
 
 async fn configure_lock() -> cmx_buffer::Result<()> {
     let lock_config = LockConfig::new()
-        .with_expire(60)           // 锁过期时间（秒），默认 30
+        .with_expire(60)            // 锁过期时间（秒），默认 30
         .with_retry_times(5)        // 重试次数，默认 3
         .with_retry_interval(200);  // 重试间隔（毫秒），默认 200
 
@@ -608,8 +611,7 @@ async fn configure_lock() -> cmx_buffer::Result<()> {
     let client = RedisClient::new(redis_config).await?;
     let lock_manager = LockManager::new(client, lock_config);
 
-    let guard = lock_manager.lock("resource").await?;
-
+    let _guard = lock_manager.lock("resource").await?;
     Ok(())
 }
 ```
@@ -715,13 +717,16 @@ async fn main() -> cmx_buffer::Result<()> {
 
     // 4. 使用分布式锁保护关键操作
     let lock_manager = LockManager::new_with_default_config(client.clone());
-    let guard = lock_manager.lock("order:12345").await?;
-
-    println!("已获取锁，正在处理订单...");
-    process_order(12345).await?;
-    println!("订单处理完成");
-
-    // 锁自动释放
+    match lock_manager.try_lock("order:12345").await {
+        Ok(Some(_guard)) => {
+            println!("已获取锁，正在处理订单...");
+            process_order(12345).await?;
+            println!("订单处理完成");
+            // _guard Drop 自动释放锁
+        }
+        Ok(None) => println!("订单正在被其他实例处理"),
+        Err(e) => println!("锁服务异常: {}", e),
+    }
 
     // 5. 集合操作
     cache.set().sadd("online_users", &["alice", "bob", "charlie"]).await?;
