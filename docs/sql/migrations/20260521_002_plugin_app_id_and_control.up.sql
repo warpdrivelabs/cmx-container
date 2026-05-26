@@ -147,3 +147,15 @@ COMMENT ON COLUMN cmx_plugin_audit_log.app_id IS '应用隔离标识，用于多
 --
 -- COMMENT
 -- ON COLUMN cmx_plugin_nodes.app_id IS '应用隔离标识，用于多租户或多应用场景下的节点隔离';
+
+-- =============================================
+-- 服务接口文档(api_doc)字段支持
+-- =============================================
+
+-- =============================================
+-- cmx_service_define_version 表添加 api_doc 字段
+-- =============================================
+ALTER TABLE cmx_service_define_version
+    ADD COLUMN IF NOT EXISTS api_doc TEXT;
+
+COMMENT ON COLUMN cmx_service_define_version.api_doc IS '服务接口文档JSON，由api_doc_generator自动生成';

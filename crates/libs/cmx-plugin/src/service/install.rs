@@ -18,7 +18,7 @@ use crate::core::registry::PluginRegistry;
 use crate::security::validator::SecurityValidator;
 use crate::service::executor::PluginOperationExecutor;
 use cmx_buffer::LockManager;
-use cmx_traits::ServiceQuery;
+use cmx_traits::{PluginQuery, ServiceQuery};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -93,6 +93,8 @@ pub struct InstallServiceDeps {
     pub service_storage: Arc<dyn cmx_traits::ServiceStorage>,
     /// 服务查询（用于降级场景查询插件的服务定义）
     pub service_query: Arc<dyn ServiceQuery>,
+    /// 插件查询（用于接口文档生成时查询跨插件版本）
+    pub plugin_query: Arc<dyn PluginQuery>,
     /// 跨实例变更通知器
     pub plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>>,
     /// 分布式锁管理器

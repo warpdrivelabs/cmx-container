@@ -43,11 +43,11 @@ impl HostFunctions for ExtismHost {
         HostCaller::cache_delete(key).map_err(|e| e.to_string())
     }
 
-    fn call_plugin(&self, request: PluginFunRequest) -> Result<serde_json::Value, String> {
+    fn call_plugin(&self, request: PluginFunRequest) -> Result<PluginFunCallResponse, String> {
         HostCaller::call_plugin(request).map_err(|e| e.to_string())
     }
 
-    fn call_service_by_key(&self, request: CallServiceRequest) -> Result<serde_json::Value, String> {
+    fn call_service_by_key(&self, request: CallServiceRequest) -> Result<CallServiceResponse, String> {
         HostCaller::call_service_by_key(request).map_err(|e| e.to_string())
     }
 }

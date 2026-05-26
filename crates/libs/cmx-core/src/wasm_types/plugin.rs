@@ -1,7 +1,7 @@
 /*
  * @Author: yqs
  * @Date: 2026-04-13 22:20:01
- * @Describe: 
+ * @Describe:
  * @LastEditors: yqs
  * @LastEditTime: 2026-05-06 14:17:24
  */
@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::execution::{ExecutionStep, OrchestrationError};
 
 /// 插件信息响应
 ///
@@ -84,22 +85,50 @@ pub struct CallServiceRequest {
     pub debug_params: Option<HashMap<String, String>>,
 }
 
-/// 服务调用响应（使用 JSON Value）
+/// 插件函数调用响应
 ///
-/// 宿主函数返回给 WASM 插件的调用结果，支持 JSON 格式的输出。
+/// 宿主函数返回给 WASM 插件的单次函数调用结果。
+/// 包含执行状态、函数输出和耗时。
+///
+/// # 字段说明
+/// - `success`: 是否执行成功
+/// - `result`: 函数执行结果（JSON 格式，失败时为 None）
+/// - `elapsed_us`: 执行耗时（微秒）
+/// - `error`: 错误信息（成功时为 None）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginFunCallResponse {
+    /// 是否执行成功
+    pub success: bool,
+    /// 函数执行结果（JSON 格式，失败时为 None）
+    pub result: Option<serde_json::Value>,
+    /// 执行耗时（微秒）
+    pub elapsed_us: Option<u64>,
+    /// 错误信息（成功时为 None）
+    pub error: Option<String>,
+}
+
+/// 服务调用响应
+///
+/// 宿主函数返回给 WASM 插件的调用结果。
+/// 包含执行状态、输出、步骤详情、耗时和错误信息。
 ///
 /// # 字段说明
 /// - `success`: 是否执行成功
 /// - `output`: 执行结果（JSON 格式，失败时为 None）
+/// - `steps`: 各步骤执行记录（成功时为空数组，除非 include_steps=true）
+/// - `elapsed_us`: 执行耗时（微秒）
 /// - `error`: 错误信息（成功时为 None）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallServiceResponse {
-    /// 是否执行成功
+    /// 是否执行成功（所有节点都成功执行则为 true）
     pub success: bool,
-    /// 执行结果（JSON 格式）
+    /// 最终输出结果（最后一个节点的输出，失败时为 None）
     pub output: Option<serde_json::Value>,
-    /// 错误信息（成功时为 None）
-    pub error: Option<String>,
-    /// 执行耗时（微秒）
-    pub elapsed_us: Option<u64>,
+    /// 各步骤执行记录（按执行顺序记录每个节点的执行情况）
+    /// 注意：当 include_steps=false 且成功时，此数组为空
+    pub steps: Vec<ExecutionStep>,
+    /// 总执行耗时（微秒）
+    pub total_elapsed_us: Option<u64>,
+    /// 结构化错误信息（失败时包含错误摘要）
+    pub error: Option<OrchestrationError>,
 }

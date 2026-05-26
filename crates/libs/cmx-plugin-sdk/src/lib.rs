@@ -51,7 +51,8 @@ pub use host_calls::HostCaller;
 pub use cmx_core::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
-    PluginFunRequest, CallServiceRequest, CallServiceResponse,
+    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
+    ExecutionStep, StepStatus, OrchestrationError,
 };
 
 // ==================== 错误类型 ====================

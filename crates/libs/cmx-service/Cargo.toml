@@ -26,8 +26,6 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
-# API 文档生成
-utoipa = { workspace = true }
 # 异步 trait
 async-trait = { workspace = true }
 # 时间处理

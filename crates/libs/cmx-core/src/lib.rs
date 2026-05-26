@@ -8,7 +8,8 @@ pub use model::service::*;
 pub use wasm_types::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse, PluginInfoResponse,
-    PluginFunRequest, CallServiceRequest, CallServiceResponse,
+    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
     WasmContext,
     WasmFunctionRequest, WasmFunctionResponse,
+    ExecutionStep, StepStatus, OrchestrationError,
 };

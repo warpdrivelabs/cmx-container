@@ -142,9 +142,9 @@ impl<H: HostFunctions> PluginCore<H> {
         let request: DemoRequest = serde_json::from_value(input.input.clone())
             .unwrap_or(DemoRequest { name: "default".to_string(), count: 0 });
         let plugin_request = PluginFunRequest {
-            plugin_id: "target-plugin".to_string(),
-            function_name: "some_function".to_string(),
-            input: serde_json::json!({"name": request.name, "count": request.count}),
+            plugin_id: "example_plugin".to_string(),
+            function_name: "route_check".to_string(),
+            input: serde_json::json!({"name": request.name, "count": request.count,"route":"2"}),
             initial_input: None,
             debug: Some(false),
         };

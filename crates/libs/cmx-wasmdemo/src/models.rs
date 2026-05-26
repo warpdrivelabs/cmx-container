@@ -4,7 +4,7 @@ pub use cmx_plugin_sdk::{
     FunctionInput, FunctionOutput, SVRContext,
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
-    PluginFunRequest, CallServiceRequest, CallServiceResponse,
+    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
 };
 
 /// 示例请求。

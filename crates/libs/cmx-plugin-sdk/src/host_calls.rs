@@ -8,7 +8,7 @@ use extism_pdk::*;
 use cmx_core::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
-    PluginFunRequest, CallServiceRequest, CallServiceResponse,
+    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
 };
 use crate::error::PluginError;
 
@@ -168,14 +168,14 @@ impl HostCaller {
     /// # 返回值说明
     /// - `Ok(serde_json::Value)`: 函数执行结果
     /// - `Err(Error)`: 调用失败，包含错误信息
-    pub fn call_plugin(request: PluginFunRequest) -> Result<serde_json::Value, PluginError> {
+    pub fn call_plugin(request: PluginFunRequest) -> Result<PluginFunCallResponse, PluginError> {
         let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
         let result = unsafe { call_plugin(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
-        let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
+        let response: PluginFunCallResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {
             return Err(PluginError::HostCallFailed(response.error.unwrap_or_default()));
         }
-        Ok(response.output.unwrap_or(serde_json::Value::Null))
+        Ok(response)
     }
 
     /// 调用指定服务编排
@@ -188,13 +188,13 @@ impl HostCaller {
     /// # 返回值说明
     /// - `Ok(serde_json::Value)`: 服务执行的最终输出
     /// - `Err(Error)`: 执行失败，包含错误信息
-    pub fn call_service_by_key(request: CallServiceRequest) -> Result<serde_json::Value, PluginError> {
+    pub fn call_service_by_key(request: CallServiceRequest) -> Result<CallServiceResponse, PluginError> {
         let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
         let result = unsafe { call_service_by_key(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
         let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {
-            return Err(PluginError::HostCallFailed(response.error.unwrap_or_default()));
+            return Err(PluginError::HostCallFailed(response.error.map(|e| e.message).unwrap_or_default()));
         }
-        Ok(response.output.unwrap_or(serde_json::Value::Null))
+        Ok(response)
     }
 }

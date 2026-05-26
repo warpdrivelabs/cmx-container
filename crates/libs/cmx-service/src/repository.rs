@@ -356,6 +356,7 @@ impl ServiceRepository {
             plugin_version,
             config,
             None,
+            None,
         )
         .await
     }
@@ -369,6 +370,7 @@ impl ServiceRepository {
     /// * `plugin_id` - 所属插件ID
     /// * `plugin_version` - 所属插件版本
     /// * `config` - 编排配置 JSON 字符串
+    /// * `api_doc` - 接口文档 JSON 字符串（可选）
     /// * `txn_id` - 事务ID（可选）
     pub async fn save_service_version_with_txn(
         &self,
@@ -378,17 +380,18 @@ impl ServiceRepository {
         plugin_id: &str,
         plugin_version: &str,
         config: &str,
+        api_doc: Option<&str>,
         txn_id: Option<&str>,
     ) -> Result<(), ServiceError> {
         let sql = r#"
             INSERT INTO cmx_service_define_version (
                 id, service_key, app_id, version, plugin_id, plugin_version,
-                config, create_time, update_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                config, api_doc, create_time, update_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
         "#;
 
         let id = Uuid::new_v4().to_string();
-        let params = json!([id, service_key, app_id, version, plugin_id, plugin_version, config]);
+        let params = json!([id, service_key, app_id, version, plugin_id, plugin_version, config, api_doc]);
 
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)

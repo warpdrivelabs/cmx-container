@@ -118,7 +118,7 @@ pub trait HostFunctions {
     /// # Returns
     ///
     /// 成功时返回插件执行结果的 JSON 值，失败时返回错误信息。
-    fn call_plugin(&self, request: PluginFunRequest) -> Result<serde_json::Value, String>;
+    fn call_plugin(&self, request: PluginFunRequest) -> Result<PluginFunCallResponse, String>;
 
     /// 通过服务键调用服务编排。
     ///
@@ -129,5 +129,5 @@ pub trait HostFunctions {
     /// # Returns
     ///
     /// 成功时返回服务执行结果的 JSON 值，失败时返回错误信息。
-    fn call_service_by_key(&self, request: CallServiceRequest) -> Result<serde_json::Value, String>;
+    fn call_service_by_key(&self, request: CallServiceRequest) -> Result<CallServiceResponse, String>;
 }

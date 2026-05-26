@@ -842,6 +842,7 @@ CREATE TABLE cmx_service_define_version
     plugin_id      VARCHAR(64),
     plugin_version VARCHAR(50),
     config         TEXT,
+    api_doc        TEXT,
     create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_by      VARCHAR(100),
@@ -860,6 +861,7 @@ COMMENT ON COLUMN cmx_service_define_version.version IS '服务版本';
 COMMENT ON COLUMN cmx_service_define_version.plugin_id IS '服务所属插件';
 COMMENT ON COLUMN cmx_service_define_version.plugin_version IS '所属插件版本';
 COMMENT ON COLUMN cmx_service_define_version.config IS '服务编排配置';
+COMMENT ON COLUMN cmx_service_define_version.api_doc IS '服务接口文档JSON，由api_doc_generator自动生成';
 COMMENT ON COLUMN cmx_service_define_version.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_service_define_version.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_service_define_version.create_by IS '创建人ID';

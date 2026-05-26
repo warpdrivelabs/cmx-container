@@ -319,6 +319,8 @@ impl PluginPersistence {
             &install_path,
             &parse_params,
             &self.deps.service_storage,
+            &self.deps.plugin_root,
+            &self.deps.plugin_query,
             Some(txn_guard.txn_id()),
         )
         .await?;
@@ -543,6 +545,8 @@ impl PluginPersistence {
             &install_path,
             &parse_params,
             &self.deps.service_storage,
+            &self.deps.plugin_root,
+            &self.deps.plugin_query,
             Some(txn_guard.txn_id()),
         )
         .await?;

@@ -4,6 +4,7 @@
 //! 实现跨模块解耦的接口适配层。
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use cmx_traits::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot, TraitError};
@@ -11,6 +12,7 @@ use cmx_traits::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot
 use crate::core::manager::PluginManager;
 use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo};
 use crate::infrastructure::database::plugin::model::PluginRecord;
+use crate::infrastructure::database::repository::PluginRepository;
 
 /// 从 PluginInfo 转换为 PluginSnapshot
 ///
@@ -179,5 +181,66 @@ impl PluginQuery for PluginManager {
         }
 
         Ok(snapshots)
+    }
+}
+
+/// 基于 PluginRepository 的轻量级 PluginQuery 适配器
+///
+/// 用于 PluginManager 构建阶段，避免自引用问题。
+/// 仅实现 get_plugin 方法（接口文档生成所需的最小接口）。
+pub struct RepositoryPluginQuery {
+    repository: Arc<PluginRepository>,
+    app_id: String,
+}
+
+impl RepositoryPluginQuery {
+    /// 创建基于仓储的插件查询适配器
+    pub fn new(repository: Arc<PluginRepository>, app_id: String) -> Self {
+        Self { repository, app_id }
+    }
+}
+
+#[async_trait]
+impl PluginQuery for RepositoryPluginQuery {
+    async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
+        let record = self
+            .repository
+            .find_plugin(plugin_id, &self.app_id)
+            .await
+            .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
+
+        Ok(record.map(PluginSnapshot::from))
+    }
+
+    async fn is_installed(&self, plugin_id: &str) -> Result<bool, TraitError> {
+        let record = self
+            .repository
+            .find_plugin(plugin_id, &self.app_id)
+            .await
+            .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
+
+        Ok(record.is_some())
+    }
+
+    async fn is_active(&self, _plugin_id: &str) -> Result<bool, TraitError> {
+        Ok(false)
+    }
+
+    async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError> {
+        let record = self
+            .repository
+            .find_plugin(plugin_id, &self.app_id)
+            .await
+            .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
+
+        match record {
+            Some(r) if !r.wasm_path.is_empty() => Ok(PathBuf::from(r.wasm_path)),
+            _ => Err(TraitError::PluginNotFound(plugin_id.to_string())),
+        }
+    }
+
+    async fn list_plugins(&self, _filter: &TraitsPluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
+        // 此适配器仅用于构建阶段，list_plugins 暂不实现
+        Ok(vec![])
     }
 }

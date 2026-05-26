@@ -66,6 +66,7 @@ impl ServiceStorage for ServiceStorageImpl {
                 &params.plugin_id,
                 &params.plugin_version,
                 &params.config,
+                params.api_doc.as_deref(),
                 params.txn_id.as_deref(),
             )
             .await

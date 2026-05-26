@@ -8,8 +8,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use cmx_core::model::service::SVRContext;
+use cmx_core::{CallServiceResponse, OrchestrationError};
 use cmx_traits::{
-    PluginQuery, RuntimeInvoker, ServiceInvoker, ServiceInvokeOptions, ServiceInvokeResult,
+    PluginQuery, RuntimeInvoker, ServiceInvoker, ServiceInvokeOptions,
     ServiceQuery, TraitError,
 };
 
@@ -51,7 +52,7 @@ impl ServiceInvoker for ServiceInvokerImpl {
         service_key: &str,
         input: serde_json::Value,
         options: ServiceInvokeOptions,
-    ) -> Result<ServiceInvokeResult, TraitError> {
+    ) -> Result<CallServiceResponse, TraitError> {
         let svr_context = SVRContext::new(
             input,
             std::collections::HashMap::new(),
@@ -74,11 +75,12 @@ impl ServiceInvoker for ServiceInvokerImpl {
             .await
             .map_err(|e| TraitError::Internal(format!("服务编排执行失败: {}", e)))?;
 
-        Ok(ServiceInvokeResult {
+        Ok(CallServiceResponse {
             success: result.success,
             output: result.output,
-            error: result.error.map(|e| e.message),
-            elapsed_us: Some(result.total_elapsed_us),
+            steps: result.steps,
+            total_elapsed_us: Some(result.total_elapsed_us),
+            error: result.error.map(|e| OrchestrationError { message: e.message }),
         })
     }
 }

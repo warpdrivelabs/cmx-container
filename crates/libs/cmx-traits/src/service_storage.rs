@@ -23,6 +23,8 @@ pub struct SaveServiceVersionParams {
     pub plugin_version: String,
     /// 服务编排配置 JSON 字符串
     pub config: String,
+    /// 服务接口文档 JSON 字符串（可选，由 api_doc_generator 生成）
+    pub api_doc: Option<String>,
     /// 事务 ID（可选，用于跨表事务一致性）
     pub txn_id: Option<String>,
 }

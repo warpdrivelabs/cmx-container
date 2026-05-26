@@ -10,6 +10,7 @@ pub mod record_builder;
 pub mod initializer;
 pub mod data_parser;
 pub mod service_parser;
+pub mod api_doc_generator;
 pub mod auto_install;
 // pub mod control;
 pub mod reconciliation;

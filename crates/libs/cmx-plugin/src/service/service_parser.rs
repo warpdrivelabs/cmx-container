@@ -5,8 +5,9 @@
 use std::path::Path;
 use std::sync::Arc;
 use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::SaveServiceVersionParams;
+use cmx_traits::{PluginQuery, SaveServiceVersionParams};
 use crate::error::{PluginError, PluginResult};
+use crate::service::api_doc_generator::ApiDocGenerator;
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
 
 /// 从插件目录解析服务定义（不保存到数据库）
@@ -61,6 +62,8 @@ pub async fn parse_and_save_services(
     install_path: &Path,
     params: &ServiceParseParams,
     service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
+    plugin_root: &Path,
+    plugin_query: &Arc<dyn PluginQuery>,
     txn_id: Option<&str>,
 ) -> PluginResult<Vec<ParsedServiceDefinition>> {
     // 解析插件安装目录下的服务数据
@@ -78,6 +81,12 @@ pub async fn parse_and_save_services(
         return Err(PluginError::Plugin(format!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e)));
     }
 
+    // 创建接口文档生成器
+    let generator = ApiDocGenerator::new(
+        plugin_root.to_path_buf(),
+        params.app_id.clone(),
+        plugin_query.clone(),
+    );
 
     // 遍历并保存每个服务
     for svc in &parsed {
@@ -99,6 +108,28 @@ pub async fn parse_and_save_services(
                 .map_err(|e| PluginError::Plugin(format!("序列化编排配置失败: {}", e)))?
         };
 
+        // 生成接口文档（失败不影响主流程）
+        let api_doc = match generator.generate_api_doc(
+            &svc.orchestration,
+            &params.plugin_id,
+            &params.plugin_version,
+            install_path,
+        ).await {
+            Ok(doc) => {
+                match serde_json::to_string(&doc) {
+                    Ok(json) => Some(json),
+                    Err(e) => {
+                        tracing::warn!("序列化服务 {} 的接口文档失败: {:?}", svc.definition.service_key, e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("生成服务 {} 的接口文档失败: {:?}", svc.definition.service_key, e);
+                None
+            }
+        };
+
         // 保存服务版本
         if let Err(e) = service_storage.save_service_version(
             SaveServiceVersionParams {
@@ -108,6 +139,7 @@ pub async fn parse_and_save_services(
                 plugin_id: params.plugin_id.clone(),
                 plugin_version: params.plugin_version.clone(),
                 config,
+                api_doc,
                 txn_id: txn_id.map(|s| s.to_string()),
             },
         ).await {

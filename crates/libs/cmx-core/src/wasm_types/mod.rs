@@ -15,10 +15,11 @@ pub mod cache;
 pub mod plugin;
 pub mod context;
 pub mod common;
+pub mod execution;
 
-// 重新导出所有类型，方便外部使用
 pub use database::{DbRequest, DbResponse};
 pub use cache::{CacheGetRequest, CacheSetRequest, CacheResponse};
-pub use plugin::{ PluginInfoResponse, PluginFunRequest, CallServiceRequest, CallServiceResponse};
+pub use plugin::{ PluginInfoResponse, PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse};
 pub use context::WasmContext;
 pub use common::{WasmFunctionRequest, WasmFunctionResponse};
+pub use execution::{ExecutionStep, StepStatus, OrchestrationError};

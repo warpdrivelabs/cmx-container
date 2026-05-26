@@ -272,6 +272,10 @@ impl PluginManager {
                 node_type: settings.node_type.clone(),
                 service_storage: GlobalServiceStorage::get().clone(),
                 service_query: GlobalServiceQuery::get().clone(),
+                plugin_query: Arc::new(crate::traits_impl::RepositoryPluginQuery::new(
+                    repository.clone(),
+                    settings.app_id.clone(),
+                )),
                 plugin_notifier: plugin_notifier.clone(),
                 lock_manager: builder.lock_manager.clone(),
             },

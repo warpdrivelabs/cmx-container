@@ -14,8 +14,8 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use tracing::{info, warn};
-use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions, GlobalServiceInvoker, ServiceInvokeOptions, ServiceInvokeResult};
-use cmx_core::{PluginFunRequest, CallServiceRequest, CallServiceResponse};
+use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions, GlobalServiceInvoker, ServiceInvokeOptions};
+use cmx_core::{PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse, OrchestrationError};
 use cmx_core::model::service::{FunctionInput, SVRContext};
 
 /// 插件宿主函数提供者
@@ -47,7 +47,7 @@ impl PluginHostFunctions {
     fn do_call_plugin(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         let req: PluginFunRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
-            Err(e) => return Ok(Self::err_response_msgpack(format!("解析请求失败: {}", e))),
+            Err(e) => return Ok(Self::err_plugin_response_msgpack(format!("解析请求失败: {}", e))),
         };
         info!("[call_plugin] 目标插件: {}, 函数: {}", req.plugin_id, req.function_name);
 
@@ -63,7 +63,7 @@ impl PluginHostFunctions {
 
         let input_bytes = match rmp_serde::to_vec(&func_input) {
             Ok(b) => b,
-            Err(e) => return Ok(Self::err_response_msgpack(format!("序列化输入失败: {}", e))),
+            Err(e) => return Ok(Self::err_plugin_response_msgpack(format!("序列化输入失败: {}", e))),
         };
 
         let invoke_options = InvokeOptions {
@@ -85,11 +85,16 @@ impl PluginHostFunctions {
                     rmp_serde::from_slice(&invoke_result.output)
                         .unwrap_or(serde_json::Value::Null)
                 };
-                Ok(Self::ok_response_msgpack(Some(output), Some(invoke_result.elapsed_us)))
+                Ok(rmp_serde::to_vec(&PluginFunCallResponse {
+                    success: true,
+                    result: Some(output),
+                    elapsed_us: Some(invoke_result.elapsed_us),
+                    error: None,
+                }).unwrap_or_default())
             }
             Err(e) => {
                 warn!("[call_plugin] 调用失败: {}", e);
-                Ok(Self::err_response_msgpack(e.to_string()))
+                Ok(Self::err_plugin_response_msgpack(e.to_string()))
             }
         }
     }
@@ -113,7 +118,7 @@ impl PluginHostFunctions {
     fn do_call_service_by_key(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         let req: CallServiceRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
-            Err(e) => return Ok(Self::err_response_msgpack(format!("解析请求失败: {}", e))),
+            Err(e) => return Ok(Self::err_service_response_msgpack(format!("解析请求失败: {}", e))),
         };
         info!("[call_service_by_key] 服务: {}", req.service_key);
 
@@ -126,23 +131,23 @@ impl PluginHostFunctions {
         };
 
         let rt = tokio::runtime::Handle::current();
-        let result: Result<ServiceInvokeResult, _> = rt.block_on(async {
+        let result: Result<CallServiceResponse, _> = rt.block_on(async {
             invoker.invoke_service(&req.service_key, req.input, options).await
         });
 
         match result {
-            Ok(invoke_result) => {
-                if invoke_result.success {
-                    Ok(Self::ok_response_msgpack(invoke_result.output, invoke_result.elapsed_us))
+            Ok(response) => {
+                if response.success {
+                    Ok(rmp_serde::to_vec(&response).unwrap_or_default())
                 } else {
-                    Ok(Self::err_response_msgpack(
-                        invoke_result.error.unwrap_or_else(|| "服务执行失败".to_string())
+                    Ok(Self::err_service_response_msgpack(
+                        response.error.map(|e| e.message).unwrap_or_else(|| "服务执行失败".to_string())
                     ))
                 }
             }
             Err(e) => {
                 warn!("[call_service_by_key] 调用失败: {}", e);
-                Ok(Self::err_response_msgpack(e.to_string()))
+                Ok(Self::err_service_response_msgpack(e.to_string()))
             }
         }
     }
@@ -166,24 +171,23 @@ impl PluginHostFunctions {
 
 
 
-    /// 构建成功响应（MsgPack 编码）- 新版本，返回 serde_json::Value
-    fn ok_response_msgpack(output: Option<serde_json::Value>, elapsed_us: Option<u64>) -> Vec<u8> {
-        rmp_serde::to_vec(&CallServiceResponse {
-            success: true,
-            output,
-            elapsed_us,
-            error: None,
+    fn err_plugin_response_msgpack(msg: String) -> Vec<u8> {
+        rmp_serde::to_vec(&PluginFunCallResponse {
+            success: false,
+            result: None,
+            elapsed_us: None,
+            error: Some(msg),
         })
         .unwrap_or_default()
     }
 
-    /// 构建错误响应（MsgPack 编码）- 新版本
-    fn err_response_msgpack(msg: String) -> Vec<u8> {
+    fn err_service_response_msgpack(msg: String) -> Vec<u8> {
         rmp_serde::to_vec(&CallServiceResponse {
             success: false,
             output: None,
-            elapsed_us: None,
-            error: Some(msg),
+            steps: vec![],
+            total_elapsed_us: None,
+            error: Some(OrchestrationError { message: msg }),
         })
         .unwrap_or_default()
     }
