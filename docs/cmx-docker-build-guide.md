@@ -58,7 +58,9 @@ cd docker/scripts
 
 # 构建镜像（自动生成时间戳版本，如 20260515143025）
 chmod +x build-docker.sh
-./build-docker.sh
+./build-docker.sh 
+#构建镜像并推送，版本号是时间
+./build-docker.sh  --push
 
 # 构建指定版本
 ./build-docker.sh 0.0.1
