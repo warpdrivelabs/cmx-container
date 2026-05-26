@@ -12,6 +12,9 @@ ALTER TABLE cmx_plugin
 
 
 DROP INDEX IF EXISTS uk_cmx_plugin_plugin_id;
+alter table cmx_plugin
+drop constraint IF EXISTS uk_cmx_plugin_plugin_id;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_plugin_app_plugin ON cmx_plugin(app_id, plugin_id);
 CREATE INDEX IF NOT EXISTS idx_plugin_app_id ON cmx_plugin(app_id);
 
