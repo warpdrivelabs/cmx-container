@@ -1,0 +1,1 @@
+import{O as e,S as t,q as n}from"./vue.runtime.esm-bundler-Ntb1RkU2.js";import{a as r,i}from"./vue-router-CHBqynxe.js";var a=e({__name:`index`,setup(e){let a=i();return r().replace({path:`/${a.params.path}`,query:a.query}),(e,r)=>(n(),t(`div`))}});export{a as default};
