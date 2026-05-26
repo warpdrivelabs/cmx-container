@@ -58,24 +58,14 @@ fn build_function_doc(func: &ParsedFunction, doc: &ParsedDoc, file_path: &str) -
     let input_fields: Vec<FieldSpec> = doc
         .input_fields
         .iter()
-        .map(|f| FieldSpec {
-            name: f.name.clone(),
-            type_name: f.type_name.clone(),
-            required: f.required,
-            description: f.description.clone(),
-        })
+        .map(convert_field_info_to_spec)
         .collect();
 
     // 构建输出字段
     let output_fields: Vec<FieldSpec> = doc
         .output_fields
         .iter()
-        .map(|f| FieldSpec {
-            name: f.name.clone(),
-            type_name: f.type_name.clone(),
-            required: f.required,
-            description: f.description.clone(),
-        })
+        .map(convert_field_info_to_spec)
         .collect();
 
     // 构建示例
@@ -120,10 +110,37 @@ fn build_function_doc(func: &ParsedFunction, doc: &ParsedDoc, file_path: &str) -
         examples,
         errors: doc.errors.clone(),
         notes: doc.notes.clone(),
+        panics: doc.panics.clone(),
+        safety: doc.safety.clone(),
         location: SourceLocation {
             file: file_path.to_string(),
             line: func.line,
         },
+    }
+}
+
+/// 去掉描述末尾的句号
+fn trim_description(desc: &str) -> String {
+    let desc = desc.trim();
+    if let Some(stripped) = desc.strip_suffix('。') {
+        stripped.trim_end().to_string()
+    } else if let Some(stripped) = desc.strip_suffix('.') {
+        stripped.trim_end().to_string()
+    } else {
+        desc.to_string()
+    }
+}
+
+/// 将 FieldInfo 递归转换为 FieldSpec
+fn convert_field_info_to_spec(f: &crate::parser::FieldInfo) -> FieldSpec {
+    FieldSpec {
+        name: f.name.clone(),
+        type_name: f.type_name.clone(),
+        format: f.format.clone(),
+        required: f.required,
+        description: trim_description(&f.description),
+        sub_fields: f.sub_fields.iter().map(convert_field_info_to_spec).collect(),
+        items: f.items.as_ref().map(|i| Box::new(convert_field_info_to_spec(i))),
     }
 }
 

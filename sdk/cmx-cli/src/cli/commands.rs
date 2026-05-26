@@ -9,7 +9,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use walkdir::WalkDir;
 
-use crate::generator::{generate_document, ScanResult};
+use crate::ast_parser::parse_structs;
+use crate::generator::{generate_ast_document, generate_document, AstScanResult, ScanResult};
 use crate::parser::{parse_doc_comments, parse_rust_file};
 
 /// CMX CLI - CMX 插件开发工具集
@@ -77,6 +78,28 @@ struct ScanArgs {
     /// 插件名称（默认从 Cargo.toml 读取）
     #[arg(long)]
     plugin_name: Option<String>,
+
+    /// 生成模式：doc（基于注释）、ast（基于 AST 展开结构体）、both（两者都生成）
+    #[arg(long, default_value = "ast")]
+    mode: GenerateMode,
+
+    /// AST 模式下的结构体展开深度（默认 3）
+    #[arg(long, default_value = "3")]
+    expand_depth: usize,
+}
+
+/// 生成模式
+#[derive(Debug, Clone, clap::ValueEnum)]
+enum GenerateMode {
+    /// 基于文档注释生成
+    #[clap(name = "doc")]
+    Doc,
+    /// 基于 AST 展开结构体
+    #[clap(name = "ast")]
+    Ast,
+    /// 两者都生成
+    #[clap(name = "both")]
+    Both,
 }
 
 /// 验证参数（预留）
@@ -173,6 +196,7 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
 
     // 解析所有文件
     let mut all_functions = Vec::new();
+    let mut all_structs = Vec::new();
     let mut first_file_path = String::new();
 
     for file_path in &rust_files {
@@ -189,6 +213,13 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
             let doc = parse_doc_comments(&func.doc_comments)?;
             all_functions.push((func, doc));
         }
+
+        // AST 模式：解析结构体定义
+        if matches!(args.mode, GenerateMode::Ast | GenerateMode::Both)
+            && let Ok(structs) = parse_structs(&content)
+        {
+            all_structs.extend(structs);
+        }
     }
 
     if all_functions.is_empty() {
@@ -200,20 +231,97 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
     let (plugin_name, plugin_version, plugin_description) =
         get_plugin_info(&args.paths, args.plugin_name.as_deref())?;
 
-    // 生成文档
-    let result = ScanResult {
-        plugin_name,
-        plugin_version,
-        plugin_description,
-        functions: all_functions,
-        file_path: first_file_path,
-    };
+    // 根据模式生成文档
+    match args.mode {
+        GenerateMode::Doc => {
+            let result = ScanResult {
+                plugin_name,
+                plugin_version,
+                plugin_description,
+                functions: all_functions,
+                file_path: first_file_path.clone(),
+            };
 
-    let json = generate_document(&result, args.pretty)?;
+            let json = generate_document(&result, args.pretty)?;
+            output_json(&json, &args.output, "doc")?;
+        }
+        GenerateMode::Ast => {
+            let mut registry = crate::ast_parser::TypeRegistry::new();
+            registry.register_all(all_structs);
 
-    // 输出结果
-    if let Some(output_path) = args.output {
-        let path = Path::new(&output_path);
+            let result = AstScanResult {
+                plugin_name,
+                plugin_version,
+                plugin_description,
+                functions: all_functions,
+                file_path: first_file_path.clone(),
+                type_registry: registry,
+            };
+
+            let json = generate_ast_document(&result, args.pretty, args.expand_depth)?;
+            output_json(&json, &args.output, "ast")?;
+        }
+        GenerateMode::Both => {
+            // 生成 doc 模式
+            let doc_result = ScanResult {
+                plugin_name: plugin_name.clone(),
+                plugin_version: plugin_version.clone(),
+                plugin_description: plugin_description.clone(),
+                functions: all_functions.clone(),
+                file_path: first_file_path.clone(),
+            };
+
+            let doc_json = generate_document(&doc_result, args.pretty)?;
+
+            // 生成 ast 模式
+            let mut registry = crate::ast_parser::TypeRegistry::new();
+            registry.register_all(all_structs);
+
+            let ast_result = AstScanResult {
+                plugin_name,
+                plugin_version,
+                plugin_description,
+                functions: all_functions,
+                file_path: first_file_path,
+                type_registry: registry,
+            };
+
+            let ast_json = generate_ast_document(&ast_result, args.pretty, args.expand_depth)?;
+
+            // 输出两个文件
+            if let Some(output_path) = &args.output {
+                let base_path = Path::new(output_path);
+                let stem = base_path.file_stem().unwrap_or_default().to_string_lossy();
+                let ext = base_path.extension().unwrap_or_default().to_string_lossy();
+
+                let doc_path = base_path.parent().unwrap_or(base_path)
+                    .join(format!("{}-doc.{}", stem, ext));
+                let ast_path = base_path.parent().unwrap_or(base_path)
+                    .join(format!("{}-ast.{}", stem, ext));
+
+                fs::write(&doc_path, &doc_json)
+                    .with_context(|| format!("无法写入文件: {}", doc_path.display()))?;
+                println!("文档已生成 (doc 模式): {}", doc_path.display());
+
+                fs::write(&ast_path, &ast_json)
+                    .with_context(|| format!("无法写入文件: {}", ast_path.display()))?;
+                println!("文档已生成 (ast 模式): {}", ast_path.display());
+            } else {
+                println!("=== DOC 模式 ===");
+                println!("{}", doc_json);
+                println!("\n=== AST 模式 ===");
+                println!("{}", ast_json);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// 输出 JSON
+fn output_json(json: &str, output: &Option<String>, suffix: &str) -> Result<()> {
+    if let Some(output_path) = output {
+        let path = Path::new(output_path);
 
         // 如果父目录不存在，则创建目录
         if let Some(parent) = path.parent()
@@ -222,13 +330,12 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
                     .with_context(|| format!("无法创建目录: {}", parent.display()))?;
             }
 
-        fs::write(&output_path, &json)
+        fs::write(output_path, json)
             .with_context(|| format!("无法写入文件: {}", output_path))?;
-        println!("文档已生成: {}", output_path);
+        println!("文档已生成 ({} 模式): {}", suffix, output_path);
     } else {
         println!("{}", json);
     }
-
     Ok(())
 }
 

@@ -52,21 +52,30 @@ impl HostFunctions for ExtismHost {
     }
 }
 
-// ==================== 演示函数 ====================
+// ==================== 功能函数 ====================
 
-/// 统计字符串中的元音字母数量
+/// 统计字符串中的元音字母数量。
 ///
-/// 这是一个简单的字符串处理函数，演示标准入参出参的使用。
+/// 这是一个简单的字符串处理函数，展示标准入参出参的使用方式。
 ///
-/// # 输入处理
-/// - `input.input`: 要统计的字符串
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的统计结果
+/// * `input` - 函数输入，包含待统计的字符串。
 ///
-/// # 示例
-/// 输入: `{"input": "hello world", "context": {...}}`
-/// 输出: `{"result": "{\"count\":3,\"total\":3,\"input\":\"hello world\"}"}`
+/// # Returns
+///
+/// 成功时返回包含统计结果的 `FunctionOutput`。
+///
+/// # Examples
+///
+/// ```
+/// let input = FunctionInput {
+///     input: serde_json::json!("hello world"),
+///     context: Default::default(),
+///     binary_data: Default::default(),
+/// };
+/// // 返回: {"count": 3, "total": 3, "input": "hello world"}
+/// ```
 #[plugin_fn]
 pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -74,17 +83,17 @@ pub fn count_vowels(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
     Ok(Msgpack(output))
 }
 
-
-/// 演示日志功能
+/// 记录不同级别的日志信息。
 ///
-/// 调用宿主的日志函数，记录不同级别的日志信息。
-/// 此函数不需要业务输入，直接执行日志演示。
+/// 调用宿主的日志函数，记录 info、error、debug、warn 四个级别的日志。
 ///
-/// # 输入处理
-/// - 忽略 `input.input`，仅用于演示
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的演示结果
+/// * `input` - 函数输入。
+///
+/// # Returns
+///
+/// 成功时返回包含日志记录结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn demo_log(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -92,19 +101,17 @@ pub fn demo_log(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
     Ok(Msgpack(output))
 }
 
-/// 演示缓存功能
+/// 执行缓存的写入和读取操作。
 ///
-/// 演示缓存的写入、读取和删除操作。
+/// 调用宿主的缓存接口，将数据写入缓存后再读取验证。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的 DemoRequest，包含 name 和 count
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的操作结果
+/// * `input` - 函数输入，包含 `DemoRequest` 格式的缓存键名和计数值。
 ///
-/// # 示例
-/// 输入: `{"input": "{\"name\":\"test\",\"count\":100}", "context": {...}}`
-/// 输出: `{"result": "{\"message\":\"缓存操作成功: ...\",\"total\":100}"}`
+/// # Returns
+///
+/// 成功时返回包含缓存操作结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -112,18 +119,17 @@ pub fn demo_cache(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fu
     Ok(Msgpack(output))
 }
 
-/// 演示数据库查询功能
+/// 执行数据库查询操作。
 ///
-/// 执行一个简单的数据库查询。
+/// 调用宿主的数据接接口，执行一条 SELECT 查询。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的 DemoRequest，用于构建 SQL
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的查询结果
+/// * `input` - 函数输入，包含 `DemoRequest` 格式的查询参数。
 ///
-/// # 事务支持
-/// 如果 `input.txn_id` 存在，函数将在指定事务中执行 SQL。
+/// # Returns
+///
+/// 成功时返回包含查询结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -131,6 +137,18 @@ pub fn demo_database(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     Ok(Msgpack(output))
 }
 
+/// 调用指定插件。
+///
+/// 通过宿主调用另一个指定的插件函数。
+///
+/// # Arguments
+///
+/// * `input` - 函数输入，包含 `DemoRequest` 格式的请求参数。
+///
+/// # Returns
+///
+/// 成功时返回包含调用结果的 `FunctionOutput`。
+/// 失败时返回包含错误信息的 `FunctionOutput`。
 #[plugin_fn]
 pub fn demo_call_plugin(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -138,6 +156,18 @@ pub fn demo_call_plugin(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
     Ok(Msgpack(output))
 }
 
+/// 调用服务编排。
+///
+/// 通过宿主调用服务编排接口。
+///
+/// # Arguments
+///
+/// * `input` - 函数输入，包含 `DemoRequest` 格式的请求参数。
+///
+/// # Returns
+///
+/// 成功时返回包含调用结果的 `FunctionOutput`。
+/// 失败时返回包含错误信息的 `FunctionOutput`。
 #[plugin_fn]
 pub fn demo_call_service_by_key(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -145,22 +175,17 @@ pub fn demo_call_service_by_key(Msgpack(input): Msgpack<FunctionInput>) -> FnRes
     Ok(Msgpack(output))
 }
 
-/// 综合测试入口
+/// 执行多项功能测试。
 ///
-/// 执行所有演示功能，用于验证插件环境是否正常。
+/// 依次执行日志、缓存、数据库等功能的测试。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的 DemoRequest，用于测试参数传递
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 数组，包含各项测试的结果
+/// * `input` - 函数输入，包含 `DemoRequest` 格式的测试参数。
 ///
-/// # 测试项
-/// 1. 日志功能测试
-/// 2. 缓存写入测试
-/// 3. 缓存读取测试
-/// 4. 数据库查询测试
-/// 5. 插件调用测试
+/// # Returns
+///
+/// 返回包含各项测试结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -168,22 +193,19 @@ pub fn run_all_demos(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack
     Ok(Msgpack(output))
 }
 
-// ==================== 服务编排测试函数 ====================
+// ==================== 服务编排函数 ====================
 
-/// 路由判断函数
+/// 路由判断函数。
 ///
 /// 根据输入的 route 字段决定返回哪个分支标识。
-/// 用于 skylake-switch 节点，返回值对应 options 中的选项。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式，包含 route 字段
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: 返回 "1"、"2" 或 "3"，对应三个分支
+/// * `input` - 函数输入，包含 `RouteInput` 格式的路由参数。
 ///
-/// # 示例
-/// 输入: `{"input": "{\"route\":\"1\"}", "context": {...}}`
-/// 输出: `{"result": "1"}`
+/// # Returns
+///
+/// 返回 "1"、"2"、"3" 或 "4"，对应四个分支。
 #[plugin_fn]
 #[doc_type = "branch_fn"]
 pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
@@ -191,16 +213,18 @@ pub fn route_check(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
     let output = core.route_check(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))
 }
-/// 分支1处理函数
+
+/// 分支1处理函数。
 ///
 /// 处理分支1的业务逻辑。
 ///
-/// # 输入处理
-/// - `input.input`: 前序步骤的输出
-/// - `input.context.initial_input`: 初始入参
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+/// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+///
+/// # Returns
+///
+/// 返回包含分支标识和处理结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -208,16 +232,17 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
     Ok(Msgpack(output))
 }
 
-/// 分支2处理函数
+/// 分支2处理函数。
 ///
 /// 处理分支2的业务逻辑。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的业务数据
-/// - `input.context.initial_input`: 初始入参
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+/// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+///
+/// # Returns
+///
+/// 返回包含分支标识和处理结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -225,17 +250,17 @@ pub fn branch_2_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
     Ok(Msgpack(output))
 }
 
-
-/// 分支3处理函数
+/// 分支3处理函数。
 ///
 /// 处理分支3的业务逻辑。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的业务数据
-/// - `input.context.initial_input`: 初始入参
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的处理结果，包含 branch 字段标识来源
+/// * `input` - 函数输入，包含前序步骤的输出和初始入参。
+///
+/// # Returns
+///
+/// 返回包含分支标识和处理结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -243,17 +268,17 @@ pub fn branch_3_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
     Ok(Msgpack(output))
 }
 
-/// 合并结果函数
+/// 合并结果函数。
 ///
-/// 合并各分支的处理结果。
-/// 可以通过 step_outputs 获取各分支的输出。
+/// 合并各分支的处理结果，从上下文获取各分支的输出并合并。
 ///
-/// # 输入处理
-/// - `input.input`: 前序步骤的输出
-/// - `input.context.step_outputs`: 各步骤的输出缓存
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的合并结果
+/// * `input` - 函数输入，包含前序步骤的输出和各步骤的输出缓存。
+///
+/// # Returns
+///
+/// 返回包含合并结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -261,17 +286,17 @@ pub fn merge_result(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<
     Ok(Msgpack(output))
 }
 
-/// 事务插入函数
+/// 事务插入函数。
 ///
-/// 在事务中执行插入操作。
-/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+/// 在事务中执行插入操作，通过上下文获取事务ID确保在同一事务中执行。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的插入数据
-/// - `input.context.txn_id`: 事务ID（由事务框设置）
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的操作结果
+/// * `input` - 函数输入，包含 `InsertData` 格式的插入数据。
+///
+/// # Returns
+///
+/// 返回包含操作结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -279,17 +304,17 @@ pub fn tx_insert(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
     Ok(Msgpack(output))
 }
 
-/// 事务更新函数
+/// 事务更新函数。
 ///
-/// 在事务中执行更新操作。
-/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+/// 在事务中执行更新操作，通过上下文获取事务ID确保在同一事务中执行。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的更新数据
-/// - `input.context.txn_id`: 事务ID（由事务框设置）
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的操作结果
+/// * `input` - 函数输入，包含 `UpdateData` 格式的更新数据。
+///
+/// # Returns
+///
+/// 返回包含操作结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -297,17 +322,17 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
     Ok(Msgpack(output))
 }
 
-/// 事务查询函数
+/// 事务查询函数。
 ///
-/// 在事务中执行查询操作。
-/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+/// 在事务中执行查询操作，通过上下文获取事务ID确保在同一事务中执行。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的查询条件
-/// - `input.context.txn_id`: 事务ID（由事务框设置）
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的查询结果
+/// * `input` - 函数输入，包含 `QueryData` 格式的查询条件。
+///
+/// # Returns
+///
+/// 返回包含查询结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -315,17 +340,17 @@ pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Func
     Ok(Msgpack(output))
 }
 
-/// 事务删除函数
+/// 事务删除函数。
 ///
-/// 在事务中执行删除操作。
-/// 通过 context.txn_id 获取事务ID，确保在同一事务中执行。
+/// 在事务中执行删除操作，通过上下文获取事务ID确保在同一事务中执行。
 ///
-/// # 输入处理
-/// - `input.input`: JSON 格式的删除条件
-/// - `input.context.txn_id`: 事务ID（由事务框设置）
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的操作结果
+/// * `input` - 函数输入，包含 `DeleteData` 格式的删除条件。
+///
+/// # Returns
+///
+/// 返回包含操作结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
@@ -333,16 +358,17 @@ pub fn tx_delete(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
     Ok(Msgpack(output))
 }
 
-/// 最终处理函数
+/// 最终处理函数。
 ///
-/// 最终处理并返回结果。
+/// 执行最终处理并返回结果，整合各步骤的输出。
 ///
-/// # 输入处理
-/// - `input.input`: 前序步骤的输出
-/// - `input.context.step_outputs`: 各步骤的输出缓存
+/// # Arguments
 ///
-/// # 输出
-/// - `result`: JSON 格式的最终结果
+/// * `input` - 函数输入，包含前序步骤的输出和各步骤的输出缓存。
+///
+/// # Returns
+///
+/// 返回包含最终结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);

@@ -55,6 +55,12 @@ pub struct FunctionDoc {
     /// 注意事项
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// Panic 场景说明
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub panics: Vec<String>,
+    /// Safety 说明（unsafe 函数）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety: Option<String>,
     /// 源码位置
     pub location: SourceLocation,
 }
@@ -93,11 +99,21 @@ pub struct FieldSpec {
     /// 字段类型
     #[serde(rename = "type")]
     pub type_name: String,
+    /// 格式（如 date-time, uuid 等）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
     /// 是否必填
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
     /// 字段说明
     pub description: String,
+    /// 子属性（用于 object 类型）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "properties")]
+    pub sub_fields: Vec<FieldSpec>,
+    /// 数组元素类型（用于 array 类型）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Box<FieldSpec>>,
 }
 
 /// 示例
