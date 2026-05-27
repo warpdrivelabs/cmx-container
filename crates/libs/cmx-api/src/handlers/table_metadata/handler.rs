@@ -95,8 +95,10 @@ pub async fn table_metadata_list(
         }
     } else {
         // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
-        let mut default_filter = TableMetadataFilter::default();
-        default_filter.app_id = Some(OpValsString::from(app_id));
+        let default_filter = TableMetadataFilter {
+            app_id: Some(OpValsString::from(app_id)),
+            ..Default::default()
+        };
         filters = Some(vec![default_filter]);
     }
 
@@ -149,8 +151,10 @@ pub async fn table_metadata_page(
         }
     } else {
         // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
-        let mut default_filter = TableMetadataFilter::default();
-        default_filter.app_id = Some(OpValsString::from(app_id));
+        let default_filter = TableMetadataFilter {
+            app_id: Some(OpValsString::from(app_id)),
+            ..Default::default()
+        };
         filters = Some(vec![default_filter]);
     }
 

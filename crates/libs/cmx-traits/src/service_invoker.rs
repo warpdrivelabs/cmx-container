@@ -8,7 +8,7 @@ use crate::error::TraitError;
 
 
 /// 服务调用选项
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ServiceInvokeOptions {
     /// 是否返回各步骤执行详情
     pub include_steps: bool,
@@ -20,16 +20,7 @@ pub struct ServiceInvokeOptions {
     pub debug_params: Option<HashMap<String, String>>,
 }
 
-impl Default for ServiceInvokeOptions {
-    fn default() -> Self {
-        Self {
-            include_steps: false,
-            debug: false,
-            debug_node_id: None,
-            debug_params: None,
-        }
-    }
-}
+
 
 #[async_trait]
 pub trait ServiceInvoker: Send + Sync {

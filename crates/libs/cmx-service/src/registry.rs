@@ -6,18 +6,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-use cmx_core::model::service::ServiceInfo;
+use cmx_core::model::service::ServiceDefinition;
 
 /// 服务注册中心
 ///
 /// 提供服务信息的内存缓存管理，包括：
-/// - 服务定义缓存（service_key -> ServiceInfo）
+/// - 服务定义缓存（service_key -> ServiceDefinition）
 /// - 插件服务映射（plugin_id -> Vec<service_key>）
 /// - 编排定义缓存（service_key -> JSON）
 #[derive(Clone)]
 pub struct ServiceRegistry {
-    /// 服务定义缓存（service_key -> ServiceInfo）
-    services: Arc<RwLock<HashMap<String, ServiceInfo>>>,
+    /// 服务定义缓存（service_key -> ServiceDefinition）
+    services: Arc<RwLock<HashMap<String, ServiceDefinition>>>,
     /// 插件服务映射（plugin_id -> Vec<service_key>）
     plugin_services: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// 编排定义缓存（service_key -> JSON）
@@ -39,7 +39,7 @@ impl ServiceRegistry {
     /// # 参数
     /// * `service` - 服务信息
     /// * `orchestration` - 编排定义（可选）
-    pub async fn register(&self, service: ServiceInfo, orchestration: Option<serde_json::Value>) {
+    pub async fn register(&self, service: ServiceDefinition, orchestration: Option<serde_json::Value>) {
         let service_key = service.service_key.clone();
         let plugin_id = service.plugin_id.clone();
         info!("注册插件{}服务：{}",&plugin_id, &service_key);
@@ -78,7 +78,7 @@ impl ServiceRegistry {
     ///
     /// # 返回值
     /// 返回服务信息的克隆，如果不存在则返回 None
-    pub async fn get(&self, service_key: &str) -> Option<ServiceInfo> {
+    pub async fn get(&self, service_key: &str) -> Option<ServiceDefinition> {
         self.services.read().await.get(service_key).cloned()
     }
 
@@ -89,7 +89,7 @@ impl ServiceRegistry {
     ///
     /// # 返回值
     /// 返回该插件下所有服务信息的列表
-    pub async fn get_by_plugin(&self, plugin_id: &str) -> Vec<ServiceInfo> {
+    pub async fn get_by_plugin(&self, plugin_id: &str) -> Vec<ServiceDefinition> {
         let plugin_services = self.plugin_services.read().await;
         let service_keys = plugin_services.get(plugin_id);
 
@@ -128,7 +128,7 @@ impl ServiceRegistry {
     /// # 参数
     /// * `services` - 服务信息列表
     /// * `orchestrations` - 编排定义映射（service_key -> JSON）
-    pub async fn load_all(&self, services: Vec<ServiceInfo>, orchestrations: HashMap<String, serde_json::Value>) {
+    pub async fn load_all(&self, services: Vec<ServiceDefinition>, orchestrations: HashMap<String, serde_json::Value>) {
         let mut services_map = self.services.write().await;
         let mut plugin_map = self.plugin_services.write().await;
         let mut orch_map = self.orchestration_cache.write().await;
@@ -162,7 +162,7 @@ impl ServiceRegistry {
     /// * `plugin_id` - 插件ID
     /// * `services` - 新的服务信息列表
     /// * `orchestrations` - 编排定义映射（service_key -> JSON）
-    pub async fn sync_plugin_services(&self, plugin_id: &str, services: Vec<ServiceInfo>, orchestrations: HashMap<String, serde_json::Value>) {
+    pub async fn sync_plugin_services(&self, plugin_id: &str, services: Vec<ServiceDefinition>, orchestrations: HashMap<String, serde_json::Value>) {
         let existing_keys = self.plugin_services.read().await
             .get(plugin_id)
             .cloned()

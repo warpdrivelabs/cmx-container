@@ -705,8 +705,7 @@ impl PluginPersistence {
                         })?;
                     deleted_count += 1;
                 } else {
-                    let mut updated_service: cmx_core::model::service::ServiceDefinition =
-                        service.into();
+                    let mut updated_service = service;
                     updated_service.version = request.target_version.clone();
                     self.deps
                         .service_storage

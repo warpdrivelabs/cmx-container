@@ -245,13 +245,13 @@ impl ApiDocGenerator {
         );
 
         for (node, _) in &executable_nodes {
-            if let Some(data) = &node.data {
-                if let Some(node_meta) = &data.node_meta {
-                    let pid = &node_meta.plugin_id;
-                    if !api_cache.contains_key(pid) {
-                        let api = self.load_plugin_api(pid).await;
-                        api_cache.insert(pid.clone(), api);
-                    }
+            if let Some(data) = &node.data
+                && let Some(node_meta) = &data.node_meta
+            {
+                let pid = &node_meta.plugin_id;
+                if !api_cache.contains_key(pid) {
+                    let api = self.load_plugin_api(pid).await;
+                    api_cache.insert(pid.clone(), api);
                 }
             }
         }
@@ -311,12 +311,11 @@ impl ApiDocGenerator {
                             return Some(target_node);
                         }
                         // 如果是 transaction 节点，进入事务框内部查找
-                        if target_node.node_type == "skylake-transaction" {
-                            if let Some(inner_entry) =
+                        if target_node.node_type == "skylake-transaction"
+                            && let Some(inner_entry) =
                                 Self::find_entry_in_transaction(target_node, nodes, edges)
-                            {
-                                return Some(inner_entry);
-                            }
+                        {
+                            return Some(inner_entry);
                         }
                         queue.push(edge.target_node_id.clone());
                     }
@@ -392,17 +391,17 @@ impl ApiDocGenerator {
         for end_node in &end_nodes {
             // 找到所有指向 end 的边
             for edge in edges {
-                if edge.target_node_id == end_node.id {
-                    if let Some(source_node) = nodes.iter().find(|n| n.id == edge.source_node_id) {
-                        if EXECUTABLE_NODE_TYPES.contains(&source_node.node_type.as_str()) {
-                            exit_nodes.push(source_node);
-                        } else if source_node.node_type == "skylake-transaction" {
-                            // 进入事务框内部找出口
-                            if let Some(inner_exit) =
-                                Self::find_exit_in_transaction(source_node, nodes, edges)
-                            {
-                                exit_nodes.push(inner_exit);
-                            }
+                if edge.target_node_id == end_node.id
+                    && let Some(source_node) = nodes.iter().find(|n| n.id == edge.source_node_id)
+                {
+                    if EXECUTABLE_NODE_TYPES.contains(&source_node.node_type.as_str()) {
+                        exit_nodes.push(source_node);
+                    } else if source_node.node_type == "skylake-transaction" {
+                        // 进入事务框内部找出口
+                        if let Some(inner_exit) =
+                            Self::find_exit_in_transaction(source_node, nodes, edges)
+                        {
+                            exit_nodes.push(inner_exit);
                         }
                     }
                 }
@@ -440,9 +439,7 @@ impl ApiDocGenerator {
 
         // 降级：返回事务框内最后一个可执行节点
         children
-            .iter()
-            .filter(|n| EXECUTABLE_NODE_TYPES.contains(&n.node_type.as_str()))
-            .last()
+            .iter().rfind(|n| EXECUTABLE_NODE_TYPES.contains(&n.node_type.as_str()))
             .copied()
     }
 

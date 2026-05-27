@@ -4,7 +4,7 @@
 //! cmx-service 模块实现此 trait。
 
 use crate::error::TraitError;
-use cmx_core::model::service::{ServiceInfo, ServiceOrchestration};
+use cmx_core::model::service::{ServiceDefinition, ServiceOrchestration};
 use serde::Deserialize;
 
 /// 服务分页查询过滤器
@@ -31,7 +31,7 @@ pub struct ServicePageFilter {
 #[derive(Debug, Clone)]
 pub struct ServicePageResult {
     /// 服务列表
-    pub items: Vec<ServiceInfo>,
+    pub items: Vec<ServiceDefinition>,
     /// 总数
     pub total: u64,
 }
@@ -51,7 +51,7 @@ pub trait ServiceQuery: Send + Sync {
     /// * `Ok(Some(ServiceInfo))` - 找到服务
     /// * `Ok(None)` - 服务不存在
     /// * `Err(TraitError)` - 查询失败
-    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceInfo>, TraitError>;
+    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, TraitError>;
 
     /// 根据插件ID查询所有服务
     ///
@@ -61,14 +61,14 @@ pub trait ServiceQuery: Send + Sync {
     /// # 返回值
     /// * `Ok(Vec<ServiceInfo>)` - 该插件下的所有服务列表
     /// * `Err(TraitError)` - 查询失败
-    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceInfo>, TraitError>;
+    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, TraitError>;
 
     /// 查询所有启用的服务
     ///
     /// # 返回值
     /// * `Ok(Vec<ServiceInfo>)` - 所有启用状态的服务列表
     /// * `Err(TraitError)` - 查询失败
-    async fn list_active_services(&self) -> Result<Vec<ServiceInfo>, TraitError>;
+    async fn list_active_services(&self) -> Result<Vec<ServiceDefinition>, TraitError>;
 
     /// 获取服务的编排定义
     ///

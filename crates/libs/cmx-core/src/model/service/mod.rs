@@ -13,7 +13,7 @@ pub mod flow;
 pub mod context;
 pub mod wasm_io;
 
-pub use definition::{ServiceDefinition, ServiceInfo};
+pub use definition::ServiceDefinition;
 pub use orchestration::ServiceOrchestration;
 pub use flow::{ServiceFlow, ServiceNode, ServiceEdge, NodeMeta, NodeSize, NodePosition, NodeData, NodeNodeMeta, NodeIO};
 pub use context::SVRContext;

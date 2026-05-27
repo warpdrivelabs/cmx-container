@@ -244,8 +244,8 @@ pub struct ServiceListItem {
     pub module_name: String,
     /// 插件名称
     pub plugin_name: String,
-    // ///服务api文档
-    // pub api_doc: Option<String>,
+    /// 服务api文档
+    pub api_doc: Option<String>,
 }
 
 /// 服务查重查询参数

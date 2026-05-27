@@ -521,7 +521,7 @@ pub async fn plugin_list(
         .into();
 
     let app_id = cmx_state.app_id().await;
-    if filter.app_id==None {
+    if filter.app_id.is_none() {
         filter.app_id = Some(app_id);
     }
 
@@ -602,7 +602,7 @@ pub async fn plugin_page(
         .into();
 
     let app_id = cmx_state.app_id().await;
-    if filter.app_id==None {
+    if filter.app_id.is_none() {
         filter.app_id = Some(app_id);
     }
 

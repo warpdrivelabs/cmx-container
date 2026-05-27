@@ -239,8 +239,9 @@ impl ServiceLifecycleListener {
             Ok(services) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 for service in &services {
-                    if !service.config.is_empty()
-                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(&service.config) {
+                    if let Some(ref config) = service.config
+                        && !config.is_empty()
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                             orchestrations.insert(service.service_key.clone(), orch);
                         }
                 }
@@ -294,7 +295,7 @@ impl ServiceLifecycleListener {
         match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
-                let service_infos: Vec<_> = service_defs
+                let service_defs: Vec<_> = service_defs
                     .into_iter()
                     .map(|def| {
                         if let Some(ref config) = def.config
@@ -302,12 +303,12 @@ impl ServiceLifecycleListener {
                                 && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                                     orchestrations.insert(def.service_key.clone(), orch);
                                 }
-                        cmx_core::model::service::ServiceInfo::from(def)
+                        def
                     })
                     .collect();
 
-                let service_count = service_infos.len();
-                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                let service_count = service_defs.len();
+                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
                 info!(
                     "插件 {} 升级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -386,7 +387,7 @@ impl ServiceLifecycleListener {
         match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
-                let service_infos: Vec<_> = service_defs
+                let service_defs: Vec<_> = service_defs
                     .into_iter()
                     .map(|def| {
                         if let Some(ref config) = def.config
@@ -394,12 +395,12 @@ impl ServiceLifecycleListener {
                                 && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                                     orchestrations.insert(def.service_key.clone(), orch);
                                 }
-                        cmx_core::model::service::ServiceInfo::from(def)
+                        def
                     })
                     .collect();
 
-                let service_count = service_infos.len();
-                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                let service_count = service_defs.len();
+                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
                 info!(
                     "插件 {} 降级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -447,7 +448,7 @@ impl ServiceLifecycleListener {
         match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
-                let service_infos: Vec<_> = service_defs
+                let service_defs: Vec<_> = service_defs
                     .into_iter()
                     .map(|def| {
                         if let Some(ref config) = def.config
@@ -455,12 +456,12 @@ impl ServiceLifecycleListener {
                                 && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                                     orchestrations.insert(def.service_key.clone(), orch);
                                 }
-                        cmx_core::model::service::ServiceInfo::from(def)
+                        def
                     })
                     .collect();
 
-                let service_count = service_infos.len();
-                registry.sync_plugin_services(&event.plugin_id, service_infos, orchestrations).await;
+                let service_count = service_defs.len();
+                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
                 info!(
                     "插件 {} 覆盖安装后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -492,8 +493,9 @@ impl ServiceLifecycleListener {
             Ok(services) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 for service in &services {
-                    if !service.config.is_empty()
-                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(&service.config) {
+                    if let Some(ref config) = service.config
+                        && !config.is_empty()
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
                             orchestrations.insert(service.service_key.clone(), orch);
                         }
                 }

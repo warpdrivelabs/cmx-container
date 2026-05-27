@@ -104,18 +104,18 @@ fn extract_doc_comments(attrs: &[syn::Attribute]) -> String {
     let mut doc_comments = Vec::new();
 
     for attr in attrs {
-        if attr.path().is_ident("doc") {
-            if let syn::Meta::NameValue(nv) = &attr.meta {
-                let nv_value = &nv.value;
-                // 检查是否是 Lit 表达式
-                if let syn::Expr::Lit(lit_expr) = nv_value {
-                    let lit = &lit_expr.lit;
-                    // 检查是否是字符串字面量
-                    if let syn::Lit::Str(s) = lit {
-                        let comment = s.value().trim().to_string();
-                        if !comment.is_empty() {
-                            doc_comments.push(comment);
-                        }
+        if attr.path().is_ident("doc")
+            && let syn::Meta::NameValue(nv) = &attr.meta
+        {
+            let nv_value = &nv.value;
+            // 检查是否是 Lit 表达式
+            if let syn::Expr::Lit(lit_expr) = nv_value {
+                let lit = &lit_expr.lit;
+                // 检查是否是字符串字面量
+                if let syn::Lit::Str(s) = lit {
+                    let comment = s.value().trim().to_string();
+                    if !comment.is_empty() {
+                        doc_comments.push(comment);
                     }
                 }
             }

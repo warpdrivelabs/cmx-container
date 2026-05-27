@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 use async_trait::async_trait;
-use cmx_core::model::service::{ServiceInfo, ServiceOrchestration};
+use cmx_core::model::service::{ServiceDefinition, ServiceOrchestration};
 use cmx_traits::{ServiceQuery, ServicePageFilter, ServicePageResult, TraitError};
 
 use crate::registry::ServiceRegistry;
@@ -48,7 +48,7 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回服务信息，如果不存在则返回 None
-    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceInfo>, TraitError> {
+    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, TraitError> {
         if let Some(service) = self.registry.get(service_key).await {
             return Ok(Some(service));
         }
@@ -57,15 +57,14 @@ impl ServiceQuery for ServiceQueryImpl {
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         if let Some(def) = &service_def {
-            let service_info = ServiceInfo::from(def.clone());
             let orchestration = serde_json::from_str::<serde_json::Value>(
                 def.config.as_ref().unwrap()
             )
                 .map_err(|e| TraitError::Internal(e.to_string()))?;
-            self.registry.register(service_info, Some(orchestration)).await;
+            self.registry.register(def.clone(), Some(orchestration)).await;
         }
 
-        Ok(service_def.map(ServiceInfo::from))
+        Ok(service_def)
     }
 
     /// 根据插件ID获取所有服务
@@ -77,7 +76,7 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回该插件下所有服务信息列表
-    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceInfo>, TraitError> {
+    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, TraitError> {
         let cached_services = self.registry.get_by_plugin(plugin_id).await;
         if !cached_services.is_empty() {
             return Ok(cached_services);
@@ -87,15 +86,14 @@ impl ServiceQuery for ServiceQueryImpl {
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         for def in &service_defs {
-            let service_info = ServiceInfo::from(def.clone());
             let orchestration = serde_json::from_str::<serde_json::Value>(
                 def.config.as_ref().unwrap()
             )
-            .map_err(|e| TraitError::Internal(e.to_string()))?;
-            self.registry.register(service_info, Some(orchestration)).await;
+                .map_err(|e| TraitError::Internal(e.to_string()))?;
+            self.registry.register(def.clone(), Some(orchestration)).await;
         }
 
-        Ok(service_defs.into_iter().map(ServiceInfo::from).collect())
+        Ok(service_defs)
     }
 
     /// 获取所有启用的服务
@@ -104,7 +102,7 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回所有状态为启用的服务信息列表
-    async fn list_active_services(&self) -> Result<Vec<ServiceInfo>, TraitError> {
+    async fn list_active_services(&self) -> Result<Vec<ServiceDefinition>, TraitError> {
         let all_keys = self.registry.get_all_keys().await;
 
         if all_keys.is_empty() {
@@ -114,17 +112,13 @@ impl ServiceQuery for ServiceQueryImpl {
             let mut active = Vec::new();
             for def in all_services {
                 if def.status == 1 {
-                    let info = ServiceInfo::from(def.clone());
-
                     let orchestration = serde_json::from_str::<serde_json::Value>(
                         def.config.as_ref().unwrap()
                     )
                         .map_err(|e| TraitError::Internal(e.to_string()))?;
-                    self.registry.register(info.clone(), Some(orchestration)).await;
+                    self.registry.register(def.clone(), Some(orchestration)).await;
 
-                    // let orchestration = def.config.as_ref().map(|s| serde_json::json!(s));
-                    // self.registry.register(info.clone(), orchestration).await;
-                    active.push(info);
+                    active.push(def);
                 }
             }
 
@@ -207,7 +201,7 @@ impl ServiceQuery for ServiceQueryImpl {
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         Ok(ServicePageResult {
-            items: items.into_iter().map(ServiceInfo::from).collect(),
+            items,
             total,
         })
     }

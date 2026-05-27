@@ -611,7 +611,7 @@ pub async fn get_service(
                 plugin_id: s.plugin_id,
                 status: s.status,
                 version: s.version,
-                config: s.config,
+                config: s.config.unwrap_or_default(),
                 domain_code: s.domain_code,
                 application_code: s.application_code,
                 module_code: s.module_code,
@@ -714,6 +714,7 @@ pub async fn get_services_by_plugin(
             application_name: s.application_name,
             module_name: s.module_name,
             plugin_name: s.plugin_name,
+            api_doc: s.api_doc,
         }
     }).collect();
 
@@ -817,6 +818,7 @@ pub async fn page_services(
             application_name: s.application_name,
             module_name: s.module_name,
             plugin_name: s.plugin_name,
+            api_doc: s.api_doc,
         }
     }).collect();
 

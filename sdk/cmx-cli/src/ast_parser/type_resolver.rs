@@ -209,23 +209,23 @@ pub fn extract_container_element(type_name: &str) -> Option<String> {
     let cleaned = clean_type_name(type_name);
 
     // HashMap<K, V> - 返回 V (需要先检查，避免被通用逻辑匹配)
-    if cleaned.starts_with("HashMap<") {
-        if let Some(start) = cleaned.find('<') {
-            let after_bracket = &cleaned[start + 1..];
-            if let Some(comma_pos) = after_bracket.find(',') {
-                let value_part = after_bracket[comma_pos + 1..].trim_start();
-                if let Some(end) = value_part.find('>') {
-                    return Some(value_part[..end].trim().to_string());
-                }
+    if cleaned.starts_with("HashMap<")
+        && let Some(start) = cleaned.find('<')
+    {
+        let after_bracket = &cleaned[start + 1..];
+        if let Some(comma_pos) = after_bracket.find(',') {
+            let value_part = after_bracket[comma_pos + 1..].trim_start();
+            if let Some(end) = value_part.find('>') {
+                return Some(value_part[..end].trim().to_string());
             }
         }
     }
 
     // Vec<T>, Option<T>, Box<T>, Result<T> 等
-    if let Some(start) = cleaned.find('<') {
-        if let Some(end) = cleaned.rfind('>') && end > start {
-            return Some(cleaned[start + 1..end].to_string());
-        }
+    if let Some(start) = cleaned.find('<')
+        && let Some(end) = cleaned.rfind('>') && end > start
+    {
+        return Some(cleaned[start + 1..end].to_string());
     }
 
     None
