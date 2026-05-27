@@ -43,6 +43,8 @@ pub struct ServiceDefinition {
     /// 所属插件名称（联查获取）
     #[serde(default)]
     pub plugin_name: String,
+    /// 服务api 联查获取）
+    pub api_doc: Option<String>,
 }
 
 /// 服务运行时信息 — 内存缓存用
@@ -128,6 +130,7 @@ impl From<ServiceInfo> for ServiceDefinition {
             application_name: info.application_name,
             module_name: info.module_name,
             plugin_name: info.plugin_name,
+            api_doc: None,
         }
     }
 }

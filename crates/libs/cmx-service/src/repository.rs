@@ -168,6 +168,7 @@ impl ServiceRepository {
                     application_name: String::new(),
                     module_name: String::new(),
                     plugin_name:String::new(),
+                    api_doc:None,
                 }))
             }
             None => Ok(None)
@@ -218,6 +219,7 @@ impl ServiceRepository {
                 application_name: String::new(),
                 module_name: String::new(),
                 plugin_name:String::new(),
+                api_doc:None
             });
         }
 
@@ -269,6 +271,7 @@ impl ServiceRepository {
                 application_name: String::new(),
                 module_name: String::new(),
                 plugin_name:String::new(),
+                api_doc:None,
             });
         }
 
@@ -577,12 +580,14 @@ impl ServiceRepository {
                    d.name as domain_name,
                    a.name as application_name,
                    m.name as module_name,
-                   p.name as plugin_name
+                   p.name as plugin_name,
+                   sd.api_doc as api_doc
             FROM cmx_service_define s
             LEFT JOIN cmx_domain d ON s.domain_code = d.code
             LEFT JOIN cmx_application a ON s.application_code = a.code
             LEFT JOIN cmx_module m ON s.module_code = m.code
             LEFT JOIN cmx_plugin p ON s.plugin_id = p.plugin_id and p.app_id = s.app_id
+            LEFT JOIN cmx_service_define_version sd ON s.service_key = sd.service_key AND s.version = sd.version AND s.app_id = sd.app_id
             {}
             ORDER BY s.update_time DESC
             LIMIT ${} OFFSET ${}
@@ -618,6 +623,7 @@ impl ServiceRepository {
                 application_name: row.get_by_name_as(schema, "application_name").unwrap_or_default(),
                 module_name: row.get_by_name_as(schema, "module_name").unwrap_or_default(),
                 plugin_name: row.get_by_name_as(schema, "plugin_name").unwrap_or_default(),
+                api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }
 

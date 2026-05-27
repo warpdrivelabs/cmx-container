@@ -281,7 +281,8 @@ impl ApiDocGenerator {
             },
             input: input_doc,
             output: output_doc,
-            functions: functions_doc,
+            // functions: functions_doc,
+            functions: vec![],
         })
     }
 
