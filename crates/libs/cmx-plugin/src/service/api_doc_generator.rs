@@ -269,7 +269,7 @@ impl ApiDocGenerator {
         let output_doc = Self::build_output_doc(&exit_nodes, &api_cache);
 
         // 8. 生成 functions 文档
-        let functions_doc = Self::build_functions_doc(&executable_nodes, &api_cache);
+        let _functions_doc = Self::build_functions_doc(&executable_nodes, &api_cache);
 
         Ok(ServiceApiDoc {
             service: ServiceInfo {

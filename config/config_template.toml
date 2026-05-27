@@ -250,3 +250,43 @@ storage_path = "./storage"
 # NACOS_CONFIG_ENABLED       - 是否启用配置中心（默认 false）
 # NACOS_CONFIG_DATA_ID       - 配置中心 Data ID
 # NACOS_CONFIG_GROUP         - 配置中心 Group（默认 DEFAULT_GROUP）
+
+# ============================================
+# 基础服务中心配置
+# ============================================
+# 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
+# 之间的数据交互配置
+[center_client]
+# 访问模式：mock（默认，当前阶段）| url（URL 直连）| discovery（服务发现）
+# mock 模式下所有接口调用返回 Mock 成功结果，适用于开发和测试环境
+mode = "mock"
+# 请求超时时间（毫秒，可选，默认 30000）
+# 各基础服务中心 HTTP 请求的超时时间
+timeout_ms = 30000
+
+# URL 直连模式配置（mode = "url" 时生效）
+# 每个中心对应一个独立的 URL 配置项
+# 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
+[center_client.urls]
+# 门户中心（菜单数据）URL
+# menu = "http://portal-center:8080/api/plugin/menu/import"
+# 权限中心（权限数据）URL
+# perm = "http://perm-center:8080/api/plugin/perm/import"
+# 表单中心（表单数据）URL
+# form = "http://form-center:8080/api/plugin/form/import"
+# 流程中心（流程定义）URL
+# flow = "http://flow-center:8080/api/plugin/flow/import"
+
+# 服务发现模式配置（mode = "discovery" 时生效）
+# 通过 Nacos 服务发现获取各中心的实例地址
+# [center_client.discovery]
+# Nacos 分组（可选，默认 DEFAULT_GROUP）
+# nacos_group = "DEFAULT_GROUP"
+# 门户中心服务名
+# menu_service = "cmx-portal-center"
+# 权限中心服务名
+# perm_service = "cmx-perm-center"
+# 表单中心服务名
+# form_service = "cmx-form-center"
+# 流程中心服务名
+# flow_service = "cmx-flow-center"

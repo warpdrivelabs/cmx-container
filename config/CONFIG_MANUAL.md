@@ -18,6 +18,7 @@
 - [Code Server 配置](#code-server-配置)
 - [节点配置](#节点配置)
 - [Nacos 配置](#nacos-配置)
+- [基础服务中心配置](#基础服务中心配置)
 - [配置优先级](#配置优先级)
 - [配置文件位置](#配置文件位置)
 
@@ -582,7 +583,123 @@ is_critical = true
 | `NACOS_NAMING_GROUP_NAME`   | String  | `DEFAULT_GROUP`  | 服务分组            |
 | `NACOS_CONFIG_ENABLED`      | Boolean | `false`          | 是否启用配置中心        |
 | `NACOS_CONFIG_DATA_ID`      | String  | -                | 配置中心 Data ID    |
-| `NACOS_CONFIG_GROUP`        | String  | `DEFAULT_GROUP`  | 配置中心 Group      |
+| `NACOS_CONFIG_GROUP`        | String  | `"DEFAULT_GROUP"`  | 配置中心 Group      |
+
+---
+
+## 基础服务中心配置
+
+插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）之间的数据交互配置。
+
+### `[center_client]`
+
+#### `mode`
+
+- **类型**: String (enum)
+- **必需**: 否
+- **默认值**: `"mock"`
+- **说明**: 基础服务中心访问模式
+- **可选值**:
+    - `mock` - Mock 模式，所有接口调用返回成功结果（当前阶段）
+    - `url` - URL 直连模式，通过显式配置的服务地址访问各中心
+    - `discovery` - 服务发现模式，通过 Nacos 服务发现获取各中心地址
+
+#### `timeout_ms`
+
+- **类型**: Integer (毫秒)
+- **必需**: 否
+- **默认值**: `30000`
+- **说明**: 各基础服务中心 HTTP 请求的超时时间
+
+---
+
+### `[center_client.urls]`
+
+URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个独立的 URL 配置项。
+
+#### `menu`
+
+- **类型**: String
+- **必需**: `mode = "url"` 时必需
+- **说明**: 门户中心（菜单数据）导入接口 URL
+- **示例**: `"http://portal-center:8080/api/plugin/menu/import"`
+
+#### `perm`
+
+- **类型**: String
+- **必需**: `mode = "url"` 时必需
+- **说明**: 权限中心（权限数据）导入接口 URL
+- **示例**: `"http://perm-center:8080/api/plugin/perm/import"`
+
+#### `form`
+
+- **类型**: String
+- **必需**: `mode = "url"` 时必需
+- **说明**: 表单中心（表单数据）导入接口 URL
+- **示例**: `"http://form-center:8080/api/plugin/form/import"`
+
+#### `flow`
+
+- **类型**: String
+- **必需**: `mode = "url"` 时必需
+- **说明**: 流程中心（流程定义）导入接口 URL
+- **示例**: `"http://flow-center:8080/api/plugin/flow/import"`
+
+---
+
+### `[center_client.discovery]`
+
+服务发现模式配置（`mode = "discovery"` 时生效）。通过 Nacos 服务发现获取各中心的实例地址。
+
+#### `nacos_group`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"DEFAULT_GROUP"`
+- **说明**: Nacos 服务分组
+
+#### `menu_service`
+
+- **类型**: String
+- **必需**: `mode = "discovery"` 时必需
+- **说明**: 门户中心在 Nacos 中注册的服务名
+- **示例**: `"cmx-portal-center"`
+
+#### `perm_service`
+
+- **类型**: String
+- **必需**: `mode = "discovery"` 时必需
+- **说明**: 权限中心在 Nacos 中注册的服务名
+- **示例**: `"cmx-perm-center"`
+
+#### `form_service`
+
+- **类型**: String
+- **必需**: `mode = "discovery"` 时必需
+- **说明**: 表单中心在 Nacos 中注册的服务名
+- **示例**: `"cmx-form-center"`
+
+#### `flow_service`
+
+- **类型**: String
+- **必需**: `mode = "discovery"` 时必需
+- **说明**: 流程中心在 Nacos 中注册的服务名
+- **示例**: `"cmx-flow-center"`
+
+---
+
+### 环境变量覆盖
+
+`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__<KEY>` 或 `CENTER_CLIENT__<SECTION>__<KEY>`：
+
+| 环境变量 | 类型 | 说明 |
+|----------|------|------|
+| `CENTER_CLIENT__MODE` | String | 访问模式 (`mock` / `url` / `discovery`) |
+| `CENTER_CLIENT__TIMEOUT_MS` | Integer | 请求超时时间（毫秒） |
+| `CENTER_CLIENT__URLS__MENU` | String | 门户中心 URL |
+| `CENTER_CLIENT__URLS__PERM` | String | 权限中心 URL |
+| `CENTER_CLIENT__URLS__FORM` | String | 表单中心 URL |
+| `CENTER_CLIENT__URLS__FLOW` | String | 流程中心 URL |
 
 ---
 

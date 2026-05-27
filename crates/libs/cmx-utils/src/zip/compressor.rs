@@ -4,7 +4,7 @@
 
 use crate::zip::{ZipError, ZipResult};
 use fs_err::File;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
@@ -160,6 +160,79 @@ impl ZipCompressor {
         zip.finish()?;
 
         Ok(())
+    }
+
+    /// 压缩目录到内存中的 ZIP 字节。
+    ///
+    /// 与 `compress_dir` 功能相同，但输出到 `Vec<u8>` 而非文件系统。
+    /// 适用于需要将 ZIP 数据直接传递给其他组件的场景（如 HTTP 上传）。
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - 源目录路径，必须存在且为目录。
+    /// * `compression_level` - 压缩级别 (0-9)，0 为不压缩，9 为最大压缩。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含 ZIP 数据的字节向量。
+    ///
+    /// # Errors
+    ///
+    /// 当源目录不存在、不是目录、为空或 IO 操作失败时返回错误。
+    pub fn compress_dir_to_memory(source: impl AsRef<Path>, compression_level: u32) -> ZipResult<Vec<u8>> {
+        let source = source.as_ref();
+
+        if !source.exists() {
+            return Err(ZipError::FileNotFound(source.display().to_string()));
+        }
+
+        if !source.is_dir() {
+            return Err(ZipError::NotDirectory(source.display().to_string()));
+        }
+
+        let buf = Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+
+        let options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .compression_level(Some(compression_level as i64));
+
+        let base_path = source.to_path_buf();
+        let mut has_files = false;
+
+        for entry in WalkDir::new(source).into_iter().filter_map(|e| e.ok()) {
+            let path = entry.path();
+
+            if path == source {
+                continue;
+            }
+
+            has_files = true;
+
+            let relative_path = path.strip_prefix(&base_path)
+                .map_err(|_| ZipError::Path("路径解析失败".to_string()))?;
+
+            let relative_str = relative_path.to_string_lossy().replace('\\', "/");
+
+            if path.is_dir() {
+                let dir_name = format!("{}/", relative_str);
+                zip.add_directory(&dir_name, options)?;
+            } else {
+                zip.start_file(&relative_str, options)?;
+
+                let mut source_file = File::open(path)?;
+                let mut buffer = Vec::new();
+                source_file.read_to_end(&mut buffer)?;
+                zip.write_all(&buffer)?;
+            }
+        }
+
+        if !has_files {
+            return Err(ZipError::EmptySource);
+        }
+
+        let buf = zip.finish()?;
+        Ok(buf.into_inner())
     }
 
     /**

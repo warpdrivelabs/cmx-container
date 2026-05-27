@@ -234,6 +234,12 @@ pub enum PluginError {
     /// 功能错误
     #[error("功能错误: {0}")]
     Feature(String),
+
+    // ==================== 服务中心错误 ====================
+
+    /// 服务中心数据分发错误
+    #[error("服务中心错误: {0}")]
+    CenterData(String),
 }
 
 // ==================== From 实现 ====================
@@ -387,6 +393,7 @@ impl PluginError {
             PluginError::WasmRuntime(_) => "WASM_RUNTIME_ERROR",
             PluginError::ServiceCall(_) => "SERVICE_CALL_ERROR",
             PluginError::Feature(_) => "FEATURE_ERROR",
+            PluginError::CenterData(_) => "CENTER_DATA_ERROR",
         }
     }
 }

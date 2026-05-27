@@ -14,6 +14,8 @@
 use std::sync::Arc;
 
 use crate::audit::logger::AuditLogger;
+use crate::center_client::dispatcher::CenterDataDispatcher;
+use crate::center_client::types::DispatchContext;
 use crate::error::PluginResult;
 use crate::service::event_publisher::EventPublisher;
 use crate::service::persistence::PluginPersistence;
@@ -41,6 +43,7 @@ pub struct PluginOperationExecutor {
     runtime: Arc<RuntimeOps>,
     event_publisher: EventPublisher,
     audit_logger: Arc<AuditLogger>,
+    center_dispatcher: Arc<CenterDataDispatcher>,
 }
 
 impl PluginOperationExecutor {
@@ -57,12 +60,14 @@ impl PluginOperationExecutor {
         runtime: Arc<RuntimeOps>,
         event_publisher: EventPublisher,
         audit_logger: Arc<AuditLogger>,
+        center_dispatcher: Arc<CenterDataDispatcher>,
     ) -> Self {
         Self {
             persistence,
             runtime,
             event_publisher,
             audit_logger,
+            center_dispatcher,
         }
     }
 
@@ -85,6 +90,45 @@ impl PluginOperationExecutor {
 
         // 1. 持久化：数据库写入 + 文件安装
         let persist_result = self.persistence.install_persist(request).await?;
+
+        // 1.5 中心数据分发：并行推送到各基础服务中心
+        let ctx = DispatchContext {
+            install_path: persist_result.install_path.clone(),
+            plugin_id: persist_result.plugin_id.clone(),
+            app_id: persist_result.app_id.clone(),
+            version: persist_result.version.clone(),
+            domain_code: persist_result.domain_code.clone(),
+            application_code: persist_result.application_code.clone(),
+            module_code: persist_result.module_code.clone(),
+        };
+        let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
+        if !dispatch_result.is_all_success() {
+            let failures: Vec<String> = dispatch_result
+                .failed_categories()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}: {}",
+                        r.category.center_name(),
+                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+                    )
+                })
+                .collect();
+            let error_msg = format!("中心数据推送失败: {}", failures.join(", "));
+            tracing::error!("{}", error_msg);
+            tracing::error!("开始补偿卸载: {}", persist_result.plugin_id);
+            let uninstall_req = crate::service::uninstall::UninstallRequest {
+                plugin_id: persist_result.plugin_id.clone(),
+                force: true,
+                operator: "system-compensate".to_string(),
+                app_id: Some(persist_result.app_id.clone()),
+            };
+            let _ = self.persistence.uninstall_persist(uninstall_req).await.map_err(|rollback_err| {
+                tracing::error!("补偿卸载也失败，需人工介入: {}", rollback_err);
+                rollback_err
+            });
+            return Err(crate::error::PluginError::CenterData(error_msg));
+        }
 
         // 2. 运行时注册：写入 Registry + Contexts + Cache
         self.runtime.register_plugin(&persist_result).await?;
@@ -135,6 +179,35 @@ impl PluginOperationExecutor {
         // 1. 持久化
         let persist_result = self.persistence.upgrade_persist(request).await?;
 
+        // 1.5 中心数据分发
+        let ctx = DispatchContext {
+            install_path: persist_result.install_path.clone(),
+            plugin_id: persist_result.plugin_id.clone(),
+            app_id: persist_result.app_id.clone(),
+            version: persist_result.version.clone(),
+            domain_code: persist_result.domain_code.clone(),
+            application_code: persist_result.application_code.clone(),
+            module_code: persist_result.module_code.clone(),
+        };
+        let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
+        if !dispatch_result.is_all_success() {
+            let failures: Vec<String> = dispatch_result
+                .failed_categories()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}: {}",
+                        r.category.center_name(),
+                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+                    )
+                })
+                .collect();
+            return Err(crate::error::PluginError::CenterData(format!(
+                "升级时中心数据推送失败: {}",
+                failures.join(", ")
+            )));
+        }
+
         // 2. 运行时更新：更新 Registry + Contexts + Cache 中的版本信息
         self.runtime.update_plugin(&persist_result).await?;
 
@@ -184,6 +257,35 @@ impl PluginOperationExecutor {
         // 1. 持久化
         let persist_result = self.persistence.downgrade_persist(request).await?;
 
+        // 1.5 中心数据分发
+        let ctx = DispatchContext {
+            install_path: persist_result.install_path.clone(),
+            plugin_id: persist_result.plugin_id.clone(),
+            app_id: persist_result.app_id.clone(),
+            version: persist_result.version.clone(),
+            domain_code: persist_result.domain_code.clone(),
+            application_code: persist_result.application_code.clone(),
+            module_code: persist_result.module_code.clone(),
+        };
+        let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
+        if !dispatch_result.is_all_success() {
+            let failures: Vec<String> = dispatch_result
+                .failed_categories()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}: {}",
+                        r.category.center_name(),
+                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+                    )
+                })
+                .collect();
+            return Err(crate::error::PluginError::CenterData(format!(
+                "降级时中心数据推送失败: {}",
+                failures.join(", ")
+            )));
+        }
+
         // 2. 运行时更新
         self.runtime.update_plugin(&persist_result).await?;
 
@@ -232,6 +334,35 @@ impl PluginOperationExecutor {
 
         // 1. 持久化：事务内删除数据库记录，提交后删除物理文件
         let persist_result = self.persistence.uninstall_persist(request).await?;
+
+        // 1.5 中心数据清理：并行通知各中心清理关联数据
+        let ctx = DispatchContext {
+            install_path: persist_result.install_path.clone(),
+            plugin_id: persist_result.plugin_id.clone(),
+            app_id: persist_result.app_id.clone(),
+            version: persist_result.version.clone(),
+            domain_code: persist_result.domain_code.clone(),
+            application_code: persist_result.application_code.clone(),
+            module_code: persist_result.module_code.clone(),
+        };
+        let dispatch_result = self.center_dispatcher.dispatch_cleanup(&ctx).await?;
+        if !dispatch_result.is_all_success() {
+            let failures: Vec<String> = dispatch_result
+                .failed_categories()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}: {}",
+                        r.category.center_name(),
+                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+                    )
+                })
+                .collect();
+            return Err(crate::error::PluginError::CenterData(format!(
+                "中心数据清理失败（DB 已清理但中心数据残留）: {}",
+                failures.join(", ")
+            )));
+        }
 
         // 2. 运行时注销：从 Registry + Contexts + Cache 中移除
         self.runtime.unregister_plugin(&persist_result.plugin_id).await?;
@@ -290,6 +421,35 @@ impl PluginOperationExecutor {
             .persistence
             .reinstall_persist(request, plugin_id, old_version)
             .await?;
+
+        // 1.5 中心数据分发（覆盖安装时重新推送数据）
+        let ctx = DispatchContext {
+            install_path: persist_result.install_path.clone(),
+            plugin_id: persist_result.plugin_id.clone(),
+            app_id: persist_result.app_id.clone(),
+            version: persist_result.version.clone(),
+            domain_code: persist_result.domain_code.clone(),
+            application_code: persist_result.application_code.clone(),
+            module_code: persist_result.module_code.clone(),
+        };
+        let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
+        if !dispatch_result.is_all_success() {
+            let failures: Vec<String> = dispatch_result
+                .failed_categories()
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}: {}",
+                        r.category.center_name(),
+                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+                    )
+                })
+                .collect();
+            return Err(crate::error::PluginError::CenterData(format!(
+                "覆盖安装时中心数据推送失败: {}",
+                failures.join(", ")
+            )));
+        }
 
         // 2. 运行时更新：更新 Registry + Contexts + Cache
         self.runtime.update_plugin(&persist_result).await?;

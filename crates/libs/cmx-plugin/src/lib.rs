@@ -39,6 +39,7 @@ pub mod cluster;
 pub mod audit;
 pub mod marketplace;
 pub mod traits_impl;
+pub mod center_client;
 
 // 导出错误类型
 pub use error::PluginError;

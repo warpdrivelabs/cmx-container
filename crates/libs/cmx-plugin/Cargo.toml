@@ -44,6 +44,8 @@ bytes = { workspace = true }
 reqwest = { workspace = true }
 # 异步 trait
 async-trait = { workspace = true }
+# 异步并发工具
+futures = { workspace = true }
 # 错误处理
 anyhow = { workspace = true }
 # 派生宏

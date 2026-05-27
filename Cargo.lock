@@ -971,6 +971,7 @@ dependencies = [
  "cmx-utils",
  "derive_more",
  "ed25519-dalek",
+ "futures",
  "md5",
  "modql",
  "rand 0.8.5",

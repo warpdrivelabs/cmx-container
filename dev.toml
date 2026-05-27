@@ -165,3 +165,28 @@ endpoint = "http://192.168.1.14:9000/"
 bucket_name = "cmx-bucket"
 domain = "http://192.168.1.14:9000/"
 base_path = "cmx-server/"
+
+# ============================================
+# 基础服务中心配置
+# ============================================
+[center_client]
+# 模式：mock（默认，当前阶段）| url（直连）| discovery（服务发现）
+mode = "mock"
+# 请求超时（毫秒）
+timeout_ms = 30000
+
+# URL 直连模式（mode = "url" 时生效）
+# 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
+[center_client.urls]
+ menu = "http://portal-center:8080/api/plugin/menu/import"
+ perm = "http://perm-center:8080/api/plugin/perm/import"
+ form = "http://form-center:8080/api/plugin/form/import"
+ flow = "http://flow-center:8080/api/plugin/flow/import"
+
+# 服务发现模式（mode = "discovery" 时生效）
+# [center_client.discovery]
+# nacos_group = "DEFAULT_GROUP"
+# menu_service = "cmx-portal-center"
+# perm_service = "cmx-perm-center"
+# form_service = "cmx-form-center"
+# flow_service = "cmx-flow-center"

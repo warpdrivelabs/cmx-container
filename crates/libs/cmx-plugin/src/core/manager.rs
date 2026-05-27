@@ -254,6 +254,14 @@ impl PluginManager {
         // 创建新架构组件
         let event_publisher = EventPublisher::new(plugin_notifier.clone());
 
+        let center_config = crate::center_client::CenterClientConfig::load();
+        let center_sender: std::sync::Arc<dyn crate::center_client::ServiceCenterSender> =
+            std::sync::Arc::new(crate::center_client::MockServiceCenterSender);
+        let center_dispatcher = std::sync::Arc::new(
+            crate::center_client::CenterDataDispatcher::new(center_sender),
+        );
+        tracing::info!("center_client 初始化完成: mode={}", center_config.mode);
+
         let persistence = PluginPersistence::new(
             crate::service::install::InstallServiceDeps {
                 repository: repository.clone(),
@@ -296,6 +304,7 @@ impl PluginManager {
             runtime_ops.clone(),
             event_publisher.clone(),
             audit_logger.clone(),
+            center_dispatcher,
         ));
 
         let install_service = crate::service::install::InstallService::new(executor.clone());
