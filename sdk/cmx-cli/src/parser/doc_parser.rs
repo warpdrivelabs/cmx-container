@@ -225,7 +225,7 @@ fn parse_sections(doc: &str) -> std::collections::HashMap<String, String> {
 
     sections
 }
-
+#[allow(dead_code)]
 /// 解析表格或列表
 fn parse_table_or_list(content: &str) -> Vec<FieldInfo> {
     // 尝试解析 Markdown 表格
@@ -298,6 +298,7 @@ fn parse_table(content: &str) -> Vec<FieldInfo> {
     fields
 }
 
+#[allow(dead_code)]
 /// 解析字段列表格式
 fn parse_field_list(content: &str) -> Vec<FieldInfo> {
     let mut fields = Vec::new();
