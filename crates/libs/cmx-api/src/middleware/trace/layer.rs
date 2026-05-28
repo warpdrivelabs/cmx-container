@@ -116,6 +116,12 @@ async fn trace_verbose(
 ) -> Response {
     let config = TraceConfig::default();
     let headers = collect_headers(req.headers());
+    let headers_json = serde_json::Value::Object(
+        headers
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect(),
+    );
 
     // multipart 请求不读取 body，直接透传给 handler
     if is_multipart_request(req.headers()) {
@@ -125,10 +131,6 @@ async fn trace_verbose(
 
         debug!(
             target: "req_trace",
-            req_method = %method,
-            req_path = %path,
-            req_query = ?query,
-            req_headers = ?headers,
             resp_status = status.as_u16(),
             resp_duration_ms = duration.as_millis() as u64,
             "文件上传: {} {} query={:?} | {} {:?}",
@@ -163,15 +165,10 @@ async fn trace_verbose(
     if is_file_download_response(response.headers()) {
         debug!(
             target: "req_trace",
-            req_method = %method,
-            req_path = %path,
-            req_query = ?query,
-            req_headers = ?headers,
-            req_body = %req_body_preview,
             resp_status = status.as_u16(),
             resp_duration_ms = duration.as_millis() as u64,
-            "文件下载: {} {} query={:?} body={} | {} {:?}",
-            method, path, query, req_body_preview, status.as_u16(), duration
+            "文件下载: {} {} query={:?} headers={} body={} | {} {:?}",
+            method, path, query, headers_json, req_body_preview, status.as_u16(), duration
         );
 
         if status.as_u16() >= 500 {
@@ -190,16 +187,10 @@ async fn trace_verbose(
 
     debug!(
         target: "req_trace",
-        req_method = %method,
-        req_path = %path,
-        req_query = ?query,
-        req_headers = ?headers,
-        req_body = %req_body_preview,
         resp_status = status.as_u16(),
-        resp_body = %resp_body_preview,
         resp_duration_ms = duration.as_millis() as u64,
-        "请求详情: {} {} query={:?} headers={:?} body={} | 响应: {} body={} {:?}",
-        method, path, query, headers, req_body_preview,
+        "请求详情: {} {} query={:?} headers={} body={} | 响应: {} body={} {:?}",
+        method, path, query, headers_json, req_body_preview,
         status.as_u16(), resp_body_preview, duration
     );
 
