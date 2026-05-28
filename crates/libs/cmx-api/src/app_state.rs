@@ -1,10 +1,9 @@
 //! CMX State 模块
 //!
-//! 定义应用程序的共享状态，支持运行时动态修改。
+//! 定义应用程序的共享状态。
 //! 包含 PluginQuery 和 RuntimeInvoker trait 对象，支持跨模块解耦调用。
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
 use cmx_storage::service::StorageService;
 
@@ -23,8 +22,8 @@ use cmx_storage::service::StorageService;
 ///     .with_runtime_invoker(wasm_engine);
 /// ```
 pub struct CmxAppState {
-    /// 内部可修改的状态
-    pub app_state: Arc<RwLock<AppStateInner>>,
+    /// 应用隔离标识，用于多租户/多应用场景隔离（初始化后不可变）
+    pub app_id: String,
     /// 插件查询器（trait 对象）
     plugin_query: Option<Arc<dyn PluginQuery>>,
     /// WASM 运行时调用器（trait 对象）
@@ -33,14 +32,8 @@ pub struct CmxAppState {
     service_query: Option<Arc<dyn ServiceQuery>>,
     /// 服务存储（trait 对象）
     service_storage: Option<Arc<dyn ServiceStorage>>,
+    /// 存储服务（trait 对象）
     storage_service: Option<Arc<dyn StorageService>>,
-}
-
-/// 内部状态结构
-#[derive(Debug, Clone)]
-pub struct AppStateInner {
-    /// 应用隔离标识，用于多租户/多应用场景隔离
-    pub app_id: String,
 }
 
 impl Default for CmxAppState {
@@ -52,13 +45,10 @@ impl Default for CmxAppState {
 impl CmxAppState {
     /// 创建新的 CmxAppState
     pub fn new() -> Self {
-        // let app_id = ConfigManager::global()
-        //     .get_string("plugin.app_id")
-        //     .unwrap_or("default".to_string());
         let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
 
         Self {
-            app_state: Arc::new(RwLock::new(AppStateInner { app_id })),
+            app_id,
             plugin_query: None,
             runtime_invoker: None,
             service_query: None,
@@ -154,10 +144,9 @@ impl CmxAppState {
 
     /// 获取应用隔离标识
     ///
-    /// 从 AppStateInner 中读取 app_id。
-    pub async fn app_id(&self) -> String {
-        let inner = self.app_state.read().await;
-        inner.app_id.clone()
+    /// 返回 app_id 字符串的副本。
+    pub fn app_id(&self) -> String {
+        self.app_id.clone()
     }
 
     /// 检查是否已完全初始化
@@ -171,7 +160,7 @@ impl CmxAppState {
 impl Clone for CmxAppState {
     fn clone(&self) -> Self {
         Self {
-            app_state: self.app_state.clone(),
+            app_id: self.app_id.clone(),
             plugin_query: self.plugin_query.clone(),
             runtime_invoker: self.runtime_invoker.clone(),
             service_query: self.service_query.clone(),

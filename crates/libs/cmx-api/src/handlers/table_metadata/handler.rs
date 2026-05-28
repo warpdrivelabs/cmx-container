@@ -87,7 +87,7 @@ pub async fn table_metadata_list(
     if params.filters.is_none() || params.filters.unwrap().is_empty() {
         filters = None;
     }
-    let app_id = cmx_state.app_id().await;
+    let app_id = cmx_state.app_id();
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
@@ -143,7 +143,7 @@ pub async fn table_metadata_page(
         filters = Some(vec![filter]);
     }
 
-    let app_id = cmx_state.app_id().await;
+    let app_id = cmx_state.app_id();
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
@@ -191,7 +191,7 @@ pub async fn table_metadata_get_by_name(
 ) -> Result<Json<ApiResp<DataSet>>> {
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let app_id = cmx_state.app_id().await;
+    let app_id = cmx_state.app_id();
 
     let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
         .await
@@ -237,7 +237,7 @@ pub async fn table_metadata_exists(
 ) -> Result<Json<ApiResp<String>>> {
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
-    let app_id = _cmx_state.app_id().await;
+    let app_id = _cmx_state.app_id();
 
     let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
         .await

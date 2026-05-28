@@ -34,7 +34,7 @@ pub mod openapi;
 
 
 pub use rest::{ handler::{create, create_many, get_by_id, update, update_many, delete, list, page}};
-pub use app_state::{CmxAppState, AppStateInner};
+pub use app_state::CmxAppState;
 pub use openapi::ApiDoc;
 
 // 注意：register_crud_routes 宏通过 #[macro_export] 自动导出到 crate 根目录
