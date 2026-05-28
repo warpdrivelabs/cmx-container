@@ -446,7 +446,7 @@ impl PluginManager {
             tracing::info!("已启动插件变更通知订阅（GlobalSubscriber + 自动重连）");
         }
 
-        // 启动定时对账任务（对比 DB 与本地 Registry，自动补偿差异）
+        // 启动定时一致性校验任务（对比 DB 与本地 Registry，自动补偿差异）
         if self.settings.reconciliation_interval_secs > 0 {
             let recon = crate::service::reconciliation::ReconciliationTask::new(
                 self.repository.clone(),
@@ -460,7 +460,7 @@ impl PluginManager {
             let recon = Arc::new(recon);
             recon.clone().start();
             tracing::info!(
-                "已启动插件定时对账任务（间隔 {}s, app_id={}）",
+                "已启动插件定时一致性校验任务（间隔 {}s, app_id={}）",
                 self.settings.reconciliation_interval_secs,
                 self.settings.app_id
             );

@@ -44,7 +44,7 @@ pub struct PluginManagerSettings {
     /// 应用ID
     #[serde(default = "default_app_id")]
     pub app_id: String,
-    /// 对账间隔（秒），0 表示禁用定时对账
+    /// 一致性校验间隔（秒），0 表示禁用定时校验
     #[serde(default = "default_reconciliation_interval")]
     pub reconciliation_interval_secs: u64,
     /// 自动安装配置

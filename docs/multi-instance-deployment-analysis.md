@@ -1079,14 +1079,14 @@ cmx:plugin:sync                                 # Pub/Sub 频道
 ```
 1. load_contexts()        — 从数据库加载插件到内存 Registry 和 Contexts（不下载文件、不执行 DDL）
 2. 启动 Redis Pub/Sub     — 监听跨实例变更通知（PluginChangeHandler）
-3. 启动定时对账任务       — ReconciliationTask，对比 DB 与本地状态，补偿差异
+3. 启动定时一致性校验任务       — ReconciliationTask，对比 DB 与本地状态，补偿差异
 ```
 
-**关键设计**：启动时不再执行 DDL 和文件下载，只做内存加载。文件下载推迟到对账任务触发。
+**关键设计**：启动时不再执行 DDL 和文件下载，只做内存加载。文件下载推迟到一致性校验任务触发。
 
-### 10.3 对账任务（ReconciliationTask）详细设计
+### 10.3 一致性校验任务（ReconciliationTask）详细设计
 
-对账任务每 N 秒（默认 60s，最小 10s）执行一次，对比**数据库**、**内存 Registry** 和**本地文件系统**三层状态。
+一致性校验任务每 N 秒（默认 60s，最小 10s）执行一次，对比**数据库**、**内存 Registry** 和**本地文件系统**三层状态。
 
 #### 10.3.1 三层状态检查逻辑
 
@@ -1111,7 +1111,7 @@ cmx:plugin:sync                                 # Pub/Sub 频道
 - Registry 中有插件信息 → 旧逻辑会跳过
 - 但本地没有 WASM 文件 → 插件实际无法运行
 
-**解决**：对账时增加本地文件检查，即使 Registry 中存在，本地文件缺失也要调用 `RuntimeLoader::load_plugin()` 重新下载。
+**解决**：一致性校验时增加本地文件检查，即使 Registry 中存在，本地文件缺失也要调用 `RuntimeLoader::load_plugin()` 重新下载。
 
 #### 10.3.4 RuntimeLoader::load_plugin() 行为
 
@@ -1124,24 +1124,24 @@ cmx:plugin:sync                                 # Pub/Sub 频道
 
 **不执行 DDL**，仅负责文件下载和内存注册。
 
-#### 10.3.5 对账结果（ReconcileResult）
+#### 10.3.5 一致性校验结果（ReconcileResult）
 
 ```rust
 pub struct ReconcileResult {
-    /// 本次对账加载的插件（Registry 中缺失，已加载）
+    /// 本次一致性校验加载的插件（Registry 中缺失，已加载）
     pub loaded: Vec<String>,
-    /// 本次对账同步的插件（Registry 中存在但本地文件缺失，已下载）
+    /// 本次一致性校验同步的插件（Registry 中存在但本地文件缺失，已下载）
     pub synced: Vec<String>,
-    /// 本次对账卸载的插件
+    /// 本次一致性校验卸载的插件
     pub unloaded: Vec<String>,
-    /// 本次对账失败的插件及错误信息
+    /// 本次一致性校验失败的插件及错误信息
     pub failed: Vec<(String, String)>,
 }
 ```
 
 ### 10.4 跨实例同步机制
 
-对账任务与 Redis Pub/Sub 通知互补：
+一致性校验任务与 Redis Pub/Sub 通知互补：
 
 | 机制 | 触发方式 | 延迟 | 用途 |
 |------|---------|------|------|
@@ -1173,7 +1173,7 @@ pub struct ReconcileResult {
 
 | 文件 | 用途 |
 |------|------|
-| `service/reconciliation.rs` | 定时对账任务 |
+| `service/reconciliation.rs` | 定时一致性校验任务 |
 | `service/runtime_loader.rs` | 运行时加载器（下载文件+注册内存，不执行 DDL） |
 | `service/plugin_sync.rs` | 跨实例变更通知处理 |
 | `service/initializer.rs` | 启动初始化（load_contexts） |
@@ -1189,4 +1189,4 @@ pub struct ReconcileResult {
 | 2026-05-08 | v1.1 | 新增跨节点同步详细设计（消息类型、锁、防重放、事件防循环） |
 | 2026-05-08 | v1.2 | 新增降级逻辑边界处理（本地无目标版本时回退到安装） |
 | 2026-05-08 | v1.3 | 修正事件防循环设计：使用 `instance_id` 替代 `node_id`，区分配置 vs 运行时标识 |
-| 2026-05-22 | v1.4 | 新增生产环境插件部署方案（第十章），完善对账任务三层状态检查（DB + Registry + 本地文件），增加本地文件缺失时自动下载逻辑 |
+| 2026-05-22 | v1.4 | 新增生产环境插件部署方案（第十章），完善一致性校验任务三层状态检查（DB + Registry + 本地文件），增加本地文件缺失时自动下载逻辑 |

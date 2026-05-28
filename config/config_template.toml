@@ -150,7 +150,7 @@ temp_root = "plugins/temp"
 # 插件上传临时目录（必需）
 upload_root = "plugins/uploads"
 
-# 定时对账间隔（可选，单位：秒，默认 60）
+# 定时一致性校验间隔（可选，单位：秒，默认 60）
 # 对比数据库与本地 Registry，自动补偿差异。设为 0 禁用。
 # reconciliation_interval_secs = 60
 
