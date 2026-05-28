@@ -13,7 +13,7 @@ use config::web_config;
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_nacos};
-use cmx_api::middleware::{cors_layer, mw_context_resolver, mw_trace};
+use cmx_api::middleware::{cors_layer, mw_context_resolver, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_utils::ConfigManager;
@@ -150,7 +150,7 @@ async fn main() -> Result<()> {
         .merge(routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
         .layer(middleware::from_fn(mw_context_resolver))
-        .layer(middleware::from_fn(mw_trace))
+        .layer(middleware::from_fn(trace_layer))
         .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(cors_layer());
