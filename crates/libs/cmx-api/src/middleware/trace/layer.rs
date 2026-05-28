@@ -73,7 +73,7 @@ async fn trace_lightweight(
 
     info!(
         target: "req_trace",
-        "{} {} query={:?} -> {} ({:?})",
+        "请求摘要: {} {} query={:?} -> {} ({:?})",
         method,
         path,
         query,
@@ -84,7 +84,7 @@ async fn trace_lightweight(
     if status.as_u16() >= 500 {
         warn!(
             target: "req_trace",
-            "SERVER ERROR: {} {} -> {}",
+            "服务端错误: {} {} -> {}",
             method,
             path,
             status.as_u16()
@@ -131,14 +131,14 @@ async fn trace_verbose(
             req_headers = ?headers,
             resp_status = status.as_u16(),
             resp_duration_ms = duration.as_millis() as u64,
-            "[MULTIPART] {} {} query={:?} | {} {:?}",
+            "文件上传: {} {} query={:?} | {} {:?}",
             method, path, query, status.as_u16(), duration
         );
 
         if status.as_u16() >= 500 {
             warn!(
                 target: "req_trace",
-                "SERVER ERROR: {} {} -> {}",
+                "服务端错误: {} {} -> {}",
                 method, path, status.as_u16()
             );
         }
@@ -170,14 +170,14 @@ async fn trace_verbose(
             req_body = %req_body_preview,
             resp_status = status.as_u16(),
             resp_duration_ms = duration.as_millis() as u64,
-            "[FILE_DOWNLOAD] {} {} query={:?} body={} | {} {:?}",
+            "文件下载: {} {} query={:?} body={} | {} {:?}",
             method, path, query, req_body_preview, status.as_u16(), duration
         );
 
         if status.as_u16() >= 500 {
             warn!(
                 target: "req_trace",
-                "SERVER ERROR: {} {} -> {}",
+                "服务端错误: {} {} -> {}",
                 method, path, status.as_u16()
             );
         }
@@ -198,7 +198,7 @@ async fn trace_verbose(
         resp_status = status.as_u16(),
         resp_body = %resp_body_preview,
         resp_duration_ms = duration.as_millis() as u64,
-        "{} {} query={:?} headers={:?} body={} | {} body={} {:?}",
+        "请求详情: {} {} query={:?} headers={:?} body={} | 响应: {} body={} {:?}",
         method, path, query, headers, req_body_preview,
         status.as_u16(), resp_body_preview, duration
     );
@@ -206,7 +206,7 @@ async fn trace_verbose(
     if status.as_u16() >= 500 {
         warn!(
             target: "req_trace",
-            "SERVER ERROR: {} {} -> {}",
+            "服务端错误: {} {} -> {}",
             method, path, status.as_u16()
         );
     }
