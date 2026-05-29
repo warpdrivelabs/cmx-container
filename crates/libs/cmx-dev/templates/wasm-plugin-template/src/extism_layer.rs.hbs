@@ -379,7 +379,7 @@ pub fn tx_update(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<Fun
 /// 返回包含查询结果的 `FunctionOutput`。
 #[plugin_fn]
 pub fn tx_query(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
-    let coe = PluginCore::new(ExtismHost);
+    let core = PluginCore::new(ExtismHost);
     let output = core.tx_query(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))
 }
