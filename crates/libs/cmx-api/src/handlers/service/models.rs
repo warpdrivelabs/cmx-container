@@ -72,7 +72,7 @@ pub struct FunctionCallResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceExecuteRequest {
     /// 服务唯一标识（对应 服务.json 中的 code 字段）
-    pub service_key: String,
+    pub service_key: Option<String>,
     /// 初始输入数据（传递给第一个函数节点，支持 JSON 对象或字符串）
     pub input: serde_json::Value,
     /// 是否返回步骤数据（可选，默认 false）
@@ -301,4 +301,11 @@ pub struct ServiceDetailResponse {
     pub application_name: String,
     /// 所属模块名称
     pub module_name: String,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct OpenApiQuery {
+    /// 是否强制刷新缓存
+    #[serde(default)]
+    pub refresh: Option<bool>,
 }

@@ -35,6 +35,7 @@
 
 use super::models::{
     FunctionCallRequest, FunctionCallResponse,
+    OpenApiQuery,
     ServiceByPluginQuery, ServiceDebugPrepareResult, ServiceDetailResponse, ServiceExecuteRequest,
     ServiceExecuteResponse,
     ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
@@ -446,8 +447,10 @@ pub async fn execute_service(
     let include_steps = include_steps || debug;
     let options = cmx_service::ExecuteOptions::new(include_steps)
         .with_debug(debug, debug_node_id, debug_params);
-
-    let response = execute_service_inner(&state, &req.service_key, svr_ctx, options).await?;
+    if req.service_key.clone().is_none(){
+        return Ok(Json(ApiResp::fail(1, "service_key 不能为空")));
+    }
+    let response = execute_service_inner(&state, &req.service_key.unwrap(), svr_ctx, options).await?;
 
     // 失败时返回错误码
     if !response.success {
@@ -956,4 +959,95 @@ pub async fn service_exists(
 
     let exists = service.is_some();
     Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/service/openapi",
+    params(OpenApiQuery),
+    responses(
+        (status = 200, description = "OpenAPI 3.0 文档", body = Value)
+    ),
+    tag = "Service"
+)]
+pub async fn get_openapi_spec(
+    State(state): State<CmxAppState>,
+    Query(_query): Query<OpenApiQuery>,
+) -> Result<Json<serde_json::Value>, Error> {
+    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+        .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
+
+    let filter = ServicePageFilter::default();
+    let page_size = 1000u64;
+    let mut all_items = Vec::new();
+    let mut page = 1u64;
+
+    loop {
+        let result = service_query.page_services(filter.clone(), page, page_size).await
+            .map_err(|e| Error::business_error(format!("查询服务失败: {}", e)))?;
+        all_items.extend(result.items);
+        let total = result.total;
+        if (page * page_size) >= total {
+            break;
+        }
+        page += 1;
+    }
+
+    let mut paths = serde_json::Map::new();
+    let mut schemas = serde_json::Map::new();
+    let mut tags = Vec::new();
+    let mut seen_tags = std::collections::HashSet::new();
+
+    for svc in &all_items {
+        if let Some(api_doc_str) = &svc.api_doc {
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(api_doc_str) {
+                if let Some(path) = doc.get("path").and_then(|v| v.as_str()) {
+                    if let Some(path_item) = doc.get("path_item") {
+                        let mut op = path_item.clone();
+                        let tag = build_tag(&svc.domain_name, &svc.application_name, &svc.module_name);
+                        if !seen_tags.contains(&tag) {
+                            seen_tags.insert(tag.clone());
+                            tags.push(serde_json::json!({
+                                "name": tag,
+                                "description": format!("域:{} > 应用:{} > 模块:{}",
+                                    svc.domain_name, svc.application_name, svc.module_name)
+                            }));
+                        }
+                        if let Some(post) = op.get_mut("post") {
+                            post["tags"] = serde_json::json!([tag]);
+                        }
+                        paths.insert(path.to_string(), op);
+                    }
+                    if let Some(doc_schemas) = doc.get("schemas").and_then(|v| v.as_object()) {
+                        schemas.extend(doc_schemas.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let openapi = serde_json::json!({
+        "openapi": "3.0.3",
+        "info": {
+            "title": "CMX 服务编排 API",
+            "version": "1.0.0",
+            "description": "所有服务编排的统一接口文档，可直接导入 Swagger/Postman/Apifox 等工具"
+        },
+        "tags": tags,
+        "paths": paths,
+        "components": {
+            "schemas": schemas
+        }
+    });
+
+    Ok(Json(openapi))
+}
+
+fn build_tag(domain: &str, app: &str, module: &str) -> String {
+    let mut parts = Vec::new();
+    if !domain.is_empty() { parts.push(domain); }
+    if !app.is_empty() { parts.push(app); }
+    if !module.is_empty() { parts.push(module); }
+    if parts.is_empty() { return "未分类".to_string(); }
+    parts.join("/")
 }

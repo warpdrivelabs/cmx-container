@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use futures::future::join_all;
-use super::packer::pack_directory_to_zip;
+use super::packer::{pack_directory_to_zip, has_files};
 use super::sender::ServiceCenterSender;
 use super::types::*;
 use crate::error::{PluginError, PluginResult};
@@ -56,6 +56,15 @@ impl CenterDataDispatcher {
             if !dir.exists() {
                 tracing::info!(
                     "插件 {} 无 {} 数据目录，跳过",
+                    ctx.plugin_id,
+                    category.dir_name()
+                );
+                continue;
+            }
+
+            if !has_files(&dir) {
+                tracing::info!(
+                    "插件 {} {} 数据目录为空，跳过",
                     ctx.plugin_id,
                     category.dir_name()
                 );

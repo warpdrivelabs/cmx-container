@@ -128,9 +128,9 @@ impl ServiceRepository {
         let sql = r#"
             SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
-                   d.create_time, d.update_time, v.config
+                   d.create_time, d.update_time, v.config, v.api_doc
             FROM cmx_service_define d
-            LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key and d.version = v.plugin_version
+            LEFT JOIN cmx_service_define_version v ON d.service_key = v.service_key and d.version = v.plugin_version and d.app_id = v.app_id
             WHERE d.service_key = $1 AND d.app_id = $2
             ORDER BY v.create_time DESC
             LIMIT 1
@@ -168,7 +168,7 @@ impl ServiceRepository {
                     application_name: String::new(),
                     module_name: String::new(),
                     plugin_name:String::new(),
-                    api_doc:None,
+                    api_doc: Some(r.get_by_name_as(schema, "api_doc").unwrap_or_default()),
                 }))
             }
             None => Ok(None)
@@ -184,12 +184,14 @@ impl ServiceRepository {
     /// 返回所有服务定义列表，按更新时间降序排列
     pub async fn list_services(&self, app_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
-            SELECT id, app_id, service_key, service_name, description, plugin_id,
-                   status, version, domain_code, application_code, module_code,
-                   create_time, update_time
-            FROM cmx_service_define
-            WHERE app_id = $1
-            ORDER BY update_time DESC
+            SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
+                   d.status, d.version, d.domain_code, d.application_code, d.module_code,
+                   d.create_time, d.update_time, dv.config, dv.api_doc
+            FROM cmx_service_define d
+            LEFT JOIN cmx_service_define_version dv ON d.service_key = dv.service_key
+             and d.version = dv.plugin_version and dv.app_id = d.app_id
+            WHERE d.app_id = $1
+            ORDER BY d.update_time DESC
         "#;
 
         let params = json!([app_id]);
@@ -211,7 +213,7 @@ impl ServiceRepository {
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
-                config: None,
+                config: row.get_by_name_as(schema, "config"),
                 domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
                 application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
                 module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
@@ -219,7 +221,7 @@ impl ServiceRepository {
                 application_name: String::new(),
                 module_name: String::new(),
                 plugin_name:String::new(),
-                api_doc:None
+                api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }
 
@@ -237,7 +239,7 @@ impl ServiceRepository {
         let sql = r#"
             SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
-                   d.create_time, d.update_time, dv.config
+                   d.create_time, d.update_time, dv.config, dv.api_doc
             FROM cmx_service_define d
             LEFT JOIN cmx_service_define_version dv ON d.service_key = dv.service_key
              and d.version = dv.plugin_version and dv.app_id = $2
@@ -271,7 +273,7 @@ impl ServiceRepository {
                 application_name: String::new(),
                 module_name: String::new(),
                 plugin_name:String::new(),
-                api_doc:None,
+                api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }
 

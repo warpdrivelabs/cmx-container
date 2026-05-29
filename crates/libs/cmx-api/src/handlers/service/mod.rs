@@ -19,6 +19,8 @@ use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 use axum::{routing::{post, get}, Router};
 
+use handler::get_openapi_spec;
+
 /// 内部路由（不含前缀）
 fn inner_routes() -> Router<CmxAppState> {
     Router::new()
@@ -31,6 +33,7 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/get", get(get_service))
         .route("/delete", post(delete_service))
         .route("/exists", get(service_exists))
+        .route("/openapi", get(get_openapi_spec))
 }
 
 /// Service 模块路由

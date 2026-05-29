@@ -91,6 +91,7 @@ use utoipa::OpenApi;
         crate::handlers::service::handler::get_services_by_plugin,
         crate::handlers::service::handler::delete_service,
         crate::handlers::service::handler::service_exists,
+        crate::handlers::service::handler::get_openapi_spec,
 
         // Marketplace handlers
         crate::handlers::marketplace::handler::marketplace_plugin_page,

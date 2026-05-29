@@ -130,45 +130,85 @@ fn build_ast_fields(
         .collect()
 }
 
-/// 将字段信息解析为 FieldSpec
 fn resolve_field_to_spec(
     field: &crate::parser::FieldInfo,
     registry: &TypeRegistry,
     max_depth: usize,
 ) -> FieldSpec {
-    // 尝试从描述中提取类型
+    if !field.sub_fields.is_empty() {
+        let sub_fields: Vec<FieldSpec> = field
+            .sub_fields
+            .iter()
+            .map(|sf| table_field_to_spec(sf))
+            .collect();
+        return FieldSpec {
+            name: field.name.clone(),
+            type_name: "object".to_string(),
+            format: None,
+            required: field.required,
+            description: trim_description(&field.description),
+            sub_fields,
+            items: None,
+        };
+    }
+
     let type_name = if field.type_name != "unknown" && field.type_name != "serde_json::Value" {
         field.type_name.clone()
     } else {
-        // 尝试从描述中提取类型名（如 "包含 `InsertData` 格式的插入数据"）
-        extract_type_from_description(&field.description)
+        extract_type_from_description(&field.description, registry)
             .unwrap_or_else(|| "serde_json::Value".to_string())
     };
 
-    // 使用类型注册表解析
     let resolved = registry.resolve_type(&type_name, &field.name, &field.description, max_depth);
 
-    // 转换为 FieldSpec
     resolved_field_to_spec(&resolved)
 }
 
-/// 从描述中提取类型名
-fn extract_type_from_description(desc: &str) -> Option<String> {
-    // 匹配 `TypeName` 格式
+fn extract_type_from_description(desc: &str, registry: &TypeRegistry) -> Option<String> {
     let desc = desc.trim();
+    let mut candidates = Vec::new();
+    let mut search_start = 0;
 
-    // 查找反引号中的内容
-    if let Some(start) = desc.find('`')
-        && let Some(end) = desc[start + 1..].find('`')
-    {
-        let type_candidate = &desc[start + 1..start + 1 + end];
-        // 排除普通单词，类型名通常以大写开头
-        if !type_candidate.is_empty() && type_candidate.chars().next().unwrap().is_uppercase() {
-            return Some(type_candidate.to_string());
+    while let Some(start) = desc[search_start..].find('`') {
+        let abs_start = search_start + start;
+        if let Some(end) = desc[abs_start + 1..].find('`') {
+            let type_candidate = &desc[abs_start + 1..abs_start + 1 + end];
+            if !type_candidate.is_empty() && type_candidate.chars().next().unwrap().is_uppercase() {
+                candidates.push(type_candidate.to_string());
+            }
+            search_start = abs_start + 1 + end + 1;
+        } else {
+            break;
         }
     }
 
-    None
+    for candidate in &candidates {
+        if registry.is_registered(candidate) {
+            return Some(candidate.clone());
+        }
+    }
+
+    candidates.into_iter().next()
+}
+
+fn table_field_to_spec(field: &crate::parser::FieldInfo) -> FieldSpec {
+    let type_name = match field.type_name.as_str() {
+        "string" | "str" | "String" => "string".to_string(),
+        "integer" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" => "integer".to_string(),
+        "number" | "f32" | "f64" => "number".to_string(),
+        "boolean" | "bool" => "boolean".to_string(),
+        "array" => "array".to_string(),
+        _ => "object".to_string(),
+    };
+    FieldSpec {
+        name: field.name.clone(),
+        type_name,
+        format: None,
+        required: field.required,
+        description: trim_description(&field.description),
+        sub_fields: Vec::new(),
+        items: None,
+    }
 }
 
 /// 去掉描述末尾的句号

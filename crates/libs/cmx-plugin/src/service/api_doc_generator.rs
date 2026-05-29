@@ -17,6 +17,7 @@ use std::sync::Arc;
 use cmx_core::model::service::{NodeIO, ServiceEdge, ServiceNode, ServiceOrchestration};
 use cmx_traits::PluginQuery;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 use crate::error::PluginResult;
 
@@ -226,23 +227,16 @@ impl ApiDocGenerator {
         current_plugin_id: &str,
         current_plugin_version: &str,
         install_path: &Path,
-    ) -> PluginResult<ServiceApiDoc> {
+    ) -> PluginResult<Value> {
         let nodes = &orchestration.flow.nodes;
         let edges = &orchestration.flow.edges;
 
-        // 1. 加载当前插件的 api.json
         let current_api = self.load_current_plugin_api(install_path);
 
-        // 2. 收集所有可执行节点
         let executable_nodes = Self::collect_executable_nodes(nodes, edges);
 
-        // 3. 加载跨插件 api.json（按 plugin_id 分组，避免重复加载）
         let mut api_cache: HashMap<String, Option<PluginApiDef>> = HashMap::new();
-        // 先缓存当前插件的 api
-        api_cache.insert(
-            current_plugin_id.to_string(),
-            current_api,
-        );
+        api_cache.insert(current_plugin_id.to_string(), current_api);
 
         for (node, _) in &executable_nodes {
             if let Some(data) = &node.data
@@ -256,34 +250,119 @@ impl ApiDocGenerator {
             }
         }
 
-        // 4. 找到入口节点
         let entry_node = Self::find_entry_node(nodes, edges);
-
-        // 5. 找到出口节点
         let exit_nodes = Self::find_exit_nodes(nodes, edges);
 
-        // 6. 生成 input 文档
-        let input_doc = Self::build_input_doc(entry_node, &api_cache, nodes, edges);
+        let service_key = &orchestration.code;
+        let schema_prefix = to_pascal_case(service_key);
 
-        // 7. 生成 output 文档
-        let output_doc = Self::build_output_doc(&exit_nodes, &api_cache);
+        let input_params = match &entry_node {
+            Some(node) => {
+                let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+                Self::resolve_parameters(&plugin_id, &function_name, true, &node_ios, &api_cache)
+            }
+            None => vec![],
+        };
 
-        // 8. 生成 functions 文档
-        let _functions_doc = Self::build_functions_doc(&executable_nodes, &api_cache);
+        let input_schema = build_request_input_schema(&input_params);
+        let output_schema = build_output_schema(&exit_nodes, &api_cache, &schema_prefix);
 
-        Ok(ServiceApiDoc {
-            service: ServiceInfo {
-                key: orchestration.code.clone(),
-                name: orchestration.name.clone(),
-                description: orchestration.description.clone(),
-                plugin_id: current_plugin_id.to_string(),
-                version: current_plugin_version.to_string(),
+        let mut schemas = serde_json::Map::new();
+        schemas.insert(
+            format!("{schema_prefix}Input"),
+            input_schema,
+        );
+
+        let request_schema = json!({
+            "type": "object",
+            "properties": {
+                "input": { "$ref": format!("#/components/schemas/{schema_prefix}Input") },
+                "include_steps": {
+                    "type": "boolean",
+                    "description": "是否返回步骤数据",
+                    "default": false
+                },
+                "debug": {
+                    "type": "boolean",
+                    "description": "是否开启调试模式",
+                    "default": false
+                }
             },
-            input: input_doc,
-            output: output_doc,
-            // functions: functions_doc,
-            functions: vec![],
-        })
+            "required": ["input"]
+        });
+
+        let response_data_schema = build_response_data_schema(&schema_prefix, &output_schema);
+        schemas.insert(
+            format!("{schema_prefix}Output"),
+            output_schema,
+        );
+        schemas.insert(
+            format!("{schema_prefix}ResponseData"),
+            response_data_schema,
+        );
+
+        let response_schema = json!({
+            "type": "object",
+            "properties": {
+                "code": { "type": "integer", "description": "状态码，0 表示成功" },
+                "msg": { "type": "string", "description": "状态消息" },
+                "data": { "$ref": format!("#/components/schemas/{schema_prefix}ResponseData") }
+            }
+        });
+        schemas.insert(format!("{schema_prefix}Response"), response_schema);
+
+        let path = format!("/api/service/execute/{service_key}");
+        let operation_id = format!("execute_{service_key}");
+
+        let path_item = json!({
+            "post": {
+                "operationId": operation_id,
+                "summary": orchestration.name,
+                "description": orchestration.description,
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": format!("#/components/schemas/{schema_prefix}Request") }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "content": {
+                            "application/json": {
+                                "schema": { "$ref": format!("#/components/schemas/{schema_prefix}Response") }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        schemas.insert(format!("{schema_prefix}Request"), request_schema);
+
+        let functions_doc = Self::build_functions_doc(&executable_nodes, &api_cache);
+        let functions_value: Vec<Value> = functions_doc
+            .iter()
+            .map(|f| serde_json::to_value(f).unwrap_or_default())
+            .collect();
+
+        let result = json!({
+            "path": path,
+            "path_item": path_item,
+            "schemas": schemas,
+            "service_info": {
+                "key": service_key,
+                "name": orchestration.name,
+                "description": orchestration.description,
+                "plugin_id": current_plugin_id,
+                "version": current_plugin_version
+            },
+            "functions": functions_value
+        });
+
+        Ok(result)
     }
 
     /// 找到入口可执行节点（起点后的第一个 func 或 switch 节点）
@@ -542,99 +621,6 @@ impl ApiDocGenerator {
         }
     }
 
-    /// 构建 input 文档
-    fn build_input_doc(
-        entry_node: Option<&ServiceNode>,
-        api_cache: &HashMap<String, Option<PluginApiDef>>,
-        _nodes: &[ServiceNode],
-        _edges: &[ServiceEdge],
-    ) -> InputDoc {
-        match entry_node {
-            Some(node) => {
-                let (plugin_id, function_name, node_ios) = extract_node_meta(node);
-                let parameters = Self::resolve_parameters(
-                    &plugin_id,
-                    &function_name,
-                    true, // input
-                    &node_ios,
-                    api_cache,
-                );
-
-                InputDoc {
-                    description: if parameters.is_empty() {
-                        "此服务无需入参".to_string()
-                    } else {
-                        "服务入参，传递给第一个可执行节点".to_string()
-                    },
-                    source_node_id: node.id.clone(),
-                    source_node_type: node.node_type.clone(),
-                    parameters,
-                }
-            }
-            None => InputDoc {
-                description: "未找到入口节点".to_string(),
-                source_node_id: String::new(),
-                source_node_type: String::new(),
-                parameters: vec![],
-            },
-        }
-    }
-
-    /// 构建 output 文档
-    fn build_output_doc(
-        exit_nodes: &[&ServiceNode],
-        api_cache: &HashMap<String, Option<PluginApiDef>>,
-    ) -> OutputDoc {
-        if exit_nodes.is_empty() {
-            return OutputDoc {
-                description: "未找到出口节点".to_string(),
-                branches: vec![],
-            };
-        }
-
-        let mut branches = Vec::new();
-        for node in exit_nodes {
-            let (plugin_id, function_name, node_ios) = extract_node_meta(node);
-            let parameters = Self::resolve_parameters(
-                &plugin_id,
-                &function_name,
-                false, // output
-                &node_ios,
-                api_cache,
-            );
-
-            let branch_name = node
-                .data
-                .as_ref()
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| "未知分支".to_string());
-
-            branches.push(OutputBranch {
-                branch_name,
-                source_node_id: node.id.clone(),
-                source_node_type: node.node_type.clone(),
-                parameters,
-            });
-        }
-
-        // 如果只有一个分支，命名为"默认输出"
-        if branches.len() == 1 {
-            branches[0].branch_name = "默认输出".to_string();
-        }
-
-        let description = if branches.len() > 1 {
-            "服务出参，输出取决于运行时分支选择".to_string()
-        } else {
-            "服务出参，来自最终可执行节点的输出".to_string()
-        };
-
-        OutputDoc {
-            description,
-            branches,
-        }
-    }
-
-    /// 构建 functions 文档
     fn build_functions_doc(
         executable_nodes: &[(&ServiceNode, usize)],
         api_cache: &HashMap<String, Option<PluginApiDef>>,
@@ -799,4 +785,211 @@ fn extract_node_meta(node: &ServiceNode) -> (String, String, Vec<NodeIO>) {
         }
         None => (String::new(), String::new(), vec![]),
     }
+}
+
+fn to_pascal_case(s: &str) -> String {
+    s.split(|c: char| !c.is_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_ascii_uppercase().to_string() + &chars.as_str().to_lowercase(),
+            }
+        })
+        .collect()
+}
+
+fn unwrap_input_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
+    if params.len() == 1 && params[0].name == "input" && params[0].param_type == "object" {
+        if let Some(props) = &params[0].properties {
+            if !props.is_empty() {
+                return props;
+            }
+        }
+    }
+    params
+}
+
+fn unwrap_output_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
+    if params.len() == 1 && params[0].name == "output" && params[0].param_type == "object" {
+        if let Some(props) = &params[0].properties {
+            if !props.is_empty() {
+                return props;
+            }
+        }
+    }
+    params
+}
+
+fn build_request_input_schema(params: &[ParameterDoc]) -> Value {
+    let params = unwrap_input_params(params);
+
+    if params.is_empty() {
+        return json!({
+            "type": "object",
+            "description": "此服务无需特定入参"
+        });
+    }
+
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+
+    for param in params {
+        let schema = param_doc_to_openapi_schema(param);
+        properties.insert(param.name.clone(), schema);
+        if param.required.unwrap_or(false) {
+            required.push(param.name.clone());
+        }
+    }
+
+    let mut schema = json!({
+        "type": "object",
+        "properties": properties
+    });
+    if !required.is_empty() {
+        schema["required"] = json!(required);
+    }
+    schema
+}
+
+fn build_output_schema(
+    exit_nodes: &[&ServiceNode],
+    api_cache: &HashMap<String, Option<PluginApiDef>>,
+    _schema_prefix: &str,
+) -> Value {
+    if exit_nodes.is_empty() {
+        return json!({
+            "type": "object",
+            "description": "未找到出口节点"
+        });
+    }
+
+    if exit_nodes.len() == 1 {
+        let node = exit_nodes[0];
+        let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+        let params = ApiDocGenerator::resolve_parameters(
+            &plugin_id,
+            &function_name,
+            false,
+            &node_ios,
+            api_cache,
+        );
+        return params_to_object_schema(&params);
+    }
+
+    let mut branch_schemas = Vec::new();
+    for (idx, node) in exit_nodes.iter().enumerate() {
+        let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+        let params = ApiDocGenerator::resolve_parameters(
+            &plugin_id,
+            &function_name,
+            false,
+            &node_ios,
+            api_cache,
+        );
+
+        let branch_name = node
+            .data
+            .as_ref()
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| format!("分支{}", idx + 1));
+
+        let mut branch_schema = params_to_object_schema(&params);
+        branch_schema["description"] = json!(branch_name);
+        branch_schemas.push(branch_schema);
+    }
+
+    json!({
+        "oneOf": branch_schemas,
+        "description": "输出取决于运行时分支选择"
+    })
+}
+
+fn build_response_data_schema(_schema_prefix: &str, output_schema: &Value) -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "success": { "type": "boolean", "description": "是否成功" },
+            "output": output_schema.clone(),
+            "steps": {
+                "type": "array",
+                "description": "各步骤执行记录（include_steps=true 时返回）",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "node_id": { "type": "string" },
+                        "node_name": { "type": "string" },
+                        "node_type": { "type": "string" },
+                        "status": { "type": "string", "enum": ["Success", "Failed", "Skipped", "DebugPaused"] },
+                        "output": { "type": "object" },
+                        "elapsed_us": { "type": "integer" },
+                        "error": { "type": "string" }
+                    }
+                }
+            },
+            "total_elapsed_us": { "type": "integer", "description": "总耗时(微秒)" },
+            "error": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                    "message": { "type": "string" }
+                }
+            },
+            "debug_triggered": { "type": "boolean" }
+        }
+    })
+}
+
+fn param_doc_to_openapi_schema(param: &ParameterDoc) -> Value {
+    let mut schema = match param.param_type.as_str() {
+        "string" => json!({ "type": "string" }),
+        "integer" | "i32" | "i64" | "u32" | "u64" => json!({ "type": "integer" }),
+        "number" | "f32" | "f64" => json!({ "type": "number" }),
+        "boolean" | "bool" => json!({ "type": "boolean" }),
+        "array" => json!({ "type": "array", "items": { "type": "object" } }),
+        _ => json!({ "type": "object" }),
+    };
+
+    if !param.description.is_empty() {
+        schema["description"] = json!(param.description);
+    }
+
+    if let Some(props) = &param.properties {
+        if !props.is_empty() {
+            let mut properties = serde_json::Map::new();
+            let mut required = Vec::new();
+            for p in props {
+                properties.insert(p.name.clone(), param_doc_to_openapi_schema(p));
+                if p.required.unwrap_or(false) {
+                    required.push(p.name.clone());
+                }
+            }
+            schema["type"] = json!("object");
+            schema["properties"] = json!(properties);
+            if !required.is_empty() {
+                schema["required"] = json!(required);
+            }
+        }
+    }
+
+    schema
+}
+
+fn params_to_object_schema(params: &[ParameterDoc]) -> Value {
+    let params = unwrap_output_params(params);
+
+    if params.is_empty() {
+        return json!({ "type": "object", "description": "无特定输出结构" });
+    }
+
+    let mut properties = serde_json::Map::new();
+    for param in params {
+        properties.insert(param.name.clone(), param_doc_to_openapi_schema(param));
+    }
+
+    json!({
+        "type": "object",
+        "properties": properties
+    })
 }

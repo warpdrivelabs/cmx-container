@@ -30,6 +30,8 @@ rmp-serde = { workspace = true }
 thiserror = { workspace = true }
 # ZIP 压缩
 zip = { workspace = true }
+# 目录递归遍历
+walkdir = { workspace = true }
 # 签名验证
 ed25519-dalek = { workspace = true }
 # Base64 编码/解码

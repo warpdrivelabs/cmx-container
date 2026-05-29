@@ -2,7 +2,7 @@
   "plugin": {
     "name": "cmx-wasmdemo",
     "version": "0.1.0",
-    "generated_at": "2026-05-26T03:00:09.408282011+00:00"
+    "generated_at": "2026-05-29T00:51:53.977256819+00:00"
   },
   "functions": [
     {
@@ -71,14 +71,13 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `DemoRequest` 格式的缓存键名和计数值",
             "properties": [
               {
                 "name": "name",
                 "type": "string",
                 "required": true,
-                "description": "请求名称"
+                "description": "缓存键名"
               },
               {
                 "name": "count",
@@ -97,14 +96,14 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 116
+        "line": 121
       }
     },
     {
       "name": "demo_database",
       "type": "func",
       "summary": "执行数据库查询操作",
-      "description": "调用宿主的数据接接口，执行一条 SELECT 查询。",
+      "description": "调用宿主的数据库接口，执行一条 SELECT 查询。",
       "input": {
         "encoding": "msgpack",
         "type": "FunctionInput",
@@ -112,14 +111,13 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `DemoRequest` 格式的查询参数",
             "properties": [
               {
                 "name": "name",
                 "type": "string",
                 "required": true,
-                "description": "请求名称"
+                "description": "查询名称"
               },
               {
                 "name": "count",
@@ -138,7 +136,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 134
+        "line": 144
       }
     },
     {
@@ -153,7 +151,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `DemoRequest` 格式的请求参数",
             "properties": [
               {
@@ -179,7 +176,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 153
+        "line": 167
       }
     },
     {
@@ -194,49 +191,7 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `DemoRequest` 格式的请求参数",
-            "properties": [
-              {
-                "name": "name",
-                "type": "string",
-                "required": true,
-                "description": "请求名称"
-              },
-              {
-                "name": "count",
-                "type": "integer",
-                "required": true,
-                "description": "计数值"
-              }
-            ]
-          }
-        ]
-      },
-      "output": {
-        "encoding": "msgpack",
-        "type": "FunctionOutput"
-      },
-      "examples": [],
-      "location": {
-        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 172
-      }
-    },
-    {
-      "name": "run_all_demos",
-      "type": "func",
-      "summary": "执行多项功能测试",
-      "description": "依次执行日志、缓存、数据库等功能的测试。",
-      "input": {
-        "encoding": "msgpack",
-        "type": "FunctionInput",
-        "fields": [
-          {
-            "name": "input",
-            "type": "object",
-            "required": true,
-            "description": "函数输入，包含 `DemoRequest` 格式的测试参数",
             "properties": [
               {
                 "name": "name",
@@ -265,6 +220,46 @@
       }
     },
     {
+      "name": "run_all_demos",
+      "type": "func",
+      "summary": "执行多项功能测试",
+      "description": "依次执行日志、缓存、数据库等功能的测试。",
+      "input": {
+        "encoding": "msgpack",
+        "type": "FunctionInput",
+        "fields": [
+          {
+            "name": "input",
+            "type": "object",
+            "description": "函数输入，包含 `DemoRequest` 格式的测试参数",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "required": true,
+                "description": "测试名称"
+              },
+              {
+                "name": "count",
+                "type": "integer",
+                "required": true,
+                "description": "计数值"
+              }
+            ]
+          }
+        ]
+      },
+      "output": {
+        "encoding": "msgpack",
+        "type": "FunctionOutput"
+      },
+      "examples": [],
+      "location": {
+        "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
+        "line": 213
+      }
+    },
+    {
       "name": "route_check",
       "type": "branch_fn",
       "summary": "路由判断函数",
@@ -276,7 +271,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `RouteInput` 格式的路由参数",
             "properties": [
               {
@@ -296,7 +290,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 211
+        "line": 238
       }
     },
     {
@@ -312,7 +306,7 @@
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含前序步骤的输出和初始入参"
+            "description": "函数输入，包含前序步骤的输出和初始入参。输入为动态数据，来源于上一步骤的输出"
           }
         ]
       },
@@ -323,7 +317,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 229
+        "line": 256
       }
     },
     {
@@ -339,7 +333,7 @@
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含前序步骤的输出和初始入参"
+            "description": "函数输入，包含前序步骤的输出和初始入参。输入为动态数据，来源于上一步骤的输出"
           }
         ]
       },
@@ -350,7 +344,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 247
+        "line": 274
       }
     },
     {
@@ -366,7 +360,7 @@
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含前序步骤的输出和初始入参"
+            "description": "函数输入，包含前序步骤的输出和初始入参。输入为动态数据，来源于上一步骤的输出"
           }
         ]
       },
@@ -377,7 +371,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 265
+        "line": 292
       }
     },
     {
@@ -393,7 +387,7 @@
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存"
+            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存。输入为动态数据，来源于上一步骤的输出及上下文中的 `step_outputs` 缓存"
           }
         ]
       },
@@ -404,7 +398,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 283
+        "line": 310
       }
     },
     {
@@ -419,7 +413,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `InsertData` 格式的插入数据",
             "properties": [
               {
@@ -451,7 +444,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 301
+        "line": 334
       }
     },
     {
@@ -466,7 +459,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `UpdateData` 格式的更新数据",
             "properties": [
               {
@@ -498,7 +490,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 319
+        "line": 358
       }
     },
     {
@@ -513,7 +505,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `QueryData` 格式的查询条件",
             "properties": [
               {
@@ -539,7 +530,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 337
+        "line": 381
       }
     },
     {
@@ -554,7 +545,6 @@
           {
             "name": "input",
             "type": "object",
-            "required": true,
             "description": "函数输入，包含 `DeleteData` 格式的删除条件",
             "properties": [
               {
@@ -580,7 +570,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 355
+        "line": 404
       }
     },
     {
@@ -596,7 +586,7 @@
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存"
+            "description": "函数输入，包含前序步骤的输出和各步骤的输出缓存。输入为动态数据，来源于上一步骤的输出及上下文中的 `step_outputs` 缓存"
           }
         ]
       },
@@ -607,7 +597,7 @@
       "examples": [],
       "location": {
         "file": "./crates/libs/cmx-wasmdemo/src/extism_layer.rs",
-        "line": 373
+        "line": 422
       }
     }
   ]

@@ -10,6 +10,22 @@ use crate::error::{PluginError, PluginResult};
 /// 默认 ZIP 压缩级别。
 const DEFAULT_COMPRESSION_LEVEL: u32 = 6;
 
+/// 检查目录是否包含至少一个文件（递归检查子目录）。
+///
+/// # Arguments
+///
+/// * `dir` - 待检查的目录路径。
+///
+/// # Returns
+///
+/// 目录中存在至少一个文件时返回 `true`，否则返回 `false`。
+pub fn has_files(dir: &Path) -> bool {
+    walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .any(|e| e.path() != dir && e.file_type().is_file())
+}
+
 /// 将指定目录下的所有文件递归打包为 ZIP 字节。
 ///
 /// 内部调用 `ZipCompressor::compress_dir_to_memory`，保留相对路径结构。
