@@ -22,3 +22,5 @@
 /example/redis-rs/
 /example/rust-modql/
 /storage/
+docker/V2/certs/key.pem
+docker/V2/certs/cert.pem
