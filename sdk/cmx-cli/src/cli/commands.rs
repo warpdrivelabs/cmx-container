@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use walkdir::WalkDir;
 
 use crate::ast_parser::parse_structs;
-use crate::generator::{generate_ast_document, generate_document, AstScanResult, ScanResult};
+use crate::generator::{generate_ast_document, AstScanResult};
 use crate::parser::{parse_doc_comments, parse_rust_file};
 
 /// CMX CLI - CMX 插件开发工具集
@@ -79,27 +79,9 @@ struct ScanArgs {
     #[arg(long)]
     plugin_name: Option<String>,
 
-    /// 生成模式：doc（基于注释）、ast（基于 AST 展开结构体）、both（两者都生成）
-    #[arg(long, default_value = "ast")]
-    mode: GenerateMode,
-
-    /// AST 模式下的结构体展开深度（默认 3）
-    #[arg(long, default_value = "3")]
+    /// 结构体展开深度（默认 5）
+    #[arg(long, default_value = "5")]
     expand_depth: usize,
-}
-
-/// 生成模式
-#[derive(Debug, Clone, clap::ValueEnum)]
-enum GenerateMode {
-    /// 基于文档注释生成
-    #[clap(name = "doc")]
-    Doc,
-    /// 基于 AST 展开结构体
-    #[clap(name = "ast")]
-    Ast,
-    /// 两者都生成
-    #[clap(name = "both")]
-    Both,
 }
 
 /// 验证参数（预留）
@@ -186,7 +168,6 @@ fn handle_doc_command(cmd: DocCommand) -> Result<()> {
 
 /// 处理扫描命令
 fn handle_scan_command(args: ScanArgs) -> Result<()> {
-    // 收集所有 Rust 文件
     let rust_files = collect_rust_files(&args.paths, args.exclude.as_deref())?;
 
     if rust_files.is_empty() {
@@ -194,7 +175,6 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
         return Ok(());
     }
 
-    // 解析所有文件
     let mut all_functions = Vec::new();
     let mut all_structs = Vec::new();
     let mut first_file_path = String::new();
@@ -214,10 +194,7 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
             all_functions.push((func, doc));
         }
 
-        // AST 模式：解析结构体定义
-        if matches!(args.mode, GenerateMode::Ast | GenerateMode::Both)
-            && let Ok(structs) = parse_structs(&content)
-        {
+        if let Ok(structs) = parse_structs(&content) {
             all_structs.extend(structs);
         }
     }
@@ -227,103 +204,32 @@ fn handle_scan_command(args: ScanArgs) -> Result<()> {
         return Ok(());
     }
 
-    // 获取插件信息
     let (plugin_name, plugin_version, plugin_description) =
         get_plugin_info(&args.paths, args.plugin_name.as_deref())?;
 
-    // 根据模式生成文档
-    match args.mode {
-        GenerateMode::Doc => {
-            let result = ScanResult {
-                plugin_name,
-                plugin_version,
-                plugin_description,
-                functions: all_functions,
-                file_path: first_file_path.clone(),
-            };
+    let mut registry = crate::ast_parser::TypeRegistry::new();
+    registry.register_all(all_structs);
 
-            let json = generate_document(&result, args.pretty)?;
-            output_json(&json, &args.output, "doc")?;
-        }
-        GenerateMode::Ast => {
-            let mut registry = crate::ast_parser::TypeRegistry::new();
-            registry.register_all(all_structs);
+    let result = AstScanResult {
+        plugin_name,
+        plugin_version,
+        plugin_description,
+        functions: all_functions,
+        file_path: first_file_path,
+        type_registry: registry,
+    };
 
-            let result = AstScanResult {
-                plugin_name,
-                plugin_version,
-                plugin_description,
-                functions: all_functions,
-                file_path: first_file_path.clone(),
-                type_registry: registry,
-            };
-
-            let json = generate_ast_document(&result, args.pretty, args.expand_depth)?;
-            output_json(&json, &args.output, "ast")?;
-        }
-        GenerateMode::Both => {
-            // 生成 doc 模式
-            let doc_result = ScanResult {
-                plugin_name: plugin_name.clone(),
-                plugin_version: plugin_version.clone(),
-                plugin_description: plugin_description.clone(),
-                functions: all_functions.clone(),
-                file_path: first_file_path.clone(),
-            };
-
-            let doc_json = generate_document(&doc_result, args.pretty)?;
-
-            // 生成 ast 模式
-            let mut registry = crate::ast_parser::TypeRegistry::new();
-            registry.register_all(all_structs);
-
-            let ast_result = AstScanResult {
-                plugin_name,
-                plugin_version,
-                plugin_description,
-                functions: all_functions,
-                file_path: first_file_path,
-                type_registry: registry,
-            };
-
-            let ast_json = generate_ast_document(&ast_result, args.pretty, args.expand_depth)?;
-
-            // 输出两个文件
-            if let Some(output_path) = &args.output {
-                let base_path = Path::new(output_path);
-                let stem = base_path.file_stem().unwrap_or_default().to_string_lossy();
-                let ext = base_path.extension().unwrap_or_default().to_string_lossy();
-
-                let doc_path = base_path.parent().unwrap_or(base_path)
-                    .join(format!("{}-doc.{}", stem, ext));
-                let ast_path = base_path.parent().unwrap_or(base_path)
-                    .join(format!("{}-ast.{}", stem, ext));
-
-                fs::write(&doc_path, &doc_json)
-                    .with_context(|| format!("无法写入文件: {}", doc_path.display()))?;
-                println!("文档已生成 (doc 模式): {}", doc_path.display());
-
-                fs::write(&ast_path, &ast_json)
-                    .with_context(|| format!("无法写入文件: {}", ast_path.display()))?;
-                println!("文档已生成 (ast 模式): {}", ast_path.display());
-            } else {
-                println!("=== DOC 模式 ===");
-                println!("{}", doc_json);
-                println!("\n=== AST 模式 ===");
-                println!("{}", ast_json);
-            }
-        }
-    }
+    let json = generate_ast_document(&result, args.pretty, args.expand_depth)?;
+    output_json(&json, &args.output)?;
 
     Ok(())
 }
 
 /// 输出 JSON
-fn output_json(json: &str, output: &Option<String>, suffix: &str) -> Result<()> {
+fn output_json(json: &str, output: &Option<String>) -> Result<()> {
     if let Some(output_path) = output {
         let path = Path::new(output_path);
 
-        // 如果父目录不存在，则创建目录
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty() && !parent.exists() {
                 fs::create_dir_all(parent)
@@ -332,7 +238,7 @@ fn output_json(json: &str, output: &Option<String>, suffix: &str) -> Result<()> 
 
         fs::write(output_path, json)
             .with_context(|| format!("无法写入文件: {}", output_path))?;
-        println!("文档已生成 ({} 模式): {}", suffix, output_path);
+        println!("文档已生成: {}", output_path);
     } else {
         println!("{}", json);
     }
@@ -344,7 +250,6 @@ fn handle_validate_command(args: ValidateArgs) -> Result<()> {
     let content = fs::read_to_string(&args.file)
         .with_context(|| format!("无法读取文件: {}", args.file))?;
 
-    // 尝试解析 JSON
     let _: serde_json::Value = serde_json::from_str(&content)
         .with_context(|| "JSON 格式无效")?;
 
@@ -379,16 +284,14 @@ fn handle_info_command(args: InfoArgs) -> Result<()> {
 /// 处理新建插件命令
 fn handle_new_plugin_command(args: NewPluginArgs) -> Result<()> {
     let target_path = Path::new(&args.path).join(&args.name);
-    
+
     if target_path.exists() {
         anyhow::bail!("目录已存在: {}", target_path.display());
     }
 
-    // 创建目录结构
     fs::create_dir_all(&target_path)?;
     fs::create_dir_all(target_path.join("src"))?;
 
-    // 生成 Cargo.toml
     let cargo_toml = format!(
         r#"[package]
 name = "{}"
@@ -407,7 +310,6 @@ serde_json = "1.0"
     );
     fs::write(target_path.join("Cargo.toml"), cargo_toml)?;
 
-    // 生成 lib.rs 模板
     let lib_rs = r#"//! 插件描述
 
 use extism_pdk::*;
@@ -415,32 +317,20 @@ use serde::{Deserialize, Serialize};
 
 /// 示例函数
 ///
-/// # 输入
+/// # Arguments
+///
+/// * `input` - 函数输入。
 ///
 /// | 字段 | 类型 | 必填 | 说明 |
 /// |------|------|------|------|
-/// | `input.input` | string | 是 | 输入数据 |
+/// | `data` | string | 是 | 输入数据 |
 ///
-/// # 输出
+/// # Returns
 ///
-/// | 字段 | 类型 | 说明 |
-/// |------|------|------|
-/// | `result` | string | 输出结果 |
-///
-/// # 示例
-///
-/// **输入:**
-/// ```json
-/// {"input": "hello", "context": {}}
-/// ```
-///
-/// **输出:**
-/// ```json
-/// {"result": "processed: hello"}
-/// ```
+/// 返回处理结果。
 #[plugin_fn]
-pub fn hello(Json(input): Json<serde_json::Value>) -> FnResult<Json<serde_json::Value>> {
-    Ok(Json(serde_json::json!({
+pub fn hello(Msgpack(input): Msgpack<serde_json::Value>) -> FnResult<Msgpack<serde_json::Value>> {
+    Ok(Msgpack(serde_json::json!({
         "result": format!("processed: {}", input)
     })))
 }
@@ -474,7 +364,6 @@ fn collect_rust_files(paths: &[String], exclude: Option<&str>) -> Result<Vec<Str
                 if entry_path.extension().is_some_and(|ext| ext == "rs") {
                     let file_path = entry_path.to_string_lossy().to_string();
 
-                    // 检查排除模式
                     if let Some(exclude_pattern) = exclude
                         && file_path.contains(exclude_pattern) {
                             continue;
@@ -494,7 +383,6 @@ fn get_plugin_info(
     paths: &[String],
     override_name: Option<&str>,
 ) -> Result<(String, String, Option<String>)> {
-    // 尝试从第一个路径查找 Cargo.toml
     for path_str in paths {
         let path = Path::new(path_str);
         let cargo_toml_path = if path.is_file() {
@@ -515,7 +403,6 @@ fn get_plugin_info(
                             .to_string()
                     });
 
-                    // 检查是否使用 workspace 版本
                     let version = if let Some(version) = value
                         .get("package")
                         .and_then(|p| p.get("version"))
@@ -523,7 +410,6 @@ fn get_plugin_info(
                     {
                         version.to_string()
                     } else {
-                        // 尝试从 workspace Cargo.toml 读取版本
                         get_workspace_version(&cargo_toml_path).unwrap_or_else(|| "0.0.0".to_string())
                     };
 
@@ -537,7 +423,6 @@ fn get_plugin_info(
                 }
     }
 
-    // 默认值
     Ok((
         override_name.unwrap_or("unknown").to_string(),
         "0.0.0".to_string(),
@@ -547,15 +432,13 @@ fn get_plugin_info(
 
 /// 从 workspace Cargo.toml 获取版本号
 fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
-    // 向上查找 workspace Cargo.toml
     let mut current = cargo_toml_path.parent()?;
-    
+
     loop {
         let workspace_cargo = current.join("Cargo.toml");
         if workspace_cargo.exists()
             && let Ok(content) = fs::read_to_string(&workspace_cargo)
                 && let Ok(value) = content.parse::<toml::Value>() {
-                    // 检查是否是 workspace
                     if value.get("workspace").is_some()
                         && let Some(version) = value
                             .get("workspace")
@@ -566,7 +449,7 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
                             return Some(version.to_string());
                         }
                 }
-        
+
         current = current.parent()?;
     }
 }

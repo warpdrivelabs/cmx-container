@@ -2,7 +2,7 @@
   "plugin": {
     "name": "cmx-wasmdemo",
     "version": "0.1.0",
-    "generated_at": "2026-05-29T00:51:53.977256819+00:00"
+    "generated_at": "2026-05-29T05:43:51.827072429+00:00"
   },
   "functions": [
     {
@@ -16,9 +16,8 @@
         "fields": [
           {
             "name": "input",
-            "type": "object",
-            "required": true,
-            "description": "函数输入，包含待统计的字符串"
+            "type": "string",
+            "description": "待统计的字符串"
           }
         ]
       },

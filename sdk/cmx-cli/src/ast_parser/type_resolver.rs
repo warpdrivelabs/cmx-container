@@ -49,7 +49,7 @@ impl TypeRegistry {
         description: &str,
         max_depth: usize,
     ) -> ResolvedField {
-        self.resolve_field_internal(type_name, field_name, description, max_depth, 0)
+        self.resolve_field_internal(type_name, field_name, description, true, max_depth, 0)
     }
 
     fn resolve_field_internal(
@@ -57,27 +57,24 @@ impl TypeRegistry {
         type_name: &str,
         field_name: &str,
         description: &str,
+        required: bool,
         max_depth: usize,
         current_depth: usize,
     ) -> ResolvedField {
-        // 清理类型名
         let clean_type = clean_type_name(type_name);
 
-        // 尝试在注册表中查找
         if let Some(struct_def) = self.structs.get(&clean_type) {
-            // 如果达到最大深度，不再展开子字段
             if current_depth >= max_depth {
                 return ResolvedField {
                     name: field_name.to_string(),
                     type_name: clean_type,
                     description: description.to_string(),
-                    required: true,
+                    required,
                     sub_fields: Vec::new(),
                     is_expanded: false,
                 };
             }
 
-            // 递归展开子字段
             let sub_fields: Vec<ResolvedField> = struct_def
                 .fields
                 .iter()
@@ -85,7 +82,8 @@ impl TypeRegistry {
                     self.resolve_field_internal(
                         &f.type_name,
                         &f.name,
-                        &f.description, // 使用字段自己的描述
+                        &f.description,
+                        f.required,
                         max_depth,
                         current_depth + 1,
                     )
@@ -96,17 +94,17 @@ impl TypeRegistry {
                 name: field_name.to_string(),
                 type_name: clean_type,
                 description: description.to_string(),
-                required: true,
+                required,
                 sub_fields,
                 is_expanded: true,
             }
         } else {
-            // 未找到定义，返回基本字段
+            let is_option = clean_type.starts_with("Option<");
             ResolvedField {
                 name: field_name.to_string(),
                 type_name: clean_type,
                 description: description.to_string(),
-                required: true,
+                required: required && !is_option,
                 sub_fields: Vec::new(),
                 is_expanded: false,
             }

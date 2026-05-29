@@ -811,6 +811,10 @@ fn unwrap_input_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
     params
 }
 
+fn is_basic_type(t: &str) -> bool {
+    matches!(t, "string" | "integer" | "number" | "boolean")
+}
+
 fn unwrap_output_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
     if params.len() == 1 && params[0].name == "output" && params[0].param_type == "object" {
         if let Some(props) = &params[0].properties {
@@ -830,6 +834,11 @@ fn build_request_input_schema(params: &[ParameterDoc]) -> Value {
             "type": "object",
             "description": "此服务无需特定入参"
         });
+    }
+
+    if params.len() == 1 && is_basic_type(&params[0].param_type) {
+        let schema = param_doc_to_openapi_schema(&params[0]);
+        return schema;
     }
 
     let mut properties = serde_json::Map::new();

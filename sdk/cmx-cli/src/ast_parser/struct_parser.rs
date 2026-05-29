@@ -59,11 +59,12 @@ fn parse_struct(item: &ItemStruct) -> Result<StructDefinition> {
                     .unwrap_or_default();
                 let type_name = type_to_string(&f.ty);
                 let description = extract_doc_comments(&f.attrs);
+                let required = !type_name.starts_with("Option<");
 
                 FieldDefinition {
                     name: field_name,
                     type_name,
-                    required: true,
+                    required,
                     description,
                 }
             })

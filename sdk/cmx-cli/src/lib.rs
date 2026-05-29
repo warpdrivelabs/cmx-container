@@ -11,7 +11,7 @@ pub mod parser;
 
 pub use ast_parser::{parse_structs, TypeRegistry, ResolvedField};
 pub use cli::commands::run;
-pub use generator::json_gen::generate_document;
+pub use generator::ast_json_gen::generate_ast_document;
 pub use models::doc_types::{PluginDocument, FunctionDoc};
 pub use parser::ast_parser::parse_rust_file;
 pub use parser::doc_parser::parse_doc_comments;

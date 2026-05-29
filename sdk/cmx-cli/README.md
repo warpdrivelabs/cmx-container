@@ -4,9 +4,7 @@ CMX CLI 是一个多功能的命令行工具，为 CMX 插件开发提供文档�
 
 ## 功能特性
 
-- 📄 **文档生成**：扫描 Rust 代码，生成 JSON 格式的 API 文档
-  - **Doc 模式**：基于代码注释生成
-  - **AST 模式**：基于 AST 展开结构体，自动提取字段描述
+- 📄 **文档生成**：扫描 Rust 代码，结合文档注释和结构体定义，生成 JSON 格式的 API 文档
 - 🔧 **插件管理**：初始化新插件项目、构建 WASM 插件（预留）
 - ✅ **文档验证**：验证生成的文档格式（预留）
 
@@ -50,18 +48,11 @@ ln -s "$(pwd)/target/release/cmx-cli" ~/.local/bin/cmx-cli
 ### 生成 API 文档
 
 ```bash
-# 生成文档（默认 AST 模式，展开结构体）
+# 生成文档（结合注释和结构体定义）
 cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
 
-# Doc 模式（基于注释）
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --mode doc -o ./docs/api-doc.json
-
-# AST 模式（展开结构体）
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --mode ast -o ./docs/api-ast.json
-
-# 同时生成两种文档
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --mode both
-# 生成 api-doc.json 和 api-ast.json
+# 控制结构体展开深度（默认 5）
+cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --expand-depth 5 -o ./docs/api.json
 ```
 
 ### 查看帮助
@@ -86,57 +77,66 @@ cmx-cli
     └── info      # 显示插件信息（预留）
 ```
 
-## 文档生成模式
+## 文档生成原理
 
-### Doc 模式（基于注释）
+cmx-cli 采用唯一的 AST 模式，将**文档注释解析**和**结构体定义解析**结合使用：
 
-依赖代码中的文档注释生成 API 文档。解析器会识别标准化的章节标题（如 `# Arguments`、`# 输入`）。
+- **注释提供**：summary（摘要）、description（描述）、函数级参数名、表格子字段、required（必填标记）
+- **结构体提供**：字段名、字段类型、字段描述、嵌套展开
+- **优先级**：表格子字段 > TypeRegistry 展开 > 默认值
 
-```bash
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo --mode doc -o api.json
+### 三种情况
+
+#### 情况1：有表格注释（注释优先）
+
+```rust
+/// * `input` - 函数输入，包含 `InsertData` 格式的数据。
+///
+/// | 字段 | 类型 | 必填 | 说明 |
+/// |------|------|------|------|
+/// | `table` | string | 是 | 表名 |
+/// | `value` | integer | 否 | 数值 |
 ```
 
-**特点**：
-- 灵活度高，注释内容完全可控
-- 支持手动指定嵌套结构
-- 适合复杂业务场景
+→ 直接使用表格中的类型和描述，结构体定义不介入。
 
-### AST 模式（展开结构体，默认）
+#### 情况2：无表格，注释引用了已注册类型（结合使用）
 
-自动解析 Rust 结构体定义，提取字段名、类型和文档注释，递归展开嵌套结构。
-
-```bash
-# 默认即为 AST 模式
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo -o api.json
-
-# 控制展开深度（默认 3）
-cmx-cli doc scan ./crates/libs/cmx-wasmdemo --expand-depth 2 -o api.json
+```rust
+/// * `input` - 函数输入，包含 `InsertData` 格式的数据。
 ```
 
-**特点**：
-- 自动从结构体定义提取信息
-- 递归展开嵌套类型（如 `InsertData`）
-- 自动提取字段的 `///` 文档注释作为描述
+→ 从描述中提取 `InsertData` → 查 TypeRegistry → 递归展开所有字段。
+
+#### 情况3：无表格，注释也没引用类型（只有注释）
+
+```rust
+/// * `input` - 函数输入，输入为动态数据，来源于上一步骤的输出。
+```
+
+→ fallback 为 `serde_json::Value`。
 
 ## 注释规范
 
 ### 标准注释模板
 
 ```rust
-/// <简短描述>（必填，一行）
+/// <简短描述>（必填，一行，不以句号结尾）
 ///
 /// <详细描述>（可选，可多行）
 ///
 /// # Arguments
 ///
-/// * `input` - 输入数据
-///   * `input` - 业务输入数据
-///   * `context` - 上下文
-///     * `context.txn_id` - 事务ID
+/// * `input` - 函数输入，包含 `XxxData` 格式的数据。
+///
+/// | 字段 | 类型 | 必填 | 说明 |
+/// |------|------|------|------|
+/// | `field1` | string | 是 | 字段1说明 |
+/// | `field2` | integer | 是 | 字段2说明 |
 ///
 /// # Returns
 ///
-/// * `result` - 操作结果
+/// 返回描述。
 #[plugin_fn]
 pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     // ...
@@ -155,12 +155,10 @@ pub fn my_function(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<F
 
 ### 结构体字段注释
 
-AST 模式会从结构体字段的文档注释中提取描述：
+结构体字段的文档注释会被自动提取：
 
 ```rust
 /// 插入数据
-///
-/// 用于事务插入函数的输入参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsertData {
     /// 表名
@@ -172,14 +170,7 @@ pub struct InsertData {
 }
 ```
 
-生成的 JSON 中 `InsertData` 的 `properties` 会包含：
-```json
-"properties": [
-  {"name": "table", "type": "string", "description": "表名"},
-  {"name": "name", "type": "string", "description": "名称字段值"},
-  {"name": "value", "type": "integer", "description": "数值字段值"}
-]
-```
+当注释中引用 `InsertData` 时，会自动递归展开为包含 `table`、`name`、`value` 的完整字段结构。
 
 ### 函数类型标注
 
@@ -188,7 +179,6 @@ pub struct InsertData {
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | 无 `#[doc_type]` 属性 | `func` | 普通处理函数 |
-| `#[doc_type = "func"]` | `func` | 普通处理函数（显式声明） |
 | `#[doc_type = "branch_fn"]` | `branch_fn` | 分支函数 |
 
 ```rust
@@ -200,7 +190,7 @@ pub struct InsertData {
 ///
 /// # Returns
 ///
-/// * `result` - 处理结果
+/// 返回处理结果。
 #[doc_type = "branch_fn"]
 #[plugin_fn]
 pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
@@ -231,7 +221,7 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
             "name": "input",
             "type": "object",
             "required": true,
-            "description": "函数输入，包含 `InsertData` 格式的插入数据",
+            "description": "函数输入，包含 InsertData 格式的插入数据",
             "properties": [
               {"name": "table", "type": "string", "required": true, "description": "表名"},
               {"name": "name", "type": "string", "required": true, "description": "名称字段值"},
@@ -282,14 +272,8 @@ pub fn branch_1_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgp
 # 生成 API 文档（自动创建 docs 目录）
 cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo -o ./docs/api.json --pretty
 
-# AST 模式（默认），控制展开深度
+# 控制展开深度
 cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --expand-depth 2 -o ./docs/api.json
-
-# Doc 模式
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --mode doc -o ./docs/api-doc.json
-
-# 同时生成两种文档
-cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --mode both -o ./docs/api.json
 
 # 排除特定文件
 cargo run -p cmx-cli -- doc scan ./crates/libs/cmx-wasmdemo --exclude "tests" -o ./docs/api.json
@@ -311,8 +295,7 @@ cargo run -p cmx-cli -- plugin new my-plugin
 | `PATHS` | | | 要扫描的目录或文件路径（支持多个） |
 | `--output` | `-o` | stdout | 输出文件路径 |
 | `--pretty` | | | 美化 JSON 输出 |
-| `--mode` | | `ast` | 生成模式：doc（基于注释）、ast（基于 AST）、both（两者都生成） |
-| `--expand-depth` | | `3` | AST 模式下的结构体展开深度 |
+| `--expand-depth` | | `3` | 结构体展开深度 |
 | `--exclude` | | | 排除的文件模式 |
 | `--plugin-name` | | 从 Cargo.toml 读取 | 指定插件名称 |
 
@@ -331,11 +314,11 @@ sdk/cmx-cli/
     │   └── type_resolver.rs # 类型注册与解析
     ├── parser/              # 注释解析模块
     │   ├── mod.rs
+    │   ├── ast_parser.rs    # 函数签名解析
     │   └── doc_parser.rs    # 文档注释解析
     ├── generator/           # JSON 生成模块
     │   ├── mod.rs
-    │   ├── json_gen.rs     # Doc 模式生成器
-    │   └── ast_json_gen.rs  # AST 模式生成器
+    │   └── ast_json_gen.rs  # 文档生成器
     ├── models/              # 数据模型
     │   ├── mod.rs
     │   └── doc_types.rs     # 文档类型定义
