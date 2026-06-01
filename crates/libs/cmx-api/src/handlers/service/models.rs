@@ -308,4 +308,16 @@ pub struct OpenApiQuery {
     /// 是否强制刷新缓存
     #[serde(default)]
     pub refresh: Option<bool>,
+    /// 插件 ID 精确匹配
+    #[serde(default)]
+    pub plugin_id: Option<String>,
+    /// 域代码精确匹配
+    #[serde(default)]
+    pub domain_code: Option<String>,
+    /// 应用代码精确匹配
+    #[serde(default)]
+    pub application_code: Option<String>,
+    /// 模块代码精确匹配
+    #[serde(default)]
+    pub module_code: Option<String>,
 }

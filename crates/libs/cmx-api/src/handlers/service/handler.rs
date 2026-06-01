@@ -972,12 +972,18 @@ pub async fn service_exists(
 )]
 pub async fn get_openapi_spec(
     State(state): State<CmxAppState>,
-    Query(_query): Query<OpenApiQuery>,
+    Query(query): Query<OpenApiQuery>,
 ) -> Result<Json<serde_json::Value>, Error> {
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let filter = ServicePageFilter::default();
+    let filter = ServicePageFilter {
+        plugin_id: query.plugin_id,
+        domain_code: query.domain_code,
+        application_code: query.application_code,
+        module_code: query.module_code,
+        ..Default::default()
+    };
     let page_size = 1000u64;
     let mut all_items = Vec::new();
     let mut page = 1u64;

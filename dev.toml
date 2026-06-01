@@ -178,10 +178,10 @@ timeout_ms = 30000
 # URL 直连模式（mode = "url" 时生效）
 # 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
 [center_client.urls]
- menu = "http://portal-center:8080/api/plugin/menu/import"
- perm = "http://perm-center:8080/api/plugin/perm/import"
- form = "http://form-center:8080/api/plugin/form/import"
- flow = "http://flow-center:8080/api/plugin/flow/import"
+# menu = "http://portal-center:8080/api/plugin/menu/import"
+# perm = "http://perm-center:8080/api/plugin/perm/import"
+# form = "http://form-center:8080/api/plugin/form/import"
+# flow = "http://flow-center:8080/api/plugin/flow/import"
 
 # 服务发现模式（mode = "discovery" 时生效）
 # [center_client.discovery]
