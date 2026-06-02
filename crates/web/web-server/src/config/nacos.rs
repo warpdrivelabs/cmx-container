@@ -105,6 +105,66 @@ fn init_global_config_fallback() -> crate::Result<()> {
     Ok(())
 }
 
+/// 解析注册到 Nacos 使用的服务端口。
+///
+/// 按以下顺序回退解析：
+/// 1. 环境变量 `NACOS_REGISTER_SERVER_PORT`，需为 1-65535 的合法 `u16`，否则记录警告后回退。
+/// 2. 配置文件中的 `server.port`。
+/// 3. 内置默认值 `8080`。
+///
+/// # Returns
+///
+/// 返回最终解析到的端口号，永远不会返回 0。
+fn resolve_register_port() -> u16 {
+    if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_PORT") {
+        if let Ok(port) = raw.trim().parse::<u16>()
+            && port > 0
+        {
+            return port;
+        }
+        warn!(
+            "NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源",
+            raw
+        );
+    }
+
+    ConfigManager::global()
+        .get_string("server.port")
+        .ok()
+        .and_then(|s| s.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(8080)
+}
+
+/// 解析注册到 Nacos 使用的服务 IP。
+///
+/// 按以下顺序回退解析：
+/// 1. 环境变量 `NACOS_REGISTER_SERVER_IP`，去除首尾空格后非空即使用。
+/// 2. 配置文件中的 `server.ip`，去除首尾空格后非空即使用。
+/// 3. 自动获取本机 IP（兜底 `127.0.0.1`）。
+///
+/// # Returns
+///
+/// 返回最终解析到的 IP 地址字符串。
+fn resolve_register_ip() -> String {
+    if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_IP") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    ConfigManager::global()
+        .get_string("server.ip")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            local_ip_address::local_ip()
+                .map(|addr| addr.to_string())
+                .unwrap_or_else(|_| "127.0.0.1".to_string())
+        })
+}
+
 /// 注册服务到 Nacos 命名服务。
 ///
 /// 从配置中读取服务端口，将当前服务实例注册到 Nacos。
@@ -119,21 +179,8 @@ async fn register_nacos_service(client: &NacosClient) {
         return;
     }
 
-    let port: u16 = ConfigManager::global()
-        .get_string("server.port")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .unwrap_or(8080);
-
-    let ip = ConfigManager::global()
-        .get_string("server.ip")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| {
-            local_ip_address::local_ip()
-                .map(|addr| addr.to_string())
-                .unwrap_or_else(|_| "127.0.0.1".to_string())
-        });
+    let port = resolve_register_port();
+    let ip = resolve_register_ip();
 
     match client.register_service(&ip, port).await {
         Ok(_) => {
@@ -186,15 +233,8 @@ pub async fn shutdown_nacos() {
             return;
         }
 
-        let port: u16 = ConfigManager::global()
-            .get_string("server.port")
-            .unwrap_or_else(|_| "8080".to_string())
-            .parse()
-            .unwrap_or(8080);
-
-        let ip = local_ip_address::local_ip()
-            .map(|addr| addr.to_string())
-            .unwrap_or_else(|_| "127.0.0.1".to_string());
+        let port = resolve_register_port();
+        let ip = resolve_register_ip();
 
         match client.deregister_service(&ip, port).await {
             Ok(_) => {

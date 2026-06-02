@@ -584,6 +584,16 @@ is_critical = true
 | `NACOS_CONFIG_ENABLED`      | Boolean | `false`          | 是否启用配置中心        |
 | `NACOS_CONFIG_DATA_ID`      | String  | -                | 配置中心 Data ID    |
 | `NACOS_CONFIG_GROUP`        | String  | `"DEFAULT_GROUP"`  | 配置中心 Group      |
+| `NACOS_REGISTER_SERVER_IP`   | String  | 自动获取本机 IP   | 注册到 Nacos 的 IP（可选，优先级高于 `server.ip`） |
+| `NACOS_REGISTER_SERVER_PORT` | Integer | `8080`            | 注册到 Nacos 的端口（可选，优先级高于 `server.port`） |
+
+#### 服务注册地址解析优先级
+
+`NACOS_REGISTER_SERVER_IP` 与 `NACOS_REGISTER_SERVER_PORT` 用于在向 Nacos 注册/注销服务实例时指定 IP 与端口。读取顺序如下：
+
+1. 环境变量 `NACOS_REGISTER_SERVER_IP` / `NACOS_REGISTER_SERVER_PORT`
+2. 配置文件中的 `server.ip` / `server.port`
+3. 内置默认值：IP 自动获取本机地址（兜底 `127.0.0.1`），端口 `8080`
 
 ---
 

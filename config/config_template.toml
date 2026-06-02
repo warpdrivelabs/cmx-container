@@ -250,6 +250,10 @@ storage_path = "./storage"
 # NACOS_CONFIG_ENABLED       - 是否启用配置中心（默认 false）
 # NACOS_CONFIG_DATA_ID       - 配置中心 Data ID
 # NACOS_CONFIG_GROUP         - 配置中心 Group（默认 DEFAULT_GROUP）
+#
+# 服务注册地址覆盖（可选，优先级高于 server.ip / server.port）：
+# NACOS_REGISTER_SERVER_IP   - 注册到 Nacos 的 IP，未设置或为空时回退 server.ip，再回退自动获取本机 IP
+# NACOS_REGISTER_SERVER_PORT - 注册到 Nacos 的端口，未设置或非法时回退 server.port，再回退 8080
 
 # ============================================
 # 基础服务中心配置
