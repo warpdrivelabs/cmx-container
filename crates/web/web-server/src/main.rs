@@ -153,7 +153,7 @@ async fn main() -> Result<()> {
         .layer(middleware::from_fn(trace_layer))
         .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .layer(cors_layer_permissive());
+        .layer(cors_layer());
 
     // 添加静态文件服务作为 fallback
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
