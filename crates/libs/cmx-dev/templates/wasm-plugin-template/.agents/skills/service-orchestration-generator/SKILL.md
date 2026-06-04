@@ -53,6 +53,19 @@ description: "Generates service orchestration JSON based on Flow JSON specificat
 
 **注意**：不要把 `transaction_box` 作为 sourceNodeID 或 targetNodeID 出现在 edges 中！
 
+### 事务生命周期管理
+
+事务框的开启、提交、回滚由 `TransactionManager` 基于 `parent` 属性自动管理，无需手动控制：
+
+| 状态转换 | 触发条件 | 行为 |
+|----------|---------|------|
+| 无事务 → 无事务 | 节点不在事务框内 | 正常执行，无事务管理 |
+| 无事务 → 开启事务 | 节点进入事务框（`parent` 不为空） | 开启新事务 |
+| 事务框内继续 | 当前节点与前一节点在同一事务框内 | 复用当前事务 |
+| 切换事务框 | 当前节点与前一节点在不同事务框内 | 提交旧事务，开启新事务 |
+| 离开事务框 → 提交 | 节点不再属于事务框 | 提交当前事务 |
+| 执行失败 | 事务框内节点执行出错 | 回滚当前事务 |
+
 ### skylake-switch 多分支节点详解
 
 **核心机制**：`options` 数组定义函数的所有可能返回值，每 个返回值对应一个出边端口。
@@ -67,6 +80,8 @@ description: "Generates service orchestration JSON based on Flow JSON specificat
 ```
 
 **映射公式**：`sourcePortID = "out_" + options 中的值`
+
+**重要**：switch 节点的函数返回值**必须是字符串类型**，返回值将直接用于拼接出边端口 ID。
 
 #### 示例
 
@@ -91,6 +106,18 @@ description: "Generates service orchestration JSON based on Flow JSON specificat
 - `options` 数组中有多少个值，就必须有多少条对应的出边
 - 函数实际返回哪个值，就走对应的分支
 - 如果函数返回的值不在 options 中，则没有匹配的出边，流程将终止
+
+### 上下文传递机制
+
+编排执行过程中，节点之间通过以下两种机制传递数据：
+
+**1. current_output 链式传递**
+
+上一个节点的输出自动成为下一个节点的输入（`current_output`）。这是主要的数据传递方式，适用于线性流程和分支流程。
+
+**2. step_outputs 缓存**
+
+每个节点执行后，其输出会按 `node_id` 缓存到 `step_outputs` 中。后续任意节点都可以通过 `step_outputs[node_id]` 访问之前任何节点的输出，而不仅仅是上一个节点。
 
 ### 固定尺寸配置
 
@@ -258,6 +285,8 @@ x: -330      x: 55        x: 390         x: 825         x: 1200
   }
 }
 ```
+
+**注意**：`nodeMeta` 中还可以添加可选字段 `"databaseId": "数据源ID"`，用于指定该节点使用的数据库连接。
 
 ### 4. skylake-switch 多分支节点
 

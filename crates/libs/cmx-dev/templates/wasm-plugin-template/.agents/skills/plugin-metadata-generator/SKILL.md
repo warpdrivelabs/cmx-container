@@ -5,7 +5,7 @@ description: "生成插件表结构元数据（metadata/）和种子数据（see
 
 # 插件元数据和种子数据生成器
 
-> 根据 cmx-metadata 模块的源码规范，指导 AI 生成符合平台要求的表结构定义、种子数据和配置文件。
+>指导 AI 生成符合平台要求的表结构定义、种子数据和配置文件。
 
 ---
 
@@ -137,12 +137,15 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 | `primary_keys` | string[] | 是 | 主键列名数组 |
 | `i18n` | boolean | 是 | 是否启用国际化（生成伴生表） |
 | `schema` | string | 是 | 数据库 schema，通常为 `"public"` |
+| `tablespace` | string | 否 | 表空间，通常不设置 |
 | `columns` | array | 是 | 列定义数组，详见 §3.3 |
 | `indexes` | array | 否 | 索引定义数组，详见 §3.6 |
 | `is_partitioned` | boolean | 否 | 是否分区表，默认 false |
 | `partition_type` | string/null | 否 | 分区类型 |
 | `partition_columns` | array | 否 | 分区列 |
 | `extensions` | object | 否 | 扩展字段，默认 `{}` |
+| `create_time` | string/null | 否 | 创建时间（系统自动维护，生成时设为 `null`） |
+| `update_time` | string/null | 否 | 更新时间（系统自动维护，生成时设为 `null`） |
 
 ### 3.3 ColumnDefine 完整字段
 
@@ -175,8 +178,12 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 | `default_value` | any | 是 | 默认值，无则为 `null` |
 | `i18n` | boolean | 是 | 该列是否参与国际化 |
 | `length` | integer | 条件必填 | 仅 `String` 类型需要，表示 VARCHAR 长度 |
+| `precision` | integer | 条件必填 | 数值总精度（总位数），仅 `Decimal` 类型需要 |
+| `scale` | integer | 条件必填 | 数值小数位数，仅 `Decimal` 类型需要 |
 | `db_type` | string | 是 | PostgreSQL 类型声明，详见 §3.5 |
 | `ordinal` | integer | 是 | 列顺序号，从 1 开始连续递增 |
+| `create_time` | string/null | 否 | 创建时间（系统自动维护，生成时设为 `null`） |
+| `update_time` | string/null | 否 | 更新时间（系统自动维护，生成时设为 `null`） |
 | `is_foreign_key` | boolean | 是 | 是否为外键 |
 | `foreign_key_table` | string/null | 条件必填 | 外键引用的表名（`is_foreign_key=true` 时必填） |
 | `foreign_key_column` | string/null | 条件必填 | 外键引用的列名（`is_foreign_key=true` 时必填） |
@@ -186,17 +193,17 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 
 | field_type | PostgreSQL db_type | 说明 | 需要额外字段 |
 |---|---|---|---|
+| `String` | `VARCHAR(length)` | 字符串 | **length**（必填） |
 | `Int` | `BIGINT` 或 `INT` | 整数 | — |
 | `Float` | `DOUBLE PRECISION` | 浮点数 | — |
-| `Decimal` | `NUMERIC(precision, scale)` | 精确小数 | — |
-| `String` | `VARCHAR(length)` | 字符串 | **length**（必填） |
-| `Text` | `TEXT` | 长文本 | — |
-| `Bool` | `BOOLEAN` | 布尔值 | — |
-| `Date` | `DATE` | 日期 | — |
+| `Decimal` | `NUMERIC(precision, scale)` | 精确小数 | **precision + scale** |
 | `DateTime` | `TIMESTAMP WITH TIME ZONE` | 日期时间 | — |
-| `Json` | `JSONB` | JSON 数据 | — |
+| `Date` | `DATE` | 日期 | — |
+| `Bool` | `BOOLEAN` | 布尔值 | — |
+| `Text` | `TEXT` | 长文本 | — |
 | `Binary` | `BYTEA` | 二进制数据 | — |
 | `Array` | `JSONB` | 数组 | — |
+| `Json` | `JSONB` | JSON 数据 | — |
 | `Uuid` | `UUID` | UUID 标识符 | — |
 | `Unknown` | `TEXT` | 未知类型 | — |
 
@@ -206,17 +213,17 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 
 | field_type | db_type 生成规则 | 示例 |
 |---|---|---|
+| `String` | `"VARCHAR(length)"`，length 为必填字段 | `"VARCHAR(32)"` |
 | `Int` | 通常用 `"BIGINT"`，小范围整数可用 `"INT"` | `"BIGINT"` |
 | `Float` | 固定 `"DOUBLE PRECISION"` | `"DOUBLE PRECISION"` |
-| `Decimal` | `"NUMERIC(precision, scale)"` | `"NUMERIC(18,2)"` |
-| `String` | `"VARCHAR(length)"`，length 为必填字段 | `"VARCHAR(32)"` |
-| `Text` | 固定 `"TEXT"` | `"TEXT"` |
-| `Bool` | 固定 `"BOOLEAN"` | `"BOOLEAN"` |
-| `Date` | 固定 `"DATE"` | `"DATE"` |
+| `Decimal` | `"NUMERIC(precision, scale)"`，precision 默认 18，scale 默认 2 | `"NUMERIC(18,2)"` |
 | `DateTime` | 固定 `"TIMESTAMP WITH TIME ZONE"` | `"TIMESTAMP WITH TIME ZONE"` |
-| `Json` | 固定 `"JSONB"` | `"JSONB"` |
+| `Date` | 固定 `"DATE"` | `"DATE"` |
+| `Bool` | 固定 `"BOOLEAN"` | `"BOOLEAN"` |
+| `Text` | 固定 `"TEXT"` | `"TEXT"` |
 | `Binary` | 固定 `"BYTEA"` | `"BYTEA"` |
 | `Array` | 固定 `"JSONB"` | `"JSONB"` |
+| `Json` | 固定 `"JSONB"` | `"JSONB"` |
 | `Uuid` | 固定 `"UUID"` | `"UUID"` |
 
 ### 3.6 索引定义规范
@@ -374,6 +381,28 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 }
 ```
 
+#### 金额/小数列
+
+```json
+{
+  "name": "unit_price",
+  "label": "单价",
+  "field_type": "Decimal",
+  "is_primary_key": false,
+  "is_nullable": false,
+  "default_value": "0",
+  "i18n": false,
+  "precision": 18,
+  "scale": 2,
+  "db_type": "NUMERIC(18,2)",
+  "ordinal": 8,
+  "is_foreign_key": false,
+  "foreign_key_table": null,
+  "foreign_key_column": null,
+  "extensions": {}
+}
+```
+
 #### 创建时间/更新时间列
 
 ```json
@@ -415,6 +444,12 @@ manifest.json → plugin.table_config_files → config/{name}_config.json
 - `null` 表示插入 NULL
 - 省略某个字段则使用列定义中的 `default_value`，无默认值时为 NULL
 - 所有非可省略字段建议显式提供
+
+**执行策略**：
+- 种子数据以 100 行为一批次执行
+- 批次执行失败时自动降级为逐行执行
+- 种子数据失败**不阻断**插件安装流程
+- 执行完成后会校验数据库实际行数
 
 ### 4.2 CSV 格式
 
