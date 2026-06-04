@@ -418,6 +418,10 @@ impl Orchestrator {
                     debug!("多分支节点执行完成，选择分支: node_id={}, output={}, port={}",
                         node.id, exec_context.current_output, source_port_id);
 
+                    // 恢复 current_output 为分支节点执行前的输入数据
+                    // 分支节点的返回值仅用于路由判断，不应作为下一个节点的输入
+                    exec_context.current_output = previous_output;
+
                     // 查找匹配的边（根据端口ID）
                     if let Some(next_edge) = navigator.find_next_edge(&current_node_id, &source_port_id) {
                         debug!("多分支节点跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
