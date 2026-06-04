@@ -13,7 +13,7 @@ use config::web_config;
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_nacos};
-use cmx_api::middleware::{cors_layer, mw_context_resolver, trace_layer};
+use cmx_api::middleware::{cors_layer, cors_layer_permissive, mw_context_resolver, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_utils::ConfigManager;
@@ -153,7 +153,7 @@ async fn main() -> Result<()> {
         .layer(middleware::from_fn(trace_layer))
         .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .layer(cors_layer());
+        .layer(cors_layer_permissive());
 
     // 添加静态文件服务作为 fallback
     let routes_all = routes_all.fallback_service(axum::routing::get_service(
