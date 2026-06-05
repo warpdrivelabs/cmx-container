@@ -66,11 +66,9 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 
 ## 三、配置方式
 
-支持两种配置方式：**环境变量**（推荐，兼容现有 `NACOS_*` 变量）和 **TOML 配置文件**。
+通过 **环境变量** 配置，兼容现有 `NACOS_*` 变量。
 
-### 3.1 环境变量（推荐）
-
-#### 注册中心环境变量
+### 3.1 注册中心环境变量
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
@@ -83,8 +81,10 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 | `NACOS_USERNAME` | - | 认证用户名（可选） |
 | `NACOS_PASSWORD` | - | 认证密码（可选） |
 | `NACOS_NAMING_GROUP_NAME` | `DEFAULT_GROUP` | 注册的服务分组 |
-| `NACOS_REGISTER_SERVER_IP` | 自动检测 | 注册使用的 IP 地址 |
-| `NACOS_REGISTER_SERVER_PORT` | `server.port` 配置值 | 注册使用的端口号 |
+| `SERVICE_REGISTRY_IP` | 自动检测 | 注册使用的 IP 地址（优先于 NACOS_REGISTER_SERVER_IP） |
+| `SERVICE_REGISTRY_PORT` | `server.port` 配置值 | 注册使用的端口号（优先于 NACOS_REGISTER_SERVER_PORT） |
+| `NACOS_REGISTER_SERVER_IP` | 自动检测 | 注册使用的 IP 地址（兼容旧变量） |
+| `NACOS_REGISTER_SERVER_PORT` | `server.port` 配置值 | 注册使用的端口号（兼容旧变量） |
 
 #### 配置中心环境变量
 
@@ -123,18 +123,22 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 type = "nacos"
 # 是否启用
 enabled = true
+# 注册的服务名称（通用参数，对所有注册中心类型生效）
+service_name = "cmx-server"
+# 分组名称
+group_name = "DEFAULT_GROUP"
+# 集群名称
+cluster_name = "DEFAULT"
+# 实例权重
+weight = 1.0
 
-# Nacos 注册中心配置
+# Nacos 连接配置（type = "nacos" 时生效）
 [service_registry.nacos]
 server_addr = "127.0.0.1:8848"
 namespace = ""
 app_name = "cmx-container"
 username = ""
 password = ""
-service_name = "cmx-server"
-group_name = "DEFAULT_GROUP"
-cluster_name = "DEFAULT"
-weight = 1.0
 
 # 配置中心配置
 [config_center]

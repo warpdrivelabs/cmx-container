@@ -8,7 +8,7 @@ use std::sync::Arc;
 use cmx_registry_config::{
     create_config_center, create_registry, ConfigCenter, ConfigCenterFullConfig,
     GlobalChangeNotifier, GlobalConfigCenter, GlobalRegistry, RegistryConfig, RemoteConfigSource,
-    ServiceInstance, ServiceRegistry,
+    ServiceRegistry,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
 use tracing::{info, warn};
@@ -103,17 +103,7 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
     let ip = resolve_register_ip();
 
     let registry_config = RegistryConfig::from_env();
-    let instance = ServiceInstance {
-        ip: ip.clone(),
-        port,
-        service_name: registry_config.service_name(),
-        group_name: Some(registry_config.nacos.group_name.clone()),
-        cluster_name: Some(registry_config.nacos.cluster_name.clone()),
-        weight: registry_config.nacos.weight,
-        metadata: registry_config.nacos.metadata.clone(),
-        healthy: true,
-        ephemeral: true,
-    };
+    let instance = registry_config.build_instance(ip.clone(), port);
 
     match registry.register(&instance).await {
         Ok(_) => {
@@ -176,17 +166,7 @@ pub async fn shutdown_infra() {
     let ip = resolve_register_ip();
 
     let registry_config = RegistryConfig::from_env();
-    let instance = ServiceInstance {
-        ip: ip.clone(),
-        port,
-        service_name: registry_config.service_name(),
-        group_name: Some(registry_config.nacos.group_name.clone()),
-        cluster_name: None,
-        weight: 1.0,
-        metadata: Default::default(),
-        healthy: true,
-        ephemeral: true,
-    };
+    let instance = registry_config.build_instance(ip.clone(), port);
 
     match registry.deregister(&instance).await {
         Ok(_) => {
@@ -199,17 +179,27 @@ pub async fn shutdown_infra() {
 }
 
 /// 解析注册使用的服务端口
+///
+/// 优先级：SERVICE_REGISTRY_PORT > NACOS_REGISTER_SERVER_PORT > server.port 配置 > 默认 8080
 fn resolve_register_port() -> u16 {
+    // 优先读取 SERVICE_REGISTRY_PORT
+    if let Ok(raw) = std::env::var("SERVICE_REGISTRY_PORT") {
+        if let Ok(port) = raw.trim().parse::<u16>() {
+            if port > 0 {
+                return port;
+            }
+        }
+        warn!("SERVICE_REGISTRY_PORT={} 不是有效的端口号，将回退到其他来源", raw);
+    }
+
+    // 兼容旧 NACOS_REGISTER_SERVER_PORT
     if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_PORT") {
         if let Ok(port) = raw.trim().parse::<u16>() {
             if port > 0 {
                 return port;
             }
         }
-        warn!(
-            "NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源",
-            raw
-        );
+        warn!("NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源", raw);
     }
 
     ConfigManager::global()
@@ -221,7 +211,18 @@ fn resolve_register_port() -> u16 {
 }
 
 /// 解析注册使用的服务 IP
+///
+/// 优先级：SERVICE_REGISTRY_IP > NACOS_REGISTER_SERVER_IP > server.ip 配置 > 自动检测 > 127.0.0.1
 fn resolve_register_ip() -> String {
+    // 优先读取 SERVICE_REGISTRY_IP
+    if let Ok(raw) = std::env::var("SERVICE_REGISTRY_IP") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    // 兼容旧 NACOS_REGISTER_SERVER_IP
     if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_IP") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {

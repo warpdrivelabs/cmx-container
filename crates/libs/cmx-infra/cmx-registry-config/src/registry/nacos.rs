@@ -31,10 +31,7 @@ impl NacosRegistry {
             .build()
             .map_err(|e| RegistryError::InitFailed(format!("命名服务初始化失败: {}", e)))?;
 
-        info!(
-            "Nacos 命名服务初始化成功: {}/{}",
-            config.group_name, config.service_name
-        );
+        info!("Nacos 命名服务初始化成功: {}", config.server_addr);
 
         Ok(Self { naming })
     }

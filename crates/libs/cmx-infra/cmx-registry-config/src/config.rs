@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 // ============================================================
 
 /// 注册中心配置
+///
+/// 包含通用的服务注册参数（与服务实例相关）和注册中心连接配置。
+/// 通用参数对所有注册中心类型生效，具体注册中心的连接配置在子结构体中定义。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryConfig {
     /// 注册中心类型：mock | nacos | consul | etcd
@@ -22,12 +25,35 @@ pub struct RegistryConfig {
     #[serde(default)]
     pub enabled: bool,
 
+    /// 注册的服务名称
+    #[serde(default = "default_service_name")]
+    pub service_name: String,
+
+    /// 分组名称
+    #[serde(default = "default_group")]
+    pub group_name: String,
+
+    /// 集群名称
+    #[serde(default = "default_cluster")]
+    pub cluster_name: String,
+
+    /// 实例权重
+    #[serde(default = "default_weight")]
+    pub weight: f64,
+
+    /// 实例元数据
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+
     /// Nacos 注册中心配置（type = "nacos" 时生效）
     #[serde(default)]
     pub nacos: NacosNamingConfig,
 }
 
 /// Nacos 命名服务配置
+///
+/// 仅包含 Nacos 连接相关的配置，不包含服务实例参数。
+/// 服务实例参数（service_name、group_name 等）在 RegistryConfig 中定义。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NacosNamingConfig {
     /// Nacos 服务器地址
@@ -49,26 +75,6 @@ pub struct NacosNamingConfig {
     /// 认证密码
     #[serde(default)]
     pub password: Option<String>,
-
-    /// 服务名称
-    #[serde(default = "default_service_name")]
-    pub service_name: String,
-
-    /// 分组名称
-    #[serde(default = "default_group")]
-    pub group_name: String,
-
-    /// 集群名称
-    #[serde(default = "default_cluster")]
-    pub cluster_name: String,
-
-    /// 实例权重
-    #[serde(default = "default_weight")]
-    pub weight: f64,
-
-    /// 实例元数据
-    #[serde(default)]
-    pub metadata: HashMap<String, String>,
 }
 
 // ============================================================
@@ -175,6 +181,11 @@ impl Default for RegistryConfig {
         Self {
             registry_type: default_registry_type(),
             enabled: false,
+            service_name: default_service_name(),
+            group_name: default_group(),
+            cluster_name: default_cluster(),
+            weight: default_weight(),
+            metadata: HashMap::new(),
             nacos: NacosNamingConfig::default(),
         }
     }
@@ -188,11 +199,6 @@ impl Default for NacosNamingConfig {
             app_name: default_app_name(),
             username: None,
             password: None,
-            service_name: default_service_name(),
-            group_name: default_group(),
-            cluster_name: default_cluster(),
-            weight: default_weight(),
-            metadata: HashMap::new(),
         }
     }
 }
@@ -231,6 +237,8 @@ impl RegistryConfig {
     /// - `SERVICE_REGISTRY_TYPE` - 注册中心类型
     /// - `SERVICE_REGISTRY_ENABLED` - 是否启用
     /// - `SERVICE_REGISTRY_NAME` - 注册的服务名称（优先于 NACOS_NAMING_SERVICE_NAME）
+    /// - `SERVICE_REGISTRY_GROUP` - 分组名称
+    /// - `SERVICE_REGISTRY_CLUSTER` - 集群名称
     /// - 兼容 `NACOS_*` 环境变量
     pub fn from_env() -> Self {
         let nacos_enabled = env_bool("NACOS_ENABLED");
@@ -252,17 +260,45 @@ impl RegistryConfig {
         Self {
             registry_type,
             enabled,
+            service_name: env_string("SERVICE_REGISTRY_NAME")
+                .or_else(|| env_string("NACOS_NAMING_SERVICE_NAME"))
+                .unwrap_or_else(default_service_name),
+            group_name: env_string("SERVICE_REGISTRY_GROUP")
+                .or_else(|| env_string("NACOS_NAMING_GROUP_NAME"))
+                .unwrap_or_else(default_group),
+            cluster_name: env_string("SERVICE_REGISTRY_CLUSTER")
+                .unwrap_or_else(default_cluster),
+            weight: env_string("SERVICE_REGISTRY_WEIGHT")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(default_weight),
+            metadata: HashMap::new(),
             nacos: NacosNamingConfig::from_env(),
         }
     }
 
-    /// 获取服务名称（注册中心注册使用的服务名）
-    ///
-    /// 优先级：SERVICE_REGISTRY_NAME > NACOS_NAMING_SERVICE_NAME > 默认值
+    /// 获取服务名称（兼容方法，支持运行时环境变量覆盖）
     pub fn service_name(&self) -> String {
         env_string("SERVICE_REGISTRY_NAME")
             .or_else(|| env_string("NACOS_NAMING_SERVICE_NAME"))
-            .unwrap_or_else(|| self.nacos.service_name.clone())
+            .unwrap_or_else(|| self.service_name.clone())
+    }
+
+    /// 构建 ServiceInstance（便捷方法）
+    ///
+    /// 将 RegistryConfig 中的通用注册参数组装为 ServiceInstance。
+    /// IP 和端口需要调用方提供（因为它们来自其他配置源）。
+    pub fn build_instance(&self, ip: String, port: u16) -> super::registry::trait_rs::ServiceInstance {
+        super::registry::trait_rs::ServiceInstance {
+            ip,
+            port,
+            service_name: self.service_name(),
+            group_name: Some(self.group_name.clone()),
+            cluster_name: Some(self.cluster_name.clone()),
+            weight: self.weight,
+            metadata: self.metadata.clone(),
+            healthy: true,
+            ephemeral: true,
+        }
     }
 }
 
@@ -275,12 +311,6 @@ impl NacosNamingConfig {
             app_name: env_string("NACOS_APP_NAME").unwrap_or_else(default_app_name),
             username: env_string("NACOS_USERNAME"),
             password: env_string("NACOS_PASSWORD"),
-            service_name: env_string("NACOS_NAMING_SERVICE_NAME")
-                .unwrap_or_else(default_service_name),
-            group_name: env_string("NACOS_NAMING_GROUP_NAME").unwrap_or_else(default_group),
-            cluster_name: default_cluster(),
-            weight: default_weight(),
-            metadata: HashMap::new(),
         }
     }
 }
