@@ -1,14 +1,14 @@
-//! cmx-registry-config: 注册中心与配置中心可扩展抽象层
+//! cmx-registry-config: 注册中心与配置中心可扩展抽象层。
 //!
-//! 提供 `ServiceRegistry` 和 `ConfigCenter` 两个核心 trait，
-//! 通过工厂函数和 `dyn trait` 动态派发实现配置驱动的实现切换。
+//! 该 crate 是 cmx-container 基础设施层的一部分，提供 `ServiceRegistry` 和 `ConfigCenter`
+//! 两个核心 trait 的抽象实现，通过工厂函数和 `dyn trait` 动态派发实现配置驱动的实现切换。
 //!
 //! # 核心功能
 //!
-//! - **服务注册/发现**: 通过 `ServiceRegistry` trait 抽象，支持 Nacos、Mock 等实现
-//! - **配置中心**: 通过 `ConfigCenter` trait 抽象，支持远程配置获取和变更监听
-//! - **配置驱动**: 通过环境变量或 TOML 配置选择具体实现
-//! - **环境变量兼容**: 保持现有 `NACOS_*` 环境变量完全兼容
+//! - **服务注册/发现**：通过 [`ServiceRegistry`](crate::ServiceRegistry) trait 抽象，支持 Nacos、Mock 等实现。
+//! - **配置中心**：通过 [`ConfigCenter`](crate::ConfigCenter) trait 抽象，支持远程配置获取和变更监听。
+//! - **配置驱动**：通过环境变量或 TOML 配置选择具体实现。
+//! - **环境变量兼容**：保持现有 `NACOS_*` 环境变量完全兼容。
 //!
 //! # 配置优先级（从高到低）
 //!
@@ -16,6 +16,42 @@
 //! 2. 远程配置中心
 //! 3. 本地 TOML 配置文件
 //! 4. 代码默认值
+//!
+//! # 架构分层
+//!
+//! ```text
+//! ┌────────────────────────────────────────────┐
+//! │  应用层 (web-server 等)                      │
+//! │  通过 GlobalRegistry / GlobalConfigCenter    │
+//! │  访问注册/配置中心                            │
+//! ├────────────────────────────────────────────┤
+//! │  抽象层 (本 crate)                            │
+//! │  ServiceRegistry / ConfigCenter trait       │
+//! │  + 工厂函数 create_registry/create_config_  │
+//! │    center 配置驱动派发                       │
+//! ├────────────────────────────────────────────┤
+//! │  实现层                                       │
+//! │  NacosRegistry / NacosConfigCenter          │
+//! │  MockRegistry / MockConfigCenter            │
+//! │  (未来扩展) ConsulRegistry / ApolloCenter   │
+//! └────────────────────────────────────────────┘
+//! ```
+//!
+//! # 快速开始
+//!
+//! ```ignore
+//! use cmx_registry_config::{
+//!     create_registry, create_config_center,
+//!     RegistryConfig, ConfigCenterFullConfig,
+//! };
+//!
+//! let registry_cfg = RegistryConfig::from_env();
+//! let config_cfg = ConfigCenterFullConfig::from_env();
+//!
+//! let registry = create_registry(&registry_cfg)?;
+//! let config_center = create_config_center(&config_cfg)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 pub mod config;
 pub mod config_center;
