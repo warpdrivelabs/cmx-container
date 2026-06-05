@@ -116,6 +116,14 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
 }
 
 /// 设置配置变更监听
+///
+/// 注册到全局配置变更通知器 (`GlobalChangeNotifier`) 的处理器包括：
+/// 1. **默认日志处理器**（key = "default"）：打印配置变更内容到 tracing 日志
+/// 2. **业务处理器**：其他模块可通过 `GlobalChangeNotifier::register("xxx", cb)` 注册
+///
+/// 收到远程配置变更时，处理器按注册顺序被调用。
+/// 注意：`ConfigManager` 是 OnceLock 不可重入，配置热更新由业务回调自行处理；
+/// 环境变量优先级由启动时的 `add_env()` 在最后叠加，配置变更不会影响该优先级。
 async fn setup_config_listener(
     config_center: &Arc<dyn ConfigCenter>,
     cc_config: &ConfigCenterFullConfig,
@@ -127,7 +135,15 @@ async fn setup_config_listener(
 
     GlobalChangeNotifier::initialize();
 
-    let callback = Arc::new(|content: &str| {
+    // 注册默认日志处理器：记录配置变更内容
+    GlobalChangeNotifier::register(
+        "default",
+        Arc::new(|content: &str| {
+            info!("检测到远程配置变更，内容长度: {} 字节", content.len());
+        }),
+    );
+
+    let callback: cmx_registry_config::ConfigChangeCallback = Arc::new(|content: &str| {
         GlobalChangeNotifier::notify(content);
     });
 

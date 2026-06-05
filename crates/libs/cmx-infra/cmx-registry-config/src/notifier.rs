@@ -42,10 +42,10 @@ impl ChangeNotifier {
     /// 通知所有处理器配置已变更
     pub fn notify(&self, content: &str) {
         let handlers = self.handlers.read().unwrap();
-        debug!("通知 {} 个配置变更处理器", handlers.len());
+        info!("通知 {} 个配置变更处理器", handlers.len());
 
         for (key, callback) in handlers.iter() {
-            debug!("调用配置变更处理器: {}", key);
+            info!("调用配置变更处理器: {}", key);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(content))) {
                 Ok(_) => {}
                 Err(e) => {
