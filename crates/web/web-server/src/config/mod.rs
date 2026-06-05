@@ -4,8 +4,9 @@
 
 pub mod cache;
 pub mod datasource;
+pub mod infra_init;
 pub mod migration;
-pub mod nacos;
+// pub mod nacos;
 pub mod plugins;
 pub mod runtime;
 pub mod services;
@@ -14,8 +15,9 @@ pub mod storage;
 pub use datasource::init_datasources;
 
 pub use cache::init_cache;
+pub use infra_init::{init_infra, shutdown_infra};
 pub use migration::init_database_migrations;
-pub use nacos::{init_global_config_with_nacos, shutdown_nacos};
+// pub use nacos::{init_global_config_with_nacos, shutdown_nacos};
 pub use plugins::init_plugins;
 pub use runtime::init_runtime;
 pub use services::init_services;

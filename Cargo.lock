@@ -1009,6 +1009,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-registry-config"
+version = "0.1.8"
+dependencies = [
+ "async-trait",
+ "cmx-utils",
+ "config",
+ "nacos-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
 name = "cmx-runtime"
 version = "0.1.8"
 dependencies = [
@@ -6872,8 +6888,8 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-debug",
- "cmx-nacos",
  "cmx-plugin",
+ "cmx-registry-config",
  "cmx-runtime",
  "cmx-service",
  "cmx-storage",

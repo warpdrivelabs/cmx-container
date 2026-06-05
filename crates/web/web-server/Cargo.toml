@@ -26,7 +26,9 @@ cmx-service = { workspace = true }
 # 内部依赖 - 调试
 cmx-debug = { workspace = true }
 # 内部依赖 - Nacos
-cmx-nacos = { workspace = true }
+# cmx-nacos = { workspace = true }
+# 内部依赖 - 注册中心与配置中心
+cmx-registry-config = { workspace = true }
 # 内部依赖 - 存储
 cmx-storage = { workspace = true }
 # 获取本机IP地址

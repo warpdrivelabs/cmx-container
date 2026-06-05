@@ -12,8 +12,8 @@ use config::web_config;
 
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
-use crate::config::{init_cache, init_datasources, init_global_config_with_nacos, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_nacos};
-use cmx_api::middleware::{cors_layer, cors_layer_permissive, mw_context_resolver, trace_layer};
+use crate::config::{init_cache, init_datasources, init_infra, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra};
+use cmx_api::middleware::{cors_layer, mw_context_resolver, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_utils::ConfigManager;
@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
     // 注意：使用 forget 而非 drop，因为 shutdown 后仍需要 flush 日志缓冲区
     std::mem::forget(guard);
 
-    init_global_config_with_nacos().await?;
+    init_infra().await?;
     cmx_utils::crypto::CryptoService::init_from_env();
     info!("加密服务初始化完成");
 
@@ -210,7 +210,7 @@ async fn main() -> Result<()> {
         .map_err(|e| Error::ServerSetup(format!("服务器运行失败: {}", e)))?;
 
     info!("开始优雅关闭...");
-    shutdown_nacos().await;
+    shutdown_infra().await;
     info!("服务已优雅关闭");
 
     Ok(())

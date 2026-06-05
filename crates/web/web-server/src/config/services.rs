@@ -34,11 +34,14 @@ pub async fn init_services() -> crate::Result<()> {
     let db_manager = get_default_db_manager();
     let default_db_id = get_default_db_manager().get_default_db_id().await;
 
-    // 从配置读取 app_id，默认值为 "default"
-    // let app_id = ConfigManager::global()
-    //     .get_string("plugin.app_id")
-    //     .unwrap_or("default".to_string());
-    let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+    //fixme yqs 不使用nacos的时候要修改
+    let app_id = cmx_utils::ConfigManager::global()
+        .get_string("app.id")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("APP_ID").ok())
+        .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
+        .unwrap_or_else(|| "default".to_string());
 
     let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id.clone()));
     let registry = Arc::new(ServiceRegistry::new());

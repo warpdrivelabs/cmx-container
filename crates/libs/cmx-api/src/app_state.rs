@@ -45,7 +45,14 @@ impl Default for CmxAppState {
 impl CmxAppState {
     /// 创建新的 CmxAppState
     pub fn new() -> Self {
-        let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
+        //fixme yqs 不使用nacos的时候要修改
+        let app_id = cmx_utils::ConfigManager::global()
+            .get_string("app.id")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::env::var("APP_ID").ok())
+            .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
+            .unwrap_or_else(|| "default".to_string());
 
         Self {
             app_id,
