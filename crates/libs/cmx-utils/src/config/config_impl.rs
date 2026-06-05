@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use super::error::{ConfigError, ConfigResult};
 use super::source::CommandLineSource;
@@ -662,7 +662,7 @@ impl DefaultConfigLoader {
 /// ```
 pub struct ConfigManager;
 
-static GLOBAL_CONFIG: OnceLock<Config> = OnceLock::new();
+static GLOBAL_CONFIG: OnceLock<RwLock<Arc<Config>>> = OnceLock::new();
 static INIT_LOCK: Mutex<bool> = Mutex::new(false);
 
 impl ConfigManager {
@@ -694,9 +694,11 @@ impl ConfigManager {
             message: format!("配置初始化失败: {}", e),
         })?;
 
-        GLOBAL_CONFIG.set(config).map_err(|_| ConfigError::BuildError {
-            message: "配置管理器已经初始化，不能重复初始化".to_string(),
-        })?;
+        GLOBAL_CONFIG
+            .set(RwLock::new(Arc::new(config)))
+            .map_err(|_| ConfigError::BuildError {
+                message: "配置管理器已经初始化，不能重复初始化".to_string(),
+            })?;
 
         *lock = true;
         Ok(())
@@ -705,20 +707,23 @@ impl ConfigManager {
     /// 获取全局配置实例
     ///
     /// # 返回值
-    /// 返回全局配置引用
+    /// 返回全局配置的 Arc 引用（开销极低，仅原子计数器 +1）
     ///
     /// # Panics
     /// 如果配置管理器未初始化则会 panic
-    pub fn global() -> &'static Config {
-        GLOBAL_CONFIG.get().expect("配置管理器未初始化，请先调用 ConfigManager::initialize()")
+    pub fn global() -> Arc<Config> {
+        let guard = GLOBAL_CONFIG
+            .get()
+            .expect("配置管理器未初始化，请先调用 ConfigManager::initialize()");
+        guard.read().unwrap().clone()
     }
 
     /// 尝试获取全局配置实例
     ///
     /// # 返回值
-    /// 如果已初始化返回 Some(配置引用)，否则返回 None
-    pub fn try_global() -> Option<&'static Config> {
-        GLOBAL_CONFIG.get()
+    /// 如果已初始化返回 Some(Arc<Config>)，否则返回 None
+    pub fn try_global() -> Option<Arc<Config>> {
+        GLOBAL_CONFIG.get().map(|g| g.read().unwrap().clone())
     }
 
     /// 检查是否已初始化
@@ -727,6 +732,27 @@ impl ConfigManager {
     /// 如果已初始化返回 true，否则返回 false
     pub fn is_initialized() -> bool {
         GLOBAL_CONFIG.get().is_some()
+    }
+
+    /// 原子替换全局配置
+    ///
+    /// 用于配置热更新场景，将新的配置实例替换全局配置。
+    /// 旧的 Arc 引用在所有持有者释放后自动回收。
+    ///
+    /// # 参数
+    /// - `config`: 新的配置实例
+    ///
+    /// # 返回值
+    /// 如果替换成功返回 Ok(())，如果未初始化返回 Err
+    pub fn reload(config: Config) -> Result<(), ConfigError> {
+        let guard = GLOBAL_CONFIG.get().ok_or(ConfigError::BuildError {
+            message: "配置管理器未初始化".to_string(),
+        })?;
+        let mut lock = guard.write().map_err(|_| ConfigError::BuildError {
+            message: "配置管理器锁获取失败".to_string(),
+        })?;
+        *lock = Arc::new(config);
+        Ok(())
     }
 }
 

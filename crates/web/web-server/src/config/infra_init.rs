@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use cmx_registry_config::{
     create_config_center, create_registry, ConfigCenter, ConfigCenterFullConfig,
-    GlobalChangeNotifier, GlobalConfigCenter, GlobalRegistry, RegistryConfig, RemoteConfigSource,
-    ServiceRegistry,
+    ConfigChangeEvent, ConfigReloader, GlobalChangeNotifier, GlobalConfigCenter, GlobalRegistry,
+    RegistryConfig, RemoteConfigSource, ServiceRegistry,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
 use tracing::{info, warn};
@@ -118,12 +118,12 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
 /// 设置配置变更监听
 ///
 /// 注册到全局配置变更通知器 (`GlobalChangeNotifier`) 的处理器包括：
-/// 1. **默认日志处理器**（key = "default"）：打印配置变更内容到 tracing 日志
-/// 2. **业务处理器**：其他模块可通过 `GlobalChangeNotifier::register("xxx", cb)` 注册
+/// 1. **配置重载器**（key = "config_reloader"）：解析新配置并原子替换全局 ConfigManager
+/// 2. **默认日志处理器**（key = "default"）：打印配置变更内容到 tracing 日志
+/// 3. **业务监听器**：其他模块可通过 `GlobalChangeNotifier::add_listener()` 注册
 ///
 /// 收到远程配置变更时，处理器按注册顺序被调用。
-/// 注意：`ConfigManager` 是 OnceLock 不可重入，配置热更新由业务回调自行处理；
-/// 环境变量优先级由启动时的 `add_env()` 在最后叠加，配置变更不会影响该优先级。
+/// 环境变量优先级由 reload 时的 `add_env()` 保持，配置变更不会影响该优先级。
 async fn setup_config_listener(
     config_center: &Arc<dyn ConfigCenter>,
     cc_config: &ConfigCenterFullConfig,
@@ -135,13 +135,38 @@ async fn setup_config_listener(
 
     GlobalChangeNotifier::initialize();
 
-    // 注册默认日志处理器：记录配置变更内容
-    GlobalChangeNotifier::register(
-        "default",
-        Arc::new(|content: &str| {
-            info!("检测到远程配置变更，内容长度: {} 字节", content.len());
-        }),
-    );
+    // 注册配置重载器：解析新配置 → 合并 → 原子替换全局 ConfigManager → 通知监听器
+    let config_file_path = std::env::var("CONFIG_FILE").ok();
+    let reloader = Arc::new(ConfigReloader::new(config_file_path));
+    GlobalChangeNotifier::register("config_reloader", {
+        let reloader = reloader.clone();
+        Arc::new(move |content: &str| {
+            let reloader = reloader.clone();
+            let content = content.to_string();
+            tokio::spawn(async move {
+                match reloader.reload(&content) {
+                    Ok(changed_keys) => {
+                        let event = ConfigChangeEvent {
+                            changed_keys,
+                            raw_content: content,
+                        };
+                        GlobalChangeNotifier::notify_listeners(&event);
+                    }
+                    Err(e) => {
+                        warn!("配置热更新失败: {}，保留当前配置", e);
+                    }
+                }
+            });
+        })
+    });
+
+    // // 注册默认日志处理器：记录配置变更内容
+    // GlobalChangeNotifier::register(
+    //     "default",
+    //     Arc::new(|content: &str| {
+    //         info!("检测到远程配置变更，内容长度: {} 字节", content.len());
+    //     }),
+    // );
 
     let callback: cmx_registry_config::ConfigChangeCallback = Arc::new(|content: &str| {
         GlobalChangeNotifier::notify(content);

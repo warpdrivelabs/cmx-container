@@ -24,6 +24,7 @@ pub mod error;
 pub mod global_config_center;
 pub mod global_registry;
 pub mod notifier;
+pub mod reloader;
 pub mod registry;
 
 pub use config::{
@@ -35,5 +36,6 @@ pub use config_source::RemoteConfigSource;
 pub use error::{ConfigCenterError, RegistryError};
 pub use global_config_center::GlobalConfigCenter;
 pub use global_registry::GlobalRegistry;
-pub use notifier::{ChangeNotifier, GlobalChangeNotifier};
+pub use notifier::{ChangeNotifier, ConfigChangeEvent, ConfigChangeListener, GlobalChangeNotifier};
+pub use reloader::ConfigReloader;
 pub use registry::{create_registry, MockRegistry, NacosRegistry, ServiceInstance, ServiceRegistry};
