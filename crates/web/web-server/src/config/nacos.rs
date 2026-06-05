@@ -38,7 +38,7 @@ pub async fn init_global_config_with_nacos() -> crate::Result<()> {
         return Err(Error::ConfigError(format!("初始配置加载失败: {}", e)));
     }
 
-    match NacosClient::new(nacos_config.clone()) {
+    match NacosClient::new(nacos_config.clone()).await {
         Ok(client) => {
             let mut builder = ConfigBuilder::new()
                 .add_toml_file_from_env("CONFIG_FILE");

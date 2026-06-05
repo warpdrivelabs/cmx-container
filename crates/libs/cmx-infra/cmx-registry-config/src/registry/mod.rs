@@ -53,17 +53,17 @@ use crate::error::RegistryError;
 /// use cmx_registry_config::{create_registry, RegistryConfig};
 ///
 /// let config = RegistryConfig::from_env();
-/// let registry = create_registry(&config)?;
+/// let registry = create_registry(&config).await?;
 /// # Ok::<(), cmx_registry_config::RegistryError>(())
 /// ```
-pub fn create_registry(config: &RegistryConfig) -> Result<Arc<dyn ServiceRegistry>, RegistryError> {
+pub async fn create_registry(config: &RegistryConfig) -> Result<Arc<dyn ServiceRegistry>, RegistryError> {
     if !config.enabled {
         tracing::info!("服务注册未启用，使用 MockRegistry");
         return Ok(Arc::new(MockRegistry::new()));
     }
 
     match config.registry_type.as_str() {
-        "nacos" => Ok(Arc::new(NacosRegistry::new(&config.nacos)?)),
+        "nacos" => Ok(Arc::new(NacosRegistry::new(&config.nacos).await?)),
         "mock" => Ok(Arc::new(MockRegistry::new())),
         other => Err(RegistryError::UnsupportedType(other.to_string())),
     }

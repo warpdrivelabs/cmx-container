@@ -49,7 +49,7 @@ impl NacosClient {
     ///
     /// # 返回值
     /// 成功返回 NacosClient 实例，失败返回 NacosError
-    pub fn new(nacos_config: NacosConfig) -> Result<Self, NacosError> {
+    pub async fn new(nacos_config: NacosConfig) -> Result<Self, NacosError> {
         if !nacos_config.enabled {
             tracing::info!("Nacos 集成已禁用");
             return Ok(Self {
@@ -73,9 +73,11 @@ impl NacosClient {
         }
 
         // 初始化命名服务
+        // nacos-sdk 0.8 中 `NamingServiceBuilder::build` 为 async，需先 `.await`。
         let naming = if nacos_config.naming.enabled {
             let service = NamingServiceBuilder::new(client_props.clone())
                 .build()
+                .await
                 .map_err(|e| NacosError::InitFailed(format!("命名服务初始化失败: {}", e)))?;
             tracing::info!(
                 "Nacos 命名服务初始化成功: {}/{}",
@@ -89,9 +91,11 @@ impl NacosClient {
         };
 
         // 初始化配置中心
+        // nacos-sdk 0.8 中 `ConfigServiceBuilder::build` 为 async，需先 `.await`。
         let config = if nacos_config.config.enabled {
             let service = ConfigServiceBuilder::new(client_props)
                 .build()
+                .await
                 .map_err(|e| NacosError::InitFailed(format!("配置中心初始化失败: {}", e)))?;
             tracing::info!("Nacos 配置中心初始化成功");
             Some(ConfigServiceWrapper { service })

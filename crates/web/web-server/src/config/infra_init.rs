@@ -42,10 +42,10 @@ pub async fn init_infra() -> crate::Result<()> {
     let cc_config = ConfigCenterFullConfig::from_env();
 
     // 通过工厂函数创建注册中心和配置中心实例。
-    let registry = create_registry(&registry_config).map_err(|e| {
+    let registry = create_registry(&registry_config).await.map_err(|e| {
         Error::ConfigError(format!("创建注册中心失败: {}", e))
     })?;
-    let config_center = create_config_center(&cc_config).map_err(|e| {
+    let config_center = create_config_center(&cc_config).await.map_err(|e| {
         Error::ConfigError(format!("创建配置中心失败: {}", e))
     })?;
 

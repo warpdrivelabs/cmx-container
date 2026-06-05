@@ -42,7 +42,7 @@ impl NacosRegistry {
     ///
     /// * `Ok(NacosRegistry)` - 初始化成功。
     /// * `Err(RegistryError::InitFailed)` - nacos-sdk 客户端构建失败。
-    pub fn new(config: &NacosNamingConfig) -> Result<Self, RegistryError> {
+    pub async fn new(config: &NacosNamingConfig) -> Result<Self, RegistryError> {
         let mut client_props = ClientProps::new()
             .server_addr(&config.server_addr)
             .namespace(&config.namespace)
@@ -53,8 +53,11 @@ impl NacosRegistry {
             client_props = client_props.auth_username(username).auth_password(password);
         }
 
+        // nacos-sdk 0.8 中 `NamingServiceBuilder::build` 为 async，
+        // 必须先 `.await` 取得 `Result`，再进行错误转换。
         let naming = NamingServiceBuilder::new(client_props)
             .build()
+            .await
             .map_err(|e| RegistryError::InitFailed(format!("命名服务初始化失败: {}", e)))?;
 
         info!("Nacos 命名服务初始化成功: {}", config.server_addr);

@@ -59,10 +59,10 @@ use crate::error::ConfigCenterError;
 /// use cmx_registry_config::{create_config_center, ConfigCenterFullConfig};
 ///
 /// let config = ConfigCenterFullConfig::from_env();
-/// let center = create_config_center(&config)?;
+/// let center = create_config_center(&config).await?;
 /// # Ok::<(), cmx_registry_config::ConfigCenterError>(())
 /// ```
-pub fn create_config_center(
+pub async fn create_config_center(
     config: &ConfigCenterFullConfig,
 ) -> Result<Arc<dyn ConfigCenter>, ConfigCenterError> {
     if !config.enabled {
@@ -71,7 +71,7 @@ pub fn create_config_center(
     }
 
     match config.center_type.as_str() {
-        "nacos" => Ok(Arc::new(NacosConfigCenter::new(&config.nacos)?)),
+        "nacos" => Ok(Arc::new(NacosConfigCenter::new(&config.nacos).await?)),
         "mock" => Ok(Arc::new(MockConfigCenter::new())),
         other => Err(ConfigCenterError::UnsupportedType(other.to_string())),
     }
