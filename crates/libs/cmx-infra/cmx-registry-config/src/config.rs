@@ -230,6 +230,7 @@ impl RegistryConfig {
     /// 支持的环境变量：
     /// - `SERVICE_REGISTRY_TYPE` - 注册中心类型
     /// - `SERVICE_REGISTRY_ENABLED` - 是否启用
+    /// - `SERVICE_REGISTRY_NAME` - 注册的服务名称（优先于 NACOS_NAMING_SERVICE_NAME）
     /// - 兼容 `NACOS_*` 环境变量
     pub fn from_env() -> Self {
         let nacos_enabled = env_bool("NACOS_ENABLED");
@@ -253,6 +254,15 @@ impl RegistryConfig {
             enabled,
             nacos: NacosNamingConfig::from_env(),
         }
+    }
+
+    /// 获取服务名称（注册中心注册使用的服务名）
+    ///
+    /// 优先级：SERVICE_REGISTRY_NAME > NACOS_NAMING_SERVICE_NAME > 默认值
+    pub fn service_name(&self) -> String {
+        env_string("SERVICE_REGISTRY_NAME")
+            .or_else(|| env_string("NACOS_NAMING_SERVICE_NAME"))
+            .unwrap_or_else(|| self.nacos.service_name.clone())
     }
 }
 

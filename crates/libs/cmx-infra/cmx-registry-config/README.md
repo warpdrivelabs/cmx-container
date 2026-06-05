@@ -76,12 +76,12 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 |----------|--------|------|
 | `SERVICE_REGISTRY_TYPE` | `mock` | 注册中心类型：`mock` / `nacos` |
 | `SERVICE_REGISTRY_ENABLED` | `false` | 是否启用服务注册 |
+| `SERVICE_REGISTRY_NAME` | `cmx-server` | 注册的服务名称（同时作为 `app_id` 的回退值） |
 | `NACOS_SERVER_ADDR` | `127.0.0.1:8848` | Nacos 服务器地址 |
 | `NACOS_NAMESPACE` | `""` | 命名空间 |
 | `NACOS_APP_NAME` | `cmx-container` | 应用名称 |
 | `NACOS_USERNAME` | - | 认证用户名（可选） |
 | `NACOS_PASSWORD` | - | 认证密码（可选） |
-| `NACOS_NAMING_SERVICE_NAME` | `cmx-server` | 注册的服务名称 |
 | `NACOS_NAMING_GROUP_NAME` | `DEFAULT_GROUP` | 注册的服务分组 |
 | `NACOS_REGISTER_SERVER_IP` | 自动检测 | 注册使用的 IP 地址 |
 | `NACOS_REGISTER_SERVER_PORT` | `server.port` 配置值 | 注册使用的端口号 |
@@ -110,7 +110,7 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 | `NACOS_ENABLED=true` | 自动启用注册中心 + 配置中心，类型设为 `nacos` |
 | `NACOS_NAMING_ENABLED` | 映射为 `SERVICE_REGISTRY_ENABLED` |
 | `NACOS_CONFIG_ENABLED` | 映射为 `CONFIG_CENTER_ENABLED` |
-| `NACOS_NAMING_SERVICE_NAME` | 同时作为 `APP_ID` 的回退值 |
+| `NACOS_NAMING_SERVICE_NAME` | 映射为 `SERVICE_REGISTRY_NAME` 的回退值 |
 
 ### 3.2 TOML 配置文件
 
@@ -182,7 +182,7 @@ export NACOS_SERVER_ADDR=192.168.1.100:8848
 export NACOS_NAMESPACE=dev
 export NACOS_USERNAME=nacos
 export NACOS_PASSWORD=nacos
-export NACOS_NAMING_SERVICE_NAME=cmx-server
+export SERVICE_REGISTRY_NAME=cmx-server
 export NACOS_CONFIG_ENABLED=true
 export NACOS_CONFIG_DATA_ID=cmx-server.toml
 export NACOS_CONFIG_GROUP=DEFAULT_GROUP
@@ -221,6 +221,7 @@ metadata:
 data:
   SERVICE_REGISTRY_TYPE: "nacos"
   SERVICE_REGISTRY_ENABLED: "true"
+  SERVICE_REGISTRY_NAME: "cmx-server"
   NACOS_SERVER_ADDR: "nacos.default.svc.cluster.local:8848"
   NACOS_NAMESPACE: "production"
   CONFIG_CENTER_TYPE: "nacos"

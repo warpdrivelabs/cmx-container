@@ -40,6 +40,7 @@ pub async fn init_services() -> crate::Result<()> {
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(|| std::env::var("APP_ID").ok())
+        .or_else(|| std::env::var("SERVICE_REGISTRY_NAME").ok())
         .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
         .unwrap_or_else(|| "default".to_string());
 

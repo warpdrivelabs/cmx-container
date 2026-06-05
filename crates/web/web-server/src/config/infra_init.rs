@@ -106,7 +106,7 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
     let instance = ServiceInstance {
         ip: ip.clone(),
         port,
-        service_name: registry_config.nacos.service_name.clone(),
+        service_name: registry_config.service_name(),
         group_name: Some(registry_config.nacos.group_name.clone()),
         cluster_name: Some(registry_config.nacos.cluster_name.clone()),
         weight: registry_config.nacos.weight,
@@ -179,7 +179,7 @@ pub async fn shutdown_infra() {
     let instance = ServiceInstance {
         ip: ip.clone(),
         port,
-        service_name: registry_config.nacos.service_name.clone(),
+        service_name: registry_config.service_name(),
         group_name: Some(registry_config.nacos.group_name.clone()),
         cluster_name: None,
         weight: 1.0,
