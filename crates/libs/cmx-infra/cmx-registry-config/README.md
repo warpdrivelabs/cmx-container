@@ -112,59 +112,6 @@ let config_center: Arc<dyn ConfigCenter> = create_config_center(&config)?;
 | `NACOS_CONFIG_ENABLED` | 映射为 `CONFIG_CENTER_ENABLED` |
 | `NACOS_NAMING_SERVICE_NAME` | 映射为 `SERVICE_REGISTRY_NAME` 的回退值 |
 
-### 3.2 TOML 配置文件
-
-在应用的 TOML 配置文件中添加：
-
-```toml
-# 服务注册中心配置
-[service_registry]
-# 注册中心类型
-type = "nacos"
-# 是否启用
-enabled = true
-# 注册的服务名称（通用参数，对所有注册中心类型生效）
-service_name = "cmx-server"
-# 分组名称
-group_name = "DEFAULT_GROUP"
-# 集群名称
-cluster_name = "DEFAULT"
-# 实例权重
-weight = 1.0
-
-# Nacos 连接配置（type = "nacos" 时生效）
-[service_registry.nacos]
-server_addr = "127.0.0.1:8848"
-namespace = ""
-app_name = "cmx-container"
-username = ""
-password = ""
-
-# 配置中心配置
-[config_center]
-# 配置中心类型
-type = "nacos"
-# 是否启用
-enabled = true
-
-# Nacos 配置中心配置
-[config_center.nacos]
-server_addr = "127.0.0.1:8848"
-namespace = ""
-app_name = "cmx-container"
-username = ""
-password = ""
-
-# 配置监听列表
-[[config_center.listeners]]
-data_id = "cmx-server.toml"
-group = "DEFAULT_GROUP"
-
-# 应用标识
-[app]
-id = "my-app"
-```
-
 ---
 
 ## 四、典型场景

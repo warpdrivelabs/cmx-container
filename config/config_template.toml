@@ -232,30 +232,6 @@ storage_path = "./storage"
 # base_path = "app/"
 
 # ============================================
-# Nacos 配置（通过环境变量注入，不在此文件中配置）
-# ============================================
-# Nacos 相关配置必须通过环境变量注入，不支持在 TOML 文件中配置
-# 这是出于安全考虑，防止远程配置覆盖敏感连接信息
-#
-# 支持的环境变量：
-# NACOS_ENABLED              - 是否启用 Nacos（true/false）
-# NACOS_SERVER_ADDR          - Nacos 服务器地址（如 127.0.0.1:8848）
-# NACOS_NAMESPACE            - Nacos 命名空间（默认 public）
-# NACOS_APP_NAME             - 应用名称（默认 cmx-container）
-# NACOS_USERNAME             - Nacos 认证用户名（可选）
-# NACOS_PASSWORD             - Nacos 认证密码（可选）
-# NACOS_NAMING_ENABLED       - 是否启用服务注册（默认 true）
-# NACOS_NAMING_SERVICE_NAME  - 注册的服务名称（默认 cmx-server）
-# NACOS_NAMING_GROUP_NAME    - 服务分组（默认 DEFAULT_GROUP）
-# NACOS_CONFIG_ENABLED       - 是否启用配置中心（默认 false）
-# NACOS_CONFIG_DATA_ID       - 配置中心 Data ID
-# NACOS_CONFIG_GROUP         - 配置中心 Group（默认 DEFAULT_GROUP）
-#
-# 服务注册地址覆盖（可选，优先级高于 server.ip / server.port）：
-# NACOS_REGISTER_SERVER_IP   - 注册到 Nacos 的 IP，未设置或为空时回退 server.ip，再回退自动获取本机 IP
-# NACOS_REGISTER_SERVER_PORT - 注册到 Nacos 的端口，未设置或非法时回退 server.port，再回退 8080
-
-# ============================================
 # 基础服务中心配置
 # ============================================
 # 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）

@@ -17,7 +17,6 @@
 - [模板配置](#模板配置)
 - [Code Server 配置](#code-server-配置)
 - [节点配置](#节点配置)
-- [Nacos 配置](#nacos-配置)
 - [基础服务中心配置](#基础服务中心配置)
 - [配置优先级](#配置优先级)
 - [配置文件位置](#配置文件位置)
@@ -564,39 +563,6 @@ is_critical = true
 
 ---
 
-## Nacos 配置
-
-> **重要**: Nacos 相关配置必须通过环境变量注入，不支持在 TOML 文件中配置。这是出于安全考虑，防止远程配置覆盖敏感连接信息。
-
-### 环境变量列表
-
-| 环境变量                        | 类型      | 默认值              | 说明              |
-|-----------------------------|---------|------------------|-----------------|
-| `NACOS_ENABLED`             | Boolean | `false`          | 是否启用 Nacos      |
-| `NACOS_SERVER_ADDR`         | String  | `127.0.0.1:8848` | Nacos 服务器地址     |
-| `NACOS_NAMESPACE`           | String  | `""` (public)    | Nacos 命名空间      |
-| `NACOS_APP_NAME`            | String  | `cmx-container`  | 应用名称            |
-| `NACOS_USERNAME`            | String  | -                | Nacos 认证用户名（可选） |
-| `NACOS_PASSWORD`            | String  | -                | Nacos 认证密码（可选）  |
-| `NACOS_NAMING_ENABLED`      | Boolean | `true`           | 是否启用服务注册        |
-| `NACOS_NAMING_SERVICE_NAME` | String  | `cmx-server`     | 注册的服务名称         |
-| `NACOS_NAMING_GROUP_NAME`   | String  | `DEFAULT_GROUP`  | 服务分组            |
-| `NACOS_CONFIG_ENABLED`      | Boolean | `false`          | 是否启用配置中心        |
-| `NACOS_CONFIG_DATA_ID`      | String  | -                | 配置中心 Data ID    |
-| `NACOS_CONFIG_GROUP`        | String  | `"DEFAULT_GROUP"`  | 配置中心 Group      |
-| `NACOS_REGISTER_SERVER_IP`   | String  | 自动获取本机 IP   | 注册到 Nacos 的 IP（可选，优先级高于 `server.ip`） |
-| `NACOS_REGISTER_SERVER_PORT` | Integer | `8080`            | 注册到 Nacos 的端口（可选，优先级高于 `server.port`） |
-
-#### 服务注册地址解析优先级
-
-`NACOS_REGISTER_SERVER_IP` 与 `NACOS_REGISTER_SERVER_PORT` 用于在向 Nacos 注册/注销服务实例时指定 IP 与端口。读取顺序如下：
-
-1. 环境变量 `NACOS_REGISTER_SERVER_IP` / `NACOS_REGISTER_SERVER_PORT`
-2. 配置文件中的 `server.ip` / `server.port`
-3. 内置默认值：IP 自动获取本机地址（兜底 `127.0.0.1`），端口 `8080`
-
----
-
 ## 基础服务中心配置
 
 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）之间的数据交互配置。
@@ -700,16 +666,7 @@ URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个�
 
 ### 环境变量覆盖
 
-`center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__<KEY>` 或 `CENTER_CLIENT__<SECTION>__<KEY>`：
-
-| 环境变量 | 类型 | 说明 |
-|----------|------|------|
-| `CENTER_CLIENT__MODE` | String | 访问模式 (`mock` / `url` / `discovery`) |
-| `CENTER_CLIENT__TIMEOUT_MS` | Integer | 请求超时时间（毫秒） |
-| `CENTER_CLIENT__URLS__MENU` | String | 门户中心 URL |
-| `CENTER_CLIENT__URLS__PERM` | String | 权限中心 URL |
-| `CENTER_CLIENT__URLS__FORM` | String | 表单中心 URL |
-| `CENTER_CLIENT__URLS__FLOW` | String | 流程中心 URL |
+`center_client` 配置节支持通过环境变量覆盖，详见 [ENV_MANUAL.md](ENV_MANUAL.md#基础服务中心环境变量)。
 
 ---
 
@@ -717,8 +674,8 @@ URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个�
 
 配置优先级从高到低：
 
-1. **环境变量** - 最高优先级，不可被覆盖
-2. **Nacos 远程配置** - 从 Nacos 配置中心拉取的配置
+1. **环境变量** - 最高优先级，不可被覆盖（详见 [ENV_MANUAL.md](ENV_MANUAL.md#配置优先级)）
+2. **远程配置中心** - 从配置中心拉取的配置
 3. **本地 TOML 文件** - 配置文件中的配置
 4. **代码默认值** - 代码中定义的默认值
 
@@ -755,4 +712,5 @@ CONFIG_FILE=/path/to/config.toml ./cmx-server
 
 ## 完整配置示例
 
-详见 [config_template.toml](../config/config_template.toml)
+- TOML 配置示例详见 [config_template.toml](config_template.toml)
+- 环境变量参考详见 [.env.template](.env.template) 和 [ENV_MANUAL.md](ENV_MANUAL.md)
