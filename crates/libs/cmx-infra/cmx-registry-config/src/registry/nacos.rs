@@ -242,13 +242,4 @@ impl ServiceRegistry for NacosRegistry {
     fn get_cached_instances(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
         self.cache.get(service_name)
     }
-
-    async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
-        let (services, _count) = self
-            .naming
-            .get_service_list(1, 1000, None)
-            .await
-            .map_err(|e| RegistryError::QueryFailed(format!("获取服务列表失败: {}", e)))?;
-        Ok(services)
-    }
 }

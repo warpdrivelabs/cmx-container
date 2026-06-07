@@ -11,15 +11,9 @@ pub struct RpcConfig {
     pub protocol: String,
     /// gRPC 配置
     pub grpc: GrpcConfig,
-    /// HTTP REST 相关配置
-    #[serde(default)]
-    pub http_rest: HttpRestConfig,
     /// 预热服务列表（启动时预先发现的服务名）
     #[serde(default)]
     pub warmup_services: Vec<String>,
-    /// 服务列表同步间隔（秒），0 表示禁用定时同步
-    #[serde(default = "default_service_sync_interval_secs")]
-    pub service_sync_interval_secs: u64,
 }
 
 /// gRPC 配置
@@ -46,12 +40,8 @@ fn default_pool_size() -> usize {
     4
 }
 
-fn default_service_sync_interval_secs() -> u64 {
-    30
-}
-
 /// HTTP REST 相关配置（预留，本期不实现）
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct HttpRestConfig {
     /// HTTP REST 服务端口
     #[serde(default = "default_http_port")]

@@ -7,29 +7,26 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use cmx_core::CallServiceResponse;
-use cmx_registry_config::registry::{InstanceChangeCallback, ServiceInstance, ServiceInstanceCache, ServiceRegistry};
+use cmx_registry_config::registry::ServiceInstanceCache;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
 use cmx_traits::{FunctionCallResult, RpcClient, RpcError};
 use serde_json::Value;
 use tracing::instrument;
 
-use crate::config::GrpcConfig;
 use crate::discover::RegistryAwareDiscover;
 
 /// 基于 volo-grpc 的 RPC 客户端
 pub struct VoloGrpcClient {
     /// 服务实例缓存
     cache: Arc<ServiceInstanceCache>,
-    /// gRPC 配置
-    config: GrpcConfig,
-    /// 注册中心实例（用于缓存穿透时主动订阅）
-    registry: Arc<dyn ServiceRegistry>,
+    /// 调用超时时间（毫秒）
+    timeout_ms: u64,
 }
 
 impl VoloGrpcClient {
     /// 创建新的 gRPC 客户端
-    pub fn new(cache: Arc<ServiceInstanceCache>, config: GrpcConfig, registry: Arc<dyn ServiceRegistry>) -> Self {
-        Self { cache, config, registry }
+    pub fn new(cache: Arc<ServiceInstanceCache>, timeout_ms: u64) -> Self {
+        Self { cache, timeout_ms }
     }
 
     /// 创建指定服务的 gRPC 客户端
@@ -38,16 +35,12 @@ impl VoloGrpcClient {
         &self,
         service_name: &str,
     ) -> Result<CmxServiceOrchestratorClient, RpcError> {
-        // 如果缓存中没有该服务的实例，主动订阅
-        if self.cache.get(service_name).map_or(true, |v| v.is_empty()) {
-            let callback: InstanceChangeCallback = Arc::new(|_svc: &str, _instances: &[ServiceInstance]| {});
-            self.registry.subscribe_instances(service_name, callback).await
-                .map_err(|e| RpcError::NoAvailableInstance(format!("服务 '{}' 订阅失败: {}", service_name, e)))?;
-
-            // 再次检查缓存
-            if self.cache.get(service_name).map_or(true, |v| v.is_empty()) {
-                return Err(RpcError::NoAvailableInstance(service_name.to_string()));
-            }
+        // 确保缓存中有该服务的实例
+        let instances = self.cache.get(service_name).ok_or_else(|| {
+            RpcError::NoAvailableInstance(service_name.to_string())
+        })?;
+        if instances.is_empty() {
+            return Err(RpcError::NoAvailableInstance(service_name.to_string()));
         }
 
         // 创建 Discover 并启动监听
