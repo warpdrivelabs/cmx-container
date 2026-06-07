@@ -17,6 +17,9 @@ use volo::FastStr;
 
 use cmx_registry_config::registry::{ServiceInstance, ServiceInstanceCache};
 
+/// 默认 broadcast 通道容量
+const DEFAULT_CHANNEL_CAPACITY: usize = 1024;
+
 /// 注册中心感知的服务发现实现
 ///
 /// 将 ServiceInstanceCache 中的服务实例数据转换为 volo 的 Instance 格式，
@@ -42,8 +45,12 @@ impl Clone for RegistryAwareDiscover {
 
 impl RegistryAwareDiscover {
     /// 创建新的注册中心感知发现器
-    pub fn new(cache: Arc<ServiceInstanceCache>) -> Self {
-        let (tx, rx) = broadcast(256);
+    ///
+    /// `channel_capacity` 为内部 broadcast 通道容量，默认 1024。
+    /// 值越大越能缓冲高频服务变更（如 k8s 滚动更新）。
+    pub fn new(cache: Arc<ServiceInstanceCache>, channel_capacity: usize) -> Self {
+        let capacity = if channel_capacity == 0 { DEFAULT_CHANNEL_CAPACITY } else { channel_capacity };
+        let (tx, rx) = broadcast(capacity);
         Self {
             cache,
             change_tx: tx,

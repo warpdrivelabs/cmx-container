@@ -42,6 +42,12 @@ pub struct GrpcConfig {
     /// 默认集群列表（用于 query_instances 过滤，空表示不过滤）
     #[serde(default)]
     pub default_clusters: Vec<String>,
+    /// 服务发现变更通知通道容量
+    ///
+    /// 用于 RegistryAwareDiscover 内部 broadcast 通道的容量。
+    /// 值越大越能缓冲高频服务变更（如 k8s 滚动更新），但内存占用略增。
+    #[serde(default = "default_discover_channel_capacity")]
+    pub discover_channel_capacity: usize,
 }
 
 fn default_timeout_ms() -> u64 {
@@ -54,6 +60,10 @@ fn default_connect_timeout_ms() -> u64 {
 
 fn default_service_sync_interval_secs() -> u64 {
     30
+}
+
+fn default_discover_channel_capacity() -> usize {
+    1024
 }
 
 /// HTTP REST 相关配置（预留，本期不实现）

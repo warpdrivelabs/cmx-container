@@ -82,7 +82,7 @@ impl VoloGrpcClient {
         }
 
         // 创建 Discover 并启动监听
-        let discover = RegistryAwareDiscover::new(self.cache.clone());
+        let discover = RegistryAwareDiscover::new(self.cache.clone(), self.config.discover_channel_capacity);
         discover.start_watch(service_name);
 
         // 构建 volo gRPC 客户端，使用 volo 原生 rpc_timeout 和 connect_timeout
@@ -131,6 +131,20 @@ impl VoloGrpcClient {
         let backoff_ms = 50u64.saturating_mul(1u64 << attempt.min(4));
         Duration::from_millis(backoff_ms.min(800))
     }
+}
+
+/// 安全解析 JSON 字符串，解析失败时记录 warn 日志并降级为 Value::Null
+fn safe_parse_json(raw: &str, context: &str) -> Value {
+    serde_json::from_str(raw).unwrap_or_else(|e| {
+        tracing::warn!(
+            target: "cmx_rpc",
+            error = %e,
+            raw = %raw,
+            context = context,
+            "RPC 返回 JSON 解析失败，降级为 Null"
+        );
+        Value::Null
+    })
 }
 
 #[async_trait]
@@ -317,7 +331,7 @@ impl RpcClient for VoloGrpcClient {
                         success: inner.success,
                         result: inner
                             .result
-                            .map(|s| serde_json::from_str(&s).unwrap_or(Value::Null)),
+                            .map(|s| safe_parse_json(&s, "call_function.result")),
                         elapsed_us: inner.elapsed_us,
                         error: inner.error.map(|s| s.to_string()),
                     });
@@ -365,16 +379,16 @@ impl RpcClient for VoloGrpcClient {
 fn proto_to_call_service_response(resp: ExecuteServiceResponse) -> CallServiceResponse {
     CallServiceResponse {
         success: resp.success,
-        output: resp.output.map(|v| serde_json::from_str(&v).unwrap_or(Value::Null)),
+        output: resp.output.map(|v| safe_parse_json(&v, "call_service.output")),
         steps: resp.steps.into_iter().map(|s| cmx_core::ExecutionStep {
             node_id: s.node_id.to_string(),
             node_name: s.node_name.to_string(),
             node_type: s.node_type.to_string(),
             status: parse_step_status(&s.status),
-            output: s.output.map(|v| serde_json::from_str(&v).unwrap_or(Value::Null)),
+            output: s.output.map(|v| safe_parse_json(&v, "step.output")),
             elapsed_us: s.elapsed_us,
             error: s.error.map(|e| e.to_string()),
-            previous_output: s.previous_output.map(|v| serde_json::from_str(&v).unwrap_or(Value::Null)),
+            previous_output: s.previous_output.map(|v| safe_parse_json(&v, "step.previous_output")),
         }).collect(),
         total_elapsed_us: Some(resp.total_elapsed_us),
         error: resp.error.map(|e| cmx_core::OrchestrationError {
@@ -390,6 +404,13 @@ fn parse_step_status(status: &pilota::FastStr) -> cmx_core::StepStatus {
         "Failed" => cmx_core::StepStatus::Failed,
         "Skipped" => cmx_core::StepStatus::Skipped,
         "DebugPaused" => cmx_core::StepStatus::DebugPaused,
-        _ => cmx_core::StepStatus::Failed,
+        _ => {
+            tracing::warn!(
+                target: "cmx_rpc",
+                raw_status = %status,
+                "收到未知的 StepStatus 字符串，按 Failed 处理（请升级 cmx-core 或检查版本对齐）"
+            );
+            cmx_core::StepStatus::Failed
+        }
     }
 }
