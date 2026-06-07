@@ -106,12 +106,26 @@ impl RegistryAwareDiscover {
                     updated,
                     removed,
                 };
-                if let Err(e) = tx.try_broadcast(change) {
-                    tracing::warn!(
-                        target: "cmx_rpc",
-                        error = %e,
-                        "实例变更广播失败: 通道已满或无接收者"
-                    );
+                match tx.try_broadcast(change) {
+                    Ok(_) => {}
+                    Err(async_broadcast::TrySendError::Full(_)) => {
+                        tracing::error!(
+                            target: "cmx_rpc",
+                            "实例变更广播失败: 通道已满，事件已丢失（考虑增大 discover_channel_capacity）"
+                        );
+                    }
+                    Err(async_broadcast::TrySendError::Inactive(_)) => {
+                        tracing::trace!(
+                            target: "cmx_rpc",
+                            "实例变更广播跳过: 无活跃接收者（启动期正常）"
+                        );
+                    }
+                    Err(async_broadcast::TrySendError::Closed(_)) => {
+                        tracing::warn!(
+                            target: "cmx_rpc",
+                            "实例变更广播失败: 通道已关闭"
+                        );
+                    }
                 }
             }),
         );
