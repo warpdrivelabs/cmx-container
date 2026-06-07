@@ -10,14 +10,50 @@
 //! 之间的双向转换。
 
 use async_trait::async_trait;
-use nacos_sdk::api::naming::{NamingServiceBuilder, ServiceInstance as NacosServiceInstance};
+use nacos_sdk::api::naming::{
+    NamingChangeEvent, NamingEventListener, NamingServiceBuilder,
+    ServiceInstance as NacosServiceInstance,
+};
 use nacos_sdk::api::props::ClientProps;
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 use tracing::info;
 
 use crate::config::NacosNamingConfig;
 use crate::error::RegistryError;
 
-use super::trait_rs::{ServiceInstance, ServiceRegistry};
+use super::instance_cache::ServiceInstanceCache;
+use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
+
+/// Nacos 服务实例变更监听器。
+///
+/// 实现 nacos-sdk 的 [`NamingEventListener`] trait，
+/// 当收到实例变更事件时更新本地缓存。
+struct NacosInstanceListener {
+    service_name: String,
+    cache: Arc<ServiceInstanceCache>,
+}
+
+impl NamingEventListener for NacosInstanceListener {
+    fn event(&self, event: Arc<NamingChangeEvent>) {
+        let instances: Vec<ServiceInstance> = event
+            .instances
+            .as_ref()
+            .map(|v| {
+                v.iter()
+                    .filter(|i| i.healthy)
+                    .map(convert_from_nacos_instance)
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.cache.update(&self.service_name, instances);
+        info!(
+            service_name = %self.service_name,
+            count = event.instances.as_ref().map(|v| v.len()).unwrap_or(0),
+            "服务实例变更，缓存已更新"
+        );
+    }
+}
 
 /// Nacos 注册中心实现。
 ///
@@ -26,6 +62,10 @@ use super::trait_rs::{ServiceInstance, ServiceRegistry};
 pub struct NacosRegistry {
     /// nacos-sdk 命名服务客户端。
     naming: nacos_sdk::api::naming::NamingService,
+    /// 服务实例缓存。
+    cache: Arc<ServiceInstanceCache>,
+    /// 已注册 Nacos 监听器的服务名称集合。
+    registered_listeners: RwLock<HashSet<String>>,
 }
 
 impl NacosRegistry {
@@ -33,16 +73,19 @@ impl NacosRegistry {
     ///
     /// 构造 `ClientProps` 并构建 `NamingService` 客户端。
     /// 如配置了用户名和密码则启用认证。
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - Nacos 命名服务配置。
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(NacosRegistry)` - 初始化成功。
-    /// * `Err(RegistryError::InitFailed)` - nacos-sdk 客户端构建失败。
+    #[deprecated(since = "0.1.8", note = "请使用 new_with_cache() 以支持服务实例缓存")]
     pub async fn new(config: &NacosNamingConfig) -> Result<Self, RegistryError> {
+        let cache = Arc::new(ServiceInstanceCache::new());
+        Self::new_with_cache(config, cache).await
+    }
+
+    /// 创建带外部缓存的 Nacos 注册中心实例。
+    ///
+    /// 允许外部共享同一个缓存实例（例如通过 `GlobalServiceInstanceCache`）。
+    pub async fn new_with_cache(
+        config: &NacosNamingConfig,
+        cache: Arc<ServiceInstanceCache>,
+    ) -> Result<Self, RegistryError> {
         let mut client_props = ClientProps::new()
             .server_addr(&config.server_addr)
             .namespace(&config.namespace)
@@ -53,8 +96,6 @@ impl NacosRegistry {
             client_props = client_props.auth_username(username).auth_password(password);
         }
 
-        // nacos-sdk 0.8 中 `NamingServiceBuilder::build` 为 async，
-        // 必须先 `.await` 取得 `Result`，再进行错误转换。
         let naming = NamingServiceBuilder::new(client_props)
             .build()
             .await
@@ -62,13 +103,15 @@ impl NacosRegistry {
 
         info!("Nacos 命名服务初始化成功: {}", config.server_addr);
 
-        Ok(Self { naming })
+        Ok(Self {
+            naming,
+            cache,
+            registered_listeners: RwLock::new(HashSet::new()),
+        })
     }
 }
 
 /// 将 cmx-container 的 [`ServiceInstance`] 转换为 nacos-sdk 的 `NacosServiceInstance`。
-///
-/// 注意：Nacos SDK 的 `port` 字段为 `i32`，需要从 `u16` 转换。
 fn convert_to_nacos_instance(instance: &ServiceInstance) -> NacosServiceInstance {
     NacosServiceInstance {
         ip: instance.ip.clone(),
@@ -84,9 +127,6 @@ fn convert_to_nacos_instance(instance: &ServiceInstance) -> NacosServiceInstance
 }
 
 /// 将 nacos-sdk 的 `NacosServiceInstance` 转换为 cmx-container 的 [`ServiceInstance`]。
-///
-/// 注意：Nacos SDK 不提供 `group_name` 字段，转换后该字段为 `None`；
-/// `port` 从 `i32` 截断为 `u16`。
 fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> ServiceInstance {
     ServiceInstance {
         ip: nacos_instance.ip.clone(),
@@ -103,7 +143,6 @@ fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> Service
 
 #[async_trait]
 impl ServiceRegistry for NacosRegistry {
-    /// 注册服务实例到 Nacos。
     async fn register(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
         let nacos_instance = convert_to_nacos_instance(instance);
         self.naming
@@ -125,7 +164,6 @@ impl ServiceRegistry for NacosRegistry {
         Ok(())
     }
 
-    /// 从 Nacos 注销服务实例。
     async fn deregister(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
         let nacos_instance = convert_to_nacos_instance(instance);
         self.naming
@@ -141,9 +179,6 @@ impl ServiceRegistry for NacosRegistry {
         Ok(())
     }
 
-    /// 查询健康的服务实例列表。
-    ///
-    /// 使用 `select_instances` 时启用健康过滤（`healthy = true`）和订阅模式（`subscribe = true`）。
     async fn query_instances(
         &self,
         service_name: &str,
@@ -165,8 +200,55 @@ impl ServiceRegistry for NacosRegistry {
         Ok(instances.iter().map(convert_from_nacos_instance).collect())
     }
 
-    /// Nacos 实现始终视为已启用。
     fn is_enabled(&self) -> bool {
         true
+    }
+
+    async fn subscribe_instances(
+        &self,
+        service_name: &str,
+        callback: InstanceChangeCallback,
+    ) -> Result<(), RegistryError> {
+        self.cache.subscribe(service_name, callback);
+
+        // 首次拉取
+        let instances = self.query_instances(service_name, None, Vec::new()).await?;
+        self.cache.update(service_name, instances);
+
+        // 注册 Nacos 监听器（每个 service_name 只注册一次）
+        if !self
+            .registered_listeners
+            .read()
+            .unwrap()
+            .contains(service_name)
+        {
+            let listener = Arc::new(NacosInstanceListener {
+                service_name: service_name.to_string(),
+                cache: self.cache.clone(),
+            });
+            self.naming
+                .subscribe(service_name.to_string(), None, Vec::new(), listener)
+                .await
+                .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
+            self.registered_listeners
+                .write()
+                .unwrap()
+                .insert(service_name.to_string());
+        }
+
+        Ok(())
+    }
+
+    fn get_cached_instances(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
+        self.cache.get(service_name)
+    }
+
+    async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
+        let (services, _count) = self
+            .naming
+            .get_service_list(1, 1000, None)
+            .await
+            .map_err(|e| RegistryError::QueryFailed(format!("获取服务列表失败: {}", e)))?;
+        Ok(services)
     }
 }

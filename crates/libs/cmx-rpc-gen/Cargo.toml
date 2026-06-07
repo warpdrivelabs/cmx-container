@@ -1,0 +1,16 @@
+[package]
+name = "cmx-rpc-gen"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+# RPC 框架代码生成
+volo-build = { workspace = true }
+
+[dependencies]
+# gRPC 框架
+volo-grpc = { workspace = true }
+# RPC 框架
+volo = { workspace = true }
+# IDL 编译框架
+pilota = { workspace = true }

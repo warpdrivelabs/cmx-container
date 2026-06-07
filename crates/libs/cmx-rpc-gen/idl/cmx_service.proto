@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package cmx;
+
+// 服务编排 gRPC 服务
+service CmxServiceOrchestrator {
+  // 执行服务编排（对应 POST /api/service/execute）
+  rpc ExecuteService(ExecuteServiceRequest) returns (ExecuteServiceResponse);
+  // 调用插件函数（对应 POST /api/service/call）
+  rpc CallFunction(CallFunctionRequest) returns (CallFunctionResponse);
+}
+
+message ExecuteServiceRequest {
+  string service_key = 1;
+  string input = 2;
+  bool include_steps = 3;
+  bool debug = 4;
+  optional string debug_node_id = 5;
+  map<string, string> debug_params = 6;
+}
+
+message ExecutionStep {
+  string node_id = 1;
+  string node_name = 2;
+  string node_type = 3;
+  string status = 4;
+  optional string output = 5;
+  uint64 elapsed_us = 6;
+  optional string error = 7;
+  optional string previous_output = 8;
+}
+
+message OrchestrationError {
+  string message = 1;
+}
+
+message ExecuteServiceResponse {
+  bool success = 1;
+  optional string output = 2;
+  repeated ExecutionStep steps = 3;
+  uint64 total_elapsed_us = 4;
+  optional OrchestrationError error = 5;
+}
+
+message CallFunctionRequest {
+  string plugin_id = 1;
+  string function_name = 2;
+  string input = 3;
+  optional string initial_input = 4;
+  bool debug = 5;
+}
+
+message CallFunctionResponse {
+  bool success = 1;
+  optional string result = 2;
+  uint64 elapsed_us = 3;
+  optional string error = 4;
+}

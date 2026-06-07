@@ -20,6 +20,8 @@ members = [
     "crates/libs/cmx-plugin-sdk",
     "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-debug",
+    "crates/libs/cmx-rpc-gen",
+    "crates/libs/cmx-infra/cmx-rpc",
     "sdk/cmx-cli",
 #    "crates/tests/cmx-serde-test",
 ]
@@ -67,6 +69,10 @@ cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.8", registry = "nor
 cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.8", registry = "nora" }
 # 内部依赖 - 注册中心与配置中心
 cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.8", registry = "nora" }
+# 内部依赖 - RPC 代码生成
+cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.8", registry = "nora" }
+# 内部依赖 - RPC 框架
+cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.8", registry = "nora" }
 # 内部依赖 - 存储
 cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.8", registry = "nora" }
 # 对象存储访问层
@@ -235,6 +241,16 @@ walkdir = "2.5"
 rand = "0.8"
 # 微服务注册与配置中心
 nacos-sdk = "0.8"
+# RPC 框架代码生成
+volo-build = "0.12.2"
+# RPC 框架
+volo = "0.12"
+# gRPC 框架
+volo-grpc = "0.12"
+# IDL 编译框架
+pilota = "0.13"
+# 异步广播通道
+async-broadcast = "0.7"
 # 获取本机IP地址
 local-ip-address = "0.6"
 

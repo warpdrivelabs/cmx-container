@@ -16,12 +16,16 @@
 //! 2. 在 [`create_registry`] 函数中增加 `match` 分支。
 //! 3. 在 [`RegistryConfig`] 中新增对应配置结构。
 
+pub mod instance_cache;
+pub mod service_list_syncer;
 mod mock;
 mod nacos;
 pub mod trait_rs;
 
+pub use instance_cache::{InstanceChangeCallback, ServiceInstanceCache};
 pub use mock::MockRegistry;
 pub use nacos::NacosRegistry;
+pub use service_list_syncer::ServiceListSyncer;
 pub use trait_rs::{ServiceInstance, ServiceRegistry};
 
 use std::sync::Arc;
@@ -36,35 +40,31 @@ use crate::error::RegistryError;
 /// - `config.registry_type == "nacos"` —— 创建 `NacosRegistry`。
 /// - `config.registry_type == "mock"` —— 创建 `MockRegistry`。
 /// - 其他类型 —— 返回 [`RegistryError::UnsupportedType`]。
-///
-/// # Arguments
-///
-/// * `config` - 注册中心配置，包含启用标志、类型选择和 Nacos 连接参数。
-///
-/// # Returns
-///
-/// * `Ok(Arc<dyn ServiceRegistry>)` - 成功返回动态分发的注册中心实例。
-/// * `Err(RegistryError::UnsupportedType)` - 配置中指定了未实现的注册中心类型。
-/// * `Err(RegistryError::InitFailed)` - Nacos 客户端初始化失败。
-///
-/// # Examples
-///
-/// ```ignore
-/// use cmx_registry_config::{create_registry, RegistryConfig};
-///
-/// let config = RegistryConfig::from_env();
-/// let registry = create_registry(&config).await?;
-/// # Ok::<(), cmx_registry_config::RegistryError>(())
-/// ```
 pub async fn create_registry(config: &RegistryConfig) -> Result<Arc<dyn ServiceRegistry>, RegistryError> {
+    let (registry, _cache) = create_registry_with_cache(config).await?;
+    Ok(registry)
+}
+
+/// 根据配置创建带缓存的注册中心实例。
+///
+/// 与 [`create_registry`] 类似，但内部创建共享缓存并一并返回。
+/// 返回的缓存可配合 [`GlobalServiceInstanceCache`](crate::GlobalServiceInstanceCache) 使用。
+pub async fn create_registry_with_cache(
+    config: &RegistryConfig,
+) -> Result<(Arc<dyn ServiceRegistry>, Arc<ServiceInstanceCache>), RegistryError> {
+    let cache = Arc::new(ServiceInstanceCache::new());
+
     if !config.enabled {
-        tracing::info!("服务注册未启用，使用 MockRegistry");
-        return Ok(Arc::new(MockRegistry::new()));
+        tracing::info!("服务注册未启用，使用 MockRegistry（带缓存）");
+        return Ok((Arc::new(MockRegistry::new_with_cache(cache.clone())), cache));
     }
 
     match config.registry_type.as_str() {
-        "nacos" => Ok(Arc::new(NacosRegistry::new(&config.nacos).await?)),
-        "mock" => Ok(Arc::new(MockRegistry::new())),
+        "nacos" => {
+            let registry = NacosRegistry::new_with_cache(&config.nacos, cache.clone()).await?;
+            Ok((Arc::new(registry), cache))
+        }
+        "mock" => Ok((Arc::new(MockRegistry::new_with_cache(cache.clone())), cache)),
         other => Err(RegistryError::UnsupportedType(other.to_string())),
     }
 }

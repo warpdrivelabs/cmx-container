@@ -29,6 +29,8 @@ cmx-debug = { workspace = true }
 # cmx-nacos = { workspace = true }
 # 内部依赖 - 注册中心与配置中心
 cmx-registry-config = { workspace = true }
+# 内部依赖 - RPC 框架
+cmx-rpc = { workspace = true }
 # 内部依赖 - 存储
 cmx-storage = { workspace = true }
 # 获取本机IP地址

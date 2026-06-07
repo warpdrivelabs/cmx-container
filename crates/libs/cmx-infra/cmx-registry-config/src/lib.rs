@@ -58,6 +58,7 @@ pub mod config_center;
 pub mod config_source;
 pub mod error;
 pub mod global_config_center;
+pub mod global_instance_cache;
 pub mod global_registry;
 pub mod notifier;
 pub mod reloader;
@@ -74,4 +75,8 @@ pub use global_config_center::GlobalConfigCenter;
 pub use global_registry::GlobalRegistry;
 pub use notifier::{ChangeNotifier, ConfigChangeEvent, ConfigChangeListener, GlobalChangeNotifier};
 pub use reloader::ConfigReloader;
-pub use registry::{create_registry, MockRegistry, NacosRegistry, ServiceInstance, ServiceRegistry};
+pub use global_instance_cache::GlobalServiceInstanceCache;
+pub use registry::{
+    create_registry, create_registry_with_cache, InstanceChangeCallback, MockRegistry,
+    NacosRegistry, ServiceInstance, ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
+};

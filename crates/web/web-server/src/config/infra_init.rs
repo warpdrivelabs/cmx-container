@@ -13,9 +13,10 @@
 use std::sync::Arc;
 
 use cmx_registry_config::{
-    create_config_center, create_registry, ConfigCenter, ConfigCenterFullConfig,
-    ConfigChangeEvent, ConfigReloader, GlobalChangeNotifier, GlobalConfigCenter, GlobalRegistry,
-    RegistryConfig, RemoteConfigSource, ServiceRegistry,
+    create_config_center, create_registry_with_cache, ConfigCenter, ConfigCenterFullConfig,
+    ConfigChangeEvent, ConfigReloader, GlobalChangeNotifier, GlobalConfigCenter,
+    GlobalRegistry, GlobalServiceInstanceCache, RegistryConfig, RemoteConfigSource,
+    ServiceRegistry,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
 use tracing::{info, warn};
@@ -41,10 +42,12 @@ pub async fn init_infra() -> crate::Result<()> {
     let registry_config = RegistryConfig::from_env();
     let cc_config = ConfigCenterFullConfig::from_env();
 
-    // 通过工厂函数创建注册中心和配置中心实例。
-    let registry = create_registry(&registry_config).await.map_err(|e| {
+    // 通过工厂函数创建注册中心（带缓存）和配置中心实例。
+    let (registry, cache) = create_registry_with_cache(&registry_config).await.map_err(|e| {
         Error::ConfigError(format!("创建注册中心失败: {}", e))
     })?;
+    GlobalServiceInstanceCache::set(cache)
+        .map_err(|e| Error::ConfigError(format!("设置全局服务实例缓存失败: {}", e)))?;
     let config_center = create_config_center(&cc_config).await.map_err(|e| {
         Error::ConfigError(format!("创建配置中心失败: {}", e))
     })?;
@@ -132,7 +135,14 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
     let ip = resolve_register_ip();
 
     let registry_config = RegistryConfig::from_env();
-    let instance = registry_config.build_instance(ip.clone(), port);
+    let mut instance = registry_config.build_instance(ip.clone(), port);
+
+    // 如果 RPC 已启用，在 metadata 中添加 gRPC 端口信息。
+    if let Some(rpc) = load_rpc_config() {
+        if rpc.enabled {
+            instance.metadata.insert("grpc_port".to_string(), rpc.grpc.port.to_string());
+        }
+    }
 
     match registry.register(&instance).await {
         Ok(_) => {
@@ -142,6 +152,13 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
             warn!("服务注册失败: {}，服务仍可正常运行", e);
         }
     }
+}
+
+/// 从全局配置加载 RPC 配置。
+fn load_rpc_config() -> Option<cmx_rpc::config::RpcConfig> {
+    ConfigManager::global()
+        .get_as::<cmx_rpc::config::RpcConfig>("rpc")
+        .ok()
 }
 
 /// 设置配置变更监听。

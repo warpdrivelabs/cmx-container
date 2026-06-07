@@ -4,9 +4,12 @@
 //! 所有具体实现（Nacos、Mock、未来的 Consul/etcd）都必须实现 [`ServiceRegistry`]。
 
 use async_trait::async_trait;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::error::RegistryError;
+
+/// 服务实例变更回调类型。
+pub type InstanceChangeCallback = Arc<dyn Fn(&str, &[ServiceInstance]) + Send + Sync>;
 
 /// 服务实例信息。
 ///
@@ -101,4 +104,30 @@ pub trait ServiceRegistry: Send + Sync {
     /// * `true` - 注册中心功能已启用，可执行注册/发现。
     /// * `false` - 注册中心被禁用，所有操作应为 no-op。
     fn is_enabled(&self) -> bool;
+    /// 订阅服务实例变更通知。
+    ///
+    /// 默认实现为空操作（no-op），具体注册中心实现可覆盖以提供真实的推送能力。
+    async fn subscribe_instances(
+        &self,
+        service_name: &str,
+        callback: InstanceChangeCallback,
+    ) -> Result<(), RegistryError> {
+        let _ = (service_name, callback);
+        Ok(())
+    }
+
+    /// 获取缓存的服务实例列表（纯内存，无网络请求）。
+    ///
+    /// 默认实现返回 `None`，具体注册中心实现可覆盖以提供本地缓存能力。
+    fn get_cached_instances(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
+        let _ = service_name;
+        None
+    }
+
+    /// 获取注册中心中的服务名列表。
+    ///
+    /// 默认实现返回空列表，具体注册中心实现可覆盖。
+    async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
+        Ok(vec![])
+    }
 }

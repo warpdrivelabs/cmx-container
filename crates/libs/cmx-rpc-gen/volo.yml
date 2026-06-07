@@ -1,0 +1,10 @@
+entries:
+  proto:
+    filename: cmx_service_orchestrator.rs
+    protocol: protobuf
+    services:
+      - idl:
+          source: local
+          path: idl/cmx_service.proto
+          includes:
+            - idl

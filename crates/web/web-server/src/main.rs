@@ -12,7 +12,7 @@ use config::web_config;
 
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
-use crate::config::{init_cache, init_datasources, init_infra, init_plugins, init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra};
+use crate::config::{init_cache, init_datasources, init_infra, init_plugins, init_rpc, init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra};
 use cmx_api::middleware::{cors_layer, mw_context_resolver, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -129,6 +129,12 @@ async fn main() -> Result<()> {
     init_plugins().await?;
     init_service_invoker().await?;
 
+    // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
+    let grpc_port = init_rpc(
+        cmx_traits::GlobalServiceInvoker::get().clone(),
+        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+    ).await?;
+
     // 构建完整的 AppState，注入各子系统的 trait 实例
     let app_state = CmxAppState::new()
         .with_plugin_query(cmx_plugin::GlobalPluginManager::get_as_plugin_query())
@@ -202,6 +208,9 @@ async fn main() -> Result<()> {
     info!("   (配置端口：{})", server_port);
     info!("   静态文件目录：{}", web_config.web_folder);
     info!("   日志目录：{}", log_dir);
+    if let Some(port) = grpc_port {
+        info!("   gRPC 端口：{}", port);
+    }
     info!("{}", "-".repeat(60));
 
     axum::serve(listener, routes_all.into_make_service())

@@ -4,32 +4,42 @@
 //! 所有操作均在内存中维护，不涉及任何网络 IO。
 
 use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use tracing::info;
 
 use crate::error::RegistryError;
 
-use super::trait_rs::{ServiceInstance, ServiceRegistry};
+use super::instance_cache::ServiceInstanceCache;
+use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 
 /// Mock 注册中心。
 ///
-/// 内存级实现，使用 `tokio::sync::RwLock<Vec<ServiceInstance>>` 维护已注册实例列表。
+/// 内存级实现，使用 `std::sync::RwLock<Vec<ServiceInstance>>` 维护已注册实例列表。
 /// 适用于本地开发和单元测试，不持久化、重启即丢失。
 pub struct MockRegistry {
     /// 已注册实例列表，多个 Mock 共享同一份数据通过 `Arc` 共享。
-    registered: Arc<RwLock<Vec<ServiceInstance>>>,
+    registered: RwLock<Vec<ServiceInstance>>,
+    /// 服务实例缓存。
+    cache: Arc<ServiceInstanceCache>,
 }
 
 impl MockRegistry {
     /// 创建 Mock 注册中心。
-    ///
-    /// # Returns
-    ///
-    /// 返回初始为空的 `MockRegistry` 实例。
+    #[deprecated(since = "0.1.8", note = "请使用 new_with_cache() 以支持服务实例缓存")]
     pub fn new() -> Self {
         Self {
-            registered: Arc::new(RwLock::new(Vec::new())),
+            registered: RwLock::new(Vec::new()),
+            cache: Arc::new(ServiceInstanceCache::new()),
+        }
+    }
+
+    /// 创建带外部缓存的 Mock 注册中心。
+    ///
+    /// 允许外部共享同一个缓存实例（例如通过 `GlobalServiceInstanceCache`）。
+    pub fn new_with_cache(cache: Arc<ServiceInstanceCache>) -> Self {
+        Self {
+            registered: RwLock::new(Vec::new()),
+            cache,
         }
     }
 }
@@ -37,30 +47,34 @@ impl MockRegistry {
 impl Default for MockRegistry {
     /// 返回默认（空）Mock 注册中心。
     fn default() -> Self {
-        Self::new()
+        Self::new_with_cache(Arc::new(ServiceInstanceCache::new()))
     }
 }
 
 #[async_trait]
 impl ServiceRegistry for MockRegistry {
-    /// 注册服务实例：追加到内部列表尾部。
+    /// 注册服务实例：追加到内部列表尾部，并更新缓存。
     async fn register(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
-        self.registered.write().await.push(instance.clone());
+        self.registered.write().unwrap().push(instance.clone());
         info!(
             "[MockRegistry] 注册服务: {}:{} ({})",
             instance.ip, instance.port, instance.service_name
         );
+        self.refresh_cache(&instance.service_name);
         Ok(())
     }
 
-    /// 注销服务实例：移除 `ip` 和 `port` 同时匹配的实例。
+    /// 注销服务实例：移除 `ip` 和 `port` 同时匹配的实例，并更新缓存。
     async fn deregister(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
-        let mut registered = self.registered.write().await;
+        let mut registered = self.registered.write().unwrap();
         registered.retain(|i| !(i.ip == instance.ip && i.port == instance.port));
         info!(
             "[MockRegistry] 注销服务: {}:{} ({})",
             instance.ip, instance.port, instance.service_name
         );
+        let service_name = instance.service_name.clone();
+        drop(registered);
+        self.refresh_cache(&service_name);
         Ok(())
     }
 
@@ -73,7 +87,7 @@ impl ServiceRegistry for MockRegistry {
         _group_name: Option<&str>,
         _clusters: Vec<String>,
     ) -> Result<Vec<ServiceInstance>, RegistryError> {
-        let registered = self.registered.read().await;
+        let registered = self.registered.read().unwrap();
         let result: Vec<ServiceInstance> = registered
             .iter()
             .filter(|i| i.service_name == service_name)
@@ -85,5 +99,47 @@ impl ServiceRegistry for MockRegistry {
     /// Mock 实现始终视为已启用。
     fn is_enabled(&self) -> bool {
         true
+    }
+
+    /// 订阅服务实例变更通知。
+    async fn subscribe_instances(
+        &self,
+        service_name: &str,
+        callback: InstanceChangeCallback,
+    ) -> Result<(), RegistryError> {
+        self.cache.subscribe(service_name, callback);
+        // 首次拉取
+        let instances = self.query_instances(service_name, None, Vec::new()).await?;
+        self.cache.update(service_name, instances);
+        Ok(())
+    }
+
+    /// 获取缓存的服务实例列表（纯内存，无网络请求）。
+    fn get_cached_instances(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
+        self.cache.get(service_name)
+    }
+
+    async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
+        let registered = self.registered.read().unwrap();
+        let mut names: Vec<String> = registered
+            .iter()
+            .map(|i| i.service_name.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
+    }
+}
+
+impl MockRegistry {
+    /// 根据内部 registered 列表刷新指定服务的缓存。
+    fn refresh_cache(&self, service_name: &str) {
+        let registered = self.registered.read().unwrap();
+        let instances: Vec<ServiceInstance> = registered
+            .iter()
+            .filter(|i| i.service_name == service_name)
+            .cloned()
+            .collect();
+        self.cache.update(service_name, instances);
     }
 }

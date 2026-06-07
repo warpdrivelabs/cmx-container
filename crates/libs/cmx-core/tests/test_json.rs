@@ -34,6 +34,7 @@ struct Settings {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
     use super::*;
 
     #[test]
@@ -398,5 +399,21 @@ mod tests {
 
         let slice = &items[1..4];
         assert_eq!(slice.len(), 3);
+    }
+
+    #[test]
+    fn test_yqs (){
+        let value: Value = serde_json::Value::String("1".to_string());
+        assert_eq!(value.to_string(),"\"1\"");
+
+        let value: Value = serde_json::from_str("\"1\"").unwrap();
+        assert_eq!(value.to_string(),"\"1\"");
+
+        let value_number: Value = json!(12.5);
+        assert_eq!(value_number.to_string(), "12.5");
+        let value: Value = serde_json::from_str( "12.5").unwrap();
+        assert_eq!(value_number, value);
+
+
     }
 }

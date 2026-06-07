@@ -29,6 +29,7 @@ pub mod service_storage;
 pub mod service_invoker;
 pub mod global_service_invoker;
 pub mod event_bus;
+pub mod rpc_client;
 
 // 统一导出
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
@@ -43,3 +44,4 @@ pub use service_storage::{ServiceStorage, SaveServiceVersionParams};
 pub use service_invoker::{ServiceInvoker, ServiceInvokeOptions};
 pub use global_service_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError};
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};
+pub use rpc_client::{RpcClient, RpcError, FunctionCallResult};
