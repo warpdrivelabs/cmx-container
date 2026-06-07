@@ -144,10 +144,20 @@ fn execution_step_to_proto(step: cmx_core::ExecutionStep) -> ExecutionStep {
     pb.node_id = step.node_id.into();
     pb.node_name = step.node_name.into();
     pb.node_type = step.node_type.into();
-    pb.status = format!("{:?}", step.status).into();
+    pb.status = step_status_to_str(&step.status).into();
     pb.output = step.output.map(|v| v.to_string().into());
     pb.elapsed_us = step.elapsed_us;
     pb.error = step.error.map(|s| s.into());
     pb.previous_output = step.previous_output.map(|v| v.to_string().into());
     pb
+}
+
+/// 将 StepStatus 转换为稳定的字符串表示，避免依赖 Debug 格式
+fn step_status_to_str(status: &cmx_core::StepStatus) -> &'static str {
+    match status {
+        cmx_core::StepStatus::Success => "Success",
+        cmx_core::StepStatus::Failed => "Failed",
+        cmx_core::StepStatus::Skipped => "Skipped",
+        cmx_core::StepStatus::DebugPaused => "DebugPaused",
+    }
 }

@@ -285,9 +285,13 @@ warmup_services = []
 [rpc.grpc]
 # gRPC 监听端口
 port = 9090
-# 调用超时时间（毫秒，可选，默认 5000）
+# RPC 调用超时时间（毫秒，可选，默认 5000），通过 volo rpc_timeout 设置
 timeout_ms = 5000
-# 重试次数（可选，默认 0）
+# 连接超时时间（毫秒，可选，默认 3000），通过 volo connect_timeout 设置
+connect_timeout_ms = 3000
+# 重试次数（可选，默认 0，仅对可重试错误重试：UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED/ABORTED）
 retry_count = 0
-# 连接池大小（可选，默认 8）
-pool_size = 4
+# 默认服务分组（可选，None 表示不按分组过滤，用于多机房/多 region 部署）
+# default_group = "DEFAULT_GROUP"
+# 默认集群列表（可选，空表示不过滤，用于多机房/多 region 部署）
+# default_clusters = []

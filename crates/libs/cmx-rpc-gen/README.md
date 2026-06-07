@@ -57,6 +57,8 @@ cmx-rpc-gen
 
 ### 生成代码模块
 
+所有生成类型位于 `cmx_rpc_gen::cmx::cmx_service_orchestrator` 模块下：
+
 ```
 cmx::cmx_service_orchestrator
 ├── ExecuteServiceRequest             # 服务编排执行请求
@@ -66,7 +68,10 @@ cmx::cmx_service_orchestrator
 ├── CallFunctionRequest               # 插件函数调用请求
 ├── CallFunctionResponse              # 插件函数调用响应
 ├── CmxServiceOrchestrator            # gRPC 服务 trait
-└── CmxServiceOrchestratorClient      # gRPC 客户端
+├── CmxServiceOrchestratorClient      # gRPC 客户端
+├── CmxServiceOrchestratorServer      # gRPC 服务端注册器
+├── CmxServiceOrchestratorRequestRecv # gRPC 请求接收类型
+└── CmxServiceOrchestratorResponseSend # gRPC 响应发送类型
 ```
 
 ## 使用指南
@@ -179,38 +184,44 @@ struct MyServiceImpl {
 }
 
 impl CmxServiceOrchestrator for MyServiceImpl {
-    async fn execute_service(
+    fn execute_service(
         &self,
         req: Request<ExecuteServiceRequest>,
-    ) -> Result<Response<ExecuteServiceResponse>, Status> {
+    ) -> impl std::future::Future<
+        Output = Result<Response<ExecuteServiceResponse>, Status>,
+    > + Send {
         let inner = req.into_inner();
+        async move {
+            // 处理业务逻辑
+            let response = ExecuteServiceResponse {
+                success: true,
+                output: Some(r#"{"result": "ok"}"#.into()),
+                steps: vec![],
+                total_elapsed_us: 100,
+                error: None,
+            };
 
-        // 处理业务逻辑
-        let response = ExecuteServiceResponse {
-            success: true,
-            output: Some(r#"{"result": "ok"}"#.into()),
-            steps: vec![],
-            total_elapsed_us: 100,
-            error: None,
-        };
-
-        Ok(Response::new(response))
+            Ok(Response::new(response))
+        }
     }
 
-    async fn call_function(
+    fn call_function(
         &self,
         req: Request<CallFunctionRequest>,
-    ) -> Result<Response<CallFunctionResponse>, Status> {
+    ) -> impl std::future::Future<
+        Output = Result<Response<CallFunctionResponse>, Status>,
+    > + Send {
         let inner = req.into_inner();
+        async move {
+            let response = CallFunctionResponse {
+                success: true,
+                result: Some("function result".into()),
+                elapsed_us: 50,
+                error: None,
+            };
 
-        let response = CallFunctionResponse {
-            success: true,
-            result: Some("function result".into()),
-            elapsed_us: 50,
-            error: None,
-        };
-
-        Ok(Response::new(response))
+            Ok(Response::new(response))
+        }
     }
 }
 ```
@@ -230,7 +241,7 @@ let request = ExecuteServiceRequest {
     input: "{}".into(),
     ..Default::default()
 };
-let response = client.execute_service(Request::new(request)).await?;
+let response = client.execute_service(request).await?;
 
 // 调用 CallFunction
 let request = CallFunctionRequest {
@@ -239,7 +250,7 @@ let request = CallFunctionRequest {
     input: "{}".into(),
     ..Default::default()
 };
-let response = client.call_function(Request::new(request)).await?;
+let response = client.call_function(request).await?;
 ```
 
 ### 三、Protobuf IDL 定义
@@ -250,6 +261,7 @@ let response = client.call_function(Request::new(request)).await?;
 syntax = "proto3";
 package cmx;
 
+// 服务编排 gRPC 服务
 service CmxServiceOrchestrator {
   // 执行服务编排（对应 POST /api/service/execute）
   rpc ExecuteService(ExecuteServiceRequest) returns (ExecuteServiceResponse);
@@ -262,43 +274,62 @@ service CmxServiceOrchestrator {
 
 **ExecuteServiceRequest：**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `service_key` | `string` | 服务标识 |
-| `input` | `string` | 输入数据（JSON 字符串） |
-| `include_steps` | `bool` | 是否包含执行步骤详情 |
-| `debug` | `bool` | 是否启用调试模式 |
-| `debug_node_id` | `optional string` | 调试目标节点 ID |
-| `debug_params` | `map<string, string>` | 调试参数 |
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `service_key` | `string` | 1 | 服务标识 |
+| `input` | `string` | 2 | 输入数据（JSON 字符串） |
+| `include_steps` | `bool` | 3 | 是否包含执行步骤详情 |
+| `debug` | `bool` | 4 | 是否启用调试模式 |
+| `debug_node_id` | `optional string` | 5 | 调试目标节点 ID |
+| `debug_params` | `map<string, string>` | 6 | 调试参数 |
+
+**ExecutionStep：**
+
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `node_id` | `string` | 1 | 节点 ID |
+| `node_name` | `string` | 2 | 节点名称 |
+| `node_type` | `string` | 3 | 节点类型 |
+| `status` | `string` | 4 | 执行状态（Success/Failed/Skipped/DebugPaused） |
+| `output` | `optional string` | 5 | 输出（JSON 字符串） |
+| `elapsed_us` | `uint64` | 6 | 耗时（微秒） |
+| `error` | `optional string` | 7 | 错误信息 |
+| `previous_output` | `optional string` | 8 | 前置节点输出（JSON 字符串） |
+
+**OrchestrationError：**
+
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `message` | `string` | 1 | 错误消息 |
 
 **ExecuteServiceResponse：**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `success` | `bool` | 是否执行成功 |
-| `output` | `optional string` | 输出结果（JSON 字符串） |
-| `steps` | `repeated ExecutionStep` | 执行步骤列表 |
-| `total_elapsed_us` | `uint64` | 总耗时（微秒） |
-| `error` | `optional OrchestrationError` | 编排错误信息 |
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `success` | `bool` | 1 | 是否执行成功 |
+| `output` | `optional string` | 2 | 输出结果（JSON 字符串） |
+| `steps` | `repeated ExecutionStep` | 3 | 执行步骤列表 |
+| `total_elapsed_us` | `uint64` | 4 | 总耗时（微秒） |
+| `error` | `optional OrchestrationError` | 5 | 编排错误信息 |
 
 **CallFunctionRequest：**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `plugin_id` | `string` | 插件 ID |
-| `function_name` | `string` | 函数名 |
-| `input` | `string` | 输入数据（JSON 字符串） |
-| `initial_input` | `optional string` | 初始输入 |
-| `debug` | `bool` | 是否启用调试模式 |
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `plugin_id` | `string` | 1 | 插件 ID |
+| `function_name` | `string` | 2 | 函数名 |
+| `input` | `string` | 3 | 输入数据（JSON 字符串） |
+| `initial_input` | `optional string` | 4 | 初始输入 |
+| `debug` | `bool` | 5 | 是否启用调试模式 |
 
 **CallFunctionResponse：**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `success` | `bool` | 是否调用成功 |
-| `result` | `optional string` | 返回结果（JSON 字符串） |
-| `elapsed_us` | `uint64` | 耗时（微秒） |
-| `error` | `optional string` | 错误信息 |
+| 字段 | 类型 | 序号 | 说明 |
+|------|------|------|------|
+| `success` | `bool` | 1 | 是否调用成功 |
+| `result` | `optional string` | 2 | 返回结果（JSON 字符串） |
+| `elapsed_us` | `uint64` | 3 | 耗时（微秒） |
+| `error` | `optional string` | 4 | 错误信息 |
 
 ### 四、修改 IDL 定义
 
@@ -339,11 +370,54 @@ entries:
             - idl
 ```
 
-### 五、与其他 Crate 的关系
+#### 4.3 构建脚本
+
+`build.rs` 使用 `volo_build::Builder::protobuf()` 生成代码：
 
 ```rust
-// cmx-rpc-gen 是底层依赖，被以下 crate 使用：
+fn main() {
+    volo_build::Builder::protobuf()
+        .write()
+        .expect("volo-build 失败：请确认 idl/cmx_service.proto 与 volo.yml 配置正确");
+}
+```
 
+### 五、数据序列化约定
+
+#### 5.1 JSON 字符串传输
+
+`input`/`output`/`result` 字段使用 `string` 类型传输 JSON 字符串，这是 gRPC 传输复杂 JSON 结构的常见做法：
+
+```
+业务层 serde_json::Value → to_string() → protobuf string → 传输 → protobuf string → from_str() → Value
+```
+
+#### 5.2 步骤状态字符串
+
+`ExecutionStep.status` 字段使用字符串表示，取值范围：
+
+| 状态值 | 说明 |
+|--------|------|
+| `Success` | 执行成功 |
+| `Failed` | 执行失败 |
+| `Skipped` | 跳过 |
+| `DebugPaused` | 调试暂停 |
+
+### 六、与其他 Crate 的关系
+
+```
+cmx-traits (定义 RpcClient/ServiceInvoker/RuntimeInvoker trait)
+    ↓
+cmx-rpc (实现 RpcClient，使用 cmx-rpc-gen 的类型)
+    ↓
+cmx-rpc-gen (提供 protobuf 生成代码)
+    ↓
+volo-build + volo-grpc + pilota (底层 gRPC 框架)
+```
+
+**使用场景：**
+
+```rust
 // 1. cmx-rpc — RPC 框架核心库
 //    使用 CmxServiceOrchestratorClient 进行 gRPC 调用
 //    使用 CmxServiceOrchestrator trait 实现服务端
@@ -352,12 +426,8 @@ entries:
 // 2. 其他需要 gRPC 类型的 crate
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::*;
 
-// 典型依赖关系：
-// cmx-traits (定义 RpcClient trait)
-//     ↓
-// cmx-rpc (实现 RpcClient，使用 cmx-rpc-gen 的类型)
-//     ↓
-// cmx-rpc-gen (提供 protobuf 生成代码)
+// 3. web-server 集成
+//    通过 cmx-rpc 的 init_rpc() 一键初始化客户端和服务端
 ```
 
 ## 常见问题
@@ -377,3 +447,7 @@ use cmx_rpc_gen::cmx::cmx_service_orchestrator::*;
 ### Q: input 字段为什么使用 string 而不是嵌套消息？
 
 **A**: `input` 字段使用 `string` 类型传输 JSON 字符串，这是 gRPC 传输复杂 JSON 结构的常见做法。客户端将 `serde_json::Value` 序列化为 JSON 字符串传输，服务端反序列化回 `Value`。这避免了 protobuf 缺少原生 JSON 值类型的限制。
+
+### Q: 生成的类型路径是什么？
+
+**A**: 所有生成类型通过 `cmx_rpc_gen::cmx::cmx_service_orchestrator` 路径访问。这对应 proto 文件中的 `package cmx` 和 `service CmxServiceOrchestrator`。

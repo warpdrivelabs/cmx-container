@@ -44,3 +44,4 @@ pub use service_storage::{ServiceStorage, SaveServiceVersionParams};
 pub use service_invoker::{ServiceInvoker, ServiceInvokeOptions};
 pub use global_service_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError};
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};
+pub use rpc_client::{RpcClient, RpcError, FunctionCallResult};

@@ -18,22 +18,14 @@ use crate::registry::trait_rs::ServiceRegistry;
 /// 全局注册中心错误类型。
 ///
 /// 用于 `set` 操作的失败情形（如重复初始化），包含人类可读的错误描述。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error("{0}")]
 pub struct GlobalRegistryError(&'static str);
 
 impl GlobalRegistryError {
     /// 表示注册中心已被设置过，重复设置会触发该错误。
     pub const ALREADY_SET: Self = GlobalRegistryError("注册中心已初始化，无法重复设置");
 }
-
-impl std::fmt::Display for GlobalRegistryError {
-    /// 输出错误描述字符串。
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0)
-    }
-}
-
-impl std::error::Error for GlobalRegistryError {}
 
 /// 全局注册中心存储器。
 ///

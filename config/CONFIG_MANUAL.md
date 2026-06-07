@@ -671,6 +671,83 @@ URL 直连模式配置（`mode = "url"` 时生效）。每个中心对应一个�
 
 ---
 
+## RPC 配置
+
+### `[rpc]`
+
+#### `enabled`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否启用 RPC 功能
+
+#### `protocol`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"grpc"`
+- **说明**: RPC 通信协议，目前仅支持 `"grpc"`
+
+#### `warmup_services`
+
+- **类型**: Array\<String\>
+- **必需**: 否
+- **默认值**: `[]`
+- **说明**: 启动时预先发现的服务名列表，对这些服务会主动拉取实例并缓存
+
+#### `service_sync_interval_secs`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: 服务列表定时同步间隔（秒），0 表示禁用定时同步
+
+### `[rpc.grpc]`
+
+#### `port`
+
+- **类型**: Integer
+- **必需**: 是
+- **说明**: gRPC Server 监听端口
+
+#### `timeout_ms`
+
+- **类型**: Integer (毫秒)
+- **必需**: 否
+- **默认值**: `5000`
+- **说明**: RPC 调用超时时间，通过 volo `rpc_timeout` 设置
+
+#### `connect_timeout_ms`
+
+- **类型**: Integer (毫秒)
+- **必需**: 否
+- **默认值**: `3000`
+- **说明**: 连接超时时间，通过 volo `connect_timeout` 设置
+
+#### `retry_count`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `0`
+- **说明**: 重试次数，仅对可重试错误重试（`UNAVAILABLE`/`DEADLINE_EXCEEDED`/`RESOURCE_EXHAUSTED`/`ABORTED`），业务错误不会重试。重试带有指数退避（50ms → 800ms）和总时间预算控制
+
+#### `default_group`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `None`
+- **说明**: 默认服务分组，用于 `query_instances` 过滤。`None` 表示不按分组过滤。多机房/多 region 部署时使用
+
+#### `default_clusters`
+
+- **类型**: Array\<String\>
+- **必需**: 否
+- **默认值**: `[]`
+- **说明**: 默认集群列表，用于 `query_instances` 过滤。空表示不过滤。多机房/多 region 部署时使用
+
+---
+
 ## 配置优先级
 
 配置优先级从高到低：

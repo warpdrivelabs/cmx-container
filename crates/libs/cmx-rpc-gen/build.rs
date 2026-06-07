@@ -1,3 +1,5 @@
 fn main() {
-    volo_build::Builder::protobuf().write().unwrap();
+    volo_build::Builder::protobuf()
+        .write()
+        .expect("volo-build 失败：请确认 idl/cmx_service.proto 与 volo.yml 配置正确");
 }

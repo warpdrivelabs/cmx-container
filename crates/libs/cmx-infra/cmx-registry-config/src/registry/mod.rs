@@ -19,11 +19,13 @@
 pub mod instance_cache;
 mod mock;
 mod nacos;
+pub mod service_list_syncer;
 pub mod trait_rs;
 
 pub use instance_cache::{InstanceChangeCallback, ServiceInstanceCache};
 pub use mock::MockRegistry;
 pub use nacos::NacosRegistry;
+pub use service_list_syncer::ServiceListSyncer;
 pub use trait_rs::{ServiceInstance, ServiceRegistry};
 
 use std::sync::Arc;

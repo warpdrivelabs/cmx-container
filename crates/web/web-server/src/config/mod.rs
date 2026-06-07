@@ -21,6 +21,7 @@ pub use migration::init_database_migrations;
 // pub use nacos::{init_global_config_with_nacos, shutdown_nacos};
 pub use plugins::init_plugins;
 pub use runtime::init_runtime;
+pub use rpc::init_rpc;
 pub use services::init_services;
 pub use services::init_service_invoker;
 pub use storage::init_storage;

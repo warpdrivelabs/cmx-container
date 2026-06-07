@@ -4,6 +4,7 @@
 //! 使 volo 负载均衡器能从注册中心缓存获取服务实例。
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 use async_broadcast::{Receiver, Sender, broadcast};
@@ -25,7 +26,7 @@ pub struct RegistryAwareDiscover {
     cache: Arc<ServiceInstanceCache>,
     /// 实例变更通知发送端
     change_tx: Sender<Change<FastStr>>,
-    /// 实例变更通知接收端（watch 时取出）
+    /// 实例变更通知接收端（watch 时克隆共享）
     change_rx: RwLock<Option<Receiver<Change<FastStr>>>>,
 }
 
@@ -34,8 +35,7 @@ impl Clone for RegistryAwareDiscover {
         Self {
             cache: self.cache.clone(),
             change_tx: self.change_tx.clone(),
-            // 克隆时不复制接收端，每个克隆实例独立管理
-            change_rx: RwLock::new(None),
+            change_rx: RwLock::new(self.change_rx.read().expect("change_rx 锁中毒").as_ref().cloned()),
         }
     }
 }
@@ -56,21 +56,56 @@ impl RegistryAwareDiscover {
     pub fn start_watch(&self, service_name: &str) {
         let tx = self.change_tx.clone();
         let service_name = service_name.to_string();
-        let cache = self.cache.clone();
+        let cache_for_closure = self.cache.clone();
 
         // 注册回调到 ServiceInstanceCache
-        cache.subscribe(
+        self.cache.subscribe(
             &service_name,
-            Arc::new(move |svc_name, instances| {
-                let volo_instances = instances_to_volo(instances);
+            Arc::new(move |svc_name, new_instances| {
+                let new_volo = instances_to_volo(new_instances);
+
+                // 获取旧实例列表做 diff
+                let old_volo = cache_for_closure.get(svc_name)
+                    .map(|old| instances_to_volo(&old))
+                    .unwrap_or_default();
+
+                // 计算 diff
+                let old_addrs: HashSet<_> = old_volo.iter().map(|i| i.address.clone()).collect();
+                let new_addrs: HashSet<_> = new_volo.iter().map(|i| i.address.clone()).collect();
+
+                let added: Vec<_> = new_volo.iter()
+                    .filter(|i| !old_addrs.contains(&i.address))
+                    .cloned()
+                    .collect();
+                let removed: Vec<_> = old_volo.iter()
+                    .filter(|i| !new_addrs.contains(&i.address))
+                    .cloned()
+                    .collect();
+                // updated: 地址相同但 weight/tags 变化的实例
+                let updated: Vec<_> = new_volo.iter()
+                    .filter(|new_i| {
+                        old_addrs.contains(&new_i.address) && old_volo.iter().any(|old_i| {
+                            old_i.address == new_i.address &&
+                            (old_i.weight != new_i.weight || old_i.tags != new_i.tags)
+                        })
+                    })
+                    .cloned()
+                    .collect();
+
                 let change = Change {
                     key: FastStr::new(svc_name),
-                    all: volo_instances.clone(),
-                    added: volo_instances,
-                    updated: vec![],
-                    removed: vec![],
+                    all: new_volo,
+                    added,
+                    updated,
+                    removed,
                 };
-                let _ = tx.try_broadcast(change);
+                if let Err(e) = tx.try_broadcast(change) {
+                    tracing::warn!(
+                        target: "cmx_rpc",
+                        error = %e,
+                        "实例变更广播失败: 通道已满或无接收者"
+                    );
+                }
             }),
         );
     }
@@ -81,7 +116,20 @@ fn instances_to_volo(instances: &[ServiceInstance]) -> Vec<Arc<Instance>> {
     instances
         .iter()
         .filter_map(|i| {
-            let addr: std::net::SocketAddr = format!("{}:{}", i.ip, i.port).parse().ok()?;
+            let addr: std::net::SocketAddr = match format!("{}:{}", i.ip, i.port).parse() {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "cmx_rpc",
+                        service_name = %i.service_name,
+                        ip = %i.ip,
+                        port = i.port,
+                        error = %e,
+                        "跳过地址解析失败的实例"
+                    );
+                    return None;
+                }
+            };
             Some(Arc::new(Instance {
                 address: Address::Ip(addr),
                 weight: (i.weight * 100.0) as u32,
@@ -109,12 +157,14 @@ impl Discover for RegistryAwareDiscover {
             match self.cache.get(&service_name) {
                 Some(instances) if !instances.is_empty() => Ok(instances_to_volo(&instances)),
                 _ => {
-                    tracing::warn!(
+                    tracing::debug!(
                         target: "cmx_rpc",
                         service_name = %service_name,
                         "服务实例缓存为空或未找到"
                     );
-                    Ok(vec![])
+                    Err(LoadBalanceError::Discover(
+                        format!("service not found in cache: {}", service_name).into(),
+                    ))
                 }
             }
         }
@@ -125,6 +175,10 @@ impl Discover for RegistryAwareDiscover {
     }
 
     fn watch(&self, _keys: Option<&[Self::Key]>) -> Option<Receiver<Change<Self::Key>>> {
-        self.change_rx.write().unwrap().take()
+        self.change_rx
+            .read()
+            .expect("change_rx 锁中毒")
+            .as_ref()
+            .map(|rx| rx.clone())
     }
 }
