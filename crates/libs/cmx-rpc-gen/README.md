@@ -372,15 +372,19 @@ entries:
 
 #### 4.3 构建脚本
 
-`build.rs` 使用 `volo_build::Builder::protobuf()` 生成代码：
+`build.rs` 使用 `volo_build::ConfigBuilder` 读取 `volo.yml` 配置生成代码：
 
 ```rust
 fn main() {
-    volo_build::Builder::protobuf()
+    volo_build::ConfigBuilder::default()
         .write()
         .expect("volo-build 失败：请确认 idl/cmx_service.proto 与 volo.yml 配置正确");
 }
 ```
+
+> **注意**：`ConfigBuilder` 会自动读取同目录下的 `volo.yml` 配置文件来生成代码。
+> 不要使用 `volo_build::Builder::protobuf()`，那是编程式 API，需要手动调用 `.add_service()` 指定 proto 文件，
+> 不会读取 `volo.yml`。
 
 ### 五、数据序列化约定
 
