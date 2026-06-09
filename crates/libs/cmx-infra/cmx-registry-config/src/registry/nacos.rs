@@ -182,9 +182,15 @@ impl ServiceRegistry for NacosRegistry {
     async fn query_instances(
         &self,
         service_name: &str,
-        group_name: Option<&str>,
+        mut group_name: Option<&str>,
         clusters: Vec<String>,
     ) -> Result<Vec<ServiceInstance>, RegistryError> {
+
+        if group_name.is_none() {
+            //nacos 默认组名为 DEFAULT_GROUP
+         group_name = Some("DEFAULT_GROUP");
+        }
+
         let instances = self
             .naming
             .select_instances(
