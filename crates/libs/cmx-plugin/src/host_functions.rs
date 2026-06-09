@@ -51,6 +51,11 @@ impl PluginHostFunctions {
         };
         info!("[call_plugin] 目标插件: {}, 函数: {}", req.plugin_id, req.function_name);
 
+        // 跨服务 RPC 调用
+        if let Some(ref server_name) = req.server_name {
+            return self.do_call_plugin_via_rpc(server_name, &req);
+        }
+
         let runtime = GlobalRuntime::get();
 
         let svr_ctx = SVRContext::new(
@@ -122,6 +127,11 @@ impl PluginHostFunctions {
         };
         info!("[call_service_by_key] 服务: {}", req.service_key);
 
+        // 跨服务 RPC 调用
+        if let Some(ref server_name) = req.server_name {
+            return self.do_call_service_via_rpc(server_name, &req);
+        }
+
         let invoker = GlobalServiceInvoker::get();
         let options = ServiceInvokeOptions {
             include_steps: req.include_steps.unwrap_or(false),
@@ -170,6 +180,59 @@ impl PluginHostFunctions {
     // }
 
 
+
+    /// 通过 RPC 调用远程插件函数
+    fn do_call_plugin_via_rpc(&self, server_name: &str, req: &PluginFunRequest) -> Result<Vec<u8>, HostFuncError> {
+        if !cmx_rpc::GlobalRpcClient::is_initialized() {
+            return Ok(Self::err_plugin_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
+        }
+        let rpc_client = cmx_rpc::GlobalRpcClient::get();
+        let rt = tokio::runtime::Handle::current();
+        let result = rt.block_on(async {
+            rpc_client.call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone()).await
+        });
+
+        match result {
+            Ok(call_result) => {
+                Ok(rmp_serde::to_vec(&PluginFunCallResponse {
+                    success: call_result.success,
+                    result: call_result.result,
+                    elapsed_us: Some(call_result.elapsed_us),
+                    error: call_result.error,
+                }).unwrap_or_default())
+            }
+            Err(e) => {
+                warn!("[call_plugin:rpc] RPC 调用失败: {}", e);
+                Ok(Self::err_plugin_response_msgpack(format!("RPC 调用失败: {}", e)))
+            }
+        }
+    }
+
+    /// 通过 RPC 调用远程服务编排
+    fn do_call_service_via_rpc(&self, server_name: &str, req: &CallServiceRequest) -> Result<Vec<u8>, HostFuncError> {
+        if !cmx_rpc::GlobalRpcClient::is_initialized() {
+            return Ok(Self::err_service_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
+        }
+        let rpc_client = cmx_rpc::GlobalRpcClient::get();
+        let options = ServiceInvokeOptions {
+            include_steps: req.include_steps.unwrap_or(false),
+            debug: req.debug.unwrap_or(false),
+            debug_node_id: req.debug_node_id.clone(),
+            debug_params: req.debug_params.clone(),
+        };
+        let rt = tokio::runtime::Handle::current();
+        let result = rt.block_on(async {
+            rpc_client.call_service(server_name, &req.service_key, req.input.clone(), options).await
+        });
+
+        match result {
+            Ok(response) => Ok(rmp_serde::to_vec(&response).unwrap_or_default()),
+            Err(e) => {
+                warn!("[call_service_by_key:rpc] RPC 调用失败: {}", e);
+                Ok(Self::err_service_response_msgpack(format!("RPC 调用失败: {}", e)))
+            }
+        }
+    }
 
     fn err_plugin_response_msgpack(msg: String) -> Vec<u8> {
         rmp_serde::to_vec(&PluginFunCallResponse {

@@ -26,18 +26,26 @@ cmx-container/
 │   ├── web/
 │   │   └── web-server/          # Web 服务器入口
 │   ├── libs/                    # 内部库
-│   │   ├── cmx-api/
-│   │   ├── cmx-buffer/
-│   │   ├── cmx-core/
-│   │   ├── cmx-database/
-│   │   ├── cmx-debug/
-│   │   ├── cmx-nacos/
-│   │   ├── cmx-plugin/
-│   │   ├── cmx-runtime/
-│   │   ├── cmx-service/
-│   │   ├── cmx-storage/
-│   │   ├── cmx-traits/
-│   │   └── cmx-utils/
+│   │   ├── cmx-api/             # HTTP API 层
+│   │   ├── cmx-core/            # 核心类型定义
+│   │   ├── cmx-plugin/          # 插件管理
+│   │   ├── cmx-plugin-sdk/      # WASM 插件 SDK
+│   │   ├── cmx-runtime/         # WASM 运行时
+│   │   ├── cmx-service/         # 服务编排引擎
+│   │   ├── cmx-traits/          # 跨模块 trait 接口
+│   │   ├── cmx-utils/           # 工具库
+│   │   ├── cmx-buffer/          # 缓存
+│   │   ├── cmx-database/        # 数据库
+│   │   ├── cmx-debug/           # 调试
+│   │   ├── cmx-storage/         # 文件存储
+│   │   ├── cmx-metadata/        # 元数据
+│   │   ├── cmx-infra/           # 基础设施
+│   │   │   ├── cmx-rpc/         # gRPC 通信
+│   │   │   ├── cmx-nacos/       # Nacos 注册中心
+│   │   │   ├── cmx-buffer/      # 缓存实现
+│   │   │   ├── cmx-database/    # 数据库实现
+│   │   │   └── cmx-storage/     # 存储实现
+│   │   └── cmx-rpc-gen/         # volo gRPC 代码生成
 │   └── tools/
 ├── config/                      # 配置文件
 ├── docs/                        # 文档
@@ -67,6 +75,12 @@ cargo build
 # Release 构建
 cargo build --release
 ```
+
+> **注意**：项目使用 volo-build 在编译时自动生成 gRPC 代码（`cmx-rpc-gen`）。
+> 如果遇到 `cmx_service_orchestrator.rs not found` 错误，请先清理构建缓存：
+> ```bash
+> rm -rf target/debug/build/cmx-rpc-gen-* && cargo build
+> ```
 
 ### 2. 配置
 

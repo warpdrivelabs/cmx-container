@@ -133,18 +133,26 @@ impl RegistryAwareDiscover {
 }
 
 /// 将 ServiceInstance 列表转换为 volo Instance 列表
+///
+/// 优先从 `metadata["grpc_port"]` 读取 gRPC 端口，不存在时回退到 `port`（兼容未启用 RPC 的服务）。
 fn instances_to_volo(instances: &[ServiceInstance]) -> Vec<Arc<Instance>> {
     instances
         .iter()
         .filter_map(|i| {
-            let addr: std::net::SocketAddr = match format!("{}:{}", i.ip, i.port).parse() {
+            // 优先使用 metadata 中的 grpc_port，回退到 ServiceInstance.port
+            let port = i.metadata
+                .get("grpc_port")
+                .and_then(|v| v.parse::<u16>().ok())
+                .unwrap_or(i.port);
+
+            let addr: std::net::SocketAddr = match format!("{}:{}", i.ip, port).parse() {
                 Ok(a) => a,
                 Err(e) => {
                     tracing::warn!(
                         target: "cmx_rpc",
                         service_name = %i.service_name,
                         ip = %i.ip,
-                        port = i.port,
+                        port = port,
                         error = %e,
                         "跳过地址解析失败的实例"
                     );

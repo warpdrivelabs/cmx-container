@@ -52,7 +52,7 @@ use axum::{
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery, ServiceInvokeOptions};
 use tracing::error;
 use std::sync::Arc;
 
@@ -171,6 +171,11 @@ pub async fn service_call(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<FunctionCallRequest>,
 ) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
+    // 跨服务 RPC 调用
+    if let Some(ref server_name) = req.server_name {
+        return call_function_via_rpc(server_name, &req).await;
+    }
+
     // ==================== 获取依赖组件 ====================
 
     let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
@@ -450,7 +455,14 @@ pub async fn execute_service(
     if req.service_key.clone().is_none(){
         return Ok(Json(ApiResp::fail(1, "service_key 不能为空")));
     }
-    let response = execute_service_inner(&state, &req.service_key.unwrap(), svr_ctx, options).await?;
+    let service_key = req.service_key.clone().unwrap();
+
+    // 跨服务 RPC 调用
+    if let Some(ref server_name) = req.server_name {
+        return execute_service_via_rpc(server_name, &service_key, &req).await;
+    }
+
+    let response = execute_service_inner(&state, &service_key, svr_ctx, options).await?;
 
     // 失败时返回错误码
     if !response.success {
@@ -528,8 +540,89 @@ pub async fn execute_service_by_key(
     let options = cmx_service::ExecuteOptions::new(include_steps)
         .with_debug(debug, debug_node_id, debug_params);
 
+    // 跨服务 RPC 调用
+    if let Some(ref server_name) = req.server_name {
+        return execute_service_via_rpc(server_name, &service_key, &req).await;
+    }
+
     let response = execute_service_inner(&state, &service_key, svr_ctx, options).await?;
 
+    Ok(Json(ApiResp::ok(response)))
+}
+
+// ==================== 跨服务 RPC 调用辅助函数 ====================
+
+/// 通过 RPC 调用远程插件函数
+///
+/// 当请求中指定了 `server_name` 时，通过 gRPC 将请求路由到远程服务执行。
+async fn call_function_via_rpc(
+    server_name: &str,
+    req: &FunctionCallRequest,
+) -> Result<Json<ApiResp<FunctionCallResponse>>, Error> {
+    if !cmx_rpc::GlobalRpcClient::is_initialized() {
+        return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
+    }
+    let rpc_client = cmx_rpc::GlobalRpcClient::get();
+    let result = rpc_client
+        .call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone())
+        .await
+        .map_err(|e| Error::business_error(format!("RPC 调用失败: {}", e)))?;
+
+    Ok(Json(ApiResp::ok(FunctionCallResponse {
+        success: result.success,
+        result: result.result,
+        elapsed_us: result.elapsed_us,
+        error: result.error,
+    })))
+}
+
+/// 通过 RPC 调用远程服务编排
+///
+/// 当请求中指定了 `server_name` 时，通过 gRPC 将服务编排请求路由到远程服务执行。
+async fn execute_service_via_rpc(
+    server_name: &str,
+    service_key: &str,
+    req: &ServiceExecuteRequest,
+) -> Result<Json<ApiResp<ServiceExecuteResponse>>, Error> {
+    if !cmx_rpc::GlobalRpcClient::is_initialized() {
+        return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
+    }
+    let rpc_client = cmx_rpc::GlobalRpcClient::get();
+    let options = ServiceInvokeOptions {
+        include_steps: req.include_steps.unwrap_or(false),
+        debug: req.debug.unwrap_or(false),
+        debug_node_id: req.debug_node_id.clone(),
+        debug_params: req.debug_params.clone(),
+    };
+    let result = rpc_client
+        .call_service(server_name, service_key, req.input.clone(), options)
+        .await
+        .map_err(|e| Error::business_error(format!("RPC 调用失败: {}", e)))?;
+
+    // 将 CallServiceResponse 转换为 ServiceExecuteResponse
+    let response = ServiceExecuteResponse {
+        success: result.success,
+        output: result.output,
+        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
+            node_id: s.node_id,
+            node_name: s.node_name,
+            node_type: s.node_type,
+            status: match s.status {
+                cmx_core::StepStatus::Success => "Success".to_string(),
+                cmx_core::StepStatus::Failed => "Failed".to_string(),
+                cmx_core::StepStatus::Skipped => "Skipped".to_string(),
+                cmx_core::StepStatus::DebugPaused => "DebugPaused".to_string(),
+            },
+            output: s.output,
+            elapsed_us: s.elapsed_us,
+            error: s.error,
+            previous_output: s.previous_output,
+        }).collect(),
+        total_elapsed_us: result.total_elapsed_us.unwrap_or(0),
+        error: result.error.map(|e| ServiceOrchestrationError { message: e.message }),
+        debug_triggered: None,
+        debug_prepare_result: None,
+    };
     Ok(Json(ApiResp::ok(response)))
 }
 

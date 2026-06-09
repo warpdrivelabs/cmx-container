@@ -197,4 +197,30 @@ impl HostCaller {
         }
         Ok(response)
     }
+
+    /// 调用远程服务的插件函数
+    ///
+    /// 通过 RPC 方式调用指定远程服务上的插件函数。
+    /// 本质上是 `call_plugin` 的便捷封装，自动设置 `server_name`。
+    ///
+    /// # 参数
+    /// - `server_name`: 目标服务名称（注册中心中的服务标识）
+    /// - `request`: 插件函数调用请求（会自动覆盖 server_name）
+    pub fn call_remote_plugin(server_name: &str, mut request: PluginFunRequest) -> Result<PluginFunCallResponse, PluginError> {
+        request.server_name = Some(server_name.to_string());
+        Self::call_plugin(request)
+    }
+
+    /// 调用远程服务编排
+    ///
+    /// 通过 RPC 方式执行指定远程服务上的服务编排。
+    /// 本质上是 `call_service_by_key` 的便捷封装，自动设置 `server_name`。
+    ///
+    /// # 参数
+    /// - `server_name`: 目标服务名称（注册中心中的服务标识）
+    /// - `request`: 服务调用请求（会自动覆盖 server_name）
+    pub fn call_remote_service(server_name: &str, mut request: CallServiceRequest) -> Result<CallServiceResponse, PluginError> {
+        request.server_name = Some(server_name.to_string());
+        Self::call_service_by_key(request)
+    }
 }

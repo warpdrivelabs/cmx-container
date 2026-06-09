@@ -33,7 +33,10 @@ pub struct FunctionCallRequest {
     pub initial_input: Option<serde_json::Value>,
     /// 是否调试模式
     #[serde(default)]
-    pub debug:bool
+    pub debug:bool,
+    /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
 }
 
 /// 函数调用响应
@@ -91,6 +94,10 @@ pub struct ServiceExecuteRequest {
     /// 调试参数（开启 debug 时有）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_params: Option<HashMap<String, String>>,
+
+    /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
 
 }
 

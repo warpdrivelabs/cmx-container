@@ -55,6 +55,9 @@ pub struct PluginFunRequest {
     pub initial_input: Option<serde_json::Value>,
     /// 是否启用调试模式（可选，默认 false）
     pub debug: Option<bool>,
+    /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
 }
 
 /// 调用指定服务的请求
@@ -83,6 +86,9 @@ pub struct CallServiceRequest {
     pub debug_node_id: Option<String>,
     /// 调试参数（可选，用于传递额外的调试配置）
     pub debug_params: Option<HashMap<String, String>>,
+    /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
 }
 
 /// 插件函数调用响应

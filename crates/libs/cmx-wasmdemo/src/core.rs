@@ -147,6 +147,7 @@ impl<H: HostFunctions> PluginCore<H> {
             input: serde_json::json!({"name": request.name, "count": request.count,"route":"2"}),
             initial_input: None,
             debug: Some(false),
+            server_name: None,
         };
         match self.host.call_plugin(plugin_request) {
             Ok(result) => {
@@ -190,6 +191,7 @@ impl<H: HostFunctions> PluginCore<H> {
             debug: Some(false),
             debug_node_id: None,
             debug_params: None,
+            server_name: None,
         };
         match self.host.call_service_by_key(service_request) {
             Ok(result) => {
@@ -569,6 +571,7 @@ impl<H: HostFunctions> PluginCore<H> {
             input: serde_json::Value::String("aabbccddee".to_string()),
             initial_input: None,
             debug: None,
+            server_name: None,
         };
         match self.host.call_plugin(plugin_fun_request) {
             Ok(call_result) => {
