@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{RuntimeInvoker, ServiceInvoker};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
 use tracing::instrument;
 
 /// CmxServiceOrchestrator 的 gRPC 服务端实现
@@ -14,6 +14,8 @@ pub struct CmxOrchestratorServiceImpl {
     service_invoker: Arc<dyn ServiceInvoker>,
     /// WASM 运行时调用器
     runtime_invoker: Arc<dyn RuntimeInvoker>,
+    /// 插件查询（检查安装状态、获取 WASM 路径）
+    plugin_query: Arc<dyn PluginQuery>,
 }
 
 impl CmxOrchestratorServiceImpl {
@@ -21,10 +23,12 @@ impl CmxOrchestratorServiceImpl {
     pub fn new(
         service_invoker: Arc<dyn ServiceInvoker>,
         runtime_invoker: Arc<dyn RuntimeInvoker>,
+        plugin_query: Arc<dyn PluginQuery>,
     ) -> Self {
         Self {
             service_invoker,
             runtime_invoker,
+            plugin_query,
         }
     }
 }
@@ -104,12 +108,51 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
         Output = Result<volo_grpc::Response<CallFunctionResponse>, volo_grpc::Status>,
     > + Send {
         let runtime_invoker = self.runtime_invoker.clone();
+        let plugin_query = self.plugin_query.clone();
         async move {
             let req = req.into_inner();
+            let plugin_id = req.plugin_id.to_string();
+            let function_name = req.function_name.to_string();
+
+            // ==================== 检查插件安装状态 ====================
+
+            let is_installed = plugin_query.is_installed(&plugin_id).await
+                .map_err(|e| volo_grpc::Status::new(
+                    volo_grpc::Code::Internal,
+                    format!("检查插件安装状态失败: {e}"),
+                ))?;
+
+            if !is_installed {
+                return Err(volo_grpc::Status::new(
+                    volo_grpc::Code::NotFound,
+                    format!("插件 {} 未安装", plugin_id),
+                ));
+            }
+
+            // ==================== 检查/加载 WASM 模块 ====================
+
+            let is_loaded = runtime_invoker.is_loaded(&plugin_id).await;
+
+            if !is_loaded {
+                let wasm_path = plugin_query.get_wasm_path(&plugin_id).await
+                    .map_err(|e| volo_grpc::Status::new(
+                        volo_grpc::Code::Internal,
+                        format!("获取 WASM 路径失败: {e}"),
+                    ))?;
+
+                runtime_invoker.load_module(&plugin_id, &wasm_path).await
+                    .map_err(|e| volo_grpc::Status::new(
+                        volo_grpc::Code::Internal,
+                        format!("加载 WASM 模块失败: {e}"),
+                    ))?;
+            }
+
+            // ==================== 调用 WASM 函数 ====================
+
             let input_bytes = req.input.as_bytes();
 
             match runtime_invoker
-                .invoke(&req.plugin_id, &req.function_name, input_bytes)
+                .invoke(&plugin_id, &function_name, input_bytes)
                 .await
             {
                 Ok(result) => {
@@ -123,8 +166,8 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                 Err(e) => {
                     tracing::error!(
                         target: "cmx_rpc",
-                        plugin_id = %req.plugin_id,
-                        function_name = %req.function_name,
+                        plugin_id = %plugin_id,
+                        function_name = %function_name,
                         error = %e,
                         "插件函数调用失败"
                     );

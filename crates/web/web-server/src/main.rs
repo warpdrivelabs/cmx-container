@@ -133,6 +133,7 @@ async fn main() -> Result<()> {
     let grpc_port = init_rpc(
         cmx_traits::GlobalServiceInvoker::get().clone(),
         cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+        cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
     ).await?;
 
     // 构建完整的 AppState，注入各子系统的 trait 实例

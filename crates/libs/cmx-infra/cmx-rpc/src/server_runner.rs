@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{RuntimeInvoker, ServiceInvoker};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
 use tracing::instrument;
 use volo::net::incoming::DefaultIncoming;
 use volo_grpc::server::ServiceBuilder;
@@ -17,18 +17,19 @@ use crate::server::CmxOrchestratorServiceImpl;
 ///
 /// 监听指定端口，注册 CmxServiceOrchestrator 服务并运行。
 /// 先绑定端口再发送就绪信号，避免启动竞态。
-#[instrument(target = "cmx_rpc", skip(service_invoker, runtime_invoker, ready_tx), fields(port = port))]
+#[instrument(target = "cmx_rpc", skip(service_invoker, runtime_invoker, plugin_query, ready_tx), fields(port = port))]
 pub async fn start_grpc_server(
     port: u16,
     service_invoker: Arc<dyn ServiceInvoker>,
     runtime_invoker: Arc<dyn RuntimeInvoker>,
+    plugin_query: Arc<dyn PluginQuery>,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), RpcFrameworkError> {
     let addr: std::net::SocketAddr = format!("[::]:{port}")
         .parse()
         .map_err(|e: std::net::AddrParseError| RpcFrameworkError::ServerStartFailed(e.to_string()))?;
 
-    let service_impl = CmxOrchestratorServiceImpl::new(service_invoker, runtime_invoker);
+    let service_impl = CmxOrchestratorServiceImpl::new(service_invoker, runtime_invoker, plugin_query);
 
     tracing::info!(
         target: "cmx_rpc",

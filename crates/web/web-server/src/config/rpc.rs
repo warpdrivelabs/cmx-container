@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::{create_rpc_client, start_grpc_server, GlobalRpcClient};
 use cmx_rpc::config::RpcConfig;
-use cmx_traits::{RuntimeInvoker, ServiceInvoker};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
 use cmx_utils::ConfigManager;
 use tracing::{info, warn};
 
@@ -29,6 +29,7 @@ pub use crate::Error;
 pub async fn init_rpc(
     service_invoker: Arc<dyn ServiceInvoker>,
     runtime_invoker: Arc<dyn RuntimeInvoker>,
+    plugin_query: Arc<dyn PluginQuery>,
 ) -> crate::Result<Option<u16>> {
     let rpc_config = load_rpc_config();
 
@@ -65,7 +66,7 @@ pub async fn init_rpc(
     let grpc_port_for_log = grpc_port;
     let _server_handle = tokio::spawn(async move {
         info!("在后台启动 gRPC Server，端口: {}", grpc_port_for_log);
-        match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, server_ready_tx).await {
+        match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, plugin_query, server_ready_tx).await {
             Ok(()) => info!("gRPC Server 已正常退出"),
             Err(e) => warn!("gRPC Server 运行失败: {}", e),
         }
