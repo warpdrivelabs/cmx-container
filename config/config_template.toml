@@ -297,3 +297,12 @@ retry_count = 0
 # default_clusters = []
 # 服务发现变更通知通道容量（可选，默认 1024，用于缓冲高频服务变更如 k8s 滚动更新）
 # discover_channel_capacity = 1024
+
+# ============================================
+# 注册中心服务实例 metadata
+# ============================================
+# 注册到注册中心的服务实例附加元数据，所有注册中心类型通用。
+# grpc_port 由 [rpc.grpc].port 自动注入，无需手动配置。
+# [registry.metadata]
+# version = "1.0.0"
+# region = "cn-east"

@@ -134,15 +134,10 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
     let port = resolve_register_port();
     let ip = resolve_register_ip();
 
-    let registry_config = RegistryConfig::from_env();
-    let mut instance = registry_config.build_instance(ip.clone(), port);
+    let mut registry_config = RegistryConfig::from_env();
+    inject_rpc_metadata(&mut registry_config);
 
-    // 如果 RPC 已启用，在 metadata 中添加 gRPC 端口信息。
-    if let Some(rpc) = load_rpc_config() {
-        if rpc.enabled {
-            instance.metadata.insert("grpc_port".to_string(), rpc.grpc.port.to_string());
-        }
-    }
+    let instance = registry_config.build_instance(ip.clone(), port);
 
     match registry.register(&instance).await {
         Ok(_) => {
@@ -159,6 +154,31 @@ fn load_rpc_config() -> Option<cmx_rpc::config::RpcConfig> {
     ConfigManager::global()
         .get_as::<cmx_rpc::config::RpcConfig>("rpc")
         .ok()
+}
+
+/// 将 RPC 相关信息注入到 RegistryConfig 的 metadata 中。
+///
+/// 从 RPC 配置中自动读取 `grpc_port` 等信息，注入到 `registry_config.metadata`，
+/// 确保注册和注销时 metadata 保持一致。
+///
+/// 同时从全局配置加载 `[registry.metadata]` 段的用户自定义 metadata，
+/// 合并到 `registry_config.metadata` 中（RPC 自动注入的 key 优先级更高）。
+fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
+    // 从配置文件加载用户自定义 metadata
+    if let Ok(custom_meta) = ConfigManager::global().get_as::<std::collections::HashMap<String, String>>("registry.metadata") {
+        for (k, v) in custom_meta {
+            registry_config.metadata.entry(k).or_insert(v);
+        }
+    }
+
+    // RPC 自动注入的 metadata 优先级高于配置文件中的值
+    if let Some(rpc) = load_rpc_config() {
+        if rpc.enabled {
+            registry_config
+                .metadata
+                .insert("grpc_port".to_string(), rpc.grpc.port.to_string());
+        }
+    }
 }
 
 /// 设置配置变更监听。
@@ -256,7 +276,9 @@ pub async fn shutdown_infra() {
     let port = resolve_register_port();
     let ip = resolve_register_ip();
 
-    let registry_config = RegistryConfig::from_env();
+    let mut registry_config = RegistryConfig::from_env();
+    inject_rpc_metadata(&mut registry_config);
+
     let instance = registry_config.build_instance(ip.clone(), port);
 
     match registry.deregister(&instance).await {

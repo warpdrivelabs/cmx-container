@@ -51,6 +51,32 @@ pub struct ServiceInstance {
 /// 实现：`NacosRegistry`、`MockRegistry`、(未来) `ConsulRegistry` 等。
 ///
 /// 所有方法都是 `async`，因为与注册中心的交互通常是网络 IO。
+///
+/// # Metadata 适配要求
+///
+/// [`ServiceInstance::metadata`] 是跨注册中心的统一元数据载体，用于传递附加信息
+/// （如 `grpc_port`、`version` 等）。每个注册中心实现必须确保：
+///
+/// 1. **注册时**：将 `metadata` 完整写入注册中心的原生元数据字段
+/// 2. **查询/订阅时**：从注册中心读取原生元数据，完整还原到 `metadata`
+/// 3. **注销时**：能通过 `ip + port + service_name` 准确定位并删除实例
+///
+/// 各注册中心的适配方式：
+///
+/// | 注册中心    | 注册时 metadata 写入                           | 查询时 metadata 读取                            |
+/// |-----------|----------------------------------------------|-----------------------------------------------|
+/// | Nacos     | `metadata` → `NacosServiceInstance.metadata` | `NacosServiceInstance.metadata` → `metadata`  |
+/// | Consul    | `metadata` → `Service.Meta`                  | `Service.Meta` → `metadata`                   |
+/// | etcd      | `ServiceInstance` 整体序列化为 JSON value        | JSON value 反序列化为 `ServiceInstance`          |
+/// | ZooKeeper | `ServiceInstance` 整体序列化为 JSON znode data   | JSON znode data 反序列化为 `ServiceInstance`     |
+///
+/// # 标准 Metadata Key
+///
+/// | Key          | 说明               | 示例          |
+/// |-------------|-------------------|--------------|
+/// | `grpc_port` | gRPC 服务端口       | `"9090"`     |
+/// | `version`   | 服务版本号（预留）    | `"1.0.0"`    |
+/// | `protocol`  | 支持的协议列表（预留） | `"http,grpc"` |
 #[async_trait]
 pub trait ServiceRegistry: Send + Sync {
     /// 注册服务实例。

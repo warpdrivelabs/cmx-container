@@ -128,11 +128,20 @@ fn convert_to_nacos_instance(instance: &ServiceInstance) -> NacosServiceInstance
 
 /// 将 nacos-sdk 的 `NacosServiceInstance` 转换为 cmx-container 的 [`ServiceInstance`]。
 fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> ServiceInstance {
+    // 从 serviceName 解析 group_name（Nacos 格式：group_name@@service_name）
+    let (group_name, service_name) = match &nacos_instance.service_name {
+        Some(name) if name.contains("@@") => {
+            let parts: Vec<&str> = name.splitn(2, "@@").collect();
+            (Some(parts[0].to_string()), parts[1].to_string())
+        }
+        other => (None, other.clone().unwrap_or_default()),
+    };
+
     ServiceInstance {
         ip: nacos_instance.ip.clone(),
         port: nacos_instance.port as u16,
-        service_name: nacos_instance.service_name.clone().unwrap_or_default(),
-        group_name: None,
+        service_name,
+        group_name,
         cluster_name: nacos_instance.cluster_name.clone(),
         weight: nacos_instance.weight,
         healthy: nacos_instance.healthy,
