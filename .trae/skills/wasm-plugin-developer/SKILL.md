@@ -114,6 +114,8 @@ extism/（Extism 适配，与 handlers/ 一一对应）
 | `call_service_by_key` | 服务编排 | 调用本服务编排接口 |
 | `call_remote_service` | 服务编排 | 调用远程服务编排接口 |
 
+> **数据库操作规范**：`DbRequest` 的 `db_id` 字段应使用 `manifest.json` 中 `plugin.datasource_id` 的值，确保数据库操作使用插件关联的数据源。
+
 ---
 
 ## 三、技能使用指引

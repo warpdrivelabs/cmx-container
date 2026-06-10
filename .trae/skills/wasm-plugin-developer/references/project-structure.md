@@ -213,6 +213,8 @@
 | `call_service_by_key` | 服务编排 | 调用本服务编排接口 |
 | `call_remote_service` | 服务编排 | 调用远程服务编排接口 |
 
+> **数据库操作规范**：`DbRequest` 的 `db_id` 字段应使用 `manifest.json` 中 `plugin.datasource_id` 的值，确保数据库操作使用插件关联的数据源。
+
 ### 3.4 函数注释规范（必须使用 plugin-fn-doc 技能）
 
 **重要**：所有带有 `#[plugin_fn]` 属性的函数的文档注释**必须**使用 **plugin-fn-doc** 技能生成。无论函数定义在哪个文件中（`extism/` 目录下的文件或其他文件），只要使用了 `#[plugin_fn]` 属性，就必须遵循此规范。该技能确保注释格式正确，cmx-cli 能够正确解析生成 `api.json`。

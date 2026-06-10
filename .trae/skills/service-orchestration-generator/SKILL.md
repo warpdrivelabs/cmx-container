@@ -288,6 +288,8 @@ x: -330      x: 55        x: 390         x: 825         x: 1200
 
 **注意**：`nodeMeta` 中还可以添加可选字段 `"databaseId": "数据源ID"`，用于指定该节点使用的数据库连接。
 
+**databaseId 规范**：事务框（`skylake-transaction`）的 `databaseId` 必须使用插件 `manifest.json` 中 `plugin.datasource_id` 的值，确保事务操作使用插件关联的数据源。
+
 **pluginId 命名约束**：`pluginId` 只能使用下划线 `_` 分隔，禁止使用连字符 `-`。正确：`my_plugin`，错误：`my-plugin`。
 
 ### 4. skylake-switch 多分支节点
@@ -645,3 +647,4 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
    - 事务框内最后一个子节点直接连接到外部节点
    - 不要使用 `transaction_box` 作为 sourceNodeID 或 targetNodeID
 10. **pluginId 命名约束**：`nodeMeta.pluginId` 只能使用下划线 `_` 分隔，禁止使用连字符 `-`（如 `my_plugin`，不能写成 `my-plugin`）
+11. **databaseId 规范**：事务框（`skylake-transaction`）的 `nodeMeta.databaseId` 必须使用插件 `manifest.json` 中 `plugin.datasource_id` 的值，确保事务操作使用插件关联的数据源
