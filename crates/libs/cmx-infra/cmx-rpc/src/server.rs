@@ -4,8 +4,9 @@
 
 use std::sync::Arc;
 
+use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
+use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServiceInvoker};
 use tracing::instrument;
 
 /// CmxServiceOrchestrator 的 gRPC 服务端实现
@@ -147,19 +148,60 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                     ))?;
             }
 
+            // ==================== 构建 FunctionInput ====================
+
+            let input_value: serde_json::Value = serde_json::from_str(&req.input).unwrap_or(serde_json::Value::Null);
+
+            let initial_input = req.initial_input
+                .as_ref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| input_value.clone());
+
+            let svr_ctx = SVRContext::new(
+                initial_input,
+                std::collections::HashMap::new(),
+                chrono::Utc::now(),
+                format!("rpc-{}", uuid::Uuid::new_v4()),
+            );
+            let func_input = FunctionInput::from_value(input_value, svr_ctx);
+
+            let input_bytes = rmp_serde::to_vec(&func_input)
+                .map_err(|e| volo_grpc::Status::new(
+                    volo_grpc::Code::InvalidArgument,
+                    format!("输入数据序列化失败: {e}"),
+                ))?;
+
             // ==================== 调用 WASM 函数 ====================
 
-            let input_bytes = req.input.as_bytes();
+            let invoke_options = InvokeOptions {
+                debug: req.debug,
+                ..Default::default()
+            };
 
             match runtime_invoker
-                .invoke(&plugin_id, &function_name, input_bytes)
+                .invoke_with_options(&plugin_id, &function_name, &input_bytes, &invoke_options)
                 .await
             {
                 Ok(result) => {
+                    // 解析 FunctionOutput
+                    let output: FunctionOutput = if result.output.is_empty() {
+                        FunctionOutput::new(serde_json::Value::Null)
+                    } else {
+                        rmp_serde::from_slice(&result.output).unwrap_or_else(|e| {
+                            tracing::warn!(
+                                target: "cmx_rpc",
+                                error = %e,
+                                "RPC call_function 返回值 rmp_serde 反序列化失败，尝试直接解析为 JSON"
+                            );
+                            FunctionOutput::new(
+                                serde_json::from_slice(&result.output).unwrap_or(serde_json::Value::Null)
+                            )
+                        })
+                    };
+
                     let mut pb_resp = CallFunctionResponse::default();
                     pb_resp.success = true;
-                    pb_resp.result =
-                        Some(String::from_utf8_lossy(&result.output).to_string().into());
+                    pb_resp.result = Some(output.result.to_string().into());
                     pb_resp.elapsed_us = result.elapsed_us;
                     Ok(volo_grpc::Response::new(pb_resp))
                 }

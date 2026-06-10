@@ -24,6 +24,12 @@ tokio = { workspace = true }
 serde = { workspace = true }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
+# MessagePack 序列化（WASM 函数输入编码）
+rmp-serde = { workspace = true }
+# 时间处理
+chrono = { workspace = true }
+# UUID 生成
+uuid = { workspace = true }
 # 错误处理
 anyhow = { workspace = true }
 # 错误处理 - 派生宏定义错误类型
