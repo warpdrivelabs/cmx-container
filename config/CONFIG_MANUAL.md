@@ -198,11 +198,11 @@
 
 - **类型**: String (enum)
 - **必需**: 否
-- **默认值**: `"standalone"`
+- **默认值**: `"Standalone"`
 - **说明**: Redis 运行模式
 - **可选值**:
-    - `standalone` - 单机模式
-    - `cluster` - 集群模式
+    - `Standalone` - 单机模式
+    - `Cluster` - 集群模式
 
 #### `cluster_urls`
 

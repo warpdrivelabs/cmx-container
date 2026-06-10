@@ -512,8 +512,8 @@ pub struct RedisConfig {
 ```toml
 [redis]
 url = "redis://192.168.137.95:32496/13"
-# Redis 运行模式：standalone（单机）或 cluster（集群）
-# mode = "standalone"
+# Redis 运行模式：Standalone（单机）或 Cluster（集群）
+# mode = "Standalone"
 # 集群节点地址（集群模式时必填，逗号分隔）
 # cluster_urls = "redis://node1:6379,redis://node2:6379,redis://node3:6379"
 # Pub/Sub 心跳间隔（秒），0 表示禁用

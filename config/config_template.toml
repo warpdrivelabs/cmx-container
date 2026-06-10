@@ -86,8 +86,8 @@ health_check_timeout = 5
 [redis]
 # Redis 连接地址（必需，格式: redis://host:port/db）
 url = "redis://localhost:6379/13"
-# Redis 运行模式：standalone（单机）或 cluster（集群），可选，默认 standalone
-# mode = "standalone"
+# Redis 运行模式：Standalone（单机）或 Cluster（集群）
+#mode = "Standalone"
 # 集群节点地址（集群模式时必填，逗号分隔）
 # cluster_urls = "redis://node1:6379,redis://node2:6379,redis://node3:6379"
 # Pub/Sub 心跳间隔（秒），0 表示禁用，可选，默认 30
