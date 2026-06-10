@@ -288,6 +288,8 @@ x: -330      x: 55        x: 390         x: 825         x: 1200
 
 **注意**：`nodeMeta` 中还可以添加可选字段 `"databaseId": "数据源ID"`，用于指定该节点使用的数据库连接。
 
+**pluginId 命名约束**：`pluginId` 只能使用下划线 `_` 分隔，禁止使用连字符 `-`。正确：`my_plugin`，错误：`my-plugin`。
+
 ### 4. skylake-switch 多分支节点
 
 ```json
@@ -415,7 +417,7 @@ y:-455 └───────────────────────�
         "meta": { "zIndex": 2, "size": { "width": 240, "height": 211 }, "position": { "x": 55, "y": -410.5 } },
         "data": {
           "name": "类型判断",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "check_type" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "check_type" },
           "inputs": [], "outputs": [],
           "options": ["A", "B", "C"]
         }
@@ -426,7 +428,7 @@ y:-455 └───────────────────────�
         "meta": { "zIndex": 3, "size": { "width": 240, "height": 98 }, "position": { "x": 390, "y": -455 } },
         "data": {
           "name": "A类型处理",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_a" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_a" },
           "inputs": [], "outputs": []
         }
       },
@@ -436,7 +438,7 @@ y:-455 └───────────────────────�
         "meta": { "zIndex": 4, "size": { "width": 240, "height": 98 }, "position": { "x": 420, "y": -237 } },
         "data": {
           "name": "B类型处理",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_b" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_b" },
           "inputs": [], "outputs": []
         }
       },
@@ -446,7 +448,7 @@ y:-455 └───────────────────────�
         "meta": { "zIndex": 5, "size": { "width": 240, "height": 98 }, "position": { "x": 405, "y": -16 } },
         "data": {
           "name": "C类型处理",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_c" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "handle_type_c" },
           "inputs": [], "outputs": []
         }
       },
@@ -456,7 +458,7 @@ y:-455 └───────────────────────�
         "meta": { "zIndex": 6, "size": { "width": 240, "height": 98 }, "position": { "x": 825, "y": -212 } },
         "data": {
           "name": "合并结果",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "merge" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "merge" },
           "inputs": [], "outputs": []
         }
       },
@@ -524,7 +526,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 2, "size": { "width": 240, "height": 211 }, "position": { "x": 55, "y": -410.5 } },
         "data": {
           "name": "类型判断",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "check_type" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "check_type" },
           "inputs": [], "outputs": [], "options": ["1", "2", "3"]
         }
       },
@@ -534,7 +536,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 3, "size": { "width": 240, "height": 98 }, "position": { "x": 390, "y": -455 } },
         "data": {
           "name": "分支处理",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "handle_branch" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "handle_branch" },
           "inputs": [], "outputs": []
         }
       },
@@ -556,7 +558,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 7, "size": { "width": 240, "height": 98 }, "position": { "x": 1170, "y": -430 } },
         "data": {
           "name": "事务插入",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "tx_insert" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "tx_insert" },
           "inputs": [], "outputs": []
         }
       },
@@ -567,7 +569,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 8, "size": { "width": 240, "height": 98 }, "position": { "x": 1590, "y": -357.5 } },
         "data": {
           "name": "事务更新",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "tx_update" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "tx_update" },
           "inputs": [], "outputs": []
         }
       },
@@ -578,7 +580,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 9, "size": { "width": 240, "height": 98 }, "position": { "x": 1185, "y": -114 } },
         "data": {
           "name": "事务查询",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "tx_query" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "tx_query" },
           "inputs": [], "outputs": []
         }
       },
@@ -589,7 +591,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 10, "size": { "width": 240, "height": 98 }, "position": { "x": 1605, "y": -114 } },
         "data": {
           "name": "事务删除",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "tx_delete" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "tx_delete" },
           "inputs": [], "outputs": []
         }
       },
@@ -599,7 +601,7 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
         "meta": { "zIndex": 11, "size": { "width": 240, "height": 98 }, "position": { "x": 1965, "y": -249 } },
         "data": {
           "name": "最终处理",
-          "nodeMeta": { "pluginId": "my-plugin", "pluginName": "my-plugin", "pluginVersion": "1.0.0", "functionName": "final_process" },
+          "nodeMeta": { "pluginId": "my_plugin", "pluginName": "my_plugin", "pluginVersion": "1.0.0", "functionName": "final_process" },
           "inputs": [], "outputs": []
         }
       },
@@ -642,3 +644,4 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
    - 外部节点直接连接到事务框内的第一个子节点
    - 事务框内最后一个子节点直接连接到外部节点
    - 不要使用 `transaction_box` 作为 sourceNodeID 或 targetNodeID
+10. **pluginId 命名约束**：`nodeMeta.pluginId` 只能使用下划线 `_` 分隔，禁止使用连字符 `-`（如 `my_plugin`，不能写成 `my-plugin`）

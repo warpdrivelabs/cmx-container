@@ -36,13 +36,37 @@ my-plugin/
 ├── flowdata/                  # 流程定义数据（预留）
 ├── mcpdata/                   # MCP/Skills 配置（预留）
 └── src/                       # Rust 源码
-    ├── lib.rs
-    ├── models.rs
-    ├── host_traits.rs
-    ├── core.rs
-    ├── extism_layer.rs
-    └── tests.rs
+    ├── lib.rs                 # 模块入口
+    ├── host.rs                # HostFunctions trait 定义
+    ├── models/                # 业务模型（按实体拆分）
+    │   ├── mod.rs             # 模块导出 + SDK 类型重导出
+    │   ├── common.rs          # 通用模型
+    │   └── {entity}.rs        # 业务实体模型（按需创建）
+    ├── handlers/              # 业务处理逻辑（按业务实体拆分）
+    │   ├── mod.rs             # PluginCore<H> 定义
+    │   └── {entity}.rs        # 业务实体的全部操作（按需创建）
+    ├── extism/                # Extism 适配层（与 handlers/ 一一对应）
+    │   ├── mod.rs             # ExtismHost 实现
+    │   └── {entity}.rs        # 对应 handlers/ 的 #[plugin_fn] 入口
+    └── tests/                 # 测试（与 handlers/ 一一对应）
+        ├── mod.rs             # 公共测试工具
+        └── {entity}.rs        # 对应 handlers/ 的单元测试
 ```
+
+> **plugin_id 命名约束**：只能使用下划线 `_` 分隔，禁止使用连字符 `-`。
+>
+> - 正确：`cmx_account`、`order_plugin`、`test_plugin`
+> - 错误：`cmx-account`、`order-plugin`、`test-plugin`
+
+**src/ 目录拆分原则**：
+
+- `handlers/`、`extism/`、`tests/` 的子文件按**业务实体**拆分，每个实体文件包含该实体的全部操作
+- 例如一个"账户"实体文件中可包含：账户查询、创建、更新、删除、缓存操作、业务校验等所有账户相关逻辑
+- `{entity}.rs` 是占位符，开发者根据实际业务创建对应文件，文件名不限
+- 当插件只有一个业务实体时，每个目录下只有一个业务文件
+- 当插件有多个业务实体时，每个实体对应一个文件
+- `extism/` 和 `tests/` 的文件划分与 `handlers/` 保持一一对应
+- `models/` 的实体文件与 `handlers/` 的实体文件对应，`common.rs` 存放跨实体共享的通用模型
 
 ### 1.2 目录用途速查表
 
@@ -65,19 +89,19 @@ my-plugin/
 ### 2.1 三层分离模式
 
 ```
-core.rs（纯业务逻辑）
+handlers/（纯业务逻辑，按业务实体拆分）
   ↓ 通过泛型 H: HostFunctions
-host_traits.rs（抽象接口）
+host.rs（抽象接口）
   ↑ impl HostFunctions for ExtismHost
-extism_layer.rs（Extism 适配）
+extism/（Extism 适配，与 handlers/ 一一对应）
 ```
 
 **设计原则**：
-- `core.rs` 不知道 Extism 的存在，只依赖 `HostFunctions` trait
-- `extism_layer.rs` 是薄适配层，仅做 `ExtismHost → HostCaller` 的委托
-- `tests.rs` 使用 `mockall` 自动生成 `MockHostFunctions`
+- `handlers/` 不知道 Extism 的存在，只依赖 `HostFunctions` trait
+- `extism/` 是薄适配层，仅做 `ExtismHost → HostCaller` 的委托
+- `tests/` 使用 `mockall` 自动生成 `MockHostFunctions`
 
-### 2.2 HostFunctions trait（11 个宿主能力）
+### 2.2 HostFunctions trait（13 个宿主能力）
 
 | 方法 | 类别 | 说明 |
 |------|------|------|
@@ -85,8 +109,10 @@ extism_layer.rs（Extism 适配）
 | `db_query` | 数据库 | 执行 SELECT 查询 |
 | `db_execute` | 数据库 | 执行 INSERT/UPDATE/DELETE |
 | `cache_get / cache_set / cache_delete` | 缓存 | 缓存读写删除 |
-| `call_plugin` | 插件调用 | 调用其他插件函数 |
-| `call_service_by_key` | 服务编排 | 调用服务编排接口 |
+| `call_plugin` | 插件调用 | 调用本插件函数 |
+| `call_remote_plugin` | 插件调用 | 调用远程插件函数 |
+| `call_service_by_key` | 服务编排 | 调用本服务编排接口 |
+| `call_remote_service` | 服务编排 | 调用远程服务编排接口 |
 
 ---
 
@@ -105,7 +131,7 @@ extism_layer.rs（Extism 适配）
 1. 确定业务需求，设计数据表结构
 2. 使用 **plugin-metadata-generator** 生成 `metadata/` 和 `seeddata/` 文件
 3. 创建 `config/` 配置文件，注册表定义和种子数据
-4. 编写 `src/` 代码（models → host_traits → core → extism_layer → tests）
+4. 编写 `src/` 代码（models/ → host.rs → handlers/ → extism/ → tests/）
 5. 使用 **service-orchestration-generator** 生成 `servicedata/` 服务编排
 6. 编写 `manifest.json` 插件清单
 7. 使用 **plugin-fn-doc** 规范化函数文档注释

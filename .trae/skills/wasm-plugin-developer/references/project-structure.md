@@ -144,7 +144,7 @@
 |------|------|------|
 | `manifest_version` | 是 | 清单格式版本，固定 `"1.0"` |
 | `plugin.type` | 是 | 插件类型，固定 `"wasm-plugin"` |
-| `plugin.id` | 是 | 插件唯一标识，下划线命名（如 `cmx_account`） |
+| `plugin.id` | 是 | 插件唯一标识，**只能使用下划线 `_` 分隔，禁止使用连字符 `-`**（如 `cmx_account`，不能写成 `cmx-account`） |
 | `plugin.name` | 是 | 插件显示名称 |
 | `plugin.version` | 是 | 语义化版本号（SemVer） |
 | `plugin.description` | 否 | 插件功能描述 |
@@ -176,14 +176,19 @@
 
 ### 3.1 文件职责
 
-| 文件 | 职责 |
-|------|------|
-| `lib.rs` | 模块入口，条件编译 `extism_layer` |
-| `models.rs` | SDK 类型重导出 + 自定义业务模型 |
-| `host_traits.rs` | `HostFunctions` trait 定义（宿主能力抽象） |
-| `core.rs` | `PluginCore<H>` 业务逻辑（纯逻辑，不依赖 Extism） |
-| `extism_layer.rs` | `#[plugin_fn]` 适配层，仅在 `extism` feature 下编译 |
-| `tests.rs` | `MockHostFunctions` 单元测试 |
+| 文件/目录 | 职责 |
+|-----------|------|
+| `lib.rs` | 模块入口，条件编译 `extism` 模块 |
+| `host.rs` | `HostFunctions` trait 定义（宿主能力抽象） |
+| `models/mod.rs` | SDK 类型重导出 + 子模块声明 |
+| `models/common.rs` | 通用模型（RouteInput、OperationResult 等跨实体共享模型） |
+| `models/{entity}.rs` | 业务实体模型（按需创建，每个实体对应一个文件） |
+| `handlers/mod.rs` | `PluginCore<H>` 定义 |
+| `handlers/{entity}.rs` | 业务实体的全部操作（按需创建，包含该实体的 CRUD、缓存、业务逻辑等） |
+| `extism/mod.rs` | `ExtismHost` 实现，仅在 `extism` feature 下编译 |
+| `extism/{entity}.rs` | 对应 `handlers/{entity}.rs` 的 `#[plugin_fn]` 入口 |
+| `tests/mod.rs` | 公共测试工具（`make_input` 等） |
+| `tests/{entity}.rs` | 对应 `handlers/{entity}.rs` 的单元测试，使用 `MockHostFunctions` |
 
 ### 3.2 cmx-plugin-sdk 核心类型
 
@@ -191,11 +196,11 @@
 |------|------|
 | `FunctionInput` | 函数输入封装，包含 `context`（SVRContext）和业务数据字段 |
 | `FunctionOutput` | 函数输出封装，包含返回值和状态信息 |
-| `HostCaller` | 宿主函数调用桥接，在 extism_layer.rs 中委托给 ExtismHost |
+| `HostCaller` | 宿主函数调用桥接，在 extism/ 适配层中委托给 ExtismHost |
 | `Msgpack<T>` | MsgPack 序列化包装器，用于 WASM 函数的输入输出参数 |
 | `FnResult<T>` | Extism 函数返回类型，即 `Result<T, Error>` |
 
-### 3.3 HostFunctions trait（11 个宿主能力）
+### 3.3 HostFunctions trait（13 个宿主能力）
 
 | 方法 | 类别 | 说明 |
 |------|------|------|
@@ -203,12 +208,14 @@
 | `db_query` | 数据库 | 执行 SELECT 查询 |
 | `db_execute` | 数据库 | 执行 INSERT/UPDATE/DELETE |
 | `cache_get / cache_set / cache_delete` | 缓存 | 缓存读写删除 |
-| `call_plugin` | 插件调用 | 调用其他插件函数 |
-| `call_service_by_key` | 服务编排 | 调用服务编排接口 |
+| `call_plugin` | 插件调用 | 调用本插件函数 |
+| `call_remote_plugin` | 插件调用 | 调用远程插件函数 |
+| `call_service_by_key` | 服务编排 | 调用本服务编排接口 |
+| `call_remote_service` | 服务编排 | 调用远程服务编排接口 |
 
 ### 3.4 函数注释规范（必须使用 plugin-fn-doc 技能）
 
-**重要**：所有带有 `#[plugin_fn]` 属性的函数的文档注释**必须**使用 **plugin-fn-doc** 技能生成。无论函数定义在哪个文件中（`extism_layer.rs` 或其他文件），只要使用了 `#[plugin_fn]` 属性，就必须遵循此规范。该技能确保注释格式正确，cmx-cli 能够正确解析生成 `api.json`。
+**重要**：所有带有 `#[plugin_fn]` 属性的函数的文档注释**必须**使用 **plugin-fn-doc** 技能生成。无论函数定义在哪个文件中（`extism/` 目录下的文件或其他文件），只要使用了 `#[plugin_fn]` 属性，就必须遵循此规范。该技能确保注释格式正确，cmx-cli 能够正确解析生成 `api.json`。
 
 不要手动编写函数注释，必须调用 `Use Skill: plugin-fn-doc` 技能。
 
