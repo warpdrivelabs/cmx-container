@@ -1,0 +1,193 @@
+{
+  "name": "订单处理流程",
+  "code": "process_order",
+  "description": "订单处理流程：路由判断 → 分支处理 → 合并 → 事务操作(创建订单+扣减库存) → 最终处理",
+  "flow": {
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "skylake-start",
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": -330, "y": -345 }
+        },
+        "data": {
+          "name": "开始节点",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "route_check",
+        "type": "skylake-switch",
+        "meta": {
+          "zIndex": 2,
+          "size": { "width": 240, "height": 211 },
+          "position": { "x": 55, "y": -410.5 }
+        },
+        "data": {
+          "name": "路由判断",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "route_check"
+          },
+          "inputs": [],
+          "outputs": [],
+          "options": ["1", "2", "3"]
+        }
+      },
+      {
+        "id": "branch_process",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 3,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 390, "y": -357 }
+        },
+        "data": {
+          "name": "分支处理",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "branch_process"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "merge_result",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 4,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 725, "y": -357 }
+        },
+        "data": {
+          "name": "合并结果",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "merge_result"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "transaction_box",
+        "type": "skylake-transaction",
+        "parent": null,
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 810, "height": 250 },
+          "position": { "x": 1095, "y": -430 }
+        },
+        "data": {
+          "name": "订单事务",
+          "nodeMeta": {
+            "pluginId": "",
+            "pluginName": "",
+            "pluginVersion": "",
+            "functionName": "",
+            "databaseId": "primary"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_create_order",
+        "type": "skylake-func",
+        "parent": "transaction_box",
+        "meta": {
+          "zIndex": 6,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 1170, "y": -355 }
+        },
+        "data": {
+          "name": "事务创建订单",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_create_order"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_update_stock",
+        "type": "skylake-func",
+        "parent": "transaction_box",
+        "meta": {
+          "zIndex": 7,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 1590, "y": -355 }
+        },
+        "data": {
+          "name": "事务扣减库存",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_update_stock"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "final_process",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 8,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 1965, "y": -357 }
+        },
+        "data": {
+          "name": "最终处理",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "final_process"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "skylake-end",
+        "meta": {
+          "zIndex": 9,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": 2280, "y": -345 }
+        },
+        "data": {
+          "name": "结束节点",
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "start_1", "sourcePortID": "out", "targetNodeID": "route_check", "targetPortID": "in" },
+      { "sourceNodeID": "route_check", "sourcePortID": "out_1", "targetNodeID": "branch_process", "targetPortID": "in" },
+      { "sourceNodeID": "route_check", "sourcePortID": "out_2", "targetNodeID": "branch_process", "targetPortID": "in" },
+      { "sourceNodeID": "route_check", "sourcePortID": "out_3", "targetNodeID": "branch_process", "targetPortID": "in" },
+      { "sourceNodeID": "branch_process", "sourcePortID": "out", "targetNodeID": "merge_result", "targetPortID": "in" },
+      { "sourceNodeID": "merge_result", "sourcePortID": "out", "targetNodeID": "tx_create_order", "targetPortID": "in" },
+      { "sourceNodeID": "tx_create_order", "sourcePortID": "out", "targetNodeID": "tx_update_stock", "targetPortID": "in" },
+      { "sourceNodeID": "tx_update_stock", "sourcePortID": "out", "targetNodeID": "final_process", "targetPortID": "in" },
+      { "sourceNodeID": "final_process", "sourcePortID": "out", "targetNodeID": "end_1", "targetPortID": "in" }
+    ]
+  }
+}

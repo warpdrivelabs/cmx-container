@@ -1,0 +1,106 @@
+{
+  "name": "创建订单",
+  "code": "create_order",
+  "description": "创建订单并扣减库存（事务操作）",
+  "flow": {
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "skylake-start",
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": -330, "y": -345 }
+        },
+        "data": {
+          "name": "开始节点",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "transaction_box",
+        "type": "skylake-transaction",
+        "parent": null,
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 810, "height": 250 },
+          "position": { "x": 55, "y": -430 }
+        },
+        "data": {
+          "name": "订单事务",
+          "nodeMeta": {
+            "pluginId": "",
+            "pluginName": "",
+            "pluginVersion": "",
+            "functionName": "",
+            "databaseId": "primary"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_create_order",
+        "type": "skylake-func",
+        "parent": "transaction_box",
+        "meta": {
+          "zIndex": 3,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 130, "y": -355 }
+        },
+        "data": {
+          "name": "创建订单",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_create_order"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_update_stock",
+        "type": "skylake-func",
+        "parent": "transaction_box",
+        "meta": {
+          "zIndex": 4,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 550, "y": -355 }
+        },
+        "data": {
+          "name": "扣减库存",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_update_stock"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "skylake-end",
+        "meta": {
+          "zIndex": 5,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": 960, "y": -345 }
+        },
+        "data": {
+          "name": "结束节点",
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "start_1", "sourcePortID": "out", "targetNodeID": "tx_create_order", "targetPortID": "in" },
+      { "sourceNodeID": "tx_create_order", "sourcePortID": "out", "targetNodeID": "tx_update_stock", "targetPortID": "in" },
+      { "sourceNodeID": "tx_update_stock", "sourcePortID": "out", "targetNodeID": "end_1", "targetPortID": "in" }
+    ]
+  }
+}
