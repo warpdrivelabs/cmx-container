@@ -18,7 +18,7 @@ members = [
     "crates/libs/cmx-api",
     "crates/libs/cmx-api-types",
     "crates/libs/cmx-plugin-sdk",
-    "crates/libs/cmx-wasmdemo",
+#    "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-plugin-demo",
     "crates/libs/cmx-debug",
     "crates/libs/cmx-rpc-gen",
