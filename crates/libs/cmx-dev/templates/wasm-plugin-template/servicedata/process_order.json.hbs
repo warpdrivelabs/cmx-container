@@ -1,0 +1,238 @@
+{
+  "name": "订单处理流程",
+  "code": "process_order",
+  "description": "根据订单金额路由：大额订单走审批事务（创建订单+扣减库存+记录审批），普通订单走简单事务（创建订单+扣减库存）",
+  "flow": {
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "skylake-start",
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": -330, "y": -345 }
+        },
+        "data": {
+          "name": "开始节点",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "check_order_amount",
+        "type": "skylake-switch",
+        "meta": {
+          "zIndex": 2,
+          "size": { "width": 240, "height": 211 },
+          "position": { "x": 55, "y": -410.5 }
+        },
+        "data": {
+          "name": "金额路由判断",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "check_order_amount"
+          },
+          "inputs": [],
+          "outputs": [],
+          "options": ["high_value", "normal"]
+        }
+      },
+      {
+        "id": "tx_high_value_order",
+        "type": "skylake-transaction",
+        "parent": null,
+        "meta": {
+          "zIndex": 3,
+          "size": { "width": 1170, "height": 250 },
+          "position": { "x": 390, "y": -630 }
+        },
+        "data": {
+          "name": "大额订单事务",
+          "nodeMeta": {
+            "pluginId": "",
+            "pluginName": "",
+            "pluginVersion": "",
+            "functionName": "",
+            "databaseId": "primary"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_create_order_hv",
+        "type": "skylake-func",
+        "parent": "tx_high_value_order",
+        "meta": {
+          "zIndex": 4,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 465, "y": -555 }
+        },
+        "data": {
+          "name": "创建订单",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_create_order"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_update_stock_hv",
+        "type": "skylake-func",
+        "parent": "tx_high_value_order",
+        "meta": {
+          "zIndex": 5,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 885, "y": -555 }
+        },
+        "data": {
+          "name": "扣减库存",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_update_stock"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_record_approval",
+        "type": "skylake-func",
+        "parent": "tx_high_value_order",
+        "meta": {
+          "zIndex": 6,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 1305, "y": -555 }
+        },
+        "data": {
+          "name": "记录审批",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_record_approval"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_normal_order",
+        "type": "skylake-transaction",
+        "parent": null,
+        "meta": {
+          "zIndex": 7,
+          "size": { "width": 810, "height": 250 },
+          "position": { "x": 390, "y": -230 }
+        },
+        "data": {
+          "name": "普通订单事务",
+          "nodeMeta": {
+            "pluginId": "",
+            "pluginName": "",
+            "pluginVersion": "",
+            "functionName": "",
+            "databaseId": "primary"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_create_order_nm",
+        "type": "skylake-func",
+        "parent": "tx_normal_order",
+        "meta": {
+          "zIndex": 8,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 465, "y": -155 }
+        },
+        "data": {
+          "name": "创建订单",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_create_order"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "tx_update_stock_nm",
+        "type": "skylake-func",
+        "parent": "tx_normal_order",
+        "meta": {
+          "zIndex": 9,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 885, "y": -155 }
+        },
+        "data": {
+          "name": "扣减库存",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "tx_update_stock"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "final_process",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 10,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 1650, "y": -357 }
+        },
+        "data": {
+          "name": "最终处理",
+          "nodeMeta": {
+            "pluginId": "{{plugin_id}}",
+            "pluginName": "{{plugin_name}}",
+            "pluginVersion": "1.0.0",
+            "functionName": "final_process"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "skylake-end",
+        "meta": {
+          "zIndex": 11,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": 1965, "y": -345 }
+        },
+        "data": {
+          "name": "结束节点",
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "start_1", "sourcePortID": "out", "targetNodeID": "check_order_amount", "targetPortID": "in" },
+      { "sourceNodeID": "check_order_amount", "sourcePortID": "out_high_value", "targetNodeID": "tx_create_order_hv", "targetPortID": "in" },
+      { "sourceNodeID": "check_order_amount", "sourcePortID": "out_normal", "targetNodeID": "tx_create_order_nm", "targetPortID": "in" },
+      { "sourceNodeID": "tx_create_order_hv", "sourcePortID": "out", "targetNodeID": "tx_update_stock_hv", "targetPortID": "in" },
+      { "sourceNodeID": "tx_update_stock_hv", "sourcePortID": "out", "targetNodeID": "tx_record_approval", "targetPortID": "in" },
+      { "sourceNodeID": "tx_record_approval", "sourcePortID": "out", "targetNodeID": "final_process", "targetPortID": "in" },
+      { "sourceNodeID": "tx_create_order_nm", "sourcePortID": "out", "targetNodeID": "tx_update_stock_nm", "targetPortID": "in" },
+      { "sourceNodeID": "tx_update_stock_nm", "sourcePortID": "out", "targetNodeID": "final_process", "targetPortID": "in" },
+      { "sourceNodeID": "final_process", "sourcePortID": "out", "targetNodeID": "end_1", "targetPortID": "in" }
+    ]
+  }
+}

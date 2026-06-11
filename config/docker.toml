@@ -71,3 +71,30 @@ storage_path = "./storage"
 enable_access = true
 path_patterns = "/files/**"
 
+
+# ============================================
+# RPC 配置
+# ============================================
+[rpc]
+# 是否启用 RPC（可选，默认 false）
+enabled = true
+# 通信协议（目前仅支持 "grpc"）
+protocol = "grpc"
+# 预热服务列表（启动时预先发现的服务名）
+warmup_services = []
+
+[rpc.grpc]
+# gRPC 监听端口
+port = 9090
+# RPC 调用超时时间（毫秒，可选，默认 5000），通过 volo rpc_timeout 设置
+timeout_ms = 5000
+# 连接超时时间（毫秒，可选，默认 3000），通过 volo connect_timeout 设置
+connect_timeout_ms = 3000
+# 重试次数（可选，默认 0，仅对可重试错误重试：UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED/ABORTED）
+retry_count = 0
+# 默认服务分组（可选，None 表示不按分组过滤，用于多机房/多 region 部署）
+# default_group = "DEFAULT_GROUP"
+# 默认集群列表（可选，空表示不过滤，用于多机房/多 region 部署）
+# default_clusters = []
+# 服务发现变更通知通道容量（可选，默认 1024，用于缓冲高频服务变更如 k8s 滚动更新）
+# discover_channel_capacity = 1024

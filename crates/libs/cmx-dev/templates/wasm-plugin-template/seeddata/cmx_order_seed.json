@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ORD-001",
+    "customer_name": "张三",
+    "product_name": "企业版许可证",
+    "quantity": 10,
+    "unit_price": "999.00",
+    "status": "pending"
+  },
+  {
+    "id": "ORD-002",
+    "customer_name": "李四",
+    "product_name": "标准版许可证",
+    "quantity": 5,
+    "unit_price": "499.00",
+    "status": "confirmed"
+  }
+]

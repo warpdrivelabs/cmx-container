@@ -11,49 +11,31 @@
         "dependencies": [],
         "main_file": "{{plugin_id}}.wasm",
         "datasource_id": "{{datasource_id}}",
-        "extra_files": [
-            "bin/script1.bas",
-            "bin/script2.bas"
-        ],
         "table_config_files": [
-            "config/domain_app_module_config.json"
+            "config/meta_config.json"
         ],
         "supported_databases": [
             "mysql",
             "postgres",
-            "sqlite",
-            "oracle"
+            "sqlite"
         ],
         "domain_code": "{{domain_code}}",
         "application_code": "{{application_code}}",
         "module_code": "{{module_code}}",
-        "vendor_name": "示例科技公司",
+        "vendor_name": "CMX 示例",
         "vendor_url": "https://example.com",
-        "vendor_logo": "https://example.com/logo.png",
-        "vendor_description": "示例科技公司是一家专注于企业应用开发的公司，提供企业应用开发、企业应用集成、企业应用管理等服务。",
-        "vendor_contact_name": "张三",
-        "vendor_contact_email": "zhangsan@example.com",
-        "vendor_contact_phone": "13800138000",
-        "vendor_contact_address": "北京市海淀区",
-        "vendor_contact_website": "https://example.com",
-        "vendor_contact_linkedin": "https://www.linkedin.com/in/zhangsan",
-        "vendor_contact": "support@example.com",
+        "vendor_description": "CMX 插件开发最佳实践示例",
+        "vendor_contact": "dev@example.com",
         "development_languages": [
             "rust"
         ]
     },
     "entries": [
         "manifest.json",
-        "project.json",
-        "readme.md",
         "config/**/*",
         "metadata/**/*",
         "servicedata/**/*",
-        "menudata/**/*",
-        "formdata/**/*",
-        "mcpdata/**/*",
         "seeddata/**/*",
-        "api/**/*",
         "target/wasm32-wasip1/release/*.wasm"
     ]
 }

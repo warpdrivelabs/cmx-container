@@ -1,0 +1,12 @@
+[
+  {
+    "id": "INV-001",
+    "product_name": "企业版许可证",
+    "stock": 100
+  },
+  {
+    "id": "INV-002",
+    "product_name": "标准版许可证",
+    "stock": 200
+  }
+]

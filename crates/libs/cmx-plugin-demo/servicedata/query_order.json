@@ -1,0 +1,82 @@
+{
+  "name": "查询订单",
+  "code": "query_order",
+  "description": "查询订单列表并缓存结果",
+  "flow": {
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "skylake-start",
+        "meta": {
+          "zIndex": 1,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": -330, "y": -345 }
+        },
+        "data": {
+          "name": "开始节点",
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "query_orders",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 2,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 55, "y": -357 }
+        },
+        "data": {
+          "name": "查询订单列表",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "query_orders"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "cache_order_status",
+        "type": "skylake-func",
+        "meta": {
+          "zIndex": 3,
+          "size": { "width": 240, "height": 98 },
+          "position": { "x": 390, "y": -357 }
+        },
+        "data": {
+          "name": "缓存订单状态",
+          "nodeMeta": {
+            "pluginId": "cmx_plugin_demo",
+            "pluginName": "cmx_plugin_demo",
+            "pluginVersion": "1.0.0",
+            "functionName": "cache_order_status"
+          },
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "skylake-end",
+        "meta": {
+          "zIndex": 4,
+          "size": { "width": 240, "height": 74 },
+          "position": { "x": 725, "y": -345 }
+        },
+        "data": {
+          "name": "结束节点",
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "start_1", "sourcePortID": "out", "targetNodeID": "query_orders", "targetPortID": "in" },
+      { "sourceNodeID": "query_orders", "sourcePortID": "out", "targetNodeID": "cache_order_status", "targetPortID": "in" },
+      { "sourceNodeID": "cache_order_status", "sourcePortID": "out", "targetNodeID": "end_1", "targetPortID": "in" }
+    ]
+  }
+}

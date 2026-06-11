@@ -1,0 +1,41 @@
+{
+    "manifest_version": "1.0",
+    "plugin": {
+        "type": "wasm-plugin",
+        "id": "cmx_plugin_demo",
+        "name": "订单管理示例插件",
+        "version": "1.0.0",
+        "description": "企业级 WASM 插件开发最佳实践示例，以订单管理为业务场景",
+        "url": "https://example.com/plugin/cmx-plugin-demo",
+        "source_path": ".",
+        "dependencies": [],
+        "main_file": "cmx_plugin_demo.wasm",
+        "datasource_id": "primary",
+        "table_config_files": [
+            "config/meta_config.json"
+        ],
+        "supported_databases": [
+            "mysql",
+            "postgres",
+            "sqlite"
+        ],
+        "domain_code": "demo",
+        "application_code": "order",
+        "module_code": "order_mgmt",
+        "vendor_name": "CMX 示例",
+        "vendor_url": "https://example.com",
+        "vendor_description": "CMX 插件开发最佳实践示例",
+        "vendor_contact": "dev@example.com",
+        "development_languages": [
+            "rust"
+        ]
+    },
+    "entries": [
+        "manifest.json",
+        "config/**/*",
+        "metadata/**/*",
+        "servicedata/**/*",
+        "seeddata/**/*",
+        "target/wasm32-wasip1/release/*.wasm"
+    ]
+}

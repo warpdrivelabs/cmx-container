@@ -1,0 +1,35 @@
+[package]
+name = "{{project_name}}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Extism PDK
+extism-pdk = { version = "1.4.1", optional = true }
+# CMX 插件 SDK
+cmx-plugin-sdk = { version = "0.1.9", registry = "nora", default-features = false }
+# 序列化框架
+serde = { version = "1.0", features = ["derive"] }
+# JSON 序列化/反序列化
+serde_json = "1.0"
+# 时间处理 - 日期时间库，支持日期时间的解析、计算和格式化
+chrono = { version = "0.4", features = ["serde"] }
+[dev-dependencies]
+# Mock 测试框架
+mockall = "0.11"
+[features]
+# Extism 特性 — 编译 Wasm 时开启
+extism = ["extism-pdk", "cmx-plugin-sdk/extism"]
+
+[profile.release]
+lto = true
+opt-level = "s"
+
+[profile.dev]
+debug = 2
+opt-level = 0
+lto = false
+strip = false
