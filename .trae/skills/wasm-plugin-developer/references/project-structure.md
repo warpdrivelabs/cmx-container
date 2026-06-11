@@ -215,7 +215,98 @@
 
 > **数据库操作规范**：`DbRequest` 的 `db_id` 字段应使用 `manifest.json` 中 `plugin.datasource_id` 的值，确保数据库操作使用插件关联的数据源。
 
-### 3.4 函数注释规范（必须使用 plugin-fn-doc 技能）
+### 3.4 服务编排数据流与代码模式
+
+#### 数据获取原则
+
+当前节点从哪里获取数据，取决于**前序节点的输出是否包含所需字段**：
+
+- **前序节点输出包含所需字段** → 直接使用 `input.input`
+- **前序节点输出不含所需字段** → 从 `input.context.initial_input` 或 `input.context.get_step_output("node_id")` 获取
+
+生成代码时，必须分析前序节点的输出结构，选择正确的数据源。
+
+#### 代码模式
+
+**模式1：前序节点输出包含所需字段 — 使用 input.input**
+
+```rust
+// 适用于：前序节点输出包含当前节点所需的全部字段
+// 例如：start → validate → save（validate 透传了业务数据）
+pub fn save(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    // input.input 包含业务数据，直接使用
+    let request: SaveRequest = serde_json::from_value(input.input.clone())
+        .map_err(|e| e.to_string())?;
+    // ...
+}
+```
+
+**模式2：前序节点输出不含所需字段 — 使用 initial_input**
+
+```rust
+// 适用于：前序节点（如 merge、校验）的输出不含完整业务数据
+// 例如：start → switch → branch → merge → 业务操作
+// merge 的输出可能只有合并标志和分支信息，不含原始业务字段
+pub fn tx_create(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    // input.input 是 merge 的输出，不含业务字段 → 从 initial_input 获取
+    let request: CreateRequest = serde_json::from_value(
+        input.context.initial_input.clone()
+    ).map_err(|e| format!("参数解析失败: {}", e))?;
+    // ...
+}
+```
+
+**模式3：聚合多步骤输出 — 使用 get_step_output**
+
+```rust
+// 适用于：需要整合多个步骤的结果
+pub fn final_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let step_a = input.context.get_step_output("node_a").cloned();
+    let step_b = input.context.get_step_output("node_b").cloned();
+    // 合并处理...
+}
+```
+
+#### switch 节点函数编写规范
+
+switch 节点的函数**只需返回路由标识字符串**，不需要传递业务数据：
+
+```rust
+// switch 节点函数：只返回路由值
+pub fn route_check(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let route = input.input.get("route")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1");
+    // 返回值仅用于路由判断，执行器会自动恢复 current_output
+    Ok(FunctionOutput::from_json(serde_json::to_value(route)?))
+}
+```
+
+#### 业务节点数据源选择示例
+
+```rust
+// 场景：merge_result 的输出为 { "merged": true, "branch_output": ..., "message": "..." }
+// 不含 customer_name、product_name 等订单字段
+// → tx_create_order 应从 initial_input 获取
+pub fn tx_create_order(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let txn_id = input.context.txn_id.clone();
+    let request: CreateOrderRequest = serde_json::from_value(
+        input.context.initial_input.clone()  // 从 initial_input 获取，因为 input.input 不含订单字段
+    ).map_err(|e| format!("参数解析失败: {}", e))?;
+    // ...
+}
+
+// 场景：如果 merge_result 的输出透传了业务数据（如包含 customer_name 等字段）
+// → tx_create_order 可以直接使用 input.input
+pub fn tx_create_order(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let txn_id = input.context.txn_id.clone();
+    let request: CreateOrderRequest = serde_json::from_value(input.input.clone())  // input.input 包含订单字段
+        .map_err(|e| format!("参数解析失败: {}", e))?;
+    // ...
+}
+```
+
+### 3.5 函数注释规范（必须使用 plugin-fn-doc 技能）
 
 **重要**：所有带有 `#[plugin_fn]` 属性的函数的文档注释**必须**使用 **plugin-fn-doc** 技能生成。无论函数定义在哪个文件中（`extism/` 目录下的文件或其他文件），只要使用了 `#[plugin_fn]` 属性，就必须遵循此规范。该技能确保注释格式正确，cmx-cli 能够正确解析生成 `api.json`。
 

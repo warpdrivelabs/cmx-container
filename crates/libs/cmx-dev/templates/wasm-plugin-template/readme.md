@@ -304,6 +304,39 @@ pub fn merge_result(&self, input: &FunctionInput) -> Result<FunctionOutput, Stri
 }
 ```
 
+### 数据流设计
+
+在服务编排中，当前节点从哪里获取数据，取决于**前序节点的输出是否包含所需字段**：
+
+| 前序节点输出 | 数据获取方式 | 说明 |
+|-------------|-------------|------|
+| 包含所需字段 | `input.input` | 直接使用前序节点的输出 |
+| 不含所需字段 | `input.context.initial_input` | 从原始输入获取业务参数 |
+| 需要特定步骤 | `input.context.get_step_output("node_id")` | 按节点ID获取指定步骤输出 |
+
+**switch 节点特殊行为**：switch 节点的返回值仅用于路由判断，不会传递给下一个节点。switch 后的节点收到的 `input.input` 与 switch 执行前相同。
+
+**典型场景**：当流程为 `start → switch → branch → merge → 数据库操作` 时，需要分析 merge 的输出结构：
+- 如果 merge 输出包含业务字段 → 数据库操作使用 `input.input`
+- 如果 merge 输出不含业务字段 → 数据库操作使用 `input.context.initial_input`
+
+```rust
+// 前序节点输出不含业务字段时：从 initial_input 获取
+pub fn tx_create_order(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let request: CreateOrderRequest = serde_json::from_value(
+        input.context.initial_input.clone()
+    ).map_err(|e| format!("参数解析失败: {}", e))?;
+    // ...
+}
+
+// 前序节点输出包含业务字段时：直接使用 input.input
+pub fn tx_create_order(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let request: CreateOrderRequest = serde_json::from_value(input.input.clone())
+        .map_err(|e| format!("参数解析失败: {}", e))?;
+    // ...
+}
+```
+
 ---
 
 ## manifest.json 配置说明

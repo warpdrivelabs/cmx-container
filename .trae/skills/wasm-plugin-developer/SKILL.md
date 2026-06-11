@@ -116,6 +116,36 @@ extism/（Extism 适配，与 handlers/ 一一对应）
 
 > **数据库操作规范**：`DbRequest` 的 `db_id` 字段应使用 `manifest.json` 中 `plugin.datasource_id` 的值，确保数据库操作使用插件关联的数据源。
 
+### 2.3 服务编排数据流规范
+
+在服务编排中，节点间数据通过 `current_output` 链式传递，但不同场景需要使用不同的数据源：
+
+| 数据源 | 访问方式 | 适用场景 |
+|--------|---------|---------|
+| 上一步输出 | `input.input` | 前序节点输出包含所需字段 |
+| 原始输入 | `input.context.initial_input` | 前序节点输出不含所需字段，需要原始业务参数 |
+| 指定步骤输出 | `input.context.get_step_output("node_id")` | 需要特定步骤的输出 |
+| 事务ID | `input.context.txn_id` | 事务操作 |
+
+**核心原则**：
+
+1. **switch 节点的返回值仅用于路由判断**，不会传递给下一个节点（执行器自动恢复 current_output）
+2. **当前节点应从哪里获取数据，取决于前序节点的输出是否包含所需字段**：
+   - 包含 → 直接使用 `input.input`
+   - 不包含 → 从 `input.context.initial_input` 或 `get_step_output("node_id")` 获取
+3. **每个节点的输出都会缓存到 `step_outputs`**，任意节点都可通过 `get_step_output("node_id")` 访问
+
+**数据获取决策树**：
+
+```
+当前节点需要什么数据？
+├── 前序节点输出包含所需字段 → input.input
+├── 前序节点输出不含所需字段
+│   ├── 需要原始业务参数 → input.context.initial_input
+│   └── 需要特定步骤的输出 → input.context.get_step_output("node_id")
+└── 事务ID → input.context.txn_id
+```
+
 ---
 
 ## 三、技能使用指引

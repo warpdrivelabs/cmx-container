@@ -1,0 +1,15 @@
+{
+  "name": "order",
+  "description": "订单管理表定义和种子数据",
+  "depends_on": [],
+  "priority": 0,
+  "files": ["order_tables.json"],
+  "seed_data": [
+    {
+      "table_name": "cmx_order",
+      "file": "seeddata/cmx_order_seed.json",
+      "conflict_columns": ["id"],
+      "enabled": true
+    }
+  ]
+}

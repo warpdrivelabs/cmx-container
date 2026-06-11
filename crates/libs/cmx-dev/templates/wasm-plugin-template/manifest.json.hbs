@@ -1,0 +1,41 @@
+{
+    "manifest_version": "1.0",
+    "plugin": {
+        "type": "wasm-plugin",
+        "id": "{{plugin_id}}",
+        "name": "{{plugin_name}}",
+        "version": "1.0.0",
+        "description": "{{description}}",
+        "url": "https://example.com/plugin/{{plugin_id}}",
+        "source_path": "{{project_path}}",
+        "dependencies": [],
+        "main_file": "{{plugin_id}}.wasm",
+        "datasource_id": "{{datasource_id}}",
+        "table_config_files": [
+            "config/meta_config.json"
+        ],
+        "supported_databases": [
+            "mysql",
+            "postgres",
+            "sqlite"
+        ],
+        "domain_code": "{{domain_code}}",
+        "application_code": "{{application_code}}",
+        "module_code": "{{module_code}}",
+        "vendor_name": "CMX 示例",
+        "vendor_url": "https://example.com",
+        "vendor_description": "CMX 插件开发最佳实践示例",
+        "vendor_contact": "dev@example.com",
+        "development_languages": [
+            "rust"
+        ]
+    },
+    "entries": [
+        "manifest.json",
+        "config/**/*",
+        "metadata/**/*",
+        "servicedata/**/*",
+        "seeddata/**/*",
+        "target/wasm32-wasip1/release/*.wasm"
+    ]
+}
