@@ -36,7 +36,7 @@ impl<H: HostFunctions> PluginCore<H> {
                 Some(serde_json::Value::Array(params))
             },
             dataset_id: None,
-            db_id: Some("primary".to_string()),
+            db_id: None,
             txn_id: None,
         };
         let db_response = self.host.db_query(db_request)?;
@@ -63,7 +63,7 @@ impl<H: HostFunctions> PluginCore<H> {
             sql,
             params: Some(serde_json::Value::Array(params)),
             dataset_id: None,
-            db_id: Some("primary".to_string()),
+            db_id: None,
             txn_id: input.context.txn_id.clone(),
         };
         let db_response = self.host.db_execute(db_request)?;
@@ -90,7 +90,7 @@ impl<H: HostFunctions> PluginCore<H> {
             sql,
             params: Some(serde_json::Value::Array(params)),
             dataset_id: None,
-            db_id: Some("primary".to_string()),
+            db_id: None,
             txn_id: input.context.txn_id.clone(),
         };
         let db_response = self.host.db_execute(db_request)?;
@@ -109,7 +109,7 @@ impl<H: HostFunctions> PluginCore<H> {
             sql,
             params: Some(serde_json::Value::Array(params)),
             dataset_id: None,
-            db_id: Some("primary".to_string()),
+            db_id: None,
             txn_id: input.context.txn_id.clone(),
         };
         let db_response = self.host.db_execute(db_request)?;
