@@ -31,11 +31,17 @@
         ]
     },
     "entries": [
-        "manifest.json",
-        "config/**/*",
-        "metadata/**/*",
-        "servicedata/**/*",
-        "seeddata/**/*",
-        "target/wasm32-wasip1/release/*.wasm"
+      "manifest.json",
+      "project.json",
+      "readme.md",
+      "config/**/*",
+      "metadata/**/*",
+      "servicedata/**/*",
+      "menudata/**/*",
+      "formdata/**/*",
+      "mcpdata/**/*",
+      "seeddata/**/*",
+      "api/**/*",
+      "target/wasm32-wasip1/release/*.wasm"
     ]
 }
