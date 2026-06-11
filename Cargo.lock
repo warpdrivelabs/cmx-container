@@ -1074,6 +1074,7 @@ dependencies = [
  "mockall 0.11.4",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

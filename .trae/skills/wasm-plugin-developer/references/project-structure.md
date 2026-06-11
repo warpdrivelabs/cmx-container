@@ -214,6 +214,8 @@
 | `call_remote_service` | 服务编排 | 调用远程服务编排接口 |
 
 > **数据库操作规范**：`DbRequest` 的 `db_id` 字段应使用 `manifest.json` 中 `plugin.datasource_id` 的值，确保数据库操作使用插件关联的数据源。
+>
+> **参数化查询规范**：SQL 参数占位符使用 PostgreSQL 风格的 `$1, $2, $3...`（不使用 `?`），参数通过 `DbRequest.params` 以 JSON 数组传递，按顺序与 `$N` 对应。动态构建查询条件时，使用递增计数器生成 `$N`。
 
 ### 3.4 服务编排数据流与代码模式
 

@@ -10,6 +10,18 @@
       "file": "seeddata/cmx_order_seed.json",
       "conflict_columns": ["id"],
       "enabled": true
+    },
+    {
+      "table_name": "cmx_inventory",
+      "file": "seeddata/cmx_inventory_seed.json",
+      "conflict_columns": ["id"],
+      "enabled": true
+    },
+    {
+      "table_name": "cmx_order_approval",
+      "file": "seeddata/cmx_order_approval_seed.json",
+      "conflict_columns": ["id"],
+      "enabled": true
     }
   ]
 }

@@ -176,13 +176,15 @@ fn test_my_function() {
 
 ```rust
 DbRequest {
-    sql: "SELECT * FROM table".to_string(),  // SQL 语句
-    params: None,                              // SQL 参数（JSON 数组）
+    sql: "SELECT * FROM table WHERE id = $1".to_string(),  // SQL 语句（PostgreSQL 使用 $1, $2... 占位符）
+    params: Some(serde_json::Value::Array(vec![...])),        // SQL 参数（JSON 数组，与 $N 一一对应）
     dataset_id: None,                          // 数据集 ID
-    db_id: None,                               // 数据库 ID（不指定用默认）
+    db_id: Some("default".to_string()),        // 数据库 ID，使用 manifest.json 的 datasource_id
     txn_id: None,                              // 事务 ID（事务操作必填）
 }
 ```
+
+> **参数化查询规范**：SQL 参数占位符使用 PostgreSQL 风格的 `$1, $2, $3...`（不使用 `?`），参数通过 `DbRequest.params` 以 JSON 数组传递，按顺序与 `$N` 对应。
 
 ### 插件调用
 
@@ -282,7 +284,9 @@ pub fn route_check(&self, input: &FunctionInput) -> Result<FunctionOutput, Strin
 pub fn tx_insert(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
     let txn_id = input.context.txn_id.clone();
     let query_request = DbRequest {
-        sql: "INSERT INTO ...".to_string(),
+        sql: "INSERT INTO ... VALUES ($1, $2)".to_string(),
+        params: Some(serde_json::Value::Array(vec![...])),
+        db_id: Some("default".to_string()),  // 使用 manifest.json 的 datasource_id
         txn_id,
         ..Default::default()
     };
@@ -529,4 +533,4 @@ let request = CallServiceRequest {
 4. **单元测试不需要 `extism` feature**，使用 `MockHostFunctions` 即可隔离宿主依赖
 5. **事务操作必须传递 `txn_id`**，从 `input.context.txn_id` 获取
 6. **获取前序步骤输出**使用 `input.context.get_step_output("node_id")`
-7. **SQL 参数化查询**建议使用 `DbRequest.params` 字段传递参数，避免 SQL 注入
+7. **SQL 参数化查询**：使用 `DbRequest.params` 字段传递参数，占位符使用 PostgreSQL 风格的 `$1, $2, $3...`（不使用 `?`），避免 SQL 注入

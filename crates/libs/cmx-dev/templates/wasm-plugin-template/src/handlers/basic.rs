@@ -11,7 +11,7 @@ impl<H: HostFunctions> PluginCore<H> {
         let name = input.input.as_str().unwrap_or("World");
         let result = serde_json::json!({
             "message": format!("Hello, {}!", name),
-            "greeting": format!("Welcome to cmx插件, {}!", name),
+            "greeting": format!("Welcome to cmx-plugin-demo, {}!", name),
         });
         Ok(FunctionOutput::from_json(result))
     }

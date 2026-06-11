@@ -1,12 +1,29 @@
 use cmx_plugin_sdk::{FunctionInput, SVRContext};
 use std::collections::HashMap;
 
-/// 创建测试用 FunctionInput。
+/// 创建测试用 FunctionInput（initial_input 与 input 相同）。
 pub fn make_input(input_value: serde_json::Value) -> FunctionInput {
+    FunctionInput {
+        input: input_value.clone(),
+        context: SVRContext::new(
+            input_value,
+            HashMap::new(),
+            chrono::Utc::now(),
+            "test-request-id".to_string(),
+        ),
+        binary_data: HashMap::new(),
+    }
+}
+
+/// 创建测试用 FunctionInput，指定 initial_input（用于服务编排场景）。
+pub fn make_input_with_initial(
+    input_value: serde_json::Value,
+    initial_input: serde_json::Value,
+) -> FunctionInput {
     FunctionInput {
         input: input_value,
         context: SVRContext::new(
-            serde_json::Value::Null,
+            initial_input,
             HashMap::new(),
             chrono::Utc::now(),
             "test-request-id".to_string(),
@@ -21,7 +38,7 @@ pub fn make_input_with_steps(
     steps: Vec<(&str, serde_json::Value)>,
 ) -> FunctionInput {
     let mut context = SVRContext::new(
-        serde_json::Value::Null,
+        input_value.clone(),
         HashMap::new(),
         chrono::Utc::now(),
         "test-request-id".to_string(),

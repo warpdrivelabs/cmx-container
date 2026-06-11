@@ -119,6 +119,67 @@ description: "Generates service orchestration JSON based on Flow JSON specificat
 
 每个节点执行后，其输出会按 `node_id` 缓存到 `step_outputs` 中。后续任意节点都可以通过 `step_outputs[node_id]` 访问之前任何节点的输出，而不仅仅是上一个节点。
 
+### 数据流设计指导
+
+生成服务编排时，需要考虑节点间的数据传递方式，确保后续业务节点能正确获取所需数据。
+
+#### 数据获取核心原则
+
+当前节点从哪里获取数据，取决于**前序节点的输出是否包含所需字段**：
+
+- **前序节点输出包含所需字段** → 直接使用 `input.input`
+- **前序节点输出不含所需字段** → 从 `input.context.initial_input` 或 `input.context.get_step_output("node_id")` 获取
+
+生成代码时，必须分析前序节点的输出结构，选择正确的数据源。
+
+#### switch 节点设计原则
+
+1. switch 节点的函数**只返回路由标识字符串**（如 "1"、"2"、"success"）
+2. switch 节点的返回值**不会**传递给下一个节点（执行器自动恢复 current_output）
+3. switch 后的节点收到的 `input.input` 与 switch 执行前相同
+
+#### 业务节点数据源选择
+
+生成编排对应的 Rust 代码时，应根据前序节点的输出结构选择数据源：
+
+| 前序节点输出 | 当前节点数据源 | 示例 |
+|-------------|--------------|------|
+| 包含当前节点所需字段 | `input.input` | validate 透传了业务数据 → save 直接用 |
+| 不含当前节点所需字段 | `input.context.initial_input` | merge 只返回合并标志 → 业务操作从 initial_input 取 |
+| 需要特定步骤的输出 | `input.context.get_step_output("node_id")` | 最终聚合节点获取各步骤输出 |
+
+#### 代码生成提示
+
+```rust
+// switch 节点：只返回路由值
+pub fn route_check(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let route = input.input.get("route").and_then(|v| v.as_str()).unwrap_or("1");
+    Ok(FunctionOutput::from_json(serde_json::to_value(route)?))
+}
+
+// 前序节点输出不含业务字段：从 initial_input 获取
+pub fn tx_create(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let request: BusinessRequest = serde_json::from_value(
+        input.context.initial_input.clone()
+    ).map_err(|e| e.to_string())?;
+    // ...
+}
+
+// 前序节点输出包含业务字段：直接使用 input.input
+pub fn save(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let request: SaveRequest = serde_json::from_value(input.input.clone())
+        .map_err(|e| e.to_string())?;
+    // ...
+}
+
+// 最终聚合节点：使用 get_step_output
+pub fn final_process(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
+    let step_a = input.context.get_step_output("node_a");
+    let step_b = input.context.get_step_output("node_b");
+    // ...
+}
+```
+
 ### 固定尺寸配置
 
 | 节点类型 | width | height |
@@ -648,3 +709,4 @@ y:-455 │  [start] → [switch] → [branch] → ┌─────────
    - 不要使用 `transaction_box` 作为 sourceNodeID 或 targetNodeID
 10. **pluginId 命名约束**：`nodeMeta.pluginId` 只能使用下划线 `_` 分隔，禁止使用连字符 `-`（如 `my_plugin`，不能写成 `my-plugin`）
 11. **databaseId 规范**：事务框（`skylake-transaction`）的 `nodeMeta.databaseId` 必须使用插件 `manifest.json` 中 `plugin.datasource_id` 的值，确保事务操作使用插件关联的数据源
+12. **数据流设计**：生成代码时必须分析前序节点的输出结构，判断 `input.input` 是否包含当前节点所需字段。包含则直接使用 `input.input`，不包含则从 `input.context.initial_input` 或 `input.context.get_step_output("node_id")` 获取
