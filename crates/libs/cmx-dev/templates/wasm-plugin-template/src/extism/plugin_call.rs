@@ -1,7 +1,6 @@
 use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
-use extism_pdk::*;
 
 /// 调用库存插件检查库存
 ///

@@ -1,7 +1,7 @@
 use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
-use extism_pdk::*;
+
 
 /// 问候函数
 ///
