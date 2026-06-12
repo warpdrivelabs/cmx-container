@@ -66,6 +66,13 @@ use std::sync::Arc;
 /// - 调试和测试插件函数
 /// - 不需要服务编排的轻量级调用
 ///
+/// # 跨服务调用
+///
+/// 请求体中的 `server_name`（可选）用于跨服务 gRPC 调用：指定后本接口
+/// 会通过 gRPC 将函数调用路由到 `server_name` 标识的远程 CMX 服务上执行，
+/// 可用于分布式部署中跨节点调用其他服务上注册的插件函数；
+/// 不指定时则在当前服务本地执行。
+///
 /// # 与 execute_service 的区别
 ///
 /// | 特性 | service_call | execute_service |
@@ -87,6 +94,12 @@ use std::sync::Arc;
 /// - `input`: 输入数据，支持 JSON 对象或字符串，将作为函数输入
 /// - `initial_input`: 初始输入数据（可选），用于调试场景，传递服务最开始的入参
 /// - `debug`: 是否调试模式，可选，默认 false，调试模式下会返回更详细的执行信息
+/// - `server_name`: 目标服务名称（可选），**用于跨服务 gRPC 调用**。当指定时，
+///   本请求会通过 gRPC 路由到 `server_name` 标识的远程 CMX 服务上执行对应
+///   插件函数或服务编排；不指定则在本地服务内直接执行。常见用途：
+///   - 在分布式部署中调用其他节点上的服务编排
+///   - 跨服务复用已注册的插件函数（无需在本地重复部署）
+///   - 跨服务执行编排子流程以实现服务组合
 ///
 /// # 响应体 (FunctionCallResponse)
 /// - `success`: 是否成功，true 表示执行成功
@@ -379,6 +392,14 @@ async fn execute_service_inner(
 /// 处理 POST /api/service/execute 请求，执行完整的服务编排流程。
 /// 通过编排器协调多个 WASM 插件函数的执行，实现复杂的业务逻辑。
 ///
+/// # 跨服务调用
+///
+/// 请求体中的 `server_name`（可选）用于跨服务 gRPC 调用：指定后本接口
+/// 会将编排执行请求通过 gRPC 路由到 `server_name` 标识的远程 CMX 服务上
+/// 执行，常用于在分布式部署中跨节点调用其他服务上注册的服务编排，
+/// 实现跨服务的编排组合（如 A 服务编排中嵌入 B 服务的编排子流程）；
+/// 不指定时则在当前服务本地执行编排流程。
+///
 /// # 参数
 /// - `state`: 应用状态
 /// - `svr_ctx`: 服务上下文（从 middleware 传入）
@@ -391,6 +412,13 @@ async fn execute_service_inner(
 /// - `debug`: 是否开启调试模式，可选，默认 false
 /// - `debug_node_id`: 调试目标节点ID，开启 debug 时必填
 /// - `debug_params`: debug相关的参数 HashMap<string, string>
+/// - `server_name`: 目标服务名称（可选），**用于跨服务 gRPC 调用**。当指定时，
+///   本编排执行请求会通过 gRPC 路由到 `server_name` 标识的远程 CMX 服务上执行，
+///   适用于：
+///   - 在分布式部署中调用其他 CMX 节点上的服务编排
+///   - 在 A 服务编排中嵌入调用 B 服务的编排子流程，实现跨服务编排组合
+///   - 将耗时编排任务分发到指定节点执行以实现负载分流
+///   不指定时则在当前服务本地执行编排流程
 ///
 /// # 响应体 (ServiceExecuteResponse)
 /// - `success`: 是否成功，编排中任何节点失败都为 false
@@ -479,6 +507,14 @@ pub async fn execute_service(
 /// 与 `execute_service` 的区别在于 service_key 从 URL 路径获取，优先级高于请求体。
 /// 适用于 service_key 可能包含复杂字符不适合放在请求体中的场景。
 ///
+/// # 跨服务调用
+///
+/// 请求体中的 `server_name`（可选）用于跨服务 gRPC 调用：指定后本接口
+/// 会将编排执行请求通过 gRPC 路由到 `server_name` 标识的远程 CMX 服务上执行。
+/// 配合 URL 路径中的 `service_key`（常含路径分隔符）可以精准地在指定服务
+/// 上执行指定的层级化服务编排，实现"路径定位 + 服务路由"的跨服务调用；
+/// 不指定时则在当前服务本地执行编排流程。
+///
 /// # 参数
 /// - `state`: 应用状态
 /// - `svr_ctx`: 服务上下文（从 middleware 传入）
@@ -494,6 +530,14 @@ pub async fn execute_service(
 /// - `input`: 初始输入数据，作为编排流程的起始输入
 /// - `include_steps`: 是否返回步骤数据，可选，默认 false
 /// - `debug_params`: debug相关的参数 HashMap<string, string>
+/// - `server_name`: 目标服务名称（可选），**用于跨服务 gRPC 调用**。当指定时，
+///   本编排执行请求会通过 gRPC 路由到 `server_name` 标识的远程 CMX 服务上执行。
+///   配合 URL 路径中的 `service_key` 可以实现"在指定服务上执行特定编排"的
+///   跨服务调用能力，典型场景：
+///   - 通过 URL 路径传递层级化 `service_key`（如 `domain/app/service`），
+///     同时通过 `server_name` 路由到目标服务
+///   - 在分布式部署中跨节点复用已注册的服务编排
+///   不指定时则在当前服务本地执行编排流程
 ///
 /// # 响应体
 /// 与 `execute_service` 相同
