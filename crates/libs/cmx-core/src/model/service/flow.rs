@@ -86,10 +86,10 @@ pub struct NodeData {
     pub node_meta: Option<NodeNodeMeta>,
     /// 输入参数列表
     #[serde(default)]
-    pub inputs: Vec<NodeIO>,
+    pub inputs: serde_json::Value,
     /// 输出参数列表
     #[serde(default)]
-    pub outputs: Vec<NodeIO>,
+    pub outputs: serde_json::Value,
     /// 分支选项（仅 skylake-switch 节点有）
     #[serde(default)]
     pub options: Option<Vec<String>>,
@@ -117,17 +117,17 @@ pub struct NodeNodeMeta {
     pub database_id: Option<String>,
 }
 
-/// 节点输入输出参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeIO {
-    /// 参数键名
-    pub key: String,
-    /// 参数类型
-    #[serde(rename = "type")]
-    pub io_type: String,
-    /// 参数描述
-    pub description: String,
-    /// 是否必填
-    #[serde(default)]
-    pub required: bool,
-}
+// /// 节点输入输出参数
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct NodeIO {
+//     /// 参数键名
+//     pub key: String,
+//     /// 参数类型
+//     #[serde(rename = "type")]
+//     pub io_type: String,
+//     /// 参数描述
+//     pub description: String,
+//     /// 是否必填
+//     #[serde(default)]
+//     pub required: bool,
+// }

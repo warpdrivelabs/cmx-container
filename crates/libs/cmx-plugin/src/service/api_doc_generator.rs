@@ -7,14 +7,14 @@
 //!
 //! 1. 解析编排文件，找到入口/出口可执行节点（skylake-func / skylake-switch）
 //! 2. 通过 PluginQuery 查询跨插件版本，加载所有引用插件的 api.json
-//! 3. 合并 api.json 和编排 NodeIO 的参数信息（以 api.json 为权威来源）
+//! 3. 通过 api.json 获取每个节点的参数信息
 //! 4. 生成接口文档 JSON
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cmx_core::model::service::{NodeIO, ServiceEdge, ServiceNode, ServiceOrchestration};
+use cmx_core::model::service::{ServiceEdge, ServiceNode, ServiceOrchestration};
 use cmx_traits::PluginQuery;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -258,8 +258,8 @@ impl ApiDocGenerator {
 
         let input_params = match &entry_node {
             Some(node) => {
-                let (plugin_id, function_name, node_ios) = extract_node_meta(node);
-                Self::resolve_parameters(&plugin_id, &function_name, true, &node_ios, &api_cache)
+                let (plugin_id, function_name) = extract_node_meta(node);
+                Self::resolve_parameters(&plugin_id, &function_name, true, &api_cache)
             }
             None => vec![],
         };
@@ -627,20 +627,18 @@ impl ApiDocGenerator {
     ) -> Vec<FunctionDoc> {
         let mut functions = Vec::new();
         for (node, step_index) in executable_nodes {
-            let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+            let (plugin_id, function_name) = extract_node_meta(node);
 
             let input_parameters = Self::resolve_parameters(
                 &plugin_id,
                 &function_name,
                 true,
-                &node_ios,
                 api_cache,
             );
             let output_parameters = Self::resolve_parameters(
                 &plugin_id,
                 &function_name,
                 false,
-                &[], // output 不从 NodeIO 取
                 api_cache,
             );
 
@@ -675,15 +673,13 @@ impl ApiDocGenerator {
         functions
     }
 
-    /// 解析参数信息：以 api.json 为权威，NodeIO 补充 description
+    /// 解析参数信息：从 api.json 获取参数定义
     fn resolve_parameters(
         plugin_id: &str,
         function_name: &str,
         is_input: bool,
-        node_ios: &[NodeIO],
         api_cache: &HashMap<String, Option<PluginApiDef>>,
     ) -> Vec<ParameterDoc> {
-        // 尝试从 api.json 获取参数
         let api_fields = api_cache
             .get(plugin_id)
             .and_then(|opt| opt.as_ref())
@@ -702,30 +698,13 @@ impl ApiDocGenerator {
 
         match api_fields {
             Some(fields) if !fields.is_empty() => {
-                // api.json 有数据，以 api.json 为权威
                 fields
                     .iter()
-                    .map(|field| Self::api_field_to_param_doc(field, node_ios))
+                    .map(Self::api_field_to_param_doc)
                     .collect()
             }
             _ => {
-                // api.json 无数据，降级使用 NodeIO
-                if is_input && !node_ios.is_empty() {
-                    node_ios
-                        .iter()
-                        .map(|io| ParameterDoc {
-                            name: io.key.clone(),
-                            param_type: io.io_type.clone(),
-                            required: Some(io.required),
-                            description: if io.description.is_empty() {
-                                "参数描述不完整（api.json 不可用）".to_string()
-                            } else {
-                                io.description.clone()
-                            },
-                            properties: None,
-                        })
-                        .collect()
-                } else if !is_input {
+                if !is_input {
                     vec![ParameterDoc {
                         name: "output".to_string(),
                         param_type: "unknown".to_string(),
@@ -740,24 +719,13 @@ impl ApiDocGenerator {
         }
     }
 
-    /// 将 ApiField 转换为 ParameterDoc，用 NodeIO 补充 description
-    fn api_field_to_param_doc(field: &ApiField, node_ios: &[NodeIO]) -> ParameterDoc {
-        // 尝试从 NodeIO 中补充 description
-        let description = if field.description.is_empty() {
-            node_ios
-                .iter()
-                .find(|io| io.key == field.name)
-                .map(|io| io.description.clone())
-                .unwrap_or_default()
-        } else {
-            field.description.clone()
-        };
-
+    /// 将 ApiField 转换为 ParameterDoc
+    fn api_field_to_param_doc(field: &ApiField) -> ParameterDoc {
         ParameterDoc {
             name: field.name.clone(),
             param_type: field.field_type.clone(),
             required: Some(field.required),
-            description,
+            description: field.description.clone(),
             properties: if field.properties.is_empty() {
                 None
             } else {
@@ -765,7 +733,7 @@ impl ApiDocGenerator {
                     field
                         .properties
                         .iter()
-                        .map(|p| Self::api_field_to_param_doc(p, &[]))
+                        .map(Self::api_field_to_param_doc)
                         .collect(),
                 )
             },
@@ -773,17 +741,14 @@ impl ApiDocGenerator {
     }
 }
 
-/// 从 ServiceNode 提取 plugin_id、function_name 和 NodeIO
-fn extract_node_meta(node: &ServiceNode) -> (String, String, Vec<NodeIO>) {
+/// 从 ServiceNode 提取 plugin_id 和 function_name
+fn extract_node_meta(node: &ServiceNode) -> (String, String) {
     match &node.data {
-        Some(data) => {
-            let (plugin_id, function_name) = match &data.node_meta {
-                Some(meta) => (meta.plugin_id.clone(), meta.function_name.clone()),
-                None => (String::new(), String::new()),
-            };
-            (plugin_id, function_name, data.inputs.clone())
-        }
-        None => (String::new(), String::new(), vec![]),
+        Some(data) => match &data.node_meta {
+            Some(meta) => (meta.plugin_id.clone(), meta.function_name.clone()),
+            None => (String::new(), String::new()),
+        },
+        None => (String::new(), String::new()),
     }
 }
 
@@ -876,12 +841,11 @@ fn build_output_schema(
 
     if exit_nodes.len() == 1 {
         let node = exit_nodes[0];
-        let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+        let (plugin_id, function_name) = extract_node_meta(node);
         let params = ApiDocGenerator::resolve_parameters(
             &plugin_id,
             &function_name,
             false,
-            &node_ios,
             api_cache,
         );
         return params_to_object_schema(&params);
@@ -889,12 +853,11 @@ fn build_output_schema(
 
     let mut branch_schemas = Vec::new();
     for (idx, node) in exit_nodes.iter().enumerate() {
-        let (plugin_id, function_name, node_ios) = extract_node_meta(node);
+        let (plugin_id, function_name) = extract_node_meta(node);
         let params = ApiDocGenerator::resolve_parameters(
             &plugin_id,
             &function_name,
             false,
-            &node_ios,
             api_cache,
         );
 
