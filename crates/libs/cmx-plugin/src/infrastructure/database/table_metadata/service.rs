@@ -9,8 +9,8 @@ use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_utils::snowflake_id_str;
 use modql::field::{HasSeaFields, SeaField, SeaFields};
 use modql::filter::{FilterGroups, ListOptions};
-use sea_query::{Asterisk, Condition, Expr, PostgresQueryBuilder, Query, SelectStatement};
-use sea_query_binder::SqlxBinder;
+use sea_query::{Asterisk, Condition, Expr, ExprTrait, PostgresQueryBuilder, Query, SelectStatement};
+use sea_query_sqlx::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 

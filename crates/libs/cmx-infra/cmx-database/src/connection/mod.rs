@@ -12,7 +12,7 @@ use crate::executor::{ResultConverter, bind_data_value_mysql, bind_data_value_po
 use crate::transaction::Dbx;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
-use sea_query_binder::SqlxValues;
+use sea_query_sqlx::SqlxValues;
 use sqlx::{MySql, Pool, Postgres, Sqlite};
 use tracing::info;
 
@@ -46,15 +46,15 @@ impl DbPool {
     pub async fn execute(&self, sql: &str) -> crate::Result<u64> {
         match self {
             DbPool::Postgres(pool) => {
-                let result = sqlx::query(sql).execute(pool).await?;
+                let result = sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await?;
                 Ok(result.rows_affected())
             }
             DbPool::MySql(pool) => {
-                let result = sqlx::query(sql).execute(pool).await?;
+                let result = sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await?;
                 Ok(result.rows_affected())
             }
             DbPool::Sqlite(pool) => {
-                let result = sqlx::query(sql).execute(pool).await?;
+                let result = sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await?;
                 Ok(result.rows_affected())
             }
         }
@@ -79,15 +79,15 @@ impl DbPool {
     pub async fn query(&self, sql: &str, dataset_id: &str) -> crate::Result<DataSet> {
         match self {
             DbPool::Postgres(pool) => {
-                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             }
             DbPool::MySql(pool) => {
-                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             }
             DbPool::Sqlite(pool) => {
-                let rows = sqlx::query(sql).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
                 Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
             }
         }
@@ -117,7 +117,7 @@ impl DbPool {
     ) -> crate::Result<u64> {
         match self {
             DbPool::Postgres(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_postgres(query, param);
                 }
@@ -125,7 +125,7 @@ impl DbPool {
                 Ok(result.rows_affected())
             }
             DbPool::MySql(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_mysql(query, param);
                 }
@@ -133,7 +133,7 @@ impl DbPool {
                 Ok(result.rows_affected())
             }
             DbPool::Sqlite(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_sqlite(query, param);
                 }
@@ -169,7 +169,7 @@ impl DbPool {
     ) -> crate::Result<DataSet> {
         match self {
             DbPool::Postgres(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_postgres(query, param);
                 }
@@ -177,7 +177,7 @@ impl DbPool {
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             }
             DbPool::MySql(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_mysql(query, param);
                 }
@@ -185,7 +185,7 @@ impl DbPool {
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             }
             DbPool::Sqlite(pool) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_sqlite(query, param);
                 }
@@ -220,7 +220,7 @@ impl DbPool {
     ) -> crate::Result<u64> {
         match self {
             DbPool::Postgres(pool) => {
-                let query = sqlx::query_with(sql, params);
+                let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let result = query.execute(pool).await?;
                 Ok(result.rows_affected())
             }
@@ -260,7 +260,7 @@ impl DbPool {
     ) -> crate::Result<DataSet> {
         match self {
             DbPool::Postgres(pool) => {
-                let query = sqlx::query_with(sql, params);
+                let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let rows = query.fetch_all(pool).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             }
@@ -509,8 +509,8 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
                     let schema = db_schema.clone();
                     Box::pin(async move {
                         // 每次新建连接时设置 schema
-                        sqlx::query(format!("SET search_path TO {}, public", schema
-                            .unwrap_or("public".to_string())).as_str())
+                        sqlx::query(sqlx::AssertSqlSafe(format!("SET search_path TO {}, public", schema
+                            .unwrap_or("public".to_string()))))
                             .execute(conn)
                             .await?;
                         Ok(())

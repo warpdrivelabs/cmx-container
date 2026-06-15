@@ -14,8 +14,8 @@ use cmx_core::model::data::dataset::{DataSet, Schema};
 use modql::SIden;
 use modql::field::HasSeaFields;
 use modql::filter::{FilterGroups, IntoFilterNodes, ListOptions};
-use sea_query::{Asterisk, Condition, Expr, IntoIden, PostgresQueryBuilder, Query};
-use sea_query_binder::SqlxBinder;
+use sea_query::{Asterisk, Condition, Expr, ExprTrait, IntoIden, PostgresQueryBuilder, Query};
+use sea_query_sqlx::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 

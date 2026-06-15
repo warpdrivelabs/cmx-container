@@ -17,7 +17,7 @@ use crate::executor::json_to_data_values;
 use crate::get_default_db_manager;
 use crate::DataSet;
 use cmx_core::model::cell::DataValue;
-use sea_query_binder::SqlxValues;
+use sea_query_sqlx::SqlxValues;
 use tracing::debug;
 
 /// TransactionGuard 清理命令

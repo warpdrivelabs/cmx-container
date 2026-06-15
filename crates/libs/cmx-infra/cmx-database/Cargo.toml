@@ -22,8 +22,8 @@ rmp-serde = { workspace = true }
 sqlx = { workspace = true }
 # sea-query SQL 查询构建器
 sea-query = { workspace = true }
-# sea-query-binder SQL 参数绑定工具
-sea-query-binder = { workspace = true }
+# sea-query-sqlx SQL 参数绑定工具
+sea-query-sqlx = { workspace = true }
 # modql 支持
 modql = { workspace = true, features = ["with-sea-query"] }
 # 派生宏

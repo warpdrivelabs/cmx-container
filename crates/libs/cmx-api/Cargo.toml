@@ -38,7 +38,7 @@ tokio = { workspace = true }
 # SQL 查询构建器
 sea-query = { workspace = true }
 # SQL 参数绑定
-sea-query-binder = { workspace = true }
+sea-query-sqlx = { workspace = true }
 # modql 支持
 modql = { workspace = true, features = ["with-sea-query"] }
 # SQL 异步查询

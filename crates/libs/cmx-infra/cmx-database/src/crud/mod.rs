@@ -29,7 +29,7 @@ pub trait DbBmc {
 
     /// 获取表引用
     fn table_ref() -> TableRef {
-        TableRef::Table(SIden(Self::TABLE).into_iden())
+        TableRef::Table(SIden(Self::TABLE).into_iden().into(), None)
     }
 
     /// 指定此 Bmc 的表具有时间戳列。

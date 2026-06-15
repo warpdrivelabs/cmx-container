@@ -1,0 +1,61 @@
+[package]
+name = "modql"
+version = "0.5.0"
+edition = "2021"
+authors = ["Jeremy Chone <jeremy.chone@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Rust implementation for Model Query Language support"
+categories = ["data-structures"]
+keywords = [
+	"query-language",
+	"sea-query",
+	"model",
+	"data-model",
+	"graphql"
+]
+homepage = "https://github.com/jeremychone/rust-modql"
+repository = "https://github.com/jeremychone/rust-modql"
+resolver = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+unused = { level = "allow", priority = -1 } # For test files (dev)
+
+[features]
+# default = ["modql-macros", "with-sea-query", "with-rusqlite"] # for dev
+default = ["modql-macros"]
+with-sea-query = ["modql-macros", "sea-query", "modql-macros/with-sea-query"]
+with-ilike = ["sea-query/backend-postgres"]
+
+[dependencies]
+modql-macros = { version="0.5.0", path = "modql-macros", optional=true}
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# -- For features
+sea-query = { version = "1.0.1", features = ["thread-safe"], optional = true }
+
+[dev-dependencies]
+serde_with = "3"
+tokio = { version = "1", features = ["full"]}
+
+# NOTE: for now, the sea-query-rusqlite is inlined in modql
+# sea-query-rusqlite = {version = "0.7"}
+# NOTE: Disable sqlx for now (not compatible lib sqlite with rusqlite 0.36)
+# sqlx = {version = "0.8", default-features = false, features = ["macros", "runtime-tokio", "sqlite-unbundled"]}
+# sea-query-binder = {version = "0.8.0-rc.1", features = ["sqlx-sqlite", "sqlite-unbundled"]}
+
+# [[example]]
+# name = "c02-rusqlite-sea-query-select"
+# path = "examples/c02-rusqlite-sea-query-select.rs"
+# required-features = ["with-rusqlite", "with-sea-query"]
+
+# [[example]]
+# name = "c02-rusqlite-sea-query-join"
+# path = "examples/c02-rusqlite-sea-query-join.rs"
+# required-features = ["with-rusqlite", "with-sea-query"]
+
+# [[example]]
+# name = "c03-sqlx-sea-query-join"
+# path = "examples/c03-sqlx-sea-query-join.rs"
+# required-features = ["with-rusqlite", "with-sea-query"]

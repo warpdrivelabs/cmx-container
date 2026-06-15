@@ -33,7 +33,7 @@ chrono = { workspace = true }
 # SQL 查询构建器
 sea-query = { workspace = true }
 # SQL 参数绑定
-sea-query-binder = { workspace = true }
+sea-query-sqlx = { workspace = true }
 # 唯一标识符
 uuid = { workspace = true, features = ["v4"] }
 # MsgPack 编码

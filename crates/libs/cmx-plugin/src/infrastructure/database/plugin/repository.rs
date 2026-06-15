@@ -66,7 +66,7 @@ impl PluginRepository {
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
         use sea_query::{PostgresQueryBuilder, Query};
-        use sea_query_binder::SqlxBinder;
+        use sea_query_sqlx::SqlxBinder;
 
         let mut query = Query::insert();
         query
@@ -155,8 +155,8 @@ impl PluginRepository {
         fields: &PluginUpdateParams,
         txn_id: Option<&str>,
     ) -> PluginResult<()> {
-        use sea_query::{Expr, PostgresQueryBuilder, Query};
-        use sea_query_binder::SqlxBinder;
+        use sea_query::{Expr, ExprTrait, PostgresQueryBuilder, Query};
+        use sea_query_sqlx::SqlxBinder;
 
         let mut query = Query::update();
         query.table("cmx_plugin");
@@ -299,7 +299,7 @@ impl PluginRepository {
         txn_id: Option<&str>,
     ) -> PluginResult<bool> {
         use sea_query::{Alias, PostgresQueryBuilder, Query};
-        use sea_query_binder::SqlxBinder;
+        use sea_query_sqlx::SqlxBinder;
 
         let mut query = Query::insert();
         query

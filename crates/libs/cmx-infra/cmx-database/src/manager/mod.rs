@@ -279,7 +279,7 @@ impl DatabaseManager {
         db_id: &str,
         txn_id: Option<&str>,
         sql: &str,
-        params: sea_query_binder::SqlxValues,
+        params: sea_query_sqlx::SqlxValues,
     ) -> Result<u64> {
         crate::transaction::execute_sql_with_params(
             db_id,
@@ -345,7 +345,7 @@ impl DatabaseManager {
         db_id: &str,
         txn_id: Option<&str>,
         sql: &str,
-        params: sea_query_binder::SqlxValues,
+        params: sea_query_sqlx::SqlxValues,
         dataset_id: &str,
     ) -> Result<DataSet> {
         crate::transaction::query_sql_with_params(

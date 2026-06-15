@@ -5,7 +5,14 @@ description: "使用 modql 库实现 MongoDB 风格的查询过滤语言，支�
 
 # Modql - Rust 模型查询语言
 
-modql 是一个 Rust 库，提供 MongoDB 风格的查询过滤语法，支持 sea-query 和 rusqlite 集成。
+modql 是一个 Rust 库，提供 MongoDB 风格的查询过滤语法，支持 sea-query 集成。
+
+> **版本更新 (2026-06-12)：**
+> - `modql` 升级到 `0.5.0`
+> - `sea-query` 升级到 `1.0.1`（稳定版）
+> - `sea-query-binder` 已更名为 `sea-query-sqlx`（`0.9.1`）
+> - `sqlx` 升级到 `0.9.0`，`sqlx::query` 现在要求 `impl SqlSafeStr`（需用 `sqlx::AssertSqlSafe(sql)` 包装动态 SQL）
+> - 工程内使用本地 modql 副本（`path = "crates/libs/modql"`），已移除 `rusqlite` 支持（避免 `libsqlite3-sys` 版本冲突）
 
 ## 核心概念
 
@@ -379,6 +386,7 @@ let list_options: ListOptions = serde_json::from_value(json!({
 use modql::filter::{FilterNodes, IntoFilterNodes, ListOptions};
 use modql::SIden;
 use sea_query::{Condition, PostgresQueryBuilder, Query};
+use sea_query_sqlx::SqlxBinder;
 
 // 1. 定义 Filter
 #[derive(FilterNodes, Deserialize, Default, Debug)]
@@ -414,7 +422,7 @@ let list_options: ListOptions = serde_json::from_value(json!({
 })) ?;
 list_options.apply_to_sea_query( & mut query);
 
-// 7. 生成 SQL
+// 7. 生成 SQL（sea-query-sqlx 0.9.1）
 let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
 ```
 
@@ -424,6 +432,7 @@ let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
 [dependencies]
 modql = { workspace = true, features = ["with-sea-query", "with-ilike"] }
 sea-query = { workspace = true }
+sea-query-sqlx = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1"
 ```
@@ -434,15 +443,42 @@ serde_json = "1"
 
 ```toml
 [workspace.dependencies]
-modql = { version = "0.4", features = ["with-sea-query", "with-ilike"] }
-sea-query = { version = "0.32", features = ["thread-safe"] }
+# 数据库 - ORM 支持（本地副本，已适配 sea-query 1.0.1）
+modql = { path = "crates/libs/modql" }
+# 数据库 - SQL 查询构建器
+sea-query = { version = "1.0.1", features = ["with-chrono", "with-time", "with-json", "with-uuid"] }
+# 数据库 - SQL 参数绑定工具（原 sea-query-binder 已更名为 sea-query-sqlx）
+sea-query-sqlx = { version = "0.9.1", features = ["sqlx-postgres", "with-uuid", "with-time", "with-chrono", "with-json"] }
 ```
 
 子 crate 使用 `workspace = true` 引用：
 
 ```toml
 modql = { workspace = true, features = ["with-sea-query"] }
+sea-query = { workspace = true }
+sea-query-sqlx = { workspace = true }
 ```
+
+## sqlx 0.9 动态 SQL 安全包装
+
+sqlx 0.9 引入了 `SqlSafeStr` trait，`sqlx::query` 和 `sqlx::query_with` 要求 SQL 字符串实现此 trait。动态 SQL 需用 `sqlx::AssertSqlSafe` 包装：
+
+```rust
+// 动态 SQL（如从 sea-query 构建的 SQL）
+let sql = "SELECT * FROM task WHERE id = $1";
+let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+    .bind(123)
+    .fetch_all(&pool)
+    .await?;
+
+// 带参数的查询
+let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+let rows = sqlx::query_with(sqlx::AssertSqlSafe(&sql), values)
+    .fetch_all(&pool)
+    .await?;
+```
+
+> `AssertSqlSafe` 表示已人工审计 SQL 注入风险，sqlx 内部会将 `&str` 克隆为 `Arc<str>` 以匹配 `'static` 生命周期要求。
 
 ## 常见错误处理
 

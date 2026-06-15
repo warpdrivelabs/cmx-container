@@ -129,16 +129,17 @@ wasmtime = "39.0.1"
 clap = { version = "4", features = ["derive"] }
 
 # 数据库 - SQL 异步查询框架
-sqlx = { version = "0.8", features = ["macros", "runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "rust_decimal", "json"] }
+sqlx = { version = "0.9.0", features = ["macros", "runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "rust_decimal", "json"] }
 # 数据库 - SQL 查询构建器
-sea-query = { version = "0.32", features = ["with-chrono", "with-time", "with-json", "with-uuid"] }
-# 数据库 - SQL 参数绑定工具
-sea-query-binder = { version = "0.7", features = ["sqlx-postgres", "with-uuid", "with-time", "with-chrono", "with-json"] }
-# 数据库 - ORM 支持
-modql = "0.4.1"
+sea-query = { version = "1.0.0", features = ["with-chrono", "with-time", "with-json", "with-uuid"] }
+# 数据库 - SQL 参数绑定工具（原 sea-query-binder 已更名为 sea-query-sqlx）
+sea-query-sqlx = { version = "0.9.1", features = ["sqlx-postgres", "with-uuid", "with-time", "with-chrono", "with-json"] }
+# 数据库 - ORM 支持（本地副本，已适配 sea-query 1.0.1）
+modql = { path = "crates/libs/modql" }
+#modql = {version = "0.5.0" }
 
 # Web 框架 - HTTP 服务器
-axum = { version = "0.8", features = ["macros", "multipart"] }
+axum = { version = "0.8.9", features = ["macros", "multipart"] }
 # Web 框架 - HTTP 中间件
 tower = "0.5"
 # Web 框架 - HTTP 服务中间件

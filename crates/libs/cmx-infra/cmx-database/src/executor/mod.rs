@@ -175,9 +175,9 @@ pub fn bind_data_value_mysql<'q>(
 /// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（SQLite）
 #[inline]
 pub fn bind_data_value_sqlite<'q>(
-    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
     param: &'q DataValue,
-) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match param {
         DataValue::Null => query.bind(None::<String>),
         DataValue::Bool(v) => query.bind(*v),

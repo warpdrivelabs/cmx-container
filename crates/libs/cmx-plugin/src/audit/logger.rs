@@ -3,8 +3,8 @@
 //! 记录操作日志到数据库
 
 use chrono::{DateTime, Utc};
-use sea_query::{PostgresQueryBuilder, Query};
-use sea_query_binder::SqlxBinder;
+use sea_query::{ExprTrait, PostgresQueryBuilder, Query};
+use sea_query_sqlx::SqlxBinder;
 use std::sync::Arc;
 
 use cmx_core::model::cell::DataValue;

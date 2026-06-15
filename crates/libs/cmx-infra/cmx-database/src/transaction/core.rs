@@ -11,7 +11,7 @@ use crate::executor::{bind_data_value_postgres, bind_data_value_mysql, bind_data
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
 use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
-use sea_query_binder::SqlxValues;
+use sea_query_sqlx::SqlxValues;
 use cmx_core::model::cell::DataValue;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc};
@@ -479,9 +479,9 @@ impl DbTransaction {
     /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
     pub async fn execute(&mut self, sql: &str) -> sqlx::Result<u64> {
         match self {
-            DbTransaction::Postgres(txn) => Ok(txn.execute(sql).await?.rows_affected()),
-            DbTransaction::MySql(txn) => Ok(txn.execute(sql).await?.rows_affected()),
-            DbTransaction::Sqlite(txn) => Ok(txn.execute(sql).await?.rows_affected()),
+            DbTransaction::Postgres(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
+            DbTransaction::MySql(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
+            DbTransaction::Sqlite(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
         }
     }
 
@@ -500,7 +500,7 @@ impl DbTransaction {
 
         match self {
             DbTransaction::Postgres(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_postgres(query, param);
                 }
@@ -508,7 +508,7 @@ impl DbTransaction {
                 Ok(result.rows_affected())
             },
             DbTransaction::MySql(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_mysql(query, param);
                 }
@@ -516,7 +516,7 @@ impl DbTransaction {
                 Ok(result.rows_affected())
             },
             DbTransaction::Sqlite(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_sqlite(query, param);
                 }
@@ -551,15 +551,15 @@ impl DbTransaction {
     pub async fn query(&mut self, sql: &str, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         match self {
             DbTransaction::Postgres(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },
             DbTransaction::MySql(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             },
             DbTransaction::Sqlite(txn) => {
-                let rows = txn.fetch_all(sqlx::query(sql)).await?;
+                let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
             },
         }
@@ -573,7 +573,7 @@ impl DbTransaction {
 
         match self {
             DbTransaction::Postgres(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_postgres(query, param);
                 }
@@ -581,7 +581,7 @@ impl DbTransaction {
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },
             DbTransaction::MySql(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_mysql(query, param);
                 }
@@ -589,7 +589,7 @@ impl DbTransaction {
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             },
             DbTransaction::Sqlite(txn) => {
-                let mut query = sqlx::query(sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
                     query = bind_data_value_sqlite(query, param);
                 }
@@ -617,7 +617,7 @@ impl DbTransaction {
     pub async fn execute_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues) -> sqlx::Result<u64> {
         match self {
             DbTransaction::Postgres(txn) => {
-                let query = sqlx::query_with(sql, params);
+                let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
             },
@@ -642,7 +642,7 @@ impl DbTransaction {
     pub async fn query_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         match self {
             DbTransaction::Postgres(txn) => {
-                let query = sqlx::query_with(sql, params);
+                let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let rows = txn.fetch_all(query).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             },

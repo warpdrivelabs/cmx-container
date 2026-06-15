@@ -3,8 +3,8 @@
 //! 提供 `cmx_plugin_versions` 表的增删改查操作
 
 use chrono::{DateTime, Utc};
-use sea_query::{Alias, PostgresQueryBuilder, Query};
-use sea_query_binder::SqlxBinder;
+use sea_query::{Alias, ExprTrait, PostgresQueryBuilder, Query};
+use sea_query_sqlx::SqlxBinder;
 use std::sync::Arc;
 
 use cmx_core::model::data::dataset::DataSet;
