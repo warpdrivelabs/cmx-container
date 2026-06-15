@@ -11,10 +11,10 @@ use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
+use cmx_biz::application::ApplicationFilter;
 use crate::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::Result;
-use crate::handlers::application::ApplicationFilter;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
 

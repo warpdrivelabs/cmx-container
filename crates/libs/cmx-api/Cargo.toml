@@ -13,6 +13,8 @@ tower-http = { workspace = true }
 tower-cookies = { workspace = true }
 # 内部依赖 - API 通用类型
 cmx-api-types = { workspace = true }
+# 内部依赖 - 业务逻辑层
+cmx-biz = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }
 # 内部依赖 - 核心库

@@ -1,16 +1,18 @@
 //! Domain 实体定义
 //!
 //! 定义 Domain 实体的数据结构，包括完整实体和创建/更新 DTO
-use crate::TreeNodeData;
+use cmx_api_types::TreeNodeData;
 use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// 领域实体（完整字段，用于查询返回）
 ///
 /// 表示系统中的一个领域/域对象
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct Domain {
     pub  id: String,
     /// 唯一标识码
@@ -59,7 +61,8 @@ pub struct Domain {
 /// 创建请求 DTO
 ///
 /// 用于创建 Domain 的请求数据
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DomainForCreate {
     // /// 唯一标识码
     pub code: String,
@@ -83,7 +86,8 @@ pub struct DomainForCreate {
 /// 更新请求 DTO
 ///
 /// 用于更新 Domain 的请求数据，所有字段均为可选
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DomainForUpdate {
     /// 名称
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -113,7 +117,8 @@ pub struct DomainForUpdate {
 ///
 /// 用于接收 tree.sql 查询返回的扁平数据，
 /// 实现 `TreeNodeData` trait 后可通过 `TreeNode::from_list()` 构建树形结构。
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DomainTreeNodeData {
     //主键列
     pub id: String,

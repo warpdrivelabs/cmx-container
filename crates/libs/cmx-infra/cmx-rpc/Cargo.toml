@@ -8,6 +8,8 @@ edition.workspace = true
 cmx-traits = { workspace = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
+# 内部依赖 - 业务逻辑层
+cmx-biz = { workspace = true }
 # 内部依赖 - RPC 代码生成
 cmx-rpc-gen = { workspace = true }
 # 内部依赖 - 注册中心与配置中心
@@ -24,8 +26,8 @@ tokio = { workspace = true }
 serde = { workspace = true }
 # JSON 序列化/反序列化
 serde_json = { workspace = true }
-# MessagePack 序列化（WASM 函数输入编码）
-rmp-serde = { workspace = true }
+# MessagePack 序列化（已迁移至 cmx-biz function_invoker）
+# rmp-serde = { workspace = true }
 # 时间处理
 chrono = { workspace = true }
 # UUID 生成

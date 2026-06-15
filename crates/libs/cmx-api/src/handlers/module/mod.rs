@@ -1,15 +1,13 @@
 //! Module 模块
 //!
 //! 提供模块实体的 CRUD 操作
+//! Entity/BMC/Filter 已迁移至 cmx-biz crate，此处通过 re-export 保持兼容
 
-mod bmc;
-mod entity;
-mod filter;
 pub mod handler;
 
-pub use bmc::ModuleBmc;
-pub use entity::{Module, ModuleForCreate, ModuleForUpdate};
-pub use filter::ModuleFilter;
+// 从 cmx-biz re-export 业务层类型
+pub use cmx_biz::module::{Module, ModuleBmc, ModuleFilter, ModuleForCreate, ModuleForUpdate};
+
 pub use handler::module_custom_page;
 
 use crate::app_state::CmxAppState;

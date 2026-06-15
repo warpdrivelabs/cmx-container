@@ -1,17 +1,15 @@
 //! Domain 模块
 //!
 //! 提供领域实体的 CRUD 操作
+//! Entity/BMC/Filter/Service 已迁移至 cmx-biz crate，此处通过 re-export 保持兼容
 
-mod bmc;
-mod entity;
-mod filter;
 pub mod handler;
-mod service;
 
-pub use bmc::DomainBmc;
-pub use entity::{Domain, DomainForCreate, DomainForUpdate, DomainTreeNodeData};
-pub use filter::DomainFilter;
-pub use service::DomainService;
+// 从 cmx-biz re-export 业务层类型
+pub use cmx_biz::domain::{
+    Domain, DomainBmc, DomainFilter, DomainForCreate, DomainForUpdate, DomainService,
+    DomainTreeNodeData,
+};
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;

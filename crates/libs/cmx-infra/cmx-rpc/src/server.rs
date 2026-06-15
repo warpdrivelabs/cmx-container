@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
-use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
+use cmx_core::model::service::SVRContext;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker, ServiceInvoker};
+use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
 use tracing::instrument;
 
 /// CmxServiceOrchestrator 的 gRPC 服务端实现
@@ -115,94 +115,43 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
             let plugin_id = req.plugin_id.to_string();
             let function_name = req.function_name.to_string();
 
-            // ==================== 检查插件安装状态 ====================
-
-            let is_installed = plugin_query.is_installed(&plugin_id).await
-                .map_err(|e| volo_grpc::Status::new(
-                    volo_grpc::Code::Internal,
-                    format!("检查插件安装状态失败: {e}"),
-                ))?;
-
-            if !is_installed {
-                return Err(volo_grpc::Status::new(
-                    volo_grpc::Code::NotFound,
-                    format!("插件 {} 未安装", plugin_id),
-                ));
-            }
-
-            // ==================== 检查/加载 WASM 模块 ====================
-
-            let is_loaded = runtime_invoker.is_loaded(&plugin_id).await;
-
-            if !is_loaded {
-                let wasm_path = plugin_query.get_wasm_path(&plugin_id).await
-                    .map_err(|e| volo_grpc::Status::new(
-                        volo_grpc::Code::Internal,
-                        format!("获取 WASM 路径失败: {e}"),
-                    ))?;
-
-                runtime_invoker.load_module(&plugin_id, &wasm_path).await
-                    .map_err(|e| volo_grpc::Status::new(
-                        volo_grpc::Code::Internal,
-                        format!("加载 WASM 模块失败: {e}"),
-                    ))?;
-            }
-
-            // ==================== 构建 FunctionInput ====================
+            // ==================== 参数解析 ====================
 
             let input_value: serde_json::Value = serde_json::from_str(&req.input).unwrap_or(serde_json::Value::Null);
 
             let initial_input = req.initial_input
                 .as_ref()
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_else(|| input_value.clone());
+                .and_then(|s| serde_json::from_str(s).ok());
 
             let svr_ctx = SVRContext::new(
-                initial_input,
+                input_value.clone(),
                 std::collections::HashMap::new(),
                 chrono::Utc::now(),
                 format!("rpc-{}", uuid::Uuid::new_v4()),
             );
-            let func_input = FunctionInput::from_value(input_value, svr_ctx);
 
-            let input_bytes = rmp_serde::to_vec(&func_input)
-                .map_err(|e| volo_grpc::Status::new(
-                    volo_grpc::Code::InvalidArgument,
-                    format!("输入数据序列化失败: {e}"),
-                ))?;
+            // ==================== 调用核心逻辑（cmx-biz） ====================
 
-            // ==================== 调用 WASM 函数 ====================
-
-            let invoke_options = InvokeOptions {
-                debug: req.debug,
-                ..Default::default()
-            };
-
-            match runtime_invoker
-                .invoke_with_options(&plugin_id, &function_name, &input_bytes, &invoke_options)
-                .await
+            match cmx_biz::function_invoker::invoke_plugin_function(
+                &runtime_invoker,
+                &plugin_query,
+                &plugin_id,
+                &function_name,
+                input_value,
+                initial_input,
+                svr_ctx,
+                req.debug,
+            )
+            .await
             {
                 Ok(result) => {
-                    // 解析 FunctionOutput
-                    let output: FunctionOutput = if result.output.is_empty() {
-                        FunctionOutput::new(serde_json::Value::Null)
-                    } else {
-                        rmp_serde::from_slice(&result.output).unwrap_or_else(|e| {
-                            tracing::warn!(
-                                target: "cmx_rpc",
-                                error = %e,
-                                "RPC call_function 返回值 rmp_serde 反序列化失败，尝试直接解析为 JSON"
-                            );
-                            FunctionOutput::new(
-                                serde_json::from_slice(&result.output).unwrap_or(serde_json::Value::Null)
-                            )
-                        })
-                    };
-
                     let mut pb_resp = CallFunctionResponse::default();
-                    pb_resp.success = true;
-                    pb_resp.result = Some(output.result.to_string().into());
+                    pb_resp.success = result.success;
+                    if result.success {
+                        pb_resp.result = Some(result.result.to_string().into());
+                    }
                     pb_resp.elapsed_us = result.elapsed_us;
+                    pb_resp.error = result.error.map(|s| s.into());
                     Ok(volo_grpc::Response::new(pb_resp))
                 }
                 Err(e) => {
@@ -229,20 +178,10 @@ fn execution_step_to_proto(step: cmx_core::ExecutionStep) -> ExecutionStep {
     pb.node_id = step.node_id.into();
     pb.node_name = step.node_name.into();
     pb.node_type = step.node_type.into();
-    pb.status = step_status_to_str(&step.status).into();
+    pb.status = cmx_biz::service_executor::step_status_to_str(&step.status).into();
     pb.output = step.output.map(|v| v.to_string().into());
     pb.elapsed_us = step.elapsed_us;
     pb.error = step.error.map(|s| s.into());
     pb.previous_output = step.previous_output.map(|v| v.to_string().into());
     pb
-}
-
-/// 将 StepStatus 转换为稳定的字符串表示，避免依赖 Debug 格式
-fn step_status_to_str(status: &cmx_core::StepStatus) -> &'static str {
-    match status {
-        cmx_core::StepStatus::Success => "Success",
-        cmx_core::StepStatus::Failed => "Failed",
-        cmx_core::StepStatus::Skipped => "Skipped",
-        cmx_core::StepStatus::DebugPaused => "DebugPaused",
-    }
 }

@@ -1,15 +1,13 @@
 //! Application 模块
 //!
 //! 提供应用实体的 CRUD 操作
+//! Entity/BMC/Filter 已迁移至 cmx-biz crate，此处通过 re-export 保持兼容
 
-mod bmc;
-mod entity;
-mod filter;
 pub mod handler;
 
-pub use bmc::ApplicationBmc;
-pub use entity::{Application, ApplicationForCreate, ApplicationForUpdate};
-pub use filter::ApplicationFilter;
+// 从 cmx-biz re-export 业务层类型
+pub use cmx_biz::application::{Application, ApplicationBmc, ApplicationFilter, ApplicationForCreate, ApplicationForUpdate};
+
 pub use handler::application_custom_page;
 
 use crate::app_state::CmxAppState;

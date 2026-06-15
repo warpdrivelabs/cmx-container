@@ -49,11 +49,11 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
+use cmx_core::model::service::SVRContext;
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
 use cmx_traits::{PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery, ServiceInvokeOptions};
-use tracing::error;
+// use tracing::error;
 use std::sync::Arc;
 
 // ==================== 函数直接调用 Handler ====================
@@ -197,77 +197,31 @@ pub async fn service_call(
     let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
-    // ==================== 检查插件状态 ====================
+    // ==================== 调用核心逻辑（cmx-biz） ====================
 
-    let is_install = plugin_query.is_installed(&req.plugin_id).await
-        .map_err(|e| Error::business_error(format!("检查插件安装状态失败: {}", e)))?;
-
-    if !is_install {
-        return Err(Error::business_error(format!("插件 {} 未安装", req.plugin_id)));
-    }
-
-    // ==================== 加载 WASM 模块 ====================
-
-    let is_loaded = runtime.is_loaded(&req.plugin_id).await;
-
-    if !is_loaded {
-        let wasm_path = plugin_query.get_wasm_path(&req.plugin_id).await
-            .map_err(|e| Error::business_error(format!("获取 WASM 路径失败: {}", e)))?;
-
-        runtime.load_module(&req.plugin_id, &wasm_path).await
-            .map_err(|e| Error::business_error(format!("加载 WASM 模块失败: {}", e)))?;
-    }
-
-    // ==================== 构建 FunctionInput ====================
-
-    let mut svr_ctx = svr_ctx;
-
-   //调试的时候initial_input 是服务最开始的入参
-    if let Some(init_input) = req.initial_input {
-        svr_ctx.initial_input = init_input.clone();
-    } else {
-        svr_ctx.initial_input = req.input.clone();
-    }
-
-
-    let func_input = FunctionInput::from_value(req.input.clone(), svr_ctx);
-
-    // ==================== 调用 WASM 函数 ====================
-
-    let start_time = std::time::Instant::now();
-    // let input_bytes = serde_json::to_vec(&func_input)
-    //     .map_err(|e| Error::bad_request(format!("输入数据序列化失败: {}", e)))?;
-    let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| Error::business_error(e.to_string()))?;
-
-    //调用选项参数
-    let invoke_options = cmx_traits::InvokeOptions {
-        debug: req.debug,
-        ..Default::default()
-    };
-
-    let invoke_result = runtime.invoke_with_options(&req.plugin_id, &req.function_name, &input_bytes,&invoke_options).await
-        .map_err(|e| Error::business_error(format!("WASM 调用失败: {}", e)))?;
-
-    let elapsed_us = start_time.elapsed().as_micros() as u64;
-
-    // ==================== 解析 FunctionOutput ====================
-
-    let output: FunctionOutput = if invoke_result.output.is_empty() {
-        FunctionOutput::new(serde_json::Value::Null)
-    } else {
-        // serde_json::from_slice(&invoke_result.output)
-        //     .map_err(|e| Error::business_error(format!("输出数据解析失败: {}", e)))?
-
-       rmp_serde::from_slice(&invoke_result.output)
-            .map_err(|e| Error::business_error(e.to_string()))?
-    };
+    let invoke_result = cmx_biz::function_invoker::invoke_plugin_function(
+        runtime,
+        plugin_query,
+        &req.plugin_id,
+        &req.function_name,
+        req.input.clone(),
+        req.initial_input.clone(),
+        svr_ctx,
+        req.debug,
+    )
+    .await?;
 
     // ==================== 构建响应 ====================
 
+    if !invoke_result.success {
+        let error_msg = invoke_result.error.unwrap_or_else(|| "未知错误".to_string());
+        return Err(Error::business_error(error_msg));
+    }
+
     let response = FunctionCallResponse {
         success: true,
-        result: Some(output.result),
-        elapsed_us,
+        result: Some(invoke_result.result),
+        elapsed_us: invoke_result.elapsed_us,
         error: None,
     };
 
@@ -325,47 +279,41 @@ async fn execute_service_inner(
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
-    let orchestrator = cmx_service::Orchestrator::new(
-        runtime.clone(),
-        plugin_query.clone(),
-        service_query.clone(),
-        default_db_id,
-    );
 
-    let result = orchestrator.execute_service(
+    // ==================== 调用核心逻辑（cmx-biz） ====================
+
+    let core_result = cmx_biz::service_executor::execute_service(
+        runtime,
+        plugin_query,
+        service_query,
+        &default_db_id,
         service_key,
         svr_context,
         options,
-    ).await
-        .map_err(|e| {
-            error!("服务{}执行失败: {:?}", service_key, e);
-            Error::business_error(format!("服务执行失败: {}", e))
-        })?;
+    )
+    .await?;
+
+    // ==================== 映射为 HTTP 响应 ====================
 
     let response = ServiceExecuteResponse {
-        success: result.success,
-        output: result.output,
-        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
+        success: core_result.success,
+        output: core_result.final_output,
+        steps: core_result.steps.into_iter().map(|s| ServiceExecutionStep {
             node_id: s.node_id,
             node_name: s.node_name,
             node_type: s.node_type,
-            status: match s.status {
-                cmx_service::StepStatus::Success => "Success".to_string(),
-                cmx_service::StepStatus::Failed => "Failed".to_string(),
-                cmx_service::StepStatus::Skipped => "Skipped".to_string(),
-                cmx_service::StepStatus::DebugPaused => "DebugPaused".to_string(),
-            },
+            status: s.status,
             output: s.output,
             elapsed_us: s.elapsed_us,
             error: s.error,
             previous_output: s.previous_output,
         }).collect(),
-        total_elapsed_us: result.total_elapsed_us,
-        error: result.error.map(|e| ServiceOrchestrationError {
+        total_elapsed_us: core_result.total_elapsed_us,
+        error: core_result.error.map(|e| ServiceOrchestrationError {
             message: e.message,
         }),
-        debug_triggered: result.debug_triggered,
-        debug_prepare_result: result.debug_prepare_result.map(|d| ServiceDebugPrepareResult {
+        debug_triggered: core_result.debug_triggered,
+        debug_prepare_result: core_result.debug_prepare_result.map(|d| ServiceDebugPrepareResult {
             code_server_url: d.code_server_url,
             plugin_id: d.plugin_id,
             plugin_name: d.plugin_name,
@@ -651,12 +599,7 @@ async fn execute_service_via_rpc(
             node_id: s.node_id,
             node_name: s.node_name,
             node_type: s.node_type,
-            status: match s.status {
-                cmx_core::StepStatus::Success => "Success".to_string(),
-                cmx_core::StepStatus::Failed => "Failed".to_string(),
-                cmx_core::StepStatus::Skipped => "Skipped".to_string(),
-                cmx_core::StepStatus::DebugPaused => "DebugPaused".to_string(),
-            },
+            status: cmx_biz::service_executor::step_status_to_str(&s.status).to_string(),
             output: s.output,
             elapsed_us: s.elapsed_us,
             error: s.error,

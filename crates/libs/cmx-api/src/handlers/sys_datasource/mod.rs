@@ -1,17 +1,15 @@
 //! SysDatasource 模块
 //!
 //! 提供数据源实体的 CRUD 操作和动态管理功能
+//! Entity/BMC/Filter/Service 已迁移至 cmx-biz crate，此处通过 re-export 保持兼容
 
-mod bmc;
-mod entity;
-mod filter;
 pub mod handler;
-pub mod service;
 
-pub use bmc::SysDatasourceBmc;
-pub use entity::{SysDatasource, SysDatasourceForCreate, SysDatasourceForUpdate};
-pub use filter::SysDatasourceFilter;
-pub use service::SysDatasourceService;
+// 从 cmx-biz re-export 业务层类型
+pub use cmx_biz::datasource::{
+    SysDatasource, SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate,
+    SysDatasourceForUpdate, SysDatasourceService,
+};
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;

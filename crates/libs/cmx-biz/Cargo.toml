@@ -1,0 +1,48 @@
+[package]
+name = "cmx-biz"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# OpenAPI 文档生成支持
+openapi = ["utoipa"]
+
+[dependencies]
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 内部依赖 - API 通用类型
+cmx-api-types = { workspace = true }
+# 内部依赖 - 特征定义
+cmx-traits = { workspace = true }
+# 内部依赖 - 数据库
+cmx-database = { workspace = true }
+# 内部依赖 - 服务编排
+cmx-service = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# MessagePack 序列化（WASM 函数输入/输出编码）
+rmp-serde = { workspace = true }
+# 时间处理
+time = { workspace = true }
+# 时间处理
+chrono = { workspace = true, features = ["serde"] }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4", "fast-rng"] }
+# 错误处理
+thiserror = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# modql 支持
+modql = { workspace = true, features = ["with-sea-query"] }
+# SQL 查询构建器
+sea-query = { workspace = true }
+# SQL 参数绑定
+sea-query-sqlx = { workspace = true }
+# SQL 异步查询
+sqlx = { workspace = true }
+# OpenAPI 文档生成（可选）
+utoipa = { workspace = true, optional = true }

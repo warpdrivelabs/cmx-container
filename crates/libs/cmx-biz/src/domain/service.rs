@@ -3,8 +3,8 @@
 //! 展示如何扩展 GenericCrudService 实现自定义业务逻辑
 
 use super::{DomainBmc, DomainFilter, DomainTreeNodeData};
-use crate::{Error, Result};
-use crate::TreeNode;
+use crate::{BizError, Result};
+use cmx_api_types::TreeNode;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
 use cmx_database::crud::GenericCrudService;
@@ -56,7 +56,7 @@ impl DomainService {
             list_options,
         )
         .await
-        .map_err(Error::from)
+        .map_err(BizError::from)
     }
 
     /// 查询域-应用-模块树形数据
@@ -73,7 +73,7 @@ impl DomainService {
         let dataset = mm
             .query_sql(db_id, None, sql, "domain_tree")
             .await
-            .map_err(|e| Error::internal_error(format!("查询域树形数据失败: {}", e)))?;
+            .map_err(|e| BizError::internal(format!("查询域树形数据失败: {}", e)))?;
 
         let items: Vec<DomainTreeNodeData> = dataset
             .iter()
@@ -131,7 +131,7 @@ impl DomainService {
         name: &str,
     ) -> Result<String> {
         row.get_by_name_as(schema, name)
-            .ok_or_else(|| Error::internal_error(format!("缺少必填字段: {}", name)))
+            .ok_or_else(|| BizError::internal(format!("缺少必填字段: {}", name)))
     }
 
     /// 从 Row 中按字段名获取 i32 值，默认 0

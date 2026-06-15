@@ -6,12 +6,14 @@ use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use time::OffsetDateTime;
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// 数据源实体（完整字段，用于查询返回）
 ///
 /// 表示系统中的一个数据源配置
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SysDatasource {
     /// 主键
     pub id: String,
@@ -63,11 +65,11 @@ pub struct SysDatasource {
     pub archived: Option<i32>,
     /// 创建时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<String>)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
     pub create_time: Option<OffsetDateTime>,
     /// 更新时间
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<String>)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
     pub update_time: Option<OffsetDateTime>,
     /// 创建人ID
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,7 +124,8 @@ fn default_source() -> Option<String> {
 /// 创建请求 DTO
 ///
 /// 用于创建 SysDatasource 的请求数据，包含完整的数据库连接配置
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SysDatasourceForCreate {
     /// 数据源标识（唯一）
     pub db_id: String,
@@ -170,7 +173,8 @@ pub struct SysDatasourceForCreate {
 /// 更新请求 DTO
 ///
 /// 用于更新 SysDatasource 的请求数据，所有字段均为可选
-#[derive(Debug, Clone, Serialize, Deserialize, Fields, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SysDatasourceForUpdate {
     /// 数据源标识
     #[serde(skip_serializing_if = "Option::is_none")]
