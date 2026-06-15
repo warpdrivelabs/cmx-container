@@ -1,0 +1,25 @@
+[package]
+name = "cmx-audit"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 时间处理
+chrono = { workspace = true, features = ["serde"] }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4", "fast-rng"] }
+# 错误处理
+thiserror = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
