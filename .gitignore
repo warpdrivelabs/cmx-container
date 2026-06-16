@@ -21,6 +21,7 @@
 #crates/libs/cmx-dev/templates/wasm-plugin-template1.zip
 /example/redis-rs/
 /example/rust-modql/
+/example/cmxold/
 /storage/
 docker/V2/certs/key.pem
 docker/V2/certs/cert.pem

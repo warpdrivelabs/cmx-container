@@ -1,0 +1,1362 @@
+//! AuthService trait 实现
+//!
+//! 整合 JwtManager、Argon2Hasher、TokenManager、SessionManager，
+//! 提供 authenticate / validate_token / refresh_token / revoke_token 等完整认证流程。
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use async_trait::async_trait;
+use chrono::Utc;
+use cmx_buffer::CacheManager;
+use cmx_core::AuthContext;
+use cmx_traits::{
+    AuthError, AuthService, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
+    OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
+};
+use tracing::{info, warn};
+
+use crate::api_key::ApiKeyManager;
+use crate::config::AuthConfig;
+use crate::error::Result;
+use crate::jwt::JwtManager;
+use crate::metrics;
+use crate::oauth2::provider::AccountLinker;
+use crate::password::{Argon2Hasher, PasswordHistory, PasswordPolicy};
+use crate::policy::OAuth2Policy;
+use crate::session::{SessionManager, UserSession};
+use crate::token::TokenManager;
+
+/// Pub/Sub 频道名
+const CACHE_INVALIDATE_CHANNEL: &str = "auth:cache:invalidate";
+
+/// 回调授权码存储数据（包含 TokenPair + is_new + provider + state）
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CallbackCodeData {
+    access_token: String,
+    refresh_token: String,
+    token_type: String,
+    access_expires_at: i64,
+    refresh_expires_at: i64,
+    is_new: bool,
+    provider: String,
+    state: String,
+}
+
+/// AuthService 实现
+pub struct AuthServiceImpl {
+    /// 缓存管理器（用于登录失败计数、账号锁定和 Pub/Sub）
+    cache: CacheManager,
+    /// JWT 管理器
+    jwt_manager: JwtManager,
+    /// 密码哈希器
+    password_hasher: Argon2Hasher,
+    /// Token 管理器
+    token_manager: TokenManager,
+    /// 会话管理器
+    session_manager: SessionManager,
+    /// OAuth2 策略
+    oauth2_policy: OAuth2Policy,
+    /// 密码策略校验器
+    password_policy: PasswordPolicy,
+    /// 密码历史校验器
+    password_history: PasswordHistory,
+    /// 用户数据查询（由 cmx-biz 实现）
+    user_query: Arc<dyn UserAuthQuery>,
+    /// 审计日志记录器
+    audit_logger: Option<Arc<dyn cmx_audit::AuditLogger>>,
+    /// 认证配置
+    config: AuthConfig,
+    /// OAuth2 存储（用于第三方 Provider state/callback code）
+    oauth2_store: crate::oauth2::OAuth2Store,
+    /// 第三方账号关联器
+    account_linker: AccountLinker,
+}
+
+impl AuthServiceImpl {
+    /// 创建新的 AuthService 实现
+    pub fn new(
+        cache: CacheManager,
+        config: AuthConfig,
+        user_query: Arc<dyn UserAuthQuery>,
+    ) -> Result<Self> {
+        let jwt_manager = JwtManager::new(config.clone())?;
+        let password_hasher = Argon2Hasher::new(&config.argon2)?;
+        let token_manager = TokenManager::new(cache.clone(), config.clone());
+        let session_manager = SessionManager::new(cache.clone(), config.clone());
+        let oauth2_policy = OAuth2Policy::new(cache.clone(), config.clone());
+        let password_policy = PasswordPolicy::new();
+        let password_history = PasswordHistory::new(cache.clone(), password_hasher.clone());
+        let oauth2_store = crate::oauth2::OAuth2Store::new(cache.clone(), config.clone());
+        let account_link_config = config.oauth2
+            .as_ref()
+            .map(|c| c.account_link.clone())
+            .unwrap_or_default();
+        let account_linker = AccountLinker::new(user_query.clone(), account_link_config);
+
+        Ok(Self {
+            cache,
+            jwt_manager,
+            password_hasher,
+            token_manager,
+            session_manager,
+            oauth2_policy,
+            password_policy,
+            password_history,
+            user_query,
+            audit_logger: None,
+            config,
+            oauth2_store,
+            account_linker,
+        })
+    }
+
+    /// 设置审计日志记录器
+    pub fn with_audit_logger(mut self, logger: Arc<dyn cmx_audit::AuditLogger>) -> Self {
+        self.audit_logger = Some(logger);
+        self
+    }
+
+    /// 获取 OAuth2 策略引用
+    pub fn oauth2_policy(&self) -> &OAuth2Policy {
+        &self.oauth2_policy
+    }
+
+    /// 用户名密码认证
+    async fn authenticate_password(
+        &self,
+        username: &str,
+        password: &str,
+        device_info: Option<&DeviceInfo>,
+    ) -> std::result::Result<TokenPair, AuthError> {
+        // 1. 检查账号锁定
+        let lock_key = format!("auth:{{{}}}:locked", username);
+        let locked = self
+            .cache
+            .ops()
+            .exists(&lock_key)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        if locked {
+            let ttl = self
+                .cache
+                .ttl()
+                .ttl(&lock_key)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            let secs = ttl.map(|d| d.as_secs()).unwrap_or(0);
+            return Err(AuthError::TooManyAttempts {
+                secs,
+                limit: self.config.cache.max_login_attempts,
+                window: self.config.cache.lock_duration_secs,
+            });
+        }
+
+        // 2. 查询用户
+        let user = match self.user_query.get_user_by_username(username).await {
+            Ok(Some(u)) => u,
+            Ok(None) => {
+                // P1-6.7 时序攻击防护：用户不存在时也执行 Argon2 dummy verify
+                // 消除响应时间差异，防止攻击者通过时间判断用户是否存在
+                let _ = self.password_hasher.verify(password, "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash");
+                return Err(AuthError::InvalidCredentials);
+            }
+            Err(e) => return Err(AuthError::Internal(e.to_string())),
+        };
+
+        // 3. 检查用户状态
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        // 4. 校验密码
+        let password_hash = user
+            .password_hash
+            .as_ref()
+            .ok_or(AuthError::InvalidCredentials)?;
+        let valid = self
+            .password_hasher
+            .verify(password, password_hash)
+            .map_err(|_| AuthError::PasswordVerifyFailed)?;
+        if !valid {
+            // 记录失败次数
+            self.record_login_failure(username).await;
+            // 4.5: 审计日志
+            self.audit_log("login", cmx_audit::OperationResult::Failure, username, Some("user"), Some(username), Some(serde_json::json!({"reason": "invalid_credentials"}))).await;
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        // 5. 清除失败计数
+        self.clear_login_failures(username).await;
+
+        // 6. 获取角色和权限
+        let roles = self
+            .user_query
+            .get_user_role_codes(&user.user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let permissions = self
+            .user_query
+            .get_user_permissions(&user.user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 7. 签发 Token
+        let result = self
+            .issue_token_pair(
+                &user.user_id,
+                &user.username,
+                &roles,
+                &permissions,
+                None,
+                device_info,
+            )
+            .await;
+
+        if result.is_ok() {
+            metrics::record_login_success("password");
+        }
+
+        result
+    }
+
+    /// 签发 Token 对
+    async fn issue_token_pair(
+        &self,
+        user_id: &str,
+        username: &str,
+        roles: &[String],
+        permissions: &[String],
+        org_id: Option<&str>,
+        device_info: Option<&DeviceInfo>,
+    ) -> std::result::Result<TokenPair, AuthError> {
+        let device_type = device_info
+            .map(|d| d.device_type.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let session_id = uuid::Uuid::new_v4().to_string();
+
+        // P1-3.7: single_session_per_device_type 互踢检查
+        if self.config.session.single_session_per_device_type {
+            // 同设备类型互踢：销毁旧会话（HSET 天然覆盖，这里先查后删以记录日志）
+            if let Ok(Some(_old_session)) = self
+                .session_manager
+                .get_session(user_id, &device_type)
+                .await
+            {
+                info!(user_id = user_id, device = %device_type, "互踢: 同设备类型旧会话已覆盖");
+            }
+        }
+
+        // P1-3.7: max_sessions 并发会话数检查
+        let max_sessions = self.config.session.max_sessions;
+        if max_sessions > 0 {
+            let devices = self
+                .session_manager
+                .get_user_devices(user_id)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            if devices.len() >= max_sessions {
+                // 踢掉最早的会话
+                if let Some(oldest_device) = devices.first() {
+                    self.session_manager
+                        .destroy_session(user_id, oldest_device)
+                        .await
+                        .map_err(|e| AuthError::Internal(e.to_string()))?;
+                    info!(
+                        user_id = user_id,
+                        max = max_sessions,
+                        kicked_device = %oldest_device,
+                        "max_sessions 超限，踢掉最早会话"
+                    );
+                }
+            }
+        }
+
+        // 签发 Access Token
+        let access_token = self
+            .jwt_manager
+            .encode_access_token(
+                user_id,
+                username,
+                roles,
+                permissions,
+                org_id,
+                &session_id,
+                &device_type,
+            )
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 签发 Refresh Token
+        let refresh_token = self
+            .jwt_manager
+            .encode_refresh_token(user_id, &session_id, &device_type)
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 解析 Access Claims 获取 jti
+        let access_claims = self
+            .jwt_manager
+            .decode_access_token(&access_token)
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 解析 Refresh Claims 获取 jti
+        let refresh_claims = self
+            .jwt_manager
+            .decode_refresh_token(&refresh_token)
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 存储 Refresh Token
+        self.token_manager
+            .store_refresh_token(user_id, &refresh_claims.jti, &device_type)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 创建会话
+        let now = Utc::now().timestamp();
+        let session = UserSession {
+            session_id: session_id.clone(),
+            user_id: user_id.to_string(),
+            device_type: device_type.clone(),
+            device_id: device_info
+                .map(|d| d.device_id.clone())
+                .unwrap_or_default(),
+            login_at: now,
+            last_active_at: now,
+            ip: device_info.and_then(|d| d.ip.clone()),
+            user_agent: device_info.and_then(|d| d.user_agent.clone()),
+            access_jti: access_claims.jti,
+            refresh_jti: refresh_claims.jti,
+            access_expires_at: now + self.config.token.access_ttl_secs as i64,
+        };
+        self.session_manager
+            .create_session(&session)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 审计：Token 签发
+        self.audit_token_event("token_issued", user_id, &session.access_jti, "access_token_issued").await;
+
+        let now_ts = Utc::now().timestamp();
+        Ok(TokenPair {
+            access_token,
+            refresh_token,
+            access_expires_at: now_ts + self.config.token.access_ttl_secs as i64,
+            refresh_expires_at: now_ts + self.config.token.refresh_ttl_secs as i64,
+            token_type: "Bearer".to_string(),
+        })
+    }
+
+    /// 记录登录失败次数（N9：每次 incr 后都 expire，幂等安全）
+    async fn record_login_failure(&self, username: &str) {
+        let fail_key = format!("auth:{{{}}}:login_fail", username);
+        let lock_key = format!("auth:{{{}}}:locked", username);
+
+        if let Ok(count) = self.cache.ops().incr(&fail_key, 1).await {
+            // 5.2 修复：expire 失败时 warn 而非静默吞没
+            // 6.1 修复：使用 config.cache.lock_duration_secs 而非硬编码 900
+            if let Err(e) = self
+                .cache
+                .ttl()
+                .expire(&fail_key, Duration::from_secs(self.config.cache.lock_duration_secs))
+                .await
+            {
+                warn!(key = %fail_key, error = %e, "设置登录失败计数 TTL 失败，key 可能变为永久 key");
+            }
+
+            // 达到阈值则锁定
+            if count >= self.config.cache.max_login_attempts as i64 {
+                if let Err(e) = self
+                    .cache
+                    .ttl()
+                    .set_with_ttl(
+                        &lock_key,
+                        "1",
+                        Duration::from_secs(self.config.cache.lock_duration_secs),
+                    )
+                    .await
+                {
+                    warn!(key = %lock_key, error = %e, "设置账号锁定失败");
+                }
+                warn!(
+                    username = username,
+                    count = count,
+                    "账号已锁定 {} 秒",
+                    self.config.cache.lock_duration_secs
+                );
+            }
+        }
+    }
+
+    /// 清除登录失败计数
+    async fn clear_login_failures(&self, username: &str) {
+        let fail_key = format!("auth:{{{}}}:login_fail", username);
+        // 5.3 修复：del 失败时 warn
+        if let Err(e) = self.cache.ops().del(&fail_key).await {
+            warn!(key = %fail_key, error = %e, "清除登录失败计数失败，用户可能仍被锁定");
+        }
+    }
+
+    /// P0-2.3: 发布 Pub/Sub 缓存失效消息
+    async fn publish_cache_invalidate(&self, message: &str) {
+        if let Err(e) = self.cache.pubsub().publish(CACHE_INVALIDATE_CHANNEL, message).await {
+            warn!(channel = CACHE_INVALIDATE_CHANNEL, error = %e, "Pub/Sub 缓存失效消息发布失败");
+        }
+    }
+
+    /// 4.5: 记录审计日志
+    async fn audit_log(
+        &self,
+        operation: &str,
+        result: cmx_audit::OperationResult,
+        actor_id: &str,
+        target_type: Option<&str>,
+        target_id: Option<&str>,
+        details: Option<serde_json::Value>,
+    ) {
+        if let Some(ref logger) = self.audit_logger {
+            let mut record = cmx_audit::AuditRecord::new(
+                cmx_audit::AuditDomain::Auth,
+                operation,
+                result,
+            )
+            .with_actor(actor_id, "");
+
+            if let Some(tt) = target_type {
+                record = record.with_target(tt, target_id.unwrap_or(""));
+            }
+            if let Some(d) = details {
+                record = record.with_details(d);
+            }
+
+            if let Err(e) = logger.log(record).await {
+                warn!(operation = operation, error = %e, "审计日志记录失败");
+            }
+        }
+    }
+
+    /// 记录 Token 审计日志
+    async fn audit_token_event(&self, event_type: &str, user_id: &str, jti: &str, detail: &str) {
+        if let Err(e) = self.user_query
+            .record_token_event(event_type, user_id, jti, detail)
+            .await
+        {
+            warn!(event_type = event_type, user_id = user_id, error = %e, "审计日志写入失败");
+        }
+    }
+
+    /// 第三方 OAuth2 登录认证
+    async fn authenticate_third_party(
+        &self,
+        user_id: &str,
+        provider: &str,
+        provider_user_id: &str,
+        device_info: Option<DeviceInfo>,
+    ) -> std::result::Result<TokenPair, AuthError> {
+        // 1. 验证用户存在且启用
+        let user = self.user_query.get_user_by_id(user_id).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::OAuth2AccountNotLinked {
+                provider: provider.to_string(),
+                provider_user_id: provider_user_id.to_string(),
+            })?;
+
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        // 2. 获取角色和权限
+        let roles = self.user_query.get_user_role_codes(user_id).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let permissions = self.user_query.get_user_permissions(user_id).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 3. 签发 TokenPair（org_id 传 None，与现有密码/APIKey/OAuth2 分支一致）
+        let result = self.issue_token_pair(
+            user_id, &user.username, &roles, &permissions,
+            None,
+            device_info.as_ref(),
+        ).await;
+
+        if result.is_ok() {
+            metrics::record_login_success("third_party_oauth2");
+            info!(provider = %provider, user_id = %user_id, "第三方 OAuth2 登录成功");
+        }
+
+        result
+    }
+}
+
+#[async_trait]
+impl AuthService for AuthServiceImpl {
+    async fn authenticate(
+        &self,
+        credentials: Credentials,
+        device_info: Option<DeviceInfo>,
+    ) -> std::result::Result<TokenPair, AuthError> {
+        match credentials {
+            Credentials::Password { username, password } => {
+                let span =
+                    tracing::span!(tracing::Level::INFO, "auth_login", username = %username);
+                let _enter = span.enter();
+                info!(username = %username, "用户认证开始");
+                let result = self
+                    .authenticate_password(&username, &password, device_info.as_ref())
+                    .await;
+                if result.is_ok() {
+                    info!(username = %username, "用户认证成功");
+                } else {
+                    metrics::record_login_failure("invalid_credentials");
+                }
+                result
+            }
+            Credentials::RefreshToken { refresh_token } => {
+                self.refresh_token(&refresh_token).await
+            }
+            Credentials::ApiKey { key } => {
+                // 注意：此路径会创建完整会话，不推荐用于中间件高频认证场景。
+                // 中间件场景请使用 validate_api_key()（无状态，不创建会话）。
+                let api_key_manager = ApiKeyManager::new(self.cache.clone(), self.user_query.clone());
+                let api_key_entity = api_key_manager.validate(&key).await?;
+
+                // 查询关联用户信息
+                let user_id = api_key_entity
+                    .user_id
+                    .ok_or(AuthError::InvalidApiKey)?;
+
+                let user = self
+                    .user_query
+                    .get_user_by_id(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?
+                    .ok_or(AuthError::InvalidToken("用户不存在".to_string()))?;
+
+                let roles = self
+                    .user_query
+                    .get_user_role_codes(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+                let permissions = self
+                    .user_query
+                    .get_user_permissions(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+                metrics::record_api_key_validation();
+                self.issue_token_pair(
+                    &user_id,
+                    &user.username,
+                    &roles,
+                    &permissions,
+                    None,
+                    Some(&DeviceInfo {
+                        device_type: "api_key".to_string(),
+                        device_id: api_key_entity.key_prefix.clone(),
+                        ip: None,
+                        user_agent: None,
+                    }),
+                )
+                .await
+            }
+            Credentials::AuthorizationCode {
+                code,
+                code_verifier,
+                client_id,
+            } => {
+                let span = tracing::span!(tracing::Level::INFO, "auth_oauth2", code = %code);
+                let _enter = span.enter();
+                info!(client_id = %client_id, "OAuth2 授权码认证开始");
+
+                // 用授权码换取用户 ID 和 scope
+                let (user_id, _scope) = self
+                    .oauth2_policy
+                    .authenticate(&code, &code_verifier, &client_id, "")
+                    .await?;
+
+                // 查询用户信息
+                let user = self
+                    .user_query
+                    .get_user_by_id(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?
+                    .ok_or(AuthError::InvalidToken("用户不存在".to_string()))?;
+
+                // 检查用户状态
+                if user.status == 0 {
+                    return Err(AuthError::UserDisabled);
+                }
+
+                // 获取角色和权限
+                let roles = self
+                    .user_query
+                    .get_user_role_codes(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+                let permissions = self
+                    .user_query
+                    .get_user_permissions(&user_id)
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+                // 签发 Token 对
+                let result = self
+                    .issue_token_pair(
+                        &user_id,
+                        &user.username,
+                        &roles,
+                        &permissions,
+                        None,
+                        device_info.as_ref(),
+                    )
+                    .await;
+
+                if result.is_ok() {
+                    info!(user_id = %user_id, "OAuth2 授权码认证成功");
+                }
+                result
+            }
+            Credentials::ThirdPartyOAuth2 { provider, provider_user_id, user_id } => {
+                let span = tracing::span!(tracing::Level::INFO, "auth_third_party_oauth2", provider = %provider);
+                let _enter = span.enter();
+                info!(provider = %provider, user_id = %user_id, "第三方 OAuth2 登录");
+                self.authenticate_third_party(&user_id, &provider, &provider_user_id, device_info).await
+            }
+        }
+    }
+
+    async fn validate_token(&self, token: &str) -> std::result::Result<AuthContext, AuthError> {
+        // 2.1 修复：记录 Token 验证耗时
+        let start = std::time::Instant::now();
+
+        // 1. 解码 Token
+        let claims = self
+            .jwt_manager
+            .decode_access_token(token)
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 2. 检查黑名单
+        if self
+            .token_manager
+            .is_blacklisted(&claims.jti)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+        {
+            return Err(AuthError::TokenRevoked);
+        }
+
+        // 3. 检查会话是否活跃
+        if !self
+            .session_manager
+            .is_session_active(&claims.sub, &claims.device)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+        {
+            return Err(AuthError::SessionNotFound);
+        }
+
+        // 4. 构建 AuthContext
+        let elapsed = start.elapsed().as_secs_f64();
+        metrics::record_validate_duration("jwt_bearer", elapsed);
+
+        Ok(AuthContext {
+            user_id: claims.sub,
+            username: claims.username,
+            roles: claims.roles,
+            permissions: claims.permissions,
+            org_id: claims.org_id,
+            session_id: Some(claims.sid),
+            device_type: Some(claims.device),
+            auth_method: Some("jwt_bearer".to_string()),
+        })
+    }
+
+    async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> std::result::Result<TokenPair, AuthError> {
+        // 1. 解码 Refresh Token
+        let claims = self
+            .jwt_manager
+            .decode_refresh_token(refresh_token)
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+
+        // 2. Lua 原子操作：检查旧 jti 是否存在 + 删除旧 token
+        let rotated = self
+            .token_manager
+            .rotation()
+            .rotate_refresh_token(&claims.sub, &claims.jti)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        if !rotated {
+            return Err(AuthError::ReplayDetected);
+        }
+
+        // 3. 通过 user_id 查询用户信息
+        let user = self
+            .user_query
+            .get_user_by_id(&claims.sub)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::InvalidToken("用户不存在".to_string()))?;
+
+        // 4. 检查用户状态
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        // 5. 重新获取角色和权限
+        let roles = self
+            .user_query
+            .get_user_role_codes(&claims.sub)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let permissions = self
+            .user_query
+            .get_user_permissions(&claims.sub)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 6. 签发新 Token 对（store_refresh_token 在内部完成新 token 的创建）
+        let device_info = DeviceInfo {
+            device_type: claims.device.clone(),
+            device_id: String::new(),
+            ip: None,
+            user_agent: None,
+        };
+        self.issue_token_pair(
+            &claims.sub,
+            &user.username,
+            &roles,
+            &permissions,
+            None,
+            Some(&device_info),
+        )
+        .await
+    }
+
+    async fn revoke_token(&self, token: &str) -> std::result::Result<(), AuthError> {
+        // 尝试解码为 Access Token
+        if let Ok(claims) = self.jwt_manager.decode_access_token(token) {
+            let remaining = Duration::from_secs(
+                (claims.exp - Utc::now().timestamp()).max(0) as u64,
+            );
+            self.token_manager
+                .blacklist_access_token(&claims.jti, remaining)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            // P0-2.3: Pub/Sub 广播本地缓存失效
+            self.publish_cache_invalidate(&format!("blacklist:{}", claims.jti)).await;
+            info!(jti = %claims.jti, "Access Token 已撤销");
+            metrics::record_token_revoked("access");
+            self.audit_token_event("token_revoked", &claims.sub, &claims.jti, "single_token_revoked").await;
+            return Ok(());
+        }
+
+        // 尝试解码为 Refresh Token
+        if let Ok(claims) = self.jwt_manager.decode_refresh_token(token) {
+            self.token_manager
+                .revoke_refresh_token(&claims.sub, &claims.jti)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            info!(jti = %claims.jti, "Refresh Token 已撤销");
+            metrics::record_token_revoked("refresh");
+            self.audit_token_event("token_revoked", &claims.sub, &claims.jti, "single_token_revoked").await;
+            return Ok(());
+        }
+
+        Err(AuthError::InvalidToken("无法解码 Token".to_string()))
+    }
+
+    async fn revoke_all_tokens(&self, user_id: &str) -> std::result::Result<(), AuthError> {
+        // 撤销所有 Refresh Token
+        self.token_manager
+            .revoke_all_refresh_tokens(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // P1-3.6: 获取每个会话的 access_jti，将 Access Token 加入黑名单
+        let devices = self
+            .session_manager
+            .get_user_devices(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        for device in &devices {
+            if let Ok(Some(session)) = self.session_manager.get_session(user_id, device).await {
+                // 2.2 修复：使用 Access Token 实际剩余有效期，而非完整 access_ttl_secs
+                let remaining_secs = (session.access_expires_at - Utc::now().timestamp()).max(0) as u64;
+                let remaining = Duration::from_secs(remaining_secs);
+                let _ = self.token_manager
+                    .blacklist_access_token(&session.access_jti, remaining)
+                    .await;
+            }
+        }
+
+        // 销毁所有会话
+        for device in &devices {
+            self.session_manager
+                .destroy_session(user_id, device)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+        }
+
+        // P0-2.3: Pub/Sub 广播全部本地缓存失效
+        self.publish_cache_invalidate(&format!("revoke_all:{}", user_id)).await;
+        // 本实例也立即失效本地缓存
+        self.token_manager.invalidate_local_cache_all().await;
+
+        info!(user_id = user_id, "用户所有 Token 已撤销");
+        self.audit_token_event("tokens_revoked", user_id, "", "all_tokens_revoked").await;
+        Ok(())
+    }
+
+    async fn hash_password(&self, plain: &str) -> std::result::Result<String, AuthError> {
+        self.password_hasher
+            .hash(plain)
+            .map_err(|e| AuthError::PasswordHashError(e.to_string()))
+    }
+
+    async fn verify_password(
+        &self,
+        plain: &str,
+        hash: &str,
+    ) -> std::result::Result<bool, AuthError> {
+        self.password_hasher
+            .verify(plain, hash)
+            .map_err(|_| AuthError::PasswordVerifyFailed)
+    }
+
+    async fn heartbeat(
+        &self,
+        user_id: &str,
+        device_type: &str,
+    ) -> std::result::Result<bool, AuthError> {
+        self.session_manager
+            .heartbeat(user_id, device_type)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))
+    }
+
+    async fn invalidate_local_cache(&self, message: &str) {
+        if let Some(jti) = message.strip_prefix("blacklist:") {
+            self.token_manager.invalidate_local_cache(jti).await;
+            // 使对应 session 的本地缓存也失效
+            // blacklist: 消息只含 jti，无法精确定位 user_id，依赖 TTL 自然过期即可
+        } else if message.starts_with("revoke_all:") {
+            self.token_manager.invalidate_local_cache_all().await;
+            // P0-2.2 修复：同时清理 Session 本地缓存
+            self.session_manager.invalidate_local_all().await;
+        }
+    }
+
+    async fn change_password(
+        &self,
+        user_id: &str,
+        old_password: &str,
+        new_password: &str,
+    ) -> std::result::Result<(), AuthError> {
+        // 5.4: 显式校验新旧密码不能相同
+        if old_password == new_password {
+            return Err(AuthError::PasswordPolicyViolated(
+                "新密码不能与当前密码相同".to_string(),
+            ));
+        }
+
+        // 1. 查询用户
+        let user = self
+            .user_query
+            .get_user_by_id(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::InvalidCredentials)?;
+
+        // 2. 校验旧密码
+        let password_hash = user
+            .password_hash
+            .as_ref()
+            .ok_or(AuthError::InvalidCredentials)?;
+        let valid = self
+            .password_hasher
+            .verify(old_password, password_hash)
+            .map_err(|_| AuthError::PasswordVerifyFailed)?;
+        if !valid {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        // 3. 密码策略校验
+        self.password_policy.validate(new_password)?;
+
+        // 4. 密码历史校验
+        let reused = self
+            .password_history
+            .is_reused(user_id, new_password)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        if reused {
+            return Err(AuthError::PasswordReused);
+        }
+
+        // 5. 哈希新密码
+        let new_hash = self
+            .password_hasher
+            .hash(new_password)
+            .map_err(|e| AuthError::PasswordHashError(e.to_string()))?;
+
+        // 6. 记录密码历史
+        self.password_history
+            .record(user_id, &new_hash)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 7. 持久化新密码哈希
+        self.user_query
+            .update_password_hash(user_id, &new_hash)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 5.3: 修改密码后强制下线用户所有旧会话
+        self.revoke_all_tokens(user_id).await?;
+
+        self.audit_token_event("password_changed", user_id, "", "password_changed_all_sessions_revoked").await;
+        info!(user_id = user_id, "密码修改成功，已强制下线所有旧会话");
+        // 4.5: 审计日志
+        self.audit_log("change_password", cmx_audit::OperationResult::Success, user_id, Some("user"), Some(user_id), None).await;
+        Ok(())
+    }
+
+    async fn ensure_super_admin(&self) -> std::result::Result<(), AuthError> {
+        if let Some(ref sa_config) = self.config.super_admin {
+            // 1. 检查超管是否已存在
+            let existing = self
+                .user_query
+                .get_user_by_username(&sa_config.username)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+            if existing.is_none() {
+                // 2. 哈希密码
+                let password_hash = self
+                    .password_hasher
+                    .hash(&sa_config.password)
+                    .map_err(|e| AuthError::PasswordHashError(e.to_string()))?;
+
+                // 3. 通过 UserAuthQuery 创建超管
+                self.user_query
+                    .create_super_admin(
+                        &sa_config.username,
+                        &password_hash,
+                        sa_config.email.as_deref(),
+                        &sa_config.roles,
+                    )
+                    .await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+                info!(username = %sa_config.username, "超管账号创建成功");
+            } else {
+                info!(username = %sa_config.username, "超管账号已存在，跳过创建");
+            }
+        }
+        Ok(())
+    }
+
+    async fn import_static_api_keys(&self) -> std::result::Result<(), AuthError> {
+        if self.config.static_api_keys.is_empty() {
+            return Ok(());
+        }
+
+        for api_key_config in &self.config.static_api_keys {
+            // 解析 key_prefix：优先显式配置，否则从 key 前 8 位提取
+            let key_prefix = api_key_config.resolve_key_prefix();
+
+            // 2.1 修复：API Key 使用 SHA256 哈希（与 ApiKeyManager::validate 一致）
+            let hash = {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(api_key_config.key.as_bytes());
+                hex::encode(hasher.finalize())
+            };
+
+            // 通过 UserAuthQuery 持久化
+            self.user_query
+                .upsert_api_key(
+                    &key_prefix,
+                    &hash,
+                    api_key_config.user_id.as_deref(),
+                    api_key_config.service_name.as_deref(),
+                    &api_key_config.scopes,
+                    api_key_config.description.as_deref(),
+                )
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+            // 启动日志清晰打印 Key 信息（仅启动时一次，便于管理员获取）
+            // 警告：明文 Key 会输出到日志，请确保日志安全
+            info!(
+                key_prefix = %key_prefix,
+                key = %api_key_config.key,
+                service_name = api_key_config.service_name.as_deref().unwrap_or("-"),
+                user_id = api_key_config.user_id.as_deref().unwrap_or("-"),
+                scopes = ?api_key_config.scopes,
+                description = api_key_config.description.as_deref().unwrap_or("-"),
+                "静态 API Key 已导入（如已存在则覆盖）；将上面 key 值作为 X-API-Key 请求头"
+            );
+        }
+
+        Ok(())
+    }
+
+    async fn start_cleanup_task(&self) {
+        let cache = self.cache.clone();
+        let idle_timeout = self.config.session.idle_timeout_secs;
+        let heartbeat_interval = self.config.session.heartbeat_interval_secs;
+        // 2.2 修复：持有 SessionManager 引用以清理本地缓存
+        let session_manager = self.session_manager.clone();
+
+        tokio::spawn(async move {
+            let interval_secs = heartbeat_interval.max(300);
+            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+            loop {
+                interval.tick().await;
+
+                // 获取在线用户列表
+                let online_users = match cache.set().smembers("auth:online:users").await {
+                    Ok(users) => users,
+                    Err(e) => {
+                        warn!(error = %e, "获取在线用户列表失败");
+                        continue;
+                    }
+                };
+
+                let now = Utc::now().timestamp();
+                for user_id in &online_users {
+                    let key = format!("auth:{{{}}}:session", user_id);
+                    let devices = match cache.hash().hkeys(&key).await {
+                        Ok(d) => d,
+                        Err(_) => continue,
+                    };
+                    let mut all_expired = true;
+                    for device in &devices {
+                        if let Ok(Some(json)) = cache.hash().hget(&key, device).await {
+                            if let Ok(session) = serde_json::from_str::<UserSession>(&json) {
+                                if now - session.last_active_at > idle_timeout as i64 {
+                                    // 过期，删除会话 Hash field
+                                    let _ = cache.hash().hdel(&key, &[device]).await;
+                                    // 2.3 修复：删除 session_detail Key
+                                    let detail_key = format!("auth:{}:session_detail", session.session_id);
+                                    let _ = cache.ops().del(&detail_key).await;
+                                    // 2.2 修复：清理 SessionManager 本地缓存
+                                    session_manager.invalidate_local(user_id, device).await;
+                                    info!(user_id = user_id, device = %device, "过期会话已清理");
+                                } else {
+                                    all_expired = false;
+                                }
+                            }
+                        }
+                    }
+                    // 如果所有会话都过期，从在线用户集合移除
+                    if all_expired {
+                        let remaining = cache.hash().hlen(&key).await.unwrap_or(0);
+                        if remaining == 0 {
+                            let _ = cache.set().srem_one("auth:online:users", user_id).await;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async fn get_oauth2_client(
+        &self,
+        client_id: &str,
+    ) -> std::result::Result<Option<OAuth2ClientData>, AuthError> {
+        self.user_query
+            .get_oauth2_client(client_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))
+    }
+
+    /// 2.4 修复：仅验证用户名密码，返回 user_id（不签发 Token）
+    async fn verify_credentials(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> std::result::Result<String, AuthError> {
+        // 1. 检查账号锁定
+        let lock_key = format!("auth:{{{}}}:locked", username);
+        let locked = self
+            .cache
+            .ops()
+            .exists(&lock_key)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        if locked {
+            let ttl = self
+                .cache
+                .ttl()
+                .ttl(&lock_key)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            let secs = ttl.map(|d| d.as_secs()).unwrap_or(0);
+            return Err(AuthError::TooManyAttempts {
+                secs,
+                limit: self.config.cache.max_login_attempts,
+                window: self.config.cache.lock_duration_secs,
+            });
+        }
+
+        // 2. 查询用户
+        let user = match self.user_query.get_user_by_username(username).await {
+            Ok(Some(u)) => u,
+            Ok(None) => {
+                // 时序攻击防护
+                let _ = self.password_hasher.verify(password, "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash");
+                return Err(AuthError::InvalidCredentials);
+            }
+            Err(e) => return Err(AuthError::Internal(e.to_string())),
+        };
+
+        // 3. 检查用户状态
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        // 4. 校验密码
+        let password_hash = user
+            .password_hash
+            .as_ref()
+            .ok_or(AuthError::InvalidCredentials)?;
+        let valid = self
+            .password_hasher
+            .verify(password, password_hash)
+            .map_err(|_| AuthError::PasswordVerifyFailed)?;
+        if !valid {
+            self.record_login_failure(username).await;
+            self.audit_log("login", cmx_audit::OperationResult::Failure, username, Some("user"), Some(username), Some(serde_json::json!({"reason": "invalid_credentials"}))).await;
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        // 5. 清除失败计数
+        self.clear_login_failures(username).await;
+
+        // 2.3 修复：记录登录成功 metrics 和审计日志
+        metrics::record_login_success("oauth2_verify");
+        self.audit_log("verify_credentials", cmx_audit::OperationResult::Success, &user.user_id, Some("user"), Some(username), None).await;
+
+        Ok(user.user_id)
+    }
+
+    /// 2.1 修复：验证 API Key 并返回 AuthContext（无状态，不创建会话）
+    async fn validate_api_key(&self, key: &str) -> std::result::Result<AuthContext, AuthError> {
+        let api_key_manager = ApiKeyManager::new(self.cache.clone(), self.user_query.clone());
+        let api_key_entity = api_key_manager.validate(key).await?;
+
+        let user_id = api_key_entity
+            .user_id
+            .ok_or(AuthError::InvalidApiKey)?;
+
+        let user = self
+            .user_query
+            .get_user_by_id(&user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::InvalidToken("用户不存在".to_string()))?;
+
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        let roles = self
+            .user_query
+            .get_user_role_codes(&user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let permissions = self
+            .user_query
+            .get_user_permissions(&user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
+        metrics::record_api_key_validation();
+
+        Ok(AuthContext {
+            user_id: user_id.clone(),
+            username: user.username,
+            roles,
+            permissions,
+            org_id: None,
+            session_id: None,
+            device_type: Some("api_key".to_string()),
+            auth_method: Some("api_key".to_string()),
+        })
+    }
+
+    async fn list_oauth2_providers(
+        &self,
+    ) -> std::result::Result<Vec<cmx_traits::ProviderInfo>, AuthError> {
+        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
+            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
+        Ok(registry.list_providers())
+    }
+
+    async fn handle_oauth2_callback(
+        &self,
+        provider: &str,
+        code: &str,
+        state: &str,
+        device_info: Option<DeviceInfo>,
+    ) -> std::result::Result<OAuth2CallbackResult, AuthError> {
+        // 1. 原子消费 state，获取 provider 名称
+        let stored_provider = self.oauth2_store.consume_provider_state(state).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::OAuth2("OAuth2 Provider state 无效或已过期".to_string()))?;
+
+        if stored_provider != provider {
+            return Err(AuthError::OAuth2("State 中的 provider 与请求不匹配".to_string()));
+        }
+
+        // 2. 获取 Provider
+        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
+            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
+        let provider_impl = registry.get_provider(provider)?;
+
+        // 3. 获取 redirect_uri（从 Provider 配置中获取）
+        let redirect_uri = provider_impl.redirect_uri().to_string();
+
+        // 4. 交换 Token
+        let token_response = provider_impl.exchange_code(code, &redirect_uri).await?;
+        tracing::info!(provider = %provider, "Token 交换成功");
+
+        // 5. 获取用户信息
+        let user_info = provider_impl.get_user_info(&token_response).await?;
+        tracing::info!(provider = %provider, provider_user_id = %user_info.provider_user_id, "用户信息获取成功");
+
+        // 6. 关联/注册用户
+        let link_result = self.account_linker.find_or_link(provider, &user_info.provider_user_id, &user_info).await?;
+
+        let (user_id, is_new) = match link_result {
+            crate::oauth2::provider::LinkResult::Linked { user_id, is_new } => (user_id, is_new),
+            crate::oauth2::provider::LinkResult::BindingRequired { .. } => {
+                return Err(AuthError::OAuth2("账号未注册，请联系管理员开通".to_string()));
+            }
+        };
+
+        // 7. 签发本平台 Token
+        let token_pair = self.authenticate(
+            Credentials::ThirdPartyOAuth2 {
+                provider: provider.to_string(),
+                provider_user_id: user_info.provider_user_id,
+                user_id: user_id.clone(),
+            },
+            device_info,
+        ).await?;
+
+        // 8. 签发一次性回调授权码（存储 TokenPair + is_new + provider）
+        let callback_code = uuid::Uuid::new_v4().to_string();
+        let callback_data = CallbackCodeData {
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            token_type: token_pair.token_type,
+            access_expires_at: token_pair.access_expires_at,
+            refresh_expires_at: token_pair.refresh_expires_at,
+            is_new,
+            provider: provider.to_string(),
+            state: state.to_string(),
+        };
+        let callback_data_json = serde_json::to_string(&callback_data)
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        self.oauth2_store.store_callback_code(&callback_code, &callback_data_json).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 审计日志：第三方 OAuth2 登录
+        self.audit_log("oauth2_login", cmx_audit::OperationResult::Success, &user_id, Some("user"), Some(&user_id), Some(serde_json::json!({
+            "provider": provider,
+            "is_new": is_new,
+        }))).await;
+
+        Ok(cmx_traits::OAuth2CallbackResult {
+            callback_code,
+            state: state.to_string(),
+            is_new,
+            provider: provider.to_string(),
+        })
+    }
+
+    async fn exchange_oauth2_callback_code(
+        &self,
+        code: &str,
+    ) -> std::result::Result<OAuth2CallbackExchangeResult, AuthError> {
+        let json = self.oauth2_store.consume_callback_code(code).await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::OAuth2CallbackCodeInvalid)?;
+
+        let callback_data: CallbackCodeData = serde_json::from_str(&json)
+            .map_err(|e| AuthError::Internal(format!("回调数据反序列化失败: {}", e)))?;
+
+        Ok(OAuth2CallbackExchangeResult {
+            access_token: callback_data.access_token,
+            refresh_token: callback_data.refresh_token,
+            token_type: callback_data.token_type,
+            access_expires_at: callback_data.access_expires_at,
+            refresh_expires_at: callback_data.refresh_expires_at,
+            is_new: callback_data.is_new,
+            provider: callback_data.provider,
+            state: callback_data.state,
+        })
+    }
+
+    async fn link_oauth2_account(
+        &self,
+        user_id: &str,
+        provider: &str,
+        code: &str,
+    ) -> std::result::Result<(), AuthError> {
+        // 1. 获取 Provider
+        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
+            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
+        let provider_impl = registry.get_provider(provider)?;
+
+        // 2. 交换 Token
+        let redirect_uri = provider_impl.redirect_uri().to_string();
+        let token_response = provider_impl.exchange_code(code, &redirect_uri).await?;
+
+        // 3. 获取用户信息
+        let user_info = provider_impl.get_user_info(&token_response).await?;
+
+        // 4. 检查该 Provider 账号是否已被其他用户绑定
+        if self.account_linker.account_exists(provider, &user_info.provider_user_id).await? {
+            return Err(AuthError::OAuth2(format!(
+                "该 {} 账号已被其他用户绑定", provider
+            )));
+        }
+
+        // 5. 创建关联记录
+        self.account_linker.create_account(provider, &user_info.provider_user_id, user_id, &user_info).await?;
+
+        // 审计日志：第三方账号绑定
+        self.audit_log("oauth2_link", cmx_audit::OperationResult::Success, user_id, Some("user"), Some(user_id), Some(serde_json::json!({
+            "provider": provider,
+        }))).await;
+
+        tracing::info!(user_id = %user_id, provider = %provider, "第三方账号绑定成功");
+        Ok(())
+    }
+
+    async fn unlink_oauth2_account(
+        &self,
+        user_id: &str,
+        provider: &str,
+    ) -> std::result::Result<(), AuthError> {
+        self.account_linker.unlink_account(user_id, provider).await?;
+
+        // 审计日志：第三方账号解绑
+        self.audit_log("oauth2_unlink", cmx_audit::OperationResult::Success, user_id, Some("user"), Some(user_id), Some(serde_json::json!({
+            "provider": provider,
+        }))).await;
+
+        Ok(())
+    }
+
+    async fn store_oauth2_provider_state(&self, state: &str, provider: &str) -> std::result::Result<(), AuthError> {
+        self.oauth2_store.store_provider_state(state, provider).await
+            .map_err(|e| AuthError::Internal(e.to_string()))
+    }
+}

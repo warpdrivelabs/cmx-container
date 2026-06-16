@@ -122,6 +122,16 @@ use utoipa::OpenApi;
         cmx_storage::handler::multipart_part_handler,
         cmx_storage::handler::multipart_complete_handler,
         cmx_storage::handler::multipart_abort_handler,
+        // Auth handlers
+        crate::handlers::auth::handler::auth_login,
+        crate::handlers::auth::handler::auth_refresh,
+        crate::handlers::auth::handler::auth_logout,
+        crate::handlers::auth::handler::auth_validate,
+        crate::handlers::auth::handler::auth_revoke_all,
+        // OAuth2 handlers
+        crate::handlers::auth::oauth2_handler::oauth2_authorize,
+        crate::handlers::auth::oauth2_handler::oauth2_login,
+        crate::handlers::auth::oauth2_handler::oauth2_token,
     ),
 
     components(
@@ -215,6 +225,22 @@ use utoipa::OpenApi;
             cmx_storage::handler::MultipartPartBody,
             cmx_storage::handler::MultipartCompleteBody,
             cmx_storage::handler::MultipartAbortBody,
+            // Auth schemas
+            crate::handlers::auth::request::LoginRequest,
+            crate::handlers::auth::request::RefreshRequest,
+            crate::handlers::auth::request::RevokeRequest,
+            crate::handlers::auth::request::RevokeAllRequest,
+            crate::handlers::auth::request::ValidateRequest,
+            crate::handlers::auth::request::ChangePasswordRequest,
+            crate::handlers::auth::response::LoginResponse,
+            crate::handlers::auth::response::ValidateResponse,
+            crate::handlers::auth::response::OnlineCountResponse,
+            // OAuth2 schemas
+            crate::handlers::auth::oauth2_request::OAuth2LoginRequest,
+            crate::handlers::auth::oauth2_request::OAuth2TokenRequest,
+            crate::handlers::auth::oauth2_response::OAuth2AuthorizeResponse,
+            crate::handlers::auth::oauth2_response::OAuth2LoginResponse,
+            crate::handlers::auth::oauth2_response::OAuth2TokenResponse,
         )
     )
 )]

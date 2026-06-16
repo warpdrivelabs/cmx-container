@@ -14,7 +14,7 @@ pub mod logging;
 
 pub use cache::{
     CacheManager, CacheOps, ChannelHandler, FnChannelHandler, GlobalCacheManager,
-    GlobalSubscriber, GlobalSubscriberManager, PubSubOps, SetOps,
+    GlobalSubscriber, GlobalSubscriberManager, HashOps, PubSubOps, ScriptOps, SetOps,
     SortedSetOps, TtlOps,
 };
 pub use client::{

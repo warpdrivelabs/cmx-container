@@ -34,6 +34,8 @@ chrono = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 # 错误处理
 thiserror = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
 # 日志追踪
 tracing = { workspace = true }
 # modql 支持

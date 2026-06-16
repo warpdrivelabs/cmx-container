@@ -2,17 +2,21 @@
 //!
 //! 提供缓存管理器 `CacheManager`，用于统一管理各种缓存操作。
 
+pub mod hash;
 pub mod ops;
 pub mod pubsub;
+pub mod script;
 pub mod set;
 pub mod sorted_set;
 pub mod ttl;
 
+pub use hash::HashOps;
 pub use ops::CacheOps;
 pub use pubsub::{
     ChannelHandler, FnChannelHandler, GlobalSubscriber, GlobalSubscriberManager,
     PubSubOps,
 };
+pub use script::ScriptOps;
 pub use set::SetOps;
 pub use sorted_set::SortedSetOps;
 pub use ttl::TtlOps;
@@ -55,9 +59,19 @@ impl CacheManager {
         SetOps::new(self.client.clone())
     }
 
+    /// 获取 Hash 操作器
+    pub fn hash(&self) -> HashOps {
+        HashOps::new(self.client.clone())
+    }
+
     /// 获取发布/订阅操作器
     pub fn pubsub(&self) -> PubSubOps {
         PubSubOps::new(self.client.clone())
+    }
+
+    /// 获取 Lua 脚本操作器
+    pub fn script(&self) -> ScriptOps {
+        ScriptOps::new(self.client.clone())
     }
 
     /// 获取内部客户端引用
@@ -103,6 +117,11 @@ impl GlobalCacheManager {
         GLOBAL_CACHE_MANAGER.get().expect(
             "缓存管理器未初始化，请先调用 GlobalCacheManager::initialize() 或 GlobalCacheManager::initialize_with_configs()"
         )
+    }
+
+    /// 尝试获取全局缓存管理器引用（未初始化时返回 None）
+    pub fn try_get() -> Option<&'static Arc<CacheManager>> {
+        GLOBAL_CACHE_MANAGER.get()
     }
 
     /// 使用已有的 RedisClient 初始化全局缓存管理器

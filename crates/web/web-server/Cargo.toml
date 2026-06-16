@@ -11,6 +11,10 @@ cmx-utils = { workspace = true }
 cmx-database = { workspace = true }
 # 内部依赖 - API
 cmx-api = { workspace = true }
+# 内部依赖 - 认证模块
+cmx-auth = { workspace = true }
+# 内部依赖 - 业务模型
+cmx-biz = { workspace = true }
 # 内部依赖 - 缓存
 cmx-buffer = { workspace = true }
 # 内部依赖 - 插件

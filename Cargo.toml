@@ -14,6 +14,8 @@ members = [
     "crates/libs/cmx-infra/cmx-nacos",
     "crates/libs/cmx-infra/cmx-registry-config",
     "crates/libs/cmx-infra/cmx-storage",
+    "crates/libs/cmx-infra/cmx-audit",
+    "crates/libs/cmx-infra/cmx-auth",
     "crates/web/web-server",
     "crates/libs/cmx-api",
     "crates/libs/cmx-api-types",
@@ -78,6 +80,9 @@ cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.9", registry 
 cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.9", registry = "nora" }
 # 内部依赖 - 存储
 cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.9", registry = "nora" }
+# 内部依赖 - 审计日志
+cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.9", registry = "nora" }
+cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.9", registry = "nora" }
 # 对象存储访问层
 opendal = { version = "0.55", features = ["services-s3", "services-fs"] }
 # 文件 MIME Type 魔数检测
@@ -207,6 +212,14 @@ strum = "0.27"
 strum_macros = "0.27"
 # Base64 编码/解码
 base64 = "0.22"
+# JWT 编解码
+jsonwebtoken = "9"
+# Argon2 密码哈希
+argon2 = "0.5"
+# 高性能本地缓存
+moka = { version = "0.12", features = ["future"] }
+# Prometheus 指标
+prometheus = "0.13"
 # Redis 客户端 - 支持异步、集群、连接管理
 redis = { version = "1.2.1", features = ["aio", "tokio-comp", "script", "connection-manager", "cluster-async"] }
 # Futures 工具
@@ -219,6 +232,8 @@ ed25519-dalek = { version = "2.2", features = ["std"] }
 urlencoding = "2"
 # SHA256 哈希
 sha2 = "0.10"
+# 十六进制编码
+hex = "0.4"
 # SHA1 哈希
 sha1 = "0.10"
 # MD5 哈希

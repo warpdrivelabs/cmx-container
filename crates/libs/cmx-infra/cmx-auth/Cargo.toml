@@ -1,0 +1,63 @@
+[package]
+name = "cmx-auth"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 内部依赖 - trait 定义
+cmx-traits = { workspace = true }
+# 内部依赖 - 缓存层（含 HashOps + Lua API）
+cmx-buffer = { workspace = true }
+# 内部依赖 - 审计日志
+cmx-audit = { workspace = true }
+# 内部依赖 - 数据库（OAuth2 客户端/API Key 持久化）
+cmx-database = { workspace = true }
+
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 时间处理
+chrono = { workspace = true, features = ["serde"] }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4", "serde"] }
+# 错误处理
+thiserror = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
+
+# JWT 编解码
+jsonwebtoken = { workspace = true }
+# Argon2 密码哈希
+argon2 = { workspace = true }
+# 高性能本地缓存
+moka = { workspace = true }
+# Prometheus 指标
+prometheus = { workspace = true }
+# 全局静态变量（Prometheus 指标注册）
+lazy_static = { workspace = true }
+# 随机数生成
+rand = { workspace = true }
+# Base64 编码（PKCE）
+base64 = { workspace = true }
+# SHA256（PKCE code_challenge）
+sha2 = { workspace = true }
+# 十六进制编码（API Key 哈希）
+hex = { workspace = true }
+# Redis 客户端（Lua 脚本返回值解析）
+redis = { workspace = true }
+# HTTP 客户端（与第三方 Provider 通信）
+reqwest = { workspace = true }
+# URL 编码
+urlencoding = { workspace = true }
+# 内部依赖 - 查询过滤/字段映射（GenericCrudService 的 FilterNodes + Fields）
+modql = { workspace = true, features = ["with-sea-query"] }
+# SQL 查询构建器（modql Fields/FilterNodes 宏依赖）
+sea-query = { workspace = true }

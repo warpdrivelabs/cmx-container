@@ -4,7 +4,7 @@
 //! 包含 PluginQuery 和 RuntimeInvoker trait 对象，支持跨模块解耦调用。
 
 use std::sync::Arc;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
+use cmx_traits::{AuthService, PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
 use cmx_storage::service::StorageService;
 
 /// CMX 应用程序状态
@@ -34,6 +34,8 @@ pub struct CmxAppState {
     service_storage: Option<Arc<dyn ServiceStorage>>,
     /// 存储服务（trait 对象）
     storage_service: Option<Arc<dyn StorageService>>,
+    /// 认证服务（trait 对象）
+    auth_service: Option<Arc<dyn AuthService>>,
 }
 
 impl Default for CmxAppState {
@@ -62,6 +64,7 @@ impl CmxAppState {
             service_query: None,
             service_storage: None,
             storage_service: None,
+            auth_service: None,
         }
     }
 
@@ -110,6 +113,12 @@ impl CmxAppState {
         self
     }
 
+    /// 设置认证服务
+    pub fn with_auth_service(mut self, service: Arc<dyn AuthService>) -> Self {
+        self.auth_service = Some(service);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -150,6 +159,11 @@ impl CmxAppState {
         self.storage_service.as_ref()
     }
 
+    /// 获取认证服务
+    pub fn auth_service(&self) -> Option<&Arc<dyn AuthService>> {
+        self.auth_service.as_ref()
+    }
+
     /// 获取应用隔离标识
     ///
     /// 返回 app_id 字符串的副本。
@@ -174,6 +188,7 @@ impl Clone for CmxAppState {
             service_query: self.service_query.clone(),
             service_storage: self.service_storage.clone(),
             storage_service: self.storage_service.clone(),
+            auth_service: self.auth_service.clone(),
         }
     }
 }

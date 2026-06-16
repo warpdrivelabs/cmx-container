@@ -4,6 +4,7 @@
 
 use crate::app_state::CmxAppState;
 use crate::handlers::application;
+use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;
 use crate::handlers::domain;
@@ -39,6 +40,9 @@ use utoipa_swagger_ui::SwaggerUi;
 /// # 注册的路由
 pub fn api_routes() -> Router<CmxAppState> {
     let router = Router::new();
+
+    // 注册认证模块路由（使用 ModuleRoutes）
+    let router = router.merge(auth::AuthModule.routes());
 
     // 注册 Domain 模块路由（使用 ModuleRoutes）
     let router = router.merge(domain::DomainModule.routes());

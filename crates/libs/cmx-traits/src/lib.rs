@@ -17,6 +17,9 @@
 //! - [`ExtismFunctionProvider`] — 宿主函数注册（各模块向 cmx-runtime 注册宿主函数）
 
 // 模块声明
+pub mod auth_error;
+pub mod auth_policy;
+pub mod auth_service;
 pub mod plugin_query;
 pub mod runtime_invoker;
 pub mod lifecycle;
@@ -30,8 +33,12 @@ pub mod service_invoker;
 pub mod global_service_invoker;
 pub mod event_bus;
 pub mod rpc_client;
+pub mod user_auth_query;
 
 // 统一导出
+pub use auth_error::AuthError;
+pub use auth_policy::AuthPolicy;
+pub use auth_service::{AuthService, Credentials, TokenPair, DeviceInfo, OAuth2CallbackResult, OAuth2CallbackExchangeResult};
 pub use plugin_query::{PluginQuery, PluginSnapshot, PluginFilter};
 pub use runtime_invoker::{RuntimeInvoker, WasmInvokeResult};
 pub use lifecycle::{PluginLifecycleListener, LifecycleEvent, PluginLifecyclePayload, plugin_events};
@@ -45,3 +52,4 @@ pub use service_invoker::{ServiceInvoker, ServiceInvokeOptions};
 pub use global_service_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError};
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};
 pub use rpc_client::{RpcClient, RpcError, FunctionCallResult};
+pub use user_auth_query::{UserAuthQuery, UserAuthData, ApiKeyData, OAuth2ClientData, OAuth2UserInfo, ProviderInfo};
