@@ -1148,9 +1148,24 @@ impl AuthService for AuthServiceImpl {
         let api_key_manager = ApiKeyManager::new(self.cache.clone(), self.user_query.clone());
         let api_key_entity = api_key_manager.validate(key).await?;
 
-        let user_id = api_key_entity
-            .user_id
-            .ok_or(AuthError::InvalidApiKey)?;
+        // user_id 为空表示未关联用户（纯服务间调用），不报错，跳过用户/角色/权限查询
+        let user_id = api_key_entity.user_id.unwrap_or_default();
+
+        // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
+        metrics::record_api_key_validation();
+
+        if user_id.is_empty() {
+            return Ok(AuthContext {
+                user_id: String::new(),
+                username: String::new(),
+                roles: vec![],
+                permissions: vec![],
+                org_id: None,
+                session_id: None,
+                device_type: Some("api_key".to_string()),
+                auth_method: Some("api_key".to_string()),
+            });
+        }
 
         let user = self
             .user_query
@@ -1173,9 +1188,6 @@ impl AuthService for AuthServiceImpl {
             .get_user_permissions(&user_id)
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
-
-        // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
-        metrics::record_api_key_validation();
 
         Ok(AuthContext {
             user_id: user_id.clone(),

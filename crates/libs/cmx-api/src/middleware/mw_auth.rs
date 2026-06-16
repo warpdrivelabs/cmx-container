@@ -21,7 +21,7 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 use regex::Regex;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::middleware::CmxSvrContext;
 use cmx_traits::AuthService;
@@ -245,7 +245,7 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
 
     // 1. 白名单检查（支持通配符 * / ** 匹配）
     if GlobalAuthService::is_whitelisted(&path) {
-        debug!(path = %path, "认证白名单，跳过");
+        info!(path = %path, "认证白名单，跳过");
         return Ok(next.run(req).await);
     }
 
@@ -285,7 +285,7 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
 
     svr_ctx.0.auth_context = Some(auth_ctx);
 
-    debug!(path = %path, "认证通过");
+    info!(path = %path, "认证通过");
     Ok(next.run(req).await)
 }
 
