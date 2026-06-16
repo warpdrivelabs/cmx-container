@@ -98,3 +98,11 @@ retry_count = 0
 # default_clusters = []
 # 服务发现变更通知通道容量（可选，默认 1024，用于缓冲高频服务变更如 k8s 滚动更新）
 # discover_channel_capacity = 1024
+
+
+# 默认 API Key（开发环境使用，生产环境请删除并改为环境变量注入）
+# 使用方法：将 key 值作为 X-API-Key 请求头
+[[auth.static_api_keys]]
+key = "cmx_sk_dev_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"
+service_name = "dev-internal"
+description = "开发环境默认 API Key"

@@ -13,6 +13,7 @@
   - [服务注册地址解析优先级](#服务注册地址解析优先级)
   - [app_id 获取优先级](#app_id-获取优先级)
 - [基础服务中心环境变量覆盖](#基础服务中心环境变量覆盖)
+- [认证配置环境变量覆盖](#认证配置环境变量覆盖)
 - [通用环境变量](#通用环境变量)
 - [配置优先级](#配置优先级)
 
@@ -101,6 +102,84 @@
 | `CENTER_CLIENT__URLS__PERM` | String | 权限中心 URL |
 | `CENTER_CLIENT__URLS__FORM` | String | 表单中心 URL |
 | `CENTER_CLIENT__URLS__FLOW` | String | 流程中心 URL |
+
+---
+
+## 认证配置环境变量覆盖
+
+`auth` 配置节支持通过环境变量覆盖，格式为 `AUTH__<SECTION>__<KEY>`（双下划线 `__` 分隔层级，对应 TOML 中的点分隔键名）。
+
+> **安全提示**：JWT 密钥（`AUTH__JWT__SECRET`）和 RS256 私钥（`AUTH__JWT__PRIVATE_KEY`）属于敏感信息，**务必通过环境变量注入**，不要写入 TOML 配置文件或版本控制。
+
+### JWT 配置
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__JWT__ALGORITHM` | String | `HS256` | JWT 签名算法（`HS256` / `RS256`） |
+| `AUTH__JWT__SECRET` | String | `change-me-in-production` | HMAC 密钥（HS256 模式，生产环境务必修改） |
+| `AUTH__JWT__ISSUER` | String | `cmx-auth` | JWT 签发者标识 |
+| `AUTH__JWT__AUDIENCE` | String | `cmx-platform` | JWT 受众标识 |
+| `AUTH__JWT__PRIVATE_KEY` | String | - | RS256 私钥（文件路径或 PEM 内容） |
+| `AUTH__JWT__PUBLIC_KEY` | String | - | RS256 公钥（文件路径或 PEM 内容） |
+| `AUTH__JWT__CURRENT_KID` | String | - | 当前签发使用的密钥 ID（密钥轮换标识） |
+| `AUTH__JWT__LEGACY_PUBLIC_KEYS_0_KID` | String | - | 旧密钥 0 的 kid（密钥轮换宽限期） |
+| `AUTH__JWT__LEGACY_PUBLIC_KEYS_0_PEM` | String | - | 旧密钥 0 的 PEM（文件路径或内容） |
+| `AUTH__JWT__LEGACY_PUBLIC_KEYS_1_KID` | String | - | 旧密钥 1 的 kid |
+| `AUTH__JWT__LEGACY_PUBLIC_KEYS_1_PEM` | String | - | 旧密钥 1 的 PEM |
+
+> 旧密钥列表支持索引 0-4，最多 5 个。
+
+### Argon2 密码哈希配置
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__ARGON2__MEMORY_COST` | Integer | `65536` | 内存开销（KB），值越大抗 GPU 破解能力越强 |
+| `AUTH__ARGON2__TIME_COST` | Integer | `3` | 时间开销（迭代次数） |
+| `AUTH__ARGON2__PARALLELISM` | Integer | `4` | 并行线程数 |
+
+### Token 有效期配置
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__TOKEN__ACCESS_TTL_SECS` | Integer | `1800` | Access Token 有效期（秒） |
+| `AUTH__TOKEN__REFRESH_TTL_SECS` | Integer | `604800` | Refresh Token 有效期（秒） |
+
+### 会话配置
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__SESSION__SINGLE_SESSION_PER_DEVICE_TYPE` | Boolean | `false` | 同一设备类型是否仅允许一个会话 |
+| `AUTH__SESSION__MAX_SESSIONS` | Integer | `0` | 最大并发会话数（0 = 不限制） |
+| `AUTH__SESSION__IDLE_TIMEOUT_SECS` | Integer | `86400` | 会话空闲超时（秒） |
+| `AUTH__SESSION__HEARTBEAT_INTERVAL_SECS` | Integer | `300` | 心跳间隔（秒） |
+
+### 认证缓存配置
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__CACHE__ENABLE_LOCAL_CACHE` | Boolean | `true` | 是否启用本地缓存 |
+| `AUTH__CACHE__LOCAL_TTL_SECS` | Integer | `30` | 本地缓存 TTL（秒） |
+| `AUTH__CACHE__LOCAL_CACHE_MAX_ENTRIES` | Integer | `10000` | 本地缓存最大容量 |
+| `AUTH__CACHE__MAX_LOGIN_ATTEMPTS` | Integer | `5` | 登录失败锁定阈值 |
+| `AUTH__CACHE__LOCK_DURATION_SECS` | Integer | `900` | 账号锁定时长（秒） |
+
+### 超管初始化环境变量
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__SUPER_ADMIN__USERNAME` | String | - | 超管用户名（必需） |
+| `AUTH__SUPER_ADMIN__PASSWORD` | String | - | 超管初始密码（必需，生产环境务必通过环境变量注入） |
+| `AUTH__SUPER_ADMIN__EMAIL` | String | - | 超管邮箱（可选） |
+| `AUTH__SUPER_ADMIN__ROLES` | String | `super_admin` | 超管角色编码（逗号分隔） |
+
+> 超管账号仅在首次启动时创建，已存在则跳过。
+
+### OAuth2 配置环境变量覆盖
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `AUTH__OAUTH2__AUTH_CODE_TTL_SECS` | Integer | `600` | 授权码有效期（秒） |
+| `AUTH__OAUTH2__PKCE_REQUIRED` | Boolean | `true` | 是否强制 PKCE（生产环境建议开启） |
 
 ---
 

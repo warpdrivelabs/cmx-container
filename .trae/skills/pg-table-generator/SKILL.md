@@ -9,6 +9,11 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 
 ## 生成规则
 
+### 标识符命名规则
+
+1. **不使用双引号**：表名、字段名、约束名、索引名等所有标识符均不使用双引号包裹，直接使用小写字母和下划线命名。
+2. **不指定 schema**：生成的 SQL 不包含 `schema_name` 前缀，直接使用表名（即默认 schema 为 `public`，由数据库 search_path 决定）。
+
 ### 标准审计字段（所有表必需）
 
 所有表必须包含以下标准字段（除 `id` 外均放在表最后）：
@@ -36,10 +41,10 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 
 ```sql
 -- 表注释
-COMMENT ON TABLE "schema_name"."table_name" IS '表业务含义';
+COMMENT ON TABLE table_name IS '表业务含义';
 
 -- 字段注释
-COMMENT ON COLUMN "schema_name"."table_name"."field_name" IS '字段用途';
+COMMENT ON COLUMN table_name.field_name IS '字段用途';
 ```
 
 **注释命名建议**：
@@ -53,29 +58,29 @@ COMMENT ON COLUMN "schema_name"."table_name"."field_name" IS '字段用途';
 
 ```sql
 -- 表注释
-CREATE TABLE "schema_name"."table_name" (
+CREATE TABLE table_name (
     -- 业务字段（主键在前）
-    "id" varchar(64) NOT NULL,
-    "field_name" varchar(255),
+    id varchar(64) NOT NULL,
+    field_name varchar(255),
     -- ... 其他业务字段 ...
 
     -- 标准审计字段（除id外按此顺序排列）
-    "archived" int4 DEFAULT 0,
-    "create_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "update_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "create_by" varchar(100),
-    "create_name" varchar(100),
-    "update_by" varchar(100),
-    "update_name" varchar(100),
+    archived int4 DEFAULT 0,
+    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by varchar(100),
+    create_name varchar(100),
+    update_by varchar(100),
+    update_name varchar(100),
 
-    CONSTRAINT "pk_table_name" PRIMARY KEY ("id")
+    CONSTRAINT pk_table_name PRIMARY KEY (id)
 );
 
 -- 唯一索引（如有）
-CREATE UNIQUE INDEX "uk_table_name_field" ON "schema_name"."table_name" ("field_name");
+CREATE UNIQUE INDEX uk_table_name_field ON table_name (field_name);
 
-COMMENT ON TABLE "schema_name"."table_name" IS '表业务注释';
-COMMENT ON COLUMN "schema_name"."table_name"."id" IS '主键ID';
+COMMENT ON TABLE table_name IS '表业务注释';
+COMMENT ON COLUMN table_name.id IS '主键ID';
 -- ... 其他字段注释 ...
 ```
 
@@ -91,39 +96,39 @@ COMMENT ON COLUMN "schema_name"."table_name"."id" IS '主键ID';
 输出：
 ```sql
 -- 用户表
-CREATE TABLE "public"."user" (
+CREATE TABLE user (
     -- 主键
-    "id" varchar(64) NOT NULL,
+    id varchar(64) NOT NULL,
 
     -- 业务字段
-    "username" varchar(50),
-    "email" varchar(100),
-    "phone" varchar(20),
+    username varchar(50),
+    email varchar(100),
+    phone varchar(20),
 
     -- 标准审计字段
-    "archived" int4 DEFAULT 0,
-    "create_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "update_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "create_by" varchar(100),
-    "create_name" varchar(100),
-    "update_by" varchar(100),
-    "update_name" varchar(100),
+    archived int4 DEFAULT 0,
+    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by varchar(100),
+    create_name varchar(100),
+    update_by varchar(100),
+    update_name varchar(100),
 
-    CONSTRAINT "pk_user" PRIMARY KEY ("id")
+    CONSTRAINT pk_user PRIMARY KEY (id)
 );
 
-COMMENT ON TABLE "public"."user" IS '用户表';
-COMMENT ON COLUMN "public"."user"."id" IS '主键ID';
-COMMENT ON COLUMN "public"."user"."username" IS '用户名';
-COMMENT ON COLUMN "public"."user"."email" IS '邮箱';
-COMMENT ON COLUMN "public"."user"."phone" IS '手机号';
-COMMENT ON COLUMN "public"."user"."archived" IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN "public"."user"."create_time" IS '创建时间';
-COMMENT ON COLUMN "public"."user"."update_time" IS '更新时间';
-COMMENT ON COLUMN "public"."user"."create_by" IS '创建人ID';
-COMMENT ON COLUMN "public"."user"."create_name" IS '创建人姓名';
-COMMENT ON COLUMN "public"."user"."update_by" IS '更新人ID';
-COMMENT ON COLUMN "public"."user"."update_name" IS '更新人姓名';
+COMMENT ON TABLE user IS '用户表';
+COMMENT ON COLUMN user.id IS '主键ID';
+COMMENT ON COLUMN user.username IS '用户名';
+COMMENT ON COLUMN user.email IS '邮箱';
+COMMENT ON COLUMN user.phone IS '手机号';
+COMMENT ON COLUMN user.archived IS '是否归档：0-否，1-是';
+COMMENT ON COLUMN user.create_time IS '创建时间';
+COMMENT ON COLUMN user.update_time IS '更新时间';
+COMMENT ON COLUMN user.create_by IS '创建人ID';
+COMMENT ON COLUMN user.create_name IS '创建人姓名';
+COMMENT ON COLUMN user.update_by IS '更新人ID';
+COMMENT ON COLUMN user.update_name IS '更新人姓名';
 ```
 
 ### 示例2：带唯一索引的表
@@ -136,92 +141,92 @@ COMMENT ON COLUMN "public"."user"."update_name" IS '更新人姓名';
 输出：
 ```sql
 -- 商品表
-CREATE TABLE "public"."product" (
+CREATE TABLE product (
     -- 主键
-    "id" varchar(64) NOT NULL,
+    id varchar(64) NOT NULL,
 
     -- 业务字段
-    "name" varchar(100) NOT NULL,
-    "code" varchar(50) NOT NULL,
-    "price" numeric(10,2),
-    "stock" int4,
+    name varchar(100) NOT NULL,
+    code varchar(50) NOT NULL,
+    price numeric(10,2),
+    stock int4,
 
     -- 标准审计字段
-    "archived" int4 DEFAULT 0,
-    "create_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "update_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "create_by" varchar(100),
-    "create_name" varchar(100),
-    "update_by" varchar(100),
-    "update_name" varchar(100),
+    archived int4 DEFAULT 0,
+    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by varchar(100),
+    create_name varchar(100),
+    update_by varchar(100),
+    update_name varchar(100),
 
-    CONSTRAINT "pk_product" PRIMARY KEY ("id"),
-    CONSTRAINT "uk_product_code" UNIQUE ("code")
+    CONSTRAINT pk_product PRIMARY KEY (id),
+    CONSTRAINT uk_product_code UNIQUE (code)
 );
 
-CREATE UNIQUE INDEX "uk_product_code" ON "public"."product" ("code");
+CREATE UNIQUE INDEX uk_product_code ON product (code);
 
-COMMENT ON TABLE "public"."product" IS '商品表';
-COMMENT ON COLUMN "public"."product"."id" IS '主键ID';
-COMMENT ON COLUMN "public"."product"."name" IS '商品名称';
-COMMENT ON COLUMN "public"."product"."code" IS '商品编码';
-COMMENT ON COLUMN "public"."product"."price" IS '商品价格';
-COMMENT ON COLUMN "public"."product"."stock" IS '库存数量';
-COMMENT ON COLUMN "public"."product"."archived" IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN "public"."product"."create_time" IS '创建时间';
-COMMENT ON COLUMN "public"."product"."update_time" IS '更新时间';
-COMMENT ON COLUMN "public"."product"."create_by" IS '创建人ID';
-COMMENT ON COLUMN "public"."product"."create_name" IS '创建人姓名';
-COMMENT ON COLUMN "public"."product"."update_by" IS '更新人ID';
-COMMENT ON COLUMN "public"."product"."update_name" IS '更新人姓名';
+COMMENT ON TABLE product IS '商品表';
+COMMENT ON COLUMN product.id IS '主键ID';
+COMMENT ON COLUMN product.name IS '商品名称';
+COMMENT ON COLUMN product.code IS '商品编码';
+COMMENT ON COLUMN product.price IS '商品价格';
+COMMENT ON COLUMN product.stock IS '库存数量';
+COMMENT ON COLUMN product.archived IS '是否归档：0-否，1-是';
+COMMENT ON COLUMN product.create_time IS '创建时间';
+COMMENT ON COLUMN product.update_time IS '更新时间';
+COMMENT ON COLUMN product.create_by IS '创建人ID';
+COMMENT ON COLUMN product.create_name IS '创建人姓名';
+COMMENT ON COLUMN product.update_by IS '更新人ID';
+COMMENT ON COLUMN product.update_name IS '更新人姓名';
 ```
 
-### 示例3：指定 schema
+### 示例3：订单表
 
 用户输入：
 ```
-在 schema business 下创建订单表 order，包含：order_no(varchar(50)唯一索引), amount(numeric(12,2)), status(int4)
+生成订单表 order，包含：order_no(varchar(50)唯一索引), amount(numeric(12,2)), status(int4)
 ```
 
 输出：
 ```sql
 -- 订单表
-CREATE TABLE "business"."order" (
+CREATE TABLE order (
     -- 主键
-    "id" varchar(64) NOT NULL,
+    id varchar(64) NOT NULL,
 
     -- 业务字段
-    "order_no" varchar(50) NOT NULL,
-    "amount" numeric(12,2),
-    "status" int4,
+    order_no varchar(50) NOT NULL,
+    amount numeric(12,2),
+    status int4,
 
     -- 标准审计字段
-    "archived" int4 DEFAULT 0,
-    "create_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "update_time" timestamp DEFAULT CURRENT_TIMESTAMP,
-    "create_by" varchar(100),
-    "create_name" varchar(100),
-    "update_by" varchar(100),
-    "update_name" varchar(100),
+    archived int4 DEFAULT 0,
+    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by varchar(100),
+    create_name varchar(100),
+    update_by varchar(100),
+    update_name varchar(100),
 
-    CONSTRAINT "pk_order" PRIMARY KEY ("id"),
-    CONSTRAINT "uk_order_order_no" UNIQUE ("order_no")
+    CONSTRAINT pk_order PRIMARY KEY (id),
+    CONSTRAINT uk_order_order_no UNIQUE (order_no)
 );
 
-CREATE UNIQUE INDEX "uk_order_order_no" ON "business"."order" ("order_no");
+CREATE UNIQUE INDEX uk_order_order_no ON order (order_no);
 
-COMMENT ON TABLE "business"."order" IS '订单表';
-COMMENT ON COLUMN "business"."order"."id" IS '主键ID';
-COMMENT ON COLUMN "business"."order"."order_no" IS '订单编号';
-COMMENT ON COLUMN "business"."order"."amount" IS '订单金额';
-COMMENT ON COLUMN "business"."order"."status" IS '订单状态';
-COMMENT ON COLUMN "business"."order"."archived" IS '是否归档：0-否，1-是';
-COMMENT ON COLUMN "business"."order"."create_time" IS '创建时间';
-COMMENT ON COLUMN "business"."order"."update_time" IS '更新时间';
-COMMENT ON COLUMN "business"."order"."create_by" IS '创建人ID';
-COMMENT ON COLUMN "business"."order"."create_name" IS '创建人姓名';
-COMMENT ON COLUMN "business"."order"."update_by" IS '更新人ID';
-COMMENT ON COLUMN "business"."order"."update_name" IS '更新人姓名';
+COMMENT ON TABLE order IS '订单表';
+COMMENT ON COLUMN order.id IS '主键ID';
+COMMENT ON COLUMN order.order_no IS '订单编号';
+COMMENT ON COLUMN order.amount IS '订单金额';
+COMMENT ON COLUMN order.status IS '订单状态';
+COMMENT ON COLUMN order.archived IS '是否归档：0-否，1-是';
+COMMENT ON COLUMN order.create_time IS '创建时间';
+COMMENT ON COLUMN order.update_time IS '更新时间';
+COMMENT ON COLUMN order.create_by IS '创建人ID';
+COMMENT ON COLUMN order.create_name IS '创建人姓名';
+COMMENT ON COLUMN order.update_by IS '更新人ID';
+COMMENT ON COLUMN order.update_name IS '更新人姓名';
 ```
 
 ## 字段类型参考

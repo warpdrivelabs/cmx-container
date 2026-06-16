@@ -306,3 +306,194 @@ retry_count = 0
 # [registry.metadata]
 # version = "1.0.0"
 # region = "cn-east"
+
+# ============================================
+# 认证配置
+# ============================================
+[auth.jwt]
+# JWT 签名算法（可选，默认 HS256，支持 RS256）
+algorithm = "HS256"
+# HMAC 密钥（HS256 模式必需，生产环境务必修改）
+# RS256 模式时不使用此项，改用 private_key/public_key
+secret = "change-me-in-production"
+# JWT 签发者（可选，默认 cmx-auth）
+issuer = "cmx-auth"
+# JWT 受众（可选，默认 cmx-platform）
+audience = "cmx-platform"
+# RS256 私钥（支持文件路径或 PEM 内容，生产环境建议文件路径 + chmod 600）
+# algorithm = "RS256" 时必需
+# private_key = "/path/to/private.pem"
+# RS256 公钥（支持文件路径或 PEM 内容）
+# algorithm = "RS256" 时必需
+# public_key = "/path/to/public.pem"
+# 当前签发使用的密钥 ID（可选，用于密钥轮换标识）
+# current_kid = "key-2026-01"
+
+# 旧密钥列表（密钥轮换宽限期，可选）
+# 格式：[[auth.jwt.legacy_public_keys]]，每个条目包含 kid 和 pem
+# 宽限期内旧 kid 签发的 Token 仍可通过旧公钥验签
+# [[auth.jwt.legacy_public_keys]]
+# kid = "key-2025-12"
+# pem = "/path/to/old-public.pem"
+
+[auth.argon2]
+# 内存开销（KB，可选，默认 65536 = 64MB）
+# 值越大抗 GPU 破解能力越强，但消耗更多内存
+memory_cost = 65536
+# 时间开销（可选，默认 3）
+# 迭代次数，值越大哈希越慢但越安全
+time_cost = 3
+# 并行度（可选，默认 4）
+# 并行线程数，需与 CPU 核心数匹配
+parallelism = 4
+
+[auth.token]
+# Access Token 有效期（秒，可选，默认 1800 = 30 分钟）
+access_ttl_secs = 1800
+# Refresh Token 有效期（秒，可选，默认 604800 = 7 天）
+refresh_ttl_secs = 604800
+
+[auth.session]
+# 同一设备类型是否只允许一个会话（可选，默认 false）
+single_session_per_device_type = false
+# 最大会话数（可选，0 = 不限制）
+max_sessions = 0
+# 空闲超时时间（秒，可选，默认 86400 = 24 小时）
+# 超过此时间无心跳的会话将被清理
+idle_timeout_secs = 86400
+# 心跳间隔（秒，可选，默认 300 = 5 分钟）
+# 客户端需定时调用 /api/auth/heartbeat 续期
+heartbeat_interval_secs = 300
+
+[auth.cache]
+# 是否启用本地缓存（可选，默认 true）
+enable_local_cache = true
+# 本地缓存 TTL（秒，可选，默认 30）
+# 安全敏感场景建议设为 5 秒以下
+local_ttl_secs = 30
+# 本地缓存最大容量（可选，默认 10000）
+local_cache_max_entries = 10000
+# 登录失败锁定阈值（可选，默认 5 次）
+max_login_attempts = 5
+# 账号锁定时长（秒，可选，默认 900 = 15 分钟）
+lock_duration_secs = 900
+
+# ==================== 认证白名单（可选） ====================
+# 路径规则列表，请求路径匹配任一规则即视为无需认证。
+# 内置白名单始终生效（登录/刷新/OAuth2 流程/文档/健康检查等），
+# 此处配置为用户自定义追加项，会与内置白名单合并去重。
+# 留空或注释掉则仅使用内置白名单。
+#
+# 匹配规则：
+# - 普通规则（不含通配符）：前缀匹配，如 /api/public 匹配 /api/public/anything
+# - * 通配符：匹配单层路径段（不含 /），如 /api/biz/* 匹配 /api/biz/users
+# - ** 通配符：匹配多层路径（含 /），如 /api/auth/** 匹配 /api/auth/a/b/c
+# - ? 通配符：匹配单个非 / 字符，如 /api/v?/users 匹配 /api/v1/users
+#
+# 配置示例：
+# whitelist = ["/api/public", "/api/v1/webhook", "/api/biz/*", "/api/docs/**"]
+auth.whitelist = []
+
+# ==================== OAuth2 配置（可选） ====================
+[auth.oauth2]
+# === Authorization Server 配置 ===
+# 授权码有效期（秒），默认 600（10 分钟）
+# auth_code_ttl_secs = 600
+# 是否强制 PKCE（默认 true，生产环境建议开启）
+# pkce_required = true
+
+# === 第三方 OAuth2 Provider 对接 ===
+# Provider state 有效期（秒），默认 600
+# state_ttl_secs = 600
+# 回调授权码有效期（秒），默认 30
+# callback_code_ttl_secs = 30
+# 第三方 OAuth2 登录成功后重定向到前端的 URL
+# 回调时拼接为：{frontend_callback_url}?code={one_time_code}&state={original_state}
+# frontend_callback_url = "https://app.example.com/auth/callback"
+
+# 第三方账号关联策略
+[auth.oauth2.account_link]
+# 是否根据邮箱自动关联已有本地用户（默认 true，要求 Provider 邮箱已验证）
+# auto_link_by_email = true
+# 是否自动注册新用户（默认 false，需手动绑定或管理员创建）
+# auto_register = false
+# 自动注册时的默认角色（role_code，如 "user"）
+# default_role = "user"
+# 用户名生成策略：provider_prefix | email_prefix | display_name
+# - provider_prefix: {provider}_{provider_user_id}，如 google_1234567890
+# - email_prefix: 邮箱 @ 前部分，如 user from user@gmail.com
+# - display_name: 使用昵称，冲突时追加随机后缀
+# username_strategy = "provider_prefix"
+
+# === Google OAuth2（示例，需替换为实际值） ===
+# [[auth.oauth2.providers]]
+# name = "google"
+# display_name = "Google"
+# provider_type = "google"
+# client_id = "your-google-client-id.apps.googleusercontent.com"
+# client_secret = "your-google-client-secret"
+# redirect_uri = "https://your-domain.com/api/auth/oauth2/provider/google/callback"
+# scopes = ["openid", "email", "profile"]
+# enabled = true
+
+# === GitHub OAuth2（示例，需替换为实际值） ===
+# [[auth.oauth2.providers]]
+# name = "github"
+# display_name = "GitHub"
+# provider_type = "github"
+# client_id = "your-github-client-id"
+# client_secret = "your-github-client-secret"
+# redirect_uri = "https://your-domain.com/api/auth/oauth2/provider/github/callback"
+# scopes = ["user:email", "read:user"]
+# enabled = true
+
+# === 通用 OAuth2 Provider 示例（适用于任何标准 OAuth2 服务） ===
+# [[auth.oauth2.providers]]
+# name = "gitlab"
+# display_name = "GitLab"
+# provider_type = "generic"
+# client_id = "your-gitlab-application-id"
+# client_secret = "your-gitlab-secret"
+# redirect_uri = "https://your-domain.com/api/auth/oauth2/provider/gitlab/callback"
+# authorize_url = "https://gitlab.com/oauth/authorize"
+# token_url = "https://gitlab.com/oauth/token"
+# userinfo_url = "https://gitlab.com/api/v4/user"
+# scopes = ["read_user", "email"]
+# token_endpoint_auth_method = "client_secret_post"
+# enabled = false
+# 字段映射使用内联表（标准字段名 = JSON 字段名，支持 number 类型自动转 string）
+# field_mapping = { provider_user_id = "id", email = "email", username = "username", display_name = "name", avatar_url = "avatar_url" }
+
+# ============================================
+# 超管初始化配置（可选）
+# ============================================
+# [auth.super_admin]
+# 超管用户名（必需，仅在首次创建时使用）
+# username = "admin"
+# 超管初始密码（必需，首次创建时使用，建议通过环境变量注入）
+# password = "change-me-in-production"
+# 超管邮箱（可选）
+# email = "admin@example.com"
+# 超管角色编码（可选，默认 ["super_admin"]）
+# roles = "super_admin"
+
+# ============================================
+# 静态 API Key 配置（可选）
+# ============================================
+# 简化用法：只需配置 `key`，key_prefix 自动从 key 前 8 位提取。
+# 启动时会在日志中打印每个导入的 key（明文）和 prefix，便于复制使用。
+# 警告：明文 Key 会输出到启动日志，请确保日志文件访问安全。
+#
+# 示例 1：简化用法（推荐）
+# [[auth.static_api_keys]]
+# key = "cmx_sk_Ab3dEf9hJkLmN2pQrStUvWxYz123456"
+# service_name = "billing-service"
+#
+# 示例 2：完整用法（显式指定 key_prefix）
+# [[auth.static_api_keys]]
+# key_prefix = "cmx_stat"
+# key = "your-static-api-key-here"
+# user_id = "system"
+# service_name = "internal-service"
+# scopes = "read,write"
+# description = "内部服务 API Key"
