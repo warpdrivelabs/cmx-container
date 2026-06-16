@@ -57,4 +57,3 @@ pub mod basic;
 pub mod cache;
 pub mod database;
 pub mod orchestration;
-pub mod plugin_call;

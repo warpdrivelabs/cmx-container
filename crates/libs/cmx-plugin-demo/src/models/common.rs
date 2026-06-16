@@ -6,13 +6,6 @@ pub struct RouteInput {
     pub route: String,
 }
 
-/// 库存检查请求（用于插件调用示例）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InventoryCheckRequest {
-    pub product_name: String,
-    pub quantity: u32,
-}
-
 /// 通用操作结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationResult {

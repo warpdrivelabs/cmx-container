@@ -2,18 +2,30 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
+
 /// 缓存订单状态
 ///
 /// 将订单状态写入缓存，演示 cache_set 的使用方式。
 ///
 /// # Arguments
 ///
-/// * `input` - 包含 `UpdateOrderRequest` 格式的订单更新参数。
+/// 支持两种输入格式：
+///
+/// 1. `UpdateOrderRequest`（直接缓存单条订单）：
 ///
 /// | 字段 | 类型 | 必填 | 说明 |
 /// |------|------|------|------|
 /// | `order_id` | string | 是 | 订单ID |
-/// | `status` | string | 否 | 订单状态 |
+/// | `status` | string | 是 | 订单状态 |
+///
+/// 2. `query_orders` 的返回结构（批量缓存订单列表）：
+///
+/// | 字段 | 类型 | 必填 | 说明 |
+/// |------|------|------|------|
+/// | `success` | bool | 是 | 查询是否成功 |
+/// | `dataset` | object | 是 | 数据集，包含 columns 和 rows |
+/// | `dataset.columns` | string[] | 是 | 列名数组（需含 id 和 status） |
+/// | `dataset.rows` | array[] | 是 | 行数据数组，每行为字段值数组 |
 #[plugin_fn]
 pub fn cache_order_status(
     Msgpack(input): Msgpack<FunctionInput>,
