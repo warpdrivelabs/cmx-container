@@ -237,6 +237,15 @@ RUST_LOG=debug cargo run --bin web-server 2>&1 | grep plugin
 # 检查插件目录权限
 ls -la plugins/
 ```
+### 插件调用失败
+
+```text
+call to route_check encountered an error: array had incorrect length, expected 6
+```
+
+`只要宿主端 SVRContext / FunctionInput / FunctionOutput 结构变更，所有依赖 cmx-plugin-sdk 的 WASM 插件都需要重新编译。`
+
+
 
 ## 构建说明
 

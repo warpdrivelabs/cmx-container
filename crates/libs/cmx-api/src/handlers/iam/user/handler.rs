@@ -14,6 +14,14 @@ use crate::{ApiResp, Error, Result};
 
 use cmx_iam::user::{AssignRolesRequest, UserFilter, UserForCreate, UserForUpdate};
 
+/// 用户名查询参数（用于 GET 接口）
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct UsernameQuery {
+    /// 用户名
+    pub username: String,
+}
+
 /// 创建用户
 #[utoipa::path(
     post,
@@ -46,12 +54,12 @@ pub async fn create_user(
     Ok(Json(ApiResp::ok(user)))
 }
 
-/// 获取用户详情
+/// 获取用户详情（按 username 查询）
 #[utoipa::path(
     get,
     path = "/api/iam/users/get",
     params(
-        ("id" = String, Query, description = "用户ID")
+        UsernameQuery
     ),
     responses(
         (status = 200, description = "查询成功", body = ApiResp<User>),
@@ -62,9 +70,9 @@ pub async fn create_user(
 pub async fn get_user(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(params): Query<cmx_core::GetParams>,
+    Query(params): Query<UsernameQuery>,
 ) -> Result<Json<ApiResp<User>>> {
-    debug!("{:<12} - handler::get_user - id: {}", "HANDLER", params.id);
+    debug!("{:<12} - handler::get_user - username: {}", "HANDLER", params.username);
 
     let iam = cmx_state.iam().ok_or_else(|| {
         Error::InternalError("IAM 服务未初始化".to_string())
@@ -72,7 +80,7 @@ pub async fn get_user(
 
     let user = iam
         .user_service
-        .get_user(&params.id)
+        .get_user(&params.username)
         .await
         .map_err(|e| Error::InternalError(e.to_string()))?;
 
@@ -237,8 +245,8 @@ pub async fn assign_roles(
     Json(req): Json<AssignRolesRequest>,
 ) -> Result<Json<ApiResp<()>>> {
     debug!(
-        "{:<12} - handler::assign_roles - user: {}, role_count: {}",
-        "HANDLER", req.user_id, req.role_ids.len()
+        "{:<12} - handler::assign_roles - username: {}, role_count: {}",
+        "HANDLER", req.username, req.role_ids.len()
     );
 
     let iam = cmx_state.iam().ok_or_else(|| {
@@ -246,19 +254,19 @@ pub async fn assign_roles(
     })?;
 
     iam.user_service
-        .assign_roles(&svr_ctx, &req.user_id, &req.role_ids)
+        .assign_roles(&svr_ctx, &req.username, &req.role_ids)
         .await
         .map_err(|e| Error::InternalError(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
 
-/// 获取用户的角色列表
+/// 获取用户的角色列表（按 username 查询）
 #[utoipa::path(
     get,
     path = "/api/iam/users/roles",
     params(
-        ("id" = String, Query, description = "用户ID")
+        UsernameQuery
     ),
     responses(
         (status = 200, description = "查询成功")
@@ -268,9 +276,9 @@ pub async fn assign_roles(
 pub async fn get_user_roles(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(params): Query<cmx_core::GetParams>,
+    Query(params): Query<UsernameQuery>,
 ) -> Result<Json<ApiResp<Vec<Role>>>> {
-    debug!("{:<12} - handler::get_user_roles - id: {}", "HANDLER", params.id);
+    debug!("{:<12} - handler::get_user_roles - username: {}", "HANDLER", params.username);
 
     let iam = cmx_state.iam().ok_or_else(|| {
         Error::InternalError("IAM 服务未初始化".to_string())
@@ -278,7 +286,7 @@ pub async fn get_user_roles(
 
     let roles = iam
         .user_service
-        .get_user_roles(&params.id)
+        .get_user_roles(&params.username)
         .await
         .map_err(|e| Error::InternalError(e.to_string()))?;
 

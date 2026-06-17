@@ -18,8 +18,8 @@ pub trait UserService: Send + Sync {
         svr_ctx: &SVRContext,
         data: UserForCreate,
     ) -> Result<User, TraitError>;
-    /// 获取单个用户
-    async fn get_user(&self, user_id: &str) -> Result<User, TraitError>;
+    /// 获取单个用户（按 username 查询）
+    async fn get_user(&self, username: &str) -> Result<User, TraitError>;
     /// 更新用户
     async fn update_user(
         &self,
@@ -38,15 +38,15 @@ pub trait UserService: Send + Sync {
     ) -> Result<(Vec<User>, i64), TraitError>;
     /// 列表查询用户
     async fn list_users(&self, filter: UserFilter) -> Result<Vec<User>, TraitError>;
-    /// 为用户分配角色（全量替换）
+    /// 为用户分配角色（全量替换，按 username 查询）
     async fn assign_roles(
         &self,
         svr_ctx: &SVRContext,
-        user_id: &str,
+        username: &str,
         role_ids: &[String],
     ) -> Result<(), TraitError>;
-    /// 获取用户的角色列表
-    async fn get_user_roles(&self, user_id: &str) -> Result<Vec<Role>, TraitError>;
+    /// 获取用户的角色列表（按 username 查询）
+    async fn get_user_roles(&self, username: &str) -> Result<Vec<Role>, TraitError>;
 }
 
 /// 角色服务 trait

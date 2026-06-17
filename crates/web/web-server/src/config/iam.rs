@@ -122,7 +122,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
 
     async fn get_user(
         &self,
-        _user_id: &str,
+        _username: &str,
     ) -> std::result::Result<cmx_core::model::iam::User, cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
     }
@@ -163,7 +163,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
     async fn assign_roles(
         &self,
         _svr_ctx: &cmx_core::SVRContext,
-        _user_id: &str,
+        _username: &str,
         _role_ids: &[String],
     ) -> std::result::Result<(), cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
@@ -171,7 +171,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
 
     async fn get_user_roles(
         &self,
-        _user_id: &str,
+        _username: &str,
     ) -> std::result::Result<Vec<cmx_core::model::iam::Role>, cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
     }

@@ -210,11 +210,11 @@ impl UserService for UserServiceImpl {
         Ok(user)
     }
 
-    /// 获取单个用户。
+    /// 获取单个用户（按 username 查询）。
     ///
     /// # Arguments
     ///
-    /// * `user_id` - 用户唯一标识。
+    /// * `username` - 用户名。
     ///
     /// # Returns
     ///
@@ -224,23 +224,29 @@ impl UserService for UserServiceImpl {
     ///
     /// * `IamError::UserNotFound` - 用户不存在。
     /// * `IamError::Crud` - 数据库查询失败。
-    async fn get_user(&self, user_id: &str) -> Result<User, TraitError> {
+    async fn get_user(&self, username: &str) -> Result<User, TraitError> {
         debug!(
-            "{:<12} - UserServiceImpl::get_user - {}",
-            "IAM", user_id
+            "{:<12} - UserServiceImpl::get_user - username: {}",
+            "IAM", username
         );
 
-        let dataset = GenericCrudService::<UserBmc>::get(
-            &self.mm,
-            &self.db_id,
-            None,
-            Value::String(user_id.to_string()),
-        )
-        .await
-        .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let sql = r#"
+            SELECT id, username, nickname, email, phone, avatar, org_id, description,
+                   status, last_login_at, last_login_ip, archived,
+                   create_time, update_time,
+                   create_by, create_name, update_by, update_name
+            FROM cmx_user
+            WHERE username = $1 AND archived = 0
+        "#;
+        let params = Value::Array(vec![Value::String(username.to_string())]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, sql, params, "get_user_by_username")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
 
         if dataset.iter().next().is_none() {
-            return Err(TraitError::from(IamError::UserNotFound(user_id.to_string())));
+            return Err(TraitError::from(IamError::UserNotFound(username.to_string())));
         }
 
         Self::extract_user(dataset).map_err(|e| TraitError::from(e))
@@ -480,26 +486,27 @@ impl UserService for UserServiceImpl {
         Ok(Self::extract_users(dataset))
     }
 
-    /// 为用户分配角色（全量替换，事务保证原子性）。
+    /// 为用户分配角色（全量替换，事务保证原子性，按 username 查询）。
     ///
     /// # Arguments
     ///
     /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
-    /// * `user_id` - 目标用户 ID。
+    /// * `username` - 目标用户名。
     /// * `role_ids` - 待分配的角色 ID 列表；空数组表示清空所有角色。
     ///
     /// # Errors
     ///
     /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
+    /// * `IamError::UserNotFound` - 用户名不存在。
     async fn assign_roles(
         &self,
         svr_ctx: &SVRContext,
-        user_id: &str,
+        username: &str,
         role_ids: &[String],
     ) -> Result<(), TraitError> {
         debug!(
-            "{:<12} - UserServiceImpl::assign_roles - user: {}, role_count: {}",
-            "IAM", user_id, role_ids.len()
+            "{:<12} - UserServiceImpl::assign_roles - username: {}, role_count: {}",
+            "IAM", username, role_ids.len()
         );
 
         // 开启事务
@@ -510,9 +517,24 @@ impl UserService for UserServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("事务开始失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
+        // 先解析 username → user_id（校验用户存在）
+        let resolve_sql = "SELECT id FROM cmx_user WHERE username = $1 AND archived = 0";
+        let resolve_params = Value::Array(vec![Value::String(username.to_string())]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, Some(txn_id), resolve_sql, resolve_params, "resolve_user_id")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
+        let schema = dataset.schema.as_ref();
+        let user_id = dataset
+            .iter()
+            .next()
+            .and_then(|row| row.get_by_name_as::<String>(schema, "id"))
+            .ok_or_else(|| TraitError::from(IamError::UserNotFound(username.to_string())))?;
+
         // 1. 物理删除旧关联
         let delete_sql = "DELETE FROM cmx_user_role WHERE user_id = $1";
-        let delete_params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let delete_params = Value::Array(vec![Value::String(user_id.clone())]);
         self.mm
             .execute_sql_with_json(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
@@ -525,7 +547,7 @@ impl UserService for UserServiceImpl {
                               VALUES ($1, $2, $3, 0, 1) ON CONFLICT (user_id, role_id) DO NOTHING";
             let params = Value::Array(vec![
                 Value::String(ur_id),
-                Value::String(user_id.to_string()),
+                Value::String(user_id.clone()),
                 Value::String(role_id.clone()),
             ]);
             self.mm
@@ -542,21 +564,22 @@ impl UserService for UserServiceImpl {
 
         // 4. 审计日志（提交后记录）
         let audit_detail = serde_json::json!({
+            "username": username,
             "user_id": user_id,
             "role_ids": role_ids,
         });
-        self.audit_write(svr_ctx, "assign_roles", "user", user_id, &audit_detail)
+        self.audit_write(svr_ctx, "assign_roles", "user", &user_id, &audit_detail)
             .await;
 
-        info!(user_id = user_id, role_count = role_ids.len(), "用户角色分配成功");
+        info!(username = username, user_id = %user_id, role_count = role_ids.len(), "用户角色分配成功");
         Ok(())
     }
 
-    /// 获取用户已启用的角色列表（含 `status = 1` 且 `archived = 0` 过滤）。
+    /// 获取用户已启用的角色列表（含 `status = 1` 且 `archived = 0` 过滤，按 username 查询）。
     ///
     /// # Arguments
     ///
-    /// * `user_id` - 目标用户 ID。
+    /// * `username` - 目标用户名。
     ///
     /// # Returns
     ///
@@ -565,10 +588,10 @@ impl UserService for UserServiceImpl {
     /// # Errors
     ///
     /// * `IamError::Business` - SQL 查询失败。
-    async fn get_user_roles(&self, user_id: &str) -> Result<Vec<Role>, TraitError> {
+    async fn get_user_roles(&self, username: &str) -> Result<Vec<Role>, TraitError> {
         debug!(
-            "{:<12} - UserServiceImpl::get_user_roles - user: {}",
-            "IAM", user_id
+            "{:<12} - UserServiceImpl::get_user_roles - username: {}",
+            "IAM", username
         );
 
         let sql = r#"
@@ -577,9 +600,11 @@ impl UserService for UserServiceImpl {
                    r.create_by, r.create_name, r.update_by, r.update_name
             FROM cmx_role r
             INNER JOIN cmx_user_role ur ON ur.role_id = r.id
-            WHERE ur.user_id = $1 AND ur.archived = 0 AND r.archived = 0 AND r.status = 1
+            INNER JOIN cmx_user u ON u.id = ur.user_id
+            WHERE u.username = $1 AND ur.archived = 0 AND r.archived = 0 AND r.status = 1
+              AND u.archived = 0
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = Value::Array(vec![Value::String(username.to_string())]);
 
         let dataset = self
             .mm

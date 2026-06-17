@@ -160,8 +160,8 @@ pub struct UserForUpdateInsert {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct AssignRolesRequest {
-    /// 目标用户 ID。
-    pub user_id: String,
+    /// 目标用户名。
+    pub username: String,
 
     /// 待分配的角色 ID 列表（空数组表示清空所有角色）。
     pub role_ids: Vec<String>,
