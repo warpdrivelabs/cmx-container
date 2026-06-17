@@ -334,15 +334,17 @@ fn load_auth_config() -> AuthConfig {
         }
     }
 
-    // 超管配置
+    // 超管配置（未配置时使用默认值 admin/cmxadmin，配置 username 后按配置覆盖）
     if let Ok(username) = config.get_string("auth.super_admin.username") {
+        let default_sa = SuperAdminConfig::default();
         let sa_config = SuperAdminConfig {
             username,
-            password: config.get_string("auth.super_admin.password").unwrap_or_default(),
+            password: config.get_string("auth.super_admin.password")
+                .unwrap_or(default_sa.password),
             email: config.get_string("auth.super_admin.email").ok(),
             roles: config.get_string("auth.super_admin.roles")
                 .map(|s| s.split(',').map(|r| r.trim().to_string()).collect())
-                .unwrap_or_else(|_| vec!["admin".to_string()]),
+                .unwrap_or(default_sa.roles),
         };
         auth_config.super_admin = Some(sa_config);
     }

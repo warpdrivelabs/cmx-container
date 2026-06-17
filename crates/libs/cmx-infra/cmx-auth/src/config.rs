@@ -336,6 +336,17 @@ fn default_super_admin_roles() -> Vec<String> {
     vec!["admin".to_string()]
 }
 
+impl Default for SuperAdminConfig {
+    fn default() -> Self {
+        Self {
+            username: "admin".to_string(),
+            password: "cmxadmin".to_string(),
+            email: None,
+            roles: default_super_admin_roles(),
+        }
+    }
+}
+
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
@@ -373,7 +384,7 @@ impl Default for AuthConfig {
             },
             oauth2: None,
             static_api_keys: vec![],
-            super_admin: None,
+            super_admin: Some(SuperAdminConfig::default()),
             whitelist: vec![],
         }
     }

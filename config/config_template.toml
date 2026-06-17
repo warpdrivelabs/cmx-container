@@ -465,12 +465,12 @@ auth.whitelist = []
 # field_mapping = { provider_user_id = "id", email = "email", username = "username", display_name = "name", avatar_url = "avatar_url" }
 
 # ============================================
-# 超管初始化配置（可选）
+# 超管初始化配置（可选，未配置时使用默认账号 admin/cmxadmin）
 # ============================================
 # [auth.super_admin]
-# 超管用户名（必需，仅在首次创建时使用）
+# 超管用户名（可选，默认 "admin"）
 # username = "admin"
-# 超管初始密码（必需，首次创建时使用，建议通过环境变量注入）
+# 超管密码（可选，默认 "cmxadmin"，每次启动同步到数据库）
 # password = "a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1"
 # 超管邮箱（可选）
 # email = "admin@example.com"

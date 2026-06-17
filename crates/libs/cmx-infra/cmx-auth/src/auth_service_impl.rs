@@ -1080,27 +1080,36 @@ impl AuthService for AuthServiceImpl {
                 .await
                 .map_err(|e| AuthError::Internal(e.to_string()))?;
 
-            if existing.is_none() {
-                // 2. 哈希密码
-                let password_hash = self
-                    .password_hasher
-                    .hash(&sa_config.password)
-                    .map_err(|e| AuthError::PasswordHashError(e.to_string()))?;
+            // 2. 哈希密码（创建和更新都需要）
+            let password_hash = self
+                .password_hasher
+                .hash(&sa_config.password)
+                .map_err(|e| AuthError::PasswordHashError(e.to_string()))?;
 
-                // 3. 通过 UserAuthQuery 创建超管
-                self.user_query
-                    .create_super_admin(
-                        &sa_config.username,
-                        &password_hash,
-                        sa_config.email.as_deref(),
-                        &sa_config.roles,
-                    )
-                    .await
-                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+            match existing {
+                None => {
+                    // 3. 不存在 → 创建
+                    self.user_query
+                        .create_super_admin(
+                            &sa_config.username,
+                            &password_hash,
+                            sa_config.email.as_deref(),
+                            &sa_config.roles,
+                        )
+                        .await
+                        .map_err(|e| AuthError::Internal(e.to_string()))?;
 
-                info!(username = %sa_config.username, "超管账号创建成功");
-            } else {
-                info!(username = %sa_config.username, "超管账号已存在，跳过创建");
+                    info!(username = %sa_config.username, "超管账号创建成功");
+                }
+                Some(user) => {
+                    // 4. 已存在 → 同步密码（配置为密码唯一真源）
+                    self.user_query
+                        .update_password_hash(&user.user_id, &password_hash)
+                        .await
+                        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+                    info!(username = %sa_config.username, "超管账号已存在，密码已同步");
+                }
             }
         }
         Ok(())
