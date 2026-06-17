@@ -132,6 +132,32 @@ use utoipa::OpenApi;
         crate::handlers::auth::oauth2_handler::oauth2_authorize,
         crate::handlers::auth::oauth2_handler::oauth2_login,
         crate::handlers::auth::oauth2_handler::oauth2_token,
+        // IAM User handlers
+        crate::handlers::iam::user::handler::create_user,
+        crate::handlers::iam::user::handler::get_user,
+        crate::handlers::iam::user::handler::update_user,
+        crate::handlers::iam::user::handler::delete_user,
+        crate::handlers::iam::user::handler::page_users,
+        crate::handlers::iam::user::handler::list_users,
+        crate::handlers::iam::user::handler::assign_roles,
+        crate::handlers::iam::user::handler::get_user_roles,
+        // IAM Role handlers
+        crate::handlers::iam::role::handler::create_role,
+        crate::handlers::iam::role::handler::get_role,
+        crate::handlers::iam::role::handler::update_role,
+        crate::handlers::iam::role::handler::delete_role,
+        crate::handlers::iam::role::handler::page_roles,
+        crate::handlers::iam::role::handler::list_roles,
+        crate::handlers::iam::role::handler::assign_permissions,
+        crate::handlers::iam::role::handler::get_role_permissions,
+        // IAM Permission handlers
+        crate::handlers::iam::permission::handler::create_permission,
+        crate::handlers::iam::permission::handler::get_permission,
+        crate::handlers::iam::permission::handler::update_permission,
+        crate::handlers::iam::permission::handler::delete_permission,
+        crate::handlers::iam::permission::handler::page_permissions,
+        crate::handlers::iam::permission::handler::list_permissions,
+        crate::handlers::iam::permission::handler::get_permission_tree,
     ),
 
     components(
@@ -241,6 +267,25 @@ use utoipa::OpenApi;
             crate::handlers::auth::oauth2_response::OAuth2AuthorizeResponse,
             crate::handlers::auth::oauth2_response::OAuth2LoginResponse,
             crate::handlers::auth::oauth2_response::OAuth2TokenResponse,
+            // IAM schemas
+            cmx_core::model::iam::User,
+            cmx_core::model::iam::Role,
+            cmx_core::model::iam::Permission,
+            cmx_core::model::iam::PermissionTreeNode,
+            cmx_iam::user::UserForCreate,
+            cmx_iam::user::UserForUpdate,
+            cmx_iam::user::AssignRolesRequest,
+            cmx_iam::role::RoleForCreate,
+            cmx_iam::role::RoleForUpdate,
+            cmx_iam::role::AssignPermissionsRequest,
+            cmx_iam::permission::PermissionForCreate,
+            cmx_iam::permission::PermissionForUpdate,
+            crate::ApiResp<cmx_core::model::iam::User>,
+            crate::ApiResp<cmx_core::model::iam::Role>,
+            crate::ApiResp<cmx_core::model::iam::Permission>,
+            crate::ApiResp<Vec<cmx_core::model::iam::PermissionTreeNode>>,
+            crate::ApiResp<Vec<cmx_core::model::iam::Role>>,
+            crate::ApiResp<Vec<cmx_core::model::iam::Permission>>,
         )
     )
 )]
