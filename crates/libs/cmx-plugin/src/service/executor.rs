@@ -539,14 +539,14 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 进程内事件（仅通知本进程内的订阅者）
-        let payload = cmx_traits::PluginLifecyclePayload::new(
+        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
             &persist_result.app_id,
             &persist_result.plugin_id,
             &persist_result.version,
         )
         .with_install_path(persist_result.install_path.clone());
         self.event_publisher
-            .publish_local_event(cmx_traits::plugin_events::INSTALLED, payload)
+            .publish_local_event(cmx_traits::plugin::plugin_events::INSTALLED, payload)
             .await;
 
         // 5. 跨实例运行时加载通知（其他节点仅做运行时同步，不操作数据库）
@@ -613,14 +613,14 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 进程内事件
-        let payload = cmx_traits::PluginLifecyclePayload::new(
+        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
             &persist_result.app_id,
             &persist_result.plugin_id,
             &persist_result.version,
         )
         .with_old_version(persist_result.old_version.as_deref().unwrap_or("unknown"));
         self.event_publisher
-            .publish_local_event(cmx_traits::plugin_events::UPGRADED, payload)
+            .publish_local_event(cmx_traits::plugin::plugin_events::UPGRADED, payload)
             .await;
 
         // 5. 跨实例运行时加载通知
@@ -684,14 +684,14 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 进程内事件
-        let payload = cmx_traits::PluginLifecyclePayload::new(
+        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
             &persist_result.app_id,
             &persist_result.plugin_id,
             &persist_result.version,
         )
         .with_old_version(persist_result.old_version.as_deref().unwrap_or("unknown"));
         self.event_publisher
-            .publish_local_event(cmx_traits::plugin_events::DOWNGRADED, payload)
+            .publish_local_event(cmx_traits::plugin::plugin_events::DOWNGRADED, payload)
             .await;
 
         // 5. 跨实例运行时加载通知
@@ -754,13 +754,13 @@ impl PluginOperationExecutor {
             .ok();
 
         // 4. 进程内事件
-        let payload = cmx_traits::PluginLifecyclePayload::new(
+        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
             &persist_result.app_id,
             &persist_result.plugin_id,
             &persist_result.version,
         );
         self.event_publisher
-            .publish_local_event(cmx_traits::plugin_events::UNINSTALLED, payload)
+            .publish_local_event(cmx_traits::plugin::plugin_events::UNINSTALLED, payload)
             .await;
 
         // 5. 跨实例运行时卸载通知（其他节点注销内存 + 清理本地文件）

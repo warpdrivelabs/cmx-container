@@ -4,9 +4,11 @@
 //! 包含 PluginQuery 和 RuntimeInvoker trait 对象，支持跨模块解耦调用。
 
 use std::sync::Arc;
-use cmx_traits::{AuthService, PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
+use cmx_traits::auth::{AuthService, UserAuthQuery};
 use cmx_traits::iam::PermissionChecker;
-use cmx_traits::UserAuthQuery;
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::{ServiceQuery, ServiceStorage};
 use cmx_storage::service::StorageService;
 use cmx_iam::service_traits::{PermissionService, RoleService, UserService};
 

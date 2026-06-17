@@ -6,7 +6,7 @@
 
 use std::sync::OnceLock;
 
-use crate::runtime_invoker::RuntimeInvoker;
+use super::invoker::RuntimeInvoker;
 
 /// 全局运行时错误类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

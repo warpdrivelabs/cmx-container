@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use cmx_core::model::service::{ServiceEdge, ServiceNode, ServiceOrchestration};
-use cmx_traits::PluginQuery;
+use cmx_traits::plugin::PluginQuery;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

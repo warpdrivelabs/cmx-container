@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use cmx_core::AuthContext;
-use cmx_traits::{AuthError, AuthPolicy};
+use cmx_traits::auth::{AuthError, AuthPolicy};
 
 use crate::jwt::JwtManager;
 use crate::token::TokenManager;

@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cmx_traits::{PluginLifecyclePayload, plugin_events};
+use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
 use crate::cluster::notification::{PluginChangeAction, PluginChangeNotification};
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::service::event_publisher::EventPublisher;

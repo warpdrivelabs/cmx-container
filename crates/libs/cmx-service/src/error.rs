@@ -6,7 +6,7 @@ use std::string::String;
 
 use thiserror::Error;
 
-use cmx_traits::TraitError;
+use cmx_traits::error::TraitError;
 
 /// 服务层错误
 #[derive(Debug, Error)]

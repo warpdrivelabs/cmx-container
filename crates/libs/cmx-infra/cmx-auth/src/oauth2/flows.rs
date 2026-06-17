@@ -5,7 +5,7 @@
 //! 换 token 时用 code 反查，补充 client_id + redirect_uri 一致性校验。
 
 use cmx_buffer::CacheManager;
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 use uuid::Uuid;
 
 use crate::config::AuthConfig;

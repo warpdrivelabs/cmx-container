@@ -121,7 +121,7 @@ pub trait PluginLifecycleListener: Send + Sync {
     // 暂时注释，暂无此功能
     // /// 插件已激活 — 通知监听者加载 WASM 模块
     // async fn on_plugin_activated(&self, event: PluginLifecyclePayload);
-    // 
+    //
     // /// 插件已停用 — 通知监听者卸载 WASM 模块
     // async fn on_plugin_deactivated(&self, event: PluginLifecyclePayload);
 }

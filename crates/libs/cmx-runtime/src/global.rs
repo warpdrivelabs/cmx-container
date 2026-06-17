@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, OnceLock};
 use crate::{ExtismEngine, ExtismError};
-use cmx_traits::RuntimeInvoker;
+use cmx_traits::runtime::RuntimeInvoker;
 
 /// 全局 Extism 引擎管理器
 pub struct GlobalExtismEngine {

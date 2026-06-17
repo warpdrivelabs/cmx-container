@@ -1,11 +1,12 @@
 //! 服务存储实现
 //!
-//! 实现 cmx_traits::ServiceStorage trait。
+//! 实现 cmx_traits::service::ServiceStorage trait。
 
 use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::{ServiceStorage, SaveServiceVersionParams, TraitError};
+use cmx_traits::service::{ServiceStorage, SaveServiceVersionParams};
+use cmx_traits::error::TraitError;
 
 use crate::repository::ServiceRepository;
 

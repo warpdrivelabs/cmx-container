@@ -3,7 +3,8 @@
 //! 为 WASM 插件提供 Redis 缓存操作能力的宿主函数。
 //! 所有缓存键自动附加插件ID前缀，实现插件间缓存隔离。
 
-use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef};
 use cmx_core::{CacheGetRequest, CacheSetRequest, CacheResponse};
 
 use crate::cache::GlobalCacheManager;

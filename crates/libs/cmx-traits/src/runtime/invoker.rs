@@ -7,7 +7,7 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use crate::error::TraitError;
-use crate::invoke_context::InvokeOptions;
+use super::invoke_context::InvokeOptions;
 
 /// WASM 调用结果
 ///

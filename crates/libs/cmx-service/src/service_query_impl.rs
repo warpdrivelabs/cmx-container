@@ -1,11 +1,12 @@
 //! 服务查询实现
 //!
-//! 实现 cmx_traits::ServiceQuery trait。
+//! 实现 cmx_traits::service::ServiceQuery trait。
 
 use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::{ServiceDefinition, ServiceOrchestration};
-use cmx_traits::{ServiceQuery, ServicePageFilter, ServicePageResult, TraitError};
+use cmx_traits::service::{ServiceQuery, ServicePageFilter, ServicePageResult};
+use cmx_traits::error::TraitError;
 
 use crate::registry::ServiceRegistry;
 use crate::repository::ServiceRepository;

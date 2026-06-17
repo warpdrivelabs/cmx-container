@@ -1,6 +1,6 @@
 //! 密码策略校验
 
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 
 /// 密码策略校验器
 pub struct PasswordPolicy {

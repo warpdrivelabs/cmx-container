@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
-use cmx_traits::{RpcClient, RpcError};
+use cmx_traits::rpc::{RpcClient, RpcError};
 
 use crate::client::VoloGrpcClient;
 use crate::config::RpcConfig;

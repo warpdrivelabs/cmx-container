@@ -8,7 +8,7 @@ use cmx_service::{
     ServiceLifecycleListener, ServiceQueryImpl, ServiceRegistry, ServiceRepository,
     ServiceStorageImpl,
 };
-use cmx_traits::{GlobalServiceInvoker, ServiceQuery, ServiceStorage};
+use cmx_traits::service::{GlobalServiceInvoker, ServiceQuery, ServiceStorage};
 use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::info;

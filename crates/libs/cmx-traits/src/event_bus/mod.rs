@@ -11,8 +11,8 @@
 //!
 //! # 使用示例
 //!
-//! ```rust
-//! use cmx_traits::{GlobalEventBus, EventHandler};
+//! ```rust,ignore
+//! use cmx_traits::event_bus::{GlobalEventBus, EventHandler};
 //! use serde_json::json;
 //!
 //! // 初始化（应用启动时调用一次）

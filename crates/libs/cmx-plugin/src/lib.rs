@@ -313,7 +313,7 @@ impl GlobalPluginManager {
     /// 
     /// # Panics
     /// 如果未初始化则 panic。
-    pub fn get_as_plugin_query() -> Arc<dyn cmx_traits::PluginQuery> {
+    pub fn get_as_plugin_query() -> Arc<dyn cmx_traits::plugin::PluginQuery> {
         Self::get_arc()
     }
     

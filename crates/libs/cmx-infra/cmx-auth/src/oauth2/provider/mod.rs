@@ -10,7 +10,7 @@ pub mod registry;
 pub mod account_linker;
 
 use async_trait::async_trait;
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 use serde::{Deserialize, Serialize};
 
 /// 第三方 OAuth2 Provider 统一接口

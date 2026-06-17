@@ -19,7 +19,7 @@
 
 use std::time::Duration;
 
-use cmx_traits::DEFAULT_TIMEOUT;
+use cmx_traits::runtime::DEFAULT_TIMEOUT;
 use cmx_utils::ConfigManager;
 
 use crate::error::ExtismError;

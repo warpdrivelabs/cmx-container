@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 
 /// CmxServiceOrchestrator 的 gRPC 服务端实现
@@ -53,7 +55,7 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                 )
             })?;
 
-            let options = cmx_traits::ServiceInvokeOptions {
+            let options = cmx_traits::service::ServiceInvokeOptions {
                 include_steps: req.include_steps,
                 debug: req.debug,
                 debug_node_id: req.debug_node_id.map(|s| s.to_string()),

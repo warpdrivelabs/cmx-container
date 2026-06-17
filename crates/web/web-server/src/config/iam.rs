@@ -15,7 +15,7 @@ use cmx_iam::permission::PermissionServiceImpl;
 use cmx_iam::role::RoleServiceImpl;
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
-use cmx_traits::UserAuthQuery;
+use cmx_traits::auth::UserAuthQuery;
 use tracing::{info, warn};
 
 use crate::error::Result;
@@ -86,7 +86,7 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
 /// 替换 IamState 中的占位 user_service 为真实的 UserServiceImpl。
 pub async fn finalize_iam_state(
     iam_state: &Arc<IamState>,
-    auth_service: Arc<dyn cmx_traits::AuthService>,
+    auth_service: Arc<dyn cmx_traits::auth::AuthService>,
     iam_config: IamConfig,
 ) -> Result<Arc<IamState>> {
     let mm = get_default_db_manager();

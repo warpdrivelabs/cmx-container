@@ -3,7 +3,7 @@
 //! 实现 AuthPolicy trait 的 OAuth2 授权码策略。
 
 use cmx_buffer::CacheManager;
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 
 use crate::config::AuthConfig;
 use crate::oauth2::flows::{OAuth2FlowService, TokenExchangeParams};

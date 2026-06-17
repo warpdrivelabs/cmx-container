@@ -1,13 +1,14 @@
 //! UserAuthQuery trait 实现
 //!
-//! 实现 cmx_traits::UserAuthQuery trait，提供用户认证数据查询。
+//! 实现 cmx_traits::auth::UserAuthQuery trait，提供用户认证数据查询。
 //! 通过自定义 SQL JOIN 查询获取用户的角色编码和权限编码。
 
 use async_trait::async_trait;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
-use cmx_traits::{TraitError, UserAuthData, UserAuthQuery, OAuth2UserInfo};
+use cmx_traits::auth::{OAuth2UserInfo, UserAuthData, UserAuthQuery};
+use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValString, OpValsString};
 use tracing::{debug, info};
 use uuid::Uuid;

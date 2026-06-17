@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cmx_buffer::CacheManager;
 use cmx_core::AuthContext;
-use cmx_traits::{
+use cmx_traits::auth::{
     AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
     OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
 };
@@ -1244,7 +1244,7 @@ impl AuthService for AuthServiceImpl {
 
     async fn list_oauth2_providers(
         &self,
-    ) -> std::result::Result<Vec<cmx_traits::ProviderInfo>, AuthError> {
+    ) -> std::result::Result<Vec<cmx_traits::auth::ProviderInfo>, AuthError> {
         let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
             .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
         Ok(registry.list_providers())
@@ -1325,7 +1325,7 @@ impl AuthService for AuthServiceImpl {
             "is_new": is_new,
         }))).await;
 
-        Ok(cmx_traits::OAuth2CallbackResult {
+        Ok(cmx_traits::auth::OAuth2CallbackResult {
             callback_code,
             state: state.to_string(),
             is_new,
@@ -1424,7 +1424,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         service_name: Option<&str>,
         scopes: &[String],
         description: Option<&str>,
-    ) -> std::result::Result<(), cmx_traits::TraitError> {
+    ) -> std::result::Result<(), cmx_traits::error::TraitError> {
         debug!(
             "{:<12} - AuthServiceImpl::upsert_api_key - key_prefix: {}",
             "AUTH", key_prefix
@@ -1438,7 +1438,7 @@ impl AuthStorageQuery for AuthServiceImpl {
             .map(|s| format!("'{}'", s.replace('\'', "''")))
             .unwrap_or("NULL".to_string());
         let scopes_json = serde_json::to_string(scopes)
-            .map_err(|e| cmx_traits::TraitError::Internal(format!("序列化 scopes 失败: {}", e)))?;
+            .map_err(|e| cmx_traits::error::TraitError::Internal(format!("序列化 scopes 失败: {}", e)))?;
         let description_val = description
             .map(|d| format!("'{}'", d.replace('\'', "''")))
             .unwrap_or("NULL".to_string());
@@ -1462,7 +1462,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         db_manager
             .execute_sql(&db_id, None, &sql)
             .await
-            .map_err(|e| cmx_traits::TraitError::Internal(format!("导入 API Key 失败: {}", e)))?;
+            .map_err(|e| cmx_traits::error::TraitError::Internal(format!("导入 API Key 失败: {}", e)))?;
 
         info!(key_prefix = key_prefix, "静态 API Key 已导入");
         Ok(())
@@ -1471,7 +1471,7 @@ impl AuthStorageQuery for AuthServiceImpl {
     async fn get_api_key_by_prefix(
         &self,
         key_prefix: &str,
-    ) -> std::result::Result<Option<cmx_traits::ApiKeyData>, cmx_traits::TraitError> {
+    ) -> std::result::Result<Option<cmx_traits::auth::ApiKeyData>, cmx_traits::error::TraitError> {
         debug!(
             "{:<12} - AuthServiceImpl::get_api_key_by_prefix - key_prefix: {}",
             "AUTH", key_prefix
@@ -1488,7 +1488,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         let dataset = db_manager
             .query_sql(&db_id, None, &sql, "api_key_by_prefix")
             .await
-            .map_err(|e| cmx_traits::TraitError::Internal(format!("查询 API Key 失败: {}", e)))?;
+            .map_err(|e| cmx_traits::error::TraitError::Internal(format!("查询 API Key 失败: {}", e)))?;
 
         let schema = dataset.schema.as_ref();
         let row = match dataset.iter().next() {
@@ -1499,7 +1499,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         let scopes_str: String = row.get_by_name_as(schema, "scopes").unwrap_or_default();
         let scopes: Vec<String> = serde_json::from_str(&scopes_str).unwrap_or_default();
 
-        Ok(Some(cmx_traits::ApiKeyData {
+        Ok(Some(cmx_traits::auth::ApiKeyData {
             key_prefix: row.get_by_name_as(schema, "key_prefix").unwrap_or_default(),
             key_hash: row.get_by_name_as(schema, "key_hash").unwrap_or_default(),
             user_id: row.get_by_name_as(schema, "user_id"),
@@ -1516,7 +1516,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         user_id: &str,
         jti: &str,
         detail: &str,
-    ) -> std::result::Result<(), cmx_traits::TraitError> {
+    ) -> std::result::Result<(), cmx_traits::error::TraitError> {
         debug!(
             "{:<12} - AuthServiceImpl::record_token_event - event: {}, user: {}",
             "AUTH", event_type, user_id
@@ -1538,7 +1538,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         db_manager
             .execute_sql(&db_id, None, &sql)
             .await
-            .map_err(|e| cmx_traits::TraitError::Internal(format!("记录 Token 事件失败: {}", e)))?;
+            .map_err(|e| cmx_traits::error::TraitError::Internal(format!("记录 Token 事件失败: {}", e)))?;
 
         Ok(())
     }
@@ -1546,7 +1546,7 @@ impl AuthStorageQuery for AuthServiceImpl {
     async fn get_oauth2_client(
         &self,
         client_id: &str,
-    ) -> std::result::Result<Option<OAuth2ClientData>, cmx_traits::TraitError> {
+    ) -> std::result::Result<Option<OAuth2ClientData>, cmx_traits::error::TraitError> {
         debug!(
             "{:<12} - AuthServiceImpl::get_oauth2_client - client_id: {}",
             "AUTH", client_id
@@ -1564,7 +1564,7 @@ impl AuthStorageQuery for AuthServiceImpl {
         let dataset = db_manager
             .query_sql(&db_id, None, &sql, "oauth2_client")
             .await
-            .map_err(|e| cmx_traits::TraitError::Internal(format!("查询 OAuth2 客户端失败: {}", e)))?;
+            .map_err(|e| cmx_traits::error::TraitError::Internal(format!("查询 OAuth2 客户端失败: {}", e)))?;
 
         let schema = dataset.schema.as_ref();
         let row = match dataset.iter().next() {

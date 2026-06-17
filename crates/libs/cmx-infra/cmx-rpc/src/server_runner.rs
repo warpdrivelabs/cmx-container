@@ -5,7 +5,9 @@
 use std::sync::Arc;
 
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 use volo::net::incoming::DefaultIncoming;
 use volo_grpc::server::ServiceBuilder;

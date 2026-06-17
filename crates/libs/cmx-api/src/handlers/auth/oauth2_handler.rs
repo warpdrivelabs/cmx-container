@@ -4,7 +4,7 @@
 
 use axum::extract::{Query, State};
 use axum::Json;
-use cmx_traits::Credentials;
+use cmx_traits::auth::Credentials;
 use tracing::{debug, info};
 
 use crate::middleware::GlobalAuthService;
@@ -72,8 +72,8 @@ pub async fn oauth2_authorize(
         )
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::OAuth2(msg) => Error::BadRequest(msg),
-            cmx_traits::AuthError::PkceVerificationFailed => {
+            cmx_traits::auth::AuthError::OAuth2(msg) => Error::BadRequest(msg),
+            cmx_traits::auth::AuthError::PkceVerificationFailed => {
                 Error::BadRequest("PKCE code_challenge 必填".to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -110,10 +110,10 @@ pub async fn oauth2_login(
         .verify_credentials(&req.username, &req.password)
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::InvalidCredentials => {
+            cmx_traits::auth::AuthError::InvalidCredentials => {
                 Error::Unauthorized("用户名或密码错误".to_string())
             }
-            cmx_traits::AuthError::UserDisabled => {
+            cmx_traits::auth::AuthError::UserDisabled => {
                 Error::Forbidden("用户已被禁用".to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -141,7 +141,7 @@ pub async fn oauth2_login(
         )
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::OAuth2(msg) => Error::BadRequest(msg),
+            cmx_traits::auth::AuthError::OAuth2(msg) => Error::BadRequest(msg),
             other => Error::InternalError(other.to_string()),
         })?;
 
@@ -188,16 +188,16 @@ pub async fn oauth2_token(
         .authenticate(credentials, None)
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::InvalidAuthCode => {
+            cmx_traits::auth::AuthError::InvalidAuthCode => {
                 Error::BadRequest("授权码无效或已过期".to_string())
             }
-            cmx_traits::AuthError::PkceVerificationFailed => {
+            cmx_traits::auth::AuthError::PkceVerificationFailed => {
                 Error::BadRequest("PKCE 校验失败".to_string())
             }
-            cmx_traits::AuthError::OAuth2(msg) => {
+            cmx_traits::auth::AuthError::OAuth2(msg) => {
                 Error::BadRequest(msg)
             }
-            cmx_traits::AuthError::InvalidToken(msg) => {
+            cmx_traits::auth::AuthError::InvalidToken(msg) => {
                 Error::Unauthorized(msg)
             }
             other => Error::InternalError(other.to_string()),

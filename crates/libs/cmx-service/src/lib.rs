@@ -61,7 +61,7 @@ pub use lifecycle_listener::ServiceLifecycleListener;
 // ==================== 全局单例 ====================
 
 use std::sync::{Arc, OnceLock};
-use cmx_traits::{ServiceQuery, ServiceStorage};
+use cmx_traits::service::{ServiceQuery, ServiceStorage};
 
 /// 全局服务查询器单例
 static GLOBAL_SERVICE_QUERY: OnceLock<Arc<dyn ServiceQuery>> = OnceLock::new();

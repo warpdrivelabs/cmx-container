@@ -1,6 +1,6 @@
 //! IAM 权限校验器 — IamChecker
 //!
-//! 实现 cmx_traits::PermissionChecker trait，通过数据库 EXISTS 查询进行权限/角色校验。
+//! 实现 cmx_traits::iam::PermissionChecker trait，通过数据库 EXISTS 查询进行权限/角色校验。
 
 use std::sync::Arc;
 

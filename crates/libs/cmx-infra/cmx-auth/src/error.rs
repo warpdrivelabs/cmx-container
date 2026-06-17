@@ -33,18 +33,18 @@ pub enum AuthInfraError {
 
     /// 认证领域错误
     #[error(transparent)]
-    Auth(#[from] cmx_traits::AuthError),
+    Auth(#[from] cmx_traits::auth::AuthError),
 }
 
-impl From<AuthInfraError> for cmx_traits::AuthError {
+impl From<AuthInfraError> for cmx_traits::auth::AuthError {
     fn from(e: AuthInfraError) -> Self {
         match e {
             AuthInfraError::Auth(auth_err) => auth_err,
-            AuthInfraError::Redis(err) => cmx_traits::AuthError::Internal(err.to_string()),
-            AuthInfraError::Jwt(err) => cmx_traits::AuthError::InvalidToken(err.to_string()),
-            AuthInfraError::Database(err) => cmx_traits::AuthError::Internal(err.to_string()),
-            AuthInfraError::SerdeJson(err) => cmx_traits::AuthError::Internal(err.to_string()),
-            AuthInfraError::Prometheus(err) => cmx_traits::AuthError::Internal(err.to_string()),
+            AuthInfraError::Redis(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
+            AuthInfraError::Jwt(err) => cmx_traits::auth::AuthError::InvalidToken(err.to_string()),
+            AuthInfraError::Database(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
+            AuthInfraError::SerdeJson(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
+            AuthInfraError::Prometheus(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
         }
     }
 }

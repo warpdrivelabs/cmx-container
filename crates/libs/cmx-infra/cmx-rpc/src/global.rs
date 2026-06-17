@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use cmx_traits::RpcClient;
+use cmx_traits::rpc::RpcClient;
 
 /// 全局 RPC 客户端已初始化错误
 ///

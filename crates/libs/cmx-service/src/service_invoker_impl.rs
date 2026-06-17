@@ -9,10 +9,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cmx_core::model::service::SVRContext;
 use cmx_core::{CallServiceResponse, OrchestrationError};
-use cmx_traits::{
-    PluginQuery, RuntimeInvoker, ServiceInvoker, ServiceInvokeOptions,
-    ServiceQuery, TraitError,
-};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::{ServiceInvoker, ServiceInvokeOptions, ServiceQuery};
+use cmx_traits::error::TraitError;
 
 use crate::orchestrator::ExecuteOptions;
 use crate::orchestrator::Orchestrator;

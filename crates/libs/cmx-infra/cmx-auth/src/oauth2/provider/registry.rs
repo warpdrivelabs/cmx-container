@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 
 use super::OAuth2Provider;
 
@@ -38,8 +38,8 @@ impl OAuth2ProviderRegistry {
     }
 
     /// 列出所有已注册的 Provider 信息
-    pub fn list_providers(&self) -> Vec<cmx_traits::ProviderInfo> {
-        self.providers.values().map(|p| cmx_traits::ProviderInfo {
+    pub fn list_providers(&self) -> Vec<cmx_traits::auth::ProviderInfo> {
+        self.providers.values().map(|p| cmx_traits::auth::ProviderInfo {
             name: p.name().to_string(),
             display_name: p.display_name().to_string(),
             scopes: p.default_scopes(),

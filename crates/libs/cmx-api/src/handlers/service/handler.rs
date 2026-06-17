@@ -52,7 +52,9 @@ use axum::{
 use cmx_core::model::service::SVRContext;
 use cmx_core::PageParams;
 use cmx_database::get_default_db_manager;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServicePageFilter, ServiceQuery, ServiceInvokeOptions};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::{ServicePageFilter, ServiceQuery, ServiceInvokeOptions};
 // use tracing::error;
 use std::sync::Arc;
 
@@ -961,7 +963,7 @@ pub async fn delete_service(
     State(state): State<CmxAppState>,
     Json(req): Json<crate::handlers::service::models::ServiceDeleteQuery>,
 ) -> Result<Json<crate::UnitResp>, Error> {
-    let service_storage: &Arc<dyn cmx_traits::ServiceStorage> = state.service_storage()
+    let service_storage: &Arc<dyn cmx_traits::service::ServiceStorage> = state.service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
     let app_id = state.app_id();

@@ -20,7 +20,8 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
-use cmx_traits::{InvokeOptions, PluginQuery, RuntimeInvoker};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::{InvokeOptions, RuntimeInvoker};
 use serde_json::Value;
 
 use crate::BizError;

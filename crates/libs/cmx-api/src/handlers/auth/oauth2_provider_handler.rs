@@ -20,7 +20,7 @@ use crate::{ApiResp, Error, Result};
 /// 列出所有已启用的第三方 OAuth2 Provider
 pub async fn oauth2_providers(
     State(state): State<CmxAppState>,
-) -> Result<Json<ApiResp<Vec<cmx_traits::ProviderInfo>>>> {
+) -> Result<Json<ApiResp<Vec<cmx_traits::auth::ProviderInfo>>>> {
     let auth_service = state.auth_service().ok_or_else(|| {
         Error::InternalError("认证服务未初始化".to_string())
     })?;
@@ -154,7 +154,7 @@ pub async fn oauth2_provider_exchange(
     let exchange_result = auth_service.exchange_oauth2_callback_code(&req.code).await.map_err(|e| {
         error!(error = %e, "授权码换 Token 失败");
         match e {
-            cmx_traits::AuthError::OAuth2CallbackCodeInvalid => {
+            cmx_traits::auth::AuthError::OAuth2CallbackCodeInvalid => {
                 Error::Unauthorized("授权码无效或已过期".to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -205,12 +205,12 @@ pub async fn oauth2_provider_link(
     auth_service.link_oauth2_account(&auth_ctx.user_id, &provider, &req.code).await.map_err(|e| {
         error!(user_id = %auth_ctx.user_id, provider = %provider, error = %e, "绑定第三方账号失败");
         match e {
-            cmx_traits::AuthError::OAuth2ProviderNotFound(_) => Error::BadRequest("Provider 不存在".to_string()),
-            cmx_traits::AuthError::OAuth2ProviderUnavailable(_) => Error::BadRequest("Provider 服务不可用".to_string()),
-            cmx_traits::AuthError::OAuth2ProviderTokenError(_) => Error::BadRequest("Provider 授权失败".to_string()),
-            cmx_traits::AuthError::OAuth2ProviderUserInfoError(_) => Error::BadRequest("Provider 用户信息获取失败".to_string()),
+            cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => Error::BadRequest("Provider 不存在".to_string()),
+            cmx_traits::auth::AuthError::OAuth2ProviderUnavailable(_) => Error::BadRequest("Provider 服务不可用".to_string()),
+            cmx_traits::auth::AuthError::OAuth2ProviderTokenError(_) => Error::BadRequest("Provider 授权失败".to_string()),
+            cmx_traits::auth::AuthError::OAuth2ProviderUserInfoError(_) => Error::BadRequest("Provider 用户信息获取失败".to_string()),
             // N-11 修复：仅匹配"已被其他用户绑定"场景，其他 OAuth2 错误走 InternalError
-            cmx_traits::AuthError::OAuth2(msg) if msg.contains("已被其他用户绑定") => {
+            cmx_traits::auth::AuthError::OAuth2(msg) if msg.contains("已被其他用户绑定") => {
                 Error::BadRequest("该第三方账号已被其他用户绑定".to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -237,10 +237,10 @@ pub async fn oauth2_provider_unlink(
     auth_service.unlink_oauth2_account(&auth_ctx.user_id, &provider).await.map_err(|e| {
         error!(user_id = %auth_ctx.user_id, provider = %provider, error = %e, "解绑第三方账号失败");
         match e {
-            cmx_traits::AuthError::OAuth2LastBindingCannotRemove => {
+            cmx_traits::auth::AuthError::OAuth2LastBindingCannotRemove => {
                 Error::BadRequest("无法解除最后一个登录绑定".to_string())
             }
-            cmx_traits::AuthError::OAuth2ProviderNotFound(_) => Error::BadRequest(e.to_string()),
+            cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => Error::BadRequest(e.to_string()),
             other => Error::InternalError(other.to_string()),
         }
     })?;
@@ -256,25 +256,25 @@ fn get_frontend_callback_url() -> Result<String> {
 }
 
 /// 将 AuthError 脱敏为前端友好的错误码，避免泄露内部信息
-fn sanitize_oauth2_error(e: &cmx_traits::AuthError) -> &'static str {
+fn sanitize_oauth2_error(e: &cmx_traits::auth::AuthError) -> &'static str {
     match e {
-        cmx_traits::AuthError::OAuth2ProviderNotFound(_) => "provider_not_found",
-        cmx_traits::AuthError::OAuth2ProviderUnavailable(_) => "provider_unavailable",
-        cmx_traits::AuthError::OAuth2ProviderTokenError(_) => "provider_token_error",
-        cmx_traits::AuthError::OAuth2ProviderUserInfoError(_) => "provider_userinfo_error",
-        cmx_traits::AuthError::OAuth2AccountNotLinked { .. } => "account_not_registered",
-        cmx_traits::AuthError::OAuth2EmailNotVerified => "email_not_verified",
-        cmx_traits::AuthError::OAuth2LastBindingCannotRemove => "last_binding_cannot_remove",
-        cmx_traits::AuthError::OAuth2UsernameConflict(_) => "username_conflict",
-        cmx_traits::AuthError::OAuth2CallbackCodeInvalid => "callback_code_invalid",
-        cmx_traits::AuthError::UserDisabled => "user_disabled",
-        cmx_traits::AuthError::OAuth2(_) => "authentication_failed",
+        cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => "provider_not_found",
+        cmx_traits::auth::AuthError::OAuth2ProviderUnavailable(_) => "provider_unavailable",
+        cmx_traits::auth::AuthError::OAuth2ProviderTokenError(_) => "provider_token_error",
+        cmx_traits::auth::AuthError::OAuth2ProviderUserInfoError(_) => "provider_userinfo_error",
+        cmx_traits::auth::AuthError::OAuth2AccountNotLinked { .. } => "account_not_registered",
+        cmx_traits::auth::AuthError::OAuth2EmailNotVerified => "email_not_verified",
+        cmx_traits::auth::AuthError::OAuth2LastBindingCannotRemove => "last_binding_cannot_remove",
+        cmx_traits::auth::AuthError::OAuth2UsernameConflict(_) => "username_conflict",
+        cmx_traits::auth::AuthError::OAuth2CallbackCodeInvalid => "callback_code_invalid",
+        cmx_traits::auth::AuthError::UserDisabled => "user_disabled",
+        cmx_traits::auth::AuthError::OAuth2(_) => "authentication_failed",
         _ => "internal_error",
     }
 }
 
 /// 从请求头提取设备信息
-fn extract_device_info(headers: &HeaderMap) -> Option<cmx_traits::DeviceInfo> {
+fn extract_device_info(headers: &HeaderMap) -> Option<cmx_traits::auth::DeviceInfo> {
     let device_type = headers.get("X-Device-Type")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
@@ -292,7 +292,7 @@ fn extract_device_info(headers: &HeaderMap) -> Option<cmx_traits::DeviceInfo> {
         return None;
     }
 
-    Some(cmx_traits::DeviceInfo {
+    Some(cmx_traits::auth::DeviceInfo {
         device_type: device_type.unwrap_or_else(|| "web".to_string()),
         device_id: device_id.unwrap_or_default(),
         ip,

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use cmx_database::crud::{GenericCrudService, DbBmc};
 use cmx_database::{DatabaseManager, get_default_db_manager, DataSet};
-use cmx_traits::{AuthError, UserAuthQuery, OAuth2UserInfo};
+use cmx_traits::auth::{AuthError, UserAuthQuery, OAuth2UserInfo};
 use modql::filter::{OpValsString, OpValsInt64, OpValString, OpValInt64};
 use modql::field::Fields;
 use serde::{Serialize, Deserialize};

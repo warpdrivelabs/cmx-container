@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cmx_auth::{AuthConfig, AuthServiceImpl, SuperAdminConfig, StaticApiKeyConfig};
 use cmx_buffer::GlobalCacheManager;
 use cmx_buffer::GlobalSubscriberManager;
-use cmx_traits::{AuthService, UserAuthQuery};
+use cmx_traits::auth::{AuthService, UserAuthQuery};
 use tracing::{info, warn};
 
 /// 初始化认证服务

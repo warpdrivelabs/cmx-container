@@ -8,7 +8,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use cmx_core::model::service::{FunctionInput, FunctionOutput, ServiceNode};
-use cmx_traits::{PluginQuery, RuntimeInvoker};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
 use tracing::debug;
 
 use crate::error::ServiceError;

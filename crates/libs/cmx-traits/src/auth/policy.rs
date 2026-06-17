@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use cmx_core::AuthContext;
 
-use crate::auth_error::AuthError;
+use super::error::AuthError;
 
 /// 认证策略 trait（Strategy Pattern）
 ///

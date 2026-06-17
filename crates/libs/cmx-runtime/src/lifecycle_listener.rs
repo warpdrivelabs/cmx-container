@@ -10,7 +10,9 @@
 //! 监听插件升级、卸载、降级事件，清除 WASM 实例缓存。
 
 use std::sync::Arc;
-use cmx_traits::{GlobalEventBus, EventHandler, plugin_events, PluginLifecyclePayload, RuntimeInvoker};
+use cmx_traits::event_bus::{GlobalEventBus, EventHandler};
+use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
+use cmx_traits::runtime::RuntimeInvoker;
 use tracing::{info, warn};
 
 /// 运行时生命周期监听器

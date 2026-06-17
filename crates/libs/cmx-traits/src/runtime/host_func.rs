@@ -134,7 +134,8 @@ impl HostFunctionDef {
 /// # 实现示例
 ///
 /// ```rust,ignore
-/// use cmx_traits::{HostFunctionProvider, HostFunctionDef, ValType, HostFuncError};
+/// use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef, ValType};
+/// use cmx_traits::error::HostFuncError;
 ///
 /// struct DatabaseHostFunctions;
 ///
@@ -188,16 +189,5 @@ pub trait HostFunctionProvider: Send + Sync {
     /// 用于调试、元数据查询和文档生成。
     fn provided_functions(&self) -> Vec<&str> {
         self.functions().iter().map(|f| f.name).collect()
-    }
-}
-
-impl HostFuncError {
-    /// 创建无效函数错误
-    pub fn invalid_function(name: &str) -> Self {
-        Self::ExecutionFailed {
-            namespace: String::new(),
-            name: name.to_string(),
-            reason: "函数不存在".to_string(),
-        }
     }
 }

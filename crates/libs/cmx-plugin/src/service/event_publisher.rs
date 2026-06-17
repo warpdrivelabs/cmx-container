@@ -11,7 +11,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cmx_traits::{plugin_events, GlobalEventBus, PluginLifecyclePayload};
+use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
+use cmx_traits::event_bus::GlobalEventBus;
 
 use crate::cluster::notification::PluginNotifier;
 use crate::service::persistence::PersistResult;

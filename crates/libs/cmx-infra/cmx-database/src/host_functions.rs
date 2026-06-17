@@ -4,7 +4,8 @@
 //! 封装 DatabaseManager 的核心 API，通过 MsgPack 格式传递参数和结果。
 
 use std::sync::Arc;
-use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef};
 use cmx_core::wasm_types::{DbRequest, DbResponse};
 
 use crate::DatabaseManager;

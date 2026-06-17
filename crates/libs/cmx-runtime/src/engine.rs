@@ -1,7 +1,7 @@
 //! Extism 运行时引擎
 //!
 //! 提供 WASM 模块的加载、实例化和调用功能。
-//! 实现 cmx_traits::RuntimeInvoker trait。
+//! 实现 cmx_traits::runtime::RuntimeInvoker trait。
 //!
 //! # 模块结构
 //!
@@ -46,9 +46,9 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 
-use cmx_traits::{
-    HostFunctionProvider, InvokeContext, InvokeOptions, RuntimeInvoker, TraitError,
-    WasmInvokeResult,
+use cmx_traits::error::TraitError;
+use cmx_traits::runtime::{
+    HostFunctionProvider, InvokeContext, InvokeOptions, RuntimeInvoker, WasmInvokeResult,
 };
 use extism::{Manifest, PluginBuilder, Pool, PoolBuilder, Wasm};
 

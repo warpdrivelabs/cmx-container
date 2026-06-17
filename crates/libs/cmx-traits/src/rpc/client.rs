@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::service_invoker::ServiceInvokeOptions;
+use crate::service::invoker::ServiceInvokeOptions;
 
 /// RPC 调用错误类型
 #[derive(Debug, thiserror::Error)]

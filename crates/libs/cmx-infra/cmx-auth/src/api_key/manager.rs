@@ -1,7 +1,7 @@
 //! API Key 管理器
 
 use cmx_buffer::CacheManager;
-use cmx_traits::{AuthError, AuthStorageQuery};
+use cmx_traits::auth::{AuthError, AuthStorageQuery};
 
 use super::entity::ApiKeyEntity;
 

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use cmx_core::AuthContext;
 use serde::{Deserialize, Serialize};
 
-use crate::auth_error::AuthError;
-use crate::user_auth_query::OAuth2ClientData;
+use super::error::AuthError;
+use super::user_query::OAuth2ClientData;
 
 /// 认证凭证（策略模式入口）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,7 +186,9 @@ pub trait AuthService: Send + Sync {
     async fn validate_api_key(&self, key: &str) -> Result<AuthContext, AuthError>;
 
     /// 列出已启用的第三方 OAuth2 Provider
-    async fn list_oauth2_providers(&self) -> Result<Vec<crate::user_auth_query::ProviderInfo>, AuthError>;
+    async fn list_oauth2_providers(
+        &self,
+    ) -> Result<Vec<super::user_query::ProviderInfo>, AuthError>;
 
     /// 处理第三方 OAuth2 回调（交换 Token + 获取用户信息 + 关联/注册 + 签发本平台 Token）
     async fn handle_oauth2_callback(
@@ -219,5 +221,9 @@ pub trait AuthService: Send + Sync {
     ) -> Result<(), AuthError>;
 
     /// 存储第三方 OAuth2 Provider state（用于 authorize 重定向）
-    async fn store_oauth2_provider_state(&self, state: &str, provider: &str) -> Result<(), AuthError>;
+    async fn store_oauth2_provider_state(
+        &self,
+        state: &str,
+        provider: &str,
+    ) -> Result<(), AuthError>;
 }

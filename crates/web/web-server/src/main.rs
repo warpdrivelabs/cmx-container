@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
 
     init_runtime().await?;
 
-    cmx_traits::GlobalEventBus::initialize()
+    cmx_traits::event_bus::GlobalEventBus::initialize()
         .map_err(|e| Error::ServerSetup(format!("初始化全局事件总线失败: {}", e)))?;
     info!("全局事件总线初始化完成");
 
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
 
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
     let grpc_port = init_rpc(
-        cmx_traits::GlobalServiceInvoker::get().clone(),
+        cmx_traits::service::GlobalServiceInvoker::get().clone(),
         cmx_runtime::GlobalExtismEngine::get_as_invoker(),
         cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
     ).await?;

@@ -24,7 +24,7 @@ use regex::Regex;
 use tracing::{debug, info, warn};
 
 use crate::middleware::CmxSvrContext;
-use cmx_traits::AuthService;
+use cmx_traits::auth::AuthService;
 
 /// 全局动态认证白名单（已编译为正则表达式列表）
 ///

@@ -4,7 +4,7 @@
 
 use axum::extract::State;
 use axum::Json;
-use cmx_traits::{Credentials, DeviceInfo};
+use cmx_traits::auth::{Credentials, DeviceInfo};
 use tracing::{debug, info, warn};
 
 use crate::{ApiResp, Error, Result};
@@ -53,13 +53,13 @@ pub async fn auth_login(
         .authenticate(credentials, Some(device_info))
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::InvalidCredentials => {
+            cmx_traits::auth::AuthError::InvalidCredentials => {
                 Error::Unauthorized("用户名或密码错误".to_string())
             }
-            cmx_traits::AuthError::UserDisabled => {
+            cmx_traits::auth::AuthError::UserDisabled => {
                 Error::Forbidden("用户已被禁用".to_string())
             }
-            cmx_traits::AuthError::TooManyAttempts { secs, limit, window } => {
+            cmx_traits::auth::AuthError::TooManyAttempts { secs, limit, window } => {
                 // 5.1 修复：映射为 429 Too Many Requests 而非 403
                 Error::RateLimitExceeded {
                     retry_after: secs,
@@ -108,10 +108,10 @@ pub async fn auth_refresh(
         .refresh_token(&req.refresh_token)
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::TokenExpired
-            | cmx_traits::AuthError::TokenRevoked
-            | cmx_traits::AuthError::ReplayDetected
-            | cmx_traits::AuthError::InvalidToken(_) => {
+            cmx_traits::auth::AuthError::TokenExpired
+            | cmx_traits::auth::AuthError::TokenRevoked
+            | cmx_traits::auth::AuthError::ReplayDetected
+            | cmx_traits::auth::AuthError::InvalidToken(_) => {
                 Error::Unauthorized(e.to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -187,9 +187,9 @@ pub async fn auth_validate(
         .validate_token(&req.token)
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::TokenExpired
-            | cmx_traits::AuthError::TokenRevoked
-            | cmx_traits::AuthError::InvalidToken(_) => {
+            cmx_traits::auth::AuthError::TokenExpired
+            | cmx_traits::auth::AuthError::TokenRevoked
+            | cmx_traits::auth::AuthError::InvalidToken(_) => {
                 Error::Unauthorized(e.to_string())
             }
             other => Error::InternalError(other.to_string()),
@@ -360,13 +360,13 @@ pub async fn auth_change_password(
         .change_password(&auth_ctx.user_id, &req.old_password, &req.new_password)
         .await
         .map_err(|e| match e {
-            cmx_traits::AuthError::InvalidCredentials => {
+            cmx_traits::auth::AuthError::InvalidCredentials => {
                 Error::Unauthorized("旧密码错误".to_string())
             }
-            cmx_traits::AuthError::PasswordPolicyViolated(msg) => {
+            cmx_traits::auth::AuthError::PasswordPolicyViolated(msg) => {
                 Error::BadRequest(msg)
             }
-            cmx_traits::AuthError::PasswordReused => {
+            cmx_traits::auth::AuthError::PasswordReused => {
                 Error::BadRequest("新密码与历史密码重复".to_string())
             }
             other => Error::InternalError(other.to_string()),

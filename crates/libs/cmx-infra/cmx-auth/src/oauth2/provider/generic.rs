@@ -1,7 +1,7 @@
 //! 通用 OAuth2 Provider（配置驱动）
 
 use async_trait::async_trait;
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 
 use super::{OAuth2Provider, ProviderTokenResponse, ProviderUserInfo};
 use crate::config::OAuth2ProviderConfig;

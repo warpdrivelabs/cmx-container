@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use cmx_core::model::service::SVRContext;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceQuery};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::ServiceQuery;
 use tracing::{debug, info, warn};
 
 use crate::error::ServiceError;

@@ -1,6 +1,6 @@
 //! UserAuthQuery trait 实现
 //!
-//! 实现 cmx_traits::UserAuthQuery trait，提供用户认证数据查询。
+//! 实现 cmx_traits::auth::UserAuthQuery trait，提供用户认证数据查询。
 //! 通过参数化 SQL 查询获取用户数据，使用事务保证超管创建和 OAuth2 注册的原子性。
 
 use std::sync::Arc;
@@ -8,7 +8,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::DatabaseManager;
-use cmx_traits::{OAuth2UserInfo, TraitError, UserAuthData, UserAuthQuery};
+use cmx_traits::auth::{OAuth2UserInfo, UserAuthData, UserAuthQuery};
+use cmx_traits::error::TraitError;
 use tracing::{debug, info};
 use uuid::Uuid;
 

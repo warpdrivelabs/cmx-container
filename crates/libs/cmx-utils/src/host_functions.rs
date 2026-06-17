@@ -3,7 +3,8 @@
 //! 为 WASM 插件提供日志记录能力的宿主函数。
 //! 所有日志消息自动附加插件ID前缀，便于追踪来源。
 
-use cmx_traits::{HostFuncError, HostFunctionProvider, HostFunctionDef, ValType};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef, ValType};
 
 /// 日志宿主函数提供者
 ///

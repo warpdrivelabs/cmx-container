@@ -3,7 +3,9 @@
 //! 监听插件生命周期事件，同步服务缓存。
 
 use std::sync::Arc;
-use cmx_traits::{GlobalEventBus, EventHandler, plugin_events, PluginLifecyclePayload, ServiceQuery};
+use cmx_traits::event_bus::{GlobalEventBus, EventHandler};
+use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
+use cmx_traits::service::ServiceQuery;
 use crate::registry::ServiceRegistry;
 use crate::repository::ServiceRepository;
 use tracing::{info, error};

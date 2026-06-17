@@ -111,4 +111,13 @@ impl HostFuncError {
             reason: reason.into(),
         }
     }
+
+    /// 创建无效函数错误
+    pub fn invalid_function(name: &str) -> Self {
+        Self::ExecutionFailed {
+            namespace: String::new(),
+            name: name.to_string(),
+            reason: "函数不存在".to_string(),
+        }
+    }
 }

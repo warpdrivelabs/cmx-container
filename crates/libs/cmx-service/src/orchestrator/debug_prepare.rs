@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::ServiceNode;
-use cmx_traits::PluginQuery;
+use cmx_traits::plugin::PluginQuery;
 use tracing::debug;
 
 use crate::error::ServiceError;

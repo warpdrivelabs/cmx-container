@@ -1,7 +1,7 @@
 //! Google OAuth2 Provider
 
 use async_trait::async_trait;
-use cmx_traits::AuthError;
+use cmx_traits::auth::AuthError;
 
 use super::{OAuth2Provider, ProviderTokenResponse, ProviderUserInfo};
 use crate::config::OAuth2ProviderConfig;

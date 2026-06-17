@@ -7,7 +7,7 @@ use cmx_database::DatabaseHostFunctions;
 use cmx_database::get_default_db_manager;
 use cmx_plugin::PluginHostFunctions;
 use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine};
-use cmx_traits::{GlobalRuntime, HostFunctionProvider};
+use cmx_traits::runtime::{GlobalRuntime, HostFunctionProvider};
 use cmx_utils::LoggingHostFunctions;
 use std::sync::Arc;
 use tracing::info;

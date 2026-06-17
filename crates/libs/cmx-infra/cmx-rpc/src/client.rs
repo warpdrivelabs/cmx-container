@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use cmx_core::CallServiceResponse;
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::{FunctionCallResult, RpcClient, RpcError};
+use cmx_traits::rpc::{FunctionCallResult, RpcClient, RpcError};
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::instrument;
@@ -155,7 +155,7 @@ impl RpcClient for VoloGrpcClient {
         service_name: &str,
         service_key: &str,
         input: Value,
-        options: cmx_traits::ServiceInvokeOptions,
+        options: cmx_traits::service::ServiceInvokeOptions,
     ) -> Result<CallServiceResponse, RpcError> {
         let start = std::time::Instant::now();
         let total_budget = Duration::from_millis(self.config.timeout_ms);

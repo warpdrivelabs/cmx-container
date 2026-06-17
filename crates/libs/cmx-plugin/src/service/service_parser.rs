@@ -5,7 +5,8 @@
 use std::path::Path;
 use std::sync::Arc;
 use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::{PluginQuery, SaveServiceVersionParams};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::service::SaveServiceVersionParams;
 use crate::error::{PluginError, PluginResult};
 use crate::service::api_doc_generator::ApiDocGenerator;
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
@@ -61,7 +62,7 @@ pub fn parse_services_from_plugin_dir(
 pub async fn parse_and_save_services(
     install_path: &Path,
     params: &ServiceParseParams,
-    service_storage: &Arc<dyn cmx_traits::ServiceStorage>,
+    service_storage: &Arc<dyn cmx_traits::service::ServiceStorage>,
     plugin_root: &Path,
     plugin_query: &Arc<dyn PluginQuery>,
     txn_id: Option<&str>,

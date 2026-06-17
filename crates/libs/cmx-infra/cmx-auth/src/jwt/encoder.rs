@@ -27,7 +27,7 @@ impl JwtManager {
             "RS256" => Algorithm::RS256,
             "HS256" => Algorithm::HS256,
             other => {
-                return Err(AuthInfraError::Auth(cmx_traits::AuthError::InvalidToken(
+                return Err(AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
                     format!("不支持的 JWT 算法: {}", other),
                 )))
             }
@@ -166,7 +166,7 @@ impl JwtManager {
                     .private_key
                     .as_deref()
                     .ok_or_else(|| {
-                        AuthInfraError::Auth(cmx_traits::AuthError::InvalidToken(
+                        AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
                             "RS256 需要 private_key 配置".to_string(),
                         ))
                     })?;
@@ -176,7 +176,7 @@ impl JwtManager {
                     .public_key
                     .as_deref()
                     .ok_or_else(|| {
-                        AuthInfraError::Auth(cmx_traits::AuthError::InvalidToken(
+                        AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
                             "RS256 需要 public_key 配置".to_string(),
                         ))
                     })?;
@@ -192,7 +192,7 @@ impl JwtManager {
                         .map_err(AuthInfraError::Jwt)?,
                 ))
             }
-            _ => Err(AuthInfraError::Auth(cmx_traits::AuthError::InvalidToken(
+            _ => Err(AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
                 format!("不支持的 JWT 算法: {:?}", algorithm),
             ))),
         }
@@ -230,7 +230,7 @@ impl JwtManager {
         } else {
             // 视为文件路径
             std::fs::read_to_string(key_input).map_err(|e| {
-                AuthInfraError::Auth(cmx_traits::AuthError::InvalidToken(format!(
+                AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(format!(
                     "无法读取密钥文件 {}: {}",
                     key_input, e
                 )))

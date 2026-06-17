@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use cmx_traits::HostFunctionProvider;
+use cmx_traits::runtime::HostFunctionProvider;
 use extism::{CurrentPlugin, Function, UserData, ValType};
 
 use crate::error::ExtismError;

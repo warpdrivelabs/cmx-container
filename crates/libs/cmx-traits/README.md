@@ -18,7 +18,7 @@ cmx-traits = "0.1.0"
 ### 核心示例
 
 ```rust
-use cmx_traits::{RuntimeInvoker, WasmInvokeResult, InvokeContext};
+use cmx_traits::runtime::{RuntimeInvoker, WasmInvokeResult, InvokeContext};
 
 async fn invoke_wasm(
     invoker: &dyn RuntimeInvoker,
@@ -33,42 +33,67 @@ async fn invoke_wasm(
 
 ## 核心功能与特性
 
-| 接口 | 说明 |
-|------|------|
-| `PluginQuery` | 插件状态查询（cmx-service 查询 cmx-plugin） |
-| `RuntimeInvoker` | WASM 运行时调用（cmx-service 调用 cmx-runtime） |
-| `PluginLifecycleListener` | 生命周期事件监听（cmx-plugin 通知 cmx-service） |
-| `ExtismFunctionProvider` | 宿主函数注册（各模块向 cmx-runtime 注册宿主函数） |
-| `ServiceQuery` | 服务信息查询 |
-| `ServiceStorage` | 服务定义存储 |
-| `EventBus` | 全局事件总线 |
+| 接口 | 模块路径 | 说明 |
+|------|---------|------|
+| `PluginQuery` | `cmx_traits::plugin` | 插件状态查询（cmx-service 查询 cmx-plugin） |
+| `RuntimeInvoker` | `cmx_traits::runtime` | WASM 运行时调用（cmx-service 调用 cmx-runtime） |
+| `PluginLifecycleListener` | `cmx_traits::plugin` | 生命周期事件监听（cmx-plugin 通知 cmx-service） |
+| `HostFunctionProvider` | `cmx_traits::runtime` | 宿主函数注册（各模块向 cmx-runtime 注册宿主函数） |
+| `ServiceQuery` | `cmx_traits::service` | 服务信息查询 |
+| `ServiceStorage` | `cmx_traits::service` | 服务定义存储 |
+| `AuthService` | `cmx_traits::auth` | 认证服务统一接口 |
+| `PermissionChecker` | `cmx_traits::iam` | 权限校验器 |
+| `RpcClient` | `cmx_traits::rpc` | RPC 调用统一接口 |
+| `EventBus` | `cmx_traits::event_bus` | 全局事件总线 |
 
 ## 模块结构
 
 ```
 cmx-traits
 ├── src/
-│   ├── lib.rs                    # 库入口
-│   ├── error.rs                  # 错误类型定义
-│   ├── event_bus/                # 事件总线模块
+│   ├── lib.rs                    # 库入口，仅声明 pub mod
+│   ├── error.rs                  # 通用错误类型（TraitError, HostFuncError）
+│   ├── auth/                     # 认证领域
 │   │   ├── mod.rs
-│   │   ├── bus.rs
-│   │   ├── global.rs
-│   │   └── types.rs
-│   ├── global_runtime.rs         # 全局运行时
-│   ├── host_func.rs              # 宿主函数接口
-│   ├── invoke_context.rs         # 调用上下文
-│   ├── lifecycle.rs              # 生命周期接口
-│   ├── plugin_query.rs           # 插件查询接口
-│   ├── runtime_invoker.rs        # 运行时调用接口
-│   ├── service_query.rs          # 服务查询接口
-│   └── service_storage.rs        # 服务存储接口
+│   │   ├── error.rs              # AuthError
+│   │   ├── policy.rs             # AuthPolicy
+│   │   ├── service.rs            # AuthService
+│   │   ├── storage_query.rs      # AuthStorageQuery
+│   │   └── user_query.rs         # UserAuthQuery
+│   ├── iam/                      # IAM 领域
+│   │   ├── mod.rs
+│   │   ├── data_scope.rs         # DataScope
+│   │   └── permission_checker.rs # PermissionChecker
+│   ├── plugin/                   # 插件领域
+│   │   ├── mod.rs
+│   │   ├── query.rs              # PluginQuery
+│   │   └── lifecycle.rs          # PluginLifecycleListener
+│   ├── runtime/                  # WASM 运行时领域
+│   │   ├── mod.rs
+│   │   ├── invoker.rs            # RuntimeInvoker
+│   │   ├── host_func.rs          # HostFunctionProvider
+│   │   ├── invoke_context.rs     # InvokeContext
+│   │   └── global.rs             # GlobalRuntime
+│   ├── service/                  # 服务领域
+│   │   ├── mod.rs
+│   │   ├── query.rs              # ServiceQuery
+│   │   ├── storage.rs            # ServiceStorage
+│   │   ├── invoker.rs            # ServiceInvoker
+│   │   └── global_invoker.rs     # GlobalServiceInvoker
+│   ├── rpc/                      # RPC 领域
+│   │   ├── mod.rs
+│   │   └── client.rs             # RpcClient
+│   └── event_bus/                # 事件总线
+│       ├── mod.rs
+│       ├── bus.rs
+│       ├── global.rs
+│       └── types.rs
 └── Cargo.toml
 ```
 
 ## 主要模块说明
 
-### `runtime_invoker`
+### `runtime`
 
 定义 `RuntimeInvoker` trait，用于 WASM 运行时调用。
 
@@ -84,11 +109,11 @@ pub trait RuntimeInvoker: Send + Sync {
 }
 ```
 
-### `plugin_query`
+### `plugin`
 
 定义 `PluginQuery` trait，用于查询插件状态。
 
-### `lifecycle`
+### `plugin::lifecycle`
 
 定义 `PluginLifecycleListener` trait，用于生命周期事件监听。
 
@@ -103,12 +128,10 @@ pub trait RuntimeInvoker: Send + Sync {
 #### 1.1 基础调用
 
 ```rust
-use cmx_traits::{
+use cmx_traits::runtime::{
     RuntimeInvoker,
     WasmInvokeResult,
     InvokeContext,
-    InvokeOutput,
-    InvokeFuncName,
 };
 
 async fn call_wasm_function(
@@ -116,26 +139,21 @@ async fn call_wasm_function(
     wasm_bytes: &[u8],
     func_name: &str,
     input_data: &[u8],
-) -> Result<InvokeOutput, Box<dyn std::error::Error>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let context = InvokeContext::default();
 
     let result = invoker
         .invoke(wasm_bytes, func_name, input_data, &context)
         .await?;
 
-    match result {
-        WasmInvokeResult::Success(output) => Ok(output),
-        WasmInvokeResult::Failure(code, msg) => {
-            Err(format!("WASM call failed: {} - {}", code, msg).into())
-        }
-    }
+    Ok(result.output)
 }
 ```
 
 #### 1.2 使用 InvokeContext 传递元数据
 
 ```rust
-use cmx_traits::invoke_context::InvokeContext;
+use cmx_traits::runtime::InvokeContext;
 
 let mut context = InvokeContext::default();
 
@@ -158,8 +176,8 @@ let result = invoker.invoke(wasm_bytes, func_name, input, &context).await?;
 #### 1.3 实现自定义 RuntimeInvoker
 
 ```rust
-use cmx_traits::{
-    RuntimeInvoker, WasmInvokeResult, InvokeContext, InvokeOutput,
+use cmx_traits::runtime::{
+    RuntimeInvoker, WasmInvokeResult, InvokeContext,
 };
 use async_trait::async_trait;
 
@@ -196,7 +214,7 @@ impl RuntimeInvoker for CustomRuntimeInvoker {
 #### 2.1 查询插件状态
 
 ```rust
-use cmx_traits::{PluginQuery, PluginStatus, PluginInfo};
+use cmx_traits::plugin::{PluginQuery, PluginSnapshot};
 
 async fn check_plugin_status(
     query: &dyn PluginQuery,
@@ -242,7 +260,7 @@ async fn get_plugin_details(
 #### 3.1 监听插件生命周期事件
 
 ```rust
-use cmx_traits::{
+use cmx_traits::plugin::{
     PluginLifecycleListener,
     PluginLifecyclePayload,
     plugin_events,
@@ -302,7 +320,8 @@ GlobalPluginManager::get()
 #### 4.1 查询服务定义
 
 ```rust
-use cmx_traits::{ServiceQuery, ServiceInfo, ServiceDefinition};
+use cmx_traits::service::ServiceQuery;
+use cmx_core::model::service::ServiceDefinition;
 
 async fn find_service(
     query: &dyn ServiceQuery,
@@ -328,7 +347,8 @@ async fn list_services_by_plugin(
 #### 4.2 保存服务定义
 
 ```rust
-use cmx_traits::{ServiceStorage, ServiceDefinition};
+use cmx_traits::service::ServiceStorage;
+use cmx_core::model::service::ServiceDefinition;
 
 async fn save_service_definition(
     storage: &dyn ServiceStorage,
@@ -354,7 +374,8 @@ async fn delete_service(
 #### 5.1 发布事件
 
 ```rust
-use cmx_traits::{GlobalEventBus, plugin_events};
+use cmx_traits::event_bus::GlobalEventBus;
+use cmx_traits::plugin::plugin_events;
 
 #[tokio::main]
 async fn main() {
@@ -376,7 +397,8 @@ async fn main() {
 #### 5.2 订阅事件
 
 ```rust
-use cmx_traits::{GlobalEventBus, plugin_events, EventBus, EventHandler};
+use cmx_traits::event_bus::{GlobalEventBus, EventBus, EventHandler};
+use cmx_traits::plugin::plugin_events;
 use std::sync::Arc;
 
 struct MyEventHandler;
@@ -453,7 +475,7 @@ async fn use_global_service_query() {
 ### 七、错误处理
 
 ```rust
-use cmx_traits::{TraitError, HostFuncError};
+use cmx_traits::error::{TraitError, HostFuncError};
 
 // TraitError 用于 trait 方法返回的错误
 impl From<TraitError> for std::io::Error {

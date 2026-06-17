@@ -5,9 +5,8 @@
 //
 // use std::sync::Arc;
 //
-// use cmx_traits::{
-//     PluginQuery, RuntimeInvoker, WasmInvokeResult,
-// };
+// use cmx_traits::plugin::PluginQuery;
+// use cmx_traits::runtime::{RuntimeInvoker, WasmInvokeResult};
 //
 // use crate::error::ServiceError;
 // use crate::request::{InvokeRequest, InvokeResponse};

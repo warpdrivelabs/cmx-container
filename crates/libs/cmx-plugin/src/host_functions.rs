@@ -14,7 +14,9 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use tracing::{info, warn};
-use cmx_traits::{HostFunctionProvider, HostFuncError, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions, GlobalServiceInvoker, ServiceInvokeOptions};
+use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::service::{GlobalServiceInvoker, ServiceInvokeOptions};
 use cmx_core::{PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse, OrchestrationError};
 use cmx_core::model::service::{FunctionInput, SVRContext};
 

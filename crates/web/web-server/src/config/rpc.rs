@@ -7,7 +7,9 @@ use std::sync::Arc;
 use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::{create_rpc_client, start_grpc_server, GlobalRpcClient};
 use cmx_rpc::config::RpcConfig;
-use cmx_traits::{PluginQuery, RuntimeInvoker, ServiceInvoker};
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::service::ServiceInvoker;
 use cmx_utils::ConfigManager;
 use tracing::{info, warn};
 

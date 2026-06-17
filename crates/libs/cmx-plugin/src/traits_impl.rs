@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_traits::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot, TraitError};
+use cmx_traits::plugin::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot};
+use cmx_traits::error::TraitError;
 
 use crate::core::manager::PluginManager;
 use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo};

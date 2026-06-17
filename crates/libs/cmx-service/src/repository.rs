@@ -491,7 +491,7 @@ impl ServiceRepository {
     /// 返回 (服务列表, 总数)
     pub async fn page_services(
         &self,
-        filter: &cmx_traits::ServicePageFilter,
+        filter: &cmx_traits::service::ServicePageFilter,
         page: u64,
         size: u64,
     ) -> Result<(Vec<ServiceDefinition>, u64), ServiceError> {

@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::service_invoker::ServiceInvoker;
+use super::invoker::ServiceInvoker;
 
 /// 全局服务调用器错误类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

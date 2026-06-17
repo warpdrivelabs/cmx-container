@@ -8,7 +8,7 @@ use cmx_core::SVRContext;
 use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
-use cmx_traits::AuthService;
+use cmx_traits::auth::AuthService;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use serde_json::Value;
 use tracing::{debug, info};

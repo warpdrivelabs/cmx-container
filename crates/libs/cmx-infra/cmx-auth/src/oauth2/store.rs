@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use cmx_buffer::CacheManager;
-use cmx_traits::OAuth2ClientData;
+use cmx_traits::auth::OAuth2ClientData;
 use serde::{Deserialize, Serialize};
 
 use crate::config::AuthConfig;
@@ -230,7 +230,7 @@ impl OAuth2Store {
             redis::Value::BulkString(bytes) => {
                 let json_str = String::from_utf8(bytes)
                     .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
+                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
                     ))?;
                 let auth_code: AuthorizationCode = serde_json::from_str(&json_str)?;
                 Ok(Some(auth_code))
@@ -268,7 +268,7 @@ impl OAuth2Store {
             redis::Value::BulkString(bytes) => {
                 let provider = String::from_utf8(bytes)
                     .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
+                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
                     ))?;
                 Ok(Some(provider))
             }
@@ -295,7 +295,7 @@ impl OAuth2Store {
             redis::Value::BulkString(bytes) => {
                 let json = String::from_utf8(bytes)
                     .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
+                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
                     ))?;
                 Ok(Some(json))
             }
