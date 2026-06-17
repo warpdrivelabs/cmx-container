@@ -1,16 +1,28 @@
 //! API Key 管理器
 
+use std::time::Duration;
+
 use cmx_buffer::CacheManager;
 use cmx_traits::auth::{AuthError, AuthStorageQuery};
+use tracing::debug;
 
 use super::entity::ApiKeyEntity;
+
+/// API Key 本地缓存 TTL（秒）
+const API_KEY_CACHE_TTL_SECS: u64 = 60;
 
 /// API Key 管理器。
 ///
 /// 通过 `key_prefix` 查找存储的 SHA256 哈希并比对明文 Key，
 /// 提供 M2M 场景下的无状态认证。
+///
+/// ## 缓存策略
+///
+/// 为避免高频 M2M 调用打垮数据库，使用 Redis 缓存 `key_prefix → ApiKeyEntity`，
+/// TTL 60 秒。缓存命中时直接返回，跳过 DB 查询。
+/// API Key 被撤销/禁用/修改时通过 Pub/Sub 广播 `api_key:{key_prefix}` 触发缓存失效。
 pub struct ApiKeyManager {
-    /// Redis 缓存管理器（用于本地缓存加速）。
+    /// Redis 缓存管理器（用于缓存加速 + 本地缓存）。
     cache: CacheManager,
 
     /// API Key 存储查询 trait 对象（由 `AuthServiceImpl` 提供）。
@@ -25,7 +37,8 @@ impl ApiKeyManager {
 
     /// 验证 API Key
     ///
-    /// 通过 key_prefix 查找对应的哈希，然后比对
+    /// 通过 key_prefix 查找对应的哈希，然后比对。
+    /// 优先查 Redis 缓存，命中则跳过 DB 查询。
     pub async fn validate(&self, api_key: &str) -> Result<ApiKeyEntity, AuthError> {
         // 1. 提取 key_prefix（格式：cmx_xxxxxxxx...）
         let key_prefix = if api_key.len() >= 8 {
@@ -34,20 +47,22 @@ impl ApiKeyManager {
             return Err(AuthError::InvalidApiKey);
         };
 
-        // 2. 先查本地缓存
+        // 2. 查 Redis 缓存
         let cache_key = format!("auth:api_key:{}", key_prefix);
-        if self
-            .cache
-            .ops()
-            .get(&cache_key)
-            .await
-            .map_err(|e| AuthError::Internal(e.to_string()))?
-            .is_some()
-        {
-            // 缓存命中，需要反序列化（简化：直接查数据库）
+        if let Ok(Some(cached)) = self.cache.ops().get(&cache_key).await {
+            if let Ok(entity) = serde_json::from_str::<ApiKeyEntity>(&cached) {
+                // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
+                let input_hash = sha256_hex(api_key);
+                if input_hash == entity.key_hash {
+                    debug!(key_prefix = %key_prefix, "API Key 缓存命中，跳过 DB 查询");
+                    return Ok(entity);
+                }
+                // hash 不匹配：可能是无效 key 撞了 prefix，返回错误
+                return Err(AuthError::InvalidApiKey);
+            }
         }
 
-        // 3. 通过 AuthStorageQuery 查询 API Key
+        // 3. 缓存未命中，查 DB
         let api_key_data = self
             .auth_storage
             .get_api_key_by_prefix(key_prefix)
@@ -61,13 +76,12 @@ impl ApiKeyManager {
         }
 
         // 5. 使用 SHA256 验证 key
-        // 对比 SHA256(api_key) == stored_hash
         let input_hash = sha256_hex(api_key);
         if input_hash != api_key_data.key_hash {
             return Err(AuthError::InvalidApiKey);
         }
 
-        Ok(ApiKeyEntity {
+        let entity = ApiKeyEntity {
             key_prefix: api_key_data.key_prefix,
             key_hash: api_key_data.key_hash,
             user_id: api_key_data.user_id,
@@ -75,7 +89,25 @@ impl ApiKeyManager {
             scopes: api_key_data.scopes,
             description: api_key_data.description,
             status: api_key_data.status,
-        })
+        };
+
+        // 6. 写入 Redis 缓存（TTL 60 秒）
+        if let Ok(json) = serde_json::to_string(&entity) {
+            let _ = self
+                .cache
+                .ttl()
+                .set_with_ttl(&cache_key, &json, Duration::from_secs(API_KEY_CACHE_TTL_SECS))
+                .await;
+        }
+
+        Ok(entity)
+    }
+
+    /// 失效指定 key_prefix 的缓存（供 Pub/Sub 回调使用）
+    pub async fn invalidate_cache(&self, key_prefix: &str) {
+        let cache_key = format!("auth:api_key:{}", key_prefix);
+        let _ = self.cache.ops().del(&cache_key).await;
+        debug!(key_prefix = %key_prefix, "API Key 缓存已失效");
     }
 }
 

@@ -474,8 +474,8 @@ auth.whitelist = []
 # password = "a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1"
 # 超管邮箱（可选）
 # email = "admin@example.com"
-# 超管角色编码（可选，默认 ["super_admin"]）
-# roles = "super_admin"
+# 超管角色编码（可选，默认 ["admin"]）
+# roles = "admin"
 
 # ============================================
 # IAM 权限管理配置

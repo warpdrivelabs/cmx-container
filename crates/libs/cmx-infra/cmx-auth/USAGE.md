@@ -576,7 +576,7 @@ OAuth2 段包含两部分：**自建 Authorization Server** 和 **第三方 Prov
 | `username` | 是 | — | 超管用户名 |
 | `password` | 是 | — | 超管初始密码（启动时 Argon2 哈希） |
 | `email` | 否 | — | 超管邮箱 |
-| `roles` | 否 | `["super_admin"]` | 角色编码列表（TOML 逗号分隔） |
+| `roles` | 否 | `["admin"]` | 角色编码列表（TOML 逗号分隔） |
 
 **安全建议**：
 
@@ -764,7 +764,7 @@ enabled = true
 username = "admin"
 password = "change-me-immediately"
 email = "admin@example.com"
-roles = "super_admin"
+roles = "admin"
 
 # 自定义白名单（与内置白名单合并；支持 *、**、? 通配符）
 auth.whitelist = ["/api/public/**", "/api/v1/webhook", "/api/biz/*"]

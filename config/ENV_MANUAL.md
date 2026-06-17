@@ -170,7 +170,7 @@
 | `AUTH__SUPER_ADMIN__USERNAME` | String | - | 超管用户名（必需） |
 | `AUTH__SUPER_ADMIN__PASSWORD` | String | - | 超管初始密码（必需，生产环境务必通过环境变量注入） |
 | `AUTH__SUPER_ADMIN__EMAIL` | String | - | 超管邮箱（可选） |
-| `AUTH__SUPER_ADMIN__ROLES` | String | `super_admin` | 超管角色编码（逗号分隔） |
+| `AUTH__SUPER_ADMIN__ROLES` | String | `admin` | 超管角色编码（逗号分隔） |
 
 > 超管账号仅在首次启动时创建，已存在则跳过。
 

@@ -30,6 +30,9 @@ use crate::token::TokenManager;
 /// Pub/Sub 频道名
 const CACHE_INVALIDATE_CHANNEL: &str = "auth:cache:invalidate";
 
+/// API Key AuthContext 缓存 TTL（秒）
+const API_KEY_CTX_CACHE_TTL_SECS: u64 = 60;
+
 /// 回调授权码存储数据（包含 TokenPair + is_new + provider + state）
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CallbackCodeData {
@@ -967,6 +970,13 @@ impl AuthService for AuthServiceImpl {
             self.token_manager.invalidate_local_cache_all().await;
             // P0-2.2 修复：同时清理 Session 本地缓存
             self.session_manager.invalidate_local_all().await;
+        } else if let Some(key_prefix) = message.strip_prefix("api_key:") {
+            // API Key 缓存失效：清理第一层（ApiKeyEntity）和第二层（AuthContext）
+            let entity_key = format!("auth:api_key:{}", key_prefix);
+            let ctx_key = format!("auth:api_key_ctx:{}", key_prefix);
+            let _ = self.cache.ops().del(&entity_key).await;
+            let _ = self.cache.ops().del(&ctx_key).await;
+            debug!(key_prefix = %key_prefix, "API Key 两层缓存已失效");
         }
     }
 
@@ -1282,17 +1292,42 @@ impl AuthService for AuthServiceImpl {
     }
 
     /// 2.1 修复：验证 API Key 并返回 AuthContext（无状态，不创建会话）
+    ///
+    /// ## 两层缓存优化
+    ///
+    /// 为避免高频 M2M 调用打垮数据库，使用两层缓存：
+    /// 1. 第一层（ApiKeyManager）：`key_prefix → ApiKeyEntity`，缓存 API Key 元数据
+    /// 2. 第二层（本方法）：`key_prefix → AuthContext`，缓存完整认证上下文（含 user/roles/permissions）
+    ///
+    /// 缓存命中时跳过全部 4 次 DB 查询，仅做 SHA256 校验。
+    /// 缓存失效通过 `invalidate_local_cache("api_key:{key_prefix}")` 触发。
     async fn validate_api_key(&self, key: &str) -> std::result::Result<AuthContext, AuthError> {
+        // 提取 key_prefix 用于缓存查找
+        let key_prefix = if key.len() >= 8 { &key[..8] } else { return Err(AuthError::InvalidApiKey); };
+
+        // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
+        metrics::record_api_key_validation();
+
+        // === 第二层缓存：key_prefix → AuthContext ===
+        let ctx_cache_key = format!("auth:api_key_ctx:{}", key_prefix);
+        if let Ok(Some(cached)) = self.cache.ops().get(&ctx_cache_key).await {
+            if let Ok(auth_ctx) = serde_json::from_str::<AuthContext>(&cached) {
+                // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
+                // validate_api_key_entity 内部走第一层缓存，命中时仅做 SHA256 比对
+                self.validate_api_key_entity(key).await?;
+                debug!(key_prefix = %key_prefix, "API Key AuthContext 缓存命中，跳过 user/roles/permissions 查询");
+                return Ok(auth_ctx);
+            }
+        }
+
+        // === 缓存未命中，走完整验证流程 ===
         let api_key_entity = self.validate_api_key_entity(key).await?;
 
         // user_id 为空表示未关联用户（纯服务间调用），不报错，跳过用户/角色/权限查询
         let user_id = api_key_entity.user_id.unwrap_or_default();
 
-        // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
-        metrics::record_api_key_validation();
-
         if user_id.is_empty() {
-            return Ok(AuthContext {
+            let auth_ctx = AuthContext {
                 user_id: String::new(),
                 username: String::new(),
                 roles: vec![],
@@ -1301,7 +1336,16 @@ impl AuthService for AuthServiceImpl {
                 session_id: None,
                 device_type: Some("api_key".to_string()),
                 auth_method: Some("api_key".to_string()),
-            });
+            };
+            // 写入缓存
+            if let Ok(json) = serde_json::to_string(&auth_ctx) {
+                let _ = self.cache.ttl().set_with_ttl(
+                    &ctx_cache_key,
+                    &json,
+                    Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
+                ).await;
+            }
+            return Ok(auth_ctx);
         }
 
         let user = self
@@ -1326,7 +1370,7 @@ impl AuthService for AuthServiceImpl {
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
 
-        Ok(AuthContext {
+        let auth_ctx = AuthContext {
             user_id: user_id.clone(),
             username: user.username,
             roles,
@@ -1335,7 +1379,19 @@ impl AuthService for AuthServiceImpl {
             session_id: None,
             device_type: Some("api_key".to_string()),
             auth_method: Some("api_key".to_string()),
-        })
+        };
+
+        // 写入第二层缓存（TTL 60 秒）
+        if let Ok(json) = serde_json::to_string(&auth_ctx) {
+            let _ = self.cache.ttl().set_with_ttl(
+                &ctx_cache_key,
+                &json,
+                Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
+            ).await;
+            debug!(key_prefix = %key_prefix, "API Key AuthContext 已写入缓存");
+        }
+
+        Ok(auth_ctx)
     }
 
     async fn list_oauth2_providers(

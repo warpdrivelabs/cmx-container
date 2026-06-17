@@ -342,7 +342,7 @@ fn load_auth_config() -> AuthConfig {
             email: config.get_string("auth.super_admin.email").ok(),
             roles: config.get_string("auth.super_admin.roles")
                 .map(|s| s.split(',').map(|r| r.trim().to_string()).collect())
-                .unwrap_or_else(|_| vec!["super_admin".to_string()]),
+                .unwrap_or_else(|_| vec!["admin".to_string()]),
         };
         auth_config.super_admin = Some(sa_config);
     }

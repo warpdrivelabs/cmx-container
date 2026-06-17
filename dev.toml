@@ -243,5 +243,5 @@ username = "admin"
 password = "admin"
 # 超管邮箱（可选）
 email = "admin@cmx.com"
-# 超管角色编码（可选，默认 ["super_admin"]）
-roles = "super_admin"
+# 超管角色编码（可选，默认 ["admin"]）
+roles = "admin"

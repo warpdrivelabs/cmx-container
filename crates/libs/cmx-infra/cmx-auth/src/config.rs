@@ -333,7 +333,7 @@ pub struct SuperAdminConfig {
 }
 
 fn default_super_admin_roles() -> Vec<String> {
-    vec!["super_admin".to_string()]
+    vec!["admin".to_string()]
 }
 
 impl Default for AuthConfig {
