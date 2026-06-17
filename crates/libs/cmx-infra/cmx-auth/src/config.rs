@@ -343,7 +343,7 @@ impl Default for AuthConfig {
                 algorithm: "HS256".into(),
                 private_key: None,
                 public_key: None,
-                secret: Some("change-me-in-production".into()),
+                secret: Some("a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1".into()),
                 issuer: "cmx-auth".into(),
                 audience: "cmx-platform".into(),
                 current_kid: None,

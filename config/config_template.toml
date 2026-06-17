@@ -315,7 +315,7 @@ retry_count = 0
 algorithm = "HS256"
 # HMAC 密钥（HS256 模式必需，生产环境务必修改）
 # RS256 模式时不使用此项，改用 private_key/public_key
-secret = "change-me-in-production"
+secret = "a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1"
 # JWT 签发者（可选，默认 cmx-auth）
 issuer = "cmx-auth"
 # JWT 受众（可选，默认 cmx-platform）
@@ -471,7 +471,7 @@ auth.whitelist = []
 # 超管用户名（必需，仅在首次创建时使用）
 # username = "admin"
 # 超管初始密码（必需，首次创建时使用，建议通过环境变量注入）
-# password = "change-me-in-production"
+# password = "a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1"
 # 超管邮箱（可选）
 # email = "admin@example.com"
 # 超管角色编码（可选，默认 ["super_admin"]）

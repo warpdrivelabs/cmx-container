@@ -116,7 +116,7 @@
 | 环境变量 | 类型 | 默认值 | 说明 |
 |----------|------|--------|------|
 | `AUTH__JWT__ALGORITHM` | String | `HS256` | JWT 签名算法（`HS256` / `RS256`） |
-| `AUTH__JWT__SECRET` | String | `change-me-in-production` | HMAC 密钥（HS256 模式，生产环境务必修改） |
+| `AUTH__JWT__SECRET` | String | `a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1` | HMAC 密钥（HS256 模式，生产环境务必修改） |
 | `AUTH__JWT__ISSUER` | String | `cmx-auth` | JWT 签发者标识 |
 | `AUTH__JWT__AUDIENCE` | String | `cmx-platform` | JWT 受众标识 |
 | `AUTH__JWT__PRIVATE_KEY` | String | - | RS256 私钥（文件路径或 PEM 内容） |

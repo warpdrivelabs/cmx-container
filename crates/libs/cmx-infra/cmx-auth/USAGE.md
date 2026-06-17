@@ -387,7 +387,7 @@ AuthConfig
 
 - **类型**：String
 - **必填**：`HS256` 模式必需
-- **默认**：`"change-me-in-production"`（**生产必须修改**）
+- **默认**：`"a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1"`（**生产必须修改**）
 - **建议**：256 位随机字符串（32 字节十六进制）
 
 #### `private_key` / `public_key`

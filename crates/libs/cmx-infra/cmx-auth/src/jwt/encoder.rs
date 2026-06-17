@@ -163,7 +163,7 @@ impl JwtManager {
                     .jwt
                     .secret
                     .as_deref()
-                    .unwrap_or("change-me-in-production");
+                    .unwrap_or("a7k9m2p4x8q1w5e3r6t0y7u2i9o4p1");
                 Ok((
                     EncodingKey::from_secret(secret.as_bytes()),
                     DecodingKey::from_secret(secret.as_bytes()),
