@@ -97,6 +97,8 @@ pub struct SVRContext {
     pub request_id: String,
     /// 认证上下文（由 mw_auth 中间件或 gRPC interceptor 注入）
     #[serde(default)]
+    //fixme 临时解决序列化问题，升级后要去掉
+    #[serde(skip)]
     pub auth_context: Option<AuthContext>,
 }
 
