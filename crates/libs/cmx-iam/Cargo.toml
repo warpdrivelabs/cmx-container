@@ -1,0 +1,44 @@
+[package]
+name = "cmx-iam"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# OpenAPI 文档生成支持
+openapi = ["utoipa"]
+
+[dependencies]
+# 内部依赖 - 核心库
+cmx-core = { workspace = true }
+# 内部依赖 - API 通用类型
+cmx-api-types = { workspace = true }
+# 内部依赖 - 特征定义
+cmx-traits = { workspace = true }
+# 内部依赖 - 数据库
+cmx-database = { workspace = true }
+# 内部依赖 - 审计日志
+cmx-audit = { workspace = true }
+# 内部依赖 - 认证服务（用于密码哈希）
+cmx-auth = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# 异步 trait
+async-trait = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# modql 支持
+modql = { workspace = true, features = ["with-sea-query"] }
+# SQL 查询构建器
+sea-query = { workspace = true }
+# SQL 异步查询
+sqlx = { workspace = true }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4"] }
+# OpenAPI 文档生成（可选）
+utoipa = { workspace = true, optional = true }

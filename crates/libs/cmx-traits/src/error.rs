@@ -35,6 +35,18 @@ pub enum TraitError {
     #[error("内部错误: {0}")]
     Internal(String),
 
+    /// 资源未找到
+    #[error("资源未找到: {0}")]
+    NotFound(String),
+
+    /// 业务逻辑错误
+    #[error("业务错误: {0}")]
+    Business(String),
+
+    /// 权限不足
+    #[error("权限不足: {0}")]
+    Forbidden(String),
+
     /// EventBus 已初始化
     #[error("{0}")]
     AlreadyInitialized(String),
