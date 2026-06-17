@@ -10,9 +10,12 @@ use super::OAuth2Provider;
 /// 全局 OAuth2 Provider 注册表（cmx-auth 内部使用）
 static GLOBAL_PROVIDER_REGISTRY: std::sync::OnceLock<OAuth2ProviderRegistry> = std::sync::OnceLock::new();
 
-/// Provider 注册表
+/// Provider 注册表。
+///
+/// 持有所有已注册的 `OAuth2Provider` 实现，按 `name` 索引查找。
 #[derive(Clone)]
 pub struct OAuth2ProviderRegistry {
+    /// 已注册的 Provider 集合：name → Arc<dyn OAuth2Provider>。
     providers: HashMap<String, Arc<dyn OAuth2Provider>>,
 }
 

@@ -2,12 +2,24 @@
 
 use cmx_traits::auth::AuthError;
 
-/// 密码策略校验器
+/// 密码策略校验器。
+///
+/// 校验新密码是否满足强度要求（长度、字符类型组合等），
+/// 策略当前为硬编码默认值，未来可通过配置扩展。
 pub struct PasswordPolicy {
+    /// 密码最小长度。
     min_length: usize,
+
+    /// 是否要求至少 1 个大写字母。
     require_uppercase: bool,
+
+    /// 是否要求至少 1 个小写字母。
     require_lowercase: bool,
+
+    /// 是否要求至少 1 个数字。
     require_digit: bool,
+
+    /// 是否要求至少 1 个特殊字符（`!@#$%^&*()_+-=[]{}|;':",./<>?\`~`）。
     require_special: bool,
 }
 

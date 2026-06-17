@@ -15,7 +15,8 @@ cmx-buffer = { workspace = true }
 cmx-audit = { workspace = true }
 # 内部依赖 - 数据库（OAuth2 客户端/API Key 持久化）
 cmx-database = { workspace = true }
-
+# 内部依赖 - 工具库
+cmx-utils = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化

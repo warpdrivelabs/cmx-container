@@ -928,6 +928,7 @@ dependencies = [
  "cmx-core 0.1.9",
  "cmx-database",
  "cmx-traits",
+ "cmx-utils",
  "hex",
  "jsonwebtoken",
  "lazy_static",

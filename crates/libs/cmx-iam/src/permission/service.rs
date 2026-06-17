@@ -126,6 +126,23 @@ impl AuditHelper for PermissionServiceImpl {
 
 #[async_trait]
 impl PermissionService for PermissionServiceImpl {
+    /// 创建权限。
+    ///
+    /// 校验权限编码唯一性后写入数据库，并写入审计日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `data` - 权限创建参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回创建后的 `Permission` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::PermissionCodeExists` - 权限编码已存在。
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn create_permission(
         &self,
         svr_ctx: &SVRContext,
@@ -167,6 +184,20 @@ impl PermissionService for PermissionServiceImpl {
         Ok(permission)
     }
 
+    /// 获取单个权限。
+    ///
+    /// # Arguments
+    ///
+    /// * `permission_id` - 权限唯一标识。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `Permission` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::PermissionNotFound` - 权限不存在。
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn get_permission(&self, permission_id: &str) -> Result<Permission, TraitError> {
         debug!(
             "{:<12} - PermissionServiceImpl::get_permission - {}",
@@ -189,6 +220,21 @@ impl PermissionService for PermissionServiceImpl {
         Self::extract_permission(dataset).map_err(|e| TraitError::from(e))
     }
 
+    /// 更新权限。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `permission_id` - 目标权限 ID。
+    /// * `data` - 更新参数（全 `Option`，未提供字段不更新）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回更新后的 `Permission` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn update_permission(
         &self,
         svr_ctx: &SVRContext,
@@ -224,6 +270,16 @@ impl PermissionService for PermissionServiceImpl {
         Ok(permission)
     }
 
+    /// 批量删除权限（事务保证软删除 + 角色关联清理的原子性）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `permission_ids` - 待删除的权限 ID 列表；空数组直接返回 `Ok(())`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
     async fn delete_permission(
         &self,
         svr_ctx: &SVRContext,
@@ -285,6 +341,23 @@ impl PermissionService for PermissionServiceImpl {
         Ok(())
     }
 
+    /// 分页查询权限。
+    ///
+    /// 默认附加 `archived = 0` 过滤；`current` 从 1 开始。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 权限查询过滤器。
+    /// * `current` - 当前页码（从 1 开始）。
+    /// * `size` - 每页记录数。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(权限列表, 总记录数)`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_permissions(
         &self,
         filter: PermissionFilter,
@@ -315,6 +388,21 @@ impl PermissionService for PermissionServiceImpl {
         Ok((permissions, total))
     }
 
+    /// 列表查询权限。
+    ///
+    /// 默认附加 `archived = 0` 过滤，返回所有匹配记录（不分页）。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 权限查询过滤器。
+    ///
+    /// # Returns
+    ///
+    /// 匹配的权限列表。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn list_permissions(
         &self,
         filter: PermissionFilter,
@@ -336,6 +424,18 @@ impl PermissionService for PermissionServiceImpl {
         Ok(Self::extract_permissions(dataset))
     }
 
+    /// 获取权限树（递归结构）。
+    ///
+    /// 一次性加载所有有效权限（`archived = 0 AND status = 1`），
+    /// 在内存中按 `parent_id` 递归构建树形结构。
+    ///
+    /// # Returns
+    ///
+    /// 树根列表（每个根节点包含嵌套的 `children`）。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询失败。
     async fn get_permission_tree(&self) -> Result<Vec<PermissionTreeNode>, TraitError> {
         debug!("{:<12} - PermissionServiceImpl::get_permission_tree", "IAM");
 

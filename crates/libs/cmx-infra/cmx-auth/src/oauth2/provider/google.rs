@@ -6,18 +6,26 @@ use cmx_traits::auth::AuthError;
 use super::{OAuth2Provider, ProviderTokenResponse, ProviderUserInfo};
 use crate::config::OAuth2ProviderConfig;
 
-/// Google OAuth2 Provider
+/// Google OAuth2 Provider。
+///
+/// 支持 ID Token 验签（使用 Google JWKS 公钥）和 userinfo endpoint 降级获取用户信息。
 pub struct GoogleProvider {
+    /// Provider 配置。
     config: OAuth2ProviderConfig,
+
+    /// 异步 HTTP 客户端。
     http_client: reqwest::Client,
-    /// Google JWKS 公钥缓存（含过期时间）
+
+    /// Google JWKS 公钥缓存（含过期时间），用于 ID Token 验签。
     jwks: tokio::sync::RwLock<JwksCache>,
 }
 
-/// JWKS 缓存
+/// JWKS 缓存条目。
 struct JwksCache {
+    /// 已缓存的 JWKS JSON。
     keys: Option<serde_json::Value>,
-    /// 缓存过期时间
+
+    /// 缓存过期时间点。
     expires_at: Option<std::time::Instant>,
 }
 

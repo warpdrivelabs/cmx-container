@@ -153,7 +153,7 @@ pub async fn delete_permission(
 #[utoipa::path(
     post,
     path = "/api/iam/permissions/page",
-    request_body = serde_json::Value,
+    request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),
@@ -189,7 +189,7 @@ pub async fn page_permissions(
 #[utoipa::path(
     post,
     path = "/api/iam/permissions/list",
-    request_body = serde_json::Value,
+    request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),

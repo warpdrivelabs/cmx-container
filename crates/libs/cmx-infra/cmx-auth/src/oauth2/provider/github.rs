@@ -6,9 +6,15 @@ use cmx_traits::auth::AuthError;
 use super::{OAuth2Provider, ProviderTokenResponse, ProviderUserInfo};
 use crate::config::OAuth2ProviderConfig;
 
-/// GitHub OAuth2 Provider
+/// GitHub OAuth2 Provider。
+///
+/// GitHub 不返回 ID Token，需通过 userinfo endpoint 获取用户信息；
+/// 邮箱验证状态通过额外调用 `/user/emails` 获取。
 pub struct GitHubProvider {
+    /// Provider 配置。
     config: OAuth2ProviderConfig,
+
+    /// 异步 HTTP 客户端。
     http_client: reqwest::Client,
 }
 

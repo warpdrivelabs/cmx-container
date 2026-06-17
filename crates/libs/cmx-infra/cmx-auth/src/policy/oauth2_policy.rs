@@ -9,9 +9,13 @@ use crate::config::AuthConfig;
 use crate::oauth2::flows::{OAuth2FlowService, TokenExchangeParams};
 use crate::oauth2::store::OAuth2Client;
 
-/// OAuth2 认证策略
+/// OAuth2 认证策略。
+///
+/// 封装 OAuth2 Authorization Code Flow 的 `authorize` / `login` / `token` 三步流程，
+/// 作为 `AuthPolicy` trait 的实现供统一调用。
 #[derive(Clone)]
 pub struct OAuth2Policy {
+    /// OAuth2 流程服务（处理 state、code、PKCE 等）。
     flow_service: OAuth2FlowService,
 }
 

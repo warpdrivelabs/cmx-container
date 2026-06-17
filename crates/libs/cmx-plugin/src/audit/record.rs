@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use cmx_utils::snowflake_id_str;
 
 /// 操作类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,7 +110,7 @@ impl AuditRecord {
         result: OperationResult,
     ) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: snowflake_id_str(),
             plugin_id,
             node_id: None,
             version: None,

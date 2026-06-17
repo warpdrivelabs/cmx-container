@@ -37,8 +37,12 @@ redis.call('SREM', KEYS[2], ARGV[1])
 return 1
 "#;
 
-/// Refresh Token Rotation 管理器
+/// Refresh Token Rotation 管理器。
+///
+/// 通过 Lua 脚本原子执行"检查旧 jti → 删除旧 token → 从 index 移除旧 jti"，
+/// 防止并发场景下 Refresh Token 重放攻击。
 pub struct RefreshRotation {
+    /// Redis 缓存管理器。
     cache: CacheManager,
 }
 

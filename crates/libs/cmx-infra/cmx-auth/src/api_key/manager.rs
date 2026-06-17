@@ -5,9 +5,15 @@ use cmx_traits::auth::{AuthError, AuthStorageQuery};
 
 use super::entity::ApiKeyEntity;
 
-/// API Key 管理器
+/// API Key 管理器。
+///
+/// 通过 `key_prefix` 查找存储的 SHA256 哈希并比对明文 Key，
+/// 提供 M2M 场景下的无状态认证。
 pub struct ApiKeyManager {
+    /// Redis 缓存管理器（用于本地缓存加速）。
     cache: CacheManager,
+
+    /// API Key 存储查询 trait 对象（由 `AuthServiceImpl` 提供）。
     auth_storage: std::sync::Arc<dyn AuthStorageQuery>,
 }
 

@@ -155,7 +155,7 @@ pub async fn delete_user(
 #[utoipa::path(
     post,
     path = "/api/iam/users/page",
-    request_body = serde_json::Value,
+    request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),
@@ -191,7 +191,7 @@ pub async fn page_users(
 #[utoipa::path(
     post,
     path = "/api/iam/users/list",
-    request_body = serde_json::Value,
+    request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),

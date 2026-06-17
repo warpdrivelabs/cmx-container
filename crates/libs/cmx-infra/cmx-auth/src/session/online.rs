@@ -6,8 +6,12 @@ use cmx_buffer::CacheManager;
 
 use crate::error::Result;
 
-/// 在线用户追踪器
+/// 在线用户追踪器。
+///
+/// 封装对 `auth:online:users` Redis Set 的读取与维护操作，
+/// 与 `SessionManager` 协同维护在线用户统计。
 pub struct OnlineTracker {
+    /// Redis 缓存管理器。
     cache: CacheManager,
 }
 

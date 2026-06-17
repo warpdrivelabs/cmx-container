@@ -11,22 +11,25 @@ use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use serde_json::Value;
 use tracing::{debug, info};
-
+use cmx_utils::snowflake_id_str;
 use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
 use crate::role::{RoleBmc, RoleFilter, RoleForCreate, RoleForUpdate};
 use crate::service_traits::RoleService;
 
-/// 角色服务实现
+/// 角色服务实现。
 pub struct RoleServiceImpl {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证库 db_id
+
+    /// 认证库 `db_id`。
     db_id: String,
-    /// IAM 配置
+
+    /// IAM 配置（含 `builtin_role_codes` 保护列表）。
     config: IamConfig,
-    /// 审计日志记录器（可选）
+
+    /// 审计日志记录器（可选，通过 `with_audit` 注入）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
@@ -104,6 +107,23 @@ impl AuditHelper for RoleServiceImpl {
 
 #[async_trait]
 impl RoleService for RoleServiceImpl {
+    /// 创建角色。
+    ///
+    /// 校验角色编码唯一性后写入数据库，并写入审计日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `data` - 角色创建参数。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回创建后的 `Role` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::RoleCodeExists` - 角色编码已存在。
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn create_role(
         &self,
         svr_ctx: &SVRContext,
@@ -144,6 +164,20 @@ impl RoleService for RoleServiceImpl {
         Ok(role)
     }
 
+    /// 获取单个角色。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_id` - 角色唯一标识。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `Role` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::RoleNotFound` - 角色不存在。
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn get_role(&self, role_id: &str) -> Result<Role, TraitError> {
         debug!(
             "{:<12} - RoleServiceImpl::get_role - {}",
@@ -166,6 +200,21 @@ impl RoleService for RoleServiceImpl {
         Self::extract_role(dataset).map_err(|e| TraitError::from(e))
     }
 
+    /// 更新角色。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `role_id` - 目标角色 ID。
+    /// * `data` - 更新参数（全 `Option`，未提供字段不更新）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回更新后的 `Role` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn update_role(
         &self,
         svr_ctx: &SVRContext,
@@ -201,6 +250,19 @@ impl RoleService for RoleServiceImpl {
         Ok(role)
     }
 
+    /// 批量删除角色（事务保证软删除 + 权限关联清理的原子性）。
+    ///
+    /// 内置角色（`builtin_role_codes` 配置项）受保护，不可删除。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `role_ids` - 待删除的角色 ID 列表；空数组直接返回 `Ok(())`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::CannotDeleteBuiltinRole` - 尝试删除内置角色。
+    /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
     async fn delete_role(
         &self,
         svr_ctx: &SVRContext,
@@ -270,6 +332,23 @@ impl RoleService for RoleServiceImpl {
         Ok(())
     }
 
+    /// 分页查询角色。
+    ///
+    /// 默认附加 `archived = 0` 过滤；`current` 从 1 开始。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 角色查询过滤器。
+    /// * `current` - 当前页码（从 1 开始）。
+    /// * `size` - 每页记录数。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(角色列表, 总记录数)`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_roles(
         &self,
         filter: RoleFilter,
@@ -300,6 +379,21 @@ impl RoleService for RoleServiceImpl {
         Ok((roles, total))
     }
 
+    /// 列表查询角色。
+    ///
+    /// 默认附加 `archived = 0` 过滤，返回所有匹配记录（不分页）。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 角色查询过滤器。
+    ///
+    /// # Returns
+    ///
+    /// 匹配的角色列表。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn list_roles(&self, filter: RoleFilter) -> Result<Vec<Role>, TraitError> {
         debug!("{:<12} - RoleServiceImpl::list_roles", "IAM");
 
@@ -318,6 +412,17 @@ impl RoleService for RoleServiceImpl {
         Ok(Self::extract_roles(dataset))
     }
 
+    /// 为角色分配权限（全量替换，事务保证原子性）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `role_id` - 目标角色 ID。
+    /// * `permission_ids` - 待分配的权限 ID 列表；空数组表示清空所有权限。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
     async fn assign_permissions(
         &self,
         svr_ctx: &SVRContext,
@@ -347,7 +452,7 @@ impl RoleService for RoleServiceImpl {
 
         // 2. 批量插入新关联
         for perm_id in permission_ids {
-            let rp_id = uuid::Uuid::new_v4().to_string();
+            let rp_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_role_permission (id, role_id, permission_id, archived, status) \
                               VALUES ($1, $2, $3, 0, 1) ON CONFLICT (role_id, permission_id) DO NOTHING";
             let params = Value::Array(vec![
@@ -379,6 +484,19 @@ impl RoleService for RoleServiceImpl {
         Ok(())
     }
 
+    /// 获取角色已启用的权限列表（含 `status = 1` 且 `archived = 0` 过滤）。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_id` - 目标角色 ID。
+    ///
+    /// # Returns
+    ///
+    /// 角色关联的权限列表，可能为空。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询失败。
     async fn get_role_permissions(&self, role_id: &str) -> Result<Vec<Permission>, TraitError> {
         debug!(
             "{:<12} - RoleServiceImpl::get_role_permissions - role: {}",

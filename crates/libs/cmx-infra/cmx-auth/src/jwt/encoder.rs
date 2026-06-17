@@ -8,15 +8,24 @@ use crate::config::AuthConfig;
 use crate::error::{AuthInfraError, Result};
 use super::claims::{AccessClaims, RefreshClaims};
 
-/// JWT 管理器
+/// JWT 管理器。
 ///
-/// 负责 JWT Token 的编码和解码，支持 RS256/HS256 算法和密钥轮换。
+/// 负责 JWT Token 的编码与解码，支持 RS256 / HS256 算法与密钥轮换宽限期。
+/// 解码时优先使用当前密钥，失败后回退到 `legacy_public_keys` 列表。
 pub struct JwtManager {
+    /// 认证配置。
     config: AuthConfig,
+
+    /// 当前签名密钥。
     encoding_key: EncodingKey,
+
+    /// 当前验签密钥。
     decoding_key: DecodingKey,
+
+    /// 签名算法（RS256 / HS256）。
     algorithm: Algorithm,
-    /// 旧密钥列表（kid → DecodingKey），用于密钥轮换宽限期验签
+
+    /// 旧密钥列表（`kid` → `DecodingKey`），用于密钥轮换宽限期内的 Token 验签。
     legacy_decoding_keys: Vec<(String, DecodingKey)>,
 }
 

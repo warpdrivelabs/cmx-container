@@ -39,12 +39,20 @@ pub struct UserSession {
     pub access_expires_at: i64,
 }
 
-/// 会话管理器
+/// 会话管理器。
+///
+/// 负责用户会话的创建/查询/销毁/互踢，配合 moka 本地缓存
+/// 减少 Redis Hash 查询次数。
 #[derive(Clone)]
 pub struct SessionManager {
+    /// Redis 缓存管理器（用于存储会话 Hash 与在线用户集合）。
     cache: CacheManager,
+
+    /// 认证配置（提供会话相关参数）。
     config: AuthConfig,
-    /// 本地缓存：session 活跃状态（key: "user_id:device" → bool）
+
+    /// 本地缓存：key = `"session_active:{user_id}:{device}"`，value = 会话是否活跃。
+    /// 在配置启用本地缓存时生效，否则为容量为 0 的空缓存。
     local_cache: Cache<String, bool>,
 }
 

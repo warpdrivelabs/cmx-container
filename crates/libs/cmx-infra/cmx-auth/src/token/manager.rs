@@ -11,11 +11,20 @@ use crate::error::Result;
 use crate::token::blacklist::Blacklist;
 use crate::token::rotation::RefreshRotation;
 
-/// Token 管理器
+/// Token 管理器。
+///
+/// 负责 Refresh Token 的存储/轮换/撤销，以及 Access Token 黑名单管理。
 pub struct TokenManager {
+    /// Redis 缓存管理器。
     cache: CacheManager,
+
+    /// Access Token 黑名单子模块。
     blacklist: Blacklist,
+
+    /// Refresh Token 轮换子模块（Lua 原子操作）。
     rotation: RefreshRotation,
+
+    /// 认证配置（提供 TTL 等参数）。
     config: AuthConfig,
 }
 

@@ -154,7 +154,7 @@ pub async fn delete_role(
 #[utoipa::path(
     post,
     path = "/api/iam/roles/page",
-    request_body = serde_json::Value,
+    request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),
@@ -190,7 +190,7 @@ pub async fn page_roles(
 #[utoipa::path(
     post,
     path = "/api/iam/roles/list",
-    request_body = serde_json::Value,
+    request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),

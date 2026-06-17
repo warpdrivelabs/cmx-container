@@ -69,9 +69,15 @@ pub enum LinkResult {
     BindingRequired { provider: String, provider_user_id: String, email: Option<String> },
 }
 
-/// 第三方账号关联/注册逻辑
+/// 第三方 OAuth2 账号关联/注册逻辑。
+///
+/// 根据 `AccountLinkConfig` 策略处理 OAuth2 登录：
+/// 1. 已关联直接返回；2. 邮箱匹配自动关联；3. 配置允许时自动注册新用户。
 pub struct AccountLinker {
+    /// 用户认证数据查询 trait 对象。
     user_query: Arc<dyn UserAuthQuery>,
+
+    /// 账号关联策略配置（邮箱匹配、自动注册、用户名生成等）。
     config: AccountLinkConfig,
 }
 

@@ -15,7 +15,7 @@ use cmx_traits::auth::{
     OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
 };
 use tracing::{debug, info, warn};
-
+use cmx_utils::snowflake_id_str;
 use crate::api_key::ApiKeyEntity;
 use crate::config::AuthConfig;
 use crate::error::Result;
@@ -531,6 +531,27 @@ impl AuthServiceImpl {
 
 #[async_trait]
 impl AuthService for AuthServiceImpl {
+    /// 用户认证入口。
+    ///
+    /// 根据 `Credentials` 变体分发到不同认证路径：
+    /// - `Password` — 用户名密码登录
+    /// - `RefreshToken` — 刷新 Access Token
+    /// - `ApiKey` — API Key 认证（会创建完整会话，不推荐中间件场景）
+    /// - `AuthorizationCode` — OAuth2 授权码换 Token
+    /// - `ThirdPartyOAuth2` — 第三方 OAuth2 登录
+    ///
+    /// # Arguments
+    ///
+    /// * `credentials` - 各类凭据的统一枚举。
+    /// * `device_info` - 设备信息（可选，用于会话创建与限流）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `TokenPair`（Access Token + Refresh Token）。
+    ///
+    /// # Errors
+    ///
+    /// 详见 `AuthError` 各变体（账号锁定、用户禁用、密码错误、Token 撤销、PKCE 失败等）。
     async fn authenticate(
         &self,
         credentials: Credentials,
@@ -665,6 +686,23 @@ impl AuthService for AuthServiceImpl {
         }
     }
 
+    /// 验证 Access Token 并返回 `AuthContext`。
+    ///
+    /// 解码 Token → 检查黑名单 → 检查会话活跃度，并记录验证耗时指标。
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - 待验证的 Access Token 字符串。
+    ///
+    /// # Returns
+    ///
+    /// 包含用户身份信息的 `AuthContext`。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::InvalidToken` - Token 解析失败或过期。
+    /// * `AuthError::TokenRevoked` - Token 已被加入黑名单。
+    /// * `AuthError::SessionNotFound` - 会话不存在或不活跃。
     async fn validate_token(&self, token: &str) -> std::result::Result<AuthContext, AuthError> {
         // 2.1 修复：记录 Token 验证耗时
         let start = std::time::Instant::now();
@@ -711,6 +749,24 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
+    /// 用 Refresh Token 换发新 Token 对（Rotation 防重放）。
+    ///
+    /// 使用 Lua 脚本原子执行"检查旧 jti → 删除旧 token"，失败时视为重放攻击。
+    /// 成功后重新签发 Access + Refresh Token 对。
+    ///
+    /// # Arguments
+    ///
+    /// * `refresh_token` - 待刷新的 Refresh Token 字符串。
+    ///
+    /// # Returns
+    ///
+    /// 新的 `TokenPair`。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::InvalidToken` - Token 解析失败。
+    /// * `AuthError::ReplayDetected` - 旧 jti 不存在（重放攻击）。
+    /// * `AuthError::UserDisabled` - 用户已禁用。
     async fn refresh_token(
         &self,
         refresh_token: &str,
@@ -776,6 +832,18 @@ impl AuthService for AuthServiceImpl {
         .await
     }
 
+    /// 撤销指定 Token。
+    ///
+    /// 自动识别 Access Token（加入黑名单）或 Refresh Token（删除记录），
+    /// 并通过 Pub/Sub 广播本地缓存失效。
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - 待撤销的 Token 字符串（Access 或 Refresh）。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::InvalidToken` - Token 无法解码为已知类型。
     async fn revoke_token(&self, token: &str) -> std::result::Result<(), AuthError> {
         // 尝试解码为 Access Token
         if let Ok(claims) = self.jwt_manager.decode_access_token(token) {
@@ -809,6 +877,18 @@ impl AuthService for AuthServiceImpl {
         Err(AuthError::InvalidToken("无法解码 Token".to_string()))
     }
 
+    /// 撤销用户的所有 Token 与会话。
+    ///
+    /// 撤销所有 Refresh Token + 将所有 Access Token 加入黑名单（TTL 取剩余有效期）+
+    /// 销毁所有会话 + Pub/Sub 广播本地缓存失效。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::Internal` - Redis 操作失败。
     async fn revoke_all_tokens(&self, user_id: &str) -> std::result::Result<(), AuthError> {
         // 撤销所有 Refresh Token
         self.token_manager
@@ -890,6 +970,22 @@ impl AuthService for AuthServiceImpl {
         }
     }
 
+    /// 修改密码（含完整校验链）。
+    ///
+    /// 校验旧密码 → 校验新密码策略 → 校验密码历史 → 哈希新密码 →
+    /// 记录历史 → 持久化 → 强制下线所有旧会话。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    /// * `old_password` - 当前明文密码。
+    /// * `new_password` - 新明文密码。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::PasswordPolicyViolated` - 新密码与旧密码相同或不符合策略。
+    /// * `AuthError::InvalidCredentials` - 旧密码错误或用户无密码。
+    /// * `AuthError::PasswordReused` - 新密码在历史中已使用。
     async fn change_password(
         &self,
         user_id: &str,
@@ -1250,6 +1346,26 @@ impl AuthService for AuthServiceImpl {
         Ok(registry.list_providers())
     }
 
+    /// 处理第三方 OAuth2 回调。
+    ///
+    /// 流程：原子消费 state → 交换 Token → 获取用户信息 → 关联/注册用户 →
+    /// 签发本平台 Token → 存储一次性回调授权码（前端用 code 换取 TokenPair）。
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - 第三方 Provider 名称。
+    /// * `code` - 第三方 Provider 返回的授权码。
+    /// * `state` - CSRF state（与 `store_oauth2_provider_state` 时存储的对应）。
+    /// * `device_info` - 设备信息（可选）。
+    ///
+    /// # Returns
+    ///
+    /// 包含一次性 `callback_code` 的 `OAuth2CallbackResult`，前端用它换取 TokenPair。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::OAuth2` - state 无效/provider 不匹配/账号未注册等。
+    /// * `AuthError::OAuth2ProviderUnavailable` - 第三方服务不可达。
     async fn handle_oauth2_callback(
         &self,
         provider: &str,
@@ -1430,7 +1546,7 @@ impl AuthStorageQuery for AuthServiceImpl {
             "AUTH", key_prefix
         );
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = snowflake_id_str();
         let user_id_val = user_id
             .map(|u| format!("'{}'", u.replace('\'', "''")))
             .unwrap_or("NULL".to_string());
@@ -1522,7 +1638,7 @@ impl AuthStorageQuery for AuthServiceImpl {
             "AUTH", event_type, user_id
         );
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = snowflake_id_str();
         let sql = format!(
             "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, created_at) \
              VALUES ('{}', '{}', '{}', '{}', '{}', NOW())",

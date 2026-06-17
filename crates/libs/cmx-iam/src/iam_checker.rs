@@ -13,13 +13,17 @@ use tracing::debug;
 
 use crate::config::IamConfig;
 
-/// IAM 权限校验器实现
+/// IAM 权限校验器实现。
+///
+/// 通过数据库 `EXISTS` 查询进行权限/角色校验，支持 `system:all` 超级权限短路。
 pub struct IamChecker {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证库 db_id
+
+    /// 认证库 `db_id`。
     db_id: String,
-    /// IAM 配置（预留：用于权限缓存 TTL 等扩展）
+
+    /// IAM 配置（预留：未来用于本地缓存 TTL 等扩展）。
     #[allow(dead_code)]
     config: IamConfig,
 }

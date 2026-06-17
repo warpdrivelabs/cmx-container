@@ -10,10 +10,16 @@ use moka::future::Cache;
 use crate::config::CacheConfig;
 use crate::error::Result;
 
-/// Token 黑名单管理器
+/// Token 黑名单管理器。
+///
+/// 基于 Redis SET + moka 本地缓存实现 Access Token 撤销，
+/// 支持通过 Pub/Sub 主动失效本地缓存。
 pub struct Blacklist {
+    /// Redis 缓存管理器。
     cache: CacheManager,
-    /// 本地缓存（jti -> bool，true = 在黑名单中，false = 不在黑名单中）
+
+    /// 本地缓存：key = `jti`，value = `true` 表示在黑名单，`false` 表示不在。
+    /// 使用 `time_to_live` 而非 `time_to_idle`，避免高频访问 key 内存膨胀。
     local_cache: Cache<String, bool>,
 }
 

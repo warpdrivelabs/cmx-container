@@ -7,9 +7,12 @@ use argon2::password_hash::SaltString;
 use crate::config::Argon2Config;
 use crate::error::{AuthInfraError, Result};
 
-/// Argon2id 密码哈希器
+/// Argon2id 密码哈希器。
+///
+/// 封装 `argon2` crate 的哈希与校验逻辑，支持自定义内存/时间/并行度参数。
 #[derive(Clone)]
 pub struct Argon2Hasher {
+    /// Argon2id 算法实例（参数来自 `Argon2Config`）。
     argon2: Argon2<'static>,
 }
 

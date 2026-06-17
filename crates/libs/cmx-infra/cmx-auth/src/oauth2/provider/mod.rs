@@ -55,32 +55,47 @@ pub trait OAuth2Provider: Send + Sync {
     fn redirect_uri(&self) -> &str;
 }
 
-/// 第三方 Provider Token 响应
+/// 第三方 Provider Token 响应。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderTokenResponse {
+    /// 访问令牌。
     pub access_token: String,
+
+    /// 令牌类型（通常为 `bearer`）。
     pub token_type: String,
+
+    /// 过期时间（秒，相对当前时间）。
     pub expires_in: Option<u64>,
+
+    /// 刷新令牌（OIDC Provider 通常返回）。
     pub refresh_token: Option<String>,
+
+    /// 实际授权的 scope 列表（空格分隔字符串）。
     pub scope: Option<String>,
-    /// ID Token（OIDC Provider 如 Google 会返回）
+
+    /// ID Token（OIDC Provider 如 Google 会返回，可用于无 userinfo 调用）。
     pub id_token: Option<String>,
 }
 
-/// 第三方 Provider 用户信息
+/// 第三方 Provider 用户信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderUserInfo {
-    /// Provider 侧的用户唯一标识
+    /// Provider 侧的用户唯一标识。
     pub provider_user_id: String,
-    /// 邮箱（可能为空，取决于 scope）
+
+    /// 邮箱（可能为空，取决于请求的 scope）。
     pub email: Option<String>,
-    /// 邮箱是否已验证
+
+    /// 邮箱是否已验证。
     pub email_verified: Option<bool>,
-    /// 用户名
+
+    /// 用户名（部分 Provider 如 GitHub 返回）。
     pub username: Option<String>,
-    /// 昵称/显示名
+
+    /// 昵称/显示名。
     pub display_name: Option<String>,
-    /// 头像 URL
+
+    /// 头像 URL。
     pub avatar_url: Option<String>,
 }
 

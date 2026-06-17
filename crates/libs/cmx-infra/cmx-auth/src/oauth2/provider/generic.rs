@@ -6,9 +6,15 @@ use cmx_traits::auth::AuthError;
 use super::{OAuth2Provider, ProviderTokenResponse, ProviderUserInfo};
 use crate::config::OAuth2ProviderConfig;
 
-/// 通用 OAuth2 Provider（配置驱动）
+/// 通用 OAuth2 Provider（配置驱动）。
+///
+/// 不硬编码特定 Provider 的端点 URL，所有信息来自 `OAuth2ProviderConfig`，
+/// 适用于任意符合 OAuth2 标准的 Provider。
 pub struct GenericOAuth2Provider {
+    /// Provider 配置（含 client_id、client_secret、端点 URL 等）。
     config: OAuth2ProviderConfig,
+
+    /// 异步 HTTP 客户端。
     http_client: reqwest::Client,
 }
 

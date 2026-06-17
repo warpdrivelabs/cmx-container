@@ -15,13 +15,15 @@ use tracing::{debug, info};
 
 use crate::config::IamConfig;
 
-/// UserAuthQuery 实现
+/// `UserAuthQuery` 实现。
 ///
-/// 持有 `Arc<DatabaseManager>` 和 `db_id`，通过参数化查询避免 SQL 注入。
+/// 持有 `Arc<DatabaseManager>` 与 `db_id`，通过参数化查询避免 SQL 注入，
+/// 供 `cmx-auth` 在认证流程中查询用户/角色/权限信息。
 pub struct UserAuthQueryImpl {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证库 db_id
+
+    /// 认证库 `db_id`（来自配置或 `DatabaseManager` 默认值）。
     db_id: String,
 }
 

@@ -9,9 +9,14 @@ use crate::password::Argon2Hasher;
 
 const MAX_HISTORY: usize = 5;
 
-/// 密码历史校验器
+/// 密码历史校验器。
+///
+/// 使用 Redis Hash 存储用户最近 5 条密码哈希，禁止修改密码时重复使用历史密码。
 pub struct PasswordHistory {
+    /// Redis 缓存管理器。
     cache: CacheManager,
+
+    /// Argon2 哈希器（用于校验明文密码是否匹配历史哈希）。
     hasher: Argon2Hasher,
 }
 

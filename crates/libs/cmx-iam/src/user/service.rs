@@ -12,7 +12,7 @@ use cmx_traits::auth::AuthService;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use serde_json::Value;
 use tracing::{debug, info};
-
+use cmx_utils::snowflake_id_str;
 use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
@@ -21,17 +21,21 @@ use crate::user::{
     UserBmc, UserFilter, UserForCreate, UserForInsert, UserForUpdate, UserForUpdateInsert,
 };
 
-/// 用户服务实现
+/// 用户服务实现。
 pub struct UserServiceImpl {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证服务（用于密码哈希）
+
+    /// 认证服务（用于密码哈希）。
     auth: Arc<dyn AuthService>,
-    /// 认证库 db_id
+
+    /// 认证库 `db_id`。
     db_id: String,
-    /// IAM 配置
+
+    /// IAM 配置。
     config: IamConfig,
-    /// 审计日志记录器（可选）
+
+    /// 审计日志记录器（可选，通过 `with_audit` 注入）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
@@ -116,6 +120,26 @@ impl AuditHelper for UserServiceImpl {
 
 #[async_trait]
 impl UserService for UserServiceImpl {
+    /// 创建用户。
+    ///
+    /// 校验用户名唯一性、密码长度，调用 `AuthService` 哈希密码后写入数据库，
+    /// 并写入审计日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `data` - 用户创建参数，包含用户名、明文密码等。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回创建后的 `User` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 密码长度不满足配置要求。
+    /// * `IamError::UsernameExists` - 用户名已存在。
+    /// * `IamError::PasswordHashError` - 密码哈希失败。
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn create_user(
         &self,
         svr_ctx: &SVRContext,
@@ -186,6 +210,20 @@ impl UserService for UserServiceImpl {
         Ok(user)
     }
 
+    /// 获取单个用户。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 用户唯一标识。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `User` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::UserNotFound` - 用户不存在。
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn get_user(&self, user_id: &str) -> Result<User, TraitError> {
         debug!(
             "{:<12} - UserServiceImpl::get_user - {}",
@@ -208,6 +246,25 @@ impl UserService for UserServiceImpl {
         Self::extract_user(dataset).map_err(|e| TraitError::from(e))
     }
 
+    /// 更新用户。
+    ///
+    /// 支持可选密码更新（提供时触发哈希 + 写入），并写入审计日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `user_id` - 目标用户 ID。
+    /// * `data` - 更新参数（不含用户名，全 `Option`）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回更新后的 `User` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 密码长度不满足配置要求。
+    /// * `IamError::PasswordHashError` - 密码哈希失败。
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn update_user(
         &self,
         svr_ctx: &SVRContext,
@@ -272,6 +329,16 @@ impl UserService for UserServiceImpl {
         Ok(user)
     }
 
+    /// 批量删除用户（事务保证软删除 + 角色关联清理的原子性）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `user_ids` - 待删除的用户 ID 列表；空数组直接返回 `Ok(())`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
     async fn delete_user(
         &self,
         svr_ctx: &SVRContext,
@@ -333,6 +400,23 @@ impl UserService for UserServiceImpl {
         Ok(())
     }
 
+    /// 分页查询用户。
+    ///
+    /// 默认附加 `archived = 0` 过滤；`current` 从 1 开始。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 用户查询过滤器。
+    /// * `current` - 当前页码（从 1 开始）。
+    /// * `size` - 每页记录数。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(用户列表, 总记录数)`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_users(
         &self,
         filter: UserFilter,
@@ -363,6 +447,21 @@ impl UserService for UserServiceImpl {
         Ok((users, total))
     }
 
+    /// 列表查询用户。
+    ///
+    /// 默认附加 `archived = 0` 过滤，返回所有匹配记录（不分页）。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 用户查询过滤器。
+    ///
+    /// # Returns
+    ///
+    /// 匹配的用户列表。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn list_users(&self, filter: UserFilter) -> Result<Vec<User>, TraitError> {
         debug!("{:<12} - UserServiceImpl::list_users", "IAM");
 
@@ -381,6 +480,17 @@ impl UserService for UserServiceImpl {
         Ok(Self::extract_users(dataset))
     }
 
+    /// 为用户分配角色（全量替换，事务保证原子性）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `user_id` - 目标用户 ID。
+    /// * `role_ids` - 待分配的角色 ID 列表；空数组表示清空所有角色。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - 事务开启/提交失败，或 SQL 执行失败。
     async fn assign_roles(
         &self,
         svr_ctx: &SVRContext,
@@ -410,7 +520,7 @@ impl UserService for UserServiceImpl {
 
         // 2. 批量插入新关联
         for role_id in role_ids {
-            let ur_id = uuid::Uuid::new_v4().to_string();
+            let ur_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived, status) \
                               VALUES ($1, $2, $3, 0, 1) ON CONFLICT (user_id, role_id) DO NOTHING";
             let params = Value::Array(vec![
@@ -442,6 +552,19 @@ impl UserService for UserServiceImpl {
         Ok(())
     }
 
+    /// 获取用户已启用的角色列表（含 `status = 1` 且 `archived = 0` 过滤）。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    ///
+    /// # Returns
+    ///
+    /// 用户关联的角色列表，可能为空。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询失败。
     async fn get_user_roles(&self, user_id: &str) -> Result<Vec<Role>, TraitError> {
         debug!(
             "{:<12} - UserServiceImpl::get_user_roles - user: {}",
