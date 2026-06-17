@@ -3,6 +3,11 @@ name = "cmx-core"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+# OpenAPI 文档生成支持
+openapi = ["utoipa"]
+
 [dependencies]
 # 序列化框架
 serde = { workspace = true }
@@ -26,3 +31,5 @@ uuid = { workspace = true }
 base64 = { workspace = true }
 # modql 支持
 modql = { workspace = true }
+# OpenAPI 文档生成（可选）
+utoipa = { workspace = true, optional = true }

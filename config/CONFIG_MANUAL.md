@@ -21,6 +21,7 @@
 - [RPC 配置](#rpc-配置)
 - [注册中心 Metadata 配置](#注册中心-metadata-配置)
 - [认证配置](#认证配置)
+- [IAM 权限管理配置](#iam-权限管理配置)
 - [配置优先级](#配置优先级)
 - [配置文件位置](#配置文件位置)
 
@@ -1343,6 +1344,68 @@ OAuth2 授权码模式配置。OAuth2 功能为可选模块，不配置时使用
 - **默认值**: 无
 - **说明**: API Key 描述
 - **示例**: `"内部服务 API Key"`
+
+---
+
+## IAM 权限管理配置
+
+### `[iam]`
+
+IAM（Identity and Access Management）权限管理配置，控制用户、角色、权限等 RBAC 功能的行为。
+
+#### `auth_db_id`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: 使用 `default_db_id`（即 `[[databases]]` 中 `default = true` 的数据源）
+- **说明**: IAM 表所在的数据源标识。指定后，cmx_user/cmx_role/cmx_permission 等 IAM 表将使用此 db_id 对应的数据库
+- **示例**: `"primary"`
+
+#### `password_min_length`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `8`
+- **说明**: 用户密码最小长度。创建用户和修改密码时校验，短于此长度的密码将被拒绝
+- **示例**: `8`
+
+#### `builtin_role_codes`
+
+- **类型**: String（逗号分隔）
+- **必需**: 否
+- **默认值**: `"admin"`
+- **说明**: 内置角色编码列表，逗号分隔。内置角色不可删除（Service 层会拦截删除请求），确保系统管理角色始终可用
+- **示例**: `"admin"`, `"admin,system_admin"`
+
+#### `permission_cache_ttl_secs`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `300`
+- **说明**: 权限缓存 TTL（预留配置）。当前权限检查依赖 AuthContext 内存查询，未来若引入 IamChecker 本地缓存（moka），此配置控制缓存过期时间
+- **示例**: `300`（5 分钟）
+
+### `[iam_permissions]`
+
+IAM 路由权限映射配置（可选）。配置 API 路由到权限码的映射，`mw_permission` 中间件据此进行权限校验。
+
+**行为规则**：
+- 未配置映射的路由默认放行（白名单模式）
+- 拥有 `system:all` 权限的用户自动放行所有路由
+- 路由路径支持最长前缀匹配（如 `/api/iam/users` 会匹配 `/api/iam/users/123`）
+
+**配置格式**：
+
+```toml
+[iam_permissions]
+"/api/iam/users" = "user:read"
+"/api/iam/roles" = "role:read"
+"/api/iam/permissions" = "permission:read"
+```
+
+每个条目为键值对：
+- **键**: API 路由路径前缀
+- **值**: 所需权限码（格式 `resource:action`，如 `user:read`、`role:write`、`system:all`）
 
 ---
 

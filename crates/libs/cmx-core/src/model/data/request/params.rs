@@ -5,6 +5,8 @@
 use modql::filter::ListOptions;
 use serde::Deserialize;
 use serde_json::Value;
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 /// 列表查询的默认限制数量
 pub const LIST_LIMIT_DEFAULT: i64 = 1000;
@@ -30,6 +32,7 @@ pub struct GetParams {
 
 /// 更新请求 Payload
 #[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct UpdatePayload<E> {
     /// 主键 ID
     pub id: Value,
@@ -39,6 +42,7 @@ pub struct UpdatePayload<E> {
 
 /// 删除请求 Payload
 #[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DeletePayload {
     /// 主键 ID 列表（单个删除传一个元素）
     pub ids: Vec<Value>,
@@ -49,6 +53,7 @@ pub struct DeletePayload {
 ///
 /// 用于列表查询的通用参数结构。
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListParams<F> {
     /// 过滤条件
     pub filter: Option<F>,
@@ -73,6 +78,7 @@ impl<F> ListParams<F> {
 ///
 /// 用于列表和分页查询的通用参数结构。
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PageParams<F> {
     /// 过滤条件
     pub filter: Option<F>,

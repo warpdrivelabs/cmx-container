@@ -11,12 +11,12 @@ use chrono::Utc;
 use cmx_buffer::CacheManager;
 use cmx_core::AuthContext;
 use cmx_traits::{
-    AuthError, AuthService, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
+    AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
     OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use crate::api_key::ApiKeyManager;
+use crate::api_key::ApiKeyEntity;
 use crate::config::AuthConfig;
 use crate::error::Result;
 use crate::jwt::JwtManager;
@@ -435,12 +435,56 @@ impl AuthServiceImpl {
 
     /// 记录 Token 审计日志
     async fn audit_token_event(&self, event_type: &str, user_id: &str, jti: &str, detail: &str) {
-        if let Err(e) = self.user_query
-            .record_token_event(event_type, user_id, jti, detail)
+        if let Err(e) = AuthStorageQuery::record_token_event(self, event_type, user_id, jti, detail)
             .await
         {
             warn!(event_type = event_type, user_id = user_id, error = %e, "审计日志写入失败");
         }
+    }
+
+    /// 验证 API Key 并返回实体（直接调用 AuthStorageQuery，无需外部 trait 对象）
+    async fn validate_api_key_entity(
+        &self,
+        api_key: &str,
+    ) -> std::result::Result<ApiKeyEntity, AuthError> {
+        // 1. 提取 key_prefix（格式：cmx_xxxxxxxx...）
+        let key_prefix = if api_key.len() >= 8 {
+            &api_key[..8]
+        } else {
+            return Err(AuthError::InvalidApiKey);
+        };
+
+        // 2. 通过 AuthStorageQuery 查询 API Key
+        let api_key_data = AuthStorageQuery::get_api_key_by_prefix(self, key_prefix)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::InvalidApiKey)?;
+
+        // 3. 检查状态
+        if api_key_data.status == 0 {
+            return Err(AuthError::InvalidApiKey);
+        }
+
+        // 4. 使用 SHA256 验证 key
+        let input_hash = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(api_key.as_bytes());
+            hex::encode(hasher.finalize())
+        };
+        if input_hash != api_key_data.key_hash {
+            return Err(AuthError::InvalidApiKey);
+        }
+
+        Ok(ApiKeyEntity {
+            key_prefix: api_key_data.key_prefix,
+            key_hash: api_key_data.key_hash,
+            user_id: api_key_data.user_id,
+            service_name: api_key_data.service_name,
+            scopes: api_key_data.scopes,
+            description: api_key_data.description,
+            status: api_key_data.status,
+        })
     }
 
     /// 第三方 OAuth2 登录认证
@@ -514,8 +558,7 @@ impl AuthService for AuthServiceImpl {
             Credentials::ApiKey { key } => {
                 // 注意：此路径会创建完整会话，不推荐用于中间件高频认证场景。
                 // 中间件场景请使用 validate_api_key()（无状态，不创建会话）。
-                let api_key_manager = ApiKeyManager::new(self.cache.clone(), self.user_query.clone());
-                let api_key_entity = api_key_manager.validate(&key).await?;
+                let api_key_entity = self.validate_api_key_entity(&key).await?;
 
                 // 查询关联用户信息
                 let user_id = api_key_entity
@@ -974,18 +1017,18 @@ impl AuthService for AuthServiceImpl {
                 hex::encode(hasher.finalize())
             };
 
-            // 通过 UserAuthQuery 持久化
-            self.user_query
-                .upsert_api_key(
-                    &key_prefix,
-                    &hash,
-                    api_key_config.user_id.as_deref(),
-                    api_key_config.service_name.as_deref(),
-                    &api_key_config.scopes,
-                    api_key_config.description.as_deref(),
-                )
-                .await
-                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            // 通过 AuthStorageQuery 持久化
+            AuthStorageQuery::upsert_api_key(
+                self,
+                &key_prefix,
+                &hash,
+                api_key_config.user_id.as_deref(),
+                api_key_config.service_name.as_deref(),
+                &api_key_config.scopes,
+                api_key_config.description.as_deref(),
+            )
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
 
             // 启动日志清晰打印 Key 信息（仅启动时一次，便于管理员获取）
             // 警告：明文 Key 会输出到日志，请确保日志安全
@@ -1067,8 +1110,7 @@ impl AuthService for AuthServiceImpl {
         &self,
         client_id: &str,
     ) -> std::result::Result<Option<OAuth2ClientData>, AuthError> {
-        self.user_query
-            .get_oauth2_client(client_id)
+        AuthStorageQuery::get_oauth2_client(self, client_id)
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))
     }
@@ -1145,8 +1187,7 @@ impl AuthService for AuthServiceImpl {
 
     /// 2.1 修复：验证 API Key 并返回 AuthContext（无状态，不创建会话）
     async fn validate_api_key(&self, key: &str) -> std::result::Result<AuthContext, AuthError> {
-        let api_key_manager = ApiKeyManager::new(self.cache.clone(), self.user_query.clone());
-        let api_key_entity = api_key_manager.validate(key).await?;
+        let api_key_entity = self.validate_api_key_entity(key).await?;
 
         // user_id 为空表示未关联用户（纯服务间调用），不报错，跳过用户/角色/权限查询
         let user_id = api_key_entity.user_id.unwrap_or_default();
@@ -1370,5 +1411,197 @@ impl AuthService for AuthServiceImpl {
     async fn store_oauth2_provider_state(&self, state: &str, provider: &str) -> std::result::Result<(), AuthError> {
         self.oauth2_store.store_provider_state(state, provider).await
             .map_err(|e| AuthError::Internal(e.to_string()))
+    }
+}
+
+#[async_trait]
+impl AuthStorageQuery for AuthServiceImpl {
+    async fn upsert_api_key(
+        &self,
+        key_prefix: &str,
+        key_hash: &str,
+        user_id: Option<&str>,
+        service_name: Option<&str>,
+        scopes: &[String],
+        description: Option<&str>,
+    ) -> std::result::Result<(), cmx_traits::TraitError> {
+        debug!(
+            "{:<12} - AuthServiceImpl::upsert_api_key - key_prefix: {}",
+            "AUTH", key_prefix
+        );
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let user_id_val = user_id
+            .map(|u| format!("'{}'", u.replace('\'', "''")))
+            .unwrap_or("NULL".to_string());
+        let service_name_val = service_name
+            .map(|s| format!("'{}'", s.replace('\'', "''")))
+            .unwrap_or("NULL".to_string());
+        let scopes_json = serde_json::to_string(scopes)
+            .map_err(|e| cmx_traits::TraitError::Internal(format!("序列化 scopes 失败: {}", e)))?;
+        let description_val = description
+            .map(|d| format!("'{}'", d.replace('\'', "''")))
+            .unwrap_or("NULL".to_string());
+
+        let sql = format!(
+            "INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, archived, status) \
+             VALUES ('{id}', '{key_prefix}', '{key_hash}', {user_id_val}, {service_name_val}, '{scopes_json}', {description_val}, 0, 1) \
+             ON CONFLICT (key_prefix) DO UPDATE SET key_hash = EXCLUDED.key_hash, user_id = EXCLUDED.user_id, \
+             service_name = EXCLUDED.service_name, scopes = EXCLUDED.scopes, description = EXCLUDED.description",
+            id = id.replace('\'', "''"),
+            key_prefix = key_prefix.replace('\'', "''"),
+            key_hash = key_hash.replace('\'', "''"),
+            user_id_val = user_id_val,
+            service_name_val = service_name_val,
+            scopes_json = scopes_json.replace('\'', "''"),
+            description_val = description_val,
+        );
+
+        let db_manager = cmx_database::get_default_db_manager();
+        let db_id = db_manager.get_default_db_id().await;
+        db_manager
+            .execute_sql(&db_id, None, &sql)
+            .await
+            .map_err(|e| cmx_traits::TraitError::Internal(format!("导入 API Key 失败: {}", e)))?;
+
+        info!(key_prefix = key_prefix, "静态 API Key 已导入");
+        Ok(())
+    }
+
+    async fn get_api_key_by_prefix(
+        &self,
+        key_prefix: &str,
+    ) -> std::result::Result<Option<cmx_traits::ApiKeyData>, cmx_traits::TraitError> {
+        debug!(
+            "{:<12} - AuthServiceImpl::get_api_key_by_prefix - key_prefix: {}",
+            "AUTH", key_prefix
+        );
+
+        let sql = format!(
+            "SELECT key_prefix, key_hash, user_id, service_name, scopes, description, status \
+             FROM cmx_auth_api_key WHERE key_prefix = '{}' AND archived = 0",
+            key_prefix.replace('\'', "''")
+        );
+
+        let db_manager = cmx_database::get_default_db_manager();
+        let db_id = db_manager.get_default_db_id().await;
+        let dataset = db_manager
+            .query_sql(&db_id, None, &sql, "api_key_by_prefix")
+            .await
+            .map_err(|e| cmx_traits::TraitError::Internal(format!("查询 API Key 失败: {}", e)))?;
+
+        let schema = dataset.schema.as_ref();
+        let row = match dataset.iter().next() {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        let scopes_str: String = row.get_by_name_as(schema, "scopes").unwrap_or_default();
+        let scopes: Vec<String> = serde_json::from_str(&scopes_str).unwrap_or_default();
+
+        Ok(Some(cmx_traits::ApiKeyData {
+            key_prefix: row.get_by_name_as(schema, "key_prefix").unwrap_or_default(),
+            key_hash: row.get_by_name_as(schema, "key_hash").unwrap_or_default(),
+            user_id: row.get_by_name_as(schema, "user_id"),
+            service_name: row.get_by_name_as(schema, "service_name"),
+            scopes,
+            description: row.get_by_name_as(schema, "description"),
+            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
+        }))
+    }
+
+    async fn record_token_event(
+        &self,
+        event_type: &str,
+        user_id: &str,
+        jti: &str,
+        detail: &str,
+    ) -> std::result::Result<(), cmx_traits::TraitError> {
+        debug!(
+            "{:<12} - AuthServiceImpl::record_token_event - event: {}, user: {}",
+            "AUTH", event_type, user_id
+        );
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let sql = format!(
+            "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, created_at) \
+             VALUES ('{}', '{}', '{}', '{}', '{}', NOW())",
+            id.replace('\'', "''"),
+            event_type.replace('\'', "''"),
+            user_id.replace('\'', "''"),
+            jti.replace('\'', "''"),
+            detail.replace('\'', "''"),
+        );
+
+        let db_manager = cmx_database::get_default_db_manager();
+        let db_id = db_manager.get_default_db_id().await;
+        db_manager
+            .execute_sql(&db_id, None, &sql)
+            .await
+            .map_err(|e| cmx_traits::TraitError::Internal(format!("记录 Token 事件失败: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn get_oauth2_client(
+        &self,
+        client_id: &str,
+    ) -> std::result::Result<Option<OAuth2ClientData>, cmx_traits::TraitError> {
+        debug!(
+            "{:<12} - AuthServiceImpl::get_oauth2_client - client_id: {}",
+            "AUTH", client_id
+        );
+
+        let sql = format!(
+            "SELECT client_id, client_name, client_secret, redirect_uris, grant_types, \
+             client_type, pkce_required, allowed_scopes, status \
+             FROM cmx_auth_client WHERE client_id = '{}' AND archived = 0",
+            client_id.replace('\'', "''")
+        );
+
+        let db_manager = cmx_database::get_default_db_manager();
+        let db_id = db_manager.get_default_db_id().await;
+        let dataset = db_manager
+            .query_sql(&db_id, None, &sql, "oauth2_client")
+            .await
+            .map_err(|e| cmx_traits::TraitError::Internal(format!("查询 OAuth2 客户端失败: {}", e)))?;
+
+        let schema = dataset.schema.as_ref();
+        let row = match dataset.iter().next() {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // 解析 JSON 字段为 Vec<String>
+        let redirect_uris_str: String =
+            row.get_by_name_as(schema, "redirect_uris").unwrap_or_default();
+        let redirect_uris: Vec<String> = serde_json::from_str(&redirect_uris_str).unwrap_or_default();
+
+        let grant_types_str: String =
+            row.get_by_name_as(schema, "grant_types").unwrap_or_default();
+        let grant_types: Vec<String> = serde_json::from_str(&grant_types_str).unwrap_or_default();
+
+        let allowed_scopes_str: String =
+            row.get_by_name_as(schema, "allowed_scopes").unwrap_or_default();
+        let allowed_scopes: Vec<String> = serde_json::from_str(&allowed_scopes_str).unwrap_or_default();
+
+        let pkce_required: bool = row
+            .get_by_name_as::<i64>(schema, "pkce_required")
+            .map(|v| v != 0)
+            .unwrap_or(true);
+
+        Ok(Some(OAuth2ClientData {
+            client_id: row.get_by_name_as(schema, "client_id").unwrap_or_default(),
+            client_name: row.get_by_name_as(schema, "client_name").unwrap_or_default(),
+            client_secret: row.get_by_name_as(schema, "client_secret"),
+            redirect_uris,
+            grant_types,
+            client_type: row
+                .get_by_name_as(schema, "client_type")
+                .unwrap_or_else(|| "public".to_string()),
+            pkce_required,
+            allowed_scopes,
+            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
+        }))
     }
 }

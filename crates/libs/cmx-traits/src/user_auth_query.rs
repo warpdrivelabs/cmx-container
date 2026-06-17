@@ -138,6 +138,13 @@ pub trait UserAuthQuery: Send + Sync {
         new_hash: &str,
     ) -> Result<(), TraitError>;
 
+    /// 更新最后登录信息（由 cmx-auth 登录流程调用）
+    async fn update_last_login(
+        &self,
+        user_id: &str,
+        ip: &str,
+    ) -> Result<(), TraitError>;
+
     /// 创建超管账号（含角色关联）
     async fn create_super_admin(
         &self,
@@ -146,38 +153,6 @@ pub trait UserAuthQuery: Send + Sync {
         email: Option<&str>,
         roles: &[String],
     ) -> Result<(), TraitError>;
-
-    /// 创建或更新静态 API Key
-    async fn upsert_api_key(
-        &self,
-        key_prefix: &str,
-        key_hash: &str,
-        user_id: Option<&str>,
-        service_name: Option<&str>,
-        scopes: &[String],
-        description: Option<&str>,
-    ) -> Result<(), TraitError>;
-
-    /// 通过 key_prefix 查询 API Key
-    async fn get_api_key_by_prefix(
-        &self,
-        key_prefix: &str,
-    ) -> Result<Option<ApiKeyData>, TraitError>;
-
-    /// 记录 Token 事件（审计）
-    async fn record_token_event(
-        &self,
-        event_type: &str,
-        user_id: &str,
-        jti: &str,
-        detail: &str,
-    ) -> Result<(), TraitError>;
-
-    /// 查询 OAuth2 客户端
-    async fn get_oauth2_client(
-        &self,
-        client_id: &str,
-    ) -> Result<Option<OAuth2ClientData>, TraitError>;
 
     /// 根据邮箱查询用户认证数据（用于第三方 OAuth2 自动关联）
     async fn get_user_by_email(

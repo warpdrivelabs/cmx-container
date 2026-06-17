@@ -18,7 +18,7 @@ cmx-biz = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }
 # 内部依赖 - 核心库
-cmx-core = { workspace = true }
+cmx-core = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 数据库
 cmx-database = { workspace = true }
 # 内部依赖 - 元数据
@@ -31,6 +31,8 @@ cmx-traits = { workspace = true }
 cmx-buffer = { workspace = true }
 # 内部依赖 - 认证模块
 cmx-auth = { workspace = true }
+# 内部依赖 - IAM 权限角色管理
+cmx-iam = { workspace = true, features = ["openapi"] }
 # 内部依赖 - RPC 通信
 cmx-rpc = { workspace = true }
 # 内部依赖 - 服务

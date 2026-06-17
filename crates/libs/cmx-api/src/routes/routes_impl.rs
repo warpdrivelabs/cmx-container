@@ -8,6 +8,7 @@ use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;
 use crate::handlers::domain;
+use crate::handlers::iam;
 use crate::handlers::marketplace;
 use crate::handlers::module;
 use crate::handlers::plugin;
@@ -46,6 +47,9 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册 Domain 模块路由（使用 ModuleRoutes）
     let router = router.merge(domain::DomainModule.routes());
+
+    // 注册 IAM 模块路由（使用 ModuleRoutes）
+    let router = router.merge(iam::IamModule.routes());
 
     // 注册 Application 模块路由（使用 ModuleRoutes）
     let router = router.merge(application::ApplicationModule.routes());

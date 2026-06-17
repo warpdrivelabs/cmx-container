@@ -28,6 +28,8 @@ CREATE TABLE cmx_user (
     CONSTRAINT uk_cmx_user_username UNIQUE (username)
 );
 
+CREATE UNIQUE INDEX uk_cmx_user_email ON cmx_user (email) WHERE email IS NOT NULL;
+
 COMMENT ON TABLE cmx_user IS '用户表';
 COMMENT ON COLUMN cmx_user.id IS '主键ID';
 COMMENT ON COLUMN cmx_user.username IS '用户名（唯一）';
@@ -49,7 +51,9 @@ COMMENT ON COLUMN cmx_user.update_time IS '更新时间';
 CREATE TABLE cmx_role (
     id varchar(64) NOT NULL,
     code varchar(100) NOT NULL,
-    name varchar(200) NOT NULL,
+    name varchar(100) NOT NULL,
+    data_scope int4 DEFAULT 1,
+    sort_order int4 DEFAULT 0,
     description varchar(500),
     status int4 DEFAULT 1,
     archived int4 DEFAULT 0,
@@ -67,6 +71,8 @@ COMMENT ON TABLE cmx_role IS '角色表';
 COMMENT ON COLUMN cmx_role.id IS '主键ID';
 COMMENT ON COLUMN cmx_role.code IS '角色编码（唯一）';
 COMMENT ON COLUMN cmx_role.name IS '角色名称';
+COMMENT ON COLUMN cmx_role.data_scope IS '数据权限范围：1-全部，2-自定义，3-本部门，4-本部门及子部门，5-仅本人（预留字段）';
+COMMENT ON COLUMN cmx_role.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role.description IS '描述';
 COMMENT ON COLUMN cmx_role.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_role.archived IS '是否归档：0-否，1-是';
@@ -83,7 +89,8 @@ CREATE TABLE cmx_user_role (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_user_role PRIMARY KEY (id)
+    CONSTRAINT pk_cmx_user_role PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_user_role UNIQUE (user_id, role_id)
 );
 
 CREATE INDEX idx_cmx_user_role_user ON cmx_user_role (user_id);
@@ -98,8 +105,10 @@ COMMENT ON COLUMN cmx_user_role.role_id IS '角色ID';
 CREATE TABLE cmx_permission (
     id varchar(64) NOT NULL,
     code varchar(200) NOT NULL,
-    name varchar(200) NOT NULL,
-    type varchar(20) DEFAULT 'api',
+    name varchar(100) NOT NULL,
+    resource_type varchar(20) DEFAULT 'api',
+    parent_id varchar(64),
+    sort_order int4 DEFAULT 0,
     description varchar(500),
     status int4 DEFAULT 1,
     archived int4 DEFAULT 0,
@@ -113,11 +122,15 @@ CREATE TABLE cmx_permission (
     CONSTRAINT uk_cmx_permission_code UNIQUE (code)
 );
 
+CREATE INDEX idx_cmx_permission_parent ON cmx_permission (parent_id);
+
 COMMENT ON TABLE cmx_permission IS '权限表';
 COMMENT ON COLUMN cmx_permission.id IS '主键ID';
 COMMENT ON COLUMN cmx_permission.code IS '权限编码（唯一，如 system:user:list）';
 COMMENT ON COLUMN cmx_permission.name IS '权限名称';
-COMMENT ON COLUMN cmx_permission.type IS '权限类型：api/menu/button';
+COMMENT ON COLUMN cmx_permission.resource_type IS '资源类型：api-接口，menu-菜单，button-按钮';
+COMMENT ON COLUMN cmx_permission.parent_id IS '父权限ID（用于权限树结构）';
+COMMENT ON COLUMN cmx_permission.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_permission.description IS '描述';
 COMMENT ON COLUMN cmx_permission.status IS '状态：0-禁用，1-启用';
 
@@ -133,7 +146,8 @@ CREATE TABLE cmx_role_permission (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_role_permission PRIMARY KEY (id)
+    CONSTRAINT pk_cmx_role_permission PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_role_permission UNIQUE (role_id, permission_id)
 );
 
 CREATE INDEX idx_cmx_role_permission_role ON cmx_role_permission (role_id);
@@ -145,20 +159,41 @@ COMMENT ON COLUMN cmx_role_permission.role_id IS '角色ID';
 COMMENT ON COLUMN cmx_role_permission.permission_id IS '权限ID';
 
 -- =====================================================
--- 种子数据：admin 角色和超管权限
+-- 种子数据：内置角色、权限及关联关系
 -- =====================================================
 
--- admin 角色
-INSERT INTO cmx_role (id, code, name, description, status)
-VALUES ('1898765432100001001', 'admin', '系统管理员', '拥有所有权限', 1)
+-- 内置角色
+INSERT INTO cmx_role (id, code, name, data_scope, sort_order, status, description) VALUES
+('1898765432100001001', 'admin', '系统管理员', 1, 1, 1, '拥有全部权限'),
+('1898765432100001002', 'user', '普通用户', 5, 2, 1, '仅查看本人数据')
 ON CONFLICT (code) DO NOTHING;
 
--- system:all 权限（超管权限）
-INSERT INTO cmx_permission (id, code, name, type, description, status)
-VALUES ('1898765432100002001', 'system:all', '所有权限', 'api', '超级管理员拥有的所有权限', 1)
+-- 内置权限（resource:action 规范）
+INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
+('1898765432100002001', 'user:list',        '用户列表',   'api',  1, 1, '查看用户列表'),
+('1898765432100002002', 'user:create',      '创建用户',   'api',  2, 1, '创建新用户'),
+('1898765432100002003', 'user:read',        '查看用户',   'api',  3, 1, '查看用户详情'),
+('1898765432100002004', 'user:update',      '更新用户',   'api',  4, 1, '更新用户信息'),
+('1898765432100002005', 'user:delete',      '删除用户',   'api',  5, 1, '删除用户'),
+('1898765432100002006', 'user:assign_role', '分配角色',   'api',  6, 1, '为用户分配角色'),
+('1898765432100002011', 'role:list',        '角色列表',   'api', 11, 1, '查看角色列表'),
+('1898765432100002012', 'role:create',      '创建角色',   'api', 12, 1, '创建新角色'),
+('1898765432100002013', 'role:read',        '查看角色',   'api', 13, 1, '查看角色详情'),
+('1898765432100002014', 'role:update',      '更新角色',   'api', 14, 1, '更新角色信息'),
+('1898765432100002015', 'role:delete',      '删除角色',   'api', 15, 1, '删除角色'),
+('1898765432100002016', 'role:assign_perm', '分配权限',   'api', 16, 1, '为角色分配权限'),
+('1898765432100002021', 'permission:list',  '权限列表',   'api', 21, 1, '查看权限列表'),
+('1898765432100002022', 'permission:read',  '查看权限',   'api', 22, 1, '查看权限详情'),
+('1898765432100002023', 'system:all',       '系统管理',   'api', 99, 1, '系统全部权限')
 ON CONFLICT (code) DO NOTHING;
 
--- admin 角色关联 system:all 权限
+-- admin 角色拥有全部权限（使用 CTE + ROW_NUMBER 生成关联 ID）
+WITH perms AS (
+    SELECT id, ROW_NUMBER() OVER () AS rn FROM cmx_permission
+)
 INSERT INTO cmx_role_permission (id, role_id, permission_id)
-VALUES ('1898765432100003001', '1898765432100001001', '1898765432100002001')
+SELECT CONCAT('1898765432100003', LPAD(rn::TEXT, 4, '0')),
+       '1898765432100001001',
+       id
+FROM perms
 ON CONFLICT DO NOTHING;

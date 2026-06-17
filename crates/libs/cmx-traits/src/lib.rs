@@ -34,6 +34,8 @@ pub mod global_service_invoker;
 pub mod event_bus;
 pub mod rpc_client;
 pub mod user_auth_query;
+pub mod iam;
+pub mod auth_storage_query;
 
 // 统一导出
 pub use auth_error::AuthError;
@@ -53,3 +55,5 @@ pub use global_service_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError
 pub use event_bus::{EventBus, GlobalEventBus, EventTopic, EventPayload, EventHandler};
 pub use rpc_client::{RpcClient, RpcError, FunctionCallResult};
 pub use user_auth_query::{UserAuthQuery, UserAuthData, ApiKeyData, OAuth2ClientData, OAuth2UserInfo, ProviderInfo};
+pub use iam::{DataScope, PermissionChecker};
+pub use auth_storage_query::AuthStorageQuery;

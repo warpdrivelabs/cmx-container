@@ -792,3 +792,147 @@ use super::response::*;
 | `cmx-api/src/handlers/domain/mod.rs` | 标准模块参考（re-export + ModuleRoutes） |
 | `cmx-api/src/handlers/plugin/mod.rs` | 复杂模块参考（嵌套路由 + Request/Response） |
 | `cmx-biz/src/domain/` | Entity/BMC/Filter/Service 定义参考 |
+
+---
+
+## 十三、新架构薄层 Handler 模式（cmx-iam 等）
+
+> 适用于业务逻辑在独立 crate（如 cmx-iam）中实现、通过 trait 对象注入 CmxAppState 的场景。
+> 与第九章的 cmx-biz 模式不同，此模式**不使用宏系统**，所有 handler 均手写。
+
+### 13.1 适用场景
+
+- 业务 crate 独立于 cmx-biz（如 cmx-iam、cmx-auth）
+- Service 通过 `Arc<dyn Trait>` 注入 CmxAppState，而非静态方法调用
+- Entity/Filter 在业务 crate 中定义，cmx-api 通过依赖引用
+- 不需要 request.rs/response.rs（直接使用业务 crate 的类型）
+
+### 13.2 目录结构
+
+```
+cmx-api/src/handlers/iam/
+  ├── mod.rs           # IamModule（ModuleRoutes）聚合 user/role/permission 子模块
+  ├── user/
+  │   ├── mod.rs       # UserModule（ModuleRoutes）路由注册
+  │   └── handler.rs   # 用户 handler 函数
+  ├── role/
+  │   ├── mod.rs       # RoleModule（ModuleRoutes）路由注册
+  │   └── handler.rs   # 角色 handler 函数
+  └── permission/
+      ├── mod.rs       # PermissionModule（ModuleRoutes）路由注册
+      └── handler.rs   # 权限 handler 函数
+```
+
+**关键区别**：
+- 无 `request.rs` / `response.rs` — 直接使用业务 crate 的 Entity/Filter 类型
+- 无宏系统调用 — 所有路由手写注册
+- Entity 从业务 crate 直接导入（非 re-export from cmx-biz）
+
+### 13.3 Handler 实现模式
+
+Handler 通过 `cmx_state.iam()` 获取 `IamState`，调用对应的 service trait 方法：
+
+```rust
+use axum::extract::State;
+use axum::Json;
+use cmx_core::SVRContext;
+use crate::api_response::ApiResp;
+use crate::app_state::CmxAppState;
+use crate::error::Result;
+use crate::middleware::CmxSvrContext;
+
+/// 创建用户
+#[utoipa::path(
+    post,
+    path = "/api/iam/user/create",
+    request_body = UserForCreate,
+    responses((status = 200, description = "创建成功", body = ApiResp<User>)),
+    tag = "IAM-User"
+)]
+pub async fn create_user(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    Json(data): Json<cmx_iam::user::UserForCreate>,
+) -> Result<Json<ApiResp<cmx_core::model::iam::User>>> {
+    let iam = cmx_state.iam().ok_or(crate::error::Error::InternalError(
+        "IAM 服务未初始化".to_string(),
+    ))?;
+    let user = iam.user_service.create_user(&svr_ctx, data).await?;
+    Ok(Json(ApiResp::ok(user)))
+}
+```
+
+### 13.4 类型转换要点
+
+| 场景 | 转换方式 |
+|------|---------|
+| `UpdatePayload.id: Value` → `&str` | `payload.id.as_str().ok_or(...)?` |
+| `DeletePayload.ids: Vec<Value>` → `Vec<String>` | `ids.into_iter().filter_map(\|v\| v.as_str().map(\|s\| s.to_string())).collect()` |
+| `PageParams.filters: Option<Vec<F>>` → 单个 `Filter` | `params.filters.and_then(\|v\| v.into_iter().next()).unwrap_or_default()` |
+| 分页响应 | `ApiResp::ok_with_pagination(data, page, size, total)` |
+
+### 13.5 mod.rs 路由注册
+
+```rust
+use crate::app_state::CmxAppState;
+use crate::routes::traits::ModuleRoutes;
+use axum::routing::{get, post};
+use axum::Router;
+
+pub struct UserModule;
+
+impl ModuleRoutes for UserModule {
+    fn routes(self) -> Router<CmxAppState> {
+        Router::new()
+            .route("/iam/user/create", post(handler::create_user))
+            .route("/iam/user/get", get(handler::get_user))
+            .route("/iam/user/update", post(handler::update_user))
+            .route("/iam/user/delete", post(handler::delete_user))
+            .route("/iam/user/page", post(handler::page_users))
+            .route("/iam/user/list", post(handler::list_users))
+            .route("/iam/user/assign-roles", post(handler::assign_roles))
+            .route("/iam/user/roles", get(handler::get_user_roles))
+    }
+    fn prefix() -> &'static str { "iam" }
+    fn module_name(&self) -> &'static str { "iam-user" }
+}
+```
+
+### 13.6 聚合模块
+
+顶层 `iam/mod.rs` 聚合子模块路由：
+
+```rust
+use crate::app_state::CmxAppState;
+use crate::routes::traits::ModuleRoutes;
+use axum::Router;
+
+pub mod user;
+pub mod role;
+pub mod permission;
+
+pub struct IamModule;
+
+impl ModuleRoutes for IamModule {
+    fn routes(self) -> Router<CmxAppState> {
+        let router = Router::new();
+        let router = router.merge(user::UserModule.routes());
+        let router = router.merge(role::RoleModule.routes());
+        let router = router.merge(permission::PermissionModule.routes());
+        router
+    }
+    fn prefix() -> &'static str { "iam" }
+    fn module_name(&self) -> &'static str { "iam" }
+}
+```
+
+### 13.7 与 cmx-biz 模式的对比
+
+| 维度 | cmx-biz 模式（第九章） | 新架构薄层模式（本章） |
+|------|----------------------|---------------------|
+| Service 调用 | 静态方法 `XxxService::create(mm, db_id, ...)` | trait 对象 `iam.user_service.create_user(...)` |
+| Entity 来源 | `cmx-biz` re-export | 直接 `use cmx_iam::user::UserForCreate` |
+| CRUD 生成 | `declare_crud_handlers!` 宏 | 手写所有 handler |
+| db_id 获取 | `get_db_id_from_header(&headers)` | Service 内部持有 db_id |
+| 状态注入 | 无需 CmxAppState（静态方法） | 通过 `CmxAppState.iam()` 获取 |
+| request.rs | 可选（API 层 DTO） | 不需要（直接用业务 crate 类型） |

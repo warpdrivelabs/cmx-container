@@ -13,10 +13,10 @@ use config::web_config;
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{
-    init_auth_service, init_cache, init_datasources, init_infra, init_plugins, init_rpc,
+    init_auth_service, init_cache, init_datasources, finalize_iam_state, init_iam_services, init_infra, init_plugins, init_rpc,
     init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra,
 };
-use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, trace_layer};
+use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_utils::ConfigManager;
@@ -132,8 +132,14 @@ async fn main() -> Result<()> {
     init_plugins().await?;
     init_service_invoker().await?;
 
-    // 初始化认证服务
-    let auth_service = init_auth_service().await?;
+    // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
+    let (iam_state, user_auth_query, iam_config) = init_iam_services().await?;
+
+    // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
+    let auth_service = init_auth_service(user_auth_query).await?;
+
+    // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
+    let iam_state = finalize_iam_state(&iam_state, auth_service.clone(), iam_config).await?;
 
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
     let grpc_port = init_rpc(
@@ -149,7 +155,8 @@ async fn main() -> Result<()> {
         .with_service_query(GlobalServiceQuery::get().clone())
         .with_service_storage(GlobalServiceStorage::get().clone())
         .with_storage_service(cmx_storage::global::GlobalStorageService::get().service().clone())
-        .with_auth_service(auth_service);
+        .with_auth_service(auth_service)
+        .with_iam(iam_state);
 
     let api_routes = routes::routes().with_state(app_state);
 
@@ -157,13 +164,15 @@ async fn main() -> Result<()> {
     // 1. CookieManager - 处理 cookies
     // 2. mw_context_resolver - 解析请求上下文
     // 3. mw_auth - 认证（Token 校验 + AuthContext 注入）
-    // 4. mw_trace - 请求追踪
-    // 5. RequestBodyLimitLayer - 请求体大小限制（100MB）
-    // 6. cors_layer - 跨域支持
+    // 4. mw_permission - 权限校验（路由→权限码映射 + system:all 短路）
+    // 5. mw_trace - 请求追踪
+    // 6. RequestBodyLimitLayer - 请求体大小限制（100MB）
+    // 7. cors_layer - 跨域支持
     let routes_all = Router::new()
         .nest("/api", api_routes)
         .merge(routes::get_swagger_routes())
         .layer(CookieManagerLayer::new())
+        .layer(middleware::from_fn(mw_permission))
         .layer(middleware::from_fn(mw_auth))
         .layer(middleware::from_fn(mw_context_resolver))
         .layer(middleware::from_fn(trace_layer))

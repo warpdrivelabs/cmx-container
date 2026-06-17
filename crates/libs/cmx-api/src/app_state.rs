@@ -5,7 +5,26 @@
 
 use std::sync::Arc;
 use cmx_traits::{AuthService, PluginQuery, RuntimeInvoker, ServiceQuery, ServiceStorage};
+use cmx_traits::iam::PermissionChecker;
+use cmx_traits::UserAuthQuery;
 use cmx_storage::service::StorageService;
+use cmx_iam::service_traits::{PermissionService, RoleService, UserService};
+
+/// IAM 服务状态
+///
+/// 聚合 IAM 模块的所有服务实例，通过 CmxAppState.iam() 访问。
+pub struct IamState {
+    /// 用户服务
+    pub user_service: Arc<dyn UserService>,
+    /// 角色服务
+    pub role_service: Arc<dyn RoleService>,
+    /// 权限服务
+    pub permission_service: Arc<dyn PermissionService>,
+    /// 权限校验器
+    pub permission_checker: Arc<dyn PermissionChecker>,
+    /// 用户认证查询（供 cmx-auth 使用）
+    pub user_auth_query: Arc<dyn UserAuthQuery>,
+}
 
 /// CMX 应用程序状态
 ///
@@ -36,6 +55,8 @@ pub struct CmxAppState {
     storage_service: Option<Arc<dyn StorageService>>,
     /// 认证服务（trait 对象）
     auth_service: Option<Arc<dyn AuthService>>,
+    /// IAM 服务状态
+    iam: Option<Arc<IamState>>,
 }
 
 impl Default for CmxAppState {
@@ -65,6 +86,7 @@ impl CmxAppState {
             service_storage: None,
             storage_service: None,
             auth_service: None,
+            iam: None,
         }
     }
 
@@ -119,6 +141,12 @@ impl CmxAppState {
         self
     }
 
+    /// 设置 IAM 服务状态
+    pub fn with_iam(mut self, iam: Arc<IamState>) -> Self {
+        self.iam = Some(iam);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -164,6 +192,11 @@ impl CmxAppState {
         self.auth_service.as_ref()
     }
 
+    /// 获取 IAM 服务状态
+    pub fn iam(&self) -> Option<&Arc<IamState>> {
+        self.iam.as_ref()
+    }
+
     /// 获取应用隔离标识
     ///
     /// 返回 app_id 字符串的副本。
@@ -189,6 +222,7 @@ impl Clone for CmxAppState {
             service_storage: self.service_storage.clone(),
             storage_service: self.storage_service.clone(),
             auth_service: self.auth_service.clone(),
+            iam: self.iam.clone(),
         }
     }
 }

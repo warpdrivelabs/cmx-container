@@ -1,20 +1,20 @@
 //! API Key 管理器
 
 use cmx_buffer::CacheManager;
-use cmx_traits::{AuthError, UserAuthQuery};
+use cmx_traits::{AuthError, AuthStorageQuery};
 
 use super::entity::ApiKeyEntity;
 
 /// API Key 管理器
 pub struct ApiKeyManager {
     cache: CacheManager,
-    user_query: std::sync::Arc<dyn UserAuthQuery>,
+    auth_storage: std::sync::Arc<dyn AuthStorageQuery>,
 }
 
 impl ApiKeyManager {
     /// 创建新的 API Key 管理器
-    pub fn new(cache: CacheManager, user_query: std::sync::Arc<dyn UserAuthQuery>) -> Self {
-        Self { cache, user_query }
+    pub fn new(cache: CacheManager, auth_storage: std::sync::Arc<dyn AuthStorageQuery>) -> Self {
+        Self { cache, auth_storage }
     }
 
     /// 验证 API Key
@@ -41,9 +41,9 @@ impl ApiKeyManager {
             // 缓存命中，需要反序列化（简化：直接查数据库）
         }
 
-        // 3. 通过 UserAuthQuery 查询 API Key
+        // 3. 通过 AuthStorageQuery 查询 API Key
         let api_key_data = self
-            .user_query
+            .auth_storage
             .get_api_key_by_prefix(key_prefix)
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))?

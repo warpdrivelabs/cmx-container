@@ -5,6 +5,7 @@
 pub mod auth;
 pub mod cache;
 pub mod datasource;
+pub mod iam;
 pub mod infra_init;
 pub mod migration;
 // pub mod nacos;
@@ -18,6 +19,7 @@ pub use datasource::init_datasources;
 
 pub use auth::init_auth_service;
 pub use cache::init_cache;
+pub use iam::{init_iam_services, finalize_iam_state};
 pub use infra_init::{init_infra, shutdown_infra};
 pub use migration::init_database_migrations;
 // pub use nacos::{init_global_config_with_nacos, shutdown_nacos};

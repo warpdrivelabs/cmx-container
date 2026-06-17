@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
-use cmx_traits::{TraitError, UserAuthData, UserAuthQuery, OAuth2ClientData, OAuth2UserInfo};
+use cmx_traits::{TraitError, UserAuthData, UserAuthQuery, OAuth2UserInfo};
 use modql::filter::{ListOptions, OpValString, OpValsString};
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -295,179 +295,28 @@ impl UserAuthQuery for UserAuthQueryImpl {
         Ok(())
     }
 
-    async fn upsert_api_key(
+    async fn update_last_login(
         &self,
-        key_prefix: &str,
-        key_hash: &str,
-        user_id: Option<&str>,
-        service_name: Option<&str>,
-        scopes: &[String],
-        description: Option<&str>,
-    ) -> Result<(), TraitError> {
-        debug!(
-            "{:<12} - UserAuthQueryImpl::upsert_api_key - key_prefix: {}",
-            "AUTH", key_prefix
-        );
-
-        let id = Uuid::new_v4().to_string();
-        let user_id_val = user_id.map(|u| format!("'{}'", u.replace('\'', "''"))).unwrap_or("NULL".to_string());
-        let service_name_val = service_name
-            .map(|s| format!("'{}'", s.replace('\'', "''")))
-            .unwrap_or("NULL".to_string());
-        let scopes_json = serde_json::to_string(&scopes)
-            .map_err(|e| TraitError::Internal(format!("序列化 scopes 失败: {}", e)))?;
-        let description_val = description
-            .map(|d| format!("'{}'", d.replace('\'', "''")))
-            .unwrap_or("NULL".to_string());
-
-        let sql = format!(
-            "INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, archived, status) \
-             VALUES ('{id}', '{key_prefix}', '{key_hash}', {user_id_val}, {service_name_val}, '{scopes_json}', {description_val}, 0, 1) \
-             ON CONFLICT (key_prefix) DO UPDATE SET key_hash = EXCLUDED.key_hash, user_id = EXCLUDED.user_id, \
-             service_name = EXCLUDED.service_name, scopes = EXCLUDED.scopes, description = EXCLUDED.description",
-            id = id.replace('\'', "''"),
-            key_prefix = key_prefix.replace('\'', "''"),
-            key_hash = key_hash.replace('\'', "''"),
-            user_id_val = user_id_val,
-            service_name_val = service_name_val,
-            scopes_json = scopes_json.replace('\'', "''"),
-            description_val = description_val,
-        );
-
-        Self::get_db_manager()
-            .execute_sql(&Self::default_db_id().await,
-                                     None, &sql)
-            .await
-            .map_err(|e| TraitError::Internal(format!("导入 API Key 失败: {}", e)))?;
-
-        info!(key_prefix = key_prefix, "静态 API Key 已导入");
-        Ok(())
-    }
-
-    async fn get_api_key_by_prefix(
-        &self,
-        key_prefix: &str,
-    ) -> Result<Option<cmx_traits::ApiKeyData>, TraitError> {
-        debug!(
-            "{:<12} - UserAuthQueryImpl::get_api_key_by_prefix - key_prefix: {}",
-            "AUTH", key_prefix
-        );
-
-        let sql = format!(
-            "SELECT key_prefix, key_hash, user_id, service_name, scopes, description, status \
-             FROM cmx_auth_api_key WHERE key_prefix = '{}' AND archived = 0",
-            key_prefix.replace('\'', "''")
-        );
-
-        let dataset = Self::get_db_manager()
-            .query_sql(&Self::default_db_id().await, None, &sql, "api_key_by_prefix")
-            .await
-            .map_err(|e| TraitError::Internal(format!("查询 API Key 失败: {}", e)))?;
-
-        let schema = dataset.schema.as_ref();
-        let row = match dataset.iter().next() {
-            Some(r) => r,
-            None => return Ok(None),
-        };
-
-        let scopes_str: String = row.get_by_name_as(schema, "scopes").unwrap_or_default();
-        let scopes: Vec<String> = serde_json::from_str(&scopes_str).unwrap_or_default();
-
-        Ok(Some(cmx_traits::ApiKeyData {
-            key_prefix: row.get_by_name_as(schema, "key_prefix").unwrap_or_default(),
-            key_hash: row.get_by_name_as(schema, "key_hash").unwrap_or_default(),
-            user_id: row.get_by_name_as(schema, "user_id"),
-            service_name: row.get_by_name_as(schema, "service_name"),
-            scopes,
-            description: row.get_by_name_as(schema, "description"),
-            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
-        }))
-    }
-
-    async fn record_token_event(
-        &self,
-        event_type: &str,
         user_id: &str,
-        jti: &str,
-        detail: &str,
+        ip: &str,
     ) -> Result<(), TraitError> {
         debug!(
-            "{:<12} - UserAuthQueryImpl::record_token_event - event: {}, user: {}",
-            "AUTH", event_type, user_id
+            "{:<12} - UserAuthQueryImpl::update_last_login - user: {}",
+            "AUTH", user_id
         );
 
-        let id = Uuid::new_v4().to_string();
-        let sql = format!(
-            "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, created_at) \
-             VALUES ('{}', '{}', '{}', '{}', '{}', NOW())",
-            id.replace('\'', "''"),
-            event_type.replace('\'', "''"),
-            user_id.replace('\'', "''"),
-            jti.replace('\'', "''"),
-            detail.replace('\'', "''"),
-        );
+        let sql = "UPDATE cmx_user SET last_login_at = NOW(), last_login_ip = $1, update_time = NOW() WHERE id = $2";
+        let params = serde_json::Value::Array(vec![
+            serde_json::Value::String(ip.to_string()),
+            serde_json::Value::String(user_id.to_string()),
+        ]);
 
         Self::get_db_manager()
-            .execute_sql(&Self::default_db_id().await, None, &sql)
+            .execute_sql_with_json(&Self::default_db_id().await, None, sql, params)
             .await
-            .map_err(|e| TraitError::Internal(format!("记录 Token 事件失败: {}", e)))?;
+            .map_err(|e| TraitError::Internal(format!("更新登录时间失败: {}", e)))?;
 
         Ok(())
-    }
-
-    async fn get_oauth2_client(
-        &self,
-        client_id: &str,
-    ) -> Result<Option<OAuth2ClientData>, TraitError> {
-        debug!(
-            "{:<12} - UserAuthQueryImpl::get_oauth2_client - client_id: {}",
-            "AUTH", client_id
-        );
-
-        let sql = format!(
-            "SELECT client_id, client_name, client_secret, redirect_uris, grant_types, \
-             client_type, pkce_required, allowed_scopes, status \
-             FROM cmx_auth_client WHERE client_id = '{}' AND archived = 0",
-            client_id.replace('\'', "''")
-        );
-
-        let dataset = Self::get_db_manager()
-            .query_sql(&Self::default_db_id().await, None, &sql, "oauth2_client")
-            .await
-            .map_err(|e| TraitError::Internal(format!("查询 OAuth2 客户端失败: {}", e)))?;
-
-        let schema = dataset.schema.as_ref();
-        let row = match dataset.iter().next() {
-            Some(r) => r,
-            None => return Ok(None),
-        };
-
-        // 解析 JSON 字段为 Vec<String>
-        let redirect_uris_str: String = row.get_by_name_as(schema, "redirect_uris").unwrap_or_default();
-        let redirect_uris: Vec<String> = serde_json::from_str(&redirect_uris_str).unwrap_or_default();
-
-        let grant_types_str: String = row.get_by_name_as(schema, "grant_types").unwrap_or_default();
-        let grant_types: Vec<String> = serde_json::from_str(&grant_types_str).unwrap_or_default();
-
-        let allowed_scopes_str: String = row.get_by_name_as(schema, "allowed_scopes").unwrap_or_default();
-        let allowed_scopes: Vec<String> = serde_json::from_str(&allowed_scopes_str).unwrap_or_default();
-
-        let pkce_required: bool = row
-            .get_by_name_as::<i64>(schema, "pkce_required")
-            .map(|v| v != 0)
-            .unwrap_or(true);
-
-        Ok(Some(OAuth2ClientData {
-            client_id: row.get_by_name_as(schema, "client_id").unwrap_or_default(),
-            client_name: row.get_by_name_as(schema, "client_name").unwrap_or_default(),
-            client_secret: row.get_by_name_as(schema, "client_secret"),
-            redirect_uris,
-            grant_types,
-            client_type: row.get_by_name_as(schema, "client_type").unwrap_or_else(|| "public".to_string()),
-            pkce_required,
-            allowed_scopes,
-            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
-        }))
     }
 
     async fn get_user_by_email(

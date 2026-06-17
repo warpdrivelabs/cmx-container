@@ -14,6 +14,7 @@ pub mod auth;
 pub mod debug;
 pub mod dev;
 pub mod domain;
+pub mod iam;
 pub mod marketplace;
 pub mod module;
 pub mod plugin;

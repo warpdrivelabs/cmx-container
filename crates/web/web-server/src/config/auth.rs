@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use cmx_auth::{AuthConfig, AuthServiceImpl, SuperAdminConfig, StaticApiKeyConfig};
-use cmx_biz::user::UserAuthQueryImpl;
 use cmx_buffer::GlobalCacheManager;
 use cmx_buffer::GlobalSubscriberManager;
 use cmx_traits::{AuthService, UserAuthQuery};
@@ -15,7 +14,12 @@ use tracing::{info, warn};
 ///
 /// 从配置文件加载 AuthConfig，创建 AuthServiceImpl 实例。
 /// 返回 Arc<dyn AuthService> 供注入 CmxAppState。
-pub async fn init_auth_service() -> Result<Arc<dyn AuthService>, crate::error::Error> {
+///
+/// # 参数
+/// * `user_query` - 用户认证查询实现（由 IAM 模块创建并共享）
+pub async fn init_auth_service(
+    user_query: Arc<dyn UserAuthQuery>,
+) -> Result<Arc<dyn AuthService>, crate::error::Error> {
     // 1. 加载 AuthConfig（从配置文件或使用默认值）
     let auth_config = load_auth_config();
 
@@ -30,8 +34,8 @@ pub async fn init_auth_service() -> Result<Arc<dyn AuthService>, crate::error::E
     // 2. 获取 CacheManager（解引用 Arc）
     let cache = (**GlobalCacheManager::get()).clone();
 
-    // 3. 创建 UserAuthQuery 实现
-    let user_query: Arc<dyn UserAuthQuery> = Arc::new(UserAuthQueryImpl);
+    // 3. 使用外部传入的 UserAuthQuery 实现（由 IAM 模块创建并共享）
+    // user_query 已通过参数传入，无需在此创建
 
     // 4. 创建 AuthServiceImpl
     // 4.1 初始化第三方 OAuth2 Provider 注册表（在创建 AuthServiceImpl 之前，因为 auth_config 会被 move）
