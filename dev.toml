@@ -254,3 +254,17 @@ service_name = "dev-internal"
 description = "开发环境默认 API Key"
 [auth]
 whitelist = ["/api/**"]
+
+
+# ============================================
+# 超管初始化配置（可选）
+# ============================================
+[auth.super_admin]
+# 超管用户名（必需，仅在首次创建时使用）
+username = "admin"
+# 超管初始密码（必需，首次创建时使用，建议通过环境变量注入）
+password = "admin"
+# 超管邮箱（可选）
+email = "admin@cmx.com"
+# 超管角色编码（可选，默认 ["super_admin"]）
+roles = "super_admin"

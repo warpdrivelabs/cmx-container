@@ -20,9 +20,7 @@ use super::response::*;
     path = "/api/auth/login",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "登录成功", body = LoginResponse),
-        (status = 401, description = "用户名或密码错误"),
-        (status = 403, description = "用户已被禁用")
+        (status = 200, description = "登录成功或失败，body code 区分: 0=成功, 401=用户名或密码错误, 403=用户已被禁用", body = ApiResp<LoginResponse>),
     ),
     tag = "Auth"
 )]
@@ -49,26 +47,29 @@ pub async fn auth_login(
         user_agent: None,
     };
 
-    let token_pair = auth_service
+    let token_pair = match auth_service
         .authenticate(credentials, Some(device_info))
         .await
-        .map_err(|e| match e {
-            cmx_traits::auth::AuthError::InvalidCredentials => {
-                Error::Unauthorized("用户名或密码错误".to_string())
-            }
-            cmx_traits::auth::AuthError::UserDisabled => {
-                Error::Forbidden("用户已被禁用".to_string())
-            }
-            cmx_traits::auth::AuthError::TooManyAttempts { secs, limit, window } => {
-                // 5.1 修复：映射为 429 Too Many Requests 而非 403
-                Error::RateLimitExceeded {
-                    retry_after: secs,
-                    limit: limit as u64,
-                    window,
-                }
-            }
-            other => Error::InternalError(other.to_string()),
-        })?;
+    {
+        Ok(pair) => pair,
+        Err(cmx_traits::auth::AuthError::InvalidCredentials) => {
+            warn!(username = %req.username, "用户名或密码错误");
+            return Ok(Json(ApiResp::fail(401, "未授权: 用户名或密码错误")));
+        }
+        Err(cmx_traits::auth::AuthError::UserDisabled) => {
+            warn!(username = %req.username, "用户已被禁用");
+            return Ok(Json(ApiResp::fail(403, "用户已被禁用")));
+        }
+        Err(cmx_traits::auth::AuthError::TooManyAttempts { secs, limit, window }) => {
+            // 5.1 修复：映射为 429 Too Many Requests 而非 403
+            return Err(Error::RateLimitExceeded {
+                retry_after: secs,
+                limit: limit as u64,
+                window,
+            });
+        }
+        Err(other) => return Err(Error::InternalError(other.to_string())),
+    };
 
     let response = LoginResponse {
         access_token: token_pair.access_token,

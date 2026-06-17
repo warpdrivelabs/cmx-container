@@ -1111,6 +1111,7 @@ dependencies = [
  "cmx-core 0.1.9",
  "cmx-database",
  "cmx-traits",
+ "cmx-utils",
  "modql 0.5.0",
  "sea-query",
  "serde",
