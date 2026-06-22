@@ -14,12 +14,7 @@ use crate::{ApiResp, Error, Result};
 
 /// 生成随机 API Key 明文
 fn generate_api_key() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("cmx{:016x}{:016x}", now, now.wrapping_mul(3))
+    format!("cmx_{}", uuid::Uuid::new_v4().simple())
 }
 
 /// SHA256 哈希
