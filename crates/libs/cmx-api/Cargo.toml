@@ -85,3 +85,13 @@ percent-encoding = { workspace = true }
 bytes = { workspace = true }
 # 正则表达式（白名单通配符匹配）
 regex = { workspace = true }
+
+[dev-dependencies]
+# HTTP 客户端
+reqwest = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
+# JSON 序列化
+serde_json = { workspace = true }
+# 唯一标识生成
+uuid = { workspace = true, features = ["v4"] }

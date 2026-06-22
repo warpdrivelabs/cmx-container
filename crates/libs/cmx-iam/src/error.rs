@@ -34,6 +34,9 @@ pub enum IamError {
 
     #[error("IAM 业务错误: {0}")]
     Business(String),
+
+    #[error("权限规则违反: 规则={rule_code}, 原因={message}")]
+    RuleViolation { rule_code: String, message: String },
 }
 
 /// IAM Result 类型别名
@@ -53,6 +56,9 @@ impl From<IamError> for cmx_api_types::Error {
                 cmx_api_types::Error::Forbidden("不能删除系统内置角色".to_string())
             }
             IamError::Business(msg) => cmx_api_types::Error::BusinessError(msg),
+            IamError::RuleViolation { rule_code, message } => {
+                cmx_api_types::Error::BusinessError(format!("[{}] {}", rule_code, message))
+            }
             IamError::Crud(e) => cmx_api_types::Error::from(e),
             IamError::PasswordHashError(msg) => {
                 cmx_api_types::Error::internal_error(format!("密码哈希失败: {msg}"))
@@ -75,6 +81,9 @@ impl From<IamError> for cmx_traits::error::TraitError {
                 cmx_traits::error::TraitError::Forbidden("不能删除系统内置角色".to_string())
             }
             IamError::Business(msg) => cmx_traits::error::TraitError::Business(msg),
+            IamError::RuleViolation { rule_code, message } => {
+                cmx_traits::error::TraitError::Business(format!("[{}] {}", rule_code, message))
+            }
             IamError::PasswordHashError(msg) => {
                 cmx_traits::error::TraitError::Internal(format!("密码哈希失败: {msg}"))
             }

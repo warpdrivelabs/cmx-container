@@ -1406,9 +1406,12 @@ impl AuthService for AuthServiceImpl {
     async fn list_oauth2_providers(
         &self,
     ) -> std::result::Result<Vec<cmx_traits::auth::ProviderInfo>, AuthError> {
-        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
-            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
-        Ok(registry.list_providers())
+        // 未配置任何第三方 Provider 时（注册表未初始化），优雅返回空列表而非报错，
+        // 使公开端点 GET /api/auth/oauth2/providers 返回 {code:0,data:[]}。
+        match crate::oauth2::OAuth2ProviderRegistry::get_global() {
+            Some(registry) => Ok(registry.list_providers()),
+            None => Ok(Vec::new()),
+        }
     }
 
     /// 处理第三方 OAuth2 回调。

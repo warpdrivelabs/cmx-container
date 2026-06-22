@@ -29,6 +29,10 @@ pub struct RoleForCreate {
     /// 角色描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 父角色ID（NULL表示根角色，不支持权限继承，仅用于层级展示）
+    #[serde(default)]
+    pub parent_role_id: Option<String>,
 }
 
 /// 更新角色 DTO（全 `Option`，未提供字段不更新）。
@@ -54,6 +58,10 @@ pub struct RoleForUpdate {
     /// 角色描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 父角色ID（NULL表示根角色，不支持权限继承，仅用于层级展示）
+    #[serde(default)]
+    pub parent_role_id: Option<String>,
 }
 
 /// 分配权限请求（IAM 专用）。

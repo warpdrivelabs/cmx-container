@@ -132,6 +132,16 @@ use utoipa::OpenApi;
         crate::handlers::auth::oauth2_handler::oauth2_authorize,
         crate::handlers::auth::oauth2_handler::oauth2_login,
         crate::handlers::auth::oauth2_handler::oauth2_token,
+        // API Key 管理接口
+        crate::handlers::auth::api_key_handler::create_api_key,
+        crate::handlers::auth::api_key_handler::list_api_keys,
+        crate::handlers::auth::api_key_handler::delete_api_key,
+        crate::handlers::auth::api_key_handler::toggle_api_key_status,
+        // OAuth2 客户端管理接口
+        crate::handlers::auth::oauth2_client_handler::create_oauth2_client,
+        crate::handlers::auth::oauth2_client_handler::list_oauth2_clients,
+        crate::handlers::auth::oauth2_client_handler::update_oauth2_client_by_id,
+        crate::handlers::auth::oauth2_client_handler::delete_oauth2_client,
         // IAM User handlers
         crate::handlers::iam::user::handler::create_user,
         crate::handlers::iam::user::handler::get_user,
@@ -158,6 +168,28 @@ use utoipa::OpenApi;
         crate::handlers::iam::permission::handler::page_permissions,
         crate::handlers::iam::permission::handler::list_permissions,
         crate::handlers::iam::permission::handler::get_permission_tree,
+        // IAM User temp role handlers（阶段1新增）
+        crate::handlers::iam::user::temp_role_handler::assign_temp_role,
+        crate::handlers::iam::user::temp_role_handler::revoke_temp_role,
+        crate::handlers::iam::user::temp_role_handler::revoke_temp_roles_batch,
+        crate::handlers::iam::user::temp_role_handler::extend_temp_role,
+        crate::handlers::iam::user::temp_role_handler::get_temp_assignments,
+        // IAM Rule handlers（阶段2新增）
+        crate::handlers::iam::rule::handler::create_rule,
+        crate::handlers::iam::rule::handler::update_rule,
+        crate::handlers::iam::rule::handler::delete_rule,
+        crate::handlers::iam::rule::handler::get_rule,
+        crate::handlers::iam::rule::handler::toggle_rule_status,
+        crate::handlers::iam::rule::handler::add_rule_items,
+        crate::handlers::iam::rule::handler::remove_rule_items,
+        // IAM Role hierarchy handlers（阶段4新增）
+        crate::handlers::iam::role::handler::get_role_tree,
+        crate::handlers::iam::role::handler::get_role_children,
+        crate::handlers::iam::role::handler::move_role,
+        // IAM Audit handlers（阶段5新增）
+        crate::handlers::iam::user::audit_handler::get_effective_permissions,
+        crate::handlers::iam::role::audit_handler::get_permission_diff,
+        crate::handlers::iam::permission::audit_handler::get_permission_usage_stat,
     ),
 
     components(
@@ -261,6 +293,19 @@ use utoipa::OpenApi;
             crate::handlers::auth::response::LoginResponse,
             crate::handlers::auth::response::ValidateResponse,
             crate::handlers::auth::response::OnlineCountResponse,
+            // API Key 管理 schemas
+            crate::handlers::auth::api_key_handler::CreateApiKeyRequest,
+            crate::handlers::auth::api_key_handler::ApiKeyResponse,
+            crate::handlers::auth::api_key_handler::ApiKeyListItem,
+            crate::handlers::auth::api_key_handler::ToggleApiKeyStatusRequest,
+            crate::ApiResp<crate::handlers::auth::api_key_handler::ApiKeyResponse>,
+            crate::ApiResp<Vec<crate::handlers::auth::api_key_handler::ApiKeyListItem>>,
+            // OAuth2 客户端管理 schemas
+            crate::handlers::auth::oauth2_client_handler::CreateOAuth2ClientRequest,
+            crate::handlers::auth::oauth2_client_handler::UpdateOAuth2ClientByIdRequest,
+            crate::handlers::auth::oauth2_client_handler::OAuth2ClientResponse,
+            crate::ApiResp<crate::handlers::auth::oauth2_client_handler::OAuth2ClientResponse>,
+            crate::ApiResp<Vec<crate::handlers::auth::oauth2_client_handler::OAuth2ClientResponse>>,
             // OAuth2 schemas
             crate::handlers::auth::oauth2_request::OAuth2LoginRequest,
             crate::handlers::auth::oauth2_request::OAuth2TokenRequest,
@@ -286,6 +331,44 @@ use utoipa::OpenApi;
             crate::ApiResp<Vec<cmx_core::model::iam::PermissionTreeNode>>,
             crate::ApiResp<Vec<cmx_core::model::iam::Role>>,
             crate::ApiResp<Vec<cmx_core::model::iam::Permission>>,
+            // IAM temp role schemas（阶段1新增）
+            crate::handlers::iam::user::temp_role_handler::AssignTempRoleRequest,
+            crate::handlers::iam::user::temp_role_handler::RevokeTempRoleRequest,
+            crate::handlers::iam::user::temp_role_handler::RevokeTempRolesBatchRequest,
+            crate::handlers::iam::user::temp_role_handler::ExtendTempRoleRequest,
+            crate::handlers::iam::user::temp_role_handler::RevokeBatchResponse,
+            cmx_iam::service_traits::UserRoleAssignment,
+            crate::ApiResp<cmx_iam::service_traits::UserRoleAssignment>,
+            crate::ApiResp<Vec<cmx_iam::service_traits::UserRoleAssignment>>,
+            crate::ApiResp<crate::handlers::iam::user::temp_role_handler::RevokeBatchResponse>,
+            // IAM rule schemas（阶段2新增）
+            cmx_iam::rule::entity::PermissionRule,
+            cmx_iam::rule::entity::PermissionRuleForUpdate,
+            cmx_iam::rule::entity::CreatePermissionRuleRequest,
+            cmx_iam::rule::entity::PermissionRuleItem,
+            cmx_iam::rule::entity::RuleItemInput,
+            crate::handlers::iam::rule::handler::ToggleRuleStatusRequest,
+            crate::handlers::iam::rule::handler::AddRuleItemsRequest,
+            crate::handlers::iam::rule::handler::RemoveRuleItemsRequest,
+            crate::handlers::iam::rule::handler::RuleDetailResponse,
+            crate::handlers::iam::rule::handler::BatchResponse,
+            crate::ApiResp<cmx_iam::rule::entity::PermissionRule>,
+            crate::ApiResp<crate::handlers::iam::rule::handler::RuleDetailResponse>,
+            crate::ApiResp<crate::handlers::iam::rule::handler::BatchResponse>,
+            // IAM role hierarchy schemas（阶段4新增）
+            crate::handlers::iam::role::handler::MoveRoleRequest,
+            cmx_iam::service_traits::RoleTreeNode,
+            crate::ApiResp<cmx_iam::service_traits::RoleTreeNode>,
+            crate::ApiResp<Vec<cmx_iam::service_traits::RoleTreeNode>>,
+            // IAM audit schemas（阶段5新增）
+            cmx_iam::service_traits::EffectivePermissionsResponse,
+            cmx_iam::service_traits::RoleSummary,
+            cmx_iam::service_traits::PermissionSummary,
+            cmx_iam::service_traits::PermissionDiffResponse,
+            cmx_iam::service_traits::PermissionUsageStat,
+            crate::ApiResp<cmx_iam::service_traits::EffectivePermissionsResponse>,
+            crate::ApiResp<cmx_iam::service_traits::PermissionDiffResponse>,
+            crate::ApiResp<Vec<cmx_iam::service_traits::PermissionUsageStat>>,
         )
     )
 )]

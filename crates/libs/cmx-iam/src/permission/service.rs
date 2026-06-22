@@ -457,4 +457,54 @@ impl PermissionService for PermissionServiceImpl {
 
         Ok(Self::build_tree(permissions))
     }
+
+    /// 统计每个权限被多少角色使用
+    async fn get_permission_usage_stat(
+        &self,
+    ) -> Result<Vec<crate::service_traits::PermissionUsageStat>, TraitError> {
+        debug!("{:<12} - PermissionServiceImpl::get_permission_usage_stat", "IAM");
+
+        let sql = r#"
+            SELECT p.id, p.code, p.name,
+                   COUNT(DISTINCT rp.role_id) AS role_count,
+                   COUNT(DISTINCT ur.user_id) AS user_count,
+                   MAX(rp.create_time) AS last_assigned_at
+            FROM cmx_permission p
+            LEFT JOIN cmx_role_permission rp ON rp.permission_id = p.id AND rp.archived = 0
+            LEFT JOIN cmx_user_role ur ON ur.role_id = rp.role_id AND ur.archived = 0
+            WHERE p.archived = 0 AND p.status = 1
+            GROUP BY p.id, p.code, p.name
+            ORDER BY role_count DESC, p.sort_order, p.code
+        "#;
+        let params = serde_json::Value::Array(vec![]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, sql, params, "perm_usage_stat")
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询权限使用统计失败: {e}")))
+            })?;
+
+        let schema = dataset.schema.as_ref();
+        let stats: Vec<crate::service_traits::PermissionUsageStat> = dataset
+            .iter()
+            .filter_map(|row| {
+                Some(crate::service_traits::PermissionUsageStat {
+                    permission_id: row.get_by_name_as(schema, "id")?,
+                    permission_code: row.get_by_name_as(schema, "code")?,
+                    permission_name: row.get_by_name_as(schema, "name")?,
+                    role_count: row
+                        .get_by_name_as::<i64>(schema, "role_count")
+                        .unwrap_or(0) as u32,
+                    user_count: row
+                        .get_by_name_as::<i64>(schema, "user_count")
+                        .unwrap_or(0) as u32,
+                    last_assigned_at: row
+                        .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "last_assigned_at"),
+                })
+            })
+            .collect();
+
+        Ok(stats)
+    }
 }

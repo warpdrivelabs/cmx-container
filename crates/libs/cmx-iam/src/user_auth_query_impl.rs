@@ -104,11 +104,23 @@ impl UserAuthQuery for UserAuthQueryImpl {
             "IAM", user_id
         );
 
+        // 合并查询永久角色（cmx_user_role）与临时有效角色（cmx_user_role_assignment）
         let sql = r#"
             SELECT DISTINCT r.code
             FROM cmx_role r
             INNER JOIN cmx_user_role ur ON ur.role_id = r.id
             WHERE ur.user_id = $1 AND ur.archived = 0 AND r.archived = 0 AND r.status = 1
+
+            UNION
+
+            SELECT DISTINCT r.code
+            FROM cmx_role r
+            INNER JOIN cmx_user_role_assignment ura ON r.id = ura.role_id
+            WHERE ura.user_id = $1
+              AND ura.status = 1
+              AND ura.archived = 0
+              AND NOW() BETWEEN ura.effective_from AND ura.effective_until
+              AND r.archived = 0 AND r.status = 1
         "#;
         let params: Vec<DataValue> = vec![DataValue::String(user_id.to_string())];
 
@@ -133,6 +145,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
             "IAM", user_id
         );
 
+        // 合并查询永久角色权限与临时角色权限
         let sql = r#"
             SELECT DISTINCT p.code
             FROM cmx_permission p
@@ -140,6 +153,21 @@ impl UserAuthQuery for UserAuthQueryImpl {
             INNER JOIN cmx_user_role ur ON ur.role_id = rp.role_id
             INNER JOIN cmx_role r ON r.id = ur.role_id
             WHERE ur.user_id = $1 AND ur.archived = 0 AND rp.archived = 0
+              AND p.archived = 0 AND p.status = 1
+              AND r.archived = 0 AND r.status = 1
+
+            UNION
+
+            SELECT DISTINCT p.code
+            FROM cmx_permission p
+            INNER JOIN cmx_role_permission rp ON rp.permission_id = p.id
+            INNER JOIN cmx_user_role_assignment ura ON ura.role_id = rp.role_id
+            INNER JOIN cmx_role r ON r.id = ura.role_id
+            WHERE ura.user_id = $1
+              AND ura.status = 1
+              AND ura.archived = 0
+              AND NOW() BETWEEN ura.effective_from AND ura.effective_until
+              AND rp.archived = 0
               AND p.archived = 0 AND p.status = 1
               AND r.archived = 0 AND r.status = 1
         "#;
@@ -266,8 +294,8 @@ impl UserAuthQuery for UserAuthQueryImpl {
             for row in role_dataset.iter() {
                 if let Some(role_id) = row.get_by_name_as::<String>(role_schema, "id") {
                     let ur_id = cmx_utils::snowflake_id_str();
-                    let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived, status) \
-                                         VALUES ($1, $2, $3, 0, 1) ON CONFLICT (user_id, role_id) DO NOTHING";
+                    let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
+                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
                     let ur_params: Vec<DataValue> = vec![
                         DataValue::String(ur_id),
                         DataValue::String(user_id.clone()),
@@ -385,8 +413,8 @@ impl UserAuthQuery for UserAuthQueryImpl {
             if let Some(role_row) = role_dataset.iter().next() {
                 if let Some(role_id) = role_row.get_by_name_as::<String>(role_schema, "id") {
                     let ur_id = cmx_utils::snowflake_id_str();
-                    let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived, status) \
-                                         VALUES ($1, $2, $3, 0, 1) ON CONFLICT (user_id, role_id) DO NOTHING";
+                    let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
+                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
                     let ur_params: Vec<DataValue> = vec![
                         DataValue::String(ur_id),
                         DataValue::String(user_id.clone()),

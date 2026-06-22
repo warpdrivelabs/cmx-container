@@ -39,6 +39,10 @@ pub struct Role {
     #[serde(default)]
     pub archived: Option<i64>,
 
+    /// 父角色ID（NULL表示根角色，不支持权限继承，仅用于层级展示）
+    #[serde(default)]
+    pub parent_role_id: Option<String>,
+
     /// 创建时间（ISO8601 字符串），可空。
     #[serde(default)]
     pub create_time: Option<String>,

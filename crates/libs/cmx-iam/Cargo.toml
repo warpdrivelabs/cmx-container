@@ -24,6 +24,8 @@ cmx-audit = { workspace = true }
 cmx-auth = { workspace = true }
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }
+# 内部依赖 - Redis 缓存
+cmx-buffer = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化
@@ -42,5 +44,9 @@ sea-query = { workspace = true }
 sqlx = { workspace = true }
 # 唯一标识符
 uuid = { workspace = true, features = ["v4"] }
+# 时间库
+chrono = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
 # OpenAPI 文档生成（可选）
 utoipa = { workspace = true, optional = true }

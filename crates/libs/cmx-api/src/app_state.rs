@@ -22,10 +22,23 @@ pub struct IamState {
     pub role_service: Arc<dyn RoleService>,
     /// 权限服务
     pub permission_service: Arc<dyn PermissionService>,
+    /// 权限规则服务（阶段2新增）
+    pub rule_service: Option<Arc<dyn cmx_iam::rule::service::PermissionRuleService>>,
     /// 权限校验器
     pub permission_checker: Arc<dyn PermissionChecker>,
+    /// IAM 权限校验器实现引用（阶段3新增，用于缓存失效）
+    pub iam_checker: Option<Arc<cmx_iam::IamChecker>>,
     /// 用户认证查询（供 cmx-auth 使用）
     pub user_auth_query: Arc<dyn UserAuthQuery>,
+}
+
+impl IamState {
+    /// 获取 IamChecker 引用（用于 finalize_iam_state 注入到 UserServiceImpl）
+    pub fn permission_checker_clone(&self) -> Arc<cmx_iam::IamChecker> {
+        self.iam_checker.clone().unwrap_or_else(|| {
+            panic!("IamChecker 未初始化");
+        })
+    }
 }
 
 /// CMX 应用程序状态

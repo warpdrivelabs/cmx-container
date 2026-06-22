@@ -1,5 +1,6 @@
 //! CORS 中间件配置
 
+use axum::http::HeaderName;
 use tower_http::cors::{CorsLayer, ExposeHeaders, AllowOrigin};
 
 /// CORS 配置
@@ -32,6 +33,9 @@ impl Default for CorsConfig {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::AUTHORIZATION,
                 axum::http::header::ACCEPT,
+                // 添加自定义请求头
+                HeaderName::from_static("x-api-key"),
+
             ],
             //允许客户端访问的响应头
             expose_headers: vec![

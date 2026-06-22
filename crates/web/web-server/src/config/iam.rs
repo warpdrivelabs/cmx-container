@@ -13,6 +13,7 @@ use cmx_iam::config::IamConfig;
 use cmx_iam::iam_checker::IamChecker;
 use cmx_iam::permission::PermissionServiceImpl;
 use cmx_iam::role::RoleServiceImpl;
+use cmx_iam::rule::{PermissionRuleServiceImpl, RuleEnforcerImpl};
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
 use cmx_traits::auth::UserAuthQuery;
@@ -40,12 +41,25 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
     // 注意：UserServiceImpl::new 需要 Arc<dyn AuthService>，这里先占位，由调用方创建后再构建
     // 改为两阶段初始化：先返回 user_auth_query，IamState 在 auth_service 创建后再组装
 
-    let permission_checker: Arc<dyn cmx_traits::iam::PermissionChecker> = Arc::new(
-        IamChecker::new(mm.clone(), iam_config.clone()).await,
+    // 4.1 创建规则校验引擎和规则服务
+    let rule_enforcer: Arc<cmx_iam::rule::RuleEnforcerImpl> = Arc::new(
+        RuleEnforcerImpl::new(mm.clone(), iam_config.clone()).await,
+    );
+    let rule_enforcer_dyn: Arc<dyn cmx_iam::rule::RuleEnforcer> = rule_enforcer.clone();
+
+    let rule_service: Arc<dyn cmx_iam::rule::service::PermissionRuleService> = Arc::new(
+        PermissionRuleServiceImpl::new(mm.clone(), iam_config.clone()).await,
     );
 
+    let permission_checker_impl = IamChecker::new(mm.clone(), iam_config.clone()).await;
+    let permission_checker: Arc<dyn cmx_traits::iam::PermissionChecker> =
+        Arc::new(permission_checker_impl.clone());
+    let iam_checker_arc: Arc<cmx_iam::IamChecker> = Arc::new(permission_checker_impl);
+
     let role_service: Arc<dyn cmx_iam::service_traits::RoleService> = Arc::new(
-        RoleServiceImpl::new(mm.clone(), iam_config.clone()).await,
+        RoleServiceImpl::new(mm.clone(), iam_config.clone()).await
+            .with_rule_enforcer(rule_enforcer_dyn.clone())
+            .with_permission_checker(iam_checker_arc.clone()),
     );
 
     let permission_service: Arc<dyn cmx_iam::service_traits::PermissionService> = Arc::new(
@@ -73,7 +87,9 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
             user_service: Arc::new(PlaceholderUserService),
             role_service,
             permission_service,
+            rule_service: Some(rule_service),
             permission_checker,
+            iam_checker: Some(iam_checker_arc.clone()),
             user_auth_query: user_auth_query.clone(),
         }),
         user_auth_query,
@@ -91,15 +107,24 @@ pub async fn finalize_iam_state(
 ) -> Result<Arc<IamState>> {
     let mm = get_default_db_manager();
 
+    // 重新创建 RuleEnforcer（用于 UserServiceImpl 注入）
+    let rule_enforcer: Arc<dyn cmx_iam::rule::RuleEnforcer> = Arc::new(
+        RuleEnforcerImpl::new(mm.clone(), iam_config).await,
+    );
+
     let user_service: Arc<dyn cmx_iam::service_traits::UserService> = Arc::new(
-        UserServiceImpl::new(mm.clone(), auth_service, iam_config).await,
+        UserServiceImpl::new(mm.clone(), auth_service, IamConfig::default()).await
+            .with_rule_enforcer(rule_enforcer)
+            .with_permission_checker(iam_state.permission_checker_clone()),
     );
 
     let finalized = Arc::new(IamState {
         user_service,
         role_service: iam_state.role_service.clone(),
         permission_service: iam_state.permission_service.clone(),
+        rule_service: iam_state.rule_service.clone(),
         permission_checker: iam_state.permission_checker.clone(),
+        iam_checker: iam_state.iam_checker.clone(),
         user_auth_query: iam_state.user_auth_query.clone(),
     });
 
@@ -173,6 +198,70 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
         &self,
         _username: &str,
     ) -> std::result::Result<Vec<cmx_core::model::iam::Role>, cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn assign_temp_role(
+        &self,
+        _svr_ctx: &cmx_core::SVRContext,
+        _user_id: &str,
+        _role_id: &str,
+        _effective_from: chrono::DateTime<chrono::Utc>,
+        _effective_until: chrono::DateTime<chrono::Utc>,
+        _reason: Option<&str>,
+        _source: &str,
+    ) -> std::result::Result<cmx_iam::service_traits::UserRoleAssignment, cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn revoke_temp_role(
+        &self,
+        _svr_ctx: &cmx_core::SVRContext,
+        _assignment_id: &str,
+        _reason: Option<&str>,
+    ) -> std::result::Result<(), cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn revoke_temp_roles_batch(
+        &self,
+        _svr_ctx: &cmx_core::SVRContext,
+        _assignment_ids: &[String],
+        _reason: Option<&str>,
+    ) -> std::result::Result<u64, cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn extend_temp_role(
+        &self,
+        _svr_ctx: &cmx_core::SVRContext,
+        _assignment_id: &str,
+        _new_effective_until: chrono::DateTime<chrono::Utc>,
+        _reason: Option<&str>,
+    ) -> std::result::Result<(), cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn get_user_temp_assignments(
+        &self,
+        _user_id: &str,
+        _status_filter: cmx_iam::service_traits::TempAssignmentStatusFilter,
+    ) -> std::result::Result<Vec<cmx_iam::service_traits::UserRoleAssignment>, cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn get_role_temp_assigned_users(
+        &self,
+        _role_id: &str,
+        _status_filter: cmx_iam::service_traits::TempAssignmentStatusFilter,
+    ) -> std::result::Result<Vec<cmx_iam::service_traits::UserRoleAssignment>, cmx_traits::error::TraitError> {
+        Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
+    }
+
+    async fn get_effective_permissions(
+        &self,
+        _user_id: &str,
+    ) -> std::result::Result<cmx_iam::service_traits::EffectivePermissionsResponse, cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
     }
 }

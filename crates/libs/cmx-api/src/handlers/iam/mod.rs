@@ -1,9 +1,10 @@
 //! IAM 模块路由注册
 //!
-//! 用户/角色/权限三组 handler 的路由聚合
+//! 用户/角色/权限/规则四组 handler 的路由聚合
 
 pub mod permission;
 pub mod role;
+pub mod rule;
 pub mod user;
 
 use crate::app_state::CmxAppState;
@@ -19,6 +20,7 @@ impl ModuleRoutes for IamModule {
         let router = router.merge(user::UserModule.routes());
         let router = router.merge(role::RoleModule.routes());
         let router = router.merge(permission::PermissionModule.routes());
+        let router = router.merge(rule::RuleModule.routes());
         router
     }
 

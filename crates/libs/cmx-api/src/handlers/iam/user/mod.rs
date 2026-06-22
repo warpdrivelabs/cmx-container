@@ -1,6 +1,8 @@
 //! 用户模块路由注册
 
+pub mod audit_handler;
 pub mod handler;
+pub mod temp_role_handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
@@ -23,6 +25,37 @@ impl ModuleRoutes for UserModule {
             // 关联操作
             .route("/iam/users/assign-roles", post(handler::assign_roles))
             .route("/iam/users/roles", get(handler::get_user_roles))
+            // 临时角色授权（阶段1新增）
+            .route(
+                "/iam/users/assign-temp-role",
+                post(temp_role_handler::assign_temp_role),
+            )
+            .route(
+                "/iam/users/revoke-temp-role",
+                post(temp_role_handler::revoke_temp_role),
+            )
+            .route(
+                "/iam/users/revoke-temp-roles-batch",
+                post(temp_role_handler::revoke_temp_roles_batch),
+            )
+            .route(
+                "/iam/users/extend-temp-role",
+                post(temp_role_handler::extend_temp_role),
+            )
+            .route(
+                "/iam/users/temp-assignments",
+                get(temp_role_handler::get_temp_assignments),
+            )
+            // 角色被授权用户列表（临时授权查询，按 role_id 查询，复用 get_temp_assignments）
+            .route(
+                "/iam/roles/temp-assigned-users",
+                get(temp_role_handler::get_temp_assignments),
+            )
+            // 审计查询（阶段5新增）
+            .route(
+                "/iam/users/effective-permissions",
+                get(audit_handler::get_effective_permissions),
+            )
     }
 
     fn prefix() -> &'static str {

@@ -864,6 +864,7 @@ dependencies = [
  "modql 0.5.0",
  "percent-encoding",
  "regex",
+ "reqwest",
  "rmp-serde",
  "sea-query",
  "sea-query-sqlx",
@@ -1106,9 +1107,11 @@ name = "cmx-iam"
 version = "0.1.9"
 dependencies = [
  "async-trait",
+ "chrono",
  "cmx-api-types",
  "cmx-audit",
  "cmx-auth",
+ "cmx-buffer",
  "cmx-core 0.1.9",
  "cmx-database",
  "cmx-traits",
@@ -1119,6 +1122,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "utoipa",
  "uuid",

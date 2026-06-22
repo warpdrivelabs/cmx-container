@@ -1,5 +1,6 @@
 //! 权限模块路由注册
 
+pub mod audit_handler;
 pub mod handler;
 
 use crate::app_state::CmxAppState;
@@ -22,6 +23,11 @@ impl ModuleRoutes for PermissionModule {
             .route("/iam/permissions/list", post(handler::list_permissions))
             // 权限树
             .route("/iam/permissions/tree", get(handler::get_permission_tree))
+            // 审计查询（阶段5新增）
+            .route(
+                "/iam/permissions/usage-stat",
+                get(audit_handler::get_permission_usage_stat),
+            )
     }
 
     fn prefix() -> &'static str {

@@ -1565,20 +1565,21 @@ CREATE UNIQUE INDEX uk_cmx_user_email ON cmx_user (email) WHERE email IS NOT NUL
 DROP TABLE IF EXISTS cmx_role;
 CREATE TABLE cmx_role
 (
-    id          VARCHAR(64)  NOT NULL,
-    code        VARCHAR(100) NOT NULL,
-    name        VARCHAR(100) NOT NULL,
-    data_scope  INT4      DEFAULT 1,
-    sort_order  INT4      DEFAULT 0,
-    description VARCHAR(500),
-    status      INT4      DEFAULT 1,
-    archived    INT4      DEFAULT 0,
-    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by   VARCHAR(100),
-    create_name VARCHAR(100),
-    update_by   VARCHAR(100),
-    update_name VARCHAR(100),
+    id             VARCHAR(64)  NOT NULL,
+    code           VARCHAR(100) NOT NULL,
+    name           VARCHAR(100) NOT NULL,
+    data_scope     INT4      DEFAULT 1,
+    sort_order     INT4      DEFAULT 0,
+    description    VARCHAR(500),
+    status         INT4      DEFAULT 1,
+    archived       INT4      DEFAULT 0,
+    parent_role_id VARCHAR(64),
+    create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by      VARCHAR(100),
+    create_name    VARCHAR(100),
+    update_by      VARCHAR(100),
+    update_name    VARCHAR(100),
     PRIMARY KEY (id)
 );
 
@@ -1591,6 +1592,7 @@ COMMENT ON COLUMN cmx_role.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role.description IS '描述';
 COMMENT ON COLUMN cmx_role.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_role.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_role.parent_role_id IS '父角色ID（NULL表示根角色，不支持角色权限继承，仅用于层级展示）';
 COMMENT ON COLUMN cmx_role.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_role.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_role.create_by IS '创建人ID';
@@ -1713,3 +1715,112 @@ COMMENT ON COLUMN cmx_role_permission.update_name IS '更新人姓名';
 CREATE UNIQUE INDEX uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id);
 CREATE INDEX idx_cmx_role_permission_role ON cmx_role_permission (role_id);
 CREATE INDEX idx_cmx_role_permission_permission ON cmx_role_permission (permission_id);
+
+-- 34. 用户角色临时授权表 (cmx_user_role_assignment)
+DROP TABLE IF EXISTS cmx_user_role_assignment;
+CREATE TABLE cmx_user_role_assignment
+(
+    id              varchar(64) NOT NULL,
+    user_id         varchar(64) NOT NULL,
+    role_id         varchar(64) NOT NULL,
+    effective_from  timestamp NOT NULL,
+    effective_until timestamp NOT NULL,
+    reason          varchar(500),
+    source          varchar(20) DEFAULT 'manual',
+    status          int4 DEFAULT 1,
+    revoked_by      varchar(100),
+    revoked_at      timestamp,
+    archived        int4 DEFAULT 0,
+    create_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by       varchar(100),
+    create_name     varchar(100),
+    update_by       varchar(100),
+    update_name     varchar(100),
+    CONSTRAINT pk_cmx_user_role_assignment PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_user_role_assignment IS '用户角色临时授权表';
+COMMENT ON COLUMN cmx_user_role_assignment.id IS '主键ID';
+COMMENT ON COLUMN cmx_user_role_assignment.user_id IS '用户ID';
+COMMENT ON COLUMN cmx_user_role_assignment.role_id IS '角色ID';
+COMMENT ON COLUMN cmx_user_role_assignment.effective_from IS '生效开始时间';
+COMMENT ON COLUMN cmx_user_role_assignment.effective_until IS '生效结束时间';
+COMMENT ON COLUMN cmx_user_role_assignment.reason IS '授权理由（便于审计）';
+COMMENT ON COLUMN cmx_user_role_assignment.source IS '授权来源：manual-手动，approval-审批，system-系统';
+COMMENT ON COLUMN cmx_user_role_assignment.status IS '状态：0-已撤销，1-生效中';
+COMMENT ON COLUMN cmx_user_role_assignment.revoked_by IS '撤销人';
+COMMENT ON COLUMN cmx_user_role_assignment.revoked_at IS '撤销时间';
+COMMENT ON COLUMN cmx_user_role_assignment.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_user_role_assignment.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_user_role_assignment.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_user_role_assignment.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_user_role_assignment.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_user_role_assignment.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_user_role_assignment.update_name IS '更新人姓名';
+
+CREATE INDEX idx_cmx_user_role_assignment_user ON cmx_user_role_assignment (user_id);
+CREATE INDEX idx_cmx_user_role_assignment_role ON cmx_user_role_assignment (role_id);
+CREATE INDEX idx_cmx_user_role_assignment_time ON cmx_user_role_assignment (effective_from, effective_until);
+CREATE INDEX idx_cmx_user_role_assignment_expire ON cmx_user_role_assignment (effective_until) WHERE status = 1 AND archived = 0;
+
+-- 35. 权限规则表 (cmx_permission_rule)
+DROP TABLE IF EXISTS cmx_permission_rule;
+CREATE TABLE cmx_permission_rule
+(
+    id                 varchar(64) NOT NULL,
+    code               varchar(100) NOT NULL,
+    name               varchar(200) NOT NULL,
+    rule_type          varchar(20) NOT NULL,
+    violation_message  varchar(500),
+    priority           int4 DEFAULT 0,
+    description        varchar(500),
+    status             int4 DEFAULT 1,
+    archived           int4 DEFAULT 0,
+    create_time        timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time        timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by          varchar(100),
+    create_name        varchar(100),
+    update_by          varchar(100),
+    update_name        varchar(100),
+    CONSTRAINT pk_cmx_permission_rule PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_permission_rule_code UNIQUE (code)
+);
+
+COMMENT ON TABLE cmx_permission_rule IS '权限规则表（互斥/依赖）';
+COMMENT ON COLUMN cmx_permission_rule.id IS '主键ID';
+COMMENT ON COLUMN cmx_permission_rule.code IS '规则编码（唯一，如 sod_finance）';
+COMMENT ON COLUMN cmx_permission_rule.name IS '规则名称';
+COMMENT ON COLUMN cmx_permission_rule.rule_type IS '规则类型：mutual_exclusion-互斥，dependency-依赖';
+COMMENT ON COLUMN cmx_permission_rule.violation_message IS '违反规则时的错误消息（为空时使用默认消息）';
+COMMENT ON COLUMN cmx_permission_rule.priority IS '优先级（数字越大越先校验，默认0）';
+COMMENT ON COLUMN cmx_permission_rule.description IS '描述';
+COMMENT ON COLUMN cmx_permission_rule.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_permission_rule.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_permission_rule.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_permission_rule.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_permission_rule.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_permission_rule.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_permission_rule.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_permission_rule.update_name IS '更新人姓名';
+
+-- 36. 规则权限项表 (cmx_permission_rule_item)
+DROP TABLE IF EXISTS cmx_permission_rule_item;
+CREATE TABLE cmx_permission_rule_item
+(
+    id            varchar(64) NOT NULL,
+    rule_id       varchar(64) NOT NULL,
+    group_seq     int4 NOT NULL,
+    permission_id varchar(64) NOT NULL,
+    CONSTRAINT pk_cmx_permission_rule_item PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_permission_rule_item UNIQUE (rule_id, group_seq, permission_id)
+);
+
+CREATE INDEX idx_cmx_permission_rule_item_rule ON cmx_permission_rule_item (rule_id);
+CREATE INDEX idx_cmx_permission_rule_item_perm ON cmx_permission_rule_item (permission_id);
+
+COMMENT ON TABLE cmx_permission_rule_item IS '规则权限项表';
+COMMENT ON COLUMN cmx_permission_rule_item.id IS '主键ID';
+COMMENT ON COLUMN cmx_permission_rule_item.rule_id IS '关联规则ID';
+COMMENT ON COLUMN cmx_permission_rule_item.group_seq IS '组序号：互斥规则下所有项两两互斥；依赖规则中 group_seq=1 为前置权限，group_seq=2 为依赖权限';
+COMMENT ON COLUMN cmx_permission_rule_item.permission_id IS '关联权限ID';

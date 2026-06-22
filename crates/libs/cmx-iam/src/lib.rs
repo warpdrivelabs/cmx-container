@@ -7,11 +7,14 @@
 //! 基础数据模型（User/Role/Permission）定义在 cmx-core 中。
 
 pub mod audit_helper;
+pub mod circuit_breaker;
 pub mod config;
 pub mod error;
 pub mod iam_checker;
 pub mod permission;
 pub mod role;
+pub mod rule;
+pub mod scheduler;
 pub mod service_traits;
 pub mod user;
 pub mod user_auth_query_impl;
@@ -23,5 +26,8 @@ pub use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, User};
 pub use config::IamConfig;
 pub use error::IamError;
 pub use iam_checker::IamChecker;
-pub use service_traits::{PermissionService, RoleService, UserService};
+pub use rule::{PermissionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
+pub use service_traits::{
+    PermissionService, RoleService, TempAssignmentStatusFilter, UserService, UserRoleAssignment,
+};
 pub use user_auth_query_impl::UserAuthQueryImpl;
