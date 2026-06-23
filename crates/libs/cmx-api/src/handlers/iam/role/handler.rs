@@ -307,7 +307,7 @@ pub struct RoleChildrenQuery {
     get,
     path = "/api/iam/roles/tree",
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleTreeNode>>)
     ),
     tag = "IAM-Role"
 )]

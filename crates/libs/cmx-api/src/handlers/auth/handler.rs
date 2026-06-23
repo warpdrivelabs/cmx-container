@@ -130,10 +130,12 @@ pub async fn auth_refresh(
 }
 
 /// 登出（撤销当前 Token）
+///
+/// 从请求头 `Authorization: Bearer <token>` 中提取 Token 并撤销，
+/// 无需在请求体中传递 Token。
 #[utoipa::path(
     post,
     path = "/api/auth/logout",
-    request_body = RevokeRequest,
     responses(
         (status = 200, description = "登出成功")
     ),
@@ -142,16 +144,23 @@ pub async fn auth_refresh(
 pub async fn auth_logout(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(svr_ctx): CmxSvrContext,
-    Json(req): Json<RevokeRequest>,
 ) -> Result<Json<ApiResp<()>>> {
     debug!("{:<12} - handler::auth_logout", "HANDLER");
+
+    // 从请求头中提取 Bearer Token
+    let token = svr_ctx
+        .headers
+        .get("authorization")
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| Error::Unauthorized("缺少 Authorization 头".to_string()))?;
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
         Error::InternalError("认证服务未初始化".to_string())
     })?;
 
     auth_service
-        .revoke_token(&req.token)
+        .revoke_token(&token)
         .await
         .map_err(|e| Error::InternalError(e.to_string()))?;
 

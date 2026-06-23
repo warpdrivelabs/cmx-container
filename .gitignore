@@ -25,3 +25,4 @@
 /storage/
 docker/V2/certs/key.pem
 docker/V2/certs/cert.pem
+/e2e_tests/.venv/
