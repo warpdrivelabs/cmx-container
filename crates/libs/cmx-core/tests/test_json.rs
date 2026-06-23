@@ -210,8 +210,8 @@ mod tests {
     fn test_json_bool操作() {
         let value: Value = serde_json::from_str(r#"{"enabled": true, "disabled": false}"#).unwrap();
 
-        assert_eq!(value["enabled"].as_bool().unwrap(), true);
-        assert_eq!(value["disabled"].as_bool().unwrap(), false);
+        assert!(value["enabled"].as_bool().unwrap());
+        assert!(!value["disabled"].as_bool().unwrap());
     }
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
         let value = serde_json::json!({
             "string": "hello",
             "number": 42,
-            "float": 3.14,
+            "float": 3.15,
             "boolean": true,
             "null": null,
             "array": [1, 2, 3],
@@ -273,7 +273,7 @@ mod tests {
 
         assert_eq!(value["string"], "hello");
         assert_eq!(value["number"], 42);
-        assert!((value["float"].as_f64().unwrap() - 3.14).abs() < f64::EPSILON);
+        assert!((value["float"].as_f64().unwrap() - 3.15).abs() < f64::EPSILON);
         assert_eq!(value["boolean"], true);
         assert!(value["null"].is_null());
         assert!(value["array"].is_array());
@@ -386,7 +386,7 @@ mod tests {
         assert!(float_val.is_f64());
 
         assert_eq!(int_val.as_i64().unwrap(), 42);
-        assert!((float_val.as_f64().unwrap() - 3.14).abs() < f64::EPSILON);
+        assert!((float_val.as_f64().unwrap() - 3.15).abs() < f64::EPSILON);
     }
 
     #[test]

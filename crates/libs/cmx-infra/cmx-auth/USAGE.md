@@ -1,6 +1,6 @@
 # cmx-auth 使用与配置指南
 
-> 版本：v2 | 适用：`crates/libs/cmx-infra/cmx-auth` 模块
+> 版本：v3 | 适用：`crates/libs/cmx-infra/cmx-auth` 模块
 >
 > 关联文档：
 > - 配置项字典：[config/CONFIG_MANUAL.md#认证配置](../../../config/CONFIG_MANUAL.md)
@@ -279,13 +279,24 @@ cmx-auth 支持 4 种认证模式，按使用场景选择。
 
 - 通过 `X-API-Key: <key>` Header 传递
 - 不创建会话（无状态校验）
-- 不计入登录指标
+- 不计入登录指标（使用专用指标 `cmx_auth_api_key_validations_total`）
 - 可关联用户（用于审计）或仅关联服务名
 
 **两种来源**：
 
 1. **配置文件静态导入**（推荐用于固定服务调用）：`[[auth.static_api_keys]]` 段，启动时 UPSERT 到数据库
-2. **API 动态管理**（推荐用于运行时生成）：通过 `cmx_auth_api_key` 表 CRUD
+2. **API 动态管理**（推荐用于运行时生成）：通过 `POST /api/auth/api-keys/create` 等管理接口（见 8.4 节）
+
+**两层缓存优化**（避免高频 M2M 调用打垮数据库）：
+
+| 缓存层 | Redis Key | TTL | 缓存内容 | 命中后跳过的查询 |
+|--------|-----------|-----|----------|-----------------|
+| 第一层 | `auth:api_key:{key_prefix}` | 60s | `ApiKeyEntity`（key_hash / status / scopes 等元数据） | DB 查询 `cmx_auth_api_key` |
+| 第二层 | `auth:api_key_ctx:{key_prefix}` | 60s | `AuthContext`（含 user / roles / permissions 完整上下文） | DB 查询 `cmx_user` + 角色权限（共 3 次） |
+
+- **缓存命中**：仅做 SHA256 校验（防缓存篡改绕过），跳过全部 4 次 DB 查询
+- **缓存失效**：API Key 删除 / 禁用 / 修改时，通过 Pub/Sub 频道 `auth:cache:invalidate` 广播 `api_key:{key_prefix}` 消息，各实例收到后清理两层缓存，秒级生效
+- **安全校验**：即使缓存命中，仍需校验明文 key 的 SHA256 与缓存中的 `key_hash` 一致，防止缓存被篡改后绕过校验
 
 **安全建议**：
 
@@ -1165,6 +1176,7 @@ enabled = true
 | POST | `/api/auth/refresh` | 白名单 | 用 Refresh Token 换新对 |
 | POST | `/api/auth/logout` | 白名单 | 撤销指定 Token（登出） |
 | POST | `/api/auth/validate` | 白名单 | 校验 Token，返回用户信息 |
+| GET | `/api/auth/me` | 是 | 获取当前登录用户完整信息（含昵称、邮箱、角色、权限） |
 | POST | `/api/auth/revoke-all` | 是 | 撤销用户所有 Token（强制下线，需 `system:auth:kick` 权限） |
 | POST | `/api/auth/heartbeat` | 是 | 刷新会话活跃时间 |
 | POST | `/api/auth/change-password` | 是 | 修改当前用户密码 |
@@ -1189,15 +1201,104 @@ enabled = true
 | POST | `/api/auth/oauth2/provider/{provider}/link` | 是 | 手动绑定第三方账号 |
 | DELETE | `/api/auth/oauth2/provider/{provider}/unlink` | 是 | 解除第三方账号绑定 |
 
-### 8.4 端点行为说明
+### 8.4 API Key 管理接口
+
+运行时动态管理 API Key（区别于 5.9 节的静态配置导入）。所有接口需认证，建议仅管理员调用。
+
+| 方法 | 路径 | 需要认证 | 用途 |
+|------|------|---------|------|
+| POST | `/api/auth/api-keys/create` | 是 | 创建 API Key，**明文仅返回一次** |
+| GET | `/api/auth/api-keys/list` | 是 | 列出 API Key（支持 status / user_id / service_name 过滤） |
+| POST | `/api/auth/api-keys/delete` | 是 | 删除指定 API Key（按 id） |
+| POST | `/api/auth/api-keys/toggle-status` | 是 | 启用 / 禁用 API Key（status: 0-禁用 / 1-启用） |
+
+**创建请求示例**：
+
+```
+POST /api/auth/api-keys/create
+{
+  "user_id": "1",                       // 可选，关联用户
+  "service_name": "billing-service",    // 可选，关联服务
+  "scopes": ["service:invoke"],         // 可选，权限范围
+  "description": "计费服务调用"           // 可选
+}
+```
+
+**创建响应**（`api_key` 字段为明文，仅此一次返回，后续不可查看）：
+
+```
+{
+  "code": 0,
+  "data": {
+    "id": "...",
+    "key_prefix": "cmx_abc1",
+    "api_key": "cmx_abc12345def67890...",  // 明文，务必立即保存
+    "user_id": "1",
+    "service_name": "billing-service",
+    "scopes": ["service:invoke"],
+    "status": 1,
+    "create_time": "2026-06-24T10:00:00Z"
+  }
+}
+```
+
+**安全提示**：
+- 明文 `api_key` 仅在创建时返回一次，丢失只能重新创建
+- 删除 / 禁用后通过 Pub/Sub 秒级失效两层缓存（见 4.2 节）
+- 建议通过环境变量或密钥管理服务保存明文，不要硬编码
+
+### 8.5 OAuth2 客户端管理接口
+
+管理自建 Authorization Server 注册的第三方应用（`cmx_auth_client` 表）。所有接口需认证，建议仅管理员调用。
+
+| 方法 | 路径 | 需要认证 | 用途 |
+|------|------|---------|------|
+| POST | `/api/auth/oauth2-clients/create` | 是 | 注册 OAuth2 客户端 |
+| GET | `/api/auth/oauth2-clients/list` | 是 | 列出客户端（支持 status / client_id 过滤） |
+| POST | `/api/auth/oauth2-clients/update` | 是 | 按 id 更新客户端（支持重置密钥） |
+| POST | `/api/auth/oauth2-clients/delete` | 是 | 删除指定客户端（按 id） |
+
+**创建请求示例**：
+
+```
+POST /api/auth/oauth2-clients/create
+{
+  "client_id": "my-app-001",
+  "client_name": "我的应用",
+  "client_secret": "my-secret",          // confidential 类型必填，public 可空
+  "client_type": "confidential",          // public / confidential
+  "redirect_uris": ["https://app.example.com/callback"],
+  "grant_types": ["authorization_code"],
+  "allowed_scopes": ["read", "write"],
+  "pkce_required": true,
+  "description": "第三方应用"
+}
+```
+
+**更新请求**（按 id 更新，所有字段可选，`client_secret` 传则重置）：
+
+```
+POST /api/auth/oauth2-clients/update
+{
+  "id": "...",
+  "client_name": "新名称",
+  "client_secret": "new-secret",          // 传则重置密钥
+  "status": 0                              // 0-禁用 / 1-启用
+}
+```
+
+### 8.6 端点行为说明
 
 - **登录接口**支持 `device_type`（web / mobile / desktop / api_key）和 `device_id` 字段，用于会话分类
 - **refresh 接口**：每次调用都返回新的 Refresh Token，旧 Refresh 立即失效（Rotation）
 - **revoke-all 接口**：撤销 Access + Refresh + 销毁所有会话 + 通过 Pub/Sub 广播本地缓存失效
 - **heartbeat 接口**：仅刷新 `last_active_at`，不返回新 Token
 - **change-password 接口**：改密成功后**自动撤销所有旧会话**（强制重新登录）
+- **me 接口**：返回当前用户完整信息（含 `cmx_user` 表的昵称、邮箱、手机、头像等），并附加角色与权限列表
+- **api-keys 接口**：明文 Key 仅创建时返回一次；删除 / 禁用通过 Pub/Sub 秒级失效两层缓存
+- **oauth2-clients 接口**：`client_secret` 哈希存储；更新时传 `client_secret` 则重置
 
-### 8.5 Swagger 文档
+### 8.7 Swagger 文档
 
 完整 API 文档（OpenAPI 3.0）：
 
@@ -1307,6 +1408,8 @@ cmx-auth 涉及 6 张表（schema 均为 `public`）。
 | `auth:oauth2:provider:callback:{code}` | String (TokenPair JSON) | 30s | 回调一次性授权码 → Token |
 | `auth:{username}:login_fail` | String (count) | lock_duration (15min) | 登录失败计数 |
 | `auth:{username}:locked` | String | lock_duration (15min) | 账号锁定标记 |
+| `auth:api_key:{key_prefix}` | String (ApiKeyEntity JSON) | 60s | API Key 元数据缓存（第一层） |
+| `auth:api_key_ctx:{key_prefix}` | String (AuthContext JSON) | 60s | API Key 认证上下文缓存（第二层） |
 | `auth:cache:invalidate` | Pub/Sub Channel | — | 缓存失效广播 |
 
 ### 10.2 Hash Tag 说明（Redis Cluster 关键）
@@ -1805,10 +1908,15 @@ Grafana 面板推荐指标：
 - **环境变量**：[config/.env.template](../../../config/.env.template)
 - **源码**：
   - [crates/libs/cmx-infra/cmx-auth/src/lib.rs](../src/lib.rs) — 模块声明
-  - [crates/libs/cmx-infra/cmx-auth/src/auth_service_impl.rs](../src/auth_service_impl.rs) — AuthService 实现
+  - [crates/libs/cmx-infra/cmx-auth/src/auth_service_impl.rs](../src/auth_service_impl.rs) — AuthService 实现（含 API Key 两层缓存）
   - [crates/libs/cmx-infra/cmx-auth/src/config.rs](../src/config.rs) — 配置定义
   - [crates/libs/cmx-infra/cmx-auth/src/metrics.rs](../src/metrics.rs) — Prometheus 指标
+  - [crates/libs/cmx-infra/cmx-auth/src/api_key/manager.rs](../src/api_key/manager.rs) — API Key 管理器（第一层缓存）
   - [crates/libs/cmx-api/src/middleware/mw_auth.rs](../../cmx-api/src/middleware/mw_auth.rs) — 路由白名单（编译正则、合并、查询）
+  - [crates/libs/cmx-api/src/handlers/auth/handler.rs](../../cmx-api/src/handlers/auth/handler.rs) — 核心认证接口（含 `/api/auth/me`）
+  - [crates/libs/cmx-api/src/handlers/auth/api_key_handler.rs](../../cmx-api/src/handlers/auth/api_key_handler.rs) — API Key 管理接口
+  - [crates/libs/cmx-api/src/handlers/auth/oauth2_client_handler.rs](../../cmx-api/src/handlers/auth/oauth2_client_handler.rs) — OAuth2 客户端管理接口
+  - [crates/libs/cmx-api/src/handlers/auth/oauth2_provider_handler.rs](../../cmx-api/src/handlers/auth/oauth2_provider_handler.rs) — 第三方 OAuth2 Provider 接口
 
 ## 附录 C：版本与变更
 
@@ -1816,6 +1924,7 @@ Grafana 面板推荐指标：
 |------|------|------|
 | v1 | 2026-06-16 | 初版，基于 cmx-auth v6 架构方案 |
 | v2 | 2026-06-16 | 更新：**白名单支持通配符**（`*` / `**` / `?`，编译为正则）；**`static_api_keys.key_prefix` 改为可选**（自动从 `key` 前 8 位提取）；新增 5.10 `[auth] whitelist` 配置段；重写第六章路由白名单 |
+| v3 | 2026-06-24 | 更新：新增 `GET /api/auth/me` 接口；新增 8.4 API Key 管理接口（create / list / delete / toggle-status）；新增 8.5 OAuth2 客户端管理接口（create / list / update / delete）；补充 4.2 API Key **两层缓存**说明（第一层 `ApiKeyEntity` + 第二层 `AuthContext`，TTL 60s，Pub/Sub 失效）；Redis Key 清单新增 `auth:api_key:{key_prefix}` 和 `auth:api_key_ctx:{key_prefix}` |
 
 ***
 

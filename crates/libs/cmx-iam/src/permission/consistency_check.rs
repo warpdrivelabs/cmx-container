@@ -1,7 +1,7 @@
-//! 代码声明权限 vs DB 存在性一致性校验
+//! 代码声明权限 vs DB 存在性一致性校验。
 //!
-//! 启动时比对 inventory 中声明的权限码 与 DB cmx_permission 表中的权限记录。
-//! 缺失时按配置 panic/warn,提示开发者手动创建 DB 记录。
+//! 启动时比对 inventory 中声明的权限码 与 DB `cmx_permission` 表中的权限记录。
+//! 缺失时按配置 panic/warn，提示开发者手动创建 DB 记录。
 //! **不自动写 DB**。
 
 use std::collections::HashSet;
@@ -9,18 +9,17 @@ use std::collections::HashSet;
 use cmx_core::model::iam::registry::all_registered_permissions;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
-use serde_json::Value;
 use tracing::{info, warn};
 
-/// 一致性校验报告
+/// 一致性校验报告。
 pub struct ConsistencyReport {
-    /// 代码有、DB 无(会导致权限检查失效)
+    /// 代码有、DB 无（会导致权限检查失效）。
     pub missing_in_db: Vec<String>,
-    /// DB 有、代码无(冗余,可清理)
+    /// DB 有、代码无（冗余，可清理）。
     pub orphan_in_db: Vec<String>,
 }
 
-/// SQL 字符串转义(单引号替换为两个单引号)
+/// SQL 字符串转义（单引号替换为两个单引号）。
 ///
 /// 避免 display/description 含单引号时生成的 DDL 语法错误。
 fn escape_sql(s: &str) -> String {
@@ -28,9 +27,9 @@ fn escape_sql(s: &str) -> String {
 }
 
 impl ConsistencyReport {
-    /// 生成待执行的 INSERT SQL
+    /// 生成待执行的 INSERT SQL。
     ///
-    /// 将缺失的权限生成 DDL,开发者可复制执行(由人工 review 后执行)
+    /// 将缺失的权限生成 DDL，开发者可复制执行（由人工 review 后执行）。
     pub fn to_insert_sql(&self) -> String {
         let mut sql = String::new();
         for code in &self.missing_in_db {
@@ -48,9 +47,9 @@ impl ConsistencyReport {
     }
 }
 
-/// 直接查询 DB 全部权限码(含已归档,绕过 archived 过滤)
+/// 直接查询 DB 全部权限码（含已归档，绕过 archived 过滤）。
 ///
-/// 确保一致性校验比对的是全量数据
+/// 确保一致性校验比对的是全量数据。
 async fn list_all_permission_codes(mm: &DatabaseManager, db_id: &str) -> Result<Vec<String>, TraitError> {
     let sql = "SELECT code FROM cmx_permission";
     let dataset = mm
@@ -74,10 +73,23 @@ async fn list_all_permission_codes(mm: &DatabaseManager, db_id: &str) -> Result<
     Ok(codes)
 }
 
-/// 执行一致性校验
+/// 执行一致性校验。
 ///
-/// 比对 inventory 声明的权限码 与 DB cmx_permission 表中的权限记录。
-/// 返回一致性报告,不自动写 DB。
+/// 比对 inventory 声明的权限码 与 DB `cmx_permission` 表中的权限记录。
+/// 返回一致性报告，不自动写 DB。
+///
+/// # Arguments
+///
+/// * `mm` - 数据库管理器。
+/// * `db_id` - 数据库 ID。
+///
+/// # Returns
+///
+/// 成功时返回 `ConsistencyReport`，包含缺失与冗余权限码列表。
+///
+/// # Errors
+///
+/// 当查询 DB 权限码失败时返回 `TraitError::Internal`。
 pub async fn ensure_db_permission_consistency(
     mm: &DatabaseManager,
     db_id: &str,
@@ -102,7 +114,7 @@ pub async fn ensure_db_permission_consistency(
     })
 }
 
-/// 启动时记录 inventory 注册的权限列表到日志
+/// 启动时记录 inventory 注册的权限列表到日志。
 pub fn log_registered_permissions() {
     let perms = all_registered_permissions();
     info!(count = perms.len(), "已注册权限定义");
@@ -116,7 +128,7 @@ pub fn log_registered_permissions() {
     }
 }
 
-/// 启动时统计已注解 handler 数量(辅助检查)
+/// 启动时统计已注解 handler 数量（辅助检查）。
 pub fn warn_handler_annotation_status() {
     let handlers = cmx_core::model::iam::registry::all_registered_handlers();
     let public_count = handlers.iter().filter(|h| h.is_public).count();
@@ -129,9 +141,21 @@ pub fn warn_handler_annotation_status() {
     );
 }
 
-/// 执行完整的一致性校验流程(启动时调用)
+/// 执行完整的一致性校验流程（启动时调用）。
 ///
-/// mode: "panic" | "warn" | "off"
+/// # Arguments
+///
+/// * `mm` - 数据库管理器。
+/// * `db_id` - 数据库 ID。
+/// * `mode` - 校验模式：`"panic"`-缺失时返回错误；`"warn"`-缺失时仅告警；`"off"`-跳过校验。
+///
+/// # Returns
+///
+/// 成功时返回 `Ok(())`。
+///
+/// # Errors
+///
+/// 当 `mode` 为 `"panic"` 且存在缺失权限时返回 `TraitError::Internal`。
 pub async fn run_consistency_check(
     mm: &DatabaseManager,
     db_id: &str,

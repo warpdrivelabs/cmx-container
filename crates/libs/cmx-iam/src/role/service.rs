@@ -171,7 +171,7 @@ impl RoleService for RoleServiceImpl {
             .await
             .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let role = Self::extract_role(dataset).map_err(|e| TraitError::from(e))?;
+        let role = Self::extract_role(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -218,7 +218,7 @@ impl RoleService for RoleServiceImpl {
             return Err(TraitError::from(IamError::RoleNotFound(role_id.to_string())));
         }
 
-        Self::extract_role(dataset).map_err(|e| TraitError::from(e))
+        Self::extract_role(dataset).map_err(TraitError::from)
     }
 
     /// 更新角色。
@@ -257,7 +257,7 @@ impl RoleService for RoleServiceImpl {
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let role = Self::extract_role(dataset).map_err(|e| TraitError::from(e))?;
+        let role = Self::extract_role(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({

@@ -67,7 +67,7 @@ impl VoloGrpcClient {
         }
 
         // 如果实例缓存中没有该服务，主动拉取
-        if self.cache.get(service_name).map_or(true, |v| v.is_empty()) {
+        if self.cache.get(service_name).is_none_or(|v| v.is_empty()) {
             let instances = self.registry.query_instances(
                 service_name,
                 self.config.default_group.as_deref(),
@@ -76,7 +76,7 @@ impl VoloGrpcClient {
                 .map_err(|e| RpcError::NoAvailableInstance(format!("服务 '{}' 查询失败: {}", service_name, e)))?;
             self.cache.update(service_name, instances);
 
-            if self.cache.get(service_name).map_or(true, |v| v.is_empty()) {
+            if self.cache.get(service_name).is_none_or(|v| v.is_empty()) {
                 return Err(RpcError::NoAvailableInstance(service_name.to_string()));
             }
         }

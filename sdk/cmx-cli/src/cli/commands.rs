@@ -438,8 +438,8 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
         let workspace_cargo = current.join("Cargo.toml");
         if workspace_cargo.exists()
             && let Ok(content) = fs::read_to_string(&workspace_cargo)
-                && let Ok(value) = content.parse::<toml::Value>() {
-                    if value.get("workspace").is_some()
+                && let Ok(value) = content.parse::<toml::Value>()
+                    && value.get("workspace").is_some()
                         && let Some(version) = value
                             .get("workspace")
                             .and_then(|w| w.get("package"))
@@ -448,7 +448,6 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
                         {
                             return Some(version.to_string());
                         }
-                }
 
         current = current.parent()?;
     }

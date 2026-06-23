@@ -1,4 +1,4 @@
-//! 角色组服务实现 — RoleGroupServiceImpl
+//! 角色组服务实现 — `RoleGroupServiceImpl`。
 
 use std::sync::Arc;
 
@@ -18,21 +18,30 @@ use crate::error::IamError;
 use crate::role_group::{RoleGroupBmc, RoleGroupFilter, RoleGroupForCreate, RoleGroupForUpdate};
 use crate::service_traits::RoleGroupService;
 
-/// 角色组服务实现
+/// 角色组服务实现。
 pub struct RoleGroupServiceImpl {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证库 db_id
+    /// 认证库 `db_id`。
     db_id: String,
-    /// IAM 配置（预留）
+    /// IAM 配置（预留）。
     #[allow(dead_code)]
     config: IamConfig,
-    /// 审计日志记录器（可选）
+    /// 审计日志记录器（可选）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
 impl RoleGroupServiceImpl {
-    /// 构造函数
+    /// 构造函数。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id`。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `RoleGroupServiceImpl` 实例，未设置审计记录器。
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -46,13 +55,21 @@ impl RoleGroupServiceImpl {
         }
     }
 
-    /// 设置审计日志记录器（Builder 模式）
+    /// 设置审计日志记录器（Builder 模式）。
+    ///
+    /// # Arguments
+    ///
+    /// * `audit` - 审计日志记录器。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `Self`，便于链式调用。
     pub fn with_audit(mut self, audit: Arc<dyn cmx_audit::AuditLogger>) -> Self {
         self.audit = Some(audit);
         self
     }
 
-    /// 从 DataSet 第一行提取 RoleGroup
+    /// 从 DataSet 第一行提取 `RoleGroup`。
     fn extract_role_group(
         dataset: cmx_core::model::data::dataset::DataSet,
     ) -> Result<RoleGroup, IamError> {
@@ -66,7 +83,7 @@ impl RoleGroupServiceImpl {
             .map_err(|e| IamError::Business(format!("角色组反序列化失败: {e}")))
     }
 
-    /// 从 DataSet 提取 RoleGroup 列表
+    /// 从 DataSet 提取 `RoleGroup` 列表。
     fn extract_role_groups(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<RoleGroup> {
         let schema = dataset.schema.as_ref();
         dataset
@@ -78,7 +95,7 @@ impl RoleGroupServiceImpl {
             .collect()
     }
 
-    /// 构造带 archived = 0 默认过滤的 RoleGroupFilter
+    /// 构造带 `archived = 0` 默认过滤的 `RoleGroupFilter`。
     fn with_default_archived(mut filter: RoleGroupFilter) -> RoleGroupFilter {
         if filter.archived.is_none() {
             filter.archived = Some(OpValsInt64(vec![OpValInt64::Eq(0)]));
@@ -86,7 +103,7 @@ impl RoleGroupServiceImpl {
         filter
     }
 
-    /// 将扁平角色组列表组装为树形结构（按 parent_id 递归）
+    /// 将扁平角色组列表组装为树形结构（按 `parent_id` 递归）。
     fn build_tree(role_groups: Vec<RoleGroup>) -> Vec<RoleGroupTreeNode> {
         // 找出根节点（parent_id 为 None 或空字符串）
         let roots: Vec<RoleGroup> = role_groups
@@ -102,7 +119,7 @@ impl RoleGroupServiceImpl {
             .collect()
     }
 
-    /// 递归构建子树
+    /// 递归构建子树。
     fn build_subtree(parent: RoleGroup, all: &[RoleGroup]) -> RoleGroupTreeNode {
         let children: Vec<RoleGroupTreeNode> = all
             .iter()
@@ -151,7 +168,7 @@ impl RoleGroupService for RoleGroupServiceImpl {
                 .await
                 .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let role_group = Self::extract_role_group(dataset).map_err(|e| TraitError::from(e))?;
+        let role_group = Self::extract_role_group(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -195,10 +212,24 @@ impl RoleGroupService for RoleGroupServiceImpl {
             )));
         }
 
-        Self::extract_role_group(dataset).map_err(|e| TraitError::from(e))
+        Self::extract_role_group(dataset).map_err(TraitError::from)
     }
 
     /// 更新角色组。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `role_group_id` - 目标角色组 ID。
+    /// * `data` - 更新参数（全 `Option`，未提供字段不更新）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回更新后的 `RoleGroup` 实例。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库 CRUD 操作失败。
     async fn update_role_group(
         &self,
         svr_ctx: &SVRContext,
@@ -220,7 +251,7 @@ impl RoleGroupService for RoleGroupServiceImpl {
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let role_group = Self::extract_role_group(dataset).map_err(|e| TraitError::from(e))?;
+        let role_group = Self::extract_role_group(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -315,6 +346,22 @@ impl RoleGroupService for RoleGroupServiceImpl {
     }
 
     /// 分页查询角色组。
+    ///
+    /// 默认附加 `archived = 0` 过滤；`current` 从 1 开始。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 角色组查询过滤器。
+    /// * `current` - 当前页码（从 1 开始）。
+    /// * `size` - 每页记录数。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(角色组列表, 总记录数)`。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_role_groups(
         &self,
         filter: RoleGroupFilter,
@@ -346,6 +393,20 @@ impl RoleGroupService for RoleGroupServiceImpl {
     }
 
     /// 列表查询角色组。
+    ///
+    /// 默认附加 `archived = 0` 过滤，返回所有匹配记录（不分页）。
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - 角色组查询过滤器。
+    ///
+    /// # Returns
+    ///
+    /// 匹配的角色组列表。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Crud` - 数据库查询失败。
     async fn list_role_groups(&self, filter: RoleGroupFilter) -> Result<Vec<RoleGroup>, TraitError> {
         debug!("{:<12} - RoleGroupServiceImpl::list_role_groups", "IAM");
 
@@ -368,6 +429,14 @@ impl RoleGroupService for RoleGroupServiceImpl {
     ///
     /// 一次性加载所有有效角色组（`archived = 0`），
     /// 在内存中按 `parent_id` 递归构建树形结构。
+    ///
+    /// # Returns
+    ///
+    /// 树根列表（每个根节点包含嵌套的 `children`）。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询失败。
     async fn get_role_group_tree(&self) -> Result<Vec<RoleGroupTreeNode>, TraitError> {
         debug!("{:<12} - RoleGroupServiceImpl::get_role_group_tree", "IAM");
 

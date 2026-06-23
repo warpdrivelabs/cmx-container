@@ -1,4 +1,4 @@
-//! IAM 跨 crate 抽象层
+//! IAM 跨 crate 抽象层。
 //!
 //! 定义权限校验和数据权限相关的 trait，供 cmx-iam 实现和其他 crate 消费。
 

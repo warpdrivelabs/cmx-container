@@ -202,7 +202,7 @@ fn resolve_field_to_spec(
         let sub_fields: Vec<FieldSpec> = field
             .sub_fields
             .iter()
-            .map(|sf| table_field_to_spec(sf))
+            .map(table_field_to_spec)
             .collect();
         return FieldSpec {
             name: field.name.clone(),
@@ -224,7 +224,7 @@ fn resolve_field_to_spec(
     };
 
     if JSON_SCHEMA_TYPES.contains(&type_name.as_str()) {
-        let clean_desc = trim_description(&field.description.replace(
+        let clean_desc = trim_description(field.description.replace(
             &format!("`{}`", type_name),
             "",
         ).trim());
@@ -377,8 +377,6 @@ fn resolved_field_to_spec(resolved: &ResolvedField) -> FieldSpec {
         }
     } else if is_primitive_type(&resolved.type_name) {
         (map_primitive_to_json_type(&resolved.type_name), None)
-    } else if resolved.sub_fields.is_empty() {
-        ("object".to_string(), None)
     } else {
         ("object".to_string(), None)
     };

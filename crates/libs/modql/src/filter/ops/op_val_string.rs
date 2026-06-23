@@ -289,12 +289,11 @@ mod with_sea_query {
 
 				OpValString::Null(null) => sea_is_col_value_null(col.clone(), null),
 				OpValString::Empty(empty) => {
-					let op = if empty { BinOper::Equal } else { BinOper::NotEqual };
-					Condition::any()
-						.add(sea_is_col_value_null(col.clone(), empty))
-						.add(binary_fn(op, "".to_string()))
-						.into()
-				}
+				let op = if empty { BinOper::Equal } else { BinOper::NotEqual };
+				Condition::any()
+					.add(sea_is_col_value_null(col.clone(), empty))
+					.add(binary_fn(op, "".to_string()))
+			}
 
 				OpValString::ContainsCi(s) => case_insensitive_fn(BinOper::Like, format!("%{s}%")),
 				OpValString::NotContainsCi(s) => case_insensitive_fn(BinOper::NotLike, format!("%{s}%")),

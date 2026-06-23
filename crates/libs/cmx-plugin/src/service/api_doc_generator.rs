@@ -766,13 +766,11 @@ fn to_pascal_case(s: &str) -> String {
 }
 
 fn unwrap_input_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
-    if params.len() == 1 && params[0].name == "input" && params[0].param_type == "object" {
-        if let Some(props) = &params[0].properties {
-            if !props.is_empty() {
+    if params.len() == 1 && params[0].name == "input" && params[0].param_type == "object"
+        && let Some(props) = &params[0].properties
+            && !props.is_empty() {
                 return props;
             }
-        }
-    }
     params
 }
 
@@ -781,13 +779,11 @@ fn is_basic_type(t: &str) -> bool {
 }
 
 fn unwrap_output_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
-    if params.len() == 1 && params[0].name == "output" && params[0].param_type == "object" {
-        if let Some(props) = &params[0].properties {
-            if !props.is_empty() {
+    if params.len() == 1 && params[0].name == "output" && params[0].param_type == "object"
+        && let Some(props) = &params[0].properties
+            && !props.is_empty() {
                 return props;
             }
-        }
-    }
     params
 }
 
@@ -927,8 +923,8 @@ fn param_doc_to_openapi_schema(param: &ParameterDoc) -> Value {
         schema["description"] = json!(param.description);
     }
 
-    if let Some(props) = &param.properties {
-        if !props.is_empty() {
+    if let Some(props) = &param.properties
+        && !props.is_empty() {
             let mut properties = serde_json::Map::new();
             let mut required = Vec::new();
             for p in props {
@@ -943,7 +939,6 @@ fn param_doc_to_openapi_schema(param: &ParameterDoc) -> Value {
                 schema["required"] = json!(required);
             }
         }
-    }
 
     schema
 }

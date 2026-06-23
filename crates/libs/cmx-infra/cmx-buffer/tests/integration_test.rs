@@ -17,7 +17,7 @@ fn get_redis_url() -> String {
 }
 
 async fn setup_client() -> RedisClient {
-    let config = RedisConfig::new(&get_redis_url())
+    let config = RedisConfig::new(get_redis_url())
         .with_key_prefix("cmx-buffer-test:");
     RedisClient::new(config).await.expect("Failed to create Redis client")
 }
@@ -194,9 +194,9 @@ async fn test_cache_mget() {
     let values = ops.mget(&keys).await.unwrap();
     
     assert_eq!(values.len(), 3);
-    assert_eq!(values[0].as_ref().map(|s| s.as_str()), Some("value0"));
-    assert_eq!(values[1].as_ref().map(|s| s.as_str()), Some("value1"));
-    assert_eq!(values[2].as_ref().map(|s| s.as_str()), Some("value2"));
+    assert_eq!(values[0].as_deref(), Some("value0"));
+    assert_eq!(values[1].as_deref(), Some("value1"));
+    assert_eq!(values[2].as_deref(), Some("value2"));
     
     // 清理
     for i in 0..3u8 {

@@ -430,7 +430,7 @@ fn parse_nested_fields(content: &str) -> Vec<FieldInfo> {
         // 顶层直接以表格开头的情况
         if is_table_start(trimmed) || trimmed.starts_with('|') {
             if root_fields.is_empty() {
-                let table_content: String = lines[idx..].iter().cloned().collect::<Vec<_>>().join("\n");
+                let table_content: String = lines[idx..].to_vec().join("\n");
                 return parse_table(&table_content);
             }
             let search_idx = skip_empty_lines(&lines, idx + 1);

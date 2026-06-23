@@ -31,7 +31,7 @@ pub async fn init_storage() -> crate::Result<()> {
     info!("初始化文件存储服务...");
 
     let config = ConfigManager::global();
-    let storage_config = StorageManagerConfig::from_config(&*config)
+    let storage_config = StorageManagerConfig::from_config(&config)
         .map_err(|e| Error::StorageInit(format!("存储配置加载失败: {}", e)))?;
 
     let manager = Arc::new(

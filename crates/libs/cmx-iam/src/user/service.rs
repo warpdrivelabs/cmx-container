@@ -256,7 +256,7 @@ impl UserService for UserServiceImpl {
                 .await
                 .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let user = Self::extract_user(dataset).map_err(|e| TraitError::from(e))?;
+        let user = Self::extract_user(dataset).map_err(TraitError::from)?;
 
         // 5. 审计日志（脱敏后记录）
         let audit_detail = serde_json::json!({
@@ -310,7 +310,7 @@ impl UserService for UserServiceImpl {
             return Err(TraitError::from(IamError::UserNotFound(username.to_string())));
         }
 
-        Self::extract_user(dataset).map_err(|e| TraitError::from(e))
+        Self::extract_user(dataset).map_err(TraitError::from)
     }
 
     /// 更新用户。
@@ -381,7 +381,7 @@ impl UserService for UserServiceImpl {
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let user = Self::extract_user(dataset).map_err(|e| TraitError::from(e))?;
+        let user = Self::extract_user(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -689,7 +689,30 @@ impl UserService for UserServiceImpl {
         Ok(Self::extract_roles(dataset))
     }
 
-    /// 分配临时角色（带有效期）
+    /// 分配临时角色（带有效期）。
+    ///
+    /// 为指定用户分配一个临时角色授权，支持有效期范围、来源标记和撤销原因。
+    /// 当配置了 SoD 规则执行器时，会先校验角色互斥约束。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务上下文，包含认证信息用于审计。
+    /// * `user_id` - 目标用户 ID。
+    /// * `role_id` - 待分配的角色 ID。
+    /// * `effective_from` - 授权生效时间。
+    /// * `effective_until` - 授权失效时间，必须晚于 `effective_from`。
+    /// * `reason` - 授权原因（可选）。
+    /// * `source` - 授权来源标记。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `UserRoleAssignment`，包含完整的授权记录。
+    ///
+    /// # Errors
+    ///
+    /// * 当 `effective_until <= effective_from` 时返回业务错误。
+    /// * 当 SoD 规则校验失败时返回规则违反错误。
+    /// * 当数据库插入或查询失败时返回内部错误。
     async fn assign_temp_role(
         &self,
         svr_ctx: &SVRContext,
@@ -784,7 +807,25 @@ impl UserService for UserServiceImpl {
             })
     }
 
-    /// 撤销临时角色（逻辑撤销 status=0）
+    /// 撤销临时角色（逻辑撤销 status=0）。
+    ///
+    /// 将指定授权记录的状态置为已撤销，并记录撤销人和撤销时间。
+    /// 撤销后会失效对应用户的权限缓存。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务上下文，包含认证信息用于审计。
+    /// * `assignment_id` - 待撤销的授权记录 ID。
+    /// * `reason` - 撤销原因（可选）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `Ok(())`。
+    ///
+    /// # Errors
+    ///
+    /// * 当授权记录不存在或已撤销时返回业务错误。
+    /// * 当数据库更新或查询失败时返回内部错误。
     async fn revoke_temp_role(
         &self,
         svr_ctx: &SVRContext,
@@ -858,7 +899,24 @@ impl UserService for UserServiceImpl {
         Ok(())
     }
 
-    /// 批量撤销临时角色
+    /// 批量撤销临时角色。
+    ///
+    /// 在单个事务中撤销多个授权记录，并聚合审计日志。
+    /// 撤销后会失效所有受影响用户的权限缓存。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务上下文，包含认证信息用于审计。
+    /// * `assignment_ids` - 待撤销的授权记录 ID 列表。
+    /// * `reason` - 撤销原因（可选）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回实际撤销的记录数。
+    ///
+    /// # Errors
+    ///
+    /// 当事务开启、提交或数据库更新失败时返回内部错误。
     async fn revoke_temp_roles_batch(
         &self,
         svr_ctx: &SVRContext,
@@ -901,11 +959,9 @@ impl UserService for UserServiceImpl {
                     .iter()
                     .next()
                     .and_then(|row| row.get_by_name_as::<String>(schema, "user_id"))
-                {
-                    if !affected_user_ids.contains(&uid) {
+                    && !affected_user_ids.contains(&uid) {
                         affected_user_ids.push(uid);
                     }
-                }
             }
 
             let update_sql = r#"
@@ -960,7 +1016,27 @@ impl UserService for UserServiceImpl {
         Ok(total_affected)
     }
 
-    /// 延长临时授权有效期
+    /// 延长临时授权有效期。
+    ///
+    /// 将指定授权记录的 `effective_until` 更新为新的失效时间。
+    /// 新失效时间必须晚于原失效时间。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务上下文，包含认证信息用于审计。
+    /// * `assignment_id` - 待延长的授权记录 ID。
+    /// * `new_effective_until` - 新的失效时间，必须晚于原 `effective_until`。
+    /// * `reason` - 延长原因（可选）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `Ok(())`。
+    ///
+    /// # Errors
+    ///
+    /// * 当授权记录不存在或已撤销时返回业务错误。
+    /// * 当新失效时间不晚于原失效时间时返回业务错误。
+    /// * 当数据库查询或更新失败时返回内部错误。
     async fn extend_temp_role(
         &self,
         svr_ctx: &SVRContext,
@@ -1044,7 +1120,22 @@ impl UserService for UserServiceImpl {
         Ok(())
     }
 
-    /// 查询用户的临时授权列表
+    /// 查询用户的临时授权列表。
+    ///
+    /// 根据状态过滤条件返回指定用户的临时角色授权记录。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    /// * `status_filter` - 状态过滤条件，参见 `TempAssignmentStatusFilter`。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `UserRoleAssignment` 列表，按授权记录顺序排列。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库查询失败时返回内部错误。
     async fn get_user_temp_assignments(
         &self,
         user_id: &str,

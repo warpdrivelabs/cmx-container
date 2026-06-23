@@ -1,6 +1,6 @@
-//! 认证策略模块
+//! 认证策略模块。
 //!
-//! 实现 AuthPolicy trait 的三种策略：JWT Bearer / API Key / OAuth2。
+//! 实现 `AuthPolicy` trait 的两种策略：JWT Bearer 和 OAuth2。
 
 pub mod jwt_policy;
 pub mod oauth2_policy;

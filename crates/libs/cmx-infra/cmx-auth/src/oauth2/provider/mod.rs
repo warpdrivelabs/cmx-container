@@ -1,6 +1,6 @@
-//! 第三方 OAuth2 Provider 抽象
+//! 第三方 OAuth2 Provider 抽象。
 //!
-//! 定义 OAuth2Provider trait，提供统一的第三方 Provider 接口。
+//! 定义 `OAuth2Provider` trait，提供统一的第三方 Provider 接口。
 //! 内置 Provider（Google/GitHub）和通用 Provider 均实现此 trait。
 
 pub mod generic;
@@ -13,45 +13,76 @@ use async_trait::async_trait;
 use cmx_traits::auth::AuthError;
 use serde::{Deserialize, Serialize};
 
-/// 第三方 OAuth2 Provider 统一接口
+/// 第三方 OAuth2 Provider 统一接口。
 #[async_trait]
 pub trait OAuth2Provider: Send + Sync {
-    /// Provider 唯一标识（如 "google", "github"）
+    /// 返回 Provider 唯一标识（如 `google`、`github`）。
     fn name(&self) -> &str;
 
-    /// Provider 显示名称（如 "Google", "GitHub"）
+    /// 返回 Provider 显示名称（如 `Google`、`GitHub`）。
     fn display_name(&self) -> &str;
 
-    /// Provider 图标 URL（内置 Provider 提供默认值）
+    /// 返回 Provider 图标 URL（内置 Provider 提供默认值）。
     fn icon_url(&self) -> Option<&str> {
         None
     }
 
-    /// 品牌色（用于前端按钮样式，如 "#4285F4"）
+    /// 返回品牌色（用于前端按钮样式，如 `#4285F4`）。
     fn brand_color(&self) -> Option<&str> {
         None
     }
 
-    /// 构建授权 URL（第一步：重定向用户到 Provider 授权页面）
+    /// 构建授权 URL（第一步：重定向用户到 Provider 授权页面）。
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - CSRF state 字符串。
+    /// * `redirect_uri` - 回调地址。
+    /// * `scopes` - 请求的 scope 列表。
     fn build_authorize_url(&self, state: &str, redirect_uri: &str, scopes: &[String]) -> String;
 
-    /// 用授权码交换 Token（第二步：POST 到 Provider token endpoint）
+    /// 用授权码交换 Token（第二步：POST 到 Provider token endpoint）。
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - 第三方 Provider 返回的授权码。
+    /// * `redirect_uri` - 回调地址。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `ProviderTokenResponse`。
+    ///
+    /// # Errors
+    ///
+    /// 当第三方服务不可达或返回错误时返回 `AuthError`。
     async fn exchange_code(
         &self,
         code: &str,
         redirect_uri: &str,
     ) -> Result<ProviderTokenResponse, AuthError>;
 
-    /// 获取用户信息（第三步：用 access_token/id_token 获取用户信息）
+    /// 获取用户信息（第三步：用 access_token/id_token 获取用户信息）。
+    ///
+    /// # Arguments
+    ///
+    /// * `token_response` - `exchange_code` 返回的 Token 响应。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `ProviderUserInfo`。
+    ///
+    /// # Errors
+    ///
+    /// 当第三方服务不可达或返回错误时返回 `AuthError`。
     async fn get_user_info(
         &self,
         token_response: &ProviderTokenResponse,
     ) -> Result<ProviderUserInfo, AuthError>;
 
-    /// Provider 特有的 scope 列表（默认值）
+    /// 返回 Provider 特有的 scope 列表（默认值）。
     fn default_scopes(&self) -> Vec<String>;
 
-    /// 获取 Provider 配置的 redirect_uri
+    /// 返回 Provider 配置的 `redirect_uri`。
     fn redirect_uri(&self) -> &str;
 }
 

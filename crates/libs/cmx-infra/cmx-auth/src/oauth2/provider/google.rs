@@ -36,7 +36,7 @@ impl JwksCache {
 
     fn is_valid(&self) -> bool {
         self.keys.is_some()
-            && self.expires_at.map_or(false, |t| std::time::Instant::now() < t)
+            && self.expires_at.is_some_and(|t| std::time::Instant::now() < t)
     }
 
     fn set(&mut self, keys: serde_json::Value, ttl: std::time::Duration) {

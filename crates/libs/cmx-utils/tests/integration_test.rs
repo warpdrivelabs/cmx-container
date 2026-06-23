@@ -175,7 +175,7 @@ fn test_config_builder_flexibility() {
 
     assert_eq!(config.get_string("app.name").unwrap(), "MyApp");
     assert_eq!(config.get_string("app.version").unwrap(), "1.0.0");
-    assert_eq!(config.get_bool("app.debug").unwrap(), true);
+    assert!(config.get_bool("app.debug").unwrap());
     assert_eq!(config.get_int("app.port").unwrap(), 8080);
 }
 
@@ -190,7 +190,7 @@ fn test_type_conversions() {
         br#"
 string_value = "hello"
 int_value = 42
-float_value = 3.14
+float_value = 3.15
 bool_value = true
 large_int = 9223372036854775807
 small_int = 255
@@ -202,8 +202,8 @@ small_int = 255
 
     assert_eq!(config.get_string("string_value").unwrap(), "hello");
     assert_eq!(config.get_int("int_value").unwrap(), 42);
-    assert!((config.get_float("float_value").unwrap() - 3.14).abs() < 0.001);
-    assert_eq!(config.get_bool("bool_value").unwrap(), true);
+    assert!((config.get_float("float_value").unwrap() - 3.15).abs() < 0.001);
+    assert!(config.get_bool("bool_value").unwrap());
 
     let large: i64 = config.get_as("large_int").unwrap();
     assert_eq!(large, 9223372036854775807);

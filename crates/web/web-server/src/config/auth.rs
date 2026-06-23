@@ -39,8 +39,8 @@ pub async fn init_auth_service(
 
     // 4. 创建 AuthServiceImpl
     // 4.1 初始化第三方 OAuth2 Provider 注册表（在创建 AuthServiceImpl 之前，因为 auth_config 会被 move）
-    if let Some(ref oauth2_config) = auth_config.oauth2 {
-        if !oauth2_config.providers.is_empty() {
+    if let Some(ref oauth2_config) = auth_config.oauth2
+        && !oauth2_config.providers.is_empty() {
             let mut registry = cmx_auth::oauth2::OAuth2ProviderRegistry::new();
             for provider_config in &oauth2_config.providers {
                 if !provider_config.enabled {
@@ -76,11 +76,10 @@ pub async fn init_auth_service(
             }
 
             cmx_api::middleware::GlobalAuthService::initialize_provider_registry(registry)
-                .map_err(|e| crate::error::Error::ServerSetup(e))?;
+                .map_err(crate::error::Error::ServerSetup)?;
 
             info!("第三方 OAuth2 Provider 注册表初始化完成");
         }
-    }
 
     // 4.2 创建 AuthServiceImpl
     let auth_service_impl = AuthServiceImpl::new(cache, auth_config, user_query)
@@ -95,13 +94,13 @@ pub async fn init_auth_service(
     // 5.6 修复：从 AuthServiceImpl 获取已创建的 OAuth2Policy，避免重复创建
     let oauth2_policy = Arc::new(auth_service_impl.oauth2_policy().clone());
     cmx_api::middleware::GlobalAuthService::initialize_oauth2(oauth2_policy)
-        .map_err(|e| crate::error::Error::ServerSetup(e))?;
+        .map_err(crate::error::Error::ServerSetup)?;
 
     let auth_service: Arc<dyn AuthService> = Arc::new(auth_service_impl);
 
     // 6. 注册全局认证服务（供 mw_auth 中间件使用）
     cmx_api::middleware::GlobalAuthService::initialize(auth_service.clone())
-        .map_err(|e| crate::error::Error::ServerSetup(e))?;
+        .map_err(crate::error::Error::ServerSetup)?;
 
     // 7. 注册 Pub/Sub 订阅（缓存失效回调）
     if GlobalSubscriberManager::is_initialized() {
@@ -239,8 +238,7 @@ fn load_auth_config() -> AuthConfig {
     }
 
     // OAuth2 Provider 配置
-    if auth_config.oauth2.is_some() {
-        let oauth2 = auth_config.oauth2.as_mut().unwrap();
+    if let Some(oauth2) = auth_config.oauth2.as_mut() {
 
         // 读取 providers 数组
         let mut providers = Vec::new();

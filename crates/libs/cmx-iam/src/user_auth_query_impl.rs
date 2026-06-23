@@ -28,7 +28,7 @@ pub struct UserAuthQueryImpl {
 }
 
 impl UserAuthQueryImpl {
-    /// 从 DataSet 第一行提取 UserAuthData
+    /// 从 DataSet 第一行提取 `UserAuthData`。
     fn extract_user(dataset: DataSet) -> Option<UserAuthData> {
         let schema = dataset.schema.as_ref();
         let row = dataset.iter().next()?;
@@ -51,9 +51,22 @@ impl UserAuthQueryImpl {
         })
     }
 
-    /// 构造函数
+    /// 构造函数。
     ///
-    /// 使用 config.auth_db_id 或回退到 DatabaseManager 默认 db_id
+    /// 使用 `config.auth_db_id` 或回退到 `DatabaseManager` 默认 `db_id`。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id`。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `UserAuthQueryImpl` 实例。
+    ///
+    /// # Errors
+    ///
+    /// 当获取默认 `db_id` 失败时返回错误。
     pub async fn new(mm: Arc<DatabaseManager>, config: &IamConfig) -> Result<Self, TraitError> {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -418,8 +431,8 @@ impl UserAuthQuery for UserAuthQueryImpl {
                 .map_err(|e| TraitError::Internal(format!("查询角色失败: {}", e)))?;
 
             let role_schema = role_dataset.schema.as_ref();
-            if let Some(role_row) = role_dataset.iter().next() {
-                if let Some(role_id) = role_row.get_by_name_as::<String>(role_schema, "id") {
+            if let Some(role_row) = role_dataset.iter().next()
+                && let Some(role_id) = role_row.get_by_name_as::<String>(role_schema, "id") {
                     let ur_id = cmx_utils::snowflake_id_str();
                     let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
                                          VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
@@ -435,7 +448,6 @@ impl UserAuthQuery for UserAuthQueryImpl {
                         .map_err(|e| TraitError::Internal(format!("关联默认角色失败: {}", e)))?;
                     info!(user_id = %user_id, role_code = %role_code, "OAuth2 自动注册用户已关联默认角色");
                 }
-            }
         }
 
         // 提交事务

@@ -76,14 +76,15 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                 .await
             {
                 Ok(resp) => {
-                    let mut pb_resp = ExecuteServiceResponse::default();
-                    pb_resp.success = resp.success;
-                    pb_resp.output = resp.output.map(|v| v.to_string().into());
-                    pb_resp.steps = resp.steps.into_iter().map(execution_step_to_proto).collect();
-                    pb_resp.total_elapsed_us = resp.total_elapsed_us.unwrap_or(0);
-                    pb_resp.error = resp.error.map(|e| OrchestrationError {
-                        message: e.message.into(),
-                    });
+                    let pb_resp = ExecuteServiceResponse {
+                        success: resp.success,
+                        output: resp.output.map(|v| v.to_string().into()),
+                        steps: resp.steps.into_iter().map(execution_step_to_proto).collect(),
+                        total_elapsed_us: resp.total_elapsed_us.unwrap_or(0),
+                        error: resp.error.map(|e| OrchestrationError {
+                            message: e.message.into(),
+                        }),
+                    };
                     Ok(volo_grpc::Response::new(pb_resp))
                 }
                 Err(e) => {
@@ -92,11 +93,15 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                         error = %e,
                         "服务编排执行失败"
                     );
-                    let mut pb_resp = ExecuteServiceResponse::default();
-                    pb_resp.success = false;
-                    pb_resp.error = Some(OrchestrationError {
-                        message: e.to_string().into(),
-                    });
+                    let pb_resp = ExecuteServiceResponse {
+                        success: false,
+                        output: None,
+                        steps: Vec::new(),
+                        total_elapsed_us: 0,
+                        error: Some(OrchestrationError {
+                            message: e.to_string().into(),
+                        }),
+                    };
                     Ok(volo_grpc::Response::new(pb_resp))
                 }
             }
@@ -147,13 +152,16 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
             .await
             {
                 Ok(result) => {
-                    let mut pb_resp = CallFunctionResponse::default();
-                    pb_resp.success = result.success;
-                    if result.success {
-                        pb_resp.result = Some(result.result.to_string().into());
-                    }
-                    pb_resp.elapsed_us = result.elapsed_us;
-                    pb_resp.error = result.error.map(|s| s.into());
+                    let pb_resp = CallFunctionResponse {
+                        success: result.success,
+                        result: if result.success {
+                            Some(result.result.to_string().into())
+                        } else {
+                            None
+                        },
+                        elapsed_us: result.elapsed_us,
+                        error: result.error.map(|s| s.into()),
+                    };
                     Ok(volo_grpc::Response::new(pb_resp))
                 }
                 Err(e) => {
@@ -164,9 +172,12 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                         error = %e,
                         "插件函数调用失败"
                     );
-                    let mut pb_resp = CallFunctionResponse::default();
-                    pb_resp.success = false;
-                    pb_resp.error = Some(e.to_string().into());
+                    let pb_resp = CallFunctionResponse {
+                        success: false,
+                        result: None,
+                        elapsed_us: 0,
+                        error: Some(e.to_string().into()),
+                    };
                     Ok(volo_grpc::Response::new(pb_resp))
                 }
             }
@@ -176,14 +187,14 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
 
 /// 将 cmx_core::ExecutionStep 转换为 protobuf ExecutionStep
 fn execution_step_to_proto(step: cmx_core::ExecutionStep) -> ExecutionStep {
-    let mut pb = ExecutionStep::default();
-    pb.node_id = step.node_id.into();
-    pb.node_name = step.node_name.into();
-    pb.node_type = step.node_type.into();
-    pb.status = cmx_biz::service_executor::step_status_to_str(&step.status).into();
-    pb.output = step.output.map(|v| v.to_string().into());
-    pb.elapsed_us = step.elapsed_us;
-    pb.error = step.error.map(|s| s.into());
-    pb.previous_output = step.previous_output.map(|v| v.to_string().into());
-    pb
+    ExecutionStep {
+        node_id: step.node_id.into(),
+        node_name: step.node_name.into(),
+        node_type: step.node_type.into(),
+        status: cmx_biz::service_executor::step_status_to_str(&step.status).into(),
+        output: step.output.map(|v| v.to_string().into()),
+        elapsed_us: step.elapsed_us,
+        error: step.error.map(|s| s.into()),
+        previous_output: step.previous_output.map(|v| v.to_string().into()),
+    }
 }

@@ -1,4 +1,4 @@
-//! 权限服务实现 — PermissionServiceImpl
+//! 权限服务实现 — `PermissionServiceImpl`。
 
 use std::sync::Arc;
 
@@ -18,21 +18,30 @@ use crate::error::IamError;
 use crate::permission::{PermissionBmc, PermissionFilter, PermissionForCreate, PermissionForUpdate};
 use crate::service_traits::PermissionService;
 
-/// 权限服务实现
+/// 权限服务实现。
 pub struct PermissionServiceImpl {
-    /// 数据库管理器
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
-    /// 认证库 db_id
+    /// 认证库 `db_id`。
     db_id: String,
-    /// IAM 配置（预留：用于权限缓存 TTL 等扩展）
+    /// IAM 配置（预留：用于权限缓存 TTL 等扩展）。
     #[allow(dead_code)]
     config: IamConfig,
-    /// 审计日志记录器（可选）
+    /// 审计日志记录器（可选）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
 impl PermissionServiceImpl {
-    /// 构造函数
+    /// 构造函数。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id`。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `PermissionServiceImpl` 实例，未设置审计记录器。
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -46,13 +55,21 @@ impl PermissionServiceImpl {
         }
     }
 
-    /// 设置审计日志记录器（Builder 模式）
+    /// 设置审计日志记录器（Builder 模式）。
+    ///
+    /// # Arguments
+    ///
+    /// * `audit` - 审计日志记录器。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `Self`，便于链式调用。
     pub fn with_audit(mut self, audit: Arc<dyn cmx_audit::AuditLogger>) -> Self {
         self.audit = Some(audit);
         self
     }
 
-    /// 从 DataSet 第一行提取 Permission
+    /// 从 DataSet 第一行提取 `Permission`。
     fn extract_permission(
         dataset: cmx_core::model::data::dataset::DataSet,
     ) -> Result<Permission, IamError> {
@@ -66,7 +83,7 @@ impl PermissionServiceImpl {
             .map_err(|e| IamError::Business(format!("权限反序列化失败: {e}")))
     }
 
-    /// 从 DataSet 提取 Permission 列表
+    /// 从 DataSet 提取 `Permission` 列表。
     fn extract_permissions(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<Permission> {
         let schema = dataset.schema.as_ref();
         dataset
@@ -78,7 +95,7 @@ impl PermissionServiceImpl {
             .collect()
     }
 
-    /// 构造带 archived = 0 默认过滤的 PermissionFilter
+    /// 构造带 `archived = 0` 默认过滤的 `PermissionFilter`。
     fn with_default_archived(mut filter: PermissionFilter) -> PermissionFilter {
         if filter.archived.is_none() {
             filter.archived = Some(OpValsInt64(vec![OpValInt64::Eq(0)]));
@@ -86,7 +103,7 @@ impl PermissionServiceImpl {
         filter
     }
 
-    /// 将扁平权限列表组装为树形结构（按 parent_id 递归）
+    /// 将扁平权限列表组装为树形结构（按 `parent_id` 递归）。
     fn build_tree(permissions: Vec<Permission>) -> Vec<PermissionTreeNode> {
         // 找出根节点（parent_id 为 None 或空字符串）
         let roots: Vec<Permission> = permissions
@@ -102,7 +119,7 @@ impl PermissionServiceImpl {
             .collect()
     }
 
-    /// 递归构建子树
+    /// 递归构建子树。
     fn build_subtree(parent: Permission, all: &[Permission]) -> PermissionTreeNode {
         let children: Vec<PermissionTreeNode> = all
             .iter()
@@ -170,7 +187,7 @@ impl PermissionService for PermissionServiceImpl {
                 .await
                 .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let permission = Self::extract_permission(dataset).map_err(|e| TraitError::from(e))?;
+        let permission = Self::extract_permission(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -217,7 +234,7 @@ impl PermissionService for PermissionServiceImpl {
             return Err(TraitError::from(IamError::PermissionNotFound(permission_id.to_string())));
         }
 
-        Self::extract_permission(dataset).map_err(|e| TraitError::from(e))
+        Self::extract_permission(dataset).map_err(TraitError::from)
     }
 
     /// 更新权限。
@@ -256,7 +273,7 @@ impl PermissionService for PermissionServiceImpl {
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
-        let permission = Self::extract_permission(dataset).map_err(|e| TraitError::from(e))?;
+        let permission = Self::extract_permission(dataset).map_err(TraitError::from)?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -485,7 +502,15 @@ impl PermissionService for PermissionServiceImpl {
         Ok(Self::build_tree(permissions))
     }
 
-    /// 统计每个权限被多少角色使用
+    /// 统计每个权限被多少角色使用。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `PermissionUsageStat` 列表，按 `role_count` 降序排列。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库查询失败时返回 `IamError::Business`。
     async fn get_permission_usage_stat(
         &self,
     ) -> Result<Vec<crate::service_traits::PermissionUsageStat>, TraitError> {

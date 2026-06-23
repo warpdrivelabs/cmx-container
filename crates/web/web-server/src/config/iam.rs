@@ -78,11 +78,10 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
 
     // 6. 初始化全局权限映射
     let permission_map = load_permission_map();
-    if !permission_map.is_empty() {
-        if let Err(e) = GlobalPermissionConfig::initialize(permission_map) {
+    if !permission_map.is_empty()
+        && let Err(e) = GlobalPermissionConfig::initialize(permission_map) {
             warn!("全局权限映射初始化失败: {}", e);
         }
-    }
 
     info!("IAM 基础服务初始化完成（等待 AuthService 注入 UserService）");
 

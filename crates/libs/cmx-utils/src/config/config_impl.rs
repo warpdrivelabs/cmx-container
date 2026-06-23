@@ -866,7 +866,7 @@ debug = false
             .unwrap();
 
         assert_eq!(config.get_string("app.name").unwrap(), "my-app");
-        assert_eq!(config.get_bool("app.debug").unwrap(), false);
+        assert!(!config.get_bool("app.debug").unwrap());
     }
 
     #[test]
@@ -904,7 +904,7 @@ port = 6379
             br#"
 string_val = "hello"
 int_val = 42
-float_val = 3.14
+float_val = 3.15
 bool_val = true
 "#,
         )
@@ -914,7 +914,7 @@ bool_val = true
 
         assert_eq!(config.get_string("string_val").unwrap(), "hello");
         assert_eq!(config.get_int("int_val").unwrap(), 42);
-        assert!((config.get_float("float_val").unwrap() - 3.14).abs() < 0.001);
-        assert_eq!(config.get_bool("bool_val").unwrap(), true);
+        assert!((config.get_float("float_val").unwrap() - 3.15).abs() < 0.001);
+        assert!(config.get_bool("bool_val").unwrap());
     }
 }

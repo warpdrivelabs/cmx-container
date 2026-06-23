@@ -1,11 +1,11 @@
-//! cmx-macros — 权限/角色注解属性宏
+//! cmx-macros — 权限/角色注解属性宏。
 //!
-//! 对标 Spring Security 注解体系,提供 7 个属性宏:
-//! - 权限:`#[has_permission]` / `#[has_permissions]` / `#[has_any_permission]`
-//! - 角色:`#[has_role]` / `#[has_roles]` / `#[has_any_role]`
-//! - 公开:`#[permit_all]`
+//! 对标 Spring Security 注解体系，提供 7 个属性宏：
+//! - 权限：`#[has_permission]` / `#[has_permissions]` / `#[has_any_permission]`
+//! - 角色：`#[has_role]` / `#[has_roles]` / `#[has_any_role]`
+//! - 公开：`#[permit_all]`
 //!
-//! 宏生成的 `inventory::submit!` 代码在调用方 crate 中展开,
+//! 宏生成的 `inventory::submit!` 代码在调用方 crate 中展开，
 //! 类型路径使用绝对路径 `::cmx_core::...` 和 `::inventory::submit!`。
 
 use proc_macro::TokenStream;
@@ -20,23 +20,22 @@ use syn::{
 // 辅助函数
 // =========================================================================
 
-/// 在函数参数中查找 CmxSvrContext 类型的 binding
+/// 在函数参数中查找 `CmxSvrContext` 类型的 binding。
 ///
-/// 通过类型路径匹配(非参数名),匹配路径末段为 "CmxSvrContext" 的 TupleStruct 模式。
+/// 通过类型路径匹配（非参数名），匹配路径末段为 `CmxSvrContext` 的 TupleStruct 模式。
 fn find_svr_ctx_binding(item_fn: &ItemFn) -> syn::Result<Ident> {
     for arg in &item_fn.sig.inputs {
         if let syn::FnArg::Typed(pat_type) = arg {
             // 检查是否为 TupleStruct 模式: CmxSvrContext(svr_ctx)
             if let Pat::TupleStruct(tuple_struct) = &*pat_type.pat {
                 // 检查路径末段是否为 "CmxSvrContext"
-                if let Some(last_seg) = tuple_struct.path.segments.last() {
-                    if last_seg.ident == "CmxSvrContext" {
+                if let Some(last_seg) = tuple_struct.path.segments.last()
+                    && last_seg.ident == "CmxSvrContext" {
                         // 提取内部 binding
                         if let Some(Pat::Ident(pat_ident)) = tuple_struct.elems.first() {
                             return Ok(pat_ident.ident.clone());
                         }
                     }
-                }
             }
         }
     }
@@ -46,7 +45,7 @@ fn find_svr_ctx_binding(item_fn: &ItemFn) -> syn::Result<Ident> {
     ))
 }
 
-/// 生成 inventory::submit! 注册 RegisteredRouteHandler 的代码
+/// 生成 `inventory::submit!` 注册 `RegisteredRouteHandler` 的代码。
 fn gen_route_handler_registration(handler_name: &str, is_public: bool) -> proc_macro2::TokenStream {
     let handler_name_lit = LitStr::new(handler_name, Span::call_site());
     let source = format!("{}:{}", env!("CARGO_PKG_NAME"), handler_name);
@@ -62,7 +61,7 @@ fn gen_route_handler_registration(handler_name: &str, is_public: bool) -> proc_m
     }
 }
 
-/// 解析逗号分隔的字符串字面量列表(如 `"a", "b"`)
+/// 解析逗号分隔的字符串字面量列表（如 `"a", "b"`）。
 fn parse_str_list(args: TokenStream) -> syn::Result<Vec<LitStr>> {
     let punctuated: Punctuated<LitStr, Token![,]> =
         Punctuated::parse_terminated.parse2(args.into())?;
@@ -73,14 +72,31 @@ fn parse_str_list(args: TokenStream) -> syn::Result<Vec<LitStr>> {
 // 1. #[has_permission] — 单权限检查(含元数据注册)
 // =========================================================================
 
-/// 受保护路由处理器权限注解(对标 Spring Security hasAuthority)
+/// 受保护路由处理器权限注解（对标 Spring Security `hasAuthority`）。
 ///
-/// 唯一带权限元数据注册的宏:
-/// 1. inventory::submit! 注册 RegisteredPermission(key/group/display/description)
-/// 2. inventory::submit! 注册 RegisteredRouteHandler { is_public: false }
-/// 3. 在函数体首行注入 require_permission 检查
+/// 唯一带权限元数据注册的宏：
+/// 1. `inventory::submit!` 注册 `RegisteredPermission`（key/group/display/description）
+/// 2. `inventory::submit!` 注册 `RegisteredRouteHandler { is_public: false }`
+/// 3. 在函数体首行注入 `require_permission` 检查
 ///
-/// # 用法
+/// # Arguments
+///
+/// 属性参数使用 `key = "value"` 形式，逗号分隔：
+/// * `key` - 权限码，全局唯一标识（如 `"user:create"`）。
+/// * `group` - 权限分组，用于管理界面分类展示。
+/// * `display` - 显示名称（中文友好）。
+/// * `description` - 详细描述。
+///
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数，宏通过类型路径识别。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入权限检查）、
+/// `RegisteredPermission` 注册代码和 `RegisteredRouteHandler` 登记代码。
+/// 若函数缺少 `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
 /// ```ignore
 /// #[cmx_macros::has_permission(
 ///     key = "user:create",
@@ -141,12 +157,12 @@ pub fn has_permission(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // 注入到函数体首行
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     // 在函数外生成 inventory::submit!(静态注册)
     let expanded = quote! {
@@ -172,8 +188,29 @@ pub fn has_permission(args: TokenStream, input: TokenStream) -> TokenStream {
 // 2. #[has_permissions] — 全部权限检查(AND 语义)
 // =========================================================================
 
-/// 必须拥有所有指定权限(对标 Spring Security 多个 hasAuthority 用 and 连接)
-/// 参数语法:逗号分隔的字符串字面量
+/// 要求调用者拥有所有指定权限（对标 Spring Security 多个 `hasAuthority` 用 `and` 连接）。
+///
+/// 在函数体首行注入 `require_all_permissions` 检查（AND 语义），并通过
+/// `inventory::submit!` 登记 `RegisteredRouteHandler { is_public: false }`。
+/// 不注册权限元数据，权限码首次出现时建议使用 `#[has_permission]`。
+///
+/// # Arguments
+///
+/// 属性参数为逗号分隔的字符串字面量列表（如 `"a", "b"`）。
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入权限检查）
+/// 和 `RegisteredRouteHandler` 登记代码。若参数解析失败或函数缺少
+/// `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::has_permissions("agent:export", "agent:read")]
+/// pub async fn export_agent_detail(...) -> ... { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn has_permissions(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_fn = parse_macro_input!(input as ItemFn);
@@ -202,12 +239,12 @@ pub fn has_permissions(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     let expanded = quote! {
         #item_fn
@@ -221,7 +258,29 @@ pub fn has_permissions(args: TokenStream, input: TokenStream) -> TokenStream {
 // 3. #[has_any_permission] — 任一权限检查(OR 语义)
 // =========================================================================
 
-/// 拥有任一权限即可(对标 Spring Security hasAnyAuthority)
+/// 要求调用者拥有任一指定权限即可（对标 Spring Security `hasAnyAuthority`）。
+///
+/// 在函数体首行注入 `require_any_permission` 检查（OR 语义），并通过
+/// `inventory::submit!` 登记 `RegisteredRouteHandler { is_public: false }`。
+/// 不注册权限元数据，权限码首次出现时建议使用 `#[has_permission]`。
+///
+/// # Arguments
+///
+/// 属性参数为逗号分隔的字符串字面量列表（如 `"a", "b"`）。
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入权限检查）
+/// 和 `RegisteredRouteHandler` 登记代码。若参数解析失败或函数缺少
+/// `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::has_any_permission("report:view", "report:export")]
+/// pub async fn view_report(...) -> ... { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn has_any_permission(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_fn = parse_macro_input!(input as ItemFn);
@@ -249,12 +308,12 @@ pub fn has_any_permission(args: TokenStream, input: TokenStream) -> TokenStream 
     };
 
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     let expanded = quote! {
         #item_fn
@@ -268,7 +327,28 @@ pub fn has_any_permission(args: TokenStream, input: TokenStream) -> TokenStream 
 // 4. #[has_role] — 单角色检查
 // =========================================================================
 
-/// 必须拥有指定角色(对标 Spring Security hasRole)
+/// 要求调用者拥有指定角色（对标 Spring Security `hasRole`）。
+///
+/// 在函数体首行注入 `require_role` 检查，并通过 `inventory::submit!` 登记
+/// `RegisteredRouteHandler { is_public: false }`。不注册权限元数据。
+///
+/// # Arguments
+///
+/// 属性参数为单个字符串字面量（如 `"admin"`）。
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入角色检查）
+/// 和 `RegisteredRouteHandler` 登记代码。若参数不是字符串字面量或函数缺少
+/// `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::has_role("admin")]
+/// pub async fn system_settings(...) -> ... { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn has_role(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_fn = parse_macro_input!(input as ItemFn);
@@ -289,12 +369,12 @@ pub fn has_role(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     let expanded = quote! {
         #item_fn
@@ -308,7 +388,29 @@ pub fn has_role(args: TokenStream, input: TokenStream) -> TokenStream {
 // 5. #[has_roles] — 全部角色检查(AND 语义)
 // =========================================================================
 
-/// 必须拥有所有指定角色(对标 Spring Security 多个 hasRole 用 and 连接)
+/// 要求调用者拥有所有指定角色（对标 Spring Security 多个 `hasRole` 用 `and` 连接）。
+///
+/// 在函数体首行注入 `require_all_roles` 检查（AND 语义），并通过
+/// `inventory::submit!` 登记 `RegisteredRouteHandler { is_public: false }`。
+/// 不注册权限元数据。
+///
+/// # Arguments
+///
+/// 属性参数为逗号分隔的字符串字面量列表（如 `"admin", "auditor"`）。
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入角色检查）
+/// 和 `RegisteredRouteHandler` 登记代码。若参数解析失败或函数缺少
+/// `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::has_roles("admin", "auditor")]
+/// pub async fn audit_admin_op(...) -> ... { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn has_roles(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_fn = parse_macro_input!(input as ItemFn);
@@ -336,12 +438,12 @@ pub fn has_roles(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     let expanded = quote! {
         #item_fn
@@ -355,7 +457,29 @@ pub fn has_roles(args: TokenStream, input: TokenStream) -> TokenStream {
 // 6. #[has_any_role] — 任一角色检查(OR 语义)
 // =========================================================================
 
-/// 拥有任一角色即可(对标 Spring Security hasAnyRole)
+/// 要求调用者拥有任一指定角色即可（对标 Spring Security `hasAnyRole`）。
+///
+/// 在函数体首行注入 `require_any_role` 检查（OR 语义），并通过
+/// `inventory::submit!` 登记 `RegisteredRouteHandler { is_public: false }`。
+/// 不注册权限元数据。
+///
+/// # Arguments
+///
+/// 属性参数为逗号分隔的字符串字面量列表（如 `"admin", "manager"`）。
+/// 被注解的函数必须包含 `CmxSvrContext(svr_ctx): CmxSvrContext` 参数。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数（函数体首行已注入角色检查）
+/// 和 `RegisteredRouteHandler` 登记代码。若参数解析失败或函数缺少
+/// `CmxSvrContext` 参数，返回编译错误。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::has_any_role("admin", "manager")]
+/// pub async fn manage_team(...) -> ... { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn has_any_role(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_fn = parse_macro_input!(input as ItemFn);
@@ -383,12 +507,12 @@ pub fn has_any_role(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let orig_block = &item_fn.block;
-    item_fn.block = Box::new(syn::parse_quote! {
+    *item_fn.block = syn::parse_quote! {
         {
             #perm_check
             #orig_block
         }
-    });
+    };
 
     let expanded = quote! {
         #item_fn
@@ -402,8 +526,22 @@ pub fn has_any_role(args: TokenStream, input: TokenStream) -> TokenStream {
 // 7. #[permit_all] — 公开访问标记
 // =========================================================================
 
-/// 标记为公开路由(对标 Spring Security permitAll),无需认证/权限
-/// 仅登记到 RegisteredRouteHandler { is_public: true } 用于漏写统计
+/// 标记路由为公开访问（对标 Spring Security `permitAll`），无需认证/权限。
+///
+/// 仅通过 `inventory::submit!` 登记 `RegisteredRouteHandler { is_public: true }`
+/// 用于漏写统计，不注入任何鉴权代码，函数体保持原样。
+///
+/// # Returns
+///
+/// 返回展开后的 `TokenStream`，包含原函数和 `RegisteredRouteHandler` 登记代码
+/// （`is_public: true`）。
+///
+/// # Examples
+///
+/// ```ignore
+/// #[cmx_macros::permit_all]
+/// pub async fn health_check() -> Json<Value> { ... }
+/// ```
 #[proc_macro_attribute]
 pub fn permit_all(_args: TokenStream, input: TokenStream) -> TokenStream {
     let item_fn = parse_macro_input!(input as ItemFn);

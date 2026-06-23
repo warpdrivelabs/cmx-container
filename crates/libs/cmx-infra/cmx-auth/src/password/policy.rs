@@ -1,4 +1,6 @@
-//! 密码策略校验
+//! 密码策略校验。
+//!
+//! 校验新密码是否满足强度要求（长度、字符类型组合等）。
 
 use cmx_traits::auth::AuthError;
 
@@ -24,6 +26,13 @@ pub struct PasswordPolicy {
 }
 
 impl PasswordPolicy {
+    /// 创建默认的密码策略校验器。
+    ///
+    /// 默认策略：最小长度 8 位，必须包含大写字母、小写字母、数字和特殊字符。
+    ///
+    /// # Returns
+    ///
+    /// 返回使用默认策略的 `PasswordPolicy` 实例。
     pub fn new() -> Self {
         Self {
             min_length: 8,
@@ -34,7 +43,18 @@ impl PasswordPolicy {
         }
     }
 
-    /// 校验密码是否符合策略
+    /// 校验密码是否符合策略。
+    ///
+    /// 依次检查长度、大写字母、小写字母、数字、特殊字符要求，
+    /// 任一不满足时收集错误信息并返回 `AuthError::PasswordPolicyViolated`。
+    ///
+    /// # Arguments
+    ///
+    /// * `password` - 待校验的明文密码。
+    ///
+    /// # Returns
+    ///
+    /// 符合策略时返回 `Ok(())`，否则返回 `AuthError::PasswordPolicyViolated`（含所有违规描述）。
     pub fn validate(&self, password: &str) -> Result<(), AuthError> {
         let mut errors = Vec::new();
 

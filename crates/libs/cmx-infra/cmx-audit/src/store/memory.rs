@@ -43,27 +43,20 @@ impl AuditStore for MemoryAuditStore {
         let filtered: Vec<AuditRecord> = store
             .iter()
             .filter(|r| {
-                if let Some(ref domain) = filter.domain {
-                    if &r.domain != domain { return false; }
-                }
-                if let Some(ref actor_id) = filter.actor_id {
-                    if r.actor_id.as_ref() != Some(actor_id) { return false; }
-                }
-                if let Some(ref target_type) = filter.target_type {
-                    if r.target_type.as_ref() != Some(target_type) { return false; }
-                }
-                if let Some(ref target_id) = filter.target_id {
-                    if r.target_id.as_ref() != Some(target_id) { return false; }
-                }
-                if let Some(ref result) = filter.result {
-                    if &r.result != result { return false; }
-                }
-                if let Some(from) = filter.from {
-                    if r.started_at < from { return false; }
-                }
-                if let Some(to) = filter.to {
-                    if r.started_at > to { return false; }
-                }
+                if let Some(ref domain) = filter.domain
+                    && &r.domain != domain { return false; }
+                if let Some(ref actor_id) = filter.actor_id
+                    && r.actor_id.as_ref() != Some(actor_id) { return false; }
+                if let Some(ref target_type) = filter.target_type
+                    && r.target_type.as_ref() != Some(target_type) { return false; }
+                if let Some(ref target_id) = filter.target_id
+                    && r.target_id.as_ref() != Some(target_id) { return false; }
+                if let Some(ref result) = filter.result
+                    && &r.result != result { return false; }
+                if let Some(from) = filter.from
+                    && r.started_at < from { return false; }
+                if let Some(to) = filter.to
+                    && r.started_at > to { return false; }
                 true
             })
             .skip(offset as usize)

@@ -22,8 +22,10 @@ pub struct ApiResult {
     /// 业务数据。
     pub data: Option<Value>,
     /// 分页信息。
+    #[allow(dead_code)]
     pub pagination: Option<Value>,
     /// 原始响应体。
+    #[allow(dead_code)]
     pub raw: Value,
 }
 
@@ -44,6 +46,7 @@ impl ApiResult {
     ///
     /// 由于错误可能经 `ApiResp::fail`（HTTP 200）或 `Err(Error)`（HTTP 4xx）返回，
     /// 此处只校验业务码非 0；如指定 `expected_code` 则同时校验相等。
+    #[allow(dead_code)]
     pub fn assert_error(self, expected_code: Option<u16>) -> Value {
         assert_ne!(
             self.code, 0,
@@ -78,18 +81,16 @@ pub fn flex_get(obj: &Value, key: &str) -> Option<Value> {
     }
     // snake_case -> camelCase
     let camel = snake_to_camel(key);
-    if camel != key {
-        if let Some(v) = obj.get(&camel) {
+    if camel != key
+        && let Some(v) = obj.get(&camel) {
             return Some(v.clone());
         }
-    }
     // camelCase -> snake_case
     let snake = camel_to_snake(key);
-    if snake != key {
-        if let Some(v) = obj.get(&snake) {
+    if snake != key
+        && let Some(v) = obj.get(&snake) {
             return Some(v.clone());
         }
-    }
     None
 }
 
@@ -155,7 +156,7 @@ pub fn gen_id(prefix: &str) -> String {
 }
 
 /// 发送请求并解析为统一响应。
-pub async fn send(client: &reqwest::Client, req: reqwest::RequestBuilder) -> ApiResult {
+pub async fn send(_client: &reqwest::Client, req: reqwest::RequestBuilder) -> ApiResult {
     let resp = req
         .send()
         .await
@@ -232,6 +233,7 @@ fn apply_auth(mut req: reqwest::RequestBuilder, token: Option<&str>) -> reqwest:
 /// 登录引导：创建唯一测试用户并登录，返回 access/refresh token 与用户名。
 ///
 /// 依赖 dev 环境 `whitelist = ["/api/**"]`，`create_user` 无需认证即可调用。
+#[allow(dead_code)]
 pub struct TestUser {
     pub username: String,
     pub password: String,
@@ -239,6 +241,7 @@ pub struct TestUser {
     pub refresh_token: String,
 }
 
+#[allow(dead_code)]
 pub async fn bootstrap_user() -> TestUser {
     let client = client();
     let username = gen_id("e2e_user");
@@ -278,6 +281,7 @@ pub async fn bootstrap_user() -> TestUser {
 }
 
 /// 健康检查：等待服务可达且 auth 健康。
+#[allow(dead_code)]
 pub async fn wait_for_server() {
     let client = client();
     let url = format!("{}/api/auth/health", base_url());

@@ -26,6 +26,8 @@ unused = { level = "allow", priority = -1 } # For test files (dev)
 default = ["modql-macros"]
 with-sea-query = ["modql-macros", "sea-query", "modql-macros/with-sea-query"]
 with-ilike = ["sea-query/backend-postgres"]
+# 保留 with-rusqlite feature 声明以避免 unexpected_cfgs 警告（代码中有 cfg 引用但实际未启用）
+with-rusqlite = []
 
 [dependencies]
 modql-macros = { version="0.5.0", path = "modql-macros", optional=true}

@@ -37,7 +37,7 @@ where
         && let Some(uid) = user_id {
             let field: SeaField = (
                 "owner_id",
-                SimpleExpr::Value(sea_query::Value::String(Some(uid.to_string().into()))),
+                SimpleExpr::Value(sea_query::Value::String(Some(uid.to_string()))),
             )
                 .into();
             fields.push(field);
@@ -62,7 +62,7 @@ where
             let pk_value = snowflake_id_str();
             let field: SeaField = (
                 pk_column,
-                SimpleExpr::Value(sea_query::Value::String(Some(pk_value.clone().into()))),
+                SimpleExpr::Value(sea_query::Value::String(Some(pk_value.clone()))),
             )
                 .into();
             fields_vec.push(field);
@@ -162,7 +162,7 @@ where
                     Ok(encrypted) => {
                         // 将字段值替换为加密后的字符串
                         field.value = sea_query::SimpleExpr::Value(
-                            sea_query::Value::String(Some(encrypted.into())),
+                            sea_query::Value::String(Some(encrypted)),
                         );
                     }
                     Err(e) => {

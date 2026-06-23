@@ -11,6 +11,8 @@ repository = "https://github.com/modql/rust-modql"
 
 [features]
 with-sea-query = ["sea-query"]
+# 保留 with-rusqlite feature 声明以避免 unexpected_cfgs 警告（代码中有 cfg 引用但实际未启用）
+with-rusqlite = []
 
 [dependencies]
 quote = "1"

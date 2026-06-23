@@ -17,23 +17,40 @@ use tracing::debug;
 use crate::config::IamConfig;
 use crate::error::IamError;
 
-/// 规则校验引擎 trait
+/// 规则校验引擎 trait。
+///
+/// 定义互斥规则校验接口，供 `assign_permissions` 和 `assign_roles` 时调用。
+/// 实现见 `RuleEnforcerImpl`。
 #[async_trait]
 pub trait RuleEnforcer: Send + Sync {
-    /// 校验角色权限组合本身是否违反功能权限互斥规则
+    /// 校验角色权限组合本身是否违反功能权限互斥规则。
     ///
-    /// - `permission_ids`：待分配给角色的权限ID列表
-    /// - 仅校验 subject_type='permission' 的互斥规则（角色层不涉及角色互斥）
+    /// 仅校验 `subject_type = 'permission'` 的互斥规则（角色层不涉及角色互斥）。
+    ///
+    /// # Arguments
+    ///
+    /// * `permission_ids` - 待分配给角色的权限 ID 列表。
+    ///
+    /// # Errors
+    ///
+    /// 当权限组合违反互斥规则时返回 `IamError::RuleViolation`。
     async fn check_role_permissions(
         &self,
         permission_ids: &[String],
     ) -> Result<(), IamError>;
 
-    /// 校验用户角色组合是否违反互斥规则（合并现有权限/角色 + 待分配角色权限）
+    /// 校验用户角色组合是否违反互斥规则（合并现有权限/角色 + 待分配角色权限）。
     ///
-    /// - `user_id`：目标用户ID（用于查询已有权限和角色）
-    /// - `role_ids`：待分配的角色ID列表
-    /// - 同时校验功能权限互斥和角色互斥两类规则
+    /// 同时校验功能权限互斥和角色互斥两类规则。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID（用于查询已有权限和角色）。
+    /// * `role_ids` - 待分配的角色 ID 列表。
+    ///
+    /// # Errors
+    ///
+    /// 当合并后的权限或角色组合违反互斥规则时返回 `IamError::RuleViolation`。
     async fn check_user_roles(
         &self,
         user_id: &str,
@@ -41,14 +58,30 @@ pub trait RuleEnforcer: Send + Sync {
     ) -> Result<(), IamError>;
 }
 
-/// 规则校验引擎实现
+/// 规则校验引擎实现。
+///
+/// 通过数据库查询加载启用的互斥规则，在内存中执行校验。
+/// 当 `IamConfig::enable_sod_check` 为 `false` 时，所有校验直接通过。
 pub struct RuleEnforcerImpl {
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
+    /// 认证库 `db_id`。
     db_id: String,
+    /// IAM 配置。
     config: IamConfig,
 }
 
 impl RuleEnforcerImpl {
+    /// 构造函数。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id` 及是否启用 SoD 校验。
+    ///
+    /// # Returns
+    ///
+    /// 返回新的 `RuleEnforcerImpl` 实例。
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -60,6 +93,7 @@ impl RuleEnforcerImpl {
     /// 加载所有启用的互斥规则及其互斥对象项
     ///
     /// - `subject_type`：可选过滤对象类型（`permission` / `role`），None 加载全部
+    ///
     /// 按 rule_id 聚合 excluded_ids
     async fn load_active_rules(
         &self,

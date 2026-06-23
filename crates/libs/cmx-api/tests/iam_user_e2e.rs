@@ -16,7 +16,7 @@ async fn create_test_user(client: &reqwest::Client, suffix: &str) -> String {
         "nickname": "用户测试",
         "status": 1,
     });
-    post_json(&client, "/api/iam/users/create", &body, None)
+    post_json(client, "/api/iam/users/create", &body, None)
         .await
         .assert_success();
     username

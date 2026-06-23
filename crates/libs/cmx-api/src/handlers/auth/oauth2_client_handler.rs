@@ -318,7 +318,7 @@ pub async fn update_oauth2_client(
         .client_name
         .as_ref()
         .map(|_| ())
-        .and_then(|_| None::<&str>);
+        .and(None::<&str>);
     let _ = client_id; // placeholder
 
     // 使用 client_id 字段定位（从请求中获取，需要额外字段）

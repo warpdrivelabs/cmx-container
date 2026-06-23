@@ -22,8 +22,8 @@ impl ModuleRoutes for IamModule {
         let router = router.merge(role::RoleModule.routes());
         let router = router.merge(role_group::RoleGroupModule.routes());
         let router = router.merge(permission::PermissionModule.routes());
-        let router = router.merge(rule::RuleModule.routes());
-        router
+        
+        router.merge(rule::RuleModule.routes())
     }
 
     fn prefix() -> &'static str {

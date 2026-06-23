@@ -1,4 +1,4 @@
-//! Token 黑名单
+//! Token 黑名单。
 //!
 //! 基于 Redis SET + moka 本地缓存实现，支持 Pub/Sub 主动失效。
 
@@ -24,7 +24,18 @@ pub struct Blacklist {
 }
 
 impl Blacklist {
-    /// 创建新的黑名单管理器
+    /// 创建新的黑名单管理器。
+    ///
+    /// 根据配置决定是否启用 moka 本地缓存及其 TTL 和容量。
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - Redis 缓存管理器。
+    /// * `config` - 缓存配置。
+    ///
+    /// # Returns
+    ///
+    /// 返回构造完成的 `Blacklist` 实例。
     pub fn new(cache: CacheManager, config: &CacheConfig) -> Self {
         let local_cache = if config.enable_local_cache {
             Cache::builder()
@@ -43,7 +54,18 @@ impl Blacklist {
         Self { cache, local_cache }
     }
 
-    /// 将 Token 加入黑名单
+    /// 将 Token 加入黑名单。
+    ///
+    /// 写入 Redis SET（带 TTL）并使本地缓存失效。
+    ///
+    /// # Arguments
+    ///
+    /// * `jti` - Access Token 的 JTI。
+    /// * `remaining_ttl` - Token 剩余有效期（黑名单 TTL 与之一致）。
+    ///
+    /// # Errors
+    ///
+    /// 当 Redis 写入失败时返回 `AuthInfraError`。
     pub async fn add(&self, jti: &str, remaining_ttl: Duration) -> Result<()> {
         // Redis: SET auth:{jti}:blacklist "1" EX remaining_ttl
         self.cache
@@ -57,7 +79,21 @@ impl Blacklist {
         Ok(())
     }
 
-    /// 检查 Token 是否在黑名单中
+    /// 检查 Token 是否在黑名单中。
+    ///
+    /// 先查 moka 本地缓存，未命中时查 Redis 并写入本地缓存。
+    ///
+    /// # Arguments
+    ///
+    /// * `jti` - Access Token 的 JTI。
+    ///
+    /// # Returns
+    ///
+    /// 在黑名单中时返回 `Ok(true)`，否则返回 `Ok(false)`。
+    ///
+    /// # Errors
+    ///
+    /// 当 Redis 读取失败时返回 `AuthInfraError`。
     pub async fn is_blacklisted(&self, jti: &str) -> Result<bool> {
         // P0-2.1 修复：先查本地缓存，根据缓存值返回
         // 旧 Bug：contains_key 对 false 值也返回 true，导致未撤销 Token 被误判
@@ -80,12 +116,16 @@ impl Blacklist {
         Ok(exists)
     }
 
-    /// 本地缓存失效（由 Pub/Sub 回调触发）
+    /// 本地缓存失效（由 Pub/Sub 回调触发）。
+    ///
+    /// # Arguments
+    ///
+    /// * `jti` - 待失效的 Access Token JTI。
     pub async fn invalidate_local(&self, jti: &str) {
         self.local_cache.invalidate(jti).await;
     }
 
-    /// 批量本地缓存失效（revoke_all_tokens 时按 user_id 模式清除）
+    /// 批量本地缓存失效（`revoke_all_tokens` 时按 `user_id` 模式清除）。
     pub async fn invalidate_local_all(&self) {
         self.local_cache.invalidate_all();
     }

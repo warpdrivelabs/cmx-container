@@ -1,4 +1,4 @@
-//! 临时授权清理任务
+//! 临时授权清理任务。
 //!
 //! 定时将过期的临时授权（effective_until < NOW()）状态置为已失效（status = 0）。
 //! 使用 tokio::time::interval 调度，失败时仅记录 warn 日志，不阻塞下一轮。
@@ -12,17 +12,19 @@ use serde_json::Value;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
-/// 启动临时授权过期清理任务
+/// 启动临时授权过期清理任务。
 ///
-/// # 参数
-/// * `mm` - 数据库管理器
-/// * `db_id` - 数据库 ID
-/// * `interval_secs` - 执行间隔（秒）
-/// * `audit_batch_size` - 审计日志批量阈值（超过则只记统计）
-/// * `audit` - 审计日志记录器（可选）
+/// # Arguments
 ///
-/// # 返回
-/// * `JoinHandle<()>` - 任务句柄，可用于取消任务
+/// * `mm` - 数据库管理器。
+/// * `db_id` - 数据库 ID。
+/// * `interval_secs` - 执行间隔（秒）。
+/// * `audit_batch_size` - 审计日志批量阈值（超过则只记统计）。
+/// * `audit` - 审计日志记录器（可选）。
+///
+/// # Returns
+///
+/// 返回 `JoinHandle<()>` 任务句柄，可用于取消任务。
 pub fn start_assignment_cleanup(
     mm: Arc<DatabaseManager>,
     db_id: String,
@@ -52,9 +54,24 @@ pub fn start_assignment_cleanup(
     })
 }
 
-/// 执行一次清理（供测试直接调用）
+/// 执行一次清理（供测试直接调用）。
 ///
-/// 返回受影响的行数
+/// 返回受影响的行数。
+///
+/// # Arguments
+///
+/// * `mm` - 数据库管理器。
+/// * `db_id` - 数据库 ID。
+/// * `audit_batch_size` - 审计日志批量阈值（超过则只记统计）。
+/// * `audit` - 审计日志记录器（可选）。
+///
+/// # Returns
+///
+/// 成功时返回受影响的行数。
+///
+/// # Errors
+///
+/// 当查询过期记录或执行清理 SQL 失败时返回错误字符串。
 pub async fn run_cleanup_once(
     mm: &DatabaseManager,
     db_id: &str,

@@ -172,13 +172,12 @@ fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
     }
 
     // RPC 自动注入的 metadata 优先级高于配置文件中的值
-    if let Some(rpc) = load_rpc_config() {
-        if rpc.enabled {
+    if let Some(rpc) = load_rpc_config()
+        && rpc.enabled {
             registry_config
                 .metadata
                 .insert("grpc_port".to_string(), rpc.grpc.port.to_string());
         }
-    }
 }
 
 /// 设置配置变更监听。
@@ -304,21 +303,19 @@ pub async fn shutdown_infra() {
 fn resolve_register_port() -> u16 {
     // 优先读取 SERVICE_REGISTRY_PORT。
     if let Ok(raw) = std::env::var("SERVICE_REGISTRY_PORT") {
-        if let Ok(port) = raw.trim().parse::<u16>() {
-            if port > 0 {
+        if let Ok(port) = raw.trim().parse::<u16>()
+            && port > 0 {
                 return port;
             }
-        }
         warn!("SERVICE_REGISTRY_PORT={} 不是有效的端口号，将回退到其他来源", raw);
     }
 
     // 兼容旧 NACOS_REGISTER_SERVER_PORT。
     if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_PORT") {
-        if let Ok(port) = raw.trim().parse::<u16>() {
-            if port > 0 {
+        if let Ok(port) = raw.trim().parse::<u16>()
+            && port > 0 {
                 return port;
             }
-        }
         warn!("NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源", raw);
     }
 

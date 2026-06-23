@@ -1,4 +1,6 @@
-//! JWT Bearer 认证策略
+//! JWT Bearer 认证策略。
+//!
+//! 解码 Access Token、检查黑名单并构建 `AuthContext`。
 
 use async_trait::async_trait;
 use cmx_core::AuthContext;
@@ -20,7 +22,16 @@ pub struct JwtBearerPolicy {
 }
 
 impl JwtBearerPolicy {
-    /// 创建新的 JWT Bearer 策略
+    /// 创建新的 JWT Bearer 策略。
+    ///
+    /// # Arguments
+    ///
+    /// * `jwt_manager` - JWT 编解码器实例。
+    /// * `token_manager` - Token 管理器（提供黑名单查询）。
+    ///
+    /// # Returns
+    ///
+    /// 返回构造完成的 `JwtBearerPolicy` 实例。
     pub fn new(jwt_manager: JwtManager, token_manager: TokenManager) -> Self {
         Self {
             jwt_manager,
@@ -35,6 +46,17 @@ impl AuthPolicy for JwtBearerPolicy {
         "jwt_bearer"
     }
 
+    /// 认证 Access Token 并构建 `AuthContext`。
+    ///
+    /// 流程：解码 Token → 检查黑名单 → 构建 `AuthContext`。
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - 待认证的 Access Token 字符串。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `AuthContext`，Token 无效或已撤销时返回对应 `AuthError`。
     async fn authenticate(&self, token: &str) -> Result<AuthContext, AuthError> {
         // 解码 Token
         let claims = self.jwt_manager.decode_access_token(token)?;

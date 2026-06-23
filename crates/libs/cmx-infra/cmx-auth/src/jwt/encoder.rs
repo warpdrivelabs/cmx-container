@@ -1,4 +1,4 @@
-//! JWT 编解码器
+//! JWT 编解码器。
 
 use chrono::Utc;
 use jsonwebtoken::{decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -10,7 +10,7 @@ use super::claims::{AccessClaims, RefreshClaims};
 
 /// JWT 管理器。
 ///
-/// 负责 JWT Token 的编码与解码，支持 RS256 / HS256 算法与密钥轮换宽限期。
+/// 负责 JWT Token 的编码与解码，支持 `RS256` / `HS256` 算法与密钥轮换宽限期。
 /// 解码时优先使用当前密钥，失败后回退到 `legacy_public_keys` 列表。
 pub struct JwtManager {
     /// 认证配置。
@@ -22,7 +22,7 @@ pub struct JwtManager {
     /// 当前验签密钥。
     decoding_key: DecodingKey,
 
-    /// 签名算法（RS256 / HS256）。
+    /// 签名算法（`RS256` / `HS256`）。
     algorithm: Algorithm,
 
     /// 旧密钥列表（`kid` → `DecodingKey`），用于密钥轮换宽限期内的 Token 验签。
@@ -30,7 +30,21 @@ pub struct JwtManager {
 }
 
 impl JwtManager {
-    /// 创建新的 JwtManager
+    /// 创建新的 `JwtManager` 实例。
+    ///
+    /// 根据配置加载当前签名/验签密钥，以及历史公钥列表（用于密钥轮换宽限期）。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - 认证配置（包含 JWT 算法、密钥、`kid` 等信息）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回构造完成的 `JwtManager` 实例。
+    ///
+    /// # Errors
+    ///
+    /// 当算法不支持、密钥加载失败或密钥文件不可读时返回 `AuthInfraError`。
     pub fn new(config: AuthConfig) -> Result<Self> {
         let algorithm = match config.jwt.algorithm.as_str() {
             "RS256" => Algorithm::RS256,
@@ -54,7 +68,25 @@ impl JwtManager {
         })
     }
 
-    /// 编码 Access Token
+    /// 编码 Access Token。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 用户 ID。
+    /// * `username` - 用户名。
+    /// * `roles` - 角色列表。
+    /// * `permissions` - 权限列表。
+    /// * `org_id` - 组织 ID（可选）。
+    /// * `session_id` - 会话 ID。
+    /// * `device` - 设备类型。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回签名的 JWT 字符串。
+    ///
+    /// # Errors
+    ///
+    /// 当 JWT 编码失败时返回 `AuthInfraError::Jwt`。
     pub fn encode_access_token(
         &self,
         user_id: &str,
@@ -94,7 +126,21 @@ impl JwtManager {
             .map_err(AuthInfraError::Jwt)
     }
 
-    /// 编码 Refresh Token
+    /// 编码 Refresh Token。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 用户 ID。
+    /// * `session_id` - 会话 ID。
+    /// * `device` - 设备类型。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回签名的 JWT 字符串。
+    ///
+    /// # Errors
+    ///
+    /// 当 JWT 编码失败时返回 `AuthInfraError::Jwt`。
     pub fn encode_refresh_token(
         &self,
         user_id: &str,
@@ -120,12 +166,42 @@ impl JwtManager {
             .map_err(AuthInfraError::Jwt)
     }
 
-    /// 解码 Access Token
+    /// 解码 Access Token。
+    ///
+    /// 优先使用当前密钥验签，失败后回退到 `legacy_public_keys` 列表
+    /// （密钥轮换宽限期支持）。
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - 待解码的 Access Token 字符串。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `AccessClaims`。
+    ///
+    /// # Errors
+    ///
+    /// 当 Token 无效、过期或验签失败时返回 `AuthInfraError::Jwt`。
     pub fn decode_access_token(&self, token: &str) -> Result<AccessClaims> {
         self.decode_with_key_fallback(token)
     }
 
-    /// 解码 Refresh Token
+    /// 解码 Refresh Token。
+    ///
+    /// 优先使用当前密钥验签，失败后回退到 `legacy_public_keys` 列表
+    /// （密钥轮换宽限期支持）。
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - 待解码的 Refresh Token 字符串。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `RefreshClaims`。
+    ///
+    /// # Errors
+    ///
+    /// 当 Token 无效、过期或验签失败时返回 `AuthInfraError::Jwt`。
     pub fn decode_refresh_token(&self, token: &str) -> Result<RefreshClaims> {
         self.decode_with_key_fallback(token)
     }
@@ -142,11 +218,10 @@ impl JwtManager {
         if let Some(kid) = &header.kid {
             // 3. 在 legacy 列表中查找匹配的密钥
             for (legacy_kid, legacy_key) in &self.legacy_decoding_keys {
-                if legacy_kid == kid {
-                    if let Ok(token_data) = decode::<T>(token, legacy_key, &self.validation()) {
+                if legacy_kid == kid
+                    && let Ok(token_data) = decode::<T>(token, legacy_key, &self.validation()) {
                         return Ok(token_data.claims);
                     }
-                }
             }
         }
 

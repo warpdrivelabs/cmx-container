@@ -1,29 +1,41 @@
-//! 熔断器
+//! 熔断器。
 //!
-//! 简化版熔断器（closed/open 两态），通过 reset_duration 自动恢复。
+//! 简化版熔断器（closed/open 两态），通过 `reset_duration` 自动恢复。
 //! 当连续失败次数达到阈值时打开熔断器，拒绝后续请求；
-//! 经过 reset_duration 后自动进入半开状态，允许请求通过。
+//! 经过 `reset_duration` 后自动进入半开状态，允许请求通过。
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// 熔断器
+/// 熔断器。
+///
+/// 通过 `threshold` 与 `reset_duration` 控制熔断与恢复行为，
+/// 用于 `IamChecker` 在数据库/缓存故障时保护系统。
 pub struct CircuitBreaker {
-    /// 连续失败次数
+    /// 连续失败次数。
     failure_count: AtomicU32,
-    /// 熔断器是否打开
+    /// 熔断器是否打开。
     is_open: AtomicBool,
-    /// 最后一次失败时间
+    /// 最后一次失败时间。
     last_failure_time: Mutex<Option<Instant>>,
-    /// 熔断阈值
+    /// 熔断阈值。
     threshold: u32,
-    /// 熔断恢复时间
+    /// 熔断恢复时间。
     reset_duration: Duration,
 }
 
 impl CircuitBreaker {
-    /// 创建新熔断器
+    /// 创建新熔断器。
+    ///
+    /// # Arguments
+    ///
+    /// * `threshold` - 连续失败次数阈值，达到后打开熔断器。
+    /// * `reset_secs` - 熔断恢复时间（秒），经过该时间后进入半开状态。
+    ///
+    /// # Returns
+    ///
+    /// 返回处于关闭状态的新熔断器实例。
     pub fn new(threshold: u32, reset_secs: u64) -> Self {
         Self {
             failure_count: AtomicU32::new(0),
@@ -34,11 +46,15 @@ impl CircuitBreaker {
         }
     }
 
-    /// 检查是否允许请求通过
+    /// 检查是否允许请求通过。
     ///
-    /// - 熔断器关闭时：允许
-    /// - 熔断器打开且超过恢复时间：半开，允许（失败会重新打开）
-    /// - 熔断器打开且未超过恢复时间：拒绝
+    /// - 熔断器关闭时：允许。
+    /// - 熔断器打开且超过恢复时间：半开，允许（失败会重新打开）。
+    /// - 熔断器打开且未超过恢复时间：拒绝。
+    ///
+    /// # Returns
+    ///
+    /// 允许通过返回 `true`，拒绝返回 `false`。
     pub fn allow_request(&self) -> bool {
         if !self.is_open.load(Ordering::Relaxed) {
             return true;
@@ -63,13 +79,13 @@ impl CircuitBreaker {
         }
     }
 
-    /// 记录成功
+    /// 记录成功，重置失败计数并关闭熔断器。
     pub fn record_success(&self) {
         self.failure_count.store(0, Ordering::Relaxed);
         self.is_open.store(false, Ordering::Relaxed);
     }
 
-    /// 记录失败
+    /// 记录失败，连续失败达到阈值时打开熔断器。
     pub fn record_failure(&self) {
         let count = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
         if count >= self.threshold {
@@ -79,7 +95,11 @@ impl CircuitBreaker {
         }
     }
 
-    /// 检查熔断器是否打开
+    /// 检查熔断器是否打开。
+    ///
+    /// # Returns
+    ///
+    /// 熔断器打开返回 `true`，关闭返回 `false`。
     pub fn is_circuit_open(&self) -> bool {
         self.is_open.load(Ordering::Relaxed)
     }

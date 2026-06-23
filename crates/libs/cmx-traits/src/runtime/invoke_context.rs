@@ -1,4 +1,4 @@
-//! WASM 调用选项与调用上下文
+//! WASM 调用选项与调用上下文。
 //!
 //! 提供超时控制、调用深度限制和循环检测的配置与跟踪机制。
 //!
@@ -21,29 +21,29 @@ use std::collections::HashSet;
 use std::time::Duration;
 use std::cell::RefCell;
 
-/// 默认超时时间（30秒）
+/// 默认超时时间（30 秒）。
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// 默认最大调用深度
+/// 默认最大调用深度。
 pub const DEFAULT_MAX_DEPTH: u32 = 8;
 
-/// WASM 调用选项
+/// WASM 调用选项。
 ///
 /// 每次调用 WASM 函数时可以传入此选项，控制超时时间和调用深度限制。
 #[derive(Debug, Clone)]
 pub struct InvokeOptions {
-    /// 单次调用的超时时间
+    /// 单次调用的超时时间。
     ///
     /// 默认 30 秒。Extism 原生支持，超时后自动中断 WASM 执行。
     pub timeout: Duration,
 
-    /// 最大调用深度（插件间调用嵌套层数）
+    /// 最大调用深度（插件间调用嵌套层数）。
     ///
     /// 默认 8 层。当 WASM-A 调用 WASM-B，WASM-B 又调用 WASM-C 时，
     /// 深度为 2。超过限制时立即返回错误。
     pub max_depth: u32,
 
-    /// 是否调试模式
+    /// 是否调试模式。
     pub  debug:bool,
 }
 
@@ -58,18 +58,38 @@ impl Default for InvokeOptions {
 }
 
 impl InvokeOptions {
-    /// 创建默认调用选项
+    /// 创建默认调用选项。
+    ///
+    /// # Returns
+    ///
+    /// 返回使用默认值的 [`InvokeOptions`]。
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 设置超时时间
+    /// 设置超时时间。
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - 超时时间。
+    ///
+    /// # Returns
+    ///
+    /// 返回更新后的 `self`（Builder 模式）。
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
-    /// 设置最大调用深度
+    /// 设置最大调用深度。
+    ///
+    /// # Arguments
+    ///
+    /// * `max_depth` - 最大调用深度。
+    ///
+    /// # Returns
+    ///
+    /// 返回更新后的 `self`（Builder 模式）。
     pub fn with_max_depth(mut self, max_depth: u32) -> Self {
         self.max_depth = max_depth;
         self
@@ -84,23 +104,36 @@ thread_local! {
     static CALL_CHAIN: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
 
-/// 调用上下文管理器
+/// 调用上下文管理器。
 ///
 /// 提供线程安全的调用深度跟踪和循环检测。
-/// 每次进入 `invoke` 时创建一个 `InvokeGuard`，
+/// 每次进入 `invoke` 时创建一个 [`InvokeGuard`]，
 /// 退出时自动恢复状态（RAII 模式）。
 pub struct InvokeContext;
 
 impl InvokeContext {
-    /// 获取当前调用深度
+    /// 获取当前调用深度。
+    ///
+    /// # Returns
+    ///
+    /// 返回当前线程的调用深度。
     pub fn current_depth() -> u32 {
         CALL_DEPTH.with(|d| *d.borrow())
     }
 
-    /// 检查调用链中是否已包含指定插件函数的调用
+    /// 检查调用链中是否已包含指定插件函数的调用。
     ///
-    /// 用于检测函数级别的递归调用（如 A.a → B.b → A.a）。
-    /// 使用 "plugin_id/function_name" 组合作为调用链的 key。
+    /// 用于检测函数级别的递归调用（如 `A.a → B.b → A.a`）。
+    /// 使用 `plugin_id/function_name` 组合作为调用链的 key。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件 ID。
+    /// * `function_name` - 函数名。
+    ///
+    /// # Returns
+    ///
+    /// 检测到循环返回 `true`，否则返回 `false`。
     pub fn is_cycle(plugin_id: &str, function_name: &str) -> bool {
         let key = format!("{}/{}", plugin_id, function_name);
         CALL_CHAIN.with(|c| {
@@ -109,10 +142,25 @@ impl InvokeContext {
         })
     }
 
-    /// 进入一个新的调用层级
+    /// 进入一个新的调用层级。
     ///
-    /// 返回一个 `InvokeGuard`，drop 时自动恢复深度和调用链。
+    /// 返回一个 [`InvokeGuard`]，drop 时自动恢复深度和调用链。
     /// 如果深度超限或检测到循环，返回 `Err`。
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - 插件 ID。
+    /// * `function_name` - 函数名。
+    /// * `max_depth` - 最大调用深度。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 [`InvokeGuard`]。
+    ///
+    /// # Errors
+    ///
+    /// * [`InvokeGuardError::DepthExceeded`] - 调用深度超限。
+    /// * [`InvokeGuardError::CycleDetected`] - 检测到循环调用。
     pub fn enter(
         plugin_id: &str,
         function_name: &str,
@@ -166,29 +214,41 @@ impl InvokeContext {
     }
 }
 
-/// 调用守卫（RAII）
+/// 调用守卫（RAII）。
 ///
 /// 创建时递增深度并记录调用链，drop 时自动恢复。
 /// 确保即使发生 panic 也能正确恢复状态。
 pub struct InvokeGuard {
-    /// 插件 ID（用于从调用链中移除）
+    /// 插件 ID（用于从调用链中移除）。
     plugin_id: String,
-    /// 函数名（仅用于日志）
+    /// 函数名（仅用于日志）。
     function_name: String,
 }
 
 impl InvokeGuard {
-    /// 获取当前调用深度（进入后的深度）
+    /// 获取当前调用深度（进入后的深度）。
+    ///
+    /// # Returns
+    ///
+    /// 返回进入此守卫后的调用深度。
     pub fn depth(&self) -> u32 {
         InvokeContext::current_depth()
     }
 
-    /// 获取插件 ID
+    /// 获取插件 ID。
+    ///
+    /// # Returns
+    ///
+    /// 返回当前调用链节点的插件 ID。
     pub fn plugin_id(&self) -> &str {
         &self.plugin_id
     }
 
-    /// 获取函数名
+    /// 获取函数名。
+    ///
+    /// # Returns
+    ///
+    /// 返回当前调用链节点的函数名。
     pub fn function_name(&self) -> &str {
         &self.function_name
     }
@@ -210,25 +270,25 @@ impl Drop for InvokeGuard {
     }
 }
 
-/// 调用守卫错误
+/// 调用守卫错误。
 #[derive(Debug)]
 pub enum InvokeGuardError {
-    /// 调用深度超限
+    /// 调用深度超限。
     DepthExceeded {
-        /// 当前深度
+        /// 当前深度。
         current: u32,
-        /// 最大深度
+        /// 最大深度。
         max: u32,
-        /// 插件 ID
+        /// 插件 ID。
         plugin_id: String,
-        /// 函数名
+        /// 函数名。
         function_name: String,
     },
-    /// 检测到循环调用
+    /// 检测到循环调用。
     CycleDetected {
-        /// 插件 ID
+        /// 插件 ID。
         plugin_id: String,
-        /// 函数名
+        /// 函数名。
         function_name: String,
     },
 }

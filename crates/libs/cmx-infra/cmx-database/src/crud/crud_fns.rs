@@ -36,15 +36,15 @@ fn json_value_to_sea_query(value: Value) -> sea_query::SimpleExpr {
             } else if let Some(f) = n.as_f64() {
                 sea_query::Value::Double(Some(f))
             } else {
-                sea_query::Value::String(Some(n.to_string().into()))
+                sea_query::Value::String(Some(n.to_string()))
             }
         }
-        Value::String(s) => sea_query::Value::String(Some(s.into())),
+        Value::String(s) => sea_query::Value::String(Some(s)),
         Value::Array(arr) => {
-            sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap().into()))
+            sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap()))
         }
         Value::Object(obj) => {
-            sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap().into()))
+            sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap()))
         }
     };
     sea_query::SimpleExpr::Value(sea_value)

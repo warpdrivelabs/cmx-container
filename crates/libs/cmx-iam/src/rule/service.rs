@@ -21,17 +21,50 @@ use crate::rule::entity::{
     UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
 };
 
-/// 互斥规则 Service trait
+/// 互斥规则 Service trait。
+///
+/// 定义互斥规则的 CRUD、启用/禁用、规则项管理、校验测试等操作。
+/// 实现见 `ExclusionRuleServiceImpl`。
 #[async_trait]
 pub trait ExclusionRuleService: Send + Sync {
-    /// 创建规则（含规则项）
+    /// 创建规则（含规则项）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `req` - 创建规则请求，包含规则主信息与互斥对象列表。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回创建后的 `ExclusionRule` 实例。
+    ///
+    /// # Errors
+    ///
+    /// 当 `subject_type` 非法、互斥对象列表为空、主要对象与互斥对象重复、
+    /// 对象不存在或事务提交失败时返回错误。
     async fn create_rule(
         &self,
         svr_ctx: &SVRContext,
         req: CreateExclusionRuleRequest,
     ) -> Result<ExclusionRule, TraitError>;
 
-    /// 更新规则基本信息
+    /// 更新规则基本信息。
+    ///
+    /// 不允许修改 `subject_type`；若修改 `primary_subject_id`，需校验其不在现有互斥列表中。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `rule_id` - 待更新的规则 ID。
+    /// * `data` - 更新参数（全 `Option`，未提供字段不更新）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回更新后的 `ExclusionRule` 实例。
+    ///
+    /// # Errors
+    ///
+    /// 当未提供任何更新字段、规则不存在、新主对象已存在于互斥列表或 SQL 执行失败时返回错误。
     async fn update_rule(
         &self,
         svr_ctx: &SVRContext,
@@ -39,23 +72,67 @@ pub trait ExclusionRuleService: Send + Sync {
         data: UpdateExclusionRuleRequest,
     ) -> Result<ExclusionRule, TraitError>;
 
-    /// 删除规则（软删除 archived=1）
+    /// 删除规则（软删除 `archived = 1`）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `rule_id` - 待删除的规则 ID。
+    ///
+    /// # Errors
+    ///
+    /// 当规则不存在或 SQL 执行失败时返回错误。
     async fn delete_rule(&self, svr_ctx: &SVRContext, rule_id: &str) -> Result<(), TraitError>;
 
-    /// 查询规则详情（含规则项）
+    /// 查询规则详情（含规则项）。
+    ///
+    /// # Arguments
+    ///
+    /// * `rule_id` - 规则 ID。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(规则主记录, 规则项列表)`。
+    ///
+    /// # Errors
+    ///
+    /// 当规则不存在或 SQL 查询失败时返回错误。
     async fn get_rule(
         &self,
         rule_id: &str,
     ) -> Result<(ExclusionRule, Vec<ExclusionRuleItem>), TraitError>;
 
-    /// 分页查询规则
+    /// 分页查询规则。
+    ///
+    /// # Arguments
+    ///
+    /// * `current` - 当前页码（从 1 开始）。
+    /// * `size` - 每页记录数。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(规则列表, 总记录数)`，按 `priority` 降序、`create_time` 降序排列。
+    ///
+    /// # Errors
+    ///
+    /// 当 `current < 1` 或 SQL 查询失败时返回错误。
     async fn page_rules(
         &self,
         current: u64,
         size: u64,
     ) -> Result<(Vec<ExclusionRule>, i64), TraitError>;
 
-    /// 切换规则状态（启用/禁用）
+    /// 切换规则状态（启用/禁用）。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `rule_id` - 目标规则 ID。
+    /// * `status` - 新状态（1 启用 / 0 禁用）。
+    ///
+    /// # Errors
+    ///
+    /// 当规则不存在、已归档或 SQL 执行失败时返回错误。
     async fn toggle_rule_status(
         &self,
         svr_ctx: &SVRContext,
@@ -63,7 +140,21 @@ pub trait ExclusionRuleService: Send + Sync {
         status: i64,
     ) -> Result<(), TraitError>;
 
-    /// 添加规则项
+    /// 添加规则项。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `rule_id` - 目标规则 ID。
+    /// * `subject_ids` - 待添加的互斥对象 ID 列表。
+    ///
+    /// # Returns
+    ///
+    /// 实际新增的记录数（已存在的会被 `ON CONFLICT DO NOTHING` 跳过）。
+    ///
+    /// # Errors
+    ///
+    /// 当规则不存在、新增对象与主要对象相同、对象不存在或 SQL 执行失败时返回错误。
     async fn add_rule_items(
         &self,
         svr_ctx: &SVRContext,
@@ -71,7 +162,21 @@ pub trait ExclusionRuleService: Send + Sync {
         subject_ids: Vec<String>,
     ) -> Result<u64, TraitError>;
 
-    /// 移除规则项
+    /// 移除规则项。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
+    /// * `rule_id` - 目标规则 ID。
+    /// * `item_ids` - 待移除的规则项 ID 列表。
+    ///
+    /// # Returns
+    ///
+    /// 实际删除的记录数。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 执行失败时返回错误。
     async fn remove_rule_items(
         &self,
         svr_ctx: &SVRContext,
@@ -79,20 +184,48 @@ pub trait ExclusionRuleService: Send + Sync {
         item_ids: &[String],
     ) -> Result<u64, TraitError>;
 
-    /// 规则校验测试（给定权限/角色组合，测试是否违反互斥规则）
+    /// 规则校验测试（给定权限/角色组合，测试是否违反互斥规则）。
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - 校验请求，包含待测权限/角色组合及可选的用户 ID（用于合并现有权限/角色）。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `ValidateRuleResponse`，包含是否通过及违反详情列表。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 查询失败时返回错误。
     async fn validate_rule(&self, req: ValidateRuleRequest) -> Result<ValidateRuleResponse, TraitError>;
 }
 
-/// 互斥规则 Service 实现
+/// 互斥规则 Service 实现。
+///
+/// 持有 `Arc<DatabaseManager>` 与 `db_id`，通过参数化 SQL 实现互斥规则的 CRUD 与校验。
 pub struct ExclusionRuleServiceImpl {
+    /// 数据库管理器。
     mm: Arc<DatabaseManager>,
+    /// 认证库 `db_id`。
     db_id: String,
+    /// IAM 配置（预留）。
     #[allow(dead_code)]
     config: IamConfig,
+    /// 审计日志记录器（可选）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
 impl ExclusionRuleServiceImpl {
+    /// 构造函数。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id`。
+    ///
+    /// # Returns
+    ///
+    /// 返回未注入审计记录器的新 `ExclusionRuleServiceImpl` 实例。
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -106,6 +239,15 @@ impl ExclusionRuleServiceImpl {
         }
     }
 
+    /// 设置审计日志记录器（Builder 模式）。
+    ///
+    /// # Arguments
+    ///
+    /// * `audit` - 审计日志记录器。
+    ///
+    /// # Returns
+    ///
+    /// 返回注入了审计记录器的新实例。
     pub fn with_audit(mut self, audit: Arc<dyn cmx_audit::AuditLogger>) -> Self {
         self.audit = Some(audit);
         self
@@ -485,7 +627,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         if let Some(status) = data.status {
             sets.push(format!("status = ${idx}"));
             params.push(Value::Number(status.into()));
-            idx += 1;
+            // idx 自增在此处可省略，后续不再使用
         }
 
         if sets.is_empty() {

@@ -1089,9 +1089,9 @@ pub async fn get_openapi_spec(
     let mut seen_tags = std::collections::HashSet::new();
 
     for svc in &all_items {
-        if let Some(api_doc_str) = &svc.api_doc {
-            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(api_doc_str) {
-                if let Some(path) = doc.get("path").and_then(|v| v.as_str()) {
+        if let Some(api_doc_str) = &svc.api_doc
+            && let Ok(doc) = serde_json::from_str::<serde_json::Value>(api_doc_str)
+                && let Some(path) = doc.get("path").and_then(|v| v.as_str()) {
                     if let Some(path_item) = doc.get("path_item") {
                         let mut op = path_item.clone();
                         let tag = build_tag(&svc.domain_name, &svc.application_name, &svc.module_name);
@@ -1112,8 +1112,6 @@ pub async fn get_openapi_spec(
                         schemas.extend(doc_schemas.clone());
                     }
                 }
-            }
-        }
     }
 
     let openapi = serde_json::json!({

@@ -27,13 +27,13 @@ use crate::policy::OAuth2Policy;
 use crate::session::{SessionManager, UserSession};
 use crate::token::TokenManager;
 
-/// Pub/Sub 频道名
+/// Pub/Sub 频道名。
 const CACHE_INVALIDATE_CHANNEL: &str = "auth:cache:invalidate";
 
-/// API Key AuthContext 缓存 TTL（秒）
+/// API Key AuthContext 缓存 TTL（秒）。
 const API_KEY_CTX_CACHE_TTL_SECS: u64 = 60;
 
-/// 回调授权码存储数据（包含 TokenPair + is_new + provider + state）
+/// 回调授权码存储数据（包含 TokenPair + is_new + provider + state）。
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CallbackCodeData {
     access_token: String,
@@ -46,38 +46,58 @@ struct CallbackCodeData {
     state: String,
 }
 
-/// AuthService 实现
+/// `AuthService` trait 的默认实现。
+///
+/// 整合 `JwtManager`、`Argon2Hasher`、`TokenManager`、`SessionManager`、
+/// `OAuth2Policy` 等子模块，提供完整的认证流程实现。
 pub struct AuthServiceImpl {
-    /// 缓存管理器（用于登录失败计数、账号锁定和 Pub/Sub）
+    /// 缓存管理器（用于登录失败计数、账号锁定和 Pub/Sub）。
     cache: CacheManager,
-    /// JWT 管理器
+    /// JWT 管理器。
     jwt_manager: JwtManager,
-    /// 密码哈希器
+    /// 密码哈希器。
     password_hasher: Argon2Hasher,
-    /// Token 管理器
+    /// Token 管理器。
     token_manager: TokenManager,
-    /// 会话管理器
+    /// 会话管理器。
     session_manager: SessionManager,
-    /// OAuth2 策略
+    /// OAuth2 策略。
     oauth2_policy: OAuth2Policy,
-    /// 密码策略校验器
+    /// 密码策略校验器。
     password_policy: PasswordPolicy,
-    /// 密码历史校验器
+    /// 密码历史校验器。
     password_history: PasswordHistory,
-    /// 用户数据查询（由 cmx-biz 实现）
+    /// 用户数据查询（由 cmx-biz 实现）。
     user_query: Arc<dyn UserAuthQuery>,
-    /// 审计日志记录器
+    /// 审计日志记录器。
     audit_logger: Option<Arc<dyn cmx_audit::AuditLogger>>,
-    /// 认证配置
+    /// 认证配置。
     config: AuthConfig,
-    /// OAuth2 存储（用于第三方 Provider state/callback code）
+    /// OAuth2 存储（用于第三方 Provider state/callback code）。
     oauth2_store: crate::oauth2::OAuth2Store,
-    /// 第三方账号关联器
+    /// 第三方账号关联器。
     account_linker: AccountLinker,
 }
 
 impl AuthServiceImpl {
-    /// 创建新的 AuthService 实现
+    /// 创建新的 `AuthServiceImpl` 实例。
+    ///
+    /// 初始化 JWT、密码哈希、Token、会话、OAuth2 等子模块，
+    /// 并根据配置构造第三方账号关联器。
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - Redis 缓存管理器，用于登录失败计数、账号锁定和 Pub/Sub。
+    /// * `config` - 认证配置（包含 JWT、Token、Argon2、会话、OAuth2 等子配置）。
+    /// * `user_query` - 用户数据查询 trait 对象（由 cmx-biz 实现）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回构造完成的 `AuthServiceImpl` 实例。
+    ///
+    /// # Errors
+    ///
+    /// 当 JWT 密钥加载失败或 Argon2 参数无效时返回 `AuthInfraError`。
     pub fn new(
         cache: CacheManager,
         config: AuthConfig,
@@ -114,13 +134,27 @@ impl AuthServiceImpl {
         })
     }
 
-    /// 设置审计日志记录器
+    /// 设置审计日志记录器。
+    ///
+    /// 采用 builder 模式，便于在构造时链式注入审计日志实现。
+    ///
+    /// # Arguments
+    ///
+    /// * `logger` - 审计日志记录器 trait 对象。
+    ///
+    /// # Returns
+    ///
+    /// 返回注入审计日志后的 `Self`，便于链式调用。
     pub fn with_audit_logger(mut self, logger: Arc<dyn cmx_audit::AuditLogger>) -> Self {
         self.audit_logger = Some(logger);
         self
     }
 
-    /// 获取 OAuth2 策略引用
+    /// 获取 OAuth2 策略引用。
+    ///
+    /// # Returns
+    ///
+    /// 返回内部 `OAuth2Policy` 的引用，供外部调用 authorize/login 等流程。
     pub fn oauth2_policy(&self) -> &OAuth2Policy {
         &self.oauth2_policy
     }
@@ -934,12 +968,39 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 对明文密码进行 Argon2id 哈希。
+    ///
+    /// # Arguments
+    ///
+    /// * `plain` - 待哈希的明文密码。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 Argon2id 哈希字符串（含盐值与参数）。
+    ///
+    /// # Errors
+    ///
+    /// 当 Argon2 哈希失败时返回 `AuthError::PasswordHashError`。
     async fn hash_password(&self, plain: &str) -> std::result::Result<String, AuthError> {
         self.password_hasher
             .hash(plain)
             .map_err(|e| AuthError::PasswordHashError(e.to_string()))
     }
 
+    /// 校验明文密码与哈希是否匹配。
+    ///
+    /// # Arguments
+    ///
+    /// * `plain` - 待校验的明文密码。
+    /// * `hash` - 已存储的 Argon2id 哈希字符串。
+    ///
+    /// # Returns
+    ///
+    /// 匹配时返回 `true`，不匹配返回 `false`。
+    ///
+    /// # Errors
+    ///
+    /// 当哈希字符串解析失败时返回 `AuthError::PasswordVerifyFailed`。
     async fn verify_password(
         &self,
         plain: &str,
@@ -950,6 +1011,23 @@ impl AuthService for AuthServiceImpl {
             .map_err(|_| AuthError::PasswordVerifyFailed)
     }
 
+    /// 刷新指定用户/设备的会话心跳。
+    ///
+    /// 更新会话的 `last_active_at` 字段并刷新 `session_detail` 的 TTL，
+    /// 用于维持会话活跃状态。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    /// * `device_type` - 设备类型。
+    ///
+    /// # Returns
+    ///
+    /// 会话存在并刷新成功时返回 `true`，会话不存在返回 `false`。
+    ///
+    /// # Errors
+    ///
+    /// 当 Redis 操作失败时返回 `AuthError::Internal`。
     async fn heartbeat(
         &self,
         user_id: &str,
@@ -961,6 +1039,16 @@ impl AuthService for AuthServiceImpl {
             .map_err(|e| AuthError::Internal(e.to_string()))
     }
 
+    /// 根据 Pub/Sub 消息失效本地缓存。
+    ///
+    /// 支持的消息前缀：
+    /// - `blacklist:{jti}` — 失效指定 Token 的黑名单本地缓存。
+    /// - `revoke_all:{user_id}` — 批量失效 Token 与 Session 本地缓存。
+    /// - `api_key:{key_prefix}` — 清理 API Key 两层缓存（实体 + AuthContext）。
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - Pub/Sub 推送的缓存失效消息。
     async fn invalidate_local_cache(&self, message: &str) {
         if let Some(jti) = message.strip_prefix("blacklist:") {
             self.token_manager.invalidate_local_cache(jti).await;
@@ -1071,6 +1159,15 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 确保超管账号存在并同步密码。
+    ///
+    /// 启动时调用：若超管不存在则创建，已存在则将密码同步为配置中的值
+    /// （配置为密码唯一真源）。配置为 `None` 时跳过。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::PasswordHashError` - 密码哈希失败。
+    /// * `AuthError::Internal` - 用户查询或创建失败。
     async fn ensure_super_admin(&self) -> std::result::Result<(), AuthError> {
         if let Some(ref sa_config) = self.config.super_admin {
             // 1. 检查超管是否已存在
@@ -1115,6 +1212,15 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 导入配置文件中的静态 API Key 到数据库。
+    ///
+    /// 启动时调用：遍历 `static_api_keys` 配置，对明文 Key 计算 SHA256 哈希后
+    /// 通过 `AuthStorageQuery::upsert_api_key` 持久化（已存在则覆盖）。
+    /// 配置为空时直接返回。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库写入失败时返回 `AuthError::Internal`。
     async fn import_static_api_keys(&self) -> std::result::Result<(), AuthError> {
         if self.config.static_api_keys.is_empty() {
             return Ok(());
@@ -1161,6 +1267,11 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 启动后台会话清理任务。
+    ///
+    /// 周期性扫描在线用户会话，清理超过 `idle_timeout_secs` 的过期会话，
+    /// 并同步清理 SessionManager 本地缓存与 `session_detail` Key。
+    /// 任务以 `tokio::spawn` 方式运行，间隔取 `heartbeat_interval_secs` 与 300 秒的较大值。
     async fn start_cleanup_task(&self) {
         let cache = self.cache.clone();
         let idle_timeout = self.config.session.idle_timeout_secs;
@@ -1192,8 +1303,8 @@ impl AuthService for AuthServiceImpl {
                     };
                     let mut all_expired = true;
                     for device in &devices {
-                        if let Ok(Some(json)) = cache.hash().hget(&key, device).await {
-                            if let Ok(session) = serde_json::from_str::<UserSession>(&json) {
+                        if let Ok(Some(json)) = cache.hash().hget(&key, device).await
+                            && let Ok(session) = serde_json::from_str::<UserSession>(&json) {
                                 if now - session.last_active_at > idle_timeout as i64 {
                                     // 过期，删除会话 Hash field
                                     let _ = cache.hash().hdel(&key, &[device]).await;
@@ -1207,7 +1318,6 @@ impl AuthService for AuthServiceImpl {
                                     all_expired = false;
                                 }
                             }
-                        }
                     }
                     // 如果所有会话都过期，从在线用户集合移除
                     if all_expired {
@@ -1221,6 +1331,19 @@ impl AuthService for AuthServiceImpl {
         });
     }
 
+    /// 查询 OAuth2 客户端信息。
+    ///
+    /// # Arguments
+    ///
+    /// * `client_id` - OAuth2 客户端 ID。
+    ///
+    /// # Returns
+    ///
+    /// 客户端存在时返回 `Some(OAuth2ClientData)`，否则返回 `None`。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库查询失败时返回 `AuthError::Internal`。
     async fn get_oauth2_client(
         &self,
         client_id: &str,
@@ -1230,7 +1353,25 @@ impl AuthService for AuthServiceImpl {
             .map_err(|e| AuthError::Internal(e.to_string()))
     }
 
-    /// 2.4 修复：仅验证用户名密码，返回 user_id（不签发 Token）
+    /// 仅验证用户名密码，返回 `user_id`（不签发 Token）。
+    ///
+    /// 用于 OAuth2 `login` 阶段：用户认证后由流程服务签发授权码，
+    /// 而非直接签发 Token。包含账号锁定检查、时序攻击防护与审计日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - 用户名。
+    /// * `password` - 明文密码。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回用户 ID。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::TooManyAttempts` - 账号已锁定。
+    /// * `AuthError::InvalidCredentials` - 用户不存在或密码错误。
+    /// * `AuthError::UserDisabled` - 用户已禁用。
     async fn verify_credentials(
         &self,
         username: &str,
@@ -1300,16 +1441,29 @@ impl AuthService for AuthServiceImpl {
         Ok(user.user_id)
     }
 
-    /// 2.1 修复：验证 API Key 并返回 AuthContext（无状态，不创建会话）
+    /// 验证 API Key 并返回 `AuthContext`（无状态，不创建会话）。
     ///
-    /// ## 两层缓存优化
+    /// # 两层缓存优化
     ///
     /// 为避免高频 M2M 调用打垮数据库，使用两层缓存：
-    /// 1. 第一层（ApiKeyManager）：`key_prefix → ApiKeyEntity`，缓存 API Key 元数据
-    /// 2. 第二层（本方法）：`key_prefix → AuthContext`，缓存完整认证上下文（含 user/roles/permissions）
+    /// 1. 第一层（ApiKeyManager）：`key_prefix → ApiKeyEntity`，缓存 API Key 元数据。
+    /// 2. 第二层（本方法）：`key_prefix → AuthContext`，缓存完整认证上下文（含 user/roles/permissions）。
     ///
     /// 缓存命中时跳过全部 4 次 DB 查询，仅做 SHA256 校验。
     /// 缓存失效通过 `invalidate_local_cache("api_key:{key_prefix}")` 触发。
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 待验证的 API Key 明文字符串。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回包含用户身份信息的 `AuthContext`。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::InvalidApiKey` - Key 格式错误、状态禁用或哈希不匹配。
+    /// * `AuthError::UserDisabled` - 关联用户已禁用。
     async fn validate_api_key(&self, key: &str) -> std::result::Result<AuthContext, AuthError> {
         // 提取 key_prefix 用于缓存查找
         let key_prefix = if key.len() >= 8 { &key[..8] } else { return Err(AuthError::InvalidApiKey); };
@@ -1319,15 +1473,14 @@ impl AuthService for AuthServiceImpl {
 
         // === 第二层缓存：key_prefix → AuthContext ===
         let ctx_cache_key = format!("auth:api_key_ctx:{}", key_prefix);
-        if let Ok(Some(cached)) = self.cache.ops().get(&ctx_cache_key).await {
-            if let Ok(auth_ctx) = serde_json::from_str::<AuthContext>(&cached) {
+        if let Ok(Some(cached)) = self.cache.ops().get(&ctx_cache_key).await
+            && let Ok(auth_ctx) = serde_json::from_str::<AuthContext>(&cached) {
                 // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
                 // validate_api_key_entity 内部走第一层缓存，命中时仅做 SHA256 比对
                 self.validate_api_key_entity(key).await?;
                 debug!(key_prefix = %key_prefix, "API Key AuthContext 缓存命中，跳过 user/roles/permissions 查询");
                 return Ok(auth_ctx);
             }
-        }
 
         // === 缓存未命中，走完整验证流程 ===
         let api_key_entity = self.validate_api_key_entity(key).await?;
@@ -1403,10 +1556,24 @@ impl AuthService for AuthServiceImpl {
         Ok(auth_ctx)
     }
 
-    /// 获取当前登录用户的完整信息（含 nickname/email/roles/permissions）
+    /// 获取当前登录用户的完整信息（含 nickname/email/roles/permissions）。
     ///
-    /// 从 cmx_user 表查询用户基本信息，并附加角色、权限列表。
+    /// 从 `cmx_user` 表查询用户基本信息，并附加角色、权限列表。
     /// 用于 `/api/auth/me` 接口。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `UserInfo`，包含用户基本信息与角色权限。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::InvalidToken` - 用户不存在。
+    /// * `AuthError::UserDisabled` - 用户已禁用。
+    /// * `AuthError::Internal` - 数据库查询失败。
     async fn get_user_info(&self, user_id: &str) -> std::result::Result<UserInfo, AuthError> {
         let user = self
             .user_query
@@ -1450,6 +1617,12 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
+    /// 列出所有已启用的第三方 OAuth2 Provider 信息。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `Vec<ProviderInfo>`。注册表未初始化时返回空列表，
+    /// 使公开端点 `GET /api/auth/oauth2/providers` 优雅返回空数组。
     async fn list_oauth2_providers(
         &self,
     ) -> std::result::Result<Vec<cmx_traits::auth::ProviderInfo>, AuthError> {
@@ -1564,6 +1737,23 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
+    /// 用一次性回调授权码换取 TokenPair。
+    ///
+    /// 原子消费回调授权码，返回此前在 `handle_oauth2_callback` 中存储的 TokenPair
+    /// 及关联的 `is_new`/`provider`/`state` 元信息。
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - 一次性回调授权码。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `OAuth2CallbackExchangeResult`，包含 TokenPair 与元信息。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::OAuth2CallbackCodeInvalid` - 授权码无效或已使用。
+    /// * `AuthError::Internal` - 回调数据反序列化失败。
     async fn exchange_oauth2_callback_code(
         &self,
         code: &str,
@@ -1587,6 +1777,22 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
+    /// 将第三方 Provider 账号绑定到已有本地用户。
+    ///
+    /// 流程：获取 Provider → 交换 Token → 获取用户信息 →
+    /// 检查账号未被他人绑定 → 创建关联记录。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 本地用户 ID。
+    /// * `provider` - 第三方 Provider 名称。
+    /// * `code` - 第三方 Provider 返回的授权码。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::OAuth2` - 该 Provider 账号已被其他用户绑定。
+    /// * `AuthError::OAuth2ProviderUnavailable` - 第三方服务不可达。
+    /// * `AuthError::Internal` - 注册表未初始化或数据库写入失败。
     async fn link_oauth2_account(
         &self,
         user_id: &str,
@@ -1624,6 +1830,20 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 解绑用户的第三方 Provider 账号。
+    ///
+    /// 委托 `AccountLinker::unlink_account` 执行，包含安全检查：
+    /// 若用户既无密码又无其他第三方绑定，则拒绝解绑最后一个登录方式。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 本地用户 ID。
+    /// * `provider` - 待解绑的第三方 Provider 名称。
+    ///
+    /// # Errors
+    ///
+    /// * `AuthError::OAuth2LastBindingCannotRemove` - 解绑后用户将无可用登录方式。
+    /// * `AuthError::Internal` - 数据库操作失败。
     async fn unlink_oauth2_account(
         &self,
         user_id: &str,
@@ -1639,6 +1859,19 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
+    /// 存储第三方 OAuth2 Provider 的 CSRF state。
+    ///
+    /// 在重定向用户到第三方授权页前调用，state 用于回调时校验请求来源，
+    /// 防止 CSRF 攻击。
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - 随机生成的 CSRF state 字符串。
+    /// * `provider` - 关联的 Provider 名称，回调时校验一致性。
+    ///
+    /// # Errors
+    ///
+    /// 当 Redis 写入失败时返回 `AuthError::Internal`。
     async fn store_oauth2_provider_state(&self, state: &str, provider: &str) -> std::result::Result<(), AuthError> {
         self.oauth2_store.store_provider_state(state, provider).await
             .map_err(|e| AuthError::Internal(e.to_string()))
@@ -1647,6 +1880,23 @@ impl AuthService for AuthServiceImpl {
 
 #[async_trait]
 impl AuthStorageQuery for AuthServiceImpl {
+    /// 新增或更新 API Key 记录。
+    ///
+    /// 以 `key_prefix` 为唯一键执行 `INSERT ... ON CONFLICT DO UPDATE`，
+    /// 已存在时覆盖 `key_hash`/`user_id`/`service_name`/`scopes`/`description`。
+    ///
+    /// # Arguments
+    ///
+    /// * `key_prefix` - API Key 前缀（唯一标识）。
+    /// * `key_hash` - Key 的 SHA256 哈希。
+    /// * `user_id` - 关联用户 ID（可选，纯服务间调用时为 `None`）。
+    /// * `service_name` - 关联服务名称（可选）。
+    /// * `scopes` - 允许的 scope 列表。
+    /// * `description` - 描述/备注（可选）。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 执行失败或 scopes 序列化失败时返回 `TraitError::Internal`。
     async fn upsert_api_key(
         &self,
         key_prefix: &str,
@@ -1699,6 +1949,19 @@ impl AuthStorageQuery for AuthServiceImpl {
         Ok(())
     }
 
+    /// 根据 `key_prefix` 查询未归档的 API Key 记录。
+    ///
+    /// # Arguments
+    ///
+    /// * `key_prefix` - API Key 前缀（前 8 位）。
+    ///
+    /// # Returns
+    ///
+    /// 存在时返回 `Some(ApiKeyData)`，否则返回 `None`。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库查询失败时返回 `TraitError::Internal`。
     async fn get_api_key_by_prefix(
         &self,
         key_prefix: &str,
@@ -1741,6 +2004,20 @@ impl AuthStorageQuery for AuthServiceImpl {
         }))
     }
 
+    /// 记录 Token 生命周期事件到审计表。
+    ///
+    /// 用于 Token 签发、撤销、密码修改等关键事件的持久化审计。
+    ///
+    /// # Arguments
+    ///
+    /// * `event_type` - 事件类型（如 `token_issued`/`token_revoked`/`password_changed`）。
+    /// * `user_id` - 关联用户 ID。
+    /// * `jti` - 关联 Token 的 JTI（无关联时传空字符串）。
+    /// * `detail` - 事件详情描述。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 执行失败时返回 `TraitError::Internal`。
     async fn record_token_event(
         &self,
         event_type: &str,
@@ -1774,6 +2051,19 @@ impl AuthStorageQuery for AuthServiceImpl {
         Ok(())
     }
 
+    /// 根据 `client_id` 查询未归档的 OAuth2 客户端信息。
+    ///
+    /// # Arguments
+    ///
+    /// * `client_id` - OAuth2 客户端 ID。
+    ///
+    /// # Returns
+    ///
+    /// 客户端存在时返回 `Some(OAuth2ClientData)`，否则返回 `None`。
+    ///
+    /// # Errors
+    ///
+    /// 当数据库查询失败时返回 `TraitError::Internal`。
     async fn get_oauth2_client(
         &self,
         client_id: &str,

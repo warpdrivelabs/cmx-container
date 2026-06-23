@@ -39,7 +39,16 @@ pub struct IamChecker {
 }
 
 impl IamChecker {
-    /// 构造函数（不带缓存）
+    /// 构造函数（不带缓存）。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `config` - IAM 配置，用于确定认证库 `db_id` 及熔断器参数。
+    ///
+    /// # Returns
+    ///
+    /// 返回未启用 Redis 缓存的新 `IamChecker` 实例。
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -58,7 +67,15 @@ impl IamChecker {
         }
     }
 
-    /// 设置 Redis 缓存管理器（Builder 模式）
+    /// 设置 Redis 缓存管理器（Builder 模式）。
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - Redis 缓存管理器。
+    ///
+    /// # Returns
+    ///
+    /// 返回启用了缓存的新 `IamChecker` 实例。
     pub fn with_cache(mut self, cache: Arc<cmx_buffer::cache::CacheManager>) -> Self {
         self.cache = Some(cache);
         self
@@ -172,7 +189,14 @@ impl IamChecker {
         }
     }
 
-    /// 失效指定用户的权限和角色缓存
+    /// 失效指定用户的权限和角色缓存。
+    ///
+    /// 同时删除 `iam:perm:{user_id}` 和 `iam:role:{user_id}` 两个缓存键。
+    /// 未启用缓存时为空操作。
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - 目标用户 ID。
     pub async fn invalidate_user_cache(&self, user_id: &str) {
         if let Some(cache) = &self.cache {
             let perm_key = format!("iam:perm:{}", user_id);
@@ -183,7 +207,15 @@ impl IamChecker {
         }
     }
 
-    /// 失效指定角色关联的所有用户缓存
+    /// 失效指定角色关联的所有用户缓存。
+    ///
+    /// 查询该角色关联的所有 `user_id`（含永久与临时授权），
+    /// 批量删除这些用户的权限和角色缓存键。
+    /// 未启用缓存时为空操作。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_id` - 目标角色 ID。
     pub async fn invalidate_role_cache(&self, role_id: &str) {
         if let Some(cache) = &self.cache {
             // 查询该角色关联的所有 user_id（永久 + 临时）
