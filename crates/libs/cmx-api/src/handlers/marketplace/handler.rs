@@ -163,17 +163,10 @@ pub async fn marketplace_plugin_page(
     let page = params.get_page() as u64;
     let page_size = params.get_size() as u64;
 
-    let filters: Option<Vec<MarketplacePluginFilter>> = if let Some(filter) = params.filter.clone() {
-        Some(vec![filter.into()])
-    } else if let Some(fs) = params.filters.clone() {
-        if !fs.is_empty() {
-            Some(fs.into_iter().map(Into::into).collect())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let filters: Option<Vec<MarketplacePluginFilter>> = params.filters
+        .clone()
+        .map(|fs| fs.into_iter().map(Into::into).collect())
+        .filter(|v: &Vec<MarketplacePluginFilter>| !v.is_empty());
 
     let list_options = params.to_list_options();
 

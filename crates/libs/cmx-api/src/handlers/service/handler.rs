@@ -880,7 +880,9 @@ pub async fn page_services(
     let service_query: &Arc<dyn ServiceQuery> = state.service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let filter = params.filter.clone().unwrap_or_default();
+    let filter = params.filters.clone()
+        .and_then(|v| v.into_iter().next())
+        .unwrap_or_default();
     let page = params.get_page() as u64;
     let size = params.get_size() as u64;
 

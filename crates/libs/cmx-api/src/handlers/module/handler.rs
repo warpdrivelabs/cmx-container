@@ -72,13 +72,7 @@ pub async fn module_custom_page(
     let list_options = params.to_list_options();
     let page_number = params.get_page() as u64;
     let page_size = params.get_size() as u64;
-    let mut filters = params.filters.clone();
-    if let Some(filter) = params.filter.clone() {
-        filters = Some(vec![filter]);
-    }
-    if filters.is_none() || filters.as_ref().unwrap().is_empty() {
-        filters = None;
-    }
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let (dataset, total) = CustomQueryService::page_custom(
         mm,

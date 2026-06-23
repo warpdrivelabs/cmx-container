@@ -516,7 +516,8 @@ pub async fn plugin_list(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
-    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filters
+        .and_then(|v| v.into_iter().next())
         .unwrap_or_default()
         .into();
 
@@ -597,7 +598,8 @@ pub async fn plugin_page(
     let page_size = params.get_size() as u64;
     let skip = params.get_offset() as usize;
 
-    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filter
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filters
+        .and_then(|v| v.into_iter().next())
         .unwrap_or_default()
         .into();
 

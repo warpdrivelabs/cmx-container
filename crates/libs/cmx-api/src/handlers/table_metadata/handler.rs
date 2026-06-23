@@ -79,14 +79,7 @@ pub async fn table_metadata_list(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
-    let mut filters = params.filters.clone();
-    //都存在时优先使用filter
-    if let Some(filter) = params.filter.clone() {
-        filters = Some(vec![filter]);
-    }
-    if params.filters.is_none() || params.filters.unwrap().is_empty() {
-        filters = None;
-    }
+    let mut filters = params.filters.clone().filter(|v| !v.is_empty());
     let app_id = cmx_state.app_id();
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
@@ -134,14 +127,7 @@ pub async fn table_metadata_page(
     let page_size = params.get_size() as u64;
 
     let list_options = params.to_list_options();
-    let mut filters = params.filters.clone();
-    if params.filters.is_none() || params.filters.unwrap().is_empty() {
-        filters = None;
-    }
-    //都存在时优先使用filter
-    if let Some(filter) = params.filter.clone() {
-        filters = Some(vec![filter]);
-    }
+    let mut filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let app_id = cmx_state.app_id();
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter

@@ -77,8 +77,6 @@ impl<F> ListParamsDoc<F> {
 /// 支持过滤条件、排序和分页信息，适用于分页列表查询。
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct PageParamsDoc<F> {
-    /// 单个过滤条件。
-    pub filter: Option<F>,
     /// 多个过滤条件列表。
     pub filters: Option<Vec<F>>,
     /// 当前页码，默认为 1。

@@ -55,8 +55,6 @@ pub struct DeletePayload {
 #[derive(Debug, Deserialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListParams<F> {
-    /// 过滤条件
-    pub filter: Option<F>,
     /// 多个过滤条件（用于or查询）
     pub filters: Option<Vec<F>>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
@@ -80,8 +78,6 @@ impl<F> ListParams<F> {
 #[derive(Debug, Deserialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct PageParams<F> {
-    /// 过滤条件
-    pub filter: Option<F>,
     /// 多个过滤条件（用于or查询）
     pub filters: Option<Vec<F>>,
     /// 页码（从 1 开始）
@@ -148,7 +144,6 @@ mod tests {
     #[test]
     fn test_list_params_to_list_options() {
         let params: ListParams<()> = ListParams {
-            filter: None,
             filters: None,
             order_bys: Some("create_time".to_string())
         };
@@ -160,7 +155,6 @@ mod tests {
     #[test]
     fn test_page_params_default_values() {
         let params: PageParams<()> = PageParams {
-            filter: None,
             filters: None,
             current: None,
             size: None,
@@ -175,7 +169,6 @@ mod tests {
     #[test]
     fn test_page_params_custom_values() {
         let params: PageParams<()> = PageParams {
-            filter: None,
             filters: None,
             current: Some(3),
             size: Some(50),
@@ -190,7 +183,6 @@ mod tests {
     #[test]
     fn test_page_params_max_size() {
         let params: PageParams<()> = PageParams {
-            filter: None,
             filters: None,
             current: Some(1),
             size: Some(10000),
@@ -203,7 +195,6 @@ mod tests {
     #[test]
     fn test_page_params_invalid_page() {
         let params: PageParams<()> = PageParams {
-            filter: None,
             filters: None,
             current: Some(0),
             size: Some(20),
@@ -217,7 +208,6 @@ mod tests {
     #[test]
     fn test_page_params_to_list_options() {
         let params: PageParams<()> = PageParams {
-            filter: None,
             filters: None,
             current: Some(3),
             size: Some(50),
