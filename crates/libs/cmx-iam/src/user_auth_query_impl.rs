@@ -37,9 +37,17 @@ impl UserAuthQueryImpl {
             user_id: row.get_by_name_as(schema, "id").unwrap_or_default(),
             username: row.get_by_name_as(schema, "username").unwrap_or_default(),
             password_hash: row.get_by_name_as(schema, "password_hash"),
-            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
             nickname: row.get_by_name_as(schema, "nickname"),
             email: row.get_by_name_as(schema, "email"),
+            phone: row.get_by_name_as(schema, "phone"),
+            avatar: row.get_by_name_as(schema, "avatar"),
+            org_id: row.get_by_name_as(schema, "org_id"),
+            gender: row.get_by_name_as::<i64>(schema, "gender").unwrap_or(0),
+            status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
+            last_login_at: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "last_login_at")
+                .map(|dt| dt.timestamp()),
+            last_login_ip: row.get_by_name_as(schema, "last_login_ip"),
+            description: row.get_by_name_as(schema, "description"),
         })
     }
 
@@ -66,7 +74,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
             "IAM", username
         );
 
-        let sql = "SELECT id, username, password_hash, status, nickname, email \
+        let sql = "SELECT id, username, password_hash, nickname, email, phone, avatar, org_id, gender, status, last_login_at, last_login_ip, description \
                    FROM cmx_user WHERE username = $1 AND archived = 0";
         let params: Vec<DataValue> = vec![DataValue::String(username.to_string())];
 
@@ -85,7 +93,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
             "IAM", user_id
         );
 
-        let sql = "SELECT id, username, password_hash, status, nickname, email \
+        let sql = "SELECT id, username, password_hash, nickname, email, phone, avatar, org_id, gender, status, last_login_at, last_login_ip, description \
                    FROM cmx_user WHERE id = $1 AND archived = 0";
         let params: Vec<DataValue> = vec![DataValue::String(user_id.to_string())];
 

@@ -21,6 +21,20 @@ pub struct UserInfo {
     pub nickname: Option<String>,
     /// 邮箱
     pub email: Option<String>,
+    /// 手机号
+    pub phone: Option<String>,
+    /// 头像 URL
+    pub avatar: Option<String>,
+    /// 组织 ID
+    pub org_id: Option<String>,
+    /// 性别：0-未知，1-男，2-女
+    pub gender: i64,
+    /// 最后登录时间（Unix 时间戳）
+    pub last_login_at: Option<i64>,
+    /// 最后登录 IP
+    pub last_login_ip: Option<String>,
+    /// 描述
+    pub description: Option<String>,
     /// 角色列表
     pub roles: Vec<String>,
     /// 权限列表

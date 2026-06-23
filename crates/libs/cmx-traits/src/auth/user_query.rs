@@ -11,18 +11,32 @@ use crate::error::TraitError;
 /// 用户认证数据（含密码哈希，仅认证服务可见）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserAuthData {
-    /// 邮箱
-    pub email: Option<String>,
     /// 用户 ID
     pub user_id: String,
     /// 用户名
     pub username: String,
     /// 密码哈希（Argon2）
     pub password_hash: Option<String>,
-    /// 状态：0-禁用 1-启用
-    pub status: i64,
     /// 昵称
     pub nickname: Option<String>,
+    /// 邮箱
+    pub email: Option<String>,
+    /// 手机号
+    pub phone: Option<String>,
+    /// 头像 URL
+    pub avatar: Option<String>,
+    /// 组织 ID
+    pub org_id: Option<String>,
+    /// 性别：0-未知，1-男，2-女
+    pub gender: i64,
+    /// 状态：0-禁用 1-启用
+    pub status: i64,
+    /// 最后登录时间（Unix 时间戳）
+    pub last_login_at: Option<i64>,
+    /// 最后登录 IP
+    pub last_login_ip: Option<String>,
+    /// 描述
+    pub description: Option<String>,
 }
 
 /// API Key 数据（用于认证查询）

@@ -13,6 +13,7 @@ CREATE TABLE cmx_user (
     phone varchar(50),
     avatar varchar(500),
     org_id varchar(64),
+    gender INT4 DEFAULT 0,
     status int4 DEFAULT 1,
     last_login_at timestamp,
     last_login_ip varchar(50),
@@ -39,6 +40,7 @@ COMMENT ON COLUMN cmx_user.email IS '邮箱';
 COMMENT ON COLUMN cmx_user.phone IS '手机号';
 COMMENT ON COLUMN cmx_user.avatar IS '头像URL';
 COMMENT ON COLUMN cmx_user.org_id IS '所属组织ID';
+COMMENT ON COLUMN cmx_user.gender IS '性别：0-未知，1-男，2-女';
 COMMENT ON COLUMN cmx_user.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_user.last_login_at IS '最后登录时间';
 COMMENT ON COLUMN cmx_user.last_login_ip IS '最后登录IP';
