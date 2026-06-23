@@ -32,14 +32,14 @@ pub async fn create_permission(
     debug!("{:<12} - handler::create_permission - code: {}", "HANDLER", data.code);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let permission = iam
         .permission_service
         .create_permission(&svr_ctx, data)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permission)))
 }
@@ -65,14 +65,14 @@ pub async fn get_permission(
     debug!("{:<12} - handler::get_permission - id: {}", "HANDLER", params.id);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let permission = iam
         .permission_service
         .get_permission(&params.id)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permission)))
 }
@@ -96,20 +96,20 @@ pub async fn update_permission(
     let permission_id = payload
         .id
         .as_str()
-        .ok_or_else(|| Error::InternalError("无效的权限ID".to_string()))?
+        .ok_or_else(|| Error::business_error("无效的权限ID".to_string()))?
         .to_string();
 
     debug!("{:<12} - handler::update_permission - id: {}", "HANDLER", permission_id);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let permission = iam
         .permission_service
         .update_permission(&svr_ctx, &permission_id, payload.data)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permission)))
 }
@@ -138,13 +138,13 @@ pub async fn delete_permission(
     debug!("{:<12} - handler::delete_permission - count: {}", "HANDLER", permission_ids.len());
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     iam.permission_service
         .delete_permission(&svr_ctx, &permission_ids)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -167,7 +167,7 @@ pub async fn page_permissions(
     debug!("{:<12} - handler::page_permissions", "HANDLER");
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let current = params.get_page() as u64;
@@ -180,7 +180,7 @@ pub async fn page_permissions(
         .permission_service
         .page_permissions(filter, current, size)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok_with_pagination(permissions, current, size, total as u64)))
 }
@@ -203,7 +203,7 @@ pub async fn list_permissions(
     debug!("{:<12} - handler::list_permissions", "HANDLER");
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let filter = params.filters
@@ -214,7 +214,7 @@ pub async fn list_permissions(
         .permission_service
         .list_permissions(filter)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permissions)))
 }
@@ -235,14 +235,14 @@ pub async fn get_permission_tree(
     debug!("{:<12} - handler::get_permission_tree", "HANDLER");
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let tree = iam
         .permission_service
         .get_permission_tree()
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(tree)))
 }

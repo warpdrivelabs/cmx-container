@@ -29,13 +29,13 @@ pub async fn get_permission_usage_stat(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let stats = iam
         .permission_service
         .get_permission_usage_stat()
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(stats)))
 }

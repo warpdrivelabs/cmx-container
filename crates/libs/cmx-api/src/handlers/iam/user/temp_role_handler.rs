@@ -113,7 +113,7 @@ pub async fn assign_temp_role(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let source = req.source.as_deref().unwrap_or("manual");
     let assignment = iam
@@ -128,7 +128,7 @@ pub async fn assign_temp_role(
             source,
         )
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(assignment)))
 }
@@ -155,12 +155,12 @@ pub async fn revoke_temp_role(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     iam.user_service
         .revoke_temp_role(&svr_ctx, &req.assignment_id, req.reason.as_deref())
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -188,13 +188,13 @@ pub async fn revoke_temp_roles_batch(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let affected = iam
         .user_service
         .revoke_temp_roles_batch(&svr_ctx, &req.assignment_ids, req.reason.as_deref())
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(RevokeBatchResponse { affected })))
 }
@@ -221,7 +221,7 @@ pub async fn extend_temp_role(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     iam.user_service
         .extend_temp_role(
@@ -231,7 +231,7 @@ pub async fn extend_temp_role(
             req.reason.as_deref(),
         )
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -262,7 +262,7 @@ pub async fn get_temp_assignments(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let status_filter = parse_status_filter(&params.status);
 
@@ -270,12 +270,12 @@ pub async fn get_temp_assignments(
         iam.user_service
             .get_user_temp_assignments(user_id, status_filter)
             .await
-            .map_err(|e| Error::InternalError(e.to_string()))?
+            .map_err(|e| Error::business_error(e.to_string()))?
     } else if let Some(role_id) = &params.role_id {
         iam.user_service
             .get_role_temp_assigned_users(role_id, status_filter)
             .await
-            .map_err(|e| Error::InternalError(e.to_string()))?
+            .map_err(|e| Error::business_error(e.to_string()))?
     } else {
         return Err(Error::BusinessError(
             "必须提供 user_id 或 role_id 参数".to_string(),

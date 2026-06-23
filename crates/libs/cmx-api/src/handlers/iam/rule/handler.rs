@@ -77,17 +77,17 @@ pub async fn create_rule(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let rule = rule_service
         .create_rule(&svr_ctx, req)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(rule)))
 }
@@ -118,17 +118,17 @@ pub async fn update_rule(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let rule = rule_service
         .update_rule(&svr_ctx, &rule_id, data)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(rule)))
 }
@@ -157,17 +157,17 @@ pub async fn delete_rule(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     rule_service
         .delete_rule(&svr_ctx, &rule_id)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -196,17 +196,17 @@ pub async fn get_rule(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let (rule, items) = rule_service
         .get_rule(&rule_id)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(RuleDetailResponse { rule, items })))
 }
@@ -233,17 +233,17 @@ pub async fn toggle_rule_status(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     rule_service
         .toggle_rule_status(&svr_ctx, &req.rule_id, req.status)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -270,17 +270,17 @@ pub async fn add_rule_items(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let affected = rule_service
         .add_rule_items(&svr_ctx, &req.rule_id, req.items)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(BatchResponse { affected })))
 }
@@ -307,17 +307,17 @@ pub async fn remove_rule_items(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let affected = rule_service
         .remove_rule_items(&svr_ctx, &req.rule_id, &req.item_ids)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(BatchResponse { affected })))
 }
@@ -360,17 +360,17 @@ pub async fn page_rules(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let (rules, total) = rule_service
         .page_rules(req.current, req.size)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(PageRulesResponse { rules, total })))
 }
@@ -397,17 +397,17 @@ pub async fn validate_rule(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let rule_service = iam
         .rule_service
         .as_ref()
-        .ok_or_else(|| Error::InternalError("权限规则服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("权限规则服务未初始化".to_string()))?;
 
     let response = rule_service
         .validate_rule(&req.permission_ids, req.user_id.as_deref())
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(response)))
 }

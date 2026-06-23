@@ -32,7 +32,7 @@ pub async fn auth_login(
     debug!("{:<12} - handler::auth_login - username: {}", "HANDLER", req.username);
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     let credentials = Credentials::Password {
@@ -68,7 +68,7 @@ pub async fn auth_login(
                 window,
             });
         }
-        Err(other) => return Err(Error::InternalError(other.to_string())),
+        Err(other) => return Err(Error::business_error(other.to_string())),
     };
 
     let response = LoginResponse {
@@ -102,7 +102,7 @@ pub async fn auth_refresh(
     debug!("{:<12} - handler::auth_refresh", "HANDLER");
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     let token_pair = auth_service
@@ -115,7 +115,7 @@ pub async fn auth_refresh(
             | cmx_traits::auth::AuthError::InvalidToken(_) => {
                 Error::Unauthorized(e.to_string())
             }
-            other => Error::InternalError(other.to_string()),
+            other => Error::business_error(other.to_string()),
         })?;
 
     let response = LoginResponse {
@@ -156,13 +156,13 @@ pub async fn auth_logout(
         .ok_or_else(|| Error::Unauthorized("缺少 Authorization 头".to_string()))?;
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     auth_service
         .revoke_token(&token)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     if let Some(auth_ctx) = &svr_ctx.auth_context {
         info!(user_id = %auth_ctx.user_id, "用户登出");
@@ -190,7 +190,7 @@ pub async fn auth_validate(
     debug!("{:<12} - handler::auth_validate", "HANDLER");
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     let auth_ctx = auth_service
@@ -202,7 +202,7 @@ pub async fn auth_validate(
             | cmx_traits::auth::AuthError::InvalidToken(_) => {
                 Error::Unauthorized(e.to_string())
             }
-            other => Error::InternalError(other.to_string()),
+            other => Error::business_error(other.to_string()),
         })?;
 
     let response = ValidateResponse {
@@ -244,7 +244,7 @@ pub async fn auth_me(
 
     let auth_service = cmx_state
         .auth_service()
-        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     let user_info = auth_service
         .get_user_info(&auth_ctx.user_id)
@@ -254,7 +254,7 @@ pub async fn auth_me(
                 Error::Forbidden("用户已被禁用".to_string())
             }
             cmx_traits::auth::AuthError::InvalidToken(msg) => Error::Unauthorized(msg),
-            other => Error::InternalError(other.to_string()),
+            other => Error::business_error(other.to_string()),
         })?;
 
     let response = UserInfoResponse {
@@ -309,13 +309,13 @@ pub async fn auth_revoke_all(
     }
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     auth_service
         .revoke_all_tokens(&req.user_id)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     warn!(user_id = %req.user_id, "管理员强制下线用户");
     Ok(Json(ApiResp::ok(())))
@@ -340,7 +340,7 @@ pub async fn auth_heartbeat(
     })?;
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     let device_type = auth_ctx.device_type.as_deref().unwrap_or("unknown");
@@ -348,7 +348,7 @@ pub async fn auth_heartbeat(
     let refreshed = auth_service
         .heartbeat(&auth_ctx.user_id, device_type)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     if !refreshed {
         return Err(Error::Unauthorized("会话不存在或已过期".to_string()));
@@ -424,7 +424,7 @@ pub async fn auth_change_password(
     })?;
 
     let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
+        Error::business_error("认证服务未初始化".to_string())
     })?;
 
     auth_service
@@ -440,7 +440,7 @@ pub async fn auth_change_password(
             cmx_traits::auth::AuthError::PasswordReused => {
                 Error::BadRequest("新密码与历史密码重复".to_string())
             }
-            other => Error::InternalError(other.to_string()),
+            other => Error::business_error(other.to_string()),
         })?;
 
     info!(user_id = %auth_ctx.user_id, "用户修改密码成功");

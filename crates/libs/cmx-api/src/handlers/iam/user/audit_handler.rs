@@ -44,13 +44,13 @@ pub async fn get_effective_permissions(
 
     let iam = cmx_state
         .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let result = iam
         .user_service
         .get_effective_permissions(&params.user_id)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(result)))
 }

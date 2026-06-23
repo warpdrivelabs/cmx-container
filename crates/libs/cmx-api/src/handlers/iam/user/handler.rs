@@ -42,14 +42,14 @@ pub async fn create_user(
     debug!("{:<12} - handler::create_user - username: {}", "HANDLER", data.username);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let user = iam
         .user_service
         .create_user(&svr_ctx, data)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(user)))
 }
@@ -75,14 +75,14 @@ pub async fn get_user(
     debug!("{:<12} - handler::get_user - username: {}", "HANDLER", params.username);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let user = iam
         .user_service
         .get_user(&params.username)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(user)))
 }
@@ -106,20 +106,20 @@ pub async fn update_user(
     let user_id = payload
         .id
         .as_str()
-        .ok_or_else(|| Error::InternalError("无效的用户ID".to_string()))?
+        .ok_or_else(|| Error::business_error("无效的用户ID".to_string()))?
         .to_string();
 
     debug!("{:<12} - handler::update_user - id: {}", "HANDLER", user_id);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let user = iam
         .user_service
         .update_user(&svr_ctx, &user_id, payload.data)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(user)))
 }
@@ -148,13 +148,13 @@ pub async fn delete_user(
     debug!("{:<12} - handler::delete_user - count: {}", "HANDLER", user_ids.len());
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     iam.user_service
         .delete_user(&svr_ctx, &user_ids)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -177,7 +177,7 @@ pub async fn page_users(
     debug!("{:<12} - handler::page_users", "HANDLER");
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let current = params.get_page() as u64;
@@ -190,7 +190,7 @@ pub async fn page_users(
         .user_service
         .page_users(filter, current, size)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok_with_pagination(users, current, size, total as u64)))
 }
@@ -213,7 +213,7 @@ pub async fn list_users(
     debug!("{:<12} - handler::list_users", "HANDLER");
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let filter = params.filters
@@ -224,7 +224,7 @@ pub async fn list_users(
         .user_service
         .list_users(filter)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(users)))
 }
@@ -250,13 +250,13 @@ pub async fn assign_roles(
     );
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     iam.user_service
         .assign_roles(&svr_ctx, &req.username, &req.role_ids)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(())))
 }
@@ -281,14 +281,14 @@ pub async fn get_user_roles(
     debug!("{:<12} - handler::get_user_roles - username: {}", "HANDLER", params.username);
 
     let iam = cmx_state.iam().ok_or_else(|| {
-        Error::InternalError("IAM 服务未初始化".to_string())
+        Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
     let roles = iam
         .user_service
         .get_user_roles(&params.username)
         .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
+        .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(roles)))
 }
