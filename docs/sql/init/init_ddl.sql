@@ -1573,7 +1573,6 @@ CREATE TABLE cmx_role
     description    VARCHAR(500),
     status         INT4      DEFAULT 1,
     archived       INT4      DEFAULT 0,
-    parent_role_id VARCHAR(64),
     create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_by      VARCHAR(100),
@@ -1592,7 +1591,6 @@ COMMENT ON COLUMN cmx_role.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role.description IS '描述';
 COMMENT ON COLUMN cmx_role.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_role.archived IS '归档标志：0-未归档，1-已归档';
-COMMENT ON COLUMN cmx_role.parent_role_id IS '父角色ID（NULL表示根角色，不支持角色权限继承，仅用于层级展示）';
 COMMENT ON COLUMN cmx_role.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_role.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_role.create_by IS '创建人ID';

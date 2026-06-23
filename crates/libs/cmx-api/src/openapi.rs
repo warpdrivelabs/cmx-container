@@ -182,10 +182,6 @@ use utoipa::OpenApi;
         crate::handlers::iam::rule::handler::toggle_rule_status,
         crate::handlers::iam::rule::handler::add_rule_items,
         crate::handlers::iam::rule::handler::remove_rule_items,
-        // IAM Role hierarchy handlers（阶段4新增）
-        crate::handlers::iam::role::handler::get_role_tree,
-        crate::handlers::iam::role::handler::get_role_children,
-        crate::handlers::iam::role::handler::move_role,
         // IAM Audit handlers（阶段5新增）
         crate::handlers::iam::user::audit_handler::get_effective_permissions,
         crate::handlers::iam::role::audit_handler::get_permission_diff,
@@ -355,11 +351,6 @@ use utoipa::OpenApi;
             crate::ApiResp<cmx_iam::rule::entity::PermissionRule>,
             crate::ApiResp<crate::handlers::iam::rule::handler::RuleDetailResponse>,
             crate::ApiResp<crate::handlers::iam::rule::handler::BatchResponse>,
-            // IAM role hierarchy schemas（阶段4新增）
-            crate::handlers::iam::role::handler::MoveRoleRequest,
-            cmx_iam::service_traits::RoleTreeNode,
-            crate::ApiResp<cmx_iam::service_traits::RoleTreeNode>,
-            crate::ApiResp<Vec<cmx_iam::service_traits::RoleTreeNode>>,
             // IAM audit schemas（阶段5新增）
             cmx_iam::service_traits::EffectivePermissionsResponse,
             cmx_iam::service_traits::RoleSummary,

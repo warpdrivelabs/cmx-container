@@ -5,7 +5,6 @@
 use axum::extract::{Query, State};
 use axum::Json;
 use cmx_core::model::iam::{Permission, Role};
-use serde::Deserialize;
 use tracing::debug;
 
 use crate::app_state::CmxAppState;
@@ -13,7 +12,6 @@ use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
 use cmx_iam::role::{AssignPermissionsRequest, RoleFilter, RoleForCreate, RoleForUpdate};
-use cmx_iam::service_traits::RoleTreeNode;
 
 /// 创建角色
 #[utoipa::path(
@@ -284,115 +282,4 @@ pub async fn get_role_permissions(
         .map_err(|e| Error::InternalError(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permissions)))
-}
-
-/// 移动角色层级请求
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::ToSchema)]
-pub struct MoveRoleRequest {
-    pub role_id: String,
-    /// 新父角色ID，None 表示移到根级
-    pub new_parent_role_id: Option<String>,
-}
-
-/// 查询子角色参数
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
-pub struct RoleChildrenQuery {
-    pub role_id: String,
-}
-
-/// 获取角色树
-#[utoipa::path(
-    get,
-    path = "/api/iam/roles/tree",
-    responses(
-        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleTreeNode>>)
-    ),
-    tag = "IAM-Role"
-)]
-pub async fn get_role_tree(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-) -> Result<Json<ApiResp<Vec<RoleTreeNode>>>> {
-    debug!("{:<12} - handler::get_role_tree", "HANDLER");
-
-    let iam = cmx_state
-        .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
-
-    let tree = iam
-        .role_service
-        .get_role_tree()
-        .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
-
-    Ok(Json(ApiResp::ok(tree)))
-}
-
-/// 查询角色的直接子角色列表
-#[utoipa::path(
-    get,
-    path = "/api/iam/roles/children",
-    params(
-        RoleChildrenQuery
-    ),
-    responses(
-        (status = 200, description = "查询成功")
-    ),
-    tag = "IAM-Role"
-)]
-pub async fn get_role_children(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(params): Query<RoleChildrenQuery>,
-) -> Result<Json<ApiResp<Vec<Role>>>> {
-    debug!(
-        "{:<12} - handler::get_role_children - role_id: {}",
-        "HANDLER", params.role_id
-    );
-
-    let iam = cmx_state
-        .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
-
-    let children = iam
-        .role_service
-        .get_role_children(&params.role_id)
-        .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
-
-    Ok(Json(ApiResp::ok(children)))
-}
-
-/// 移动角色层级
-#[utoipa::path(
-    post,
-    path = "/api/iam/roles/move",
-    request_body = MoveRoleRequest,
-    responses(
-        (status = 200, description = "移动成功")
-    ),
-    tag = "IAM-Role"
-)]
-pub async fn move_role(
-    State(cmx_state): State<CmxAppState>,
-    CmxSvrContext(svr_ctx): CmxSvrContext,
-    Json(req): Json<MoveRoleRequest>,
-) -> Result<Json<ApiResp<()>>> {
-    debug!(
-        "{:<12} - handler::move_role - role_id: {}, new_parent: {:?}",
-        "HANDLER", req.role_id, req.new_parent_role_id
-    );
-
-    let iam = cmx_state
-        .iam()
-        .ok_or_else(|| Error::InternalError("IAM 服务未初始化".to_string()))?;
-
-    iam.role_service
-        .move_role(&svr_ctx, &req.role_id, req.new_parent_role_id.as_deref())
-        .await
-        .map_err(|e| Error::InternalError(e.to_string()))?;
-
-    Ok(Json(ApiResp::ok(())))
 }

@@ -142,12 +142,3 @@ INSERT INTO cmx_permission_rule (id, code, name, rule_type, violation_message, p
 ('1898765432100004002', 'dep_user_mgmt', '用户管理依赖规则', 'dependency',
  '删除用户前必须能查看用户列表', 5, 0, '确保操作可追溯（默认禁用）')
 ON CONFLICT (code) DO NOTHING;
-
--- =====================================================
--- 阶段 4：角色层级（不含权限继承）
--- 修改表：cmx_role 增加 parent_role_id 字段
--- =====================================================
-
-ALTER TABLE cmx_role ADD COLUMN IF NOT EXISTS parent_role_id varchar(64);
-CREATE INDEX IF NOT EXISTS idx_cmx_role_parent ON cmx_role (parent_role_id);
-COMMENT ON COLUMN cmx_role.parent_role_id IS '父角色ID（NULL表示根角色，不支持角色权限继承，仅用于层级展示）';

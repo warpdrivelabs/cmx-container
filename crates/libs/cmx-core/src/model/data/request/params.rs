@@ -92,9 +92,7 @@ pub struct PageParams<F> {
     pub size: Option<i64>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
     pub order_bys: Option<String>,
-    // /// 数据库 ID（可选）
-    // #[serde(default)]
-    // pub db_id: Option<String>,
+
 }
 
 fn default_page() -> Option<i64> {

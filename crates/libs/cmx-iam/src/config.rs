@@ -38,10 +38,6 @@ pub struct IamConfig {
     #[serde(default = "default_sod_check_scope")]
     pub sod_check_scope: SodCheckScope,
 
-    /// 角色层级最大深度（默认 10，0 表示不限制）
-    #[serde(default = "default_role_max_depth")]
-    pub role_max_depth: u32,
-
     /// 故障降级策略（默认 FailClose）
     #[serde(default = "default_failure_mode")]
     pub failure_mode: FailureMode,
@@ -97,10 +93,6 @@ fn default_sod_check_scope() -> SodCheckScope {
     SodCheckScope::All
 }
 
-fn default_role_max_depth() -> u32 {
-    10
-}
-
 fn default_failure_mode() -> FailureMode {
     FailureMode::FailClose
 }
@@ -124,7 +116,6 @@ impl Default for IamConfig {
             audit_batch_size: default_audit_batch_size(),
             enable_sod_check: false,
             sod_check_scope: default_sod_check_scope(),
-            role_max_depth: default_role_max_depth(),
             failure_mode: default_failure_mode(),
             circuit_breaker_threshold: default_circuit_breaker_threshold(),
             circuit_breaker_reset_secs: default_circuit_breaker_reset_secs(),

@@ -24,10 +24,6 @@ impl ModuleRoutes for RoleModule {
             // 关联操作
             .route("/iam/roles/assign-permissions", post(handler::assign_permissions))
             .route("/iam/roles/permissions", get(handler::get_role_permissions))
-            // 角色层级（阶段4新增）
-            .route("/iam/roles/tree", get(handler::get_role_tree))
-            .route("/iam/roles/children", get(handler::get_role_children))
-            .route("/iam/roles/move", post(handler::move_role))
             // 审计查询（阶段5新增）
             .route(
                 "/iam/roles/permission-diff",

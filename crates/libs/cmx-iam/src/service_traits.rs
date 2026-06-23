@@ -239,22 +239,6 @@ pub trait RoleService: Send + Sync {
     /// 获取角色的权限列表
     async fn get_role_permissions(&self, role_id: &str) -> Result<Vec<Permission>, TraitError>;
 
-    // ===== 角色层级相关（阶段4新增） =====
-
-    /// 获取角色树（递归构建，含父子关系）
-    async fn get_role_tree(&self) -> Result<Vec<RoleTreeNode>, TraitError>;
-
-    /// 移动角色层级（含循环检测 + 深度检测）
-    async fn move_role(
-        &self,
-        svr_ctx: &SVRContext,
-        role_id: &str,
-        new_parent_role_id: Option<&str>,
-    ) -> Result<(), TraitError>;
-
-    /// 查询角色的直接子角色列表
-    async fn get_role_children(&self, role_id: &str) -> Result<Vec<Role>, TraitError>;
-
     // ===== 审计查询（阶段5新增） =====
 
     /// 比较两个角色的权限差异
@@ -263,20 +247,6 @@ pub trait RoleService: Send + Sync {
         role_id_1: &str,
         role_id_2: &str,
     ) -> Result<PermissionDiffResponse, TraitError>;
-}
-
-/// 角色树节点
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(
-    feature = "openapi",
-    derive(utoipa::ToSchema),
-    schema(no_recursion)
-)]
-pub struct RoleTreeNode {
-    pub role: Role,
-    pub parent_role_id: Option<String>,
-    pub children: Vec<RoleTreeNode>,
-    pub depth: u32,
 }
 
 /// 权限服务 trait
