@@ -31,7 +31,7 @@ pub struct PermissionDiffQuery {
     responses(
         (status = 200, description = "查询成功")
     ),
-    tag = "IAM-Role-Audit"
+    tag = "IAM-Audit"
 )]
 pub async fn get_permission_diff(
     State(cmx_state): State<CmxAppState>,

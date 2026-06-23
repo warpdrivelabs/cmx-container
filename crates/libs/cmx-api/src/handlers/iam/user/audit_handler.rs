@@ -30,7 +30,7 @@ pub struct EffectivePermissionsQuery {
     responses(
         (status = 200, description = "查询成功")
     ),
-    tag = "IAM-User-Audit"
+    tag = "IAM-Audit"
 )]
 pub async fn get_effective_permissions(
     State(cmx_state): State<CmxAppState>,

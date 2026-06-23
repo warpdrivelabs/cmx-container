@@ -431,7 +431,7 @@ pub async fn update_oauth2_client_by_id(
     if let Some(status) = req.status {
         sets.push(format!("status = ${idx}"));
         params.push(serde_json::Value::Number(status.into()));
-        idx += 1;
+        // idx += 1;
     }
 
     if sets.is_empty() {
