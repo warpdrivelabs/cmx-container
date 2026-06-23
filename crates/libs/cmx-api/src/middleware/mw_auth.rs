@@ -242,6 +242,8 @@ impl GlobalAuthService {
 /// 从全局 GlobalAuthService 获取 AuthService，验证 Token 或 API Key 后注入 AuthContext。
 pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     let path = req.uri().path().to_string();
+    let method = req.method().to_string();
+    let query = req.uri().query().unwrap_or("").to_string();
 
     // 1. 白名单检查（支持通配符 * / ** 匹配）
     if GlobalAuthService::is_whitelisted(&path) {
@@ -264,16 +266,16 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
         // 2.1 修复：直接验证 API Key 返回 AuthContext（无状态，不创建会话）
         debug!(path = %path, "检测到 X-API-Key 头，使用 API Key 认证");
         auth_service.validate_api_key(&api_key).await.map_err(|e| {
-            warn!(path = %path, error = %e, "API Key 认证失败");
+            warn!(method = %method, path = %path, query = %query, error = %e, "API Key 认证失败，返回 401");
             StatusCode::UNAUTHORIZED
         })?
     } else if let Some(token) = extract_bearer_token(&req) {
         auth_service.validate_token(&token).await.map_err(|e| {
-            warn!(path = %path, error = %e, "Token 验证失败");
+            warn!(method = %method, path = %path, query = %query, error = %e, "Token 验证失败，返回 401");
             StatusCode::UNAUTHORIZED
         })?
     } else {
-        warn!(path = %path, "缺少 Authorization 头或 X-API-Key 头");
+        warn!(method = %method, path = %path, query = %query, "缺少 Authorization 头或 X-API-Key 头，返回 401");
         return Err(StatusCode::UNAUTHORIZED);
     };
 
