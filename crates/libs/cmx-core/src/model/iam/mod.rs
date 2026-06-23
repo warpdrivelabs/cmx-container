@@ -5,6 +5,8 @@
 
 pub mod user;
 pub mod role;
+pub mod role_group;
+pub mod role_group_tree_node;
 pub mod permission;
 pub mod permission_tree_node;
 pub mod error;
@@ -12,6 +14,8 @@ pub mod registry;
 
 pub use user::User;
 pub use role::Role;
+pub use role_group::RoleGroup;
+pub use role_group_tree_node::RoleGroupTreeNode;
 pub use permission::Permission;
 pub use permission_tree_node::PermissionTreeNode;
 pub use error::{PermissionDeniedError, RoleRequirement};

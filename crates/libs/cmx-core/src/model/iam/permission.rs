@@ -40,6 +40,22 @@ pub struct Permission {
     #[serde(default)]
     pub description: Option<String>,
 
+    /// 所属域编码（如 `platform`、`tenant`），可空。
+    #[serde(default)]
+    pub domain_code: Option<String>,
+
+    /// 所属应用编码（如 `user-center`、`billing`），可空。
+    #[serde(default)]
+    pub app_code: Option<String>,
+
+    /// 所属模块编码（如 `user`、`order`），可空。
+    #[serde(default)]
+    pub module_code: Option<String>,
+
+    /// 扩展配置（用户自定义 JSON 文本），可空。
+    #[serde(default)]
+    pub extension: Option<String>,
+
     /// 归档标记（如 1 已归档 / 0 正常），可空。
     #[serde(default)]
     pub archived: Option<i64>,

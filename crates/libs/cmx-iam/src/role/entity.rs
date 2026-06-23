@@ -18,6 +18,10 @@ pub struct RoleForCreate {
     /// 角色名称，用于展示。
     pub name: String,
 
+    /// 所属角色组 ID，未分组为 None。
+    #[serde(default)]
+    pub role_group_id: Option<String>,
+
     /// 数据权限范围（如 1 全部 / 2 本部门 / 3 本人 等）。
     #[serde(default)]
     pub data_scope: Option<i64>,
@@ -38,6 +42,10 @@ pub struct RoleForUpdate {
     /// 角色名称。
     #[serde(default)]
     pub name: Option<String>,
+
+    /// 所属角色组 ID。
+    #[serde(default)]
+    pub role_group_id: Option<String>,
 
     /// 数据权限范围。
     #[serde(default)]

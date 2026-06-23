@@ -21,6 +21,15 @@ pub struct PermissionFilter {
     /// 按父权限 ID 过滤。
     pub parent_id: Option<OpValsString>,
 
+    /// 按所属域编码过滤。
+    pub domain_code: Option<OpValsString>,
+
+    /// 按所属应用编码过滤。
+    pub app_code: Option<OpValsString>,
+
+    /// 按所属模块编码过滤。
+    pub module_code: Option<OpValsString>,
+
     /// 按状态过滤（1 启用 / 0 禁用）。
     pub status: Option<OpValsInt64>,
 

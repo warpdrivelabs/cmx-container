@@ -5,6 +5,7 @@
 use axum::extract::{Query, State};
 use axum::Json;
 use cmx_core::model::iam::{Permission, PermissionTreeNode};
+use serde::Deserialize;
 use tracing::debug;
 
 use crate::app_state::CmxAppState;
@@ -219,10 +220,26 @@ pub async fn list_permissions(
     Ok(Json(ApiResp::ok(permissions)))
 }
 
-/// 获取权限树
+/// 权限树查询参数（支持按域/应用/模块过滤）
+#[derive(Debug, Deserialize, Default)]
+pub struct PermissionTreeQuery {
+    /// 所属域编码
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    pub app_code: Option<String>,
+    /// 所属模块编码
+    pub module_code: Option<String>,
+}
+
+/// 获取权限树（支持按域/应用/模块过滤）
 #[utoipa::path(
     get,
     path = "/api/iam/permissions/tree",
+    params(
+        ("domain_code" = Option<String>, Query, description = "所属域编码"),
+        ("app_code" = Option<String>, Query, description = "所属应用编码"),
+        ("module_code" = Option<String>, Query, description = "所属模块编码")
+    ),
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<PermissionTreeNode>>)
     ),
@@ -231,8 +248,12 @@ pub async fn list_permissions(
 pub async fn get_permission_tree(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Query(query): Query<PermissionTreeQuery>,
 ) -> Result<Json<ApiResp<Vec<PermissionTreeNode>>>> {
-    debug!("{:<12} - handler::get_permission_tree", "HANDLER");
+    debug!(
+        "{:<12} - handler::get_permission_tree - domain: {:?}, app: {:?}, module: {:?}",
+        "HANDLER", query.domain_code, query.app_code, query.module_code
+    );
 
     let iam = cmx_state.iam().ok_or_else(|| {
         Error::business_error("IAM 服务未初始化".to_string())
@@ -240,7 +261,11 @@ pub async fn get_permission_tree(
 
     let tree = iam
         .permission_service
-        .get_permission_tree()
+        .get_permission_tree(
+            query.domain_code.as_deref(),
+            query.app_code.as_deref(),
+            query.module_code.as_deref(),
+        )
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 

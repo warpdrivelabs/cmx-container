@@ -13,6 +13,7 @@ use cmx_iam::config::IamConfig;
 use cmx_iam::iam_checker::IamChecker;
 use cmx_iam::permission::PermissionServiceImpl;
 use cmx_iam::role::RoleServiceImpl;
+use cmx_iam::role_group::RoleGroupServiceImpl;
 use cmx_iam::rule::{PermissionRuleServiceImpl, RuleEnforcerImpl};
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
@@ -66,6 +67,10 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
         PermissionServiceImpl::new(mm.clone(), iam_config.clone()).await,
     );
 
+    let role_group_service: Arc<dyn cmx_iam::service_traits::RoleGroupService> = Arc::new(
+        RoleGroupServiceImpl::new(mm.clone(), iam_config.clone()).await,
+    );
+
     // 5. 初始化全局权限校验器
     if let Err(e) = GlobalPermissionConfig::initialize_checker(permission_checker.clone()) {
         warn!("全局权限校验器初始化失败: {}", e);
@@ -86,6 +91,7 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
         Arc::new(IamState {
             user_service: Arc::new(PlaceholderUserService),
             role_service,
+            role_group_service,
             permission_service,
             rule_service: Some(rule_service),
             permission_checker,
@@ -121,6 +127,7 @@ pub async fn finalize_iam_state(
     let finalized = Arc::new(IamState {
         user_service,
         role_service: iam_state.role_service.clone(),
+        role_group_service: iam_state.role_group_service.clone(),
         permission_service: iam_state.permission_service.clone(),
         rule_service: iam_state.rule_service.clone(),
         permission_checker: iam_state.permission_checker.clone(),

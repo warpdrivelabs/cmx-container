@@ -19,6 +19,10 @@ pub struct Role {
     /// 角色名称，用于展示。
     pub name: String,
 
+    /// 所属角色组 ID，可空（未分组的角色为 None）。
+    #[serde(default)]
+    pub role_group_id: Option<String>,
+
     /// 数据权限范围（如 1 全部 / 2 本部门 / 3 本人 等），可空。
     #[serde(default)]
     pub data_scope: Option<i64>,

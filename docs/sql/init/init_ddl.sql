@@ -1548,19 +1548,57 @@ CREATE UNIQUE INDEX uk_cmx_user_username ON cmx_user (username);
 CREATE UNIQUE INDEX uk_cmx_user_email ON cmx_user (email) WHERE email IS NOT NULL;
 
 -- =============================================
+-- 29a. 角色组表 (cmx_role_group)
+-- =============================================
+DROP TABLE IF EXISTS cmx_role_group;
+CREATE TABLE cmx_role_group
+(
+    id          VARCHAR(64)  NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    parent_id   VARCHAR(64),
+    sort_order  INT4      DEFAULT 0,
+    description VARCHAR(500),
+    archived    INT4      DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by   VARCHAR(100),
+    create_name VARCHAR(100),
+    update_by   VARCHAR(100),
+    update_name VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_role_group IS '角色组表（树形结构）';
+COMMENT ON COLUMN cmx_role_group.id IS '主键ID';
+COMMENT ON COLUMN cmx_role_group.name IS '角色组名称';
+COMMENT ON COLUMN cmx_role_group.parent_id IS '父角色组ID（NULL=根节点）';
+COMMENT ON COLUMN cmx_role_group.sort_order IS '排序序号';
+COMMENT ON COLUMN cmx_role_group.description IS '描述';
+COMMENT ON COLUMN cmx_role_group.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_role_group.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_role_group.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_role_group.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_role_group.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_role_group.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_role_group.update_name IS '更新人姓名';
+
+CREATE INDEX idx_cmx_role_group_parent ON cmx_role_group (parent_id);
+
+-- =============================================
 -- 30. 角色表 (cmx_role)
 -- =============================================
 DROP TABLE IF EXISTS cmx_role;
 CREATE TABLE cmx_role
 (
-    id             VARCHAR(64)  NOT NULL,
-    code           VARCHAR(100) NOT NULL,
-    name           VARCHAR(100) NOT NULL,
-    data_scope     INT4      DEFAULT 1,
-    sort_order     INT4      DEFAULT 0,
-    description    VARCHAR(500),
-    status         INT4      DEFAULT 1,
-    archived       INT4      DEFAULT 0,
+    id            VARCHAR(64)  NOT NULL,
+    code          VARCHAR(100) NOT NULL,
+    name          VARCHAR(100) NOT NULL,
+    role_group_id VARCHAR(64),
+    data_scope    INT4      DEFAULT 1,
+    sort_order    INT4      DEFAULT 0,
+    description   VARCHAR(500),
+    status        INT4      DEFAULT 1,
+    archived      INT4      DEFAULT 0,
     create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_by      VARCHAR(100),
@@ -1574,6 +1612,7 @@ COMMENT ON TABLE cmx_role IS '角色表';
 COMMENT ON COLUMN cmx_role.id IS '主键ID';
 COMMENT ON COLUMN cmx_role.code IS '角色编码（唯一）';
 COMMENT ON COLUMN cmx_role.name IS '角色名称';
+COMMENT ON COLUMN cmx_role.role_group_id IS '所属角色组ID';
 COMMENT ON COLUMN cmx_role.data_scope IS '数据权限范围：1-全部，2-自定义，3-本部门，4-本部门及子部门，5-仅本人（预留字段）';
 COMMENT ON COLUMN cmx_role.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role.description IS '描述';
@@ -1587,6 +1626,7 @@ COMMENT ON COLUMN cmx_role.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_role.update_name IS '更新人姓名';
 
 CREATE UNIQUE INDEX uk_cmx_role_code ON cmx_role (code);
+CREATE INDEX idx_cmx_role_group_id ON cmx_role (role_group_id);
 
 -- =============================================
 -- 31. 用户角色关联表 (cmx_user_role)
@@ -1636,6 +1676,10 @@ CREATE TABLE cmx_permission
     parent_id     VARCHAR(64),
     sort_order    INT4      DEFAULT 0,
     description   VARCHAR(500),
+    domain_code   VARCHAR(100),
+    app_code      VARCHAR(100),
+    module_code   VARCHAR(100),
+    extension     TEXT,
     status        INT4      DEFAULT 1,
     archived      INT4      DEFAULT 0,
     create_time   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1655,6 +1699,10 @@ COMMENT ON COLUMN cmx_permission.resource_type IS '资源类型：api-接口，m
 COMMENT ON COLUMN cmx_permission.parent_id IS '父权限ID（用于权限树结构）';
 COMMENT ON COLUMN cmx_permission.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_permission.description IS '描述';
+COMMENT ON COLUMN cmx_permission.domain_code IS '所属域编码（如 platform、tenant）';
+COMMENT ON COLUMN cmx_permission.app_code IS '所属应用编码（如 user-center、billing）';
+COMMENT ON COLUMN cmx_permission.module_code IS '所属模块编码（如 user、order）';
+COMMENT ON COLUMN cmx_permission.extension IS '扩展配置（用户自定义 JSON 文本）';
 COMMENT ON COLUMN cmx_permission.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_permission.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_permission.create_time IS '创建时间';
@@ -1666,6 +1714,9 @@ COMMENT ON COLUMN cmx_permission.update_name IS '更新人姓名';
 
 CREATE UNIQUE INDEX uk_cmx_permission_code ON cmx_permission (code);
 CREATE INDEX idx_cmx_permission_parent ON cmx_permission (parent_id);
+CREATE INDEX idx_cmx_permission_domain_code ON cmx_permission (domain_code);
+CREATE INDEX idx_cmx_permission_app_code ON cmx_permission (app_code);
+CREATE INDEX idx_cmx_permission_module_code ON cmx_permission (module_code);
 
 -- =============================================
 -- 33. 角色权限关联表 (cmx_role_permission)

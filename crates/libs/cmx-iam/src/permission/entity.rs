@@ -33,6 +33,22 @@ pub struct PermissionForCreate {
     /// 权限描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 所属域编码（如 `platform`、`tenant`）。
+    #[serde(default)]
+    pub domain_code: Option<String>,
+
+    /// 所属应用编码（如 `user-center`、`billing`）。
+    #[serde(default)]
+    pub app_code: Option<String>,
+
+    /// 所属模块编码（如 `user`、`order`）。
+    #[serde(default)]
+    pub module_code: Option<String>,
+
+    /// 扩展配置（用户自定义 JSON 文本）。
+    #[serde(default)]
+    pub extension: Option<String>,
 }
 
 /// 更新权限 DTO（全 `Option`，未提供字段不更新）。
@@ -62,4 +78,20 @@ pub struct PermissionForUpdate {
     /// 权限描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 所属域编码。
+    #[serde(default)]
+    pub domain_code: Option<String>,
+
+    /// 所属应用编码。
+    #[serde(default)]
+    pub app_code: Option<String>,
+
+    /// 所属模块编码。
+    #[serde(default)]
+    pub module_code: Option<String>,
+
+    /// 扩展配置（用户自定义 JSON 文本）。
+    #[serde(default)]
+    pub extension: Option<String>,
 }

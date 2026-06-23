@@ -4,6 +4,7 @@
 
 pub mod permission;
 pub mod role;
+pub mod role_group;
 pub mod rule;
 pub mod user;
 
@@ -19,6 +20,7 @@ impl ModuleRoutes for IamModule {
         let router = Router::new();
         let router = router.merge(user::UserModule.routes());
         let router = router.merge(role::RoleModule.routes());
+        let router = router.merge(role_group::RoleGroupModule.routes());
         let router = router.merge(permission::PermissionModule.routes());
         let router = router.merge(rule::RuleModule.routes());
         router

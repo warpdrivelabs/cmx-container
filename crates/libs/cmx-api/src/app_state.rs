@@ -10,7 +10,7 @@ use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
 use cmx_storage::service::StorageService;
-use cmx_iam::service_traits::{PermissionService, RoleService, UserService};
+use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, UserService};
 
 /// IAM 服务状态
 ///
@@ -20,6 +20,8 @@ pub struct IamState {
     pub user_service: Arc<dyn UserService>,
     /// 角色服务
     pub role_service: Arc<dyn RoleService>,
+    /// 角色组服务
+    pub role_group_service: Arc<dyn RoleGroupService>,
     /// 权限服务
     pub permission_service: Arc<dyn PermissionService>,
     /// 权限规则服务（阶段2新增）

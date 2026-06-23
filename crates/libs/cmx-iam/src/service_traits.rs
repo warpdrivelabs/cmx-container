@@ -1,12 +1,13 @@
 //! IAM Service trait 定义（cmx-iam 内部）
 
 use async_trait::async_trait;
-use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, User};
+use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, RoleGroup, RoleGroupTreeNode, User};
 use cmx_core::SVRContext;
 use cmx_traits::error::TraitError;
 
 use crate::permission::{PermissionFilter, PermissionForCreate, PermissionForUpdate};
 use crate::role::{RoleFilter, RoleForCreate, RoleForUpdate};
+use crate::role_group::{RoleGroupFilter, RoleGroupForCreate, RoleGroupForUpdate};
 use crate::user::{UserFilter, UserForCreate, UserForUpdate};
 
 /// 临时授权状态过滤
@@ -249,6 +250,46 @@ pub trait RoleService: Send + Sync {
     ) -> Result<PermissionDiffResponse, TraitError>;
 }
 
+/// 角色组服务 trait
+#[async_trait]
+pub trait RoleGroupService: Send + Sync {
+    /// 创建角色组
+    async fn create_role_group(
+        &self,
+        svr_ctx: &SVRContext,
+        data: RoleGroupForCreate,
+    ) -> Result<RoleGroup, TraitError>;
+    /// 获取单个角色组
+    async fn get_role_group(&self, role_group_id: &str) -> Result<RoleGroup, TraitError>;
+    /// 更新角色组
+    async fn update_role_group(
+        &self,
+        svr_ctx: &SVRContext,
+        role_group_id: &str,
+        data: RoleGroupForUpdate,
+    ) -> Result<RoleGroup, TraitError>;
+    /// 删除角色组（支持批量）
+    async fn delete_role_group(
+        &self,
+        svr_ctx: &SVRContext,
+        role_group_ids: &[String],
+    ) -> Result<(), TraitError>;
+    /// 分页查询角色组
+    async fn page_role_groups(
+        &self,
+        filter: RoleGroupFilter,
+        current: u64,
+        size: u64,
+    ) -> Result<(Vec<RoleGroup>, i64), TraitError>;
+    /// 列表查询角色组
+    async fn list_role_groups(
+        &self,
+        filter: RoleGroupFilter,
+    ) -> Result<Vec<RoleGroup>, TraitError>;
+    /// 获取角色组树（递归结构）
+    async fn get_role_group_tree(&self) -> Result<Vec<RoleGroupTreeNode>, TraitError>;
+}
+
 /// 权限服务 trait
 #[async_trait]
 pub trait PermissionService: Send + Sync {
@@ -282,8 +323,13 @@ pub trait PermissionService: Send + Sync {
     ) -> Result<(Vec<Permission>, i64), TraitError>;
     /// 列表查询权限
     async fn list_permissions(&self, filter: PermissionFilter) -> Result<Vec<Permission>, TraitError>;
-    /// 获取权限树（递归结构）
-    async fn get_permission_tree(&self) -> Result<Vec<PermissionTreeNode>, TraitError>;
+    /// 获取权限树（递归结构，支持按域/应用/模块过滤）
+    async fn get_permission_tree(
+        &self,
+        domain_code: Option<&str>,
+        app_code: Option<&str>,
+        module_code: Option<&str>,
+    ) -> Result<Vec<PermissionTreeNode>, TraitError>;
 
     // ===== 审计查询（阶段5新增） =====
 

@@ -540,6 +540,7 @@ impl RoleService for RoleServiceImpl {
         let sql = r#"
             SELECT p.id, p.code, p.name, p.resource_type, p.parent_id, p.sort_order,
                    p.status, p.description, p.archived,
+                   p.domain_code, p.app_code, p.module_code, p.extension,
                    p.create_time, p.update_time,
                    p.create_by, p.create_name, p.update_by, p.update_name
             FROM cmx_permission p

@@ -15,6 +15,9 @@ pub struct RoleFilter {
     /// 按角色名称过滤。
     pub name: Option<OpValsString>,
 
+    /// 按所属角色组 ID 过滤。
+    pub role_group_id: Option<OpValsString>,
+
     /// 按数据权限范围过滤。
     pub data_scope: Option<OpValsInt64>,
 

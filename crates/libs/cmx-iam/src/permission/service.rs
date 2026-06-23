@@ -424,10 +424,11 @@ impl PermissionService for PermissionServiceImpl {
         Ok(Self::extract_permissions(dataset))
     }
 
-    /// 获取权限树（递归结构）。
+    /// 获取权限树（递归结构，支持按域/应用/模块过滤）。
     ///
     /// 一次性加载所有有效权限（`archived = 0 AND status = 1`），
     /// 在内存中按 `parent_id` 递归构建树形结构。
+    /// 当指定 `domain_code`/`app_code`/`module_code` 时，通过参数化 SQL WHERE 子句过滤。
     ///
     /// # Returns
     ///
@@ -436,20 +437,46 @@ impl PermissionService for PermissionServiceImpl {
     /// # Errors
     ///
     /// * `IamError::Business` - SQL 查询失败。
-    async fn get_permission_tree(&self) -> Result<Vec<PermissionTreeNode>, TraitError> {
-        debug!("{:<12} - PermissionServiceImpl::get_permission_tree", "IAM");
+    async fn get_permission_tree(
+        &self,
+        domain_code: Option<&str>,
+        app_code: Option<&str>,
+        module_code: Option<&str>,
+    ) -> Result<Vec<PermissionTreeNode>, TraitError> {
+        debug!(
+            "{:<12} - PermissionServiceImpl::get_permission_tree - domain: {:?}, app: {:?}, module: {:?}",
+            "IAM", domain_code, app_code, module_code
+        );
 
-        // 一次性加载所有有效权限，在内存中递归构建树
-        let sql = r#"
-            SELECT id, code, name, resource_type, parent_id, sort_order, status, description
-            FROM cmx_permission
-            WHERE archived = 0 AND status = 1
-            ORDER BY sort_order ASC NULLS LAST, code ASC
-        "#;
+        // 动态构建带过滤条件的 SQL
+        let mut sql = String::from(
+            "SELECT id, code, name, resource_type, parent_id, sort_order, status, description, \
+             domain_code, app_code, module_code, extension \
+             FROM cmx_permission WHERE archived = 0 AND status = 1",
+        );
+        let mut params: Vec<Value> = Vec::new();
+        let mut param_idx = 1;
 
+        if let Some(dc) = domain_code {
+            sql.push_str(&format!(" AND domain_code = ${param_idx}"));
+            params.push(Value::String(dc.to_string()));
+            param_idx += 1;
+        }
+        if let Some(ac) = app_code {
+            sql.push_str(&format!(" AND app_code = ${param_idx}"));
+            params.push(Value::String(ac.to_string()));
+            param_idx += 1;
+        }
+        if let Some(mc) = module_code {
+            sql.push_str(&format!(" AND module_code = ${param_idx}"));
+            params.push(Value::String(mc.to_string()));
+        }
+        sql.push_str(" ORDER BY sort_order ASC NULLS LAST, code ASC");
+
+        let params_value = Value::Array(params);
         let dataset = self
             .mm
-            .query_sql(&self.db_id, None, sql, "permission_tree")
+            .query_sql_with_json(&self.db_id, None, &sql, params_value, "permission_tree")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询权限树失败: {e}"))))?;
 
