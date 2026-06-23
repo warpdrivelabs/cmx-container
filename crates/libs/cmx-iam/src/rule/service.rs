@@ -1,7 +1,8 @@
-//! 权限规则 Service 实现
+//! 互斥规则 Service 实现
 //!
-//! 提供规则的 CRUD、启用/禁用、规则项管理、校验测试等功能。
+//! 提供互斥规则的 CRUD、启用/禁用、规则项管理、校验测试等功能。
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -16,40 +17,43 @@ use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
 use crate::rule::entity::{
-    CreatePermissionRuleRequest, PermissionRule, PermissionRuleForUpdate,
-    PermissionRuleItem, RuleItemInput, RuleViolationDetail, ValidateRuleResponse,
+    CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, RuleViolationDetail,
+    UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
 };
 
-/// 权限规则 Service trait
+/// 互斥规则 Service trait
 #[async_trait]
-pub trait PermissionRuleService: Send + Sync {
+pub trait ExclusionRuleService: Send + Sync {
     /// 创建规则（含规则项）
     async fn create_rule(
         &self,
         svr_ctx: &SVRContext,
-        req: CreatePermissionRuleRequest,
-    ) -> Result<PermissionRule, TraitError>;
+        req: CreateExclusionRuleRequest,
+    ) -> Result<ExclusionRule, TraitError>;
 
     /// 更新规则基本信息
     async fn update_rule(
         &self,
         svr_ctx: &SVRContext,
         rule_id: &str,
-        data: PermissionRuleForUpdate,
-    ) -> Result<PermissionRule, TraitError>;
+        data: UpdateExclusionRuleRequest,
+    ) -> Result<ExclusionRule, TraitError>;
 
     /// 删除规则（软删除 archived=1）
     async fn delete_rule(&self, svr_ctx: &SVRContext, rule_id: &str) -> Result<(), TraitError>;
 
     /// 查询规则详情（含规则项）
-    async fn get_rule(&self, rule_id: &str) -> Result<(PermissionRule, Vec<PermissionRuleItem>), TraitError>;
+    async fn get_rule(
+        &self,
+        rule_id: &str,
+    ) -> Result<(ExclusionRule, Vec<ExclusionRuleItem>), TraitError>;
 
     /// 分页查询规则
     async fn page_rules(
         &self,
         current: u64,
         size: u64,
-    ) -> Result<(Vec<PermissionRule>, i64), TraitError>;
+    ) -> Result<(Vec<ExclusionRule>, i64), TraitError>;
 
     /// 切换规则状态（启用/禁用）
     async fn toggle_rule_status(
@@ -64,7 +68,7 @@ pub trait PermissionRuleService: Send + Sync {
         &self,
         svr_ctx: &SVRContext,
         rule_id: &str,
-        items: Vec<RuleItemInput>,
+        subject_ids: Vec<String>,
     ) -> Result<u64, TraitError>;
 
     /// 移除规则项
@@ -75,16 +79,12 @@ pub trait PermissionRuleService: Send + Sync {
         item_ids: &[String],
     ) -> Result<u64, TraitError>;
 
-    /// 规则校验测试（给定权限组合，测试是否违反规则）
-    async fn validate_rule(
-        &self,
-        permission_ids: &[String],
-        user_id: Option<&str>,
-    ) -> Result<ValidateRuleResponse, TraitError>;
+    /// 规则校验测试（给定权限/角色组合，测试是否违反互斥规则）
+    async fn validate_rule(&self, req: ValidateRuleRequest) -> Result<ValidateRuleResponse, TraitError>;
 }
 
-/// 权限规则 Service 实现
-pub struct PermissionRuleServiceImpl {
+/// 互斥规则 Service 实现
+pub struct ExclusionRuleServiceImpl {
     mm: Arc<DatabaseManager>,
     db_id: String,
     #[allow(dead_code)]
@@ -92,7 +92,7 @@ pub struct PermissionRuleServiceImpl {
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
 }
 
-impl PermissionRuleServiceImpl {
+impl ExclusionRuleServiceImpl {
     pub async fn new(mm: Arc<DatabaseManager>, config: IamConfig) -> Self {
         let db_id = match &config.auth_db_id {
             Some(id) => id.clone(),
@@ -111,16 +111,17 @@ impl PermissionRuleServiceImpl {
         self
     }
 
-    /// 从 DataSet 提取 PermissionRule（单条）
-    fn extract_rule(dataset: cmx_core::model::data::dataset::DataSet) -> Option<PermissionRule> {
+    /// 从 DataSet 提取 ExclusionRule（单条）
+    fn extract_rule(dataset: cmx_core::model::data::dataset::DataSet) -> Option<ExclusionRule> {
         let schema = dataset.schema.as_ref();
         let row = dataset.iter().next()?;
 
-        Some(PermissionRule {
+        Some(ExclusionRule {
             id: row.get_by_name_as(schema, "id")?,
             code: row.get_by_name_as(schema, "code")?,
             name: row.get_by_name_as(schema, "name")?,
-            rule_type: row.get_by_name_as(schema, "rule_type")?,
+            subject_type: row.get_by_name_as(schema, "subject_type")?,
+            primary_subject_id: row.get_by_name_as(schema, "primary_subject_id")?,
             violation_message: row.get_by_name_as(schema, "violation_message"),
             priority: row.get_by_name_as::<i64>(schema, "priority").unwrap_or(0),
             description: row.get_by_name_as(schema, "description"),
@@ -139,19 +140,20 @@ impl PermissionRuleServiceImpl {
         })
     }
 
-    /// 从 DataSet 提取 PermissionRule 列表
+    /// 从 DataSet 提取 ExclusionRule 列表
     fn extract_rules_from_dataset(
         dataset: cmx_core::model::data::dataset::DataSet,
-    ) -> Vec<PermissionRule> {
+    ) -> Vec<ExclusionRule> {
         let schema = dataset.schema.as_ref();
         dataset
             .iter()
             .filter_map(|row| {
-                Some(PermissionRule {
+                Some(ExclusionRule {
                     id: row.get_by_name_as(schema, "id")?,
                     code: row.get_by_name_as(schema, "code")?,
                     name: row.get_by_name_as(schema, "name")?,
-                    rule_type: row.get_by_name_as(schema, "rule_type")?,
+                    subject_type: row.get_by_name_as(schema, "subject_type")?,
+                    primary_subject_id: row.get_by_name_as(schema, "primary_subject_id")?,
                     violation_message: row.get_by_name_as(schema, "violation_message"),
                     priority: row.get_by_name_as::<i64>(schema, "priority").unwrap_or(0),
                     description: row.get_by_name_as(schema, "description"),
@@ -172,29 +174,28 @@ impl PermissionRuleServiceImpl {
             .collect()
     }
 
-    /// 从 DataSet 提取 PermissionRuleItem 列表
-    fn extract_items(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<PermissionRuleItem> {
+    /// 从 DataSet 提取 ExclusionRuleItem 列表
+    fn extract_items(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<ExclusionRuleItem> {
         let schema = dataset.schema.as_ref();
         dataset
             .iter()
             .filter_map(|row| {
-                Some(PermissionRuleItem {
+                Some(ExclusionRuleItem {
                     id: row.get_by_name_as(schema, "id")?,
                     rule_id: row.get_by_name_as(schema, "rule_id")?,
-                    group_seq: row.get_by_name_as::<i64>(schema, "group_seq").unwrap_or(1),
-                    permission_id: row.get_by_name_as(schema, "permission_id")?,
+                    subject_id: row.get_by_name_as(schema, "subject_id")?,
                 })
             })
             .collect()
     }
 
     /// 查询单条规则
-    async fn query_rule(&self, rule_id: &str) -> Result<PermissionRule, IamError> {
+    async fn query_rule(&self, rule_id: &str) -> Result<ExclusionRule, IamError> {
         let sql = r#"
-            SELECT id, code, name, rule_type, violation_message, priority, description,
-                   status, archived, create_time, update_time,
+            SELECT id, code, name, subject_type, primary_subject_id, violation_message,
+                   priority, description, status, archived, create_time, update_time,
                    create_by, create_name, update_by, update_name
-            FROM cmx_permission_rule
+            FROM cmx_exclusion_rule
             WHERE id = $1
         "#;
         let params = Value::Array(vec![Value::String(rule_id.to_string())]);
@@ -204,14 +205,15 @@ impl PermissionRuleServiceImpl {
             .await
             .map_err(|e| IamError::Business(format!("查询规则失败: {e}")))?;
 
-        Self::extract_rule(dataset).ok_or_else(|| IamError::Business(format!("规则不存在: {rule_id}")))
+        Self::extract_rule(dataset)
+            .ok_or_else(|| IamError::Business(format!("规则不存在: {rule_id}")))
     }
 
     /// 查询规则项
-    async fn query_rule_items(&self, rule_id: &str) -> Result<Vec<PermissionRuleItem>, IamError> {
+    async fn query_rule_items(&self, rule_id: &str) -> Result<Vec<ExclusionRuleItem>, IamError> {
         let sql = r#"
-            SELECT id, rule_id, group_seq, permission_id
-            FROM cmx_permission_rule_item
+            SELECT id, rule_id, subject_id
+            FROM cmx_exclusion_rule_item
             WHERE rule_id = $1
         "#;
         let params = Value::Array(vec![Value::String(rule_id.to_string())]);
@@ -223,38 +225,116 @@ impl PermissionRuleServiceImpl {
 
         Ok(Self::extract_items(dataset))
     }
+
+    /// 校验对象（权限/角色）在对应表中存在
+    async fn check_subjects_exist(
+        &self,
+        subject_type: &str,
+        ids: &[String],
+    ) -> Result<(), IamError> {
+        let table = match subject_type {
+            "permission" => "cmx_permission",
+            "role" => "cmx_role",
+            _ => {
+                return Err(IamError::Business(format!(
+                    "无效的对象类型: {subject_type}（应为 permission 或 role）"
+                )))
+            }
+        };
+        let sql = format!(
+            "SELECT id FROM {} WHERE id = ANY($1) AND archived = 0",
+            table
+        );
+        let params = Value::Array(vec![Value::Array(
+            ids.iter().map(|i| Value::String(i.clone())).collect(),
+        )]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, &sql, params, "check_subjects_exist")
+            .await
+            .map_err(|e| IamError::Business(format!("校验对象存在性失败: {e}")))?;
+
+        let schema = dataset.schema.as_ref();
+        let found: HashSet<String> = dataset
+            .iter()
+            .filter_map(|row| row.get_by_name_as(schema, "id"))
+            .collect();
+
+        for id in ids {
+            if !found.contains(id) {
+                return Err(IamError::Business(format!(
+                    "{table} 中对象不存在: {id}"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
-impl AuditHelper for PermissionRuleServiceImpl {
+impl AuditHelper for ExclusionRuleServiceImpl {
     fn audit_logger(&self) -> Option<&Arc<dyn cmx_audit::AuditLogger>> {
         self.audit.as_ref()
     }
 }
 
 #[async_trait]
-impl PermissionRuleService for PermissionRuleServiceImpl {
+impl ExclusionRuleService for ExclusionRuleServiceImpl {
     async fn create_rule(
         &self,
         svr_ctx: &SVRContext,
-        req: CreatePermissionRuleRequest,
-    ) -> Result<PermissionRule, TraitError> {
+        req: CreateExclusionRuleRequest,
+    ) -> Result<ExclusionRule, TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::create_rule - code: {}",
-            "IAM-RULE", req.code
+            "{:<12} - ExclusionRuleServiceImpl::create_rule - code: {}, subject_type: {}",
+            "IAM-RULE", req.code, req.subject_type
         );
 
-        // 校验 rule_type
-        if req.rule_type != "mutual_exclusion" && req.rule_type != "dependency" {
+        // 1. 校验 subject_type 合法性
+        if req.subject_type != "permission" && req.subject_type != "role" {
             return Err(TraitError::from(IamError::Business(format!(
-                "无效的规则类型: {}（应为 mutual_exclusion 或 dependency）",
-                req.rule_type
+                "无效的对象类型: {}（应为 permission 或 role）",
+                req.subject_type
             ))));
         }
+
+        // 2. 校验 excluded_subject_ids 非空
+        if req.excluded_subject_ids.is_empty() {
+            return Err(TraitError::from(IamError::Business(
+                "互斥对象列表不能为空".to_string(),
+            )));
+        }
+
+        // 3. 校验 primary_subject_id 不在 excluded_subject_ids 中
+        if req
+            .excluded_subject_ids
+            .iter()
+            .any(|id| id == &req.primary_subject_id)
+        {
+            return Err(TraitError::from(IamError::Business(
+                "主要对象不能出现在互斥对象列表中".to_string(),
+            )));
+        }
+
+        // 4. 对 excluded_subject_ids 去重
+        let mut excluded: Vec<String> = Vec::new();
+        let mut seen: HashSet<&str> = HashSet::new();
+        for id in &req.excluded_subject_ids {
+            if seen.insert(id.as_str()) {
+                excluded.push(id.clone());
+            }
+        }
+
+        // 5. 校验 primary_subject_id 和 excluded_subject_ids 在对应表中存在
+        let mut all_ids = vec![req.primary_subject_id.clone()];
+        all_ids.extend(excluded.iter().cloned());
+        self.check_subjects_exist(&req.subject_type, &all_ids)
+            .await
+            .map_err(TraitError::from)?;
 
         let rule_id = snowflake_id_str();
         let priority = req.priority.unwrap_or(0);
 
-        // 开启事务
+        // 6. 开启事务
         let txn_ctx = self.mm.get_transaction_context();
         let guard = txn_ctx
             .begin_with_guard(&self.db_id)
@@ -262,17 +342,19 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("事务开始失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
-        // 插入规则
+        // 插入规则主记录
         let insert_sql = r#"
-            INSERT INTO cmx_permission_rule
-                (id, code, name, rule_type, violation_message, priority, description, status, archived)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0)
+            INSERT INTO cmx_exclusion_rule
+                (id, code, name, subject_type, primary_subject_id, violation_message,
+                 priority, description, status, archived)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 0)
         "#;
         let params = Value::Array(vec![
             Value::String(rule_id.clone()),
             Value::String(req.code.clone()),
             Value::String(req.name.clone()),
-            Value::String(req.rule_type.clone()),
+            Value::String(req.subject_type.clone()),
+            Value::String(req.primary_subject_id.clone()),
             req.violation_message
                 .clone()
                 .map(Value::String)
@@ -286,31 +368,26 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         self.mm
             .execute_sql_with_json(&self.db_id, Some(txn_id), insert_sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("创建规则失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("创建规则失败: {e}"))))?;
 
-        // 插入规则项
-        for item in &req.items {
+        // 批量插入规则项
+        for subject_id in &excluded {
             let item_id = snowflake_id_str();
             let insert_item_sql = r#"
-                INSERT INTO cmx_permission_rule_item
-                    (id, rule_id, group_seq, permission_id)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (rule_id, group_seq, permission_id) DO NOTHING
+                INSERT INTO cmx_exclusion_rule_item
+                    (id, rule_id, subject_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
             "#;
             let params = Value::Array(vec![
                 Value::String(item_id),
                 Value::String(rule_id.clone()),
-                Value::Number(item.group_seq.into()),
-                Value::String(item.permission_id.clone()),
+                Value::String(subject_id.clone()),
             ]);
             self.mm
                 .execute_sql_with_json(&self.db_id, Some(txn_id), insert_item_sql, params)
                 .await
-                .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("创建规则项失败: {e}")))
-                })?;
+                .map_err(|e| TraitError::from(IamError::Business(format!("创建规则项失败: {e}"))))?;
         }
 
         // 提交事务
@@ -319,19 +396,25 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
 
-        // 审计
+        // 7. 审计
         let audit_detail = serde_json::json!({
             "rule_id": rule_id,
             "code": req.code,
             "name": req.name,
-            "rule_type": req.rule_type,
-            "items_count": req.items.len(),
+            "subject_type": req.subject_type,
+            "primary_subject_id": req.primary_subject_id,
+            "excluded_count": excluded.len(),
         });
-        self.audit_write(svr_ctx, "create_rule", "permission_rule", &rule_id, &audit_detail)
+        self.audit_write(svr_ctx, "create_rule", "exclusion_rule", &rule_id, &audit_detail)
             .await;
 
         let rule = self.query_rule(&rule_id).await.map_err(TraitError::from)?;
-        info!(rule_id = %rule_id, code = %req.code, "权限规则创建成功");
+        info!(
+            rule_id = %rule_id,
+            code = %req.code,
+            subject_type = %req.subject_type,
+            "互斥规则创建成功"
+        );
         Ok(rule)
     }
 
@@ -339,14 +422,37 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         &self,
         svr_ctx: &SVRContext,
         rule_id: &str,
-        data: PermissionRuleForUpdate,
-    ) -> Result<PermissionRule, TraitError> {
+        data: UpdateExclusionRuleRequest,
+    ) -> Result<ExclusionRule, TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::update_rule - rule_id: {}",
+            "{:<12} - ExclusionRuleServiceImpl::update_rule - rule_id: {}",
             "IAM-RULE", rule_id
         );
 
-        // 构造动态 UPDATE
+        // 若修改 primary_subject_id，需校验
+        if let Some(new_primary) = &data.primary_subject_id {
+            // 查询规则的 subject_type
+            let existing = self.query_rule(rule_id).await.map_err(TraitError::from)?;
+            let subject_type = existing.subject_type;
+
+            // 校验新值在对应表中存在
+            self.check_subjects_exist(&subject_type, std::slice::from_ref(new_primary))
+                .await
+                .map_err(TraitError::from)?;
+
+            // 查询现有 excluded subject_ids，校验新值不在其中
+            let items = self
+                .query_rule_items(rule_id)
+                .await
+                .map_err(TraitError::from)?;
+            if items.iter().any(|item| item.subject_id == *new_primary) {
+                return Err(TraitError::from(IamError::Business(
+                    "新的主要对象已存在于互斥对象列表中".to_string(),
+                )));
+            }
+        }
+
+        // 构造动态 UPDATE（不允许修改 subject_type）
         let mut sets: Vec<String> = Vec::new();
         let mut params: Vec<Value> = vec![Value::String(rule_id.to_string())];
         let mut idx = 2;
@@ -354,6 +460,11 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         if let Some(name) = data.name {
             sets.push(format!("name = ${idx}"));
             params.push(Value::String(name));
+            idx += 1;
+        }
+        if let Some(primary_subject_id) = data.primary_subject_id {
+            sets.push(format!("primary_subject_id = ${idx}"));
+            params.push(Value::String(primary_subject_id));
             idx += 1;
         }
         if let Some(vm) = data.violation_message {
@@ -385,39 +496,41 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
 
         sets.push("update_time = NOW()".to_string());
         let sql = format!(
-            "UPDATE cmx_permission_rule SET {} WHERE id = $1",
+            "UPDATE cmx_exclusion_rule SET {} WHERE id = $1",
             sets.join(", ")
         );
 
         self.mm
             .execute_sql_with_json(&self.db_id, None, &sql, Value::Array(params))
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("更新规则失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("更新规则失败: {e}"))))?;
 
         // 审计
-        self.audit_write(svr_ctx, "update_rule", "permission_rule", rule_id, &serde_json::json!({}))
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "update_rule",
+            "exclusion_rule",
+            rule_id,
+            &serde_json::json!({}),
+        )
+        .await;
 
         self.query_rule(rule_id).await.map_err(TraitError::from)
     }
 
     async fn delete_rule(&self, svr_ctx: &SVRContext, rule_id: &str) -> Result<(), TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::delete_rule - rule_id: {}",
+            "{:<12} - ExclusionRuleServiceImpl::delete_rule - rule_id: {}",
             "IAM-RULE", rule_id
         );
 
-        let sql = "UPDATE cmx_permission_rule SET archived = 1, update_time = NOW() WHERE id = $1";
+        let sql = "UPDATE cmx_exclusion_rule SET archived = 1, update_time = NOW() WHERE id = $1";
         let params = Value::Array(vec![Value::String(rule_id.to_string())]);
         let affected = self
             .mm
             .execute_sql_with_json(&self.db_id, None, sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("删除规则失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("删除规则失败: {e}"))))?;
 
         if affected == 0 {
             return Err(TraitError::from(IamError::Business(format!(
@@ -425,8 +538,14 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
             ))));
         }
 
-        self.audit_write(svr_ctx, "delete_rule", "permission_rule", rule_id, &serde_json::json!({}))
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "delete_rule",
+            "exclusion_rule",
+            rule_id,
+            &serde_json::json!({}),
+        )
+        .await;
 
         Ok(())
     }
@@ -434,15 +553,76 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
     async fn get_rule(
         &self,
         rule_id: &str,
-    ) -> Result<(PermissionRule, Vec<PermissionRuleItem>), TraitError> {
+    ) -> Result<(ExclusionRule, Vec<ExclusionRuleItem>), TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::get_rule - rule_id: {}",
+            "{:<12} - ExclusionRuleServiceImpl::get_rule - rule_id: {}",
             "IAM-RULE", rule_id
         );
 
         let rule = self.query_rule(rule_id).await.map_err(TraitError::from)?;
         let items = self.query_rule_items(rule_id).await.map_err(TraitError::from)?;
         Ok((rule, items))
+    }
+
+    async fn page_rules(
+        &self,
+        current: u64,
+        size: u64,
+    ) -> Result<(Vec<ExclusionRule>, i64), TraitError> {
+        debug!(
+            "{:<12} - ExclusionRuleServiceImpl::page_rules - current: {}, size: {}",
+            "IAM-RULE", current, size
+        );
+
+        let offset = if current > 0 {
+            ((current - 1) * size) as i64
+        } else {
+            return Err(TraitError::from(IamError::Business(
+                "current 必须 >= 1".to_string(),
+            )));
+        };
+
+        // 查询总数
+        let count_sql = "SELECT COUNT(*) as cnt FROM cmx_exclusion_rule WHERE archived = 0";
+        let params = Value::Array(vec![]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, count_sql, params, "rule_count")
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询规则总数失败: {e}")))
+            })?;
+        let schema = dataset.schema.as_ref();
+        let total: i64 = dataset
+            .iter()
+            .next()
+            .and_then(|row| row.get_by_name_as::<i64>(schema, "cnt"))
+            .unwrap_or(0);
+
+        // 查询分页数据
+        let page_sql = r#"
+            SELECT id, code, name, subject_type, primary_subject_id, violation_message,
+                   priority, description, status, archived, create_time, update_time,
+                   create_by, create_name, update_by, update_name
+            FROM cmx_exclusion_rule
+            WHERE archived = 0
+            ORDER BY priority DESC, create_time DESC
+            LIMIT $1 OFFSET $2
+        "#;
+        let params = Value::Array(vec![
+            Value::Number((size as i64).into()),
+            Value::Number(offset.into()),
+        ]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, page_sql, params, "rule_page")
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("分页查询规则失败: {e}")))
+            })?;
+
+        let rules: Vec<ExclusionRule> = Self::extract_rules_from_dataset(dataset);
+        Ok((rules, total))
     }
 
     async fn toggle_rule_status(
@@ -452,11 +632,11 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         status: i64,
     ) -> Result<(), TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::toggle_rule_status - rule_id: {}, status: {}",
+            "{:<12} - ExclusionRuleServiceImpl::toggle_rule_status - rule_id: {}, status: {}",
             "IAM-RULE", rule_id, status
         );
 
-        let sql = "UPDATE cmx_permission_rule SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
+        let sql = "UPDATE cmx_exclusion_rule SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
         let params = Value::Array(vec![
             Value::String(rule_id.to_string()),
             Value::Number(status.into()),
@@ -478,7 +658,7 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         self.audit_write(
             svr_ctx,
             "toggle_rule_status",
-            "permission_rule",
+            "exclusion_rule",
             rule_id,
             &serde_json::json!({ "new_status": status }),
         )
@@ -491,27 +671,44 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         &self,
         svr_ctx: &SVRContext,
         rule_id: &str,
-        items: Vec<RuleItemInput>,
+        subject_ids: Vec<String>,
     ) -> Result<u64, TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::add_rule_items - rule_id: {}, count: {}",
-            "IAM-RULE", rule_id, items.len()
+            "{:<12} - ExclusionRuleServiceImpl::add_rule_items - rule_id: {}, count: {}",
+            "IAM-RULE", rule_id, subject_ids.len()
         );
 
+        // 查询规则的 primary_subject_id 和 subject_type
+        let rule = self.query_rule(rule_id).await.map_err(TraitError::from)?;
+
+        // 校验新增 subject_id 不等于 primary_subject_id
+        for sid in &subject_ids {
+            if sid == &rule.primary_subject_id {
+                return Err(TraitError::from(IamError::Business(format!(
+                    "不能添加与主要对象相同的互斥对象: {sid}"
+                ))));
+            }
+        }
+
+        // 校验新增 subject_id 在对应表中存在
+        self.check_subjects_exist(&rule.subject_type, &subject_ids)
+            .await
+            .map_err(TraitError::from)?;
+
+        // 批量插入规则项
         let mut count: u64 = 0;
-        for item in items {
+        for subject_id in subject_ids {
             let item_id = snowflake_id_str();
             let sql = r#"
-                INSERT INTO cmx_permission_rule_item
-                    (id, rule_id, group_seq, permission_id)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (rule_id, group_seq, permission_id) DO NOTHING
+                INSERT INTO cmx_exclusion_rule_item
+                    (id, rule_id, subject_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
             "#;
             let params = Value::Array(vec![
                 Value::String(item_id),
                 Value::String(rule_id.to_string()),
-                Value::Number(item.group_seq.into()),
-                Value::String(item.permission_id),
+                Value::String(subject_id),
             ]);
             let affected = self
                 .mm
@@ -526,7 +723,7 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         self.audit_write(
             svr_ctx,
             "add_rule_items",
-            "permission_rule",
+            "exclusion_rule",
             rule_id,
             &serde_json::json!({ "added_count": count }),
         )
@@ -542,31 +739,28 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         item_ids: &[String],
     ) -> Result<u64, TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::remove_rule_items - rule_id: {}, count: {}",
+            "{:<12} - ExclusionRuleServiceImpl::remove_rule_items - rule_id: {}, count: {}",
             "IAM-RULE", rule_id, item_ids.len()
         );
 
-        let mut total: u64 = 0;
-        for item_id in item_ids {
-            let sql = "DELETE FROM cmx_permission_rule_item WHERE id = $1 AND rule_id = $2";
-            let params = Value::Array(vec![
-                Value::String(item_id.clone()),
-                Value::String(rule_id.to_string()),
-            ]);
-            let affected = self
-                .mm
-                .execute_sql_with_json(&self.db_id, None, sql, params)
-                .await
-                .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("移除规则项失败: {e}")))
-                })?;
-            total += affected as u64;
-        }
+        let sql = "DELETE FROM cmx_exclusion_rule_item WHERE id = ANY($1) AND rule_id = $2";
+        let params = Value::Array(vec![
+            Value::Array(item_ids.iter().map(|i| Value::String(i.clone())).collect()),
+            Value::String(rule_id.to_string()),
+        ]);
+        let affected = self
+            .mm
+            .execute_sql_with_json(&self.db_id, None, sql, params)
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("移除规则项失败: {e}")))
+            })?;
 
+        let total = affected as u64;
         self.audit_write(
             svr_ctx,
             "remove_rule_items",
-            "permission_rule",
+            "exclusion_rule",
             rule_id,
             &serde_json::json!({ "removed_count": total }),
         )
@@ -575,114 +769,27 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
         Ok(total)
     }
 
-    async fn page_rules(
-        &self,
-        current: u64,
-        size: u64,
-    ) -> Result<(Vec<PermissionRule>, i64), TraitError> {
-        debug!(
-            "{:<12} - PermissionRuleServiceImpl::page_rules - current: {}, size: {}",
-            "IAM-RULE", current, size
-        );
-
-        let offset = if current > 0 {
-            ((current - 1) * size) as i64
-        } else {
-            return Err(TraitError::from(IamError::Business(
-                "current 必须 >= 1".to_string(),
-            )));
-        };
-
-        // 查询总数
-        let count_sql = "SELECT COUNT(*) as cnt FROM cmx_permission_rule WHERE archived = 0";
-        let params = Value::Array(vec![]);
-        let dataset = self
-            .mm
-            .query_sql_with_json(&self.db_id, None, count_sql, params, "rule_count")
-            .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询规则总数失败: {e}"))))?;
-        let schema = dataset.schema.as_ref();
-        let total: i64 = dataset
-            .iter()
-            .next()
-            .and_then(|row| row.get_by_name_as::<i64>(schema, "cnt"))
-            .unwrap_or(0);
-
-        // 查询分页数据
-        let page_sql = r#"
-            SELECT id, code, name, rule_type, violation_message, priority, description,
-                   status, archived, create_time, update_time,
-                   create_by, create_name, update_by, update_name
-            FROM cmx_permission_rule
-            WHERE archived = 0
-            ORDER BY priority DESC, create_time DESC
-            LIMIT $1 OFFSET $2
-        "#;
-        let params = Value::Array(vec![
-            Value::Number((size as i64).into()),
-            Value::Number(offset.into()),
-        ]);
-        let dataset = self
-            .mm
-            .query_sql_with_json(&self.db_id, None, page_sql, params, "rule_page")
-            .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("分页查询规则失败: {e}"))))?;
-
-        let rules: Vec<PermissionRule> = Self::extract_rules_from_dataset(dataset);
-        Ok((rules, total))
-    }
-
     async fn validate_rule(
         &self,
-        permission_ids: &[String],
-        user_id: Option<&str>,
+        req: ValidateRuleRequest,
     ) -> Result<ValidateRuleResponse, TraitError> {
         debug!(
-            "{:<12} - PermissionRuleServiceImpl::validate_rule - perm_count: {}, user: {:?}",
-            "IAM-RULE", permission_ids.len(), user_id
+            "{:<12} - ExclusionRuleServiceImpl::validate_rule - perm_count: {}, role_count: {}, user: {:?}",
+            "IAM-RULE",
+            req.permission_ids.len(),
+            req.role_ids.len(),
+            req.user_id
         );
 
-        // 加载启用规则
-        let load_sql = r#"
-            SELECT r.id, r.code, r.name, r.rule_type, r.violation_message,
-                   i.group_seq, i.permission_id
-            FROM cmx_permission_rule r
-            INNER JOIN cmx_permission_rule_item i ON i.rule_id = r.id
-            WHERE r.status = 1 AND r.archived = 0
-            ORDER BY r.priority DESC, r.id
-        "#;
-        let params = Value::Array(vec![]);
-        let dataset = self
-            .mm
-            .query_sql_with_json(&self.db_id, None, load_sql, params, "validate_load_rules")
-            .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("加载规则失败: {e}"))))?;
+        // 1. 构建权限集合
+        let mut perm_set: HashSet<String> = req.permission_ids.iter().cloned().collect();
 
-        let schema = dataset.schema.as_ref();
-        use std::collections::{HashMap, HashSet};
-        let mut rules_map: HashMap<String, (String, String, String, Option<String>, Vec<(i64, String)>)> =
-            HashMap::new();
+        // 2. 构建角色集合
+        let mut role_set: HashSet<String> = req.role_ids.iter().cloned().collect();
 
-        for row in dataset.iter() {
-            let rule_id: String = row.get_by_name_as(schema, "id").unwrap_or_default();
-            let rule_entry = rules_map.entry(rule_id.clone()).or_insert_with(|| {
-                (
-                    row.get_by_name_as(schema, "code").unwrap_or_default(),
-                    row.get_by_name_as(schema, "name").unwrap_or_default(),
-                    row.get_by_name_as(schema, "rule_type").unwrap_or_default(),
-                    row.get_by_name_as(schema, "violation_message"),
-                    Vec::new(),
-                )
-            });
-            let group_seq: i64 = row.get_by_name_as(schema, "group_seq").unwrap_or(1);
-            let permission_id: String =
-                row.get_by_name_as(schema, "permission_id").unwrap_or_default();
-            rule_entry.4.push((group_seq, permission_id));
-        }
-
-        // 构建权限集合
-        let mut perm_set: HashSet<String> = permission_ids.iter().cloned().collect();
-        if let Some(uid) = user_id {
+        // 可选：合并用户已有权限/角色
+        if let Some(uid) = &req.user_id {
+            // 查询用户已有权限
             let user_perm_sql = r#"
                 SELECT DISTINCT rp.permission_id
                 FROM cmx_role_permission rp
@@ -696,7 +803,7 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
                   AND NOW() BETWEEN ura.effective_from AND ura.effective_until
                   AND rp.archived = 0
             "#;
-            let params = Value::Array(vec![Value::String(uid.to_string())]);
+            let params = Value::Array(vec![Value::String(uid.clone())]);
             let dataset = self
                 .mm
                 .query_sql_with_json(&self.db_id, None, user_perm_sql, params, "validate_user_perms")
@@ -710,57 +817,108 @@ impl PermissionRuleService for PermissionRuleServiceImpl {
                     perm_set.insert(pid);
                 }
             }
-        }
 
-        // 校验规则
-        let mut violations = Vec::new();
-        for (rule_id, (code, name, rule_type, violation_message, items)) in &rules_map {
-            if rule_type == "mutual_exclusion" {
-                let matched: Vec<String> = items
-                    .iter()
-                    .filter(|(_, pid)| perm_set.contains(pid))
-                    .map(|(_, pid)| pid.clone())
-                    .collect();
-                if matched.len() >= 2 {
-                    violations.push(RuleViolationDetail {
-                        rule_id: rule_id.clone(),
-                        rule_code: code.clone(),
-                        rule_name: name.clone(),
-                        rule_type: rule_type.clone(),
-                        violation_message: violation_message
-                            .clone()
-                            .unwrap_or_else(|| format!("权限组合违反互斥规则 [{}]", code)),
-                        conflicting_permission_ids: matched,
-                    });
-                }
-            } else if rule_type == "dependency" {
-                let prerequisites: HashSet<&String> =
-                    items.iter().filter(|(seq, _)| *seq == 1).map(|(_, pid)| pid).collect();
-                let dependents: Vec<&String> =
-                    items.iter().filter(|(seq, _)| *seq == 2).map(|(_, pid)| pid).collect();
-                let has_prerequisite = prerequisites.iter().any(|pid| perm_set.contains(*pid));
-                let conflicting: Vec<String> = dependents
-                    .iter()
-                    .filter(|pid| perm_set.contains(**pid) && !has_prerequisite)
-                    .map(|pid| (*pid).clone())
-                    .collect();
-                if !conflicting.is_empty() {
-                    violations.push(RuleViolationDetail {
-                        rule_id: rule_id.clone(),
-                        rule_code: code.clone(),
-                        rule_name: name.clone(),
-                        rule_type: rule_type.clone(),
-                        violation_message: violation_message
-                            .clone()
-                            .unwrap_or_else(|| {
-                                format!("权限依赖规则违反 [{}]：缺少前置权限", code)
-                            }),
-                        conflicting_permission_ids: conflicting,
-                    });
+            // 查询用户已有角色
+            let user_role_sql = r#"
+                SELECT DISTINCT role_id
+                FROM cmx_user_role
+                WHERE user_id = $1 AND archived = 0
+                UNION
+                SELECT DISTINCT role_id
+                FROM cmx_user_role_assignment
+                WHERE user_id = $1 AND status = 1 AND archived = 0
+                  AND NOW() BETWEEN effective_from AND effective_until
+            "#;
+            let params = Value::Array(vec![Value::String(uid.clone())]);
+            let dataset = self
+                .mm
+                .query_sql_with_json(&self.db_id, None, user_role_sql, params, "validate_user_roles")
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("查询用户角色失败: {e}")))
+                })?;
+            let schema = dataset.schema.as_ref();
+            for row in dataset.iter() {
+                if let Some(rid) = row.get_by_name_as::<String>(schema, "role_id") {
+                    role_set.insert(rid);
                 }
             }
         }
 
+        // 3. 加载全部启用规则（含规则项）
+        let load_sql = r#"
+            SELECT r.id, r.code, r.name, r.subject_type, r.primary_subject_id,
+                   r.violation_message, i.subject_id
+            FROM cmx_exclusion_rule r
+            INNER JOIN cmx_exclusion_rule_item i ON i.rule_id = r.id
+            WHERE r.status = 1 AND r.archived = 0
+            ORDER BY r.priority DESC, r.id
+        "#;
+        let params = Value::Array(vec![]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, load_sql, params, "validate_load_rules")
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("加载规则失败: {e}")))
+            })?;
+
+        let schema = dataset.schema.as_ref();
+        // 按规则聚合：rule_id -> (code, name, subject_type, primary_subject_id, violation_message, Vec<subject_id>)
+        let mut rules_map: HashMap<
+            String,
+            (String, String, String, String, Option<String>, Vec<String>),
+        > = HashMap::new();
+
+        for row in dataset.iter() {
+            let rule_id: String = row.get_by_name_as(schema, "id").unwrap_or_default();
+            let entry = rules_map.entry(rule_id.clone()).or_insert_with(|| {
+                (
+                    row.get_by_name_as(schema, "code").unwrap_or_default(),
+                    row.get_by_name_as(schema, "name").unwrap_or_default(),
+                    row.get_by_name_as(schema, "subject_type").unwrap_or_default(),
+                    row.get_by_name_as(schema, "primary_subject_id").unwrap_or_default(),
+                    row.get_by_name_as(schema, "violation_message"),
+                    Vec::new(),
+                )
+            });
+            if let Some(sid) = row.get_by_name_as::<String>(schema, "subject_id") {
+                entry.5.push(sid);
+            }
+        }
+
+        // 4. 按 subject_type 分别校验（收集所有 violations，不快速失败）
+        let mut violations = Vec::new();
+        for (rule_id, (code, name, subject_type, primary_subject_id, violation_message, excluded_ids)) in
+            &rules_map
+        {
+            let target_set = match subject_type.as_str() {
+                "permission" => &perm_set,
+                "role" => &role_set,
+                _ => continue,
+            };
+
+            // 仅当 primary_subject_id 在集合中时，检查互斥对象是否也在集合中
+            if target_set.contains(primary_subject_id) {
+                for excluded_id in excluded_ids {
+                    if target_set.contains(excluded_id) {
+                        violations.push(RuleViolationDetail {
+                            rule_id: rule_id.clone(),
+                            rule_code: code.clone(),
+                            rule_name: name.clone(),
+                            subject_type: subject_type.clone(),
+                            violation_message: violation_message.clone().unwrap_or_else(|| {
+                                format!("对象组合违反互斥规则 [{}]", code)
+                            }),
+                            primary_subject_id: primary_subject_id.clone(),
+                            conflicting_subject_id: excluded_id.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 5. 返回结果
         let passed = violations.is_empty();
         Ok(ValidateRuleResponse { passed, violations })
     }

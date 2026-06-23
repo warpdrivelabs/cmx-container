@@ -51,18 +51,19 @@ COMMENT ON COLUMN cmx_user_role_assignment.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_user_role_assignment.update_name IS '更新人姓名';
 
 -- =====================================================
--- 阶段 2：权限互斥与依赖规则（SoD）
--- 新增表：cmx_permission_rule、cmx_permission_rule_item
+-- 阶段 2：互斥规则引擎（功能权限互斥 + 角色互斥）
+-- 新增表：cmx_exclusion_rule、cmx_exclusion_rule_item
 -- 新增权限码：rule:read、rule:manage
 -- =====================================================
 
--- 权限规则表
-DROP TABLE IF EXISTS cmx_permission_rule;
-CREATE TABLE cmx_permission_rule (
+-- 互斥规则表
+DROP TABLE IF EXISTS cmx_exclusion_rule;
+CREATE TABLE cmx_exclusion_rule (
     id varchar(64) NOT NULL,
     code varchar(100) NOT NULL,
     name varchar(200) NOT NULL,
-    rule_type varchar(20) NOT NULL,
+    subject_type varchar(20) NOT NULL,
+    primary_subject_id varchar(64) NOT NULL,
     violation_message varchar(500),
     priority int4 DEFAULT 0,
     description varchar(500),
@@ -74,50 +75,49 @@ CREATE TABLE cmx_permission_rule (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_permission_rule PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_permission_rule_code UNIQUE (code)
+    CONSTRAINT pk_cmx_exclusion_rule PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_exclusion_rule_code UNIQUE (code)
 );
 
-COMMENT ON TABLE cmx_permission_rule IS '权限规则表（互斥/依赖）';
-COMMENT ON COLUMN cmx_permission_rule.id IS '主键ID';
-COMMENT ON COLUMN cmx_permission_rule.code IS '规则编码（唯一，如 sod_finance）';
-COMMENT ON COLUMN cmx_permission_rule.name IS '规则名称';
-COMMENT ON COLUMN cmx_permission_rule.rule_type IS '规则类型：mutual_exclusion-互斥，dependency-依赖';
-COMMENT ON COLUMN cmx_permission_rule.violation_message IS '违反规则时的错误消息（为空时使用默认消息）';
-COMMENT ON COLUMN cmx_permission_rule.priority IS '优先级（数字越大越先校验，默认0）';
-COMMENT ON COLUMN cmx_permission_rule.description IS '描述';
-COMMENT ON COLUMN cmx_permission_rule.status IS '状态：0-禁用，1-启用';
-COMMENT ON COLUMN cmx_permission_rule.archived IS '归档标志：0-未归档，1-已归档';
-COMMENT ON COLUMN cmx_permission_rule.create_time IS '创建时间';
-COMMENT ON COLUMN cmx_permission_rule.update_time IS '更新时间';
-COMMENT ON COLUMN cmx_permission_rule.create_by IS '创建人ID';
-COMMENT ON COLUMN cmx_permission_rule.create_name IS '创建人姓名';
-COMMENT ON COLUMN cmx_permission_rule.update_by IS '更新人ID';
-COMMENT ON COLUMN cmx_permission_rule.update_name IS '更新人姓名';
+COMMENT ON TABLE cmx_exclusion_rule IS '互斥规则表（功能互斥/角色互斥）';
+COMMENT ON COLUMN cmx_exclusion_rule.id IS '主键ID';
+COMMENT ON COLUMN cmx_exclusion_rule.code IS '规则编码（唯一）';
+COMMENT ON COLUMN cmx_exclusion_rule.name IS '规则名称';
+COMMENT ON COLUMN cmx_exclusion_rule.subject_type IS '对象类型：permission-功能权限互斥，role-角色互斥';
+COMMENT ON COLUMN cmx_exclusion_rule.primary_subject_id IS '主要对象ID（权限ID或角色ID，取决于 subject_type）';
+COMMENT ON COLUMN cmx_exclusion_rule.violation_message IS '违反规则时的错误消息（为空时使用默认消息）';
+COMMENT ON COLUMN cmx_exclusion_rule.priority IS '优先级（数字越大越先校验，默认0）';
+COMMENT ON COLUMN cmx_exclusion_rule.description IS '描述';
+COMMENT ON COLUMN cmx_exclusion_rule.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_exclusion_rule.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_exclusion_rule.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_exclusion_rule.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_exclusion_rule.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_exclusion_rule.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_exclusion_rule.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_exclusion_rule.update_name IS '更新人姓名';
 
--- 规则权限项表
-DROP TABLE IF EXISTS cmx_permission_rule_item;
-CREATE TABLE cmx_permission_rule_item (
+-- 互斥对象明细表
+DROP TABLE IF EXISTS cmx_exclusion_rule_item;
+CREATE TABLE cmx_exclusion_rule_item (
     id varchar(64) NOT NULL,
     rule_id varchar(64) NOT NULL,
-    group_seq int4 NOT NULL,
-    permission_id varchar(64) NOT NULL,
-    CONSTRAINT pk_cmx_permission_rule_item PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_permission_rule_item UNIQUE (rule_id, group_seq, permission_id)
+    subject_id varchar(64) NOT NULL,
+    CONSTRAINT pk_cmx_exclusion_rule_item PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_exclusion_rule_item UNIQUE (rule_id, subject_id)
 );
 
-CREATE INDEX idx_cmx_permission_rule_item_rule ON cmx_permission_rule_item (rule_id);
-CREATE INDEX idx_cmx_permission_rule_item_perm ON cmx_permission_rule_item (permission_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
 
-COMMENT ON TABLE cmx_permission_rule_item IS '规则权限项表';
-COMMENT ON COLUMN cmx_permission_rule_item.id IS '主键ID';
-COMMENT ON COLUMN cmx_permission_rule_item.rule_id IS '关联规则ID';
-COMMENT ON COLUMN cmx_permission_rule_item.group_seq IS '组序号：互斥规则下所有项两两互斥；依赖规则中 group_seq=1 为前置权限，group_seq=2 为依赖权限';
-COMMENT ON COLUMN cmx_permission_rule_item.permission_id IS '关联权限ID';
+COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
+COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';
 
 -- 新增权限码（规则管理）
 INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
-('1898765432100002031', 'rule:read',   '查看权限规则', 'api', 31, 1, '查询互斥/依赖规则及规则项'),
+('1898765432100002031', 'rule:read',   '查看权限规则', 'api', 31, 1, '查询互斥规则及规则项'),
 ('1898765432100002032', 'rule:manage', '管理权限规则', 'api', 32, 1, '创建/更新/删除/启用禁用规则及规则项')
 ON CONFLICT (code) DO NOTHING;
 
@@ -131,14 +131,3 @@ SELECT CONCAT('1898765432100003', LPAD(ROW_NUMBER() OVER ()::TEXT, 4, '0')),
        id
 FROM new_perms
 ON CONFLICT DO NOTHING;
-
--- 示例规则种子数据（可选）
-INSERT INTO cmx_permission_rule (id, code, name, rule_type, violation_message, priority, status, description) VALUES
-('1898765432100004001', 'sod_finance', '财务职责分离规则', 'mutual_exclusion',
- '拥有审计权限的用户不能同时拥有录入权限', 10, 0, '防止财务造假（默认禁用）')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO cmx_permission_rule (id, code, name, rule_type, violation_message, priority, status, description) VALUES
-('1898765432100004002', 'dep_user_mgmt', '用户管理依赖规则', 'dependency',
- '删除用户前必须能查看用户列表', 5, 0, '确保操作可追溯（默认禁用）')
-ON CONFLICT (code) DO NOTHING;

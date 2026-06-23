@@ -1,7 +1,10 @@
-//! 权限规则校验引擎
+//! 互斥规则校验引擎
 //!
 //! 提供 `RuleEnforcer` trait 和 `RuleEnforcerImpl` 实现，
-//! 在 `assign_permissions` 和 `assign_roles` 时进行 SoD 规则校验。
+//! 在 `assign_permissions` 和 `assign_roles` 时进行互斥规则校验。
+//!
+//! 核心模型：「1 主对象 + N 互斥对象」。仅当用户集合同时包含主对象和
+//! 任一互斥对象时判定违反，互斥对象之间不互斥。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -11,25 +14,26 @@ use cmx_database::DatabaseManager;
 use serde_json::Value;
 use tracing::debug;
 
-use crate::config::{IamConfig, SodCheckScope};
+use crate::config::IamConfig;
 use crate::error::IamError;
 
 /// 规则校验引擎 trait
 #[async_trait]
 pub trait RuleEnforcer: Send + Sync {
-    /// 校验角色权限组合本身是否违反互斥规则
+    /// 校验角色权限组合本身是否违反功能权限互斥规则
     ///
     /// - `permission_ids`：待分配给角色的权限ID列表
-    /// - 仅校验互斥规则（依赖规则针对用户场景，角色层不校验）
+    /// - 仅校验 subject_type='permission' 的互斥规则（角色层不涉及角色互斥）
     async fn check_role_permissions(
         &self,
         permission_ids: &[String],
     ) -> Result<(), IamError>;
 
-    /// 校验用户权限组合是否违反规则（合并现有权限 + 待分配角色权限）
+    /// 校验用户角色组合是否违反互斥规则（合并现有权限/角色 + 待分配角色权限）
     ///
-    /// - `user_id`：目标用户ID（用于查询已有权限）
-    /// - `role_ids`：待分配的角色ID列表（展开到权限后与现有权限合并）
+    /// - `user_id`：目标用户ID（用于查询已有权限和角色）
+    /// - `role_ids`：待分配的角色ID列表
+    /// - 同时校验功能权限互斥和角色互斥两类规则
     async fn check_user_roles(
         &self,
         user_id: &str,
@@ -53,20 +57,28 @@ impl RuleEnforcerImpl {
         Self { mm, db_id, config }
     }
 
-    /// 加载所有启用的规则及其关联权限项
-    /// 返回：(rule_code, rule_type, violation_message, Vec<(group_seq, permission_id)>)
+    /// 加载所有启用的互斥规则及其互斥对象项
+    ///
+    /// - `subject_type`：可选过滤对象类型（`permission` / `role`），None 加载全部
+    /// 按 rule_id 聚合 excluded_ids
     async fn load_active_rules(
         &self,
+        subject_type: Option<&str>,
     ) -> Result<Vec<LoadedRule>, IamError> {
         let sql = r#"
-            SELECT r.id, r.code, r.name, r.rule_type, r.violation_message,
-                   i.group_seq, i.permission_id
-            FROM cmx_permission_rule r
-            INNER JOIN cmx_permission_rule_item i ON i.rule_id = r.id
+            SELECT r.id, r.code, r.name, r.subject_type, r.primary_subject_id,
+                   r.violation_message, i.subject_id
+            FROM cmx_exclusion_rule r
+            INNER JOIN cmx_exclusion_rule_item i ON i.rule_id = r.id
             WHERE r.status = 1 AND r.archived = 0
+              AND ($1::text IS NULL OR r.subject_type = $1)
             ORDER BY r.priority DESC, r.id
         "#;
-        let params = Value::Array(vec![]);
+        let params = Value::Array(vec![
+            subject_type
+                .map(|s| Value::String(s.to_string()))
+                .unwrap_or(Value::Null),
+        ]);
         let dataset = self
             .mm
             .query_sql_with_json(&self.db_id, None, sql, params, "load_rules")
@@ -89,21 +101,22 @@ impl RuleEnforcerImpl {
                     name: row
                         .get_by_name_as(schema, "name")
                         .unwrap_or_default(),
-                    rule_type: row
-                        .get_by_name_as(schema, "rule_type")
+                    subject_type: row
+                        .get_by_name_as(schema, "subject_type")
+                        .unwrap_or_default(),
+                    primary_subject_id: row
+                        .get_by_name_as(schema, "primary_subject_id")
                         .unwrap_or_default(),
                     violation_message: row
                         .get_by_name_as(schema, "violation_message"),
-                    items: Vec::new(),
+                    excluded_ids: HashSet::new(),
                 }
             });
 
-            let group_seq: i64 =
-                row.get_by_name_as(schema, "group_seq").unwrap_or(1);
-            let permission_id: String = row
-                .get_by_name_as(schema, "permission_id")
+            let subject_id: String = row
+                .get_by_name_as(schema, "subject_id")
                 .unwrap_or_default();
-            rule_entry.items.push((group_seq, permission_id));
+            rule_entry.excluded_ids.insert(subject_id);
         }
 
         Ok(rules_map.into_values().collect())
@@ -174,34 +187,56 @@ impl RuleEnforcerImpl {
         Ok(perm_ids)
     }
 
-    /// 校验互斥规则
-    /// 检查 permission_set 是否包含同一互斥规则下的任意两个权限
-    fn check_mutual_exclusion(
-        &self,
+    /// 查询用户当前已有的角色ID集合（合并永久 + 临时授权）
+    async fn get_user_role_ids(&self, user_id: &str) -> Result<HashSet<String>, IamError> {
+        let sql = r#"
+            SELECT role_id FROM cmx_user_role
+            WHERE user_id = $1 AND archived = 0
+
+            UNION
+
+            SELECT role_id FROM cmx_user_role_assignment
+            WHERE user_id = $1 AND status = 1 AND archived = 0
+              AND NOW() BETWEEN effective_from AND effective_until
+        "#;
+        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let dataset = self
+            .mm
+            .query_sql_with_json(&self.db_id, None, sql, params, "user_role_ids")
+            .await
+            .map_err(|e| IamError::Business(format!("查询用户角色ID失败: {e}")))?;
+
+        let schema = dataset.schema.as_ref();
+        let mut role_ids = HashSet::new();
+        for row in dataset.iter() {
+            if let Some(rid) = row.get_by_name_as::<String>(schema, "role_id") {
+                role_ids.insert(rid);
+            }
+        }
+        Ok(role_ids)
+    }
+
+    /// 统一互斥校验
+    ///
+    /// 遍历规则，仅当 `subject_set` 包含 `primary_subject_id` 时，
+    /// 检查是否同时包含任一 `excluded_id`。违反时返回 `IamError::RuleViolation`。
+    fn check_exclusion(
         rules: &[LoadedRule],
-        permission_set: &HashSet<String>,
+        subject_set: &HashSet<String>,
     ) -> Result<(), IamError> {
         for rule in rules {
-            if rule.rule_type != "mutual_exclusion" {
+            // 不含主对象则不可能违反本规则
+            if !subject_set.contains(&rule.primary_subject_id) {
                 continue;
             }
-            // 收集该规则下用户拥有的所有权限
-            let matched: Vec<&String> = rule
-                .items
+            // 同时包含任一互斥对象即违反
+            let violated = rule
+                .excluded_ids
                 .iter()
-                .filter_map(|(_, pid)| {
-                    if permission_set.contains(pid) {
-                        Some(pid)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if matched.len() >= 2 {
-                // 违反互斥规则
+                .any(|id| subject_set.contains(id));
+            if violated {
                 let message = rule.violation_message.clone().unwrap_or_else(|| {
-                    format!("权限组合违反互斥规则 [{}]", rule.code)
+                    format!("互斥规则违反 [{}]", rule.code)
                 });
                 return Err(IamError::RuleViolation {
                     rule_code: rule.code.clone(),
@@ -211,67 +246,22 @@ impl RuleEnforcerImpl {
         }
         Ok(())
     }
-
-    /// 校验依赖规则
-    /// 对于每个 group_seq=2 的权限，检查是否至少有一个 group_seq=1 的权限
-    fn check_dependency(
-        &self,
-        rules: &[LoadedRule],
-        permission_set: &HashSet<String>,
-    ) -> Result<(), IamError> {
-        for rule in rules {
-            if rule.rule_type != "dependency" {
-                continue;
-            }
-            // group_seq=1 的权限集合（前置条件）
-            let prerequisites: HashSet<&String> = rule
-                .items
-                .iter()
-                .filter(|(seq, _)| *seq == 1)
-                .map(|(_, pid)| pid)
-                .collect();
-
-            // group_seq=2 的权限集合（依赖前置）
-            let dependents: HashSet<&String> = rule
-                .items
-                .iter()
-                .filter(|(seq, _)| *seq == 2)
-                .map(|(_, pid)| pid)
-                .collect();
-
-            // 检查用户拥有的 group_seq=2 权限是否都有至少一个 group_seq=1 权限
-            let has_prerequisite = prerequisites.iter().any(|pid| permission_set.contains(*pid));
-
-            for dep_pid in &dependents {
-                if permission_set.contains(*dep_pid) && !has_prerequisite {
-                    let message = rule
-                        .violation_message
-                        .clone()
-                        .unwrap_or_else(|| {
-                            format!("权限依赖规则违反 [{}]：缺少前置权限", rule.code)
-                        });
-                    return Err(IamError::RuleViolation {
-                        rule_code: rule.code.clone(),
-                        message,
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
-/// 加载的规则数据
+/// 加载的互斥规则数据
 struct LoadedRule {
     #[allow(dead_code)]
     id: String,
     code: String,
     #[allow(dead_code)]
     name: String,
-    rule_type: String,
+    /// 对象类型：permission | role
+    subject_type: String,
+    /// 主对象ID（权限ID或角色ID）
+    primary_subject_id: String,
     violation_message: Option<String>,
-    /// (group_seq, permission_id)
-    items: Vec<(i64, String)>,
+    /// 互斥对象ID集合
+    excluded_ids: HashSet<String>,
 }
 
 #[async_trait]
@@ -290,11 +280,11 @@ impl RuleEnforcer for RuleEnforcerImpl {
             permission_ids.len()
         );
 
-        let rules = self.load_active_rules().await?;
+        let rules = self.load_active_rules(Some("permission")).await?;
         let perm_set: HashSet<String> = permission_ids.iter().cloned().collect();
 
-        // 角色层仅校验互斥规则
-        self.check_mutual_exclusion(&rules, &perm_set)
+        // 角色层仅校验功能权限互斥
+        Self::check_exclusion(&rules, &perm_set)
     }
 
     async fn check_user_roles(
@@ -313,33 +303,27 @@ impl RuleEnforcer for RuleEnforcerImpl {
             role_ids.len()
         );
 
-        let rules = self.load_active_rules().await?;
+        // 一次性加载全部规则，按 subject_type 分区
+        let rules = self.load_active_rules(None).await?;
+        let (perm_rules, role_rules): (Vec<LoadedRule>, Vec<LoadedRule>) = rules
+            .into_iter()
+            .partition(|r| r.subject_type == "permission");
 
-        // 1. 查询用户当前已有权限
-        let existing_perms = self.get_user_permission_ids(user_id).await?;
+        // 权限级校验：合并已有权限 + 待分配角色权限
+        if !perm_rules.is_empty() {
+            let existing_perms = self.get_user_permission_ids(user_id).await?;
+            let new_perms = self.get_role_permission_ids(role_ids).await?;
+            let mut perm_set = existing_perms;
+            perm_set.extend(new_perms);
+            Self::check_exclusion(&perm_rules, &perm_set)?;
+        }
 
-        // 2. 展开待分配角色到权限集合
-        let new_perm_ids = self.get_role_permission_ids(role_ids).await?;
-
-        // 3. 根据配置决定校验范围
-        match self.config.sod_check_scope {
-            SodCheckScope::All => {
-                // 校验合并后的完整权限集合（已有 + 新增）
-                let mut perm_set = existing_perms.clone();
-                perm_set.extend(new_perm_ids.clone());
-                self.check_mutual_exclusion(&rules, &perm_set)?;
-                self.check_dependency(&rules, &perm_set)?;
-            }
-            SodCheckScope::Incremental => {
-                // 仅校验本次新增权限是否违反规则
-                // 互斥：仅检查新增权限之间是否互斥
-                let new_only: HashSet<String> = new_perm_ids.iter().cloned().collect();
-                self.check_mutual_exclusion(&rules, &new_only)?;
-                // 依赖：检查新增权限中的 group_seq=2 是否有前置权限（新增或已有均可）
-                let mut merged = existing_perms.clone();
-                merged.extend(new_perm_ids);
-                self.check_dependency(&rules, &merged)?;
-            }
+        // 角色级校验：合并已有角色 + 待分配角色
+        if !role_rules.is_empty() {
+            let existing_roles = self.get_user_role_ids(user_id).await?;
+            let mut role_set = existing_roles;
+            role_set.extend(role_ids.iter().cloned());
+            Self::check_exclusion(&role_rules, &role_set)?;
         }
 
         Ok(())

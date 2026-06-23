@@ -74,16 +74,14 @@ def test_full_integration(api_client):
             rule_code = gen_id("int_rule")
             rule_data = (
                 api_client.post(
-                    "/api/iam/permission-rules/create",
+                    "/api/iam/exclusion-rules/create",
                     {
                         "code": rule_code,
                         "name": "集成互斥规则",
-                        "rule_type": "mutual_exclusion",
+                        "subject_type": "permission",
+                        "primary_subject_id": p1_id,
+                        "excluded_subject_ids": [p2_id],
                         "priority": 100,
-                        "items": [
-                            {"group_seq": 1, "permission_id": p1_id},
-                            {"group_seq": 2, "permission_id": p2_id},
-                        ],
                     },
                 )
             ).assert_success()
@@ -146,7 +144,7 @@ def test_full_integration(api_client):
                 finally:
                     api_client.post("/api/iam/users/delete", {"ids": [user_id]})
             finally:
-                api_client.post(f"/api/iam/permission-rules/delete/{rule_id}")
+                api_client.post(f"/api/iam/exclusion-rules/delete/{rule_id}")
         finally:
             api_client.post("/api/iam/roles/delete", {"ids": [r1_id]})
             api_client.post("/api/iam/roles/delete", {"ids": [r2_id]})

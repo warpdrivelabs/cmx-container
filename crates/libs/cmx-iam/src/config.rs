@@ -9,7 +9,7 @@ pub struct IamConfig {
     #[serde(default)]
     pub auth_db_id: Option<String>,
 
-    /// 密码最小长度
+    /// 密码最小长度 默认8
     #[serde(default = "default_password_min_length")]
     pub password_min_length: usize,
 
@@ -34,10 +34,6 @@ pub struct IamConfig {
     #[serde(default)]
     pub enable_sod_check: bool,
 
-    /// SoD 校验范围（默认 All，校验用户合并后所有权限；Incremental 仅校验本次新增）
-    #[serde(default = "default_sod_check_scope")]
-    pub sod_check_scope: SodCheckScope,
-
     /// 故障降级策略（默认 FailClose）
     #[serde(default = "default_failure_mode")]
     pub failure_mode: FailureMode,
@@ -60,15 +56,6 @@ pub enum FailureMode {
     FailClose,
 }
 
-/// SoD 校验范围
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SodCheckScope {
-    /// 校验用户合并后的所有权限（含已有权限）
-    All,
-    /// 仅校验本次新增的权限
-    Incremental,
-}
-
 fn default_password_min_length() -> usize {
     8
 }
@@ -87,10 +74,6 @@ fn default_cleanup_interval() -> u64 {
 
 fn default_audit_batch_size() -> u32 {
     100
-}
-
-fn default_sod_check_scope() -> SodCheckScope {
-    SodCheckScope::All
 }
 
 fn default_failure_mode() -> FailureMode {
@@ -115,7 +98,6 @@ impl Default for IamConfig {
             assignment_cleanup_interval_secs: default_cleanup_interval(),
             audit_batch_size: default_audit_batch_size(),
             enable_sod_check: false,
-            sod_check_scope: default_sod_check_scope(),
             failure_mode: default_failure_mode(),
             circuit_breaker_threshold: default_circuit_breaker_threshold(),
             circuit_breaker_reset_secs: default_circuit_breaker_reset_secs(),

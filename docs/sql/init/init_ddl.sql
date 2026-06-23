@@ -1801,63 +1801,63 @@ CREATE INDEX idx_cmx_user_role_assignment_role ON cmx_user_role_assignment (role
 CREATE INDEX idx_cmx_user_role_assignment_time ON cmx_user_role_assignment (effective_from, effective_until);
 CREATE INDEX idx_cmx_user_role_assignment_expire ON cmx_user_role_assignment (effective_until) WHERE status = 1 AND archived = 0;
 
--- 35. 权限规则表 (cmx_permission_rule)
-DROP TABLE IF EXISTS cmx_permission_rule;
-CREATE TABLE cmx_permission_rule
+-- 35. 互斥规则表 (cmx_exclusion_rule)
+DROP TABLE IF EXISTS cmx_exclusion_rule;
+CREATE TABLE cmx_exclusion_rule
 (
-    id                 varchar(64) NOT NULL,
-    code               varchar(100) NOT NULL,
-    name               varchar(200) NOT NULL,
-    rule_type          varchar(20) NOT NULL,
-    violation_message  varchar(500),
-    priority           int4 DEFAULT 0,
-    description        varchar(500),
-    status             int4 DEFAULT 1,
-    archived           int4 DEFAULT 0,
-    create_time        timestamp DEFAULT CURRENT_TIMESTAMP,
-    update_time        timestamp DEFAULT CURRENT_TIMESTAMP,
-    create_by          varchar(100),
-    create_name        varchar(100),
-    update_by          varchar(100),
-    update_name        varchar(100),
-    CONSTRAINT pk_cmx_permission_rule PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_permission_rule_code UNIQUE (code)
+    id                  varchar(64) NOT NULL,
+    code                varchar(100) NOT NULL,
+    name                varchar(200) NOT NULL,
+    subject_type        varchar(20) NOT NULL,
+    primary_subject_id  varchar(64) NOT NULL,
+    violation_message   varchar(500),
+    priority            int4 DEFAULT 0,
+    description         varchar(500),
+    status              int4 DEFAULT 1,
+    archived            int4 DEFAULT 0,
+    create_time         timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time         timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by           varchar(100),
+    create_name         varchar(100),
+    update_by           varchar(100),
+    update_name         varchar(100),
+    CONSTRAINT pk_cmx_exclusion_rule PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_exclusion_rule_code UNIQUE (code)
 );
 
-COMMENT ON TABLE cmx_permission_rule IS '权限规则表（互斥/依赖）';
-COMMENT ON COLUMN cmx_permission_rule.id IS '主键ID';
-COMMENT ON COLUMN cmx_permission_rule.code IS '规则编码（唯一，如 sod_finance）';
-COMMENT ON COLUMN cmx_permission_rule.name IS '规则名称';
-COMMENT ON COLUMN cmx_permission_rule.rule_type IS '规则类型：mutual_exclusion-互斥，dependency-依赖';
-COMMENT ON COLUMN cmx_permission_rule.violation_message IS '违反规则时的错误消息（为空时使用默认消息）';
-COMMENT ON COLUMN cmx_permission_rule.priority IS '优先级（数字越大越先校验，默认0）';
-COMMENT ON COLUMN cmx_permission_rule.description IS '描述';
-COMMENT ON COLUMN cmx_permission_rule.status IS '状态：0-禁用，1-启用';
-COMMENT ON COLUMN cmx_permission_rule.archived IS '归档标志：0-未归档，1-已归档';
-COMMENT ON COLUMN cmx_permission_rule.create_time IS '创建时间';
-COMMENT ON COLUMN cmx_permission_rule.update_time IS '更新时间';
-COMMENT ON COLUMN cmx_permission_rule.create_by IS '创建人ID';
-COMMENT ON COLUMN cmx_permission_rule.create_name IS '创建人姓名';
-COMMENT ON COLUMN cmx_permission_rule.update_by IS '更新人ID';
-COMMENT ON COLUMN cmx_permission_rule.update_name IS '更新人姓名';
+COMMENT ON TABLE cmx_exclusion_rule IS '互斥规则表（功能互斥/角色互斥）';
+COMMENT ON COLUMN cmx_exclusion_rule.id IS '主键ID';
+COMMENT ON COLUMN cmx_exclusion_rule.code IS '规则编码（唯一）';
+COMMENT ON COLUMN cmx_exclusion_rule.name IS '规则名称';
+COMMENT ON COLUMN cmx_exclusion_rule.subject_type IS '对象类型：permission-功能权限互斥，role-角色互斥';
+COMMENT ON COLUMN cmx_exclusion_rule.primary_subject_id IS '主要对象ID（权限ID或角色ID，取决于 subject_type）';
+COMMENT ON COLUMN cmx_exclusion_rule.violation_message IS '违反规则时的错误消息（为空时使用默认消息）';
+COMMENT ON COLUMN cmx_exclusion_rule.priority IS '优先级（数字越大越先校验，默认0）';
+COMMENT ON COLUMN cmx_exclusion_rule.description IS '描述';
+COMMENT ON COLUMN cmx_exclusion_rule.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_exclusion_rule.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_exclusion_rule.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_exclusion_rule.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_exclusion_rule.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_exclusion_rule.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_exclusion_rule.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_exclusion_rule.update_name IS '更新人姓名';
 
--- 36. 规则权限项表 (cmx_permission_rule_item)
-DROP TABLE IF EXISTS cmx_permission_rule_item;
-CREATE TABLE cmx_permission_rule_item
+-- 36. 互斥对象明细表 (cmx_exclusion_rule_item)
+DROP TABLE IF EXISTS cmx_exclusion_rule_item;
+CREATE TABLE cmx_exclusion_rule_item
 (
-    id            varchar(64) NOT NULL,
-    rule_id       varchar(64) NOT NULL,
-    group_seq     int4 NOT NULL,
-    permission_id varchar(64) NOT NULL,
-    CONSTRAINT pk_cmx_permission_rule_item PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_permission_rule_item UNIQUE (rule_id, group_seq, permission_id)
+    id          varchar(64) NOT NULL,
+    rule_id     varchar(64) NOT NULL,
+    subject_id  varchar(64) NOT NULL,
+    CONSTRAINT pk_cmx_exclusion_rule_item PRIMARY KEY (id),
+    CONSTRAINT uk_cmx_exclusion_rule_item UNIQUE (rule_id, subject_id)
 );
 
-CREATE INDEX idx_cmx_permission_rule_item_rule ON cmx_permission_rule_item (rule_id);
-CREATE INDEX idx_cmx_permission_rule_item_perm ON cmx_permission_rule_item (permission_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
 
-COMMENT ON TABLE cmx_permission_rule_item IS '规则权限项表';
-COMMENT ON COLUMN cmx_permission_rule_item.id IS '主键ID';
-COMMENT ON COLUMN cmx_permission_rule_item.rule_id IS '关联规则ID';
-COMMENT ON COLUMN cmx_permission_rule_item.group_seq IS '组序号：互斥规则下所有项两两互斥；依赖规则中 group_seq=1 为前置权限，group_seq=2 为依赖权限';
-COMMENT ON COLUMN cmx_permission_rule_item.permission_id IS '关联权限ID';
+COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
+COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';

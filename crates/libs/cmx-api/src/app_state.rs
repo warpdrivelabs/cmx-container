@@ -24,8 +24,8 @@ pub struct IamState {
     pub role_group_service: Arc<dyn RoleGroupService>,
     /// 权限服务
     pub permission_service: Arc<dyn PermissionService>,
-    /// 权限规则服务（阶段2新增）
-    pub rule_service: Option<Arc<dyn cmx_iam::rule::service::PermissionRuleService>>,
+    /// 互斥规则服务
+    pub rule_service: Option<Arc<dyn cmx_iam::rule::service::ExclusionRuleService>>,
     /// 权限校验器
     pub permission_checker: Arc<dyn PermissionChecker>,
     /// IAM 权限校验器实现引用（阶段3新增，用于缓存失效）

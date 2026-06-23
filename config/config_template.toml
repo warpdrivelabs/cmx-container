@@ -499,6 +499,25 @@ builtin_role_codes = "admin"
 # - "warn":  仅告警并输出建议执行的 DDL，不阻断启动
 # - "off":   不校验
 permission_consistency_mode = "warn"
+# 是否启用互斥规则校验（可选，默认 false）
+# 开启后，分配角色/权限时会校验互斥规则（功能权限互斥 + 角色互斥）
+# 需配合 cmx_exclusion_rule 表配置规则数据
+# enable_sod_check = false
+# 临时授权清理任务执行间隔（秒，可选，默认 3600）
+# 定时将过期的 cmx_user_role_assignment 记录标记为已撤销
+# assignment_cleanup_interval_secs = 3600
+# 审计日志批量阈值（可选，默认 100）
+# 临时授权批量过期时，超过此阈值则聚合为统计记录而非逐条审计
+# audit_batch_size = 100
+# 故障降级策略（可选，默认 "FailClose"）
+# DB/缓存故障时的权限检查降级行为
+# - "FailClose": 全部拒绝（更安全）
+# - "FailOpen":  仅放行 system:all 用户
+# failure_mode = "FailClose"
+# 熔断阈值：连续失败次数（可选，默认 5）
+# circuit_breaker_threshold = 5
+# 熔断恢复时间（秒，可选，默认 60）
+# circuit_breaker_reset_secs = 60
 
 # ============================================
 # IAM 路由权限映射（可选）

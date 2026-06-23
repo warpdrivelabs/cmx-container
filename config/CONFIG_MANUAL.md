@@ -1396,6 +1396,56 @@ IAM（Identity and Access Management）权限管理配置，控制用户、角�
   - `"off"`: 不校验
 - **示例**: `"warn"`
 
+#### `enable_sod_check`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否启用互斥规则校验（Separation of Duties）。开启后，在分配角色/权限时会校验互斥规则（功能权限互斥 + 角色互斥）。需配合 `cmx_exclusion_rule` 表配置规则数据。关闭时所有互斥校验跳过
+- **示例**: `true`
+
+#### `assignment_cleanup_interval_secs`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `3600`
+- **说明**: 临时授权清理任务执行间隔。定时将过期的 `cmx_user_role_assignment` 记录（`effective_until < NOW()`）标记为已撤销（`status = 0`）
+- **示例**: `3600`（1 小时）
+
+#### `audit_batch_size`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `100`
+- **说明**: 审计日志批量阈值。临时授权批量过期时，超过此阈值则聚合为统计记录（`{expired_count, sample_ids}`）而非逐条写审计日志，避免审计日志爆炸
+- **示例**: `100`
+
+#### `failure_mode`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"FailClose"`
+- **说明**: 故障降级策略。DB/缓存故障时的权限检查降级行为。可选值：
+  - `"FailClose"`: 全部拒绝（更安全，推荐生产环境使用）
+  - `"FailOpen"`: 仅放行 `system:all` 用户（DB 也故障时实际返回错误）
+- **示例**: `"FailClose"`
+
+#### `circuit_breaker_threshold`
+
+- **类型**: Integer
+- **必需**: 否
+- **默认值**: `5`
+- **说明**: 熔断阈值。权限检查连续失败达到此次数后触发熔断，按 `failure_mode` 策略降级
+- **示例**: `5`
+
+#### `circuit_breaker_reset_secs`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `60`
+- **说明**: 熔断恢复时间。熔断器打开后经过此时间自动尝试恢复（半开状态）
+- **示例**: `60`
+
 ### `[iam_permissions]`
 
 IAM 路由权限映射配置（可选）。配置 API 路由到权限码的映射，`mw_permission` 中间件据此进行权限校验。

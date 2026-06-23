@@ -28,7 +28,7 @@ pub use config::IamConfig;
 pub use error::IamError;
 pub use iam_checker::IamChecker;
 pub use role_group::RoleGroupServiceImpl;
-pub use rule::{PermissionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
+pub use rule::{ExclusionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
 pub use service_traits::{
     PermissionService, RoleGroupService, RoleService, TempAssignmentStatusFilter, UserService, UserRoleAssignment,
 };

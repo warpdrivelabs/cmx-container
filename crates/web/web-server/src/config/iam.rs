@@ -14,7 +14,7 @@ use cmx_iam::iam_checker::IamChecker;
 use cmx_iam::permission::PermissionServiceImpl;
 use cmx_iam::role::RoleServiceImpl;
 use cmx_iam::role_group::RoleGroupServiceImpl;
-use cmx_iam::rule::{PermissionRuleServiceImpl, RuleEnforcerImpl};
+use cmx_iam::rule::{ExclusionRuleServiceImpl, RuleEnforcerImpl};
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
 use cmx_traits::auth::UserAuthQuery;
@@ -48,8 +48,8 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
     );
     let rule_enforcer_dyn: Arc<dyn cmx_iam::rule::RuleEnforcer> = rule_enforcer.clone();
 
-    let rule_service: Arc<dyn cmx_iam::rule::service::PermissionRuleService> = Arc::new(
-        PermissionRuleServiceImpl::new(mm.clone(), iam_config.clone()).await,
+    let rule_service: Arc<dyn cmx_iam::rule::service::ExclusionRuleService> = Arc::new(
+        ExclusionRuleServiceImpl::new(mm.clone(), iam_config.clone()).await,
     );
 
     let permission_checker_impl = IamChecker::new(mm.clone(), iam_config.clone()).await;

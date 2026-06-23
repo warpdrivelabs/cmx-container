@@ -1,17 +1,17 @@
-//! 权限规则 BMC 定义
+//! 互斥规则 BMC 定义
 
 use cmx_database::crud::DbBmc;
 
-/// 权限规则表 BMC。
-pub struct PermissionRuleBmc;
-impl DbBmc for PermissionRuleBmc {
-    const TABLE: &'static str = "cmx_permission_rule";
+/// 互斥规则表 BMC
+pub struct ExclusionRuleBmc;
+impl DbBmc for ExclusionRuleBmc {
+    const TABLE: &'static str = "cmx_exclusion_rule";
     const PK_COLUMN: &'static str = "id";
 }
 
-/// 规则权限项表 BMC。
-pub struct PermissionRuleItemBmc;
-impl DbBmc for PermissionRuleItemBmc {
-    const TABLE: &'static str = "cmx_permission_rule_item";
+/// 互斥对象明细表 BMC
+pub struct ExclusionRuleItemBmc;
+impl DbBmc for ExclusionRuleItemBmc {
+    const TABLE: &'static str = "cmx_exclusion_rule_item";
     const PK_COLUMN: &'static str = "id";
 }
