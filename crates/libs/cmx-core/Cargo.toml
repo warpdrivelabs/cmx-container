@@ -33,3 +33,5 @@ base64 = { workspace = true }
 modql = { workspace = true }
 # OpenAPI 文档生成（可选）
 utoipa = { workspace = true, optional = true }
+# 编译期全局注册
+inventory = { workspace = true }

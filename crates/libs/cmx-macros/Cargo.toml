@@ -1,0 +1,15 @@
+[package]
+name = "cmx-macros"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# AST 解析 - 语法树
+syn = { workspace = true }
+# AST 解析 - 代码生成
+quote = { workspace = true }
+# AST 解析 - 底层支持
+proc-macro2 = { workspace = true }

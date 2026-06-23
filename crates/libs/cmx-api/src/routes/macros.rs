@@ -40,6 +40,43 @@ macro_rules! register_crud_routes {
 /// handler 函数签名使用 cmx-core 运行时参数类型（PageParams、UpdatePayload 等），
 /// utoipa 宏的 request_body 使用 cmx-api 文档类型（PageParamsDoc、UpdatePayloadDoc 等）。
 ///
+/// # 三种权限配置模式
+///
+/// ## 模式一：统一资源名（第 9 参数为权限资源名）
+///
+/// 所有 CRUD 操作使用同一资源名，自动拼接 `:create`/`:read`/`:update`/`:delete` 后缀。
+///
+/// ```ignore
+/// declare_crud_handlers!(
+///     user_crud, User, UserBmc, UserForCreate, UserForUpdate, UserFilter,
+///     "User", "/users",
+///     "user"  // 权限码: user:create, user:read, user:update, user:delete
+/// );
+/// ```
+///
+/// ## 模式二：无鉴权（仅 8 参数）
+///
+/// 不注入任何权限检查，保持向后兼容。
+///
+/// ```ignore
+/// declare_crud_handlers!(
+///     user_crud, User, UserBmc, UserForCreate, UserForUpdate, UserFilter,
+///     "User", "/users"
+/// );
+/// ```
+///
+/// ## 模式三：精细化配置（perms(...) 语法）
+///
+/// 为 create/read/update/delete 分别指定权限资源名。
+///
+/// ```ignore
+/// declare_crud_handlers!(
+///     user_crud, User, UserBmc, UserForCreate, UserForUpdate, UserFilter,
+///     "User", "/users",
+///     perms(create="user", read="user", update="user_admin", delete="user_admin")
+/// );
+/// ```
+///
 /// # 参数
 /// * `$module_name` - 生成的模块名
 /// * `$entity` - 实体类型
@@ -51,6 +88,63 @@ macro_rules! register_crud_routes {
 /// * `$prefix` - 路由前缀
 #[macro_export]
 macro_rules! declare_crud_handlers {
+    // 模式三：精细化权限配置 perms(create=..., read=..., update=..., delete=...)
+    (
+        $module_name:ident,
+        $entity:ty,
+        $bmc:ty,
+        $entity_create:ty,
+        $entity_update:ty,
+        $filter:ty,
+        $tag:expr,
+        $prefix:expr,
+        perms(create=$p_create:expr, read=$p_read:expr, update=$p_update:expr, delete=$p_delete:expr)
+    ) => {
+        $crate::__declare_crud_handlers_inner!(
+            $module_name,
+            $entity,
+            $bmc,
+            $entity_create,
+            $entity_update,
+            $filter,
+            $tag,
+            $prefix,
+            $p_create,
+            $p_read,
+            $p_update,
+            $p_delete
+        )
+    };
+
+    // 模式一：统一资源名（第 9 参数为权限资源名）
+    (
+        $module_name:ident,
+        $entity:ty,
+        $bmc:ty,
+        $entity_create:ty,
+        $entity_update:ty,
+        $filter:ty,
+        $tag:expr,
+        $prefix:expr,
+        $perm_resource:expr
+    ) => {
+        $crate::__declare_crud_handlers_inner!(
+            $module_name,
+            $entity,
+            $bmc,
+            $entity_create,
+            $entity_update,
+            $filter,
+            $tag,
+            $prefix,
+            $perm_resource,
+            $perm_resource,
+            $perm_resource,
+            $perm_resource
+        )
+    };
+
+    // 模式二：无鉴权（仅 8 参数，向后兼容）
     (
         $module_name:ident,
         $entity:ty,
@@ -60,6 +154,51 @@ macro_rules! declare_crud_handlers {
         $filter:ty,
         $tag:expr,
         $prefix:expr
+    ) => {
+        $crate::__declare_crud_handlers_inner!(
+            $module_name,
+            $entity,
+            $bmc,
+            $entity_create,
+            $entity_update,
+            $filter,
+            $tag,
+            $prefix,
+            "",
+            "",
+            "",
+            ""
+        );
+    };
+}
+
+/// 内部代理宏：生成 CRUD handlers 模块并注入权限检查
+///
+/// 此宏为 `declare_crud_handlers!` 的内部实现，不应直接调用。
+/// 通过 4 个权限资源参数控制各操作的鉴权行为：
+/// 空字符串表示不鉴权，非空字符串则调用 `svr_ctx.require_permission`。
+///
+/// # 权限检查注入规则
+/// * create/create_many → `{resource}:create`
+/// * get/list/page → `{resource}:read`
+/// * update/update_many → `{resource}:update`
+/// * delete → `{resource}:delete`
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __declare_crud_handlers_inner {
+    (
+        $module_name:ident,
+        $entity:ty,
+        $bmc:ty,
+        $entity_create:ty,
+        $entity_update:ty,
+        $filter:ty,
+        $tag:expr,
+        $prefix:expr,
+        $p_create:expr,
+        $p_read:expr,
+        $p_update:expr,
+        $p_delete:expr
     ) => {
         pub mod $module_name {
             use axum::extract::{Query, State};
@@ -93,6 +232,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(data): Json<$entity_create>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_create.is_empty() {
+                    svr_ctx.require_permission(concat!($p_create, ":create")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::create::<$bmc, $entity_create>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -120,6 +262,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(data): Json<Vec<$entity_create>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_create.is_empty() {
+                    svr_ctx.require_permission(concat!($p_create, ":create")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::create_many::<$bmc, $entity_create>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -149,6 +294,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Query(params): Query<GetParams>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_read.is_empty() {
+                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::get_by_id::<$bmc>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -177,6 +325,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(payload): Json<UpdatePayload<$entity_update>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_update.is_empty() {
+                    svr_ctx.require_permission(concat!($p_update, ":update")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::update::<$bmc, $entity_update>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -205,6 +356,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(data): Json<Vec<UpdatePayload<$entity_update>>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_update.is_empty() {
+                    svr_ctx.require_permission(concat!($p_update, ":update")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::update_many::<$bmc, $entity_update>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -232,6 +386,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(payload): Json<DeletePayload>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_delete.is_empty() {
+                    svr_ctx.require_permission(concat!($p_delete, ":delete")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::delete::<$bmc>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -259,6 +416,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(params): Json<ListParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_read.is_empty() {
+                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::list::<$bmc, $filter>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),
@@ -286,6 +446,9 @@ macro_rules! declare_crud_handlers {
                 headers: HeaderMap,
                 Json(params): Json<PageParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
+                if !$p_read.is_empty() {
+                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                }
                 $crate::rest::handler::page::<$bmc, $filter>(
                     State(cmx_state),
                     CmxSvrContext(svr_ctx),

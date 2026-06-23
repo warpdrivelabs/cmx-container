@@ -1385,6 +1385,17 @@ IAM（Identity and Access Management）权限管理配置，控制用户、角�
 - **说明**: 权限缓存 TTL（预留配置）。当前权限检查依赖 AuthContext 内存查询，未来若引入 IamChecker 本地缓存（moka），此配置控制缓存过期时间
 - **示例**: `300`（5 分钟）
 
+#### `permission_consistency_mode`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"warn"`
+- **说明**: 权限一致性校验模式。启动时比对代码声明的权限码（通过 `#[has_permission]` 等宏注册到 inventory）与 DB `cmx_permission` 表中的记录。如果代码声明的权限在 DB 中不存在，会导致 `IamChecker` 的 SQL JOIN 查不到该权限，宏注入的 `require_permission()` 将拒绝所有非超级用户。可选值：
+  - `"panic"`: 缺失时启动 panic，强制开发者手动创建 DB 记录
+  - `"warn"`: 仅告警并输出建议执行的 INSERT DDL，不阻断启动
+  - `"off"`: 不校验
+- **示例**: `"warn"`
+
 ### `[iam_permissions]`
 
 IAM 路由权限映射配置（可选）。配置 API 路由到权限码的映射，`mw_permission` 中间件据此进行权限校验。

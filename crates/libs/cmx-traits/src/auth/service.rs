@@ -10,6 +10,29 @@ use serde::{Deserialize, Serialize};
 use super::error::AuthError;
 use super::user_query::OAuth2ClientData;
 
+/// 当前登录用户完整信息（用于 /api/auth/me 接口）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    /// 用户 ID
+    pub user_id: String,
+    /// 用户名
+    pub username: String,
+    /// 昵称
+    pub nickname: Option<String>,
+    /// 邮箱
+    pub email: Option<String>,
+    /// 角色列表
+    pub roles: Vec<String>,
+    /// 权限列表
+    pub permissions: Vec<String>,
+    /// 会话 ID
+    pub session_id: Option<String>,
+    /// 设备类型
+    pub device_type: Option<String>,
+    /// 认证方式
+    pub auth_method: Option<String>,
+}
+
 /// 认证凭证（策略模式入口）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
@@ -184,6 +207,12 @@ pub trait AuthService: Send + Sync {
     /// 并构建 AuthContext，跳过 Token 签发和 Session 创建流程。
     /// API Key 认证是无状态的，不需要 Session 管理。
     async fn validate_api_key(&self, key: &str) -> Result<AuthContext, AuthError>;
+
+    /// 获取当前登录用户的完整信息（含 nickname/email/roles/permissions）
+    ///
+    /// 用于 `/api/auth/me` 接口，从 cmx_user 表查询用户基本信息，
+    /// 并附加角色、权限列表。
+    async fn get_user_info(&self, user_id: &str) -> Result<UserInfo, AuthError>;
 
     /// 列出已启用的第三方 OAuth2 Provider
     async fn list_oauth2_providers(

@@ -19,8 +19,8 @@ use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
 
 pub use handler::{
-    auth_change_password, auth_health, auth_heartbeat, auth_login, auth_logout, auth_refresh,
-    auth_revoke_all, auth_validate,
+    auth_change_password, auth_health, auth_heartbeat, auth_login, auth_logout, auth_me,
+    auth_refresh, auth_revoke_all, auth_validate,
 };
 pub use request::*;
 pub use response::*;
@@ -31,6 +31,7 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/login", post(auth_login))
         .route("/refresh", post(auth_refresh))
         .route("/logout", post(auth_logout))
+        .route("/me", get(auth_me))
         .route("/validate", post(auth_validate))
         .route("/revoke-all", post(auth_revoke_all))
         .route("/heartbeat", post(auth_heartbeat))

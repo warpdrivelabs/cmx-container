@@ -21,6 +21,7 @@ members = [
     "crates/libs/cmx-api-types",
     "crates/libs/cmx-biz",
     "crates/libs/cmx-iam",
+    "crates/libs/cmx-macros",
     "crates/libs/cmx-plugin-sdk",
 #    "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-plugin-demo",
@@ -86,6 +87,10 @@ cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.9", regis
 cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.9", registry = "nora" }
 # 内部依赖 - IAM 用户权限角色管理
 cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.9", registry = "nora" }
+# 内部依赖 - 过程宏
+cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.9", registry = "nora" }
+# 编译期全局注册
+inventory = "0.3"
 # 对象存储访问层
 opendal = { version = "0.55", features = ["services-s3", "services-fs"] }
 # 文件 MIME Type 魔数检测

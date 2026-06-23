@@ -126,6 +126,7 @@ use utoipa::OpenApi;
         crate::handlers::auth::handler::auth_login,
         crate::handlers::auth::handler::auth_refresh,
         crate::handlers::auth::handler::auth_logout,
+        crate::handlers::auth::handler::auth_me,
         crate::handlers::auth::handler::auth_validate,
         crate::handlers::auth::handler::auth_revoke_all,
         // OAuth2 handlers
@@ -288,6 +289,7 @@ use utoipa::OpenApi;
             crate::handlers::auth::request::ChangePasswordRequest,
             crate::handlers::auth::response::LoginResponse,
             crate::handlers::auth::response::ValidateResponse,
+            crate::handlers::auth::response::UserInfoResponse,
             crate::handlers::auth::response::OnlineCountResponse,
             // API Key 管理 schemas
             crate::handlers::auth::api_key_handler::CreateApiKeyRequest,

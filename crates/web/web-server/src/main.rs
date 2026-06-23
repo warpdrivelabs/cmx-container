@@ -141,6 +141,20 @@ async fn main() -> Result<()> {
     // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
     let iam_state = finalize_iam_state(&iam_state, auth_service.clone(), iam_config).await?;
 
+    // 权限一致性校验 + 权限列表日志(不写 DB,仅校验代码声明权限与 DB 是否一致)
+    {
+        let mm = cmx_database::get_default_db_manager();
+        let db_id = mm.get_default_db_id().await;
+        let mode = cmx_utils::ConfigManager::global()
+            .get_string("iam.permission_consistency_mode")
+            .unwrap_or_else(|_| "warn".to_string());
+        if let Err(e) = cmx_iam::permission::run_consistency_check(mm, &db_id, &mode).await {
+            return Err(Error::ServerSetup(format!("权限一致性校验失败: {e}")));
+        }
+        cmx_iam::permission::log_registered_permissions();
+        cmx_iam::permission::warn_handler_annotation_status();
+    }
+
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),

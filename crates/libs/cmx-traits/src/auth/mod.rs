@@ -20,6 +20,7 @@ pub use error::AuthError;
 pub use policy::AuthPolicy;
 pub use service::{
     AuthService, Credentials, TokenPair, DeviceInfo, OAuth2CallbackResult, OAuth2CallbackExchangeResult,
+    UserInfo,
 };
 pub use storage_query::AuthStorageQuery;
 pub use user_query::{

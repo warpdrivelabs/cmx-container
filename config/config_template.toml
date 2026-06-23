@@ -493,6 +493,12 @@ builtin_role_codes = "admin"
 # 预留配置，当前权限检查依赖 AuthContext 内存查询
 # 未来若引入 IamChecker 本地缓存（moka），此配置控制缓存过期时间
 # permission_cache_ttl_secs = 300
+# 权限一致性校验模式（可选，默认 "warn"）
+# 启动时比对代码声明的权限码（inventory）与 DB cmx_permission 表中的记录
+# - "panic": 代码声明的权限在 DB 中缺失时，启动 panic（强制开发者手动创建 DB 记录）
+# - "warn":  仅告警并输出建议执行的 DDL，不阻断启动
+# - "off":   不校验
+permission_consistency_mode = "warn"
 
 # ============================================
 # IAM 路由权限映射（可选）

@@ -1230,19 +1230,15 @@ cmx-auth 涉及 6 张表（schema 均为 `public`）。
   - `status` — 0-禁用 / 1-启用
   - `description` — 描述
 
-### 9.3 `cmx_auth_token_record`
+### 9.3 `cmx_auth_token_event`
 
-- **用途**：Token 签发 / 撤销审计记录
+- **用途**：Token 签发/撤销/刷新等关键审计事件（append-only 事件流）
 - **关键字段**：
-  - `jti` — JWT ID（唯一）
+  - `event_type` — 事件类型：`token_issued`/`token_revoked`/`token_refreshed`/`login_success`/`login_failed`/`password_changed`
   - `user_id` — 用户 ID
-  - `token_type` — `access` / `refresh`
-  - `session_id` — 关联会话 ID
-  - `device_type` / `device_id` — 设备信息
-  - `ip_address` — IP
-  - `issued_at` / `expires_at` — 签发 / 过期时间
-  - `revoked_at` / `revoke_reason` — 撤销时间 / 原因
-- **清理策略**：每天凌晨归档 30 天前的已过期 / 已撤销记录
+  - `jti` — JWT ID（关联 Token）
+  - `detail` — 事件详情（JSON）
+- **清理策略**：每天凌晨归档 30 天前的事件记录
 
 ### 9.4 `cmx_auth_api_key`
 
@@ -1280,7 +1276,7 @@ cmx-auth 涉及 6 张表（schema 均为 `public`）。
 
 ### 9.7 表关系图（文字版）
 
-- `cmx_user`（1）—（N）`cmx_auth_token_record`
+- `cmx_user`（1）—（N）`cmx_auth_token_event`
 - `cmx_user`（1）—（N）`cmx_auth_password_history`
 - `cmx_user`（1）—（N）`cmx_auth_oauth2_account`
 - `cmx_user`（1）—（N）`cmx_auth_api_key`（可选）
@@ -1362,7 +1358,7 @@ return value
 ### 10.4 缓存清理任务
 
 - **过期会话清理**：每 5 分钟扫描 `auth:online:users`，检查 `last_active_at`，过期则删除
-- **Token 记录归档**：每天凌晨归档 30 天前的 `cmx_auth_token_record`
+- **Token 记录归档**：每天凌晨归档 30 天前的 `cmx_auth_token_event`
 - **本地缓存失效**：通过 Pub/Sub `auth:cache:invalidate` 频道广播，秒级生效
 
 ### 10.5 Redis Cluster 部署建议
@@ -1610,7 +1606,7 @@ Span 字段：
 
 1. Access Token 黑名单：无需重建（短期有效，最长 30 分钟过期）
 2. Refresh Token 索引：用户需重新登录（无法重建）
-3. 在线用户集合：从 `cmx_auth_token_record` 表查最近活跃用户写回（可选）
+3. 在线用户集合：从 `cmx_auth_token_event` 表查最近活跃用户写回（可选）
 4. 会话详情：同 3
 
 **建议**：Redis 启用 AOF + 定期 RDB 备份，避免重启导致认证状态丢失。

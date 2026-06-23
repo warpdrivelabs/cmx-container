@@ -339,6 +339,16 @@ impl From<validator::ValidationErrors> for Error {
     }
 }
 
+impl From<cmx_core::PermissionDeniedError> for Error {
+    fn from(e: cmx_core::PermissionDeniedError) -> Self {
+        if e.is_unauthenticated() {
+            Self::Unauthorized(e.to_string())
+        } else {
+            Self::Forbidden(e.to_string())
+        }
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         debug!("{:<12} - Error {self:?}", "ERROR");

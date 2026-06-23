@@ -1282,59 +1282,6 @@ COMMENT ON COLUMN cmx_auth_client.update_name IS '更新人姓名';
 CREATE UNIQUE INDEX uk_cmx_auth_client_client_id ON cmx_auth_client (client_id);
 
 -- =============================================
--- 24. Token 签发记录表 (cmx_auth_token_record)
--- =============================================
-DROP TABLE IF EXISTS cmx_auth_token_record;
-CREATE TABLE cmx_auth_token_record
-(
-    id            VARCHAR(64)  NOT NULL,
-    jti           VARCHAR(100) NOT NULL,
-    user_id       VARCHAR(64)  NOT NULL,
-    token_type    VARCHAR(20)  NOT NULL,
-    session_id    VARCHAR(100),
-    device_type   VARCHAR(50),
-    device_id     VARCHAR(200),
-    ip_address    VARCHAR(50),
-    issued_at     TIMESTAMP    NOT NULL,
-    expires_at    TIMESTAMP    NOT NULL,
-    revoked_at    TIMESTAMP,
-    revoke_reason VARCHAR(200),
-    archived      INT4      DEFAULT 0,
-    create_time   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    create_by     VARCHAR(100),
-    create_name   VARCHAR(100),
-    update_by     VARCHAR(100),
-    update_name   VARCHAR(100),
-    PRIMARY KEY (id)
-);
-
-COMMENT ON TABLE cmx_auth_token_record IS 'Token 签发记录表（审计追踪）';
-COMMENT ON COLUMN cmx_auth_token_record.id IS '主键ID';
-COMMENT ON COLUMN cmx_auth_token_record.jti IS 'JWT ID';
-COMMENT ON COLUMN cmx_auth_token_record.user_id IS '用户ID';
-COMMENT ON COLUMN cmx_auth_token_record.token_type IS 'Token 类型：access/refresh';
-COMMENT ON COLUMN cmx_auth_token_record.session_id IS '关联会话ID';
-COMMENT ON COLUMN cmx_auth_token_record.device_type IS '设备类型';
-COMMENT ON COLUMN cmx_auth_token_record.device_id IS '设备ID';
-COMMENT ON COLUMN cmx_auth_token_record.ip_address IS 'IP地址';
-COMMENT ON COLUMN cmx_auth_token_record.issued_at IS '签发时间';
-COMMENT ON COLUMN cmx_auth_token_record.expires_at IS '过期时间';
-COMMENT ON COLUMN cmx_auth_token_record.revoked_at IS '撤销时间';
-COMMENT ON COLUMN cmx_auth_token_record.revoke_reason IS '撤销原因';
-COMMENT ON COLUMN cmx_auth_token_record.archived IS '归档标志：0-未归档，1-已归档';
-COMMENT ON COLUMN cmx_auth_token_record.create_time IS '创建时间';
-COMMENT ON COLUMN cmx_auth_token_record.update_time IS '更新时间';
-COMMENT ON COLUMN cmx_auth_token_record.create_by IS '创建人ID';
-COMMENT ON COLUMN cmx_auth_token_record.create_name IS '创建人姓名';
-COMMENT ON COLUMN cmx_auth_token_record.update_by IS '更新人ID';
-COMMENT ON COLUMN cmx_auth_token_record.update_name IS '更新人姓名';
-
-CREATE UNIQUE INDEX uk_cmx_auth_token_record_jti ON cmx_auth_token_record (jti);
-CREATE INDEX idx_cmx_auth_token_record_user ON cmx_auth_token_record (user_id);
-CREATE INDEX idx_cmx_auth_token_record_expires ON cmx_auth_token_record (expires_at);
-
--- =============================================
 -- 25. API Key 表 (cmx_auth_api_key)
 -- =============================================
 DROP TABLE IF EXISTS cmx_auth_api_key;
@@ -1457,7 +1404,46 @@ COMMENT ON COLUMN cmx_auth_jwt_key.update_name IS '更新人姓名';
 CREATE UNIQUE INDEX uk_cmx_auth_jwt_key_kid ON cmx_auth_jwt_key (kid);
 
 -- =============================================
--- 28. 第三方 OAuth2 账号关联表 (cmx_auth_oauth2_account)
+-- 28. Token 事件审计表 (cmx_auth_token_event)
+-- =============================================
+DROP TABLE IF EXISTS cmx_auth_token_event;
+CREATE TABLE cmx_auth_token_event
+(
+    id           VARCHAR(64)  NOT NULL,
+    event_type   VARCHAR(50)  NOT NULL,
+    user_id      VARCHAR(64)  NOT NULL,
+    jti          VARCHAR(100),
+    detail       VARCHAR(500),
+    archived     INT4      DEFAULT 0,
+    create_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by    VARCHAR(100),
+    create_name  VARCHAR(100),
+    update_by    VARCHAR(100),
+    update_name  VARCHAR(100),
+    CONSTRAINT pk_cmx_auth_token_event PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_auth_token_event IS 'Token 事件审计表（记录签发/撤销/刷新等关键事件）';
+COMMENT ON COLUMN cmx_auth_token_event.id IS '主键ID';
+COMMENT ON COLUMN cmx_auth_token_event.event_type IS '事件类型：token_issued/token_revoked/token_refreshed/login_success/login_failed/password_changed';
+COMMENT ON COLUMN cmx_auth_token_event.user_id IS '用户ID';
+COMMENT ON COLUMN cmx_auth_token_event.jti IS 'JWT ID（关联 Token）';
+COMMENT ON COLUMN cmx_auth_token_event.detail IS '事件详情';
+COMMENT ON COLUMN cmx_auth_token_event.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_auth_token_event.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_auth_token_event.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_auth_token_event.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_auth_token_event.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_auth_token_event.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_auth_token_event.update_name IS '更新人姓名';
+
+CREATE INDEX idx_cmx_auth_token_event_user ON cmx_auth_token_event (user_id);
+CREATE INDEX idx_cmx_auth_token_event_type ON cmx_auth_token_event (event_type);
+CREATE INDEX idx_cmx_auth_token_event_created ON cmx_auth_token_event (create_time);
+
+-- =============================================
+-- 29. 第三方 OAuth2 账号关联表 (cmx_auth_oauth2_account)
 -- =============================================
 DROP TABLE IF EXISTS cmx_auth_oauth2_account;
 CREATE TABLE cmx_auth_oauth2_account

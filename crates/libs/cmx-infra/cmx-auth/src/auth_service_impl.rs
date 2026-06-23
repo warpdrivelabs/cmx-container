@@ -12,7 +12,7 @@ use cmx_buffer::CacheManager;
 use cmx_core::AuthContext;
 use cmx_traits::auth::{
     AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
-    OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
+    OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery, UserInfo,
 };
 use tracing::{debug, info, warn};
 use cmx_utils::snowflake_id_str;
@@ -1403,6 +1403,46 @@ impl AuthService for AuthServiceImpl {
         Ok(auth_ctx)
     }
 
+    /// 获取当前登录用户的完整信息（含 nickname/email/roles/permissions）
+    ///
+    /// 从 cmx_user 表查询用户基本信息，并附加角色、权限列表。
+    /// 用于 `/api/auth/me` 接口。
+    async fn get_user_info(&self, user_id: &str) -> std::result::Result<UserInfo, AuthError> {
+        let user = self
+            .user_query
+            .get_user_by_id(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?
+            .ok_or(AuthError::InvalidToken("用户不存在".to_string()))?;
+
+        if user.status == 0 {
+            return Err(AuthError::UserDisabled);
+        }
+
+        let roles = self
+            .user_query
+            .get_user_role_codes(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let permissions = self
+            .user_query
+            .get_user_permissions(user_id)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        Ok(UserInfo {
+            user_id: user.user_id,
+            username: user.username,
+            nickname: user.nickname,
+            email: user.email,
+            roles,
+            permissions,
+            session_id: None,
+            device_type: None,
+            auth_method: None,
+        })
+    }
+
     async fn list_oauth2_providers(
         &self,
     ) -> std::result::Result<Vec<cmx_traits::auth::ProviderInfo>, AuthError> {
@@ -1708,7 +1748,7 @@ impl AuthStorageQuery for AuthServiceImpl {
 
         let id = snowflake_id_str();
         let sql = format!(
-            "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, created_at) \
+            "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, create_time) \
              VALUES ('{}', '{}', '{}', '{}', '{}', NOW())",
             id.replace('\'', "''"),
             event_type.replace('\'', "''"),

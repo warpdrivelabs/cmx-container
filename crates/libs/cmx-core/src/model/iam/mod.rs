@@ -7,8 +7,15 @@ pub mod user;
 pub mod role;
 pub mod permission;
 pub mod permission_tree_node;
+pub mod error;
+pub mod registry;
 
 pub use user::User;
 pub use role::Role;
 pub use permission::Permission;
 pub use permission_tree_node::PermissionTreeNode;
+pub use error::{PermissionDeniedError, RoleRequirement};
+pub use registry::{
+    PermissionInfo, PermissionRegistry, RegisteredPermission, RegisteredRouteHandler,
+    all_registered_handlers, all_registered_permissions,
+};

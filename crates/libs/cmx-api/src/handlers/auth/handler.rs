@@ -218,6 +218,60 @@ pub async fn auth_validate(
     Ok(Json(ApiResp::ok(response)))
 }
 
+/// 获取当前登录用户信息
+///
+/// 从请求头 `Authorization: Bearer <token>` 中提取 Token，
+/// 查询 cmx_user 表获取用户完整信息（含昵称、邮箱），并附加角色、权限列表。
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    responses(
+        (status = 200, description = "成功", body = UserInfoResponse),
+        (status = 401, description = "未认证")
+    ),
+    tag = "Auth"
+)]
+pub async fn auth_me(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+) -> Result<Json<ApiResp<UserInfoResponse>>> {
+    debug!("{:<12} - handler::auth_me", "HANDLER");
+
+    let auth_ctx = svr_ctx
+        .auth_context
+        .as_ref()
+        .ok_or_else(|| Error::Unauthorized("未认证".to_string()))?;
+
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
+
+    let user_info = auth_service
+        .get_user_info(&auth_ctx.user_id)
+        .await
+        .map_err(|e| match e {
+            cmx_traits::auth::AuthError::UserDisabled => {
+                Error::Forbidden("用户已被禁用".to_string())
+            }
+            cmx_traits::auth::AuthError::InvalidToken(msg) => Error::Unauthorized(msg),
+            other => Error::InternalError(other.to_string()),
+        })?;
+
+    let response = UserInfoResponse {
+        user_id: user_info.user_id,
+        username: user_info.username,
+        nickname: user_info.nickname,
+        email: user_info.email,
+        roles: user_info.roles,
+        permissions: user_info.permissions,
+        session_id: auth_ctx.session_id.clone(),
+        device_type: auth_ctx.device_type.clone(),
+        auth_method: auth_ctx.auth_method.clone(),
+    };
+
+    Ok(Json(ApiResp::ok(response)))
+}
+
 /// 撤销用户所有 Token（管理员强制下线）
 ///
 /// P1-6.4: 需要调用者具有 `system:auth:kick` 权限
