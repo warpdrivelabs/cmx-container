@@ -586,6 +586,8 @@ impl RoleService for RoleServiceImpl {
             id: p.id.clone(),
             code: p.code.clone(),
             name: p.name.clone(),
+            resource_type: p.resource_type.clone(),
+            description: p.description.clone(),
         };
 
         let only_in_role_1: Vec<_> = perms1.iter().filter(|p| !set2.contains(&p.id)).map(to_summary).collect();
@@ -597,11 +599,13 @@ impl RoleService for RoleServiceImpl {
                 id: role1.id,
                 code: role1.code,
                 name: role1.name,
+                description: role1.description,
             },
             role_2: crate::service_traits::RoleSummary {
                 id: role2.id,
                 code: role2.code,
                 name: role2.name,
+                description: role2.description,
             },
             only_in_role_1,
             only_in_role_2,

@@ -1029,7 +1029,7 @@ whitelist = ["/api/biz/ping", "/api/biz/version"]
 2. **用户**：点击 "Google 登录" 按钮
 3. **前端**：跳转浏览器到 `GET /api/auth/oauth2/provider/{provider}/authorize`（后端 302 重定向到 Provider 授权页）
 4. **Provider**：用户在 Google 登录并同意授权
-5. **Provider**：302 回调到 `https://your-domain.com/api/auth/oauth2/provider/{provider}/callback?code=XXX&state=YYY`
+5. **Provider**：302 回调到 `https://your-domain.com/api/auth/oauth2/{provider}/callback?code=XXX&state=YYY`
 6. **后端**：
    - 原子消费 `state`（防重放，防 CSRF）
    - 用 `code` 向 Provider 换 `access_token`（含 ID Token）
@@ -1196,7 +1196,7 @@ enabled = true
 |------|------|---------|------|
 | GET | `/api/auth/oauth2/providers` | 白名单 | 列出已启用的 Provider 列表 |
 | GET | `/api/auth/oauth2/provider/{provider}/authorize` | 白名单 | 重定向到 Provider 授权页 |
-| GET | `/api/auth/oauth2/provider/{provider}/callback` | 白名单 | Provider 回调，签发一次性授权码 |
+| GET | `/api/auth/oauth2/{provider}/callback` | 白名单 | Provider 回调，签发一次性授权码 |
 | POST | `/api/auth/oauth2/provider/exchange` | 白名单 | 用一次性授权码换 Token |
 | POST | `/api/auth/oauth2/provider/{provider}/link` | 是 | 手动绑定第三方账号 |
 | DELETE | `/api/auth/oauth2/provider/{provider}/unlink` | 是 | 解除第三方账号绑定 |

@@ -1181,7 +1181,7 @@ OAuth2 授权码模式配置。OAuth2 功能为可选模块，不配置时使用
 - **类型**: String
 - **必需**: 是
 - **默认值**: 无
-- **说明**: 回调地址。服务端配置，前端不可覆盖，防止 Open Redirect。格式为 `{your-domain}/api/auth/oauth2/provider/{provider}/callback`
+- **说明**: 回调地址。服务端配置，前端不可覆盖，防止 Open Redirect。格式为 `{your-domain}/api/auth/oauth2/{provider}/callback`
 - **示例**: `"https://your-domain.com/api/auth/oauth2/provider/google/callback"`
 
 #### `authorize_url`

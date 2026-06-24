@@ -285,6 +285,42 @@ fn load_auth_config() -> AuthConfig {
                     })
                     .unwrap_or_default();
 
+                // token_field_mapping 从配置读取内联表
+                let token_field_mapping = config.inner()
+                    .get_table(&format!("auth.oauth2.providers[{}].token_field_mapping", i))
+                    .map(|table| {
+                        table.into_iter()
+                            .filter_map(|(k, v)| {
+                                v.clone().into_string().map(|s| (k, s)).ok()
+                            })
+                            .collect::<std::collections::HashMap<String, String>>()
+                    })
+                    .unwrap_or_default();
+
+                // userinfo_extra_params 从配置读取内联表
+                let userinfo_extra_params = config.inner()
+                    .get_table(&format!("auth.oauth2.providers[{}].userinfo_extra_params", i))
+                    .map(|table| {
+                        table.into_iter()
+                            .filter_map(|(k, v)| {
+                                v.clone().into_string().map(|s| (k, s)).ok()
+                            })
+                            .collect::<std::collections::HashMap<String, String>>()
+                    })
+                    .unwrap_or_default();
+
+                // authorize_extra_params 从配置读取内联表
+                let authorize_extra_params = config.inner()
+                    .get_table(&format!("auth.oauth2.providers[{}].authorize_extra_params", i))
+                    .map(|table| {
+                        table.into_iter()
+                            .filter_map(|(k, v)| {
+                                v.clone().into_string().map(|s| (k, s)).ok()
+                            })
+                            .collect::<std::collections::HashMap<String, String>>()
+                    })
+                    .unwrap_or_default();
+
                 providers.push(cmx_auth::OAuth2ProviderConfig {
                     name,
                     display_name,
@@ -301,6 +337,14 @@ fn load_auth_config() -> AuthConfig {
                     icon_url,
                     brand_color,
                     enabled,
+                    token_response_path: config.get_string(&format!("auth.oauth2.providers[{}].token_response_path", i)).unwrap_or_default(),
+                    token_field_mapping,
+                    userinfo_method: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_method", i)).unwrap_or_else(|_| "GET".to_string()),
+                    userinfo_token_param: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_token_param", i)).unwrap_or_else(|_| "bearer".to_string()),
+                    userinfo_extra_params,
+                    userinfo_response_path: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_response_path", i)).unwrap_or_default(),
+                    authorize_extra_params,
+                    skip_ssl_verification: config.get_bool(&format!("auth.oauth2.providers[{}].skip_ssl_verification", i)).unwrap_or(false),
                 });
             }
         }

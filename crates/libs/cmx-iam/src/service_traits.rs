@@ -101,6 +101,9 @@ pub struct RoleSummary {
     pub code: String,
     /// 角色名称。
     pub name: String,
+    /// 角色描述。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// 权限摘要。
@@ -115,6 +118,12 @@ pub struct PermissionSummary {
     pub code: String,
     /// 权限名称。
     pub name: String,
+    /// 资源类型（如 menu / button / api）。
+    #[serde(default)]
+    pub resource_type: Option<String>,
+    /// 权限描述。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// 角色权限差异响应。

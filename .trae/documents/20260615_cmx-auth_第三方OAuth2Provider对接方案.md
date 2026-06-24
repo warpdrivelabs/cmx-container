@@ -770,7 +770,7 @@ username_strategy = "provider_prefix"
 | ------ | ------------------------------------------------ | --- | ----------------------------------------------------- |
 | GET    | `/api/auth/oauth2/providers`                     | 白名单 | 列出已启用 Provider（前端展示登录按钮）                              |
 | GET    | `/api/auth/oauth2/provider/{provider}/authorize` | 白名单 | 生成 state → 302 重定向到 Provider 授权页                      |
-| GET    | `/api/auth/oauth2/provider/{provider}/callback`  | 白名单 | Provider 回调 → 交换 Token → 关联/注册 → 签发一次性授权码 → 302 重定向前端 |
+| GET    | `/api/auth/oauth2/{provider}/callback`  | 白名单 | Provider 回调 → 交换 Token → 关联/注册 → 签发一次性授权码 → 302 重定向前端 |
 | POST   | `/api/auth/oauth2/provider/exchange`             | 白名单 | 用一次性授权码换 TokenPair + `is_new` + `provider` + `state`  |
 | POST   | `/api/auth/oauth2/provider/{provider}/link`      | 需登录 | 手动绑定第三方账号到当前用户                                        |
 | DELETE | `/api/auth/oauth2/provider/{provider}/unlink`    | 需登录 | 解绑第三方账号（含安全检查）                                        |

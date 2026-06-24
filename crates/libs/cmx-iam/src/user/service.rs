@@ -1269,11 +1269,11 @@ impl UserService for UserServiceImpl {
 
         // 2. 查询有效角色（永久 + 临时）
         let roles_sql = r#"
-            SELECT r.id, r.code, r.name FROM cmx_role r
+            SELECT r.id, r.code, r.name, r.description FROM cmx_role r
             INNER JOIN cmx_user_role ur ON ur.role_id = r.id
             WHERE ur.user_id = $1 AND ur.archived = 0 AND r.archived = 0 AND r.status = 1
             UNION
-            SELECT r.id, r.code, r.name FROM cmx_role r
+            SELECT r.id, r.code, r.name, r.description FROM cmx_role r
             INNER JOIN cmx_user_role_assignment ura ON r.id = ura.role_id
             WHERE ura.user_id = $1 AND ura.status = 1 AND ura.archived = 0
               AND NOW() BETWEEN ura.effective_from AND ura.effective_until
@@ -1293,20 +1293,21 @@ impl UserService for UserServiceImpl {
                     id: row.get_by_name_as(schema, "id")?,
                     code: row.get_by_name_as(schema, "code")?,
                     name: row.get_by_name_as(schema, "name")?,
+                    description: row.get_by_name_as(schema, "description"),
                 })
             })
             .collect();
 
         // 3. 查询有效权限
         let perms_sql = r#"
-            SELECT DISTINCT p.id, p.code, p.name FROM cmx_permission p
+            SELECT DISTINCT p.id, p.code, p.name, p.resource_type, p.description FROM cmx_permission p
             INNER JOIN cmx_role_permission rp ON rp.permission_id = p.id
             INNER JOIN cmx_user_role ur ON ur.role_id = rp.role_id
             INNER JOIN cmx_role r ON r.id = ur.role_id
             WHERE ur.user_id = $1 AND ur.archived = 0 AND rp.archived = 0
               AND p.archived = 0 AND p.status = 1 AND r.archived = 0 AND r.status = 1
             UNION
-            SELECT DISTINCT p.id, p.code, p.name FROM cmx_permission p
+            SELECT DISTINCT p.id, p.code, p.name, p.resource_type, p.description FROM cmx_permission p
             INNER JOIN cmx_role_permission rp ON rp.permission_id = p.id
             INNER JOIN cmx_user_role_assignment ura ON ura.role_id = rp.role_id
             INNER JOIN cmx_role r ON r.id = ura.role_id
@@ -1329,6 +1330,8 @@ impl UserService for UserServiceImpl {
                     id: row.get_by_name_as(schema, "id")?,
                     code: row.get_by_name_as(schema, "code")?,
                     name: row.get_by_name_as(schema, "name")?,
+                    resource_type: row.get_by_name_as(schema, "resource_type"),
+                    description: row.get_by_name_as(schema, "description"),
                 })
             })
             .collect();

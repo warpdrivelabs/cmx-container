@@ -198,7 +198,7 @@ async def test_user(api_client, wait_server):
 |---|---|---|
 | `test_providers_list` | `GET /api/auth/oauth2/providers` | code=0，数组 |
 | `test_provider_authorize_invalid` | `GET /api/auth/oauth2/provider/{invalid}/authorize` | 无效 provider → 业务码非 0 |
-| `test_provider_callback_missing_code` | `GET /api/auth/oauth2/provider/{provider}/callback` | 缺 code → 业务码非 0 |
+| `test_provider_callback_missing_code` | `GET /api/auth/oauth2/{provider}/callback` | 缺 code → 业务码非 0 |
 | `test_provider_exchange_invalid_code` | `POST /api/auth/oauth2/provider/exchange` | 无效 code → 业务码非 0 |
 | `test_provider_link_requires_auth` | `POST /api/auth/oauth2/provider/{p}/link` | 无 Bearer Token → 401 |
 | `test_provider_unlink_requires_auth` | `DELETE /api/auth/oauth2/provider/{p}/unlink` | 无 Bearer Token → 401 |

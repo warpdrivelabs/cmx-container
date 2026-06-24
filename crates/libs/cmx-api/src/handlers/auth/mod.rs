@@ -44,7 +44,7 @@ fn inner_routes() -> Router<CmxAppState> {
         // 第三方 OAuth2 Provider 路由
         .route("/oauth2/providers", get(oauth2_provider_handler::oauth2_providers))
         .route("/oauth2/provider/{provider}/authorize", get(oauth2_provider_handler::oauth2_provider_authorize))
-        .route("/oauth2/provider/{provider}/callback", get(oauth2_provider_handler::oauth2_provider_callback))
+        .route("/oauth2/{provider}/callback", get(oauth2_provider_handler::oauth2_provider_callback))
         .route("/oauth2/provider/exchange", post(oauth2_provider_handler::oauth2_provider_exchange))
         .route("/oauth2/provider/{provider}/link", post(oauth2_provider_handler::oauth2_provider_link))
         .route("/oauth2/provider/{provider}/unlink", delete(oauth2_provider_handler::oauth2_provider_unlink))
