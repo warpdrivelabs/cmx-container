@@ -175,6 +175,54 @@ pub struct OAuth2ProviderConfig {
     /// 是否启用。
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+
+    // === Token 响应解析配置 ===
+
+    /// Token 响应嵌套路径（点分 JSON 路径，如 `data` 或 `result.data`）。
+    ///
+    /// 部分厂商将 Token 响应包装在 `{"code":0,"data":{...}}` 中，
+    /// 配置此字段后先导航到指定路径再提取 Token 字段。
+    /// 空字符串表示无包装（直接从根对象提取）。
+    #[serde(default)]
+    pub token_response_path: String,
+
+    /// Token 响应字段映射（标准字段名 → 厂商实际字段名）。
+    ///
+    /// 如 `access_token` → `accessToken`、`expires_in` → `expire`。
+    #[serde(default)]
+    pub token_field_mapping: std::collections::HashMap<String, String>,
+
+    // === 用户信息端点配置 ===
+
+    /// 用户信息端点请求方法：`GET`（默认）或 `POST`。
+    #[serde(default = "default_userinfo_method")]
+    pub userinfo_method: String,
+
+    /// 用户信息端点 token 传递方式：`bearer`（默认）/ `query` / `form`。
+    #[serde(default = "default_userinfo_token_param")]
+    pub userinfo_token_param: String,
+
+    /// 用户信息端点额外请求参数（始终作为 query 参数附加）。
+    #[serde(default)]
+    pub userinfo_extra_params: std::collections::HashMap<String, String>,
+
+    /// 用户信息响应嵌套路径（点分 JSON 路径，如 `data`）。
+    ///
+    /// 空字符串表示无包装。
+    #[serde(default)]
+    pub userinfo_response_path: String,
+
+    // === 授权 URL 配置 ===
+
+    /// 授权 URL 额外参数（如 Azure AD `resource` 参数）。
+    #[serde(default)]
+    pub authorize_extra_params: std::collections::HashMap<String, String>,
+
+    // === 网络配置 ===
+
+    /// 是否跳过 SSL 证书验证（仅内网自签名证书场景使用，生产环境慎用）。
+    #[serde(default)]
+    pub skip_ssl_verification: bool,
 }
 
 fn default_provider_type() -> String {
@@ -189,12 +237,26 @@ fn default_auth_method() -> String {
     "client_secret_post".to_string()
 }
 
+fn default_userinfo_method() -> String {
+    "GET".to_string()
+}
+
+fn default_userinfo_token_param() -> String {
+    "bearer".to_string()
+}
+
 /// 第三方账号关联配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountLinkConfig {
     /// 是否根据邮箱自动关联已有本地用户。
     #[serde(default = "default_auto_link_by_email")]
     pub auto_link_by_email: bool,
+    /// 是否根据用户名自动关联已有本地用户（企业场景常用）。
+    ///
+    /// 仅应对可信 Provider 启用：与邮箱关联不同，username 无"已验证"概念，
+    /// 恶意 Provider 可通过返回目标用户名关联到任意本地账号。
+    #[serde(default = "default_auto_link_by_username")]
+    pub auto_link_by_username: bool,
     /// 是否自动注册新用户（当无匹配的本地用户时）。
     #[serde(default = "default_auto_register")]
     pub auto_register: bool,
@@ -209,7 +271,8 @@ pub struct AccountLinkConfig {
 impl Default for AccountLinkConfig {
     fn default() -> Self {
         Self {
-            auto_link_by_email: true,
+            auto_link_by_email: false,
+            auto_link_by_username: true,
             auto_register: false,
             default_role: None,
             username_strategy: "provider_prefix".to_string(),
@@ -218,11 +281,15 @@ impl Default for AccountLinkConfig {
 }
 
 fn default_auto_link_by_email() -> bool {
+    false
+}
+
+fn default_auto_link_by_username() -> bool {
     true
 }
 
 fn default_auto_register() -> bool {
-    false
+    true
 }
 
 fn default_username_strategy() -> String {

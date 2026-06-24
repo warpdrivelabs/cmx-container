@@ -413,10 +413,13 @@ auth.whitelist = []
 
 # 第三方账号关联策略
 [auth.oauth2.account_link]
-# 是否根据邮箱自动关联已有本地用户（默认 true，要求 Provider 邮箱已验证）
-# auto_link_by_email = true
-# 是否自动注册新用户（默认 false，需手动绑定或管理员创建）
-# auto_register = false
+# 是否根据邮箱自动关联已有本地用户（默认 false，要求 Provider 邮箱已验证）
+# auto_link_by_email = false
+# 是否根据用户名自动关联已有本地用户（默认 false，企业场景常用）
+# 仅对可信 Provider 启用：username 无"已验证"概念，恶意 Provider 可关联任意本地账号
+# auto_link_by_username = true
+# 是否自动注册新用户（默认 true，需手动绑定或管理员创建）
+# auto_register = true
 # 自动注册时的默认角色（role_code，如 "user"）
 # default_role = "user"
 # 用户名生成策略：provider_prefix | email_prefix | display_name
@@ -463,6 +466,26 @@ auth.whitelist = []
 # enabled = false
 # 字段映射使用内联表（标准字段名 = JSON 字段名，支持 number 类型自动转 string）
 # field_mapping = { provider_user_id = "id", email = "email", username = "username", display_name = "name", avatar_url = "avatar_url" }
+#
+# === 通用 Provider 高级配置（企业 CAS / 自定义 OAuth2 服务） ===
+# Token 响应嵌套路径（点分路径，如 "data"，空字符串表示无包装）
+# token_response_path = ""
+# Token 响应字段映射（标准字段名 = 厂商字段名）
+# token_field_mapping = { access_token = "accessToken", expires_in = "expire" }
+# 用户信息端点请求方法：GET（默认）或 POST
+# userinfo_method = "GET"
+# 用户信息端点 token 传递方式：bearer（默认）/ query / form
+# userinfo_token_param = "bearer"
+# 用户信息端点额外参数
+# [auth.oauth2.providers.userinfo_extra_params]
+# client_id = "xxx"
+# 用户信息响应嵌套路径（点分路径，如 "data"）
+# userinfo_response_path = ""
+# 授权 URL 额外参数（如 Azure AD resource 参数）
+# [auth.oauth2.providers.authorize_extra_params]
+# resource = "xxx"
+# 是否跳过 SSL 证书验证（仅内网自签名证书场景，默认 false）
+# skip_ssl_verification = false
 
 # ============================================
 # 超管初始化配置（可选，未配置时使用默认账号 admin/cmxadmin）

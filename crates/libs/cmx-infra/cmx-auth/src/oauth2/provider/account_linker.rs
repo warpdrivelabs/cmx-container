@@ -278,8 +278,9 @@ impl AccountLinker {
     /// 按以下顺序处理：
     /// 1. 已关联直接返回并更新 `last_login_at`；
     /// 2. 邮箱匹配自动关联（要求邮箱已验证）；
-    /// 3. 配置允许时自动注册新用户；
-    /// 4. 不自动注册时返回 `BindingRequired`。
+    /// 3. 用户名匹配自动关联（企业场景，仅对可信 Provider 启用）；
+    /// 4. 配置允许时自动注册新用户；
+    /// 5. 不自动注册时返回 `BindingRequired`。
     ///
     /// # Arguments
     ///
@@ -334,7 +335,23 @@ impl AccountLinker {
                 }
             }
 
-        // 3. 自动注册策略
+        // 3. 用户名自动关联（企业场景，仅对可信 Provider 启用）
+        // 注意：与邮箱关联不同，username 无"已验证"概念，直接匹配
+        if self.config.auto_link_by_username
+            && let Some(username) = &user_info.username {
+                let user = self.user_query.get_user_by_username(username).await
+                    .map_err(|e| AuthError::Internal(e.to_string()))?;
+                if let Some(user) = user {
+                    tracing::info!(provider = %provider, username = %username, user_id = %user.user_id, "username 匹配，自动关联");
+                    self.create_account(provider, provider_user_id, &user.user_id, user_info).await?;
+                    return Ok(LinkResult::Linked {
+                        user_id: user.user_id,
+                        is_new: false,
+                    });
+                }
+            }
+
+        // 4. 自动注册策略
         if self.config.auto_register {
             let username = self.generate_username(provider, user_info).await?;
             let user_id = self.user_query.create_user_from_oauth2(
@@ -357,7 +374,7 @@ impl AccountLinker {
             });
         }
 
-        // 4. 不自动注册，返回需要绑定
+        // 5. 不自动注册，返回需要绑定
         tracing::info!(provider = %provider, provider_user_id = %provider_user_id, "需手动绑定");
         Ok(LinkResult::BindingRequired {
             provider: provider.to_string(),

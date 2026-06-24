@@ -1087,8 +1087,17 @@ OAuth2 授权码模式配置。OAuth2 功能为可选模块，不配置时使用
 
 - **类型**: Boolean
 - **必需**: 否
-- **默认值**: `true`
+- **默认值**: `false`
 - **说明**: 是否根据邮箱自动关联已有本地用户。启用后，当 Provider 返回的邮箱（需已验证）与本地用户邮箱匹配时，自动创建关联记录。邮箱未验证时跳过关联，继续尝试后续策略
+- **示例**: `true`
+
+#### `auto_link_by_username`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `true`
+- **说明**: 是否根据用户名自动关联已有本地用户（企业场景常用）。启用后，当 Provider 返回的 username 与本地用户名匹配时，自动创建关联记录。关联优先级：已关联 > 邮箱关联（要求已验证）> username 关联 > 自动注册 > BindingRequired
+- **安全提示**: 仅应对可信 Provider 启用。与 `auto_link_by_email`（要求邮箱已验证）不同，username 无"已验证"概念，恶意 Provider 可通过返回目标用户名关联到任意本地账号
 - **示例**: `true`
 
 #### `auto_register`
@@ -1226,6 +1235,87 @@ OAuth2 授权码模式配置。OAuth2 功能为可选模块，不配置时使用
 - **说明**: 用户信息字段映射，仅 generic 类型使用。将 Provider 返回的 JSON 字段名映射到标准字段名，支持 number 类型自动转 string
 - **标准字段**: `provider_user_id`, `email`, `email_verified`, `username`, `display_name`, `avatar_url`
 - **示例**: `{ provider_user_id = "id", email = "email", username = "username", display_name = "name", avatar_url = "avatar_url" }`
+
+#### `token_response_path`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`（无包装）
+- **说明**: Token 响应嵌套路径（点分 JSON 路径）。部分厂商（企业 CAS）将 Token 响应包装在 `{"code":0,"data":{...}}` 中，配置此字段后先导航到指定路径再提取 Token 字段。空字符串表示直接从根对象提取
+- **示例**: `"data"` 或 `"result.data"`
+
+#### `token_field_mapping`
+
+- **类型**: 内联表（TOML inline table）
+- **必需**: 否
+- **默认值**: 空
+- **说明**: Token 响应字段映射，仅 generic 类型使用。将标准字段名映射到厂商实际字段名
+- **标准字段**: `access_token`, `token_type`, `expires_in`, `refresh_token`, `scope`, `id_token`
+- **示例**: `{ access_token = "accessToken", expires_in = "expire" }`
+
+#### `userinfo_method`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"GET"`
+- **说明**: 用户信息端点请求方法。部分厂商要求使用 POST 请求获取用户信息
+- **可选值**: `"GET"`、`"POST"`
+- **示例**: `"GET"`
+
+#### `userinfo_token_param`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `"bearer"`
+- **说明**: 用户信息端点 access_token 传递方式
+- **可选值**:
+  - `"bearer"` — 通过 `Authorization: Bearer {token}` 请求头传递（默认）
+  - `"query"` — 通过 query string `access_token={token}` 传递
+  - `"form"` — 通过 form body `access_token={token}` 传递（仅 POST 有效）
+- **边界处理**: `userinfo_method = "GET"` + `userinfo_token_param = "form"` 不合理（GET 无 body），自动降级为 `query` 并记录 warn 日志
+- **示例**: `"bearer"`
+
+#### `userinfo_extra_params`
+
+- **类型**: 表（TOML table）
+- **必需**: 否
+- **默认值**: 空
+- **说明**: 用户信息端点额外请求参数。始终作为 query 参数附加（GET/POST 均同，与 Java 实现一致）
+- **示例**:
+
+  ```toml
+  [auth.oauth2.providers.userinfo_extra_params]
+  client_id = "xxx"
+  ```
+
+#### `userinfo_response_path`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`（无包装）
+- **说明**: 用户信息响应嵌套路径（点分 JSON 路径）。部分厂商将用户信息包装在 `{"code":0,"data":{...}}` 中。空字符串表示直接从根对象提取
+- **示例**: `"data"`
+
+#### `authorize_extra_params`
+
+- **类型**: 表（TOML table）
+- **必需**: 否
+- **默认值**: 空
+- **说明**: 授权 URL 额外参数。部分厂商授权端点需要额外参数（如 Azure AD 的 `resource` 参数）
+- **示例**:
+
+  ```toml
+  [auth.oauth2.providers.authorize_extra_params]
+  resource = "https://graph.microsoft.com"
+  ```
+
+#### `skip_ssl_verification`
+
+- **类型**: Boolean
+- **必需**: 否
+- **默认值**: `false`
+- **说明**: 是否跳过 SSL 证书验证。仅内网自签名证书场景使用，生产环境慎用。启用后使用 `danger_accept_invalid_certs` 构建客户端，构建失败时回退到默认 Client
+- **示例**: `false`
 
 #### `icon_url`
 
