@@ -63,4 +63,8 @@ pub enum ConfigCenterError {
     /// 客户端初始化失败。
     #[error("初始化失败: {0}")]
     InitFailed(String),
+
+    /// 配置热更新失败（全局配置替换失败）。
+    #[error("配置热更新失败: {0}")]
+    ReloadFailed(String),
 }

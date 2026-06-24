@@ -10,7 +10,6 @@
 
 use async_trait::async_trait;
 use nacos_sdk::api::config::{ConfigChangeListener, ConfigResponse, ConfigServiceBuilder};
-use nacos_sdk::api::props::ClientProps;
 use std::sync::Arc;
 use tracing::info;
 
@@ -63,15 +62,13 @@ impl NacosConfigCenter {
     /// * `Ok(NacosConfigCenter)` - 初始化成功。
     /// * `Err(ConfigCenterError::InitFailed)` - nacos-sdk 客户端构建失败。
     pub async fn new(config: &NacosConfigCenterConfig) -> Result<Self, ConfigCenterError> {
-        let mut client_props = ClientProps::new()
-            .server_addr(&config.server_addr)
-            .namespace(&config.namespace)
-            .app_name(&config.app_name);
-
-        // 同时配置用户名和密码时才启用认证。
-        if let (Some(username), Some(password)) = (&config.username, &config.password) {
-            client_props = client_props.auth_username(username).auth_password(password);
-        }
+        let client_props = crate::utils::build_nacos_client_props(
+            &config.server_addr,
+            &config.namespace,
+            &config.app_name,
+            &config.username,
+            &config.password,
+        );
 
         // nacos-sdk 0.8 中 `ConfigServiceBuilder::build` 为 async，
         // 必须先 `.await` 取得 `Result`，再进行错误转换。
@@ -114,43 +111,7 @@ impl NacosConfigCenter {
         let content = self.get_config(data_id, group).await?;
         let toml_value: toml::Value = toml::from_str(&content)
             .map_err(|e| ConfigCenterError::ParseFailed(format!("TOML 解析失败: {}", e)))?;
-        Self::toml_to_config_value(toml_value)
-    }
-
-    /// 递归将 `toml::Value` 转换为 `config::Value`。
-    ///
-    /// `Table` 类型递归处理；其他类型通过 [`Self::toml_primitive_to_value`] 转换。
-    fn toml_to_config_value(toml_val: toml::Value) -> Result<config::Value, ConfigCenterError> {
-        use std::collections::HashMap as StdMap;
-        match toml_val {
-            toml::Value::Table(table) => {
-                let mut map = StdMap::new();
-                for (k, v) in table {
-                    map.insert(k, Self::toml_to_config_value(v)?);
-                }
-                Ok(config::Value::new(None, map))
-            }
-            other => Ok(Self::toml_primitive_to_value(other)),
-        }
-    }
-
-    /// 将 TOML 原始类型转换为 `config::Value`。
-    ///
-    /// `Table` 类型在此函数中不可达，由 [`Self::toml_to_config_value`] 单独处理。
-    fn toml_primitive_to_value(toml_val: toml::Value) -> config::Value {
-        match toml_val {
-            toml::Value::String(s) => config::Value::new(None, s),
-            toml::Value::Integer(i) => config::Value::new(None, i),
-            toml::Value::Float(f) => config::Value::new(None, f),
-            toml::Value::Boolean(b) => config::Value::new(None, b),
-            toml::Value::Array(arr) => {
-                let vec: Vec<config::Value> =
-                    arr.into_iter().map(Self::toml_primitive_to_value).collect();
-                config::Value::new(None, vec)
-            }
-            toml::Value::Datetime(dt) => config::Value::new(None, dt.to_string()),
-            toml::Value::Table(_) => unreachable!(),
-        }
+        Ok(crate::utils::toml_to_config_value(toml_value))
     }
 }
 

@@ -14,7 +14,6 @@ use nacos_sdk::api::naming::{
     NamingChangeEvent, NamingEventListener, NamingServiceBuilder,
     ServiceInstance as NacosServiceInstance,
 };
-use nacos_sdk::api::props::ClientProps;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use tracing::info;
@@ -86,15 +85,13 @@ impl NacosRegistry {
         config: &NacosNamingConfig,
         cache: Arc<ServiceInstanceCache>,
     ) -> Result<Self, RegistryError> {
-        let mut client_props = ClientProps::new()
-            .server_addr(&config.server_addr)
-            .namespace(&config.namespace)
-            .app_name(&config.app_name);
-
-        // 同时配置用户名和密码时才启用认证。
-        if let (Some(username), Some(password)) = (&config.username, &config.password) {
-            client_props = client_props.auth_username(username).auth_password(password);
-        }
+        let client_props = crate::utils::build_nacos_client_props(
+            &config.server_addr,
+            &config.namespace,
+            &config.app_name,
+            &config.username,
+            &config.password,
+        );
 
         let naming = NamingServiceBuilder::new(client_props)
             .build()
@@ -139,7 +136,13 @@ fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> Service
 
     ServiceInstance {
         ip: nacos_instance.ip.clone(),
-        port: nacos_instance.port as u16,
+        port: u16::try_from(nacos_instance.port).unwrap_or_else(|_| {
+            tracing::warn!(
+                "Nacos 实例端口号超出 u16 范围: {}，已截断为 0",
+                nacos_instance.port
+            );
+            0
+        }),
         service_name,
         group_name,
         cluster_name: nacos_instance.cluster_name.clone(),
@@ -197,7 +200,7 @@ impl ServiceRegistry for NacosRegistry {
 
         if group_name.is_none() {
             //nacos 默认组名为 DEFAULT_GROUP
-         group_name = Some("DEFAULT_GROUP");
+            group_name = Some(crate::config::DEFAULT_GROUP);
         }
 
         let instances = self
@@ -231,24 +234,34 @@ impl ServiceRegistry for NacosRegistry {
         self.cache.update(service_name, instances);
 
         // 注册 Nacos 监听器（每个 service_name 只注册一次）
-        if !self
-            .registered_listeners
-            .read()
-            .unwrap()
-            .contains(service_name)
-        {
+        // 使用写锁原子检查+占位，避免并发 TOCTOU 导致重复订阅
+        let already_registered = {
+            let mut set = self.registered_listeners.write().unwrap();
+            if set.contains(service_name) {
+                true
+            } else {
+                set.insert(service_name.to_string());
+                false
+            }
+        };
+
+        if !already_registered {
             let listener = Arc::new(NacosInstanceListener {
                 service_name: service_name.to_string(),
                 cache: self.cache.clone(),
             });
-            self.naming
+            if let Err(e) = self
+                .naming
                 .subscribe(service_name.to_string(), None, Vec::new(), listener)
                 .await
-                .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
-            self.registered_listeners
-                .write()
-                .unwrap()
-                .insert(service_name.to_string());
+            {
+                // 订阅失败，回滚占位
+                self.registered_listeners
+                    .write()
+                    .unwrap()
+                    .remove(service_name);
+                return Err(RegistryError::QueryFailed(e.to_string()));
+            }
         }
 
         Ok(())
@@ -256,5 +269,15 @@ impl ServiceRegistry for NacosRegistry {
 
     fn get_cached_instances(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
         self.cache.get(service_name)
+    }
+
+    async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
+        // 拉取第一页，每页 1000 条，覆盖大部分场景
+        let (services, _total) = self
+            .naming
+            .get_service_list(1, 1000, None)
+            .await
+            .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
+        Ok(services)
     }
 }

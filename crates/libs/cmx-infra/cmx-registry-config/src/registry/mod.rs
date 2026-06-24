@@ -22,11 +22,11 @@ mod nacos;
 pub mod service_list_syncer;
 pub mod trait_rs;
 
-pub use instance_cache::{InstanceChangeCallback, ServiceInstanceCache};
+pub use instance_cache::ServiceInstanceCache;
 pub use mock::MockRegistry;
 pub use nacos::NacosRegistry;
 pub use service_list_syncer::ServiceListSyncer;
-pub use trait_rs::{ServiceInstance, ServiceRegistry};
+pub use trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 
 use std::sync::Arc;
 

@@ -114,7 +114,7 @@ impl ConfigReloader {
             }
             Err(e) => {
                 warn!("配置热更新失败: {}，保留当前配置", e);
-                Err(ConfigCenterError::ParseFailed(format!(
+                Err(ConfigCenterError::ReloadFailed(format!(
                     "全局配置替换失败: {}",
                     e
                 )))

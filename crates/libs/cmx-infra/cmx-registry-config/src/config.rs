@@ -167,6 +167,21 @@ pub struct ConfigListener {
 }
 
 // ============================================================
+// 默认值常量
+// ============================================================
+
+/// Nacos 服务器地址默认值。
+pub const DEFAULT_NACOS_ADDR: &str = "127.0.0.1:8848";
+/// 应用名称默认值。
+pub const DEFAULT_APP_NAME: &str = "cmx-container";
+/// 服务名称默认值。
+pub const DEFAULT_SERVICE_NAME: &str = "cmx-server";
+/// Nacos Group 默认值。
+pub const DEFAULT_GROUP: &str = "DEFAULT_GROUP";
+/// Nacos Cluster 默认值。
+pub const DEFAULT_CLUSTER: &str = "DEFAULT";
+
+// ============================================================
 // 默认值函数
 // ============================================================
 
@@ -180,29 +195,29 @@ fn default_center_type() -> String {
     "mock".to_string()
 }
 
-/// 返回 Nacos 服务器地址的默认值 `"127.0.0.1:8848"`。
+/// 返回 Nacos 服务器地址的默认值。
 fn default_server_addr() -> String {
-    "127.0.0.1:8848".to_string()
+    DEFAULT_NACOS_ADDR.to_string()
 }
 
-/// 返回应用名称的默认值 `"cmx-container"`。
+/// 返回应用名称的默认值。
 fn default_app_name() -> String {
-    "cmx-container".to_string()
+    DEFAULT_APP_NAME.to_string()
 }
 
-/// 返回服务名称的默认值 `"cmx-server"`。
+/// 返回服务名称的默认值。
 fn default_service_name() -> String {
-    "cmx-server".to_string()
+    DEFAULT_SERVICE_NAME.to_string()
 }
 
-/// 返回 Nacos Group 的默认值 `"DEFAULT_GROUP"`。
+/// 返回 Nacos Group 的默认值。
 fn default_group() -> String {
-    "DEFAULT_GROUP".to_string()
+    DEFAULT_GROUP.to_string()
 }
 
-/// 返回 Nacos Cluster 的默认值 `"DEFAULT"`。
+/// 返回 Nacos Cluster 的默认值。
 fn default_cluster() -> String {
-    "DEFAULT".to_string()
+    DEFAULT_CLUSTER.to_string()
 }
 
 /// 返回实例权重的默认值 `1.0`。
@@ -384,12 +399,13 @@ impl NacosNamingConfig {
     ///
     /// 返回从环境变量解析得到的 `NacosNamingConfig`。
     pub fn from_env() -> Self {
+        let (server_addr, namespace, app_name, username, password) = nacos_common_from_env();
         Self {
-            server_addr: env_string("NACOS_SERVER_ADDR").unwrap_or_else(default_server_addr),
-            namespace: env_string("NACOS_NAMESPACE").unwrap_or_default(),
-            app_name: env_string("NACOS_APP_NAME").unwrap_or_else(default_app_name),
-            username: env_string("NACOS_USERNAME"),
-            password: env_string("NACOS_PASSWORD"),
+            server_addr,
+            namespace,
+            app_name,
+            username,
+            password,
         }
     }
 }
@@ -463,12 +479,13 @@ impl NacosConfigCenterConfig {
     ///
     /// 返回从环境变量解析得到的 `NacosConfigCenterConfig`。
     pub fn from_env() -> Self {
+        let (server_addr, namespace, app_name, username, password) = nacos_common_from_env();
         Self {
-            server_addr: env_string("NACOS_SERVER_ADDR").unwrap_or_else(default_server_addr),
-            namespace: env_string("NACOS_NAMESPACE").unwrap_or_default(),
-            app_name: env_string("NACOS_APP_NAME").unwrap_or_else(default_app_name),
-            username: env_string("NACOS_USERNAME"),
-            password: env_string("NACOS_PASSWORD"),
+            server_addr,
+            namespace,
+            app_name,
+            username,
+            password,
         }
     }
 }
@@ -476,6 +493,17 @@ impl NacosConfigCenterConfig {
 // ============================================================
 // 环境变量辅助函数
 // ============================================================
+
+/// 读取 Nacos 公共连接配置（Naming 和 ConfigCenter 共用）。
+fn nacos_common_from_env() -> (String, String, String, Option<String>, Option<String>) {
+    (
+        env_string("NACOS_SERVER_ADDR").unwrap_or_else(default_server_addr),
+        env_string("NACOS_NAMESPACE").unwrap_or_default(),
+        env_string("NACOS_APP_NAME").unwrap_or_else(default_app_name),
+        env_string("NACOS_USERNAME"),
+        env_string("NACOS_PASSWORD"),
+    )
+}
 
 /// 读取环境变量字符串值，若未设置或读取失败返回 `None`。
 ///

@@ -55,7 +55,31 @@ impl ServiceListSyncer {
     /// 启动定时同步循环。
     ///
     /// 该方法会阻塞当前 task，通常在 `tokio::spawn` 中调用。
-    pub async fn run(&self) {
+    /// 当 `shutdown` 收到 `true` 时优雅退出。
+    pub async fn run(&self, shutdown: tokio::sync::watch::Receiver<bool>) {
+        let mut ticker = interval(Duration::from_secs(self.interval_secs));
+        let mut shutdown = shutdown;
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    if let Err(e) = self.sync_once().await {
+                        warn!(error = %e, "服务列表同步失败");
+                    }
+                }
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        info!("ServiceListSyncer 正在停止");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// 启动定时同步循环（无停止信号，兼容旧调用方）。
+    ///
+    /// 该方法会阻塞当前 task，通常在 `tokio::spawn` 中调用。
+    pub async fn run_forever(&self) {
         let mut ticker = interval(Duration::from_secs(self.interval_secs));
         loop {
             ticker.tick().await;

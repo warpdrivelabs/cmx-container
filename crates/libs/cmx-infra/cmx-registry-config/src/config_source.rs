@@ -68,35 +68,11 @@ impl RemoteConfigSource {
             toml::Value::Table(table) => {
                 let mut map = HashMap::new();
                 for (k, v) in table {
-                    map.insert(k, Self::toml_to_config_value(v));
+                    map.insert(k, crate::utils::toml_to_config_value(v));
                 }
                 map
             }
             _ => HashMap::new(),
-        }
-    }
-
-    /// 递归将 `toml::Value` 转换为 `config::Value`。
-    ///
-    /// 支持所有 TOML 原始类型、数组、嵌套 Table 和 DateTime（转为字符串）。
-    fn toml_to_config_value(toml_val: toml::Value) -> Value {
-        match toml_val {
-            toml::Value::String(s) => Value::new(None, s),
-            toml::Value::Integer(i) => Value::new(None, i),
-            toml::Value::Float(f) => Value::new(None, f),
-            toml::Value::Boolean(b) => Value::new(None, b),
-            toml::Value::Table(table) => {
-                let mut map = HashMap::new();
-                for (k, v) in table {
-                    map.insert(k, Self::toml_to_config_value(v));
-                }
-                Value::new(None, map)
-            }
-            toml::Value::Array(arr) => {
-                let vec: Vec<Value> = arr.into_iter().map(Self::toml_to_config_value).collect();
-                Value::new(None, vec)
-            }
-            toml::Value::Datetime(dt) => Value::new(None, dt.to_string()),
         }
     }
 }

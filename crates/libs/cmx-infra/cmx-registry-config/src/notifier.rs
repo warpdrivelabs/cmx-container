@@ -15,20 +15,7 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use tracing::{debug, info, warn};
 
-/// 配置变更回调函数类型。
-///
-/// 接收配置中心推送的原始 TOML 字符串内容，主要用于：
-/// - 适配 `nacos-sdk` 的 `ConfigChangeListener` 接口
-/// - 兼容已有业务代码
-///
-/// # Examples
-///
-/// ```ignore
-/// let callback: ConfigChangeCallback = Arc::new(|content: &str| {
-///     info!("收到配置变更: {} 字节", content.len());
-/// });
-/// ```
-pub type ConfigChangeCallback = Arc<dyn Fn(&str) + Send + Sync>;
+use crate::config_center::trait_rs::ConfigChangeCallback;
 
 /// 配置变更事件。
 ///
@@ -180,10 +167,17 @@ impl ChangeNotifier {
     ///
     /// * `content` - 新的配置内容（TOML 字符串）。
     pub fn notify(&self, content: &str) {
-        let handlers = self.handlers.read().unwrap();
-        info!("通知 {} 个配置变更处理器", handlers.len());
+        // 先 clone 出回调列表，释放锁后再调用，避免回调内部操作 handlers 导致死锁
+        let handlers_snapshot: Vec<(String, ConfigChangeCallback)> = {
+            let handlers = self.handlers.read().unwrap();
+            info!("通知 {} 个配置变更处理器", handlers.len());
+            handlers
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        };
 
-        for (key, callback) in handlers.iter() {
+        for (key, callback) in &handlers_snapshot {
             info!("调用配置变更处理器: {}", key);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(content))) {
                 Ok(_) => {}
@@ -203,17 +197,22 @@ impl ChangeNotifier {
     ///
     /// * `event` - 配置变更事件。
     pub fn notify_listeners(&self, event: &ConfigChangeEvent) {
-        let listeners = self.listeners.read().unwrap();
-        if listeners.is_empty() {
-            return;
-        }
+        // 先 clone 出监听器列表，释放锁后再调用，避免回调内部操作 listeners 导致死锁
+        let listeners_snapshot: Vec<Arc<dyn ConfigChangeListener>> = {
+            let listeners = self.listeners.read().unwrap();
+            if listeners.is_empty() {
+                return;
+            }
+            listeners.iter().cloned().collect()
+        };
 
-        for listener in listeners.iter() {
+        for listener in &listeners_snapshot {
             let interested = listener.interested_keys();
             let should_notify = interested.is_empty()
-                || event.changed_keys.iter().any(|k| {
-                    interested.iter().any(|prefix| k.starts_with(prefix.as_str()))
-                });
+                || event
+                    .changed_keys
+                    .iter()
+                    .any(|k| interested.iter().any(|prefix| k.starts_with(prefix.as_str())));
 
             if should_notify {
                 debug!("调用配置变更监听器: {}", listener.name());
@@ -335,6 +334,36 @@ impl GlobalChangeNotifier {
             n.notify_listeners(event);
         } else {
             warn!("全局配置变更通知器未初始化，无法通知配置变更事件");
+        }
+    }
+
+    /// 移除指定 key 的原始字符串回调处理器。
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 要移除的处理器标识。
+    pub fn unregister(key: &str) {
+        let guard = get_notifier();
+        let notifier = guard.read().unwrap();
+        if let Some(ref n) = *notifier {
+            n.unregister(key);
+        } else {
+            warn!("全局配置变更通知器未初始化，无法移除处理器: {}", key);
+        }
+    }
+
+    /// 移除指定名称的结构化配置变更监听器。
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - 要移除的监听器名称。
+    pub fn remove_listener(name: &str) {
+        let guard = get_notifier();
+        let notifier = guard.read().unwrap();
+        if let Some(ref n) = *notifier {
+            n.remove_listener(name);
+        } else {
+            warn!("全局配置变更通知器未初始化，无法移除监听器: {}", name);
         }
     }
 }

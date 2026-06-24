@@ -5,14 +5,13 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::RwLock,
 };
 
-use super::trait_rs::ServiceInstance;
-use crate::error::RegistryError;
+use tracing::{debug, info, warn};
 
-/// 服务实例变更回调。
-pub type InstanceChangeCallback = Arc<dyn Fn(&str, &[ServiceInstance]) + Send + Sync>;
+use super::trait_rs::{InstanceChangeCallback, ServiceInstance};
+use crate::error::RegistryError;
 
 /// 通用服务实例缓存（注册中心无关）。
 ///
@@ -35,8 +34,17 @@ impl ServiceInstanceCache {
     /// 纯内存读取 O(1)。
     ///
     /// 返回指定服务的缓存实例列表，未缓存时返回 `None`。
+    /// 锁 poisoned 时返回 `None` 并打印警告。
     pub fn get(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
-        self.cached.read().unwrap().get(service_name).cloned()
+        self.cached
+            .read()
+            .unwrap_or_else(|e| {
+                warn!("cached 锁 poisoned: {}", e);
+                // poison 后返回空 HashMap 的读锁
+                e.into_inner()
+            })
+            .get(service_name)
+            .cloned()
     }
 
     /// 懒加载：缓存命中直接返回，未命中时通过 `fetch_fn` 获取并缓存。
@@ -59,23 +67,42 @@ impl ServiceInstanceCache {
 
     /// 更新缓存并通知所有订阅者。
     pub fn update(&self, service_name: &str, instances: Vec<ServiceInstance>) {
-        self.cached
-            .write()
-            .unwrap()
-            .insert(service_name.to_string(), instances.clone());
+        debug!(
+            service_name = %service_name,
+            count = instances.len(),
+            "缓存更新"
+        );
 
-        if let Some(subscribers) = self.subscribers.read().unwrap().get(service_name) {
-            for cb in subscribers {
-                cb(service_name, &instances);
-            }
+        {
+            let mut cached = self.cached.write().unwrap_or_else(|e| {
+                warn!("cached 锁 poisoned: {}", e);
+                e.into_inner()
+            });
+            cached.insert(service_name.to_string(), instances.clone());
+        }
+
+        // 先 clone 出订阅者列表，释放锁后再调用回调，避免回调内部操作 subscribers 导致死锁
+        let subscribers_snapshot: Vec<InstanceChangeCallback> = {
+            let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+                warn!("subscribers 锁 poisoned: {}", e);
+                e.into_inner()
+            });
+            subscribers.get(service_name).cloned().unwrap_or_default()
+        };
+
+        for cb in &subscribers_snapshot {
+            cb(service_name, &instances);
         }
     }
 
     /// 注册变更回调。
     pub fn subscribe(&self, service_name: &str, callback: InstanceChangeCallback) {
-        self.subscribers
-            .write()
-            .unwrap()
+        info!(service_name = %service_name, "注册实例变更订阅");
+        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
+            warn!("subscribers 锁 poisoned: {}", e);
+            e.into_inner()
+        });
+        subscribers
             .entry(service_name.to_string())
             .or_default()
             .push(callback);

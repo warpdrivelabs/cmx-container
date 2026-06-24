@@ -64,10 +64,14 @@ impl ServiceRegistry for MockRegistry {
         Ok(())
     }
 
-    /// 注销服务实例：移除 `ip` 和 `port` 同时匹配的实例，并更新缓存。
+    /// 注销服务实例：移除 `service_name`、`ip` 和 `port` 同时匹配的实例，并更新缓存。
     async fn deregister(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
         let mut registered = self.registered.write().unwrap();
-        registered.retain(|i| !(i.ip == instance.ip && i.port == instance.port));
+        registered.retain(|i| {
+            !(i.service_name == instance.service_name
+                && i.ip == instance.ip
+                && i.port == instance.port)
+        });
         info!(
             "[MockRegistry] 注销服务: {}:{} ({})",
             instance.ip, instance.port, instance.service_name

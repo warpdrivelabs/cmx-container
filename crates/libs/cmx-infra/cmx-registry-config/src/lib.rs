@@ -63,6 +63,10 @@ pub mod global_registry;
 pub mod notifier;
 pub mod reloader;
 pub mod registry;
+pub mod utils;
+
+#[cfg(test)]
+mod tests;
 
 pub use config::{
     ConfigCenterFullConfig, ConfigListener, NacosConfigCenterConfig, NacosNamingConfig,

@@ -65,14 +65,34 @@ use crate::error::ConfigCenterError;
 pub async fn create_config_center(
     config: &ConfigCenterFullConfig,
 ) -> Result<Arc<dyn ConfigCenter>, ConfigCenterError> {
-    if !config.enabled {
+    let center: Arc<dyn ConfigCenter> = if !config.enabled {
         tracing::info!("配置中心未启用，使用 MockConfigCenter");
-        return Ok(Arc::new(MockConfigCenter::new()));
+        Arc::new(MockConfigCenter::new())
+    } else {
+        match config.center_type.as_str() {
+            "nacos" => Arc::new(NacosConfigCenter::new(&config.nacos).await?),
+            "mock" => Arc::new(MockConfigCenter::new()),
+            other => return Err(ConfigCenterError::UnsupportedType(other.to_string())),
+        }
+    };
+
+    // 自动注册配置监听器（将远程配置变更转发到 GlobalChangeNotifier）
+    for listener in &config.listeners {
+        tracing::info!(
+            "自动注册配置监听: data_id={}, group={}",
+            listener.data_id,
+            listener.group
+        );
+        center
+            .listen(
+                &listener.data_id,
+                &listener.group,
+                std::sync::Arc::new(|content: &str| {
+                    crate::notifier::GlobalChangeNotifier::notify(content);
+                }),
+            )
+            .await?;
     }
 
-    match config.center_type.as_str() {
-        "nacos" => Ok(Arc::new(NacosConfigCenter::new(&config.nacos).await?)),
-        "mock" => Ok(Arc::new(MockConfigCenter::new())),
-        other => Err(ConfigCenterError::UnsupportedType(other.to_string())),
-    }
+    Ok(center)
 }

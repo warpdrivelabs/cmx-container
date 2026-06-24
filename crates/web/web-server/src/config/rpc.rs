@@ -116,7 +116,7 @@ pub async fn init_rpc(
         }
         tokio::spawn(async move {
             info!("启动服务列表定时同步，间隔: {}s", sync_interval);
-            syncer.run().await;
+            syncer.run_forever().await;
         });
     }
 
