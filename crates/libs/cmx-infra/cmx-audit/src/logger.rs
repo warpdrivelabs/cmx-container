@@ -2,8 +2,10 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
+use cmx_database::DatabaseManager;
 use crate::{AuditRecord, Result};
 use crate::store::{AuditStore, AuditFilter};
+use crate::store::database::DatabaseAuditStore;
 
 /// 审计日志记录器 trait
 ///
@@ -25,6 +27,19 @@ pub struct DefaultAuditLogger {
 impl DefaultAuditLogger {
     pub fn new(store: Arc<dyn AuditStore>) -> Self {
         Self { store }
+    }
+
+    /// 从数据库管理器快速构造 DatabaseAuditStore 并包装为 AuditLogger。
+    /// 等价于 `DefaultAuditLogger::new(Arc::new(DatabaseAuditStore::new(mm, db_id, app_id)))`。
+    ///
+    /// `app_id` 通常来自 `ConfigManager::global().get_string("application.id")`，
+    /// 缺省时回退 `"default"`（与表列 DEFAULT 保持一致）。
+    pub fn with_db(
+        mm: Arc<DatabaseManager>,
+        db_id: impl Into<String>,
+        app_id: impl Into<String>,
+    ) -> Self {
+        Self::new(Arc::new(DatabaseAuditStore::new(mm, db_id, app_id)))
     }
 }
 

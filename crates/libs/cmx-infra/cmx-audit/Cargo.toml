@@ -7,6 +7,8 @@ authors.workspace = true
 [dependencies]
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
+# 内部依赖 - 数据库（提供 DatabaseManager / 事务 / sqlx 桥接）
+cmx-database = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化
@@ -23,3 +25,7 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 # 异步运行时
 tokio = { workspace = true }
+# SQL 查询构建器
+sea-query = { workspace = true }
+# sea-query 与 sqlx 的参数绑定
+sea-query-sqlx = { workspace = true }
