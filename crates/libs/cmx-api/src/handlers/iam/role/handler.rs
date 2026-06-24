@@ -120,7 +120,7 @@ pub async fn update_role(
     path = "/api/iam/roles/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功"),
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>),
         (status = 400, description = "内置角色不可删除")
     ),
     tag = "IAM-Role"
@@ -156,7 +156,7 @@ pub async fn delete_role(
     path = "/api/iam/roles/page",
     request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Role>>)
     ),
     tag = "IAM-Role"
 )]
@@ -192,7 +192,7 @@ pub async fn page_roles(
     path = "/api/iam/roles/list",
     request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Role>>)
     ),
     tag = "IAM-Role"
 )]
@@ -226,7 +226,7 @@ pub async fn list_roles(
     path = "/api/iam/roles/assign-permissions",
     request_body = AssignPermissionsRequest,
     responses(
-        (status = 200, description = "分配成功")
+        (status = 200, description = "分配成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Role"
 )]
@@ -260,7 +260,7 @@ pub async fn assign_permissions(
         ("id" = String, Query, description = "角色ID")
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Permission>>)
     ),
     tag = "IAM-Role"
 )]

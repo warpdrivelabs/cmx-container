@@ -121,7 +121,7 @@ pub async fn update_permission(
     path = "/api/iam/permissions/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功")
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Permission"
 )]
@@ -156,7 +156,7 @@ pub async fn delete_permission(
     path = "/api/iam/permissions/page",
     request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Permission>>)
     ),
     tag = "IAM-Permission"
 )]
@@ -192,7 +192,7 @@ pub async fn page_permissions(
     path = "/api/iam/permissions/list",
     request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Permission>>)
     ),
     tag = "IAM-Permission"
 )]

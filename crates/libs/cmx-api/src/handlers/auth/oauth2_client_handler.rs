@@ -117,7 +117,7 @@ pub struct OAuth2ClientQuery {
     path = "/api/auth/oauth2-clients/create",
     request_body = CreateOAuth2ClientRequest,
     responses(
-        (status = 200, description = "创建成功")
+        (status = 200, description = "创建成功", body = ApiResp<OAuth2ClientResponse>)
     ),
     tag = "Auth-OAuth2Client"
 )]
@@ -215,7 +215,7 @@ pub async fn create_oauth2_client(
         OAuth2ClientQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<OAuth2ClientResponse>>)
     ),
     tag = "Auth-OAuth2Client"
 )]
@@ -302,7 +302,7 @@ pub async fn list_oauth2_clients(
     path = "/api/auth/oauth2-clients/update",
     request_body = UpdateOAuth2ClientRequest,
     responses(
-        (status = 200, description = "更新成功")
+        (status = 200, description = "更新成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth-OAuth2Client"
 )]
@@ -366,7 +366,7 @@ pub struct UpdateOAuth2ClientByIdRequest {
     path = "/api/auth/oauth2-clients/update",
     request_body = UpdateOAuth2ClientByIdRequest,
     responses(
-        (status = 200, description = "更新成功")
+        (status = 200, description = "更新成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth-OAuth2Client"
 )]
@@ -466,7 +466,7 @@ pub async fn update_oauth2_client_by_id(
     post,
     path = "/api/auth/oauth2-clients/delete",
     responses(
-        (status = 200, description = "删除成功")
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth-OAuth2Client"
 )]

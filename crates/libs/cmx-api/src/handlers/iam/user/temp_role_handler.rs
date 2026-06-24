@@ -126,7 +126,7 @@ fn parse_status_filter(s: &str) -> TempAssignmentStatusFilter {
     path = "/api/iam/users/assign-temp-role",
     request_body = AssignTempRoleRequest,
     responses(
-        (status = 200, description = "分配成功")
+        (status = 200, description = "分配成功", body = ApiResp<UserRoleAssignment>)
     ),
     tag = "IAM-User-Temp"
 )]
@@ -168,7 +168,7 @@ pub async fn assign_temp_role(
     path = "/api/iam/users/revoke-temp-role",
     request_body = RevokeTempRoleRequest,
     responses(
-        (status = 200, description = "撤销成功")
+        (status = 200, description = "撤销成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-User-Temp"
 )]
@@ -200,7 +200,7 @@ pub async fn revoke_temp_role(
     path = "/api/iam/users/revoke-temp-roles-batch",
     request_body = RevokeTempRolesBatchRequest,
     responses(
-        (status = 200, description = "批量撤销成功")
+        (status = 200, description = "批量撤销成功", body = ApiResp<RevokeBatchResponse>)
     ),
     tag = "IAM-User-Temp"
 )]
@@ -234,7 +234,7 @@ pub async fn revoke_temp_roles_batch(
     path = "/api/iam/users/extend-temp-role",
     request_body = ExtendTempRoleRequest,
     responses(
-        (status = 200, description = "延长成功")
+        (status = 200, description = "延长成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-User-Temp"
 )]
@@ -275,7 +275,7 @@ pub async fn extend_temp_role(
         TempAssignmentQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<UserRoleAssignment>>)
     ),
     tag = "IAM-User-Temp"
 )]

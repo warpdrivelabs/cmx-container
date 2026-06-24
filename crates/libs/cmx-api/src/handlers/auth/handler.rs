@@ -89,7 +89,7 @@ pub async fn auth_login(
     path = "/api/auth/refresh",
     request_body = RefreshRequest,
     responses(
-        (status = 200, description = "刷新成功", body = LoginResponse),
+        (status = 200, description = "刷新成功", body = ApiResp<LoginResponse>),
         (status = 401, description = "Refresh Token 无效")
     ),
     tag = "Auth"
@@ -137,7 +137,7 @@ pub async fn auth_refresh(
     post,
     path = "/api/auth/logout",
     responses(
-        (status = 200, description = "登出成功")
+        (status = 200, description = "登出成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth"
 )]
@@ -177,7 +177,7 @@ pub async fn auth_logout(
     path = "/api/auth/validate",
     request_body = ValidateRequest,
     responses(
-        (status = 200, description = "Token 有效", body = ValidateResponse),
+        (status = 200, description = "Token 有效", body = ApiResp<ValidateResponse>),
         (status = 401, description = "Token 无效")
     ),
     tag = "Auth"
@@ -226,7 +226,7 @@ pub async fn auth_validate(
     get,
     path = "/api/auth/me",
     responses(
-        (status = 200, description = "成功", body = UserInfoResponse),
+        (status = 200, description = "成功", body = ApiResp<UserInfoResponse>),
         (status = 401, description = "未认证")
     ),
     tag = "Auth"
@@ -287,7 +287,7 @@ pub async fn auth_me(
     path = "/api/auth/revoke-all",
     request_body = RevokeAllRequest,
     responses(
-        (status = 200, description = "操作成功"),
+        (status = 200, description = "操作成功", body = ApiResp<serde_json::Value>),
         (status = 403, description = "无权限")
     ),
     tag = "Auth"
@@ -326,7 +326,7 @@ pub async fn auth_revoke_all(
     post,
     path = "/api/auth/heartbeat",
     responses(
-        (status = 200, description = "心跳成功"),
+        (status = 200, description = "心跳成功", body = ApiResp<serde_json::Value>),
         (status = 401, description = "会话不存在或已过期")
     ),
     tag = "Auth"
@@ -362,7 +362,7 @@ pub async fn auth_heartbeat(
     get,
     path = "/api/auth/health",
     responses(
-        (status = 200, description = "服务健康")
+        (status = 200, description = "服务健康", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth"
 )]
@@ -408,7 +408,7 @@ pub async fn auth_health() -> Result<Json<ApiResp<serde_json::Value>>> {
     path = "/api/auth/change-password",
     request_body = ChangePasswordRequest,
     responses(
-        (status = 200, description = "修改成功"),
+        (status = 200, description = "修改成功", body = ApiResp<serde_json::Value>),
         (status = 400, description = "密码不符合策略或与历史重复"),
         (status = 401, description = "旧密码错误")
     ),

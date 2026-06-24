@@ -31,7 +31,7 @@ pub struct EffectivePermissionsQuery {
         EffectivePermissionsQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<EffectivePermissionsResponse>)
     ),
     tag = "IAM-Audit"
 )]

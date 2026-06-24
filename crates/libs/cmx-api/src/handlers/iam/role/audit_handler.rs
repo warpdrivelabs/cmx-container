@@ -33,7 +33,7 @@ pub struct PermissionDiffQuery {
         PermissionDiffQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<PermissionDiffResponse>)
     ),
     tag = "IAM-Audit"
 )]

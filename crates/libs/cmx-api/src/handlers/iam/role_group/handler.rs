@@ -119,7 +119,7 @@ pub async fn update_role_group(
     path = "/api/iam/role-groups/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功"),
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>),
         (status = 409, description = "角色组下存在子组或关联角色")
     ),
     tag = "IAM-RoleGroup"
@@ -155,7 +155,7 @@ pub async fn delete_role_group(
     path = "/api/iam/role-groups/page",
     request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleGroup>>)
     ),
     tag = "IAM-RoleGroup"
 )]
@@ -191,7 +191,7 @@ pub async fn page_role_groups(
     path = "/api/iam/role-groups/list",
     request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleGroup>>)
     ),
     tag = "IAM-RoleGroup"
 )]

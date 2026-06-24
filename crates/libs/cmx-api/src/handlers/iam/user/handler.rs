@@ -132,7 +132,7 @@ pub async fn update_user(
     path = "/api/iam/users/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功")
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-User"
 )]
@@ -167,7 +167,7 @@ pub async fn delete_user(
     path = "/api/iam/users/page",
     request_body = crate::PageParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<User>>)
     ),
     tag = "IAM-User"
 )]
@@ -203,7 +203,7 @@ pub async fn page_users(
     path = "/api/iam/users/list",
     request_body = crate::ListParamsDoc<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<User>>)
     ),
     tag = "IAM-User"
 )]
@@ -237,7 +237,7 @@ pub async fn list_users(
     path = "/api/iam/users/assign-roles",
     request_body = AssignRolesRequest,
     responses(
-        (status = 200, description = "分配成功")
+        (status = 200, description = "分配成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-User"
 )]
@@ -271,7 +271,7 @@ pub async fn assign_roles(
         UsernameQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<Role>>)
     ),
     tag = "IAM-User"
 )]

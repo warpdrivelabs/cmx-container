@@ -134,7 +134,7 @@ pub struct ToggleApiKeyStatusRequest {
     path = "/api/auth/api-keys/create",
     request_body = CreateApiKeyRequest,
     responses(
-        (status = 200, description = "创建成功，api_key 字段为明文（仅此一次）")
+        (status = 200, description = "创建成功，api_key 字段为明文（仅此一次）", body = ApiResp<ApiKeyResponse>)
     ),
     tag = "Auth-ApiKey"
 )]
@@ -199,7 +199,7 @@ pub async fn create_api_key(
         ApiKeyQuery
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<ApiKeyListItem>>)
     ),
     tag = "Auth-ApiKey"
 )]
@@ -263,7 +263,7 @@ pub async fn list_api_keys(
     post,
     path = "/api/auth/api-keys/delete",
     responses(
-        (status = 200, description = "删除成功")
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth-ApiKey"
 )]
@@ -311,7 +311,7 @@ pub async fn delete_api_key(
     path = "/api/auth/api-keys/toggle-status",
     request_body = ToggleApiKeyStatusRequest,
     responses(
-        (status = 200, description = "切换成功")
+        (status = 200, description = "切换成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "Auth-ApiKey"
 )]

@@ -98,7 +98,7 @@ pub struct PageRulesResponse {
     path = "/api/iam/exclusion-rules/create",
     request_body = CreateExclusionRuleRequest,
     responses(
-        (status = 200, description = "创建成功")
+        (status = 200, description = "创建成功", body = ApiResp<ExclusionRule>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -138,7 +138,7 @@ pub async fn create_rule(
         ("rule_id" = String, Path, description = "规则ID")
     ),
     responses(
-        (status = 200, description = "更新成功")
+        (status = 200, description = "更新成功", body = ApiResp<ExclusionRule>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -178,7 +178,7 @@ pub async fn update_rule(
         ("rule_id" = String, Path, description = "规则ID")
     ),
     responses(
-        (status = 200, description = "删除成功")
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -217,7 +217,7 @@ pub async fn delete_rule(
         ("rule_id" = String, Path, description = "规则ID")
     ),
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<RuleDetailResponse>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -254,7 +254,7 @@ pub async fn get_rule(
     path = "/api/iam/exclusion-rules/toggle-status",
     request_body = ToggleRuleStatusRequest,
     responses(
-        (status = 200, description = "切换成功")
+        (status = 200, description = "切换成功", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -291,7 +291,7 @@ pub async fn toggle_rule_status(
     path = "/api/iam/exclusion-rules/items/add",
     request_body = AddRuleItemsRequest,
     responses(
-        (status = 200, description = "添加成功")
+        (status = 200, description = "添加成功", body = ApiResp<BatchResponse>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -328,7 +328,7 @@ pub async fn add_rule_items(
     path = "/api/iam/exclusion-rules/items/remove",
     request_body = RemoveRuleItemsRequest,
     responses(
-        (status = 200, description = "移除成功")
+        (status = 200, description = "移除成功", body = ApiResp<BatchResponse>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -365,7 +365,7 @@ pub async fn remove_rule_items(
     path = "/api/iam/exclusion-rules/page",
     request_body = PageRulesRequest,
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<PageRulesResponse>)
     ),
     tag = "IAM-Exclusion"
 )]
@@ -402,7 +402,7 @@ pub async fn page_rules(
     path = "/api/iam/exclusion-rules/validate",
     request_body = ValidateRuleRequest,
     responses(
-        (status = 200, description = "校验完成")
+        (status = 200, description = "校验完成", body = ApiResp<ValidateRuleResponse>)
     ),
     tag = "IAM-Exclusion"
 )]

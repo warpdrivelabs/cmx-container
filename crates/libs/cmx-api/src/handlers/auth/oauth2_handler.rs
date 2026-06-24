@@ -21,7 +21,7 @@ use super::oauth2_response::*;
     path = "/api/auth/oauth2/authorize",
     params(OAuth2AuthorizeRequest),
     responses(
-        (status = 200, description = "验证成功", body = OAuth2AuthorizeResponse),
+        (status = 200, description = "验证成功", body = ApiResp<OAuth2AuthorizeResponse>),
         (status = 400, description = "参数错误"),
         (status = 401, description = "客户端未注册或已禁用")
     ),
@@ -89,7 +89,7 @@ pub async fn oauth2_authorize(
     path = "/api/auth/oauth2/login",
     request_body = OAuth2LoginRequest,
     responses(
-        (status = 200, description = "登录成功", body = OAuth2LoginResponse),
+        (status = 200, description = "登录成功", body = ApiResp<OAuth2LoginResponse>),
         (status = 401, description = "用户名或密码错误")
     ),
     tag = "OAuth2"
@@ -160,7 +160,7 @@ pub async fn oauth2_login(
     path = "/api/auth/oauth2/token",
     request_body = OAuth2TokenRequest,
     responses(
-        (status = 200, description = "Token 签发成功", body = OAuth2TokenResponse),
+        (status = 200, description = "Token 签发成功", body = ApiResp<OAuth2TokenResponse>),
         (status = 400, description = "授权码无效或已过期")
     ),
     tag = "OAuth2"

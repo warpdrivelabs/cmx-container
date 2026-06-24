@@ -17,7 +17,7 @@ use crate::{ApiResp, Error, Result};
     get,
     path = "/api/iam/permissions/usage-stat",
     responses(
-        (status = 200, description = "查询成功")
+        (status = 200, description = "查询成功", body = ApiResp<Vec<PermissionUsageStat>>)
     ),
     tag = "IAM-Audit"
 )]
