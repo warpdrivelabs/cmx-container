@@ -22,7 +22,7 @@
 //! ```text
 //! ┌────────────────────────────────────────────┐
 //! │  应用层 (web-server 等)                      │
-//! │  通过 GlobalRegistry / GlobalConfigCenter    │
+//! │  通过 GlobalServiceRegistry / GlobalConfigCenter│
 //! │  访问注册/配置中心                            │
 //! ├────────────────────────────────────────────┤
 //! │  抽象层 (本 crate)                            │
@@ -76,7 +76,7 @@ pub use config_center::{create_config_center, ConfigCenter, ConfigChangeCallback
 pub use config_source::RemoteConfigSource;
 pub use error::{ConfigCenterError, RegistryError};
 pub use global_config_center::GlobalConfigCenter;
-pub use global_registry::GlobalRegistry;
+pub use global_registry::GlobalServiceRegistry;
 pub use notifier::{ChangeNotifier, ConfigChangeEvent, ConfigChangeListener, GlobalChangeNotifier};
 pub use reloader::ConfigReloader;
 pub use global_instance_cache::GlobalServiceInstanceCache;

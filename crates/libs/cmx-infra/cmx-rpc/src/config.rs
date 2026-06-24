@@ -17,9 +17,6 @@ pub struct RpcConfig {
     /// 预热服务列表（启动时预先发现的服务名）
     #[serde(default)]
     pub warmup_services: Vec<String>,
-    /// 服务列表同步间隔（秒），0 表示禁用定时同步
-    #[serde(default = "default_service_sync_interval_secs")]
-    pub service_sync_interval_secs: u64,
 }
 
 /// gRPC 配置
@@ -56,10 +53,6 @@ fn default_timeout_ms() -> u64 {
 
 fn default_connect_timeout_ms() -> u64 {
     3000
-}
-
-fn default_service_sync_interval_secs() -> u64 {
-    30
 }
 
 fn default_discover_channel_capacity() -> usize {

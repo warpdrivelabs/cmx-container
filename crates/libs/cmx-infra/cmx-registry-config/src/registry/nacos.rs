@@ -16,7 +16,7 @@ use nacos_sdk::api::naming::{
 };
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::config::NacosNamingConfig;
 use crate::error::RegistryError;
@@ -35,6 +35,7 @@ struct NacosInstanceListener {
 
 impl NamingEventListener for NacosInstanceListener {
     fn event(&self, event: Arc<NamingChangeEvent>) {
+        let total = event.instances.as_ref().map(|v| v.len()).unwrap_or(0);
         let instances: Vec<ServiceInstance> = event
             .instances
             .as_ref()
@@ -45,10 +46,12 @@ impl NamingEventListener for NacosInstanceListener {
                     .collect()
             })
             .unwrap_or_default();
+        let healthy = instances.len();
         self.cache.update(&self.service_name, instances);
         info!(
             service_name = %self.service_name,
-            count = event.instances.as_ref().map(|v| v.len()).unwrap_or(0),
+            total = total,
+            healthy = healthy,
             "服务实例变更，缓存已更新"
         );
     }
@@ -197,13 +200,12 @@ impl ServiceRegistry for NacosRegistry {
         mut group_name: Option<&str>,
         clusters: Vec<String>,
     ) -> Result<Vec<ServiceInstance>, RegistryError> {
-
         if group_name.is_none() {
             //nacos 默认组名为 DEFAULT_GROUP
             group_name = Some(crate::config::DEFAULT_GROUP);
         }
 
-        let instances = self
+        let result = self
             .naming
             .select_instances(
                 service_name.to_string(),
@@ -212,8 +214,24 @@ impl ServiceRegistry for NacosRegistry {
                 true,
                 true,
             )
-            .await
-            .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
+            .await;
+
+        let instances = match result {
+            Ok(v) => v,
+            Err(e) => {
+                // 网络错误（连接中断、超时、Nacos Server 重启等）：移除占位，
+                // 让下次 subscribe_instances 能重新订阅，否则断联后永久无推送。
+                warn!(
+                    "查询实例失败 (service={}): {}，移除订阅占位触发重订阅",
+                    service_name, e
+                );
+                self.registered_listeners
+                    .write()
+                    .unwrap()
+                    .remove(service_name);
+                return Err(RegistryError::QueryFailed(e.to_string()));
+            }
+        };
 
         Ok(instances.iter().map(convert_from_nacos_instance).collect())
     }
@@ -227,12 +245,6 @@ impl ServiceRegistry for NacosRegistry {
         service_name: &str,
         callback: InstanceChangeCallback,
     ) -> Result<(), RegistryError> {
-        self.cache.subscribe(service_name, callback);
-
-        // 首次拉取
-        let instances = self.query_instances(service_name, None, Vec::new()).await?;
-        self.cache.update(service_name, instances);
-
         // 注册 Nacos 监听器（每个 service_name 只注册一次）
         // 使用写锁原子检查+占位，避免并发 TOCTOU 导致重复订阅
         let already_registered = {
@@ -262,7 +274,16 @@ impl ServiceRegistry for NacosRegistry {
                     .remove(service_name);
                 return Err(RegistryError::QueryFailed(e.to_string()));
             }
+
+            // Nacos SDK 订阅成功后注册 cache callback，
+            // 避免订阅失败时 callback 残留在 cache 中。
+            // 仅首次订阅时注册，防止重复调用导致 callback 累积。
+            self.cache.subscribe(service_name, callback);
         }
+
+        // 首次拉取
+        let instances = self.query_instances(service_name, None, Vec::new()).await?;
+        self.cache.update(service_name, instances);
 
         Ok(())
     }
@@ -272,12 +293,27 @@ impl ServiceRegistry for NacosRegistry {
     }
 
     async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
-        // 拉取第一页，每页 1000 条，覆盖大部分场景
-        let (services, _total) = self
-            .naming
-            .get_service_list(1, 1000, None)
-            .await
-            .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
-        Ok(services)
+        // 分页拉取所有服务，每页 1000 条，避免大规模部署遗漏服务。
+        const PAGE_SIZE: i32 = 1000;
+        let mut all_services = Vec::new();
+        let mut page_no = 1;
+
+        loop {
+            let (services, _total) = self
+                .naming
+                .get_service_list(page_no, PAGE_SIZE, None)
+                .await
+                .map_err(|e| RegistryError::QueryFailed(e.to_string()))?;
+
+            let fetched = services.len();
+            all_services.extend(services);
+
+            if (fetched as i32) < PAGE_SIZE {
+                break;
+            }
+            page_no += 1;
+        }
+
+        Ok(all_services)
     }
 }

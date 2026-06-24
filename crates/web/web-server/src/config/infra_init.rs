@@ -15,8 +15,8 @@ use std::sync::Arc;
 use cmx_registry_config::{
     create_config_center, create_registry_with_cache, ConfigCenter, ConfigCenterFullConfig,
     ConfigChangeEvent, ConfigReloader, GlobalChangeNotifier, GlobalConfigCenter,
-    GlobalRegistry, GlobalServiceInstanceCache, RegistryConfig, RemoteConfigSource,
-    ServiceRegistry,
+    GlobalServiceRegistry, GlobalServiceInstanceCache, RegistryConfig, RemoteConfigSource,
+    ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
 use tracing::{info, warn};
@@ -88,8 +88,8 @@ pub async fn init_infra() -> crate::Result<()> {
     ConfigManager::initialize(|| Ok::<_, cmx_utils::ConfigError>(final_config))
         .map_err(|e| Error::ConfigError(format!("配置管理器初始化失败: {}", e)))?;
 
-    // 存储到全局单例（其他 crate 可通过 `GlobalRegistry::get()` / `GlobalConfigCenter::get()` 访问）。
-    GlobalRegistry::set(registry).map_err(|_| {
+    // 存储到全局单例（其他 crate 可通过 `GlobalServiceRegistry::get()` / `GlobalConfigCenter::get()` 访问）。
+    GlobalServiceRegistry::set(registry).map_err(|_| {
         Error::ConfigError("注册中心全局单例已设置".to_string())
     })?;
     GlobalConfigCenter::set(config_center).map_err(|_| {
@@ -99,12 +99,15 @@ pub async fn init_infra() -> crate::Result<()> {
     info!("配置初始化完成");
 
     // 注册服务到注册中心。
-    let registry = GlobalRegistry::get();
+    let registry = GlobalServiceRegistry::get();
     register_service(registry).await;
+
+    // 启动服务列表定时同步（注册中心基础设施职责，不依赖 RPC 是否启用）。
+    start_service_list_syncer().await;
 
     // 设置配置变更监听，启动热更新。
     let config_center = GlobalConfigCenter::get();
-    setup_config_listener(config_center, &cc_config).await;
+    setup_config_listener(config_center).await;
 
     // 输出当前所有配置项（调试用，过滤掉 Path）。
     for key in ConfigManager::global().keys() {
@@ -149,11 +152,33 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
     }
 }
 
-/// 从全局配置加载 RPC 配置。
-fn load_rpc_config() -> Option<cmx_rpc::config::RpcConfig> {
-    ConfigManager::global()
-        .get_as::<cmx_rpc::config::RpcConfig>("rpc")
-        .ok()
+/// 启动服务列表定时同步器。
+///
+/// 以固定 30s 间隔在后台启动 `ServiceListSyncer`，
+/// 定期从注册中心拉取服务列表并自动订阅新服务。
+///
+/// 这是注册中心基础设施职责，不依赖 RPC 是否启用。即使 RPC 未启用，
+/// 其他需要服务发现的模块也能从缓存中获取实例信息。
+async fn start_service_list_syncer() {
+    let registry = GlobalServiceRegistry::get();
+
+    // 注册中心未启用（使用 MockRegistry）时跳过定时同步，避免无意义的轮询。
+    if !registry.is_enabled() {
+        info!("注册中心未启用，跳过服务列表定时同步");
+        return;
+    }
+
+    // 服务列表定时同步间隔固定为 30s，不通过配置控制。
+    const SYNC_INTERVAL_SECS: u64 = 30;
+
+    let registry = registry.clone();
+    let cache: Arc<ServiceInstanceCache> = GlobalServiceInstanceCache::get().clone();
+    let syncer = ServiceListSyncer::new(registry, cache, SYNC_INTERVAL_SECS);
+
+    tokio::spawn(async move {
+        info!("启动服务列表定时同步，间隔: {}s", SYNC_INTERVAL_SECS);
+        syncer.run_forever().await;
+    });
 }
 
 /// 将 RPC 相关信息注入到 RegistryConfig 的 metadata 中。
@@ -172,7 +197,7 @@ fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
     }
 
     // RPC 自动注入的 metadata 优先级高于配置文件中的值
-    if let Some(rpc) = load_rpc_config()
+    if let Some(rpc) = super::rpc::load_rpc_config()
         && rpc.enabled {
             registry_config
                 .metadata
@@ -194,10 +219,8 @@ fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
 /// # Arguments
 ///
 /// * `config_center` - 全局配置中心实例。
-/// * `cc_config` - 配置中心配置（含 listeners 列表）。
 async fn setup_config_listener(
     config_center: &Arc<dyn ConfigCenter>,
-    cc_config: &ConfigCenterFullConfig,
 ) {
     if !config_center.is_enabled() {
         info!("配置中心未启用，跳过配置监听注册");
@@ -233,41 +256,18 @@ async fn setup_config_listener(
         })
     });
 
-    // 将 SDK 推送的变更转发到全局通知器，触发第一轮 handlers。
-    let callback: cmx_registry_config::ConfigChangeCallback = Arc::new(|content: &str| {
-        GlobalChangeNotifier::notify(content);
-    });
-
-    // 为配置中心中配置的每个 listener 注册 SDK 级别的监听。
-    for listener in &cc_config.listeners {
-        match config_center
-            .listen(&listener.data_id, &listener.group, callback.clone())
-            .await
-        {
-            Ok(_) => {
-                info!(
-                    "已注册配置变更监听: {}/{}",
-                    listener.group, listener.data_id
-                );
-            }
-            Err(e) => {
-                warn!(
-                    "注册配置变更监听失败 [{}/{}]: {}",
-                    listener.group, listener.data_id, e
-                );
-            }
-        }
-    }
+    // 注意：配置变更的 SDK 级别监听已在 create_config_center 工厂函数中自动注册，
+    // 此处不再重复注册，避免配置变更被双重触发。
 }
 
 /// 优雅关闭：从注册中心注销服务实例。
 ///
 /// 应在应用退出时调用，确保 Nacos 等注册中心能及时感知实例下线。
 pub async fn shutdown_infra() {
-    if !GlobalRegistry::is_initialized() {
+    if !GlobalServiceRegistry::is_initialized() {
         return;
     }
-    let registry = GlobalRegistry::get();
+    let registry = GlobalServiceRegistry::get();
     if !registry.is_enabled() {
         return;
     }

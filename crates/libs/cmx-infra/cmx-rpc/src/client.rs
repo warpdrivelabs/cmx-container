@@ -59,33 +59,29 @@ impl VoloGrpcClient {
             return Ok(cached.client.clone());
         }
 
-        // 慢路径：写锁 + double-check
-        let mut clients = self.clients.write().await;
-        // 再次检查，防止并发时多个线程都进入写锁路径
-        if let Some(cached) = clients.get(service_name) {
-            return Ok(cached.client.clone());
-        }
-
-        // 如果实例缓存中没有该服务，主动拉取
+        // 慢路径：在获取写锁之前，先完成网络 IO（订阅 + 缓存填充）。
+        // 这样写锁只保护 HashMap insert，不会因网络请求阻塞其他服务的客户端创建。
         if self.cache.get(service_name).is_none_or(|v| v.is_empty()) {
-            let instances = self.registry.query_instances(
-                service_name,
-                self.config.default_group.as_deref(),
-                self.config.default_clusters.clone(),
-            ).await
-                .map_err(|e| RpcError::NoAvailableInstance(format!("服务 '{}' 查询失败: {}", service_name, e)))?;
-            self.cache.update(service_name, instances);
+            self.registry
+                .subscribe_instances(service_name, Arc::new(|_, _| {}))
+                .await
+                .map_err(|e| {
+                    RpcError::NoAvailableInstance(format!(
+                        "服务 '{}' 订阅失败: {}",
+                        service_name, e
+                    ))
+                })?;
 
             if self.cache.get(service_name).is_none_or(|v| v.is_empty()) {
                 return Err(RpcError::NoAvailableInstance(service_name.to_string()));
             }
         }
 
-        // 创建 Discover 并启动监听
+        // 创建 Discover 并启动监听（不涉及网络 IO，可在锁外完成）
         let discover = RegistryAwareDiscover::new(self.cache.clone(), self.config.discover_channel_capacity);
         discover.start_watch(service_name);
 
-        // 构建 volo gRPC 客户端，使用 volo 原生 rpc_timeout 和 connect_timeout
+        // 构建 volo gRPC 客户端（不涉及网络 IO）
         let rpc_timeout = Duration::from_millis(self.config.timeout_ms);
         let connect_timeout = Duration::from_millis(self.config.connect_timeout_ms);
 
@@ -95,7 +91,13 @@ impl VoloGrpcClient {
             .connect_timeout(connect_timeout)
             .build();
 
-        // 缓存 client（同一写锁内完成，其他并发调用会等待）
+        // 写锁：仅保护 HashMap insert，double-check 防止并发重复创建
+        let mut clients = self.clients.write().await;
+        if let Some(cached) = clients.get(service_name) {
+            // 并发时另一个调用方可能已创建完成，直接返回已有的
+            return Ok(cached.client.clone());
+        }
+
         let cached = CachedClient {
             client: client.clone(),
             _discover: discover,

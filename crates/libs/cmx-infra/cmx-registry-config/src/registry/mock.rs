@@ -4,6 +4,7 @@
 //! 所有操作均在内存中维护，不涉及任何网络 IO。
 
 use async_trait::async_trait;
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use tracing::info;
 
@@ -21,6 +22,8 @@ pub struct MockRegistry {
     registered: RwLock<Vec<ServiceInstance>>,
     /// 服务实例缓存。
     cache: Arc<ServiceInstanceCache>,
+    /// 已订阅的服务名集合（避免重复 subscribe 导致 callback 累积）。
+    subscribed_services: RwLock<HashSet<String>>,
 }
 
 impl MockRegistry {
@@ -30,6 +33,7 @@ impl MockRegistry {
         Self {
             registered: RwLock::new(Vec::new()),
             cache: Arc::new(ServiceInstanceCache::new()),
+            subscribed_services: RwLock::new(HashSet::new()),
         }
     }
 
@@ -40,6 +44,7 @@ impl MockRegistry {
         Self {
             registered: RwLock::new(Vec::new()),
             cache,
+            subscribed_services: RwLock::new(HashSet::new()),
         }
     }
 }
@@ -106,12 +111,29 @@ impl ServiceRegistry for MockRegistry {
     }
 
     /// 订阅服务实例变更通知。
+    ///
+    /// 每个 service_name 只注册一次 callback（通过 `subscribed_services` 去重），
+    /// 避免重复调用导致 callback 累积。
     async fn subscribe_instances(
         &self,
         service_name: &str,
         callback: InstanceChangeCallback,
     ) -> Result<(), RegistryError> {
-        self.cache.subscribe(service_name, callback);
+        // 检查是否已订阅，避免重复注册 callback
+        let already_subscribed = {
+            let mut set = self.subscribed_services.write().unwrap();
+            if set.contains(service_name) {
+                true
+            } else {
+                set.insert(service_name.to_string());
+                false
+            }
+        };
+
+        if !already_subscribed {
+            self.cache.subscribe(service_name, callback);
+        }
+
         // 首次拉取
         let instances = self.query_instances(service_name, None, Vec::new()).await?;
         self.cache.update(service_name, instances);

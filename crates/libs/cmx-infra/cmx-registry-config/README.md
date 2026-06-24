@@ -22,7 +22,7 @@ use cmx_registry_config::{
     // 工厂函数
     create_registry, create_config_center,
     // 全局单例访问器
-    GlobalRegistry, GlobalConfigCenter,
+    GlobalServiceRegistry, GlobalConfigCenter,
     // trait
     ServiceRegistry, ConfigCenter,
     // 数据类型
@@ -308,14 +308,14 @@ GlobalChangeNotifier::notify("新的配置内容...");
 
 ### 5.8 在任意 crate 中访问全局实例
 
-全局单例 `GlobalRegistry` 和 `GlobalConfigCenter` 定义在 `cmx-registry-config` crate 中，
+全局单例 `GlobalServiceRegistry` 和 `GlobalConfigCenter` 定义在 `cmx-registry-config` crate 中，
 任何依赖了该 crate 的模块都可以直接访问，无需通过 `web-server` 中转：
 
 ```rust
-use cmx_registry_config::{GlobalRegistry, GlobalConfigCenter};
+use cmx_registry_config::{GlobalServiceRegistry, GlobalConfigCenter};
 
 // 获取全局注册中心（必须在 init_infra() 之后调用）
-let registry = GlobalRegistry::get();
+let registry = GlobalServiceRegistry::get();
 registry.register(&instance).await?;
 
 // 获取全局配置中心
@@ -323,7 +323,7 @@ let config_center = GlobalConfigCenter::get();
 let config = config_center.get_config("app.toml", "DEFAULT_GROUP").await?;
 
 // 检查是否已初始化
-if GlobalRegistry::is_initialized() {
+if GlobalServiceRegistry::is_initialized() {
     // ...
 }
 ```
@@ -395,6 +395,359 @@ async fn test_config_center() {
         .simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 8080")
         .await;
 }
+```
+
+---
+
+## 六.5 服务实例变化与配置变化监听指南
+
+本节详细介绍两种变更通知机制：注册中心的服务实例变化、配置中心的配置内容变化。
+
+### 1. 监听服务实例变化
+
+#### 1.1 核心 API：`ServiceRegistry::subscribe_instances`
+
+| 方法 | 用途 | 备注 |
+|------|------|------|
+| `subscribe_instances(service_name, callback)` | 订阅服务实例变更 | 每个 service_name 只订阅一次（实现层去重） |
+
+**完整示例**：
+
+```rust
+use std::sync::Arc;
+use cmx_registry_config::{GlobalServiceRegistry, ServiceInstance};
+
+// 1. 拉取初始实例列表并注册变更回调
+let registry = GlobalServiceRegistry::get();
+let callback: cmx_registry_config::InstanceChangeCallback = Arc::new(
+    |service_name: &str, instances: &[ServiceInstance]| {
+        info!(
+            "服务 {} 实例变更，当前 {} 个",
+            service_name,
+            instances.len()
+        );
+        for inst in instances {
+            info!("  - {}:{} (healthy={})", inst.ip, inst.port, inst.healthy);
+        }
+    },
+);
+registry
+    .subscribe_instances("cmx-server", callback)
+    .await?;
+
+// 2. 主动查询当前实例
+let instances = registry
+    .query_instances("cmx-server", None, vec![])
+    .await?;
+println!("当前 {} 个实例", instances.len());
+```
+
+**callback 签名**：
+
+```rust
+pub type InstanceChangeCallback =
+    Arc<dyn Fn(&str, &[ServiceInstance]) + Send + Sync>;
+```
+
+参数说明：
+- `&str`：发生变更的服务名
+- `&[ServiceInstance]`：变更后的实例列表（已过滤不健康实例）
+
+#### 1.2 全局缓存读取（轻量场景）
+
+无需订阅变更时，可直接读取缓存：
+
+```rust
+use cmx_registry_config::GlobalServiceInstanceCache;
+
+let cache = GlobalServiceInstanceCache::get();
+
+// 同步读快照
+if let Some(instances) = cache.get("cmx-server") {
+    println!("缓存中有 {} 个实例", instances.len());
+}
+
+// 按需拉取：缓存为空时触发注册中心拉取
+let instances = cache.get_or_fetch("cmx-server").await?;
+```
+
+#### 1.3 与 volo gRPC 客户端集成
+
+volo 负载均衡器自动监听实例变化，无需手动处理：
+
+```rust
+// cmx-rpc 内部已实现
+// 1. subscribe_instances 注册 no-op callback
+// 2. start_watch 注册 discover callback
+// 3. cache.update 时 volo 收到 Change 事件并刷新负载均衡器
+//
+// 业务侧无需关心，调用 VoloGrpcClient::get_client 即可
+```
+
+#### 1.4 监听机制原理
+
+```
+注册中心 (Nacos/Consul)
+    │ 推送变更事件
+    ▼
+NacosInstanceListener::event
+    │ cache.update(service_name, healthy_instances)
+    ▼
+ServiceInstanceCache::update
+    │ 遍历 subscribers[service_name] 列表
+    ├─→ no-op callback（subscribe_instances 注册）
+    └─→ discover callback（start_watch 注册）→ volo LB
+```
+
+#### 1.5 完整生产级示例
+
+```rust
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use cmx_registry_config::{GlobalServiceRegistry, ServiceInstance};
+
+async fn watch_service_changes() -> anyhow::Result<()> {
+    let (tx, mut rx) = mpsc::channel::<Vec<ServiceInstance>>(100);
+
+    let callback: cmx_registry_config::InstanceChangeCallback = Arc::new(
+        move |_service: &str, instances: &[ServiceInstance]| {
+            // 异步发送最新实例列表
+            let instances = instances.to_vec();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let _ = tx.send(instances).await;
+            });
+        },
+    );
+
+    GlobalServiceRegistry::get()
+        .subscribe_instances("cmx-server", callback)
+        .await?;
+
+    // 消费实例变更事件
+    while let Some(instances) = rx.recv().await {
+        info!("业务逻辑处理：路由表更新 {:?} 个实例", instances.len());
+    }
+    Ok(())
+}
+```
+
+---
+
+### 2. 监听配置变化
+
+#### 2.1 核心 API：`ConfigCenter::listen`
+
+| 方法 | 用途 | 备注 |
+|------|------|------|
+| `listen(data_id, group, callback)` | 订阅指定配置项变更 | 同一 data_id 多次调用会重复触发回调 |
+| `get_config(data_id, group)` | 主动拉取配置 | 不订阅变更通知 |
+
+**完整示例**：
+
+```rust
+use std::sync::Arc;
+use cmx_registry_config::{GlobalConfigCenter, ConfigChangeCallback};
+
+let config_center = GlobalConfigCenter::get();
+
+// 主动拉取
+let content = config_center
+    .get_config("cmx-server.toml", "DEFAULT_GROUP")
+    .await?;
+info!("当前配置:\n{}", content);
+
+// 注册变更回调
+let callback: ConfigChangeCallback = Arc::new(|content: &str| {
+    info!("配置已变更:\n{}", content);
+    // 在此触发配置热更新
+});
+
+config_center
+    .listen("cmx-server.toml", "DEFAULT_GROUP", callback)
+    .await?;
+```
+
+**callback 签名**：
+
+```rust
+pub type ConfigChangeCallback = Arc<dyn Fn(&str) + Send + Sync>;
+```
+
+参数说明：
+- `&str`：配置变更后的完整内容（已发布版本）
+
+#### 2.2 全局通知器（推荐）
+
+使用 `GlobalChangeNotifier` 集中管理多个配置订阅者：
+
+```rust
+use cmx_registry_config::GlobalChangeNotifier;
+
+// 1. 初始化（应用启动时调用一次）
+GlobalChangeNotifier::initialize();
+
+// 2. 注册 keyed handler
+GlobalChangeNotifier::register("config-reloader", Arc::new(|content: &str| {
+    info!("收到配置变更，准备热更新");
+    // 调用 ConfigReloader::reload
+}));
+
+// 3. 注册 typed listener（按 data_id/group 精确匹配）
+GlobalChangeNotifier::add_listener(
+    "cmx-server.toml",
+    "DEFAULT_GROUP",
+    Arc::new(|event| {
+        info!("cmx-server.toml 变更:\n{}", event.content);
+    }),
+);
+```
+
+**API 总览**：
+
+| 方法 | 用途 |
+|------|------|
+| `initialize()` | 初始化全局通知器（幂等） |
+| `register(key, callback)` | 注册全局 handler（任何配置变更都触发） |
+| `unregister(key)` | 移除指定 handler |
+| `add_listener(data_id, group, callback)` | 注册精确匹配的 listener |
+| `remove_listener(data_id, group)` | 移除指定 listener |
+| `notify(content)` | 触发所有 handler（仅 handler） |
+| `notify_listeners(event)` | 触发所有 listener 和 handler |
+
+#### 2.3 监听机制原理
+
+```
+Nacos Server 配置变更
+    │ 长轮询/推送
+    ▼
+ConfigCenter::listen 回调
+    │ GlobalChangeNotifier::notify(content)
+    ▼
+ChangeNotifier::handlers（keyed handler）
+    ├─→ config-reloader（应用启动时注册）
+    └─→ 其他业务 handler
+    
+ChangeNotifier::listeners（typed listener）
+    └─→ 精确匹配 (data_id, group) 后触发
+```
+
+#### 2.4 配置中心 listeners 配置（推荐）
+
+通过 `ConfigCenterFullConfig::listeners` 统一声明订阅项，应用启动时自动注册：
+
+```rust
+use cmx_registry_config::{ConfigCenterFullConfig, GlobalConfigCenter, GlobalChangeNotifier};
+
+// 1. 声明订阅
+let cc_config = ConfigCenterFullConfig::from_env();
+GlobalChangeNotifier::initialize();
+
+// 2. 应用层注册 typed listener
+for listener in &cc_config.listeners {
+    let data_id = listener.data_id.clone();
+    let group = listener.group.clone();
+    GlobalChangeNotifier::add_listener(
+        &data_id,
+        &group,
+        Arc::new(move |event| {
+            info!("{} 变更:\n{}", data_id, event.content);
+        }),
+    );
+}
+
+// 3. create_config_center 时自动注册 SDK 级别监听
+//    （推荐通过工厂函数而非手动 listen，避免双重触发）
+```
+
+#### 2.5 完整生产级示例
+
+```rust
+use std::sync::Arc;
+use cmx_registry_config::{
+    GlobalChangeNotifier, GlobalConfigCenter, ConfigChangeEvent,
+};
+
+async fn setup_config_watcher() -> anyhow::Result<()> {
+    let center = GlobalConfigCenter::get();
+    let config = cmx_registry_config::ConfigCenterFullConfig::from_env();
+
+    // 1. 全局 keyed handler（不区分配置项）
+    GlobalChangeNotifier::initialize();
+    GlobalChangeNotifier::register(
+        "audit-logger",
+        Arc::new(|content: &str| {
+            info!("[audit] 配置变更记录");
+        }),
+    );
+
+    // 2. typed listener（按 data_id 精确匹配）
+    for listener in &config.listeners {
+        let data_id = listener.data_id.clone();
+        let group = listener.group.clone();
+
+        // 全局 typed listener
+        GlobalChangeNotifier::add_listener(
+            &data_id,
+            &group,
+            Arc::new(move |event: &ConfigChangeEvent| {
+                info!("{} 变更:\n{}", data_id, event.content);
+            }),
+        );
+
+        // SDK 级别监听（工厂函数内部会自动调用）
+        // 此处也可手动 listen，但会与 create_config_center 内的自动注册重复
+    }
+
+    // 3. 主动拉取初始配置
+    for listener in &config.listeners {
+        let content = center
+            .get_config(&listener.data_id, &listener.group)
+            .await?;
+        info!("初始配置 {}:\n{}", listener.data_id, content);
+    }
+    Ok(())
+}
+```
+
+---
+
+### 3. 监听器注册最佳实践
+
+| 场景 | 推荐方式 | 原因 |
+|------|---------|------|
+| **应用启动热更新** | `GlobalChangeNotifier::register(key, ...)` | 集中管理，支持 unregister |
+| **按 data_id 精确处理** | `GlobalChangeNotifier::add_listener(data_id, group, ...)` | 避免无关配置触发回调 |
+| **gRPC 服务发现** | `subscribe_instances` + `start_watch` | volo 自动接管负载均衡 |
+| **本地开发无注册中心** | `MockRegistry` + 手动 `cache.update` | 内存级，无需外部依赖 |
+| **避免双重触发** | 仅在 `create_config_center` 工厂函数内调用 `listen` | 工厂封装完整职责 |
+
+### 4. 完整订阅流程图
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  应用启动                                                 │
+│  ├─ init_infra()                                        │
+│  │   ├─ create_registry_with_cache                     │
+│  │   ├─ create_config_center (内部自动 listen)         │
+│  │   ├─ start_service_list_syncer                       │
+│  │   └─ setup_config_listener                          │
+│  │       └─ GlobalChangeNotifier::initialize + register │
+│  │                                                      │
+│  └─ init_rpc()                                          │
+│      ├─ warmup subscribe_instances                      │
+│      └─ VoloGrpcClient 创建（内部 subscribe + watch）    │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  运行期                                                   │
+│  ├─ Nacos 服务实例推送                                   │
+│  │   └─ cache.update → 触发 no-op + discover callbacks │
+│  │                                                      │
+│  └─ Nacos 配置变更推送                                  │
+│      └─ GlobalChangeNotifier::notify                    │
+│          └─ 触发所有 handlers + 匹配 typed listeners    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---

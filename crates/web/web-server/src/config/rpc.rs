@@ -53,7 +53,7 @@ pub async fn init_rpc(
     let cache = GlobalServiceInstanceCache::get().clone();
 
     // 2. 获取注册中心引用（整函数复用，避免重复 clone）。
-    let registry = cmx_registry_config::GlobalRegistry::get().clone();
+    let registry = cmx_registry_config::GlobalServiceRegistry::get().clone();
 
     // 3. 创建 RPC 客户端并注册到全局单例。
     let rpc_client = create_rpc_client(&rpc, cache, registry.clone())
@@ -66,7 +66,7 @@ pub async fn init_rpc(
     // 4. 在后台 tokio task 中启动 gRPC Server，同步等待启动结果。
     let (server_ready_tx, server_ready_rx) = tokio::sync::oneshot::channel();
     let grpc_port_for_log = grpc_port;
-    let _server_handle = tokio::spawn(async move {
+    let server_handle = tokio::spawn(async move {
         info!("在后台启动 gRPC Server，端口: {}", grpc_port_for_log);
         match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, plugin_query, server_ready_tx).await {
             Ok(()) => info!("gRPC Server 已正常退出"),
@@ -77,22 +77,22 @@ pub async fn init_rpc(
     // 等待 Server 启动信号（最多 3 秒）
     match tokio::time::timeout(std::time::Duration::from_secs(3), server_ready_rx).await {
         Ok(Ok(())) => info!("gRPC Server 启动成功"),
-        Ok(Err(_)) => return Err(Error::ServerSetup("gRPC Server 启动失败".to_string())),
-        Err(_) => return Err(Error::ServerSetup("gRPC Server 启动超时".to_string())),
+        Ok(Err(_)) => {
+            server_handle.abort();
+            return Err(Error::ServerSetup("gRPC Server 启动失败".to_string()));
+        }
+        Err(_) => {
+            server_handle.abort();
+            return Err(Error::ServerSetup("gRPC Server 启动超时".to_string()));
+        }
     }
 
-    // 5. 缓存预热：遍历 warmup_services 列表，直接查询并缓存。
+    // 5. 缓存预热：遍历 warmup_services 列表，通过注册中心订阅并缓存。
+    //    使用 subscribe_instances 替代手动 query+update，让注册中心层管理缓存。
     if !rpc.warmup_services.is_empty() {
         for service_name in &rpc.warmup_services {
-            match registry.query_instances(
-                service_name,
-                rpc.grpc.default_group.as_deref(),
-                rpc.grpc.default_clusters.clone(),
-            ).await {
-                Ok(instances) => {
-                    if !instances.is_empty() {
-                        GlobalServiceInstanceCache::get().update(service_name, instances);
-                    }
+            match registry.subscribe_instances(service_name, Arc::new(|_, _| {})).await {
+                Ok(()) => {
                     info!(service_name = %service_name, "服务预热完成");
                 }
                 Err(e) => {
@@ -100,24 +100,6 @@ pub async fn init_rpc(
                 }
             }
         }
-    }
-
-    // 6. 启动服务列表定时同步
-    let sync_interval = rpc.service_sync_interval_secs;
-    if sync_interval > 0 {
-        let syncer = cmx_registry_config::ServiceListSyncer::new(
-            registry,
-            GlobalServiceInstanceCache::get().clone(),
-            sync_interval,
-        );
-        // 将已预热的服务标记为已订阅
-        for svc in &rpc.warmup_services {
-            syncer.mark_subscribed(svc);
-        }
-        tokio::spawn(async move {
-            info!("启动服务列表定时同步，间隔: {}s", sync_interval);
-            syncer.run_forever().await;
-        });
     }
 
     info!("RPC 子系统初始化完成，gRPC 端口: {}", grpc_port);
@@ -128,7 +110,7 @@ pub async fn init_rpc(
 /// 从全局配置加载 RPC 配置。
 ///
 /// 使用 `Option` 包裹，因为旧配置文件可能没有 `[rpc]` 段。
-fn load_rpc_config() -> Option<RpcConfig> {
+pub(crate) fn load_rpc_config() -> Option<RpcConfig> {
     ConfigManager::global()
         .get_as::<RpcConfig>("rpc")
         .ok()

@@ -96,6 +96,9 @@ impl ServiceInstanceCache {
     }
 
     /// 注册变更回调。
+    ///
+    /// 允许同一 service_name 注册多个回调（如 discover 的变更通知回调 + 业务层回调）。
+    /// `cache.update` 时所有回调都会被调用。
     pub fn subscribe(&self, service_name: &str, callback: InstanceChangeCallback) {
         info!(service_name = %service_name, "注册实例变更订阅");
         let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {

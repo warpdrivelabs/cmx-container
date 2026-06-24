@@ -1,8 +1,8 @@
-//! 全局注册中心存储器。
+//! 全局服务注册中心存储器。
 //!
 //! 提供应用层访问 [`ServiceRegistry`] 的全局单例。
-//! 在应用启动时通过 [`GlobalRegistry::set`] 设置一次，
-//! 之后任意位置可通过 [`GlobalRegistry::get`] 获取访问。
+//! 在应用启动时通过 [`GlobalServiceRegistry::set`] 设置一次，
+//! 之后任意位置可通过 [`GlobalServiceRegistry::get`] 获取访问。
 //!
 //! # 线程安全
 //!
@@ -15,29 +15,29 @@ use std::sync::{Arc, OnceLock};
 
 use crate::registry::trait_rs::ServiceRegistry;
 
-/// 全局注册中心错误类型。
+/// 全局服务注册中心错误类型。
 ///
 /// 用于 `set` 操作的失败情形（如重复初始化），包含人类可读的错误描述。
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 #[error("{0}")]
-pub struct GlobalRegistryError(&'static str);
+pub struct GlobalServiceRegistryError(&'static str);
 
-impl GlobalRegistryError {
+impl GlobalServiceRegistryError {
     /// 表示注册中心已被设置过，重复设置会触发该错误。
-    pub const ALREADY_SET: Self = GlobalRegistryError("注册中心已初始化，无法重复设置");
+    pub const ALREADY_SET: Self = GlobalServiceRegistryError("注册中心已初始化，无法重复设置");
 }
 
-/// 全局注册中心存储器。
+/// 全局服务注册中心存储器。
 ///
 /// 通过关联函数（`set` / `get` / `is_initialized`）操作 `OnceLock` 单例。
 /// 该类型本身无字段，所有状态存储在模块级静态变量中。
-pub struct GlobalRegistry;
+pub struct GlobalServiceRegistry;
 
 /// 注册中心单例存储。`OnceLock` 保证线程安全的延迟初始化与一次性写入。
 static REGISTRY: OnceLock<Arc<dyn ServiceRegistry>> = OnceLock::new();
 
-impl GlobalRegistry {
-    /// 设置全局注册中心实例。
+impl GlobalServiceRegistry {
+    /// 设置全局服务注册中心实例。
     ///
     /// 整个进程生命周期内只能成功调用一次。
     ///
@@ -48,12 +48,12 @@ impl GlobalRegistry {
     /// # Returns
     ///
     /// * `Ok(())` - 首次设置成功。
-    /// * `Err(GlobalRegistryError::ALREADY_SET)` - 已被设置过。
-    pub fn set(registry: Arc<dyn ServiceRegistry>) -> Result<(), GlobalRegistryError> {
-        REGISTRY.set(registry).map_err(|_| GlobalRegistryError::ALREADY_SET)
+    /// * `Err(GlobalServiceRegistryError::ALREADY_SET)` - 已被设置过。
+    pub fn set(registry: Arc<dyn ServiceRegistry>) -> Result<(), GlobalServiceRegistryError> {
+        REGISTRY.set(registry).map_err(|_| GlobalServiceRegistryError::ALREADY_SET)
     }
 
-    /// 获取全局注册中心实例。
+    /// 获取全局服务注册中心实例。
     ///
     /// # Panics
     ///
@@ -65,7 +65,7 @@ impl GlobalRegistry {
     pub fn get() -> &'static Arc<dyn ServiceRegistry> {
         REGISTRY
             .get()
-            .expect("GlobalRegistry 未初始化，请先调用 GlobalRegistry::set()")
+            .expect("GlobalServiceRegistry 未初始化，请先调用 GlobalServiceRegistry::set()")
     }
 
     /// 检查是否已初始化。

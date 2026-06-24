@@ -69,6 +69,11 @@ impl RegistryAwareDiscover {
         self.cache.subscribe(
             &service_name,
             Arc::new(move |svc_name, new_instances| {
+                tracing::info!(
+                    target: "cmx_rpc",
+                    service_name = %svc_name,
+                    "rpc监听到服务实例变更"
+                );
                 let new_volo = instances_to_volo(new_instances);
 
                 // 获取旧实例列表做 diff
