@@ -26,3 +26,5 @@
 docker/V2/certs/key.pem
 docker/V2/certs/cert.pem
 /e2e_tests/.venv/
+/git.txt
+/docker/k8s-deployment.yml
