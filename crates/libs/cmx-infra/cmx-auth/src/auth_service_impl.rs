@@ -1044,7 +1044,6 @@ impl AuthService for AuthServiceImpl {
     /// 支持的消息前缀：
     /// - `blacklist:{jti}` — 失效指定 Token 的黑名单本地缓存。
     /// - `revoke_all:{user_id}` — 批量失效 Token 与 Session 本地缓存。
-    /// - `api_key:{key_prefix}` — 清理 API Key 两层缓存（实体 + AuthContext）。
     ///
     /// # Arguments
     ///
@@ -1058,13 +1057,6 @@ impl AuthService for AuthServiceImpl {
             self.token_manager.invalidate_local_cache_all().await;
             // P0-2.2 修复：同时清理 Session 本地缓存
             self.session_manager.invalidate_local_all().await;
-        } else if let Some(key_prefix) = message.strip_prefix("api_key:") {
-            // API Key 缓存失效：清理第一层（ApiKeyEntity）和第二层（AuthContext）
-            let entity_key = format!("auth:api_key:{}", key_prefix);
-            let ctx_key = format!("auth:api_key_ctx:{}", key_prefix);
-            let _ = self.cache.ops().del(&entity_key).await;
-            let _ = self.cache.ops().del(&ctx_key).await;
-            debug!(key_prefix = %key_prefix, "API Key 两层缓存已失效");
         }
     }
 

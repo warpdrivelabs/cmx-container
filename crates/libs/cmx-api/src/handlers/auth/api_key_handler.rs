@@ -26,6 +26,40 @@ fn sha256(input: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
+/// 根据 id 查询 API Key 的 key_prefix。
+///
+/// 用于在删除/禁用前获取 key_prefix，以便失效 Redis 缓存。
+async fn query_key_prefix_by_id(id: &str) -> Option<String> {
+    let db_manager = cmx_database::get_default_db_manager();
+    let db_id = db_manager.get_default_db_id().await;
+    let sql = "SELECT key_prefix FROM cmx_auth_api_key WHERE id = $1";
+    let params = serde_json::Value::Array(vec![serde_json::Value::String(id.to_string())]);
+    let dataset = db_manager
+        .query_sql_with_json(&db_id, None, sql, params, "api_key_prefix")
+        .await
+        .ok()?;
+    let schema = dataset.schema.as_ref();
+    dataset
+        .iter()
+        .next()
+        .and_then(|row| row.get_by_name_as(schema, "key_prefix"))
+}
+
+/// 失效 API Key 的 Redis 两层缓存。
+///
+/// API Key 缓存为 Redis-only（无本地 moka L1），直接删除 Redis key 即可对所有实例生效。
+async fn invalidate_api_key_cache(key_prefix: &str) {
+    if let Some(cache) = cmx_buffer::GlobalCacheManager::try_get() {
+        let entity_key = format!("auth:api_key:{}", key_prefix);
+        let ctx_key = format!("auth:api_key_ctx:{}", key_prefix);
+        let keys = [entity_key.as_str(), ctx_key.as_str()];
+        match cache.ops().del_batch(&keys).await {
+            Ok(_) => debug!(key_prefix = %key_prefix, "API Key 缓存已失效"),
+            Err(e) => warn!(key_prefix = %key_prefix, error = %e, "API Key 缓存失效失败"),
+        }
+    }
+}
+
 /// 创建 API Key 请求
 #[derive(Debug, Deserialize, Serialize)]
 #[derive(utoipa::ToSchema)]
@@ -248,6 +282,9 @@ pub async fn delete_api_key(
     let db_manager = cmx_database::get_default_db_manager();
     let db_id = db_manager.get_default_db_id().await;
 
+    // 删除前查询 key_prefix，用于删除后失效 Redis 缓存
+    let key_prefix = query_key_prefix_by_id(id).await;
+
     let sql = "UPDATE cmx_auth_api_key SET archived = 1, update_time = NOW() WHERE id = $1 AND archived = 0";
     let params = serde_json::Value::Array(vec![serde_json::Value::String(id.to_string())]);
     let affected = db_manager
@@ -257,6 +294,11 @@ pub async fn delete_api_key(
 
     if affected == 0 {
         return Err(Error::BusinessError(format!("API Key 不存在: {id}")));
+    }
+
+    // 失效 Redis 两层缓存（ApiKeyEntity + AuthContext）
+    if let Some(prefix) = key_prefix {
+        invalidate_api_key_cache(&prefix).await;
     }
 
     info!(api_key_id = id, "API Key 已删除");
@@ -286,6 +328,9 @@ pub async fn toggle_api_key_status(
     let db_manager = cmx_database::get_default_db_manager();
     let db_id = db_manager.get_default_db_id().await;
 
+    // 查询 key_prefix，用于状态切换后失效 Redis 缓存
+    let key_prefix = query_key_prefix_by_id(&req.id).await;
+
     let sql = "UPDATE cmx_auth_api_key SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
     let params = serde_json::Value::Array(vec![
         serde_json::Value::String(req.id.clone()),
@@ -302,6 +347,11 @@ pub async fn toggle_api_key_status(
             "API Key 不存在或已归档: {}",
             req.id
         )));
+    }
+
+    // 失效 Redis 两层缓存（ApiKeyEntity + AuthContext）
+    if let Some(prefix) = key_prefix {
+        invalidate_api_key_cache(&prefix).await;
     }
 
     Ok(Json(ApiResp::ok(())))
