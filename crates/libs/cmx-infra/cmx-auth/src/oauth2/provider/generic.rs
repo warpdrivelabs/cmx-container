@@ -115,7 +115,7 @@ impl OAuth2Provider for GenericOAuth2Provider {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            tracing::warn!(provider = %self.name(), status = %status, "Token 交换失败");
+            tracing::warn!(provider = %self.name(), status = %status, body = %body, "Token 交换失败");
             return Err(AuthError::OAuth2ProviderTokenError(format!(
                 "HTTP {}: {}", status, body
             )));
@@ -127,6 +127,8 @@ impl OAuth2Provider for GenericOAuth2Provider {
                 tracing::warn!(provider = %self.name(), error = %e, "Token 响应解析失败");
                 AuthError::OAuth2ProviderTokenError(e.to_string())
             })?;
+
+        tracing::info!(provider = %self.name(), response = %json, "Token 端点原始响应");
 
         // 导航到嵌套路径（如企业 CAS 的 `{"code":0,"data":{...}}`）
         let token_json = Self::navigate_path(&json, &self.config.token_response_path);
@@ -196,14 +198,19 @@ impl OAuth2Provider for GenericOAuth2Provider {
             })?;
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!(provider = %self.name(), status = %status, body = %body, "用户信息请求失败");
             return Err(AuthError::OAuth2ProviderUserInfoError(
-                format!("HTTP {}", resp.status())
+                format!("HTTP {}: {}", status, body)
             ));
         }
 
         // 5. 解析响应
         let json: serde_json::Value = resp.json().await
             .map_err(|e| AuthError::OAuth2ProviderUserInfoError(e.to_string()))?;
+
+        tracing::info!(provider = %self.name(), response = %json, "用户信息端点原始响应");
 
         // 6. 导航到嵌套路径
         let user_json = Self::navigate_path(&json, &self.config.userinfo_response_path);

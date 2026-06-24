@@ -9,5 +9,5 @@ pub mod store;
 
 pub use error::{AuditError, Result};
 pub use record::{AuditRecord, AuditDomain, OperationResult};
-pub use logger::AuditLogger;
+pub use logger::{AuditLogger, DefaultAuditLogger};
 pub use store::database::DatabaseAuditStore;

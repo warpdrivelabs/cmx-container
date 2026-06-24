@@ -13,7 +13,7 @@ use config::web_config;
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{
-    init_auth_service, init_cache, init_datasources, finalize_iam_state, init_iam_services, init_infra, init_plugins, init_rpc,
+    build_audit_logger, init_auth_service, init_cache, init_datasources, finalize_iam_state, init_iam_services, init_infra, init_plugins, init_rpc,
     init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra,
 };
 use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
@@ -132,14 +132,17 @@ async fn main() -> Result<()> {
     init_plugins().await?;
     init_service_invoker().await?;
 
+    // 初始化审计日志器（依赖 DatabaseManager，必须在 init_datasources 之后）
+    let audit_logger = build_audit_logger().await?;
+
     // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
-    let (iam_state, user_auth_query, iam_config) = init_iam_services().await?;
+    let (iam_state, user_auth_query, iam_config) = init_iam_services(audit_logger.clone()).await?;
 
     // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
-    let auth_service = init_auth_service(user_auth_query).await?;
+    let auth_service = init_auth_service(user_auth_query, audit_logger.clone()).await?;
 
     // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
-    let iam_state = finalize_iam_state(&iam_state, auth_service.clone(), iam_config).await?;
+    let iam_state = finalize_iam_state(&iam_state, auth_service.clone(), iam_config, audit_logger).await?;
 
     // 权限一致性校验 + 权限列表日志(不写 DB,仅校验代码声明权限与 DB 是否一致)
     {

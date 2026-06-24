@@ -17,8 +17,10 @@ use tracing::{info, warn};
 ///
 /// # 参数
 /// * `user_query` - 用户认证查询实现（由 IAM 模块创建并共享）
+/// * `audit_logger` - 审计日志器，注入到 `AuthServiceImpl`
 pub async fn init_auth_service(
     user_query: Arc<dyn UserAuthQuery>,
+    audit_logger: Arc<dyn cmx_audit::AuditLogger>,
 ) -> Result<Arc<dyn AuthService>, crate::error::Error> {
     // 1. 加载 AuthConfig（从配置文件或使用默认值）
     let auth_config = load_auth_config();
@@ -81,9 +83,10 @@ pub async fn init_auth_service(
             info!("第三方 OAuth2 Provider 注册表初始化完成");
         }
 
-    // 4.2 创建 AuthServiceImpl
+    // 4.2 创建 AuthServiceImpl 并注入审计日志器
     let auth_service_impl = AuthServiceImpl::new(cache, auth_config, user_query)
-        .map_err(|e| crate::error::Error::ServerSetup(format!("认证服务初始化失败: {}", e)))?;
+        .map_err(|e| crate::error::Error::ServerSetup(format!("认证服务初始化失败: {}", e)))?
+        .with_audit_logger(audit_logger);
 
     // 4.5 2.6 修复：初始化 Prometheus 指标（注册到全局默认注册表）
     if let Err(e) = cmx_auth::metrics::init_metrics() {
@@ -229,6 +232,15 @@ fn load_auth_config() -> AuthConfig {
         auth_config.cache.lock_duration_secs = secs as u64;
     }
 
+
+
+    // 确保 [auth.oauth2] 节存在时初始化 oauth2 配置
+    // 当 auth_code_ttl_secs / pkce_required 被注释时，上面的 get_or_insert_with 不会执行，
+    // 但 [auth.oauth2] 节下的其他配置（providers、frontend_callback_url 等）仍需加载
+    if auth_config.oauth2.is_none() && config.inner().get_table("auth.oauth2").is_ok() {
+        auth_config.oauth2 = Some(Default::default());
+    }
+
     // OAuth2 配置
     if let Ok(ttl) = config.get_int("auth.oauth2.auth_code_ttl_secs") {
         auth_config.oauth2.get_or_insert_with(Default::default).auth_code_ttl_secs = ttl as u64;
@@ -353,6 +365,9 @@ fn load_auth_config() -> AuthConfig {
         // 读取 account_link 配置
         if let Ok(auto_link) = config.get_bool("auth.oauth2.account_link.auto_link_by_email") {
             oauth2.account_link.auto_link_by_email = auto_link;
+        }
+        if let Ok(auto_link) = config.get_bool("auth.oauth2.account_link.auto_link_by_username") {
+            oauth2.account_link.auto_link_by_username = auto_link;
         }
         if let Ok(auto_register) = config.get_bool("auth.oauth2.account_link.auto_register") {
             oauth2.account_link.auto_register = auto_register;

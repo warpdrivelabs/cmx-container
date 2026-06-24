@@ -3,6 +3,7 @@
 //! 提供应用程序初始化所需的各项配置功能。
 
 pub mod auth;
+pub mod audit;
 pub mod cache;
 pub mod datasource;
 pub mod iam;
@@ -18,6 +19,7 @@ pub mod storage;
 pub use datasource::init_datasources;
 
 pub use auth::init_auth_service;
+pub use audit::build_audit_logger;
 pub use cache::init_cache;
 pub use iam::{init_iam_services, finalize_iam_state};
 pub use infra_init::{init_infra, shutdown_infra};

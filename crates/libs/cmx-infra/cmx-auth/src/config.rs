@@ -55,6 +55,7 @@ pub const BUILTIN_WHITELIST: &[&str] = &[
     "/api/auth/oauth2/token",
     "/api/auth/oauth2/providers",
     "/api/auth/oauth2/provider",
+    "/api/auth/oauth2/*/callback",
     "/swagger",
     "/api-docs",
     "/health",
@@ -263,7 +264,7 @@ pub struct AccountLinkConfig {
     /// 自动注册时的默认角色（`role_code`）。
     #[serde(default)]
     pub default_role: Option<String>,
-    /// 用户名生成策略：`provider_prefix` / `email_prefix` / `display_name`。
+    /// 用户名生成策略：`provider_prefix` / `provider_user_id` / `username` / `email_prefix` / `display_name`。
     #[serde(default = "default_username_strategy")]
     pub username_strategy: String,
 }
@@ -305,7 +306,7 @@ fn default_callback_code_ttl() -> u64 {
 }
 
 /// OAuth2 配置（扩展）。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuth2Config {
     // === Authorization Server 配置（原有） ===
     /// 授权码有效期（秒），默认 600（10 分钟）。
@@ -331,6 +332,20 @@ pub struct OAuth2Config {
     /// 第三方 OAuth2 登录成功后重定向到前端的 URL。
     #[serde(default)]
     pub frontend_callback_url: String,
+}
+
+impl Default for OAuth2Config {
+    fn default() -> Self {
+        Self {
+            auth_code_ttl_secs: default_auth_code_ttl(),
+            pkce_required: default_pkce_required(),
+            providers: Vec::new(),
+            account_link: AccountLinkConfig::default(),
+            state_ttl_secs: default_state_ttl(),
+            callback_code_ttl_secs: default_callback_code_ttl(),
+            frontend_callback_url: String::new(),
+        }
+    }
 }
 
 fn default_auth_code_ttl() -> u64 {

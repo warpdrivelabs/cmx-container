@@ -7,6 +7,7 @@ use std::time::Duration;
 use cmx_buffer::CacheManager;
 use cmx_traits::auth::OAuth2ClientData;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::config::AuthConfig;
 use crate::error::Result;
@@ -339,7 +340,10 @@ impl OAuth2Store {
     pub async fn store_provider_state(&self, state: &str, provider: &str) -> Result<()> {
         let key = format!("auth:oauth2:provider:state:{}", state);
         let ttl = self.provider_state_ttl();
-        self.cache.ttl().set_with_ttl(&key, provider, ttl).await?;
+        if let Err(e) = self.cache.ttl().set_with_ttl(&key, provider, ttl).await {
+            error!(error = %e, key = %key, "Redis set_with_ttl 失败 (store_provider_state)");
+            return Err(e.into());
+        }
         Ok(())
     }
 

@@ -26,7 +26,13 @@ use crate::error::Result;
 ///
 /// 返回 (IamState, Arc<dyn UserAuthQuery>, IamConfig)，其中 UserAuthQuery 供 AuthServiceImpl 共享使用，
 /// IamConfig 供 finalize_iam_state 使用，避免重复解析配置。
-pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery>, IamConfig)> {
+///
+/// # 参数
+/// * `audit_logger` - 审计日志器，注入到各 IAM Service（RuleEnforcer、ExclusionRuleService、
+///   RoleService、PermissionService、RoleGroupService、UserService）
+pub async fn init_iam_services(
+    audit_logger: Arc<dyn cmx_audit::AuditLogger>,
+) -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery>, IamConfig)> {
     // 1. 加载 IAM 配置
     let iam_config = load_iam_config();
 
@@ -49,7 +55,8 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
     let rule_enforcer_dyn: Arc<dyn cmx_iam::rule::RuleEnforcer> = rule_enforcer.clone();
 
     let rule_service: Arc<dyn cmx_iam::rule::service::ExclusionRuleService> = Arc::new(
-        ExclusionRuleServiceImpl::new(mm.clone(), iam_config.clone()).await,
+        ExclusionRuleServiceImpl::new(mm.clone(), iam_config.clone()).await
+            .with_audit(audit_logger.clone()),
     );
 
     let permission_checker_impl = IamChecker::new(mm.clone(), iam_config.clone()).await;
@@ -60,15 +67,18 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
     let role_service: Arc<dyn cmx_iam::service_traits::RoleService> = Arc::new(
         RoleServiceImpl::new(mm.clone(), iam_config.clone()).await
             .with_rule_enforcer(rule_enforcer_dyn.clone())
-            .with_permission_checker(iam_checker_arc.clone()),
+            .with_permission_checker(iam_checker_arc.clone())
+            .with_audit(audit_logger.clone()),
     );
 
     let permission_service: Arc<dyn cmx_iam::service_traits::PermissionService> = Arc::new(
-        PermissionServiceImpl::new(mm.clone(), iam_config.clone()).await,
+        PermissionServiceImpl::new(mm.clone(), iam_config.clone()).await
+            .with_audit(audit_logger.clone()),
     );
 
     let role_group_service: Arc<dyn cmx_iam::service_traits::RoleGroupService> = Arc::new(
-        RoleGroupServiceImpl::new(mm.clone(), iam_config.clone()).await,
+        RoleGroupServiceImpl::new(mm.clone(), iam_config.clone()).await
+            .with_audit(audit_logger.clone()),
     );
 
     // 5. 初始化全局权限校验器
@@ -105,10 +115,14 @@ pub async fn init_iam_services() -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery
 /// 用 auth_service 完成 IamState 的最终组装
 ///
 /// 替换 IamState 中的占位 user_service 为真实的 UserServiceImpl。
+///
+/// # 参数
+/// * `audit_logger` - 审计日志器，注入到 UserServiceImpl
 pub async fn finalize_iam_state(
     iam_state: &Arc<IamState>,
     auth_service: Arc<dyn cmx_traits::auth::AuthService>,
     iam_config: IamConfig,
+    audit_logger: Arc<dyn cmx_audit::AuditLogger>,
 ) -> Result<Arc<IamState>> {
     let mm = get_default_db_manager();
 
@@ -120,7 +134,8 @@ pub async fn finalize_iam_state(
     let user_service: Arc<dyn cmx_iam::service_traits::UserService> = Arc::new(
         UserServiceImpl::new(mm.clone(), auth_service, IamConfig::default()).await
             .with_rule_enforcer(rule_enforcer)
-            .with_permission_checker(iam_state.permission_checker_clone()),
+            .with_permission_checker(iam_state.permission_checker_clone())
+            .with_audit(audit_logger),
     );
 
     let finalized = Arc::new(IamState {
