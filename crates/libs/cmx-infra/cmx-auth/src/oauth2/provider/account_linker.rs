@@ -156,23 +156,14 @@ impl AccountLinker {
 
     /// 更新关联记录的 `last_login_at`。
     async fn update_last_login_at(&self, account_id: &str) -> Result<(), AuthError> {
-        #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
-        struct OAuth2AccountForUpdate {
-            last_login_at: Option<String>,
-        }
+        let sql = "UPDATE cmx_auth_oauth2_account SET last_login_at = NOW() WHERE id = $1";
+        let params: Vec<cmx_core::model::cell::DataValue> =
+            vec![cmx_core::model::cell::DataValue::String(account_id.to_string())];
 
-        let now = chrono::Utc::now().to_rfc3339();
-        let data = OAuth2AccountForUpdate {
-            last_login_at: Some(now),
-        };
-
-        GenericCrudService::<OAuth2AccountBmc>::update(
-            Self::get_db_manager(),
-            &Self::default_db_id().await,
-            None,
-            serde_json::Value::String(account_id.to_string()),
-            data,
-        ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+        Self::get_db_manager()
+            .execute_sql_with_datavalues(&Self::default_db_id().await, None, sql, params)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         Ok(())
     }
