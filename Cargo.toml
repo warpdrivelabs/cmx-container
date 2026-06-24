@@ -11,7 +11,7 @@ members = [
     "crates/libs/cmx-service",
     "crates/libs/cmx-infra/cmx-database",
     "crates/libs/cmx-infra/cmx-buffer",
-    "crates/libs/cmx-infra/cmx-nacos",
+#    "crates/libs/cmx-infra/cmx-nacos",
     "crates/libs/cmx-infra/cmx-registry-config",
     "crates/libs/cmx-infra/cmx-storage",
     "crates/libs/cmx-infra/cmx-audit",
@@ -74,7 +74,7 @@ cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.9", regis
 # 内部依赖 - 调试
 cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.9", registry = "nora" }
 # 内部依赖 - Nacos
-cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.9", registry = "nora" }
+#cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.9", registry = "nora" }
 # 内部依赖 - 注册中心与配置中心
 cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.9", registry = "nora" }
 cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.9", registry = "nora" }

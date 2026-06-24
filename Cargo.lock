@@ -1158,21 +1158,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmx-nacos"
-version = "0.1.9"
-dependencies = [
- "cmx-utils",
- "config",
- "nacos-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.8.23",
- "tracing",
-]
-
-[[package]]
 name = "cmx-plugin"
 version = "0.1.9"
 dependencies = [
