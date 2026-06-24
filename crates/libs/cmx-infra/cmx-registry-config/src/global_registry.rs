@@ -13,7 +13,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::registry::trait_rs::ServiceRegistry;
+use crate::registry::ServiceRegistry;
 
 /// 全局服务注册中心错误类型。
 ///

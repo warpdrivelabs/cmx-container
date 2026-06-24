@@ -235,27 +235,30 @@ storage_path = "./storage"
 # 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
 # 之间的数据交互配置
 [center_client]
-# 访问模式：mock（默认，当前阶段）| url（URL 直连）| discovery（服务发现）
-# mock 模式下所有接口调用返回 Mock 成功结果，适用于开发和测试环境
+# 访问模式：mock（默认）| http_url（URL 直连）| http_discovery（服务发现）| grpc（gRPC 调用）
+# - mock：所有接口调用返回 Mock 成功结果，适用于开发和测试环境
+# - http_url：通过 HTTP multipart form-data 将 ZIP 发送到指定 URL（需配置 [center_client.urls]）
+# - http_discovery：通过 Nacos 服务发现获取中心实例地址后走 HTTP（需配置 [center_client.discovery]）
+# - grpc：通过 gRPC 调用 CmxPluginDataService（需启用 [rpc] 并配置服务发现）
 mode = "mock"
 # 请求超时时间（毫秒，可选，默认 30000）
-# 各基础服务中心 HTTP 请求的超时时间
+# 各基础服务中心 HTTP 请求的超时时间（仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000
 
-# URL 直连模式配置（mode = "url" 时生效）
+# URL 直连模式配置（mode = "http_url" 时生效）
 # 每个中心对应一个独立的 URL 配置项
 # 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
 [center_client.urls]
 ## 门户中心（菜单数据）URL
 # menu = "http://portal-center:8080/api/plugin/menu/import"
 ## 权限中心（权限数据）URL
-# perm = "http://perm-center:8080/api/plugin/perm/import"
+# perm = "http://perm-center:8080/api/iam/permissions/import"
 ## 表单中心（表单数据）URL
 # form = "http://form-center:8080/api/plugin/form/import"
 ## 流程中心（流程定义）URL
 # flow = "http://flow-center:8080/api/plugin/flow/import"
 
-# 服务发现模式配置（mode = "discovery" 时生效）
+# 服务发现模式配置（mode = "http_discovery" 或 "grpc" 时生效）
 # 通过 Nacos 服务发现获取各中心的实例地址
 # [center_client.discovery]
 ## Nacos 分组（可选，默认 DEFAULT_GROUP）

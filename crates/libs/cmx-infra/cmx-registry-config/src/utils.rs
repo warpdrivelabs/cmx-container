@@ -1,8 +1,32 @@
 //! 公共工具函数。
 
 use std::collections::HashMap;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use nacos_sdk::api::props::ClientProps;
+use tracing::warn;
+
+/// 读取 `std::sync::RwLock` 的辅助函数。
+///
+/// 锁 poisoned 时打印警告并返回内部数据，避免 panic 传播。
+/// 适用于锁持有时间短、不跨 `await` 的场景。
+pub fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read().unwrap_or_else(|e| {
+        warn!("RwLock 读锁 poisoned: {}", e);
+        e.into_inner()
+    })
+}
+
+/// 写入 `std::sync::RwLock` 的辅助函数。
+///
+/// 锁 poisoned 时打印警告并返回内部数据，避免 panic 传播。
+/// 适用于锁持有时间短、不跨 `await` 的场景。
+pub fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write().unwrap_or_else(|e| {
+        warn!("RwLock 写锁 poisoned: {}", e);
+        e.into_inner()
+    })
+}
 
 /// 递归将 `toml::Value` 转换为 `config::Value`。
 ///

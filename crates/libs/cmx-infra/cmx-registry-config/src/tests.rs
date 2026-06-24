@@ -131,8 +131,7 @@ async fn mock_config_center_set_get() {
     let center = MockConfigCenter::new();
 
     center
-        .set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090")
-        .await;
+        .set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090");
 
     let content = center
         .get_config("app.toml", "DEFAULT_GROUP")
@@ -167,8 +166,7 @@ async fn mock_config_center_listen_and_simulate_change() {
 
     // 模拟变更
     center
-        .simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 7070")
-        .await;
+        .simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 7070");
 
     // 验证回调被触发
     assert_eq!(*received.lock().unwrap(), "server.port = 7070");
@@ -234,77 +232,6 @@ async fn instance_cache_get_or_fetch_hit_and_miss() {
 // ===========================================================================
 
 #[test]
-fn change_notifier_register_and_notify() {
-    let notifier = ChangeNotifier::new();
-
-    let received = Arc::new(Mutex::new(String::new()));
-    let received_clone = received.clone();
-
-    notifier.register(
-        "handler-1",
-        Arc::new(move |content: &str| {
-            *received_clone.lock().unwrap() = content.to_string();
-        }),
-    );
-
-    notifier.notify("new config");
-
-    assert_eq!(*received.lock().unwrap(), "new config");
-}
-
-#[test]
-fn change_notifier_panic_isolation() {
-    let notifier = ChangeNotifier::new();
-
-    let received = Arc::new(Mutex::new(String::new()));
-    let received_clone = received.clone();
-
-    // 第一个 handler 会 panic
-    notifier.register(
-        "panic-handler",
-        Arc::new(|_content: &str| {
-            panic!("handler panic");
-        }),
-    );
-
-    // 第二个 handler 应正常执行
-    notifier.register(
-        "normal-handler",
-        Arc::new(move |content: &str| {
-            *received_clone.lock().unwrap() = content.to_string();
-        }),
-    );
-
-    // notify 不应 panic，第二个 handler 应正常执行
-    notifier.notify("config after panic");
-
-    assert_eq!(*received.lock().unwrap(), "config after panic");
-}
-
-#[test]
-fn change_notifier_unregister() {
-    let notifier = ChangeNotifier::new();
-
-    let call_count = Arc::new(Mutex::new(0u32));
-    let call_count_clone = call_count.clone();
-
-    notifier.register(
-        "handler-1",
-        Arc::new(move |_content: &str| {
-            *call_count_clone.lock().unwrap() += 1;
-        }),
-    );
-
-    notifier.notify("first");
-    assert_eq!(*call_count.lock().unwrap(), 1);
-
-    notifier.unregister("handler-1");
-    notifier.notify("second");
-    // 注销后不应再被调用
-    assert_eq!(*call_count.lock().unwrap(), 1);
-}
-
-#[test]
 fn change_notifier_listener_with_interested_keys_filter() {
     let notifier = ChangeNotifier::new();
 
@@ -350,6 +277,46 @@ fn change_notifier_listener_with_interested_keys_filter() {
     };
     notifier.notify_listeners(&event2);
     assert_eq!(*call_count.lock().unwrap(), 1);
+}
+
+#[test]
+fn change_notifier_listener_panic_isolation() {
+    let notifier = ChangeNotifier::new();
+
+    let received = Arc::new(Mutex::new(String::new()));
+    let received_clone = received.clone();
+
+    // 第一个监听器会 panic
+    struct PanicListener;
+    impl crate::notifier::ConfigChangeListener for PanicListener {
+        fn name(&self) -> &str { "panic-listener" }
+        fn on_change(&self, _event: &ConfigChangeEvent) {
+            panic!("listener panic");
+        }
+    }
+
+    // 第二个监听器应正常执行
+    struct NormalListener {
+        received: Arc<Mutex<String>>,
+    }
+    impl crate::notifier::ConfigChangeListener for NormalListener {
+        fn name(&self) -> &str { "normal-listener" }
+        fn on_change(&self, event: &ConfigChangeEvent) {
+            *self.received.lock().unwrap() = event.raw_content.clone();
+        }
+    }
+
+    notifier.add_listener(Arc::new(PanicListener));
+    notifier.add_listener(Arc::new(NormalListener { received: received_clone }));
+
+    // notify_listeners 不应 panic，第二个监听器应正常执行
+    let event = ConfigChangeEvent {
+        changed_keys: vec!["server.port".to_string()],
+        raw_content: "config after panic".to_string(),
+    };
+    notifier.notify_listeners(&event);
+
+    assert_eq!(*received.lock().unwrap(), "config after panic");
 }
 
 // ===========================================================================

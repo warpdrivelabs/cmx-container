@@ -1,5 +1,7 @@
 //! 权限服务实现 — `PermissionServiceImpl`。
 
+use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -8,14 +10,17 @@ use cmx_core::SVRContext;
 use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
+use cmx_traits::plugin::PluginDataImportResult;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use cmx_core::model::cell::DataValue;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument, warn};
 
 use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
+use crate::iam_checker::IamChecker;
 use crate::permission::{PermissionBmc, PermissionFilter, PermissionForCreate, PermissionForUpdate};
 use crate::service_traits::PermissionService;
 
@@ -30,6 +35,8 @@ pub struct PermissionServiceImpl {
     config: IamConfig,
     /// 审计日志记录器（可选）。
     audit: Option<Arc<dyn cmx_audit::AuditLogger>>,
+    /// IAM 权限校验器（可选，用于精准缓存失效）。
+    iam_checker: Option<Arc<IamChecker>>,
 }
 
 impl PermissionServiceImpl {
@@ -53,6 +60,7 @@ impl PermissionServiceImpl {
             db_id,
             config,
             audit: None,
+            iam_checker: None,
         }
     }
 
@@ -67,6 +75,22 @@ impl PermissionServiceImpl {
     /// 返回 `Self`，便于链式调用。
     pub fn with_audit(mut self, audit: Arc<dyn cmx_audit::AuditLogger>) -> Self {
         self.audit = Some(audit);
+        self
+    }
+
+    /// 设置 IAM 权限校验器（Builder 模式）。
+    ///
+    /// 注入后，导入/清理权限操作完成时会触发精准缓存失效。
+    ///
+    /// # Arguments
+    ///
+    /// * `checker` - IAM 权限校验器。
+    ///
+    /// # Returns
+    ///
+    /// 返回 `Self`，便于链式调用。
+    pub fn with_iam_checker(mut self, checker: Arc<IamChecker>) -> Self {
+        self.iam_checker = Some(checker);
         self
     }
 
@@ -133,6 +157,569 @@ impl PermissionServiceImpl {
             permission: parent,
             children,
         }
+    }
+
+    // ============================================================
+    // 插件权限导入相关固有方法（非 trait 方法）
+    // ============================================================
+
+    /// 解压 ZIP 并解析、校验所有 JSON 文件，合并返回权限定义列表。
+    ///
+    /// fail-fast：任何 ZIP/JSON 解析错误或校验失败立即返回错误。
+    fn parse_and_validate_permission_zip(zip_data: &[u8]) -> Result<Vec<PermissionDefinition>, TraitError> {
+        let cursor = std::io::Cursor::new(zip_data);
+        let mut archive = zip::ZipArchive::new(cursor)
+            .map_err(|e| TraitError::Business(format!("ZIP 解压失败: {e}")))?;
+
+        // ZIP 炸弹防护：限制条目数量和单个文件解压大小
+        const MAX_ENTRIES: usize = 100;
+        const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024; // 单文件 10MB
+        if archive.len() > MAX_ENTRIES {
+            return Err(TraitError::Business(format!(
+                "ZIP 条目数 {} 超过上限 {}，拒绝执行",
+                archive.len(),
+                MAX_ENTRIES
+            )));
+        }
+
+        let mut all_definitions: Vec<PermissionDefinition> = Vec::new();
+        let mut seen_codes: HashSet<String> = HashSet::new();
+
+        for i in 0..archive.len() {
+            let mut file = archive
+                .by_index(i)
+                .map_err(|e| TraitError::Business(format!("读取 ZIP 条目失败: {e}")))?;
+
+            let name = file.name().to_string();
+            // 仅处理 .json 文件，跳过目录
+            if file.is_dir() || !name.ends_with(".json") {
+                continue;
+            }
+
+            // 检查解压后大小，防止 ZIP 炸弹
+            if file.size() > MAX_FILE_SIZE {
+                return Err(TraitError::Business(format!(
+                    "文件 {name} 解压后大小 {} 超过上限 {}，拒绝执行",
+                    file.size(),
+                    MAX_FILE_SIZE
+                )));
+            }
+
+            let mut content = String::new();
+            file.read_to_string(&mut content)
+                .map_err(|e| TraitError::Business(format!("读取文件 {name} 失败: {e}")))?;
+
+            let perm_file: PermissionFile = serde_json::from_str(&content).map_err(|e| {
+                TraitError::Business(format!("文件 {name} JSON 解析失败: {e}"))
+            })?;
+
+            for def in perm_file.permissions {
+                // 校验：code 非空且含 ":" 分隔符
+                if def.code.is_empty() {
+                    return Err(TraitError::Business(format!(
+                        "文件 {name} 中存在空权限 code"
+                    )));
+                }
+                if !def.code.contains(':') {
+                    return Err(TraitError::Business(format!(
+                        "权限 code 格式不合规（需包含模块前缀 ':'）: {}",
+                        def.code
+                    )));
+                }
+                // 校验：resource_type ∈ {api,menu,button}（未指定时默认 api）
+                let rt = def.resource_type.as_deref().unwrap_or("api");
+                if !matches!(rt, "api" | "menu" | "button") {
+                    return Err(TraitError::Business(format!(
+                        "权限 resource_type 非法: {} (code={})",
+                        rt, def.code
+                    )));
+                }
+                // 校验：同一批次内 code 不重复
+                if !seen_codes.insert(def.code.clone()) {
+                    return Err(TraitError::Business(format!(
+                        "重复的权限 code: {}",
+                        def.code
+                    )));
+                }
+                all_definitions.push(def);
+            }
+        }
+
+        Ok(all_definitions)
+    }
+
+    /// 事务内查询指定三元组作用域下的权限集合（code → id）。
+    ///
+    /// 不限定 archived，物理删除场景需感知所有历史记录。
+    async fn query_permission_ids_by_scope_txn(
+        &self,
+        txn_id: &str,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> Result<HashMap<String, String>, TraitError> {
+        let sql = "SELECT id, code FROM cmx_permission \
+                   WHERE domain_code = $1 AND app_code = $2 AND module_code = $3";
+        let params = vec![
+            DataValue::String(domain_code.to_string()),
+            DataValue::String(app_code.to_string()),
+            DataValue::String(module_code.to_string()),
+        ];
+        let dataset = self
+            .mm
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params, "perm_scope_ids")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询作用域权限失败: {e}"))))?;
+
+        let schema = dataset.schema.as_ref();
+        let mut map: HashMap<String, String> = HashMap::new();
+        for row in dataset.iter() {
+            let id = row.get_by_name_as::<String>(schema, "id");
+            let code = row.get_by_name_as::<String>(schema, "code");
+            if let (Some(id), Some(code)) = (id, code) {
+                map.insert(code, id);
+            }
+        }
+        Ok(map)
+    }
+
+    /// 事务内查询受权限删除影响的 role_id 列表（用于精准缓存失效）。
+    async fn query_affected_roles_txn(
+        &self,
+        txn_id: &str,
+        permission_ids: &[String],
+    ) -> Result<Vec<String>, TraitError> {
+        if permission_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // 使用 ANY($1) 数组参数，避免 IN 列表过长
+        let sql = "SELECT DISTINCT role_id FROM cmx_role_permission WHERE permission_id = ANY($1)";
+        let arr = DataValue::Array(
+            permission_ids
+                .iter()
+                .map(|s| DataValue::String(s.clone()))
+                .collect(),
+        );
+        let params = vec![arr];
+        let dataset = self
+            .mm
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params, "perm_affected_roles")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}"))))?;
+
+        let schema = dataset.schema.as_ref();
+        let role_ids: Vec<String> = dataset
+            .iter()
+            .filter_map(|row| row.get_by_name_as::<String>(schema, "role_id"))
+            .collect();
+        Ok(role_ids)
+    }
+
+    /// 导入权限数据（从 ZIP 解压、解析、比对 DB、事务写入）。
+    ///
+    /// 完整流程：
+    /// 1. 解压 ZIP 并解析校验 JSON
+    /// 2. 事务内查询 DB 已有权限，计算新增/更新/删除集合
+    /// 3. 第一阶段：INSERT/UPDATE（parent_id 暂置 NULL）
+    /// 4. 第二阶段：回填 parent_id
+    /// 5. 物理删除多余权限及其角色关联
+    /// 6. 提交事务，写审计日志，失效缓存
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文（用于审计日志填充操作者信息）。
+    /// * `domain_code` - 域编码（作用域三元组之一）。
+    /// * `app_code` - 应用编码（作用域三元组之一）。
+    /// * `module_code` - 模块编码（作用域三元组之一）。
+    /// * `zip_data` - ZIP 文件二进制内容（内含一个或多个 JSON 文件）。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `PluginDataImportResult`，包含新增/更新/删除计数与汇总消息。
+    ///
+    /// # Errors
+    ///
+    /// 整体 fail-fast：任何错误回滚整个事务。可能的错误包括：
+    /// - ZIP 解压失败、JSON 解析失败、code 校验失败
+    /// - 唯一约束冲突（code 被其他模块占用）
+    /// - 事务开启/提交失败、SQL 执行失败
+    #[instrument(target = "cmx_iam_import", skip(self, zip_data), fields(domain = %domain_code, app = %app_code, module = %module_code))]
+    pub async fn import_permissions(
+        &self,
+        svr_ctx: &SVRContext,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+        zip_data: &[u8],
+    ) -> Result<PluginDataImportResult, TraitError> {
+        // 1. 解压 + 解析 + 校验 JSON
+        let definitions = Self::parse_and_validate_permission_zip(zip_data)?;
+
+        // 安全校验：空 ZIP 或空 permissions 数组时拒绝执行，
+        // 否则会导致该作用域下全部权限被误删（to_delete = db_codes - empty = db_codes 全集）
+        if definitions.is_empty() {
+            return Err(TraitError::from(IamError::Business(
+                "ZIP 中未包含任何权限定义，拒绝执行导入（防止误删现有权限）".to_string(),
+            )));
+        }
+
+        let file_codes: HashSet<String> = definitions.iter().map(|d| d.code.clone()).collect();
+
+        // 2. 开启事务（查询和写入在同一事务内，避免并发竞态）
+        let txn_ctx = self.mm.get_transaction_context();
+        let guard = txn_ctx
+            .begin_with_guard(&self.db_id)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
+        let txn_id = guard.txn_id();
+
+        // 2.1 事务内查询 DB 已有权限（按三元组）
+        let db_map = self
+            .query_permission_ids_by_scope_txn(txn_id, domain_code, app_code, module_code)
+            .await?;
+        let db_codes: HashSet<String> = db_map.keys().cloned().collect();
+
+        // 2.2 比对
+        let to_create: Vec<&PermissionDefinition> =
+            definitions.iter().filter(|d| !db_codes.contains(&d.code)).collect();
+        let to_update: Vec<&PermissionDefinition> =
+            definitions.iter().filter(|d| db_codes.contains(&d.code)).collect();
+        let to_delete: Vec<String> = db_codes.difference(&file_codes).cloned().collect();
+
+        // 3. 第一阶段：INSERT/UPDATE（parent_id 暂置 NULL）
+        let mut code_to_id: HashMap<String, String> = db_map.clone();
+        let mut created_count = 0u32;
+
+        for def in &to_create {
+            let id = cmx_utils::id::snowflake_id_str();
+            let sql = "INSERT INTO cmx_permission \
+                       (id, code, name, resource_type, parent_id, sort_order, description, \
+                        domain_code, app_code, module_code, extension, status, archived) \
+                       VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9, $10, $11, 0)";
+            let params = vec![
+                DataValue::String(id.clone()),
+                DataValue::String(def.code.clone()),
+                DataValue::String(def.name.clone()),
+                DataValue::String(def.resource_type.clone().unwrap_or_else(|| "api".to_string())),
+                DataValue::Int(def.sort_order.unwrap_or(0)),
+                def.description.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+                DataValue::String(domain_code.to_string()),
+                DataValue::String(app_code.to_string()),
+                DataValue::String(module_code.to_string()),
+                def.extension.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+                DataValue::Int(def.status.unwrap_or(1)),
+            ];
+            self.mm
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!(
+                        "新增权限失败 (code={}): {e}（可能权限 code 已被其他模块占用）",
+                        def.code
+                    )))
+                })?;
+            code_to_id.insert(def.code.clone(), id);
+            created_count += 1;
+        }
+
+        let mut updated_count = 0u32;
+        for def in &to_update {
+            let id = db_map
+                .get(&def.code)
+                .ok_or_else(|| TraitError::Business(format!("更新权限时找不到 id: {}", def.code)))?;
+            // UPDATE 按 id 定位，parent_id 暂置 NULL（第二阶段回填）
+            let sql = "UPDATE cmx_permission SET name = $1, resource_type = $2, parent_id = NULL, \
+                       sort_order = $3, description = $4, extension = $5, status = $6, update_time = NOW() \
+                       WHERE id = $7";
+            let params = vec![
+                DataValue::String(def.name.clone()),
+                DataValue::String(def.resource_type.clone().unwrap_or_else(|| "api".to_string())),
+                DataValue::Int(def.sort_order.unwrap_or(0)),
+                def.description.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+                def.extension.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+                DataValue::Int(def.status.unwrap_or(1)),
+                DataValue::String(id.clone()),
+            ];
+            let rows = self.mm
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("更新权限失败 (id={id}): {e}")))
+                })?;
+            // 仅在实际更新行时计数（rows_affected > 0）
+            if rows > 0 {
+                updated_count += 1;
+            }
+        }
+
+        // 4. 第二阶段：回填 parent_id（合并 db_map + 新增的映射）
+        for def in &definitions {
+            if let Some(parent_code) = &def.parent_code {
+                let id_opt = code_to_id.get(&def.code).cloned();
+                let parent_id_opt = code_to_id.get(parent_code).cloned();
+                if let (Some(id), Some(parent_id)) = (id_opt, parent_id_opt) {
+                    let sql = "UPDATE cmx_permission SET parent_id = $1 WHERE id = $2";
+                    let params = vec![
+                        DataValue::String(parent_id),
+                        DataValue::String(id),
+                    ];
+                    self.mm
+                        .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
+                        .await
+                        .map_err(|e| {
+                            TraitError::from(IamError::Business(format!(
+                                "回填 parent_id 失败 (code={}): {e}",
+                                def.code
+                            )))
+                        })?;
+                } else {
+                    warn!(code = %def.code, parent_code = %parent_code, "parent_code 未找到，降级为无父节点");
+                }
+            }
+        }
+
+        // 5. 删除前查询受影响角色（用于缓存失效）
+        // 同时收集被更新的权限 ID，因为更新也可能影响缓存（name/status/parent_id 变更）
+        let to_delete_ids: Vec<String> = to_delete
+            .iter()
+            .filter_map(|c| db_map.get(c).cloned())
+            .collect();
+        let to_update_ids: Vec<String> = to_update
+            .iter()
+            .filter_map(|d| db_map.get(&d.code).cloned())
+            .collect();
+        let mut affected_ids = to_delete_ids.clone();
+        affected_ids.extend(to_update_ids);
+        let affected_roles = self.query_affected_roles_txn(txn_id, &affected_ids).await?;
+
+        // 5.1 物理删除权限 + 物理删除角色关联（按 id 定位）
+        let mut deleted_count = 0u32;
+        for code in &to_delete {
+            let id = db_map
+                .get(code)
+                .ok_or_else(|| TraitError::Business(format!("删除权限时找不到 id: {code}")))?;
+            let del_perm_sql = "DELETE FROM cmx_permission WHERE id = $1";
+            let del_perm_params = vec![DataValue::String(id.clone())];
+            let rows = self.mm
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_perm_sql, del_perm_params)
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("删除权限失败 (id={id}): {e}")))
+                })?;
+
+            // 仅在实际删除行时计数和清理角色关联
+            if rows > 0 {
+                deleted_count += 1;
+                let del_rp_sql = "DELETE FROM cmx_role_permission WHERE permission_id = $1";
+                let del_rp_params = vec![DataValue::String(id.clone())];
+                self.mm
+                    .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, del_rp_params)
+                    .await
+                    .map_err(|e| {
+                        TraitError::from(IamError::Business(format!(
+                            "删除角色权限关联失败 (permission_id={id}): {e}"
+                        )))
+                    })?;
+            }
+        }
+
+        // 6. 提交事务
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
+
+        // 7. 审计日志（事务提交后）
+        let audit_detail = serde_json::json!({
+            "domain_code": domain_code,
+            "app_code": app_code,
+            "module_code": module_code,
+            "created": created_count,
+            "updated": updated_count,
+            "deleted": deleted_count,
+            "created_codes": to_create.iter().map(|d| d.code.clone()).collect::<Vec<_>>(),
+            "updated_codes": to_update.iter().map(|d| d.code.clone()).collect::<Vec<_>>(),
+            "deleted_codes": to_delete,
+        });
+        self.audit_write(
+            svr_ctx,
+            "import_permissions",
+            "permission",
+            "batch",
+            &audit_detail,
+        )
+        .await;
+
+        // 8. 精准缓存失效（删除或更新都会影响权限树，需失效受影响角色）
+        if (deleted_count > 0 || updated_count > 0)
+            && !affected_roles.is_empty()
+            && let Some(ref checker) = self.iam_checker
+        {
+            for role_id in &affected_roles {
+                checker.invalidate_role_cache(role_id).await;
+            }
+        }
+
+        info!(
+            target: "cmx_iam_import",
+            created = created_count,
+            updated = updated_count,
+            deleted = deleted_count,
+            "权限导入完成"
+        );
+
+        Ok(PluginDataImportResult {
+            success: true,
+            message: format!(
+                "导入完成: 新增 {} / 更新 {} / 删除 {}",
+                created_count, updated_count, deleted_count
+            ),
+            created_count,
+            updated_count,
+            deleted_count,
+        })
+    }
+
+    /// 清理指定三元组作用域下的所有权限及其角色关联（物理删除）。
+    ///
+    /// 流程：
+    /// 1. 开启事务
+    /// 2. 查询受影响角色（用于缓存失效）
+    /// 3. 物理删除角色-权限关联（用子查询避免 IN 列表过长）
+    /// 4. 物理删除权限
+    /// 5. 提交事务，精准失效缓存
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文（用于审计日志）。
+    /// * `domain_code` - 域编码。
+    /// * `app_code` - 应用编码。
+    /// * `module_code` - 模块编码。
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 `PluginDataImportResult`，仅 `deleted_count` 有值。
+    ///
+    /// # Errors
+    ///
+    /// 事务开启/提交失败、SQL 执行失败时返回错误并回滚事务。
+    #[instrument(target = "cmx_iam_import", skip(self), fields(domain = %domain_code, app = %app_code, module = %module_code))]
+    pub async fn cleanup_permissions(
+        &self,
+        svr_ctx: &SVRContext,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> Result<PluginDataImportResult, TraitError> {
+        // 1. 开启事务
+        let txn_ctx = self.mm.get_transaction_context();
+        let guard = txn_ctx
+            .begin_with_guard(&self.db_id)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
+        let txn_id = guard.txn_id();
+
+        // 1.1 查询受影响角色（用子查询避免依赖额外参数）
+        let affected_roles_sql =
+            "SELECT DISTINCT role_id FROM cmx_role_permission \
+             WHERE permission_id IN (SELECT id FROM cmx_permission \
+             WHERE domain_code = $1 AND app_code = $2 AND module_code = $3)";
+        let affected_roles_params = vec![
+            DataValue::String(domain_code.to_string()),
+            DataValue::String(app_code.to_string()),
+            DataValue::String(module_code.to_string()),
+        ];
+        let dataset = self
+            .mm
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                affected_roles_sql,
+                affected_roles_params,
+                "cleanup_affected_roles",
+            )
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}"))))?;
+        let schema = dataset.schema.as_ref();
+        let affected_roles: Vec<String> = dataset
+            .iter()
+            .filter_map(|row| row.get_by_name_as::<String>(schema, "role_id"))
+            .collect();
+
+        // 1.2 物理删除角色关联（子查询避免 IN 列表过长）
+        let del_rp_sql =
+            "DELETE FROM cmx_role_permission WHERE permission_id IN (\
+             SELECT id FROM cmx_permission \
+             WHERE domain_code = $1 AND app_code = $2 AND module_code = $3)";
+        let scope_params = vec![
+            DataValue::String(domain_code.to_string()),
+            DataValue::String(app_code.to_string()),
+            DataValue::String(module_code.to_string()),
+        ];
+        self.mm
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, scope_params.clone())
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}")))
+            })?;
+
+        // 1.3 物理删除权限
+        let del_perm_sql =
+            "DELETE FROM cmx_permission \
+             WHERE domain_code = $1 AND app_code = $2 AND module_code = $3";
+        let deleted = self
+            .mm
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_perm_sql, scope_params)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("删除权限失败: {e}"))))?;
+
+        // 2. 提交事务
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
+
+        let deleted_count = u32::try_from(deleted).unwrap_or(u32::MAX);
+
+        // 3. 审计日志（事务提交后）
+        let audit_detail = serde_json::json!({
+            "domain_code": domain_code,
+            "app_code": app_code,
+            "module_code": module_code,
+            "deleted": deleted_count,
+            "affected_roles": affected_roles,
+        });
+        self.audit_write(
+            svr_ctx,
+            "cleanup_permissions",
+            "permission",
+            "batch",
+            &audit_detail,
+        )
+        .await;
+
+        // 4. 精准缓存失效
+        if !affected_roles.is_empty()
+            && let Some(ref checker) = self.iam_checker
+        {
+            for role_id in &affected_roles {
+                checker.invalidate_role_cache(role_id).await;
+            }
+        }
+
+        info!(
+            target: "cmx_iam_import",
+            deleted = deleted_count,
+            "权限清理完成"
+        );
+
+        Ok(PluginDataImportResult {
+            success: true,
+            message: format!("清理完成: 删除 {} 条权限", deleted_count),
+            created_count: 0,
+            updated_count: 0,
+            deleted_count,
+        })
     }
 }
 
@@ -559,4 +1146,60 @@ impl PermissionService for PermissionServiceImpl {
 
         Ok(stats)
     }
+}
+
+// ============================================================
+// 插件权限文件解析相关结构体
+// ============================================================
+
+/// 权限定义（对应 JSON 文件中的单条权限条目）。
+///
+/// 用于从插件 `permdata/*.json` 文件反序列化，与入库的 `Permission` 实体解耦。
+/// `parent_code` 在第二阶段被解析为 `parent_id`。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDefinition {
+    /// 权限编码（必须含 `:` 分隔符，如 `user:list`）。
+    pub code: String,
+    /// 权限名称。
+    pub name: String,
+    /// 资源类型（`api`/`menu`/`button`，未指定默认 `api`）。
+    #[serde(default)]
+    pub resource_type: Option<String>,
+    /// 父权限编码（用 code 引用，接收端解析为 parent_id）。
+    #[serde(default)]
+    pub parent_code: Option<String>,
+    /// 排序序号（默认 0）。
+    #[serde(default)]
+    pub sort_order: Option<i64>,
+    /// 权限描述。
+    #[serde(default)]
+    pub description: Option<String>,
+    /// 扩展配置（JSON 字符串）。
+    #[serde(default)]
+    pub extension: Option<String>,
+    /// 状态（1-启用，0-禁用，默认 1）。
+    #[serde(default)]
+    pub status: Option<i64>,
+}
+
+/// 权限文件（对应 `permdata/` 目录下的单个 JSON 文件）。
+///
+/// `name`/`version`/`description` 为元数据，不入库；
+/// `permissions` 为实际权限定义列表，合并后统一处理。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionFile {
+    /// 文件描述名称（元数据，不入库）。
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub name: String,
+    /// 文件版本（元数据，不入库）。
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub version: String,
+    /// 文件描述（元数据，不入库）。
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub description: String,
+    /// 权限定义列表。
+    pub permissions: Vec<PermissionDefinition>,
 }

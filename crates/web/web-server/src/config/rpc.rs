@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::{create_rpc_client, start_grpc_server, GlobalRpcClient};
 use cmx_rpc::config::RpcConfig;
-use cmx_traits::plugin::PluginQuery;
+use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::ServiceInvoker;
 use cmx_utils::ConfigManager;
@@ -24,6 +24,14 @@ pub use crate::Error;
 /// 4. 执行缓存预热（遍历 `warmup_services` 列表）。
 /// 5. 启动服务列表定时同步。
 ///
+/// # Arguments
+///
+/// * `service_invoker` - 服务调用器。
+/// * `runtime_invoker` - 运行时调用器。
+/// * `plugin_query` - 插件查询器。
+/// * `data_importer` - 插件数据导入器（可选）。注入后 gRPC 服务端可处理
+///   `CmxPluginDataService` 的 import/cleanup 请求。
+///
 /// # Returns
 ///
 /// * `Ok(Option<u16>)` - RPC 启用且成功时返回 gRPC 端口，否则返回 `None`。
@@ -32,6 +40,7 @@ pub async fn init_rpc(
     service_invoker: Arc<dyn ServiceInvoker>,
     runtime_invoker: Arc<dyn RuntimeInvoker>,
     plugin_query: Arc<dyn PluginQuery>,
+    data_importer: Option<Arc<dyn PluginDataImporter>>,
 ) -> crate::Result<Option<u16>> {
     let rpc_config = load_rpc_config();
 
@@ -68,7 +77,7 @@ pub async fn init_rpc(
     let grpc_port_for_log = grpc_port;
     let server_handle = tokio::spawn(async move {
         info!("在后台启动 gRPC Server，端口: {}", grpc_port_for_log);
-        match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, plugin_query, server_ready_tx).await {
+        match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, plugin_query, data_importer, server_ready_tx).await {
             Ok(()) => info!("gRPC Server 已正常退出"),
             Err(e) => warn!("gRPC Server 运行失败: {}", e),
         }

@@ -1130,6 +1130,7 @@ dependencies = [
  "tracing",
  "utoipa",
  "uuid",
+ "zip 2.4.2",
 ]
 
 [[package]]
@@ -1173,6 +1174,7 @@ dependencies = [
  "cmx-core 0.1.9",
  "cmx-database",
  "cmx-metadata",
+ "cmx-registry-config",
  "cmx-rpc",
  "cmx-service",
  "cmx-storage",
@@ -1253,7 +1255,6 @@ dependencies = [
  "config",
  "nacos-sdk",
  "serde",
- "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.23",
@@ -5539,6 +5540,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",

@@ -16,11 +16,11 @@
 //! 2. 在 [`create_registry`] 函数中增加 `match` 分支。
 //! 3. 在 [`RegistryConfig`] 中新增对应配置结构。
 
-pub mod instance_cache;
+mod instance_cache;
 mod mock;
 mod nacos;
-pub mod service_list_syncer;
-pub mod trait_rs;
+mod service_list_syncer;
+mod trait_rs;
 
 pub use instance_cache::ServiceInstanceCache;
 pub use mock::MockRegistry;

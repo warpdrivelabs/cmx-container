@@ -29,6 +29,19 @@ impl DataCategory {
         }
     }
 
+    /// 返回用于 HTTP/gRPC 传输的短标识符。
+    ///
+    /// 与 `PluginDataCategory::as_str()` 保持一致（`menu`/`perm`/`form`/`flow`），
+    /// 用于跨服务传输的 category 字段。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Menu => "menu",
+            Self::Perm => "perm",
+            Self::Form => "form",
+            Self::Flow => "flow",
+        }
+    }
+
     /// 返回对应服务中心的中文名称。
     pub fn center_name(&self) -> &str {
         match self {
@@ -154,6 +167,12 @@ pub struct CenterCleanupRequest {
     pub version: Option<String>,
     /// 数据类别。
     pub category: DataCategory,
+    /// 域编码。
+    pub domain_code: String,
+    /// 应用编码。
+    pub application_code: String,
+    /// 模块编码。
+    pub module_code: String,
 }
 
 /// 服务中心响应。

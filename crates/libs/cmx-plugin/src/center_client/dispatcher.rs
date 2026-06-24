@@ -130,6 +130,9 @@ impl CenterDataDispatcher {
                 app_id: ctx.app_id.clone(),
                 version: Some(ctx.version.clone()),
                 category: *category,
+                domain_code: ctx.domain_code.clone(),
+                application_code: ctx.application_code.clone(),
+                module_code: ctx.module_code.clone(),
             };
 
             let sender = self.sender.clone();

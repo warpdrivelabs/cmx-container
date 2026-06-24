@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::registry::instance_cache::ServiceInstanceCache;
+use crate::registry::ServiceInstanceCache;
 
 /// 全局服务实例缓存错误类型。
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]

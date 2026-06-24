@@ -8,10 +8,11 @@ use std::{
     sync::RwLock,
 };
 
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use super::trait_rs::{InstanceChangeCallback, ServiceInstance};
 use crate::error::RegistryError;
+use crate::utils::{read_lock, write_lock};
 
 /// 通用服务实例缓存（注册中心无关）。
 ///
@@ -36,15 +37,7 @@ impl ServiceInstanceCache {
     /// 返回指定服务的缓存实例列表，未缓存时返回 `None`。
     /// 锁 poisoned 时返回 `None` 并打印警告。
     pub fn get(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
-        self.cached
-            .read()
-            .unwrap_or_else(|e| {
-                warn!("cached 锁 poisoned: {}", e);
-                // poison 后返回空 HashMap 的读锁
-                e.into_inner()
-            })
-            .get(service_name)
-            .cloned()
+        read_lock(&self.cached).get(service_name).cloned()
     }
 
     /// 懒加载：缓存命中直接返回，未命中时通过 `fetch_fn` 获取并缓存。
@@ -74,19 +67,13 @@ impl ServiceInstanceCache {
         );
 
         {
-            let mut cached = self.cached.write().unwrap_or_else(|e| {
-                warn!("cached 锁 poisoned: {}", e);
-                e.into_inner()
-            });
+            let mut cached = write_lock(&self.cached);
             cached.insert(service_name.to_string(), instances.clone());
         }
 
         // 先 clone 出订阅者列表，释放锁后再调用回调，避免回调内部操作 subscribers 导致死锁
         let subscribers_snapshot: Vec<InstanceChangeCallback> = {
-            let subscribers = self.subscribers.read().unwrap_or_else(|e| {
-                warn!("subscribers 锁 poisoned: {}", e);
-                e.into_inner()
-            });
+            let subscribers = read_lock(&self.subscribers);
             subscribers.get(service_name).cloned().unwrap_or_default()
         };
 
@@ -101,10 +88,7 @@ impl ServiceInstanceCache {
     /// `cache.update` 时所有回调都会被调用。
     pub fn subscribe(&self, service_name: &str, callback: InstanceChangeCallback) {
         info!(service_name = %service_name, "注册实例变更订阅");
-        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
-            warn!("subscribers 锁 poisoned: {}", e);
-            e.into_inner()
-        });
+        let mut subscribers = write_lock(&self.subscribers);
         subscribers
             .entry(service_name.to_string())
             .or_default()

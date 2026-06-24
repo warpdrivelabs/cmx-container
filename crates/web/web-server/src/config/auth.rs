@@ -99,6 +99,12 @@ pub async fn init_auth_service(
     cmx_api::middleware::GlobalAuthService::initialize_oauth2(oauth2_policy)
         .map_err(crate::error::Error::ServerSetup)?;
 
+    // 5.5 启动过期会话定时清理任务（必须在 auth_service_impl move 到 Arc<dyn AuthService> 之前调用）
+    // start_cleanup_task 是同步方法，返回 JoinHandle 供调用方管理生命周期。
+    // 此处启动后无需持有 handle（应用退出时 tokio runtime 会处理），
+    // 如需 graceful shutdown，可保存 handle 并在 shutdown 时 abort()。
+    let _cleanup_handle = auth_service_impl.start_cleanup_task();
+
     let auth_service: Arc<dyn AuthService> = Arc::new(auth_service_impl);
 
     // 6. 注册全局认证服务（供 mw_auth 中间件使用）
@@ -128,9 +134,6 @@ pub async fn init_auth_service(
     if let Err(e) = auth_service.import_static_api_keys().await {
         warn!("静态 API Key 导入失败: {}", e);
     }
-
-    // 10. 启动过期会话定时清理任务
-    auth_service.start_cleanup_task().await;
 
     info!("认证服务初始化完成");
     Ok(auth_service)

@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
+use crate::plugin::{PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult};
 use crate::service::invoker::ServiceInvokeOptions;
 
 /// RPC 调用错误类型。
@@ -103,4 +104,47 @@ pub trait RpcClient: Send + Sync {
         function_name: &str,
         input: Value,
     ) -> Result<FunctionCallResult, RpcError>;
+
+    /// 导入插件数据到远程服务（gRPC 专用，HTTP 端点不使用此方法）。
+    ///
+    /// 将 ZIP 数据通过 gRPC 发送到远程实例的 `ImportPluginData` 方法。
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - 目标服务在注册中心的服务名（如 `cmx-perm-center`），
+    ///   用于服务发现。与 `request.app_id`（插件应用 ID）不同。
+    /// * `request` - 插件数据导入请求。
+    ///
+    /// # 默认实现
+    ///
+    /// 返回 `RpcError::UnsupportedProtocol`，仅 `VoloGrpcClient` 覆盖。
+    async fn import_plugin_data(
+        &self,
+        _service_name: &str,
+        _request: PluginDataImportRequest,
+    ) -> Result<PluginDataImportResult, RpcError> {
+        Err(RpcError::UnsupportedProtocol(
+            "import_plugin_data 未实现".to_string(),
+        ))
+    }
+
+    /// 清理远程服务中的插件数据（gRPC 专用）。
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - 目标服务在注册中心的服务名。
+    /// * `request` - 插件数据清理请求。
+    ///
+    /// # 默认实现
+    ///
+    /// 返回 `RpcError::UnsupportedProtocol`，仅 `VoloGrpcClient` 覆盖。
+    async fn cleanup_plugin_data(
+        &self,
+        _service_name: &str,
+        _request: PluginDataCleanupRequest,
+    ) -> Result<PluginDataImportResult, RpcError> {
+        Err(RpcError::UnsupportedProtocol(
+            "cleanup_plugin_data 未实现".to_string(),
+        ))
+    }
 }

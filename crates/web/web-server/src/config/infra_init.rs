@@ -13,15 +13,21 @@
 use std::sync::Arc;
 
 use cmx_registry_config::{
-    create_config_center, create_registry_with_cache, ConfigCenter, ConfigCenterFullConfig,
-    ConfigChangeEvent, ConfigReloader, GlobalChangeNotifier, GlobalConfigCenter,
-    GlobalServiceRegistry, GlobalServiceInstanceCache, RegistryConfig, RemoteConfigSource,
-    ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
+    create_config_center, create_registry_with_cache, ConfigCenterFullConfig,
+    ConfigChangeEvent, ConfigChangeCallback, ConfigReloader, GlobalChangeNotifier,
+    GlobalConfigCenter, GlobalServiceRegistry, GlobalServiceInstanceCache, RegistryConfig,
+    RemoteConfigSource, ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
+use tokio::sync::watch;
 use tracing::{info, warn};
 
 pub use crate::Error;
+
+/// 全局服务列表同步器的 shutdown 信号发送端。
+///
+/// 在 `start_service_list_syncer` 中创建，在 `shutdown_infra` 中发送 `true` 优雅停止同步器。
+static SYNCER_SHUTDOWN: std::sync::OnceLock<watch::Sender<bool>> = std::sync::OnceLock::new();
 
 /// 初始化基础设施（注册中心 + 配置中心 + 全局配置）。
 ///
@@ -48,9 +54,17 @@ pub async fn init_infra() -> crate::Result<()> {
     })?;
     GlobalServiceInstanceCache::set(cache)
         .map_err(|e| Error::ConfigError(format!("设置全局服务实例缓存失败: {}", e)))?;
-    let config_center = create_config_center(&cc_config).await.map_err(|e| {
-        Error::ConfigError(format!("创建配置中心失败: {}", e))
-    })?;
+
+    // 初始化全局配置变更通知器（必须在创建配置中心前完成，以便 change_handler 注册到通知器）。
+    GlobalChangeNotifier::initialize();
+
+    // 构造配置变更处理器：解析新配置 → 合并 → 原子替换全局 ConfigManager → 通知结构化监听器。
+    // 该处理器由 create_config_center 自动注册到每个 listener，配置变更时由 SDK 直接回调。
+    let change_handler = build_config_change_handler();
+
+    let config_center = create_config_center(&cc_config, change_handler)
+        .await
+        .map_err(|e| Error::ConfigError(format!("创建配置中心失败: {}", e)))?;
 
     // 构建配置（本地 TOML + 远程配置中心 + 环境变量）。
     let mut builder = ConfigBuilder::new().add_toml_file_from_env("CONFIG_FILE");
@@ -105,9 +119,8 @@ pub async fn init_infra() -> crate::Result<()> {
     // 启动服务列表定时同步（注册中心基础设施职责，不依赖 RPC 是否启用）。
     start_service_list_syncer().await;
 
-    // 设置配置变更监听，启动热更新。
-    let config_center = GlobalConfigCenter::get();
-    setup_config_listener(config_center).await;
+    // 配置变更监听已在 create_config_center 时通过 change_handler 自动注册，
+    // 业务模块可通过 GlobalChangeNotifier::add_listener() 注册结构化监听器。
 
     // 输出当前所有配置项（调试用，过滤掉 Path）。
     for key in ConfigManager::global().keys() {
@@ -159,6 +172,8 @@ async fn register_service(registry: &Arc<dyn ServiceRegistry>) {
 ///
 /// 这是注册中心基础设施职责，不依赖 RPC 是否启用。即使 RPC 未启用，
 /// 其他需要服务发现的模块也能从缓存中获取实例信息。
+///
+/// 同步器通过 `watch::channel` 接收 shutdown 信号，在 `shutdown_infra` 时优雅停止。
 async fn start_service_list_syncer() {
     let registry = GlobalServiceRegistry::get();
 
@@ -173,11 +188,19 @@ async fn start_service_list_syncer() {
 
     let registry = registry.clone();
     let cache: Arc<ServiceInstanceCache> = GlobalServiceInstanceCache::get().clone();
-    let syncer = ServiceListSyncer::new(registry, cache, SYNC_INTERVAL_SECS);
+    let syncer = Arc::new(ServiceListSyncer::new(registry, cache, SYNC_INTERVAL_SECS));
+
+    // 创建 shutdown 信号通道，发送端存入全局 OnceLock 供 shutdown_infra 使用。
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    if SYNCER_SHUTDOWN.set(shutdown_tx).is_err() {
+        warn!("服务列表同步器已启动，跳过重复启动");
+        return;
+    }
 
     tokio::spawn(async move {
         info!("启动服务列表定时同步，间隔: {}s", SYNC_INTERVAL_SECS);
-        syncer.run_forever().await;
+        syncer.run(shutdown_rx).await;
+        info!("服务列表定时同步已停止");
     });
 }
 
@@ -205,65 +228,51 @@ fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
         }
 }
 
-/// 设置配置变更监听。
+/// 构造配置变更处理器。
 ///
-/// 注册到全局配置变更通知器（`GlobalChangeNotifier`）的处理器包括：
+/// 返回的回调负责：
+/// 1. 解析新配置内容（原始 TOML 字符串）。
+/// 2. 原子替换全局 `ConfigManager`。
+/// 3. 通过 `GlobalChangeNotifier::notify_listeners` 通知结构化监听器。
 ///
-/// 1. **配置重载器**（key = `"config_reloader"`）：解析新配置并原子替换全局 `ConfigManager`，
-///    之后通过 `notify_listeners()` 通知结构化监听器。
-/// 2. **业务监听器**：其他模块可通过 `GlobalChangeNotifier::add_listener()` 注册。
-///
-/// 收到远程配置变更时，处理器按注册顺序被调用。
+/// 回调内部使用 `tokio::spawn` 异步执行 reload，避免阻塞 Nacos 监听线程。
 /// 环境变量优先级由 reload 时的 `add_env()` 保持，配置变更不会影响该优先级。
-///
-/// # Arguments
-///
-/// * `config_center` - 全局配置中心实例。
-async fn setup_config_listener(
-    config_center: &Arc<dyn ConfigCenter>,
-) {
-    if !config_center.is_enabled() {
-        info!("配置中心未启用，跳过配置监听注册");
-        return;
-    }
-
-    GlobalChangeNotifier::initialize();
-
-    // 注册配置重载器：解析新配置 → 合并 → 原子替换全局 ConfigManager → 通知监听器。
+fn build_config_change_handler() -> Option<ConfigChangeCallback> {
     let config_file_path = std::env::var("CONFIG_FILE").ok();
     let reloader = Arc::new(ConfigReloader::new(config_file_path));
-    GlobalChangeNotifier::register("config_reloader", {
+    Some(Arc::new(move |content: &str| {
         let reloader = reloader.clone();
-        Arc::new(move |content: &str| {
-            let reloader = reloader.clone();
-            let content = content.to_string();
-            // 使用 tokio::spawn 异步执行 reload，避免阻塞 Nacos 监听线程。
-            tokio::spawn(async move {
-                match reloader.reload(&content) {
-                    Ok(changed_keys) => {
-                        let event = ConfigChangeEvent {
-                            changed_keys,
-                            raw_content: content,
-                        };
-                        // 通知结构化监听器（仅 typed listener）。
-                        GlobalChangeNotifier::notify_listeners(&event);
-                    }
-                    Err(e) => {
-                        warn!("配置热更新失败: {}，保留当前配置", e);
-                    }
+        let content = content.to_string();
+        // 使用 tokio::spawn 异步执行 reload，避免阻塞 Nacos 监听线程。
+        tokio::spawn(async move {
+            match reloader.reload(&content) {
+                Ok(changed_keys) => {
+                    let event = ConfigChangeEvent {
+                        changed_keys,
+                        raw_content: content,
+                    };
+                    // 通知结构化监听器。
+                    GlobalChangeNotifier::notify_listeners(&event);
                 }
-            });
-        })
-    });
-
-    // 注意：配置变更的 SDK 级别监听已在 create_config_center 工厂函数中自动注册，
-    // 此处不再重复注册，避免配置变更被双重触发。
+                Err(e) => {
+                    warn!("配置热更新失败: {}，保留当前配置", e);
+                }
+            }
+        });
+    }))
 }
 
 /// 优雅关闭：从注册中心注销服务实例。
 ///
 /// 应在应用退出时调用，确保 Nacos 等注册中心能及时感知实例下线。
+/// 同时发送 shutdown 信号停止服务列表定时同步器。
 pub async fn shutdown_infra() {
+    // 先停止服务列表定时同步器，避免注销后同步器仍尝试拉取已下线实例。
+    if let Some(tx) = SYNCER_SHUTDOWN.get() {
+        let _ = tx.send(true);
+        info!("已发送服务列表同步器停止信号");
+    }
+
     if !GlobalServiceRegistry::is_initialized() {
         return;
     }

@@ -256,7 +256,27 @@ impl PluginManager {
 
         let center_config = crate::center_client::CenterClientConfig::load();
         let center_sender: std::sync::Arc<dyn crate::center_client::ServiceCenterSender> =
-            std::sync::Arc::new(crate::center_client::MockServiceCenterSender);
+            match center_config.mode.as_str() {
+                "http_url" | "http_discovery" => {
+                    tracing::info!(
+                        "center_client 使用 HTTP 模式: mode={}",
+                        center_config.mode
+                    );
+                    std::sync::Arc::new(
+                        crate::center_client::HttpServiceCenterSender::new(center_config.clone()),
+                    )
+                }
+                "grpc" => {
+                    tracing::info!("center_client 使用 gRPC 模式");
+                    std::sync::Arc::new(
+                        crate::center_client::GrpcServiceCenterSender::new(center_config.clone()),
+                    )
+                }
+                _ => {
+                    tracing::info!("center_client 使用 Mock 模式: mode={}", center_config.mode);
+                    std::sync::Arc::new(crate::center_client::MockServiceCenterSender)
+                }
+            };
         let center_dispatcher = std::sync::Arc::new(
             crate::center_client::CenterDataDispatcher::new(center_sender),
         );

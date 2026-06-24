@@ -11,28 +11,38 @@ use cmx_api::middleware::GlobalPermissionConfig;
 use cmx_database::get_default_db_manager;
 use cmx_iam::config::IamConfig;
 use cmx_iam::iam_checker::IamChecker;
-use cmx_iam::permission::PermissionServiceImpl;
+use cmx_iam::permission::{PermissionServiceImpl, PluginDataImporterImpl};
 use cmx_iam::role::RoleServiceImpl;
 use cmx_iam::role_group::RoleGroupServiceImpl;
 use cmx_iam::rule::{ExclusionRuleServiceImpl, RuleEnforcerImpl};
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
 use cmx_traits::auth::UserAuthQuery;
+use cmx_traits::plugin::PluginDataImporter;
 use tracing::{info, warn};
 
 use crate::error::Result;
 
 /// 创建 IAM 服务（含 UserAuthQueryImpl）
 ///
-/// 返回 (IamState, Arc<dyn UserAuthQuery>, IamConfig)，其中 UserAuthQuery 供 AuthServiceImpl 共享使用，
-/// IamConfig 供 finalize_iam_state 使用，避免重复解析配置。
+/// 返回 `(IamState, Arc<dyn UserAuthQuery>, IamConfig, Option<Arc<dyn PluginDataImporter>>)`，
+/// 其中：
+/// - `UserAuthQuery` 供 AuthServiceImpl 共享使用；
+/// - `IamConfig` 供 finalize_iam_state 使用，避免重复解析配置；
+/// - `PluginDataImporter` 供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑，
+///   仅当 `PermissionServiceImpl` 成功创建时返回 `Some`。
 ///
 /// # 参数
 /// * `audit_logger` - 审计日志器，注入到各 IAM Service（RuleEnforcer、ExclusionRuleService、
 ///   RoleService、PermissionService、RoleGroupService、UserService）
 pub async fn init_iam_services(
     audit_logger: Arc<dyn cmx_audit::AuditLogger>,
-) -> Result<(Arc<IamState>, Arc<dyn UserAuthQuery>, IamConfig)> {
+) -> Result<(
+    Arc<IamState>,
+    Arc<dyn UserAuthQuery>,
+    IamConfig,
+    Option<Arc<dyn PluginDataImporter>>,
+)> {
     // 1. 加载 IAM 配置
     let iam_config = load_iam_config();
 
@@ -71,10 +81,20 @@ pub async fn init_iam_services(
             .with_audit(audit_logger.clone()),
     );
 
-    let permission_service: Arc<dyn cmx_iam::service_traits::PermissionService> = Arc::new(
+    // 创建 PermissionServiceImpl 时保留具体类型 Arc<PermissionServiceImpl>，
+    // 用于构造 PluginDataImporterImpl（固有方法 import_permissions/cleanup_permissions
+    // 不在 trait 上，必须通过具体类型调用）。
+    let permission_service_impl = Arc::new(
         PermissionServiceImpl::new(mm.clone(), iam_config.clone()).await
-            .with_audit(audit_logger.clone()),
+            .with_audit(audit_logger.clone())
+            .with_iam_checker(iam_checker_arc.clone()),
     );
+    let permission_service: Arc<dyn cmx_iam::service_traits::PermissionService> =
+        permission_service_impl.clone();
+
+    // 构造插件数据导入器（HTTP 端点和 gRPC 服务端共用）
+    let plugin_data_importer: Arc<dyn PluginDataImporter> =
+        Arc::new(PluginDataImporterImpl::new(permission_service_impl));
 
     let role_group_service: Arc<dyn cmx_iam::service_traits::RoleGroupService> = Arc::new(
         RoleGroupServiceImpl::new(mm.clone(), iam_config.clone()).await
@@ -109,6 +129,7 @@ pub async fn init_iam_services(
         }),
         user_auth_query,
         iam_config,
+        Some(plugin_data_importer),
     ))
 }
 

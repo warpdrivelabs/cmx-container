@@ -12,6 +12,7 @@ use tracing::{debug, info, warn, instrument};
 
 use super::instance_cache::ServiceInstanceCache;
 use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
+use crate::utils::{read_lock, write_lock};
 
 /// 服务列表定时同步器。
 ///
@@ -46,10 +47,7 @@ impl ServiceListSyncer {
 
     /// 标记指定服务已订阅（避免重复订阅）。
     pub fn mark_subscribed(&self, service_name: &str) {
-        self.subscribed_services
-            .write()
-            .unwrap()
-            .insert(service_name.to_string());
+        write_lock(&self.subscribed_services).insert(service_name.to_string());
     }
 
     /// 启动定时同步循环。
@@ -76,26 +74,13 @@ impl ServiceListSyncer {
         }
     }
 
-    /// 启动定时同步循环（无停止信号，兼容旧调用方）。
-    ///
-    /// 该方法会阻塞当前 task，通常在 `tokio::spawn` 中调用。
-    pub async fn run_forever(&self) {
-        let mut ticker = interval(Duration::from_secs(self.interval_secs));
-        loop {
-            ticker.tick().await;
-            if let Err(e) = self.sync_once().await {
-                warn!(error = %e, "服务列表同步失败");
-            }
-        }
-    }
-
     /// 执行一次同步。
     #[instrument(target = "cmx_registry", skip(self))]
     async fn sync_once(&self) -> Result<(), crate::error::RegistryError> {
         let services = self.registry.get_service_list().await?;
         let current: HashSet<String> = services.into_iter().collect();
 
-        let known = self.subscribed_services.read().unwrap().clone();
+        let known = read_lock(&self.subscribed_services).clone();
 
         // 发现新服务
         let new_services: Vec<&String> = current.difference(&known).collect();
@@ -111,7 +96,7 @@ impl ServiceListSyncer {
                     Arc::new(|_svc: &str, _instances: &[ServiceInstance]| {});
                 match self.registry.subscribe_instances(svc, callback).await {
                     Ok(()) => {
-                        self.subscribed_services.write().unwrap().insert(svc.clone());
+                        write_lock(&self.subscribed_services).insert(svc.clone());
                         debug!(service_name = %svc, "新服务订阅成功");
                     }
                     Err(e) => {

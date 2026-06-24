@@ -2,6 +2,7 @@
 
 pub mod audit_handler;
 pub mod handler;
+pub mod import_handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
@@ -27,6 +28,15 @@ impl ModuleRoutes for PermissionModule {
             .route(
                 "/iam/permissions/usage-stat",
                 get(audit_handler::get_permission_usage_stat),
+            )
+            // 插件数据导入/清理（权限中心数据集成）
+            .route(
+                "/iam/permissions/import",
+                post(import_handler::import_permissions),
+            )
+            .route(
+                "/iam/permissions/cleanup",
+                post(import_handler::cleanup_permissions),
             )
     }
 

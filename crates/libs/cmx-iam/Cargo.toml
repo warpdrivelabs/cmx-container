@@ -50,3 +50,5 @@ chrono = { workspace = true }
 tokio = { workspace = true }
 # OpenAPI 文档生成（可选）
 utoipa = { workspace = true, optional = true }
+# ZIP 解压缩（权限导入）
+zip = { workspace = true }

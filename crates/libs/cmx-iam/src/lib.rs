@@ -27,6 +27,7 @@ pub use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, RoleGroup, 
 pub use config::IamConfig;
 pub use error::IamError;
 pub use iam_checker::IamChecker;
+pub use permission::PluginDataImporterImpl;
 pub use role_group::RoleGroupServiceImpl;
 pub use rule::{ExclusionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
 pub use service_traits::{

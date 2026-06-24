@@ -24,7 +24,7 @@
 
 mod mock;
 mod nacos;
-pub mod trait_rs;
+mod trait_rs;
 
 pub use mock::MockConfigCenter;
 pub use nacos::NacosConfigCenter;
@@ -46,6 +46,8 @@ use crate::error::ConfigCenterError;
 /// # Arguments
 ///
 /// * `config` - 配置中心配置，包含启用标志、类型选择和 Nacos 连接参数。
+/// * `change_handler` - 配置变更处理器。若提供，将为每个 listener 注册此处理器；
+///   若为 `None`，则不注册任何监听器（调用方自行通过 `ConfigCenter::listen` 注册）。
 ///
 /// # Returns
 ///
@@ -59,11 +61,12 @@ use crate::error::ConfigCenterError;
 /// use cmx_registry_config::{create_config_center, ConfigCenterFullConfig};
 ///
 /// let config = ConfigCenterFullConfig::from_env();
-/// let center = create_config_center(&config).await?;
+/// let center = create_config_center(&config, None).await?;
 /// # Ok::<(), cmx_registry_config::ConfigCenterError>(())
 /// ```
 pub async fn create_config_center(
     config: &ConfigCenterFullConfig,
+    change_handler: Option<ConfigChangeCallback>,
 ) -> Result<Arc<dyn ConfigCenter>, ConfigCenterError> {
     let center: Arc<dyn ConfigCenter> = if !config.enabled {
         tracing::info!("配置中心未启用，使用 MockConfigCenter");
@@ -76,22 +79,19 @@ pub async fn create_config_center(
         }
     };
 
-    // 自动注册配置监听器（将远程配置变更转发到 GlobalChangeNotifier）
-    for listener in &config.listeners {
-        tracing::info!(
-            "自动注册配置监听: data_id={}, group={}",
-            listener.data_id,
-            listener.group
-        );
-        center
-            .listen(
-                &listener.data_id,
-                &listener.group,
-                std::sync::Arc::new(|content: &str| {
-                    crate::notifier::GlobalChangeNotifier::notify(content);
-                }),
-            )
-            .await?;
+    // 若提供了配置变更处理器，为每个 listener 自动注册。
+    // 处理器负责解析原始配置字符串并分发结构化事件（见 web-server 的 setup_config_listener）。
+    if let Some(handler) = change_handler {
+        for listener in &config.listeners {
+            tracing::info!(
+                "自动注册配置监听: data_id={}, group={}",
+                listener.data_id,
+                listener.group
+            );
+            center
+                .listen(&listener.data_id, &listener.group, handler.clone())
+                .await?;
+        }
     }
 
     Ok(center)

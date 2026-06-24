@@ -170,20 +170,20 @@ base_path = "cmx-server/"
 # 基础服务中心配置
 # ============================================
 [center_client]
-# 模式：mock（默认，当前阶段）| url（直连）| discovery（服务发现）
+# 模式：mock（默认）| http_url（URL 直连）| http_discovery（服务发现）| grpc（gRPC 调用）
 mode = "mock"
-# 请求超时（毫秒）
+# 请求超时（毫秒，仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000
 
-# URL 直连模式（mode = "url" 时生效）
+# URL 直连模式（mode = "http_url" 时生效）
 # 环境变量覆盖：CENTER_CLIENT__URLS__MENU, CENTER_CLIENT__URLS__PERM 等
 [center_client.urls]
 # menu = "http://portal-center:8080/api/plugin/menu/import"
-# perm = "http://perm-center:8080/api/plugin/perm/import"
+# perm = "http://perm-center:8080/api/iam/permissions/import"
 # form = "http://form-center:8080/api/plugin/form/import"
 # flow = "http://flow-center:8080/api/plugin/flow/import"
 
-# 服务发现模式（mode = "discovery" 时生效）
+# 服务发现模式（mode = "http_discovery" 或 "grpc" 时生效）
 # [center_client.discovery]
 # nacos_group = "DEFAULT_GROUP"
 # menu_service = "cmx-portal-center"

@@ -5,13 +5,21 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
+use cmx_rpc_gen::cmx::cmx_plugin_data_service::cmx_plugin_data_service::cmx as plugin_data_proto;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::plugin::PluginQuery;
+use cmx_traits::plugin::{
+    PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImporter,
+    PluginQuery,
+};
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 
 /// CmxServiceOrchestrator 的 gRPC 服务端实现
+///
+/// 同时实现 `CmxServiceOrchestrator` 和 `CmxPluginDataService` 两个 trait，
+/// 通过 `Clone` 共享给两个 volo service 注册。
+#[derive(Clone)]
 pub struct CmxOrchestratorServiceImpl {
     /// 服务编排调用器
     service_invoker: Arc<dyn ServiceInvoker>,
@@ -19,6 +27,8 @@ pub struct CmxOrchestratorServiceImpl {
     runtime_invoker: Arc<dyn RuntimeInvoker>,
     /// 插件查询（检查安装状态、获取 WASM 路径）
     plugin_query: Arc<dyn PluginQuery>,
+    /// 插件数据导入器（可选，未配置时 import/cleanup 返回错误）
+    data_importer: Option<Arc<dyn PluginDataImporter>>,
 }
 
 impl CmxOrchestratorServiceImpl {
@@ -27,11 +37,13 @@ impl CmxOrchestratorServiceImpl {
         service_invoker: Arc<dyn ServiceInvoker>,
         runtime_invoker: Arc<dyn RuntimeInvoker>,
         plugin_query: Arc<dyn PluginQuery>,
+        data_importer: Option<Arc<dyn PluginDataImporter>>,
     ) -> Self {
         Self {
             service_invoker,
             runtime_invoker,
             plugin_query,
+            data_importer,
         }
     }
 }
@@ -179,6 +191,199 @@ impl CmxServiceOrchestrator for CmxOrchestratorServiceImpl {
                         error: Some(e.to_string().into()),
                     };
                     Ok(volo_grpc::Response::new(pb_resp))
+                }
+            }
+        }
+    }
+}
+
+impl plugin_data_proto::CmxPluginDataService for CmxOrchestratorServiceImpl {
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_import_plugin_data")]
+    fn import_plugin_data(
+        &self,
+        req: volo_grpc::Request<plugin_data_proto::ImportPluginDataRequest>,
+    ) -> impl std::future::Future<
+        Output = Result<volo_grpc::Response<plugin_data_proto::ImportPluginDataResponse>, volo_grpc::Status>,
+    > + Send {
+        let data_importer = self.data_importer.clone();
+        async move {
+            let req = req.into_inner();
+
+            let Some(importer) = data_importer else {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: "data_importer 未配置".into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: format!("无效的数据类别: {}（有效值: menu/perm/form/flow）", req.category).into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            // 校验必填字段（与 HTTP 端点保持一致）
+            if req.domain_code.is_empty()
+                || req.application_code.is_empty()
+                || req.module_code.is_empty()
+            {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: "domain_code/application_code/module_code 不能为空".into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            }
+            if req.plugin_id.is_empty() || req.app_id.is_empty() {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: "plugin_id/app_id 不能为空".into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            }
+            if req.version.is_empty() {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: "version 不能为空".into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            }
+
+            let request = PluginDataImportRequest {
+                category,
+                domain_code: req.domain_code.to_string(),
+                application_code: req.application_code.to_string(),
+                module_code: req.module_code.to_string(),
+                plugin_id: req.plugin_id.to_string(),
+                app_id: req.app_id.to_string(),
+                version: req.version.to_string(),
+                zip_data: req.zip_data.to_vec(),
+            };
+
+            match importer.import_data(request).await {
+                Ok(result) => {
+                    let response = plugin_data_proto::ImportPluginDataResponse {
+                        success: result.success,
+                        message: result.message.into(),
+                        created_count: result.created_count,
+                        updated_count: result.updated_count,
+                        deleted_count: result.deleted_count,
+                    };
+                    Ok(volo_grpc::Response::new(response))
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "cmx_rpc",
+                        error = %e,
+                        category = %req.category,
+                        domain = %req.domain_code,
+                        app = %req.application_code,
+                        module = %req.module_code,
+                        plugin_id = %req.plugin_id,
+                        "插件数据导入失败"
+                    );
+                    let response = plugin_data_proto::ImportPluginDataResponse {
+                        success: false,
+                        message: e.to_string().into(),
+                        created_count: 0,
+                        updated_count: 0,
+                        deleted_count: 0,
+                    };
+                    Ok(volo_grpc::Response::new(response))
+                }
+            }
+        }
+    }
+
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_cleanup_plugin_data")]
+    fn cleanup_plugin_data(
+        &self,
+        req: volo_grpc::Request<plugin_data_proto::CleanupPluginDataRequest>,
+    ) -> impl std::future::Future<
+        Output = Result<volo_grpc::Response<plugin_data_proto::ImportPluginDataResponse>, volo_grpc::Status>,
+    > + Send {
+        let data_importer = self.data_importer.clone();
+        async move {
+            let req = req.into_inner();
+
+            let Some(importer) = data_importer else {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: "data_importer 未配置".into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
+                let response = plugin_data_proto::ImportPluginDataResponse {
+                    success: false,
+                    message: format!("无效的数据类别: {}", req.category).into(),
+                    created_count: 0,
+                    updated_count: 0,
+                    deleted_count: 0,
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            let request = PluginDataCleanupRequest {
+                category,
+                domain_code: req.domain_code.to_string(),
+                application_code: req.application_code.to_string(),
+                module_code: req.module_code.to_string(),
+                plugin_id: req.plugin_id.to_string(),
+                app_id: req.app_id.to_string(),
+            };
+
+            match importer.cleanup_data(request).await {
+                Ok(result) => {
+                    let response = plugin_data_proto::ImportPluginDataResponse {
+                        success: result.success,
+                        message: result.message.into(),
+                        created_count: result.created_count,
+                        updated_count: result.updated_count,
+                        deleted_count: result.deleted_count,
+                    };
+                    Ok(volo_grpc::Response::new(response))
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "cmx_rpc",
+                        error = %e,
+                        category = %req.category,
+                        domain = %req.domain_code,
+                        app = %req.application_code,
+                        module = %req.module_code,
+                        plugin_id = %req.plugin_id,
+                        "插件数据清理失败"
+                    );
+                    let response = plugin_data_proto::ImportPluginDataResponse {
+                        success: false,
+                        message: e.to_string().into(),
+                        created_count: 0,
+                        updated_count: 0,
+                        deleted_count: 0,
+                    };
+                    Ok(volo_grpc::Response::new(response))
                 }
             }
         }

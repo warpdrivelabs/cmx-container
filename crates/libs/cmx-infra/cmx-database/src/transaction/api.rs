@@ -128,7 +128,8 @@ impl TransactionGuard {
 
     /// 提交事务。
     ///
-    /// 将 `committed` 标记设为 `true`，然后执行实际的事务提交操作。
+    /// 先尝试执行实际的事务提交，成功后才标记 `committed = true`。
+    /// 若提交失败，会尝试回滚以释放事务资源，避免事务悬空。
     ///
     /// # Returns
     ///
@@ -136,11 +137,36 @@ impl TransactionGuard {
     ///
     /// # Errors
     ///
-    /// 返回底层事务提交的错误。
+    /// 返回底层事务提交的错误（回滚失败时仍返回原始提交错误）。
     pub async fn commit(mut self) -> Result<()> {
-        self.committed = true;
-        commit_txn_by_id(&self.txn_id).await?;
-        Ok(())
+        match commit_txn_by_id(&self.txn_id).await {
+            Ok(()) => {
+                self.committed = true;
+                Ok(())
+            }
+            Err(e) => {
+                // commit 失败，尝试回滚以释放事务资源
+                // 标记 committed=true 防止 Drop 重复回滚
+                self.committed = true;
+                if let Err(rb_err) = rollback_txn_by_id(&self.txn_id).await {
+                    tracing::error!(
+                        target: "cmx_db_txn",
+                        txn_id = %self.txn_id,
+                        commit_error = %e,
+                        rollback_error = %rb_err,
+                        "事务 commit 失败且 rollback 也失败，事务可能悬空"
+                    );
+                } else {
+                    tracing::warn!(
+                        target: "cmx_db_txn",
+                        txn_id = %self.txn_id,
+                        commit_error = %e,
+                        "事务 commit 失败，已成功 rollback"
+                    );
+                }
+                Err(e)
+            }
+        }
     }
 
     /// 回滚事务。

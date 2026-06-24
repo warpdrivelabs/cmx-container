@@ -322,9 +322,6 @@ pub trait AuthService: Send + Sync {
     /// 导入失败时返回错误。
     async fn import_static_api_keys(&self) -> Result<(), AuthError>;
 
-    /// 启动过期会话定时清理任务。
-    async fn start_cleanup_task(&self);
-
     /// 查询 OAuth2 客户端（供 handler 使用）。
     ///
     /// # Arguments

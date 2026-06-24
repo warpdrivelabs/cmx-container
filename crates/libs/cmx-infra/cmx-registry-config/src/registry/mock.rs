@@ -9,6 +9,7 @@ use std::sync::{Arc, RwLock};
 use tracing::info;
 
 use crate::error::RegistryError;
+use crate::utils::{read_lock, write_lock};
 
 use super::instance_cache::ServiceInstanceCache;
 use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
@@ -60,7 +61,7 @@ impl Default for MockRegistry {
 impl ServiceRegistry for MockRegistry {
     /// 注册服务实例：追加到内部列表尾部，并更新缓存。
     async fn register(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
-        self.registered.write().unwrap().push(instance.clone());
+        write_lock(&self.registered).push(instance.clone());
         info!(
             "[MockRegistry] 注册服务: {}:{} ({})",
             instance.ip, instance.port, instance.service_name
@@ -71,18 +72,19 @@ impl ServiceRegistry for MockRegistry {
 
     /// 注销服务实例：移除 `service_name`、`ip` 和 `port` 同时匹配的实例，并更新缓存。
     async fn deregister(&self, instance: &ServiceInstance) -> Result<(), RegistryError> {
-        let mut registered = self.registered.write().unwrap();
-        registered.retain(|i| {
-            !(i.service_name == instance.service_name
-                && i.ip == instance.ip
-                && i.port == instance.port)
-        });
+        {
+            let mut registered = write_lock(&self.registered);
+            registered.retain(|i| {
+                !(i.service_name == instance.service_name
+                    && i.ip == instance.ip
+                    && i.port == instance.port)
+            });
+        }
         info!(
             "[MockRegistry] 注销服务: {}:{} ({})",
             instance.ip, instance.port, instance.service_name
         );
         let service_name = instance.service_name.clone();
-        drop(registered);
         self.refresh_cache(&service_name);
         Ok(())
     }
@@ -96,7 +98,7 @@ impl ServiceRegistry for MockRegistry {
         _group_name: Option<&str>,
         _clusters: Vec<String>,
     ) -> Result<Vec<ServiceInstance>, RegistryError> {
-        let registered = self.registered.read().unwrap();
+        let registered = read_lock(&self.registered);
         let result: Vec<ServiceInstance> = registered
             .iter()
             .filter(|i| i.service_name == service_name)
@@ -121,7 +123,7 @@ impl ServiceRegistry for MockRegistry {
     ) -> Result<(), RegistryError> {
         // 检查是否已订阅，避免重复注册 callback
         let already_subscribed = {
-            let mut set = self.subscribed_services.write().unwrap();
+            let mut set = write_lock(&self.subscribed_services);
             if set.contains(service_name) {
                 true
             } else {
@@ -146,7 +148,7 @@ impl ServiceRegistry for MockRegistry {
     }
 
     async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
-        let registered = self.registered.read().unwrap();
+        let registered = read_lock(&self.registered);
         let mut names: Vec<String> = registered
             .iter()
             .map(|i| i.service_name.clone())
@@ -160,7 +162,7 @@ impl ServiceRegistry for MockRegistry {
 impl MockRegistry {
     /// 根据内部 registered 列表刷新指定服务的缓存。
     fn refresh_cache(&self, service_name: &str) {
-        let registered = self.registered.read().unwrap();
+        let registered = read_lock(&self.registered);
         let instances: Vec<ServiceInstance> = registered
             .iter()
             .filter(|i| i.service_name == service_name)

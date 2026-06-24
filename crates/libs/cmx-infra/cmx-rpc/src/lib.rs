@@ -17,5 +17,6 @@ pub use discover::RegistryAwareDiscover;
 pub use error::RpcFrameworkError;
 pub use factory::create_rpc_client;
 pub use global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
+pub use cmx_traits::plugin::PluginDataImporter;
 pub use server::CmxOrchestratorServiceImpl;
 pub use server_runner::start_grpc_server;

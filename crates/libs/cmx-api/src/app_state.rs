@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
 use cmx_traits::iam::PermissionChecker;
-use cmx_traits::plugin::PluginQuery;
+use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
 use cmx_storage::service::StorageService;
@@ -74,6 +74,8 @@ pub struct CmxAppState {
     auth_service: Option<Arc<dyn AuthService>>,
     /// IAM 服务状态
     iam: Option<Arc<IamState>>,
+    /// 插件数据导入器（trait 对象，用于 HTTP/gRPC 接收端统一调用）
+    plugin_data_importer: Option<Arc<dyn PluginDataImporter>>,
 }
 
 impl Default for CmxAppState {
@@ -104,6 +106,7 @@ impl CmxAppState {
             storage_service: None,
             auth_service: None,
             iam: None,
+            plugin_data_importer: None,
         }
     }
 
@@ -164,6 +167,12 @@ impl CmxAppState {
         self
     }
 
+    /// 设置插件数据导入器
+    pub fn with_plugin_data_importer(mut self, importer: Arc<dyn PluginDataImporter>) -> Self {
+        self.plugin_data_importer = Some(importer);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -214,6 +223,11 @@ impl CmxAppState {
         self.iam.as_ref()
     }
 
+    /// 获取插件数据导入器
+    pub fn plugin_data_importer(&self) -> Option<&Arc<dyn PluginDataImporter>> {
+        self.plugin_data_importer.as_ref()
+    }
+
     /// 获取应用隔离标识
     ///
     /// 返回 app_id 字符串的副本。
@@ -240,6 +254,7 @@ impl Clone for CmxAppState {
             storage_service: self.storage_service.clone(),
             auth_service: self.auth_service.clone(),
             iam: self.iam.clone(),
+            plugin_data_importer: self.plugin_data_importer.clone(),
         }
     }
 }

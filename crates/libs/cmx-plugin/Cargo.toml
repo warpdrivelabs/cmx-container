@@ -18,6 +18,8 @@ cmx-utils = { workspace = true }
 cmx-traits = { workspace = true }
 # 内部依赖 - RPC 通信
 cmx-rpc = { workspace = true }
+# 内部依赖 - 服务注册发现
+cmx-registry-config = { workspace = true }
 # 内部依赖 - 服务
 cmx-service = { workspace = true }
 # 内部依赖 - 存储服务
@@ -45,7 +47,7 @@ tokio = { workspace = true, features = ["fs", "io-util"] }
 # 字节处理
 bytes = { workspace = true }
 # HTTP 客户端
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 # 异步 trait
 async-trait = { workspace = true }
 # 异步并发工具

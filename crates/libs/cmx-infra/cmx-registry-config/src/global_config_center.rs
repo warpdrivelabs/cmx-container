@@ -13,7 +13,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::config_center::trait_rs::ConfigCenter;
+use crate::config_center::ConfigCenter;
 
 /// 全局配置中心错误类型。
 ///

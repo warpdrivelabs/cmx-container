@@ -358,7 +358,7 @@ impl RegistryConfig {
 
     /// 构建 `ServiceInstance`（便捷方法）。
     ///
-    /// 将 `RegistryConfig` 中的通用注册参数组装为 [`ServiceInstance`](super::registry::trait_rs::ServiceInstance)。
+    /// 将 `RegistryConfig` 中的通用注册参数组装为 [`ServiceInstance`](crate::registry::ServiceInstance)。
     /// IP 和端口需要调用方提供（因为它们来自其他配置源）。
     ///
     /// # Arguments
@@ -369,8 +369,8 @@ impl RegistryConfig {
     /// # Returns
     ///
     /// 返回组装好的 `ServiceInstance`，`healthy` 和 `ephemeral` 默认为 `true`。
-    pub fn build_instance(&self, ip: String, port: u16) -> super::registry::trait_rs::ServiceInstance {
-        super::registry::trait_rs::ServiceInstance {
+    pub fn build_instance(&self, ip: String, port: u16) -> crate::registry::ServiceInstance {
+        crate::registry::ServiceInstance {
             ip,
             port,
             service_name: self.service_name(),

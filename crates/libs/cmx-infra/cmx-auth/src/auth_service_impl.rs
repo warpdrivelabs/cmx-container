@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cmx_buffer::CacheManager;
 use cmx_core::AuthContext;
+use cmx_core::model::cell::DataValue;
 use cmx_traits::auth::{
     AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
     OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery, UserInfo,
@@ -564,6 +565,76 @@ impl AuthServiceImpl {
 
         result
     }
+
+    /// 启动后台会话清理任务。
+    ///
+    /// 周期性扫描在线用户会话，清理超过 `idle_timeout_secs` 的过期会话，
+    /// 并同步清理 SessionManager 本地缓存与 `session_detail` Key。
+    /// 任务以 `tokio::spawn` 方式运行，间隔取 `heartbeat_interval_secs` 与 300 秒的较大值。
+    ///
+    /// 返回 `JoinHandle` 供调用方管理任务生命周期（如 shutdown 时 `abort()` 或等待完成）。
+    /// 此方法为同步函数（非 `async fn`），因为内部仅做 `tokio::spawn` 后立即返回。
+    ///
+    /// 注意：此方法不属于 `AuthService` trait，因为它是生命周期管理方法，
+    /// 仅在应用启动时调用一次，不应暴露给业务调用方。
+    pub fn start_cleanup_task(&self) -> tokio::task::JoinHandle<()> {
+        let cache = self.cache.clone();
+        let idle_timeout = self.config.session.idle_timeout_secs;
+        let heartbeat_interval = self.config.session.heartbeat_interval_secs;
+        // 2.2 修复：持有 SessionManager 引用以清理本地缓存
+        let session_manager = self.session_manager.clone();
+
+        tokio::spawn(async move {
+            let interval_secs = heartbeat_interval.max(300);
+            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+            loop {
+                interval.tick().await;
+
+                // 获取在线用户列表
+                let online_users = match cache.set().smembers("auth:online:users").await {
+                    Ok(users) => users,
+                    Err(e) => {
+                        warn!(error = %e, "获取在线用户列表失败");
+                        continue;
+                    }
+                };
+
+                let now = Utc::now().timestamp();
+                for user_id in &online_users {
+                    let key = format!("auth:{{{}}}:session", user_id);
+                    let devices = match cache.hash().hkeys(&key).await {
+                        Ok(d) => d,
+                        Err(_) => continue,
+                    };
+                    let mut all_expired = true;
+                    for device in &devices {
+                        if let Ok(Some(json)) = cache.hash().hget(&key, device).await
+                            && let Ok(session) = serde_json::from_str::<UserSession>(&json) {
+                                if now - session.last_active_at > idle_timeout as i64 {
+                                    // 过期，删除会话 Hash field
+                                    let _ = cache.hash().hdel(&key, &[device]).await;
+                                    // 2.3 修复：删除 session_detail Key
+                                    let detail_key = format!("auth:{}:session_detail", session.session_id);
+                                    let _ = cache.ops().del(&detail_key).await;
+                                    // 2.2 修复：清理 SessionManager 本地缓存
+                                    session_manager.invalidate_local(user_id, device).await;
+                                    info!(user_id = user_id, device = %device, "过期会话已清理");
+                                } else {
+                                    all_expired = false;
+                                }
+                            }
+                    }
+                    // 如果所有会话都过期，从在线用户集合移除
+                    if all_expired {
+                        let remaining = cache.hash().hlen(&key).await.unwrap_or(0);
+                        if remaining == 0 {
+                            let _ = cache.set().srem_one("auth:online:users", user_id).await;
+                        }
+                    }
+                }
+            }
+        })
+    }
 }
 
 #[async_trait]
@@ -928,42 +999,83 @@ impl AuthService for AuthServiceImpl {
     /// * `AuthError::Internal` - Redis 操作失败。
     async fn revoke_all_tokens(&self, user_id: &str) -> std::result::Result<(), AuthError> {
         // 撤销所有 Refresh Token
+        // 此步失败属于关键错误，直接返回（Refresh Token 未撤销会导致用户仍可刷新 Token）
         self.token_manager
             .revoke_all_refresh_tokens(user_id)
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         // P1-3.6: 获取每个会话的 access_jti，将 Access Token 加入黑名单
+        // get_user_devices 失败属于关键错误，无法继续后续销毁流程
         let devices = self
             .session_manager
             .get_user_devices(user_id)
             .await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        // 收集销毁失败的设备，用于审计日志
+        let mut failed_devices: Vec<String> = Vec::new();
+
         for device in &devices {
-            if let Ok(Some(session)) = self.session_manager.get_session(user_id, device).await {
-                // 2.2 修复：使用 Access Token 实际剩余有效期，而非完整 access_ttl_secs
-                let remaining_secs = (session.access_expires_at - Utc::now().timestamp()).max(0) as u64;
-                let remaining = Duration::from_secs(remaining_secs);
-                let _ = self.token_manager
-                    .blacklist_access_token(&session.access_jti, remaining)
-                    .await;
+            // 获取会话信息，根据结果决定后续处理
+            let session_result = self.session_manager.get_session(user_id, device).await;
+            match session_result {
+                Ok(Some(session)) => {
+                    // 2.2 修复：使用 Access Token 实际剩余有效期，而非完整 access_ttl_secs
+                    let remaining_secs = (session.access_expires_at - Utc::now().timestamp()).max(0) as u64;
+                    let remaining = Duration::from_secs(remaining_secs);
+                    // blacklist 失败不影响后续销毁，Access Token 会在过期后自然失效
+                    if let Err(e) = self.token_manager
+                        .blacklist_access_token(&session.access_jti, remaining)
+                        .await
+                    {
+                        warn!(user_id = user_id, device = %device, error = %e, "Access Token 加入黑名单失败，将依赖自然过期");
+                    }
+                }
+                Ok(None) => {
+                    // 会话已不存在，无需黑名单处理也无需销毁，跳过该设备
+                    debug!(user_id = user_id, device = %device, "会话不存在，跳过黑名单与销毁");
+                    continue;
+                }
+                Err(e) => {
+                    // 获取会话失败（如 Redis 临时故障），跳过黑名单但仍尝试销毁
+                    // destroy_session 内部会处理不存在的情况，此处尝试销毁可清理残留的设备注册信息
+                    warn!(user_id = user_id, device = %device, error = %e, "获取会话信息失败，跳过黑名单处理");
+                }
+            }
+
+            // 销毁会话失败时记录 warn 并继续处理其他设备，避免单个设备失败导致整个撤销流程中断
+            if let Err(e) = self.session_manager
+                .destroy_session(user_id, device)
+                .await
+            {
+                warn!(user_id = user_id, device = %device, error = %e, "销毁会话失败，继续处理其他设备");
+                failed_devices.push(device.clone());
             }
         }
 
-        // 销毁所有会话
-        for device in &devices {
-            self.session_manager
-                .destroy_session(user_id, device)
-                .await
-                .map_err(|e| AuthError::Internal(e.to_string()))?;
-        }
-
         // P0-2.3: Pub/Sub 广播全部本地缓存失效
+        // 无论个别设备销毁是否失败，都执行广播和本地缓存失效：
+        // - Refresh Token 已在开头撤销，即使会话残留也无法刷新 Token
+        // - 广播确保其他实例尽快清空本地缓存，避免使用过期的权限快照
+        // - 残留的 Access Token 会按自身 TTL 自然过期，安全风险可控
         self.publish_cache_invalidate(&format!("revoke_all:{}", user_id)).await;
         // 本实例也立即失效本地缓存
         self.token_manager.invalidate_local_cache_all().await;
 
-        info!(user_id = user_id, "用户所有 Token 已撤销");
+        if failed_devices.is_empty() {
+            info!(user_id = user_id, "用户所有 Token 已撤销");
+        } else {
+            // 部分设备销毁失败：缓存已失效，但 Redis 中可能残留部分会话记录
+            // 残留会话的 Access Token 会按 TTL 自然过期，无需人工干预
+            warn!(
+                user_id = user_id,
+                failed_count = failed_devices.len(),
+                total_devices = devices.len(),
+                failed_devices = ?failed_devices,
+                "用户 Token 撤销完成，但部分设备会话销毁失败（缓存已失效，残留 Access Token 将按 TTL 自然过期）"
+            );
+        }
         self.audit_token_event("tokens_revoked", user_id, "", "all_tokens_revoked").await;
         Ok(())
     }
@@ -1257,70 +1369,6 @@ impl AuthService for AuthServiceImpl {
         }
 
         Ok(())
-    }
-
-    /// 启动后台会话清理任务。
-    ///
-    /// 周期性扫描在线用户会话，清理超过 `idle_timeout_secs` 的过期会话，
-    /// 并同步清理 SessionManager 本地缓存与 `session_detail` Key。
-    /// 任务以 `tokio::spawn` 方式运行，间隔取 `heartbeat_interval_secs` 与 300 秒的较大值。
-    async fn start_cleanup_task(&self) {
-        let cache = self.cache.clone();
-        let idle_timeout = self.config.session.idle_timeout_secs;
-        let heartbeat_interval = self.config.session.heartbeat_interval_secs;
-        // 2.2 修复：持有 SessionManager 引用以清理本地缓存
-        let session_manager = self.session_manager.clone();
-
-        tokio::spawn(async move {
-            let interval_secs = heartbeat_interval.max(300);
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
-            loop {
-                interval.tick().await;
-
-                // 获取在线用户列表
-                let online_users = match cache.set().smembers("auth:online:users").await {
-                    Ok(users) => users,
-                    Err(e) => {
-                        warn!(error = %e, "获取在线用户列表失败");
-                        continue;
-                    }
-                };
-
-                let now = Utc::now().timestamp();
-                for user_id in &online_users {
-                    let key = format!("auth:{{{}}}:session", user_id);
-                    let devices = match cache.hash().hkeys(&key).await {
-                        Ok(d) => d,
-                        Err(_) => continue,
-                    };
-                    let mut all_expired = true;
-                    for device in &devices {
-                        if let Ok(Some(json)) = cache.hash().hget(&key, device).await
-                            && let Ok(session) = serde_json::from_str::<UserSession>(&json) {
-                                if now - session.last_active_at > idle_timeout as i64 {
-                                    // 过期，删除会话 Hash field
-                                    let _ = cache.hash().hdel(&key, &[device]).await;
-                                    // 2.3 修复：删除 session_detail Key
-                                    let detail_key = format!("auth:{}:session_detail", session.session_id);
-                                    let _ = cache.ops().del(&detail_key).await;
-                                    // 2.2 修复：清理 SessionManager 本地缓存
-                                    session_manager.invalidate_local(user_id, device).await;
-                                    info!(user_id = user_id, device = %device, "过期会话已清理");
-                                } else {
-                                    all_expired = false;
-                                }
-                            }
-                    }
-                    // 如果所有会话都过期，从在线用户集合移除
-                    if all_expired {
-                        let remaining = cache.hash().hlen(&key).await.unwrap_or(0);
-                        if remaining == 0 {
-                            let _ = cache.set().srem_one("auth:online:users", user_id).await;
-                        }
-                    }
-                }
-            }
-        });
     }
 
     /// 查询 OAuth2 客户端信息。
@@ -1904,36 +1952,29 @@ impl AuthStorageQuery for AuthServiceImpl {
         );
 
         let id = snowflake_id_str();
-        let user_id_val = user_id
-            .map(|u| format!("'{}'", u.replace('\'', "''")))
-            .unwrap_or("NULL".to_string());
-        let service_name_val = service_name
-            .map(|s| format!("'{}'", s.replace('\'', "''")))
-            .unwrap_or("NULL".to_string());
         let scopes_json = serde_json::to_string(scopes)
             .map_err(|e| cmx_traits::error::TraitError::Internal(format!("序列化 scopes 失败: {}", e)))?;
-        let description_val = description
-            .map(|d| format!("'{}'", d.replace('\'', "''")))
-            .unwrap_or("NULL".to_string());
 
-        let sql = format!(
-            "INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, archived, status) \
-             VALUES ('{id}', '{key_prefix}', '{key_hash}', {user_id_val}, {service_name_val}, '{scopes_json}', {description_val}, 0, 1) \
+        // 参数化查询：使用 $1..$7 占位符，由数据库驱动处理转义，避免 SQL 注入风险
+        let sql = "INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, archived, status) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 1) \
              ON CONFLICT (key_prefix) DO UPDATE SET key_hash = EXCLUDED.key_hash, user_id = EXCLUDED.user_id, \
-             service_name = EXCLUDED.service_name, scopes = EXCLUDED.scopes, description = EXCLUDED.description",
-            id = id.replace('\'', "''"),
-            key_prefix = key_prefix.replace('\'', "''"),
-            key_hash = key_hash.replace('\'', "''"),
-            user_id_val = user_id_val,
-            service_name_val = service_name_val,
-            scopes_json = scopes_json.replace('\'', "''"),
-            description_val = description_val,
-        );
+             service_name = EXCLUDED.service_name, scopes = EXCLUDED.scopes, description = EXCLUDED.description";
+
+        let params: Vec<DataValue> = vec![
+            DataValue::String(id),
+            DataValue::String(key_prefix.to_string()),
+            DataValue::String(key_hash.to_string()),
+            user_id.map(|u| DataValue::String(u.to_string())).unwrap_or(DataValue::Null),
+            service_name.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null),
+            DataValue::String(scopes_json),
+            description.map(|d| DataValue::String(d.to_string())).unwrap_or(DataValue::Null),
+        ];
 
         let db_manager = cmx_database::get_default_db_manager();
         let db_id = db_manager.get_default_db_id().await;
         db_manager
-            .execute_sql(&db_id, None, &sql)
+            .execute_sql_with_datavalues(&db_id, None, sql, params)
             .await
             .map_err(|e| cmx_traits::error::TraitError::Internal(format!("导入 API Key 失败: {}", e)))?;
 
@@ -1963,16 +2004,16 @@ impl AuthStorageQuery for AuthServiceImpl {
             "AUTH", key_prefix
         );
 
-        let sql = format!(
-            "SELECT key_prefix, key_hash, user_id, service_name, scopes, description, status \
-             FROM cmx_auth_api_key WHERE key_prefix = '{}' AND archived = 0",
-            key_prefix.replace('\'', "''")
-        );
+        // 参数化查询：使用 $1 占位符，由数据库驱动处理转义
+        let sql = "SELECT key_prefix, key_hash, user_id, service_name, scopes, description, status \
+             FROM cmx_auth_api_key WHERE key_prefix = $1 AND archived = 0";
+
+        let params: Vec<DataValue> = vec![DataValue::String(key_prefix.to_string())];
 
         let db_manager = cmx_database::get_default_db_manager();
         let db_id = db_manager.get_default_db_id().await;
         let dataset = db_manager
-            .query_sql(&db_id, None, &sql, "api_key_by_prefix")
+            .query_sql_with_datavalues(&db_id, None, sql, params, "api_key_by_prefix")
             .await
             .map_err(|e| cmx_traits::error::TraitError::Internal(format!("查询 API Key 失败: {}", e)))?;
 
@@ -2023,20 +2064,22 @@ impl AuthStorageQuery for AuthServiceImpl {
         );
 
         let id = snowflake_id_str();
-        let sql = format!(
-            "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, create_time) \
-             VALUES ('{}', '{}', '{}', '{}', '{}', NOW())",
-            id.replace('\'', "''"),
-            event_type.replace('\'', "''"),
-            user_id.replace('\'', "''"),
-            jti.replace('\'', "''"),
-            detail.replace('\'', "''"),
-        );
+        // 参数化查询：使用 $1..$5 占位符，由数据库驱动处理转义
+        let sql = "INSERT INTO cmx_auth_token_event (id, event_type, user_id, jti, detail, create_time) \
+             VALUES ($1, $2, $3, $4, $5, NOW())";
+
+        let params: Vec<DataValue> = vec![
+            DataValue::String(id),
+            DataValue::String(event_type.to_string()),
+            DataValue::String(user_id.to_string()),
+            DataValue::String(jti.to_string()),
+            DataValue::String(detail.to_string()),
+        ];
 
         let db_manager = cmx_database::get_default_db_manager();
         let db_id = db_manager.get_default_db_id().await;
         db_manager
-            .execute_sql(&db_id, None, &sql)
+            .execute_sql_with_datavalues(&db_id, None, sql, params)
             .await
             .map_err(|e| cmx_traits::error::TraitError::Internal(format!("记录 Token 事件失败: {}", e)))?;
 
@@ -2065,17 +2108,17 @@ impl AuthStorageQuery for AuthServiceImpl {
             "AUTH", client_id
         );
 
-        let sql = format!(
-            "SELECT client_id, client_name, client_secret, redirect_uris, grant_types, \
+        // 参数化查询：使用 $1 占位符，由数据库驱动处理转义
+        let sql = "SELECT client_id, client_name, client_secret, redirect_uris, grant_types, \
              client_type, pkce_required, allowed_scopes, status \
-             FROM cmx_auth_client WHERE client_id = '{}' AND archived = 0",
-            client_id.replace('\'', "''")
-        );
+             FROM cmx_auth_client WHERE client_id = $1 AND archived = 0";
+
+        let params: Vec<DataValue> = vec![DataValue::String(client_id.to_string())];
 
         let db_manager = cmx_database::get_default_db_manager();
         let db_id = db_manager.get_default_db_id().await;
         let dataset = db_manager
-            .query_sql(&db_id, None, &sql, "oauth2_client")
+            .query_sql_with_datavalues(&db_id, None, sql, params, "oauth2_client")
             .await
             .map_err(|e| cmx_traits::error::TraitError::Internal(format!("查询 OAuth2 客户端失败: {}", e)))?;
 

@@ -9,11 +9,11 @@ cmx-utils = { workspace = true }
 # Nacos SDK
 nacos-sdk = { workspace = true }
 # 异步运行时
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
 # 序列化框架
 serde = { workspace = true, features = ["derive"] }
-# JSON 序列化/反序列化
-serde_json = { workspace = true }
+# JSON 序列化/反序列化（暂未使用，保留以备后续扩展）
+# serde_json = { workspace = true }
 # TOML 解析
 toml = { workspace = true }
 # 错误处理

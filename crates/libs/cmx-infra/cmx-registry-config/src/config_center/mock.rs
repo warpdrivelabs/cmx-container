@@ -6,16 +6,17 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use tracing::info;
 
 use crate::error::ConfigCenterError;
+use crate::utils::{read_lock, write_lock};
 
 use super::trait_rs::{ConfigCenter, ConfigChangeCallback};
 
 /// Mock 配置中心。
 ///
-/// 内存级实现，使用 `tokio::sync::RwLock<HashMap<>>` 维护配置内容，
+/// 内存级实现，使用 `std::sync::RwLock<HashMap<>>` 维护配置内容，
 /// 使用 `Vec<(data_id, group, callback)>` 维护监听器。
 /// 适用于本地开发和单元测试。
 pub struct MockConfigCenter {
@@ -48,9 +49,9 @@ impl MockConfigCenter {
     /// * `data_id` - 配置标识。
     /// * `group` - 配置分组。
     /// * `content` - 配置内容字符串。
-    pub async fn set_config(&self, data_id: &str, group: &str, content: &str) {
+    pub fn set_config(&self, data_id: &str, group: &str, content: &str) {
         let key = format!("{}/{}", group, data_id);
-        self.configs.write().await.insert(key, content.to_string());
+        write_lock(&self.configs).insert(key, content.to_string());
     }
 
     /// 模拟配置变更通知（测试用）。
@@ -63,8 +64,9 @@ impl MockConfigCenter {
     /// * `data_id` - 配置标识。
     /// * `group` - 配置分组。
     /// * `new_content` - 新的配置内容，将作为参数传入回调。
-    pub async fn simulate_change(&self, data_id: &str, group: &str, new_content: &str) {
-        for (did, grp, callback) in self.listeners.read().await.iter() {
+    pub fn simulate_change(&self, data_id: &str, group: &str, new_content: &str) {
+        let listeners = read_lock(&self.listeners);
+        for (did, grp, callback) in listeners.iter() {
             if did == data_id && grp == group {
                 callback(new_content);
             }
@@ -88,9 +90,7 @@ impl ConfigCenter for MockConfigCenter {
     /// * `ConfigCenterError::GetFailed` - 配置不存在（未通过 [`Self::set_config`] 注入）。
     async fn get_config(&self, data_id: &str, group: &str) -> Result<String, ConfigCenterError> {
         let key = format!("{}/{}", group, data_id);
-        self.configs
-            .read()
-            .await
+        read_lock(&self.configs)
             .get(&key)
             .cloned()
             .ok_or_else(|| {
@@ -107,9 +107,7 @@ impl ConfigCenter for MockConfigCenter {
         group: &str,
         callback: ConfigChangeCallback,
     ) -> Result<(), ConfigCenterError> {
-        self.listeners
-            .write()
-            .await
+        write_lock(&self.listeners)
             .push((data_id.to_string(), group.to_string(), callback));
         info!("[MockConfigCenter] 已添加配置监听: {}/{}", group, data_id);
         Ok(())

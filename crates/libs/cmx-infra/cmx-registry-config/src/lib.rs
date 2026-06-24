@@ -63,7 +63,7 @@ pub mod global_registry;
 pub mod notifier;
 pub mod reloader;
 pub mod registry;
-pub mod utils;
+pub(crate) mod utils;
 
 #[cfg(test)]
 mod tests;

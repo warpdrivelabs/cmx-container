@@ -136,7 +136,9 @@ async fn main() -> Result<()> {
     let audit_logger = build_audit_logger().await?;
 
     // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
-    let (iam_state, user_auth_query, iam_config) = init_iam_services(audit_logger.clone()).await?;
+    // 同时产出 PluginDataImporter，供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑。
+    let (iam_state, user_auth_query, iam_config, plugin_data_importer) =
+        init_iam_services(audit_logger.clone()).await?;
 
     // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
     let auth_service = init_auth_service(user_auth_query, audit_logger.clone()).await?;
@@ -159,10 +161,12 @@ async fn main() -> Result<()> {
     }
 
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
+    // 将 PluginDataImporter 透传给 gRPC 服务端，启用 CmxPluginDataService。
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
         cmx_runtime::GlobalExtismEngine::get_as_invoker(),
         cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
+        plugin_data_importer.clone(),
     ).await?;
 
     // 构建完整的 AppState，注入各子系统的 trait 实例
@@ -174,6 +178,13 @@ async fn main() -> Result<()> {
         .with_storage_service(cmx_storage::global::GlobalStorageService::get().service().clone())
         .with_auth_service(auth_service)
         .with_iam(iam_state);
+
+    // 注入 PluginDataImporter（HTTP 端点 /iam/permissions/import 和 /cleanup 使用）
+    let app_state = if let Some(importer) = plugin_data_importer {
+        app_state.with_plugin_data_importer(importer)
+    } else {
+        app_state
+    };
 
     let api_routes = routes::routes().with_state(app_state);
 

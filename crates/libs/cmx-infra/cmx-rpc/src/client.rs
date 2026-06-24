@@ -9,7 +9,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use cmx_core::CallServiceResponse;
 use cmx_registry_config::registry::{ServiceInstanceCache, ServiceRegistry};
+use cmx_rpc_gen::cmx::cmx_plugin_data_service::cmx_plugin_data_service::cmx as plugin_data_proto;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
+use cmx_traits::plugin::{PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult};
 use cmx_traits::rpc::{FunctionCallResult, RpcClient, RpcError};
 use serde_json::Value;
 use tokio::sync::RwLock;
@@ -20,8 +22,11 @@ use crate::config::GrpcConfig;
 use crate::discover::RegistryAwareDiscover;
 
 /// 缓存的 gRPC 客户端
+///
+/// 同时持有服务编排和插件数据导入两个 gRPC 客户端，共享同一个 Discover。
 struct CachedClient {
-    client: CmxServiceOrchestratorClient,
+    orchestrator_client: CmxServiceOrchestratorClient,
+    plugin_data_client: plugin_data_proto::CmxPluginDataServiceClient,
     _discover: RegistryAwareDiscover,
 }
 
@@ -56,7 +61,7 @@ impl VoloGrpcClient {
     ) -> Result<CmxServiceOrchestratorClient, RpcError> {
         // 快查：读锁检查缓存
         if let Some(cached) = self.clients.read().await.get(service_name) {
-            return Ok(cached.client.clone());
+            return Ok(cached.orchestrator_client.clone());
         }
 
         // 慢路径：在获取写锁之前，先完成网络 IO（订阅 + 缓存填充）。
@@ -85,7 +90,13 @@ impl VoloGrpcClient {
         let rpc_timeout = Duration::from_millis(self.config.timeout_ms);
         let connect_timeout = Duration::from_millis(self.config.connect_timeout_ms);
 
-        let client = CmxServiceOrchestratorClientBuilder::new(service_name)
+        let orchestrator_client = CmxServiceOrchestratorClientBuilder::new(service_name)
+            .discover(discover.clone())
+            .rpc_timeout(Some(rpc_timeout))
+            .connect_timeout(connect_timeout)
+            .build();
+
+        let plugin_data_client = plugin_data_proto::CmxPluginDataServiceClientBuilder::new(service_name)
             .discover(discover.clone())
             .rpc_timeout(Some(rpc_timeout))
             .connect_timeout(connect_timeout)
@@ -95,16 +106,46 @@ impl VoloGrpcClient {
         let mut clients = self.clients.write().await;
         if let Some(cached) = clients.get(service_name) {
             // 并发时另一个调用方可能已创建完成，直接返回已有的
-            return Ok(cached.client.clone());
+            return Ok(cached.orchestrator_client.clone());
         }
 
         let cached = CachedClient {
-            client: client.clone(),
+            orchestrator_client: orchestrator_client.clone(),
+            plugin_data_client: plugin_data_client.clone(),
             _discover: discover,
         };
         clients.insert(service_name.to_string(), cached);
 
-        Ok(client)
+        Ok(orchestrator_client)
+    }
+
+    /// 获取插件数据导入 gRPC 客户端
+    ///
+    /// 复用 `get_client` 的缓存创建逻辑（会同时创建两个客户端），
+    /// 然后从缓存中返回 plugin_data_client。
+    #[instrument(target = "cmx_rpc", skip(self), fields(service_name = %service_name))]
+    async fn get_plugin_data_client(
+        &self,
+        service_name: &str,
+    ) -> Result<plugin_data_proto::CmxPluginDataServiceClient, RpcError> {
+        // 快查：读锁检查缓存
+        if let Some(cached) = self.clients.read().await.get(service_name) {
+            return Ok(cached.plugin_data_client.clone());
+        }
+        // 慢路径：调用 get_client 创建缓存（会同时创建两个客户端）
+        let _ = self.get_client(service_name).await?;
+        // 现在缓存应存在（get_client 成功即保证已 insert）
+        self.clients
+            .read()
+            .await
+            .get(service_name)
+            .map(|c| c.plugin_data_client.clone())
+            .ok_or_else(|| {
+                RpcError::NoAvailableInstance(format!(
+                    "服务 '{}' 客户端缓存创建后仍未找到（内部一致性错误）",
+                    service_name
+                ))
+            })
     }
 
     /// 判断 gRPC 错误是否可重试
@@ -374,6 +415,110 @@ impl RpcClient for VoloGrpcClient {
         }
 
         unreachable!("retry loop must return before exiting")
+    }
+
+    #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
+    async fn import_plugin_data(
+        &self,
+        service_name: &str,
+        request: PluginDataImportRequest,
+    ) -> Result<PluginDataImportResult, RpcError> {
+        let client = self.get_plugin_data_client(service_name).await?;
+
+        let category_str = request.category.as_str();
+        let proto_req = plugin_data_proto::ImportPluginDataRequest {
+            category: category_str.into(),
+            domain_code: request.domain_code.clone().into(),
+            application_code: request.application_code.clone().into(),
+            module_code: request.module_code.clone().into(),
+            plugin_id: request.plugin_id.clone().into(),
+            app_id: request.app_id.clone().into(),
+            version: request.version.clone().into(),
+            zip_data: request.zip_data.clone().into(),
+        };
+
+        match client.import_plugin_data(proto_req).await {
+            Ok(resp) => {
+                let resp = resp.into_inner();
+                tracing::info!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    success = resp.success,
+                    created = resp.created_count,
+                    updated = resp.updated_count,
+                    deleted = resp.deleted_count,
+                    "RPC import_plugin_data 完成"
+                );
+                Ok(PluginDataImportResult {
+                    success: resp.success,
+                    message: resp.message.to_string(),
+                    created_count: resp.created_count,
+                    updated_count: resp.updated_count,
+                    deleted_count: resp.deleted_count,
+                })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    error = %e,
+                    "RPC import_plugin_data 失败"
+                );
+                Err(RpcError::RpcCallFailed(e.to_string()))
+            }
+        }
+    }
+
+    #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
+    async fn cleanup_plugin_data(
+        &self,
+        service_name: &str,
+        request: PluginDataCleanupRequest,
+    ) -> Result<PluginDataImportResult, RpcError> {
+        let client = self.get_plugin_data_client(service_name).await?;
+
+        let category_str = request.category.as_str();
+        let proto_req = plugin_data_proto::CleanupPluginDataRequest {
+            category: category_str.into(),
+            domain_code: request.domain_code.clone().into(),
+            application_code: request.application_code.clone().into(),
+            module_code: request.module_code.clone().into(),
+            plugin_id: request.plugin_id.clone().into(),
+            app_id: request.app_id.clone().into(),
+        };
+
+        match client.cleanup_plugin_data(proto_req).await {
+            Ok(resp) => {
+                let resp = resp.into_inner();
+                tracing::info!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    success = resp.success,
+                    deleted = resp.deleted_count,
+                    "RPC cleanup_plugin_data 完成"
+                );
+                Ok(PluginDataImportResult {
+                    success: resp.success,
+                    message: resp.message.to_string(),
+                    created_count: resp.created_count,
+                    updated_count: resp.updated_count,
+                    deleted_count: resp.deleted_count,
+                })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    error = %e,
+                    "RPC cleanup_plugin_data 失败"
+                );
+                Err(RpcError::RpcCallFailed(e.to_string()))
+            }
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 //! 服务中心客户端配置。
 //!
 //! 从 `dev.toml` 的 `[center_client]` 配置节加载服务中心访问配置。
-//! 支持三种模式：`mock`（默认）、`url`（URL 直连）、`discovery`（服务发现）。
+//! 支持四种模式：`mock`（默认）、`http_url`（URL 直连）、`http_discovery`（服务发现）、`grpc`（gRPC 调用）。
 //! 配置优先级：dev.toml < 环境变量（`CENTER_CLIENT__*`）。
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use super::types::DataCategory;
 /// 对应 `dev.toml` 中 `[center_client]` 配置节。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CenterClientConfig {
-    /// 访问模式：`"mock"` | `"url"` | `"discovery"`。
+    /// 访问模式：`"mock"` | `"http_url"` | `"http_discovery"` | `"grpc"`。
     #[serde(default = "default_mode")]
     pub mode: String,
 
@@ -70,6 +70,18 @@ pub struct CenterDiscoveryConfig {
     /// 流程中心服务名。
     #[serde(default)]
     pub flow_service: Option<String>,
+}
+
+impl CenterDiscoveryConfig {
+    /// 获取指定数据类别对应的服务名。
+    pub fn get_service_name(&self, category: DataCategory) -> Option<&str> {
+        match category {
+            DataCategory::Menu => self.menu_service.as_deref(),
+            DataCategory::Perm => self.perm_service.as_deref(),
+            DataCategory::Form => self.form_service.as_deref(),
+            DataCategory::Flow => self.flow_service.as_deref(),
+        }
+    }
 }
 
 fn default_mode() -> String {

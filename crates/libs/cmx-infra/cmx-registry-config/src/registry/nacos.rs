@@ -20,6 +20,7 @@ use tracing::{info, warn};
 
 use crate::config::NacosNamingConfig;
 use crate::error::RegistryError;
+use crate::utils::write_lock;
 
 use super::instance_cache::ServiceInstanceCache;
 use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
@@ -42,7 +43,7 @@ impl NamingEventListener for NacosInstanceListener {
             .map(|v| {
                 v.iter()
                     .filter(|i| i.healthy)
-                    .map(convert_from_nacos_instance)
+                    .filter_map(convert_from_nacos_instance)
                     .collect()
             })
             .unwrap_or_default();
@@ -127,7 +128,10 @@ fn convert_to_nacos_instance(instance: &ServiceInstance) -> NacosServiceInstance
 }
 
 /// 将 nacos-sdk 的 `NacosServiceInstance` 转换为 cmx-container 的 [`ServiceInstance`]。
-fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> ServiceInstance {
+///
+/// 端口号超出 `u16` 范围时返回 `None`，调用方应过滤掉此类无效实例，
+/// 避免端口 0 污染缓存导致后续连接失败。
+fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> Option<ServiceInstance> {
     // 从 serviceName 解析 group_name（Nacos 格式：group_name@@service_name）
     let (group_name, service_name) = match &nacos_instance.service_name {
         Some(name) if name.contains("@@") => {
@@ -137,15 +141,23 @@ fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> Service
         other => (None, other.clone().unwrap_or_default()),
     };
 
-    ServiceInstance {
-        ip: nacos_instance.ip.clone(),
-        port: u16::try_from(nacos_instance.port).unwrap_or_else(|_| {
+    // 端口号必须能转换为 u16，否则视为无效实例跳过
+    let port = match u16::try_from(nacos_instance.port) {
+        Ok(p) => p,
+        Err(_) => {
             tracing::warn!(
-                "Nacos 实例端口号超出 u16 范围: {}，已截断为 0",
-                nacos_instance.port
+                ip = %nacos_instance.ip,
+                port = nacos_instance.port,
+                service_name = %service_name,
+                "Nacos 实例端口号超出 u16 范围，已跳过该实例"
             );
-            0
-        }),
+            return None;
+        }
+    };
+
+    Some(ServiceInstance {
+        ip: nacos_instance.ip.clone(),
+        port,
         service_name,
         group_name,
         cluster_name: nacos_instance.cluster_name.clone(),
@@ -153,7 +165,7 @@ fn convert_from_nacos_instance(nacos_instance: &NacosServiceInstance) -> Service
         healthy: nacos_instance.healthy,
         ephemeral: nacos_instance.ephemeral,
         metadata: nacos_instance.metadata.clone(),
-    }
+    })
 }
 
 #[async_trait]
@@ -219,21 +231,23 @@ impl ServiceRegistry for NacosRegistry {
         let instances = match result {
             Ok(v) => v,
             Err(e) => {
-                // 网络错误（连接中断、超时、Nacos Server 重启等）：移除占位，
-                // 让下次 subscribe_instances 能重新订阅，否则断联后永久无推送。
+                // 查询失败直接返回错误。
+                // 注意：此处不再移除 subscribe_instances 中设置的订阅占位，
+                // 因为订阅本身可能已成功（Nacos 会持续推送变更），
+                // 移除占位会导致并发场景下重复订阅。
+                // 若确需重订阅，应由独立的健康检查机制处理。
                 warn!(
-                    "查询实例失败 (service={}): {}，移除订阅占位触发重订阅",
+                    "查询实例失败 (service={}): {}，保留订阅占位等待 Nacos 推送",
                     service_name, e
                 );
-                self.registered_listeners
-                    .write()
-                    .unwrap()
-                    .remove(service_name);
                 return Err(RegistryError::QueryFailed(e.to_string()));
             }
         };
 
-        Ok(instances.iter().map(convert_from_nacos_instance).collect())
+        Ok(instances
+            .iter()
+            .filter_map(convert_from_nacos_instance)
+            .collect())
     }
 
     fn is_enabled(&self) -> bool {
@@ -248,7 +262,7 @@ impl ServiceRegistry for NacosRegistry {
         // 注册 Nacos 监听器（每个 service_name 只注册一次）
         // 使用写锁原子检查+占位，避免并发 TOCTOU 导致重复订阅
         let already_registered = {
-            let mut set = self.registered_listeners.write().unwrap();
+            let mut set = write_lock(&self.registered_listeners);
             if set.contains(service_name) {
                 true
             } else {
@@ -268,10 +282,7 @@ impl ServiceRegistry for NacosRegistry {
                 .await
             {
                 // 订阅失败，回滚占位
-                self.registered_listeners
-                    .write()
-                    .unwrap()
-                    .remove(service_name);
+                write_lock(&self.registered_listeners).remove(service_name);
                 return Err(RegistryError::QueryFailed(e.to_string()));
             }
 
@@ -281,9 +292,21 @@ impl ServiceRegistry for NacosRegistry {
             self.cache.subscribe(service_name, callback);
         }
 
-        // 首次拉取
-        let instances = self.query_instances(service_name, None, Vec::new()).await?;
-        self.cache.update(service_name, instances);
+        // 首次拉取：失败时不回滚订阅占位。
+        // 订阅本身已成功，Nacos 会通过 listener 推送变更更新缓存，
+        // 移除占位会导致并发场景下重复订阅。
+        match self.query_instances(service_name, None, Vec::new()).await {
+            Ok(instances) => {
+                self.cache.update(service_name, instances);
+            }
+            Err(e) => {
+                warn!(
+                    service_name = %service_name,
+                    error = %e,
+                    "首次拉取实例失败，等待 Nacos 推送更新缓存"
+                );
+            }
+        }
 
         Ok(())
     }

@@ -13,16 +13,15 @@
 //!
 //! - `ServiceCenterSender` trait 定义统一的发送/清理接口。
 //! - `CenterDataDispatcher` 调度器负责并行分发和结果汇总。
-//! - `MockServiceCenterSender` 提供当前阶段的 Mock 实现。
+//! - `MockServiceCenterSender` 提供 Mock 实现（默认）。
+//! - `HttpServiceCenterSender` 提供 HTTP form-data 实现（`http_url`/`http_discovery` 模式）。
+//! - `GrpcServiceCenterSender` 提供 gRPC 实现（`grpc` 模式）。
 //! - `CenterClientConfig` 从 `dev.toml` 加载配置。
-//!
-//! # 扩展
-//!
-//! 后续只需新增 `HttpServiceCenterSender` 实现 `ServiceCenterSender` trait，
-//! 并在配置中将 `mode` 设为 `"url"` 或 `"discovery"` 即可对接真实服务。
 
 pub mod config;
 pub mod dispatcher;
+pub mod grpc_sender;
+pub mod http_sender;
 pub mod mock_sender;
 pub mod packer;
 pub mod sender;
@@ -30,6 +29,8 @@ pub mod types;
 
 pub use config::CenterClientConfig;
 pub use dispatcher::CenterDataDispatcher;
+pub use grpc_sender::GrpcServiceCenterSender;
+pub use http_sender::HttpServiceCenterSender;
 pub use mock_sender::MockServiceCenterSender;
 pub use sender::{CenterError, ServiceCenterSender};
 pub use types::{DataCategory, DispatchContext, DispatchResult};
