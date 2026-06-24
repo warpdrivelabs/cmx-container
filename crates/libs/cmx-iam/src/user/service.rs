@@ -433,9 +433,9 @@ impl UserService for UserServiceImpl {
         // 1. 软删除 cmx_user（archived = 1）
         for user_id in user_ids {
             let sql = "UPDATE cmx_user SET archived = 1, update_time = NOW() WHERE id = $1";
-            let params = Value::Array(vec![Value::String(user_id.clone())]);
+            let params = vec![DataValue::String(user_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("软删除用户失败: {e}"))))?;
         }
@@ -443,9 +443,9 @@ impl UserService for UserServiceImpl {
         // 2. 物理删除 cmx_user_role 关联
         for user_id in user_ids {
             let sql = "DELETE FROM cmx_user_role WHERE user_id = $1";
-            let params = Value::Array(vec![Value::String(user_id.clone())]);
+            let params = vec![DataValue::String(user_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("删除用户角色关联失败: {e}"))))?;
         }
@@ -604,9 +604,9 @@ impl UserService for UserServiceImpl {
 
         // 1. 物理删除旧关联
         let delete_sql = "DELETE FROM cmx_user_role WHERE user_id = $1";
-        let delete_params = Value::Array(vec![Value::String(user_id.clone())]);
+        let delete_params = vec![DataValue::String(user_id.clone())];
         self.mm
-            .execute_sql_with_json(&self.db_id, Some(txn_id), delete_sql, delete_params)
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("删除旧角色关联失败: {e}"))))?;
 
@@ -615,13 +615,13 @@ impl UserService for UserServiceImpl {
             let ur_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
                               VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
-            let params = Value::Array(vec![
-                Value::String(ur_id),
-                Value::String(user_id.clone()),
-                Value::String(role_id.clone()),
-            ]);
+            let params = vec![
+                DataValue::String(ur_id),
+                DataValue::String(user_id.clone()),
+                DataValue::String(role_id.clone()),
+            ];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), insert_sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("插入用户角色关联失败: {e}"))))?;
         }
@@ -749,17 +749,17 @@ impl UserService for UserServiceImpl {
                 (id, user_id, role_id, effective_from, effective_until, reason, source, status, archived)
             VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0)
         "#;
-        let params = Value::Array(vec![
-            Value::String(assignment_id.clone()),
-            Value::String(user_id.to_string()),
-            Value::String(role_id.to_string()),
-            Value::String(effective_from.to_rfc3339()),
-            Value::String(effective_until.to_rfc3339()),
-            reason.map(|s| Value::String(s.to_string())).unwrap_or(Value::Null),
-            Value::String(source.to_string()),
-        ]);
+        let params = vec![
+            DataValue::String(assignment_id.clone()),
+            DataValue::String(user_id.to_string()),
+            DataValue::String(role_id.to_string()),
+            DataValue::String(effective_from.to_rfc3339()),
+            DataValue::String(effective_until.to_rfc3339()),
+            reason.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null),
+            DataValue::String(source.to_string()),
+        ];
         self.mm
-            .execute_sql_with_json(&self.db_id, None, insert_sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, insert_sql, params)
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("分配临时角色失败: {e}")))
@@ -849,13 +849,13 @@ impl UserService for UserServiceImpl {
             SET status = 0, revoked_by = $2, revoked_at = NOW(), update_time = NOW()
             WHERE id = $1 AND status = 1 AND archived = 0
         "#;
-        let params = Value::Array(vec![
-            Value::String(assignment_id.to_string()),
-            Value::String(operator),
-        ]);
+        let params = vec![
+            DataValue::String(assignment_id.to_string()),
+            DataValue::String(operator),
+        ];
         let affected = self
             .mm
-            .execute_sql_with_json(&self.db_id, None, update_sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, update_sql, params)
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("撤销临时角色失败: {e}")))
@@ -970,13 +970,13 @@ impl UserService for UserServiceImpl {
                 SET status = 0, revoked_by = $2, revoked_at = NOW(), update_time = NOW()
                 WHERE id = $1 AND status = 1 AND archived = 0
             "#;
-            let params = Value::Array(vec![
-                Value::String(assignment_id.clone()),
-                Value::String(operator.clone()),
-            ]);
+            let params = vec![
+                DataValue::String(assignment_id.clone()),
+                DataValue::String(operator.clone()),
+            ];
             let affected = self
                 .mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), update_sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), update_sql, params)
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("批量撤销临时角色失败: {e}")))
@@ -1092,12 +1092,12 @@ impl UserService for UserServiceImpl {
             SET effective_until = $2, update_time = NOW()
             WHERE id = $1
         "#;
-        let params = Value::Array(vec![
-            Value::String(assignment_id.to_string()),
-            Value::String(new_effective_until.to_rfc3339()),
-        ]);
+        let params = vec![
+            DataValue::String(assignment_id.to_string()),
+            DataValue::String(new_effective_until.to_rfc3339()),
+        ];
         self.mm
-            .execute_sql_with_json(&self.db_id, None, update_sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, update_sql, params)
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("延长临时授权失败: {e}")))

@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_traits::iam::{DataScope, PermissionChecker};
-use serde_json::Value;
+use cmx_core::model::cell::DataValue;
 use tracing::{debug, warn};
 
 use crate::circuit_breaker::CircuitBreaker;
@@ -82,10 +82,10 @@ impl IamChecker {
     }
 
     /// 执行 EXISTS 查询，返回布尔值
-    async fn exists_check(&self, sql: &str, params: Value, label: &str) -> Result<bool, TraitError> {
+    async fn exists_check(&self, sql: &str, params: Vec<DataValue>, label: &str) -> Result<bool, TraitError> {
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, label)
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, label)
             .await
             .map_err(|e| TraitError::Internal(format!("权限查询失败: {e}")))?;
 
@@ -225,10 +225,10 @@ impl IamChecker {
                 SELECT DISTINCT user_id FROM cmx_user_role_assignment
                 WHERE role_id = $1 AND archived = 0
             "#;
-            let params = Value::Array(vec![Value::String(role_id.to_string())]);
+            let params = vec![DataValue::String(role_id.to_string())];
             let dataset = self
                 .mm
-                .query_sql_with_json(&self.db_id, None, sql, params, "role_user_ids")
+                .query_sql_with_datavalues(&self.db_id, None, sql, params, "role_user_ids")
                 .await;
             if let Ok(dataset) = dataset {
                 let schema = dataset.schema.as_ref();
@@ -275,7 +275,7 @@ impl IamChecker {
                         AND NOW() BETWEEN ura.effective_from AND ura.effective_until
                     )
                 "#;
-                let params = Value::Array(vec![Value::String(user_id.to_string())]);
+                let params = vec![DataValue::String(user_id.to_string())];
                 // 直查 DB，失败时返回 Err（DB 也故障的实际效果）
                 match self.exists_check(system_all_sql, params, "failopen_system_all").await {
                     Ok(has_all) => Ok(has_all),
@@ -403,11 +403,11 @@ impl PermissionChecker for IamChecker {
               AND p.archived = 0 AND p.status = 1
               AND r.archived = 0 AND r.status = 1
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "user_permissions")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "user_permissions")
             .await
             .map_err(|e| TraitError::Internal(format!("查询用户权限失败: {e}")))?;
 
@@ -444,11 +444,11 @@ impl PermissionChecker for IamChecker {
               AND NOW() BETWEEN ura.effective_from AND ura.effective_until
               AND r.archived = 0 AND r.status = 1
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "user_role_codes")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "user_role_codes")
             .await
             .map_err(|e| TraitError::Internal(format!("查询用户角色失败: {e}")))?;
 

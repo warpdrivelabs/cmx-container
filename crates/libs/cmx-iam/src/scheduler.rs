@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use cmx_audit::{AuditDomain, AuditLogger, AuditRecord, OperationResult};
 use cmx_database::DatabaseManager;
-use serde_json::Value;
+use cmx_core::model::cell::DataValue;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
@@ -84,9 +84,9 @@ pub async fn run_cleanup_once(
         FROM cmx_user_role_assignment
         WHERE effective_until < NOW() AND status = 1 AND archived = 0
     "#;
-    let params = Value::Array(vec![]);
+    let params: Vec<DataValue> = vec![];
     let dataset = mm
-        .query_sql_with_json(db_id, None, query_sql, params, "cleanup_query_expired")
+        .query_sql_with_datavalues(db_id, None, query_sql, params, "cleanup_query_expired")
         .await
         .map_err(|e| format!("查询过期记录失败: {e}"))?;
 
@@ -112,9 +112,9 @@ pub async fn run_cleanup_once(
         SET status = 0, update_time = NOW()
         WHERE effective_until < NOW() AND status = 1 AND archived = 0
     "#;
-    let params = Value::Array(vec![]);
+    let params: Vec<DataValue> = vec![];
     let affected = mm
-        .execute_sql_with_json(db_id, None, sql, params)
+        .execute_sql_with_datavalues(db_id, None, sql, params)
         .await
         .map_err(|e| format!("执行清理SQL失败: {e}"))?;
 

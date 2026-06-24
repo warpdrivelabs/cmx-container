@@ -9,6 +9,7 @@ use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
+use cmx_core::model::cell::DataValue;
 use serde_json::Value;
 use tracing::{debug, info};
 
@@ -172,10 +173,10 @@ impl PermissionService for PermissionServiceImpl {
 
         // 检查权限编码唯一性
         let check_sql = "SELECT id FROM cmx_permission WHERE code = $1 AND archived = 0";
-        let check_params = Value::Array(vec![Value::String(data.code.clone())]);
+        let check_params = vec![DataValue::String(data.code.clone())];
         let existing = self
             .mm
-            .query_sql_with_json(&self.db_id, None, check_sql, check_params, "check_perm_code")
+            .query_sql_with_datavalues(&self.db_id, None, check_sql, check_params, "check_perm_code")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询权限编码失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -323,9 +324,9 @@ impl PermissionService for PermissionServiceImpl {
         // 1. 软删除 cmx_permission
         for permission_id in permission_ids {
             let sql = "UPDATE cmx_permission SET archived = 1, update_time = NOW() WHERE id = $1";
-            let params = Value::Array(vec![Value::String(permission_id.clone())]);
+            let params = vec![DataValue::String(permission_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("软删除权限失败: {e}"))))?;
         }
@@ -333,9 +334,9 @@ impl PermissionService for PermissionServiceImpl {
         // 2. 物理删除 cmx_role_permission 关联
         for permission_id in permission_ids {
             let sql = "DELETE FROM cmx_role_permission WHERE permission_id = $1";
-            let params = Value::Array(vec![Value::String(permission_id.clone())]);
+            let params = vec![DataValue::String(permission_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("删除权限角色关联失败: {e}"))))?;
         }
@@ -471,29 +472,28 @@ impl PermissionService for PermissionServiceImpl {
              domain_code, app_code, module_code, extension \
              FROM cmx_permission WHERE archived = 0 AND status = 1",
         );
-        let mut params: Vec<Value> = Vec::new();
+        let mut params: Vec<DataValue> = Vec::new();
         let mut param_idx = 1;
 
         if let Some(dc) = domain_code {
             sql.push_str(&format!(" AND domain_code = ${param_idx}"));
-            params.push(Value::String(dc.to_string()));
+            params.push(DataValue::String(dc.to_string()));
             param_idx += 1;
         }
         if let Some(ac) = app_code {
             sql.push_str(&format!(" AND app_code = ${param_idx}"));
-            params.push(Value::String(ac.to_string()));
+            params.push(DataValue::String(ac.to_string()));
             param_idx += 1;
         }
         if let Some(mc) = module_code {
             sql.push_str(&format!(" AND module_code = ${param_idx}"));
-            params.push(Value::String(mc.to_string()));
+            params.push(DataValue::String(mc.to_string()));
         }
         sql.push_str(" ORDER BY sort_order ASC NULLS LAST, code ASC");
 
-        let params_value = Value::Array(params);
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, &sql, params_value, "permission_tree")
+            .query_sql_with_datavalues(&self.db_id, None, &sql, params, "permission_tree")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询权限树失败: {e}"))))?;
 
@@ -528,10 +528,10 @@ impl PermissionService for PermissionServiceImpl {
             GROUP BY p.id, p.code, p.name
             ORDER BY role_count DESC, p.sort_order, p.code
         "#;
-        let params = serde_json::Value::Array(vec![]);
+        let params: Vec<DataValue> = vec![];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "perm_usage_stat")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "perm_usage_stat")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询权限使用统计失败: {e}")))

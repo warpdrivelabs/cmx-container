@@ -9,6 +9,7 @@ use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
+use cmx_core::model::cell::DataValue;
 use serde_json::Value;
 use tracing::{debug, info};
 use cmx_utils::snowflake_id_str;
@@ -157,10 +158,10 @@ impl RoleService for RoleServiceImpl {
 
         // 检查角色编码唯一性
         let check_sql = "SELECT id FROM cmx_role WHERE code = $1 AND archived = 0";
-        let check_params = Value::Array(vec![Value::String(data.code.clone())]);
+        let check_params = vec![DataValue::String(data.code.clone())];
         let existing = self
             .mm
-            .query_sql_with_json(&self.db_id, None, check_sql, check_params, "check_role_code")
+            .query_sql_with_datavalues(&self.db_id, None, check_sql, check_params, "check_role_code")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询角色编码失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -318,9 +319,9 @@ impl RoleService for RoleServiceImpl {
         // 2. 软删除 cmx_role
         for role_id in role_ids {
             let sql = "UPDATE cmx_role SET archived = 1, update_time = NOW() WHERE id = $1";
-            let params = Value::Array(vec![Value::String(role_id.clone())]);
+            let params = vec![DataValue::String(role_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色失败: {e}"))))?;
         }
@@ -328,9 +329,9 @@ impl RoleService for RoleServiceImpl {
         // 3. 物理删除 cmx_role_permission 关联
         for role_id in role_ids {
             let sql = "DELETE FROM cmx_role_permission WHERE role_id = $1";
-            let params = Value::Array(vec![Value::String(role_id.clone())]);
+            let params = vec![DataValue::String(role_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
         }
@@ -473,9 +474,9 @@ impl RoleService for RoleServiceImpl {
 
         // 1. 物理删除旧关联
         let delete_sql = "DELETE FROM cmx_role_permission WHERE role_id = $1";
-        let delete_params = Value::Array(vec![Value::String(role_id.to_string())]);
+        let delete_params = vec![DataValue::String(role_id.to_string())];
         self.mm
-            .execute_sql_with_json(&self.db_id, Some(txn_id), delete_sql, delete_params)
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("删除旧权限关联失败: {e}"))))?;
 
@@ -484,13 +485,13 @@ impl RoleService for RoleServiceImpl {
             let rp_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_role_permission (id, role_id, permission_id, archived) \
                               VALUES ($1, $2, $3, 0) ON CONFLICT (role_id, permission_id) DO NOTHING";
-            let params = Value::Array(vec![
-                Value::String(rp_id),
-                Value::String(role_id.to_string()),
-                Value::String(perm_id.clone()),
-            ]);
+            let params = vec![
+                DataValue::String(rp_id),
+                DataValue::String(role_id.to_string()),
+                DataValue::String(perm_id.clone()),
+            ];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), insert_sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("插入角色权限关联失败: {e}"))))?;
         }
@@ -547,11 +548,11 @@ impl RoleService for RoleServiceImpl {
             INNER JOIN cmx_role_permission rp ON rp.permission_id = p.id
             WHERE rp.role_id = $1 AND rp.archived = 0 AND p.archived = 0 AND p.status = 1
         "#;
-        let params = Value::Array(vec![Value::String(role_id.to_string())]);
+        let params = vec![DataValue::String(role_id.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "role_permissions")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "role_permissions")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询角色权限失败: {e}"))))?;
 

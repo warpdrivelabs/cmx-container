@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use cmx_database::DatabaseManager;
-use serde_json::Value;
+use cmx_core::model::cell::DataValue;
 use tracing::debug;
 
 use crate::config::IamConfig;
@@ -108,14 +108,14 @@ impl RuleEnforcerImpl {
               AND ($1::text IS NULL OR r.subject_type = $1)
             ORDER BY r.priority DESC, r.id
         "#;
-        let params = Value::Array(vec![
+        let params: Vec<DataValue> = vec![
             subject_type
-                .map(|s| Value::String(s.to_string()))
-                .unwrap_or(Value::Null),
-        ]);
+                .map(|s| DataValue::String(s.to_string()))
+                .unwrap_or(DataValue::Null),
+        ];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "load_rules")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "load_rules")
             .await
             .map_err(|e| IamError::Business(format!("加载规则失败: {e}")))?;
 
@@ -174,10 +174,10 @@ impl RuleEnforcerImpl {
               AND NOW() BETWEEN ura.effective_from AND ura.effective_until
               AND rp.archived = 0
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "user_perm_ids")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "user_perm_ids")
             .await
             .map_err(|e| IamError::Business(format!("查询用户权限ID失败: {e}")))?;
 
@@ -201,13 +201,13 @@ impl RuleEnforcerImpl {
             SELECT permission_id FROM cmx_role_permission
             WHERE role_id = ANY($1) AND archived = 0
         "#;
-        let role_id_array = Value::Array(
-            role_ids.iter().map(|id| Value::String(id.clone())).collect(),
+        let role_id_array = DataValue::Array(
+            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
         );
-        let params = Value::Array(vec![role_id_array]);
+        let params = vec![role_id_array];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "role_perm_ids")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "role_perm_ids")
             .await
             .map_err(|e| IamError::Business(format!("查询角色权限ID失败: {e}")))?;
 
@@ -233,10 +233,10 @@ impl RuleEnforcerImpl {
             WHERE user_id = $1 AND status = 1 AND archived = 0
               AND NOW() BETWEEN effective_from AND effective_until
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "user_role_ids")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "user_role_ids")
             .await
             .map_err(|e| IamError::Business(format!("查询用户角色ID失败: {e}")))?;
 

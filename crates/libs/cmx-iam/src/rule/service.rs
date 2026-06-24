@@ -10,7 +10,7 @@ use cmx_core::SVRContext;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
-use serde_json::Value;
+use cmx_core::model::cell::DataValue;
 use tracing::{debug, info};
 
 use crate::audit_helper::AuditHelper;
@@ -340,10 +340,10 @@ impl ExclusionRuleServiceImpl {
             FROM cmx_exclusion_rule
             WHERE id = $1
         "#;
-        let params = Value::Array(vec![Value::String(rule_id.to_string())]);
+        let params = vec![DataValue::String(rule_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "query_rule")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "query_rule")
             .await
             .map_err(|e| IamError::Business(format!("查询规则失败: {e}")))?;
 
@@ -358,10 +358,10 @@ impl ExclusionRuleServiceImpl {
             FROM cmx_exclusion_rule_item
             WHERE rule_id = $1
         "#;
-        let params = Value::Array(vec![Value::String(rule_id.to_string())]);
+        let params = vec![DataValue::String(rule_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "query_rule_items")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "query_rule_items")
             .await
             .map_err(|e| IamError::Business(format!("查询规则项失败: {e}")))?;
 
@@ -387,12 +387,12 @@ impl ExclusionRuleServiceImpl {
             "SELECT id FROM {} WHERE id = ANY($1) AND archived = 0",
             table
         );
-        let params = Value::Array(vec![Value::Array(
-            ids.iter().map(|i| Value::String(i.clone())).collect(),
-        )]);
+        let params = vec![DataValue::Array(
+            ids.iter().map(|i| DataValue::String(i.clone())).collect(),
+        )];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, &sql, params, "check_subjects_exist")
+            .query_sql_with_datavalues(&self.db_id, None, &sql, params, "check_subjects_exist")
             .await
             .map_err(|e| IamError::Business(format!("校验对象存在性失败: {e}")))?;
 
@@ -491,24 +491,24 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                  priority, description, status, archived)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 0)
         "#;
-        let params = Value::Array(vec![
-            Value::String(rule_id.clone()),
-            Value::String(req.code.clone()),
-            Value::String(req.name.clone()),
-            Value::String(req.subject_type.clone()),
-            Value::String(req.primary_subject_id.clone()),
+        let params = vec![
+            DataValue::String(rule_id.clone()),
+            DataValue::String(req.code.clone()),
+            DataValue::String(req.name.clone()),
+            DataValue::String(req.subject_type.clone()),
+            DataValue::String(req.primary_subject_id.clone()),
             req.violation_message
                 .clone()
-                .map(Value::String)
-                .unwrap_or(Value::Null),
-            Value::Number(priority.into()),
+                .map(DataValue::String)
+                .unwrap_or(DataValue::Null),
+            DataValue::Int(priority),
             req.description
                 .clone()
-                .map(Value::String)
-                .unwrap_or(Value::Null),
-        ]);
+                .map(DataValue::String)
+                .unwrap_or(DataValue::Null),
+        ];
         self.mm
-            .execute_sql_with_json(&self.db_id, Some(txn_id), insert_sql, params)
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_sql, params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("创建规则失败: {e}"))))?;
 
@@ -521,13 +521,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                 VALUES ($1, $2, $3)
                 ON CONFLICT DO NOTHING
             "#;
-            let params = Value::Array(vec![
-                Value::String(item_id),
-                Value::String(rule_id.clone()),
-                Value::String(subject_id.clone()),
-            ]);
+            let params = vec![
+                DataValue::String(item_id),
+                DataValue::String(rule_id.clone()),
+                DataValue::String(subject_id.clone()),
+            ];
             self.mm
-                .execute_sql_with_json(&self.db_id, Some(txn_id), insert_item_sql, params)
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_item_sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("创建规则项失败: {e}"))))?;
         }
@@ -596,37 +596,37 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
 
         // 构造动态 UPDATE（不允许修改 subject_type）
         let mut sets: Vec<String> = Vec::new();
-        let mut params: Vec<Value> = vec![Value::String(rule_id.to_string())];
+        let mut params: Vec<DataValue> = vec![DataValue::String(rule_id.to_string())];
         let mut idx = 2;
 
         if let Some(name) = data.name {
             sets.push(format!("name = ${idx}"));
-            params.push(Value::String(name));
+            params.push(DataValue::String(name));
             idx += 1;
         }
         if let Some(primary_subject_id) = data.primary_subject_id {
             sets.push(format!("primary_subject_id = ${idx}"));
-            params.push(Value::String(primary_subject_id));
+            params.push(DataValue::String(primary_subject_id));
             idx += 1;
         }
         if let Some(vm) = data.violation_message {
             sets.push(format!("violation_message = ${idx}"));
-            params.push(Value::String(vm));
+            params.push(DataValue::String(vm));
             idx += 1;
         }
         if let Some(priority) = data.priority {
             sets.push(format!("priority = ${idx}"));
-            params.push(Value::Number(priority.into()));
+            params.push(DataValue::Int(priority));
             idx += 1;
         }
         if let Some(desc) = data.description {
             sets.push(format!("description = ${idx}"));
-            params.push(Value::String(desc));
+            params.push(DataValue::String(desc));
             idx += 1;
         }
         if let Some(status) = data.status {
             sets.push(format!("status = ${idx}"));
-            params.push(Value::Number(status.into()));
+            params.push(DataValue::Int(status));
             // idx 自增在此处可省略，后续不再使用
         }
 
@@ -643,7 +643,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         );
 
         self.mm
-            .execute_sql_with_json(&self.db_id, None, &sql, Value::Array(params))
+            .execute_sql_with_datavalues(&self.db_id, None, &sql, params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("更新规则失败: {e}"))))?;
 
@@ -667,10 +667,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         );
 
         let sql = "UPDATE cmx_exclusion_rule SET archived = 1, update_time = NOW() WHERE id = $1";
-        let params = Value::Array(vec![Value::String(rule_id.to_string())]);
+        let params = vec![DataValue::String(rule_id.to_string())];
         let affected = self
             .mm
-            .execute_sql_with_json(&self.db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, sql, params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("删除规则失败: {e}"))))?;
 
@@ -726,10 +726,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
 
         // 查询总数
         let count_sql = "SELECT COUNT(*) as cnt FROM cmx_exclusion_rule WHERE archived = 0";
-        let params = Value::Array(vec![]);
+        let params: Vec<DataValue> = vec![];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, count_sql, params, "rule_count")
+            .query_sql_with_datavalues(&self.db_id, None, count_sql, params, "rule_count")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询规则总数失败: {e}")))
@@ -751,13 +751,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             ORDER BY priority DESC, create_time DESC
             LIMIT $1 OFFSET $2
         "#;
-        let params = Value::Array(vec![
-            Value::Number((size as i64).into()),
-            Value::Number(offset.into()),
-        ]);
+        let params = vec![
+            DataValue::Int(size as i64),
+            DataValue::Int(offset),
+        ];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, page_sql, params, "rule_page")
+            .query_sql_with_datavalues(&self.db_id, None, page_sql, params, "rule_page")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("分页查询规则失败: {e}")))
@@ -779,13 +779,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         );
 
         let sql = "UPDATE cmx_exclusion_rule SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
-        let params = Value::Array(vec![
-            Value::String(rule_id.to_string()),
-            Value::Number(status.into()),
-        ]);
+        let params = vec![
+            DataValue::String(rule_id.to_string()),
+            DataValue::Int(status),
+        ];
         let affected = self
             .mm
-            .execute_sql_with_json(&self.db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, sql, params)
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("切换规则状态失败: {e}")))
@@ -847,14 +847,14 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                 VALUES ($1, $2, $3)
                 ON CONFLICT DO NOTHING
             "#;
-            let params = Value::Array(vec![
-                Value::String(item_id),
-                Value::String(rule_id.to_string()),
-                Value::String(subject_id),
-            ]);
+            let params = vec![
+                DataValue::String(item_id),
+                DataValue::String(rule_id.to_string()),
+                DataValue::String(subject_id),
+            ];
             let affected = self
                 .mm
-                .execute_sql_with_json(&self.db_id, None, sql, params)
+                .execute_sql_with_datavalues(&self.db_id, None, sql, params)
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("添加规则项失败: {e}")))
@@ -886,13 +886,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         );
 
         let sql = "DELETE FROM cmx_exclusion_rule_item WHERE id = ANY($1) AND rule_id = $2";
-        let params = Value::Array(vec![
-            Value::Array(item_ids.iter().map(|i| Value::String(i.clone())).collect()),
-            Value::String(rule_id.to_string()),
-        ]);
+        let params = vec![
+            DataValue::Array(item_ids.iter().map(|i| DataValue::String(i.clone())).collect()),
+            DataValue::String(rule_id.to_string()),
+        ];
         let affected = self
             .mm
-            .execute_sql_with_json(&self.db_id, None, sql, params)
+            .execute_sql_with_datavalues(&self.db_id, None, sql, params)
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("移除规则项失败: {e}")))
@@ -945,10 +945,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                   AND NOW() BETWEEN ura.effective_from AND ura.effective_until
                   AND rp.archived = 0
             "#;
-            let params = Value::Array(vec![Value::String(uid.clone())]);
+            let params = vec![DataValue::String(uid.clone())];
             let dataset = self
                 .mm
-                .query_sql_with_json(&self.db_id, None, user_perm_sql, params, "validate_user_perms")
+                .query_sql_with_datavalues(&self.db_id, None, user_perm_sql, params, "validate_user_perms")
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("查询用户权限失败: {e}")))
@@ -971,10 +971,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                 WHERE user_id = $1 AND status = 1 AND archived = 0
                   AND NOW() BETWEEN effective_from AND effective_until
             "#;
-            let params = Value::Array(vec![Value::String(uid.clone())]);
+            let params = vec![DataValue::String(uid.clone())];
             let dataset = self
                 .mm
-                .query_sql_with_json(&self.db_id, None, user_role_sql, params, "validate_user_roles")
+                .query_sql_with_datavalues(&self.db_id, None, user_role_sql, params, "validate_user_roles")
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("查询用户角色失败: {e}")))
@@ -996,10 +996,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             WHERE r.status = 1 AND r.archived = 0
             ORDER BY r.priority DESC, r.id
         "#;
-        let params = Value::Array(vec![]);
+        let params: Vec<DataValue> = vec![];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, load_sql, params, "validate_load_rules")
+            .query_sql_with_datavalues(&self.db_id, None, load_sql, params, "validate_load_rules")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("加载规则失败: {e}")))

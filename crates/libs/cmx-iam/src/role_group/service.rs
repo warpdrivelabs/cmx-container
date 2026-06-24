@@ -9,6 +9,7 @@ use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
+use cmx_core::model::cell::DataValue;
 use serde_json::Value;
 use tracing::{debug, info};
 
@@ -290,15 +291,13 @@ impl RoleGroupService for RoleGroupServiceImpl {
         // 1. 检查待删除角色组下是否有子角色组
         let child_check_sql =
             "SELECT id FROM cmx_role_group WHERE parent_id = ANY($1) AND archived = 0 LIMIT 1";
-        let child_params = Value::Array(
-            role_group_ids
+        let child_params: Vec<DataValue> = role_group_ids
                 .iter()
-                .map(|id| Value::String(id.clone()))
-                .collect(),
-        );
+                .map(|id| DataValue::String(id.clone()))
+                .collect();
         let existing = self
             .mm
-            .query_sql_with_json(&self.db_id, None, child_check_sql, child_params, "check_child_groups")
+            .query_sql_with_datavalues(&self.db_id, None, child_check_sql, child_params, "check_child_groups")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询子角色组失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -308,15 +307,13 @@ impl RoleGroupService for RoleGroupServiceImpl {
         // 2. 检查待删除角色组下是否有关联角色
         let role_check_sql =
             "SELECT id FROM cmx_role WHERE role_group_id = ANY($1) AND archived = 0 LIMIT 1";
-        let role_params = Value::Array(
-            role_group_ids
+        let role_params: Vec<DataValue> = role_group_ids
                 .iter()
-                .map(|id| Value::String(id.clone()))
-                .collect(),
-        );
+                .map(|id| DataValue::String(id.clone()))
+                .collect();
         let existing = self
             .mm
-            .query_sql_with_json(&self.db_id, None, role_check_sql, role_params, "check_role_group_usage")
+            .query_sql_with_datavalues(&self.db_id, None, role_check_sql, role_params, "check_role_group_usage")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询关联角色失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -326,9 +323,9 @@ impl RoleGroupService for RoleGroupServiceImpl {
         // 3. 软删除角色组
         for role_group_id in role_group_ids {
             let sql = "UPDATE cmx_role_group SET archived = 1, update_time = NOW() WHERE id = $1";
-            let params = Value::Array(vec![Value::String(role_group_id.clone())]);
+            let params = vec![DataValue::String(role_group_id.clone())];
             self.mm
-                .execute_sql_with_json(&self.db_id, None, sql, params)
+                .execute_sql_with_datavalues(&self.db_id, None, sql, params)
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色组失败: {e}"))))?;
         }
