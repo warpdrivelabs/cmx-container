@@ -68,12 +68,14 @@ pub async fn oauth2_provider_authorize(
     Ok(axum::response::Redirect::temporary(&authorize_url))
 }
 
-/// Provider 回调请求参数
+/// Provider 回调请求查询参数。
+///
+/// 由第三方 Provider 在用户授权后重定向到本端时携带，含授权码和 CSRF state。
 #[derive(Debug, Deserialize)]
 pub struct CallbackParams {
-    /// 授权码
+    /// 授权码。
     pub code: String,
-    /// CSRF state
+    /// CSRF state，由 authorize 阶段生成并由 Provider 原样回传。
     pub state: String,
 }
 
@@ -112,33 +114,38 @@ pub async fn oauth2_provider_callback(
     }
 }
 
-/// 授权码换 Token 请求
+/// 一次性授权码换 Token 请求载荷。
+///
+/// 第三方 OAuth2 登录回调后，前端收到一次性授权码后调用此接口换发 Access/Refresh Token。
+/// 一次性码仅可使用一次且有效期短（建议 60 秒）。
 #[derive(Debug, Deserialize)]
 pub struct ExchangeCodeRequest {
-    /// 一次性授权码
+    /// 一次性授权码。
     pub code: String,
-    /// 原始 state（用于前端校验）
+    /// 原始 state（用于前端校验 CSRF）。
     pub state: String,
 }
 
-/// Token 换取响应
+/// 一次性授权码换 Token 响应载荷。
+///
+/// `is_new` 标识是否为首次登录的新注册用户，前端可据此提示用户完善资料。
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct ExchangeCodeResponse {
-    /// Access Token
+    /// Access Token。
     pub access_token: String,
-    /// Refresh Token
+    /// Refresh Token。
     pub refresh_token: String,
-    /// Token 类型
+    /// Token 类型，固定为 "Bearer"。
     pub token_type: String,
-    /// Access Token 过期时间（Unix 时间戳）
+    /// Access Token 过期时间（Unix 时间戳）。
     pub access_expires_at: i64,
-    /// Refresh Token 过期时间（Unix 时间戳）
+    /// Refresh Token 过期时间（Unix 时间戳）。
     pub refresh_expires_at: i64,
-    /// 是否为新注册用户
+    /// 是否为新注册用户。
     pub is_new: bool,
-    /// Provider 名称
+    /// Provider 名称（如 google/github）。
     pub provider: String,
-    /// 原始 state（用于前端校验 CSRF）
+    /// 原始 state（用于前端校验 CSRF）。
     pub state: String,
 }
 
@@ -180,10 +187,13 @@ pub async fn oauth2_provider_exchange(
     Ok(Json(ApiResp::ok(response)))
 }
 
-/// 手动绑定第三方账号请求
+/// 手动绑定第三方账号请求载荷。
+///
+/// 已登录用户可通过此接口将第三方 OAuth2 账号绑定到当前用户，绑定后
+/// 可使用第三方登录方式直接进入该账号。
 #[derive(Debug, Deserialize)]
 pub struct LinkAccountRequest {
-    /// Provider 返回的授权码
+    /// Provider 返回的授权码。
     pub code: String,
 }
 

@@ -16,51 +16,79 @@ use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
-/// 启用/禁用规则请求
+/// 启用/禁用互斥规则请求载荷。
+///
+/// 通过 `status` 字段切换规则的启用状态，禁用后规则不再参与互斥校验。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ToggleRuleStatusRequest {
+    /// 规则 ID。
     pub rule_id: String,
-    pub status: i64, // 0-禁用，1-启用
+    /// 目标状态：0-禁用，1-启用。
+    pub status: i64,
 }
 
-/// 添加规则项请求
+/// 添加互斥规则项请求载荷。
+///
+/// 在指定规则下批量追加互斥对象（权限或角色，取决于规则的 subject_type）。
+/// 主对象不可重复出现在互斥对象列表中。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct AddRuleItemsRequest {
+    /// 目标规则 ID。
     pub rule_id: String,
+    /// 待添加的互斥对象 ID 列表。
     pub subject_ids: Vec<String>,
 }
 
-/// 移除规则项请求
+/// 移除互斥规则项请求载荷。
+///
+/// 按 item_id 批量删除规则下的互斥对象项。删除后用户集不再受此规则中对应项约束。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct RemoveRuleItemsRequest {
+    /// 目标规则 ID。
     pub rule_id: String,
+    /// 待移除的规则项 ID 列表（cmx_exclusion_rule_item.id）。
     pub item_ids: Vec<String>,
 }
 
-/// 规则详情响应（含规则项）
+/// 规则详情响应载荷（含规则项）。
+///
+/// 用于规则详情页：返回规则主体与该规则下所有互斥对象项。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct RuleDetailResponse {
+    /// 规则主体。
     pub rule: ExclusionRule,
+    /// 规则下的互斥对象项列表。
     pub items: Vec<ExclusionRuleItem>,
 }
 
-/// 批量操作响应
+/// 批量操作通用响应载荷。
+///
+/// 用于 add_rule_items / remove_rule_items 等批量操作，返回实际写入或删除的记录数。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct BatchResponse {
+    /// 受影响的记录数。
     pub affected: u64,
 }
 
-/// 分页查询规则请求
+/// 分页查询互斥规则请求载荷。
+///
+/// 采用页码 + 页大小模式，页码从 1 开始。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct PageRulesRequest {
+    /// 当前页码，从 1 开始。
     pub current: u64,
+    /// 每页大小。
     pub size: u64,
 }
 
-/// 分页查询规则响应
+/// 分页查询互斥规则响应载荷。
+///
+/// 包含当前页规则列表与总记录数。
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct PageRulesResponse {
+    /// 规则列表。
     pub rules: Vec<ExclusionRule>,
+    /// 总记录数。
     pub total: i64,
 }
 

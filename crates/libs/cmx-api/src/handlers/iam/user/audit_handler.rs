@@ -13,10 +13,13 @@ use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
-/// 用户有效权限查询参数
+/// 用户有效权限查询参数。
+///
+/// 用于查询用户合并后的有效权限集合。
 #[derive(Debug, Deserialize)]
 #[derive(utoipa::IntoParams)]
 pub struct EffectivePermissionsQuery {
+    /// 用户 ID。
     pub user_id: String,
 }
 

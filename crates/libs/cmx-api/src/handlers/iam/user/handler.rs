@@ -14,11 +14,13 @@ use crate::{ApiResp, Error, Result};
 
 use cmx_iam::user::{AssignRolesRequest, UserFilter, UserForCreate, UserForUpdate};
 
-/// 用户名查询参数（用于 GET 接口）
+/// 按用户名查询的 GET 请求参数。
+///
+/// 用于用户详情、用户角色列表等 GET 端点。username 是用户主账号的唯一标识。
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct UsernameQuery {
-    /// 用户名
+    /// 用户名。
     pub username: String,
 }
 

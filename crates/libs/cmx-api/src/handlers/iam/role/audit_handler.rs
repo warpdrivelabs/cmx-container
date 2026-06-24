@@ -13,11 +13,15 @@ use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
-/// 权限差异查询参数
+/// 权限差异查询参数。
+///
+/// 用于比较两个角色之间权限集合的差异，常用于角色合并/迁移审计。
 #[derive(Debug, Deserialize)]
 #[derive(utoipa::IntoParams)]
 pub struct PermissionDiffQuery {
+    /// 角色 1 ID。
     pub role_id_1: String,
+    /// 角色 2 ID。
     pub role_id_2: String,
 }
 

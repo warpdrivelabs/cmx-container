@@ -220,14 +220,16 @@ pub async fn list_permissions(
     Ok(Json(ApiResp::ok(permissions)))
 }
 
-/// 权限树查询参数（支持按域/应用/模块过滤）
+/// 权限树查询参数。
+///
+/// 支持按域/应用/模块编码做多层过滤，缺省时返回全量权限树。
 #[derive(Debug, Deserialize, Default)]
 pub struct PermissionTreeQuery {
-    /// 所属域编码
+    /// 所属域编码（如 platform/tenant）。
     pub domain_code: Option<String>,
-    /// 所属应用编码
+    /// 所属应用编码。
     pub app_code: Option<String>,
-    /// 所属模块编码
+    /// 所属模块编码。
     pub module_code: Option<String>,
 }
 

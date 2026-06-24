@@ -14,17 +14,26 @@ use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
-/// 分配临时角色请求
+/// 分配临时角色请求载荷。
+///
+/// 在 `effective_from` 至 `effective_until` 窗口内为用户赋予 `role_id` 指定角色，
+/// 到期后由 cmx-iam 后台调度任务自动清理。`source` 用于审计追踪（默认 manual）。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(utoipa::ToSchema)]
 pub struct AssignTempRoleRequest {
+    /// 目标用户 ID。
     pub user_id: String,
+    /// 待分配的角色 ID。
     pub role_id: String,
+    /// 授权生效起始时间（UTC）。
     pub effective_from: DateTime<Utc>,
+    /// 授权失效截止时间（UTC）。
     pub effective_until: DateTime<Utc>,
+    /// 授权原因（可选，记录于审计日志）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// 授权来源（manual/workflow/emergency 等），默认 "manual"。
     #[serde(skip_serializing_if = "Option::is_none", default = "default_source")]
     pub source: Option<String>,
 }
@@ -33,52 +42,72 @@ fn default_source() -> Option<String> {
     Some("manual".to_string())
 }
 
-/// 撤销临时角色请求
+/// 撤销单条临时角色授权请求载荷。
+///
+/// 撤销后该 assignment 不再生效，关联用户的角色集合会立即回退。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(utoipa::ToSchema)]
 pub struct RevokeTempRoleRequest {
+    /// 待撤销的授权记录 ID。
     pub assignment_id: String,
+    /// 撤销原因（可选，记录于审计日志）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
-/// 批量撤销临时角色请求
+/// 批量撤销临时角色授权请求载荷。
+///
+/// 通过单次调用撤销多条授权记录，提升管理后台批量操作效率。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(utoipa::ToSchema)]
 pub struct RevokeTempRolesBatchRequest {
+    /// 待撤销的授权记录 ID 列表。
     pub assignment_ids: Vec<String>,
+    /// 撤销原因（可选）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
-/// 延长临时授权请求
+/// 延长临时角色授权有效期请求载荷。
+///
+/// 仅能延长（`new_effective_until` 须晚于当前 `effective_until`），不能缩短。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(utoipa::ToSchema)]
 pub struct ExtendTempRoleRequest {
+    /// 待延长的授权记录 ID。
     pub assignment_id: String,
+    /// 新的失效截止时间（UTC）。
     pub new_effective_until: DateTime<Utc>,
+    /// 延长原因（可选）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
-/// 临时授权查询参数
+/// 临时授权查询参数。
+///
+/// 至少需要 `user_id` 或 `role_id` 之一。`status` 默认 all，支持按生命周期状态过滤。
 #[derive(Debug, Deserialize)]
 #[derive(utoipa::IntoParams)]
 pub struct TempAssignmentQuery {
+    /// 按用户 ID 过滤（可选）。
     pub user_id: Option<String>,
+    /// 按角色 ID 过滤（可选）。
     pub role_id: Option<String>,
-    /// all | active | expired | revoked（默认 all）
+    /// 状态过滤：all | active | expired | revoked，默认 all。
     #[serde(default)]
     pub status: String,
 }
 
-/// 批量撤销响应
+/// 批量撤销操作的响应载荷。
+///
+/// 返回实际受影响的记录数，便于前端展示。
 #[derive(Debug, Serialize)]
 #[derive(utoipa::ToSchema)]
 pub struct RevokeBatchResponse {
+    /// 受影响的记录数。
     pub affected: u64,
 }
 
