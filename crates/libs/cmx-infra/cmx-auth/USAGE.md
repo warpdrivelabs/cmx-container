@@ -556,7 +556,7 @@ OAuth2 段包含两部分：**自建 Authorization Server** 和 **第三方 Prov
 | `auto_link_by_email` | `true` | 邮箱已验证时自动关联本地用户 |
 | `auto_register` | `false` | 无匹配用户时是否自动注册 |
 | `default_role` | `None` | 自动注册时的默认角色（role_code） |
-| `username_strategy` | `"provider_prefix"` | 用户名生成策略（`provider_prefix` / `email_prefix` / `display_name`） |
+| `username_strategy` | `"provider_prefix"` | 用户名生成策略（`provider_prefix` / `provider_user_id` / `username` / `email_prefix` / `display_name`） |
 
 #### 5.7.3 `[[auth.oauth2.providers]]` — Provider 配置
 
@@ -734,7 +734,7 @@ frontend_callback_url = "https://app.example.com/auth/callback"
 auto_link_by_email = true
 auto_register = false
 default_role = "user"
-username_strategy = "provider_prefix"
+username_strategy = "username"
 
 [[auth.oauth2.providers]]
 name = "google"
@@ -1130,6 +1130,8 @@ enabled = true
 | 策略 | 示例 | 适用 |
 |------|------|------|
 | `provider_prefix` | `google_1234567890` | 默认，最稳定，无重复风险 |
+| `provider_user_id` | `1234567890` | 直接使用 Provider 用户 ID，适合内部 IdP 的用户 ID 已满足本地用户名规则的场景 |
+| `username` | `zhangsan` | 直接使用 Provider 返回的 `username` 字段；字段缺失时回退为 `provider_prefix` |
 | `email_prefix` | `user`（从 `user@gmail.com`） | 用户体验好，但可能冲突 |
 | `display_name` | 昵称 | 体验最好，但冲突最多 |
 

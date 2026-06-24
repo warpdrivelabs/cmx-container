@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use cmx_core::model::cell::DataValue;
 use cmx_core::model::iam::{Role, User};
 use cmx_core::SVRContext;
 use cmx_database::crud::GenericCrudService;
@@ -221,10 +222,10 @@ impl UserService for UserServiceImpl {
 
         // 2. 检查用户名唯一性
         let check_sql = "SELECT id FROM cmx_user WHERE username = $1 AND archived = 0";
-        let check_params = Value::Array(vec![Value::String(data.username.clone())]);
+        let check_params = vec![DataValue::String(data.username.clone())];
         let existing = self
             .mm
-            .query_sql_with_json(&self.db_id, None, check_sql, check_params, "check_username")
+            .query_sql_with_datavalues(&self.db_id, None, check_sql, check_params, "check_username")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户名失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -299,10 +300,10 @@ impl UserService for UserServiceImpl {
             FROM cmx_user
             WHERE username = $1 AND archived = 0
         "#;
-        let params = Value::Array(vec![Value::String(username.to_string())]);
+        let params = vec![DataValue::String(username.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "get_user_by_username")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "get_user_by_username")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
 
@@ -580,10 +581,10 @@ impl UserService for UserServiceImpl {
 
         // 先解析 username → user_id（校验用户存在）
         let resolve_sql = "SELECT id FROM cmx_user WHERE username = $1 AND archived = 0";
-        let resolve_params = Value::Array(vec![Value::String(username.to_string())]);
+        let resolve_params = vec![DataValue::String(username.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, Some(txn_id), resolve_sql, resolve_params, "resolve_user_id")
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), resolve_sql, resolve_params, "resolve_user_id")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -678,11 +679,11 @@ impl UserService for UserServiceImpl {
             WHERE u.username = $1 AND ur.archived = 0 AND r.archived = 0 AND r.status = 1
               AND u.archived = 0
         "#;
-        let params = Value::Array(vec![Value::String(username.to_string())]);
+        let params = vec![DataValue::String(username.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, sql, params, "user_roles")
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "user_roles")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户角色失败: {e}"))))?;
 
@@ -790,10 +791,10 @@ impl UserService for UserServiceImpl {
             INNER JOIN cmx_role r ON r.id = a.role_id
             WHERE a.id = $1
         "#;
-        let params = Value::Array(vec![Value::String(assignment_id)]);
+        let params = vec![DataValue::String(assignment_id)];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, query_sql, params, "temp_assignment")
+            .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "temp_assignment")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询临时授权失败: {e}")))
@@ -869,10 +870,10 @@ impl UserService for UserServiceImpl {
         // 查询 assignment 对应的 user_id（用于审计 target_id 和缓存失效）
         let user_id = {
             let query_sql = "SELECT user_id FROM cmx_user_role_assignment WHERE id = $1";
-            let params = Value::Array(vec![Value::String(assignment_id.to_string())]);
+            let params = vec![DataValue::String(assignment_id.to_string())];
             let dataset = self
                 .mm
-                .query_sql_with_json(&self.db_id, None, query_sql, params, "revoke_get_user")
+                .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "revoke_get_user")
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("查询用户ID失败: {e}"))))?;
             let schema = dataset.schema.as_ref();
@@ -948,10 +949,10 @@ impl UserService for UserServiceImpl {
         for assignment_id in assignment_ids {
             // 先查询 user_id（用于缓存失效）
             let query_sql = "SELECT user_id FROM cmx_user_role_assignment WHERE id = $1";
-            let params = Value::Array(vec![Value::String(assignment_id.clone())]);
+            let params = vec![DataValue::String(assignment_id.clone())];
             if let Ok(dataset) = self
                 .mm
-                .query_sql_with_json(&self.db_id, Some(txn_id), query_sql, params, "batch_revoke_get_user")
+                .query_sql_with_datavalues(&self.db_id, Some(txn_id), query_sql, params, "batch_revoke_get_user")
                 .await
             {
                 let schema = dataset.schema.as_ref();
@@ -1054,10 +1055,10 @@ impl UserService for UserServiceImpl {
             SELECT effective_until, user_id FROM cmx_user_role_assignment
             WHERE id = $1 AND status = 1 AND archived = 0
         "#;
-        let params = Value::Array(vec![Value::String(assignment_id.to_string())]);
+        let params = vec![DataValue::String(assignment_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, query_sql, params, "query_assignment")
+            .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "query_assignment")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询临时授权失败: {e}")))
@@ -1173,11 +1174,11 @@ impl UserService for UserServiceImpl {
             ORDER BY a.create_time DESC
             "#
         );
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, &sql, params, "user_temp_assignments")
+            .query_sql_with_datavalues(&self.db_id, None, &sql, params, "user_temp_assignments")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询用户临时授权失败: {e}")))
@@ -1224,11 +1225,11 @@ impl UserService for UserServiceImpl {
             ORDER BY a.create_time DESC
             "#
         );
-        let params = Value::Array(vec![Value::String(role_id.to_string())]);
+        let params = vec![DataValue::String(role_id.to_string())];
 
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, &sql, params, "role_temp_users")
+            .query_sql_with_datavalues(&self.db_id, None, &sql, params, "role_temp_users")
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("查询角色临时用户失败: {e}")))
@@ -1249,10 +1250,10 @@ impl UserService for UserServiceImpl {
 
         // 1. 查询用户基本信息
         let user_sql = "SELECT id, username FROM cmx_user WHERE id = $1 AND archived = 0";
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, user_sql, params, "user_info")
+            .query_sql_with_datavalues(&self.db_id, None, user_sql, params, "user_info")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1279,10 +1280,10 @@ impl UserService for UserServiceImpl {
               AND NOW() BETWEEN ura.effective_from AND ura.effective_until
               AND r.archived = 0 AND r.status = 1
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, roles_sql, params, "effective_roles")
+            .query_sql_with_datavalues(&self.db_id, None, roles_sql, params, "effective_roles")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询有效角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1316,10 +1317,10 @@ impl UserService for UserServiceImpl {
               AND rp.archived = 0 AND p.archived = 0 AND p.status = 1
               AND r.archived = 0 AND r.status = 1
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, perms_sql, params, "effective_perms")
+            .query_sql_with_datavalues(&self.db_id, None, perms_sql, params, "effective_perms")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询有效权限失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1342,10 +1343,10 @@ impl UserService for UserServiceImpl {
             WHERE user_id = $1 AND status = 1 AND archived = 0
               AND NOW() BETWEEN effective_from AND effective_until
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, active_count_sql, params, "active_count")
+            .query_sql_with_datavalues(&self.db_id, None, active_count_sql, params, "active_count")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("统计临时角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1360,10 +1361,10 @@ impl UserService for UserServiceImpl {
             WHERE user_id = $1 AND status = 1 AND archived = 0
               AND effective_until < NOW()
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, expired_count_sql, params, "expired_count")
+            .query_sql_with_datavalues(&self.db_id, None, expired_count_sql, params, "expired_count")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("统计过期角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1380,10 +1381,10 @@ impl UserService for UserServiceImpl {
               AND NOW() BETWEEN effective_from AND effective_until
               AND effective_until < NOW() + INTERVAL '7 days'
         "#;
-        let params = Value::Array(vec![Value::String(user_id.to_string())]);
+        let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_json(&self.db_id, None, upcoming_sql, params, "upcoming_expirations")
+            .query_sql_with_datavalues(&self.db_id, None, upcoming_sql, params, "upcoming_expirations")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("统计即将过期角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();

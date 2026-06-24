@@ -389,6 +389,9 @@ impl AccountLinker {
 
         let base = match self.config.username_strategy.as_str() {
             "provider_prefix" => format!("{}_{}", provider, user_info.provider_user_id),
+            "provider_user_id" => user_info.provider_user_id.clone(),
+            "username" => user_info.username.clone()
+                .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
             "email_prefix" => {
                 user_info.email
                     .as_ref()

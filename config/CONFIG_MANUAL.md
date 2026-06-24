@@ -1124,6 +1124,8 @@ OAuth2 授权码模式配置。OAuth2 功能为可选模块，不配置时使用
 - **说明**: 自动注册时的用户名生成策略
 - **可选值**:
   - `"provider_prefix"` — `{provider}_{provider_user_id}`，如 `google_1234567890`
+  - `"provider_user_id"` — 直接使用 Provider 返回的 `provider_user_id`，如 `1234567890`
+  - `"username"` — 直接使用 Provider 返回的 `username` 字段；字段缺失时回退为 `{provider}_{provider_user_id}`
   - `"email_prefix"` — 邮箱 @ 前部分，如 `user` from `user@gmail.com`
   - `"display_name"` — 使用 Provider 返回的昵称，冲突时追加 4 位随机后缀
 - **示例**: `"provider_prefix"`

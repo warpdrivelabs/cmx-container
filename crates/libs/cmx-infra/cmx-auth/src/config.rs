@@ -276,7 +276,7 @@ impl Default for AccountLinkConfig {
             auto_link_by_username: true,
             auto_register: false,
             default_role: None,
-            username_strategy: "provider_prefix".to_string(),
+            username_strategy: "username".to_string(),
         }
     }
 }
@@ -294,7 +294,7 @@ fn default_auto_register() -> bool {
 }
 
 fn default_username_strategy() -> String {
-    "provider_prefix".to_string()
+    "username".to_string()
 }
 
 fn default_state_ttl() -> u64 {

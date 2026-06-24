@@ -422,8 +422,10 @@ auth.whitelist = []
 # auto_register = true
 # 自动注册时的默认角色（role_code，如 "user"）
 # default_role = "user"
-# 用户名生成策略：provider_prefix | email_prefix | display_name
+# 用户名生成策略：provider_prefix | provider_user_id | username | email_prefix | display_name
 # - provider_prefix: {provider}_{provider_user_id}，如 google_1234567890
+# - provider_user_id: 直接使用 Provider 用户 ID，如 1234567890
+# - username: 直接使用 Provider 返回的 username 字段，缺失时回退到 username
 # - email_prefix: 邮箱 @ 前部分，如 user from user@gmail.com
 # - display_name: 使用昵称，冲突时追加随机后缀
 # username_strategy = "provider_prefix"

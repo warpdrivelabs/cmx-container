@@ -406,6 +406,9 @@ async fn generate_username(&self, provider: &str, user_info: &ProviderUserInfo) 
 
     let base = match self.config.username_strategy.as_str() {
         "provider_prefix" => format!("{}_{}", provider, user_info.provider_user_id),
+        "provider_user_id" => user_info.provider_user_id.clone(),
+        "username" => user_info.username.clone()
+            .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
         "email_prefix" => user_info.email.as_ref()
             .map(|e| e.split('@').next().unwrap_or(e).to_string())
             .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
@@ -651,7 +654,7 @@ pub struct AccountLinkConfig {
     pub auto_register: bool,       // 默认 false
     #[serde(default)]
     pub default_role: Option<String>,
-    /// "provider_prefix" | "email_prefix" | "display_name"
+    /// "provider_prefix" | "provider_user_id" | "username" | "email_prefix" | "display_name"
     #[serde(default = "default_username_strategy")]
     pub username_strategy: String,
 }
@@ -705,6 +708,12 @@ frontend_callback_url = "https://app.example.com/auth/callback"
 auto_link_by_email = true
 auto_register = false
 # default_role = "user"
+# 用户名生成策略：provider_prefix | provider_user_id | username | email_prefix | display_name
+# - provider_prefix: {provider}_{provider_user_id}，如 google_1234567890
+# - provider_user_id: 直接使用 Provider 用户 ID，如 1234567890
+# - username: 直接使用 Provider 返回的 username 字段，缺失时回退到 username
+# - email_prefix: 邮箱 @ 前部分，如 user from user@gmail.com
+# - display_name: 使用昵称，冲突时追加随机后缀
 username_strategy = "provider_prefix"
 
 # === Google OAuth2（示例） ===
@@ -753,7 +762,7 @@ username_strategy = "provider_prefix"
 | ----------- | --------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------- |
 | Auth Server | `auth.oauth2`                           | `auth_code_ttl_secs` / `pkce_required`                                                           | 600 / true                             |
 | State       | `auth.oauth2`                           | `state_ttl_secs` / `callback_code_ttl_secs` / `frontend_callback_url`                            | 600 / 30 / ""                          |
-| 账号关联        | `auth.oauth2.account_link`              | `auto_link_by_email` / `auto_register` / `default_role` / `username_strategy`                    | true / false / None / provider\_prefix |
+| 账号关联        | `auth.oauth2.account_link`              | `auto_link_by_email` / `auto_register` / `default_role` / `username_strategy`                    | true / false / None / `provider_prefix` |
 | Provider 列表 | `auth.oauth2.providers[]`               | `name` / `provider_type` / `client_id` / `client_secret` / `redirect_uri` / `scopes` / `enabled` | -                                      |
 | Provider 端点 | `auth.oauth2.providers[]`               | `authorize_url` / `token_url` / `userinfo_url`                                                   | 内置 Provider 自动填充                       |
 | Provider 安全 | `auth.oauth2.providers[]`               | `token_endpoint_auth_method`                                                                     | client\_secret\_post                   |
