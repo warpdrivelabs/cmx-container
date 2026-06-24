@@ -231,3 +231,72 @@ service_name = "dev-internal"
 description = "开发环境默认 API Key"
 #[auth]
 #whitelist = ["/api/**"]
+
+
+# ==================== OAuth2 配置（可选） ====================
+[auth.oauth2]
+# === Authorization Server 配置 ===
+# 授权码有效期（秒），默认 600（10 分钟）
+# auth_code_ttl_secs = 600
+# 是否强制 PKCE（默认 true，生产环境建议开启）
+# pkce_required = true
+
+# === 第三方 OAuth2 Provider 对接 ===
+# Provider state 有效期（秒），默认 600
+# state_ttl_secs = 600
+# 回调授权码有效期（秒），默认 30
+# callback_code_ttl_secs = 30
+# 第三方 OAuth2 登录成功后重定向到前端的 URL
+# 回调时拼接为：{frontend_callback_url}?code={one_time_code}&state={original_state}
+ frontend_callback_url = "http://127.0.0.1:8080"
+
+# 第三方账号关联策略
+[auth.oauth2.account_link]
+# 是否根据邮箱自动关联已有本地用户（默认 false，要求 Provider 邮箱已验证）
+ auto_link_by_email = false
+# 是否根据用户名自动关联已有本地用户（默认 false，企业场景常用）
+# 仅对可信 Provider 启用：username 无"已验证"概念，恶意 Provider 可关联任意本地账号
+auto_link_by_username = true
+# 是否自动注册新用户（默认 true，需手动绑定或管理员创建）
+auto_register = true
+# 自动注册时的默认角色（role_code，如 "user"）
+default_role = "user"
+# 用户名生成策略：provider_prefix | provider_user_id | username | email_prefix | display_name
+# - provider_prefix: {provider}_{provider_user_id}，如 google_1234567890
+# - provider_user_id: 直接使用 Provider 用户 ID，如 1234567890
+# - username: 直接使用 Provider 返回的 username 字段，缺失时回退到 username
+# - email_prefix: 邮箱 @ 前部分，如 user from user@gmail.com
+# - display_name: 使用昵称，冲突时追加随机后缀
+username_strategy = "username"
+
+
+# === 通用 OAuth2 Provider 示例（适用于任何标准 OAuth2 服务） ===
+[[auth.oauth2.providers]]
+name = "ospiam"
+display_name = "ospiam"
+provider_type = "generic"
+client_id = "1d392d8850994349905d829dfd4fad18"
+client_secret = "0bf5a1928f4b4026bd1dc01dea98615c"
+redirect_uri = "http://127.0.0.1:8080/api/auth/oauth2/ospiam/callback"
+authorize_url = "http://192.168.137.95:31363/OSPIam/oauth/v20/authorize"
+token_url = "http://192.168.137.95:31363/OSPIam/oauth/v20/token"
+userinfo_url = "http://192.168.137.95:31363/OSPIam/api/oauth/v20/me"
+scopes = ["read"]
+token_endpoint_auth_method = "client_secret_post"
+enabled = true
+# 字段映射使用内联表（标准字段名 = JSON 字段名，支持 number 类型自动转 string）
+field_mapping = { provider_user_id = "sub", email = "email", username = "username", display_name = "username", avatar_url = "avatar_url" }
+
+# === 通用 Provider 高级配置（企业 CAS / 自定义 OAuth2 服务） ===
+# Token 响应嵌套路径（点分路径，如 "data"，空字符串表示无包装）
+token_response_path = ""
+# Token 响应字段映射（标准字段名 = 厂商字段名）
+token_field_mapping = { access_token = "access_token", expires_in = "expires_in" }
+# 用户信息端点请求方法：GET（默认）或 POST
+userinfo_method = "GET"
+# 用户信息端点 token 传递方式：bearer（默认）/ query / form
+userinfo_token_param = "bearer"
+# 用户信息响应嵌套路径（点分路径，如 "data"）
+userinfo_response_path = ""
+# 是否跳过 SSL 证书验证（仅内网自签名证书场景，默认 false）
+ skip_ssl_verification = false
