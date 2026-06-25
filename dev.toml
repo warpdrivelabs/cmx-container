@@ -171,7 +171,7 @@ base_path = "cmx-server/"
 # ============================================
 [center_client]
 # 模式：mock（默认）| http_url（URL 直连）| http_discovery（服务发现）| grpc（gRPC 调用）
-mode = "mock"
+mode = "grpc"
 # 请求超时（毫秒，仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000
 
@@ -184,12 +184,12 @@ timeout_ms = 30000
 # flow = "http://flow-center:8080/api/plugin/flow/import"
 
 # 服务发现模式（mode = "http_discovery" 或 "grpc" 时生效）
-# [center_client.discovery]
-# nacos_group = "DEFAULT_GROUP"
-# menu_service = "cmx-portal-center"
-# perm_service = "cmx-perm-center"
-# form_service = "cmx-form-center"
-# flow_service = "cmx-flow-center"
+ [center_client.discovery]
+ nacos_group = "DEFAULT_GROUP"
+ menu_service = "cmx-server-local"
+ perm_service = "cmx-server-local"
+ form_service = "cmx-server-local"
+ flow_service = "cmx-server-local"
 
 
 # ============================================
