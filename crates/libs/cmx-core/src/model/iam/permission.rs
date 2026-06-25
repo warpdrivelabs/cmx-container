@@ -56,6 +56,22 @@ pub struct Permission {
     #[serde(default)]
     pub extension: Option<String>,
 
+    /// 父权限编码（根为 `None`），冗余字段便于直接读取。
+    #[serde(default)]
+    pub parent_code: Option<String>,
+
+    /// code 全路径（如 `/user:list/user:delete`），用于 LIKE 查询子树。
+    #[serde(default)]
+    pub full_code_path: Option<String>,
+
+    /// 是否叶子节点（1 叶子 / 0 非叶子）。
+    #[serde(default)]
+    pub is_leaf: Option<i64>,
+
+    /// 层级深度（根 = 1，子 = 父 + 1）。
+    #[serde(default)]
+    pub level: Option<i64>,
+
     /// 归档标记（如 1 已归档 / 0 正常），可空。
     #[serde(default)]
     pub archived: Option<i64>,

@@ -121,7 +121,8 @@ pub async fn update_permission(
     path = "/api/iam/permissions/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>),
+        (status = 200, description = "权限被角色使用，无法删除（code=40901，data 携带阻止详情）", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Permission"
 )]
@@ -129,7 +130,7 @@ pub async fn delete_permission(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(payload): Json<cmx_core::DeletePayload>,
-) -> Result<Json<ApiResp<()>>> {
+) -> Result<Json<ApiResp<serde_json::Value>>> {
     let permission_ids: Vec<String> = payload
         .ids
         .iter()
@@ -142,12 +143,24 @@ pub async fn delete_permission(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
-    iam.permission_service
+    let outcome = iam
+        .permission_service
         .delete_permission(&svr_ctx, &permission_ids)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok(())))
+    match outcome {
+        cmx_iam::permission::DeletePermissionOutcome::Deleted { result } => {
+            Ok(Json(ApiResp::ok(serde_json::to_value(result).unwrap())))
+        }
+        cmx_iam::permission::DeletePermissionOutcome::Blocked { detail } => {
+            Ok(Json(ApiResp::fail_with_data(
+                40901,
+                "权限被角色使用，无法删除",
+                serde_json::to_value(detail).unwrap(),
+            )))
+        }
+    }
 }
 
 /// 分页查询权限
@@ -173,13 +186,14 @@ pub async fn page_permissions(
 
     let current = params.get_page() as u64;
     let size = params.get_size() as u64;
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let (permissions, total) = iam
         .permission_service
-        .page_permissions(filter, current, size)
+        .page_permissions(filter, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
@@ -207,13 +221,14 @@ pub async fn list_permissions(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let permissions = iam
         .permission_service
-        .list_permissions(filter)
+        .list_permissions(filter, Some(list_options))
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 

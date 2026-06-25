@@ -12,7 +12,10 @@ pub use consistency_check::{
     run_consistency_check, warn_handler_annotation_status, log_registered_permissions,
     ConsistencyReport,
 };
-pub use entity::{PermissionForCreate, PermissionForUpdate};
+pub use entity::{
+    BlockedPermissionInfo, BlockedRoleInfo, DeletePermissionBlocked, DeletePermissionOutcome,
+    DeletePermissionResult, PermissionForCreate, PermissionForUpdate,
+};
 pub use filter::PermissionFilter;
 pub use import_handler::PluginDataImporterImpl;
 pub use service::{PermissionDefinition, PermissionFile, PermissionServiceImpl};

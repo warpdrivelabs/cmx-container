@@ -285,7 +285,7 @@ pub async fn delete_api_key(
     // 删除前查询 key_prefix，用于删除后失效 Redis 缓存
     let key_prefix = query_key_prefix_by_id(id).await;
 
-    let sql = "UPDATE cmx_auth_api_key SET archived = 1, update_time = NOW() WHERE id = $1 AND archived = 0";
+    let sql = "DELETE FROM cmx_auth_api_key WHERE id = $1 AND archived = 0";
     let params = serde_json::Value::Array(vec![serde_json::Value::String(id.to_string())]);
     let affected = db_manager
         .execute_sql_with_json(&db_id, None, sql, params)

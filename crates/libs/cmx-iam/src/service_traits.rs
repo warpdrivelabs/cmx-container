@@ -7,8 +7,11 @@ use async_trait::async_trait;
 use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, RoleGroup, RoleGroupTreeNode, User};
 use cmx_core::SVRContext;
 use cmx_traits::error::TraitError;
+use modql::filter::ListOptions;
 
-use crate::permission::{PermissionFilter, PermissionForCreate, PermissionForUpdate};
+use crate::permission::{
+    DeletePermissionOutcome, PermissionFilter, PermissionForCreate, PermissionForUpdate,
+};
 use crate::role::{RoleFilter, RoleForCreate, RoleForUpdate};
 use crate::role_group::{RoleGroupFilter, RoleGroupForCreate, RoleGroupForUpdate};
 use crate::user::{UserFilter, UserForCreate, UserForUpdate};
@@ -244,8 +247,7 @@ pub trait UserService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 用户查询过滤器。
-    /// * `current` - 当前页码（从 1 开始）。
-    /// * `size` - 每页记录数。
+    /// * `list_options` - 分页与排序选项（由 `PageParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -257,8 +259,7 @@ pub trait UserService: Send + Sync {
     async fn page_users(
         &self,
         filter: UserFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<User>, i64), TraitError>;
 
     /// 列表查询用户（不分页）。
@@ -266,6 +267,7 @@ pub trait UserService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 用户查询过滤器。
+    /// * `list_options` - 排序选项（由 `ListParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -274,7 +276,11 @@ pub trait UserService: Send + Sync {
     /// # Errors
     ///
     /// 当数据库查询失败时返回错误。
-    async fn list_users(&self, filter: UserFilter) -> Result<Vec<User>, TraitError>;
+    async fn list_users(
+        &self,
+        filter: UserFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<User>, TraitError>;
 
     /// 为用户分配角色（全量替换，按 `username` 查询）。
     ///
@@ -542,8 +548,7 @@ pub trait RoleService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 角色查询过滤器。
-    /// * `current` - 当前页码（从 1 开始）。
-    /// * `size` - 每页记录数。
+    /// * `list_options` - 分页与排序选项（由 `PageParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -555,8 +560,7 @@ pub trait RoleService: Send + Sync {
     async fn page_roles(
         &self,
         filter: RoleFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<Role>, i64), TraitError>;
 
     /// 列表查询角色（不分页）。
@@ -564,6 +568,7 @@ pub trait RoleService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 角色查询过滤器。
+    /// * `list_options` - 排序选项（由 `ListParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -572,7 +577,11 @@ pub trait RoleService: Send + Sync {
     /// # Errors
     ///
     /// 当数据库查询失败时返回错误。
-    async fn list_roles(&self, filter: RoleFilter) -> Result<Vec<Role>, TraitError>;
+    async fn list_roles(
+        &self,
+        filter: RoleFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<Role>, TraitError>;
 
     /// 为角色分配权限（全量替换）。
     ///
@@ -750,8 +759,7 @@ pub trait RoleGroupService: Send + Sync {
     async fn page_role_groups(
         &self,
         filter: RoleGroupFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<RoleGroup>, i64), TraitError>;
 
     /// 列表查询角色组（不分页）。
@@ -759,6 +767,7 @@ pub trait RoleGroupService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 角色组查询过滤器。
+    /// * `list_options` - 排序选项（由 `ListParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -770,6 +779,7 @@ pub trait RoleGroupService: Send + Sync {
     async fn list_role_groups(
         &self,
         filter: RoleGroupFilter,
+        list_options: Option<ListOptions>,
     ) -> Result<Vec<RoleGroup>, TraitError>;
 
     /// 获取角色组树（递归结构）。
@@ -850,12 +860,18 @@ pub trait PermissionService: Send + Sync {
         data: PermissionForUpdate,
     ) -> Result<Permission, TraitError>;
 
-    /// 批量删除权限（软删除 + 角色关联清理）。
+    /// 批量删除权限（物理删除 + 前置校验 + 级联子权限）。
+    ///
+    /// 流程：
+    /// 1. 按 `full_code_path` LIKE 收集每个根权限及其所有后代子权限 ID。
+    /// 2. 查询这些权限是否被角色关联（`cmx_role_permission`）。
+    /// 3. 若任一被使用，返回 `DeletePermissionOutcome::Blocked`，携带角色 code+name 详情，不执行删除。
+    /// 4. 若均未被使用，事务内物理删除权限及其所有后代、物理删除相关角色关联，返回 `Deleted`。
     ///
     /// # Arguments
     ///
     /// * `svr_ctx` - 服务端上下文，用于审计日志填充操作者信息。
-    /// * `permission_ids` - 待删除的权限 ID 列表；空数组直接返回 `Ok(())`。
+    /// * `permission_ids` - 待删除的根权限 ID 列表；空数组返回空的 `Deleted`。
     ///
     /// # Errors
     ///
@@ -864,15 +880,14 @@ pub trait PermissionService: Send + Sync {
         &self,
         svr_ctx: &SVRContext,
         permission_ids: &[String],
-    ) -> Result<(), TraitError>;
+    ) -> Result<DeletePermissionOutcome, TraitError>;
 
     /// 分页查询权限。
     ///
     /// # Arguments
     ///
     /// * `filter` - 权限查询过滤器。
-    /// * `current` - 当前页码（从 1 开始）。
-    /// * `size` - 每页记录数。
+    /// * `list_options` - 分页与排序选项（由 `PageParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -884,8 +899,7 @@ pub trait PermissionService: Send + Sync {
     async fn page_permissions(
         &self,
         filter: PermissionFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<Permission>, i64), TraitError>;
 
     /// 列表查询权限（不分页）。
@@ -893,6 +907,7 @@ pub trait PermissionService: Send + Sync {
     /// # Arguments
     ///
     /// * `filter` - 权限查询过滤器。
+    /// * `list_options` - 排序选项（由 `ListParams::to_list_options()` 构造）。
     ///
     /// # Returns
     ///
@@ -901,7 +916,11 @@ pub trait PermissionService: Send + Sync {
     /// # Errors
     ///
     /// 当数据库查询失败时返回错误。
-    async fn list_permissions(&self, filter: PermissionFilter) -> Result<Vec<Permission>, TraitError>;
+    async fn list_permissions(
+        &self,
+        filter: PermissionFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<Permission>, TraitError>;
 
     /// 获取权限树（递归结构，支持按域/应用/模块过滤）。
     ///
