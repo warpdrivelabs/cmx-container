@@ -441,11 +441,21 @@ pub trait AuthService: Send + Sync {
         device_info: Option<DeviceInfo>,
     ) -> Result<OAuth2CallbackResult, AuthError>;
 
-    /// 用回调授权码交换 TokenPair 及附加信息。
+    /// 用授权码交换 TokenPair 及附加信息（统一接口，支持两种模式）。
+    ///
+    /// **后端回调模式**：`code` 为 [`Self::handle_oauth2_callback`] 签发的一次性回调码，
+    /// 后端从 Redis 取回已签发的 TokenPair 返回。
+    ///
+    /// **前端直调模式**：`code` 为 Provider 返回的原始授权码，后端消费 `state`
+    /// 获取 provider，执行完整的换 token + 用户关联 + 签发 TokenPair 流程。
+    ///
+    /// 后端自动判断模式，前端无感知。
     ///
     /// # Arguments
     ///
-    /// * `code` - 一次性回调授权码（由 [`Self::handle_oauth2_callback`] 返回）。
+    /// * `code` - 一次性回调授权码（后端回调模式）或 Provider 原始授权码（前端直调模式）。
+    /// * `state` - 原始 state（用于 CSRF 校验 + 前端直调模式下消费获取 provider）。
+    /// * `device_info` - 设备信息（前端直调模式签发 TokenPair 时使用）。
     ///
     /// # Returns
     ///
@@ -453,10 +463,13 @@ pub trait AuthService: Send + Sync {
     ///
     /// # Errors
     ///
-    /// * [`AuthError::OAuth2CallbackCodeInvalid`] - 授权码无效或已过期。
+    /// * [`AuthError::OAuth2CallbackCodeInvalid`] - 授权码和 state 均无效或已过期。
+    /// * [`AuthError::OAuth2`] - state 不匹配 / 账号未注册 / Provider 错误等。
     async fn exchange_oauth2_callback_code(
         &self,
         code: &str,
+        state: &str,
+        device_info: Option<DeviceInfo>,
     ) -> Result<OAuth2CallbackExchangeResult, AuthError>;
 
     /// 绑定第三方 OAuth2 账号到已登录用户。

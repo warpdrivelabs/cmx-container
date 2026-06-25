@@ -149,26 +149,53 @@ pub struct ExchangeCodeResponse {
     pub state: String,
 }
 
-/// 用一次性授权码换 TokenPair
+/// 用授权码换 TokenPair（统一接口，后端自动判断模式）。
+///
+/// 后端自动判断两种模式：
+/// - 后端回调模式：`code` 为 `handle_oauth2_callback` 签发的一次性回调码
+/// - 前端直调模式：`code` 为 Provider 返回的原始授权码
 pub async fn oauth2_provider_exchange(
     State(state): State<CmxAppState>,
+    headers: HeaderMap,
     Json(req): Json<ExchangeCodeRequest>,
 ) -> Result<Json<ApiResp<ExchangeCodeResponse>>> {
     let auth_service = state.auth_service().ok_or_else(|| {
         Error::InternalError("认证服务未初始化".to_string())
     })?;
 
-    let exchange_result = auth_service.exchange_oauth2_callback_code(&req.code).await.map_err(|e| {
+    // 提取设备信息（前端直调模式签发 TokenPair 时使用）
+    let device_info = extract_device_info(&headers);
+
+    let exchange_result = auth_service.exchange_oauth2_callback_code(&req.code, &req.state, device_info).await.map_err(|e| {
         error!(error = %e, "授权码换 Token 失败");
         match e {
             cmx_traits::auth::AuthError::OAuth2CallbackCodeInvalid => {
-                Error::Unauthorized("授权码无效或已过期".to_string())
+                Error::Unauthorized("授权码或 state 无效或已过期".to_string())
+            }
+            // state 不匹配属于 CSRF 攻击迹象，返回 401 Unauthorized
+            cmx_traits::auth::AuthError::OAuth2(msg) if msg.contains("不匹配") => {
+                Error::Unauthorized(msg)
+            }
+            cmx_traits::auth::AuthError::OAuth2(msg) => {
+                Error::BadRequest(msg)
+            }
+            cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => {
+                Error::BadRequest("Provider 不存在".to_string())
+            }
+            cmx_traits::auth::AuthError::OAuth2ProviderUnavailable(_) => {
+                Error::BadRequest("Provider 服务不可用".to_string())
+            }
+            cmx_traits::auth::AuthError::OAuth2ProviderTokenError(_) => {
+                Error::BadRequest("Provider 授权失败".to_string())
+            }
+            cmx_traits::auth::AuthError::OAuth2ProviderUserInfoError(_) => {
+                Error::BadRequest("Provider 用户信息获取失败".to_string())
             }
             other => Error::InternalError(other.to_string()),
         }
     })?;
 
-    // 校验 state 一致性（防 CSRF）
+    // 校验 state 一致性（防 CSRF 二次防护）
     if !req.state.is_empty() && req.state != exchange_result.state {
         return Err(Error::Unauthorized("state 不匹配".to_string()));
     }

@@ -635,6 +635,63 @@ impl AuthServiceImpl {
             }
         })
     }
+
+    /// 处理 Provider 授权码的核心逻辑（不含 state 消费）。
+    ///
+    /// 前置条件：state 已由调用方消费，并校验 provider 一致性。
+    ///
+    /// 供 `handle_oauth2_callback`（后端回调模式）和 `exchange_oauth2_callback_code`
+    /// （统一 exchange，前端直调分支）复用。
+    async fn process_provider_code_after_state(
+        &self,
+        provider: &str,
+        code: &str,
+        device_info: Option<DeviceInfo>,
+    ) -> std::result::Result<(cmx_traits::auth::TokenPair, bool, String), AuthError> {
+        // 1. 获取 Provider
+        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
+            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
+        let provider_impl = registry.get_provider(provider)?;
+
+        // 2. 获取 redirect_uri（从 Provider 配置中获取）
+        let redirect_uri = provider_impl.redirect_uri().to_string();
+
+        // 3. 交换 Token
+        let token_response = provider_impl.exchange_code(code, &redirect_uri).await?;
+        tracing::info!(provider = %provider, "Token 交换成功");
+
+        // 4. 获取用户信息
+        let user_info = provider_impl.get_user_info(&token_response).await?;
+        tracing::info!(provider = %provider, provider_user_id = %user_info.provider_user_id, "用户信息获取成功");
+
+        // 5. 关联/注册用户
+        let link_result = self.account_linker.find_or_link(provider, &user_info.provider_user_id, &user_info).await?;
+
+        let (user_id, is_new) = match link_result {
+            crate::oauth2::provider::LinkResult::Linked { user_id, is_new } => (user_id, is_new),
+            crate::oauth2::provider::LinkResult::BindingRequired { .. } => {
+                return Err(AuthError::OAuth2("账号未注册，请联系管理员开通".to_string()));
+            }
+        };
+
+        // 6. 签发本平台 Token
+        let token_pair = self.authenticate(
+            Credentials::ThirdPartyOAuth2 {
+                provider: provider.to_string(),
+                provider_user_id: user_info.provider_user_id,
+                user_id: user_id.clone(),
+            },
+            device_info,
+        ).await?;
+
+        // 7. 审计日志：第三方 OAuth2 登录
+        self.audit_log("oauth2_login", cmx_audit::OperationResult::Success, &user_id, Some("user"), Some(&user_id), Some(serde_json::json!({
+            "provider": provider,
+            "is_new": is_new,
+        }))).await;
+
+        Ok((token_pair, is_new, user_id))
+    }
 }
 
 #[async_trait]
@@ -1676,8 +1733,8 @@ impl AuthService for AuthServiceImpl {
 
     /// 处理第三方 OAuth2 回调。
     ///
-    /// 流程：原子消费 state → 交换 Token → 获取用户信息 → 关联/注册用户 →
-    /// 签发本平台 Token → 存储一次性回调授权码（前端用 code 换取 TokenPair）。
+    /// 流程：原子消费 state → 执行核心流程（换 token、获取用户信息、关联用户、
+    /// 签发 TokenPair）→ 存储一次性回调授权码（前端用 code 换取 TokenPair）。
     ///
     /// # Arguments
     ///
@@ -1710,43 +1767,10 @@ impl AuthService for AuthServiceImpl {
             return Err(AuthError::OAuth2("State 中的 provider 与请求不匹配".to_string()));
         }
 
-        // 2. 获取 Provider
-        let registry = crate::oauth2::OAuth2ProviderRegistry::get_global()
-            .ok_or(AuthError::Internal("OAuth2 Provider 注册表未初始化".to_string()))?;
-        let provider_impl = registry.get_provider(provider)?;
+        // 2. 执行核心流程（换 token、获取用户信息、关联用户、签发 TokenPair）
+        let (token_pair, is_new, _user_id) = self.process_provider_code_after_state(provider, code, device_info).await?;
 
-        // 3. 获取 redirect_uri（从 Provider 配置中获取）
-        let redirect_uri = provider_impl.redirect_uri().to_string();
-
-        // 4. 交换 Token
-        let token_response = provider_impl.exchange_code(code, &redirect_uri).await?;
-        tracing::info!(provider = %provider, "Token 交换成功");
-
-        // 5. 获取用户信息
-        let user_info = provider_impl.get_user_info(&token_response).await?;
-        tracing::info!(provider = %provider, provider_user_id = %user_info.provider_user_id, "用户信息获取成功");
-
-        // 6. 关联/注册用户
-        let link_result = self.account_linker.find_or_link(provider, &user_info.provider_user_id, &user_info).await?;
-
-        let (user_id, is_new) = match link_result {
-            crate::oauth2::provider::LinkResult::Linked { user_id, is_new } => (user_id, is_new),
-            crate::oauth2::provider::LinkResult::BindingRequired { .. } => {
-                return Err(AuthError::OAuth2("账号未注册，请联系管理员开通".to_string()));
-            }
-        };
-
-        // 7. 签发本平台 Token
-        let token_pair = self.authenticate(
-            Credentials::ThirdPartyOAuth2 {
-                provider: provider.to_string(),
-                provider_user_id: user_info.provider_user_id,
-                user_id: user_id.clone(),
-            },
-            device_info,
-        ).await?;
-
-        // 8. 签发一次性回调授权码（存储 TokenPair + is_new + provider）
+        // 3. 签发一次性回调授权码（存储 TokenPair + is_new + provider）
         let callback_code = uuid::Uuid::new_v4().to_string();
         let callback_data = CallbackCodeData {
             access_token: token_pair.access_token,
@@ -1763,12 +1787,6 @@ impl AuthService for AuthServiceImpl {
         self.oauth2_store.store_callback_code(&callback_code, &callback_data_json).await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
 
-        // 审计日志：第三方 OAuth2 登录
-        self.audit_log("oauth2_login", cmx_audit::OperationResult::Success, &user_id, Some("user"), Some(&user_id), Some(serde_json::json!({
-            "provider": provider,
-            "is_new": is_new,
-        }))).await;
-
         Ok(cmx_traits::auth::OAuth2CallbackResult {
             callback_code,
             state: state.to_string(),
@@ -1777,14 +1795,21 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
-    /// 用一次性回调授权码换取 TokenPair。
+    /// 用授权码交换 TokenPair 及附加信息（统一接口，支持两种模式）。
     ///
-    /// 原子消费回调授权码，返回此前在 `handle_oauth2_callback` 中存储的 TokenPair
-    /// 及关联的 `is_new`/`provider`/`state` 元信息。
+    /// **后端回调模式**：`code` 为 `handle_oauth2_callback` 签发的一次性回调码，
+    /// 后端从 Redis 取回已签发的 TokenPair 返回。
+    ///
+    /// **前端直调模式**：`code` 为 Provider 返回的原始授权码，后端消费 `state`
+    /// 获取 provider，执行完整的换 token + 用户关联 + 签发 TokenPair 流程。
+    ///
+    /// 后端自动判断模式，前端无感知。
     ///
     /// # Arguments
     ///
-    /// * `code` - 一次性回调授权码。
+    /// * `code` - 一次性回调授权码（后端回调模式）或 Provider 原始授权码（前端直调模式）。
+    /// * `state` - 原始 state（用于 CSRF 校验 + 前端直调模式下消费获取 provider）。
+    /// * `device_info` - 设备信息（前端直调模式签发 TokenPair 时使用）。
     ///
     /// # Returns
     ///
@@ -1792,28 +1817,58 @@ impl AuthService for AuthServiceImpl {
     ///
     /// # Errors
     ///
-    /// * `AuthError::OAuth2CallbackCodeInvalid` - 授权码无效或已使用。
+    /// * `AuthError::OAuth2CallbackCodeInvalid` - 授权码和 state 均无效或已过期。
+    /// * `AuthError::OAuth2` - state 不匹配 / 账号未注册 / Provider 错误等。
     /// * `AuthError::Internal` - 回调数据反序列化失败。
     async fn exchange_oauth2_callback_code(
         &self,
         code: &str,
+        state: &str,
+        device_info: Option<DeviceInfo>,
     ) -> std::result::Result<OAuth2CallbackExchangeResult, AuthError> {
-        let json = self.oauth2_store.consume_callback_code(code).await
+        // 模式 1：后端回调模式 —— 尝试消费一次性回调码
+        if let Some(json) = self.oauth2_store.consume_callback_code(code).await
+            .map_err(|e| AuthError::Internal(e.to_string()))? {
+            tracing::info!("OAuth2 exchange 命中后端回调模式（callback_code 有效）");
+            let callback_data: CallbackCodeData = serde_json::from_str(&json)
+                .map_err(|e| AuthError::Internal(format!("回调数据反序列化失败: {}", e)))?;
+
+            // 校验 state 一致性（防 CSRF）
+            if !state.is_empty() && state != callback_data.state {
+                return Err(AuthError::OAuth2("state 不匹配".to_string()));
+            }
+
+            return Ok(OAuth2CallbackExchangeResult {
+                access_token: callback_data.access_token,
+                refresh_token: callback_data.refresh_token,
+                token_type: callback_data.token_type,
+                access_expires_at: callback_data.access_expires_at,
+                refresh_expires_at: callback_data.refresh_expires_at,
+                is_new: callback_data.is_new,
+                provider: callback_data.provider,
+                state: callback_data.state,
+            });
+        }
+
+        // 模式 2：前端直调模式 —— 尝试消费 state，获取 provider
+        let provider = self.oauth2_store.consume_provider_state(state).await
             .map_err(|e| AuthError::Internal(e.to_string()))?
             .ok_or(AuthError::OAuth2CallbackCodeInvalid)?;
 
-        let callback_data: CallbackCodeData = serde_json::from_str(&json)
-            .map_err(|e| AuthError::Internal(format!("回调数据反序列化失败: {}", e)))?;
+        tracing::info!(provider = %provider, "OAuth2 exchange 命中前端直调模式（消费 state 获取 provider）");
+
+        // 执行核心流程（换 token、获取用户信息、关联用户、签发 TokenPair）
+        let (token_pair, is_new, _user_id) = self.process_provider_code_after_state(&provider, code, device_info).await?;
 
         Ok(OAuth2CallbackExchangeResult {
-            access_token: callback_data.access_token,
-            refresh_token: callback_data.refresh_token,
-            token_type: callback_data.token_type,
-            access_expires_at: callback_data.access_expires_at,
-            refresh_expires_at: callback_data.refresh_expires_at,
-            is_new: callback_data.is_new,
-            provider: callback_data.provider,
-            state: callback_data.state,
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            token_type: token_pair.token_type,
+            access_expires_at: token_pair.access_expires_at,
+            refresh_expires_at: token_pair.refresh_expires_at,
+            is_new,
+            provider,
+            state: state.to_string(),
         })
     }
 
