@@ -131,7 +131,7 @@ pub fn bind_data_value_postgres<'q>(
     param: &'q DataValue,
 ) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
     match param {
-        DataValue::Null => query.bind(None::<String>),
+        DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
         DataValue::Bool(v) => query.bind(*v),
         DataValue::Int(v) => query.bind(*v),
         DataValue::Float(v) => query.bind(*v),
@@ -155,7 +155,7 @@ pub fn bind_data_value_mysql<'q>(
     param: &'q DataValue,
 ) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
     match param {
-        DataValue::Null => query.bind(None::<String>),
+        DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
         DataValue::Bool(v) => query.bind(*v),
         DataValue::Int(v) => query.bind(*v),
         DataValue::Float(v) => query.bind(*v),
@@ -179,7 +179,7 @@ pub fn bind_data_value_sqlite<'q>(
     param: &'q DataValue,
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match param {
-        DataValue::Null => query.bind(None::<String>),
+        DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
         DataValue::Bool(v) => query.bind(*v),
         DataValue::Int(v) => query.bind(*v),
         DataValue::Float(v) => query.bind(*v),

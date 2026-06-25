@@ -21,7 +21,7 @@ pub trait Validate {
 /// 校验 DataValue 是否与 FieldType 兼容（Null 兼容所有类型）
 fn check_type_compatible(value: &DataValue, field_type: &FieldType) -> bool {
     match value {
-        DataValue::Null => true,
+        DataValue::Null | DataValue::NullTyped(_) => true,
         DataValue::Bool(_) => matches!(field_type, FieldType::Bool),
         DataValue::Int(_) => matches!(field_type, FieldType::Int),
         DataValue::Float(_) => matches!(field_type, FieldType::Float),

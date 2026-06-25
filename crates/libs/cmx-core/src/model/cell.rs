@@ -16,6 +16,31 @@ pub type CellValue = DataValue;
 // 1. 值类型系统 (Type System)
 // ==========================================
 
+/// SQL 列类型标记(不依赖 sqlx,用于描述 NULL 的目标绑定类型)。
+///
+/// 仅在 [`DataValue::NullTyped`] 中携带,告知绑定层
+/// 这个 NULL 应绑定为哪种数据库列类型。
+///
+/// # 设计动机
+///
+/// sqlx 绑定 `None::<T>` 时,目标类型由 `T` 决定。
+/// 若 NULL 占位符对应非字符串列(INTEGER/TIMESTAMP/UUID 等),
+/// 绑定 `None::<String>` 会导致 PostgreSQL prepare 类型不匹配。
+/// `NullTyped` 让调用方显式声明目标类型。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SqlTypeMarker {
+    Bool,
+    Int,
+    Float,
+    Decimal,
+    Text,
+    Timestamp,
+    Date,
+    Uuid,
+    Json,
+    Binary,
+}
+
 /// ERP 通用数据值枚举
 /// 这种设计允许我们在编译时不知道具体类型的情况下存储数据
 ///
@@ -28,6 +53,12 @@ pub type CellValue = DataValue;
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
     Null,
+    /// 带类型信息的 NULL。
+    ///
+    /// 绑定到非字符串列(INTEGER/TIMESTAMP/UUID 等)时必须使用,
+    /// 否则绑定层无法确定 NULL 的目标 SQL 类型。
+    /// 序列化为普通 null(类型信息仅用于绑定,不参与传输)。
+    NullTyped(SqlTypeMarker),
     Bool(bool),
     Int(i64),
     Float(f64),
@@ -67,7 +98,7 @@ impl Serialize for DataValue {
         S: Serializer,
     {
         match self {
-            DataValue::Null => serializer.serialize_unit(),
+            DataValue::Null | DataValue::NullTyped(_) => serializer.serialize_unit(),
             DataValue::Bool(b) => serializer.serialize_bool(*b),
             DataValue::Int(i) => serializer.serialize_i64(*i),
             DataValue::Float(f) => {
