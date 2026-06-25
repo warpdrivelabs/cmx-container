@@ -7,6 +7,7 @@ pub use model::data::request::params::*;
 pub use model::service::*;
 pub use model::iam::{PermissionDeniedError, RoleRequirement};
 pub use model::cell::{DataValue, SqlTypeMarker, SqlParam};
+pub use model::ParamsBuilder;
 pub use wasm_types::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse, PluginInfoResponse,
