@@ -373,19 +373,22 @@ impl RoleService for RoleServiceImpl {
     /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_roles(
         &self,
-        filter: RoleFilter,
+        filters: Option<Vec<RoleFilter>>,
         list_options: ListOptions,
     ) -> Result<(Vec<Role>, i64), TraitError> {
         debug!("{:<12} - RoleServiceImpl::page_roles", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let (dataset, total) =
             GenericCrudService::<RoleBmc, RoleFilter>::page(
                 &self.mm,
                 &self.db_id,
                 None,
-                Some(vec![filters]),
+                filters,
                 list_options,
             )
             .await
@@ -401,7 +404,7 @@ impl RoleService for RoleServiceImpl {
     ///
     /// # Arguments
     ///
-    /// * `filter` - 角色查询过滤器。
+    /// * `filters` - 角色查询过滤器数组（每个 filter 为一个 AND 组，组间 OR）。
     ///
     /// # Returns
     ///
@@ -412,18 +415,21 @@ impl RoleService for RoleServiceImpl {
     /// * `IamError::Crud` - 数据库查询失败。
     async fn list_roles(
         &self,
-        filter: RoleFilter,
+        filters: Option<Vec<RoleFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<Role>, TraitError> {
         debug!("{:<12} - RoleServiceImpl::list_roles", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let dataset = GenericCrudService::<RoleBmc, RoleFilter>::list(
             &self.mm,
             &self.db_id,
             None,
-            Some(vec![filters]),
+            filters,
             list_options,
         )
         .await
