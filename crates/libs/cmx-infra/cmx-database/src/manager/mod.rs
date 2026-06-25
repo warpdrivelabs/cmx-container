@@ -273,6 +273,26 @@ impl DatabaseManager {
         .await
     }
 
+    /// 执行带强类型 SqlParam 参数的 SQL 语句(支持带类型 NULL)。
+    ///
+    /// 与 [`execute_sql_with_datavalues`] 区别:接收 `Vec<SqlParam>`,
+    /// 内部转换为 `Vec<DataValue>` 后绑定。适合需要精确控制 NULL 目标类型的场景。
+    pub async fn execute_sql_typed(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::SqlParam>,
+    ) -> Result<u64> {
+        crate::transaction::execute_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::Typed(params),
+        )
+        .await
+    }
+
     /// 执行带 sea-query-binder SqlxValues 的 SQL 语句
     pub async fn execute_sql_with_sqlxvalues(
         &self,
@@ -334,6 +354,28 @@ impl DatabaseManager {
             txn_id,
             sql,
             crate::transaction::SqlParams::DataValues(params),
+            dataset_id,
+        )
+        .await
+    }
+
+    /// 查询带强类型 SqlParam 参数的 SQL 语句(支持带类型 NULL)。
+    ///
+    /// 与 [`query_sql_with_datavalues`] 区别:接收 `Vec<SqlParam>`,
+    /// 内部转换为 `Vec<DataValue>` 后绑定。适合需要精确控制 NULL 目标类型的场景。
+    pub async fn query_sql_typed(
+        &self,
+        db_id: &str,
+        txn_id: Option<&str>,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::SqlParam>,
+        dataset_id: &str,
+    ) -> Result<DataSet> {
+        crate::transaction::query_sql_with_params(
+            db_id,
+            txn_id,
+            sql,
+            crate::transaction::SqlParams::Typed(params),
             dataset_id,
         )
         .await

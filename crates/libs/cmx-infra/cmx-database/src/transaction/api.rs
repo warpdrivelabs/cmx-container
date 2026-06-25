@@ -234,6 +234,7 @@ impl Drop for TransactionGuard {
 /// - **Json**：适用于从外部（如 WebAssembly）传入 JSON 数据的场景，内部自动转换为 DataValue。
 /// - **DataValues**：适用于已在 Rust 代码中构建好参数的场景，直接使用 DataValue 数组。
 /// - **SqlxValues**：适用于通过 sea-query 构建器的场景，使用预绑定的 SqlxValues。
+/// - **Typed**：强类型参数(带类型 NULL 支持),内部转换为 DataValue 后绑定。
 pub enum SqlParams {
     /// serde_json::Value 数组，内部自动转换为 DataValue。
     Json(serde_json::Value),
@@ -241,6 +242,8 @@ pub enum SqlParams {
     DataValues(Vec<DataValue>),
     /// sea-query-binder 的 SqlxValues，用于 sea-query 构建的 SQL。
     SqlxValues(SqlxValues),
+    /// 强类型参数(带类型 NULL 支持)。SqlParam 来自 cmx-core。
+    Typed(Vec<cmx_core::model::cell::SqlParam>),
 }
 
 /// 通过事务ID提交事务。
@@ -478,6 +481,10 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
                     SqlParams::SqlxValues(sqlx_values) => {
                         txn.execute_with_sqlxvalues(&sql, sqlx_values).await?
                     },
+                    SqlParams::Typed(params) => {
+                        let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
+                        txn.execute_with_datavalues(&sql, &values).await?
+                    },
                 };
                 Ok(result)
             })).await
@@ -496,6 +503,10 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
                 },
                 SqlParams::SqlxValues(sqlx_values) => {
                     pool.execute_with_sqlxvalues(&sql, sqlx_values).await
+                },
+                SqlParams::Typed(params) => {
+                    let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
+                    pool.execute_with_datavalues(&sql, &values).await
                 },
             }
         },
@@ -585,6 +596,10 @@ pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str,
                     SqlParams::SqlxValues(sqlx_values) => {
                         txn.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id).await?
                     },
+                    SqlParams::Typed(params) => {
+                        let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
+                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
+                    },
                 };
                 Ok(result)
             })).await
@@ -603,6 +618,10 @@ pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str,
                 },
                 SqlParams::SqlxValues(sqlx_values) => {
                     pool.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id).await
+                },
+                SqlParams::Typed(params) => {
+                    let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
+                    pool.query_with_datavalues(&sql, &values, &dataset_id).await
                 },
             }
         },
