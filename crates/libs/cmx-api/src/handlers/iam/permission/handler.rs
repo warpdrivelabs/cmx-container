@@ -167,7 +167,7 @@ pub async fn delete_permission(
 #[utoipa::path(
     post,
     path = "/api/iam/permissions/page",
-    request_body = crate::PageParamsDoc<serde_json::Value>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<Permission>>)
     ),
@@ -184,8 +184,8 @@ pub async fn page_permissions(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
-    let current = params.get_page() as u64;
-    let size = params.get_size() as u64;
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
     let list_options = params.to_list_options();
     let filters = params.filters.clone().filter(|v| !v.is_empty());
 
@@ -195,14 +195,14 @@ pub async fn page_permissions(
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok_with_pagination(permissions, current, size, total as u64)))
+    Ok(Json(ApiResp::ok_with_pagination(permissions, page_number, page_size, total as u64)))
 }
 
 /// 列表查询权限
 #[utoipa::path(
     post,
     path = "/api/iam/permissions/list",
-    request_body = crate::ListParamsDoc<serde_json::Value>,
+    request_body = cmx_core::ListParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<Permission>>)
     ),

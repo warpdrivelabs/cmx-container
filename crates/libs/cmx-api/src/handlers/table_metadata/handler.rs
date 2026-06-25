@@ -64,7 +64,7 @@ pub async fn table_metadata_get_by_id(
 #[utoipa::path(
     post,
     path = "/api/table-metadata/list",
-    request_body = crate::ListParamsDoc<serde_json::Value>,
+    request_body = cmx_core::ListParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),
@@ -109,7 +109,7 @@ pub async fn table_metadata_list(
 #[utoipa::path(
     post,
     path = "/api/table-metadata/page",
-    request_body = crate::PageParamsDoc<serde_json::Value>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),

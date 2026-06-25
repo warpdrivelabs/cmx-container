@@ -210,9 +210,7 @@ macro_rules! __declare_crud_handlers_inner {
             use $crate::app_state::CmxAppState;
             use $crate::Result;
             use $crate::middleware::CmxSvrContext;
-            use $crate::{
-                DeletePayloadDoc, ListParamsDoc, PageParamsDoc, UpdatePayloadDoc
-            };
+
 
             /// 创建实体 Handler
             ///
@@ -312,7 +310,7 @@ macro_rules! __declare_crud_handlers_inner {
             #[utoipa::path(
                 post,
                 path = concat!("/api",$prefix, "/update"),
-                request_body = UpdatePayloadDoc<$entity_update>,
+                request_body = cmx_core::UpdatePayload<$entity_update>,
                 // request_body = serde_json::Value,
                 responses(
                     (status = 200, description = "更新成功")
@@ -343,8 +341,8 @@ macro_rules! __declare_crud_handlers_inner {
             #[utoipa::path(
                 post,
                 path = concat!("/api",$prefix, "/update-many"),
-                // request_body = Vec<UpdatePayloadDoc<serde_json::Value>>,
-                request_body = inline(Vec<UpdatePayloadDoc<$entity_update>>),
+                // request_body = Vec<cmx_core::UpdatePayload<serde_json::Value>>,
+                request_body = inline(Vec<cmx_core::UpdatePayload<$entity_update>>),
                 responses(
                     (status = 200, description = "批量更新成功")
                 ),
@@ -374,7 +372,7 @@ macro_rules! __declare_crud_handlers_inner {
             #[utoipa::path(
                 post,
                 path = concat!("/api",$prefix, "/delete"),
-                request_body = DeletePayloadDoc,
+                request_body = cmx_core::DeletePayload,
                 responses(
                     (status = 200, description = "删除成功")
                 ),
@@ -404,7 +402,7 @@ macro_rules! __declare_crud_handlers_inner {
             #[utoipa::path(
                 post,
                 path = concat!("/api",$prefix, "/list"),
-                request_body = ListParamsDoc<serde_json::Value>,
+                request_body = cmx_core::ListParams<serde_json::Value>,
                 responses(
                     (status = 200, description = "列表查询成功")
                 ),
@@ -434,7 +432,7 @@ macro_rules! __declare_crud_handlers_inner {
             #[utoipa::path(
                 post,
                 path = concat!("/api",$prefix, "/page"),
-                request_body = PageParamsDoc<serde_json::Value>,
+                request_body = cmx_core::PageParams<serde_json::Value>,
                 responses(
                     (status = 200, description = "分页查询成功")
                 ),

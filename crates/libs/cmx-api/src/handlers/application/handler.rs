@@ -36,7 +36,7 @@ use crate::rest::header_parse::get_db_id_from_header;
 #[utoipa::path(
     post,
     path = "/api/applications/custom-page",
-    request_body = crate::PageParamsDoc<serde_json::Value>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功")
     ),

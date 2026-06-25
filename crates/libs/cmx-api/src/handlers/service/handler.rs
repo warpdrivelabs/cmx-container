@@ -865,7 +865,7 @@ pub async fn get_services_by_plugin(
 #[utoipa::path(
     post,
     path = "/api/service/page",
-    request_body = crate::PageParamsDoc<serde_json::Value>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "分页查询成功", body = ApiResp<Vec<ServiceListItem>>)
     ),
@@ -881,10 +881,10 @@ pub async fn page_services(
     let filter = params.filters.clone()
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
-    let page = params.get_page() as u64;
-    let size = params.get_size() as u64;
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
 
-    let result = service_query.page_services(filter, page, size).await
+    let result = service_query.page_services(filter, page_number, page_size).await
         .map_err(|e| Error::business_error(format!("分页查询失败: {}", e)))?;
 
     let items: Vec<ServiceListItem> = result.items.into_iter().map(|s| {
@@ -909,8 +909,8 @@ pub async fn page_services(
 
     Ok(Json(ApiResp::ok_with_pagination(
         items,
-        page,
-        size,
+        page_number,
+        page_size,
         result.total,
     )))
 }

@@ -14,7 +14,7 @@ use crate::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::Result;
 use crate::middleware::CmxSvrContext;
-use crate::rest::PageParamsDoc;
+
 use super::request::*;
 use super::response::*;
 
@@ -501,7 +501,7 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
 #[utoipa::path(
     post,
     path = "/api/plugin/list",
-    request_body = crate::rest::ListParamsDoc<super::request::ApiPluginFilter>,
+    request_body = cmx_core::ListParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<PluginListResponse>)
     ),
@@ -581,7 +581,7 @@ pub async fn plugin_get(
 #[utoipa::path(
     post,
     path = "/api/plugin/page",
-    request_body = PageParamsDoc<super::request::ApiPluginFilter>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<PluginInfoResponse>>)
     ),

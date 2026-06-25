@@ -125,31 +125,103 @@ use cmx_biz::domain::DomainFilter;  // 业务 crate 的 Filter
 #[utoipa::path(
     post,
     path = "/api/domain/list",
-    request_body = PageParams<DomainFilter>,   // ✅ 直接用 cmx-core 类型
+    request_body = cmx_core::ListParams<serde_json::Value>,  // ✅ 文档用 serde_json::Value
     responses((status = 200, description = "查询成功", body = ApiResp<DataSet>)),
     tag = "Domain"
 )]
 pub async fn list_domains(
     State(_): State<CmxAppState>,
     CmxSvrContext(_): CmxSvrContext,
-    Json(params): Json<PageParams<DomainFilter>>,  // ✅ 同一个类型
+    Json(params): Json<cmx_core::ListParams<DomainFilter>>,  // ✅ 函数签名用具体 Filter
+) -> Result<Json<ApiResp<DataSet>>> {
+    let list_options = params.to_list_options();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
+    // ... 继续业务逻辑
+}
+```
+
+### 2.4 ⚠️ 强制规范：列表/分页查询的 `request_body` 必须使用 `serde_json::Value`
+
+> **⚠️ 极其重要**：由于 modql 的 Filter 类型（`FilterNodes`）**不支持 `ToSchema`**，所有列表和分页查询接口的 **utoipa 注解中的 `request_body`** 必须使用 `serde_json::Value` 作为泛型参数，**函数签名可以使用具体 Filter 类型**！
+
+#### 核心要求
+
+1. **utoipa 注解的 `request_body`**：必须使用 `cmx_core::ListParams<serde_json::Value>` 或 `cmx_core::PageParams<serde_json::Value>`
+2. **函数签名的参数类型**：可以使用具体 Filter 类型，如 `Json<cmx_core::ListParams<XxxFilter>>`
+
+#### ✅ 正确写法（完整示例）
+
+```rust
+// ✅ 列表查询 - 完全符合规范
+#[utoipa::path(
+    post,
+    path = "/api/xxx/list",
+    request_body = cmx_core::ListParams<serde_json::Value>,  // ✅ 文档用 serde_json::Value
+    responses((status = 200, description = "查询成功")),
+    tag = "Xxx"
+)]
+pub async fn list_xxx(
+    State(_): State<CmxAppState>,
+    CmxSvrContext(_): CmxSvrContext,
+    Json(params): Json<cmx_core::ListParams<XxxFilter>>,  // ✅ 函数签名用具体 Filter
+) -> Result<Json<ApiResp<DataSet>>> {
+    let list_options = params.to_list_options();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
+    // ... 继续业务逻辑
+}
+
+// ✅ 分页查询 - 完全符合规范
+#[utoipa::path(
+    post,
+    path = "/api/xxx/page",
+    request_body = cmx_core::PageParams<serde_json::Value>,  // ✅ 文档用 serde_json::Value
+    responses((status = 200, description = "查询成功")),
+    tag = "Xxx"
+)]
+pub async fn page_xxx(
+    State(_): State<CmxAppState>,
+    CmxSvrContext(_): CmxSvrContext,
+    Json(params): Json<cmx_core::PageParams<XxxFilter>>,  // ✅ 函数签名用具体 Filter
+) -> Result<Json<ApiResp<Vec<XxxEntity>>>> {
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
+    let list_options = params.to_list_options();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
+    // ... 继续业务逻辑
+}
+```
+
+#### ❌ 错误写法（严格禁止）
+
+```rust
+// ❌ 错误：request_body 使用了具体 Filter 类型
+#[utoipa::path(
+    post,
+    path = "/api/xxx/list",
+    request_body = cmx_core::ListParams<XxxFilter>,  // ❌ 绝对禁止！Filter 不支持 ToSchema
+    // ...
+)]
+pub async fn list_xxx(
+    State(_): State<CmxAppState>,
+    CmxSvrContext(_): CmxSvrContext,
+    Json(params): Json<cmx_core::ListParams<XxxFilter>>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     // ...
 }
 ```
 
-### 2.4 旧 param_doc 兼容方案（逐步迁移中）
+#### 原因说明
 
-历史代码可能仍引用 `crate::rest::param_doc::PageParamsDoc` 等类型。**新代码必须直接使用 `cmx_core::PageParams<F>`**。
-如果业务 crate 的 Filter（F）暂未派生 `ToSchema`，可临时回退：
+1. **modql 限制**：modql 的 `FilterNodes` 类型未实现 `ToSchema` trait
+2. **OpenAPI 文档生成**：utoipa 生成 OpenAPI 文档时要求 `request_body` 的类型必须实现 `ToSchema`
+3. **运行时反序列化**：函数签名使用具体 Filter 类型在运行时反序列化没有问题
+4. **解决方案**：`request_body` 用 `serde_json::Value` 生成文档，函数签名用具体 Filter 处理业务逻辑
 
-```rust
-// 临时回退（不推荐长期使用）
-request_body = crate::rest::param_doc::PageParamsDoc<serde_json::Value>,
-Json(params): Json<cmx_core::PageParams<XxxFilter>>,
-```
+#### 迁移检查清单
 
-迁移完成标准：业务 Filter 派生 `ToSchema` 后，去掉 `*Doc` 包装。
+- [ ] 所有列表查询接口的 `request_body` 使用 `ListParams<serde_json::Value>`
+- [ ] 所有分页查询接口的 `request_body` 使用 `PageParams<serde_json::Value>`
+- [ ] 函数签名可以使用具体 Filter 类型
 
 ---
 

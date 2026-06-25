@@ -17,7 +17,7 @@ use crate::ApiResp;
 use crate::app_state::CmxAppState;
 use crate::{Error, Result};
 use crate::middleware::CmxSvrContext;
-use crate::rest::PageParamsDoc;
+
 use super::request::*;
 use super::response::*;
 
@@ -147,7 +147,7 @@ fn convert_version_to_response(version: cmx_plugin::MarketplacePluginVersion) ->
 #[utoipa::path(
     post,
     path = "/api/marketplace/plugin/page",
-    request_body = PageParamsDoc<MarketplacePluginFilterDoc>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<MarketplacePluginResponse>>)
     ),
@@ -156,17 +156,14 @@ fn convert_version_to_response(version: cmx_plugin::MarketplacePluginVersion) ->
 pub async fn marketplace_plugin_page(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Json(params): Json<cmx_core::PageParams<MarketplacePluginFilterDoc>>,
+    Json(params): Json<cmx_core::PageParams<MarketplacePluginFilter>>,
 ) -> Result<Json<ApiResp<Vec<MarketplacePluginResponse>>>> {
     debug!("插件市场分页查询");
 
     let page = params.get_page() as u64;
     let page_size = params.get_size() as u64;
 
-    let filters: Option<Vec<MarketplacePluginFilter>> = params.filters
-        .clone()
-        .map(|fs| fs.into_iter().map(Into::into).collect())
-        .filter(|v: &Vec<MarketplacePluginFilter>| !v.is_empty());
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let list_options = params.to_list_options();
 

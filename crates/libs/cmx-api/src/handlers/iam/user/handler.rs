@@ -165,7 +165,7 @@ pub async fn delete_user(
 #[utoipa::path(
     post,
     path = "/api/iam/users/page",
-    request_body = crate::PageParamsDoc<serde_json::Value>,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<User>>)
     ),
@@ -182,8 +182,8 @@ pub async fn page_users(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
-    let current = params.get_page() as u64;
-    let size = params.get_size() as u64;
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
     let list_options = params.to_list_options();
     let filters = params.filters.clone().filter(|v| !v.is_empty());
 
@@ -193,14 +193,14 @@ pub async fn page_users(
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok_with_pagination(users, current, size, total as u64)))
+    Ok(Json(ApiResp::ok_with_pagination(users, page_number, page_size, total as u64)))
 }
 
 /// 列表查询用户
 #[utoipa::path(
     post,
     path = "/api/iam/users/list",
-    request_body = crate::ListParamsDoc<serde_json::Value>,
+    request_body = cmx_core::ListParams<serde_json::Value>,
     responses(
         (status = 200, description = "查询成功", body = ApiResp<Vec<User>>)
     ),
