@@ -188,10 +188,9 @@ impl PluginHostFunctions {
         if !cmx_rpc::GlobalRpcClient::is_initialized() {
             return Ok(Self::err_plugin_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
         }
-        let rpc_client = cmx_rpc::GlobalRpcClient::get();
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            rpc_client.call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone()).await
+            cmx_rpc::orchestrator_client().call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone()).await
         });
 
         match result {
@@ -215,7 +214,6 @@ impl PluginHostFunctions {
         if !cmx_rpc::GlobalRpcClient::is_initialized() {
             return Ok(Self::err_service_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
         }
-        let rpc_client = cmx_rpc::GlobalRpcClient::get();
         let options = ServiceInvokeOptions {
             include_steps: req.include_steps.unwrap_or(false),
             debug: req.debug.unwrap_or(false),
@@ -224,7 +222,7 @@ impl PluginHostFunctions {
         };
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            rpc_client.call_service(server_name, &req.service_key, req.input.clone(), options).await
+            cmx_rpc::orchestrator_client().call_service(server_name, &req.service_key, req.input.clone(), options).await
         });
 
         match result {

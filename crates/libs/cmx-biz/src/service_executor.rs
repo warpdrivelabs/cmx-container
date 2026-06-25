@@ -42,6 +42,31 @@ pub fn step_status_to_str(status: &StepStatus) -> &'static str {
     }
 }
 
+/// 将 StepStatus 字符串表示解析回枚举（[`step_status_to_str`] 的逆运算）。
+///
+/// 统一 cmx-rpc 客户端/服务端的 StepStatus 反序列化逻辑，作为 str↔enum 双向转换的
+/// 单一来源。未知字符串降级为 `Failed` 并记录 warn。
+///
+/// # Arguments
+///
+/// * `status` - 由 [`step_status_to_str`] 产生的字符串。
+pub fn parse_step_status(status: &str) -> StepStatus {
+    match status {
+        "Success" => StepStatus::Success,
+        "Failed" => StepStatus::Failed,
+        "Skipped" => StepStatus::Skipped,
+        "DebugPaused" => StepStatus::DebugPaused,
+        _ => {
+            tracing::warn!(
+                target: "cmx_rpc",
+                raw_status = %status,
+                "收到未知的 StepStatus 字符串，按 Failed 处理（请升级 cmx-core 或检查版本对齐）"
+            );
+            StepStatus::Failed
+        }
+    }
+}
+
 /// 服务编排执行的核心结果（协议无关）
 ///
 /// 封装 Orchestrator 执行编排的结果，供 cmx-api / cmx-rpc 等协议层

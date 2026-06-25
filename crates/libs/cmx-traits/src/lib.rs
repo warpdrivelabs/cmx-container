@@ -17,7 +17,7 @@
 //! - [`plugin`] — 插件领域（PluginQuery、PluginLifecycleListener）。
 //! - [`runtime`] — WASM 运行时领域（RuntimeInvoker、HostFunctionProvider、InvokeContext）。
 //! - [`service`] — 服务领域（ServiceQuery、ServiceStorage、ServiceInvoker）。
-//! - [`rpc`] — RPC 领域（RpcClient）。
+//! - [`rpc`] — RPC 领域（ServiceOrchestrationClient、PluginDataClient）。
 //! - [`event_bus`] — 事件总线（EventBus、GlobalEventBus）。
 
 // 模块声明

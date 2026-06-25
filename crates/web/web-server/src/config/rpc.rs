@@ -5,7 +5,8 @@
 use std::sync::Arc;
 
 use cmx_registry_config::GlobalServiceInstanceCache;
-use cmx_rpc::{create_rpc_client, start_grpc_server, GlobalRpcClient};
+use cmx_rpc::bundle::ServerDeps;
+use cmx_rpc::{init_rpc_clients, start_grpc_server};
 use cmx_rpc::config::RpcConfig;
 use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
 use cmx_traits::runtime::RuntimeInvoker;
@@ -64,20 +65,24 @@ pub async fn init_rpc(
     // 2. 获取注册中心引用（整函数复用，避免重复 clone）。
     let registry = cmx_registry_config::GlobalServiceRegistry::get().clone();
 
-    // 3. 创建 RPC 客户端并注册到全局单例。
-    let rpc_client = create_rpc_client(&rpc, cache, registry.clone())
-        .map_err(|e| Error::ServerSetup(format!("创建 RPC 客户端失败: {}", e)))?;
-    GlobalRpcClient::set(rpc_client)
-        .map_err(|e| Error::ServerSetup(format!("设置全局 RPC 客户端失败: {}", e)))?;
+    // 3. 初始化全部领域客户端（迭代 bundles，注册到领域全局单例）。
+    let bundles = init_rpc_clients(&rpc, cache, registry.clone())
+        .map_err(|e| Error::ServerSetup(format!("初始化 RPC 客户端失败: {}", e)))?;
 
     let grpc_port = rpc.grpc.port;
 
     // 4. 在后台 tokio task 中启动 gRPC Server，同步等待启动结果。
     let (server_ready_tx, server_ready_rx) = tokio::sync::oneshot::channel();
     let grpc_port_for_log = grpc_port;
+    let deps = ServerDeps {
+        service_invoker,
+        runtime_invoker,
+        plugin_query,
+        data_importer,
+    };
     let server_handle = tokio::spawn(async move {
         info!("在后台启动 gRPC Server，端口: {}", grpc_port_for_log);
-        match start_grpc_server(grpc_port_for_log, service_invoker, runtime_invoker, plugin_query, data_importer, server_ready_tx).await {
+        match start_grpc_server(grpc_port_for_log, bundles, deps, server_ready_tx).await {
             Ok(()) => info!("gRPC Server 已正常退出"),
             Err(e) => warn!("gRPC Server 运行失败: {}", e),
         }

@@ -556,8 +556,7 @@ async fn call_function_via_rpc(
     if !cmx_rpc::GlobalRpcClient::is_initialized() {
         return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
     }
-    let rpc_client = cmx_rpc::GlobalRpcClient::get();
-    let result = rpc_client
+    let result = cmx_rpc::orchestrator_client()
         .call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone())
         .await
         .map_err(|e| Error::business_error(format!("RPC 调用失败: {}", e)))?;
@@ -581,14 +580,13 @@ async fn execute_service_via_rpc(
     if !cmx_rpc::GlobalRpcClient::is_initialized() {
         return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
     }
-    let rpc_client = cmx_rpc::GlobalRpcClient::get();
     let options = ServiceInvokeOptions {
         include_steps: req.include_steps.unwrap_or(false),
         debug: req.debug.unwrap_or(false),
         debug_node_id: req.debug_node_id.clone(),
         debug_params: req.debug_params.clone(),
     };
-    let result = rpc_client
+    let result = cmx_rpc::orchestrator_client()
         .call_service(server_name, service_key, req.input.clone(), options)
         .await
         .map_err(|e| Error::business_error(format!("RPC 调用失败: {}", e)))?;

@@ -74,8 +74,6 @@ impl ServiceCenterSender for GrpcServiceCenterSender {
         let category = request.category;
         let service_name = self.resolve_service_name(category)?;
 
-        let rpc_client = GlobalRpcClient::get();
-
         info!(
             target: "cmx_plugin_center",
             category = %category.center_name(),
@@ -96,7 +94,7 @@ impl ServiceCenterSender for GrpcServiceCenterSender {
             zip_data: request.zip_data,
         };
 
-        let result = rpc_client
+        let result = cmx_rpc::plugin_data_client()
             .import_plugin_data(service_name, import_request)
             .await
             .map_err(|e| CenterError::CallFailed {
@@ -132,8 +130,6 @@ impl ServiceCenterSender for GrpcServiceCenterSender {
         let category = request.category;
         let service_name = self.resolve_service_name(category)?;
 
-        let rpc_client = GlobalRpcClient::get();
-
         info!(
             target: "cmx_plugin_center",
             category = %category.center_name(),
@@ -151,7 +147,7 @@ impl ServiceCenterSender for GrpcServiceCenterSender {
             app_id: request.app_id,
         };
 
-        let result = rpc_client
+        let result = cmx_rpc::plugin_data_client()
             .cleanup_plugin_data(service_name, cleanup_request)
             .await
             .map_err(|e| CenterError::CallFailed {
