@@ -519,6 +519,136 @@ impl RoleService for RoleServiceImpl {
         Ok(())
     }
 
+    /// 为角色分配用户（全量替换）。
+    ///
+    /// 事务内先删除该角色的所有用户关联，再分块批量插入新关联。
+    /// 空数组表示清空该角色的所有用户。
+    async fn assign_role_users(
+        &self,
+        svr_ctx: &SVRContext,
+        role_id: &str,
+        user_ids: &[String],
+    ) -> Result<(), TraitError> {
+        debug!(
+            "{:<12} - RoleServiceImpl::assign_role_users - role: {}, user_count: {}",
+            "IAM", role_id, user_ids.len()
+        );
+
+        const ROLE_USERS_INSERT_BATCH: usize = 500;
+
+        // 开启事务
+        let txn_ctx = self.mm.get_transaction_context();
+        let guard = txn_ctx
+            .begin_with_guard(&self.db_id)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("事务开始失败: {e}"))))?;
+        let txn_id = guard.txn_id();
+
+        // SoD 规则校验（仅当启用时）
+        if let Some(enforcer) = &self.rule_enforcer {
+            let single_role = vec![role_id.to_string()];
+            for uid in user_ids {
+                enforcer
+                    .check_user_roles(uid.as_str(), &single_role)
+                    .await
+                    .map_err(TraitError::from)?;
+            }
+        }
+
+        // 事务内先查询「原用户集合」，供提交后缓存失效使用
+        // （必须在 DELETE 之前查，否则会漏掉被移除的旧用户）
+        let select_sql = "SELECT user_id FROM cmx_user_role WHERE role_id = $1";
+        let ds = self
+            .mm
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                select_sql,
+                vec![DataValue::String(role_id.to_string())],
+                "old_role_users",
+            )
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询原用户集合失败: {e}"))))?;
+        let schema = ds.schema.as_ref();
+        let mut old_user_ids: Vec<String> = Vec::new();
+        for row in ds.iter() {
+            if let Some(uid) = row.get_by_name_as::<String>(schema, "user_id") {
+                old_user_ids.push(uid);
+            }
+        }
+
+        // 物理删除旧关联（全量替换）
+        let delete_sql = "DELETE FROM cmx_user_role WHERE role_id = $1";
+        self.mm
+            .execute_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                delete_sql,
+                vec![DataValue::String(role_id.to_string())],
+            )
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("删除旧用户关联失败: {e}"))))?;
+
+        // 分块批量插入新关联（ON CONFLICT 兜底）
+        for chunk in user_ids.chunks(ROLE_USERS_INSERT_BATCH) {
+            let n = chunk.len();
+            // 动态拼装占位符："($1,$2,$3,0),($4,$5,$6,0),..."
+            let values_clause = (0..n)
+                .map(|i| {
+                    let b = i * 3;
+                    format!("(${},${},${},0)", b + 1, b + 2, b + 3)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let insert_sql = format!(
+                "INSERT INTO cmx_user_role (id, user_id, role_id, archived) VALUES {} \
+                 ON CONFLICT (user_id, role_id) DO NOTHING",
+                values_clause
+            );
+            // 参数列表：每行 [id, user_id, role_id]
+            let mut params: Vec<DataValue> = Vec::with_capacity(n * 3);
+            for uid in chunk {
+                params.push(DataValue::String(snowflake_id_str()));
+                params.push(DataValue::String(uid.clone()));
+                params.push(DataValue::String(role_id.to_string()));
+            }
+            self.mm
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), &insert_sql, params)
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("批量插入用户角色关联失败: {e}")))
+                })?;
+        }
+
+        // 提交事务
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
+
+        // 审计日志
+        let audit_detail = serde_json::json!({
+            "role_id": role_id,
+            "user_ids": user_ids,
+        });
+        self.audit_write(svr_ctx, "assign_role_users", "role", role_id, &audit_detail)
+            .await;
+
+        // 批量失效缓存：对 old_user_ids ∪ new user_ids 逐个失效
+        // （被移除的旧用户角色集已变，必须失效）
+        if let Some(checker) = &self.permission_checker {
+            let mut done: std::collections::HashSet<&str> = std::collections::HashSet::new();
+            for uid in old_user_ids.iter().chain(user_ids.iter()) {
+                if done.insert(uid.as_str()) {
+                    checker.invalidate_user_cache(uid).await;
+                }
+            }
+        }
+
+        info!(role_id = role_id, user_count = user_ids.len(), "角色用户分配成功");
+        Ok(())
+    }
+
     /// 获取角色已启用的权限列表（含 `status = 1` 且 `archived = 0` 过滤）。
     ///
     /// # Arguments

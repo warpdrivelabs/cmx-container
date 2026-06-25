@@ -11,7 +11,9 @@ use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Error, Result};
 
-use cmx_iam::role::{AssignPermissionsRequest, RoleFilter, RoleForCreate, RoleForUpdate};
+use cmx_iam::role::{
+    AssignPermissionsRequest, AssignRoleUsersRequest, RoleFilter, RoleForCreate, RoleForUpdate,
+};
 
 /// 创建角色
 #[utoipa::path(
@@ -246,6 +248,38 @@ pub async fn assign_permissions(
 
     iam.role_service
         .assign_permissions(&svr_ctx, &req.role_id, &req.permission_ids)
+        .await
+        .map_err(|e| Error::business_error(e.to_string()))?;
+
+    Ok(Json(ApiResp::ok(())))
+}
+
+/// 批量给角色分配用户（全量替换）
+#[utoipa::path(
+    post,
+    path = "/api/iam/roles/assign-users",
+    request_body = AssignRoleUsersRequest,
+    responses(
+        (status = 200, description = "分配成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "IAM-Role"
+)]
+pub async fn assign_role_users(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(svr_ctx): CmxSvrContext,
+    Json(req): Json<AssignRoleUsersRequest>,
+) -> Result<Json<ApiResp<()>>> {
+    debug!(
+        "{:<12} - handler::assign_role_users - role: {}, user_count: {}",
+        "HANDLER", req.role_id, req.user_ids.len()
+    );
+
+    let iam = cmx_state.iam().ok_or_else(|| {
+        Error::business_error("IAM 服务未初始化".to_string())
+    })?;
+
+    iam.role_service
+        .assign_role_users(&svr_ctx, &req.role_id, &req.user_ids)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 

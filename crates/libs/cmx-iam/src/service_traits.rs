@@ -592,6 +592,27 @@ pub trait RoleService: Send + Sync {
         permission_ids: &[String],
     ) -> Result<(), TraitError>;
 
+    /// 为角色分配用户（全量替换）。
+    ///
+    /// 将目标角色的用户集合设置为 `user_ids`：事务内先删除该角色的所有用户关联，
+    /// 再分块批量插入新关联。空数组表示清空。
+    ///
+    /// # Arguments
+    ///
+    /// * `svr_ctx` - 服务端上下文，用于审计日志。
+    /// * `role_id` - 目标角色 ID。
+    /// * `user_ids` - 待分配的用户 ID 列表（全量替换）。
+    ///
+    /// # Errors
+    ///
+    /// 当事务开启/提交失败、SoD 规则违反或 SQL 执行失败时返回错误。
+    async fn assign_role_users(
+        &self,
+        svr_ctx: &SVRContext,
+        role_id: &str,
+        user_ids: &[String],
+    ) -> Result<(), TraitError>;
+
     /// 获取角色的权限列表。
     ///
     /// # Arguments

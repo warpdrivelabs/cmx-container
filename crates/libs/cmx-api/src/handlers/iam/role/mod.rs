@@ -23,6 +23,7 @@ impl ModuleRoutes for RoleModule {
             .route("/iam/roles/list", post(handler::list_roles))
             // 关联操作
             .route("/iam/roles/assign-permissions", post(handler::assign_permissions))
+            .route("/iam/roles/assign-users", post(handler::assign_role_users))
             .route("/iam/roles/permissions", get(handler::get_role_permissions))
             // 审计查询（阶段5新增）
             .route(

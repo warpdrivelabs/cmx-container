@@ -74,3 +74,17 @@ pub struct AssignPermissionsRequest {
     /// 待分配的权限 ID 列表（空数组表示清空所有权限）。
     pub permission_ids: Vec<String>,
 }
+
+/// 批量给角色分配用户请求（全量替换）。
+///
+/// 将目标角色的用户集合设置为 `user_ids`，原有不在列表中的用户关联会被移除。
+/// 空数组表示清空该角色的所有用户。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AssignRoleUsersRequest {
+    /// 目标角色 ID。
+    pub role_id: String,
+
+    /// 待分配的用户 ID 列表（全量替换语义）。
+    pub user_ids: Vec<String>,
+}

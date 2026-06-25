@@ -160,6 +160,7 @@ use utoipa::OpenApi;
         crate::handlers::iam::role::handler::page_roles,
         crate::handlers::iam::role::handler::list_roles,
         crate::handlers::iam::role::handler::assign_permissions,
+        crate::handlers::iam::role::handler::assign_role_users,
         crate::handlers::iam::role::handler::get_role_permissions,
         // IAM RoleGroup handlers
         crate::handlers::iam::role_group::handler::create_role_group,
@@ -331,6 +332,7 @@ use utoipa::OpenApi;
             cmx_iam::role::RoleForCreate,
             cmx_iam::role::RoleForUpdate,
             cmx_iam::role::AssignPermissionsRequest,
+            cmx_iam::role::AssignRoleUsersRequest,
             cmx_iam::role_group::RoleGroupForCreate,
             cmx_iam::role_group::RoleGroupForUpdate,
             cmx_iam::permission::PermissionForCreate,

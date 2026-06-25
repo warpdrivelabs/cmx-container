@@ -6,6 +6,6 @@ pub mod filter;
 pub mod service;
 
 pub use bmc::{RoleBmc, RolePermissionBmc};
-pub use entity::{AssignPermissionsRequest, RoleForCreate, RoleForUpdate};
+pub use entity::{AssignPermissionsRequest, AssignRoleUsersRequest, RoleForCreate, RoleForUpdate};
 pub use filter::RoleFilter;
 pub use service::RoleServiceImpl;
