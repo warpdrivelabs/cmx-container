@@ -53,6 +53,7 @@ impl DatabaseHostFunctions {
         let db_manager = self.db_manager.clone();
         let sql = request.sql;
         let params = request.params;
+        let data_values = request.data_values;
         let dataset_id = request.dataset_id.unwrap_or_else(|| "wasm_query".to_string());
         let request_db_id = request.db_id;
         let request_txn_id = request.txn_id;
@@ -65,14 +66,21 @@ impl DatabaseHostFunctions {
                     _ => db_manager.get_default_db_id().await,
                 };
 
-                match params {
-                    Some(params_value) => {
+                // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
+                match (data_values, params) {
+                    (Some(data_values), _) => {
+                        db_manager
+                            .query_sql_with_datavalues(&db_id, request_txn_id.as_deref(), &sql, data_values, &dataset_id)
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                    (None, Some(params_value)) => {
                         db_manager
                             .query_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value, &dataset_id)
                             .await
                             .map_err(|e| e.to_string())
                     }
-                    None => {
+                    (None, None) => {
                         db_manager
                             .query_sql(&db_id, request_txn_id.as_deref(), &sql, &dataset_id)
                             .await
@@ -114,6 +122,7 @@ impl DatabaseHostFunctions {
         let db_manager = self.db_manager.clone();
         let sql = request.sql;
         let params = request.params;
+        let data_values = request.data_values;
         let request_db_id = request.db_id;
         let request_txn_id = request.txn_id;
 
@@ -125,14 +134,21 @@ impl DatabaseHostFunctions {
                     _ => db_manager.get_default_db_id().await,
                 };
 
-                match params {
-                    Some(params_value) => {
+                // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
+                match (data_values, params) {
+                    (Some(data_values), _) => {
+                        db_manager
+                            .execute_sql_with_datavalues(&db_id, request_txn_id.as_deref(), &sql, data_values)
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                    (None, Some(params_value)) => {
                         db_manager
                             .execute_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value)
                             .await
                             .map_err(|e| e.to_string())
                     }
-                    None => {
+                    (None, None) => {
                         db_manager
                             .execute_sql(&db_id, request_txn_id.as_deref(), &sql)
                             .await

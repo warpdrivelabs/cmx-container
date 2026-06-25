@@ -122,7 +122,12 @@ impl Serialize for DataValue {
         S: Serializer,
     {
         match self {
-            DataValue::Null | DataValue::NullTyped(_) => serializer.serialize_unit(),
+            DataValue::Null => serializer.serialize_unit(),
+            DataValue::NullTyped(t) => {
+                // 序列化为 "$null:Int" 字符串以保留类型信息(wasm 边界往返需要)
+                // 与 Binary 的 "B64:" 前缀模式一致,跨 JSON/MsgPack 格式统一
+                serializer.serialize_str(&format!("$null:{:?}", t))
+            }
             DataValue::Bool(b) => serializer.serialize_bool(*b),
             DataValue::Int(i) => serializer.serialize_i64(*i),
             DataValue::Float(f) => {
@@ -188,6 +193,12 @@ impl<'de> Deserialize<'de> for DataValue {
                 }
             }
             JsonValue::String(s) => {
+                // 尝试解析为 NullTyped(通过 $null: 前缀识别,如 "$null:Int")
+                if let Some(type_str) = s.strip_prefix("$null:") {
+                    let t: SqlTypeMarker = serde_json::from_value(JsonValue::String(type_str.to_string()))
+                        .map_err(|e| serde::de::Error::custom(format!("invalid $null type: {}", e)))?;
+                    return Ok(DataValue::NullTyped(t));
+                }
                 // 尝试解析为 DateTime（RFC3339 格式，如 "2024-01-01T12:00:00Z" 或 "2024-01-01T12:00:00+00:00"）
                 if let Ok(dt) = DateTime::parse_from_rfc3339(&s) {
                     return Ok(DataValue::DateTime(dt.with_timezone(&Utc)));
