@@ -213,7 +213,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
 
     async fn page_users(
         &self,
-        _filter: cmx_iam::user::UserFilter,
+        _filters: Option<Vec<cmx_iam::user::UserFilter>>,
         _list_options: modql::filter::ListOptions,
     ) -> std::result::Result<(Vec<cmx_core::model::iam::User>, i64), cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))
@@ -221,7 +221,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
 
     async fn list_users(
         &self,
-        _filter: cmx_iam::user::UserFilter,
+        _filters: Option<Vec<cmx_iam::user::UserFilter>>,
         _list_options: Option<modql::filter::ListOptions>,
     ) -> std::result::Result<Vec<cmx_core::model::iam::User>, cmx_traits::error::TraitError> {
         Err(cmx_traits::error::TraitError::Internal("IAM 服务尚未完成初始化".to_string()))

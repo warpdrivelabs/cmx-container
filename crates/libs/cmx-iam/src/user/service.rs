@@ -487,19 +487,22 @@ impl UserService for UserServiceImpl {
     /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_users(
         &self,
-        filter: UserFilter,
+        filters: Option<Vec<UserFilter>>,
         list_options: ListOptions,
     ) -> Result<(Vec<User>, i64), TraitError> {
         debug!("{:<12} - UserServiceImpl::page_users", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let (dataset, total) =
             GenericCrudService::<UserBmc, UserFilter>::page(
                 &self.mm,
                 &self.db_id,
                 None,
-                Some(vec![filters]),
+                filters,
                 list_options,
             )
             .await
@@ -515,7 +518,7 @@ impl UserService for UserServiceImpl {
     ///
     /// # Arguments
     ///
-    /// * `filter` - 用户查询过滤器。
+    /// * `filters` - 用户查询过滤器数组（每个 filter 为一个 AND 组，组间 OR）。
     ///
     /// # Returns
     ///
@@ -526,18 +529,21 @@ impl UserService for UserServiceImpl {
     /// * `IamError::Crud` - 数据库查询失败。
     async fn list_users(
         &self,
-        filter: UserFilter,
+        filters: Option<Vec<UserFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<User>, TraitError> {
         debug!("{:<12} - UserServiceImpl::list_users", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let dataset = GenericCrudService::<UserBmc, UserFilter>::list(
             &self.mm,
             &self.db_id,
             None,
-            Some(vec![filters]),
+            filters,
             list_options,
         )
         .await
