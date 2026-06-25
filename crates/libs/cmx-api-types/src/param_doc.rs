@@ -49,8 +49,6 @@ pub struct DeletePayloadDoc {
 /// 支持过滤条件和排序，不带分页信息，适用于全量列表查询。
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct ListParamsDoc<F> {
-    /// 单个过滤条件。
-    pub filter: Option<F>,
     /// 多个过滤条件列表。
     pub filters: Option<Vec<F>>,
     /// 排序字段，格式为 `"!field1,field2"` !表示 desc 降序。
@@ -85,6 +83,8 @@ pub struct PageParamsDoc<F> {
     /// 每页条数，默认为 [`PAGE_SIZE_DEFAULT`]。
     #[serde(default = "default_size")]
     pub size: Option<i64>,
+    /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
+    pub order_bys: Option<String>,
 }
 
 fn default_page() -> Option<i64> {

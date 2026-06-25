@@ -62,7 +62,11 @@ pub struct ListParams<F> {
 }
 
 impl<F> ListParams<F> {
-    /// 转换为 ListOptions
+    /// 将列表查询参数转换为 modql 的 [`ListOptions`]。
+    ///
+    /// # Returns
+    ///
+    /// 返回使用默认 limit 和当前 `order_bys` 构造的 `ListOptions`。
     pub fn to_list_options(&self) -> ListOptions {
         ListOptions {
             limit: Some(LIST_LIMIT_DEFAULT),
@@ -83,7 +87,7 @@ pub struct PageParams<F> {
     /// 页码（从 1 开始）
     #[serde(default = "default_page")]
     pub current: Option<i64>,
-    /// 每页条数
+    /// 每页条数,默认20
     #[serde(default = "default_size")]
     pub size: Option<i64>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
@@ -100,13 +104,26 @@ fn default_size() -> Option<i64> {
 }
 
 impl<F> PageParams<F> {
-    /// 获取页码，默认为 1
+    /// 获取当前页码。
+    ///
+    /// 当 `current` 为 `None` 或小于 1 时，返回 1。
+    ///
+    /// # Returns
+    ///
+    /// 不小于 1 的页码值。
     pub fn get_page(&self) -> i64 {
         let page = self.current.unwrap_or(1);
         if page < 1 { 1 } else { page }
     }
 
-    /// 获取每页条数，默认为 20
+    /// 获取每页条数。
+    ///
+    /// 当 `size` 为 `None` 或小于 1 时，返回 [`PAGE_SIZE_DEFAULT`]；
+    /// 当 `size` 超过 [`PAGE_SIZE_MAX`] 时，返回 [`PAGE_SIZE_MAX`]。
+    ///
+    /// # Returns
+    ///
+    /// 在 1 到 [`PAGE_SIZE_MAX`] 范围内的每页条数。
     pub fn get_size(&self) -> i64 {
         let size = self.size.unwrap_or(PAGE_SIZE_DEFAULT);
         if size < 1 {
@@ -118,7 +135,7 @@ impl<F> PageParams<F> {
         }
     }
 
-    /// 计算偏移量
+    /// 计算数据库查询偏移量
     pub fn get_offset(&self) -> i64 {
         (self.get_page() - 1) * self.get_size()
     }
