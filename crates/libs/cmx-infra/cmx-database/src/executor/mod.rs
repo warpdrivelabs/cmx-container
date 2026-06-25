@@ -125,30 +125,89 @@ impl ParamValue {
 }
 
 /// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（PostgreSQL）
+///
+/// 识别 `DataValue::NullTyped` 携带的类型信息,绑定正确的 sqlx 类型,
+/// 避免 `None::<String>` 导致非 TEXT 列的 prepare 类型不匹配。
 #[inline]
 pub fn bind_data_value_postgres<'q>(
     query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
     param: &'q DataValue,
 ) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    use cmx_core::model::cell::SqlTypeMarker;
     match param {
-        DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
-        DataValue::Bool(v) => query.bind(*v),
-        DataValue::Int(v) => query.bind(*v),
-        DataValue::Float(v) => query.bind(*v),
-        DataValue::String(v) => query.bind(v.as_str()),
+        DataValue::Null => query.bind(None::<String>),
+        DataValue::NullTyped(t) => match t {
+            SqlTypeMarker::Bool      => query.bind(None::<bool>),
+            SqlTypeMarker::Int       => query.bind(None::<i64>),
+            SqlTypeMarker::Float     => query.bind(None::<f64>),
+            SqlTypeMarker::Decimal   => query.bind(None::<rust_decimal::Decimal>),
+            SqlTypeMarker::Text      => query.bind(None::<String>),
+            SqlTypeMarker::Timestamp => query.bind(None::<chrono::DateTime<chrono::Utc>>),
+            SqlTypeMarker::Date      => query.bind(None::<chrono::NaiveDate>),
+            SqlTypeMarker::Uuid      => query.bind(None::<uuid::Uuid>),
+            SqlTypeMarker::Json      => query.bind(None::<serde_json::Value>),
+            SqlTypeMarker::Binary    => query.bind(None::<Vec<u8>>),
+        },
+        DataValue::Bool(v)    => query.bind(*v),
+        DataValue::Int(v)     => query.bind(*v),
+        DataValue::Float(v)   => query.bind(*v),
+        DataValue::String(v)  => query.bind(v.as_str()),
         DataValue::Decimal(v) => query.bind(*v),
         DataValue::DateTime(v) => query.bind(*v),
-        DataValue::Date(v) => query.bind(*v),
-        DataValue::Json(v) => query.bind(v.clone()),
-        DataValue::Binary(v) => query.bind(v.as_slice()),
-        DataValue::Uuid(v) => query.bind(*v),
-        DataValue::Array(_) => query.bind(None::<String>),
-        DataValue::ShortStr(_) => query.bind(None::<String>),
-        DataValue::LongStr(_) => query.bind(None::<String>),
+        DataValue::Date(v)    => query.bind(*v),
+        DataValue::Json(v)    => query.bind(v.clone()),
+        DataValue::Binary(v)  => query.bind(v.as_slice()),
+        DataValue::Uuid(v)    => query.bind(*v),
+        DataValue::Array(els) => bind_pg_array_postgres(query, els),
+        DataValue::ShortStr(s) => query.bind(s.as_str()),
+        DataValue::LongStr(s)  => query.bind(s.as_str()),
+    }
+}
+
+/// 将单层同类型数组绑定为 PostgreSQL 数组。
+///
+/// 元素类型由首个元素推断;空数组绑定为 NULL text 数组。
+/// 仅支持单层、元素同类型(对应 cmx-iam 的 IN 查询场景)。
+fn bind_pg_array_postgres<'q>(
+    query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    els: &'q [DataValue],
+) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    if els.is_empty() {
+        return query.bind(None::<Vec<String>>);
+    }
+    // 按首个元素类型分发
+    match &els[0] {
+        DataValue::String(_) | DataValue::ShortStr(_) | DataValue::LongStr(_) => {
+            let v: Vec<&str> = els.iter().filter_map(|e| match e {
+                DataValue::String(s) => Some(s.as_str()),
+                DataValue::ShortStr(s) => Some(s.as_str()),
+                DataValue::LongStr(s) => Some(s.as_str()),
+                _ => None,
+            }).collect();
+            query.bind(v)
+        }
+        DataValue::Int(_) => {
+            let v: Vec<i64> = els.iter().filter_map(|e| match e {
+                DataValue::Int(i) => Some(*i),
+                _ => None,
+            }).collect();
+            query.bind(v)
+        }
+        DataValue::Uuid(_) => {
+            let v: Vec<uuid::Uuid> = els.iter().filter_map(|e| match e {
+                DataValue::Uuid(u) => Some(*u),
+                _ => None,
+            }).collect();
+            query.bind(v)
+        }
+        _ => query.bind(None::<Vec<String>>),
     }
 }
 
 /// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（MySQL）
+///
+/// MySQL 的 NULL 无类型区分,`NullTyped` 统一走 `None::<String>` 兜底。
+/// MySQL 无原生数组,`Array` 序列化为逗号分隔字符串。
 #[inline]
 pub fn bind_data_value_mysql<'q>(
     query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
@@ -156,23 +215,33 @@ pub fn bind_data_value_mysql<'q>(
 ) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
     match param {
         DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
-        DataValue::Bool(v) => query.bind(*v),
-        DataValue::Int(v) => query.bind(*v),
-        DataValue::Float(v) => query.bind(*v),
-        DataValue::String(v) => query.bind(v.clone()),
+        DataValue::Bool(v)    => query.bind(*v),
+        DataValue::Int(v)     => query.bind(*v),
+        DataValue::Float(v)   => query.bind(*v),
+        DataValue::String(v)  => query.bind(v.clone()),
         DataValue::Decimal(v) => query.bind(v.to_string()),
         DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
-        DataValue::Date(v) => query.bind(v.to_string()),
-        DataValue::Json(v) => query.bind(v.to_string()),
-        DataValue::Binary(v) => query.bind(v.as_slice()),
-        DataValue::Uuid(v) => query.bind(v.to_string()),
-        DataValue::Array(_) => query.bind(None::<String>),
-        DataValue::ShortStr(_) => query.bind(None::<String>),
-        DataValue::LongStr(_) => query.bind(None::<String>),
+        DataValue::Date(v)    => query.bind(v.to_string()),
+        DataValue::Json(v)    => query.bind(v.to_string()),
+        DataValue::Binary(v)  => query.bind(v.as_slice()),
+        DataValue::Uuid(v)    => query.bind(v.to_string()),
+        DataValue::Array(els) => {
+            let s = els.iter().map(|e| match e {
+                DataValue::String(s) => s.clone(),
+                DataValue::ShortStr(s) | DataValue::LongStr(s) => s.to_string(),
+                other => format!("{:?}", other),
+            }).collect::<Vec<_>>().join(",");
+            query.bind(s)
+        }
+        DataValue::ShortStr(s) => query.bind(s.to_string()),
+        DataValue::LongStr(s)  => query.bind(s.to_string()),
     }
 }
 
 /// DataValue 绑定函数：将 DataValue 绑定到 sqlx 查询（SQLite）
+///
+/// SQLite 动态类型,NULL 无类型区分,`NullTyped` 统一走 `None::<String>` 兜底。
+/// `Array` 序列化为 JSON 字符串。
 #[inline]
 pub fn bind_data_value_sqlite<'q>(
     query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
@@ -180,19 +249,19 @@ pub fn bind_data_value_sqlite<'q>(
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match param {
         DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
-        DataValue::Bool(v) => query.bind(*v),
-        DataValue::Int(v) => query.bind(*v),
-        DataValue::Float(v) => query.bind(*v),
-        DataValue::String(v) => query.bind(v.clone()),
+        DataValue::Bool(v)    => query.bind(*v),
+        DataValue::Int(v)     => query.bind(*v),
+        DataValue::Float(v)   => query.bind(*v),
+        DataValue::String(v)  => query.bind(v.clone()),
         DataValue::Decimal(v) => query.bind(v.to_string()),
         DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
-        DataValue::Date(v) => query.bind(v.to_string()),
-        DataValue::Json(v) => query.bind(v.to_string()),
-        DataValue::Binary(v) => query.bind(v.as_slice()),
-        DataValue::Uuid(v) => query.bind(v.to_string()),
-        DataValue::Array(_) => query.bind(None::<String>),
-        DataValue::ShortStr(_) => query.bind(None::<String>),
-        DataValue::LongStr(_) => query.bind(None::<String>),
+        DataValue::Date(v)    => query.bind(v.to_string()),
+        DataValue::Json(v)    => query.bind(v.to_string()),
+        DataValue::Binary(v)  => query.bind(v.as_slice()),
+        DataValue::Uuid(v)    => query.bind(v.to_string()),
+        DataValue::Array(els) => query.bind(serde_json::to_string(els).unwrap_or_default()),
+        DataValue::ShortStr(s) => query.bind(s.to_string()),
+        DataValue::LongStr(s)  => query.bind(s.to_string()),
     }
 }
 
