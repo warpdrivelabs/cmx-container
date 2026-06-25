@@ -38,6 +38,7 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: None,
+            data_values: None,
         };
         let db_response = self.host.db_query(db_request)?;
         Ok(FunctionOutput::from_json(serde_json::json!({
@@ -65,6 +66,7 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: input.context.txn_id.clone(),
+            data_values: None,
         };
         let db_response = self.host.db_execute(db_request)?;
         self.host.log_info(&format!(
@@ -92,6 +94,7 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: input.context.txn_id.clone(),
+            data_values: None,
         };
         let db_response = self.host.db_execute(db_request)?;
         Ok(FunctionOutput::from_json(serde_json::json!({
@@ -111,6 +114,7 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: input.context.txn_id.clone(),
+            data_values: None,
         };
         let db_response = self.host.db_execute(db_request)?;
         self.host.log_info(&format!("订单已删除: {}", order_id))?;

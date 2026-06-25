@@ -840,7 +840,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "cmx-api"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "axum",
  "bytes",
@@ -849,7 +849,7 @@ dependencies = [
  "cmx-auth",
  "cmx-biz",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-debug",
  "cmx-iam",
@@ -887,10 +887,10 @@ dependencies = [
 
 [[package]]
 name = "cmx-api-types"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "axum",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "modql 0.5.0",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -903,11 +903,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-audit"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "sea-query",
  "sea-query-sqlx",
@@ -921,7 +921,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-auth"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "argon2",
  "async-trait",
@@ -929,7 +929,7 @@ dependencies = [
  "chrono",
  "cmx-audit",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-traits",
  "cmx-utils",
@@ -955,12 +955,12 @@ dependencies = [
 
 [[package]]
 name = "cmx-biz"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
  "cmx-api-types",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-service",
  "cmx-traits",
@@ -980,12 +980,12 @@ dependencies = [
 
 [[package]]
 name = "cmx-buffer"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-traits",
  "cmx-utils",
  "dashmap",
@@ -1003,7 +1003,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-cli"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-core"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "base64",
  "chrono",
@@ -1042,9 +1042,9 @@ dependencies = [
 
 [[package]]
 name = "cmx-core"
-version = "0.1.10"
+version = "0.1.11"
 source = "sparse+http://192.168.157.46:4000/cargo/index/"
-checksum = "15a5e18328280fc79161e470a8db6dd8138ae6a0860396c5b7edfc53b2c2c096"
+checksum = "ad3c6e6ae9d1a9c713af6fa0b6126a2de6e50bb3072fe413e543c3236cb0720a"
 dependencies = [
  "base64",
  "chrono",
@@ -1062,12 +1062,12 @@ dependencies = [
 
 [[package]]
 name = "cmx-database"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "base64",
  "chrono",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
@@ -1094,7 +1094,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-debug"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "extism",
@@ -1109,7 +1109,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-iam"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1117,7 +1117,7 @@ dependencies = [
  "cmx-audit",
  "cmx-auth",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-traits",
  "cmx-utils",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-macros"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "proc-macro2 1.0.106 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.45",
@@ -1145,11 +1145,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-metadata"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "csv",
  "regex",
@@ -1164,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1172,7 +1172,7 @@ dependencies = [
  "bytes",
  "chrono",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-metadata",
  "cmx-registry-config",
@@ -1213,7 +1213,7 @@ name = "cmx-plugin-demo"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "cmx-plugin-sdk 0.1.10 (sparse+http://192.168.157.46:4000/cargo/index/)",
+ "cmx-plugin-sdk 0.1.11 (sparse+http://192.168.157.46:4000/cargo/index/)",
  "extism-pdk",
  "mockall 0.11.4",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1223,9 +1223,9 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin-sdk"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "extism-pdk",
  "rmp-serde",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1235,11 +1235,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin-sdk"
-version = "0.1.10"
+version = "0.1.11"
 source = "sparse+http://192.168.157.46:4000/cargo/index/"
-checksum = "e6c85161e974584a8355f24a6d8807f1400053c9076c848a8edd5fb8d518b453"
+checksum = "e5cb2572d9018c49b3bbf5bd07b9744928083b3ad5b36e9ecca6e4dbab8c36ce"
 dependencies = [
- "cmx-core 0.1.10 (sparse+http://192.168.157.46:4000/cargo/index/)",
+ "cmx-core 0.1.11 (sparse+http://192.168.157.46:4000/cargo/index/)",
  "extism-pdk",
  "rmp-serde",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1249,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-registry-config"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "cmx-utils",
@@ -1264,14 +1264,14 @@ dependencies = [
 
 [[package]]
 name = "cmx-rpc"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "async-broadcast",
  "async-trait",
  "chrono",
  "cmx-biz",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-registry-config",
  "cmx-rpc-gen",
  "cmx-traits",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-rpc-gen"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "pilota",
  "volo",
@@ -1299,10 +1299,10 @@ dependencies = [
 
 [[package]]
 name = "cmx-runtime"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-traits",
  "cmx-utils",
  "extism",
@@ -1317,11 +1317,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-service"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-debug",
  "cmx-runtime",
@@ -1341,7 +1341,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-storage"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1349,7 +1349,7 @@ dependencies = [
  "bytes",
  "chrono",
  "cmx-api-types",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-utils",
  "dashmap",
@@ -1374,11 +1374,11 @@ dependencies = [
 
 [[package]]
 name = "cmx-traits"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "extism",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.149",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-utils"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -8214,7 +8214,7 @@ dependencies = [
 
 [[package]]
 name = "web-server"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "axum",
@@ -8224,7 +8224,7 @@ dependencies = [
  "cmx-auth",
  "cmx-biz",
  "cmx-buffer",
- "cmx-core 0.1.10",
+ "cmx-core 0.1.11",
  "cmx-database",
  "cmx-debug",
  "cmx-iam",
