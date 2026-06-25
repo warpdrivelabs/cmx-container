@@ -514,7 +514,7 @@ impl PermissionServiceImpl {
             definitions.iter().filter(|d| !db_codes.contains(&d.code)).collect();
         let to_update: Vec<&PermissionDefinition> =
             definitions.iter().filter(|d| db_codes.contains(&d.code)).collect();
-        let to_delete: Vec<String> = db_codes.difference(&file_codes).cloned().collect();
+        // let to_delete: Vec<String> = db_codes.difference(&file_codes).cloned().collect();
 
         // 3. 第一阶段：INSERT/UPDATE（parent_id 暂置 NULL）
         let mut code_to_id: HashMap<String, String> = db_map.clone();
@@ -628,48 +628,51 @@ impl PermissionServiceImpl {
 
         // 5. 删除前查询受影响角色（用于缓存失效）
         // 同时收集被更新的权限 ID，因为更新也可能影响缓存（name/status/parent_id 变更）
-        let to_delete_ids: Vec<String> = to_delete
-            .iter()
-            .filter_map(|c| db_map.get(c).cloned())
-            .collect();
+        // let to_delete_ids: Vec<String> = to_delete
+        //     .iter()
+        //     .filter_map(|c| db_map.get(c).cloned())
+        //     .collect();
         let to_update_ids: Vec<String> = to_update
             .iter()
             .filter_map(|d| db_map.get(&d.code).cloned())
             .collect();
-        let mut affected_ids = to_delete_ids.clone();
-        affected_ids.extend(to_update_ids);
+        // let mut affected_ids = to_delete_ids.clone();
+        let mut affected_ids = to_update_ids.clone();
+        // affected_ids.extend(to_update_ids);
         let affected_roles = self.query_affected_roles_txn(txn_id, &affected_ids).await?;
 
-        // 5.1 物理删除权限 + 物理删除角色关联（按 id 定位）
         let mut deleted_count = 0u32;
-        for code in &to_delete {
-            let id = db_map
-                .get(code)
-                .ok_or_else(|| TraitError::Business(format!("删除权限时找不到 id: {code}")))?;
-            let del_perm_sql = "DELETE FROM cmx_permission WHERE id = $1";
-            let del_perm_params = vec![DataValue::String(id.clone())];
-            let rows = self.mm
-                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_perm_sql, del_perm_params)
-                .await
-                .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("删除权限失败 (id={id}): {e}")))
-                })?;
-
-            // 仅在实际删除行时计数和清理角色关联
-            if rows > 0 {
-                deleted_count += 1;
-                let del_rp_sql = "DELETE FROM cmx_role_permission WHERE permission_id = $1";
-                let del_rp_params = vec![DataValue::String(id.clone())];
-                self.mm
-                    .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, del_rp_params)
-                    .await
-                    .map_err(|e| {
-                        TraitError::from(IamError::Business(format!(
-                            "删除角色权限关联失败 (permission_id={id}): {e}"
-                        )))
-                    })?;
-            }
-        }
+        
+        // 5.1 物理删除权限 + 物理删除角色关联（按 id 定位）
+        // let mut deleted_count = 0u32;
+        // for code in &to_delete {
+        //     let id = db_map
+        //         .get(code)
+        //         .ok_or_else(|| TraitError::Business(format!("删除权限时找不到 id: {code}")))?;
+        //     let del_perm_sql = "DELETE FROM cmx_permission WHERE id = $1";
+        //     let del_perm_params = vec![DataValue::String(id.clone())];
+        //     let rows = self.mm
+        //         .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_perm_sql, del_perm_params)
+        //         .await
+        //         .map_err(|e| {
+        //             TraitError::from(IamError::Business(format!("删除权限失败 (id={id}): {e}")))
+        //         })?;
+        //
+        //     // 仅在实际删除行时计数和清理角色关联
+        //     if rows > 0 {
+        //         deleted_count += 1;
+        //         let del_rp_sql = "DELETE FROM cmx_role_permission WHERE permission_id = $1";
+        //         let del_rp_params = vec![DataValue::String(id.clone())];
+        //         self.mm
+        //             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, del_rp_params)
+        //             .await
+        //             .map_err(|e| {
+        //                 TraitError::from(IamError::Business(format!(
+        //                     "删除角色权限关联失败 (permission_id={id}): {e}"
+        //                 )))
+        //             })?;
+        //     }
+        // }
 
         // 6. 提交事务
         guard
@@ -705,10 +708,10 @@ impl PermissionServiceImpl {
             "module_code": module_code,
             "created": created_count,
             "updated": updated_count,
-            "deleted": deleted_count,
+            // "deleted": deleted_count,
             "created_codes": to_create.iter().map(|d| d.code.clone()).collect::<Vec<_>>(),
             "updated_codes": to_update.iter().map(|d| d.code.clone()).collect::<Vec<_>>(),
-            "deleted_codes": to_delete,
+            // "deleted_codes": to_delete,
         });
         self.audit_write(
             svr_ctx,
@@ -720,7 +723,8 @@ impl PermissionServiceImpl {
         .await;
 
         // 8. 精准缓存失效（删除或更新都会影响权限树，需失效受影响角色）
-        if (deleted_count > 0 || updated_count > 0)
+        // if (deleted_count > 0 || updated_count > 0)
+        if  updated_count > 0
             && !affected_roles.is_empty()
             && let Some(ref checker) = self.iam_checker
         {
@@ -733,15 +737,19 @@ impl PermissionServiceImpl {
             target: "cmx_iam_import",
             created = created_count,
             updated = updated_count,
-            deleted = deleted_count,
+            // deleted = deleted_count,
             "权限导入完成"
         );
 
         Ok(PluginDataImportResult {
             success: true,
+            // message: format!(
+            //     "导入完成: 新增 {} / 更新 {} / 删除 {}",
+            //     created_count, updated_count, deleted_count
+            // ),
             message: format!(
-                "导入完成: 新增 {} / 更新 {} / 删除 {}",
-                created_count, updated_count, deleted_count
+                "导入完成: 新增 {} / 更新 {} ",
+                created_count, updated_count
             ),
             created_count,
             updated_count,

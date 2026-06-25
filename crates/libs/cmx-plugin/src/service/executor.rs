@@ -335,34 +335,34 @@ impl PluginOperationExecutor {
         // 1. 持久化：事务内删除数据库记录，提交后删除物理文件
         let persist_result = self.persistence.uninstall_persist(request).await?;
 
-        // 1.5 中心数据清理：并行通知各中心清理关联数据
-        let ctx = DispatchContext {
-            install_path: persist_result.install_path.clone(),
-            plugin_id: persist_result.plugin_id.clone(),
-            app_id: persist_result.app_id.clone(),
-            version: persist_result.version.clone(),
-            domain_code: persist_result.domain_code.clone(),
-            application_code: persist_result.application_code.clone(),
-            module_code: persist_result.module_code.clone(),
-        };
-        let dispatch_result = self.center_dispatcher.dispatch_cleanup(&ctx).await?;
-        if !dispatch_result.is_all_success() {
-            let failures: Vec<String> = dispatch_result
-                .failed_categories()
-                .iter()
-                .map(|r| {
-                    format!(
-                        "{}: {}",
-                        r.category.center_name(),
-                        match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-                    )
-                })
-                .collect();
-            return Err(crate::error::PluginError::CenterData(format!(
-                "中心数据清理失败（DB 已清理但中心数据残留）: {}",
-                failures.join(", ")
-            )));
-        }
+        // 1.5 中心数据清理：并行通知各中心清理关联数据 fixme yqs 暂时不允许清理数据库数据
+        // let ctx = DispatchContext {
+        //     install_path: persist_result.install_path.clone(),
+        //     plugin_id: persist_result.plugin_id.clone(),
+        //     app_id: persist_result.app_id.clone(),
+        //     version: persist_result.version.clone(),
+        //     domain_code: persist_result.domain_code.clone(),
+        //     application_code: persist_result.application_code.clone(),
+        //     module_code: persist_result.module_code.clone(),
+        // };
+        // let dispatch_result = self.center_dispatcher.dispatch_cleanup(&ctx).await?;
+        // if !dispatch_result.is_all_success() {
+        //     let failures: Vec<String> = dispatch_result
+        //         .failed_categories()
+        //         .iter()
+        //         .map(|r| {
+        //             format!(
+        //                 "{}: {}",
+        //                 r.category.center_name(),
+        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
+        //             )
+        //         })
+        //         .collect();
+        //     return Err(crate::error::PluginError::CenterData(format!(
+        //         "中心数据清理失败（DB 已清理但中心数据残留）: {}",
+        //         failures.join(", ")
+        //     )));
+        // }
 
         // 2. 运行时注销：从 Registry + Contexts + Cache 中移除
         self.runtime.unregister_plugin(&persist_result.plugin_id).await?;
