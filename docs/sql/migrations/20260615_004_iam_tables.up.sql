@@ -161,7 +161,7 @@ CREATE TABLE cmx_permission
     id            VARCHAR(64)  NOT NULL,
     code          VARCHAR(200) NOT NULL,
     name          VARCHAR(100) NOT NULL,
-    resource_type VARCHAR(20) DEFAULT '',
+    resource_type VARCHAR(20) DEFAULT 'api',
     parent_id     VARCHAR(64),
     sort_order    INT4      DEFAULT 0,
     description   VARCHAR(500),
@@ -169,6 +169,10 @@ CREATE TABLE cmx_permission
     app_code      VARCHAR(100),
     module_code   VARCHAR(100),
     extension     TEXT,
+    parent_code    VARCHAR(200),                   -- 父权限 code（根为 NULL）
+    full_code_path VARCHAR(1000) NOT NULL,         -- code 全路径，如 /user:list/user:delete
+    is_leaf        INT4      DEFAULT 1,            -- 1 叶子 / 0 非叶子
+    level          INT4      DEFAULT 1,            -- 层级深度，根=1
     status        INT4      DEFAULT 1,
     archived      INT4      DEFAULT 0,
     create_time   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -203,6 +207,8 @@ COMMENT ON COLUMN cmx_permission.update_name IS '更新人姓名';
 
 CREATE UNIQUE INDEX uk_cmx_permission_code ON cmx_permission (code);
 CREATE INDEX idx_cmx_permission_parent ON cmx_permission (parent_id);
+CREATE INDEX idx_cmx_permission_full_path ON cmx_permission (full_code_path);
+CREATE INDEX idx_cmx_permission_parent_code ON cmx_permission (parent_code);
 CREATE INDEX idx_cmx_permission_domain_code ON cmx_permission (domain_code);
 CREATE INDEX idx_cmx_permission_app_code ON cmx_permission (app_code);
 CREATE INDEX idx_cmx_permission_module_code ON cmx_permission (module_code);
