@@ -258,7 +258,7 @@ pub async fn list_api_keys(
     Ok(Json(ApiResp::ok(items)))
 }
 
-/// 删除 API Key（软删除）
+/// 删除 API Key
 #[utoipa::path(
     post,
     path = "/api/auth/api-keys/delete",
