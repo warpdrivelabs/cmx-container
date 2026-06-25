@@ -1970,3 +1970,199 @@ impl ApplicationService {
 | 落地代码 | Entity / Filter 结构体定义 | Service 调用 + Handler 路由 |
 | 是否需要对方 | 总是被 axum-handler 调用 | 调用 modql 设计 Filter |
 | 触发关键词 | "Filter" "OpVals" "Fields" "ListOptions" "分页" | "handler" "axum" "utoipa" "路由" |
+
+---
+
+## 十六、与 cmx-sql-execution 技能的协同（**必读**）
+
+> 本章节是 axum-handler-generator 与 cmx-sql-execution 两个技能的**桥梁**。
+> **强烈建议**：在编写任何涉及「手写 SQL 执行 / DataValue 参数构造 / 动态 UPDATE」的 Service 层代码前，**先调 cmx-sql-execution 技能获取参数构造与 API 选择指导**，再回到本技能完成 handler 集成。
+
+### 16.1 为什么需要协同 cmx-sql-execution
+
+axum-handler-generator 关注 **HTTP 协议层**（axum handler / utoipa 注解 / 路由注册）。
+cmx-sql-execution 关注 **SQL 执行层**（DatabaseManager API 选择 / DataValue 参数构造 / ParamsBuilder / 带类型 NULL / 事务）。
+
+Service 层是两者**唯一强耦合**的地方：
+- handler 调用 Service 方法，Service 内部执行 SQL
+- Service 的 SQL 参数构造方式（`Vec<DataValue>` / `dv!` 宏 / `From<Option<T>>` / `ParamsBuilder`）由 cmx-sql-execution 规范
+- Service 调用的 DatabaseManager 方法（`execute_sql_with_datavalues` / `query_sql_with_datavalues` 等）由 cmx-sql-execution 指导选择
+- NULL 类型处理（`NullTyped` vs `Null`）由 cmx-sql-execution 规范
+
+**没有 cmx-sql-execution，axum-handler-generator 的 Service 层 SQL 代码容易写出 NULL 类型丢失、占位符漂移、参数构造冗长等问题**。
+
+### 16.2 触发场景：什么时候必须先调 cmx-sql-execution
+
+遇到以下任意**一个**场景时，**必须**先 `Use Skill: cmx-sql-execution`：
+
+| 场景 | 关键词 | 调 cmx-sql-execution 解决的问题 |
+|------|--------|------------------------------|
+| 在 Service 层**手写 SQL 并执行** | "execute_sql" "query_sql" "raw sql" | API 选择（datavalues vs json vs typed）、参数构造、结果提取 |
+| 构造 `Vec<DataValue>` 参数 | "DataValue" "params" "参数构造" | dv! 宏、From<Option<T>> 糖、NullTyped |
+| 构建动态 UPDATE SET 子句 | "动态 UPDATE" "set 子句" "条件更新" | ParamsBuilder 自动管理占位符编号 |
+| 处理 NULL 绑定到非字符串列 | "NULL 类型" "NullTyped" "prepare 失败" | SqlTypeMarker + NullTyped 正确绑定 |
+| 在事务中执行多条 SQL | "事务" "txn_id" "transaction" | 事务 API、txn_id 传递规范 |
+| 从 DataSet 提取查询结果 | "DataSet" "提取结果" "反序列化" | row 遍历、to_json_value、get_by_name_as |
+| 编写涉及 Option 字段的 INSERT/UPDATE | "Option" "可空字段" "None" | From<Option<T>> 自动产生 NullTyped(带类型) |
+| WASM plugin 传带类型参数 | "data_values" "wasm sql" "DbRequest" | data_values 优先于 params JSON |
+
+**反例：什么时候**不要**调 cmx-sql-execution**：
+- 仅写 handler 薄层（接收 HTTP → 调 Service → 返回响应），不涉及 SQL
+- 使用 GenericCrudService 标准 CRUD（已封装好 SQL，无需手写）
+- 使用 modql + sea-query 构建查询（调 modql 技能即可）
+- 编写 DDL / migrations SQL 文件（调 sql-guide 技能）
+
+### 16.3 衔接点：cmx-sql-execution 在 axum-handler 工作流中的位置
+
+```
+[Step 1: 调 axum-handler] 设计 handler 签名 + 路由
+    │
+    ├─ axum-handler 输出：handler 函数 + utoipa 注解 + 路由注册
+    │
+    ▼
+[Step 2: 调 axum-handler] 设计 Service trait 签名
+    │
+    ├─ axum-handler 输出：XxxService::create/update/delete 方法签名
+    │
+    ▼
+[Step 3: 调 cmx-sql-execution] 实现 Service 内部 SQL 逻辑  ★
+    │
+    ├─ cmx-sql-execution 输出：
+    │   ├─ API 选择：execute_sql_with_datavalues / query_sql_with_datavalues
+    │   ├─ 参数构造：dv! 宏 / .into() 糖 / ParamsBuilder
+    │   ├─ NULL 处理：From<Option<T>> 自动 NullTyped
+    │   └─ 事务模式：txn_id 传递
+    │
+    ▼
+[Step 4: 回 axum-handler] handler 调用 Service
+    │
+    └─ axum-handler 输出：handler 内 XxxService::create(mm, db_id, data).await
+```
+
+### 16.4 核心协同点（按代码出现顺序）
+
+| 协同点 | 出现位置 | 调 cmx-sql-execution 的目的 | 关键 API |
+|--------|---------|---------------------------|---------|
+| **1. Service 内 SQL 执行** | `<业务 crate>/src/<module>/service.rs` | 选择正确的 DatabaseManager 方法 | `execute_sql_with_datavalues` / `query_sql_with_datavalues` |
+| **2. 参数构造** | Service 内 | 用 dv! 宏或 .into() 糖简化 params 构造 | `dv![...]` / `From<Option<T>>` |
+| **3. 动态 UPDATE** | Service 内 update 方法 | 用 ParamsBuilder 替换手动占位符管理 | `ParamsBuilder::new(0).set_opt(...).build()` |
+| **4. NULL 类型处理** | Service 内 | 确保非字符串列的 NULL 带类型 | `NullTyped(SqlTypeMarker::Int)` |
+| **5. 事务内执行** | Service 内多步操作 | 正确传递 txn_id | `txn_id: Some(&txn_id)` |
+
+### 16.5 标准调用流程（端到端示例）
+
+> 场景：为一个新实体 `XxxEntity` 实现 create + update handler，Service 层需要手写 SQL。
+
+#### Step 1：调 axum-handler-generator 设计 handler
+
+```
+Use Skill: axum-handler-generator
+```
+
+**输出**：handler 函数 + 路由注册
+```rust
+#[utoipa::path(post, path = "/api/xxx/create", ...)]
+pub async fn xxx_create(
+    State(state): State<CmxAppState>,
+    Json(data): Json<XxxForCreate>,
+) -> Result<Json<ApiResp<XxxEntity>>> {
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+    let result = XxxService::create(mm, &db_id, data).await?;
+    Ok(Json(ApiResp::ok(result)))
+}
+```
+
+#### Step 2：调 axum-handler-generator 设计 Service 签名
+
+```rust
+impl XxxService {
+    pub async fn create(mm: &DatabaseManager, db_id: &str, data: XxxForCreate) -> Result<XxxEntity, TraitError> {
+        // 内部实现需要手写 SQL → 进入 Step 3
+    }
+}
+```
+
+#### Step 3：调 cmx-sql-execution 实现 SQL 逻辑 ★
+
+```
+Use Skill: cmx-sql-execution
+```
+
+**关键提问**：
+- "我要实现一个 INSERT，参数含 Option<String> 和 Option<i64>，应该用什么 API？"
+- "DataValue 参数怎么构造？Option 字段怎么处理？"
+- "如何在事务中执行？"
+
+**cmx-sql-execution 输出**：
+```rust
+use cmx_core::model::cell::DataValue;
+
+impl XxxService {
+    pub async fn create(mm: &DatabaseManager, db_id: &str, data: XxxForCreate) -> Result<XxxEntity, TraitError> {
+        let id = cmx_utils::id::snowflake_id_str();
+        let sql = "INSERT INTO cmx_xxx (id, name, sort_order, description) VALUES ($1, $2, $3, $4)";
+
+        // ★ cmx-sql-execution 规范：.into() 糖 + execute_sql_with_datavalues
+        let params: Vec<DataValue> = vec![
+            DataValue::String(id.clone()),
+            DataValue::String(data.name),
+            data.sort_order.unwrap_or(0).into(),  // 保留 None→0 语义
+            data.description.into(),               // Option<String> → Null
+        ];
+
+        mm.execute_sql_with_datavalues(db_id, None, sql, params).await?;
+
+        // 查询返回
+        let sql = "SELECT * FROM cmx_xxx WHERE id = $1";
+        let ds = mm.query_sql_with_datavalues(db_id, None, sql, vec![DataValue::String(id)], "xxx").await?;
+        // ... 提取结果
+    }
+}
+```
+
+#### Step 4（动态 UPDATE）：再调 cmx-sql-execution 获取 ParamsBuilder 指导
+
+> 涉及动态 UPDATE 时：
+>
+> ```
+> Use Skill: cmx-sql-execution
+> ```
+>
+> 关键提问：
+> - "update 方法有多个 Option 字段，怎么构建动态 SET 子句？"
+> - "ParamsBuilder 怎么用？占位符怎么编号？"
+>
+> cmx-sql-execution 输出：使用 ParamsBuilder::new(0).set_opt(...).build()
+
+### 16.6 反例：什么时候**不要**先调 cmx-sql-execution
+
+| 场景 | 原因 |
+|------|------|
+| 仅写 handler 薄层（不涉及 SQL） | handler 只做协议转换，SQL 在 Service 层 |
+| 使用 GenericCrudService 标准 CRUD | 已封装好 SQL，调 axum-handler-generator 即可 |
+| 使用 modql + sea-query 构建查询 | 调 modql 技能，不走 raw SQL 路径 |
+| 编写 DDL / migrations SQL 文件 | 调 sql-guide 技能 |
+| 写 OpenAPI 文档注解 | utoipa 相关，与 SQL 执行无关 |
+
+### 16.7 协同检查清单
+
+在编写 Service 层 SQL 代码前，**按顺序自检**：
+
+- [ ] **Step 1**：是否需要手写 SQL？若是 GenericCrudService 能覆盖的 → 不调 cmx-sql-execution
+- [ ] **Step 2**：是否选择了 `execute_sql_with_datavalues`（而非旧的 `with_json`）？
+- [ ] **Step 3**：参数中含 Option<T> 时是否用 `.into()` 糖（而非 `.map().unwrap_or()`）？
+- [ ] **Step 4**：整型/时间/Uuid 的 None 是否走 NullTyped（自动，通过 From<Option<T>>）？
+- [ ] **Step 5**：动态 UPDATE 是否用 ParamsBuilder（而非手动 idx 管理）？
+- [ ] **Step 6**：None→0 vs None→NULL 语义是否逐处核对？
+- [ ] **Step 7**：事务内执行是否正确传递 `txn_id: Some(&txn_id)`？
+
+### 16.8 两个技能的关系总结
+
+| 维度 | cmx-sql-execution 技能 | axum-handler-generator 技能 |
+|------|----------------------|----------------------------|
+| 关注点 | **SQL 执行层**：DatabaseManager API / DataValue / ParamsBuilder / NullTyped | **HTTP 协议层**：axum handler / utoipa / 路由 |
+| 解决的问题 | 怎么执行 SQL、怎么构造参数、怎么处理 NULL 类型 | 怎么接收 HTTP 请求、怎么返回响应 |
+| 落地代码 | Service 内部 SQL 执行逻辑 | handler 函数 + 路由注册 |
+| 是否需要对方 | 被 axum-handler 的 Service 层调用 | 调用 cmx-sql-execution 实现 Service SQL |
+| 触发关键词 | "execute_sql" "DataValue" "params" "ParamsBuilder" "NullTyped" | "handler" "axum" "utoipa" "路由" |
