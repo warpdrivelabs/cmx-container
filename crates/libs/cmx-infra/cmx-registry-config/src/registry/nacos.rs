@@ -18,12 +18,12 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
 
-use crate::config::NacosNamingConfig;
+use crate::config_model::NacosNamingConfig;
 use crate::error::RegistryError;
 use crate::utils::write_lock;
 
 use super::instance_cache::ServiceInstanceCache;
-use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
+use super::registry_traits::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 
 /// Nacos 服务实例变更监听器。
 ///
@@ -36,25 +36,32 @@ struct NacosInstanceListener {
 
 impl NamingEventListener for NacosInstanceListener {
     fn event(&self, event: Arc<NamingChangeEvent>) {
-        let total = event.instances.as_ref().map(|v| v.len()).unwrap_or(0);
-        let instances: Vec<ServiceInstance> = event
-            .instances
-            .as_ref()
-            .map(|v| {
-                v.iter()
-                    .filter(|i| i.healthy)
-                    .filter_map(convert_from_nacos_instance)
-                    .collect()
-            })
-            .unwrap_or_default();
-        let healthy = instances.len();
-        self.cache.update(&self.service_name, instances);
-        info!(
-            service_name = %self.service_name,
-            total = total,
-            healthy = healthy,
-            "服务实例变更，缓存已更新"
-        );
+        let cache = self.cache.clone();
+        let service_name = self.service_name.clone();
+        // 异步处理变更事件，避免阻塞 nacos-sdk 通知线程。
+        // 实例转换和缓存更新（含订阅者回调）可能耗时，放入 tokio task 执行。
+        // nacos-sdk 基于 tokio，其回调运行在 tokio 运行时上下文中，可安全 spawn。
+        tokio::spawn(async move {
+            let total = event.instances.as_ref().map(|v| v.len()).unwrap_or(0);
+            let instances: Vec<ServiceInstance> = event
+                .instances
+                .as_ref()
+                .map(|v| {
+                    v.iter()
+                        .filter(|i| i.healthy)
+                        .filter_map(convert_from_nacos_instance)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let healthy = instances.len();
+            cache.update(&service_name, instances);
+            info!(
+                service_name = %service_name,
+                total = total,
+                healthy = healthy,
+                "服务实例变更，缓存已更新"
+            );
+        });
     }
 }
 
@@ -214,7 +221,7 @@ impl ServiceRegistry for NacosRegistry {
     ) -> Result<Vec<ServiceInstance>, RegistryError> {
         if group_name.is_none() {
             //nacos 默认组名为 DEFAULT_GROUP
-            group_name = Some(crate::config::DEFAULT_GROUP);
+            group_name = Some(crate::config_model::DEFAULT_GROUP);
         }
 
         let result = self

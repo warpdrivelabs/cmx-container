@@ -9,7 +9,10 @@ use std::{collections::HashMap, sync::Arc};
 use crate::error::RegistryError;
 
 /// 服务实例变更回调类型。
-pub type InstanceChangeCallback = Arc<dyn Fn(&str, &[ServiceInstance]) + Send + Sync>;
+///
+/// 使用 owned 类型（`String`、`Vec<ServiceInstance>`）作为参数，
+/// 便于调用方在异步上下文中跨 `await` 传递，避免引用生命周期约束。
+pub type InstanceChangeCallback = Arc<dyn Fn(String, Vec<ServiceInstance>) + Send + Sync>;
 
 /// 服务实例信息。
 ///

@@ -10,7 +10,7 @@ use std::{
 
 use tracing::{debug, info};
 
-use super::trait_rs::{InstanceChangeCallback, ServiceInstance};
+use super::registry_traits::{InstanceChangeCallback, ServiceInstance};
 use crate::error::RegistryError;
 use crate::utils::{read_lock, write_lock};
 
@@ -78,7 +78,7 @@ impl ServiceInstanceCache {
         };
 
         for cb in &subscribers_snapshot {
-            cb(service_name, &instances);
+            cb(service_name.to_string(), instances.clone());
         }
     }
 
@@ -93,6 +93,32 @@ impl ServiceInstanceCache {
             .entry(service_name.to_string())
             .or_default()
             .push(callback);
+    }
+
+    /// 移除指定服务的缓存项。
+    ///
+    /// 与 [`update`](Self::update) 不同，`invalidate` 是显式移除缓存项，
+    /// **不通知订阅者**（因为这不是实例变更，而是缓存清理）。
+    /// 适用于服务下线后避免 HashMap 中积累空 `Vec` 的 key，防止长期运行内存泄漏。
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - 要移除的服务名。
+    ///
+    /// # Returns
+    ///
+    /// 返回被移除的实例列表（若存在）。
+    pub fn invalidate(&self, service_name: &str) -> Option<Vec<ServiceInstance>> {
+        debug!(service_name = %service_name, "缓存项移除");
+        write_lock(&self.cached).remove(service_name)
+    }
+
+    /// 清空所有缓存项。
+    ///
+    /// 同样不通知订阅者。适用于测试场景或全局重置。
+    pub fn clear(&self) {
+        debug!("清空所有缓存项");
+        write_lock(&self.cached).clear();
     }
 }
 

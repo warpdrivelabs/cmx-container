@@ -11,7 +11,7 @@ use tokio::time::interval;
 use tracing::{debug, info, warn, instrument};
 
 use super::instance_cache::ServiceInstanceCache;
-use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
+use super::registry_traits::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 use crate::utils::{read_lock, write_lock};
 
 /// 服务列表定时同步器。
@@ -93,7 +93,7 @@ impl ServiceListSyncer {
 
             for svc in new_services {
                 let callback: InstanceChangeCallback =
-                    Arc::new(|_svc: &str, _instances: &[ServiceInstance]| {});
+                    Arc::new(|_svc: String, _instances: Vec<ServiceInstance>| {});
                 match self.registry.subscribe_instances(svc, callback).await {
                     Ok(()) => {
                         write_lock(&self.subscribed_services).insert(svc.clone());

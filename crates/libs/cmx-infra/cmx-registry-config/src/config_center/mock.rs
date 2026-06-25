@@ -12,7 +12,7 @@ use tracing::info;
 use crate::error::ConfigCenterError;
 use crate::utils::{read_lock, write_lock};
 
-use super::trait_rs::{ConfigCenter, ConfigChangeCallback};
+use super::config_traits::{ConfigCenter, ConfigChangeCallback};
 
 /// Mock 配置中心。
 ///
@@ -64,12 +64,25 @@ impl MockConfigCenter {
     /// * `data_id` - 配置标识。
     /// * `group` - 配置分组。
     /// * `new_content` - 新的配置内容，将作为参数传入回调。
+    ///
+    /// # 实现说明
+    ///
+    /// 采用 clone-snapshot 模式：先 clone 出匹配的回调列表再释放锁，最后调用回调。
+    /// 这样回调内部可以安全地操作 `listeners`（如动态注册新监听器），避免死锁。
+    /// 与 `ServiceInstanceCache::update` 保持一致的代码风格。
     pub fn simulate_change(&self, data_id: &str, group: &str, new_content: &str) {
-        let listeners = read_lock(&self.listeners);
-        for (did, grp, callback) in listeners.iter() {
-            if did == data_id && grp == group {
-                callback(new_content);
-            }
+        // 先 clone 出匹配的回调列表，释放锁后再调用。
+        let callbacks: Vec<ConfigChangeCallback> = {
+            let listeners = read_lock(&self.listeners);
+            listeners
+                .iter()
+                .filter(|(did, grp, _)| did == data_id && grp == group)
+                .map(|(_, _, cb)| cb.clone())
+                .collect()
+        };
+
+        for callback in &callbacks {
+            callback(new_content);
         }
     }
 }

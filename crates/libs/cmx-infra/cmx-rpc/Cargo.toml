@@ -14,6 +14,8 @@ cmx-biz = { workspace = true }
 cmx-rpc-gen = { workspace = true }
 # 内部依赖 - 注册中心与配置中心
 cmx-registry-config = { workspace = true }
+# 内部依赖 - 通用工具库（sync_utils 等）
+cmx-utils = { workspace = true }
 # gRPC 框架
 volo-grpc = { workspace = true }
 # RPC 框架

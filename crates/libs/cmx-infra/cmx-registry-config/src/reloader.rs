@@ -14,8 +14,10 @@
 //! 详细机制说明参见 `docs/配置变更事件订阅发布机制.md`。
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use cmx_utils::{ConfigBuilder, ConfigManager};
+use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::config_source::RemoteConfigSource;
@@ -25,9 +27,17 @@ use crate::error::ConfigCenterError;
 ///
 /// 注册到 `GlobalChangeNotifier` 后，当远程配置变更时自动执行热更新。
 /// 持有本地配置文件路径（可选），用于 reload 时保持与启动时一致的合并策略。
+///
+/// # 并发互斥
+///
+/// 内部使用 `tokio::sync::Mutex` 串行化 reload 执行，避免配置变更频繁时
+/// 多个 reload task 并发执行导致 `changed_keys` 漏报（基于过期 old_config 计算 diff）。
+/// `reload` 保持为 `async fn`，内部调用同步实现 `reload_inner`。
 pub struct ConfigReloader {
     /// 本地 TOML 配置文件路径，用于 reload 时合并。
     config_file_path: Option<String>,
+    /// reload 串行化锁，确保同一时刻只有一个 reload task 在执行。
+    reload_lock: Arc<Mutex<()>>,
 }
 
 impl ConfigReloader {
@@ -42,13 +52,16 @@ impl ConfigReloader {
     ///
     /// 返回新的 `ConfigReloader` 实例。
     pub fn new(config_file_path: Option<String>) -> Self {
-        Self { config_file_path }
+        Self {
+            config_file_path,
+            reload_lock: Arc::new(Mutex::new(())),
+        }
     }
 
-    /// 执行配置重载。
+    /// 执行配置重载（异步入口，串行化）。
     ///
-    /// 解析新的远程配置内容，与本地配置文件和环境变量合并后，
-    /// 原子替换全局配置。失败时保留旧配置，不影响服务运行。
+    /// 通过 `tokio::sync::Mutex` 串行化 reload 执行，避免并发引发的 changed_keys 漏报。
+    /// 实际的同步 reload 逻辑在 [`reload_inner`] 中实现。
     ///
     /// # Arguments
     ///
@@ -62,8 +75,25 @@ impl ConfigReloader {
     /// # Errors
     ///
     /// * `ConfigCenterError::ParseFailed` - 本地配置加载、TOML 解析或 config-rs 构建失败。
-    /// * `ConfigCenterError::ParseFailed` - 全局配置替换失败（`ConfigManager::reload()`）。
-    pub fn reload(&self, new_content: &str) -> Result<Vec<String>, ConfigCenterError> {
+    /// * `ConfigCenterError::ReloadFailed` - 全局配置替换失败（`ConfigManager::reload()`）。
+    pub async fn reload(&self, new_content: &str) -> Result<Vec<String>, ConfigCenterError> {
+        let _guard = self.reload_lock.lock().await;
+        self.reload_inner(new_content)
+    }
+
+    /// 执行配置重载（同步实现）。
+    ///
+    /// 解析新的远程配置内容，与本地配置文件和环境变量合并后，
+    /// 原子替换全局配置。失败时保留旧配置，不影响服务运行。
+    ///
+    /// 该函数保持同步实现，因为整个流程都是同步 CPU 密集操作：
+    /// TOML 解析、`HashSet` diff 计算、`ConfigManager::reload()` 原子替换。
+    /// 调用方应在 `tokio::spawn` 中调用 [`reload`]，避免阻塞 Nacos 监听线程。
+    ///
+    /// # Arguments
+    ///
+    /// * `new_content` - 新的远程 TOML 配置内容。
+    fn reload_inner(&self, new_content: &str) -> Result<Vec<String>, ConfigCenterError> {
         // 1. 记录旧配置的 key 集合，用于后续 diff 计算。
         let old_config = ConfigManager::global();
         let old_keys: HashSet<String> = old_config.keys().collect();

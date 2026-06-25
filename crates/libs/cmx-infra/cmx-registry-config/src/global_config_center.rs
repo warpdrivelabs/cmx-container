@@ -14,18 +14,7 @@
 use std::sync::{Arc, OnceLock};
 
 use crate::config_center::ConfigCenter;
-
-/// 全局配置中心错误类型。
-///
-/// 用于 `set` 操作的失败情形（如重复初始化），包含人类可读的错误描述。
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-#[error("{0}")]
-pub struct GlobalConfigCenterError(&'static str);
-
-impl GlobalConfigCenterError {
-    /// 表示配置中心已被设置过，重复设置会触发该错误。
-    pub const ALREADY_SET: Self = GlobalConfigCenterError("配置中心已初始化，无法重复设置");
-}
+use crate::error::GlobalStorageError;
 
 /// 全局配置中心存储器。
 ///
@@ -48,11 +37,11 @@ impl GlobalConfigCenter {
     /// # Returns
     ///
     /// * `Ok(())` - 首次设置成功。
-    /// * `Err(GlobalConfigCenterError::ALREADY_SET)` - 已被设置过。
-    pub fn set(config_center: Arc<dyn ConfigCenter>) -> Result<(), GlobalConfigCenterError> {
+    /// * `Err(GlobalStorageError::ALREADY_SET)` - 已被设置过。
+    pub fn set(config_center: Arc<dyn ConfigCenter>) -> Result<(), GlobalStorageError> {
         CONFIG_CENTER
             .set(config_center)
-            .map_err(|_| GlobalConfigCenterError::ALREADY_SET)
+            .map_err(|_| GlobalStorageError::ALREADY_SET)
     }
 
     /// 获取全局配置中心实例。

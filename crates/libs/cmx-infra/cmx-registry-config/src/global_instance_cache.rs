@@ -6,17 +6,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use crate::error::GlobalStorageError;
 use crate::registry::ServiceInstanceCache;
-
-/// 全局服务实例缓存错误类型。
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-#[error("{0}")]
-pub struct GlobalInstanceCacheError(&'static str);
-
-impl GlobalInstanceCacheError {
-    /// 表示缓存已被设置过，重复设置会触发该错误。
-    pub const ALREADY_SET: Self = GlobalInstanceCacheError("GlobalServiceInstanceCache 已初始化，无法重复设置");
-}
 
 /// 全局服务实例缓存存储器。
 ///
@@ -35,13 +26,13 @@ impl GlobalServiceInstanceCache {
     /// # Returns
     ///
     /// * `Ok(())` - 首次设置成功。
-    /// * `Err(GlobalInstanceCacheError::ALREADY_SET)` - 已被设置过。
-    pub fn set(cache: Arc<ServiceInstanceCache>) -> Result<(), GlobalInstanceCacheError> {
+    /// * `Err(GlobalStorageError::ALREADY_SET)` - 已被设置过。
+    pub fn set(cache: Arc<ServiceInstanceCache>) -> Result<(), GlobalStorageError> {
         CACHE
             .set(cache)
             .map_err(|_| {
                 tracing::warn!("GlobalServiceInstanceCache 重复初始化被拒绝");
-                GlobalInstanceCacheError::ALREADY_SET
+                GlobalStorageError::ALREADY_SET
             })?;
         tracing::info!("GlobalServiceInstanceCache 初始化完成");
         Ok(())

@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::config::RegistryConfig;
+use crate::config_model::RegistryConfig;
 use crate::config_center::{ConfigCenter, MockConfigCenter};
 use crate::notifier::{ChangeNotifier, ConfigChangeEvent};
 use crate::registry::{MockRegistry, ServiceInstance, ServiceInstanceCache, ServiceRegistry};
@@ -185,9 +185,9 @@ async fn instance_cache_update_triggers_subscriber() {
 
     cache.subscribe(
         "svc-a",
-        Arc::new(move |_name, instances: &[ServiceInstance]| {
+        Arc::new(move |_name, instances: Vec<ServiceInstance>| {
             let mut guard = received_clone.lock().unwrap();
-            guard.extend(instances.iter().cloned());
+            guard.extend(instances);
         }),
     );
 

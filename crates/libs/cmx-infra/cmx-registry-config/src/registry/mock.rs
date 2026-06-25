@@ -12,7 +12,7 @@ use crate::error::RegistryError;
 use crate::utils::{read_lock, write_lock};
 
 use super::instance_cache::ServiceInstanceCache;
-use super::trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
+use super::registry_traits::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 
 /// Mock 注册中心。
 ///

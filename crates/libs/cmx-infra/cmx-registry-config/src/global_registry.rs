@@ -13,19 +13,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use crate::error::GlobalStorageError;
 use crate::registry::ServiceRegistry;
-
-/// 全局服务注册中心错误类型。
-///
-/// 用于 `set` 操作的失败情形（如重复初始化），包含人类可读的错误描述。
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-#[error("{0}")]
-pub struct GlobalServiceRegistryError(&'static str);
-
-impl GlobalServiceRegistryError {
-    /// 表示注册中心已被设置过，重复设置会触发该错误。
-    pub const ALREADY_SET: Self = GlobalServiceRegistryError("注册中心已初始化，无法重复设置");
-}
 
 /// 全局服务注册中心存储器。
 ///
@@ -48,9 +37,9 @@ impl GlobalServiceRegistry {
     /// # Returns
     ///
     /// * `Ok(())` - 首次设置成功。
-    /// * `Err(GlobalServiceRegistryError::ALREADY_SET)` - 已被设置过。
-    pub fn set(registry: Arc<dyn ServiceRegistry>) -> Result<(), GlobalServiceRegistryError> {
-        REGISTRY.set(registry).map_err(|_| GlobalServiceRegistryError::ALREADY_SET)
+    /// * `Err(GlobalStorageError::ALREADY_SET)` - 已被设置过。
+    pub fn set(registry: Arc<dyn ServiceRegistry>) -> Result<(), GlobalStorageError> {
+        REGISTRY.set(registry).map_err(|_| GlobalStorageError::ALREADY_SET)
     }
 
     /// 获取全局服务注册中心实例。

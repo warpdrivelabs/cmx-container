@@ -38,7 +38,11 @@ impl Clone for RegistryAwareDiscover {
         Self {
             cache: self.cache.clone(),
             change_tx: self.change_tx.clone(),
-            change_rx: RwLock::new(self.change_rx.read().expect("change_rx 锁中毒").as_ref().cloned()),
+            change_rx: RwLock::new(
+                cmx_utils::read_lock(&self.change_rx)
+                    .as_ref()
+                    .cloned(),
+            ),
         }
     }
 }
@@ -68,16 +72,16 @@ impl RegistryAwareDiscover {
         // 注册回调到 ServiceInstanceCache
         self.cache.subscribe(
             &service_name,
-            Arc::new(move |svc_name, new_instances| {
+            Arc::new(move |svc_name: String, new_instances: Vec<ServiceInstance>| {
                 tracing::info!(
                     target: "cmx_rpc",
                     service_name = %svc_name,
                     "rpc监听到服务实例变更"
                 );
-                let new_volo = instances_to_volo(new_instances);
+                let new_volo = instances_to_volo(&new_instances);
 
                 // 获取旧实例列表做 diff
-                let old_volo = cache_for_closure.get(svc_name)
+                let old_volo = cache_for_closure.get(&svc_name)
                     .map(|old| instances_to_volo(&old))
                     .unwrap_or_default();
 
@@ -209,9 +213,7 @@ impl Discover for RegistryAwareDiscover {
     }
 
     fn watch(&self, _keys: Option<&[Self::Key]>) -> Option<Receiver<Change<Self::Key>>> {
-        self.change_rx
-            .read()
-            .expect("change_rx 锁中毒")
+        cmx_utils::read_lock(&self.change_rx)
             .as_ref()
             .map(|rx| rx.clone())
     }

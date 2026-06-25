@@ -9,7 +9,6 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
-use tracing::debug;
 
 /// 业务错误码枚举。
 ///
@@ -351,7 +350,7 @@ impl From<cmx_core::PermissionDeniedError> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        debug!("{:<12} - Error {self:?}", "ERROR");
+        tracing::error!("{:<12} - Error {self:?}", "ERROR");
         let status_code = self.get_status_code();
         let body = self.to_response_body();
 

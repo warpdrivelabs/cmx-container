@@ -287,7 +287,7 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
 
     svr_ctx.0.auth_context = Some(auth_ctx);
 
-    info!(path = %path, "认证通过");
+    // info!(path = %path, "认证通过");
     Ok(next.run(req).await)
 }
 

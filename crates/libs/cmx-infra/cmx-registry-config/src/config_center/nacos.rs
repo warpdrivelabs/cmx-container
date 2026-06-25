@@ -13,10 +13,10 @@ use nacos_sdk::api::config::{ConfigChangeListener, ConfigResponse, ConfigService
 use std::sync::Arc;
 use tracing::info;
 
-use crate::config::NacosConfigCenterConfig;
+use crate::config_model::NacosConfigCenterConfig;
 use crate::error::ConfigCenterError;
 
-use super::trait_rs::{ConfigCenter, ConfigChangeCallback};
+use super::config_traits::{ConfigCenter, ConfigChangeCallback};
 
 /// 适配器：将 `ConfigChangeCallback` 适配为 `nacos_sdk` 的 `ConfigChangeListener`。
 ///

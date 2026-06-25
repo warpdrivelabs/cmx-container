@@ -244,8 +244,10 @@ fn build_config_change_handler() -> Option<ConfigChangeCallback> {
         let reloader = reloader.clone();
         let content = content.to_string();
         // 使用 tokio::spawn 异步执行 reload，避免阻塞 Nacos 监听线程。
+        // ConfigReloader::reload 内部使用 tokio::sync::Mutex 串行化执行，
+        // 避免配置变更频繁时多个 reload task 并发执行导致 changed_keys 漏报。
         tokio::spawn(async move {
-            match reloader.reload(&content) {
+            match reloader.reload(&content).await {
                 Ok(changed_keys) => {
                     let event = ConfigChangeEvent {
                         changed_keys,

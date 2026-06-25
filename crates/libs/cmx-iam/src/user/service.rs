@@ -753,8 +753,8 @@ impl UserService for UserServiceImpl {
             DataValue::String(assignment_id.clone()),
             DataValue::String(user_id.to_string()),
             DataValue::String(role_id.to_string()),
-            DataValue::String(effective_from.to_rfc3339()),
-            DataValue::String(effective_until.to_rfc3339()),
+            DataValue::DateTime(effective_from),
+            DataValue::DateTime(effective_until),
             reason.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null),
             DataValue::String(source.to_string()),
         ];
@@ -1094,7 +1094,7 @@ impl UserService for UserServiceImpl {
         "#;
         let params = vec![
             DataValue::String(assignment_id.to_string()),
-            DataValue::String(new_effective_until.to_rfc3339()),
+            DataValue::DateTime(new_effective_until),
         ];
         self.mm
             .execute_sql_with_datavalues(&self.db_id, None, update_sql, params)

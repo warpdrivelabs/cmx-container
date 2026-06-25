@@ -68,3 +68,16 @@ pub enum ConfigCenterError {
     #[error("配置热更新失败: {0}")]
     ReloadFailed(String),
 }
+
+/// 全局存储器（注册中心 / 配置中心 / 实例缓存）重复初始化错误。
+///
+/// 三个全局存储器（`GlobalServiceRegistry`、`GlobalConfigCenter`、`GlobalServiceInstanceCache`）
+/// 共用此错误类型，消除重复定义。具体哪个存储器触发由调用上下文确定。
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error("全局存储已初始化，无法重复设置")]
+pub struct GlobalStorageError;
+
+impl GlobalStorageError {
+    /// 重复设置全局存储器时返回的错误实例。
+    pub const ALREADY_SET: Self = Self;
+}

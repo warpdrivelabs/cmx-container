@@ -53,8 +53,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-pub mod config;
 pub mod config_center;
+pub mod config_model;
 pub mod config_source;
 pub mod error;
 pub mod global_config_center;
@@ -68,7 +68,7 @@ pub(crate) mod utils;
 #[cfg(test)]
 mod tests;
 
-pub use config::{
+pub use config_model::{
     ConfigCenterFullConfig, ConfigListener, NacosConfigCenterConfig, NacosNamingConfig,
     RegistryConfig,
 };

@@ -22,17 +22,17 @@
 //! 推荐与 [`GlobalChangeNotifier`](crate::GlobalChangeNotifier) 配合使用，
 //! 实现结构化事件分发与配置热更新。
 
+mod config_traits;
 mod mock;
 mod nacos;
-mod trait_rs;
 
+pub use config_traits::{ConfigCenter, ConfigChangeCallback};
 pub use mock::MockConfigCenter;
 pub use nacos::NacosConfigCenter;
-pub use trait_rs::{ConfigCenter, ConfigChangeCallback};
 
 use std::sync::Arc;
 
-use crate::config::ConfigCenterFullConfig;
+use crate::config_model::ConfigCenterFullConfig;
 use crate::error::ConfigCenterError;
 
 /// 根据配置创建配置中心实例。

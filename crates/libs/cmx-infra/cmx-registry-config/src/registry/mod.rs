@@ -19,18 +19,18 @@
 mod instance_cache;
 mod mock;
 mod nacos;
+mod registry_traits;
 mod service_list_syncer;
-mod trait_rs;
 
 pub use instance_cache::ServiceInstanceCache;
 pub use mock::MockRegistry;
 pub use nacos::NacosRegistry;
+pub use registry_traits::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 pub use service_list_syncer::ServiceListSyncer;
-pub use trait_rs::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};
 
 use std::sync::Arc;
 
-use crate::config::RegistryConfig;
+use crate::config_model::RegistryConfig;
 use crate::error::RegistryError;
 
 /// 根据配置创建注册中心实例。

@@ -1274,6 +1274,7 @@ dependencies = [
  "cmx-registry-config",
  "cmx-rpc-gen",
  "cmx-traits",
+ "cmx-utils",
  "pilota",
  "serde",
  "serde_json",

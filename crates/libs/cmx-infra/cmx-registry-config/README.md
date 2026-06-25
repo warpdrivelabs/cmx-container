@@ -216,16 +216,21 @@ use std::sync::Arc;
 use cmx_registry_config::{
     create_registry, create_config_center,
     RegistryConfig, ConfigCenterFullConfig,
-    ServiceRegistry, ConfigCenter,
+    ServiceRegistry, ConfigCenter, ConfigChangeCallback,
 };
 
 // 从环境变量加载配置
 let registry_config = RegistryConfig::from_env();
 let cc_config = ConfigCenterFullConfig::from_env();
 
-// 创建实例（返回 Arc<dyn Trait>）
+// 创建注册中心实例（返回 Arc<dyn Trait>）
 let registry: Arc<dyn ServiceRegistry> = create_registry(&registry_config)?;
-let config_center: Arc<dyn ConfigCenter> = create_config_center(&cc_config)?;
+
+// 创建配置中心实例。
+// 第二个参数为可选的配置变更处理器：若提供，工厂函数会为每个 listener 自动注册此处理器；
+// 若为 None，则调用方需自行通过 ConfigCenter::listen 注册。
+let change_handler: Option<ConfigChangeCallback> = None;
+let config_center: Arc<dyn ConfigCenter> = create_config_center(&cc_config, change_handler).await?;
 ```
 
 ### 5.2 服务注册
@@ -292,18 +297,38 @@ config_center
 ### 5.7 全局配置变更通知器
 
 ```rust
-use cmx_registry_config::GlobalChangeNotifier;
+use std::sync::Arc;
+use cmx_registry_config::{
+    GlobalChangeNotifier, ConfigChangeEvent, ConfigChangeListener,
+};
 
-// 初始化（通常在应用启动时调用一次）
+// 1. 初始化（通常在应用启动时调用一次）
 GlobalChangeNotifier::initialize();
 
-// 注册回调
-GlobalChangeNotifier::register("my-handler", Arc::new(|content: &str| {
-    println!("收到配置变更: {}", content);
-}));
+// 2. 注册结构化监听器
+struct MyListener;
+impl ConfigChangeListener for MyListener {
+    fn name(&self) -> &str { "my-listener" }
 
-// 通知所有处理器（通常由 ConfigCenter 的 listen 回调触发）
-GlobalChangeNotifier::notify("新的配置内容...");
+    fn interested_keys(&self) -> &[String] {
+        // 返回空切片表示监听所有变更；非空切片按 key 前缀过滤
+        &[]
+    }
+
+    fn on_change(&self, event: &ConfigChangeEvent) {
+        println!("收到配置变更，变更的 keys: {:?}", event.changed_keys);
+        println!("新配置内容:\n{}", event.raw_content);
+    }
+}
+
+GlobalChangeNotifier::add_listener(Arc::new(MyListener));
+
+// 3. 通知所有监听器（通常由 ConfigReloader 在完成配置替换后调用）
+let event = ConfigChangeEvent {
+    changed_keys: vec!["server.port".to_string()],
+    raw_content: "server.port = 9090".to_string(),
+};
+GlobalChangeNotifier::notify_listeners(&event);
 ```
 
 ### 5.8 在任意 crate 中访问全局实例
@@ -381,19 +406,15 @@ use cmx_registry_config::MockConfigCenter;
 async fn test_config_center() {
     let center = MockConfigCenter::new();
 
-    // 注入预设配置
-    center
-        .set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090")
-        .await;
+    // 注入预设配置（同步方法，无需 .await）
+    center.set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090");
 
     // 获取配置
     let content = center.get_config("app.toml", "DEFAULT_GROUP").await.unwrap();
     assert_eq!(content, "server.port = 9090");
 
-    // 模拟配置变更通知
-    center
-        .simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 8080")
-        .await;
+    // 模拟配置变更通知（同步方法，无需 .await）
+    center.simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 8080");
 }
 ```
 
@@ -510,9 +531,8 @@ async fn watch_service_changes() -> anyhow::Result<()> {
     let (tx, mut rx) = mpsc::channel::<Vec<ServiceInstance>>(100);
 
     let callback: cmx_registry_config::InstanceChangeCallback = Arc::new(
-        move |_service: &str, instances: &[ServiceInstance]| {
+        move |_service: String, instances: Vec<ServiceInstance>| {
             // 异步发送最新实例列表
-            let instances = instances.to_vec();
             let tx = tx.clone();
             tokio::spawn(async move {
                 let _ = tx.send(instances).await;
@@ -579,28 +599,39 @@ pub type ConfigChangeCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
 #### 2.2 全局通知器（推荐）
 
-使用 `GlobalChangeNotifier` 集中管理多个配置订阅者：
+使用 `GlobalChangeNotifier` 集中管理多个配置订阅者，通过实现 `ConfigChangeListener` trait 注册结构化监听器：
 
 ```rust
-use cmx_registry_config::GlobalChangeNotifier;
+use std::sync::Arc;
+use cmx_registry_config::{
+    GlobalChangeNotifier, ConfigChangeEvent, ConfigChangeListener,
+};
 
 // 1. 初始化（应用启动时调用一次）
 GlobalChangeNotifier::initialize();
 
-// 2. 注册 keyed handler
-GlobalChangeNotifier::register("config-reloader", Arc::new(|content: &str| {
-    info!("收到配置变更，准备热更新");
-    // 调用 ConfigReloader::reload
-}));
+// 2. 实现结构化监听器
+struct DatabaseListener;
+impl ConfigChangeListener for DatabaseListener {
+    fn name(&self) -> &str { "database-listener" }
 
-// 3. 注册 typed listener（按 data_id/group 精确匹配）
-GlobalChangeNotifier::add_listener(
-    "cmx-server.toml",
-    "DEFAULT_GROUP",
-    Arc::new(|event| {
-        info!("cmx-server.toml 变更:\n{}", event.content);
-    }),
-);
+    fn interested_keys(&self) -> &[String] {
+        // 仅监听 database 前缀的配置变更，返回空切片则监听所有变更
+        static KEYS: &[String] = &["database"];
+        KEYS
+    }
+
+    fn on_change(&self, event: &ConfigChangeEvent) {
+        info!("数据库配置变更: {:?}", event.changed_keys);
+        // 执行数据库连接池重建等业务逻辑
+    }
+}
+
+// 3. 注册监听器
+GlobalChangeNotifier::add_listener(Arc::new(DatabaseListener));
+
+// 4. 移除监听器（按 name 匹配）
+GlobalChangeNotifier::remove_listener("database-listener");
 ```
 
 **API 总览**：
@@ -608,12 +639,26 @@ GlobalChangeNotifier::add_listener(
 | 方法 | 用途 |
 |------|------|
 | `initialize()` | 初始化全局通知器（幂等） |
-| `register(key, callback)` | 注册全局 handler（任何配置变更都触发） |
-| `unregister(key)` | 移除指定 handler |
-| `add_listener(data_id, group, callback)` | 注册精确匹配的 listener |
-| `remove_listener(data_id, group)` | 移除指定 listener |
-| `notify(content)` | 触发所有 handler（仅 handler） |
-| `notify_listeners(event)` | 触发所有 listener 和 handler |
+| `add_listener(listener)` | 注册结构化监听器（实现 `ConfigChangeListener` trait） |
+| `remove_listener(name)` | 按 `name()` 移除指定监听器 |
+| `notify_listeners(event)` | 通知所有监听器（按 `interested_keys` 过滤） |
+
+**ConfigChangeListener trait**：
+
+```rust
+pub trait ConfigChangeListener: Send + Sync {
+    /// 监听器名称，用于日志和 remove_listener 匹配
+    fn name(&self) -> &str;
+
+    /// 感兴趣的配置键前缀列表
+    /// - 空切片：监听所有变更
+    /// - 非空切片：仅当 changed_keys 中任一 key 以某个 prefix 开头时触发 on_change
+    fn interested_keys(&self) -> &[String] { &[] }
+
+    /// 配置变更回调
+    fn on_change(&self, event: &ConfigChangeEvent);
+}
+```
 
 #### 2.3 监听机制原理
 
@@ -621,43 +666,60 @@ GlobalChangeNotifier::add_listener(
 Nacos Server 配置变更
     │ 长轮询/推送
     ▼
-ConfigCenter::listen 回调
-    │ GlobalChangeNotifier::notify(content)
+ConfigCenter::listen 回调（change_handler）
+    │ ConfigReloader::reload(content)
+    │   ├─ 解析新配置 → 计算 changed_keys
+    │   └─ 原子替换全局 ConfigManager
     ▼
-ChangeNotifier::handlers（keyed handler）
-    ├─→ config-reloader（应用启动时注册）
-    └─→ 其他业务 handler
-    
-ChangeNotifier::listeners（typed listener）
-    └─→ 精确匹配 (data_id, group) 后触发
+GlobalChangeNotifier::notify_listeners(event)
+    │ 遍历 listeners，按 interested_keys 过滤
+    └─→ 触发匹配的 ConfigChangeListener::on_change
 ```
 
 #### 2.4 配置中心 listeners 配置（推荐）
 
-通过 `ConfigCenterFullConfig::listeners` 统一声明订阅项，应用启动时自动注册：
+通过 `ConfigCenterFullConfig::listeners` 统一声明订阅项，`create_config_center` 工厂函数会自动为每个 listener 注册 `change_handler`：
 
 ```rust
-use cmx_registry_config::{ConfigCenterFullConfig, GlobalConfigCenter, GlobalChangeNotifier};
+use std::sync::Arc;
+use cmx_registry_config::{
+    ConfigCenterFullConfig, GlobalChangeNotifier, ConfigChangeEvent,
+    ConfigChangeListener, ConfigChangeCallback, ConfigReloader,
+};
 
-// 1. 声明订阅
-let cc_config = ConfigCenterFullConfig::from_env();
+// 1. 初始化全局通知器
 GlobalChangeNotifier::initialize();
 
-// 2. 应用层注册 typed listener
-for listener in &cc_config.listeners {
-    let data_id = listener.data_id.clone();
-    let group = listener.group.clone();
-    GlobalChangeNotifier::add_listener(
-        &data_id,
-        &group,
-        Arc::new(move |event| {
-            info!("{} 变更:\n{}", data_id, event.content);
-        }),
-    );
-}
+// 2. 构造配置变更处理器（负责解析配置 → 替换 ConfigManager → 通知监听器）
+let config_file_path = std::env::var("CONFIG_FILE").ok();
+let reloader = Arc::new(ConfigReloader::new(config_file_path));
+let change_handler: Option<ConfigChangeCallback> = Some(Arc::new(move |content: &str| {
+    let reloader = reloader.clone();
+    let content = content.to_string();
+    tokio::spawn(async move {
+        if let Ok(changed_keys) = reloader.reload(&content) {
+            let event = ConfigChangeEvent {
+                changed_keys,
+                raw_content: content,
+            };
+            GlobalChangeNotifier::notify_listeners(&event);
+        }
+    });
+}));
 
-// 3. create_config_center 时自动注册 SDK 级别监听
-//    （推荐通过工厂函数而非手动 listen，避免双重触发）
+// 3. 创建配置中心时注入 change_handler，工厂函数自动为每个 listener 注册
+let cc_config = ConfigCenterFullConfig::from_env();
+let config_center = create_config_center(&cc_config, change_handler).await?;
+
+// 4. 业务侧注册结构化监听器
+struct BusinessListener;
+impl ConfigChangeListener for BusinessListener {
+    fn name(&self) -> &str { "business" }
+    fn on_change(&self, event: &ConfigChangeEvent) {
+        info!("业务配置变更: {:?}", event.changed_keys);
+    }
+}
+GlobalChangeNotifier::add_listener(Arc::new(BusinessListener));
 ```
 
 #### 2.5 完整生产级示例
@@ -665,43 +727,54 @@ for listener in &cc_config.listeners {
 ```rust
 use std::sync::Arc;
 use cmx_registry_config::{
-    GlobalChangeNotifier, GlobalConfigCenter, ConfigChangeEvent,
+    GlobalChangeNotifier, ConfigChangeEvent, ConfigChangeListener,
+    ConfigChangeCallback, ConfigReloader, ConfigCenterFullConfig,
+    create_config_center,
 };
 
 async fn setup_config_watcher() -> anyhow::Result<()> {
-    let center = GlobalConfigCenter::get();
-    let config = cmx_registry_config::ConfigCenterFullConfig::from_env();
+    let config = ConfigCenterFullConfig::from_env();
 
-    // 1. 全局 keyed handler（不区分配置项）
+    // 1. 初始化全局通知器
     GlobalChangeNotifier::initialize();
-    GlobalChangeNotifier::register(
-        "audit-logger",
-        Arc::new(|content: &str| {
-            info!("[audit] 配置变更记录");
-        }),
-    );
 
-    // 2. typed listener（按 data_id 精确匹配）
-    for listener in &config.listeners {
-        let data_id = listener.data_id.clone();
-        let group = listener.group.clone();
-
-        // 全局 typed listener
-        GlobalChangeNotifier::add_listener(
-            &data_id,
-            &group,
-            Arc::new(move |event: &ConfigChangeEvent| {
-                info!("{} 变更:\n{}", data_id, event.content);
-            }),
-        );
-
-        // SDK 级别监听（工厂函数内部会自动调用）
-        // 此处也可手动 listen，但会与 create_config_center 内的自动注册重复
+    // 2. 注册业务监听器（结构化，按 interested_keys 过滤）
+    struct AuditListener;
+    impl ConfigChangeListener for AuditListener {
+        fn name(&self) -> &str { "audit" }
+        fn on_change(&self, event: &ConfigChangeEvent) {
+            info!("[audit] 配置变更记录，变更 keys: {:?}", event.changed_keys);
+        }
     }
+    GlobalChangeNotifier::add_listener(Arc::new(AuditListener));
 
-    // 3. 主动拉取初始配置
+    // 3. 构造配置变更处理器并创建配置中心
+    let config_file_path = std::env::var("CONFIG_FILE").ok();
+    let reloader = Arc::new(ConfigReloader::new(config_file_path));
+    let change_handler: Option<ConfigChangeCallback> = Some(Arc::new(move |content: &str| {
+        let reloader = reloader.clone();
+        let content = content.to_string();
+        tokio::spawn(async move {
+            match reloader.reload(&content) {
+                Ok(changed_keys) => {
+                    let event = ConfigChangeEvent {
+                        changed_keys,
+                        raw_content: content,
+                    };
+                    GlobalChangeNotifier::notify_listeners(&event);
+                }
+                Err(e) => {
+                    tracing::warn!("配置热更新失败: {}", e);
+                }
+            }
+        });
+    }));
+
+    let _config_center = create_config_center(&config, change_handler).await?;
+
+    // 4. 主动拉取初始配置（可选）
     for listener in &config.listeners {
-        let content = center
+        let content = _config_center
             .get_config(&listener.data_id, &listener.group)
             .await?;
         info!("初始配置 {}:\n{}", listener.data_id, content);
@@ -716,11 +789,11 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
 
 | 场景 | 推荐方式 | 原因 |
 |------|---------|------|
-| **应用启动热更新** | `GlobalChangeNotifier::register(key, ...)` | 集中管理，支持 unregister |
-| **按 data_id 精确处理** | `GlobalChangeNotifier::add_listener(data_id, group, ...)` | 避免无关配置触发回调 |
+| **应用启动热更新** | `create_config_center(config, change_handler)` + `ConfigReloader` | 工厂函数自动注册，change_handler 负责解析配置并通知监听器 |
+| **按配置键前缀过滤** | 实现 `ConfigChangeListener`，覆写 `interested_keys()` | 避免无关配置触发回调 |
+| **业务模块订阅变更** | `GlobalChangeNotifier::add_listener(Arc::new(MyListener))` | 结构化监听器，类型安全，支持按 key 过滤 |
 | **gRPC 服务发现** | `subscribe_instances` + `start_watch` | volo 自动接管负载均衡 |
 | **本地开发无注册中心** | `MockRegistry` + 手动 `cache.update` | 内存级，无需外部依赖 |
-| **避免双重触发** | 仅在 `create_config_center` 工厂函数内调用 `listen` | 工厂封装完整职责 |
 
 ### 4. 完整订阅流程图
 
@@ -729,10 +802,13 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
 │  应用启动                                                 │
 │  ├─ init_infra()                                        │
 │  │   ├─ create_registry_with_cache                     │
-│  │   ├─ create_config_center (内部自动 listen)         │
-│  │   ├─ start_service_list_syncer                       │
-│  │   └─ setup_config_listener                          │
-│  │       └─ GlobalChangeNotifier::initialize + register │
+│  │   ├─ GlobalChangeNotifier::initialize()             │
+│  │   ├─ build_config_change_handler()                  │
+│  │   │   └─ 构造 ConfigReloader + ConfigChangeCallback │
+│  │   ├─ create_config_center(config, change_handler)   │
+│  │   │   └─ 工厂函数为每个 listener 自动注册 change_handler │
+│  │   ├─ start_service_list_syncer (run + shutdown)     │
+│  │   └─ 业务模块通过 add_listener 注册 ConfigChangeListener │
 │  │                                                      │
 │  └─ init_rpc()                                          │
 │      ├─ warmup subscribe_instances                      │
@@ -745,8 +821,12 @@ async fn setup_config_watcher() -> anyhow::Result<()> {
 │  │   └─ cache.update → 触发 no-op + discover callbacks │
 │  │                                                      │
 │  └─ Nacos 配置变更推送                                  │
-│      └─ GlobalChangeNotifier::notify                    │
-│          └─ 触发所有 handlers + 匹配 typed listeners    │
+│      └─ change_handler 被触发                           │
+│          ├─ ConfigReloader::reload(content)             │
+│          │   └─ 解析配置 → 计算 changed_keys            │
+│          │   └─ 原子替换全局 ConfigManager              │
+│          └─ GlobalChangeNotifier::notify_listeners(event)│
+│              └─ 按 interested_keys 过滤并触发监听器     │
 └─────────────────────────────────────────────────────────┘
 ```
 
