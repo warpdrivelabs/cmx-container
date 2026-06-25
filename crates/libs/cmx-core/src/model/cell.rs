@@ -41,6 +41,30 @@ pub enum SqlTypeMarker {
     Binary,
 }
 
+/// 面向 SQL 绑定的参数类型,内含带类型的 NULL。
+///
+/// 比 [`DataValue`] 更贴近 SQL 语义,适合手写 SQL 时需要精确控制
+/// NULL 目标类型的场景。宿主端和 wasm plugin 都可使用。
+/// 可通过 [`From`]/[`Into`] 与 [`DataValue`] 互通。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SqlParam {
+    /// 带类型标记的 NULL。
+    Null(SqlTypeMarker),
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Text(String),
+    Decimal(Decimal),
+    Timestamp(DateTime<Utc>),
+    Date(NaiveDate),
+    Uuid(Uuid),
+    /// JSON 字符串
+    Json(String),
+    Binary(Vec<u8>),
+    /// 单层同类型数组(IN 查询用)
+    Array(Vec<SqlParam>),
+}
+
 /// ERP 通用数据值枚举
 /// 这种设计允许我们在编译时不知道具体类型的情况下存储数据
 ///
@@ -368,6 +392,51 @@ impl From<Option<NaiveDate>> for DataValue {
 impl From<Option<Decimal>> for DataValue {
     fn from(v: Option<Decimal>) -> Self {
         v.map(DataValue::Decimal).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Decimal))
+    }
+}
+
+// ==========================================
+// SqlParam 与 DataValue 互通
+// ==========================================
+
+impl From<DataValue> for SqlParam {
+    fn from(v: DataValue) -> Self {
+        match v {
+            DataValue::Null => SqlParam::Null(SqlTypeMarker::Text),
+            DataValue::NullTyped(t) => SqlParam::Null(t),
+            DataValue::Bool(b) => SqlParam::Bool(b),
+            DataValue::Int(i) => SqlParam::Int(i),
+            DataValue::Float(f) => SqlParam::Float(f),
+            DataValue::String(s) => SqlParam::Text(s),
+            DataValue::Decimal(d) => SqlParam::Decimal(d),
+            DataValue::DateTime(dt) => SqlParam::Timestamp(dt),
+            DataValue::Date(d) => SqlParam::Date(d),
+            DataValue::Json(s) => SqlParam::Json(s),
+            DataValue::Binary(b) => SqlParam::Binary(b),
+            DataValue::Uuid(u) => SqlParam::Uuid(u),
+            DataValue::Array(els) => SqlParam::Array(els.into_iter().map(Into::into).collect()),
+            DataValue::ShortStr(s) => SqlParam::Text(s.to_string()),
+            DataValue::LongStr(s) => SqlParam::Text(s.to_string()),
+        }
+    }
+}
+
+impl From<SqlParam> for DataValue {
+    fn from(p: SqlParam) -> Self {
+        match p {
+            SqlParam::Null(t) => DataValue::NullTyped(t),
+            SqlParam::Bool(b) => DataValue::Bool(b),
+            SqlParam::Int(i) => DataValue::Int(i),
+            SqlParam::Float(f) => DataValue::Float(f),
+            SqlParam::Text(s) => DataValue::String(s),
+            SqlParam::Decimal(d) => DataValue::Decimal(d),
+            SqlParam::Timestamp(dt) => DataValue::DateTime(dt),
+            SqlParam::Date(d) => DataValue::Date(d),
+            SqlParam::Json(s) => DataValue::Json(s),
+            SqlParam::Binary(b) => DataValue::Binary(b),
+            SqlParam::Uuid(u) => DataValue::Uuid(u),
+            SqlParam::Array(els) => DataValue::Array(els.into_iter().map(Into::into).collect()),
+        }
     }
 }
 
