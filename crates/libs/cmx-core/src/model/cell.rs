@@ -532,6 +532,55 @@ pub use super::meta::table::{
 };
 
 // ============================================
+//  dv! 宏 —— 批量构造 Vec<DataValue> 的便捷宏
+// ============================================
+
+/// 构造 `Vec<DataValue>` 的便捷宏。
+///
+/// 基于 [`Into<DataValue>`] trait 驱动,每个表达式须满足 `Into<DataValue>`。
+/// 配合 [`From<Option<T>>`] 实现,可空字段直接传 `Option` 值即可。
+///
+/// # 语法
+/// - `dv!()` → 空 `Vec<DataValue>`
+/// - `dv!(expr1, expr2, ...)` → `vec![DataValue::from(expr1), ...]`
+/// - `dv!(null T)` → `DataValue::NullTyped(SqlTypeMarker::T)`(显式带类型的 NULL)
+///
+/// # 示例
+/// ```ignore
+/// use cmx_core::dv;
+/// use cmx_core::model::cell::DataValue;
+///
+/// let id = "id123".to_string();
+/// let name: Option<String> = Some("alice".into());
+/// let sort: Option<i64> = None;
+///
+/// let params: Vec<DataValue> = dv![
+///     id,            // String -> DataValue::String
+///     name,          // Option<String> -> DataValue::String 或 Null
+///     sort,          // Option<i64> -> DataValue::Int 或 NullTyped(Int)
+///     dv!(null Uuid), // 显式带 Uuid 类型的 NULL
+/// ];
+/// ```
+#[macro_export]
+macro_rules! dv {
+    // 空参数
+    () => { ::std::vec::Vec::<$crate::model::cell::DataValue>::new() };
+
+    // null + 类型标记:返回单个 DataValue(非 Vec)
+    (null $t:ident) => {
+        $crate::model::cell::DataValue::NullTyped($crate::model::cell::SqlTypeMarker::$t)
+    };
+
+    // 多元素:每个 expr 须 Into<DataValue>
+    ($first:expr $(, $rest:expr)* $(,)?) => {
+        ::std::vec![
+            ::std::convert::Into::<$crate::model::cell::DataValue>::into($first)
+            $(, ::std::convert::Into::<$crate::model::cell::DataValue>::into($rest))*
+        ]
+    };
+}
+
+// ============================================
 //  数据类型单元测试
 // ============================================
 
