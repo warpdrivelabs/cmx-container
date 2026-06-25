@@ -6,6 +6,7 @@
 use axum::extract::{Query, State};
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use cmx_core::model::cell::DataValue;
 use tracing::{debug, info, warn};
 
 use crate::app_state::CmxAppState;
@@ -33,9 +34,9 @@ async fn query_key_prefix_by_id(id: &str) -> Option<String> {
     let db_manager = cmx_database::get_default_db_manager();
     let db_id = db_manager.get_default_db_id().await;
     let sql = "SELECT key_prefix FROM cmx_auth_api_key WHERE id = $1";
-    let params = serde_json::Value::Array(vec![serde_json::Value::String(id.to_string())]);
+    let params = vec![DataValue::String(id.to_string())];
     let dataset = db_manager
-        .query_sql_with_json(&db_id, None, sql, params, "api_key_prefix")
+        .query_sql_with_datavalues(&db_id, None, sql, params, "api_key_prefix")
         .await
         .ok()?;
     let schema = dataset.schema.as_ref();
@@ -162,17 +163,17 @@ pub async fn create_api_key(
         INSERT INTO cmx_auth_api_key (id, key_prefix, key_hash, user_id, service_name, scopes, description, status, archived)
         VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0)
     "#;
-    let params = serde_json::Value::Array(vec![
-        serde_json::Value::String(id.clone()),
-        serde_json::Value::String(key_prefix_str.to_string()),
-        serde_json::Value::String(key_hash),
-        req.user_id.clone().map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
-        req.service_name.clone().map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
-        serde_json::Value::String(scopes_json),
-        req.description.clone().map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
-    ]);
+    let params = vec![
+        DataValue::String(id.clone()),
+        DataValue::String(key_prefix_str.to_string()),
+        DataValue::String(key_hash),
+        req.user_id.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        req.service_name.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        DataValue::String(scopes_json),
+        req.description.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+    ];
     db_manager
-        .execute_sql_with_json(&db_id, None, sql, params)
+        .execute_sql_with_datavalues(&db_id, None, sql, params)
         .await
         .map_err(|e| Error::InternalError(format!("创建 API Key 失败: {e}")))?;
 
@@ -286,9 +287,9 @@ pub async fn delete_api_key(
     let key_prefix = query_key_prefix_by_id(id).await;
 
     let sql = "DELETE FROM cmx_auth_api_key WHERE id = $1 AND archived = 0";
-    let params = serde_json::Value::Array(vec![serde_json::Value::String(id.to_string())]);
+    let params = vec![DataValue::String(id.to_string())];
     let affected = db_manager
-        .execute_sql_with_json(&db_id, None, sql, params)
+        .execute_sql_with_datavalues(&db_id, None, sql, params)
         .await
         .map_err(|e| Error::InternalError(format!("删除 API Key 失败: {e}")))?;
 
@@ -332,12 +333,12 @@ pub async fn toggle_api_key_status(
     let key_prefix = query_key_prefix_by_id(&req.id).await;
 
     let sql = "UPDATE cmx_auth_api_key SET status = $2, update_time = NOW() WHERE id = $1 AND archived = 0";
-    let params = serde_json::Value::Array(vec![
-        serde_json::Value::String(req.id.clone()),
-        serde_json::Value::Number(req.status.into()),
-    ]);
+    let params = vec![
+        DataValue::String(req.id.clone()),
+        DataValue::Int(req.status),
+    ];
     let affected = db_manager
-        .execute_sql_with_json(&db_id, None, sql, params)
+        .execute_sql_with_datavalues(&db_id, None, sql, params)
         .await
         .map_err(|e| Error::InternalError(format!("切换 API Key 状态失败: {e}")))?;
 

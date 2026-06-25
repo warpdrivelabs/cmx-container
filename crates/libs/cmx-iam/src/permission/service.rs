@@ -294,18 +294,21 @@ impl PermissionServiceImpl {
         if permission_ids.is_empty() {
             return Ok(Vec::new());
         }
-        // 使用 ANY($1) 数组参数，避免 IN 列表过长
-        let sql = "SELECT DISTINCT role_id FROM cmx_role_permission WHERE permission_id = ANY($1)";
-        let arr = DataValue::Array(
-            permission_ids
-                .iter()
-                .map(|s| DataValue::String(s.clone()))
-                .collect(),
+        // 使用 IN + 动态占位符（驱动不支持 ANY($1) 数组绑定）
+        let placeholders: Vec<String> = (1..=permission_ids.len())
+            .map(|i| format!("${i}"))
+            .collect();
+        let in_clause = placeholders.join(",");
+        let sql = format!(
+            "SELECT DISTINCT role_id FROM cmx_role_permission WHERE permission_id IN ({in_clause})"
         );
-        let params = vec![arr];
+        let params: Vec<DataValue> = permission_ids
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect();
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params, "perm_affected_roles")
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), &sql, params, "perm_affected_roles")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}"))))?;
 
@@ -376,21 +379,25 @@ impl PermissionServiceImpl {
         if permission_ids.is_empty() {
             return Ok(vec![]);
         }
-        let sql = "SELECT p.id AS pid, p.code AS pcode, p.name AS pname, \
-                   r.id AS rid, r.code AS rcode, r.name AS rname \
-                   FROM cmx_permission p \
-                   JOIN cmx_role_permission rp ON rp.permission_id = p.id \
-                   JOIN cmx_role r ON r.id = rp.role_id AND r.archived = 0 \
-                   WHERE p.id = ANY($1)";
-        let arr = DataValue::Array(
-            permission_ids
-                .iter()
-                .map(|s| DataValue::String(s.clone()))
-                .collect(),
+        let placeholders: Vec<String> = (1..=permission_ids.len())
+            .map(|i| format!("${i}"))
+            .collect();
+        let in_clause = placeholders.join(",");
+        let sql = format!(
+            "SELECT p.id AS pid, p.code AS pcode, p.name AS pname, \
+             r.id AS rid, r.code AS rcode, r.name AS rname \
+             FROM cmx_permission p \
+             JOIN cmx_role_permission rp ON rp.permission_id = p.id \
+             JOIN cmx_role r ON r.id = rp.role_id AND r.archived = 0 \
+             WHERE p.id IN ({in_clause})"
         );
+        let params: Vec<DataValue> = permission_ids
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect();
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, vec![arr], "check_perm_usage")
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), &sql, params, "check_perm_usage")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询权限使用情况失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -1294,16 +1301,20 @@ impl PermissionService for PermissionServiceImpl {
         let txn_id = guard.txn_id();
 
         // 1. 查询每个根权限的 full_code_path 和 parent_id
-        let meta_sql = "SELECT id, full_code_path, parent_id FROM cmx_permission WHERE id = ANY($1)";
-        let meta_arr = DataValue::Array(
-            permission_ids
-                .iter()
-                .map(|s| DataValue::String(s.clone()))
-                .collect(),
+        let placeholders: Vec<String> = (1..=permission_ids.len())
+            .map(|i| format!("${i}"))
+            .collect();
+        let in_clause = placeholders.join(",");
+        let meta_sql = format!(
+            "SELECT id, full_code_path, parent_id FROM cmx_permission WHERE id IN ({in_clause})"
         );
+        let meta_params: Vec<DataValue> = permission_ids
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect();
         let meta_dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), meta_sql, vec![meta_arr], "delete_perm_meta")
+            .query_sql_with_datavalues(&self.db_id, Some(txn_id), &meta_sql, meta_params, "delete_perm_meta")
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询删除权限元数据失败: {e}"))))?;
         let schema = meta_dataset.schema.as_ref();
@@ -1342,28 +1353,32 @@ impl PermissionService for PermissionServiceImpl {
         let affected_roles = self.query_affected_roles_txn(txn_id, &all_ids_vec).await?;
 
         // 5. 物理删除角色关联
-        let del_rp_sql = "DELETE FROM cmx_role_permission WHERE permission_id = ANY($1)";
-        let del_rp_arr = DataValue::Array(
-            all_ids_vec
-                .iter()
-                .map(|s| DataValue::String(s.clone()))
-                .collect(),
+        let del_placeholders: Vec<String> = (1..=all_ids_vec.len())
+            .map(|i| format!("${i}"))
+            .collect();
+        let del_in_clause = del_placeholders.join(",");
+        let del_rp_sql = format!(
+            "DELETE FROM cmx_role_permission WHERE permission_id IN ({del_in_clause})"
         );
+        let del_rp_params: Vec<DataValue> = all_ids_vec
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect();
         self.mm
-            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, vec![del_rp_arr])
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), &del_rp_sql, del_rp_params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
 
         // 6. 物理删除权限
-        let del_perm_sql = "DELETE FROM cmx_permission WHERE id = ANY($1)";
-        let del_perm_arr = DataValue::Array(
-            all_ids_vec
-                .iter()
-                .map(|s| DataValue::String(s.clone()))
-                .collect(),
+        let del_perm_sql = format!(
+            "DELETE FROM cmx_permission WHERE id IN ({del_in_clause})"
         );
+        let del_perm_params: Vec<DataValue> = all_ids_vec
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect();
         self.mm
-            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_perm_sql, vec![del_perm_arr])
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), &del_perm_sql, del_perm_params)
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("删除权限失败: {e}"))))?;
 

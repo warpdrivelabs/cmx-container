@@ -121,7 +121,7 @@ pub async fn update_permission(
     path = "/api/iam/permissions/delete",
     request_body = cmx_core::DeletePayload,
     responses(
-        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>),
+        (status = 200, description = "删除成功（code=0）", body = ApiResp<serde_json::Value>),
         (status = 200, description = "权限被角色使用，无法删除（code=40901，data 携带阻止详情）", body = ApiResp<serde_json::Value>)
     ),
     tag = "IAM-Permission"
