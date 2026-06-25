@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use cmx_core::SVRContext;
+use cmx_core::ParamsBuilder;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
@@ -595,51 +596,27 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         }
 
         // 构造动态 UPDATE（不允许修改 subject_type）
-        let mut sets: Vec<String> = Vec::new();
-        let mut params: Vec<DataValue> = vec![DataValue::String(rule_id.to_string())];
-        let mut idx = 2;
+        // 使用 ParamsBuilder 自动管理占位符编号,SET 从 $1 起,WHERE id 放最后
+        let mut b = ParamsBuilder::new(0);
+        b.set_opt("name", data.name)
+            .set_opt("primary_subject_id", data.primary_subject_id)
+            .set_opt("violation_message", data.violation_message)
+            .set_opt("priority", data.priority)
+            .set_opt("description", data.description)
+            .set_opt("status", data.status);
+        let (set_clause, mut params) = b.build();
 
-        if let Some(name) = data.name {
-            sets.push(format!("name = ${idx}"));
-            params.push(DataValue::String(name));
-            idx += 1;
-        }
-        if let Some(primary_subject_id) = data.primary_subject_id {
-            sets.push(format!("primary_subject_id = ${idx}"));
-            params.push(DataValue::String(primary_subject_id));
-            idx += 1;
-        }
-        if let Some(vm) = data.violation_message {
-            sets.push(format!("violation_message = ${idx}"));
-            params.push(DataValue::String(vm));
-            idx += 1;
-        }
-        if let Some(priority) = data.priority {
-            sets.push(format!("priority = ${idx}"));
-            params.push(DataValue::Int(priority));
-            idx += 1;
-        }
-        if let Some(desc) = data.description {
-            sets.push(format!("description = ${idx}"));
-            params.push(DataValue::String(desc));
-            idx += 1;
-        }
-        if let Some(status) = data.status {
-            sets.push(format!("status = ${idx}"));
-            params.push(DataValue::Int(status));
-            // idx 自增在此处可省略，后续不再使用
-        }
-
-        if sets.is_empty() {
+        if set_clause.is_empty() {
             return Err(TraitError::from(IamError::Business(
                 "未提供任何更新字段".to_string(),
             )));
         }
 
-        sets.push("update_time = NOW()".to_string());
+        // WHERE id 参数放最后,占位符编号 = SET 参数数 + 1
+        let where_idx = params.len() + 1;
+        params.push(DataValue::String(rule_id.to_string()));
         let sql = format!(
-            "UPDATE cmx_exclusion_rule SET {} WHERE id = $1",
-            sets.join(", ")
+            "UPDATE cmx_exclusion_rule SET {set_clause}, update_time = NOW() WHERE id = ${where_idx}"
         );
 
         self.mm
