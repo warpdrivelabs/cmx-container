@@ -493,7 +493,7 @@ impl PermissionServiceImpl {
             )));
         }
 
-        let file_codes: HashSet<String> = definitions.iter().map(|d| d.code.clone()).collect();
+        let _file_codes: HashSet<String> = definitions.iter().map(|d| d.code.clone()).collect();
 
         // 2. 开启事务（查询和写入在同一事务内，避免并发竞态）
         let txn_ctx = self.mm.get_transaction_context();
@@ -637,12 +637,12 @@ impl PermissionServiceImpl {
             .filter_map(|d| db_map.get(&d.code).cloned())
             .collect();
         // let mut affected_ids = to_delete_ids.clone();
-        let mut affected_ids = to_update_ids.clone();
+        let  affected_ids = to_update_ids.clone();
         // affected_ids.extend(to_update_ids);
         let affected_roles = self.query_affected_roles_txn(txn_id, &affected_ids).await?;
 
-        let mut deleted_count = 0u32;
-        
+        let  deleted_count = 0u32;
+
         // 5.1 物理删除权限 + 物理删除角色关联（按 id 定位）
         // let mut deleted_count = 0u32;
         // for code in &to_delete {
