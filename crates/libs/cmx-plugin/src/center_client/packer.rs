@@ -10,7 +10,9 @@ use crate::error::{PluginError, PluginResult};
 /// 默认 ZIP 压缩级别。
 const DEFAULT_COMPRESSION_LEVEL: u32 = 6;
 
-/// 检查目录是否包含至少一个文件（递归检查子目录）。
+/// 检查目录是否包含至少一个 `.json` 或 `.csv` 文件（递归检查子目录）。
+///
+/// 扩展名匹配大小写不敏感，例如 `.JSON`、`.Csv` 同样视为有效。
 ///
 /// # Arguments
 ///
@@ -18,12 +20,20 @@ const DEFAULT_COMPRESSION_LEVEL: u32 = 6;
 ///
 /// # Returns
 ///
-/// 目录中存在至少一个文件时返回 `true`，否则返回 `false`。
+/// 目录中存在至少一个扩展名为 `json` 或 `csv`（忽略大小写）的文件时返回 `true`，
+/// 否则（目录不存在、为空或仅含其他类型文件）返回 `false`。
 pub fn has_files(dir: &Path) -> bool {
     walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .any(|e| e.path() != dir && e.file_type().is_file())
+        .filter(|e| e.path() != dir && e.file_type().is_file())
+        .any(|e| {
+            e.path()
+                .extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .map(|ext| matches!(ext.to_lowercase().as_str(), "json" | "csv"))
+                .unwrap_or(false)
+        })
 }
 
 /// 将指定目录下的所有文件递归打包为 ZIP 字节。
