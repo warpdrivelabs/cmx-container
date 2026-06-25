@@ -308,6 +308,70 @@ impl From<Vec<DataValue>> for DataValue {
 }
 
 // ==========================================
+// Option<T> 构造糖 —— 消除 .map(DataValue::X).unwrap_or(DataValue::Null) 模式
+// ==========================================
+
+impl From<Option<String>> for DataValue {
+    fn from(v: Option<String>) -> Self {
+        v.map(DataValue::String).unwrap_or(DataValue::Null)
+    }
+}
+
+impl From<Option<&str>> for DataValue {
+    fn from(v: Option<&str>) -> Self {
+        v.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null)
+    }
+}
+
+impl From<Option<i64>> for DataValue {
+    fn from(v: Option<i64>) -> Self {
+        v.map(DataValue::Int).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
+    }
+}
+
+impl From<Option<i32>> for DataValue {
+    fn from(v: Option<i32>) -> Self {
+        v.map(|i| DataValue::Int(i as i64)).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
+    }
+}
+
+impl From<Option<f64>> for DataValue {
+    fn from(v: Option<f64>) -> Self {
+        v.map(DataValue::Float).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Float))
+    }
+}
+
+impl From<Option<bool>> for DataValue {
+    fn from(v: Option<bool>) -> Self {
+        v.map(DataValue::Bool).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Bool))
+    }
+}
+
+impl From<Option<Uuid>> for DataValue {
+    fn from(v: Option<Uuid>) -> Self {
+        v.map(DataValue::Uuid).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Uuid))
+    }
+}
+
+impl From<Option<DateTime<Utc>>> for DataValue {
+    fn from(v: Option<DateTime<Utc>>) -> Self {
+        v.map(DataValue::DateTime).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Timestamp))
+    }
+}
+
+impl From<Option<NaiveDate>> for DataValue {
+    fn from(v: Option<NaiveDate>) -> Self {
+        v.map(DataValue::Date).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Date))
+    }
+}
+
+impl From<Option<Decimal>> for DataValue {
+    fn from(v: Option<Decimal>) -> Self {
+        v.map(DataValue::Decimal).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Decimal))
+    }
+}
+
+// ==========================================
 // DataValue 类型转换实现（用于 get_by_name_as 泛型方法）
 // ==========================================
 
