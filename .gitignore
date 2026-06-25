@@ -29,3 +29,4 @@ docker/V2/certs/cert.pem
 /git.txt
 /docker/k8s-deployment.yml
 /example/javaoauth2/
+/.agents/skills/
