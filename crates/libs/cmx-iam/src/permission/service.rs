@@ -1448,19 +1448,22 @@ impl PermissionService for PermissionServiceImpl {
     /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_permissions(
         &self,
-        filter: PermissionFilter,
+        filters: Option<Vec<PermissionFilter>>,
         list_options: ListOptions,
     ) -> Result<(Vec<Permission>, i64), TraitError> {
         debug!("{:<12} - PermissionServiceImpl::page_permissions", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let (dataset, total) =
             GenericCrudService::<PermissionBmc, PermissionFilter>::page(
                 &self.mm,
                 &self.db_id,
                 None,
-                Some(vec![filters]),
+                filters,
                 list_options,
             )
             .await
@@ -1476,7 +1479,7 @@ impl PermissionService for PermissionServiceImpl {
     ///
     /// # Arguments
     ///
-    /// * `filter` - 权限查询过滤器。
+    /// * `filters` - 权限查询过滤器数组（每个 filter 为一个 AND 组，组间 OR）。
     ///
     /// # Returns
     ///
@@ -1487,18 +1490,21 @@ impl PermissionService for PermissionServiceImpl {
     /// * `IamError::Crud` - 数据库查询失败。
     async fn list_permissions(
         &self,
-        filter: PermissionFilter,
+        filters: Option<Vec<PermissionFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<Permission>, TraitError> {
         debug!("{:<12} - PermissionServiceImpl::list_permissions", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let dataset = GenericCrudService::<PermissionBmc, PermissionFilter>::list(
             &self.mm,
             &self.db_id,
             None,
-            Some(vec![filters]),
+            filters,
             list_options,
         )
         .await

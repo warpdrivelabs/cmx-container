@@ -884,9 +884,12 @@ pub trait PermissionService: Send + Sync {
 
     /// 分页查询权限。
     ///
+    /// 接收一个 filter 组的数组（`filters`），组间为 OR 关系，组内为 AND。
+    /// 当传入 `None` 或空数组时，仅应用默认 `archived = 0` 过滤。
+    ///
     /// # Arguments
     ///
-    /// * `filter` - 权限查询过滤器。
+    /// * `filters` - 权限查询过滤器数组（每个元素是一个 AND 组）。
     /// * `list_options` - 分页与排序选项（由 `PageParams::to_list_options()` 构造）。
     ///
     /// # Returns
@@ -898,15 +901,18 @@ pub trait PermissionService: Send + Sync {
     /// 当数据库分页查询失败时返回错误。
     async fn page_permissions(
         &self,
-        filter: PermissionFilter,
+        filters: Option<Vec<PermissionFilter>>,
         list_options: ListOptions,
     ) -> Result<(Vec<Permission>, i64), TraitError>;
 
     /// 列表查询权限（不分页）。
     ///
+    /// 接收一个 filter 组的数组（`filters`），组间为 OR 关系，组内为 AND。
+    /// 当传入 `None` 或空数组时，仅应用默认 `archived = 0` 过滤。
+    ///
     /// # Arguments
     ///
-    /// * `filter` - 权限查询过滤器。
+    /// * `filters` - 权限查询过滤器数组（每个元素是一个 AND 组）。
     /// * `list_options` - 排序选项（由 `ListParams::to_list_options()` 构造）。
     ///
     /// # Returns
@@ -918,7 +924,7 @@ pub trait PermissionService: Send + Sync {
     /// 当数据库查询失败时返回错误。
     async fn list_permissions(
         &self,
-        filter: PermissionFilter,
+        filters: Option<Vec<PermissionFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<Permission>, TraitError>;
 

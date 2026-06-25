@@ -187,13 +187,11 @@ pub async fn page_permissions(
     let current = params.get_page() as u64;
     let size = params.get_size() as u64;
     let list_options = params.to_list_options();
-    let filter = params.filters
-        .and_then(|v| v.into_iter().next())
-        .unwrap_or_default();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let (permissions, total) = iam
         .permission_service
-        .page_permissions(filter, list_options)
+        .page_permissions(filters, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
@@ -222,13 +220,11 @@ pub async fn list_permissions(
     })?;
 
     let list_options = params.to_list_options();
-    let filter = params.filters
-        .and_then(|v| v.into_iter().next())
-        .unwrap_or_default();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let permissions = iam
         .permission_service
-        .list_permissions(filter, Some(list_options))
+        .list_permissions(filters, Some(list_options))
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
