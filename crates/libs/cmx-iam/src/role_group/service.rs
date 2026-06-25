@@ -361,19 +361,22 @@ impl RoleGroupService for RoleGroupServiceImpl {
     /// * `IamError::Crud` - 数据库分页查询失败。
     async fn page_role_groups(
         &self,
-        filter: RoleGroupFilter,
+        filters: Option<Vec<RoleGroupFilter>>,
         list_options: ListOptions,
     ) -> Result<(Vec<RoleGroup>, i64), TraitError> {
         debug!("{:<12} - RoleGroupServiceImpl::page_role_groups", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let (dataset, total) =
             GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::page(
                 &self.mm,
                 &self.db_id,
                 None,
-                Some(vec![filters]),
+                filters,
                 list_options,
             )
             .await
@@ -389,7 +392,7 @@ impl RoleGroupService for RoleGroupServiceImpl {
     ///
     /// # Arguments
     ///
-    /// * `filter` - 角色组查询过滤器。
+    /// * `filters` - 角色组查询过滤器数组（每个 filter 为一个 AND 组，组间 OR）。
     ///
     /// # Returns
     ///
@@ -400,18 +403,21 @@ impl RoleGroupService for RoleGroupServiceImpl {
     /// * `IamError::Crud` - 数据库查询失败。
     async fn list_role_groups(
         &self,
-        filter: RoleGroupFilter,
+        filters: Option<Vec<RoleGroupFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<RoleGroup>, TraitError> {
         debug!("{:<12} - RoleGroupServiceImpl::list_role_groups", "IAM");
 
-        let filters = Self::with_default_archived(filter);
+        // 对每个 filter 组注入默认 archived = 0
+        let filters = filters.map(|fs| {
+            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+        });
 
         let dataset = GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::list(
             &self.mm,
             &self.db_id,
             None,
-            Some(vec![filters]),
+            filters,
             list_options,
         )
         .await

@@ -173,13 +173,11 @@ pub async fn page_role_groups(
     let current = params.get_page() as u64;
     let size = params.get_size() as u64;
     let list_options = params.to_list_options();
-    let filter = params.filters
-        .and_then(|v| v.into_iter().next())
-        .unwrap_or_default();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let (role_groups, total) = iam
         .role_group_service
-        .page_role_groups(filter, list_options)
+        .page_role_groups(filters, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
@@ -208,13 +206,11 @@ pub async fn list_role_groups(
     })?;
 
     let list_options = params.to_list_options();
-    let filter = params.filters
-        .and_then(|v| v.into_iter().next())
-        .unwrap_or_default();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
     let role_groups = iam
         .role_group_service
-        .list_role_groups(filter, Some(list_options))
+        .list_role_groups(filters, Some(list_options))
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
