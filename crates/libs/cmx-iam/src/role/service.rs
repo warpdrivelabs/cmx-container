@@ -374,17 +374,11 @@ impl RoleService for RoleServiceImpl {
     async fn page_roles(
         &self,
         filter: RoleFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<Role>, i64), TraitError> {
-        debug!(
-            "{:<12} - RoleServiceImpl::page_roles - current: {}, size: {}",
-            "IAM", current, size
-        );
+        debug!("{:<12} - RoleServiceImpl::page_roles", "IAM");
 
         let filters = Self::with_default_archived(filter);
-        let offset = current.saturating_sub(1) * size;
-        let list_options = ListOptions::from_offset_limit(offset as i64, size as i64);
 
         let (dataset, total) =
             GenericCrudService::<RoleBmc, RoleFilter>::page(
@@ -416,7 +410,11 @@ impl RoleService for RoleServiceImpl {
     /// # Errors
     ///
     /// * `IamError::Crud` - 数据库查询失败。
-    async fn list_roles(&self, filter: RoleFilter) -> Result<Vec<Role>, TraitError> {
+    async fn list_roles(
+        &self,
+        filter: RoleFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<Role>, TraitError> {
         debug!("{:<12} - RoleServiceImpl::list_roles", "IAM");
 
         let filters = Self::with_default_archived(filter);
@@ -426,7 +424,7 @@ impl RoleService for RoleServiceImpl {
             &self.db_id,
             None,
             Some(vec![filters]),
-            None,
+            list_options,
         )
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;

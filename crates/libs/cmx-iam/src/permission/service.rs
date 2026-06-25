@@ -150,7 +150,7 @@ impl PermissionServiceImpl {
     fn build_subtree(parent: Permission, all: &[Permission]) -> PermissionTreeNode {
         let children: Vec<PermissionTreeNode> = all
             .iter()
-            .filter(|p| p.parent_id.as_deref() == Some(&parent.id))
+            .filter(|p| p.parent_id.as_deref() == Some(parent.id.as_str()))
             .cloned()
             .map(|child| Self::build_subtree(child, all))
             .collect();

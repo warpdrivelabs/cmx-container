@@ -488,17 +488,11 @@ impl UserService for UserServiceImpl {
     async fn page_users(
         &self,
         filter: UserFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<User>, i64), TraitError> {
-        debug!(
-            "{:<12} - UserServiceImpl::page_users - current: {}, size: {}",
-            "IAM", current, size
-        );
+        debug!("{:<12} - UserServiceImpl::page_users", "IAM");
 
         let filters = Self::with_default_archived(filter);
-        let offset = current.saturating_sub(1) * size;
-        let list_options = ListOptions::from_offset_limit(offset as i64, size as i64);
 
         let (dataset, total) =
             GenericCrudService::<UserBmc, UserFilter>::page(
@@ -530,7 +524,11 @@ impl UserService for UserServiceImpl {
     /// # Errors
     ///
     /// * `IamError::Crud` - 数据库查询失败。
-    async fn list_users(&self, filter: UserFilter) -> Result<Vec<User>, TraitError> {
+    async fn list_users(
+        &self,
+        filter: UserFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<User>, TraitError> {
         debug!("{:<12} - UserServiceImpl::list_users", "IAM");
 
         let filters = Self::with_default_archived(filter);
@@ -540,7 +538,7 @@ impl UserService for UserServiceImpl {
             &self.db_id,
             None,
             Some(vec![filters]),
-            None,
+            list_options,
         )
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;

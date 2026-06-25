@@ -53,7 +53,7 @@ pub struct ListParamsDoc<F> {
     pub filter: Option<F>,
     /// 多个过滤条件列表。
     pub filters: Option<Vec<F>>,
-    /// 排序字段，格式为 `"field1:asc,field2:desc"`。
+    /// 排序字段，格式为 `"!field1,field2"` !表示 desc 降序。
     pub order_bys: Option<String>,
 }
 

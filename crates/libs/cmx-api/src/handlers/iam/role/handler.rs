@@ -175,13 +175,14 @@ pub async fn page_roles(
 
     let current = params.get_page() as u64;
     let size = params.get_size() as u64;
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let (roles, total) = iam
         .role_service
-        .page_roles(filter, current, size)
+        .page_roles(filter, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
@@ -209,13 +210,14 @@ pub async fn list_roles(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let roles = iam
         .role_service
-        .list_roles(filter)
+        .list_roles(filter, Some(list_options))
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 

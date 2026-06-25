@@ -184,13 +184,14 @@ pub async fn page_users(
 
     let current = params.get_page() as u64;
     let size = params.get_size() as u64;
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let (users, total) = iam
         .user_service
-        .page_users(filter, current, size)
+        .page_users(filter, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
@@ -218,13 +219,14 @@ pub async fn list_users(
         Error::business_error("IAM 服务未初始化".to_string())
     })?;
 
+    let list_options = params.to_list_options();
     let filter = params.filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
 
     let users = iam
         .user_service
-        .list_users(filter)
+        .list_users(filter, Some(list_options))
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 

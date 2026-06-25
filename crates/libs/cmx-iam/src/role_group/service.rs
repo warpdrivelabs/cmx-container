@@ -124,7 +124,7 @@ impl RoleGroupServiceImpl {
     fn build_subtree(parent: RoleGroup, all: &[RoleGroup]) -> RoleGroupTreeNode {
         let children: Vec<RoleGroupTreeNode> = all
             .iter()
-            .filter(|g| g.parent_id.as_deref() == Some(&parent.id))
+            .filter(|g| g.parent_id.as_deref() == Some(parent.id.as_str()))
             .cloned()
             .map(|child| Self::build_subtree(child, all))
             .collect();
@@ -362,17 +362,11 @@ impl RoleGroupService for RoleGroupServiceImpl {
     async fn page_role_groups(
         &self,
         filter: RoleGroupFilter,
-        current: u64,
-        size: u64,
+        list_options: ListOptions,
     ) -> Result<(Vec<RoleGroup>, i64), TraitError> {
-        debug!(
-            "{:<12} - RoleGroupServiceImpl::page_role_groups - current: {}, size: {}",
-            "IAM", current, size
-        );
+        debug!("{:<12} - RoleGroupServiceImpl::page_role_groups", "IAM");
 
         let filters = Self::with_default_archived(filter);
-        let offset = current.saturating_sub(1) * size;
-        let list_options = ListOptions::from_offset_limit(offset as i64, size as i64);
 
         let (dataset, total) =
             GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::page(
@@ -404,7 +398,11 @@ impl RoleGroupService for RoleGroupServiceImpl {
     /// # Errors
     ///
     /// * `IamError::Crud` - 数据库查询失败。
-    async fn list_role_groups(&self, filter: RoleGroupFilter) -> Result<Vec<RoleGroup>, TraitError> {
+    async fn list_role_groups(
+        &self,
+        filter: RoleGroupFilter,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<RoleGroup>, TraitError> {
         debug!("{:<12} - RoleGroupServiceImpl::list_role_groups", "IAM");
 
         let filters = Self::with_default_archived(filter);
@@ -414,7 +412,7 @@ impl RoleGroupService for RoleGroupServiceImpl {
             &self.db_id,
             None,
             Some(vec![filters]),
-            None,
+            list_options,
         )
         .await
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
