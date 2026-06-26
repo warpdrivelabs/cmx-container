@@ -1384,6 +1384,7 @@ impl AuthService for AuthServiceImpl {
     /// 当数据库写入失败时返回 `AuthError::Internal`。
     async fn import_static_api_keys(&self) -> std::result::Result<(), AuthError> {
         if self.config.static_api_keys.is_empty() {
+            info!("没有静态 API Key 配置");
             return Ok(());
         }
 
