@@ -38,6 +38,7 @@
       "metadata/**/*",
       "servicedata/**/*",
       "menudata/**/*",
+      "permdata/**/*",
       "formdata/**/*",
       "mcpdata/**/*",
       "seeddata/**/*",
