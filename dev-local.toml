@@ -19,7 +19,7 @@ db_id = "primary"
 # 数据库类型：postgres | mysql | sqlite（必需）
 db_type = "postgres"
 # 数据库连接 URL（必需）
-db_url = "postgresql://postgres:postgres@1127.0.0.1:5432/cmx"
+db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = true
@@ -45,8 +45,10 @@ health_check_timeout = 5
 
 
 [redis]
-url = "redis://192.168.137.95:32496/12"
+# url = "redis://192.168.137.95:32496/12"
 #url = "redis://192.168.157.46:6379/12"
+url = "redis://127.0.0.1:6379/12"
+
 
 # Redis 运行模式：Standalone（单机）或 Cluster（集群）
 #mode = "Standalone"
