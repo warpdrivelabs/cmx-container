@@ -269,7 +269,7 @@ mm.execute_sql_with_datavalues(&db_id, None, &sql, params).await?;
 | `new(start_offset)` | 创建 builder,占位符从 `start_offset + 1` 起编号 |
 | `set(col, val)` | 必填列赋值,val 须 `Into<DataValue>` |
 | `set_opt(col, val)` | 可选列赋值,**None 跳过该列**(不加入 SET) |
-| `set_opt_null(col, val)` | 可选列赋值,**None 写入 NULL**(显式置 NULL,带类型) |
+| `set_opt_null(col, val)` | 可选列赋值,**None 写入无类型 NULL**(`DataValue::Null`,绑 TEXT) |
 | `build()` | 返回 `(set_clause: String, params: Vec<DataValue>)` |
 | `len()` / `is_empty()` | 查询当前赋值数 |
 | `next_placeholder()` | 查询下一个占位符编号 |
@@ -280,8 +280,11 @@ mm.execute_sql_with_datavalues(&db_id, None, &sql, params).await?;
 // set_opt: None → 跳过该列(不更新)
 b.set_opt("name", None::<String>);  // SET 子句不含 name
 
-// set_opt_null: None → 写入 SET name = NULL(显式置 NULL)
-b.set_opt_null("deleted_at", None::<DateTime<Utc>>);  // SET deleted_at = $N (NullTyped)
+// set_opt_null: None → 写入 SET name = NULL(无类型,绑 TEXT)
+// 注意:当前实现产生 DataValue::Null(非 NullTyped),仅适用于 TEXT 列。
+// 若目标列是 INTEGER/TIMESTAMP/UUID,应改用 set + 显式 NullTyped:
+b.set_opt_null("description", None::<String>);  // SET description = $N (Null)
+b.set("deleted_at", DataValue::NullTyped(SqlTypeMarker::Timestamp));  // 非 TEXT 列的 NULL
 ```
 
 ### 4.5 占位符编号策略
@@ -355,11 +358,11 @@ let null_uuid: DataValue = cmx_core::dv!(null Uuid);
 
 ### 5.4 绑定层行为
 
-| 数据库 | NullTyped 行为 |
-|--------|---------------|
-| PostgreSQL | 按 SqlTypeMarker 分发到 `None::<T>`(类型精确) |
-| MySQL | 统一 `None::<String>`(MySQL NULL 无类型) |
-| SQLite | 统一 `None::<String>`(SQLite 动态类型) |
+| 数据库 | NullTyped 行为 | 其他注意 |
+|--------|---------------|---------|
+| PostgreSQL | 按 SqlTypeMarker 分发到 `None::<T>`(类型精确) | `ShortStr`/`LongStr` 绑定为 `&str`;`Array` 按 PG 数组绑定 |
+| MySQL | 统一 `None::<String>`(MySQL NULL 无类型) | `ShortStr`/`LongStr` 绑定为 String |
+| SQLite | 统一 `None::<String>`(SQLite 动态类型) | 同 MySQL |
 
 ---
 
