@@ -115,19 +115,19 @@ COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';
 
--- 新增权限码（规则管理）
-INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
-('1898765432100002031', 'rule:read',   '查看权限规则', 'api', 31, 1, '查询互斥规则及规则项'),
-('1898765432100002032', 'rule:manage', '管理权限规则', 'api', 32, 1, '创建/更新/删除/启用禁用规则及规则项')
-ON CONFLICT (code) DO NOTHING;
-
--- 新增权限码对 admin 角色的批量授权（复用 CTE 逻辑）
-WITH new_perms AS (
-    SELECT id FROM cmx_permission WHERE code IN ('rule:read', 'rule:manage')
-)
-INSERT INTO cmx_role_permission (id, role_id, permission_id)
-SELECT CONCAT('1898765432100003', LPAD(ROW_NUMBER() OVER ()::TEXT, 4, '0')),
-       '1898765432100001001',
-       id
-FROM new_perms
+-- -- 新增权限码（规则管理）
+-- INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
+-- ('1898765432100002031', 'rule:read',   '查看权限规则', 'api', 31, 1, '查询互斥规则及规则项'),
+-- ('1898765432100002032', 'rule:manage', '管理权限规则', 'api', 32, 1, '创建/更新/删除/启用禁用规则及规则项')
+-- ON CONFLICT (code) DO NOTHING;
+--
+-- -- 新增权限码对 admin 角色的批量授权（复用 CTE 逻辑）
+-- WITH new_perms AS (
+--     SELECT id FROM cmx_permission WHERE code IN ('rule:read', 'rule:manage')
+-- )
+-- INSERT INTO cmx_role_permission (id, role_id, permission_id)
+-- SELECT CONCAT('1898765432100003', LPAD(ROW_NUMBER() OVER ()::TEXT, 4, '0')),
+--        '1898765432100001001',
+--        id
+-- FROM new_perms
 ON CONFLICT DO NOTHING;

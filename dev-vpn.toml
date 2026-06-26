@@ -123,6 +123,9 @@ enabled = false
 
 #数据库迁移相关配置
 [migration]
+# 是否启用迁移（可选，默认 false）
+# 启用后会执行待执行的数据库迁移
+enabled = false
 # 迁移文件目录
 dir = "docs/sql/migrations"
 # 校验文件内容是否被修改，默认值true

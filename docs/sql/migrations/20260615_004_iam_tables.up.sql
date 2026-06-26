@@ -247,32 +247,32 @@ INSERT INTO cmx_role (id, code, name, data_scope, sort_order, status, descriptio
 ('1898765432100001002', 'user', '普通用户', 5, 2, 1, '仅查看本人数据')
 ON CONFLICT (code) DO NOTHING;
 
--- 内置权限（resource:action 规范）
-INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
-('1898765432100002001', 'user:list',        '用户列表',   'api',  1, 1, '查看用户列表'),
-('1898765432100002002', 'user:create',      '创建用户',   'api',  2, 1, '创建新用户'),
-('1898765432100002003', 'user:read',        '查看用户',   'api',  3, 1, '查看用户详情'),
-('1898765432100002004', 'user:update',      '更新用户',   'api',  4, 1, '更新用户信息'),
-('1898765432100002005', 'user:delete',      '删除用户',   'api',  5, 1, '删除用户'),
-('1898765432100002006', 'user:assign_role', '分配角色',   'api',  6, 1, '为用户分配角色'),
-('1898765432100002011', 'role:list',        '角色列表',   'api', 11, 1, '查看角色列表'),
-('1898765432100002012', 'role:create',      '创建角色',   'api', 12, 1, '创建新角色'),
-('1898765432100002013', 'role:read',        '查看角色',   'api', 13, 1, '查看角色详情'),
-('1898765432100002014', 'role:update',      '更新角色',   'api', 14, 1, '更新角色信息'),
-('1898765432100002015', 'role:delete',      '删除角色',   'api', 15, 1, '删除角色'),
-('1898765432100002016', 'role:assign_perm', '分配权限',   'api', 16, 1, '为角色分配权限'),
-('1898765432100002021', 'permission:list',  '权限列表',   'api', 21, 1, '查看权限列表'),
-('1898765432100002022', 'permission:read',  '查看权限',   'api', 22, 1, '查看权限详情'),
-('1898765432100002023', 'system:all',       '系统管理',   'api', 99, 1, '系统全部权限')
-ON CONFLICT (code) DO NOTHING;
-
--- admin 角色拥有全部权限（使用 CTE + ROW_NUMBER 生成关联 ID）
-WITH perms AS (
-    SELECT id, ROW_NUMBER() OVER () AS rn FROM cmx_permission
-)
-INSERT INTO cmx_role_permission (id, role_id, permission_id)
-SELECT CONCAT('1898765432100003', LPAD(rn::TEXT, 4, '0')),
-       '1898765432100001001',
-       id
-FROM perms
-ON CONFLICT DO NOTHING;
+-- -- 内置权限（resource:action 规范）
+-- INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES
+-- ('1898765432100002001', 'user:list',        '用户列表',   'api',  1, 1, '查看用户列表'),
+-- ('1898765432100002002', 'user:create',      '创建用户',   'api',  2, 1, '创建新用户'),
+-- ('1898765432100002003', 'user:read',        '查看用户',   'api',  3, 1, '查看用户详情'),
+-- ('1898765432100002004', 'user:update',      '更新用户',   'api',  4, 1, '更新用户信息'),
+-- ('1898765432100002005', 'user:delete',      '删除用户',   'api',  5, 1, '删除用户'),
+-- ('1898765432100002006', 'user:assign_role', '分配角色',   'api',  6, 1, '为用户分配角色'),
+-- ('1898765432100002011', 'role:list',        '角色列表',   'api', 11, 1, '查看角色列表'),
+-- ('1898765432100002012', 'role:create',      '创建角色',   'api', 12, 1, '创建新角色'),
+-- ('1898765432100002013', 'role:read',        '查看角色',   'api', 13, 1, '查看角色详情'),
+-- ('1898765432100002014', 'role:update',      '更新角色',   'api', 14, 1, '更新角色信息'),
+-- ('1898765432100002015', 'role:delete',      '删除角色',   'api', 15, 1, '删除角色'),
+-- ('1898765432100002016', 'role:assign_perm', '分配权限',   'api', 16, 1, '为角色分配权限'),
+-- ('1898765432100002021', 'permission:list',  '权限列表',   'api', 21, 1, '查看权限列表'),
+-- ('1898765432100002022', 'permission:read',  '查看权限',   'api', 22, 1, '查看权限详情'),
+-- ('1898765432100002023', 'system:all',       '系统管理',   'api', 99, 1, '系统全部权限')
+-- ON CONFLICT (code) DO NOTHING;
+--
+-- -- admin 角色拥有全部权限（使用 CTE + ROW_NUMBER 生成关联 ID）
+-- WITH perms AS (
+--     SELECT id, ROW_NUMBER() OVER () AS rn FROM cmx_permission
+-- )
+-- INSERT INTO cmx_role_permission (id, role_id, permission_id)
+-- SELECT CONCAT('1898765432100003', LPAD(rn::TEXT, 4, '0')),
+--        '1898765432100001001',
+--        id
+-- FROM perms
+-- ON CONFLICT DO NOTHING;
