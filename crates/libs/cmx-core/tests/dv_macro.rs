@@ -50,13 +50,13 @@ fn dv_mixed_types() {
         "str".to_string(),
         42_i64,
         true,
-        3.14_f64,
+        3.5_f64,
     ];
     assert_eq!(v.len(), 4);
     assert_eq!(v[0], DataValue::String("str".into()));
     assert_eq!(v[1], DataValue::Int(42));
     assert_eq!(v[2], DataValue::Bool(true));
-    assert_eq!(v[3], DataValue::Float(3.14));
+    assert_eq!(v[3], DataValue::Float(3.5));
 }
 
 #[test]
