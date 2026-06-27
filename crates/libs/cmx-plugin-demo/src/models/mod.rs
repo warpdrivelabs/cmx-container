@@ -8,6 +8,7 @@ pub use cmx_plugin_sdk::{
     DbRequest, DbResponse,
     CacheGetRequest, CacheSetRequest, CacheResponse,
     PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
+    WasmUserDetails, WasmEffectivePermissions,
 };
 
 pub mod order;

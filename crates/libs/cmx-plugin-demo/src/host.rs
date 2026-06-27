@@ -56,4 +56,24 @@ pub trait HostFunctions {
 
     /// 调用远程服务编排。
     fn call_remote_service(&self, server_name: &str, request: CallServiceRequest) -> Result<CallServiceResponse, String>;
+
+    // ── IAM 用户/权限查询 ──────────────────────────
+
+    /// 查询单个用户详情（脱敏）。
+    fn get_user_details(&self, user_id: &str) -> Result<Option<WasmUserDetails>, String>;
+
+    /// 批量查询用户详情（脱敏）。
+    fn get_users_details(&self, user_ids: &[String]) -> Result<Vec<WasmUserDetails>, String>;
+
+    /// 查询用户有效权限聚合（roles + permissions）。
+    fn get_user_effective_permissions(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<WasmEffectivePermissions>, String>;
+
+    /// 权限校验：用户是否拥有指定权限码。
+    fn has_permission(&self, user_id: &str, code: &str) -> Result<bool, String>;
+
+    /// 角色判断：用户是否拥有指定角色码。
+    fn has_role(&self, user_id: &str, code: &str) -> Result<bool, String>;
 }

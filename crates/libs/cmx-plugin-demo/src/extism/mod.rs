@@ -68,6 +68,31 @@ impl HostFunctions for ExtismHost {
     ) -> Result<CallServiceResponse, String> {
         HostCaller::call_remote_service(server_name, request).map_err(|e| e.to_string())
     }
+
+    // ── IAM 用户/权限查询（委托到 HostCaller）──
+
+    fn get_user_details(&self, user_id: &str) -> Result<Option<WasmUserDetails>, String> {
+        HostCaller::get_user_details(user_id).map_err(|e| e.to_string())
+    }
+
+    fn get_users_details(&self, user_ids: &[String]) -> Result<Vec<WasmUserDetails>, String> {
+        HostCaller::get_users_details(user_ids).map_err(|e| e.to_string())
+    }
+
+    fn get_user_effective_permissions(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<WasmEffectivePermissions>, String> {
+        HostCaller::get_user_effective_permissions(user_id).map_err(|e| e.to_string())
+    }
+
+    fn has_permission(&self, user_id: &str, code: &str) -> Result<bool, String> {
+        HostCaller::has_permission(user_id, code).map_err(|e| e.to_string())
+    }
+
+    fn has_role(&self, user_id: &str, code: &str) -> Result<bool, String> {
+        HostCaller::has_role(user_id, code).map_err(|e| e.to_string())
+    }
 }
 
 pub mod basic;
