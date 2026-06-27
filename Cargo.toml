@@ -323,3 +323,8 @@ incremental = true
 # 运行时路径：是否在可执行文件中嵌入库搜索路径
 # 开发时通常关闭，发布到特定环境时可能需要开启
 rpath = false
+
+# 本地 patch：让 cmx-plugin-demo 通过 registry(nora) 声明的 cmx-plugin-sdk
+# 解析到本地 path，便于在 SDK 改动后本地验证 demo（发布时 demo 用 registry 新版）。
+[patch.nora]
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" }

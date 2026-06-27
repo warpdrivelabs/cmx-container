@@ -98,5 +98,6 @@ impl HostFunctions for ExtismHost {
 pub mod basic;
 pub mod cache;
 pub mod database;
+pub mod iam;
 pub mod plugin_call;
 pub mod orchestration;

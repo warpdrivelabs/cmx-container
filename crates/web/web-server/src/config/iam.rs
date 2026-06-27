@@ -309,7 +309,7 @@ impl cmx_iam::service_traits::UserService for PlaceholderUserService {
 }
 
 /// 从配置文件加载 IamConfig
-fn load_iam_config() -> IamConfig {
+pub fn load_iam_config() -> IamConfig {
     let config = cmx_utils::ConfigManager::global();
     let mut iam_config = IamConfig::default();
 
