@@ -257,10 +257,17 @@ pub fn call_plugin_function(
     func_name: &str,
     input: &JsonValue,
 ) -> Result<JsonValue> {
+    // SAFETY: `std::env::set_var` 在多线程环境下可能引发数据竞争，此处安全的前提是：
+    // 当前进程内没有其他线程并发读写 `EXTISM_DEBUG` 环境变量。该变量仅在下方
+    // `PluginBuilder::build()` 期间被 extism 运行时读取，设置后立即构建并在构建完成后移除，
+    // 假设调用方未并发触发同一调试流程。
     unsafe {
         std::env::set_var("EXTISM_DEBUG", "1");
     }
     let mut plugin = PluginBuilder::new(wasm_bytes).with_wasi(true).build()?;
+    // SAFETY: `std::env::remove_var` 在多线程环境下可能引发数据竞争，此处安全的前提是：
+    // 与上方 `set_var` 配对，且没有其他线程并发读写 `EXTISM_DEBUG`。
+    // 插件构建已完成，移除该变量以避免影响后续操作。
     unsafe {
         std::env::remove_var("EXTISM_DEBUG");
     }

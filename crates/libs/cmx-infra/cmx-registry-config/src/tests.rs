@@ -328,6 +328,9 @@ fn config_service_name_priority() {
     use std::env;
 
     // 清理可能存在的环境变量
+    // SAFETY: `std::env::remove_var` 在多线程环境下可能引发数据竞争。此处安全的前提是：
+    // 测试运行期间没有其他线程并发读写这两个环境变量。本测试为这两个变量的唯一操作者，
+    // 在测试起始处清理以建立已知初始状态。
     unsafe {
         env::remove_var("SERVICE_REGISTRY_NAME");
         env::remove_var("NACOS_NAMING_SERVICE_NAME");
@@ -338,6 +341,9 @@ fn config_service_name_priority() {
     assert_eq!(config.service_name(), "cmx-server");
 
     // 设置 NACOS_NAMING_SERVICE_NAME
+    // SAFETY: `std::env::set_var` 在多线程环境下可能引发数据竞争。此处安全的前提是：
+    // 测试运行期间没有其他线程并发读写 `NACOS_NAMING_SERVICE_NAME` 环境变量。
+    // 该变量由本测试独占，设置后立即读取验证并在测试末尾清理。
     unsafe {
         env::set_var("NACOS_NAMING_SERVICE_NAME", "nacos-service");
     }
@@ -345,6 +351,9 @@ fn config_service_name_priority() {
     assert_eq!(config.service_name(), "nacos-service");
 
     // 设置 SERVICE_REGISTRY_NAME -> 优先级更高
+    // SAFETY: `std::env::set_var` 在多线程环境下可能引发数据竞争。此处安全的前提是：
+    // 测试运行期间没有其他线程并发读写 `SERVICE_REGISTRY_NAME` 环境变量。
+    // 该变量由本测试独占，设置后立即读取验证并在测试末尾清理。
     unsafe {
         env::set_var("SERVICE_REGISTRY_NAME", "registry-service");
     }
@@ -352,6 +361,9 @@ fn config_service_name_priority() {
     assert_eq!(config.service_name(), "registry-service");
 
     // 清理
+    // SAFETY: `std::env::remove_var` 在多线程环境下可能引发数据竞争。此处安全的前提是：
+    // 与上方 `set_var` 调用配对，且测试期间没有其他线程并发读写这两个环境变量。
+    // 测试已结束验证，在退出前恢复环境变量为未设置状态，避免污染其他测试。
     unsafe {
         env::remove_var("SERVICE_REGISTRY_NAME");
         env::remove_var("NACOS_NAMING_SERVICE_NAME");
