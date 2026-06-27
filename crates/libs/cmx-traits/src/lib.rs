@@ -19,6 +19,8 @@
 //! - [`service`] — 服务领域（ServiceQuery、ServiceStorage、ServiceInvoker）。
 //! - [`rpc`] — RPC 领域（ServiceOrchestrationClient、PluginDataClient）。
 //! - [`event_bus`] — 事件总线（EventBus、GlobalEventBus）。
+//! - [`function_invoker`] — 插件函数调用（FunctionInvoker、FunctionInvokeResult）。
+//! - [`step_status`] — StepStatus 字符串编解码（跨模块单一来源）。
 
 // 模块声明
 pub mod error;
@@ -29,3 +31,5 @@ pub mod runtime;
 pub mod service;
 pub mod rpc;
 pub mod event_bus;
+pub mod function_invoker;
+pub mod step_status;
