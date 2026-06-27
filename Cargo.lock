@@ -840,7 +840,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "cmx-api"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axum",
  "bytes",
@@ -887,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-api-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axum",
  "cmx-core",
@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-audit"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -921,7 +921,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-auth"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "argon2",
  "async-trait",
@@ -955,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-biz"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-buffer"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1003,7 +1003,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-cli"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-core"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "base64",
  "chrono",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-database"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "base64",
  "chrono",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-debug"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "extism",
@@ -1089,7 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-iam"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1118,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-macros"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1127,7 +1127,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-metadata"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1206,7 +1206,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-plugin-sdk"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "cmx-core",
  "extism-pdk",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-registry-config"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "cmx-utils",
@@ -1233,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-rpc"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -1257,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-rpc-gen"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "pilota",
  "volo",
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-runtime"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "cmx-core",
@@ -1285,7 +1285,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-service"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1309,7 +1309,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-storage"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1342,7 +1342,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-traits"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "cmx-utils"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -2298,7 +2298,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3456,7 +3456,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3521,7 +3521,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4904,7 +4904,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -5137,7 +5137,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5735,7 +5735,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5935,7 +5935,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6607,7 +6607,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8069,7 +8069,7 @@ dependencies = [
 
 [[package]]
 name = "web-server"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-trait",
  "axum",
@@ -8222,7 +8222,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
