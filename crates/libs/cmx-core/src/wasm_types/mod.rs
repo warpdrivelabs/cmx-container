@@ -25,4 +25,4 @@ pub use plugin::{ PluginInfoResponse, PluginFunRequest, PluginFunCallResponse, C
 pub use context::WasmContext;
 pub use common::{WasmFunctionRequest, WasmFunctionResponse};
 pub use execution::{ExecutionStep, StepStatus, OrchestrationError};
-pub use iam::{IamRequest, IamResponse, WasmEffectivePermissions, WasmUserDetails};
+pub use iam::{IamRequest, IamResponse, WasmCheckResult, WasmEffectivePermissions, WasmUserDetails};

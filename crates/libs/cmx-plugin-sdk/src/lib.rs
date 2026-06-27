@@ -53,7 +53,7 @@ pub use cmx_core::{
     CacheGetRequest, CacheSetRequest, CacheResponse,
     PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
     ExecutionStep, StepStatus, OrchestrationError,
-    IamRequest, IamResponse, WasmUserDetails, WasmEffectivePermissions,
+    IamRequest, IamResponse, WasmUserDetails, WasmEffectivePermissions, WasmCheckResult,
 };
 
 // ==================== 错误类型 ====================

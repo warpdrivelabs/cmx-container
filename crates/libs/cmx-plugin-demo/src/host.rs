@@ -76,4 +76,18 @@ pub trait HostFunctions {
 
     /// 角色判断：用户是否拥有指定角色码。
     fn has_role(&self, user_id: &str, code: &str) -> Result<bool, String>;
+
+    /// 批量权限校验：用户对多个权限码的拥有情况。
+    fn has_permissions(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<WasmCheckResult>, String>;
+
+    /// 批量角色判断：用户对多个角色码的拥有情况。
+    fn has_roles(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<WasmCheckResult>, String>;
 }

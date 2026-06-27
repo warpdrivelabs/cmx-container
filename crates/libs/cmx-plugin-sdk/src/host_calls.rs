@@ -379,4 +379,42 @@ impl HostCaller {
         })?;
         Ok(resp.allowed.unwrap_or(false))
     }
+
+    /// 批量权限校验：用户对多个权限码的拥有情况（一次往返，结果按入参顺序返回）。
+    ///
+    /// # 参数
+    /// - `user_id`: 目标用户 ID
+    /// - `codes`: 权限码列表（如 `["user:read", "user:write"]`）
+    ///
+    /// # 返回值
+    /// - `Ok(Vec<WasmCheckResult>)`: 每个 code 的校验结果，按入参顺序
+    pub fn has_permissions(
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<cmx_core::WasmCheckResult>, PluginError> {
+        let resp = Self::iam_query_call(IamRequest::HasPermissions {
+            user_id: user_id.to_string(),
+            codes: codes.to_vec(),
+        })?;
+        Ok(resp.check_results)
+    }
+
+    /// 批量角色判断：用户对多个角色码的拥有情况（一次往返，结果按入参顺序返回）。
+    ///
+    /// # 参数
+    /// - `user_id`: 目标用户 ID
+    /// - `codes`: 角色码列表（如 `["admin", "operator"]`）
+    ///
+    /// # 返回值
+    /// - `Ok(Vec<WasmCheckResult>)`: 每个 code 的判断结果，按入参顺序
+    pub fn has_roles(
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<cmx_core::WasmCheckResult>, PluginError> {
+        let resp = Self::iam_query_call(IamRequest::HasRoles {
+            user_id: user_id.to_string(),
+            codes: codes.to_vec(),
+        })?;
+        Ok(resp.check_results)
+    }
 }

@@ -16,7 +16,9 @@
 use std::sync::Arc;
 
 use cmx_core::model::cell::DataValue;
-use cmx_core::wasm_types::{IamRequest, IamResponse, WasmEffectivePermissions, WasmUserDetails};
+use cmx_core::wasm_types::{
+    IamRequest, IamResponse, WasmCheckResult, WasmEffectivePermissions, WasmUserDetails,
+};
 use cmx_database::DatabaseManager;
 use cmx_traits::auth::UserAuthQuery;
 use cmx_traits::error::HostFuncError;
@@ -93,6 +95,12 @@ impl IamHostFunctions {
                     self.do_has_permission(&user_id, &code).await
                 }
                 IamRequest::HasRole { user_id, code } => self.do_has_role(&user_id, &code).await,
+                IamRequest::HasPermissions { user_id, codes } => {
+                    self.do_has_permissions(&user_id, &codes).await
+                }
+                IamRequest::HasRoles { user_id, codes } => {
+                    self.do_has_roles(&user_id, &codes).await
+                }
             }
         });
 
@@ -233,6 +241,73 @@ impl IamHostFunctions {
         Ok(IamResponse {
             success: true,
             allowed: Some(allowed),
+            ..Default::default()
+        })
+    }
+
+    /// 批量权限校验：用户对多个权限码的拥有情况。
+    ///
+    /// 并发执行各权限校验（`futures::join_all`），每个校验独立走 IamChecker 缓存+熔断。
+    /// 任一校验失败则整体返回错误；结果按入参 codes 顺序返回。
+    async fn do_has_permissions(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<IamResponse, String> {
+        debug!(
+            "[cmx:iam] has_permissions: user={user_id}, count={}",
+            codes.len()
+        );
+        // 并发校验，保留入参顺序。
+        let futs = codes.iter().map(|code| async move {
+            let allowed = self.checker.has_permission(user_id, code).await?;
+            Ok::<_, cmx_traits::error::TraitError>(WasmCheckResult {
+                code: code.clone(),
+                allowed,
+            })
+        });
+        let results: Vec<WasmCheckResult> = futures::future::join_all(futs)
+            .await
+            .into_iter()
+            .collect::<Result<_, _>>()
+            .map_err(|e| format!("批量权限校验失败: {e}"))?;
+
+        Ok(IamResponse {
+            success: true,
+            check_results: results,
+            ..Default::default()
+        })
+    }
+
+    /// 批量角色判断：用户对多个角色码的拥有情况。
+    ///
+    /// 并发执行各角色判断（`futures::join_all`），每个判断独立走 IamChecker 缓存+熔断。
+    /// 任一判断失败则整体返回错误；结果按入参 codes 顺序返回。
+    async fn do_has_roles(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<IamResponse, String> {
+        debug!(
+            "[cmx:iam] has_roles: user={user_id}, count={}",
+            codes.len()
+        );
+        let futs = codes.iter().map(|code| async move {
+            let allowed = self.checker.has_role(user_id, code).await?;
+            Ok::<_, cmx_traits::error::TraitError>(WasmCheckResult {
+                code: code.clone(),
+                allowed,
+            })
+        });
+        let results: Vec<WasmCheckResult> = futures::future::join_all(futs)
+            .await
+            .into_iter()
+            .collect::<Result<_, _>>()
+            .map_err(|e| format!("批量角色校验失败: {e}"))?;
+
+        Ok(IamResponse {
+            success: true,
+            check_results: results,
             ..Default::default()
         })
     }

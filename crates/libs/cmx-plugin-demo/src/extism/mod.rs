@@ -93,6 +93,22 @@ impl HostFunctions for ExtismHost {
     fn has_role(&self, user_id: &str, code: &str) -> Result<bool, String> {
         HostCaller::has_role(user_id, code).map_err(|e| e.to_string())
     }
+
+    fn has_permissions(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<WasmCheckResult>, String> {
+        HostCaller::has_permissions(user_id, codes).map_err(|e| e.to_string())
+    }
+
+    fn has_roles(
+        &self,
+        user_id: &str,
+        codes: &[String],
+    ) -> Result<Vec<WasmCheckResult>, String> {
+        HostCaller::has_roles(user_id, codes).map_err(|e| e.to_string())
+    }
 }
 
 pub mod basic;

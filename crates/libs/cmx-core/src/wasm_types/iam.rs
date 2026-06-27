@@ -67,6 +67,18 @@ pub struct WasmEffectivePermissions {
     pub active_temp_roles: u32,
 }
 
+/// 批量权限/角色校验单项结果。
+///
+/// `HasPermissions` / `HasRoles` 操作对每个 code 返回一个此结构，
+/// 保持入参顺序便于插件按索引取用。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct WasmCheckResult {
+    /// 被校验的权限码或角色码。
+    pub code: String,
+    /// 是否拥有该权限/角色。
+    pub allowed: bool,
+}
+
 /// IAM 宿主函数请求（统一信封，按变体分发）。
 ///
 /// 单一宿主函数入口接收此 enum，根据变体路由到对应查询逻辑，
@@ -103,6 +115,20 @@ pub enum IamRequest {
         /// 角色码（如 `admin`）。
         code: String,
     },
+    /// 批量权限校验：用户对多个权限码的拥有情况（一次往返，结果按入参顺序返回）。
+    HasPermissions {
+        /// 目标用户 ID。
+        user_id: String,
+        /// 待校验的权限码列表。
+        codes: Vec<String>,
+    },
+    /// 批量角色判断：用户对多个角色码的拥有情况（一次往返，结果按入参顺序返回）。
+    HasRoles {
+        /// 目标用户 ID。
+        user_id: String,
+        /// 待校验的角色码列表。
+        codes: Vec<String>,
+    },
 }
 
 /// IAM 宿主函数响应（统一信封）。
@@ -129,6 +155,9 @@ pub struct IamResponse {
     /// `HasPermission` / `HasRole` 结果。
     #[serde(default)]
     pub allowed: Option<bool>,
+    /// `HasPermissions` / `HasRoles` 批量校验结果（按入参 codes 顺序）。
+    #[serde(default)]
+    pub check_results: Vec<WasmCheckResult>,
 }
 
 impl IamResponse {
