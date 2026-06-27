@@ -48,7 +48,6 @@
 pub mod b64;
 pub mod config;
 pub mod crypto;
-pub mod host_functions;
 pub mod id;
 pub mod sync_utils;
 pub mod time;
@@ -61,5 +60,4 @@ pub use config::{
 };
 pub use zip::{ZipCompressor, ZipExtractor, ZipError, ZipResult};
 pub use id::{snowflake_id, snowflake_id_str, SnowflakeGenerator, UuidGenerator};
-pub use host_functions::LoggingHostFunctions;
 pub use sync_utils::{read_lock, write_lock};
