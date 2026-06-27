@@ -325,6 +325,10 @@ fn load_iam_config() -> IamConfig {
     if let Ok(ttl) = config.get_int("iam.permission_cache_ttl_secs") {
         iam_config.permission_cache_ttl_secs = ttl as u64;
     }
+    // SoD 互斥校验开关：默认开启（见 IamConfig::default），此处允许配置覆盖关闭
+    if let Ok(enabled) = config.get_bool("iam.enable_sod_check") {
+        iam_config.enable_sod_check = enabled;
+    }
 
     iam_config
 }

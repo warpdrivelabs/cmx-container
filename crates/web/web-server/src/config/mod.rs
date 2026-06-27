@@ -32,16 +32,39 @@ pub use services::init_services;
 pub use services::init_service_invoker;
 pub use storage::init_storage;
 
-use cmx_utils::{ConfigManager, ConfigResult};
+use cmx_utils::{ConfigError, ConfigManager, ConfigResult};
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-pub fn web_config() -> &'static WebConfig {
-    static INSTANCE: OnceLock<WebConfig> = OnceLock::new();
+/// Web 服务器配置单例。
+///
+/// 由 [`init_web_config`] 在启动早期完成初始化，运行期通过 [`web_config`] 读取。
+static WEB_CONFIG_INSTANCE: OnceLock<WebConfig> = OnceLock::new();
 
-    INSTANCE.get_or_init(|| {
-        WebConfig::load_from_env()
-            .unwrap_or_else(|ex| panic!("FATAL - WHILE LOADING CONF - Cause: {}", ex))
+/// 初始化 Web 服务器配置。
+///
+/// 从环境变量加载配置并存储到全局单例。必须在 [`web_config`] 调用前完成。
+///
+/// # Errors
+///
+/// 配置加载失败时返回 `ConfigError`。
+pub fn init_web_config() -> ConfigResult<()> {
+    let config = WebConfig::load_from_env()?;
+    // 重复初始化时保留首次值，忽略后续 set 返回的错误。
+    let _ = WEB_CONFIG_INSTANCE.set(config);
+    Ok(())
+}
+
+/// 获取 Web 服务器配置的静态引用。
+///
+/// 必须先调用 [`init_web_config`] 完成初始化。
+///
+/// # Errors
+///
+/// 配置未初始化时返回 `ConfigError`。
+pub fn web_config() -> ConfigResult<&'static WebConfig> {
+    WEB_CONFIG_INSTANCE.get().ok_or_else(|| ConfigError::BuildError {
+        message: "WebConfig 尚未初始化，请先调用 init_web_config()".to_string(),
     })
 }
 

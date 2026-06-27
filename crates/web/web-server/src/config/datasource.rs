@@ -344,6 +344,7 @@ fn build_dbconfig_from_row(
             connect_timeout,
             idle_timeout,
             max_lifetime,
+            ..Default::default()
         },
         health_check_interval,
         health_check_timeout,
