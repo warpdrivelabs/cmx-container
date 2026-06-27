@@ -481,6 +481,7 @@ mod tests {
             max_connections: 5,
             min_connections: 1,
             connect_timeout: 30,
+            acquire_timeout: 30,
             idle_timeout: 600,
             max_lifetime: 1800,
         };
