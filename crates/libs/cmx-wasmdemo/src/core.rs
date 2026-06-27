@@ -116,6 +116,7 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: None,
+            data_values: None,
         };
         let db_response = self.host.db_query(query_request)?;
         self.host.log_info(&format!("数据库查询结果: {:?}", db_response))?;
@@ -250,6 +251,8 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: None,
+            data_values: None,
+
         };
         match self.host.db_query(query_request) {
             Ok(resp) => results.push(format!("数据库测试: {:?}", resp)),
@@ -403,6 +406,8 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: txn_id.clone(),
+            data_values: None,
+
         };
         let db_response = self.host.db_execute(query_request)?;
         let result = serde_json::json!({
@@ -441,6 +446,8 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: txn_id.clone(),
+            data_values: None,
+
         };
         let db_response = self.host.db_execute(query_request)?;
         let result = serde_json::json!({
@@ -479,6 +486,8 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: Some("test_table".to_string()),
             db_id: None,
             txn_id: txn_id.clone(),
+            data_values: None,
+
         };
         let db_response = self.host.db_query(query_request)?;
         let result = serde_json::json!({
@@ -518,6 +527,8 @@ impl<H: HostFunctions> PluginCore<H> {
             dataset_id: None,
             db_id: None,
             txn_id: txn_id.clone(),
+            data_values: None,
+
         };
         let db_response = self.host.db_execute(query_request)?;
         let result = serde_json::json!({
