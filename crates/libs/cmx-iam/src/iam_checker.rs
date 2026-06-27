@@ -119,6 +119,17 @@ impl IamChecker {
         Duration::from_secs(ttl.max(60))
     }
 
+    /// 计算缓存 TTL。
+    ///
+    /// 空结果使用 60 秒短 TTL 防缓存穿透；非空结果走带抖动的 TTL 防雪崩。
+    fn calc_cache_ttl(&self, is_empty: bool) -> Duration {
+        if is_empty {
+            Duration::from_secs(60)
+        } else {
+            self.calc_ttl_with_jitter()
+        }
+    }
+
     /// 从 Redis 缓存读取用户权限列表
     async fn get_user_permissions_cached(&self, user_id: &str) -> Option<Vec<String>> {
         let cache = self.cache.as_ref()?;
@@ -141,11 +152,7 @@ impl IamChecker {
     async fn set_user_permissions_cache(&self, user_id: &str, perms: &[String]) {
         if let Some(cache) = &self.cache {
             let key = format!("iam:perm:{}", user_id);
-            let ttl = if perms.is_empty() {
-                Duration::from_secs(60) // 空结果短 TTL 防穿透
-            } else {
-                self.calc_ttl_with_jitter()
-            };
+            let ttl = self.calc_cache_ttl(perms.is_empty());
             let json = serde_json::to_string(perms).unwrap_or_default();
             let ops = cache.ops();
             if let Err(e) = ops.set_ex(&key, &json, ttl).await {
@@ -176,11 +183,7 @@ impl IamChecker {
     async fn set_user_role_codes_cache(&self, user_id: &str, roles: &[String]) {
         if let Some(cache) = &self.cache {
             let key = format!("iam:role:{}", user_id);
-            let ttl = if roles.is_empty() {
-                Duration::from_secs(60)
-            } else {
-                self.calc_ttl_with_jitter()
-            };
+            let ttl = self.calc_cache_ttl(roles.is_empty());
             let json = serde_json::to_string(roles).unwrap_or_default();
             let ops = cache.ops();
             if let Err(e) = ops.set_ex(&key, &json, ttl).await {
@@ -464,5 +467,93 @@ impl PermissionChecker for IamChecker {
     /// 获取用户的数据权限范围（默认返回 All，待后续实现）
     async fn get_data_scope(&self, _user_id: &str) -> Result<DataScope, TraitError> {
         Ok(DataScope::All)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmx_database::{DatabaseManager, DatabaseManagerConfig};
+    use std::collections::HashSet;
+    use std::time::Duration;
+
+    /// 构造一个不带缓存、不依赖真实 DB 连接的 IamChecker 用于纯逻辑测试。
+    async fn make_checker(config: IamConfig) -> IamChecker {
+        let mm = Arc::new(DatabaseManager::new(DatabaseManagerConfig::default()));
+        IamChecker::new(mm, config).await
+    }
+
+    /// 防穿透：空结果使用 60 秒短 TTL
+    #[tokio::test]
+    async fn test_empty_result_uses_short_ttl() {
+        let checker = make_checker(IamConfig::default()).await;
+        let ttl = checker.calc_cache_ttl(true);
+        assert_eq!(ttl, Duration::from_secs(60));
+    }
+
+    /// 防穿透 vs 防雪崩：非空结果不使用 60 秒短 TTL，走带抖动的 TTL
+    #[tokio::test]
+    async fn test_non_empty_result_uses_jittered_ttl() {
+        let checker = make_checker(IamConfig::default()).await;
+        let ttl = checker.calc_cache_ttl(false);
+        // 默认 base=300，抖动后区间 [270, 330]，必然大于 60
+        assert!(ttl.as_secs() > 60, "非空 TTL 应大于 60s 防穿透阈值");
+        assert!(ttl.as_secs() <= 330, "非空 TTL 不应超过 base+10%");
+    }
+
+    /// 防雪崩：TTL 在 base ± 10% 范围内
+    #[tokio::test]
+    async fn test_ttl_jitter_within_10_percent() {
+        let base = 300u64;
+        let config = IamConfig {
+            permission_cache_ttl_secs: base,
+            ..IamConfig::default()
+        };
+        let checker = make_checker(config).await;
+        let jitter = (base as f64 * 0.1) as u64;
+        let lower = base - jitter;
+        let upper = base + jitter;
+        // 多次采样验证均落在区间内
+        for _ in 0..50 {
+            let ttl = checker.calc_ttl_with_jitter().as_secs();
+            assert!(
+                ttl >= lower && ttl <= upper,
+                "TTL {} 应在 [{}, {}] 范围内",
+                ttl,
+                lower,
+                upper
+            );
+        }
+    }
+
+    /// 防雪崩：TTL 有随机性（多次调用产生不同值）
+    #[tokio::test]
+    async fn test_ttl_has_randomness() {
+        let checker = make_checker(IamConfig::default()).await;
+        let mut seen: HashSet<u64> = HashSet::new();
+        // 采集足够样本验证抖动生效
+        for _ in 0..200 {
+            seen.insert(checker.calc_ttl_with_jitter().as_secs());
+        }
+        assert!(
+            seen.len() >= 2,
+            "防雪崩抖动应产生至少 2 个不同 TTL，实际: {} 个",
+            seen.len()
+        );
+    }
+
+    /// TTL 下限保护：当抖动计算结果小于 60 秒时，回退到 60 秒
+    #[tokio::test]
+    async fn test_ttl_floor_60_seconds() {
+        // base=50：jitter=5，offset ∈ [0,10]，原始 ttl ∈ [45,55]，全部 < 60
+        let config = IamConfig {
+            permission_cache_ttl_secs: 50,
+            ..IamConfig::default()
+        };
+        let checker = make_checker(config).await;
+        for _ in 0..50 {
+            let ttl = checker.calc_ttl_with_jitter().as_secs();
+            assert_eq!(ttl, 60, "TTL 下限应被 max(60) 保护为 60 秒");
+        }
     }
 }

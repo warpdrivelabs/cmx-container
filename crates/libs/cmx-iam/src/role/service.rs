@@ -300,11 +300,33 @@ impl RoleService for RoleServiceImpl {
             return Ok(());
         }
 
-        // 1. 内置角色保护检查
-        for role_id in role_ids {
-            let role = self.get_role(role_id).await?;
-            if self.config.builtin_role_codes.contains(&role.code) {
+        // 1. 批量查询角色信息（内置角色保护检查，消除 N+1 查询）
+        let select_sql = "SELECT id, code FROM cmx_role WHERE id = ANY($1)";
+        let select_params = vec![DataValue::Array(
+            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+        )];
+        let dataset = self
+            .mm
+            .query_sql_with_datavalues(&self.db_id, None, select_sql, select_params, "roles_for_delete")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("批量查询角色失败: {e}"))))?;
+        let schema = dataset.schema.as_ref();
+        let mut found_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for row in dataset.iter() {
+            let id: String = row.get_by_name_as::<String>(schema, "id").unwrap_or_default();
+            let code: String = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
+            if !id.is_empty() {
+                found_ids.insert(id);
+            }
+            // 内置角色保护检查（批量查询后在内存判断 code）
+            if self.config.builtin_role_codes.contains(&code) {
                 return Err(TraitError::from(IamError::CannotDeleteBuiltinRole));
+            }
+        }
+        // 校验所有角色都存在（与原逐条 get_role 的 RoleNotFound 语义一致）
+        for role_id in role_ids {
+            if !found_ids.contains(role_id) {
+                return Err(TraitError::from(IamError::RoleNotFound(role_id.clone())));
             }
         }
 
@@ -316,25 +338,25 @@ impl RoleService for RoleServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
-        // 2. 软删除 cmx_role
-        for role_id in role_ids {
-            let sql = "UPDATE cmx_role SET archived = 1, update_time = NOW() WHERE id = $1";
-            let params = vec![DataValue::String(role_id.clone())];
-            self.mm
-                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
-                .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色失败: {e}"))))?;
-        }
+        // 2. 批量软删除 cmx_role（单条 SQL 替代循环 N 次往返）
+        let update_sql = "UPDATE cmx_role SET archived = 1, update_time = NOW() WHERE id = ANY($1)";
+        let update_params = vec![DataValue::Array(
+            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+        )];
+        self.mm
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), update_sql, update_params)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色失败: {e}"))))?;
 
-        // 3. 物理删除 cmx_role_permission 关联
-        for role_id in role_ids {
-            let sql = "DELETE FROM cmx_role_permission WHERE role_id = $1";
-            let params = vec![DataValue::String(role_id.clone())];
-            self.mm
-                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
-                .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
-        }
+        // 3. 批量物理删除 cmx_role_permission 关联（单条 SQL 替代循环 N 次往返）
+        let delete_sql = "DELETE FROM cmx_role_permission WHERE role_id = ANY($1)";
+        let delete_params = vec![DataValue::Array(
+            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+        )];
+        self.mm
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
 
         // 提交事务
         guard
@@ -704,13 +726,13 @@ impl RoleService for RoleServiceImpl {
             "IAM", role_id_1, role_id_2
         );
 
-        // 查询两个角色信息
-        let role1 = self.get_role(role_id_1).await?;
-        let role2 = self.get_role(role_id_2).await?;
-
-        // 查询两个角色的权限列表
-        let perms1 = self.get_role_permissions(role_id_1).await?;
-        let perms2 = self.get_role_permissions(role_id_2).await?;
+        // 4 个查询相互独立（role 与其权限列表无依赖），并发执行以消除串行 await
+        let (role1, role2, perms1, perms2) = tokio::try_join!(
+            self.get_role(role_id_1),
+            self.get_role(role_id_2),
+            self.get_role_permissions(role_id_1),
+            self.get_role_permissions(role_id_2),
+        )?;
 
         // 构建权限ID集合用于差异比较
         use std::collections::HashSet;

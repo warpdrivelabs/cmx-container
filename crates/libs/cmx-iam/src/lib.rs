@@ -17,6 +17,7 @@ pub mod role_group;
 pub mod rule;
 pub mod scheduler;
 pub mod service_traits;
+pub mod traits;
 pub mod user;
 pub mod user_auth_query_impl;
 
