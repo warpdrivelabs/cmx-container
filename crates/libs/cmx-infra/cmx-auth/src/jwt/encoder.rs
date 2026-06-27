@@ -330,3 +330,275 @@ impl JwtManager {
         validation
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AuthConfig, JwtConfig, TokenExpiryConfig};
+
+    /// 构造用于测试的 `AuthConfig`（HS256 算法 + 自定义密钥）。
+    fn make_config(secret: &str, access_ttl: u64, refresh_ttl: u64) -> AuthConfig {
+        AuthConfig {
+            jwt: JwtConfig {
+                algorithm: "HS256".to_string(),
+                private_key: None,
+                public_key: None,
+                secret: Some(secret.to_string()),
+                issuer: "cmx-auth-test".to_string(),
+                audience: "cmx-platform-test".to_string(),
+                current_kid: None,
+                legacy_public_keys: vec![],
+            },
+            token: TokenExpiryConfig {
+                access_ttl_secs: access_ttl,
+                refresh_ttl_secs: refresh_ttl,
+            },
+            ..AuthConfig::default()
+        }
+    }
+
+    /// 构造一个使用默认密钥的 `JwtManager`。
+    fn make_manager(secret: &str) -> JwtManager {
+        JwtManager::new(make_config(secret, 1800, 604800)).expect("JwtManager 构造失败")
+    }
+
+    #[test]
+    fn test_jwt_encode_decode_access_token() {
+        let mgr = make_manager("test-secret-for-jwt-encode-decode");
+
+        let roles = vec!["admin".to_string(), "user".to_string()];
+        let perms = vec!["read".to_string(), "write".to_string()];
+        let token = mgr
+            .encode_access_token(
+                "user-001",
+                "alice",
+                &roles,
+                &perms,
+                Some("org-001"),
+                "session-001",
+                "web",
+            )
+            .expect("编码 Access Token 失败");
+
+        assert!(!token.is_empty(), "Token 不应为空字符串");
+        // JWT 格式应为 header.payload.signature
+        assert_eq!(token.split('.').count(), 3, "Token 应为三段式 JWT");
+
+        let claims = mgr
+            .decode_access_token(&token)
+            .expect("解码 Access Token 失败");
+
+        assert_eq!(claims.sub, "user-001");
+        assert_eq!(claims.username, "alice");
+        assert_eq!(claims.roles, roles);
+        assert_eq!(claims.permissions, perms);
+        assert_eq!(claims.org_id.as_deref(), Some("org-001"));
+        assert_eq!(claims.sid, "session-001");
+        assert_eq!(claims.device, "web");
+        assert_eq!(claims.typ, "access");
+        assert_eq!(claims.iss, "cmx-auth-test");
+        assert_eq!(claims.aud, "cmx-platform-test");
+        assert!(!claims.jti.is_empty(), "jti 不应为空");
+        assert!(claims.exp > claims.iat, "exp 应大于 iat");
+    }
+
+    #[test]
+    fn test_jwt_encode_decode_refresh_token() {
+        let mgr = make_manager("test-secret-refresh-token");
+
+        let token = mgr
+            .encode_refresh_token("user-002", "session-002", "mobile")
+            .expect("编码 Refresh Token 失败");
+
+        assert!(!token.is_empty());
+        assert_eq!(token.split('.').count(), 3);
+
+        let claims = mgr
+            .decode_refresh_token(&token)
+            .expect("解码 Refresh Token 失败");
+
+        assert_eq!(claims.sub, "user-002");
+        assert_eq!(claims.sid, "session-002");
+        assert_eq!(claims.device, "mobile");
+        assert_eq!(claims.typ, "refresh");
+        assert_eq!(claims.iss, "cmx-auth-test");
+        assert!(!claims.jti.is_empty());
+        assert!(claims.exp > claims.iat);
+    }
+
+    #[test]
+    fn test_jwt_expired_access_token_fails() {
+        // 手工构造一个已过期的 Access Token（exp 在过去）
+        use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey, Header};
+
+        let mgr = make_manager("expired-secret-access");
+        let secret = "expired-secret-access";
+
+        let now = Utc::now().timestamp();
+        let claims = AccessClaims {
+            sub: "user-exp".to_string(),
+            exp: now - 3600, // 1 小时前过期
+            iat: now - 7200,
+            jti: Uuid::new_v4().to_string(),
+            iss: "cmx-auth-test".to_string(),
+            aud: "cmx-platform-test".to_string(),
+            username: "bob".to_string(),
+            roles: vec![],
+            permissions: vec![],
+            org_id: None,
+            sid: "session-exp".to_string(),
+            device: "web".to_string(),
+            typ: "access".to_string(),
+            kid: None,
+        };
+
+        let header = Header::new(Algorithm::HS256);
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+        let token = jwt_encode(&header, &claims, &encoding_key).expect("编码过期 Token 失败");
+
+        let result = mgr.decode_access_token(&token);
+        assert!(
+            result.is_err(),
+            "过期 Access Token 应解码失败，实际: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_jwt_expired_refresh_token_fails() {
+        use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey, Header};
+
+        let mgr = make_manager("expired-secret-refresh");
+        let secret = "expired-secret-refresh";
+
+        let now = Utc::now().timestamp();
+        let claims = RefreshClaims {
+            sub: "user-exp-r".to_string(),
+            exp: now - 3600, // 1 小时前过期
+            iat: now - 7200,
+            jti: Uuid::new_v4().to_string(),
+            iss: "cmx-auth-test".to_string(),
+            typ: "refresh".to_string(),
+            sid: "session-exp-r".to_string(),
+            device: "web".to_string(),
+        };
+
+        let header = Header::new(Algorithm::HS256);
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+        let token = jwt_encode(&header, &claims, &encoding_key).expect("编码过期 Refresh Token 失败");
+
+        let result = mgr.decode_refresh_token(&token);
+        assert!(
+            result.is_err(),
+            "过期 Refresh Token 应解码失败，实际: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_jwt_invalid_signature_access_token_fails() {
+        // 用密钥 A 编码，用密钥 B 解码（验签失败）
+        let encoder = make_manager("secret-a-for-signing");
+        let decoder = make_manager("secret-b-different");
+
+        let token = encoder
+            .encode_access_token("user-sig", "carol", &[], &[], None, "session-sig", "web")
+            .expect("编码 Access Token 失败");
+
+        let result = decoder.decode_access_token(&token);
+        assert!(
+            result.is_err(),
+            "无效签名的 Access Token 应解码失败，实际: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_jwt_invalid_signature_refresh_token_fails() {
+        let encoder = make_manager("secret-a-refresh");
+        let decoder = make_manager("secret-b-refresh-diff");
+
+        let token = encoder
+            .encode_refresh_token("user-sig-r", "session-sig-r", "web")
+            .expect("编码 Refresh Token 失败");
+
+        let result = decoder.decode_refresh_token(&token);
+        assert!(
+            result.is_err(),
+            "无效签名的 Refresh Token 应解码失败，实际: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_jwt_invalid_token_format_fails() {
+        let mgr = make_manager("format-test-secret");
+
+        // 非法字符串
+        assert!(mgr.decode_access_token("not-a-jwt").is_err());
+        assert!(mgr.decode_refresh_token("not-a-jwt").is_err());
+
+        // 空字符串
+        assert!(mgr.decode_access_token("").is_err());
+        assert!(mgr.decode_refresh_token("").is_err());
+
+        // 三段式但 payload 非法
+        assert!(mgr.decode_access_token("aaa.bbb.ccc").is_err());
+    }
+
+    #[test]
+    fn test_jwt_tampered_payload_fails() {
+        let mgr = make_manager("tamper-test-secret");
+
+        let token = mgr
+            .encode_access_token("user-tamper", "dave", &[], &[], None, "session-tamper", "web")
+            .expect("编码 Access Token 失败");
+
+        // 篡改 signature 部分的最后一个字符（破坏签名）
+        let parts: Vec<&str> = token.split('.').collect();
+        let sig = parts[2];
+        let last_char = sig.chars().last().unwrap();
+        let new_last = if last_char == 'A' { 'B' } else { 'A' };
+        let tampered_sig = format!("{}{}", &sig[..sig.len() - 1], new_last);
+        let tampered_token = format!("{}.{}.{}", parts[0], parts[1], tampered_sig);
+
+        let result = mgr.decode_access_token(&tampered_token);
+        assert!(
+            result.is_err(),
+            "篡改签名的 Token 应解码失败，实际: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_jwt_unsupported_algorithm_fails() {
+        let mut config = make_config("any-secret", 1800, 604800);
+        config.jwt.algorithm = "ES256".to_string(); // 不支持的算法
+
+        let result = JwtManager::new(config);
+        assert!(
+            result.is_err(),
+            "不支持的算法应导致 JwtManager 构造失败"
+        );
+    }
+
+    #[test]
+    fn test_jwt_unique_jti_per_token() {
+        let mgr = make_manager("unique-jti-secret");
+
+        let token1 = mgr
+            .encode_access_token("user-u", "eve", &[], &[], None, "session-u", "web")
+            .expect("编码 Token 1 失败");
+        let token2 = mgr
+            .encode_access_token("user-u", "eve", &[], &[], None, "session-u", "web")
+            .expect("编码 Token 2 失败");
+
+        let claims1 = mgr.decode_access_token(&token1).expect("解码 Token 1 失败");
+        let claims2 = mgr.decode_access_token(&token2).expect("解码 Token 2 失败");
+
+        assert_ne!(
+            claims1.jti, claims2.jti,
+            "两次编码生成的 jti 应不同（UUID v4）"
+        );
+    }
+}
