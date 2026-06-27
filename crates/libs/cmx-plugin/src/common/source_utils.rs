@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_build_plugin_source_local() {
         let source = build_plugin_source(Some("/tmp/plugin.zip"), Some("local"));
-        assert!(matches!(source, PluginSource::Local { path } if path == PathBuf::from("/tmp/plugin.zip")));
+        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/plugin.zip")));
     }
 
     #[test]
@@ -181,14 +181,14 @@ mod tests {
     fn test_build_plugin_source_unknown_type_defaults_to_local() {
         // 未知类型应回退为 Local，且使用 url 作为 path
         let source = build_plugin_source(Some("/some/path"), Some("unknown_type"));
-        assert!(matches!(source, PluginSource::Local { path } if path == PathBuf::from("/some/path")));
+        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path")));
     }
 
     #[test]
     fn test_build_plugin_source_none_type_defaults_to_local() {
         // 类型为 None 时也应回退为 Local
         let source = build_plugin_source(Some("/some/path"), None);
-        assert!(matches!(source, PluginSource::Local { path } if path == PathBuf::from("/some/path")));
+        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path")));
     }
 
     #[test]

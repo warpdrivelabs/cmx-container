@@ -296,6 +296,7 @@ pub struct StartDebugRequest {
     pub data: JsonValue,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn start_debug_session(
     plugin_id: String,
     plugin_name: String,
@@ -346,6 +347,7 @@ pub fn start_debug_session(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_debug_session_async(
     plugin_id: String,
     plugin_name: String,

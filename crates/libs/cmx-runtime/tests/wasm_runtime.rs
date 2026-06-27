@@ -274,7 +274,7 @@ async fn test_invoke_function_success() {
 
     // 验证耗时已记录
     assert!(
-        result.elapsed_us > 0 || result.output.len() > 0,
+        result.elapsed_us > 0 || !result.output.is_empty(),
         "应记录执行耗时或返回数据"
     );
 
@@ -393,7 +393,7 @@ async fn test_invoke_multiple_times_same_plugin() {
         let result = engine
             .invoke("multi_invoke", "count_vowels", input.as_bytes())
             .await
-            .expect(&format!("第 {} 次调用失败", i));
+            .unwrap_or_else(|_| panic!("第 {} 次调用失败", i));
         assert!(!result.output.is_empty(), "第 {} 次调用输出为空", i);
     }
 

@@ -57,6 +57,7 @@ pub use cmx_traits::function_invoker::FunctionInvokeResult;
 /// - `Err(BizError)`: 基础设施错误（插件未安装、WASM 加载失败、序列化失败等）
 /// - `Ok(FunctionInvokeResult { success: false, ... })`: WASM 函数调用失败
 /// - `Ok(FunctionInvokeResult { success: true, ... })`: 调用成功
+#[allow(clippy::too_many_arguments)]
 pub async fn invoke_plugin_function(
     runtime: &Arc<dyn RuntimeInvoker>,
     plugin_query: &Arc<dyn PluginQuery>,

@@ -20,6 +20,7 @@ impl UserServiceImpl {
     /// 分配临时角色（带有效期，[`crate::service_traits::UserService::assign_temp_role`] 的实现）。
     ///
     /// 支持有效期范围、来源标记和撤销原因。当配置了 SoD 规则执行器时，会先校验角色互斥约束。
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn assign_temp_role(
         &self,
         svr_ctx: &SVRContext,

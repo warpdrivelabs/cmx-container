@@ -87,6 +87,7 @@ impl JwtManager {
     /// # Errors
     ///
     /// 当 JWT 编码失败时返回 `AuthInfraError::Jwt`。
+    #[allow(clippy::too_many_arguments)]
     pub fn encode_access_token(
         &self,
         user_id: &str,

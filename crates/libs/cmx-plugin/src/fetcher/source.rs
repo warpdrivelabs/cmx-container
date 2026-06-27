@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_local_constructor() {
         let src = PluginSource::local(PathBuf::from("/tmp/a.zip"));
-        assert!(matches!(src, PluginSource::Local { path } if path == PathBuf::from("/tmp/a.zip")));
+        assert!(matches!(src, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/a.zip")));
     }
 
     #[test]

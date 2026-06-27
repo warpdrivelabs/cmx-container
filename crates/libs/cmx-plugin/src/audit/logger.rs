@@ -131,12 +131,12 @@ impl AuditLogger {
         let mut details: Map<String, Value> = record
             .details
             .take()
-            .and_then(|v| match v {
-                Value::Object(map) => Some(map),
+            .map(|v| match v {
+                Value::Object(map) => map,
                 other => {
                     let mut m = Map::new();
                     m.insert("details".to_string(), other);
-                    Some(m)
+                    m
                 }
             })
             .unwrap_or_default();

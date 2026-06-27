@@ -675,7 +675,7 @@ mod tests {
         let candidate = SemanticVersion::parse("1.1.0").unwrap();
         assert!(candidate > current, "1.1.0 应可从 1.0.0 升级");
         let same = SemanticVersion::parse("1.0.0").unwrap();
-        assert!(!(same > current), "相同版本不应触发升级");
+        assert!(same <= current, "相同版本不应触发升级");
     }
 
     #[test]
@@ -684,7 +684,7 @@ mod tests {
         let current = SemanticVersion::parse("2.0.0").unwrap();
         let target = SemanticVersion::parse("1.9.0").unwrap();
         assert!(target < current, "1.9.0 应可从 2.0.0 降级");
-        assert!(!(current < target), "2.0.0 不应小于 1.9.0");
+        assert!(current >= target, "2.0.0 不应小于 1.9.0");
     }
 
     #[test]

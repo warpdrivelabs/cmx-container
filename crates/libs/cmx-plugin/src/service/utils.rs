@@ -276,6 +276,7 @@ pub async fn save_plugin_table_metadata(
 /// * `install_path` - 安装路径
 /// * `plugin_def` - 插件定义
 /// * `txn_id` - 事务 ID，为 `None` 时 DDL 不在事务内执行
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_ddl_with_lock(
     lock_manager: &Option<Arc<LockManager>>,
     target_db_id: &str,

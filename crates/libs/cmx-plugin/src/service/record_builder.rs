@@ -125,6 +125,7 @@ pub fn build_plugin_create_params(
 /// # Returns
 ///
 /// 版本历史创建参数
+#[allow(clippy::too_many_arguments)]
 pub fn build_version_create_params(
     plugin_id: &str,
     app_id: &str,

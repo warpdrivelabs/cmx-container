@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn has_active_初始状态为false() {
         let manager = TransactionManager::new("db_default".to_string());
-        assert_eq!(manager.has_active(), false);
+        assert!(!manager.has_active());
     }
 
     // ==================== commit_active 测试 ====================

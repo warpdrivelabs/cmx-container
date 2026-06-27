@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_is_retryable_true_for_io_error() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "boom");
+        let io_err = std::io::Error::other("boom");
         assert!(PluginError::Io(io_err).is_retryable());
     }
 
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_error_code_for_io() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "x");
+        let io_err = std::io::Error::other("x");
         assert_eq!(PluginError::Io(io_err).error_code(), "IO_ERROR");
     }
 

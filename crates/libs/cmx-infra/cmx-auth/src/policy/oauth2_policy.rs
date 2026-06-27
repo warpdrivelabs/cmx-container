@@ -137,6 +137,7 @@ impl OAuth2Policy {
     /// # Errors
     ///
     /// 当 state 验证失败或授权码存储失败时返回对应 `AuthError`。
+    #[allow(clippy::too_many_arguments)]
     pub async fn login(
         &self,
         state: &str,

@@ -558,8 +558,12 @@ impl SecurityValidator {
 
     /// 验证插件 ID 格式
     fn is_valid_plugin_id(&self, id: &str) -> bool {
-        // ID 应该只包含字母、数字、下划线和连字符
-        id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+        // ID 非空，且只包含字母、数字、下划线、连字符和点号
+        // （`chars().all()` 对空串返回 true，需显式排除空 ID）
+        !id.is_empty()
+            && id
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
     }
 
     /// 验证版本格式

@@ -389,10 +389,13 @@ impl MarketplaceFetcher {
 
     /// 提取文件名
     fn extract_filename(&self, url: &str, plugin_id: &str, version: &str) -> String {
+        // 仅当 URL 末段形如「文件名.扩展名」时才采用；否则回退到 {plugin_id}-{version}.zip，
+        // 避免 /download、/api/packages 这类纯路径段被误当作文件名。
         if let Ok(parsed) = url::Url::parse(url)
             && let Some(mut segments) = parsed.path_segments()
             && let Some(filename) = segments.next_back()
-            && !filename.is_empty() {
+            && !filename.is_empty()
+            && filename.rsplit_once('.').is_some() {
             return filename.to_string();
         }
 

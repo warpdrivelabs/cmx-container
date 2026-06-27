@@ -92,6 +92,7 @@ pub struct EffectivePermissionsResponse {
 /// 定义用户 CRUD、角色分配、临时授权及审计查询等操作。
 /// 实现见 `crate::user::service::UserServiceImpl`。
 #[async_trait]
+#[allow(clippy::too_many_arguments)] // assign_temp_role 等方法参数由业务契约决定
 pub trait UserService: Send + Sync {
     /// 创建用户。
     ///
