@@ -9,8 +9,8 @@
 //!
 //! # `ServerDeps` 耦合代价说明
 //!
-//! [`ServerDeps`] 含 4 个字段，每个 Bundle 都收到全量，但 `OrchestratorBundle` 忽略
-//! `data_importer`、`PluginDataBundle` 忽略前 3 个。这是为换取 OCP
+//! [`ServerDeps`] 含 3 个字段，每个 Bundle 都收到全量，但 `OrchestratorBundle` 忽略
+//! `data_importer`、`PluginDataBundle` 忽略前 2 个。这是为换取 OCP
 //! （`factory`/`server_runner` 零改动）付出的合理耦合代价。当前仅 2 领域，引入
 //! `type Deps` 关联类型属过度设计，本期不做；若未来 Bundle 数量增长，可再考虑每 Bundle
 //! 自带关联类型。
@@ -23,10 +23,9 @@ use crate::client::infra::GrpcInfrastructure;
 pub struct ServerDeps {
     /// 服务编排调用器（orchestrator 领域使用）。
     pub service_invoker: Arc<dyn cmx_traits::service::ServiceInvoker>,
-    /// WASM 运行时调用器（orchestrator 领域使用）。
-    pub runtime_invoker: Arc<dyn cmx_traits::runtime::RuntimeInvoker>,
-    /// 插件查询（orchestrator 领域使用）。
-    pub plugin_query: Arc<dyn cmx_traits::plugin::PluginQuery>,
+    /// 插件函数调用器（orchestrator 领域使用；由组装层注入 cmx-biz 的实现，
+    /// 封装 RuntimeInvoker + PluginQuery 完整调用链，使 cmx-rpc 不直接依赖 cmx-biz）。
+    pub function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker>,
     /// 插件数据导入器（plugin_data 领域使用，可选）。
     pub data_importer: Option<Arc<dyn cmx_traits::plugin::PluginDataImporter>>,
 }

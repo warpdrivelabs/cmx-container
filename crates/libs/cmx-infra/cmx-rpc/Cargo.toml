@@ -8,8 +8,6 @@ edition.workspace = true
 cmx-traits = { workspace = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
-# 内部依赖 - 业务逻辑层
-cmx-biz = { workspace = true }
 # 内部依赖 - RPC 代码生成
 cmx-rpc-gen = { workspace = true }
 # 内部依赖 - 注册中心与配置中心
