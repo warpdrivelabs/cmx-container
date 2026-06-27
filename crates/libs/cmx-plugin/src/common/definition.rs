@@ -267,3 +267,191 @@ impl DefinitionUtils {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmx_core::model::meta::plugin::PluginDefinition;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// 临时目录守卫，Drop 时自动清理
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("cmx_plugin_def_{}_{}", label, uuid::Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+
+        fn write(&self, name: &str, content: &str) {
+            fs::write(self.0.join(name), content).unwrap();
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// 构造一个有效的插件定义
+    fn make_valid_definition() -> PluginDefinition {
+        PluginDefinition {
+            id: "my_plugin".to_string(),
+            name: "My Plugin".to_string(),
+            version: Some("1.0.0".to_string()),
+            main_file: "bin/plugin.wasm".to_string(),
+            r#type: "wasm-plugin".to_string(),
+            source_path: None,
+            table_config_files: vec![],
+            supported_databases: vec![],
+            domain_code: None,
+            application_code: None,
+            module_code: None,
+            vendor_name: None,
+            vendor_url: None,
+            vendor_contact: None,
+            development_languages: vec![],
+            description: None,
+            dependencies: vec![],
+            services: vec![],
+            datasource_id: None,
+        }
+    }
+
+    /// 有效的 manifest.json（包含 type / source_path 等必填字段）
+    fn valid_manifest_json() -> String {
+        r#"{
+            "manifest_version": "1.0",
+            "plugin": {
+                "type": "wasm-plugin",
+                "id": "my_plugin",
+                "name": "My Plugin",
+                "version": "1.0.0",
+                "main_file": "bin/plugin.wasm",
+                "source_path": "."
+            }
+        }"#
+        .to_string()
+    }
+
+    // ==================== validate_definition 纯逻辑 ====================
+
+    #[test]
+    fn test_validate_definition_valid() {
+        let def = make_valid_definition();
+        assert!(DefinitionUtils::validate_definition(&def).is_ok());
+    }
+
+    #[test]
+    fn test_validate_definition_empty_id_errors() {
+        let mut def = make_valid_definition();
+        def.id = String::new();
+        let err = DefinitionUtils::validate_definition(&def).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("ID"));
+    }
+
+    #[test]
+    fn test_validate_definition_empty_name_errors() {
+        let mut def = make_valid_definition();
+        def.name = String::new();
+        let err = DefinitionUtils::validate_definition(&def).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("名称"));
+    }
+
+    #[test]
+    fn test_validate_definition_empty_main_file_errors() {
+        let mut def = make_valid_definition();
+        def.main_file = String::new();
+        let err = DefinitionUtils::validate_definition(&def).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("主文件"));
+    }
+
+    // ==================== parse_plugin_definition 解析 ====================
+
+    #[test]
+    fn test_parse_plugin_definition_valid() {
+        let dir = TempDir::new("valid");
+        dir.write("manifest.json", &valid_manifest_json());
+
+        let def = DefinitionUtils::parse_plugin_definition(dir.path()).unwrap();
+        assert_eq!(def.id, "my_plugin");
+        assert_eq!(def.name, "My Plugin");
+        assert_eq!(def.version.as_deref(), Some("1.0.0"));
+        assert_eq!(def.main_file, "bin/plugin.wasm");
+        assert_eq!(def.r#type, "wasm-plugin");
+    }
+
+    #[test]
+    fn test_parse_plugin_definition_missing_file_errors() {
+        let dir = TempDir::new("missing_manifest");
+
+        let err = DefinitionUtils::parse_plugin_definition(dir.path()).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("manifest.json 不存在"));
+    }
+
+    #[test]
+    fn test_parse_plugin_definition_invalid_json_errors() {
+        let dir = TempDir::new("invalid_json");
+        dir.write("manifest.json", "{ not valid json");
+
+        let err = DefinitionUtils::parse_plugin_definition(dir.path()).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("解析 manifest.json 失败"));
+    }
+
+    #[test]
+    fn test_parse_plugin_definition_missing_plugin_object_errors() {
+        let dir = TempDir::new("no_plugin");
+        // manifest 缺少 plugin 对象
+        dir.write("manifest.json", r#"{"manifest_version": "1.0"}"#);
+
+        let err = DefinitionUtils::parse_plugin_definition(dir.path()).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("plugin 对象"));
+    }
+
+    #[test]
+    fn test_parse_plugin_definition_missing_required_fields_errors() {
+        let dir = TempDir::new("missing_fields");
+        // plugin 缺少 type 与 main_file
+        dir.write(
+            "manifest.json",
+            r#"{"manifest_version":"1.0","plugin":{"id":"p","name":"x","source_path":"."}}"#,
+        );
+
+        let err = DefinitionUtils::parse_plugin_definition(dir.path()).unwrap_err();
+        assert!(matches!(err, PluginError::Metadata(_)));
+        assert!(err.to_string().contains("解析 plugin 定义失败"));
+    }
+
+    #[test]
+    fn test_parse_from_install_path_equivalent() {
+        let dir = TempDir::new("install_path");
+        dir.write("manifest.json", &valid_manifest_json());
+
+        let def = DefinitionUtils::parse_from_install_path(dir.path()).unwrap();
+        assert_eq!(def.id, "my_plugin");
+    }
+
+    #[tokio::test]
+    async fn test_parse_plugin_definition_async_equivalent() {
+        let dir = TempDir::new("async");
+        dir.write("manifest.json", &valid_manifest_json());
+
+        let def = DefinitionUtils::parse_plugin_definition_async(dir.path()).await.unwrap();
+        assert_eq!(def.id, "my_plugin");
+        assert_eq!(def.version.as_deref(), Some("1.0.0"));
+    }
+}

@@ -78,24 +78,40 @@ pub struct HostCaller;
 impl HostCaller {
     /// 记录信息日志
     pub fn log_info(message: &str) -> Result<(), Error> {
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:log")]` 宏生成的 extern "ExtismHost" 函数 log_info。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `message` 是有效的 String 所有权值，
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 ()，宿主侧错误由 pdk 解码为 `Error` 并通过 `?` 传播。
         unsafe { log_info(message.to_string())? };
         Ok(())
     }
 
     /// 记录错误日志
     pub fn log_error(message: &str) -> Result<(), Error> {
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:log")]` 宏生成的 extern "ExtismHost" 函数 log_error。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `message` 是有效的 String 所有权值，
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 ()，宿主侧错误由 pdk 解码为 `Error` 并通过 `?` 传播。
         unsafe { log_error(message.to_string())? };
         Ok(())
     }
 
     /// 记录调试日志
     pub fn log_debug(message: &str) -> Result<(), Error> {
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:log")]` 宏生成的 extern "ExtismHost" 函数 log_debug。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `message` 是有效的 String 所有权值，
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 ()，宿主侧错误由 pdk 解码为 `Error` 并通过 `?` 传播。
         unsafe { log_debug(message.to_string())? };
         Ok(())
     }
 
     /// 记录警告日志
     pub fn log_warn(message: &str) -> Result<(), Error> {
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:log")]` 宏生成的 extern "ExtismHost" 函数 log_warn。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `message` 是有效的 String 所有权值，
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 ()，宿主侧错误由 pdk 解码为 `Error` 并通过 `?` 传播。
         unsafe { log_warn(message.to_string())? };
         Ok(())
     }
@@ -103,6 +119,10 @@ impl HostCaller {
     /// 执行数据库查询
     pub fn db_query(request: DbRequest) -> Result<DbResponse, Error> {
         let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:database")]` 宏生成的 extern "ExtismHost" 函数 db_query。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `?` 传播。
         let result = unsafe { db_query(bytes)? };
         let response: DbResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
@@ -111,6 +131,10 @@ impl HostCaller {
     /// 执行数据库操作
     pub fn db_execute(request: DbRequest) -> Result<DbResponse, Error> {
         let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:database")]` 宏生成的 extern "ExtismHost" 函数 db_execute。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `?` 传播。
         let result = unsafe { db_execute(bytes)? };
         let response: DbResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
@@ -122,6 +146,10 @@ impl HostCaller {
             key: key.to_string(),
         };
         let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:buffer")]` 宏生成的 extern "ExtismHost" 函数 cache_get。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `?` 传播。
         let result = unsafe { cache_get(bytes)? };
         let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
@@ -140,6 +168,10 @@ impl HostCaller {
             ttl_seconds,
         };
         let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:buffer")]` 宏生成的 extern "ExtismHost" 函数 cache_set。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `?` 传播。
         let result = unsafe { cache_set(bytes)? };
         let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
@@ -151,6 +183,10 @@ impl HostCaller {
             key: key.to_string(),
         };
         let bytes = rmp_serde::to_vec(&request)?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:buffer")]` 宏生成的 extern "ExtismHost" 函数 cache_delete。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `?` 传播。
         let result = unsafe { cache_delete(bytes)? };
         let response: CacheResponse = rmp_serde::from_slice(&result)?;
         Ok(response)
@@ -170,6 +206,10 @@ impl HostCaller {
     /// - `Err(Error)`: 调用失败，包含错误信息
     pub fn call_plugin(request: PluginFunRequest) -> Result<PluginFunCallResponse, PluginError> {
         let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:plugin")]` 宏生成的 extern "ExtismHost" 函数 call_plugin。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `map_err` 转换为 `PluginError` 传播。
         let result = unsafe { call_plugin(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
         let response: PluginFunCallResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {
@@ -190,6 +230,10 @@ impl HostCaller {
     /// - `Err(Error)`: 执行失败，包含错误信息
     pub fn call_service_by_key(request: CallServiceRequest) -> Result<CallServiceResponse, PluginError> {
         let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        // SAFETY: 调用 extism-pdk `#[host_fn("cmx:plugin")]` 宏生成的 extern "ExtismHost" 函数 call_service_by_key。
+        // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
+        // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
+        // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `map_err` 转换为 `PluginError` 传播。
         let result = unsafe { call_service_by_key(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
         let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {

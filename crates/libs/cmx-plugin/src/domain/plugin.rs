@@ -162,3 +162,227 @@ pub struct PluginDatabaseConfig {
     /// 表配置文件路径列表
     pub table_config_files: Vec<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    // ==================== PluginStatus Display ====================
+
+    #[test]
+    fn test_plugin_status_display_installed() {
+        assert_eq!(PluginStatus::Installed.to_string(), "installed");
+    }
+
+    #[test]
+    fn test_plugin_status_display_activated() {
+        assert_eq!(PluginStatus::Activated.to_string(), "activated");
+    }
+
+    #[test]
+    fn test_plugin_status_display_deactivated() {
+        assert_eq!(PluginStatus::Deactivated.to_string(), "deactivated");
+    }
+
+    #[test]
+    fn test_plugin_status_display_error() {
+        assert_eq!(PluginStatus::Error.to_string(), "error");
+    }
+
+    // ==================== PluginStatus FromStr ====================
+
+    #[test]
+    fn test_plugin_status_from_str_installed() {
+        let status = PluginStatus::from_str("installed").unwrap();
+        assert_eq!(status, PluginStatus::Installed);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_activated() {
+        let status = PluginStatus::from_str("activated").unwrap();
+        assert_eq!(status, PluginStatus::Activated);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_deactivated() {
+        let status = PluginStatus::from_str("deactivated").unwrap();
+        assert_eq!(status, PluginStatus::Deactivated);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_error() {
+        let status = PluginStatus::from_str("error").unwrap();
+        assert_eq!(status, PluginStatus::Error);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_case_insensitive() {
+        // 大小写不敏感：均应解析成功
+        assert_eq!(PluginStatus::from_str("INSTALLED").unwrap(), PluginStatus::Installed);
+        assert_eq!(PluginStatus::from_str("Activated").unwrap(), PluginStatus::Activated);
+        assert_eq!(PluginStatus::from_str("Deactivated").unwrap(), PluginStatus::Deactivated);
+        assert_eq!(PluginStatus::from_str("ERROR").unwrap(), PluginStatus::Error);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_unknown_returns_err() {
+        let result = PluginStatus::from_str("unknown");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("未知插件状态"), "错误消息应包含未知状态提示: {}", err);
+        assert!(err.contains("unknown"), "错误消息应包含原状态值: {}", err);
+    }
+
+    #[test]
+    fn test_plugin_status_from_str_empty_returns_err() {
+        let result = PluginStatus::from_str("");
+        assert!(result.is_err());
+    }
+
+    // ==================== PluginStatus 序列化 / 反序列化 ====================
+
+    #[test]
+    fn test_plugin_status_serde_roundtrip() {
+        for status in [
+            PluginStatus::Installed,
+            PluginStatus::Activated,
+            PluginStatus::Deactivated,
+            PluginStatus::Error,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let deserialized: PluginStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(status, deserialized, "状态 {} 应能往返序列化", status);
+        }
+    }
+
+    #[test]
+    fn test_plugin_status_serde_lowercase_format() {
+        // serde rename_all = "lowercase" 确保小写输出
+        let json = serde_json::to_string(&PluginStatus::Installed).unwrap();
+        assert_eq!(json, "\"installed\"");
+        let json = serde_json::to_string(&PluginStatus::Error).unwrap();
+        assert_eq!(json, "\"error\"");
+    }
+
+    // ==================== PluginFilter Default ====================
+
+    #[test]
+    fn test_plugin_filter_default_all_none() {
+        let filter = PluginFilter::default();
+        assert!(filter.app_id.is_none());
+        assert!(filter.status.is_none());
+        assert!(filter.name.is_none());
+        assert!(filter.domain_code.is_none());
+        assert!(filter.application_code.is_none());
+        assert!(filter.module_code.is_none());
+    }
+
+    // ==================== PluginSource 构造与匹配 ====================
+
+    #[test]
+    fn test_plugin_source_local_construction() {
+        let src = PluginSource::Local {
+            path: PathBuf::from("/tmp/plugin"),
+        };
+        match src {
+            PluginSource::Local { path } => assert_eq!(path, PathBuf::from("/tmp/plugin")),
+            _ => panic!("应匹配 Local 变体"),
+        }
+    }
+
+    #[test]
+    fn test_plugin_source_remote_with_checksum() {
+        let src = PluginSource::Remote {
+            url: "https://example.com/a.zip".to_string(),
+            checksum: Some("sha256:abc".to_string()),
+        };
+        match src {
+            PluginSource::Remote { url, checksum } => {
+                assert_eq!(url, "https://example.com/a.zip");
+                assert_eq!(checksum.as_deref(), Some("sha256:abc"));
+            }
+            _ => panic!("应匹配 Remote 变体"),
+        }
+    }
+
+    #[test]
+    fn test_plugin_source_marketplace_with_optional_url() {
+        // marketplace_url 为 Option，允许为 None
+        let with_url = PluginSource::Marketplace {
+            marketplace_url: Some("https://market.example.com".to_string()),
+            plugin_id: "p1".to_string(),
+        };
+        let without_url = PluginSource::Marketplace {
+            marketplace_url: None,
+            plugin_id: "p2".to_string(),
+        };
+        assert!(matches!(with_url, PluginSource::Marketplace { marketplace_url: Some(_), plugin_id } if plugin_id == "p1"));
+        assert!(matches!(without_url, PluginSource::Marketplace { marketplace_url: None, plugin_id } if plugin_id == "p2"));
+    }
+
+    #[test]
+    fn test_plugin_source_storage_with_checksum() {
+        let src = PluginSource::Storage {
+            file_id: "fid".to_string(),
+            checksum: Some("abc".to_string()),
+        };
+        match src {
+            PluginSource::Storage { file_id, checksum } => {
+                assert_eq!(file_id, "fid");
+                assert_eq!(checksum.as_deref(), Some("abc"));
+            }
+            _ => panic!("应匹配 Storage 变体"),
+        }
+    }
+
+    // ==================== app_id 默认值 ====================
+
+    #[test]
+    fn test_plugin_info_app_id_default_value() {
+        // 通过反序列化验证 app_id 字段的默认值
+        let json = r#"{
+            "id": "p1",
+            "name": "P1",
+            "version": "1.0.0",
+            "description": null,
+            "author": null,
+            "source": { "Local": { "path": "/tmp" } },
+            "status": "installed",
+            "installed_at": null,
+            "updated_at": null,
+            "install_path": "/tmp/p1",
+            "plugin_type": "wasm",
+            "source_path": null,
+            "domain_code": "",
+            "application_code": "",
+            "module_code": ""
+        }"#;
+        let info: PluginInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.app_id, "default", "缺失 app_id 时应使用默认值 'default'");
+    }
+
+    #[test]
+    fn test_plugin_info_app_id_explicit_value() {
+        let json = r#"{
+            "id": "p1",
+            "name": "P1",
+            "version": "1.0.0",
+            "description": null,
+            "author": null,
+            "source": { "Local": { "path": "/tmp" } },
+            "status": "installed",
+            "installed_at": null,
+            "updated_at": null,
+            "install_path": "/tmp/p1",
+            "plugin_type": "wasm",
+            "source_path": null,
+            "domain_code": "",
+            "application_code": "",
+            "module_code": "",
+            "app_id": "my-app"
+        }"#;
+        let info: PluginInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.app_id, "my-app");
+    }
+}

@@ -631,3 +631,962 @@ impl Default for SecurityValidator {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::{Cursor, Write};
+    use std::path::PathBuf;
+    use zip::write::SimpleFileOptions;
+    use zip::ZipWriter;
+
+    /// 临时目录守卫，Drop 时自动清理
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("cmx_plugin_validator_{}_{}", label, uuid::Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+
+        fn write(&self, name: &str, content: &str) {
+            fs::write(self.0.join(name), content).unwrap();
+        }
+
+        fn write_bytes(&self, name: &str, content: &[u8]) {
+            fs::write(self.0.join(name), content).unwrap();
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// 有效的 manifest.json 内容（符合 validator 的松散校验规则）
+    fn valid_manifest() -> String {
+        r#"{
+            "manifest_version": "1.0",
+            "plugin": {
+                "id": "my_plugin",
+                "name": "My Plugin",
+                "version": "1.0.0",
+                "main_file": "bin/plugin.wasm"
+            }
+        }"#
+        .to_string()
+    }
+
+    /// 构造一个 ZIP 文件到指定路径
+    fn write_zip(zip_path: &Path, entries: &[(&str, &[u8])]) {
+        let buf = Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let options = SimpleFileOptions::default();
+        for (name, data) in entries {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        let buf = zip.finish().unwrap().into_inner();
+        fs::write(zip_path, &buf).unwrap();
+    }
+
+    // ==================== ValidationResult 纯逻辑 ====================
+
+    #[test]
+    fn test_validation_result_passed() {
+        let r = ValidationResult::passed();
+        assert!(r.passed);
+        assert!(r.errors.is_empty());
+        assert!(r.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_failed() {
+        let r = ValidationResult::failed(vec!["err1".to_string(), "err2".to_string()]);
+        assert!(!r.passed);
+        assert_eq!(r.errors.len(), 2);
+        assert!(r.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_add_error_sets_passed_false() {
+        let mut r = ValidationResult::passed();
+        r.add_error("boom".to_string());
+        assert!(!r.passed);
+        assert_eq!(r.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_validation_result_add_warning_keeps_passed() {
+        let mut r = ValidationResult::passed();
+        r.add_warning("warn".to_string());
+        assert!(r.passed, "仅添加警告不应使验证失败");
+        assert_eq!(r.warnings.len(), 1);
+    }
+
+    #[test]
+    fn test_validation_result_merge() {
+        let mut a = ValidationResult::passed();
+        a.add_warning("a-warn".to_string());
+        let mut b = ValidationResult::passed();
+        b.add_error("b-err".to_string());
+        b.add_warning("b-warn".to_string());
+        a.merge(b);
+        assert!(!a.passed, "合并失败结果后应失败");
+        assert_eq!(a.errors.len(), 1);
+        assert_eq!(a.warnings.len(), 2);
+    }
+
+    // ==================== SecurityConfig 默认值 ====================
+
+    #[test]
+    fn test_security_config_defaults() {
+        let cfg = SecurityConfig::default();
+        // 签名验证默认关闭（插件开发端暂未支持）
+        assert!(!cfg.verify_signature);
+        assert!(cfg.check_permissions);
+        assert!(cfg.check_package_structure);
+        assert!(cfg.check_manifest);
+        assert_eq!(cfg.max_plugin_size, 100 * 1024 * 1024);
+        // 扩展名白名单包含 wasm/json/toml/yaml
+        assert!(cfg.allowed_extensions.contains(&"wasm".to_string()));
+        assert!(cfg.allowed_extensions.contains(&"json".to_string()));
+        assert!(cfg.allowed_extensions.contains(&"toml".to_string()));
+        assert!(cfg.allowed_extensions.contains(&"yaml".to_string()));
+        // 禁止路径穿越模式
+        assert!(cfg.forbidden_patterns.contains(&"../".to_string()));
+        assert!(cfg.forbidden_patterns.contains(&"..\\".to_string()));
+        assert!(cfg.forbidden_patterns.contains(&"/etc/".to_string()));
+        assert!(cfg.forbidden_patterns.contains(&"/root/".to_string()));
+    }
+
+    #[test]
+    fn test_security_validator_with_custom_config() {
+        let cfg = SecurityConfig {
+            verify_signature: false,
+            check_permissions: false,
+            check_package_structure: false,
+            check_manifest: false,
+            max_plugin_size: 10,
+            allowed_extensions: vec!["wasm".to_string()],
+            forbidden_patterns: vec!["../".to_string()],
+        };
+        let v = SecurityValidator::with_config(cfg);
+        assert!(!v.config().check_package_structure);
+        assert_eq!(v.config().max_plugin_size, 10);
+    }
+
+    #[test]
+    fn test_security_validator_set_config() {
+        let mut v = SecurityValidator::new();
+        let cfg = SecurityConfig {
+            verify_signature: false,
+            check_permissions: false,
+            check_package_structure: true,
+            check_manifest: false,
+            max_plugin_size: 5,
+            allowed_extensions: vec![],
+            forbidden_patterns: vec![],
+        };
+        v.set_config(cfg);
+        assert!(v.config().check_package_structure);
+        assert!(!v.config().check_manifest);
+        assert_eq!(v.config().max_plugin_size, 5);
+    }
+
+    // ==================== 私有纯逻辑：插件 ID 校验 ====================
+
+    #[test]
+    fn test_is_valid_plugin_id_valid() {
+        let v = SecurityValidator::new();
+        assert!(v.is_valid_plugin_id("my_plugin"));
+        assert!(v.is_valid_plugin_id("my-plugin"));
+        assert!(v.is_valid_plugin_id("plugin123"));
+        assert!(v.is_valid_plugin_id("org.plugin"));
+        assert!(v.is_valid_plugin_id("ABC_123-xyz.v2"));
+    }
+
+    #[test]
+    fn test_is_valid_plugin_id_invalid() {
+        let v = SecurityValidator::new();
+        // 含空格、特殊字符均非法
+        assert!(!v.is_valid_plugin_id("my plugin"));
+        assert!(!v.is_valid_plugin_id("my@plugin"));
+        assert!(!v.is_valid_plugin_id("my/plugin"));
+        assert!(!v.is_valid_plugin_id("my:plugin"));
+        assert!(!v.is_valid_plugin_id(""));
+    }
+
+    // ==================== 私有纯逻辑：版本格式校验 ====================
+
+    #[test]
+    fn test_is_valid_version_valid() {
+        let v = SecurityValidator::new();
+        assert!(v.is_valid_version("1.0"));
+        assert!(v.is_valid_version("1.0.0"));
+        assert!(v.is_valid_version("12.3.45"));
+    }
+
+    #[test]
+    fn test_is_valid_version_invalid() {
+        let v = SecurityValidator::new();
+        // 仅一段或非数字应无效
+        assert!(!v.is_valid_version("1"));
+        assert!(!v.is_valid_version("1.x"));
+        assert!(!v.is_valid_version("a.b"));
+        assert!(!v.is_valid_version(""));
+    }
+
+    // ==================== 文件系统：目录包结构校验 ====================
+
+    #[tokio::test]
+    async fn test_validate_valid_plugin_directory() {
+        let dir = TempDir::new("valid");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(result.passed, "有效插件目录应通过校验，错误: {:?}", result.errors);
+    }
+
+    #[tokio::test]
+    async fn test_validate_nonexistent_package() {
+        let v = SecurityValidator::new();
+        let missing = std::env::temp_dir().join("cmx_plugin_nonexistent_9999");
+        let result = v.validate_plugin_package(&missing).await;
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("插件包不存在")));
+    }
+
+    #[tokio::test]
+    async fn test_validate_missing_wasm_errors() {
+        let dir = TempDir::new("no_wasm");
+        dir.write("manifest.json", &valid_manifest());
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed, "缺少 WASM 文件应校验失败");
+        assert!(
+            result.errors.iter().any(|e| e.contains("WASM")),
+            "应报告缺少 WASM 文件错误，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_missing_manifest_warns() {
+        let dir = TempDir::new("no_manifest");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        // 缺少 manifest 仅产生警告，不改变通过状态
+        assert!(result.passed, "缺少 manifest 不应导致校验失败");
+        assert!(
+            !result.warnings.is_empty(),
+            "缺少 manifest 应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_non_allowed_extension_warns() {
+        let dir = TempDir::new("bad_ext");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        // .exe 不在扩展名白名单
+        dir.write_bytes("helper.exe", b"binary");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(result.passed, "非白名单扩展名仅产生警告");
+        assert!(
+            result.warnings.iter().any(|w| w.contains("helper.exe")),
+            "应针对非白名单扩展名产生警告: {:?}", result.warnings
+        );
+    }
+
+    // ==================== 文件系统：manifest 校验 ====================
+
+    #[tokio::test]
+    async fn test_validate_manifest_missing_plugin_object_errors() {
+        let dir = TempDir::new("no_plugin_obj");
+        dir.write("manifest.json", r#"{"manifest_version": "1.0"}"#);
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed);
+        assert!(
+            result.errors.iter().any(|e| e.contains("plugin 对象")),
+            "应报告缺少 plugin 对象，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_missing_required_fields_errors() {
+        let dir = TempDir::new("missing_fields");
+        // 缺少 version 与 main_file
+        dir.write(
+            "manifest.json",
+            r#"{"manifest_version":"1.0","plugin":{"id":"my_plugin","name":"x"}}"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("version")), "缺少 version 字段应报错");
+        assert!(result.errors.iter().any(|e| e.contains("main_file")), "缺少 main_file 字段应报错");
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_invalid_plugin_id_errors() {
+        let dir = TempDir::new("bad_id");
+        // id 含非法字符（空格）
+        dir.write(
+            "manifest.json",
+            r#"{"manifest_version":"1.0","plugin":{"id":"bad id","name":"x","version":"1.0.0","main_file":"p.wasm"}}"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed);
+        assert!(
+            result.errors.iter().any(|e| e.contains("插件 ID 格式")),
+            "非法插件 ID 应报错，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_invalid_version_warns() {
+        let dir = TempDir::new("bad_version");
+        // 版本非数字格式（仅产生警告）
+        dir.write(
+            "manifest.json",
+            r#"{"manifest_version":"1.0","plugin":{"id":"my_plugin","name":"x","version":"x.y","main_file":"p.wasm"}}"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        // 版本格式无效仅产生警告，不改变通过状态
+        assert!(
+            result.warnings.iter().any(|w| w.contains("版本格式")),
+            "无效版本应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_invalid_json_errors() {
+        let dir = TempDir::new("bad_json");
+        dir.write("manifest.json", "{ not a valid json");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed);
+        assert!(
+            result.errors.iter().any(|e| e.contains("manifest 文件失败")),
+            "无效 JSON 应报告 manifest 解析失败，错误: {:?}", result.errors
+        );
+    }
+
+    // ==================== 文件系统：包大小校验 ====================
+
+    #[tokio::test]
+    async fn test_validate_oversized_package_errors() {
+        let dir = TempDir::new("oversize");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        // 配置极小的最大尺寸阈值
+        let cfg = SecurityConfig {
+            max_plugin_size: 1,
+            ..SecurityConfig::default()
+        };
+        let v = SecurityValidator::with_config(cfg);
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(!result.passed);
+        assert!(
+            result.errors.iter().any(|e| e.contains("超出限制")),
+            "超尺寸包应报错，错误: {:?}", result.errors
+        );
+    }
+
+    // ==================== ZIP：路径穿越防护（安全关键路径） ====================
+
+    #[tokio::test]
+    async fn test_validate_zip_path_traversal_detected() {
+        let dir = TempDir::new("zip_traversal");
+        let zip_path = dir.path().join("plugin.zip");
+        // 构造恶意 ZIP：含 ../ 路径穿越条目，同时包含 wasm 与 manifest 以隔离路径穿越错误
+        write_zip(
+            &zip_path,
+            &[
+                ("../../etc/passwd", b"malicious"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("禁止的路径模式")),
+            "应检测到路径穿越条目，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_windows_path_traversal_detected() {
+        let dir = TempDir::new("zip_win_traversal");
+        let zip_path = dir.path().join("plugin.zip");
+        // Windows 风格路径穿越模式 ..\
+        write_zip(
+            &zip_path,
+            &[
+                ("..\\..\\windows\\sys.dll", b"malicious"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("禁止的路径模式")),
+            "应检测到 Windows 路径穿越条目，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_missing_wasm_errors() {
+        let dir = TempDir::new("zip_no_wasm");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[("manifest.json", b"{}"), ("readme.md", b"hi")],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(!result.passed);
+        assert!(result.errors.iter().any(|e| e.contains("WASM")));
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_valid_structure_passes() {
+        let dir = TempDir::new("zip_valid");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+                ("readme.md", b"docs"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(result.passed, "结构合法的 ZIP 应通过校验，错误: {:?}", result.errors);
+    }
+
+    #[tokio::test]
+    async fn test_validate_unsupported_package_format_errors() {
+        let dir = TempDir::new("bad_format");
+        let tar_path = dir.path().join("plugin.tar");
+        // 非 zip 扩展名的文件应报错
+        fs::write(&tar_path, b"some bytes").unwrap();
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&tar_path).await;
+        assert!(!result.passed);
+        assert!(
+            result.errors.iter().any(|e| e.contains("不支持的插件包格式")),
+            "应报告不支持的包格式，错误: {:?}", result.errors
+        );
+    }
+
+    // ==================== 权限校验 ====================
+
+    #[tokio::test]
+    async fn test_check_permissions_dangerous_returns_ok() {
+        // 危险权限仅记录警告，仍返回 Ok(true)
+        let v = SecurityValidator::new();
+        let result = v
+            .check_permissions(&[
+                "filesystem.write.root".to_string(),
+                "network.all".to_string(),
+            ])
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_check_permissions_disabled_config() {
+        let cfg = SecurityConfig {
+            check_permissions: false,
+            ..SecurityConfig::default()
+        };
+        let v = SecurityValidator::with_config(cfg);
+        let result = v.check_permissions(&["filesystem.write.root".to_string()]).await;
+        assert!(result.unwrap(), "关闭权限检查时应直接通过");
+    }
+
+    #[tokio::test]
+    async fn test_verify_signature_skipped_when_disabled() {
+        // 默认配置关闭签名验证，应直接返回 Ok(true)
+        let dir = TempDir::new("sig_skip");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.verify_signature(dir.path()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    // ==================== 目录：禁止路径模式检测（安全关键路径） ====================
+
+    #[tokio::test]
+    async fn test_validate_directory_etc_path_pattern_detected() {
+        // 目录形式的 /etc/ 路径模式检测：在插件目录下创建 etc/passwd 文件，
+        // 其完整路径会包含 "/etc/" 模式，应被检测到
+        let dir = TempDir::new("dir_etc");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        // 创建 etc 子目录并放置一个文件，使路径包含 "/etc/"
+        let etc_dir = dir.path().join("etc");
+        std::fs::create_dir_all(&etc_dir).unwrap();
+        std::fs::write(etc_dir.join("passwd"), b"malicious").unwrap();
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("禁止的路径模式") && e.contains("/etc/")),
+            "应检测到目录中的 /etc/ 路径模式，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_directory_root_path_pattern_detected() {
+        // 目录形式的 /root/ 路径模式检测：在插件目录下创建 root/.ssh 文件，
+        // 其完整路径会包含 "/root/" 模式，应被检测到
+        let dir = TempDir::new("dir_root");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        let root_dir = dir.path().join("root").join(".ssh");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::write(root_dir.join("id_rsa"), b"stolen").unwrap();
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("禁止的路径模式") && e.contains("/root/")),
+            "应检测到目录中的 /root/ 路径模式，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_etc_path_pattern_detected() {
+        // ZIP 中包含 /etc/ 路径模式应被检测
+        let dir = TempDir::new("zip_etc");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("/etc/passwd", b"malicious"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("/etc/")),
+            "应检测到 /etc/ 路径模式，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_root_path_pattern_detected() {
+        // ZIP 中包含 /root/ 路径模式应被检测
+        let dir = TempDir::new("zip_root");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("/root/.ssh/id_rsa", b"stolen"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("/root/")),
+            "应检测到 /root/ 路径模式，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_windows_path_pattern_detected() {
+        // ZIP 中包含 C:\Windows\ 路径模式应被检测
+        let dir = TempDir::new("zip_win");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("C:\\Windows\\System32\\evil.dll", b"malicious"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        assert!(
+            result.errors.iter().any(|e| e.contains("C:\\Windows\\")),
+            "应检测到 Windows 系统路径模式，错误: {:?}", result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_zip_multiple_forbidden_patterns_all_detected() {
+        // 同时包含多种禁止路径模式，应全部检测
+        let dir = TempDir::new("zip_multi");
+        let zip_path = dir.path().join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("../escape.txt", b"x"),
+                ("/etc/shadow", b"x"),
+                ("C:\\Windows\\bad.dll", b"x"),
+                ("plugin.wasm", b"\0asm"),
+                ("manifest.json", b"{}"),
+            ],
+        );
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(&zip_path).await;
+        // 至少应报告 3 种禁止路径模式
+        let forbidden_count = result
+            .errors
+            .iter()
+            .filter(|e| e.contains("禁止的路径模式"))
+            .count();
+        assert!(
+            forbidden_count >= 3,
+            "应至少检测到 3 处禁止路径模式，实际: {}, 错误: {:?}",
+            forbidden_count,
+            result.errors
+        );
+    }
+
+    // ==================== 扩展名白名单正向用例 ====================
+
+    #[tokio::test]
+    async fn test_validate_allowed_extension_json_no_warning() {
+        // .json 在白名单中，不应产生扩展名警告
+        let dir = TempDir::new("ext_json");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        dir.write("config.json", r#"{"key":"value"}"#);
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("config.json")),
+            "白名单中的 .json 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_allowed_extension_toml_no_warning() {
+        // .toml 在白名单中，不应产生扩展名警告
+        let dir = TempDir::new("ext_toml");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        dir.write("config.toml", "[package]\nname = \"x\"");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("config.toml")),
+            "白名单中的 .toml 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_allowed_extension_yaml_no_warning() {
+        // .yaml / .yml 在白名单中，不应产生扩展名警告
+        let dir = TempDir::new("ext_yaml");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        dir.write("config.yaml", "key: value");
+        dir.write("config2.yml", "key: value");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("config.yaml") && !w.contains("config2.yml")),
+            "白名单中的 .yaml/.yml 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_allowed_extension_md_txt_no_warning() {
+        // .md / .txt 在白名单中，不应产生扩展名警告
+        let dir = TempDir::new("ext_md_txt");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        dir.write("readme.md", "# readme");
+        dir.write("notes.txt", "some notes");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("readme.md") && !w.contains("notes.txt")),
+            "白名单中的 .md/.txt 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_custom_allowed_extensions_respected() {
+        // 自定义白名单：允许 .rs，禁止 .json
+        let dir = TempDir::new("ext_custom");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        dir.write("helper.rs", "fn main() {}");
+        dir.write("data.json", "{}");
+
+        let cfg = SecurityConfig {
+            allowed_extensions: vec![
+                "wasm".to_string(),
+                "json".to_string(),
+                "toml".to_string(),
+                "yaml".to_string(),
+                "yml".to_string(),
+                "md".to_string(),
+                "txt".to_string(),
+                "rs".to_string(),
+            ],
+            ..SecurityConfig::default()
+        };
+        let v = SecurityValidator::with_config(cfg);
+        let result = v.validate_plugin_package(dir.path()).await;
+        // .rs 在自定义白名单中，不应产生警告
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("helper.rs")),
+            "自定义白名单中的 .rs 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    // ==================== manifest_version 兼容性 ====================
+
+    #[tokio::test]
+    async fn test_validate_manifest_version_compatible_no_warning() {
+        // manifest_version 为 "1.0" 不应产生版本不兼容警告
+        let dir = TempDir::new("manifest_compat");
+        dir.write("manifest.json", &valid_manifest());
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(result.passed);
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("manifest_version") && !w.contains("Manifest 版本")),
+            "manifest_version 1.0 不应产生兼容性警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_version_incompatible_warns() {
+        // manifest_version 非 1.0 应产生兼容性警告
+        let dir = TempDir::new("manifest_incompat");
+        dir.write(
+            "manifest.json",
+            r#"{
+                "manifest_version": "2.0",
+                "plugin": {
+                    "id": "my_plugin",
+                    "name": "x",
+                    "version": "1.0.0",
+                    "main_file": "p.wasm"
+                }
+            }"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().any(|w| w.contains("Manifest 版本可能不兼容")),
+            "非 1.0 manifest_version 应产生兼容性警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_missing_version_field_warns() {
+        // 缺少 manifest_version 字段应产生警告
+        let dir = TempDir::new("manifest_no_ver");
+        dir.write(
+            "manifest.json",
+            r#"{
+                "plugin": {
+                    "id": "my_plugin",
+                    "name": "x",
+                    "version": "1.0.0",
+                    "main_file": "p.wasm"
+                }
+            }"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().any(|w| w.contains("manifest_version 字段")),
+            "缺少 manifest_version 应产生警告: {:?}", result.warnings
+        );
+    }
+
+    // ==================== manifest 依赖校验 ====================
+
+    #[tokio::test]
+    async fn test_validate_manifest_dependencies_valid_no_warning() {
+        // 依赖列表中所有 ID 合法，不应产生警告
+        let dir = TempDir::new("deps_valid");
+        dir.write(
+            "manifest.json",
+            r#"{
+                "manifest_version": "1.0",
+                "plugin": {
+                    "id": "my_plugin",
+                    "name": "x",
+                    "version": "1.0.0",
+                    "main_file": "p.wasm",
+                    "dependencies": ["dep_a", "dep_b-1", "org.dep"]
+                }
+            }"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(result.passed);
+        assert!(
+            result.warnings.iter().all(|w| !w.contains("依赖插件 ID")),
+            "合法依赖 ID 不应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_dependencies_invalid_id_warns() {
+        // 依赖列表中存在非法 ID 应产生警告
+        let dir = TempDir::new("deps_invalid");
+        dir.write(
+            "manifest.json",
+            r#"{
+                "manifest_version": "1.0",
+                "plugin": {
+                    "id": "my_plugin",
+                    "name": "x",
+                    "version": "1.0.0",
+                    "main_file": "p.wasm",
+                    "dependencies": ["good_dep", "bad dep@id"]
+                }
+            }"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().any(|w| w.contains("依赖插件 ID 格式")),
+            "非法依赖 ID 应产生警告: {:?}", result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_manifest_dependencies_non_string_item_warns() {
+        // 依赖列表中存在非字符串项应产生警告
+        let dir = TempDir::new("deps_non_str");
+        dir.write(
+            "manifest.json",
+            r#"{
+                "manifest_version": "1.0",
+                "plugin": {
+                    "id": "my_plugin",
+                    "name": "x",
+                    "version": "1.0.0",
+                    "main_file": "p.wasm",
+                    "dependencies": ["good_dep", 123]
+                }
+            }"#,
+        );
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let v = SecurityValidator::new();
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.warnings.iter().any(|w| w.contains("非字符串项")),
+            "非字符串依赖项应产生警告: {:?}", result.warnings
+        );
+    }
+
+    // ==================== 关闭子检查项的行为 ====================
+
+    #[tokio::test]
+    async fn test_validate_with_structure_check_disabled_skips_wasm_check() {
+        // 关闭包结构检查时，缺少 WASM 不应导致校验失败
+        let dir = TempDir::new("struct_off");
+        dir.write("manifest.json", &valid_manifest());
+        // 不放置 plugin.wasm
+
+        let cfg = SecurityConfig {
+            check_package_structure: false,
+            ..SecurityConfig::default()
+        };
+        let v = SecurityValidator::with_config(cfg);
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.passed,
+            "关闭包结构检查时缺少 WASM 不应失败，错误: {:?}",
+            result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_with_manifest_check_disabled_skips_manifest_errors() {
+        // 关闭 manifest 检查时，损坏的 manifest 不应导致校验失败
+        let dir = TempDir::new("manifest_off");
+        dir.write("manifest.json", "{ invalid json");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let cfg = SecurityConfig {
+            check_manifest: false,
+            ..SecurityConfig::default()
+        };
+        let v = SecurityValidator::with_config(cfg);
+        let result = v.validate_plugin_package(dir.path()).await;
+        assert!(
+            result.passed,
+            "关闭 manifest 检查时损坏 manifest 不应失败，错误: {:?}",
+            result.errors
+        );
+    }
+}

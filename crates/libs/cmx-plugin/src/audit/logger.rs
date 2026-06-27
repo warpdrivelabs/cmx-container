@@ -1,15 +1,19 @@
 //! 审计日志模块
 //!
-//! 记录操作日志到数据库
+//! 薄适配层：将插件域审计记录转换为统一 `cmx-audit` 记录并委托其写入。
+//!
+//! 历史上 cmx-plugin 自写了完整的审计日志实现（DB 插入/查询/解析），
+//! 现统一复用 `cmx-audit` 基础设施，本模块仅保留插件域模型
+//! （`AuditRecord` / `OperationType`）到通用 `cmx_audit::AuditRecord` 的映射逻辑。
 
-use chrono::{DateTime, Utc};
-use sea_query::{ExprTrait, PostgresQueryBuilder, Query};
-use sea_query_sqlx::SqlxBinder;
 use std::sync::Arc;
 
-use cmx_core::model::cell::DataValue;
-use cmx_core::model::data::dataset::DataSet;
+use cmx_audit::{
+    AuditDomain, AuditLogger as UnifiedAuditLogger, AuditRecord as UnifiedAuditRecord,
+    DatabaseAuditStore, DefaultAuditLogger, OperationResult as UnifiedOperationResult,
+};
 use cmx_database::DatabaseManager;
+use serde_json::{Map, Value};
 
 use crate::audit::record::{AuditRecord, OperationResult, OperationType};
 use crate::error::{PluginError, PluginResult};
@@ -50,364 +54,144 @@ impl Default for AuditLoggerConfig {
     }
 }
 
-/// 审计日志记录器
-#[derive(Default)]
+/// 审计日志记录器（适配层）
+///
+/// 包装统一 `cmx-audit` 的 `AuditLogger` trait，对外暴露插件域友好的 `log` 接口，
+/// 内部完成插件域字段（plugin_id / version / old_value 等）到通用审计记录的映射。
+///
+/// 审计数据最终写入统一表 `cmx_audit_log`（domain = "plugin"）。
 pub struct AuditLogger {
-    /// 配置
-    config: AuditLoggerConfig,
+    /// 统一审计日志记录器
+    inner: Arc<dyn UnifiedAuditLogger>,
+    /// 节点ID（用于填充记录的 node_id 字段，写入 details）
+    node_id: String,
 }
 
 impl AuditLogger {
     /// 创建新的审计日志记录器
     pub fn new(config: AuditLoggerConfig) -> Self {
-        Self { config }
+        let store = DatabaseAuditStore::new(
+            config.db_manager,
+            config.default_db_id,
+            // app_id 与统一审计表 DEFAULT 一致
+            "default",
+        );
+        Self {
+            inner: Arc::new(DefaultAuditLogger::new(Arc::new(store))),
+            node_id: config.node_id,
+        }
     }
 
-    /// 记录操作（持久化到数据库）
+    /// 记录操作（委托统一 cmx-audit 写入）
+    ///
+    /// 将插件域 `AuditRecord` 映射为通用 `cmx_audit::AuditRecord`：
+    /// - `plugin_id` → `target_id`（target_type = "plugin"）
+    /// - `operation_type` → `operation` 字符串
+    /// - `operation_status` → `result`
+    /// - `version` / `deployment_id` / `node_id` / `old_value` / `new_value`
+    ///   / `error_code` / `error_message` / `stack_trace` → 合并到 `details` JSON
+    /// - `request_id` / `started_at` / `duration_ms` → 直接映射
     pub async fn log(&self, mut record: AuditRecord) -> PluginResult<()> {
-        // 设置完成时间和耗时
-        let duration_ms = if let Some(duration) = record.duration_ms {
-            duration
-        } else {
-            (Utc::now() - record.started_at).num_milliseconds()
-        };
-        record.completed_at = Some(Utc::now());
+        // 补全完成时间和耗时（与原实现一致）
+        let duration_ms = record.duration_ms.unwrap_or_else(|| {
+            (chrono::Utc::now() - record.started_at).num_milliseconds()
+        });
+        record.completed_at = Some(chrono::Utc::now());
         record.duration_ms = Some(duration_ms);
 
-        // 如果没有设置 node_id，使用默认的节点ID
-        if record.node_id.is_none() {
-            record.node_id = Some(self.config.node_id.clone());
+        // 节点ID回填（与原实现一致：未设置时使用配置的默认节点ID）
+        let node_id = record
+            .node_id
+            .clone()
+            .unwrap_or_else(|| self.node_id.clone());
+
+        // 映射操作结果
+        let result = match record.operation_status {
+            OperationResult::Success => UnifiedOperationResult::Success,
+            OperationResult::Failure => UnifiedOperationResult::Failure,
+        };
+
+        // 构造统一审计记录
+        let mut unified = UnifiedAuditRecord::new(
+            AuditDomain::Plugin,
+            record.operation_type.to_string(),
+            result,
+        )
+        .with_target("plugin", record.plugin_id.clone())
+        .with_duration(duration_ms);
+
+        // started_at 保留原始开始时间
+        unified.started_at = record.started_at;
+
+        if let Some(req_id) = record.request_id.take() {
+            unified = unified.with_request_id(req_id);
         }
 
-        // 持久化到数据库
-        self.insert_record(&record).await
-    }
+        // 合并插件域专属字段到 details（统一审计无对应列）
+        let mut details: Map<String, Value> = record
+            .details
+            .take()
+            .and_then(|v| match v {
+                Value::Object(map) => Some(map),
+                other => {
+                    let mut m = Map::new();
+                    m.insert("details".to_string(), other);
+                    Some(m)
+                }
+            })
+            .unwrap_or_default();
 
-    /// 插入记录到数据库
-    async fn insert_record(&self, record: &AuditRecord) -> PluginResult<()> {
-        let now = Utc::now();
-        let mut query = Query::insert();
-        query
-            .into_table("cmx_plugin_audit_log")
-            .columns(vec![
-                "id", "plugin_id", "node_id", "version", "deployment_id",
-                "operation_type", "operation_status",  "request_id",  "details",
-                "old_value", "new_value", "error_code", "error_message",
-                "stack_trace", "started_at", "completed_at", "duration_ms",
-                "create_time", "update_time", "archived",
-                // "create_by", "create_name", "update_by", "update_name"
-            ])
-            .values(vec![
-                record.id.clone().into(),
-                record.plugin_id.clone().into(),
-                record.node_id.clone().into(),
-                record.version.clone().into(),
-                record.deployment_id.clone().into(),
-                record.operation_type.to_string().into(),
-                record.operation_status.to_string().into(),
+        if let Some(v) = record.version.take() {
+            details.insert("version".to_string(), Value::String(v));
+        }
+        if let Some(v) = record.deployment_id.take() {
+            details.insert("deployment_id".to_string(), Value::String(v));
+        }
+        if !node_id.is_empty() {
+            details.insert("node_id".to_string(), Value::String(node_id));
+        }
+        if let Some(v) = record.old_value.take() {
+            details.insert("old_value".to_string(), Value::String(v));
+        }
+        if let Some(v) = record.new_value.take() {
+            details.insert("new_value".to_string(), Value::String(v));
+        }
+        if let Some(v) = record.error_code.take() {
+            details.insert("error_code".to_string(), Value::String(v));
+        }
+        if let Some(v) = record.error_message.take() {
+            details.insert("error_message".to_string(), Value::String(v));
+        }
+        if let Some(v) = record.stack_trace.take() {
+            details.insert("stack_trace".to_string(), Value::String(v));
+        }
 
-                record.request_id.clone().into(),
-                record.details.clone().into(),
-                record.old_value.clone().into(),
-                record.new_value.clone().into(),
-                record.error_code.clone().into(),
-                record.error_message.clone().into(),
-                record.stack_trace.clone().into(),
-                record.started_at.into(),
-                record.completed_at.into(),
-                record.duration_ms.into(),
-                now.into(),
-                now.into(),
-                0.into()
-            ])
-            .map_err(|e| PluginError::Database(format!("构建插入语句失败: {}", e)))?;
+        if !details.is_empty() {
+            unified = unified.with_details(Value::Object(details));
+        }
 
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        self.config.db_manager
-            .execute_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values)
+        self.inner
+            .log(unified)
             .await
-            .map_err(|e| PluginError::Database(format!("插入审计日志失败: {}", e)))?;
+            .map_err(|e| PluginError::Database(format!("审计日志写入失败: {}", e)))?;
 
         Ok(())
-    }
-
-    /// 获取所有记录
-    pub async fn get_all(&self, limit: Option<usize>, offset: Option<usize>) -> PluginResult<Vec<AuditRecord>> {
-        let mut query = Query::select();
-        query
-            .from("cmx_plugin_audit_log")
-            .columns(vec![
-                "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status", "operator", "operator_ip",
-                "operator_session", "request_id", "correlation_id", "details",
-                "old_value", "new_value", "error_code", "error_message",
-                "stack_trace", "started_at", "completed_at", "duration_ms"
-            ])
-            .order_by("started_at", sea_query::Order::Desc);
-
-        if let Some(limit_val) = limit {
-            query.limit(limit_val as u64);
-        }
-
-        if let Some(offset_val) = offset {
-            query.offset(offset_val as u64);
-        }
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        let result = self.config.db_manager
-            .query_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values, "audit_get_all")
-            .await
-            .map_err(|e| PluginError::Database(format!("查询审计日志失败: {}", e)))?;
-
-        Self::parse_records(&result)
-    }
-
-    /// 获取指定插件的记录
-    pub async fn get_by_plugin(&self, plugin_id: &str, limit: Option<usize>) -> PluginResult<Vec<AuditRecord>> {
-        let mut query = Query::select();
-        query
-            .from("cmx_plugin_audit_log")
-            .columns(vec![
-                "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status", "operator", "operator_ip",
-                "operator_session", "request_id", "correlation_id", "details",
-                "old_value", "new_value", "error_code", "error_message",
-                "stack_trace", "started_at", "completed_at", "duration_ms"
-            ])
-            .and_where(sea_query::Expr::col("plugin_id").eq(plugin_id))
-            .order_by("started_at", sea_query::Order::Desc);
-
-        if let Some(limit_val) = limit {
-            query.limit(limit_val as u64);
-        }
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        let result = self.config.db_manager
-            .query_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values, "audit_get_by_plugin")
-            .await
-            .map_err(|e| PluginError::Database(format!("查询审计日志失败: {}", e)))?;
-
-        Self::parse_records(&result)
-    }
-
-    /// 获取指定时间范围的记录
-    pub async fn get_by_time_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> PluginResult<Vec<AuditRecord>> {
-        let mut query = Query::select();
-        query
-            .from("cmx_plugin_audit_log")
-            .columns(vec![
-                "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status", "operator", "operator_ip",
-                "operator_session", "request_id", "correlation_id", "details",
-                "old_value", "new_value", "error_code", "error_message",
-                "stack_trace", "started_at", "completed_at", "duration_ms"
-            ])
-            .and_where(sea_query::Expr::col("started_at").gte(start))
-            .and_where(sea_query::Expr::col("started_at").lte(end))
-            .order_by("started_at", sea_query::Order::Desc);
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        let result = self.config.db_manager
-            .query_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values, "audit_get_by_time_range")
-            .await
-            .map_err(|e| PluginError::Database(format!("查询审计日志失败: {}", e)))?;
-
-        Self::parse_records(&result)
-    }
-
-    /// 获取指定节点的记录
-    pub async fn get_by_node(&self, node_id: &str, limit: Option<usize>) -> PluginResult<Vec<AuditRecord>> {
-        let mut query = Query::select();
-        query
-            .from("cmx_plugin_audit_log")
-            .columns(vec![
-                "id", "plugin_id", "node_id", "version_id", "deployment_id",
-                "operation_type", "operation_status",  "request_id", "details",
-                "old_value", "new_value", "error_code", "error_message",
-                "stack_trace", "started_at", "completed_at", "duration_ms"
-            ])
-            .and_where(sea_query::Expr::col("node_id").eq(node_id))
-            .order_by("started_at", sea_query::Order::Desc);
-
-        if let Some(limit_val) = limit {
-            query.limit(limit_val as u64);
-        }
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        let result = self.config.db_manager
-            .query_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values, "audit_get_by_node")
-            .await
-            .map_err(|e| PluginError::Database(format!("查询审计日志失败: {}", e)))?;
-
-        Self::parse_records(&result)
-    }
-
-    /// 清空所有记录（软删除，设置为 archived = 1）
-    pub async fn clear(&self) -> PluginResult<()> {
-        let mut query = Query::update();
-        query.table("cmx_plugin_audit_log");
-        query.value("archived", 1);
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        self.config.db_manager
-            .execute_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values)
-            .await
-            .map_err(|e| PluginError::Database(format!("清空审计日志失败: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// 获取记录数量
-    pub async fn len(&self) -> PluginResult<i64> {
-        let mut query = Query::select();
-        query
-            .from("cmx_plugin_audit_log")
-            .expr(sea_query::Expr::col("id").count())
-            .and_where(sea_query::Expr::col("archived").eq(0));
-
-        let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
-
-        let result = self.config.db_manager
-            .query_sql_with_sqlxvalues(&self.config.default_db_id, None, &sql, sql_values, "audit_count")
-            .await
-            .map_err(|e| PluginError::Database(format!("统计审计日志失败: {}", e)))?;
-
-        Self::parse_count(&result)
-    }
-
-    /// 检查是否为空
-    pub async fn is_empty(&self) -> bool {
-        self.len().await.map(|c| c == 0).unwrap_or(true)
-    }
-
-    /// 解析记录列表
-    fn parse_records(dataset: &DataSet) -> PluginResult<Vec<AuditRecord>> {
-        let mut records = Vec::new();
-        let schema = dataset.schema.as_ref();
-
-        for row in dataset.iter() {
-            let get_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::String(s) = v { Some(s.clone()) } else { None })
-            };
-
-            let get_opt_string = |col_name: &str| -> Option<String> {
-                row.get_by_name(schema, col_name).and_then(|v| match v {
-                    DataValue::Null => None,
-                    DataValue::String(s) => Some(s.clone()),
-                    _ => None,
-                })
-            };
-
-            let get_opt_datetime = |col_name: &str| -> Option<DateTime<Utc>> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    if let DataValue::String(s) = v {
-                        DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                    } else {
-                        None
-                    }
-                })
-            };
-
-            let get_datetime = |col_name: &str| -> DateTime<Utc> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| {
-                        if let DataValue::String(s) = v {
-                            DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(Utc::now)
-            };
-
-            let get_i64 = |col_name: &str| -> Option<i64> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| if let DataValue::Int(n) = v { Some(*n) } else { None })
-            };
-
-            let get_opt_json = |col_name: &str| -> Option<serde_json::Value> {
-                row.get_by_name(schema, col_name).and_then(|v| {
-                    if let DataValue::Json(s) = v {
-                        serde_json::from_str(s).ok()
-                    } else if let DataValue::String(s) = v {
-                        serde_json::from_str(s).ok()
-                    } else {
-                        None
-                    }
-                })
-            };
-
-            let operation_str = get_string("operation_type").unwrap_or_default();
-            let operation = match operation_str.as_str() {
-                "install" => OperationType::Install,
-                "uninstall" => OperationType::Uninstall,
-                "activate" => OperationType::Activate,
-                "deactivate" => OperationType::Deactivate,
-                "upgrade" => OperationType::Upgrade,
-                "downgrade" => OperationType::Downgrade,
-                "rollback" => OperationType::Rollback,
-                "config_update" => OperationType::ConfigUpdate,
-                _ => OperationType::Install,
-            };
-
-            let result_str = get_string("operation_status").unwrap_or_default();
-            let result = match result_str.as_str() {
-                "success" => OperationResult::Success,
-                "failure" => OperationResult::Failure,
-                _ => OperationResult::Success,
-            };
-
-            let record = AuditRecord {
-                id: get_string("id").unwrap_or_default(),
-                plugin_id: get_string("plugin_id").unwrap_or_default(),
-                node_id: get_opt_string("node_id"),
-                version: get_opt_string("version"),
-                deployment_id: get_opt_string("deployment_id"),
-                operation_type: operation,
-                operation_status: result,
-
-                request_id: get_opt_string("request_id"),
-                details: get_opt_json("details"),
-                old_value: get_opt_string("old_value"),
-                new_value: get_opt_string("new_value"),
-                error_code: get_opt_string("error_code"),
-                error_message: get_opt_string("error_message"),
-                stack_trace: get_opt_string("stack_trace"),
-                started_at: get_datetime("started_at"),
-                completed_at: get_opt_datetime("completed_at"),
-                duration_ms: get_i64("duration_ms"),
-            };
-
-            records.push(record);
-        }
-
-        Ok(records)
-    }
-
-    /// 解析计数结果
-    fn parse_count(dataset: &DataSet) -> PluginResult<i64> {
-        if dataset.row_count() > 0 {
-            let row = dataset.iter().next();
-            if let Some(row) = row {
-                return row.get_by_name(dataset.schema.as_ref(), "count")
-                    .and_then(|v| {
-                        if let DataValue::Int(n) = v {
-                            Some(*n)
-                        } else {
-                            None
-                        }
-                    })
-                    .ok_or_else(|| PluginError::Database("解析计数结果失败".to_string()));
-            }
-        }
-        Ok(0)
     }
 }
 
+/// 将 `OperationType` 转换为统一审计的 operation 字符串
+///
+/// 保留此辅助函数以备外部调用方需要手动构造 operation 名称。
+#[allow(dead_code)]
+pub(crate) fn operation_to_string(op: &OperationType) -> &'static str {
+    match op {
+        OperationType::Install => "install",
+        OperationType::Uninstall => "uninstall",
+        OperationType::Activate => "activate",
+        OperationType::Deactivate => "deactivate",
+        OperationType::Upgrade => "upgrade",
+        OperationType::Downgrade => "downgrade",
+        OperationType::Rollback => "rollback",
+        OperationType::ConfigUpdate => "config_update",
+    }
+}
