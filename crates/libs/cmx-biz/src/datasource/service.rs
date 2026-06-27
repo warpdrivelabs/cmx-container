@@ -221,6 +221,7 @@ impl SysDatasourceService {
                 connect_timeout: data.connect_timeout.unwrap_or(30) as u64,
                 idle_timeout: data.idle_timeout.unwrap_or(600) as u64,
                 max_lifetime: data.max_lifetime.unwrap_or(1800) as u64,
+                ..Default::default()
             },
             health_check_interval: data.health_check_interval.unwrap_or(60) as u64,
             health_check_timeout: data.health_check_timeout.unwrap_or(5) as u64,
@@ -291,6 +292,7 @@ impl SysDatasourceService {
                 connect_timeout,
                 idle_timeout,
                 max_lifetime,
+                ..Default::default()
             },
             health_check_interval,
             health_check_timeout,
