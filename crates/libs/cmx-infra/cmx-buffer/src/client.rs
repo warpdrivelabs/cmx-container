@@ -20,6 +20,8 @@ pub enum RedisConnectionRef {
     Standalone(redis::aio::ConnectionManager),
     /// 集群模式 - 使用 ClusterConnection（自带重连和路由）
     Cluster(redis::cluster_async::ClusterConnection),
+    /// 测试用 Mock 连接，公开供集成测试使用
+    Mock(crate::mock::MockConnection),
 }
 
 impl redis::aio::ConnectionLike for RedisConnectionRef {
@@ -30,6 +32,7 @@ impl redis::aio::ConnectionLike for RedisConnectionRef {
         match self {
             Self::Standalone(conn) => conn.req_packed_command(cmd),
             Self::Cluster(conn) => conn.req_packed_command(cmd),
+            Self::Mock(backend) => backend.req_packed_command(cmd),
         }
     }
 
@@ -42,6 +45,7 @@ impl redis::aio::ConnectionLike for RedisConnectionRef {
         match self {
             Self::Standalone(conn) => conn.req_packed_commands(cmd, offset, count),
             Self::Cluster(conn) => conn.req_packed_commands(cmd, offset, count),
+            Self::Mock(backend) => backend.req_packed_commands(cmd, offset, count),
         }
     }
 
@@ -49,6 +53,7 @@ impl redis::aio::ConnectionLike for RedisConnectionRef {
         match self {
             Self::Standalone(conn) => conn.get_db(),
             Self::Cluster(conn) => conn.get_db(),
+            Self::Mock(backend) => backend.get_db(),
         }
     }
 }
@@ -154,6 +159,23 @@ impl RedisClient {
             cache_config,
             lock_config,
         })
+    }
+
+    /// 用已有连接和配置创建 Redis 客户端（仅供测试使用）
+    ///
+    /// 允许注入 Mock 连接，用于在不依赖真实 Redis 的情况下测试上层逻辑。
+    pub fn new_with_connection(
+        connection: RedisConnectionRef,
+        config: RedisConfig,
+        cache_config: CacheConfig,
+        lock_config: LockConfig,
+    ) -> Self {
+        Self {
+            connection,
+            config,
+            cache_config,
+            lock_config,
+        }
     }
 
     /// 根据配置创建对应的连接
