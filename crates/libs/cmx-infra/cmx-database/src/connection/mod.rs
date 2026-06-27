@@ -502,7 +502,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
             let pool = PgPoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
                 .min_connections(pool_config.min_connections as u32)
-                .acquire_timeout(std::time::Duration::from_secs(pool_config.connect_timeout))
+                .acquire_timeout(std::time::Duration::from_secs(pool_config.acquire_timeout))
                 .idle_timeout(std::time::Duration::from_secs(pool_config.idle_timeout))
                 .max_lifetime(std::time::Duration::from_secs(pool_config.max_lifetime))
                 .after_connect(move |conn, _metadata| {
@@ -528,6 +528,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
             let pool = MySqlPoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
                 .min_connections(pool_config.min_connections as u32)
+                .acquire_timeout(std::time::Duration::from_secs(pool_config.acquire_timeout))
                 .idle_timeout(std::time::Duration::from_secs(pool_config.idle_timeout))
                 .max_lifetime(std::time::Duration::from_secs(pool_config.max_lifetime))
                 .connect(&db_url)
@@ -539,6 +540,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
             let db_url = config.db_url.clone();
             let pool = SqlitePoolOptions::new()
                 .max_connections(pool_config.max_connections as u32)
+                .acquire_timeout(std::time::Duration::from_secs(pool_config.acquire_timeout))
                 .connect(&db_url)
                 .await?;
             Ok(DbPool::Sqlite(pool))

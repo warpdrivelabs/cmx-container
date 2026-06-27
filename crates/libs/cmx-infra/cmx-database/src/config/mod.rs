@@ -37,6 +37,9 @@ pub struct PoolConfig {
     /// 连接超时时间（秒）
     #[serde(default = "default_connect_timeout")]
     pub connect_timeout: u64,
+    /// 从连接池获取连接的超时时间（秒），池耗尽时超出该时间将返回错误而非无限期等待
+    #[serde(default = "default_acquire_timeout")]
+    pub acquire_timeout: u64,
     /// 空闲连接超时时间（秒）
     #[serde(default = "default_idle_timeout")]
     pub idle_timeout: u64,
@@ -57,6 +60,11 @@ fn default_connect_timeout() -> u64 {
     30
 }
 
+/// 获取连接的默认超时时间（秒），避免连接池耗尽时无限期等待
+fn default_acquire_timeout() -> u64 {
+    30
+}
+
 fn default_idle_timeout() -> u64 {
     600
 }
@@ -71,6 +79,7 @@ impl Default for PoolConfig {
             max_connections: default_max_connections(),
             min_connections: default_min_connections(),
             connect_timeout: default_connect_timeout(),
+            acquire_timeout: default_acquire_timeout(),
             idle_timeout: default_idle_timeout(),
             max_lifetime: default_max_lifetime(),
         }
