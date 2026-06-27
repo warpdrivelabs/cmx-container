@@ -201,3 +201,162 @@ impl TransactionManager {
         Ok(())
     }
 }
+
+// ============================================================================
+// 单元测试
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmx_core::model::service::{
+        NodeData, NodeMeta, NodePosition, NodeSize, ServiceFlow, ServiceNode,
+    };
+
+    /// 构造测试用节点元数据
+    fn make_meta() -> NodeMeta {
+        NodeMeta {
+            z_index: 1,
+            size: NodeSize { width: 100, height: 50 },
+            position: NodePosition { x: 0.0, y: 0.0 },
+        }
+    }
+
+    /// 构造一个无 parent 的普通节点（不在事务框中）
+    fn make_node_no_parent(id: &str) -> ServiceNode {
+        ServiceNode {
+            id: id.to_string(),
+            node_type: "skylake-func".to_string(),
+            parent: None,
+            meta: make_meta(),
+            data: Some(NodeData {
+                name: "普通节点".to_string(),
+                node_meta: None,
+                inputs: serde_json::Value::Array(vec![]),
+                outputs: serde_json::Value::Array(vec![]),
+                options: None,
+            }),
+        }
+    }
+
+    /// 构造空流程
+    fn make_empty_flow() -> ServiceFlow {
+        ServiceFlow {
+            nodes: vec![],
+            edges: vec![],
+        }
+    }
+
+    /// 构造测试用 SVRContext
+    fn make_svr_context() -> SVRContext {
+        use std::collections::HashMap;
+        use chrono::Utc;
+        SVRContext::new(
+            serde_json::Value::Null,
+            HashMap::new(),
+            Utc::now(),
+            "test_request_id".to_string(),
+        )
+    }
+
+    // ==================== 初始化测试 ====================
+
+    #[test]
+    fn new_应创建无活跃事务的管理器() {
+        let manager = TransactionManager::new("db_default".to_string());
+        assert!(!manager.has_active(), "新创建的事务管理器不应有活跃事务");
+    }
+
+    #[test]
+    fn has_active_初始状态为false() {
+        let manager = TransactionManager::new("db_default".to_string());
+        assert_eq!(manager.has_active(), false);
+    }
+
+    // ==================== commit_active 测试 ====================
+
+    #[tokio::test]
+    async fn commit_active_无活跃事务时为空操作并返回ok() {
+        // 当没有活跃事务时，commit_active 应该是空操作并返回 Ok
+        let mut manager = TransactionManager::new("db_default".to_string());
+        let mut ctx = make_svr_context();
+
+        // 无活跃事务时调用提交
+        let result = manager.commit_active(&mut ctx).await;
+        assert!(result.is_ok(), "无活跃事务时 commit 应返回 Ok");
+        assert!(!manager.has_active(), "提交后仍应无活跃事务");
+        assert!(ctx.txn_id.is_none(), "上下文中不应有事务ID");
+    }
+
+    // ==================== rollback_active 测试 ====================
+
+    #[tokio::test]
+    async fn rollback_active_无活跃事务时为空操作() {
+        // 当没有活跃事务时，rollback_active 应该是空操作，不会 panic
+        let mut manager = TransactionManager::new("db_default".to_string());
+
+        // 无活跃事务时调用回滚 - 不应 panic
+        manager.rollback_active().await;
+        assert!(!manager.has_active(), "回滚后仍应无活跃事务");
+    }
+
+    // ==================== ensure_transaction 测试 ====================
+
+    #[tokio::test]
+    async fn ensure_transaction_无活跃事务且节点不在事务框中时为空操作() {
+        // 情况1: (None, None) - 无活跃事务 + 节点不在事务框中
+        // 这是普通流程节点的场景，应直接返回 Ok 而不触发任何 DB 操作
+        let mut manager = TransactionManager::new("db_default".to_string());
+        let flow = make_empty_flow();
+        let navigator = FlowNavigator::new(&flow);
+        let mut ctx = make_svr_context();
+        let node = make_node_no_parent("func_1");
+
+        let result = manager.ensure_transaction(&node, &navigator, &mut ctx).await;
+        assert!(result.is_ok(), "无事务+无parent 应返回 Ok");
+        assert!(!manager.has_active(), "不应开启事务");
+        assert!(ctx.txn_id.is_none(), "上下文中不应有事务ID");
+    }
+
+    #[tokio::test]
+    async fn ensure_transaction_无活跃事务时连续处理多个无parent节点() {
+        // 模拟线性流程中连续的多个普通节点
+        // 每个节点都不在事务框中，不应触发事务开启
+        let mut manager = TransactionManager::new("db_default".to_string());
+        let flow = make_empty_flow();
+        let navigator = FlowNavigator::new(&flow);
+        let mut ctx = make_svr_context();
+
+        // 处理第一个节点
+        let node1 = make_node_no_parent("func_1");
+        let result1 = manager.ensure_transaction(&node1, &navigator, &mut ctx).await;
+        assert!(result1.is_ok());
+        assert!(!manager.has_active());
+
+        // 处理第二个节点
+        let node2 = make_node_no_parent("func_2");
+        let result2 = manager.ensure_transaction(&node2, &navigator, &mut ctx).await;
+        assert!(result2.is_ok());
+        assert!(!manager.has_active());
+
+        // 处理第三个节点
+        let node3 = make_node_no_parent("func_3");
+        let result3 = manager.ensure_transaction(&node3, &navigator, &mut ctx).await;
+        assert!(result3.is_ok());
+        assert!(!manager.has_active());
+
+        // 始终没有事务ID
+        assert!(ctx.txn_id.is_none());
+    }
+
+    // 注意：以下场景需要真实数据库连接，无法在纯单元测试中覆盖：
+    // - ensure_transaction (None, Some(parent_id)): 节点进入事务框，触发 begin_transaction
+    // - ensure_transaction (Some, Some(同parent)): 节点在同一事务框中继续执行
+    // - ensure_transaction (Some, None/不同parent): 节点离开事务框，触发 commit
+    // - commit_active 有活跃事务时: 实际提交事务
+    // - rollback_active 有活跃事务时: 实际回滚事务
+    //
+    // 这些场景的完整端到端测试需要数据库环境，建议在集成测试中覆盖。
+    // 这里通过 mock 的 Orchestrator 集成测试覆盖"事务开启失败时的错误传播"路径
+    // （见 tests/orchestrator_test.rs 中的事务框错误传播测试）。
+}

@@ -107,3 +107,334 @@ impl<'a> FlowNavigator<'a> {
         }
     }
 }
+
+// ============================================================================
+// 单元测试
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmx_core::model::service::{
+        NodeData, NodeMeta, NodeNodeMeta, NodePosition, NodeSize, ServiceEdge, ServiceFlow,
+        ServiceNode,
+    };
+
+    /// 构造测试用节点元数据（位置/尺寸）
+    fn make_meta() -> NodeMeta {
+        NodeMeta {
+            z_index: 1,
+            size: NodeSize { width: 100, height: 50 },
+            position: NodePosition { x: 0.0, y: 0.0 },
+        }
+    }
+
+    /// 构造一个简单的开始节点
+    fn make_start_node(id: &str) -> ServiceNode {
+        ServiceNode {
+            id: id.to_string(),
+            node_type: "skylake-start".to_string(),
+            parent: None,
+            meta: make_meta(),
+            data: Some(NodeData {
+                name: "开始".to_string(),
+                node_meta: None,
+                inputs: serde_json::Value::Array(vec![]),
+                outputs: serde_json::Value::Array(vec![]),
+                options: None,
+            }),
+        }
+    }
+
+    /// 构造一个函数节点
+    fn make_func_node(id: &str, name: &str, plugin_id: &str, function_name: &str) -> ServiceNode {
+        ServiceNode {
+            id: id.to_string(),
+            node_type: "skylake-func".to_string(),
+            parent: None,
+            meta: make_meta(),
+            data: Some(NodeData {
+                name: name.to_string(),
+                node_meta: Some(NodeNodeMeta {
+                    plugin_id: plugin_id.to_string(),
+                    plugin_name: plugin_id.to_string(),
+                    plugin_version: "1.0.0".to_string(),
+                    function_name: function_name.to_string(),
+                    database_id: None,
+                }),
+                inputs: serde_json::Value::Array(vec![]),
+                outputs: serde_json::Value::Array(vec![]),
+                options: None,
+            }),
+        }
+    }
+
+    /// 构造一个事务框节点（可指定 database_id）
+    fn make_txn_node(id: &str, name: &str, database_id: Option<&str>) -> ServiceNode {
+        ServiceNode {
+            id: id.to_string(),
+            node_type: "skylake-transaction".to_string(),
+            parent: None,
+            meta: make_meta(),
+            data: Some(NodeData {
+                name: name.to_string(),
+                node_meta: Some(NodeNodeMeta {
+                    plugin_id: String::new(),
+                    plugin_name: String::new(),
+                    plugin_version: String::new(),
+                    function_name: String::new(),
+                    database_id: database_id.map(|s| s.to_string()),
+                }),
+                inputs: serde_json::Value::Array(vec![]),
+                outputs: serde_json::Value::Array(vec![]),
+                options: None,
+            }),
+        }
+    }
+
+    /// 构造一条边
+    fn make_edge(source: &str, source_port: &str, target: &str) -> ServiceEdge {
+        ServiceEdge {
+            source_node_id: source.to_string(),
+            source_port_id: source_port.to_string(),
+            target_node_id: target.to_string(),
+            target_port_id: "in".to_string(),
+        }
+    }
+
+    /// 构造线性流程：start -> func1 -> func2 -> end
+    fn make_linear_flow() -> ServiceFlow {
+        ServiceFlow {
+            nodes: vec![
+                make_start_node("start_1"),
+                make_func_node("func_1", "步骤1", "plugin_a", "func1"),
+                make_func_node("func_2", "步骤2", "plugin_a", "func2"),
+                ServiceNode {
+                    id: "end_1".to_string(),
+                    node_type: "skylake-end".to_string(),
+                    parent: None,
+                    meta: make_meta(),
+                    data: Some(NodeData {
+                        name: "结束".to_string(),
+                        node_meta: None,
+                        inputs: serde_json::Value::Array(vec![]),
+                        outputs: serde_json::Value::Array(vec![]),
+                        options: None,
+                    }),
+                },
+            ],
+            edges: vec![
+                make_edge("start_1", "out", "func_1"),
+                make_edge("func_1", "out", "func_2"),
+                make_edge("func_2", "out", "end_1"),
+            ],
+        }
+    }
+
+    // ==================== find_node 测试 ====================
+
+    #[test]
+    fn find_node_应返回存在的节点() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        let node = navigator.find_node("func_1");
+        assert!(node.is_some(), "应找到 func_1 节点");
+        assert_eq!(node.unwrap().id, "func_1");
+        assert_eq!(node.unwrap().node_type, "skylake-func");
+    }
+
+    #[test]
+    fn find_node_对不存在的id应返回none() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        assert!(navigator.find_node("not_exists").is_none());
+        assert!(navigator.find_node("").is_none());
+    }
+
+    // ==================== find_start_node 测试 ====================
+
+    #[test]
+    fn find_start_node_应返回开始节点() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        let start = navigator.find_start_node();
+        assert!(start.is_some(), "应找到开始节点");
+        assert_eq!(start.unwrap().id, "start_1");
+        assert_eq!(start.unwrap().node_type, "skylake-start");
+    }
+
+    #[test]
+    fn find_start_node_无开始节点时返回none() {
+        // 流程中只有 func 节点，没有 start 节点
+        let flow = ServiceFlow {
+            nodes: vec![make_func_node("func_1", "步骤1", "p", "f")],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        assert!(navigator.find_start_node().is_none());
+    }
+
+    #[test]
+    fn find_start_node_多个开始节点时返回第一个() {
+        // 异常配置：存在多个 start 节点，应返回第一个
+        let flow = ServiceFlow {
+            nodes: vec![
+                make_start_node("start_2"),
+                make_start_node("start_1"),
+            ],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        let start = navigator.find_start_node();
+        assert!(start.is_some());
+        assert_eq!(start.unwrap().id, "start_2");
+    }
+
+    // ==================== find_next_edge 测试 ====================
+
+    #[test]
+    fn find_next_edge_普通节点应找到out端口边() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        let edge = navigator.find_next_edge("func_1", "out");
+        assert!(edge.is_some());
+        assert_eq!(edge.unwrap().source_node_id, "func_1");
+        assert_eq!(edge.unwrap().source_port_id, "out");
+        assert_eq!(edge.unwrap().target_node_id, "func_2");
+    }
+
+    #[test]
+    fn find_next_edge_开始节点应找到out端口边() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        let edge = navigator.find_next_edge("start_1", "out");
+        assert!(edge.is_some());
+        assert_eq!(edge.unwrap().target_node_id, "func_1");
+    }
+
+    #[test]
+    fn find_next_edge_端口不匹配时返回none() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        // 普通节点没有 out_1 端口（那是 switch 节点的端口）
+        assert!(navigator.find_next_edge("func_1", "out_1").is_none());
+    }
+
+    #[test]
+    fn find_next_edge_节点不存在时返回none() {
+        let flow = make_linear_flow();
+        let navigator = FlowNavigator::new(&flow);
+
+        assert!(navigator.find_next_edge("not_exists", "out").is_none());
+    }
+
+    #[test]
+    fn find_next_edge_switch节点的分支端口() {
+        // 构造带 switch 节点的流程
+        let flow = ServiceFlow {
+            nodes: vec![
+                make_start_node("start_1"),
+                make_func_node("switch_1", "路由", "p", "route"),
+                make_func_node("branch_a", "分支A", "p", "a"),
+                make_func_node("branch_b", "分支B", "p", "b"),
+            ],
+            edges: vec![
+                make_edge("start_1", "out", "switch_1"),
+                make_edge("switch_1", "out_1", "branch_a"),
+                make_edge("switch_1", "out_2", "branch_b"),
+            ],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        // out_1 端口应指向 branch_a
+        let edge_a = navigator.find_next_edge("switch_1", "out_1");
+        assert!(edge_a.is_some());
+        assert_eq!(edge_a.unwrap().target_node_id, "branch_a");
+
+        // out_2 端口应指向 branch_b
+        let edge_b = navigator.find_next_edge("switch_1", "out_2");
+        assert!(edge_b.is_some());
+        assert_eq!(edge_b.unwrap().target_node_id, "branch_b");
+
+        // 不存在的 out_3 端口应返回 None
+        assert!(navigator.find_next_edge("switch_1", "out_3").is_none());
+    }
+
+    // ==================== resolve_transaction_db_id 测试 ====================
+
+    #[test]
+    fn resolve_transaction_db_id_节点指定database_id时返回指定值() {
+        let flow = ServiceFlow {
+            nodes: vec![make_txn_node("txn_1", "事务框1", Some("db_secondary"))],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        let db_id = navigator.resolve_transaction_db_id("txn_1", "db_default");
+        assert_eq!(db_id, "db_secondary");
+    }
+
+    #[test]
+    fn resolve_transaction_db_id_节点未指定database_id时返回默认值() {
+        let flow = ServiceFlow {
+            nodes: vec![make_txn_node("txn_1", "事务框1", None)],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        let db_id = navigator.resolve_transaction_db_id("txn_1", "db_default");
+        assert_eq!(db_id, "db_default");
+    }
+
+    #[test]
+    fn resolve_transaction_db_id_事务框节点不存在时返回默认值() {
+        let flow = ServiceFlow {
+            nodes: vec![make_func_node("func_1", "步骤1", "p", "f")],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        // txn_not_exist 不在节点列表中
+        let db_id = navigator.resolve_transaction_db_id("txn_not_exist", "db_default");
+        assert_eq!(db_id, "db_default");
+    }
+
+    #[test]
+    fn resolve_transaction_db_id_节点id匹配但类型不是事务框时返回默认值() {
+        // 节点 ID 匹配但类型是 func 而非 transaction
+        let flow = ServiceFlow {
+            nodes: vec![make_func_node("txn_1", "伪装的事务框", "p", "f")],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        let db_id = navigator.resolve_transaction_db_id("txn_1", "db_default");
+        assert_eq!(db_id, "db_default");
+    }
+
+    #[test]
+    fn resolve_transaction_db_id_事务框节点缺少data时返回默认值() {
+        let flow = ServiceFlow {
+            nodes: vec![ServiceNode {
+                id: "txn_1".to_string(),
+                node_type: "skylake-transaction".to_string(),
+                parent: None,
+                meta: make_meta(),
+                data: None, // 缺少 data
+            }],
+            edges: vec![],
+        };
+        let navigator = FlowNavigator::new(&flow);
+
+        let db_id = navigator.resolve_transaction_db_id("txn_1", "db_default");
+        assert_eq!(db_id, "db_default");
+    }
+}
