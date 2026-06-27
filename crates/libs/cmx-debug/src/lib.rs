@@ -310,7 +310,7 @@ pub fn start_debug_session(
     let cmx_pid = std::process::id();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
+        .expect("系统时钟异常: 当前时间早于 UNIX_EPOCH")
         .as_millis();
     let session_id = format!("debug_{}_{}", plugin_name, timestamp);
 
@@ -360,7 +360,7 @@ pub async fn start_debug_session_async(
     let cmx_pid = std::process::id();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
+        .expect("系统时钟异常: 当前时间早于 UNIX_EPOCH")
         .as_millis();
     let session_id = format!("debug_{}_{}", plugin_name, timestamp);
 

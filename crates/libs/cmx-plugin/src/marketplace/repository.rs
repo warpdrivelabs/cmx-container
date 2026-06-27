@@ -104,7 +104,10 @@ impl MarketplaceRepository {
             return Ok(None);
         }
 
-        let row = result.iter().next().unwrap();
+        let row = result
+            .iter()
+            .next()
+            .expect("已校验 row_count>0，但 next() 为空（数据不一致）");
         let schema = result.schema.as_ref();
         Ok(Some(Self::row_to_plugin(row, schema)))
     }
@@ -310,7 +313,10 @@ impl MarketplaceRepository {
             return Ok(None);
         }
 
-        let row = result.iter().next().unwrap();
+        let row = result
+            .iter()
+            .next()
+            .expect("已校验 row_count>0，但 next() 为空（数据不一致）");
         let schema = result.schema.as_ref();
         Ok(Some(Self::row_to_version(row, schema)))
     }
@@ -365,7 +371,10 @@ impl MarketplaceRepository {
             return Ok(None);
         }
 
-        let row = result.iter().next().unwrap();
+        let row = result
+            .iter()
+            .next()
+            .expect("已校验 row_count>0，但 next() 为空（数据不一致）");
         let schema = result.schema.as_ref();
         Ok(Some(Self::row_to_version(row, schema)))
     }
@@ -420,7 +429,10 @@ impl MarketplaceRepository {
             return Ok(None);
         }
 
-        let row = result.iter().next().unwrap();
+        let row = result
+            .iter()
+            .next()
+            .expect("已校验 row_count>0，但 next() 为空（数据不一致）");
         let schema = result.schema.as_ref();
         Ok(Some(Self::row_to_version(row, schema)))
     }

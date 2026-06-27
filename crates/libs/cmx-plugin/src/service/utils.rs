@@ -221,7 +221,12 @@ pub async fn save_plugin_table_metadata(
                 //存在  更新下
                 //先查询
                 let table_meta_defines_result = TableMetadataService::parse_metadata_record(&metadata);
-                let record   = table_meta_defines_result.as_ref().unwrap().iter().next().unwrap();
+                let record = table_meta_defines_result
+                    .as_ref()
+                    .expect("解析表元数据记录失败（已确认 metadata 非空）")
+                    .iter()
+                    .next()
+                    .expect("元数据记录列表为空（已确认 metadata 非空，数据不一致）");
 
                 let table_define_primary_id = record.id.clone();
 

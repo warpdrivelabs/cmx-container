@@ -22,43 +22,43 @@ lazy_static::lazy_static! {
         Opts::new("auth_login_total", "Total login attempts")
             .namespace("cmx"),
         &["method"]
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_login_total");
 
     /// 登录失败数。
     pub static ref LOGIN_FAILED: IntCounterVec = IntCounterVec::new(
         Opts::new("auth_login_failed_total", "Failed login attempts")
             .namespace("cmx"),
         &["reason"]
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_login_failed_total");
 
     /// Token 验证耗时。
     pub static ref TOKEN_VALIDATE_DURATION: HistogramVec = HistogramVec::new(
         HistogramOpts::new("auth_token_validate_duration_seconds", "Token validation duration")
             .namespace("cmx"),
         &["method"]
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_token_validate_duration_seconds");
 
     /// 活跃会话数。
     pub static ref ACTIVE_SESSIONS: IntGauge = IntGauge::new(
         "auth_active_sessions", "Number of active sessions"
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_active_sessions");
 
     /// 在线用户数。
     pub static ref ONLINE_USERS: IntGauge = IntGauge::new(
         "auth_online_users", "Number of online users"
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_online_users");
 
     /// Token 撤销数。
     pub static ref TOKEN_REVOKED: IntCounterVec = IntCounterVec::new(
         Opts::new("auth_token_revoked_total", "Total revoked tokens")
             .namespace("cmx"),
         &["type"]
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: auth_token_revoked_total");
 
     /// API Key 验证总数（M2M 场景，不计入 `LOGIN_TOTAL`）。
     pub static ref API_KEY_VALIDATIONS_TOTAL: IntCounter = IntCounter::new(
         "cmx_auth_api_key_validations_total", "Total API Key validations"
-    ).unwrap();
+    ).expect("构造 Prometheus 指标失败: cmx_auth_api_key_validations_total");
 }
 
 /// 初始化指标（注册到 `AUTH_REGISTRY` 和 Prometheus 全局默认注册表）。
