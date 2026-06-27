@@ -10,6 +10,7 @@ pub mod audit_helper;
 pub mod circuit_breaker;
 pub mod config;
 pub mod error;
+pub mod host_functions;
 pub mod iam_checker;
 pub mod permission;
 pub mod role;
@@ -23,6 +24,9 @@ pub mod user_auth_query_impl;
 
 // Re-export cmx-core 基础数据模型
 pub use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, RoleGroup, RoleGroupTreeNode, User};
+
+// Re-export WASM 宿主函数提供者
+pub use host_functions::IamHostFunctions;
 
 // Re-export 本 crate 类型
 pub use config::IamConfig;

@@ -52,3 +52,5 @@ tokio = { workspace = true }
 utoipa = { workspace = true, optional = true }
 # ZIP 解压缩（权限导入）
 zip = { workspace = true }
+# MsgPack 序列化（cmx:iam 宿主函数跨 WASM 边界）
+rmp-serde = { workspace = true }
