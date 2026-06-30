@@ -48,3 +48,7 @@ sea-query-sqlx = { workspace = true }
 sqlx = { workspace = true }
 # OpenAPI 文档生成（可选）
 utoipa = { workspace = true, optional = true }
+
+[dev-dependencies]
+# 异步运行期(测试用)
+tokio = { workspace = true, features = ["full", "test-util"] }
