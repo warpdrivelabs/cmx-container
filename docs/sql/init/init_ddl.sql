@@ -159,6 +159,10 @@ CREATE TABLE cmx_sys_datasource
     health_check_timeout  INTEGER,
     default_flag          INTEGER,
     source                VARCHAR(20),
+    domain_code           VARCHAR(64),
+    application_code      VARCHAR(64),
+    module_code           VARCHAR(64),
+    source_type           VARCHAR(20),
     status                INT4      DEFAULT 1,
     archived              INT4      DEFAULT 0,
     create_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -186,6 +190,10 @@ COMMENT ON COLUMN cmx_sys_datasource.health_check_interval IS '健康检查间�
 COMMENT ON COLUMN cmx_sys_datasource.health_check_timeout IS '健康检查超时（秒）';
 COMMENT ON COLUMN cmx_sys_datasource.default_flag IS '是否默认;0否1是';
 COMMENT ON COLUMN cmx_sys_datasource.source IS '数据源来源：config-配置文件, manual-手动维护';
+COMMENT ON COLUMN cmx_sys_datasource.domain_code IS '所属域编码';
+COMMENT ON COLUMN cmx_sys_datasource.application_code IS '所属应用编码';
+COMMENT ON COLUMN cmx_sys_datasource.module_code IS '所属模块编码';
+COMMENT ON COLUMN cmx_sys_datasource.source_type IS '数据源类型：default-默认库，biz-业务库，other-其他';
 COMMENT ON COLUMN cmx_sys_datasource.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_sys_datasource.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_sys_datasource.create_time IS '创建时间';
@@ -195,7 +203,7 @@ COMMENT ON COLUMN cmx_sys_datasource.create_name IS '创建人名称';
 COMMENT ON COLUMN cmx_sys_datasource.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_sys_datasource.update_name IS '更新人名称';
 
-CREATE UNIQUE INDEX uk_cmx_datasource_db_id ON cmx_sys_datasource (db_id);
+CREATE INDEX idx_datasource_domain_app_module ON cmx_sys_datasource (domain_code, application_code, module_code);
 
 -- =============================================
 -- 5. 插件注册表 (cmx_plugin)
