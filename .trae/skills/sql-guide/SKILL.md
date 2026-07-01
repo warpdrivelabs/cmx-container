@@ -133,7 +133,7 @@ INSERT INTO cmx_domain (id, code, name, type, sort_order, status, archived) VALU
 **格式：**
 
 - 日期：YYYYMMDD
-- 序号：3 位数字，从 001 开始递增
+- 序号：3 位数字，按日期从 001 开始；同一天多个文件依次递增（001、002、003...）；新日期重新从 001 开始
 - 描述：使用下划线分隔单词
 
 **示例：**
@@ -141,6 +141,10 @@ INSERT INTO cmx_domain (id, code, name, type, sort_order, status, archived) VALU
 ```
 20260520_001_add_storage_file_id.up.sql
 20260520_001_add_storage_file_id.down.sql
+20260520_002_add_user_phone.up.sql
+20260520_002_add_user_phone.down.sql
+20260521_001_create_marketplace_table.up.sql
+20260521_001_create_marketplace_table.down.sql
 ```
 
 ### 3.3 up.sql 规范

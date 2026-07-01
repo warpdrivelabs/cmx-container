@@ -179,6 +179,10 @@ impl SysDatasourceService {
             db_type: None,
             default_flag: None,
             source: None,
+            domain_code: None,
+            application_code: None,
+            module_code: None,
+            source_type: None,
             status: None,
             archived: None,
         };
@@ -215,6 +219,10 @@ impl SysDatasourceService {
             db_id: data.db_id.clone(),
             db_schema: data.db_schema.clone(),
             default: data.default_flag.unwrap_or(0) == 1,
+            domain_code: data.domain_code.clone(),
+            application_code: data.application_code.clone(),
+            module_code: data.module_code.clone(),
+            source_type: data.source_type.clone(),
             pool_config: PoolConfig {
                 max_connections: data.max_connections.unwrap_or(10) as usize,
                 min_connections: data.min_connections.unwrap_or(2) as usize,
@@ -280,12 +288,25 @@ impl SysDatasourceService {
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(5) as u64;
 
+        let domain_code = row.get_by_name(schema, "domain_code")
+            .and_then(|v| String::try_from(v.clone()).ok());
+        let application_code = row.get_by_name(schema, "application_code")
+            .and_then(|v| String::try_from(v.clone()).ok());
+        let module_code = row.get_by_name(schema, "module_code")
+            .and_then(|v| String::try_from(v.clone()).ok());
+        let source_type = row.get_by_name(schema, "source_type")
+            .and_then(|v| String::try_from(v.clone()).ok());
+
         Some(DbConfig {
             db_type,
             db_url,
             db_id,
             db_schema,
             default: default_flag == 1,
+            domain_code,
+            application_code,
+            module_code,
+            source_type,
             pool_config: PoolConfig {
                 max_connections,
                 min_connections,

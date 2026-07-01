@@ -92,3 +92,47 @@ impl WebConfig {
         }
     }
 }
+
+/// 应用标识配置（当前实例所属的域/应用/模块）。
+///
+/// 用于数据源过滤：`load_active_datasources` 仅加载归属本实例域的数据源。
+/// 从 `[app]` TOML 节读取，支持环境变量覆盖（`APP__DOMAIN_CODE` 等）。
+/// 三项均缺省为 `"default"`，保证向后兼容。
+#[derive(Debug, Clone)]
+pub struct AppIdentity {
+    /// 当前实例所属域编码。
+    pub domain_code: String,
+    /// 当前实例所属应用编码。
+    pub application_code: String,
+    /// 当前实例所属模块编码。
+    pub module_code: String,
+}
+
+impl Default for AppIdentity {
+    fn default() -> Self {
+        Self {
+            domain_code: "default".to_string(),
+            application_code: "default".to_string(),
+            module_code: "default".to_string(),
+        }
+    }
+}
+
+/// 从 `[app]` TOML 节加载应用标识配置。
+///
+/// 读取 `app.domain_code` / `app.application_code` / `app.module_code`，
+/// 未配置时各项回退为 `"default"`（向后兼容）。
+pub fn load_app_identity() -> AppIdentity {
+    let config = ConfigManager::global();
+    let mut identity = AppIdentity::default();
+    if let Ok(v) = config.get_string("app.domain_code") {
+        identity.domain_code = v;
+    }
+    if let Ok(v) = config.get_string("app.application_code") {
+        identity.application_code = v;
+    }
+    if let Ok(v) = config.get_string("app.module_code") {
+        identity.module_code = v;
+    }
+    identity
+}

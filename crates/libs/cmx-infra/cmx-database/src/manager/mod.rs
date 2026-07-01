@@ -80,6 +80,21 @@ impl DatabaseManager {
         self.default_db_id.read().await.clone()
     }
 
+    /// 获取业务库（`source_type = "biz"`）的 db_id。
+    ///
+    /// 遍历已注册数据源，返回第一个 `source_type` 为 `"biz"` 的 `db_id`。
+    /// 若不存在业务库，则回退到默认库 `db_id`（向后兼容）。
+    pub async fn get_biz_db_id(&self) -> String {
+        let configs = self.pool_manager.list_configs().await;
+        for config in &configs {
+            if config.source_type.as_deref() == Some("biz") {
+                return config.db_id.clone();
+            }
+        }
+        // 未找到业务库，回退到默认库
+        self.default_db_id.read().await.clone()
+    }
+
     /// 注册数据源
     pub async fn register_data_source(&self, db_config: DbConfig) -> Result<()> {
         if db_config.clone().default {
@@ -447,6 +462,11 @@ impl PoolManager {
 
     pub async fn list(&self) -> Vec<String> {
         self.registry.list().await
+    }
+
+    /// 获取所有已注册数据源的配置列表。
+    pub async fn list_configs(&self) -> Vec<DbConfig> {
+        self.registry.list_configs().await
     }
 
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {

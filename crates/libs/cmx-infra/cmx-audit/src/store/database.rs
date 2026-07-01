@@ -493,7 +493,12 @@ mod tests {
             pool_config,
             health_check_interval: 60,
             health_check_timeout: 5,
+            domain_code: None,
+            application_code: None,
+            module_code: None,
             default: true,
+
+            source_type: None,
         };
         let mm = std::sync::Arc::new(DatabaseManager::new(DatabaseManagerConfig::default()));
         mm.register_data_source(db_config)
