@@ -413,7 +413,7 @@ impl ModuleInstallService {
                 component: None,
                 sort_order: 0,
                 visible: 1,
-                extension: Some(content), // 整体透传
+                definition: Some(menu_json.clone()), // 整体透传
                 domain_code: domain.to_string(),
                 application_code: app.to_string(),
                 module_code: module.to_string(),

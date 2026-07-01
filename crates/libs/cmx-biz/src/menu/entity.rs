@@ -1,7 +1,7 @@
 //! Menu 实体定义
 //!
 //! 定义 Menu 实体的数据结构，包括完整实体和创建/更新 DTO。
-//! 树形字段(full_path/is_leaf/level/parent_code)对齐 cmx_permission 命名约定。
+//! 树形字段使用标准分级字段(leaf/depth/parent_id/parent_code/id_path/code_path)。
 use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -17,20 +17,6 @@ pub struct Menu {
     pub code: String,
     /// 菜单名称
     pub name: String,
-    /// 父菜单ID(逻辑关联，无外键约束)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
-    /// 父菜单编码(根为NULL)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_code: Option<String>,
-    /// 菜单全路径，如 /gl:finance/gl:dashboard
-    pub full_path: String,
-    /// 是否叶子节点：1-是，0-否
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_leaf: Option<i32>,
-    /// 层级深度，根=1
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub level: Option<i32>,
     /// 菜单描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -49,18 +35,38 @@ pub struct Menu {
     /// 是否可见：0-隐藏，1-显示
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<i32>,
-    /// 扩展字段(用户自定义JSON文本)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extension: Option<String>,
     /// 所属域编码
     pub domain_code: String,
     /// 所属应用编码
     pub application_code: String,
     /// 所属模块编码
     pub module_code: String,
+    /// 菜单完整定义JSON(items/children树形结构，整体透传)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definition: Option<serde_json::Value>,
     /// 状态（0: 禁用, 1: 启用）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<i32>,
+    // 标准分级字段
+    /// 是否明细：1-是叶子节点，0-非叶子节点
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub leaf: Option<i32>,
+    /// 级数：根节点为1，逐层递增
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<i32>,
+    /// 父节点ID，根节点为空
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// 父节点编码，根节点为空
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_code: Option<String>,
+    /// ID全路径，以/分隔
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_path: Option<String>,
+    /// 编号全路径，以/分隔
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_path: Option<String>,
+    // 审计字段
     /// 是否归档（0: 否, 1: 是）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived: Option<i32>,
@@ -76,9 +82,12 @@ pub struct Menu {
     pub update_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_name: Option<String>,
+    /// 扩展属性，存储JSON格式的额外业务属性
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_attributes: Option<String>,
 }
 
-/// 创建 DTO（不含 full_path/is_leaf/level/parent_code，由 Service 自动计算）
+/// 创建 DTO（不含分级字段 leaf/depth/parent_code/id_path/code_path，由 Service 自动计算）
 #[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct MenuForCreate {
@@ -98,8 +107,8 @@ pub struct MenuForCreate {
     pub sort_order: i32,
     /// 是否可见：0-隐藏，1-显示
     pub visible: i32,
-    /// 扩展字段(用户自定义JSON文本)
-    pub extension: Option<String>,
+    /// 菜单完整定义JSON(模块导入时整体 items/children 树形 JSON 透传存入)
+    pub definition: Option<serde_json::Value>,
     /// 所属域编码
     pub domain_code: String,
     /// 所属应用编码
@@ -118,6 +127,7 @@ pub struct MenuForUpdate {
     pub component: Option<String>,
     pub sort_order: Option<i32>,
     pub visible: Option<i32>,
-    pub extension: Option<String>,
     pub status: Option<i32>,
+    /// 扩展属性，存储JSON格式的额外业务属性
+    pub ext_attributes: Option<String>,
 }

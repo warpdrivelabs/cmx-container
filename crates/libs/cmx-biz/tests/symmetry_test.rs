@@ -116,7 +116,7 @@ async fn test_form_definition_roundtrip_symmetry() {
 }
 
 #[tokio::test]
-async fn test_menu_extension_roundtrip_symmetry() {
+async fn test_menu_definition_roundtrip_symmetry() {
     let mm = setup_db_manager().await;
     common::ensure_tables(&mm).await;
     let db_id = "test_db";
@@ -148,9 +148,8 @@ async fn test_menu_extension_roundtrip_symmetry() {
             }
         ]
     });
-    let original_str = serde_json::to_string(&original_menu_json).unwrap();
 
-    // 存入(extension 存原始 JSON 文本)
+    // 存入(definition 存原始 JSON Value,整体透传)
     let dto = MenuForCreate {
         code: code.to_string(),
         name: "对称测试菜单".to_string(),
@@ -160,7 +159,7 @@ async fn test_menu_extension_roundtrip_symmetry() {
         component: None,
         sort_order: 0,
         visible: 1,
-        extension: Some(original_str.clone()),
+        definition: Some(original_menu_json.clone()),
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
@@ -182,18 +181,20 @@ async fn test_menu_extension_roundtrip_symmetry() {
     .await
     .expect("查询应成功");
 
-    let roundtrip_ext = first_row_field_json(&ds, "extension")
-        .expect("应返回 extension")
-        .as_str()
-        .expect("extension 应为字符串")
-        .to_string();
+    let roundtrip_definition = first_row_field_json(&ds, "definition").expect("应返回 definition");
 
-    // 核心断言:extension round-trip 后完全一致
-    // 注意:从 DB 取出的可能是 JSON 字符串,需比对解析后的值
-    let roundtrip_json: Value = serde_json::from_str(&roundtrip_ext).expect("应可解析为 JSON");
+    // DB JSONB 可能以字符串返回,需解析回对象
+    let roundtrip_json: Value = if roundtrip_definition.is_string() {
+        serde_json::from_str(roundtrip_definition.as_str().expect("应为字符串"))
+            .expect("definition 字符串应可解析为 JSON")
+    } else {
+        roundtrip_definition
+    };
+
+    // 核心断言:definition round-trip 后完全一致
     assert_eq!(
         roundtrip_json, original_menu_json,
-        "菜单 extension round-trip 后必须完全一致"
+        "菜单 definition round-trip 后必须完全一致"
     );
 
     // 清理

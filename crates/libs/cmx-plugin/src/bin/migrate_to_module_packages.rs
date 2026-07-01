@@ -216,7 +216,7 @@ async fn migrate_module(
                             component: None,
                             sort_order: 0,
                             visible: 1,
-                            extension: None,
+                            definition: None,
                             domain_code: domain.to_string(),
                             application_code: app.to_string(),
                             module_code: module.to_string(),

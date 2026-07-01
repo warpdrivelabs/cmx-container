@@ -1,8 +1,8 @@
 //! Menu Service
 //!
 //! 封装菜单的 CRUD 与列表/分页查询逻辑。
-//! create 计算树形字段(full_path/is_leaf/level/parent_code)后写入，
-//! 参照 cmx-iam/src/permission/service/crud.rs 的路径计算逻辑。
+//! create 计算标准分级字段(leaf/depth/parent_code/id_path/code_path)后写入，
+//! 并更新父节点 leaf=0。
 
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
@@ -15,61 +15,29 @@ use tracing::instrument;
 use crate::error::{BizError, Result};
 use crate::menu::{MenuBmc, MenuFilter, MenuForCreate, MenuForUpdate};
 
+/// 创建菜单时计算出的分级字段
+struct TreeFields {
+    parent_code: Option<String>,
+    depth: i32,
+    id_path: String,
+    code_path: String,
+}
+
 /// 菜单服务
 pub struct MenuService;
 
 impl MenuService {
-    /// 创建菜单：计算 full_path/parent_code/level/is_leaf 后事务内写入，
-    /// 并更新父节点 is_leaf=0。
+    /// 创建菜单：计算标准分级字段(leaf/depth/parent_code/id_path/code_path)后事务内写入，
+    /// 并更新父节点 leaf=0。
     ///
     /// # Errors
     /// 父菜单不存在、数据库写入失败时返回错误
     #[instrument(skip(mm, data))]
     pub async fn create(mm: &DatabaseManager, db_id: &str, data: MenuForCreate) -> Result<DataSet> {
-        // 计算树形字段(参照 cmx-iam permission crud.rs:55-65)
-        let (parent_code, full_path, level) = match &data.parent_id {
-            Some(pid) => {
-                // 查父节点
-                let parent = GenericCrudService::<MenuBmc>::get(
-                    mm,
-                    db_id,
-                    None,
-                    Value::String(pid.clone()),
-                )
-                .await?;
-                let _row = parent.iter().next().ok_or_else(|| {
-                    BizError::business(format!("父菜单不存在: {pid}"))
-                })?;
-                // 通过序列化取父节点字段(schema 索引不便直接取，用 DataSet 的 Serialize)
-                let p_json = serde_json::to_value(&parent)?;
-                let p_path = p_json
-                    .get("rows")
-                    .and_then(|r| r.as_array())
-                    .and_then(|rows| rows.first())
-                    .and_then(|row| row.get("full_path"))
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| BizError::business("父菜单缺少 full_path 字段"))?
-                    .to_string();
-                let p_level = p_json
-                    .get("rows")
-                    .and_then(|r| r.as_array())
-                    .and_then(|rows| rows.first())
-                    .and_then(|row| row.get("level"))
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1) as i32;
-                let p_code = p_json
-                    .get("rows")
-                    .and_then(|r| r.as_array())
-                    .and_then(|rows| rows.first())
-                    .and_then(|row| row.get("code"))
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                (p_code, format!("{p_path}/{}", data.code), p_level + 1)
-            }
-            None => (None, format!("/{}", data.code), 1),
-        };
+        // 计算分级字段
+        let tree = Self::compute_tree_fields(mm, db_id, &data).await?;
 
-        // 开事务:INSERT 新节点 + 更新父 is_leaf=0
+        // 开事务:INSERT 新节点 + 更新父 leaf=0
         let txn_ctx = mm.get_transaction_context();
         let guard = txn_ctx
             .begin_with_guard(db_id)
@@ -78,39 +46,45 @@ impl MenuService {
         let txn_id = guard.txn_id();
 
         let id = uuid::Uuid::new_v4().to_string();
+        let definition_str = data
+            .definition
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default());
         let sql = "INSERT INTO cmx_menu \
-                   (id, code, name, parent_id, parent_code, full_path, is_leaf, level, \
-                    description, path, icon, component, sort_order, visible, extension, \
-                    domain_code, application_code, module_code, status, archived) \
-                   VALUES ($1, $2, $3, $4, $5, $6, 1, $7, NULL, $8, $9, $10, $11, $12, $13, \
-                           $14, $15, $16, 1, 0) \
+                   (id, code, name, description, path, icon, component, sort_order, visible, \
+                    domain_code, application_code, module_code, definition, status, \
+                    leaf, depth, parent_id, parent_code, id_path, code_path, archived) \
+                   VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, \
+                           $9, $10, $11, $12::jsonb, 1, \
+                           1, $13, $14, $15, $16, $17, 0) \
                    RETURNING *";
         let params: Vec<DataValue> = vec![
             DataValue::String(id),
             DataValue::String(data.code.clone()),
             DataValue::String(data.name.clone()),
-            data.parent_id.clone().into(),
-            parent_code.clone().into(),
-            DataValue::String(full_path),
-            DataValue::Int(level as i64),
             data.path.clone().into(),
             data.icon.clone().into(),
             data.component.clone().into(),
             DataValue::Int(data.sort_order as i64),
             DataValue::Int(data.visible as i64),
-            data.extension.clone().into(),
             DataValue::String(data.domain_code.clone()),
             DataValue::String(data.application_code.clone()),
             DataValue::String(data.module_code.clone()),
+            definition_str.into(),
+            DataValue::Int(tree.depth as i64),
+            data.parent_id.clone().into(),
+            tree.parent_code.clone().into(),
+            DataValue::String(tree.id_path),
+            DataValue::String(tree.code_path),
         ];
         let dataset = mm
             .query_sql_with_datavalues(db_id, Some(txn_id), sql, params, "create_menu")
             .await
             .map_err(|e| BizError::business(format!("新增菜单失败: {e}")))?;
 
-        // 父节点 is_leaf = 0
+        // 父节点 leaf = 0(有子节点后不再是叶子)
         if let Some(pid) = &data.parent_id {
-            let upd_sql = "UPDATE cmx_menu SET is_leaf = 0 WHERE id = $1";
+            let upd_sql = "UPDATE cmx_menu SET leaf = 0 WHERE id = $1";
             let _ = mm
                 .execute_sql_with_datavalues(
                     db_id,
@@ -128,6 +102,71 @@ impl MenuService {
             .map_err(|e| BizError::business(format!("事务提交失败: {e}")))?;
 
         Ok(dataset)
+    }
+
+    /// 根据父节点计算分级字段
+    ///
+    /// 根节点: depth=1, id_path=/{id}, code_path=/{code}
+    /// 子节点: depth=父+1, id_path=父id_path/{id}, code_path=父code_path/{code}
+    async fn compute_tree_fields(
+        mm: &DatabaseManager,
+        db_id: &str,
+        data: &MenuForCreate,
+    ) -> Result<TreeFields> {
+        let new_id = uuid::Uuid::new_v4().to_string();
+        match &data.parent_id {
+            Some(pid) => {
+                // 查父节点,取 id_path/code_path/depth/code
+                let parent = GenericCrudService::<MenuBmc>::get(
+                    mm,
+                    db_id,
+                    None,
+                    Value::String(pid.clone()),
+                )
+                .await?;
+                let _row = parent.iter().next().ok_or_else(|| {
+                    BizError::business(format!("父菜单不存在: {pid}"))
+                })?;
+                let p_json = serde_json::to_value(&parent)?;
+                let row_json = p_json
+                    .get("rows")
+                    .and_then(|r| r.as_array())
+                    .and_then(|rows| rows.first())
+                    .ok_or_else(|| BizError::business("父菜单查询结果为空"))?;
+
+                let p_id_path = row_json
+                    .get("id_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let p_code_path = row_json
+                    .get("code_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let p_depth = row_json
+                    .get("depth")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(1) as i32;
+                let p_code = row_json
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                Ok(TreeFields {
+                    parent_code: p_code,
+                    depth: p_depth + 1,
+                    id_path: format!("{p_id_path}/{new_id}"),
+                    code_path: format!("{p_code_path}/{}", data.code),
+                })
+            }
+            None => Ok(TreeFields {
+                parent_code: None,
+                depth: 1,
+                id_path: format!("/{new_id}"),
+                code_path: format!("/{}", data.code),
+            }),
+        }
     }
 
     /// 查询单个菜单

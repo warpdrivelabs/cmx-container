@@ -74,8 +74,7 @@ async fn test_menu_root_create_calculates_tree_fields() {
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1,
-        extension: None,
+        visible: 1, definition: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
@@ -85,16 +84,16 @@ async fn test_menu_root_create_calculates_tree_fields() {
         .expect("根菜单创建应成功");
     let json = dataset_to_json(&created);
 
-    // 根菜单: level=1, is_leaf=1, full_path=/code
-    let level = first_row_field(&json, "level").expect("应返回 level");
-    assert_eq!(level, "1", "根菜单 level 应为 1");
-    let is_leaf = first_row_field(&json, "is_leaf").expect("应返回 is_leaf");
-    assert_eq!(is_leaf, "1", "根菜单 is_leaf 应为 1");
-    let full_path = first_row_field(&json, "full_path").expect("应返回 full_path");
+    // 根菜单: depth=1, leaf=1, code_path=/code
+    let depth = first_row_field(&json, "depth").expect("应返回 depth");
+    assert_eq!(depth, "1", "根菜单 depth 应为 1");
+    let leaf = first_row_field(&json, "leaf").expect("应返回 leaf");
+    assert_eq!(leaf, "1", "根菜单 leaf 应为 1");
+    let code_path = first_row_field(&json, "code_path").expect("应返回 code_path");
     assert_eq!(
-        full_path,
+        code_path,
         format!("/{}", root_code),
-        "根菜单 full_path 应为 /code"
+        "根菜单 code_path 应为 /code"
     );
 
     let root_id = first_row_field(&json, "id").expect("应返回 id");
@@ -128,8 +127,7 @@ async fn test_menu_child_create_inherits_parent_path() {
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1,
-        extension: None,
+        visible: 1, definition: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
@@ -148,8 +146,7 @@ async fn test_menu_child_create_inherits_parent_path() {
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1,
-        extension: None,
+        visible: 1, definition: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
@@ -159,27 +156,27 @@ async fn test_menu_child_create_inherits_parent_path() {
         .expect("子菜单创建应成功");
     let child_json = dataset_to_json(&child_ds);
 
-    // 子菜单: level=2, full_path=/root_code/child_code
-    let level = first_row_field(&child_json, "level").expect("子 level");
-    assert_eq!(level, "2", "子菜单 level 应为 2");
-    let full_path = first_row_field(&child_json, "full_path").expect("子 full_path");
+    // 子菜单: depth=2, code_path=/root_code/child_code
+    let depth = first_row_field(&child_json, "depth").expect("子 depth");
+    assert_eq!(depth, "2", "子菜单 depth 应为 2");
+    let code_path = first_row_field(&child_json, "code_path").expect("子 code_path");
     assert_eq!(
-        full_path,
+        code_path,
         format!("/{}/{}", root_code, child_code),
-        "子菜单 full_path 应继承父路径"
+        "子菜单 code_path 应继承父路径"
     );
     let parent_code = first_row_field(&child_json, "parent_code").expect("子 parent_code");
     assert_eq!(parent_code, root_code, "子菜单 parent_code 应为父 code");
 
-    // 3. 验证父节点 is_leaf 变为 0
+    // 3. 验证父节点 leaf 变为 0
     let parent_after = MenuService::get(&mm, db_id, &root_id)
         .await
         .expect("查询父节点");
-    let parent_is_leaf =
-        first_row_field(&dataset_to_json(&parent_after), "is_leaf").expect("父 is_leaf");
+    let parent_leaf =
+        first_row_field(&dataset_to_json(&parent_after), "leaf").expect("父 leaf");
     assert_eq!(
-        parent_is_leaf, "0",
-        "有子节点后父菜单 is_leaf 应为 0"
+        parent_leaf, "0",
+        "有子节点后父菜单 leaf 应为 0"
     );
 
     // 清理(先删子再删父)
@@ -191,7 +188,7 @@ async fn test_menu_child_create_inherits_parent_path() {
 
 #[test]
 fn test_menu_filter_deserialize() {
-    let json = r#"{"full_path": {"$startsWith": "/gl:"}}"#;
+    let json = r#"{"code_path": {"$startsWith": "/gl:"}}"#;
     let f: MenuFilter = serde_json::from_str(json).expect("反序列化应成功");
-    assert!(f.full_path.is_some(), "full_path 应被解析");
+    assert!(f.code_path.is_some(), "code_path 应被解析");
 }

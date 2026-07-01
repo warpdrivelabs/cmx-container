@@ -183,9 +183,9 @@ impl ModuleExportService {
         Ok(count)
     }
 
-    /// 导出菜单:从 cmx_menu.extension(根菜单)取出原始 JSON
+    /// 导出菜单:从 cmx_menu.definition(根菜单)取出原始 JSON
     ///
-    /// 对称:导入时 menus/*.json 整体存入 extension,导出时整体取出。
+    /// 对称:导入时 menus/*.json 整体存入 definition,导出时整体取出。
     async fn export_menus(
         mm: &DatabaseManager,
         db_id: &str,
@@ -193,8 +193,8 @@ impl ModuleExportService {
         export_dir: &Path,
     ) -> PluginResult<usize> {
         let menus_dir = export_dir.join("menus");
-        // 只导出根菜单(parent_id IS NULL),其 extension 含完整菜单树
-        let sql = "SELECT code, extension FROM cmx_menu \
+        // 只导出根菜单(parent_id IS NULL),其 definition 含完整菜单树
+        let sql = "SELECT code, definition FROM cmx_menu \
                    WHERE module_code = $1 AND parent_id IS NULL AND archived = 0";
         let ds = mm
             .query_sql_with_datavalues(
@@ -212,10 +212,13 @@ impl ModuleExportService {
         if let Some(rows) = rows {
             tokio::fs::create_dir_all(&menus_dir).await.ok();
             for (i, row) in rows.iter().enumerate() {
-                // extension 是字符串(JSON 文本),需解析后写为 JSON
-                let ext_str = row.get("extension").and_then(|v| v.as_str()).unwrap_or("{}");
-                let menu_json: serde_json::Value =
-                    serde_json::from_str(ext_str).unwrap_or_default();
+                // definition 是 JSONB,DB 取出可能是字符串或对象
+                let definition = row.get("definition").cloned().unwrap_or_default();
+                let menu_json = if definition.is_string() {
+                    serde_json::from_str(definition.as_str().unwrap_or("{}")).unwrap_or_default()
+                } else {
+                    definition
+                };
                 let file_path = menus_dir.join(format!("menu_{i}.json"));
                 Self::write_json(&file_path, &menu_json)?;
                 count += 1;

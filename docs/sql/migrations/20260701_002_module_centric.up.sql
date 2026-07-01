@@ -51,28 +51,31 @@ COMMENT ON COLUMN cmx_form.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_form.update_name IS '更新人姓名';
 
 -- =============================================
--- 2. 菜单定义表 (cmx_menu，树形结构字段对齐 cmx_permission)
+-- 2. 菜单定义表 (cmx_menu，树形结构使用标准分级字段)
 -- =============================================
 CREATE TABLE IF NOT EXISTS cmx_menu (
     id               VARCHAR(64)   NOT NULL,
     code             VARCHAR(128)  NOT NULL,
     name             VARCHAR(256)  NOT NULL,
-    parent_id        VARCHAR(64),
-    parent_code      VARCHAR(128),
-    full_path        VARCHAR(1000) NOT NULL,
-    is_leaf          INT4       DEFAULT 1,
-    level            INT4       DEFAULT 1,
     description      VARCHAR(500),
     path             VARCHAR(512),
     icon             VARCHAR(128),
     component        VARCHAR(512),
     sort_order       INT4       DEFAULT 0,
     visible          INT4       DEFAULT 1,
-    extension        TEXT,
     domain_code      VARCHAR(64)   NOT NULL,
     application_code VARCHAR(64)   NOT NULL,
     module_code      VARCHAR(64)   NOT NULL,
+    definition       JSONB,
     status           INT4       DEFAULT 1,
+    -- 标准分级字段
+    leaf             INT4       DEFAULT 1,
+    depth            INT4       DEFAULT 1,
+    parent_id        VARCHAR(64),
+    parent_code      VARCHAR(128),
+    id_path          VARCHAR(1000),
+    code_path        VARCHAR(1000),
+    -- 标准审计字段
     archived         INT4       DEFAULT 0,
     create_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
     update_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
@@ -80,35 +83,36 @@ CREATE TABLE IF NOT EXISTS cmx_menu (
     create_name      VARCHAR(100),
     update_by        VARCHAR(100),
     update_name      VARCHAR(100),
+    -- 标准扩展信息字段
+    ext_attributes   TEXT,
     CONSTRAINT pk_cmx_menu PRIMARY KEY (id),
     CONSTRAINT uk_cmx_menu_code UNIQUE (code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code);
-CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent ON cmx_menu (parent_id);
-CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent_code ON cmx_menu (parent_code);
-CREATE INDEX IF NOT EXISTS idx_cmx_menu_full_path ON cmx_menu (full_path);
+CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent_id ON cmx_menu (parent_id);
 
 COMMENT ON TABLE cmx_menu IS '菜单定义表';
 COMMENT ON COLUMN cmx_menu.id IS '主键ID';
 COMMENT ON COLUMN cmx_menu.code IS '菜单编码，唯一';
 COMMENT ON COLUMN cmx_menu.name IS '菜单名称';
-COMMENT ON COLUMN cmx_menu.parent_id IS '父菜单ID(逻辑关联，无外键约束)';
-COMMENT ON COLUMN cmx_menu.parent_code IS '父菜单编码(根为NULL)';
-COMMENT ON COLUMN cmx_menu.full_path IS '菜单全路径，如 /gl:finance/gl:dashboard';
-COMMENT ON COLUMN cmx_menu.is_leaf IS '是否叶子节点：1-是，0-否';
-COMMENT ON COLUMN cmx_menu.level IS '层级深度，根=1';
 COMMENT ON COLUMN cmx_menu.description IS '菜单描述';
 COMMENT ON COLUMN cmx_menu.path IS '前端路由路径';
 COMMENT ON COLUMN cmx_menu.icon IS '菜单图标';
 COMMENT ON COLUMN cmx_menu.component IS '前端组件路径';
 COMMENT ON COLUMN cmx_menu.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_menu.visible IS '是否可见：0-隐藏，1-显示';
-COMMENT ON COLUMN cmx_menu.extension IS '扩展字段(用户自定义JSON文本)';
 COMMENT ON COLUMN cmx_menu.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_menu.application_code IS '所属应用编码';
 COMMENT ON COLUMN cmx_menu.module_code IS '所属模块编码';
+COMMENT ON COLUMN cmx_menu.definition IS '菜单完整定义JSON(items/children树形结构，整体透传)';
 COMMENT ON COLUMN cmx_menu.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_menu.leaf IS '是否明细：1-是叶子节点，0-非叶子节点';
+COMMENT ON COLUMN cmx_menu.depth IS '级数：根节点为1，逐层递增';
+COMMENT ON COLUMN cmx_menu.parent_id IS '父节点ID，根节点为空';
+COMMENT ON COLUMN cmx_menu.parent_code IS '父节点编码，根节点为空';
+COMMENT ON COLUMN cmx_menu.id_path IS 'ID全路径，以/分隔，如 /root_id/parent_id/current_id';
+COMMENT ON COLUMN cmx_menu.code_path IS '编号全路径，以/分隔，如 /ROOT_CODE/PARENT_CODE/CURRENT_CODE';
 COMMENT ON COLUMN cmx_menu.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_menu.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_menu.update_time IS '更新时间';
@@ -116,6 +120,7 @@ COMMENT ON COLUMN cmx_menu.create_by IS '创建人ID';
 COMMENT ON COLUMN cmx_menu.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_menu.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_menu.update_name IS '更新人姓名';
+COMMENT ON COLUMN cmx_menu.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
 
 -- =============================================
 -- 3. 模块当前版本表 (cmx_module_current_version，每模块一行)
