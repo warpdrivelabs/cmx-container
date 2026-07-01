@@ -442,6 +442,12 @@ impl DbRegistry {
     pub async fn get_db_config(&self, key: &str) -> Option<DbConfig> {
         self.get(key).await.map(|(_, config)| config)
     }
+
+    /// 获取所有已注册数据源的配置列表（用于按 source_type 等条件筛选）。
+    pub async fn list_configs(&self) -> Vec<DbConfig> {
+        let pools = self.pools.read().await;
+        pools.values().map(|p| p.get_config()).collect()
+    }
 }
 
 use std::sync::OnceLock;

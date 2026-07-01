@@ -109,6 +109,18 @@ pub struct DbConfig {
     /// 健康检查超时（秒）
     #[serde(default = "default_health_check_timeout")]
     pub health_check_timeout: u64,
+    /// 所属域编码（用于数据源归属识别，由 web-server [app] 节注入）
+    #[serde(default)]
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    #[serde(default)]
+    pub application_code: Option<String>,
+    /// 所属模块编码
+    #[serde(default)]
+    pub module_code: Option<String>,
+    /// 数据源类型：default-默认库，biz-业务库，other-其他
+    #[serde(default)]
+    pub source_type: Option<String>,
 }
 
 fn default_health_check_interval() -> u64 {
