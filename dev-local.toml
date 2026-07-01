@@ -8,6 +8,20 @@ host = "0.0.0.0"
 port = 8080
 
 # ============================================
+# 应用标识配置
+# ============================================
+# 当前实例所属的域/应用/模块，用于数据源过滤（load_active_datasources 仅加载归属本实例域的数据源）。
+# 支持环境变量覆盖：APP__DOMAIN_CODE / APP__APPLICATION_CODE / APP__MODULE_CODE
+[app]
+# 所属域编码（必需，默认 default）
+domain_code = "FIN"
+# 所属应用编码（必需，默认 default）
+application_code = "FI"
+# 所属模块编码（必需，默认 default）
+module_code = "GL"
+
+
+# ============================================
 # 门户/设计器业务数据根（迁移自 CMXPortalManager/CMXHTMLDesigner 的 Node 后端）
 # cmx-portal 的 JSON 文件存储根目录；缺省时回退环境变量 CMX_PORTAL_DATA_ROOT 或 ./data
 # ============================================
@@ -37,20 +51,8 @@ db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = true
-
 # 连接池配置（可选，使用默认值时可省略）
-[databases.pool_config]
-# 最大连接数（可选，默认 10，测试环境为 1）
-max_connections = 20
-# 最小空闲连接数（可选，默认 2）
-min_connections = 5
-# 连接超时时间（秒，可选，默认 30）
-connect_timeout = 30
-# 空闲连接超时时间（秒，可选，默认 600）
-idle_timeout = 600
-# 连接最大生命周期（秒，可选，默认 1800）
-max_lifetime = 1800
-
+pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
 # 健康检查配置（可选）
 # 健康检查间隔（秒，可选，默认 60）
 health_check_interval = 60
@@ -67,20 +69,8 @@ db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = false
-
 # 连接池配置（可选，使用默认值时可省略）
-[databases.pool_config]
-# 最大连接数（可选，默认 10，测试环境为 1）
-max_connections = 20
-# 最小空闲连接数（可选，默认 2）
-min_connections = 5
-# 连接超时时间（秒，可选，默认 30）
-connect_timeout = 30
-# 空闲连接超时时间（秒，可选，默认 600）
-idle_timeout = 600
-# 连接最大生命周期（秒，可选，默认 1800）
-max_lifetime = 1800
-
+pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
 # 健康检查配置（可选）
 # 健康检查间隔（秒，可选，默认 60）
 health_check_interval = 60
