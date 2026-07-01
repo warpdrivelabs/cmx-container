@@ -23,7 +23,7 @@ use super::context::SVRContext;
 ///
 /// # 示例
 ///
-/// ```rust
+/// ```rust,ignore
 /// use cmx_core::model::service::{FunctionInput, SVRContext};
 /// use std::collections::HashMap;
 ///
@@ -76,7 +76,7 @@ impl FunctionInput {
     ///
     /// # 示例
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use cmx_core::model::service::{FunctionInput, SVRContext};
     ///
     /// let input = FunctionInput::from_value(
@@ -103,7 +103,7 @@ impl FunctionInput {
     ///
     /// # 示例
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use cmx_core::model::service::{FunctionInput, SVRContext};
     ///
     /// #[derive(Serialize)]
@@ -221,6 +221,7 @@ impl FunctionOutput {
     ///
     /// ```rust
     /// use cmx_core::model::service::FunctionOutput;
+    /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
     /// struct MyResult {

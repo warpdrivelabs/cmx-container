@@ -280,6 +280,7 @@ impl From<Vec<u8>> for DataValue {
     ///
     /// # 示例
     /// ```
+    /// use cmx_core::model::cell::DataValue;
     /// let bytes = vec![0x00, 0x01, 0x02];
     /// let value = DataValue::from(bytes);
     /// ```
@@ -304,6 +305,7 @@ impl From<JsonValue> for DataValue {
     ///
     /// # 示例
     /// ```
+    /// use cmx_core::model::cell::DataValue;
     /// use serde_json::json;
     /// let json_val = json!({"key": "value"});
     /// let data_value = DataValue::from(json_val);
@@ -320,6 +322,7 @@ impl From<Uuid> for DataValue {
     ///
     /// # 示例
     /// ```
+    /// use cmx_core::model::cell::DataValue;
     /// use uuid::Uuid;
     /// let id = Uuid::new_v4();
     /// let value = DataValue::from(id);
@@ -336,7 +339,12 @@ impl From<Vec<DataValue>> for DataValue {
     ///
     /// # 示例
     /// ```
-    /// let arr = vec![1i32.into(), "hello".into(), true.into()];
+    /// use cmx_core::model::cell::DataValue;
+    /// let arr: Vec<DataValue> = vec![
+    ///     DataValue::Int(1),
+    ///     DataValue::String("hello".to_string()),
+    ///     DataValue::Bool(true),
+    /// ];
     /// let value = DataValue::from(arr);
     /// ```
     fn from(v: Vec<DataValue>) -> Self { DataValue::Array(v) }

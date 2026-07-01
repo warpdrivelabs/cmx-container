@@ -120,9 +120,11 @@ mod tests {
 
         let json_str = serde_json::to_string_pretty(&config).unwrap();
         println!("[test_nested_struct_serialization] JSON:\n{}", json_str);
-        assert!(json_str.contains("\"app_name\":\"MyApp\""));
-        assert!(json_str.contains("\"features\""));
-        assert!(json_str.contains("\"settings\""));
+        // pretty 格式冒号后有空格，使用紧凑格式断言以确保字段存在
+        let compact = serde_json::to_string(&config).unwrap();
+        assert!(compact.contains("\"app_name\":\"MyApp\""));
+        assert!(compact.contains("\"features\""));
+        assert!(compact.contains("\"settings\""));
     }
 
     #[test]
@@ -377,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_number类型转换() {
-        let value: Value = serde_json::from_str(r#"{"int": 42, "float": 3.14}"#).unwrap();
+        let value: Value = serde_json::from_str(r#"{"int": 42, "float": 3.15}"#).unwrap();
 
         let int_val = &value["int"];
         let float_val = &value["float"];
