@@ -217,6 +217,7 @@ async fn migrate_module(
                             sort_order: 0,
                             visible: 1,
                             definition: None,
+                ext_attributes: None,
                             domain_code: domain.to_string(),
                             application_code: app.to_string(),
                             module_code: module.to_string(),

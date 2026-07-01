@@ -109,6 +109,8 @@ pub struct MenuForCreate {
     pub visible: i32,
     /// 菜单完整定义JSON(模块导入时整体 items/children 树形 JSON 透传存入)
     pub definition: Option<serde_json::Value>,
+    /// 扩展属性，存储JSON格式的额外业务属性
+    pub ext_attributes: Option<String>,
     /// 所属域编码
     pub domain_code: String,
     /// 所属应用编码

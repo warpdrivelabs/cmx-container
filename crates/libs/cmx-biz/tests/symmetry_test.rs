@@ -160,6 +160,7 @@ async fn test_menu_definition_roundtrip_symmetry() {
         sort_order: 0,
         visible: 1,
         definition: Some(original_menu_json.clone()),
+        ext_attributes: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),

@@ -52,11 +52,11 @@ impl MenuService {
             .map(|v| serde_json::to_string(v).unwrap_or_default());
         let sql = "INSERT INTO cmx_menu \
                    (id, code, name, description, path, icon, component, sort_order, visible, \
-                    domain_code, application_code, module_code, definition, status, \
+                    domain_code, application_code, module_code, definition, ext_attributes, status, \
                     leaf, depth, parent_id, parent_code, id_path, code_path, archived) \
                    VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, \
-                           $9, $10, $11, $12::jsonb, 1, \
-                           1, $13, $14, $15, $16, $17, 0) \
+                           $9, $10, $11, $12::jsonb, $13, 1, \
+                           1, $14, $15, $16, $17, $18, 0) \
                    RETURNING *";
         let params: Vec<DataValue> = vec![
             DataValue::String(id),
@@ -71,6 +71,7 @@ impl MenuService {
             DataValue::String(data.application_code.clone()),
             DataValue::String(data.module_code.clone()),
             definition_str.into(),
+            data.ext_attributes.clone().into(),
             DataValue::Int(tree.depth as i64),
             data.parent_id.clone().into(),
             tree.parent_code.clone().into(),
