@@ -142,3 +142,28 @@ git commit -m "update config"
 # ❌ 错误 - 强制提交 .env
 git add -f .env
 ```
+
+### 4.2 禁止自动提交代码
+
+AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作**，必须由用户主动确认并提出提交请求后才能提交。
+
+**正确做法**：
+
+1. AI 完成代码修改后，仅向用户汇报改动内容，等待用户明确指令（如「提交代码」「commit」「提交一下」等）
+2. 收到用户明确指令后，再按规范执行 `git status` → `git diff` → 暂存指定文件 → `git commit` 流程
+3. 提交信息需遵循 Conventional Commits 规范（feat / fix / refactor / docs / chore 等）
+
+**错误示例**：
+
+```bash
+# ❌ 错误 - 未经用户允许直接提交
+git add .
+git commit -m "update"
+
+# ❌ 错误 - 完成任务后自动 push
+git push origin main
+```
+
+**例外情况**：
+
+仅在用户明确表示「帮我提交」「请提交这次改动」等明确指令时，AI 才可以执行提交操作。
