@@ -1930,3 +1930,223 @@ COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
 COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';
+
+-- =============================================
+-- 37. 表单定义表 (cmx_form)
+-- =============================================
+DROP TABLE IF EXISTS cmx_form;
+CREATE TABLE cmx_form
+(
+    id               VARCHAR(64)  NOT NULL,
+    code             VARCHAR(128) NOT NULL,
+    name             VARCHAR(256) NOT NULL,
+    description      TEXT,
+    definition       JSONB,
+    version          VARCHAR(64)  DEFAULT '1.0.0',
+    domain_code      VARCHAR(64)  NOT NULL,
+    application_code VARCHAR(64)  NOT NULL,
+    module_code      VARCHAR(64)  NOT NULL,
+    status           INT4      DEFAULT 1,
+    archived         INT4      DEFAULT 0,
+    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by        VARCHAR(100),
+    create_name      VARCHAR(100),
+    update_by        VARCHAR(100),
+    update_name      VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_form IS '表单定义表';
+COMMENT ON COLUMN cmx_form.id IS '主键ID';
+COMMENT ON COLUMN cmx_form.code IS '表单编码，模块内唯一';
+COMMENT ON COLUMN cmx_form.name IS '表单名称';
+COMMENT ON COLUMN cmx_form.description IS '表单描述';
+COMMENT ON COLUMN cmx_form.definition IS '表单完整定义JSON(字段/布局/校验)';
+COMMENT ON COLUMN cmx_form.version IS '表单版本';
+COMMENT ON COLUMN cmx_form.domain_code IS '所属域编码';
+COMMENT ON COLUMN cmx_form.application_code IS '所属应用编码';
+COMMENT ON COLUMN cmx_form.module_code IS '所属模块编码';
+COMMENT ON COLUMN cmx_form.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_form.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_form.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_form.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_form.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_form.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_form.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_form.update_name IS '更新人姓名';
+
+CREATE UNIQUE INDEX uk_cmx_form_code ON cmx_form (code);
+CREATE INDEX idx_cmx_form_module ON cmx_form (domain_code, application_code, module_code);
+
+-- =============================================
+-- 38. 菜单定义表 (cmx_menu)
+-- =============================================
+DROP TABLE IF EXISTS cmx_menu;
+CREATE TABLE cmx_menu
+(
+    id               VARCHAR(64)   NOT NULL,
+    code             VARCHAR(128)  NOT NULL,
+    name             VARCHAR(256)  NOT NULL,
+    parent_id        VARCHAR(64),
+    parent_code      VARCHAR(128),
+    full_path        VARCHAR(1000) NOT NULL,
+    is_leaf          INT4       DEFAULT 1,
+    level            INT4       DEFAULT 1,
+    description      VARCHAR(500),
+    path             VARCHAR(512),
+    icon             VARCHAR(128),
+    component        VARCHAR(512),
+    sort_order       INT4       DEFAULT 0,
+    visible          INT4       DEFAULT 1,
+    extension        TEXT,
+    domain_code      VARCHAR(64)   NOT NULL,
+    application_code VARCHAR(64)   NOT NULL,
+    module_code      VARCHAR(64)   NOT NULL,
+    status           INT4       DEFAULT 1,
+    archived         INT4       DEFAULT 0,
+    create_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    create_by        VARCHAR(100),
+    create_name      VARCHAR(100),
+    update_by        VARCHAR(100),
+    update_name      VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_menu IS '菜单定义表';
+COMMENT ON COLUMN cmx_menu.id IS '主键ID';
+COMMENT ON COLUMN cmx_menu.code IS '菜单编码，唯一';
+COMMENT ON COLUMN cmx_menu.name IS '菜单名称';
+COMMENT ON COLUMN cmx_menu.parent_id IS '父菜单ID(逻辑关联，无外键约束)';
+COMMENT ON COLUMN cmx_menu.parent_code IS '父菜单编码(根为NULL)';
+COMMENT ON COLUMN cmx_menu.full_path IS '菜单全路径，如 /gl:finance/gl:dashboard';
+COMMENT ON COLUMN cmx_menu.is_leaf IS '是否叶子节点：1-是，0-否';
+COMMENT ON COLUMN cmx_menu.level IS '层级深度，根=1';
+COMMENT ON COLUMN cmx_menu.description IS '菜单描述';
+COMMENT ON COLUMN cmx_menu.path IS '前端路由路径';
+COMMENT ON COLUMN cmx_menu.icon IS '菜单图标';
+COMMENT ON COLUMN cmx_menu.component IS '前端组件路径';
+COMMENT ON COLUMN cmx_menu.sort_order IS '排序序号';
+COMMENT ON COLUMN cmx_menu.visible IS '是否可见：0-隐藏，1-显示';
+COMMENT ON COLUMN cmx_menu.extension IS '扩展字段(用户自定义JSON文本)';
+COMMENT ON COLUMN cmx_menu.domain_code IS '所属域编码';
+COMMENT ON COLUMN cmx_menu.application_code IS '所属应用编码';
+COMMENT ON COLUMN cmx_menu.module_code IS '所属模块编码';
+COMMENT ON COLUMN cmx_menu.status IS '状态：0-禁用，1-启用';
+COMMENT ON COLUMN cmx_menu.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_menu.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_menu.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_menu.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_menu.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_menu.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_menu.update_name IS '更新人姓名';
+
+CREATE UNIQUE INDEX uk_cmx_menu_code ON cmx_menu (code);
+CREATE INDEX idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code);
+CREATE INDEX idx_cmx_menu_parent ON cmx_menu (parent_id);
+CREATE INDEX idx_cmx_menu_parent_code ON cmx_menu (parent_code);
+CREATE INDEX idx_cmx_menu_full_path ON cmx_menu (full_path);
+
+-- =============================================
+-- 39. 模块当前版本表 (cmx_module_current_version)
+-- =============================================
+DROP TABLE IF EXISTS cmx_module_current_version;
+CREATE TABLE cmx_module_current_version
+(
+    id                VARCHAR(64) NOT NULL,
+    module_id         VARCHAR(64) NOT NULL,
+    domain_code       VARCHAR(64) NOT NULL,
+    application_code  VARCHAR(64) NOT NULL,
+    module_code       VARCHAR(64) NOT NULL,
+    package_version   VARCHAR(14) NOT NULL,
+    checksum          VARCHAR(128),
+    manifest_snapshot JSONB,
+    imported_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    imported_by       VARCHAR(100),
+    source            VARCHAR(256),
+    archived          INT4      DEFAULT 0,
+    create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by         VARCHAR(100),
+    create_name       VARCHAR(100),
+    update_by         VARCHAR(100),
+    update_name       VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_module_current_version IS '模块当前版本表：每个模块当前生效的迁移包版本';
+COMMENT ON COLUMN cmx_module_current_version.id IS '主键ID';
+COMMENT ON COLUMN cmx_module_current_version.module_id IS '关联模块ID(逻辑关联cmx_module.id)';
+COMMENT ON COLUMN cmx_module_current_version.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_module_current_version.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_module_current_version.module_code IS '模块编码(唯一，一个模块一行)';
+COMMENT ON COLUMN cmx_module_current_version.package_version IS '当前迁移包版本号(导出时间戳yyyyMMddHHmmSS)';
+COMMENT ON COLUMN cmx_module_current_version.checksum IS '当前迁移包校验和sha256';
+COMMENT ON COLUMN cmx_module_current_version.manifest_snapshot IS '当前module.manifest.json快照';
+COMMENT ON COLUMN cmx_module_current_version.imported_at IS '最近一次导入时间';
+COMMENT ON COLUMN cmx_module_current_version.imported_by IS '最近一次导入人';
+COMMENT ON COLUMN cmx_module_current_version.source IS '来源(文件名/URL)';
+COMMENT ON COLUMN cmx_module_current_version.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_module_current_version.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_module_current_version.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_module_current_version.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_module_current_version.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_module_current_version.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_module_current_version.update_name IS '更新人姓名';
+
+CREATE UNIQUE INDEX uk_cmx_module_current_version_module ON cmx_module_current_version (module_code);
+CREATE INDEX idx_cmx_module_current_version_dom_app_mod ON cmx_module_current_version (domain_code, application_code, module_code);
+
+-- =============================================
+-- 40. 模块版本历史表 (cmx_module_version_history)
+-- =============================================
+DROP TABLE IF EXISTS cmx_module_version_history;
+CREATE TABLE cmx_module_version_history
+(
+    id                VARCHAR(64) NOT NULL,
+    module_id         VARCHAR(64) NOT NULL,
+    domain_code       VARCHAR(64) NOT NULL,
+    application_code  VARCHAR(64) NOT NULL,
+    module_code       VARCHAR(64) NOT NULL,
+    package_version   VARCHAR(14) NOT NULL,
+    checksum          VARCHAR(128),
+    manifest_snapshot JSONB,
+    imported_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    imported_by       VARCHAR(100),
+    source            VARCHAR(256),
+    notes             TEXT,
+    archived          INT4      DEFAULT 0,
+    create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    create_by         VARCHAR(100),
+    create_name       VARCHAR(100),
+    update_by         VARCHAR(100),
+    update_name       VARCHAR(100),
+    PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE cmx_module_version_history IS '模块迁移包版本历史表';
+COMMENT ON COLUMN cmx_module_version_history.id IS '主键ID';
+COMMENT ON COLUMN cmx_module_version_history.module_id IS '关联模块ID(逻辑关联cmx_module.id)';
+COMMENT ON COLUMN cmx_module_version_history.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_module_version_history.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_module_version_history.module_code IS '模块编码';
+COMMENT ON COLUMN cmx_module_version_history.package_version IS '迁移包版本号(导出时间戳yyyyMMddHHmmSS)';
+COMMENT ON COLUMN cmx_module_version_history.checksum IS '迁移包校验和sha256';
+COMMENT ON COLUMN cmx_module_version_history.manifest_snapshot IS '导入时的module.manifest.json快照';
+COMMENT ON COLUMN cmx_module_version_history.imported_at IS '导入时间';
+COMMENT ON COLUMN cmx_module_version_history.imported_by IS '导入人';
+COMMENT ON COLUMN cmx_module_version_history.source IS '来源(文件名/URL)';
+COMMENT ON COLUMN cmx_module_version_history.notes IS '备注';
+COMMENT ON COLUMN cmx_module_version_history.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_module_version_history.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_module_version_history.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_module_version_history.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_module_version_history.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_module_version_history.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_module_version_history.update_name IS '更新人姓名';
+
+CREATE UNIQUE INDEX uk_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
+CREATE INDEX idx_cmx_module_version_history_module ON cmx_module_version_history (module_id);
+CREATE INDEX idx_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
