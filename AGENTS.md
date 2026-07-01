@@ -31,6 +31,19 @@ pub enum MyError {
 - 每个 crate 有独立 error 模块 (`src/error.rs`)
 - 使用 `pub type Result<T> = core::result::Result<T, Error>;`
 
+### 1.4 禁止裸用 unwrap()
+
+在编写 Rust 代码时，禁止在生产环境中直接使用 `unwrap()` 方法。
+
+**正确做法**：
+
+1. **首选方案**：使用 `?` 操作符将错误优雅地向上抛出（`Result`）。
+2. **兜底方案**：如果当前逻辑确实无法处理该错误且必须中断，请使用 `expect("...")`，并在括号内提供具有业务指导意义的错误提示（例如：`expect("Redis 连接池初始化失败，请检查配置")`）。
+
+**例外情况**：
+
+仅在 `#[test]` 单元测试函数内部，或者 100% 确信该值不可能为 `None` 的极特殊场景下，才允许使用 `unwrap()`。
+
 ---
 
 ## 二、日志处理规则
@@ -107,3 +120,50 @@ log = "0.4"
 # [dependencies]
 # unused_crate = "1.0"
 ```
+
+---
+
+## 四、Git 提交规则
+
+### 4.1 禁止提交根目录 .env 文件
+
+Git 提交代码时，必须忽略根目录的 `.env` 文件，**即使该文件已经被 `git add` 加入暂存区，也不得提交**。
+
+**正确做法**：
+1. 提交时不通过 `git add .` 或 `git add -A` 批量添加，逐个指定文件
+
+**错误示例**：
+
+```bash
+# ❌ 错误 - 可能误提交 .env
+git add .
+git commit -m "update config"
+
+# ❌ 错误 - 强制提交 .env
+git add -f .env
+```
+
+### 4.2 禁止自动提交代码
+
+AI 助手在完成任务后，**禁止主动执行 `git commit` 等提交操作**，必须由用户主动确认并提出提交请求后才能提交。
+
+**正确做法**：
+
+1. AI 完成代码修改后，仅向用户汇报改动内容，等待用户明确指令（如「提交代码」「commit」「提交一下」等）
+2. 收到用户明确指令后，再按规范执行 `git status` → `git diff` → 暂存指定文件 → `git commit` 流程
+3. 提交信息需遵循 Conventional Commits 规范（feat / fix / refactor / docs / chore 等）
+
+**错误示例**：
+
+```bash
+# ❌ 错误 - 未经用户允许直接提交
+git add .
+git commit -m "update"
+
+# ❌ 错误 - 完成任务后自动 push
+git push origin main
+```
+
+**例外情况**：
+
+仅在用户明确表示「帮我提交」「请提交这次改动」等明确指令时，AI 才可以执行提交操作。

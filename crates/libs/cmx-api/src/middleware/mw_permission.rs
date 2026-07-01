@@ -69,23 +69,31 @@ impl GlobalPermissionConfig {
         GLOBAL_PERMISSION_MAP
             .get()
             .and_then(|rw| rw.read().ok())
-            .and_then(|map| {
-                let mut best_match: Option<(&String, &String)> = None;
-                for (prefix, perm) in map.iter() {
-                    if path.starts_with(prefix) {
-                        match &best_match {
-                            Some((best_prefix, _)) if prefix.len() > best_prefix.len() => {
-                                best_match = Some((prefix, perm));
-                            }
-                            None => {
-                                best_match = Some((prefix, perm));
-                            }
-                            _ => {}
-                        }
+            .and_then(|map| Self::find_in_map(&map, path))
+    }
+
+    /// 在给定映射表中按最长前缀匹配查找路径所需权限码（纯函数，便于单元测试）。
+    ///
+    /// 规则：路径 `path` 以某 `prefix` 开头即视为匹配；多个匹配时取最长前缀对应的权限码。
+    pub(super) fn find_in_map(
+        map: &HashMap<String, String>,
+        path: &str,
+    ) -> Option<String> {
+        let mut best_match: Option<(&String, &String)> = None;
+        for (prefix, perm) in map.iter() {
+            if path.starts_with(prefix) {
+                match &best_match {
+                    Some((best_prefix, _)) if prefix.len() > best_prefix.len() => {
+                        best_match = Some((prefix, perm));
                     }
+                    None => {
+                        best_match = Some((prefix, perm));
+                    }
+                    _ => {}
                 }
-                best_match.map(|(_, perm)| perm.clone())
-            })
+            }
+        }
+        best_match.map(|(_, perm)| perm.clone())
     }
 
     /// 运行时更新权限映射（支持热更新）
@@ -169,59 +177,64 @@ pub async fn mw_permission(req: Request<Body>, next: Next) -> Result<Response, S
 mod tests {
     use super::*;
 
+    /// 测试纯函数 `find_in_map`，避免全局 `OnceLock` 在并行测试间相互污染
+    /// （`GlobalPermissionConfig::initialize` 仅首次 `set` 生效，后续调用静默失败，
+    /// 导致依赖全局态的测试结果取决于执行顺序）。
+    fn build_map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
     #[test]
     fn test_find_required_permission_exact_match() {
-        let mut map = HashMap::new();
-        map.insert("/api/iam/users".to_string(), "user:read".to_string());
-        map.insert("/api/iam/roles".to_string(), "role:read".to_string());
-
-        let _ = GlobalPermissionConfig::initialize(map);
+        let map = build_map(&[
+            ("/api/iam/users", "user:read"),
+            ("/api/iam/roles", "role:read"),
+        ]);
 
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/users"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/users"),
             Some("user:read".to_string())
         );
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/roles"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/roles"),
             Some("role:read".to_string())
         );
     }
 
     #[test]
     fn test_find_required_permission_prefix_match() {
-        let mut map = HashMap::new();
-        map.insert("/api/iam/users".to_string(), "user:read".to_string());
-
-        let _ = GlobalPermissionConfig::initialize(map);
+        let map = build_map(&[("/api/iam/users", "user:read")]);
 
         // 子路径应匹配
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/users/123"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/users/123"),
             Some("user:read".to_string())
         );
         // 不相关路径不匹配
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/roles"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/roles"),
             None
         );
     }
 
     #[test]
     fn test_find_required_permission_longest_prefix() {
-        let mut map = HashMap::new();
-        map.insert("/api/iam".to_string(), "iam:access".to_string());
-        map.insert("/api/iam/users".to_string(), "user:read".to_string());
-
-        let _ = GlobalPermissionConfig::initialize(map);
+        let map = build_map(&[
+            ("/api/iam", "iam:access"),
+            ("/api/iam/users", "user:read"),
+        ]);
 
         // /api/iam/users 应匹配更长的前缀 user:read
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/users"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/users"),
             Some("user:read".to_string())
         );
         // /api/iam/roles 应匹配较短的前缀 iam:access
         assert_eq!(
-            GlobalPermissionConfig::find_required_permission("/api/iam/roles"),
+            GlobalPermissionConfig::find_in_map(&map, "/api/iam/roles"),
             Some("iam:access".to_string())
         );
     }

@@ -377,6 +377,7 @@ impl ServiceRepository {
     /// * `config` - 编排配置 JSON 字符串
     /// * `api_doc` - 接口文档 JSON 字符串（可选）
     /// * `txn_id` - 事务ID（可选）
+    #[allow(clippy::too_many_arguments)]
     pub async fn save_service_version_with_txn(
         &self,
         service_key: &str,

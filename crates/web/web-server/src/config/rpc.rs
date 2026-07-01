@@ -8,8 +8,8 @@ use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::bundle::ServerDeps;
 use cmx_rpc::{init_rpc_clients, start_grpc_server};
 use cmx_rpc::config::RpcConfig;
-use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
-use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::function_invoker::FunctionInvoker;
+use cmx_traits::plugin::PluginDataImporter;
 use cmx_traits::service::ServiceInvoker;
 use cmx_utils::ConfigManager;
 use tracing::{info, warn};
@@ -28,8 +28,9 @@ pub use crate::Error;
 /// # Arguments
 ///
 /// * `service_invoker` - 服务调用器。
-/// * `runtime_invoker` - 运行时调用器。
-/// * `plugin_query` - 插件查询器。
+/// * `function_invoker` - 插件函数调用器（封装 RuntimeInvoker + PluginQuery 完整调用链，
+///   由调用方在组装层构造 cmx-biz 的 `BizFunctionInvoker` 实现后注入，使 cmx-rpc
+///   无需直接依赖 cmx-biz）。
 /// * `data_importer` - 插件数据导入器（可选）。注入后 gRPC 服务端可处理
 ///   `CmxPluginDataService` 的 import/cleanup 请求。
 ///
@@ -39,8 +40,7 @@ pub use crate::Error;
 /// * `Err(Error)` - 初始化失败。
 pub async fn init_rpc(
     service_invoker: Arc<dyn ServiceInvoker>,
-    runtime_invoker: Arc<dyn RuntimeInvoker>,
-    plugin_query: Arc<dyn PluginQuery>,
+    function_invoker: Arc<dyn FunctionInvoker>,
     data_importer: Option<Arc<dyn PluginDataImporter>>,
 ) -> crate::Result<Option<u16>> {
     let rpc_config = load_rpc_config();
@@ -76,8 +76,7 @@ pub async fn init_rpc(
     let grpc_port_for_log = grpc_port;
     let deps = ServerDeps {
         service_invoker,
-        runtime_invoker,
-        plugin_query,
+        function_invoker,
         data_importer,
     };
     let server_handle = tokio::spawn(async move {

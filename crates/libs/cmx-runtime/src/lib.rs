@@ -11,6 +11,7 @@
 //! config.rs           ← 引擎配置：ExtismEngineConfig + 缓存/Fuel 初始化
 //! metrics.rs          ← 运行时指标：EngineMetrics（无锁原子计数器）
 //! host_function.rs    ← 宿主函数桥接：HostFunctionContext + Extism 回调
+//! logging_host_functions.rs ← 日志宿主函数提供者：LoggingHostFunctions
 //! error.rs            ← 错误类型：ExtismError
 //! global.rs           ← 全局单例：GlobalExtismEngine
 //! lifecycle_listener.rs ← 生命周期监听器
@@ -29,6 +30,7 @@ pub mod error;
 pub mod global;
 pub mod host_function;
 pub mod lifecycle_listener;
+pub mod logging_host_functions;
 pub mod metrics;
 
 pub use config::ExtismEngineConfig;
@@ -36,4 +38,5 @@ pub use engine::{ExtismEngine};
 pub use error::ExtismError;
 pub use global::GlobalExtismEngine;
 pub use lifecycle_listener::RuntimeLifecycleListener;
+pub use logging_host_functions::LoggingHostFunctions;
 pub use metrics::EngineMetrics;

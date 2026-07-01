@@ -14,8 +14,9 @@
 //!
 //! ```rust,no_run
 //! use std::sync::atomic::Ordering;
+//! use cmx_runtime::EngineMetrics;
 //!
-//! let metrics = engine.get_metrics();
+//! let metrics = EngineMetrics::new();
 //! let total = metrics.total_calls.load(Ordering::Relaxed);
 //! let failed = metrics.failed_calls.load(Ordering::Relaxed);
 //! let avg_latency = metrics.total_elapsed_us.load(Ordering::Relaxed) / total.max(1);

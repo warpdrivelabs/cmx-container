@@ -400,3 +400,282 @@ impl PluginError {
 
 /// 插件操作结果类型别名
 pub type PluginResult<T> = Result<T, PluginError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== 辅助构造方法 ====================
+
+    #[test]
+    fn test_plugin_not_found_helper_format() {
+        let err = PluginError::plugin_not_found("my-plugin");
+        assert!(matches!(err, PluginError::NotFound(_)));
+        assert!(err.to_string().contains("插件 'my-plugin' 未找到"));
+    }
+
+    #[test]
+    fn test_plugin_already_exists_helper_format() {
+        let err = PluginError::plugin_already_exists("dup");
+        assert!(matches!(err, PluginError::Conflict(_)));
+        assert!(err.to_string().contains("插件 'dup' 已存在"));
+    }
+
+    #[test]
+    fn test_invalid_state_helper_fields() {
+        let err = PluginError::invalid_state("pid", "Installed", "activate");
+        match err {
+            PluginError::InvalidState { plugin_id, current, operation } => {
+                assert_eq!(plugin_id, "pid");
+                assert_eq!(current, "Installed");
+                assert_eq!(operation, "activate");
+            }
+            other => panic!("期望 InvalidState，得到 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_missing_dependency_helper_fields() {
+        let err = PluginError::missing_dependency("p1", "p2");
+        match err {
+            PluginError::MissingDependency { plugin_id, dependency } => {
+                assert_eq!(plugin_id, "p1");
+                assert_eq!(dependency, "p2");
+            }
+            other => panic!("期望 MissingDependency，得到 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_dependency_conflict_helper_fields() {
+        let err = PluginError::dependency_conflict("p1", "p2", "version mismatch");
+        match err {
+            PluginError::DependencyConflict { plugin_id, conflicting_plugin, details } => {
+                assert_eq!(plugin_id, "p1");
+                assert_eq!(conflicting_plugin, "p2");
+                assert_eq!(details, "version mismatch");
+            }
+            other => panic!("期望 DependencyConflict，得到 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_version_incompatible_helper_fields() {
+        let err = PluginError::version_incompatible("pid", "1.0.0", "2.0.0");
+        match err {
+            PluginError::VersionIncompatible { plugin_id, installed, required } => {
+                assert_eq!(plugin_id, "pid");
+                assert_eq!(installed, "1.0.0");
+                assert_eq!(required, "2.0.0");
+            }
+            other => panic!("期望 VersionIncompatible，得到 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_permission_denied_helper_fields() {
+        let err = PluginError::permission_denied("pid", "fs.write");
+        match err {
+            PluginError::PermissionDenied { plugin_id, permission } => {
+                assert_eq!(plugin_id, "pid");
+                assert_eq!(permission, "fs.write");
+            }
+            other => panic!("期望 PermissionDenied，得到 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_node_unavailable_helper_fields() {
+        let err = PluginError::node_unavailable("node-1");
+        match err {
+            PluginError::NodeUnavailable { node_id } => {
+                assert_eq!(node_id, "node-1");
+            }
+            other => panic!("期望 NodeUnavailable，得到 {:?}", other),
+        }
+    }
+
+    // ==================== is_retryable ====================
+
+    #[test]
+    fn test_is_retryable_true_for_timeout() {
+        assert!(PluginError::Timeout("op".to_string()).is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_true_for_network() {
+        assert!(PluginError::Network("conn lost".to_string()).is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_true_for_node_unavailable() {
+        assert!(PluginError::node_unavailable("n1").is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_true_for_io_error() {
+        let io_err = std::io::Error::other("boom");
+        assert!(PluginError::Io(io_err).is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_false_for_install_error() {
+        // 安装错误不应自动重试
+        assert!(!PluginError::Install("fail".to_string()).is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_false_for_security_error() {
+        assert!(!PluginError::Security("breach".to_string()).is_retryable());
+    }
+
+    #[test]
+    fn test_is_retryable_false_for_not_found() {
+        assert!(!PluginError::plugin_not_found("p").is_retryable());
+    }
+
+    // ==================== is_fatal ====================
+
+    #[test]
+    fn test_is_fatal_true_for_security() {
+        assert!(PluginError::Security("escape".to_string()).is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_true_for_signature_verification() {
+        assert!(PluginError::SignatureVerification("bad sig".to_string()).is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_true_for_permission_denied() {
+        assert!(PluginError::permission_denied("p", "perm").is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_true_for_insufficient_resource() {
+        assert!(PluginError::InsufficientResource("oom".to_string()).is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_false_for_timeout() {
+        // 超时可重试，非致命
+        assert!(!PluginError::Timeout("slow".to_string()).is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_false_for_install_error() {
+        assert!(!PluginError::Install("fail".to_string()).is_fatal());
+    }
+
+    #[test]
+    fn test_is_fatal_false_for_not_found() {
+        assert!(!PluginError::plugin_not_found("p").is_fatal());
+    }
+
+    // ==================== error_code ====================
+
+    #[test]
+    fn test_error_code_for_io() {
+        let io_err = std::io::Error::other("x");
+        assert_eq!(PluginError::Io(io_err).error_code(), "IO_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_install() {
+        assert_eq!(PluginError::Install("x".to_string()).error_code(), "INSTALL_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_uninstall() {
+        assert_eq!(PluginError::Uninstall("x".to_string()).error_code(), "UNINSTALL_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_upgrade() {
+        assert_eq!(PluginError::Upgrade("x".to_string()).error_code(), "UPGRADE_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_downgrade() {
+        assert_eq!(PluginError::Downgrade("x".to_string()).error_code(), "DOWNGRADE_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_security() {
+        assert_eq!(PluginError::Security("x".to_string()).error_code(), "SECURITY_ERROR");
+    }
+
+    #[test]
+    fn test_error_code_for_signature_verification() {
+        assert_eq!(
+            PluginError::SignatureVerification("x".to_string()).error_code(),
+            "SIGNATURE_VERIFICATION_ERROR"
+        );
+    }
+
+    #[test]
+    fn test_error_code_for_permission_denied() {
+        assert_eq!(
+            PluginError::permission_denied("p", "perm").error_code(),
+            "PERMISSION_DENIED"
+        );
+    }
+
+    #[test]
+    fn test_error_code_for_node_unavailable() {
+        assert_eq!(PluginError::node_unavailable("n").error_code(), "NODE_UNAVAILABLE");
+    }
+
+    #[test]
+    fn test_error_code_for_not_found() {
+        assert_eq!(PluginError::plugin_not_found("p").error_code(), "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_error_code_for_missing_dependency() {
+        assert_eq!(
+            PluginError::missing_dependency("p1", "p2").error_code(),
+            "MISSING_DEPENDENCY"
+        );
+    }
+
+    #[test]
+    fn test_error_code_for_dependency_conflict() {
+        assert_eq!(
+            PluginError::dependency_conflict("p1", "p2", "x").error_code(),
+            "DEPENDENCY_CONFLICT"
+        );
+    }
+
+    #[test]
+    fn test_error_code_for_version_incompatible() {
+        assert_eq!(
+            PluginError::version_incompatible("p", "1.0.0", "2.0.0").error_code(),
+            "VERSION_INCOMPATIBLE"
+        );
+    }
+
+    // ==================== From 转换 ====================
+
+    #[test]
+    fn test_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let plugin_err: PluginError = io_err.into();
+        assert!(matches!(plugin_err, PluginError::Io(_)));
+    }
+
+    #[test]
+    fn test_from_serde_json_error() {
+        let result: Result<serde_json::Value, _> = serde_json::from_str("{ invalid");
+        let json_err = result.unwrap_err();
+        let plugin_err: PluginError = json_err.into();
+        assert!(matches!(plugin_err, PluginError::Json(_)));
+    }
+
+    #[test]
+    fn test_from_serde_yaml_error() {
+        let yaml_err = serde_yaml::from_str::<serde_yaml::Value>("- [invalid").unwrap_err();
+        let plugin_err: PluginError = yaml_err.into();
+        assert!(matches!(plugin_err, PluginError::Yaml(_)));
+    }
+}

@@ -539,7 +539,10 @@ impl TableMetadataService {
         let table_meta_defines_result = Self::parse_metadata_record(&existing);
 
         if table_meta_defines_result.is_ok()
-            && let Some(record) = table_meta_defines_result.unwrap().first()
+            && let Some(record) = table_meta_defines_result
+                .as_ref()
+                .expect("已校验 is_ok()")
+                .first()
         {
             let table_name = record.table_name.clone();
             let display_name = record.display_name.clone();
@@ -593,7 +596,9 @@ impl TableMetadataService {
                     .table(TableMetadataVersionBmc::table_ref())
                     .values(values)
                     .and_where(Expr::col("table_name").eq(&table_name))
-                    .and_where(Expr::col("version").eq(data.version.unwrap()))
+                    .and_where(Expr::col("version").eq(data.version.clone().expect(
+                        "version_exists 分支要求 data.version 为 Some（更新版本记录需指定版本号）",
+                    )))
                     .and_where(Expr::col("db_id").eq(&target_db_id));
 
                 let (version_sql, version_sql_values) = version_query.build_sqlx(PostgresQueryBuilder);

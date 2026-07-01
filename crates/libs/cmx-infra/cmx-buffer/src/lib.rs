@@ -12,6 +12,9 @@ pub mod host_functions;
 pub mod lock;
 pub mod logging;
 
+// 测试用 Mock Redis 后端，公开供集成测试使用
+pub mod mock;
+
 pub use cache::{
     CacheManager, CacheOps, ChannelHandler, FnChannelHandler, GlobalCacheManager,
     GlobalSubscriber, GlobalSubscriberManager, HashOps, PubSubOps, ScriptOps, SetOps,

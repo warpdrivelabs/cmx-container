@@ -37,8 +37,12 @@ pub struct IamConfig {
     #[serde(default = "default_audit_batch_size")]
     pub audit_batch_size: u32,
 
-    /// 是否启用 SoD 规则校验（默认 `false`）。
-    #[serde(default)]
+    /// 是否启用 SoD（职责分离互斥）规则校验（默认 `true`）。
+    ///
+    /// 开启后，在 `assign_permissions` / `assign_roles` 时会校验互斥规则
+    /// （功能权限互斥 + 角色互斥）。规则数据存储于 `cmx_exclusion_rule` 表。
+    /// 当规则表为空时，校验直接通过（无规则=不拦截），可安全开启。
+    #[serde(default = "default_enable_sod_check")]
     pub enable_sod_check: bool,
 
     /// 故障降级策略（默认 `FailClose`）。
@@ -85,6 +89,10 @@ fn default_audit_batch_size() -> u32 {
     100
 }
 
+fn default_enable_sod_check() -> bool {
+    true
+}
+
 fn default_failure_mode() -> FailureMode {
     FailureMode::FailClose
 }
@@ -106,7 +114,7 @@ impl Default for IamConfig {
             permission_cache_ttl_secs: default_permission_cache_ttl(),
             assignment_cleanup_interval_secs: default_cleanup_interval(),
             audit_batch_size: default_audit_batch_size(),
-            enable_sod_check: false,
+            enable_sod_check: default_enable_sod_check(),
             failure_mode: default_failure_mode(),
             circuit_breaker_threshold: default_circuit_breaker_threshold(),
             circuit_breaker_reset_secs: default_circuit_breaker_reset_secs(),

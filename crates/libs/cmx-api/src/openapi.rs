@@ -196,6 +196,9 @@ use utoipa::OpenApi;
         crate::handlers::iam::user::audit_handler::get_effective_permissions,
         crate::handlers::iam::role::audit_handler::get_permission_diff,
         crate::handlers::iam::permission::audit_handler::get_permission_usage_stat,
+        // Dev handlers
+        crate::handlers::dev::handler::list_templates,
+        crate::handlers::dev::handler::create_project,
     ),
 
     components(
@@ -389,6 +392,11 @@ use utoipa::OpenApi;
             crate::ApiResp<cmx_iam::service_traits::EffectivePermissionsResponse>,
             crate::ApiResp<cmx_iam::service_traits::PermissionDiffResponse>,
             crate::ApiResp<Vec<cmx_iam::service_traits::PermissionUsageStat>>,
+            // Dev schemas
+            crate::handlers::dev::request::CreateProjectRequest,
+            crate::handlers::dev::response::CreateProjectResponse,
+            crate::handlers::dev::response::TemplateInfo,
+            crate::ApiResp<Vec<crate::handlers::dev::response::TemplateInfo>>,
         )
     )
 )]

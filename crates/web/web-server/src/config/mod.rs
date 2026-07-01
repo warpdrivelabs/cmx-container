@@ -32,16 +32,39 @@ pub use services::init_services;
 pub use services::init_service_invoker;
 pub use storage::init_storage;
 
-use cmx_utils::{ConfigManager, ConfigResult};
+use cmx_utils::{ConfigError, ConfigManager, ConfigResult};
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-pub fn web_config() -> &'static WebConfig {
-    static INSTANCE: OnceLock<WebConfig> = OnceLock::new();
+/// Web 服务器配置单例。
+///
+/// 由 [`init_web_config`] 在启动早期完成初始化，运行期通过 [`web_config`] 读取。
+static WEB_CONFIG_INSTANCE: OnceLock<WebConfig> = OnceLock::new();
 
-    INSTANCE.get_or_init(|| {
-        WebConfig::load_from_env()
-            .unwrap_or_else(|ex| panic!("FATAL - WHILE LOADING CONF - Cause: {}", ex))
+/// 初始化 Web 服务器配置。
+///
+/// 从环境变量加载配置并存储到全局单例。必须在 [`web_config`] 调用前完成。
+///
+/// # Errors
+///
+/// 配置加载失败时返回 `ConfigError`。
+pub fn init_web_config() -> ConfigResult<()> {
+    let config = WebConfig::load_from_env()?;
+    // 重复初始化时保留首次值，忽略后续 set 返回的错误。
+    let _ = WEB_CONFIG_INSTANCE.set(config);
+    Ok(())
+}
+
+/// 获取 Web 服务器配置的静态引用。
+///
+/// 必须先调用 [`init_web_config`] 完成初始化。
+///
+/// # Errors
+///
+/// 配置未初始化时返回 `ConfigError`。
+pub fn web_config() -> ConfigResult<&'static WebConfig> {
+    WEB_CONFIG_INSTANCE.get().ok_or_else(|| ConfigError::BuildError {
+        message: "WebConfig 尚未初始化，请先调用 init_web_config()".to_string(),
     })
 }
 
@@ -68,4 +91,48 @@ impl WebConfig {
             Err(ex) => Err(ex),
         }
     }
+}
+
+/// 应用标识配置（当前实例所属的域/应用/模块）。
+///
+/// 用于数据源过滤：`load_active_datasources` 仅加载归属本实例域的数据源。
+/// 从 `[app]` TOML 节读取，支持环境变量覆盖（`APP__DOMAIN_CODE` 等）。
+/// 三项均缺省为 `"default"`，保证向后兼容。
+#[derive(Debug, Clone)]
+pub struct AppIdentity {
+    /// 当前实例所属域编码。
+    pub domain_code: String,
+    /// 当前实例所属应用编码。
+    pub application_code: String,
+    /// 当前实例所属模块编码。
+    pub module_code: String,
+}
+
+impl Default for AppIdentity {
+    fn default() -> Self {
+        Self {
+            domain_code: "default".to_string(),
+            application_code: "default".to_string(),
+            module_code: "default".to_string(),
+        }
+    }
+}
+
+/// 从 `[app]` TOML 节加载应用标识配置。
+///
+/// 读取 `app.domain_code` / `app.application_code` / `app.module_code`，
+/// 未配置时各项回退为 `"default"`（向后兼容）。
+pub fn load_app_identity() -> AppIdentity {
+    let config = ConfigManager::global();
+    let mut identity = AppIdentity::default();
+    if let Ok(v) = config.get_string("app.domain_code") {
+        identity.domain_code = v;
+    }
+    if let Ok(v) = config.get_string("app.application_code") {
+        identity.application_code = v;
+    }
+    if let Ok(v) = config.get_string("app.module_code") {
+        identity.module_code = v;
+    }
+    identity
 }

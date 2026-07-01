@@ -91,3 +91,155 @@ impl Default for PasswordPolicy {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmx_traits::auth::AuthError;
+
+    #[test]
+    fn test_password_policy_valid_password() {
+        // 满足所有要求的密码：长度>=8 + 大写 + 小写 + 数字 + 特殊字符
+        let policy = PasswordPolicy::new();
+
+        // 大小写、数字、特殊字符齐全
+        assert!(policy.validate("Abcd1234!").is_ok());
+        assert!(policy.validate("P@ssw0rd").is_ok());
+        assert!(policy.validate("Zx1!abcd").is_ok());
+    }
+
+    #[test]
+    fn test_password_policy_too_short() {
+        let policy = PasswordPolicy::new();
+
+        // 长度不足 8 位
+        let result = policy.validate("Ab1!");
+        assert!(result.is_err(), "过短密码应违反策略");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            assert!(
+                msg.contains("长度"),
+                "错误信息应包含 '长度'，实际: {}",
+                msg
+            );
+        } else {
+            panic!("期望 PasswordPolicyViolated 错误");
+        }
+    }
+
+    #[test]
+    fn test_password_policy_missing_uppercase() {
+        let policy = PasswordPolicy::new();
+
+        // 缺少大写字母
+        let result = policy.validate("abcd1234!");
+        assert!(result.is_err(), "缺少大写字母应违反策略");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            assert!(
+                msg.contains("大写字母"),
+                "错误信息应包含 '大写字母'，实际: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_password_policy_missing_lowercase() {
+        let policy = PasswordPolicy::new();
+
+        // 缺少小写字母
+        let result = policy.validate("ABCD1234!");
+        assert!(result.is_err(), "缺少小写字母应违反策略");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            assert!(
+                msg.contains("小写字母"),
+                "错误信息应包含 '小写字母'，实际: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_password_policy_missing_digit() {
+        let policy = PasswordPolicy::new();
+
+        // 缺少数字
+        let result = policy.validate("Abcdefgh!");
+        assert!(result.is_err(), "缺少数字应违反策略");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            assert!(
+                msg.contains("数字"),
+                "错误信息应包含 '数字'，实际: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_password_policy_missing_special() {
+        let policy = PasswordPolicy::new();
+
+        // 缺少特殊字符
+        let result = policy.validate("Abcd1234");
+        assert!(result.is_err(), "缺少特殊字符应违反策略");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            assert!(
+                msg.contains("特殊字符"),
+                "错误信息应包含 '特殊字符'，实际: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_password_policy_multiple_violations_collected() {
+        let policy = PasswordPolicy::new();
+
+        // 同时违反多个规则：过短 + 缺大写 + 缺数字 + 缺特殊字符
+        let result = policy.validate("abc");
+        assert!(result.is_err(), "多重违规应返回错误");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            // 错误信息应包含所有违规项（用分号分隔）
+            assert!(msg.contains("长度"), "应包含长度违规: {}", msg);
+            assert!(msg.contains("大写字母"), "应包含大写字母违规: {}", msg);
+            assert!(msg.contains("数字"), "应包含数字违规: {}", msg);
+            assert!(msg.contains("特殊字符"), "应包含特殊字符违规: {}", msg);
+            // 不应包含小写字母违规（密码含小写字母）
+            assert!(!msg.contains("小写字母"), "不应包含小写字母违规: {}", msg);
+        }
+    }
+
+    #[test]
+    fn test_password_policy_all_special_chars_accepted() {
+        // 测试策略中定义的所有特殊字符
+        let policy = PasswordPolicy::new();
+
+        // `!@#$%^&*()_+-=[]{}|;':",./<>?`~` 中的每个字符都应被接受
+        let specials = "!@#$%^&*()_+-=[]{}|;':\",./<>?`~";
+        for ch in specials.chars() {
+            let password = format!("Abc1234{}", ch);
+            let result = policy.validate(&password);
+            assert!(
+                result.is_ok(),
+                "包含特殊字符 '{}' 的密码应通过: {}",
+                ch,
+                password
+            );
+        }
+    }
+
+    #[test]
+    fn test_password_policy_empty_password() {
+        let policy = PasswordPolicy::new();
+
+        let result = policy.validate("");
+        assert!(result.is_err(), "空密码应违反多项规则");
+        if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
+            // 空密码应触发所有规则违规
+            assert!(msg.contains("长度"));
+            assert!(msg.contains("大写字母"));
+            assert!(msg.contains("小写字母"));
+            assert!(msg.contains("数字"));
+            assert!(msg.contains("特殊字符"));
+        }
+    }
+}

@@ -59,7 +59,6 @@ cmx-utils
 │   │   ├── cipher.rs
 │   │   ├── error.rs
 │   │   └── service.rs
-│   ├── host_functions.rs
 │   ├── id/             # ID 生成模块
 │   │   ├── mod.rs
 │   │   ├── snowflake.rs

@@ -30,10 +30,27 @@ pub async fn init_datasources() -> crate::Result<()> {
     info!("开始初始化数据源...");
 
     let config = ConfigManager::global();
-    let configs: Vec<DbConfig> = config.get_as("databases")
+    let mut configs: Vec<DbConfig> = config.get_as("databases")
         .map_err(|e| Error::DatasourceInit(format!("无法从配置管理器获取 databases 配置: {}", e)))?;
 
     info!("成功解析到 {} 个数据源配置", configs.len());
+
+    // 读取本实例应用标识，为配置文件数据源统一注入域应用模块归属。
+    let app_identity = crate::config::load_app_identity();
+    for c in &mut configs {
+        if c.domain_code.is_none() {
+            c.domain_code = Some(app_identity.domain_code.clone());
+        }
+        if c.application_code.is_none() {
+            c.application_code = Some(app_identity.application_code.clone());
+        }
+        if c.module_code.is_none() {
+            c.module_code = Some(app_identity.module_code.clone());
+        }
+        if c.source_type.is_none() {
+            c.source_type = Some(if c.default { "default".to_string() } else { "other".to_string() });
+        }
+    }
 
     let db_manager = get_default_db_manager();
 
@@ -47,13 +64,13 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     crate::config::init_database_migrations().await?;
 
-    if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, configs).await {
+    if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, &app_identity, configs).await {
         return Err(Error::DatasourceInit(format!(
             "持久化数据源配置失败: {}", e
         )));
     }
 
-    let active_datasources = load_active_datasources(db_manager, &default_db_id).await?;
+    let active_datasources = load_active_datasources(db_manager, &default_db_id, &app_identity).await?;
 
     // 过滤掉配置文件中的数据源（只保留数据库中的数据源）
     let mut filtered_datasources = Vec::new();
@@ -89,13 +106,18 @@ pub async fn init_datasources() -> crate::Result<()> {
 async fn persist_datasource_configs(
     mm: &DatabaseManager,
     db_id: &str,
+    app_identity: &crate::config::AppIdentity,
     configs: Vec<DbConfig>,
 ) -> crate::Result<()> {
     info!("开始持久化数据源配置...");
 
     for config in configs {
+        // 按 db_id + 域应用模块联合查重（db_id 在不同域下可重复）
         let filter = SysDatasourceFilter {
             db_id: Some(OpValsString(vec![OpValString::Eq(config.db_id.clone())])),
+            domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
+            application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
+            module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
             ..Default::default()
         };
 
@@ -161,10 +183,15 @@ async fn persist_datasource_configs(
 async fn load_active_datasources(
     mm: &DatabaseManager,
     db_id: &str,
+    app_identity: &crate::config::AppIdentity,
 ) -> crate::Result<Vec<DbConfig>> {
-    info!("开始加载有效数据源...");
+    info!("开始加载有效数据源（域: {}/{}/{}）...",
+        app_identity.domain_code, app_identity.application_code, app_identity.module_code);
 
     let filter = SysDatasourceFilter {
+        domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
+        application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
+        module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
         status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
         archived: Some(OpValsInt64(vec![OpValInt64::Eq(0)])),
         ..Default::default()
@@ -252,6 +279,10 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
         db_url: config.db_url.clone(),
         db_schema: config.db_schema.clone(),
         default_flag: if config.default { Some(1) } else { Some(0) },
+        domain_code: config.domain_code.clone(),
+        application_code: config.application_code.clone(),
+        module_code: config.module_code.clone(),
+        source_type: config.source_type.clone(),
         max_connections: Some(config.pool_config.max_connections as i32),
         min_connections: Some(config.pool_config.min_connections as i32),
         connect_timeout: Some(config.pool_config.connect_timeout as i64),
@@ -279,6 +310,10 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
         db_url: Some(config.db_url.clone()),
         db_schema: config.db_schema.clone(),
         default_flag: Some(if config.default { 1 } else { 0 }),
+        domain_code: config.domain_code.clone(),
+        application_code: config.application_code.clone(),
+        module_code: config.module_code.clone(),
+        source_type: config.source_type.clone(),
         max_connections: Some(config.pool_config.max_connections as i32),
         min_connections: Some(config.pool_config.min_connections as i32),
         connect_timeout: Some(config.pool_config.connect_timeout as i64),
@@ -322,6 +357,11 @@ fn build_dbconfig_from_row(
     let db_schema = get_string_field(row, schema, "db_schema");
     let default_flag = get_int_field(row, schema, "default_flag").unwrap_or(0);
 
+    let domain_code = get_string_field(row, schema, "domain_code");
+    let application_code = get_string_field(row, schema, "application_code");
+    let module_code = get_string_field(row, schema, "module_code");
+    let source_type = get_string_field(row, schema, "source_type");
+
     let max_connections = get_int_field(row, schema, "max_connections").unwrap_or(10) as usize;
     let min_connections = get_int_field(row, schema, "min_connections").unwrap_or(2) as usize;
     let connect_timeout = get_int_field(row, schema, "connect_timeout").unwrap_or(30) as u64;
@@ -344,9 +384,14 @@ fn build_dbconfig_from_row(
             connect_timeout,
             idle_timeout,
             max_lifetime,
+            ..Default::default()
         },
         health_check_interval,
         health_check_timeout,
+        domain_code,
+        application_code,
+        module_code,
+        source_type,
     })
 }
 

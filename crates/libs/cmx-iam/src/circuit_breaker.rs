@@ -146,4 +146,114 @@ mod tests {
         assert!(!cb.is_circuit_open());
         assert_eq!(cb.failure_count.load(Ordering::Relaxed), 0);
     }
+
+    /// 边界：阈值-1 次失败不应打开熔断器
+    #[test]
+    fn test_below_threshold_does_not_open() {
+        let cb = CircuitBreaker::new(5, 60);
+        for _ in 0..4 {
+            cb.record_failure();
+        }
+        assert!(!cb.is_circuit_open());
+        assert!(cb.allow_request());
+    }
+
+    /// 边界：恰好达到阈值时打开熔断器
+    #[test]
+    fn test_exact_threshold_opens() {
+        let cb = CircuitBreaker::new(3, 60);
+        cb.record_failure();
+        cb.record_failure();
+        assert!(!cb.is_circuit_open());
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+    }
+
+    /// 熔断状态下连续多次请求均被拒绝
+    #[test]
+    fn test_open_state_rejects_all_requests() {
+        let cb = CircuitBreaker::new(1, 60);
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        // 熔断打开期间，连续 5 次请求都应被拒绝
+        for _ in 0..5 {
+            assert!(!cb.allow_request(), "熔断状态下应拒绝所有请求");
+        }
+    }
+
+    /// 半开状态：超过恢复时间后允许请求通过
+    #[test]
+    fn test_half_open_allows_after_reset_duration() {
+        let cb = CircuitBreaker::new(1, 0);
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        // reset_duration=0，等待 10ms 确保时间已过
+        std::thread::sleep(Duration::from_millis(10));
+        // 半开 -> 允许请求，并重置为关闭状态
+        assert!(cb.allow_request());
+        assert!(!cb.is_circuit_open());
+    }
+
+    /// 半开成功后熔断器恢复关闭，后续请求正常通过
+    #[test]
+    fn test_half_open_success_closes_circuit() {
+        let cb = CircuitBreaker::new(2, 0);
+        cb.record_failure();
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        std::thread::sleep(Duration::from_millis(10));
+        // 第一次 allow_request 进入半开 -> 关闭
+        assert!(cb.allow_request());
+        // 半开后记录成功，熔断器保持关闭
+        cb.record_success();
+        assert!(!cb.is_circuit_open());
+        assert_eq!(cb.failure_count.load(Ordering::Relaxed), 0);
+        // 后续请求正常通过
+        assert!(cb.allow_request());
+    }
+
+    /// 半开后再次失败会重新累计，达到阈值后重新熔断
+    #[test]
+    fn test_half_open_failure_reopens_circuit() {
+        // 使用 1 秒恢复时间，确保重新熔断后短期内不立即恢复
+        let cb = CircuitBreaker::new(1, 1);
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        // 等待超过恢复时间，进入半开
+        std::thread::sleep(Duration::from_millis(1100));
+        assert!(cb.allow_request());
+        assert!(!cb.is_circuit_open());
+        // 立即再次失败（threshold=1），重新熔断
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        // 刚熔断，未过恢复时间，请求应被拒绝
+        assert!(!cb.allow_request());
+    }
+
+    /// 熔断打开状态下 record_success 直接关闭熔断器
+    #[test]
+    fn test_record_success_during_open_state() {
+        let cb = CircuitBreaker::new(2, 60);
+        cb.record_failure();
+        cb.record_failure();
+        assert!(cb.is_circuit_open());
+        // 未过恢复时间，但 record_success 仍可关闭
+        cb.record_success();
+        assert!(!cb.is_circuit_open());
+        assert_eq!(cb.failure_count.load(Ordering::Relaxed), 0);
+    }
+
+    /// 成功与失败交替时，失败计数被 record_success 重置，不累计熔断
+    #[test]
+    fn test_success_resets_failure_accumulation() {
+        let cb = CircuitBreaker::new(3, 60);
+        // 2 次失败 + 1 次成功 + 2 次失败，不应熔断
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_success();
+        cb.record_failure();
+        cb.record_failure();
+        assert!(!cb.is_circuit_open());
+        assert!(cb.allow_request());
+    }
 }

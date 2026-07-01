@@ -37,6 +37,9 @@ pub struct PoolConfig {
     /// 连接超时时间（秒）
     #[serde(default = "default_connect_timeout")]
     pub connect_timeout: u64,
+    /// 从连接池获取连接的超时时间（秒），池耗尽时超出该时间将返回错误而非无限期等待
+    #[serde(default = "default_acquire_timeout")]
+    pub acquire_timeout: u64,
     /// 空闲连接超时时间（秒）
     #[serde(default = "default_idle_timeout")]
     pub idle_timeout: u64,
@@ -57,6 +60,11 @@ fn default_connect_timeout() -> u64 {
     30
 }
 
+/// 获取连接的默认超时时间（秒），避免连接池耗尽时无限期等待
+fn default_acquire_timeout() -> u64 {
+    30
+}
+
 fn default_idle_timeout() -> u64 {
     600
 }
@@ -71,6 +79,7 @@ impl Default for PoolConfig {
             max_connections: default_max_connections(),
             min_connections: default_min_connections(),
             connect_timeout: default_connect_timeout(),
+            acquire_timeout: default_acquire_timeout(),
             idle_timeout: default_idle_timeout(),
             max_lifetime: default_max_lifetime(),
         }
@@ -100,6 +109,18 @@ pub struct DbConfig {
     /// 健康检查超时（秒）
     #[serde(default = "default_health_check_timeout")]
     pub health_check_timeout: u64,
+    /// 所属域编码（用于数据源归属识别，由 web-server [app] 节注入）
+    #[serde(default)]
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    #[serde(default)]
+    pub application_code: Option<String>,
+    /// 所属模块编码
+    #[serde(default)]
+    pub module_code: Option<String>,
+    /// 数据源类型：default-默认库，biz-业务库，other-其他
+    #[serde(default)]
+    pub source_type: Option<String>,
 }
 
 fn default_health_check_interval() -> u64 {

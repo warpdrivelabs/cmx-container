@@ -481,3 +481,131 @@ impl Default for AuthConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造一个 `StaticApiKeyConfig`，便于测试。
+    fn make_config(
+        key: &str,
+        key_prefix: Option<&str>,
+    ) -> StaticApiKeyConfig {
+        StaticApiKeyConfig {
+            key: key.to_string(),
+            key_prefix: key_prefix.map(|s| s.to_string()),
+            user_id: None,
+            service_name: None,
+            scopes: vec![],
+            description: None,
+        }
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_from_key_default() {
+        // 未显式配置 key_prefix，应从 key 前 8 位提取
+        let config = make_config("cmx_sk_Ab3dEf9hJkLmN2pQrStUvWxYz123456", None);
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(
+            prefix, "cmx_sk_A",
+            "未显式配置时应取 key 前 8 位作为 prefix"
+        );
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_explicit_value_used() {
+        // 显式配置的 key_prefix 应优先使用
+        let config = make_config(
+            "cmx_sk_Ab3dEf9hJkLmN2pQrStUvWxYz123456",
+            Some("custom_prefix"),
+        );
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(
+            prefix, "custom_prefix",
+            "显式配置的 key_prefix 应被使用"
+        );
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_explicit_empty_falls_back_to_key() {
+        // 显式配置空字符串时，应回退到从 key 提取
+        let config = make_config("cmx_sk_Ab3dEf9hJkLmN2pQrStUvWxYz123456", Some(""));
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(
+            prefix, "cmx_sk_A",
+            "显式空配置应回退到 key 前 8 位"
+        );
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_short_key_uses_whole_key() {
+        // key 长度不足 8 位时，应使用整个 key
+        let config = make_config("short", None);
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(
+            prefix, "short",
+            "短 key 应直接使用整个 key 作为 prefix"
+        );
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_exactly_8_chars() {
+        // key 恰好 8 位，应使用整个 key
+        let config = make_config("12345678", None);
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(
+            prefix, "12345678",
+            "8 位 key 应使用整个 key 作为 prefix"
+        );
+    }
+
+    #[test]
+    fn test_resolve_key_prefix_with_dev_key_pattern() {
+        // 模拟开发环境常用的 API Key 格式
+        let dev_key = "cmx_sk_dev_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6";
+        let config = make_config(dev_key, None);
+
+        let prefix = config.resolve_key_prefix();
+        assert_eq!(prefix, "cmx_sk_d");
+        assert_eq!(prefix.len(), 8);
+    }
+
+    #[test]
+    fn test_default_auth_config() {
+        // 验证 Default 实现符合预期
+        let config = AuthConfig::default();
+        assert_eq!(config.jwt.algorithm, "HS256");
+        assert_eq!(config.jwt.issuer, "cmx-auth");
+        assert_eq!(config.jwt.audience, "cmx-platform");
+        assert_eq!(config.token.access_ttl_secs, 1800);
+        assert_eq!(config.token.refresh_ttl_secs, 604800);
+        assert_eq!(config.argon2.memory_cost, 65536);
+        assert_eq!(config.argon2.time_cost, 3);
+        assert_eq!(config.argon2.parallelism, 4);
+        assert!(config.oauth2.is_none());
+        assert!(config.super_admin.is_some());
+    }
+
+    #[test]
+    fn test_super_admin_config_default() {
+        let sa = SuperAdminConfig::default();
+        assert_eq!(sa.username, "admin");
+        assert_eq!(sa.password, "cmxadmin");
+        assert!(sa.email.is_none());
+        assert_eq!(sa.roles, vec!["admin".to_string()]);
+    }
+
+    #[test]
+    fn test_builtin_whitelist_contains_auth_paths() {
+        // 验证内置白名单包含关键认证路径
+        assert!(BUILTIN_WHITELIST.contains(&"/api/auth/login"));
+        assert!(BUILTIN_WHITELIST.contains(&"/api/auth/refresh"));
+        assert!(BUILTIN_WHITELIST.contains(&"/health"));
+        assert!(BUILTIN_WHITELIST.contains(&"/swagger"));
+    }
+}

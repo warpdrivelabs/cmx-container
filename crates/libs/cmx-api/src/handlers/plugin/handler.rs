@@ -318,7 +318,8 @@ pub async fn plugin_deploy(
     tokio::fs::write(&file_path, &file_bytes).await
         .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
-    let abs_path = std::fs::canonicalize(&file_path)
+    let abs_path = tokio::fs::canonicalize(&file_path)
+        .await
         .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
 
     // 如果需要发布到市场，先解析插件定义并发布

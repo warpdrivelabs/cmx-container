@@ -710,20 +710,33 @@ impl ConfigManager {
     /// 返回全局配置的 Arc 引用（开销极低，仅原子计数器 +1）
     ///
     /// # Panics
-    /// 如果配置管理器未初始化则会 panic
+    /// 如果配置管理器未初始化则会 panic。
+    /// 若内部 RwLock 中毒（持有写锁时发生 panic）也会 panic。
+    ///
+    // TODO: 后续将 global() 改为返回 Result 以彻底消除 panic 风险。
+    // 当前影响 35+ 调用点，且 RwLock 中毒在实际中极难发生（reload() 已用 map_err 处理写锁错误），
+    // 故暂用 expect 带上下文替换裸 unwrap 作为过渡方案。
     pub fn global() -> Arc<Config> {
         let guard = GLOBAL_CONFIG
             .get()
             .expect("配置管理器未初始化，请先调用 ConfigManager::initialize()");
-        guard.read().unwrap().clone()
+        guard
+            .read()
+            .expect("配置管理器 RwLock 中毒，可能因 reload 过程中 panic 导致")
+            .clone()
     }
 
     /// 尝试获取全局配置实例
     ///
+    /// 与 [`global`](Self::global) 不同，此方法在任何情况下都不会 panic：
+    /// 未初始化或 RwLock 中毒时均返回 `None`。
+    ///
     /// # 返回值
-    /// 如果已初始化返回 Some(Arc<Config>)，否则返回 None
+    /// 如果已初始化且锁正常返回 Some(Arc<Config>)，否则返回 None
     pub fn try_global() -> Option<Arc<Config>> {
-        GLOBAL_CONFIG.get().map(|g| g.read().unwrap().clone())
+        GLOBAL_CONFIG
+            .get()
+            .and_then(|g| g.read().ok().map(|lock| lock.clone()))
     }
 
     /// 检查是否已初始化

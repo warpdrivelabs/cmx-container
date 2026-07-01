@@ -41,6 +41,9 @@ port = 443
     )
     .unwrap();
 
+    // SAFETY: `std::env::set_var` 在多线程环境下可能引发数据竞争。此处安全的前提是：
+    // 测试运行期间没有其他线程并发读写 `CONFIG_FILE` 环境变量。该变量名专用于本测试，
+    // 设置后立即加载配置并在加载完成后移除，假设 cargo 默认并行测试未触及同名变量。
     unsafe {
         std::env::set_var("CONFIG_FILE", &production_toml);
     }
@@ -50,6 +53,9 @@ port = 443
         .load()
         .unwrap();
 
+    // SAFETY: `std::env::remove_var` 在多线程环境下可能引发数据竞争，此处安全的前提是：
+    // 与上方 `set_var` 配对，且没有其他线程并发读写 `CONFIG_FILE`。
+    // 配置加载已完成，移除该变量以避免污染后续测试。
     unsafe {
         std::env::remove_var("CONFIG_FILE");
     }

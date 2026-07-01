@@ -1,14 +1,13 @@
 //! 服务编排 gRPC 服务端实现。
 //!
 //! 实现 [`CmxServiceOrchestrator`] trait，桥接 gRPC 请求到
-//! [`ServiceInvoker`]（编排执行）和 [`RuntimeInvoker`]（插件函数调用）。
+//! [`ServiceInvoker`]（编排执行）和 [`FunctionInvoker`]（插件函数调用）。
 
 use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
 use cmx_rpc_gen::cmx::cmx_service_orchestrator::cmx_service_orchestrator::cmx::*;
-use cmx_traits::plugin::PluginQuery;
-use cmx_traits::runtime::RuntimeInvoker;
+use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::service::ServiceInvoker;
 use tracing::instrument;
 
@@ -17,23 +16,19 @@ use tracing::instrument;
 pub struct CmxOrchestratorServerImpl {
     /// 服务编排调用器
     service_invoker: Arc<dyn ServiceInvoker>,
-    /// WASM 运行时调用器
-    runtime_invoker: Arc<dyn RuntimeInvoker>,
-    /// 插件查询（检查安装状态、获取 WASM 路径）
-    plugin_query: Arc<dyn PluginQuery>,
+    /// 插件函数调用器（封装 RuntimeInvoker + PluginQuery 的完整调用链）
+    function_invoker: Arc<dyn FunctionInvoker>,
 }
 
 impl CmxOrchestratorServerImpl {
     /// 创建新的服务编排 gRPC 服务端。
     pub fn new(
         service_invoker: Arc<dyn ServiceInvoker>,
-        runtime_invoker: Arc<dyn RuntimeInvoker>,
-        plugin_query: Arc<dyn PluginQuery>,
+        function_invoker: Arc<dyn FunctionInvoker>,
     ) -> Self {
         Self {
             service_invoker,
-            runtime_invoker,
-            plugin_query,
+            function_invoker,
         }
     }
 }
@@ -121,8 +116,7 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
     ) -> impl std::future::Future<
         Output = Result<volo_grpc::Response<CallFunctionResponse>, volo_grpc::Status>,
     > + Send {
-        let runtime_invoker = self.runtime_invoker.clone();
-        let plugin_query = self.plugin_query.clone();
+        let function_invoker = self.function_invoker.clone();
         async move {
             let req = req.into_inner();
             let plugin_id = req.plugin_id.to_string();
@@ -145,19 +139,18 @@ impl CmxServiceOrchestrator for CmxOrchestratorServerImpl {
                 format!("rpc-{}", uuid::Uuid::new_v4()),
             );
 
-            // ==================== 调用核心逻辑（cmx-biz） ====================
+            // ==================== 调用核心逻辑（通过 FunctionInvoker trait） ====================
 
-            match cmx_biz::function_invoker::invoke_plugin_function(
-                &runtime_invoker,
-                &plugin_query,
-                &plugin_id,
-                &function_name,
-                input_value,
-                initial_input,
-                svr_ctx,
-                req.debug,
-            )
-            .await
+            match function_invoker
+                .invoke_plugin_function(
+                    &plugin_id,
+                    &function_name,
+                    input_value,
+                    initial_input,
+                    svr_ctx,
+                    req.debug,
+                )
+                .await
             {
                 Ok(result) => {
                     let pb_resp = CallFunctionResponse {
@@ -199,7 +192,7 @@ fn execution_step_to_proto(step: cmx_core::ExecutionStep) -> ExecutionStep {
         node_id: step.node_id.into(),
         node_name: step.node_name.into(),
         node_type: step.node_type.into(),
-        status: cmx_biz::service_executor::step_status_to_str(&step.status).into(),
+        status: cmx_traits::step_status::step_status_to_str(&step.status).into(),
         output: step.output.map(|v| v.to_string().into()),
         elapsed_us: step.elapsed_us,
         error: step.error.map(|s| s.into()),

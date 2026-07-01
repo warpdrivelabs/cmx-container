@@ -151,6 +151,7 @@ impl OAuth2FlowService {
     /// # Errors
     ///
     /// * `AuthError::OAuth2` - state 无效/已过期或与 `client_id` 不匹配。
+    #[allow(clippy::too_many_arguments)]
     pub async fn login(
         &self,
         state: &str,

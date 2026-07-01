@@ -343,10 +343,12 @@ impl RuleEnforcer for RuleEnforcerImpl {
             .into_iter()
             .partition(|r| r.subject_type == "permission");
 
-        // 权限级校验：合并已有权限 + 待分配角色权限
+        // 权限级校验：合并已有权限 + 待分配角色权限（两个查询相互独立，并发执行）
         if !perm_rules.is_empty() {
-            let existing_perms = self.get_user_permission_ids(user_id).await?;
-            let new_perms = self.get_role_permission_ids(role_ids).await?;
+            let (existing_perms, new_perms) = tokio::try_join!(
+                self.get_user_permission_ids(user_id),
+                self.get_role_permission_ids(role_ids),
+            )?;
             let mut perm_set = existing_perms;
             perm_set.extend(new_perms);
             Self::check_exclusion(&perm_rules, &perm_set)?;
@@ -361,5 +363,152 @@ impl RuleEnforcer for RuleEnforcerImpl {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    /// 构造一条 LoadedRule 用于测试。
+    fn make_rule(
+        code: &str,
+        primary: &str,
+        excluded: &[&str],
+        message: Option<&str>,
+    ) -> LoadedRule {
+        LoadedRule {
+            id: format!("rule-{}", code),
+            code: code.to_string(),
+            name: format!("rule-{}", code),
+            subject_type: "permission".to_string(),
+            primary_subject_id: primary.to_string(),
+            violation_message: message.map(|s| s.to_string()),
+            excluded_ids: excluded.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    /// 无规则时不拦截（验证安全启用：规则表为空时校验直接通过）
+    #[test]
+    fn test_no_rules_no_violation() {
+        let rules: Vec<LoadedRule> = vec![];
+        let set: HashSet<String> = ["p1".to_string(), "p2".to_string()].into_iter().collect();
+        assert!(RuleEnforcerImpl::check_exclusion(&rules, &set).is_ok());
+    }
+
+    /// 有互斥规则时，同时包含主对象和任一互斥对象则违反
+    #[test]
+    fn test_primary_and_excluded_in_set_violation() {
+        let rules = vec![make_rule("R1", "p1", &["p2", "p3"], None)];
+        let set: HashSet<String> = ["p1".to_string(), "p2".to_string()].into_iter().collect();
+        let err = RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err();
+        match err {
+            IamError::RuleViolation { rule_code, message } => {
+                assert_eq!(rule_code, "R1");
+                assert!(message.contains("R1"));
+            }
+            other => panic!("期望 RuleViolation，实际: {:?}", other),
+        }
+    }
+
+    /// 不包含互斥对象则通过（包含主对象但不含任何互斥对象）
+    #[test]
+    fn test_primary_without_excluded_passes() {
+        let rules = vec![make_rule("R1", "p1", &["p2", "p3"], None)];
+        // 含主对象 p1，但只含无关权限 p4
+        let set: HashSet<String> = ["p1".to_string(), "p4".to_string()].into_iter().collect();
+        assert!(RuleEnforcerImpl::check_exclusion(&rules, &set).is_ok());
+    }
+
+    /// 主对象不在集合中则不违反（即使含互斥对象）
+    #[test]
+    fn test_excluded_without_primary_no_violation() {
+        let rules = vec![make_rule("R1", "p1", &["p2", "p3"], None)];
+        // 不含主对象 p1，仅含互斥对象 p2（互斥对象之间不互斥）
+        let set: HashSet<String> = ["p2".to_string(), "p3".to_string()].into_iter().collect();
+        assert!(RuleEnforcerImpl::check_exclusion(&rules, &set).is_ok());
+    }
+
+    /// 多个互斥对象时，任一匹配即违反
+    #[test]
+    fn test_multiple_excluded_any_match_violation() {
+        let rules = vec![make_rule("R1", "p1", &["p2", "p3", "p4"], None)];
+        // 主对象 p1 + 互斥对象 p4
+        let set: HashSet<String> = ["p1".to_string(), "p4".to_string()].into_iter().collect();
+        assert!(matches!(
+            RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err(),
+            IamError::RuleViolation { .. }
+        ));
+    }
+
+    /// 自定义违规消息被使用
+    #[test]
+    fn test_custom_violation_message_used() {
+        let rules = vec![make_rule("R1", "p1", &["p2"], Some("不能同时持有付款和审批权限"))];
+        let set: HashSet<String> = ["p1".to_string(), "p2".to_string()].into_iter().collect();
+        let err = RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err();
+        match err {
+            IamError::RuleViolation { message, .. } => {
+                assert_eq!(message, "不能同时持有付款和审批权限");
+            }
+            other => panic!("期望 RuleViolation，实际: {:?}", other),
+        }
+    }
+
+    /// 无自定义消息时使用默认格式
+    #[test]
+    fn test_default_message_when_no_custom() {
+        let rules = vec![make_rule("R1", "p1", &["p2"], None)];
+        let set: HashSet<String> = ["p1".to_string(), "p2".to_string()].into_iter().collect();
+        let err = RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err();
+        match err {
+            IamError::RuleViolation { rule_code, message } => {
+                assert_eq!(rule_code, "R1");
+                assert_eq!(message, "互斥规则违反 [R1]");
+            }
+            other => panic!("期望 RuleViolation，实际: {:?}", other),
+        }
+    }
+
+    /// 多规则时，第一个违反的规则被返回（按顺序遍历）
+    #[test]
+    fn test_multiple_rules_first_violation_returned() {
+        let rules = vec![
+            make_rule("R1", "p1", &["p2"], None),
+            make_rule("R2", "p3", &["p4"], None),
+        ];
+        // 同时违反 R1 和 R2
+        let set: HashSet<String> = ["p1", "p2", "p3", "p4"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let err = RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err();
+        match err {
+            IamError::RuleViolation { rule_code, .. } => {
+                assert_eq!(rule_code, "R1", "应返回第一个违反的规则");
+            }
+            other => panic!("期望 RuleViolation，实际: {:?}", other),
+        }
+    }
+
+    /// 多规则都不违反时通过
+    #[test]
+    fn test_multiple_rules_none_violated() {
+        let rules = vec![
+            make_rule("R1", "p1", &["p2"], None),
+            make_rule("R2", "p3", &["p4"], None),
+        ];
+        // 仅含主对象，不含任一互斥对象
+        let set: HashSet<String> = ["p1".to_string(), "p3".to_string()].into_iter().collect();
+        assert!(RuleEnforcerImpl::check_exclusion(&rules, &set).is_ok());
+    }
+
+    /// 空集合永不违反（即使有规则，无主对象则不触发）
+    #[test]
+    fn test_empty_subject_set_no_violation() {
+        let rules = vec![make_rule("R1", "p1", &["p2"], None)];
+        let set: HashSet<String> = HashSet::new();
+        assert!(RuleEnforcerImpl::check_exclusion(&rules, &set).is_ok());
     }
 }

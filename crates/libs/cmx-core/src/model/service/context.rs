@@ -179,10 +179,12 @@ pub struct SVRContext {
     pub time_in: DateTime<Utc>,
     /// 请求ID
     pub request_id: String,
-    /// 认证上下文（由 mw_auth 中间件或 gRPC interceptor 注入）
+    /// 认证上下文（由 mw_auth 中间件或 gRPC interceptor 注入）。
+    ///
+    /// `AuthContext` 仅含 user_id/username/roles/permissions/org_id/session_id/
+    /// device_type/auth_method，不含密码或令牌等敏感字段，可安全跨 WASM 边界序列化，
+    /// 供插件读取当前调用者身份。
     #[serde(default)]
-    //fixme 临时解决序列化问题，升级后要去掉
-    #[serde(skip)]
     pub auth_context: Option<AuthContext>,
 }
 

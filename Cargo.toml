@@ -41,7 +41,7 @@ resolver = "2"
 # Workspace 包级别的元数据配置
 [workspace.package]
 # 项目版本号
-version = "0.1.11"
+version = "0.1.12"
 # Rust Edition 版本，决定可用的语法特性
 edition = "2024"
 # 项目作者列表
@@ -50,47 +50,47 @@ authors = ["skylake@pansoft.com"]
 # Workspace 依赖统一管理，所有成员 crate 可共享这些依赖
 [workspace.dependencies]
 # 内部依赖 - 核心库
-cmx-core = { path = "crates/libs/cmx-core", version = "0.1.11", registry = "nora" }
+cmx-core = { path = "crates/libs/cmx-core", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 工具库
-cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.11", registry = "nora" }
+cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.12", registry = "nora" }
 # 内部依赖 - API
-cmx-api = { path = "crates/libs/cmx-api", version = "0.1.11", registry = "nora" }
+cmx-api = { path = "crates/libs/cmx-api", version = "0.1.12", registry = "nora" }
 # 内部依赖 - API 通用类型
-cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.11", registry = "nora" }
+cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 业务模型
-cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.11", registry = "nora" }
+cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据库
-cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.11", registry = "nora" }
+cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 缓存
-cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.11", registry = "nora" }
+cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 元数据
-cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.11", registry = "nora" }
+cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 插件
-cmx-plugin = { path = "crates/libs/cmx-plugin", version = "0.1.11", registry = "nora" }
+cmx-plugin = { path = "crates/libs/cmx-plugin", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 特征定义
-cmx-traits = { path = "crates/libs/cmx-traits", version = "0.1.11", registry = "nora" }
+cmx-traits = { path = "crates/libs/cmx-traits", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 运行时
-cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.11", registry = "nora" }
+cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 服务
-cmx-service = { path = "crates/libs/cmx-service", version = "0.1.11", registry = "nora" }
+cmx-service = { path = "crates/libs/cmx-service", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 插件SDK
-cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.11", registry = "nora" }
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 调试
-cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.11", registry = "nora" }
+cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.12", registry = "nora" }
 # 内部依赖 - Nacos
-#cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.11", registry = "nora" }
+#cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 注册中心与配置中心
-cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.11", registry = "nora" }
-cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.11", registry = "nora" }
+cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.12", registry = "nora" }
+cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.12", registry = "nora" }
 # 内部依赖 - RPC 代码生成
-cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.11", registry = "nora" }
+cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 存储
-cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.11", registry = "nora" }
+cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 审计日志
-cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.11", registry = "nora" }
-cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.11", registry = "nora" }
+cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.12", registry = "nora" }
+cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.12", registry = "nora" }
 # 内部依赖 - IAM 用户权限角色管理
-cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.11", registry = "nora" }
+cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）
 cmx-portal = { path = "crates/libs/cmx-portal", version = "0.1.11", registry = "nora" }
 # 内部依赖 - 门户系列共享基础设施（config / error / fsutil / util）
@@ -100,7 +100,7 @@ cmx-form = { path = "crates/libs/cmx-form", version = "0.1.11", registry = "nora
 # 内部依赖 - 模型中心（meta 相关：definitions / context_profile / dict 元数据建模）
 cmx-model = { path = "crates/libs/cmx-model", version = "0.1.11", registry = "nora" }
 # 内部依赖 - 过程宏
-cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.11", registry = "nora" }
+cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层
@@ -337,3 +337,8 @@ incremental = true
 # 运行时路径：是否在可执行文件中嵌入库搜索路径
 # 开发时通常关闭，发布到特定环境时可能需要开启
 rpath = false
+
+# 本地 patch：让 cmx-plugin-demo 通过 registry(nora) 声明的 cmx-plugin-sdk
+# 解析到本地 path，便于在 SDK 改动后本地验证 demo（发布时 demo 用 registry 新版）。
+[patch.nora]
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk" }

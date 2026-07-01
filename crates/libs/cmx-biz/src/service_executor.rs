@@ -21,7 +21,7 @@
 use std::sync::Arc;
 
 use cmx_core::model::service::SVRContext;
-use cmx_core::{ExecutionStep, OrchestrationError, StepStatus};
+use cmx_core::{ExecutionStep, OrchestrationError};
 use cmx_service::{DebugPrepareResult, ExecuteOptions};
 use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::RuntimeInvoker;
@@ -30,42 +30,9 @@ use serde_json::Value;
 
 use crate::BizError;
 
-/// 将 StepStatus 转换为稳定的字符串表示，避免依赖 Debug 格式
-///
-/// 统一 cmx-api（HTTP）和 cmx-rpc（gRPC）中重复的 StepStatus 转换逻辑。
-pub fn step_status_to_str(status: &StepStatus) -> &'static str {
-    match status {
-        StepStatus::Success => "Success",
-        StepStatus::Failed => "Failed",
-        StepStatus::Skipped => "Skipped",
-        StepStatus::DebugPaused => "DebugPaused",
-    }
-}
-
-/// 将 StepStatus 字符串表示解析回枚举（[`step_status_to_str`] 的逆运算）。
-///
-/// 统一 cmx-rpc 客户端/服务端的 StepStatus 反序列化逻辑，作为 str↔enum 双向转换的
-/// 单一来源。未知字符串降级为 `Failed` 并记录 warn。
-///
-/// # Arguments
-///
-/// * `status` - 由 [`step_status_to_str`] 产生的字符串。
-pub fn parse_step_status(status: &str) -> StepStatus {
-    match status {
-        "Success" => StepStatus::Success,
-        "Failed" => StepStatus::Failed,
-        "Skipped" => StepStatus::Skipped,
-        "DebugPaused" => StepStatus::DebugPaused,
-        _ => {
-            tracing::warn!(
-                target: "cmx_rpc",
-                raw_status = %status,
-                "收到未知的 StepStatus 字符串，按 Failed 处理（请升级 cmx-core 或检查版本对齐）"
-            );
-            StepStatus::Failed
-        }
-    }
-}
+// 重导出 StepStatus 字符串编解码工具（实现已迁移至 cmx_traits::step_status），
+// 保持 `cmx_biz::service_executor::{step_status_to_str, parse_step_status}` 路径向后兼容。
+pub use cmx_traits::step_status::{parse_step_status, step_status_to_str};
 
 /// 服务编排执行的核心结果（协议无关）
 ///

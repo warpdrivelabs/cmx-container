@@ -36,6 +36,18 @@ pub struct SysDatasource {
     /// 数据源来源：config-配置文件, manual-手动维护
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// 所属域编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_code: Option<String>,
+    /// 所属模块编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module_code: Option<String>,
+    /// 数据源类型：default-默认库，biz-业务库，other-其他
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
     /// 最大连接数
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_connections: Option<i32>,
@@ -121,6 +133,10 @@ fn default_source() -> Option<String> {
     Some("manual".to_string())
 }
 
+fn default_source_type() -> Option<String> {
+    Some("".to_string())
+}
+
 /// 创建请求 DTO
 ///
 /// 用于创建 SysDatasource 的请求数据，包含完整的数据库连接配置
@@ -145,6 +161,18 @@ pub struct SysDatasourceForCreate {
     /// 数据源来源：config-配置文件, manual-手动维护
     #[serde(default = "default_source")]
     pub source: Option<String>,
+    /// 所属域编码
+    #[serde(default)]
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    #[serde(default)]
+    pub application_code: Option<String>,
+    /// 所属模块编码
+    #[serde(default)]
+    pub module_code: Option<String>,
+    /// 数据源类型：default-默认库，biz-业务库，other-其他
+    #[serde(default = "default_source_type")]
+    pub source_type: Option<String>,
     /// 最大连接数
     #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,
@@ -197,6 +225,18 @@ pub struct SysDatasourceForUpdate {
     /// 数据源来源：config-配置文件, manual-手动维护
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// 所属域编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_code: Option<String>,
+    /// 所属应用编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_code: Option<String>,
+    /// 所属模块编码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module_code: Option<String>,
+    /// 数据源类型：default-默认库，biz-业务库，other-其他
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
     /// 最大连接数
     #[serde(default = "default_max_connections")]
     pub max_connections: Option<i32>,

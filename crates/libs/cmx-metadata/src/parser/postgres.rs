@@ -134,7 +134,7 @@ fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
     // 使用正则提取表名（支持 schema.table 和 引号格式）
     let re_table = Regex::new(
         r#"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?(\w+)"?\.)?"?(\w+)"?\s*\("#
-    ).unwrap();
+    ).expect("编译静态正则失败: CREATE TABLE 表名提取模式");
 
     let caps = re_table.captures(stmt).ok_or_else(|| {
         MetadataError::DdlParse(format!("无法解析 CREATE TABLE 语句: {}", &stmt[..stmt.len().min(100)]))
@@ -225,7 +225,7 @@ fn find_matching_paren(s: &str) -> Result<&str, MetadataError> {
             ')' => {
                 depth -= 1;
                 if depth == 0 {
-                    let s_start = start.unwrap();
+                    let s_start = start.expect("depth 归零时 start 必已设置（括号配对逻辑保证）");
                     return Ok(&s[s_start..i]);
                 }
             }

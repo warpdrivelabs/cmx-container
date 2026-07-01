@@ -276,7 +276,7 @@ impl RuntimeInvoker for ExtismEngine {
         }
 
         // 读取 WASM 字节（在锁外执行，避免长时间持锁）
-        let wasm_bytes = std::fs::read(wasm_path).map_err(|e| {
+        let wasm_bytes = tokio::fs::read(wasm_path).await.map_err(|e| {
             TraitError::WasmLoadFailed(format!("读取 WASM 文件 {:?} 失败: {}", wasm_path, e))
         })?;
 

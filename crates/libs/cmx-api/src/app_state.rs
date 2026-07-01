@@ -37,9 +37,9 @@ pub struct IamState {
 impl IamState {
     /// 获取 IamChecker 引用（用于 finalize_iam_state 注入到 UserServiceImpl）
     pub fn permission_checker_clone(&self) -> Arc<cmx_iam::IamChecker> {
-        self.iam_checker.clone().unwrap_or_else(|| {
-            panic!("IamChecker 未初始化");
-        })
+        self.iam_checker.clone().expect(
+            "IamChecker 未初始化：请在 finalize_iam_state 中完成注入后再调用本方法",
+        )
     }
 }
 

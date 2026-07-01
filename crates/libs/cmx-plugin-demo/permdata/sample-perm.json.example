@@ -1,0 +1,52 @@
+{
+  "name": "sample-perm",
+  "version": "1.0.0",
+  "description": "示例插件权限定义文件，演示 permdata/*.json 的结构和字段约定",
+  "permissions": [
+    {
+      "code": "sample:view",
+      "name": "示例-查看",
+      "resource_type": "api",
+      "sort_order": 10,
+      "description": "查看示例资源列表",
+      "status": 1
+    },
+    {
+      "code": "sample:create",
+      "name": "示例-创建",
+      "resource_type": "api",
+      "parent_code": "sample:view",
+      "sort_order": 20,
+      "description": "创建示例资源",
+      "status": 1
+    },
+    {
+      "code": "sample:update",
+      "name": "示例-更新",
+      "resource_type": "api",
+      "parent_code": "sample:view",
+      "sort_order": 30,
+      "description": "更新示例资源",
+      "status": 1
+    },
+    {
+      "code": "sample:delete",
+      "name": "示例-删除",
+      "resource_type": "api",
+      "parent_code": "sample:view",
+      "sort_order": 40,
+      "description": "删除示例资源",
+      "status": 1
+    },
+    {
+      "code": "sample:export",
+      "name": "示例-导出",
+      "resource_type": "button",
+      "parent_code": "sample:view",
+      "sort_order": 50,
+      "description": "导出示例资源（按钮权限）",
+      "extension": "{\"confirm\":true}",
+      "status": 1
+    }
+  ]
+}

@@ -19,30 +19,18 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use cmx_core::model::service::{FunctionInput, FunctionOutput, SVRContext};
+use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::{InvokeOptions, RuntimeInvoker};
 use serde_json::Value;
 
 use crate::BizError;
 
-/// 插件函数调用的核心结果（协议无关）
-///
-/// 封装 WASM 函数调用的执行结果，供 cmx-api / cmx-rpc 等协议层
-/// 转换为各自的响应格式（HTTP JSON / protobuf）。
-#[derive(Debug, Clone)]
-pub struct FunctionInvokeResult {
-    /// 是否执行成功
-    pub success: bool,
-    /// 函数执行结果（来自 FunctionOutput.result）
-    pub result: Value,
-    /// 执行耗时（微秒），来自 WasmInvokeResult.elapsed_us
-    pub elapsed_us: u64,
-    /// 错误信息（WASM 调用失败时包含）
-    pub error: Option<String>,
-    /// 调试信息（预留，调试模式下可能包含额外数据）
-    pub debug: Option<Value>,
-}
+// 重导出 FunctionInvokeResult，保持 `cmx_biz::function_invoker::FunctionInvokeResult`
+// 路径向后兼容（类型已迁移至 cmx_traits::function_invoker）。
+pub use cmx_traits::function_invoker::FunctionInvokeResult;
 
 /// 插件函数调用的核心逻辑（协议无关）
 ///
@@ -69,6 +57,7 @@ pub struct FunctionInvokeResult {
 /// - `Err(BizError)`: 基础设施错误（插件未安装、WASM 加载失败、序列化失败等）
 /// - `Ok(FunctionInvokeResult { success: false, ... })`: WASM 函数调用失败
 /// - `Ok(FunctionInvokeResult { success: true, ... })`: 调用成功
+#[allow(clippy::too_many_arguments)]
 pub async fn invoke_plugin_function(
     runtime: &Arc<dyn RuntimeInvoker>,
     plugin_query: &Arc<dyn PluginQuery>,
@@ -180,5 +169,56 @@ pub async fn invoke_plugin_function(
                 debug: None,
             })
         }
+    }
+}
+
+// ==================== FunctionInvoker trait 实现 ====================
+
+/// cmx-biz 的 [`FunctionInvoker`] 实现。
+///
+/// 持有 `RuntimeInvoker` 与 `PluginQuery` 运行时依赖，将 trait 调用委托给
+/// [`invoke_plugin_function`] 自由函数。供组装层（如 web-server）构造后注入
+/// cmx-rpc，使基础设施层无需直接依赖 cmx-biz。
+pub struct BizFunctionInvoker {
+    /// WASM 运行时调用器
+    runtime: Arc<dyn RuntimeInvoker>,
+    /// 插件查询器
+    plugin_query: Arc<dyn PluginQuery>,
+}
+
+impl BizFunctionInvoker {
+    /// 创建新的 `BizFunctionInvoker`。
+    pub fn new(
+        runtime: Arc<dyn RuntimeInvoker>,
+        plugin_query: Arc<dyn PluginQuery>,
+    ) -> Self {
+        Self { runtime, plugin_query }
+    }
+}
+
+#[async_trait]
+impl FunctionInvoker for BizFunctionInvoker {
+    async fn invoke_plugin_function(
+        &self,
+        plugin_id: &str,
+        function_name: &str,
+        input: Value,
+        initial_input: Option<Value>,
+        svr_ctx: SVRContext,
+        debug: bool,
+    ) -> Result<FunctionInvokeResult, cmx_traits::error::TraitError> {
+        // 委托给同名自由函数（通过全路径消歧，避免与 trait 方法递归）
+        invoke_plugin_function(
+            &self.runtime,
+            &self.plugin_query,
+            plugin_id,
+            function_name,
+            input,
+            initial_input,
+            svr_ctx,
+            debug,
+        )
+        .await
+        .map_err(cmx_traits::error::TraitError::from)
     }
 }

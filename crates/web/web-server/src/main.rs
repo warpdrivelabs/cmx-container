@@ -17,8 +17,9 @@ use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{
     build_audit_logger, init_auth_service, init_cache, init_datasources, finalize_iam_state, init_iam_services, init_infra, init_plugins, init_rpc,
-    init_runtime, init_services, init_service_invoker, init_storage, shutdown_infra,
+    init_runtime, init_services, init_service_invoker, init_storage, init_web_config, shutdown_infra,
 };
+use std::sync::Arc;
 use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
 use cmx_api::CmxAppState;
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
@@ -120,7 +121,10 @@ async fn main() -> Result<()> {
     init_datasources().await?;
     init_storage().await?;
 
-    let web_config = web_config();
+    init_web_config()
+        .map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
+    let web_config = web_config()
+        .map_err(|e| Error::ConfigError(format!("获取 Web 配置失败: {}", e)))?;
 
     cmx_debug::init();
     info!("调试会话管理器初始化完成");
@@ -165,10 +169,17 @@ async fn main() -> Result<()> {
 
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
     // 将 PluginDataImporter 透传给 gRPC 服务端，启用 CmxPluginDataService。
+    // 组装层构造 cmx-biz 的 BizFunctionInvoker（封装 RuntimeInvoker + PluginQuery）注入 cmx-rpc，
+    // 使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
+    let function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker> = Arc::new(
+        cmx_biz::function_invoker::BizFunctionInvoker::new(
+            cmx_runtime::GlobalExtismEngine::get_as_invoker(),
+            cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
+        ),
+    );
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
-        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
-        cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
+        function_invoker,
         plugin_data_importer.clone(),
     ).await?;
 

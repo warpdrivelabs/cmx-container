@@ -58,6 +58,30 @@ impl BizError {
     }
 }
 
+/// 支持 BizError 到 [`cmx_traits::error::TraitError`] 的转换。
+///
+/// 使 cmx-biz 实现 `FunctionInvoker` trait 时，可将基础设施错误统一映射为
+/// 抽象层错误类型（[`cmx_traits::error::TraitError`]），供 cmx-rpc 等基础设施层消费。
+/// 满足孤儿规则：BizError 为本 crate 定义类型。
+impl From<BizError> for cmx_traits::error::TraitError {
+    fn from(e: BizError) -> Self {
+        match e {
+            BizError::Business(msg) => cmx_traits::error::TraitError::Business(msg),
+            BizError::NotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
+            BizError::PluginInvoke(msg) => cmx_traits::error::TraitError::WasmInvokeFailed(msg),
+            BizError::Orchestration(msg) => cmx_traits::error::TraitError::OrchestrationFailed(msg),
+            BizError::Crud(err) => {
+                cmx_traits::error::TraitError::Internal(format!("数据库操作错误: {}", err))
+            }
+            BizError::Database(msg) => cmx_traits::error::TraitError::Internal(msg),
+            BizError::SerdeJson(err) => {
+                cmx_traits::error::TraitError::Internal(format!("JSON 解析错误: {}", err))
+            }
+            BizError::Internal(msg) => cmx_traits::error::TraitError::Internal(msg),
+        }
+    }
+}
+
 /// 支持 BizError 到 cmx_api_types::Error 的转换，
 /// 使 cmx-api handler 中可以使用 `?` 操作符传播业务层错误。
 impl From<BizError> for cmx_api_types::Error {

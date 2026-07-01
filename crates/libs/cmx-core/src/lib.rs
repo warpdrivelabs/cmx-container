@@ -15,4 +15,5 @@ pub use wasm_types::{
     WasmContext,
     WasmFunctionRequest, WasmFunctionResponse,
     ExecutionStep, StepStatus, OrchestrationError,
+    IamRequest, IamResponse, WasmUserDetails, WasmEffectivePermissions, WasmCheckResult,
 };

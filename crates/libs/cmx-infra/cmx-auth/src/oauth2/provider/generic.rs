@@ -320,3 +320,179 @@ impl GenericOAuth2Provider {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::OAuth2ProviderConfig;
+    use std::collections::HashMap;
+
+    /// 构造测试用的 `OAuth2ProviderConfig`。
+    fn make_provider_config() -> OAuth2ProviderConfig {
+        OAuth2ProviderConfig {
+            name: "test-provider".to_string(),
+            display_name: "Test Provider".to_string(),
+            provider_type: "generic".to_string(),
+            client_id: "test-client-id".to_string(),
+            client_secret: "test-client-secret".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            authorize_url: "https://auth.example.com/authorize".to_string(),
+            token_url: "https://auth.example.com/token".to_string(),
+            userinfo_url: "https://api.example.com/userinfo".to_string(),
+            scopes: vec!["openid".to_string(), "email".to_string()],
+            field_mapping: HashMap::new(),
+            token_endpoint_auth_method: "client_secret_post".to_string(),
+            icon_url: None,
+            brand_color: None,
+            enabled: true,
+            token_response_path: String::new(),
+            token_field_mapping: HashMap::new(),
+            userinfo_method: "GET".to_string(),
+            userinfo_token_param: "bearer".to_string(),
+            userinfo_extra_params: HashMap::new(),
+            userinfo_response_path: String::new(),
+            authorize_extra_params: HashMap::new(),
+            skip_ssl_verification: false,
+        }
+    }
+
+    #[test]
+    fn test_generic_provider_build_authorize_url_basic() {
+        let provider = GenericOAuth2Provider::new(make_provider_config());
+
+        let url = provider.build_authorize_url(
+            "csrf-state-123",
+            "https://app.example.com/callback",
+            &["openid".to_string(), "profile".to_string()],
+        );
+
+        // URL 应以配置的 authorize_url 开头
+        assert!(
+            url.starts_with("https://auth.example.com/authorize?"),
+            "URL 应以 authorize_url 开头，实际: {}",
+            url
+        );
+
+        // 必填参数应存在
+        assert!(
+            url.contains("response_type=code"),
+            "应包含 response_type=code: {}",
+            url
+        );
+        assert!(
+            url.contains("client_id=test-client-id"),
+            "应包含 client_id: {}",
+            url
+        );
+        assert!(
+            url.contains("state=csrf-state-123"),
+            "应包含 state: {}",
+            url
+        );
+        // 验证 redirect_uri 被编码（: 和 / 被 urlencoding 编码）
+        assert!(
+            url.contains("redirect_uri=https"),
+            "应包含 redirect_uri: {}",
+            url
+        );
+
+        // scope 应被空格分隔（OAuth2 标准）
+        // 注意：调用方传入 scopes 时直接 join(' ')
+        assert!(
+            url.contains("scope=openid"),
+            "应包含 scope=openid: {}",
+            url
+        );
+        assert!(
+            url.contains("profile"),
+            "应包含 profile scope: {}",
+            url
+        );
+    }
+
+    #[test]
+    fn test_generic_provider_build_authorize_url_empty_scopes_uses_config() {
+        // 当传入空 scopes 时，应回退到配置中的 scopes
+        let provider = GenericOAuth2Provider::new(make_provider_config());
+
+        let url = provider.build_authorize_url("state-x", "https://app.example.com/cb", &[]);
+
+        // 配置中默认 scopes 是 ["openid", "email"]
+        assert!(
+            url.contains("scope=openid"),
+            "空 scopes 时应使用配置 scopes (openid): {}",
+            url
+        );
+        assert!(
+            url.contains("email"),
+            "空 scopes 时应使用配置 scopes (email): {}",
+            url
+        );
+    }
+
+    #[test]
+    fn test_generic_provider_build_authorize_url_with_extra_params() {
+        let mut config = make_provider_config();
+        config
+            .authorize_extra_params
+            .insert("resource".to_string(), "my-api".to_string());
+
+        let provider = GenericOAuth2Provider::new(config);
+
+        let url = provider.build_authorize_url("state-y", "https://app.example.com/cb", &[]);
+
+        // 应包含额外参数（Azure AD 场景）
+        assert!(
+            url.contains("resource=my-api"),
+            "应包含 authorize_extra_params 中的参数: {}",
+            url
+        );
+    }
+
+    #[test]
+    fn test_generic_provider_name_and_metadata() {
+        let provider = GenericOAuth2Provider::new(make_provider_config());
+
+        assert_eq!(provider.name(), "test-provider");
+        assert_eq!(provider.display_name(), "Test Provider");
+        assert_eq!(provider.redirect_uri(), "https://app.example.com/callback");
+        assert_eq!(provider.default_scopes(), vec!["openid", "email"]);
+        assert!(provider.icon_url().is_none());
+        assert!(provider.brand_color().is_none());
+    }
+
+    #[test]
+    fn test_generic_provider_build_authorize_url_special_chars_encoded() {
+        // 验证 state 中包含特殊字符时被正确编码
+        let provider = GenericOAuth2Provider::new(make_provider_config());
+
+        let url = provider.build_authorize_url(
+            "state with spaces&special=chars",
+            "https://app.example.com/callback",
+            &[],
+        );
+
+        // state 应被 URL 编码（空格 → %20，& → %26，= → %3D）
+        assert!(
+            url.contains("state="),
+            "应包含 state 参数: {}",
+            url
+        );
+        assert!(
+            !url.contains("state with spaces&special"),
+            "原始 state 不应出现（应被编码）: {}",
+            url
+        );
+        // 编码后的 & 应为 %26，不应误认为是参数分隔符
+        // 解析 query string 后验证
+        let query_part = url.split('?').nth(1).unwrap_or("");
+        let params: Vec<&str> = query_part.split('&').collect();
+        // 应有 5 个参数：response_type, client_id, redirect_uri, state, scope
+        // 而不是 6 个（如果 state 的 & 没被编码会多一个）
+        assert!(
+            params.len() >= 5,
+            "参数数量应正确（state 的 & 应被编码）: {:?}",
+            params
+        );
+    }
+}

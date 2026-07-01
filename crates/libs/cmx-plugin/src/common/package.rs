@@ -432,3 +432,261 @@ impl Default for PackageUtils {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// 临时目录守卫，Drop 时自动清理
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("cmx_plugin_pkg_{}_{}", label, uuid::Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+
+        fn join(&self, rel: &str) -> PathBuf {
+            self.0.join(rel)
+        }
+
+        fn write(&self, name: &str, content: &str) {
+            fs::write(self.0.join(name), content).unwrap();
+        }
+
+        fn write_bytes(&self, name: &str, content: &[u8]) {
+            fs::write(self.0.join(name), content).unwrap();
+        }
+
+        fn create_dir(&self, rel: &str) -> PathBuf {
+            let p = self.0.join(rel);
+            fs::create_dir_all(&p).unwrap();
+            p
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    // ==================== PackageUtils::new / default ====================
+
+    #[test]
+    fn test_package_utils_new_stores_deps() {
+        let utils = PackageUtils::new(PackageUtilsDeps {
+            plugin_root: PathBuf::from("/tmp/plugins"),
+            temp_root: PathBuf::from("/tmp/temp"),
+            storage: None,
+        });
+        // 通过 config() 间接确认内部状态（PackageUtils 没有 getter，使用 default 行为验证）
+        // 这里主要验证不会 panic
+        let _ = utils.deps.plugin_root;
+    }
+
+    #[test]
+    fn test_package_utils_default_paths() {
+        let utils = PackageUtils::default();
+        // 默认配置应使用 ./plugins 与 ./temp
+        assert_eq!(utils.deps.plugin_root, PathBuf::from("./plugins"));
+        assert_eq!(utils.deps.temp_root, PathBuf::from("./temp"));
+        assert!(utils.deps.storage.is_none());
+    }
+
+    // ==================== find_plugin_root_in_dir ====================
+
+    #[test]
+    fn test_find_plugin_root_returns_dir_with_manifest_at_root() {
+        let dir = TempDir::new("root_manifest");
+        dir.write("manifest.json", "{}");
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, dir.path().to_path_buf());
+    }
+
+    #[test]
+    fn test_find_plugin_root_finds_in_immediate_subdir() {
+        let dir = TempDir::new("subdir_manifest");
+        let sub = dir.create_dir("plugin");
+        fs::write(sub.join("manifest.json"), "{}").unwrap();
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, sub);
+    }
+
+    #[test]
+    fn test_find_plugin_root_finds_in_nested_subdir() {
+        // 多层嵌套目录中查找 manifest.json
+        let dir = TempDir::new("nested_manifest");
+        let deep = dir.create_dir("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("manifest.json"), "{}").unwrap();
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, deep);
+    }
+
+    #[test]
+    fn test_find_plugin_root_returns_original_when_no_subdirs() {
+        // 既无根 manifest，也无任何子目录，应回退为原始目录
+        let dir = TempDir::new("no_manifest");
+        dir.write("readme.md", "hi");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, dir.path().to_path_buf());
+    }
+
+    #[test]
+    fn test_find_plugin_root_prefers_root_over_subdir() {
+        // 根目录已有 manifest.json，应优先返回根目录而非子目录
+        let dir = TempDir::new("prefer_root");
+        dir.write("manifest.json", "{\"root\":true}");
+        let sub = dir.create_dir("nested");
+        fs::write(sub.join("manifest.json"), "{\"nested\":true}").unwrap();
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, dir.path().to_path_buf());
+    }
+
+    #[test]
+    fn test_find_plugin_root_skips_files_in_listing() {
+        // 目录中混杂文件应不影响 manifest 查找
+        let dir = TempDir::new("mixed_entries");
+        dir.write("readme.md", "readme");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        let sub = dir.create_dir("actual_plugin");
+        fs::write(sub.join("manifest.json"), "{}").unwrap();
+
+        let found = PackageUtils::find_plugin_root_in_dir(dir.path()).unwrap();
+        assert_eq!(found, sub);
+    }
+
+    // ==================== prepare_package_for_validation ====================
+
+    #[test]
+    fn test_prepare_package_for_validation_directory_passes_through() {
+        // 目录路径应直接返回 (path, false)，无需解压
+        let dir = TempDir::new("prepare_dir");
+        dir.write("manifest.json", "{}");
+
+        let utils = PackageUtils::default();
+        let temp = TempDir::new("prepare_temp");
+        let (extract_path, needs_cleanup) = utils
+            .prepare_package_for_validation(dir.path(), temp.path(), "测试")
+            .unwrap();
+        assert_eq!(extract_path, dir.path().to_path_buf());
+        assert!(!needs_cleanup, "目录形式不应需要清理");
+    }
+
+    #[test]
+    fn test_prepare_package_for_validation_unsupported_format_errors() {
+        // 既非 .zip 也非目录的文件应报错
+        let dir = TempDir::new("prepare_bad");
+        let bad_path = dir.join("not_a_zip.txt");
+        fs::write(&bad_path, b"plain text").unwrap();
+
+        let utils = PackageUtils::default();
+        let temp = TempDir::new("prepare_bad_temp");
+        let result = utils.prepare_package_for_validation(&bad_path, temp.path(), "测试");
+        assert!(result.is_err(), "不支持的格式应返回错误");
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("不支持的插件包格式"), "应报告不支持格式: {}", err);
+    }
+
+    #[test]
+    fn test_prepare_package_for_validation_zip_extracts_and_needs_cleanup() {
+        // ZIP 应解压到临时目录，并标记需要清理
+        let dir = TempDir::new("prepare_zip");
+        let zip_path = dir.join("plugin.zip");
+        write_zip(&zip_path, &[("manifest.json", b"{}"), ("plugin.wasm", b"\0asm")]);
+
+        let utils = PackageUtils::default();
+        let temp = TempDir::new("prepare_zip_temp");
+        let (extract_path, needs_cleanup) = utils
+            .prepare_package_for_validation(&zip_path, temp.path(), "测试")
+            .unwrap();
+        assert!(needs_cleanup, "ZIP 解压结果应需要清理");
+        // 解压目录应包含 manifest.json
+        assert!(extract_path.join("manifest.json").exists(), "应解压出 manifest.json");
+    }
+
+    // ==================== extract_zip / copy_plugin_files 集成 ====================
+
+    #[test]
+    fn test_extract_zip_creates_files_in_target() {
+        let dir = TempDir::new("extract");
+        let zip_path = dir.join("plugin.zip");
+        write_zip(
+            &zip_path,
+            &[
+                ("manifest.json", b"{\"id\":\"p\"}"),
+                ("plugin.wasm", b"\0asm"),
+                ("readme.md", b"docs"),
+            ],
+        );
+
+        let target = dir.create_dir("out");
+        let utils = PackageUtils::default();
+        utils.extract_zip(&zip_path, &target, "测试").unwrap();
+
+        assert!(target.join("manifest.json").exists());
+        assert!(target.join("plugin.wasm").exists());
+        assert!(target.join("readme.md").exists());
+    }
+
+    #[test]
+    fn test_copy_plugin_files_copies_recursively() {
+        let dir = TempDir::new("copy_src");
+        dir.write("manifest.json", "{}");
+        dir.write_bytes("plugin.wasm", b"\0asm");
+        let sub = dir.create_dir("sub");
+        fs::write(sub.join("data.json"), b"{}").unwrap();
+
+        let target = TempDir::new("copy_dst").join("dest");
+        let utils = PackageUtils::default();
+        utils.copy_plugin_files(dir.path(), &target, "测试").unwrap();
+
+        assert!(target.join("manifest.json").exists());
+        assert!(target.join("plugin.wasm").exists());
+        assert!(target.join("sub").join("data.json").exists());
+    }
+
+    #[test]
+    fn test_copy_plugin_files_source_not_exist_no_error() {
+        // 源不是目录时（如不存在），copy_plugin_files 不应报错（实现：仅在 source.is_dir() 时复制）
+        let utils = PackageUtils::default();
+        let result = utils.copy_plugin_files(
+            Path::new("/nonexistent/path/xyz"),
+            Path::new("/tmp/dest"),
+            "测试",
+        );
+        assert!(result.is_ok(), "源目录不存在时不应报错");
+    }
+
+    /// 构造一个 ZIP 文件到指定路径
+    fn write_zip(zip_path: &Path, entries: &[(&str, &[u8])]) {
+        use std::io::{Cursor, Write};
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
+        let buf = Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let options = SimpleFileOptions::default();
+        for (name, data) in entries {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        let buf = zip.finish().unwrap().into_inner();
+        fs::write(zip_path, &buf).unwrap();
+    }
+}

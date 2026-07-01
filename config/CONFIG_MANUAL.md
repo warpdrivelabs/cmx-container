@@ -8,6 +8,7 @@
 
 - [服务器配置](#服务器配置)
 - [Web 服务配置](#web-服务配置)
+- [应用标识配置](#应用标识配置)
 - [数据库配置](#数据库配置)
 - [Redis 配置](#redis-配置)
 - [WASM 运行时配置](#wasm-运行时配置)
@@ -76,6 +77,40 @@
 
 ---
 
+## 应用标识配置
+
+### `[app]`
+
+当前实例所属的域/应用/模块标识，用于数据源过滤。`load_active_datasources` 仅加载归属本实例域的数据源，`persist_datasource_configs` 持久化时也按此标识查重。
+
+支持环境变量覆盖：`APP__DOMAIN_CODE` / `APP__APPLICATION_CODE` / `APP__MODULE_CODE`（双下划线分隔层级，详见 [ENV_MANUAL.md](ENV_MANUAL.md)）。
+
+#### `domain_code`
+
+- **类型**: string
+- **必需**: 是
+- **默认值**: `"default"`
+- **说明**: 当前实例所属域编码，用于过滤该实例应加载的数据源
+- **示例**: `"default"`、`"finance"`、`"logistics"`
+
+#### `application_code`
+
+- **类型**: string
+- **必需**: 是
+- **默认值**: `"default"`
+- **说明**: 当前实例所属应用编码
+- **示例**: `"default"`、`"erp"`、`"wms"`
+
+#### `module_code`
+
+- **类型**: string
+- **必需**: 是
+- **默认值**: `"default"`
+- **说明**: 当前实例所属模块编码
+- **示例**: `"default"`、`"order"`、`"inventory"`
+
+---
+
 ## 数据库配置
 
 ### `[[databases]]`
@@ -115,6 +150,18 @@
 - **默认值**: `false`
 - **说明**: 是否为默认数据库。多个数据源时只能有一个为 `true`
 
+#### `source_type`
+
+- **类型**: String (enum)
+- **必需**: 否
+- **默认值**: 未配置时按 `default` 标志判定（`default=true` → `"default"`，否则 → `"other"`）
+- **说明**: 数据源类型，标识库的用途分类，与 `default` 正交共存
+- **可选值**:
+    - `default` - 默认库（系统核心库）
+    - `biz` - 业务库（业务数据）
+    - `other` - 其他
+- **示例**: `"biz"`
+
 #### `db_schema`
 
 - **类型**: String
@@ -148,7 +195,14 @@
 - **类型**: Integer (秒)
 - **必需**: 否
 - **默认值**: `30`
-- **说明**: 获取连接的超时时间
+- **说明**: TCP 连接建立超时时间（保留字段）。从连接池获取连接的超时请使用 `acquire_timeout`
+
+#### `acquire_timeout`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: 从连接池获取连接的超时时间。连接池耗尽时，等待可用连接超过该时间将返回错误，而非无限期等待。适用于 PostgreSQL、MySQL、SQLite 三种数据库的连接池
 
 #### `idle_timeout`
 
@@ -1485,8 +1539,8 @@ IAM（Identity and Access Management）权限管理配置，控制用户、角�
 
 - **类型**: Boolean
 - **必需**: 否
-- **默认值**: `false`
-- **说明**: 是否启用互斥规则校验（Separation of Duties）。开启后，在分配角色/权限时会校验互斥规则（功能权限互斥 + 角色互斥）。需配合 `cmx_exclusion_rule` 表配置规则数据。关闭时所有互斥校验跳过
+- **默认值**: `true`
+- **说明**: 是否启用 SoD（职责分离互斥）规则校验（Separation of Duties）。开启后，在分配角色/权限时会校验互斥规则（功能权限互斥 + 角色互斥）。规则数据存储于 `cmx_exclusion_rule` 表；当规则表为空时校验直接通过（无规则=不拦截），可安全开启。关闭时所有互斥校验跳过。如需停用可显式设为 `false`
 - **示例**: `true`
 
 #### `assignment_cleanup_interval_secs`

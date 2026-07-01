@@ -97,7 +97,9 @@ impl RedisConfig {
 
     /// 从通用 Config 读取 Redis 配置
     pub fn from_config(config: &Config) -> Self {
-        let url = config.get_string("redis.url").unwrap();
+        let url = config
+            .get_string("redis.url")
+            .expect("Redis 配置缺失: redis.url 未配置");
 
         let mode_str = config
             .get_string("redis.mode")

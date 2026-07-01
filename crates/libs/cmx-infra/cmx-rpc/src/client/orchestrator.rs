@@ -247,13 +247,11 @@ impl RpcServiceBundle for OrchestratorBundle {
 
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration {
         let service_invoker = deps.service_invoker.clone();
-        let runtime_invoker = deps.runtime_invoker.clone();
-        let plugin_query = deps.plugin_query.clone();
+        let function_invoker = deps.function_invoker.clone();
         ServerRegistration::new(move |server| {
             let impl_ = crate::server::orchestrator::CmxOrchestratorServerImpl::new(
                 service_invoker,
-                runtime_invoker,
-                plugin_query,
+                function_invoker,
             );
             let svc = volo_grpc::server::ServiceBuilder::new(
                 CmxServiceOrchestratorServer::new(impl_),
@@ -264,7 +262,7 @@ impl RpcServiceBundle for OrchestratorBundle {
     }
 }
 
-// ==================== proto 转换（step_status 统一到 cmx-biz 单一来源）====================
+// ==================== proto 转换（step_status 统一到 cmx-traits 单一来源）====================
 
 /// 将 protobuf 响应转换为 [`CallServiceResponse`]。
 fn proto_to_call_service_response(resp: ExecuteServiceResponse) -> CallServiceResponse {
@@ -280,8 +278,8 @@ fn proto_to_call_service_response(resp: ExecuteServiceResponse) -> CallServiceRe
                 node_id: s.node_id.to_string(),
                 node_name: s.node_name.to_string(),
                 node_type: s.node_type.to_string(),
-                // 统一到 cmx-biz 单一来源（str → enum）
-                status: cmx_biz::service_executor::parse_step_status(s.status.as_str()),
+                // 统一到单一来源（str → enum），位于 cmx-traits 抽象层
+                status: cmx_traits::step_status::parse_step_status(s.status.as_str()),
                 output: s.output.map(|v| safe_parse_json(&v, "step.output")),
                 elapsed_us: s.elapsed_us,
                 error: s.error.map(|e| e.to_string()),

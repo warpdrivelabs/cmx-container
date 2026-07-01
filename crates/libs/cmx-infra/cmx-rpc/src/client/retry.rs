@@ -128,7 +128,13 @@ where
         }
     }
 
-    unreachable!("retry loop must return before exiting")
+    // 循环不变式：每次迭代必经三条出口之一返回 ——
+    //   1) 预算耗尽 return（第 74-87 行）；
+    //   2) 调用成功 return（第 107 行）；
+    //   3) 最终失败 return（第 126 行）。
+    // continue 仅在 attempt < max_retries 时发生，故最后一次迭代必走出口 1 或 3。
+    // 若未来改动破坏该不变式，此 unreachable 会在运行时以清晰消息暴露。
+    unreachable!("重试循环应在预算耗尽/成功/最终失败三条路径之一返回，不应执行到此处")
 }
 
 #[cfg(test)]
