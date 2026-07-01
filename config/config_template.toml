@@ -24,6 +24,19 @@ port = 8080
 web_folder = "./web-folder"
 
 # ============================================
+# 应用标识配置
+# ============================================
+# 当前实例所属的域/应用/模块，用于数据源过滤（load_active_datasources 仅加载归属本实例域的数据源）。
+# 支持环境变量覆盖：APP__DOMAIN_CODE / APP__APPLICATION_CODE / APP__MODULE_CODE
+[app]
+# 所属域编码（必需，默认 default）
+domain_code = "default"
+# 所属应用编码（必需，默认 default）
+application_code = "default"
+# 所属模块编码（必需，默认 default）
+module_code = "default"
+
+# ============================================
 # 数据库配置
 # ============================================
 # databases 是一个数组，可以配置多个数据源
@@ -40,6 +53,9 @@ db_url = "postgresql://postgres:postgres@localhost:5432/cmx"
 # 是否为默认数据库，默认为 false
 # 多个数据源时只有一个应为 true
 default = true
+## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+## 取值：default-默认库，biz-业务库，other-其他
+# source_type = "default"
 ## 数据库 schema（可选，PostgreSQL 默认为 public）
 # db_schema = "public"
 
@@ -73,6 +89,7 @@ health_check_timeout = 5
 # db_type = "postgres"
 # db_url = "postgresql://user:password@192.168.1.100:5432/cmx"
 # default = false
+## source_type = "biz"
 # [databases.pool_config]
 # max_connections = 10
 # min_connections = 2
