@@ -18,3 +18,5 @@ pub mod event_publisher;
 pub mod persistence;
 pub mod runtime_ops;
 pub mod executor;
+pub mod module_install;
+pub mod module_export;

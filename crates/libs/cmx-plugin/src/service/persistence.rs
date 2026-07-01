@@ -226,18 +226,30 @@ impl PluginPersistence {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
-        // 11. DDL 操作（分布式锁保护）
-        crate::service::utils::execute_ddl_with_lock(
-            &self.deps.lock_manager,
+        // 11. 种子数据初始化(建表 DDL 已迁移到模块安装流程,但 seeddata 保留在插件包内)
+        // TODO(module): 建表 execute_ddl_with_lock 已迁移到模块安装流程(ModuleInstallService),
+        // 单独安装插件时不再自动建表。但种子数据初始化仍随插件执行(seeddata 在插件包内)。
+        // crate::service::utils::execute_ddl_with_lock(
+        //     &self.deps.lock_manager,
+        //     &target_db_id,
+        //     &plugin_id,
+        //     &app_id,
+        //     &install_version,
+        //     &install_path,
+        //     &plugin_def,
+        //     Some(txn_guard.txn_id()),
+        // )
+        // .await?;
+        if let Err(e) = crate::service::utils::execute_seed_data(
             &target_db_id,
             &plugin_id,
-            &app_id,
-            &install_version,
             &install_path,
             &plugin_def,
-            Some(txn_guard.txn_id()),
         )
-        .await?;
+        .await
+        {
+            tracing::warn!("插件 {} 种子数据初始化失败(不阻断安装): {}", plugin_id, e);
+        }
 
         // 12. 构建数据库记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
@@ -467,18 +479,30 @@ impl PluginPersistence {
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
-        // 11. DDL 操作（分布式锁保护）
-        crate::service::utils::execute_ddl_with_lock(
-            &self.deps.lock_manager,
+        // 11. 种子数据初始化(建表 DDL 已迁移到模块安装流程,但 seeddata 保留在插件包内)
+        // TODO(module): 建表 execute_ddl_with_lock 已迁移到模块安装流程,升级插件时不再自动建表。
+        // 但种子数据初始化仍随插件执行(seeddata 在插件包内)。
+        // crate::service::utils::execute_ddl_with_lock(
+        //     &self.deps.lock_manager,
+        //     &target_db_id,
+        //     &plugin_id,
+        //     &app_id,
+        //     &new_version,
+        //     &install_path,
+        //     &plugin_def,
+        //     Some(txn_guard.txn_id()),
+        // )
+        // .await?;
+        if let Err(e) = crate::service::utils::execute_seed_data(
             &target_db_id,
             &plugin_id,
-            &app_id,
-            &new_version,
             &install_path,
             &plugin_def,
-            Some(txn_guard.txn_id()),
         )
-        .await?;
+        .await
+        {
+            tracing::warn!("插件 {} 种子数据初始化失败(不阻断升级): {}", plugin_id, e);
+        }
 
         // 12. 构建数据库记录
         let (zip_source_type, zip_source_url) = extract_source_info(&request.source);

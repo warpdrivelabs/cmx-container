@@ -26,6 +26,8 @@ cmx-service = { workspace = true }
 cmx-storage = { workspace = true }
 # 内部依赖 - 统一审计
 cmx-audit = { workspace = true }
+# 内部依赖 - 业务层(模块版本管理)
+cmx-biz = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化

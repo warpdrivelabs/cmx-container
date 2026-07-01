@@ -602,6 +602,11 @@ impl PluginManager {
         &self.repository
     }
 
+    /// 获取安装服务(供 ModuleInstallService 复用安装插件子包)
+    pub fn install_service(&self) -> &crate::service::install::InstallService {
+        &self.install_service
+    }
+
     /// 获取缓存管理器
     pub fn cache(&self) -> &Arc<LayeredCacheManager> {
         &self.cache
