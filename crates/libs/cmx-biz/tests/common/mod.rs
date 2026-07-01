@@ -27,7 +27,11 @@ pub async fn setup_db_manager() -> DatabaseManager {
         pool_config,
         health_check_interval: 60,
         health_check_timeout: 5,
+        domain_code: None,
+        application_code: None,
+        module_code: None,
         default: true,
+        source_type: None,
     };
     let manager = DatabaseManager::new(DatabaseManagerConfig::default());
     manager
