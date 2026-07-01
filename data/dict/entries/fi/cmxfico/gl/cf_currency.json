@@ -1,0 +1,54 @@
+[
+ {
+  "code": "CNY",
+  "name": "人民币",
+  "status": 1,
+  "symbol": "¥",
+  "decimals": 2,
+  "sortKey": "000001",
+  "fullText": "CNY 人民币",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "USD",
+  "name": "美元",
+  "status": 1,
+  "symbol": "$",
+  "decimals": 2,
+  "sortKey": "000002",
+  "fullText": "USD 美元",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "EUR",
+  "name": "欧元",
+  "status": 1,
+  "symbol": "€",
+  "decimals": 2,
+  "sortKey": "000003",
+  "fullText": "EUR 欧元",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "KZT",
+  "name": "坚戈",
+  "status": 1,
+  "symbol": "₸",
+  "decimals": 2,
+  "sortKey": "000004",
+  "fullText": "KZT 坚戈",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

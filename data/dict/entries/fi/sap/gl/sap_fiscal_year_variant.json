@@ -1,0 +1,13 @@
+[
+  {
+    "id": "K4",
+    "code": "K4",
+    "name": "日历年(1-12月)",
+    "status": 1,
+    "calendar_year": 1,
+    "posting_periods": 12,
+    "special_periods": 4,
+    "sortKey": "000001",
+    "fullText": "K4 日历年(1-12月)"
+  }
+]

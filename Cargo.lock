@@ -855,12 +855,14 @@ dependencies = [
  "cmx-iam",
  "cmx-metadata",
  "cmx-plugin",
+ "cmx-portal",
  "cmx-rpc",
  "cmx-service",
  "cmx-storage",
  "cmx-traits",
  "cmx-utils",
  "derive_more",
+ "futures",
  "modql 0.5.0",
  "percent-encoding",
  "regex",
@@ -1108,6 +1110,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmx-form"
+version = "0.1.11"
+dependencies = [
+ "chrono",
+ "cmx-portal-base",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.149",
+]
+
+[[package]]
 name = "cmx-iam"
 version = "0.1.11"
 dependencies = [
@@ -1160,6 +1172,18 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "cmx-model"
+version = "0.1.11"
+dependencies = [
+ "chrono",
+ "cmx-portal-base",
+ "regex",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.149",
+ "tokio",
 ]
 
 [[package]]
@@ -1245,6 +1269,35 @@ dependencies = [
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.149",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "cmx-portal"
+version = "0.1.11"
+dependencies = [
+ "chrono",
+ "cmx-form",
+ "cmx-model",
+ "cmx-portal-base",
+ "futures-util",
+ "regex",
+ "reqwest",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.149",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cmx-portal-base"
+version = "0.1.11"
+dependencies = [
+ "cmx-api-types",
+ "cmx-utils",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.149",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -6111,6 +6164,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap 2.13.0",
  "itoa 1.0.17",
  "memchr 2.8.0",
  "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -7506,8 +7560,15 @@ dependencies = [
  "serde_json 1.0.149",
  "url",
  "utoipa",
+ "utoipa-swagger-ui-vendored",
  "zip 3.0.0",
 ]
+
+[[package]]
+name = "utoipa-swagger-ui-vendored"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2eebbbfe4093922c2b6734d7c679ebfebd704a0d7e56dfcb0d05818ce28977d"
 
 [[package]]
 name = "uuid"

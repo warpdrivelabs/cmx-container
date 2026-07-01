@@ -1,0 +1,29 @@
+[
+  {
+    "id": "G001",
+    "code": "G001",
+    "name": "一般科目",
+    "status": 1,
+    "field_status_variant": "1000",
+    "sortKey": "000001",
+    "fullText": "G001 一般科目"
+  },
+  {
+    "id": "G004",
+    "code": "G004",
+    "name": "成本科目",
+    "status": 1,
+    "field_status_variant": "1000",
+    "sortKey": "000002",
+    "fullText": "G004 成本科目"
+  },
+  {
+    "id": "G067",
+    "code": "G067",
+    "name": "往来科目",
+    "status": 1,
+    "field_status_variant": "1000",
+    "sortKey": "000003",
+    "fullText": "G067 往来科目"
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "nodes": {
+    "help-demo-node": {
+      "id": "help-demo-node",
+      "name": "示例工作台",
+      "icon": "workflow-tasks",
+      "details": "帮助 node: 链接演示节点",
+      "workspace": {
+        "content": {
+          "caption": "示例工作台",
+          "icon": "workflow-tasks",
+          "views": [
+            {
+              "tabLabel": "概览",
+              "type": "placeholder",
+              "data": {
+                "title": "来自帮助 node: 链接打开的示例工作台"
+              }
+            }
+          ]
+        }
+      },
+      "updatedAt": "2026-06-27T17:12:54.600Z"
+    }
+  }
+}

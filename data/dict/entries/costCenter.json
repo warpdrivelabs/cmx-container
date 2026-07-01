@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "code": "CC-RD-01",
+    "name": "软件研发-基础平台",
+    "accountCode": "6001",
+    "orgCode": "HQ",
+    "sortKey": "1",
+    "fullText": "CC-RD-01 软件研发-基础平台"
+  },
+  {
+    "id": 2,
+    "code": "CC-RD-02",
+    "name": "软件研发-产品研发",
+    "accountCode": "6001",
+    "orgCode": "HQ",
+    "sortKey": "2",
+    "fullText": "CC-RD-02 软件研发-产品研发"
+  },
+  {
+    "id": 3,
+    "code": "CC-RD-03",
+    "name": "硬件研发-芯片设计",
+    "accountCode": "6001",
+    "orgCode": "HQ",
+    "sortKey": "3",
+    "fullText": "CC-RD-03 硬件研发-芯片设计"
+  },
+  {
+    "id": 4,
+    "code": "CC-MG-01",
+    "name": "行政管理",
+    "accountCode": "6002",
+    "orgCode": "HQ",
+    "sortKey": "4",
+    "fullText": "CC-MG-01 行政管理"
+  },
+  {
+    "id": 5,
+    "code": "CC-MG-02",
+    "name": "财务管理",
+    "accountCode": "6002",
+    "orgCode": "HQ",
+    "sortKey": "5",
+    "fullText": "CC-MG-02 财务管理"
+  },
+  {
+    "id": 6,
+    "code": "CC-MG-03",
+    "name": "人力资源管理",
+    "accountCode": "6002",
+    "orgCode": "HQ",
+    "sortKey": "6",
+    "fullText": "CC-MG-03 人力资源管理"
+  },
+  {
+    "id": 7,
+    "code": "CC-BJ-01",
+    "name": "北京销售-华北区",
+    "accountCode": "5001",
+    "orgCode": "BJ",
+    "sortKey": "7",
+    "fullText": "CC-BJ-01 北京销售-华北区"
+  },
+  {
+    "id": 8,
+    "code": "CC-BJ-02",
+    "name": "北京销售-东北区",
+    "accountCode": "5001",
+    "orgCode": "BJ",
+    "sortKey": "8",
+    "fullText": "CC-BJ-02 北京销售-东北区"
+  },
+  {
+    "id": 9,
+    "code": "CC-SH-01",
+    "name": "上海销售-华东区",
+    "accountCode": "5001",
+    "orgCode": "SH",
+    "sortKey": "9",
+    "fullText": "CC-SH-01 上海销售-华东区"
+  },
+  {
+    "id": 10,
+    "code": "CC-SH-02",
+    "name": "上海销售-华南区",
+    "accountCode": "5001",
+    "orgCode": "SH",
+    "sortKey": "10",
+    "fullText": "CC-SH-02 上海销售-华南区"
+  }
+]

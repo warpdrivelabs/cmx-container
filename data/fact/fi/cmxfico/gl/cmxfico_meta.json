@@ -1,0 +1,13 @@
+{
+  "title": "cmx-fico 凭证(CNPC)",
+  "levels": [
+    "batch",
+    "headers",
+    "account_lines",
+    "aux_lines"
+  ],
+  "total": 8,
+  "pageSize": 3,
+  "totalPages": 3,
+  "voucherCount": 100
+}

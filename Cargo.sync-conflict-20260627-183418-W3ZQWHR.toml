@@ -1,0 +1,330 @@
+# Cargo Workspace 配置文件
+[workspace]
+# Workspace 成员列表,包含本项目的所有 crate
+members = [
+    "crates/libs/cmx-core",
+    "crates/libs/cmx-utils",
+    "crates/libs/cmx-metadata",
+    "crates/libs/cmx-plugin",
+    "crates/libs/cmx-traits",
+    "crates/libs/cmx-runtime",
+    "crates/libs/cmx-service",
+    "crates/libs/cmx-infra/cmx-database",
+    "crates/libs/cmx-infra/cmx-buffer",
+#    "crates/libs/cmx-infra/cmx-nacos",
+    "crates/libs/cmx-infra/cmx-registry-config",
+    "crates/libs/cmx-infra/cmx-storage",
+    "crates/libs/cmx-infra/cmx-audit",
+    "crates/libs/cmx-infra/cmx-auth",
+    "crates/web/web-server",
+    "crates/libs/cmx-api",
+    "crates/libs/cmx-api-types",
+    "crates/libs/cmx-biz",
+    "crates/libs/cmx-iam",
+    "crates/libs/cmx-macros",
+    "crates/libs/cmx-plugin-sdk",
+#    "crates/libs/cmx-wasmdemo",
+    "crates/libs/cmx-plugin-demo",
+    "crates/libs/cmx-debug",
+    "crates/libs/cmx-portal",
+    "crates/libs/cmx-rpc-gen",
+    "crates/libs/cmx-infra/cmx-rpc",
+    "sdk/cmx-cli",
+#    "crates/tests/cmx-serde-test",
+]
+# 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
+resolver = "2"
+
+# Workspace 包级别的元数据配置
+[workspace.package]
+# 项目版本号
+version = "0.1.11"
+# Rust Edition 版本，决定可用的语法特性
+edition = "2024"
+# 项目作者列表
+authors = ["skylake@pansoft.com"]
+
+# Workspace 依赖统一管理，所有成员 crate 可共享这些依赖
+[workspace.dependencies]
+# 内部依赖 - 核心库
+cmx-core = { path = "crates/libs/cmx-core", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 工具库
+cmx-utils = { path = "crates/libs/cmx-utils", version = "0.1.11", registry = "nora" }
+# 内部依赖 - API
+cmx-api = { path = "crates/libs/cmx-api", version = "0.1.11", registry = "nora" }
+# 内部依赖 - API 通用类型
+cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 业务模型
+cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 数据库
+cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 缓存
+cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 元数据
+cmx-metadata = { path = "crates/libs/cmx-metadata", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 插件
+cmx-plugin = { path = "crates/libs/cmx-plugin", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 特征定义
+cmx-traits = { path = "crates/libs/cmx-traits", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 运行时
+cmx-runtime = { path = "crates/libs/cmx-runtime", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 服务
+cmx-service = { path = "crates/libs/cmx-service", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 插件SDK
+cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 调试
+cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.11", registry = "nora" }
+# 内部依赖 - Nacos
+#cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 注册中心与配置中心
+cmx-registry-config = { path = "crates/libs/cmx-infra/cmx-registry-config", version = "0.1.11", registry = "nora" }
+cmx-rpc = { path = "crates/libs/cmx-infra/cmx-rpc", version = "0.1.11", registry = "nora" }
+# 内部依赖 - RPC 代码生成
+cmx-rpc-gen = { path = "crates/libs/cmx-rpc-gen", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 存储
+cmx-storage = { path = "crates/libs/cmx-infra/cmx-storage", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 审计日志
+cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.11", registry = "nora" }
+cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.11", registry = "nora" }
+# 内部依赖 - IAM 用户权限角色管理
+cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）
+cmx-portal = { path = "crates/libs/cmx-portal", version = "0.1.11", registry = "nora" }
+# 内部依赖 - 过程宏
+cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.11", registry = "nora" }
+# 编译期全局注册
+inventory = "0.3"
+# 对象存储访问层
+opendal = { version = "0.55", features = ["services-s3", "services-fs"] }
+# 文件 MIME Type 魔数检测
+infer = "0.19"
+# 基于扩展名的 MIME Type 推断
+mime_guess = "2"
+# MIME 类型
+mime = "0.3"
+
+# 异步运行时 - tokio 提供完整的异步编程支持
+tokio = { version = "1.41", features = ["full"] }
+
+# 序列化框架
+serde = { version = "1.0", features = ["derive"] }
+# JSON 序列化/反序列化
+# JSON 序列化/反序列化（preserve_order：保持对象键插入顺序，与 Node JSON.stringify 一致，
+# 使 JSON 文件读写/补丁/对拍不因键重排产生噪声 diff）
+serde_json = { version = "1.0", features = ["preserve_order"] }
+# YAML 序列化/反序列化
+serde_yaml = "0.9.33"
+# serde 辅助宏
+serde_with = { version = "3", features = ["time_0_3", "json"] }
+# MessagePack 序列化
+rmp = "0.8"
+# MessagePack 序列化/反序列化
+rmp-serde = "1.3"
+# 字节切片序列化
+serde_bytes = "0.11"
+
+# 时间处理 - 日期时间库，支持日期时间的解析、计算和格式化
+chrono = { version = "0.4", features = ["serde"] }
+# 时间处理
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+
+# 错误处理 - 动态错误上下文，提供灵活的错误处理和传播
+anyhow = "1.0"
+# 错误处理 - 派生宏定义错误类型，用于自定义错误类型
+thiserror = "2.0"
+
+# 日志追踪 - 日志追踪框架，提供结构化的日志记录
+tracing = "0.1"
+# 日志订阅器 - 收集和导出日志事件，支持环境过滤
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 内存分配 - Arena 内存分配器，快速 bump 指针分配，适合短期 allocations
+bumpalo = { version = "3.16", features = ["collections", "allocator-api2"] }
+# 字节缓冲区 - 高效处理字节数据，常用于网络和 I/O
+bytes = { version = "1.8", features = ["serde"] }
+
+# WebAssembly 运行时 - 支持加载和执行 WASM 模块
+wasmtime = "39.0.1"
+
+# 命令行参数解析 - 支持派生宏定义 CLI 接口
+clap = { version = "4", features = ["derive"] }
+
+# 数据库 - SQL 异步查询框架
+sqlx = { version = "0.9.0", features = ["macros", "runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "rust_decimal", "json"] }
+# 数据库 - SQL 查询构建器
+sea-query = { version = "1.0.0", features = ["with-chrono", "with-time", "with-json", "with-uuid"] }
+# 数据库 - SQL 参数绑定工具（原 sea-query-binder 已更名为 sea-query-sqlx）
+sea-query-sqlx = { version = "0.9.1", features = ["sqlx-postgres", "with-uuid", "with-time", "with-chrono", "with-json"] }
+# 数据库 - ORM 支持（本地副本，已适配 sea-query 1.0.1）
+modql = { path = "crates/libs/modql" ,version = "0.5.0", registry = "nora" }
+#modql = {version = "0.5.0" }
+
+# Web 框架 - HTTP 服务器
+axum = { version = "0.8.9", features = ["macros", "multipart"] }
+# Web 框架 - HTTP 中间件
+tower = "0.5"
+# Web 框架 - HTTP 服务中间件
+tower-http = { version = "0.6", features = ["fs", "cors", "trace", "compression-full", "timeout", "limit"] }
+# Web 框架 - Cookie 支持
+tower-cookies = "0.11"
+
+# 派生宏 - 派生宏库
+derive_more = { version = "1.0.0-beta", features = ["from", "display"] }
+# 并发 HashMap
+dashmap = "6"
+# 配置管理
+config = { version = "0.15", features = ["toml", "yaml", "json"] }
+# 环境变量 - .env 文件加载
+dotenvy = "0.15"
+
+# 唯一标识符
+uuid = { version = "1.21", features = ["v4", "serde"] }
+# 正则表达式
+regex = "1"
+
+# 加密与安全 - AES-GCM 对称加密算法
+aes-gcm = "0.10"
+# URL 解析库
+url = "2.5"
+# HTTP 客户端
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# 异步与并发
+futures = "0.3"
+
+# 验证 - 数据验证
+validator = { version = "0.18", features = ["derive"] }
+# 验证 - 验证派生宏
+validator_macros = "0.18"
+# HTTP 日期处理
+http-date = "0.3"
+# API 文档生成 - 生成 OpenAPI 规范文档
+utoipa = { version = "5", features = ["axum_extras", "chrono", "decimal", "uuid"] }
+# Swagger UI 支持
+utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
+# gRPC 框架
+volo-grpc = "0.12"
+# RPC 框架
+volo = "0.12"
+# RPC 框架代码生成
+volo-build = "0.12"
+# IDL 编译框架
+pilota = "0.13"
+# 异步广播通道
+async-broadcast = "0.7"
+# 异步 trait - 使 trait 中的异步函数能够与动态特征配合使用
+async-trait = "0.1"
+
+# 小字符串优化
+smol_str = { version = "0.3", features = ["serde"] }
+# 十进制数处理
+rust_decimal = "1"
+# 枚举字符串转换
+strum = "0.27"
+# 枚举派生宏
+strum_macros = "0.27"
+# Base64 编码/解码
+base64 = "0.22"
+# JWT 编解码
+jsonwebtoken = "9"
+# Argon2 密码哈希
+argon2 = "0.5"
+# 高性能本地缓存
+moka = { version = "0.12", features = ["future"] }
+# Prometheus 指标
+prometheus = "0.13"
+# Redis 客户端 - 支持异步、集群、连接管理
+redis = { version = "1.2.1", features = ["aio", "tokio-comp", "script", "connection-manager", "cluster-async"] }
+# Futures 工具
+futures-util = "0.3"
+# CSV 文件解析
+csv = "1.3"
+# 签名验证 - Ed25519 签名算法
+ed25519-dalek = { version = "2.2", features = ["std"] }
+# URL 编码
+urlencoding = "2"
+# SHA256 哈希
+sha2 = "0.10"
+# 十六进制编码
+hex = "0.4"
+# SHA1 哈希
+sha1 = "0.10"
+# MD5 哈希
+md5 = "0.7"
+# TOML 解析
+toml = "0.8"
+# 图像处理
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# ZIP 压缩
+zip = "2"
+# SQL 解析器
+sqlparser = "0.49"
+# Extism 运行时
+extism = "1.4"
+# 日志追加器
+tracing-appender = "0.2"
+# 懒加载静态量
+lazy_static = "1"
+# AST 解析 - 语法树
+syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+# AST 解析 - 代码生成
+quote = "1"
+# AST 解析 - 底层支持
+proc-macro2 = { version = "1", features = ["span-locations"] }
+# Markdown 解析
+pulldown-cmark = "0.11"
+# Percent 编码
+percent-encoding = "2"
+# 改进的文件系统操作
+fs-err = "2.2"
+# 目录遍历
+walkdir = "2.5"
+# 随机数生成
+rand = "0.8"
+# 微服务注册与配置中心
+nacos-sdk = "0.8"
+# 获取本机IP地址
+local-ip-address = "0.6"
+
+[profile.dev]
+# 优化级别：0=关闭，1=基本，2=中等，3=激进
+# 调试时必须设为0，否则变量可能被优化掉无法调试
+opt-level = 0
+
+# 调试信息级别：0=无，1=行号，2=完整调试信息
+# 设为2确保生成完整的DWARF/PDB调试信息
+debug = 2  # 注意：true 会被转换为2，但显式写2更明确
+
+# 是否剥离符号：调试时必须设为false
+# 如果为true，调试器将无法找到变量和函数名
+strip = false
+
+# 启用调试断言：在开发时检查各种不变式
+# 包括数组越界，空指针等，发布时应关闭以提高性能
+debug-assertions = true
+
+# 启用整数溢出检查：开发时检测算术溢出
+# 发布时通常关闭，溢出会回绕（wrapping arithmetic）
+overflow-checks = true
+
+# 链接时优化：关闭以加速编译和便于调试
+# 如果开启，编译器会进行跨crate的激进优化，破坏调试信息
+lto = false
+
+# 代码生成单元数：影响并行编译粒度
+# 值越大编译越快但优化越少，值越小优化越好但编译越慢
+# 256 是较大的值，适合开发时的快速迭代
+codegen-units = 256
+
+# 恐慌处理策略：'unwind'=展开调用栈，'abort'=立即终止
+# 'unwind' 可以捕获 panic 信息，便于调试
+panic = 'unwind'
+
+# 增量编译：开启以加速重复构建
+# 只重新编译改变的部分，显著提升开发效率
+# 但在某些复杂情况下可能导致奇怪的编译错误
+incremental = true
+
+# 运行时路径：是否在可执行文件中嵌入库搜索路径
+# 开发时通常关闭，发布到特定环境时可能需要开启
+rpath = false

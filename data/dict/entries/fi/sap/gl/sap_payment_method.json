@@ -1,0 +1,38 @@
+[
+  {
+    "id": "T",
+    "code": "T",
+    "name": "电汇转账",
+    "status": 1,
+    "payment_type": "电汇转账",
+    "sortKey": "000001",
+    "fullText": "T 电汇转账"
+  },
+  {
+    "id": "C",
+    "code": "C",
+    "name": "支票",
+    "status": 1,
+    "payment_type": "支票",
+    "sortKey": "000002",
+    "fullText": "C 支票"
+  },
+  {
+    "id": "B",
+    "code": "B",
+    "name": "银行承兑",
+    "status": 1,
+    "payment_type": "银行承兑",
+    "sortKey": "000003",
+    "fullText": "B 银行承兑"
+  },
+  {
+    "id": "W",
+    "code": "W",
+    "name": "网银",
+    "status": 1,
+    "payment_type": "网银",
+    "sortKey": "000004",
+    "fullText": "W 网银"
+  }
+]

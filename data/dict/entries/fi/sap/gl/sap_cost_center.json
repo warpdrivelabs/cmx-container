@@ -1,0 +1,90 @@
+[
+  {
+    "id": "CC-JS-NJ",
+    "code": "CC-JS-NJ",
+    "name": "江苏南京销售-机关",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-JSSALE",
+    "functional_area_id": "0500",
+    "sortKey": "000001",
+    "fullText": "CC-JS-NJ 江苏南京销售-机关"
+  },
+  {
+    "id": "CC-JS-STN01",
+    "code": "CC-JS-STN01",
+    "name": "江苏南京-江宁加油站",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-JSSALE",
+    "functional_area_id": "0500",
+    "sortKey": "000002",
+    "fullText": "CC-JS-STN01 江苏南京-江宁加油站"
+  },
+  {
+    "id": "CC-JS-DEP",
+    "code": "CC-JS-DEP",
+    "name": "江苏-南京油库",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-JSSALE",
+    "functional_area_id": "0500",
+    "sortKey": "000003",
+    "fullText": "CC-JS-DEP 江苏-南京油库"
+  },
+  {
+    "id": "CC-DQ-PROD",
+    "code": "CC-DQ-PROD",
+    "name": "大庆-采油一厂",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-DAQING",
+    "functional_area_id": "0400",
+    "sortKey": "000004",
+    "fullText": "CC-DQ-PROD 大庆-采油一厂"
+  },
+  {
+    "id": "CC-DL-PROD",
+    "code": "CC-DL-PROD",
+    "name": "大连石化-炼油车间",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-DLPC",
+    "functional_area_id": "0400",
+    "sortKey": "000005",
+    "fullText": "CC-DL-PROD 大连石化-炼油车间"
+  },
+  {
+    "id": "CC-BH-RIG7",
+    "code": "CC-BH-RIG7",
+    "name": "渤海钻探-7011钻井队",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-BHDC",
+    "functional_area_id": "0400",
+    "sortKey": "000006",
+    "fullText": "CC-BH-RIG7 渤海钻探-7011钻井队"
+  },
+  {
+    "id": "CC-PIPE-E",
+    "code": "CC-PIPE-E",
+    "name": "东部管道运行处",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-PIPE",
+    "functional_area_id": "0400",
+    "sortKey": "000007",
+    "fullText": "CC-PIPE-E 东部管道运行处"
+  },
+  {
+    "id": "CC-GD-NJ",
+    "code": "CC-GD-NJ",
+    "name": "广东销售-机关",
+    "status": 1,
+    "controlling_area": "CN00",
+    "profit_center_id": "PC-GDSALE",
+    "functional_area_id": "0500",
+    "sortKey": "000008",
+    "fullText": "CC-GD-NJ 广东销售-机关"
+  }
+]

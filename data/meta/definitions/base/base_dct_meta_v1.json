@@ -1,0 +1,542 @@
+{
+  "baseMeta": {
+    "metaCode": "base_dct_meta",
+    "metaName": "基础数据字典元数据",
+    "version": 1,
+    "remark": "跨模块复用的数据字典基础 fieldSet。业务模块通过 baseDctMetaRef 引用，避免重复维护字典基础列、层级列、审计列、组织范围、有效期、停用信息和系统预置标识。"
+  },
+  "fieldSets": {
+    "dictionaryCommonFields": {
+      "remark": "所有独立字典表共用的基础列。物理建表时与各字典表 fields 合并；字段名保持一致，便于通用组件复用。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "字典项主键"
+          },
+          "dimType": "attribute"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "字典项编码"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "字典项名称"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "edit": {
+            "mode": "checkbox"
+          }
+        }
+      ]
+    },
+    "dictionaryCommonNoIDFields": {
+      "remark": "所有独立字典表共用的基础列（No ID Col）。物理建表时与各字典表 fields 合并；字段名保持一致，便于通用组件复用。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "字典项编码"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "字典项名称"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "sort_no",
+          "name": "sort_no",
+          "caption": {
+            "zh_CN": "排序号"
+          },
+          "edit": {
+            "mode": "number"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "status",
+          "name": "status",
+          "caption": {
+            "zh_CN": "启用状态(1启用0停用)"
+          },
+          "edit": {
+            "mode": "checkbox"
+          }
+        }
+      ]
+    },
+    "dictionaryHierarchyFields": {
+      "remark": "自分级字典共用的层级列。仅 selfHierarchy=true 的字典表引用，用于维护本表内父子关系和物化路径。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "parent_id",
+          "name": "parent_id",
+          "caption": {
+            "zh_CN": "上级字典项ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false,
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级"
+          }
+        }
+      ]
+    },
+    "dictionaryHierarchyNoIDFields": {
+      "remark": "自分级字典共用的层级列。仅 selfHierarchy=true 的字典表引用，用于维护本表内父子关系和物化路径。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "parent_code",
+          "name": "parent_code",
+          "caption": {
+            "zh_CN": "上级字典code"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": false,
+          "id": "full_path",
+          "name": "full_path",
+          "caption": {
+            "zh_CN": "物化路径(.分隔)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "level_no",
+          "name": "level_no",
+          "caption": {
+            "zh_CN": "层级深度(1~N)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "is_leaf",
+          "name": "is_leaf",
+          "caption": {
+            "zh_CN": "是否末级"
+          }
+        }
+      ]
+    },
+    "dictionaryAuditFields": {
+      "remark": "业务主数据字典可选引用的审计列，用于问题排查、增量同步和基础资料变更留痕；简单枚举字典可不引用以保持轻量。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          }
+        },
+        {
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false,
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "最后修改人ID"
+          }
+        },
+        {
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true,
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "最后修改时间"
+          }
+        }
+      ]
+    },
+    "dictionaryScopeFields": {
+      "remark": "需要按核算主体/组织隔离的业务主数据可引用。scope_type 表示全局或组织级；entity_id 为空时表示全局有效。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "id": "scope_type",
+          "name": "scope_type",
+          "caption": {
+            "zh_CN": "适用范围(global全局/acct_entity核算主体)"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "refDict": "acct_entity",
+          "refField": "id",
+          "displayField": "name",
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "entity_id",
+          "name": "entity_id",
+          "caption": {
+            "zh_CN": "适用核算主体ID(scope_type=acct_entity时填写)"
+          }
+        }
+      ]
+    },
+    "dictionaryEffectiveFields": {
+      "remark": "有生效期要求的业务主数据可引用，用于期间有效性校验、历史追溯和未来变更预置。",
+      "fields": [
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": false,
+          "id": "effective_from",
+          "name": "effective_from",
+          "caption": {
+            "zh_CN": "生效日期"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "id": "effective_to",
+          "name": "effective_to",
+          "caption": {
+            "zh_CN": "失效日期"
+          }
+        }
+      ]
+    },
+    "dictionaryDisableFields": {
+      "remark": "需要记录停用原因的业务主数据可引用。status=0 时建议填写 disabled_reason/disabled_time。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 256,
+          "nullable": true,
+          "id": "disabled_reason",
+          "name": "disabled_reason",
+          "caption": {
+            "zh_CN": "停用原因"
+          }
+        },
+        {
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true,
+          "id": "disabled_time",
+          "name": "disabled_time",
+          "caption": {
+            "zh_CN": "停用时间"
+          }
+        }
+      ]
+    },
+    "dictionarySystemFields": {
+      "remark": "用于标记系统预置数据，系统预置项通常不允许删除，部分字段不允许修改。",
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "is_system",
+          "name": "is_system",
+          "caption": {
+            "zh_CN": "是否系统预置(1是0否)"
+          }
+        }
+      ]
+    },
+    "hierarchyClosureFields": {
+      "remark": "自分级层级闭包字段",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "dict_code",
+          "name": "dict_code",
+          "caption": {
+            "zh_CN": "数据字典编码"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "id": "ancestor_id",
+          "name": "ancestor_id",
+          "caption": {
+            "zh_CN": "祖先节点 ID"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "id": "descendant_id",
+          "name": "descendant_id",
+          "caption": {
+            "zh_CN": "后代节点 ID"
+          }
+        },
+        {
+          "dataType": "INT",
+          "nullable": false,
+          "id": "depth",
+          "name": "depth",
+          "caption": {
+            "zh_CN": "祖先到后代相隔层数"
+          }
+        }
+      ]
+    },
+    "relationCommonFields": {
+      "remark": "关系字典共用的基础列。关系字典用于关联分组字典与业务字典；本字段集冗余存储双方的 ID 与名称，便于直接展示与查询。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "关系ID"
+          },
+          "dimType": "attribute"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "id": "code",
+          "name": "code",
+          "caption": {
+            "zh_CN": "关系编码"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "caption": {
+            "zh_CN": "关系名称"
+          },
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false
+        },
+        {
+          "id": "hierarchy_node_id",
+          "name": "hierarchy_node_id",
+          "caption": {
+            "zh_CN": "层级节点ID"
+          },
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "dimension"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "refField": "id",
+          "displayField": "name",
+          "id": "hierarchy_node_code",
+          "name": "hierarchy_node_code",
+          "caption": {
+            "zh_CN": "层级节点编码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "id": "hierarchy_node_name",
+          "name": "hierarchy_node_name",
+          "caption": {
+            "zh_CN": "层级节点名称"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        },
+        {
+          "id": "business_data_id",
+          "name": "business_data_id",
+          "caption": {
+            "zh_CN": "业务数据ID"
+          },
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "dimension"
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "refField": "id",
+          "displayField": "name",
+          "id": "business_data_code",
+          "name": "business_data_code",
+          "caption": {
+            "zh_CN": "业务数据编码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "id": "business_data_name",
+          "name": "business_data_name",
+          "caption": {
+            "zh_CN": "业务数据名称"
+          },
+          "edit": {
+            "mode": "input"
+          }
+        }
+      ]
+    }
+  },
+  "updatedAt": "2026-06-15T09:10:23.196Z"
+}

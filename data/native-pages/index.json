@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "pages": [
+    {
+      "id": "portal.datasource.cluster",
+      "name": "集群数据源浏览",
+      "details": "native_pages 三区只读功能：explorer DAM 下拉 + 数据库列表(cmx-ignite-list) + 属性(cmx-ui5-form)；content 三视图(数据字典/业务单据/上下文档案)按档案+版本只读展示；property 只读详情",
+      "sourceType": "js",
+      "relPath": "portal/datasource/cluster-datasource.js"
+    },
+    {
+      "id": "portal.definition.base-dct",
+      "name": "字典基础元数据",
+      "details": "native_pages 方式实现的字典基础元数据页面",
+      "sourceType": "js",
+      "relPath": "portal/definition/base-dct.js"
+    },
+    {
+      "id": "definition.base-dct-native",
+      "name": "字典基础元数据(native_pages)",
+      "details": "native_pages 独立实现的字典基础元数据功能",
+      "sourceType": "js",
+      "relPath": "definition/base-dct-native.js"
+    },
+    {
+      "id": "portal.dam.registry-center",
+      "name": "DAM 注册管理中心",
+      "details": "Domain / Application / Module 注册主数据管理中心",
+      "sourceType": "js",
+      "relPath": "portal/dam/registry-center.js"
+    },
+    {
+      "id": "portal.help.center",
+      "name": "帮助中心",
+      "details": "按 DAM(域/应用/模块) 组织的帮助中心：explorer 可搜索分级目录、content 详细内容、property 样例/示例，三区共享同一页面的三视图（借鉴 DAM 注册中心）",
+      "sourceType": "js",
+      "relPath": "portal/help/center.js"
+    },
+    {
+      "id": "portal.notify.center",
+      "name": "通知中心",
+      "details": "任务/消息/日志 通知列表（props.center 区分），支持标记已读/全部已读；数据来自 /api/notifications，SSE 实时推送",
+      "sourceType": "js",
+      "relPath": "portal/notify/center.js"
+    },
+    {
+      "id": "demo.product-explorer",
+      "name": "产品列表(explorer)",
+      "details": "native_pages 演示 · explorer 区 CE，点击产品经 workspace.context 通知 content 区",
+      "sourceType": "html",
+      "relPath": "demo/product-explorer.html"
+    },
+    {
+      "id": "demo.product-content",
+      "name": "产品详情(content)",
+      "details": "native_pages 演示 · content 区 CE，订阅 workspace.context 显示选中产品详情",
+      "sourceType": "html",
+      "relPath": "demo/product-content.html"
+    },
+    {
+      "id": "demo.interactive",
+      "name": "自包含交互页(整页HTML)",
+      "details": "native_pages 演示 · 完整 HTML 文档(含 <script>)，由 iframe 承载，脚本/样式隔离运行",
+      "sourceType": "html",
+      "relPath": "demo/interactive-demo.html"
+    },
+    {
+      "id": "demo.dict-base.list",
+      "name": "字典基础元数据·文件/字段集",
+      "details": "native_pages 新模式 · explorer 区，文件与字段集列表，选择经 workspace.context 通知",
+      "sourceType": "html",
+      "relPath": "demo/dict-base/dict-base-list.html"
+    },
+    {
+      "id": "demo.dict-base.manager",
+      "name": "字典基础元数据·设计",
+      "details": "native_pages 新模式 · content 区，字段表格编辑+保存，doc 单一来源放 workspace.context",
+      "sourceType": "html",
+      "relPath": "demo/dict-base/dict-base-manager.html"
+    },
+    {
+      "id": "demo.dict-base.inspector",
+      "name": "字典基础元数据·检查器",
+      "details": "native_pages 新模式 · property 区，当前字段详编，与设计页经 workspace.context 联动",
+      "sourceType": "html",
+      "relPath": "demo/dict-base/dict-base-inspector.html"
+    },
+    {
+      "id": "demo.dict-base.source",
+      "name": "字典基础元数据·源码",
+      "details": "native_pages 新模式 · content 区源码 tab，编辑 doc JSON 经 workspace.context 同步",
+      "sourceType": "html",
+      "relPath": "demo/dict-base/dict-base-source.html"
+    },
+    {
+      "id": "demo.doc-base.list",
+      "name": "业务单据定义·单据/表",
+      "details": "native_pages 新模式 · explorer 区，单据文件与多层表(L1/L2/L3)，选择经 workspace.context 通知",
+      "sourceType": "html",
+      "relPath": "demo/doc-base/doc-base-list.html"
+    },
+    {
+      "id": "demo.doc-base.manager",
+      "name": "业务单据定义·设计",
+      "details": "native_pages 新模式 · content 区，选中表的字段表格(含维度/聚合)+保存，DOC 单一来源放 workspace.context",
+      "sourceType": "html",
+      "relPath": "demo/doc-base/doc-base-manager.html"
+    },
+    {
+      "id": "demo.doc-base.inspector",
+      "name": "业务单据定义·检查器",
+      "details": "native_pages 新模式 · property 区，当前字段详编(含 dimType/refField)，与设计页经 workspace.context 联动",
+      "sourceType": "html",
+      "relPath": "demo/doc-base/doc-base-inspector.html"
+    },
+    {
+      "id": "demo.doc-base.source",
+      "name": "业务单据定义·源码",
+      "details": "native_pages 新模式 · content 区源码 tab，编辑 DOC JSON 经 workspace.context 同步",
+      "sourceType": "html",
+      "relPath": "demo/doc-base/doc-base-source.html"
+    },
+    {
+      "id": "demo.doc-base.schema",
+      "name": "业务单据定义·Schema",
+      "details": "native_pages 新模式 · content 区 Schema tab，只读展开多层表+主从关系+聚合",
+      "sourceType": "html",
+      "relPath": "demo/doc-base/doc-base-schema.html"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "0400",
+    "code": "0400",
+    "name": "生产",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "0400 生产"
+  },
+  {
+    "id": "0500",
+    "code": "0500",
+    "name": "销售",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "0500 销售"
+  },
+  {
+    "id": "0600",
+    "code": "0600",
+    "name": "管理",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "0600 管理"
+  },
+  {
+    "id": "0700",
+    "code": "0700",
+    "name": "研发",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "0700 研发"
+  }
+]

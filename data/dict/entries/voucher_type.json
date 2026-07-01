@@ -1,0 +1,46 @@
+[
+  {
+    "id": 1,
+    "code": "GENERAL",
+    "name": "记账凭证",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "no_prefix": "记",
+    "sortKey": "1",
+    "fullText": "GENERAL 记账凭证"
+  },
+  {
+    "id": 2,
+    "code": "RECEIPT",
+    "name": "收款凭证",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "no_prefix": "收",
+    "sortKey": "2",
+    "fullText": "RECEIPT 收款凭证"
+  },
+  {
+    "id": 3,
+    "code": "PAYMENT",
+    "name": "付款凭证",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "no_prefix": "付",
+    "sortKey": "3",
+    "fullText": "PAYMENT 付款凭证"
+  },
+  {
+    "id": 4,
+    "code": "TRANSFER",
+    "name": "转账凭证",
+    "sort_no": 4,
+    "status": 1,
+    "is_system": 1,
+    "no_prefix": "转",
+    "sortKey": "4",
+    "fullText": "TRANSFER 转账凭证"
+  }
+]

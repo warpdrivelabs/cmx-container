@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "code": "ASSET",
+    "name": "资产",
+    "sort_no": 1,
+    "status": 1,
+    "is_system": 1,
+    "sortKey": "1",
+    "fullText": "ASSET 资产"
+  },
+  {
+    "id": 2,
+    "code": "LIABILITY",
+    "name": "负债",
+    "sort_no": 2,
+    "status": 1,
+    "is_system": 1,
+    "sortKey": "2",
+    "fullText": "LIABILITY 负债"
+  },
+  {
+    "id": 3,
+    "code": "EQUITY",
+    "name": "权益",
+    "sort_no": 3,
+    "status": 1,
+    "is_system": 1,
+    "sortKey": "3",
+    "fullText": "EQUITY 权益"
+  },
+  {
+    "id": 4,
+    "code": "COST",
+    "name": "成本",
+    "sort_no": 4,
+    "status": 1,
+    "is_system": 1,
+    "sortKey": "4",
+    "fullText": "COST 成本"
+  },
+  {
+    "id": 5,
+    "code": "PROFIT_LOSS",
+    "name": "损益",
+    "sort_no": 5,
+    "status": 1,
+    "is_system": 1,
+    "sortKey": "5",
+    "fullText": "PROFIT_LOSS 损益"
+  }
+]

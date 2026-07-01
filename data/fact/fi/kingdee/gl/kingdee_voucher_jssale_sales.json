@@ -1,0 +1,122 @@
+{
+  "_meta": {
+    "system": "kingdee",
+    "app": "kingdee",
+    "docMeta": {
+      "domain": "fi",
+      "module": "kingdee",
+      "file": "kingdee_gl_doc_meta_v1.json"
+    },
+    "levels": [
+      "header",
+      "entries",
+      "accitems"
+    ],
+    "title": "金蝶 凭证(CNPC)",
+    "biz": "江苏销售分公司确认成品油批发收入(含13%销项税)"
+  },
+  "voucher": {
+    "header": {
+      "id": "KDV-2026-06-0001",
+      "account_book_id": "AB-CNPC",
+      "accounting_org_id": "JSSALE",
+      "voucher_word_id": "ji",
+      "accounting_period_id": "2026-06",
+      "voucher_source_id": "AR",
+      "voucher_no": "记-0001",
+      "voucher_date": "2026-06-15",
+      "book_date": "2026-06-15",
+      "fiscal_year": "2026",
+      "period_no": 6,
+      "entry_count": 3,
+      "preparer_id": "zhangsan",
+      "auditor_id": "lisi",
+      "audit_flag": 1,
+      "post_flag": 1,
+      "document_status": "posted",
+      "total_debit": 1130000.0,
+      "total_credit": 1130000.0
+    },
+    "entries": [
+      {
+        "id": "KDE-1",
+        "header_id": "KDV-2026-06-0001",
+        "entry_seq": 1,
+        "summary": "销售成品油-收款",
+        "account_id": "1122",
+        "account_code": "1122",
+        "account_name": "应收账款",
+        "direction": "D",
+        "acc_item_summary": "部门:江苏南京销售机关 客户:中石化华东分销",
+        "cashflow_item_id": "XJ01",
+        "currency_id": "CNY",
+        "debit_amount": 1130000.0,
+        "credit_amount": 0
+      },
+      {
+        "id": "KDE-2",
+        "header_id": "KDV-2026-06-0001",
+        "entry_seq": 2,
+        "summary": "销售成品油-收入",
+        "account_id": "6001",
+        "account_code": "6001",
+        "account_name": "主营业务收入",
+        "direction": "C",
+        "acc_item_summary": "部门:江苏南京销售机关 客户:中石化华东分销",
+        "currency_id": "CNY",
+        "debit_amount": 0,
+        "credit_amount": 1000000.0,
+        "quantity": 1428.57,
+        "measure_unit": "吨"
+      },
+      {
+        "id": "KDE-3",
+        "header_id": "KDV-2026-06-0001",
+        "entry_seq": 3,
+        "summary": "销项税额13%",
+        "account_id": "2221",
+        "account_code": "2221",
+        "account_name": "应交税费",
+        "direction": "C",
+        "currency_id": "CNY",
+        "debit_amount": 0,
+        "credit_amount": 130000.0,
+        "tax_rate_id": "VAT13"
+      }
+    ],
+    "accitems": [
+      {
+        "id": "KDI-1",
+        "entry_id": "KDE-1",
+        "acc_type": "dept",
+        "acc_value_id": "CC-JS-NJ",
+        "acc_value_code": "CC-JS-NJ",
+        "acc_value_name": "江苏南京销售-机关"
+      },
+      {
+        "id": "KDI-2",
+        "entry_id": "KDE-1",
+        "acc_type": "customer",
+        "acc_value_id": "C-SINOPEC",
+        "acc_value_code": "C-SINOPEC",
+        "acc_value_name": "中石化华东分销"
+      },
+      {
+        "id": "KDI-3",
+        "entry_id": "KDE-2",
+        "acc_type": "dept",
+        "acc_value_id": "CC-JS-NJ",
+        "acc_value_code": "CC-JS-NJ",
+        "acc_value_name": "江苏南京销售-机关"
+      },
+      {
+        "id": "KDI-4",
+        "entry_id": "KDE-2",
+        "acc_type": "customer",
+        "acc_value_id": "C-SINOPEC",
+        "acc_value_code": "C-SINOPEC",
+        "acc_value_name": "中石化华东分销"
+      }
+    ]
+  }
+}

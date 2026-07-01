@@ -1,0 +1,56 @@
+{
+  "_meta": {
+    "dictCode": "voucher_type",
+    "dictName": "凭证类型",
+    "tableName": "gl_voucher_type",
+    "generatedAt": "2026-06-04T01:37:48.342Z",
+    "rowCount": 4
+  },
+  "columns": [
+    "id",
+    "code",
+    "name",
+    "sort_no",
+    "status",
+    "is_system",
+    "no_prefix"
+  ],
+  "rows": [
+    {
+      "id": 1,
+      "code": "GENERAL",
+      "name": "记账凭证",
+      "sort_no": 1,
+      "status": 1,
+      "is_system": 1,
+      "no_prefix": "记"
+    },
+    {
+      "id": 2,
+      "code": "RECEIPT",
+      "name": "收款凭证",
+      "sort_no": 2,
+      "status": 1,
+      "is_system": 1,
+      "no_prefix": "收"
+    },
+    {
+      "id": 3,
+      "code": "PAYMENT",
+      "name": "付款凭证",
+      "sort_no": 3,
+      "status": 1,
+      "is_system": 1,
+      "no_prefix": "付"
+    },
+    {
+      "id": 4,
+      "code": "TRANSFER",
+      "name": "转账凭证",
+      "sort_no": 4,
+      "status": 1,
+      "is_system": 1,
+      "no_prefix": "转"
+    }
+  ]
+}

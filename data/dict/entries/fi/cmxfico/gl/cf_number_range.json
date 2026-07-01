@@ -1,0 +1,57 @@
+[
+ {
+  "code": "01",
+  "name": "编号范围01",
+  "status": 1,
+  "sortKey": "000001",
+  "fullText": "01 编号范围01",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "14",
+  "name": "编号范围14",
+  "status": 1,
+  "sortKey": "000002",
+  "fullText": "14 编号范围14",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "15",
+  "name": "编号范围15",
+  "status": 1,
+  "sortKey": "000003",
+  "fullText": "15 编号范围15",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "18",
+  "name": "编号范围18",
+  "status": 1,
+  "sortKey": "000004",
+  "fullText": "18 编号范围18",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "19",
+  "name": "编号范围19",
+  "status": 1,
+  "sortKey": "000005",
+  "fullText": "19 编号范围19",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

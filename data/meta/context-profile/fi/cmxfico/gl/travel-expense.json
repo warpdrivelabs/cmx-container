@@ -1,0 +1,1712 @@
+{
+  "version": 1,
+  "scenario": "travel-expense",
+  "domain": "fi",
+  "app": "cmxfico",
+  "module": "gl",
+  "anchorDimensions": [
+    "expenseType",
+    "travelerMode"
+  ],
+  "description": "差旅报销明细：按费用类型+出行人数模式动态字段",
+  "dimensions": {
+    "city": {
+      "name": "城市",
+      "valueSourceId": "cityDict",
+      "attributes": [
+        "region"
+      ],
+      "values": [
+        {
+          "code": "SHA",
+          "name": "上海",
+          "region": "华东"
+        },
+        {
+          "code": "BJS",
+          "name": "北京",
+          "region": "华北"
+        },
+        {
+          "code": "SZX",
+          "name": "深圳",
+          "region": "华南"
+        },
+        {
+          "code": "HGH",
+          "name": "杭州",
+          "region": "华东"
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "id": "te-train-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "train",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "ticketNo",
+            "name": "ticketNo",
+            "caption": {
+              "zh_CN": "火车票号/单据"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "quantity",
+            "name": "quantity",
+            "caption": {
+              "zh_CN": "数量/人次"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * quantity",
+            "dependsOn": [
+              "unitPrice",
+              "quantity"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-train-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "train",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "报销人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "人均单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * personCount",
+            "dependsOn": [
+              "unitPrice",
+              "personCount"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-car-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "car",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "ticketNo",
+            "name": "ticketNo",
+            "caption": {
+              "zh_CN": "汽车票号/单据"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "quantity",
+            "name": "quantity",
+            "caption": {
+              "zh_CN": "数量/人次"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * quantity",
+            "dependsOn": [
+              "unitPrice",
+              "quantity"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-car-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "car",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "报销人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "人均单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * personCount",
+            "dependsOn": [
+              "unitPrice",
+              "personCount"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-plane-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "plane",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "ticketNo",
+            "name": "ticketNo",
+            "caption": {
+              "zh_CN": "飞机票号/单据"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "quantity",
+            "name": "quantity",
+            "caption": {
+              "zh_CN": "数量/人次"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * quantity",
+            "dependsOn": [
+              "unitPrice",
+              "quantity"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-plane-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "plane",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "报销人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "人均单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * personCount",
+            "dependsOn": [
+              "unitPrice",
+              "personCount"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-ferry-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "ferry",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "ticketNo",
+            "name": "ticketNo",
+            "caption": {
+              "zh_CN": "轮渡票号/单据"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "quantity",
+            "name": "quantity",
+            "caption": {
+              "zh_CN": "数量/人次"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * quantity",
+            "dependsOn": [
+              "unitPrice",
+              "quantity"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-ferry-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "ferry",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "报销人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "人均单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * personCount",
+            "dependsOn": [
+              "unitPrice",
+              "personCount"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-self_drive-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "self_drive",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "ticketNo",
+            "name": "ticketNo",
+            "caption": {
+              "zh_CN": "自驾车票号/单据"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "quantity",
+            "name": "quantity",
+            "caption": {
+              "zh_CN": "数量/人次"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * quantity",
+            "dependsOn": [
+              "unitPrice",
+              "quantity"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-self_drive-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "self_drive",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "发生日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeFrom",
+            "name": "routeFrom",
+            "caption": {
+              "zh_CN": "出发地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "routeTo",
+            "name": "routeTo",
+            "caption": {
+              "zh_CN": "目的地"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "报销人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "unitPrice",
+            "name": "unitPrice",
+            "caption": {
+              "zh_CN": "人均单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "unitPrice * personCount",
+            "dependsOn": [
+              "unitPrice",
+              "personCount"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-accommodation-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "accommodation",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "select"
+            },
+            "dimType": "dimension",
+            "refDict": "city",
+            "id": "city",
+            "name": "city",
+            "caption": {
+              "zh_CN": "城市"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "hotelName",
+            "name": "hotelName",
+            "caption": {
+              "zh_CN": "酒店名称"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "nights",
+            "name": "nights",
+            "caption": {
+              "zh_CN": "住宿晚数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "roomRate",
+            "name": "roomRate",
+            "caption": {
+              "zh_CN": "每晚单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "nights * roomRate",
+            "dependsOn": [
+              "nights",
+              "roomRate"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-accommodation-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "accommodation",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "select"
+            },
+            "dimType": "dimension",
+            "refDict": "city",
+            "id": "city",
+            "name": "city",
+            "caption": {
+              "zh_CN": "城市"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "入住人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "nights",
+            "name": "nights",
+            "caption": {
+              "zh_CN": "住宿晚数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "roomRate",
+            "name": "roomRate",
+            "caption": {
+              "zh_CN": "每晚单价"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "personCount * nights * roomRate",
+            "dependsOn": [
+              "personCount",
+              "nights",
+              "roomRate"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-dining-single",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "dining",
+          "travelerMode": "single"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "用餐日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "venue",
+            "name": "venue",
+            "caption": {
+              "zh_CN": "用餐地点"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "remark",
+            "name": "remark",
+            "caption": {
+              "zh_CN": "备注"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-dining-multi",
+      "anchor": {
+        "dimensions": [
+          "expenseType",
+          "travelerMode"
+        ],
+        "match": {
+          "expenseType": "dining",
+          "travelerMode": "multi"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "personCount",
+            "name": "personCount",
+            "caption": {
+              "zh_CN": "用餐人数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "perCapita",
+            "name": "perCapita",
+            "caption": {
+              "zh_CN": "人均金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "personCount * perCapita",
+            "dependsOn": [
+              "personCount",
+              "perCapita"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-accounting",
+      "anchor": {
+        "dimensions": [
+          "expenseType"
+        ],
+        "match": {
+          "expenseType": "accounting"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "serviceItem",
+            "name": "serviceItem",
+            "caption": {
+              "zh_CN": "会计/审计项目"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "invoiceNo",
+            "name": "invoiceNo",
+            "caption": {
+              "zh_CN": "发票号"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "te-local_transit",
+      "anchor": {
+        "dimensions": [
+          "expenseType"
+        ],
+        "match": {
+          "expenseType": "local_transit"
+        }
+      },
+      "detail": {
+        "fields": [
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "occurredOn",
+            "name": "occurredOn",
+            "caption": {
+              "zh_CN": "日期"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "dimType": "measure",
+            "id": "vehicle",
+            "name": "vehicle",
+            "caption": {
+              "zh_CN": "交通方式"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "trips",
+            "name": "trips",
+            "caption": {
+              "zh_CN": "次数"
+            }
+          },
+          {
+            "edit": {
+              "mode": "input"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "dimType": "measure",
+            "id": "tripCost",
+            "name": "tripCost",
+            "caption": {
+              "zh_CN": "单次费用"
+            }
+          },
+          {
+            "edit": {
+              "mode": "computed"
+            },
+            "display": {
+              "decimals": 2,
+              "thousand": ",",
+              "zeroBlank": true
+            },
+            "formula": "trips * tripCost",
+            "dependsOn": [
+              "trips",
+              "tripCost"
+            ],
+            "dimType": "measure",
+            "id": "amount",
+            "name": "amount",
+            "caption": {
+              "zh_CN": "金额"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "application": "cmxfico"
+}

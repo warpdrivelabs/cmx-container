@@ -1,0 +1,123 @@
+[
+  {
+    "id": "PC-DAQING",
+    "code": "PC-DAQING",
+    "name": "利润中心-大庆油田有限责任公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "UPSTREAM",
+    "company_code_id": "DAQING",
+    "sortKey": "000001",
+    "fullText": "PC-DAQING 利润中心-大庆油田有限责任公司"
+  },
+  {
+    "id": "PC-CQOF",
+    "code": "PC-CQOF",
+    "name": "利润中心-长庆油田分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "UPSTREAM",
+    "company_code_id": "CQOF",
+    "sortKey": "000002",
+    "fullText": "PC-CQOF 利润中心-长庆油田分公司"
+  },
+  {
+    "id": "PC-DLPC",
+    "code": "PC-DLPC",
+    "name": "利润中心-大连石化分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "REFINING",
+    "company_code_id": "DLPC",
+    "sortKey": "000003",
+    "fullText": "PC-DLPC 利润中心-大连石化分公司"
+  },
+  {
+    "id": "PC-LZPC",
+    "code": "PC-LZPC",
+    "name": "利润中心-兰州石化分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "REFINING",
+    "company_code_id": "LZPC",
+    "sortKey": "000004",
+    "fullText": "PC-LZPC 利润中心-兰州石化分公司"
+  },
+  {
+    "id": "PC-JSSALE",
+    "code": "PC-JSSALE",
+    "name": "利润中心-江苏销售分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "MARKETING",
+    "company_code_id": "JSSALE",
+    "sortKey": "000005",
+    "fullText": "PC-JSSALE 利润中心-江苏销售分公司"
+  },
+  {
+    "id": "PC-GDSALE",
+    "code": "PC-GDSALE",
+    "name": "利润中心-广东销售分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "MARKETING",
+    "company_code_id": "GDSALE",
+    "sortKey": "000006",
+    "fullText": "PC-GDSALE 利润中心-广东销售分公司"
+  },
+  {
+    "id": "PC-PIPE",
+    "code": "PC-PIPE",
+    "name": "利润中心-国家管网(原管道)分公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "PIPELINE",
+    "company_code_id": "PIPE",
+    "sortKey": "000007",
+    "fullText": "PC-PIPE 利润中心-国家管网(原管道)分公司"
+  },
+  {
+    "id": "PC-BHDC",
+    "code": "PC-BHDC",
+    "name": "利润中心-渤海钻探工程有限公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "OILSVC",
+    "company_code_id": "BHDC",
+    "sortKey": "000008",
+    "fullText": "PC-BHDC 利润中心-渤海钻探工程有限公司"
+  },
+  {
+    "id": "PC-CPECC",
+    "code": "PC-CPECC",
+    "name": "利润中心-中国石油工程建设公司",
+    "status": 1,
+    "controlling_area": "CN00",
+    "segment_id": "OILSVC",
+    "company_code_id": "CPECC",
+    "sortKey": "000009",
+    "fullText": "PC-CPECC 利润中心-中国石油工程建设公司"
+  },
+  {
+    "id": "PC-PKZ",
+    "code": "PC-PKZ",
+    "name": "利润中心-PetroKazakhstan(哈萨克)",
+    "status": 1,
+    "controlling_area": "OS00",
+    "segment_id": "OVERSEAS",
+    "company_code_id": "PKZ",
+    "sortKey": "000010",
+    "fullText": "PC-PKZ 利润中心-PetroKazakhstan(哈萨克)"
+  },
+  {
+    "id": "PC-GNPOC",
+    "code": "PC-GNPOC",
+    "name": "利润中心-大尼罗河石油(苏丹)",
+    "status": 1,
+    "controlling_area": "OS00",
+    "segment_id": "OVERSEAS",
+    "company_code_id": "GNPOC",
+    "sortKey": "000011",
+    "fullText": "PC-GNPOC 利润中心-大尼罗河石油(苏丹)"
+  }
+]

@@ -1,0 +1,240 @@
+[
+  {
+    "id": 1,
+    "code": "HQ",
+    "name": "集团总部",
+    "parentCode": null,
+    "type": "group",
+    "sortKey": "1",
+    "level": 1,
+    "path": [
+      "HQ"
+    ],
+    "pathStr": "HQ",
+    "fullText": "HQ 集团总部"
+  },
+  {
+    "id": 2,
+    "code": "HQ-FIN",
+    "name": "财务部",
+    "parentCode": "HQ",
+    "type": "dept",
+    "sortKey": "2",
+    "level": 2,
+    "path": [
+      "HQ",
+      "HQ-FIN"
+    ],
+    "pathStr": "HQ/HQ-FIN",
+    "fullText": "HQ-FIN 财务部"
+  },
+  {
+    "id": 3,
+    "code": "HQ-IT",
+    "name": "信息技术部",
+    "parentCode": "HQ",
+    "type": "dept",
+    "sortKey": "3",
+    "level": 2,
+    "path": [
+      "HQ",
+      "HQ-IT"
+    ],
+    "pathStr": "HQ/HQ-IT",
+    "fullText": "HQ-IT 信息技术部"
+  },
+  {
+    "id": 4,
+    "code": "HQ-HR",
+    "name": "人力资源部",
+    "parentCode": "HQ",
+    "type": "dept",
+    "sortKey": "4",
+    "level": 2,
+    "path": [
+      "HQ",
+      "HQ-HR"
+    ],
+    "pathStr": "HQ/HQ-HR",
+    "fullText": "HQ-HR 人力资源部"
+  },
+  {
+    "id": 5,
+    "code": "HQ-RD",
+    "name": "研发中心",
+    "parentCode": "HQ",
+    "type": "dept",
+    "sortKey": "5",
+    "level": 2,
+    "path": [
+      "HQ",
+      "HQ-RD"
+    ],
+    "pathStr": "HQ/HQ-RD",
+    "fullText": "HQ-RD 研发中心"
+  },
+  {
+    "id": 6,
+    "code": "HQ-RD-SW",
+    "name": "软件研发部",
+    "parentCode": "HQ-RD",
+    "type": "team",
+    "sortKey": "6",
+    "level": 3,
+    "path": [
+      "HQ",
+      "HQ-RD",
+      "HQ-RD-SW"
+    ],
+    "pathStr": "HQ/HQ-RD/HQ-RD-SW",
+    "fullText": "HQ-RD-SW 软件研发部"
+  },
+  {
+    "id": 7,
+    "code": "HQ-RD-HW",
+    "name": "硬件研发部",
+    "parentCode": "HQ-RD",
+    "type": "team",
+    "sortKey": "7",
+    "level": 3,
+    "path": [
+      "HQ",
+      "HQ-RD",
+      "HQ-RD-HW"
+    ],
+    "pathStr": "HQ/HQ-RD/HQ-RD-HW",
+    "fullText": "HQ-RD-HW 硬件研发部"
+  },
+  {
+    "id": 8,
+    "code": "BJ",
+    "name": "北京分公司",
+    "parentCode": null,
+    "type": "branch",
+    "sortKey": "8",
+    "level": 1,
+    "path": [
+      "BJ"
+    ],
+    "pathStr": "BJ",
+    "fullText": "BJ 北京分公司"
+  },
+  {
+    "id": 9,
+    "code": "BJ-SALE",
+    "name": "北京销售部",
+    "parentCode": "BJ",
+    "type": "dept",
+    "sortKey": "9",
+    "level": 2,
+    "path": [
+      "BJ",
+      "BJ-SALE"
+    ],
+    "pathStr": "BJ/BJ-SALE",
+    "fullText": "BJ-SALE 北京销售部"
+  },
+  {
+    "id": 10,
+    "code": "BJ-SUP",
+    "name": "北京客户支持",
+    "parentCode": "BJ",
+    "type": "dept",
+    "sortKey": "10",
+    "level": 2,
+    "path": [
+      "BJ",
+      "BJ-SUP"
+    ],
+    "pathStr": "BJ/BJ-SUP",
+    "fullText": "BJ-SUP 北京客户支持"
+  },
+  {
+    "id": 11,
+    "code": "SH",
+    "name": "上海分公司",
+    "parentCode": null,
+    "type": "branch",
+    "sortKey": "11",
+    "level": 1,
+    "path": [
+      "SH"
+    ],
+    "pathStr": "SH",
+    "fullText": "SH 上海分公司"
+  },
+  {
+    "id": 12,
+    "code": "SH-SALE",
+    "name": "上海销售部",
+    "parentCode": "SH",
+    "type": "dept",
+    "sortKey": "12",
+    "level": 2,
+    "path": [
+      "SH",
+      "SH-SALE"
+    ],
+    "pathStr": "SH/SH-SALE",
+    "fullText": "SH-SALE 上海销售部"
+  },
+  {
+    "id": 13,
+    "code": "SH-FIN",
+    "name": "上海财务部",
+    "parentCode": "SH",
+    "type": "dept",
+    "sortKey": "13",
+    "level": 2,
+    "path": [
+      "SH",
+      "SH-FIN"
+    ],
+    "pathStr": "SH/SH-FIN",
+    "fullText": "SH-FIN 上海财务部"
+  },
+  {
+    "id": 14,
+    "code": "GZ",
+    "name": "广州分公司",
+    "parentCode": null,
+    "type": "branch",
+    "level": 1,
+    "path": [
+      "GZ"
+    ],
+    "pathStr": "GZ",
+    "sortKey": "14",
+    "fullText": "GZ 广州分公司"
+  },
+  {
+    "id": 15,
+    "code": "GZ-SALE",
+    "name": "广州销售部",
+    "parentCode": "GZ",
+    "type": "dept",
+    "level": 2,
+    "path": [
+      "GZ",
+      "GZ-SALE"
+    ],
+    "pathStr": "GZ/GZ-SALE",
+    "sortKey": "15",
+    "fullText": "GZ-SALE 广州销售部"
+  },
+  {
+    "id": 16,
+    "code": "GZ-FIN",
+    "name": "广州财务部",
+    "parentCode": "GZ",
+    "type": "dept",
+    "level": 2,
+    "path": [
+      "GZ",
+      "GZ-FIN"
+    ],
+    "pathStr": "GZ/GZ-FIN",
+    "sortKey": "16",
+    "fullText": "GZ-FIN 广州财务部"
+  }
+]

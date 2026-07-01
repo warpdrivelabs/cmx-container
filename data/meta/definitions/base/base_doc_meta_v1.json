@@ -1,0 +1,325 @@
+{
+  "baseMeta": {
+    "metaCode": "base_doc_meta",
+    "metaName": "基础业务单据元数据",
+    "version": 1,
+    "remark": "跨模块复用的业务单据基础 fieldSet。业务模块通过 baseDocMetaRef 引用，覆盖单据技术审计、业务标识、来源引用、生命周期、附件和备注等公共字段。"
+  },
+  "fieldSets": {
+    "documentTechnicalFields": {
+      "remark": "业务单据各层表共用的技术主键、审计与逻辑删除字段。适用于单据头、分录、明细等持久化表。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "create_by",
+          "name": "create_by",
+          "caption": {
+            "zh_CN": "创建人ID"
+          }
+        },
+        {
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": false,
+          "id": "create_time",
+          "name": "create_time",
+          "caption": {
+            "zh_CN": "创建时间"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "update_by",
+          "name": "update_by",
+          "caption": {
+            "zh_CN": "更新人ID"
+          }
+        },
+        {
+          "dataType": "DATETIME",
+          "fieldLength": 19,
+          "nullable": true,
+          "id": "update_time",
+          "name": "update_time",
+          "caption": {
+            "zh_CN": "更新时间"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": false,
+          "id": "delete_flag",
+          "name": "delete_flag",
+          "caption": {
+            "zh_CN": "逻辑删除标识(0正常1删除)"
+          }
+        }
+      ]
+    },
+    "documentIdentityFields": {
+      "remark": "业务单据头共用的业务标识字段。凭证、发票、收付款单、采购/销售单据等都应具备单据日期、单据类型、单据编码和核算主体。",
+      "fields": [
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "doc_date",
+          "name": "doc_date",
+          "caption": {
+            "zh_CN": "单据日期"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "doc_type_id",
+          "name": "doc_type_id",
+          "caption": {
+            "zh_CN": "单据类型ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "doc_no",
+          "name": "doc_no",
+          "caption": {
+            "zh_CN": "单据编码/单据号"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "entity_id",
+          "name": "entity_id",
+          "caption": {
+            "zh_CN": "业务主体"
+          }
+        }
+      ]
+    },
+    "documentSourceFields": {
+      "remark": "业务单据头共用的来源/引用单据信息，用于记录由哪个上游单据生成、关联或冲销。source_* 表示生成来源，ref_* 表示业务引用。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "source_doc_id",
+          "name": "source_doc_id",
+          "caption": {
+            "zh_CN": "来源单据ID"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "source_doc_type_id",
+          "name": "source_doc_type_id",
+          "caption": {
+            "zh_CN": "来源单据类型ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "source_doc_no",
+          "name": "source_doc_no",
+          "caption": {
+            "zh_CN": "来源单据号"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "source_line_id",
+          "name": "source_line_id",
+          "caption": {
+            "zh_CN": "来源单据行ID"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "ref_doc_id",
+          "name": "ref_doc_id",
+          "caption": {
+            "zh_CN": "引用/关联单据ID"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "ref_doc_type_id",
+          "name": "ref_doc_type_id",
+          "caption": {
+            "zh_CN": "引用/关联单据类型ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "id": "ref_doc_no",
+          "name": "ref_doc_no",
+          "caption": {
+            "zh_CN": "引用/关联单据号"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "reverse_doc_id",
+          "name": "reverse_doc_id",
+          "caption": {
+            "zh_CN": "冲销/红冲原单ID"
+          }
+        }
+      ]
+    },
+    "documentLifecycleFields": {
+      "remark": "业务单据头共用的生命周期、附件与备注字段。具体模块可用 stateField/statusFlow 指定状态机。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "doc_status",
+          "name": "doc_status",
+          "caption": {
+            "zh_CN": "单据状态"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "business_status",
+          "name": "business_status",
+          "caption": {
+            "zh_CN": "业务状态/处理状态"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "attach_count",
+          "name": "attach_count",
+          "caption": {
+            "zh_CN": "附件张数"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注说明"
+          }
+        }
+      ]
+    },
+    "documentCommonFields": {
+      "remark": "兼容性组合：业务单据通用字段全集，等价于 documentTechnicalFields + documentIdentityFields + documentSourceFields + documentLifecycleFields。建议新模块优先按场景引用拆分后的 fieldSet。",
+      "includeFieldSets": [
+        "documentTechnicalFields",
+        "documentIdentityFields",
+        "documentSourceFields",
+        "documentLifecycleFields"
+      ]
+    },
+    "documentLevelFields": {
+      "remark": "业务单据层级基础字段集:id(主键) + upper_id(上级单据主键,单层父指针,联动用) + line_no(行号)",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "id",
+          "name": "id",
+          "caption": {
+            "zh_CN": "主键ID"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "upper_id",
+          "name": "upper_id",
+          "caption": {
+            "zh_CN": "上级单据主键"
+          },
+          "dimType": "attribute"
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 11,
+          "nullable": false,
+          "intDigits": 11,
+          "decimalDigits": 0,
+          "id": "line_no",
+          "name": "line_no",
+          "caption": {
+            "zh_CN": "行号"
+          },
+          "dimType": "attribute"
+        }
+      ]
+    }
+  },
+  "updatedAt": "2026-06-21T06:10:14.124Z"
+}

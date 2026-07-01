@@ -1,0 +1,28 @@
+[
+ {
+  "id": 1900001,
+  "code": "YPCA",
+  "name": "中国石油运营科目表",
+  "status": 1,
+  "coa_type": "运营",
+  "sortKey": "000001",
+  "fullText": "YPCA 中国石油运营科目表",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1900002,
+  "code": "GRP",
+  "name": "集团合并科目表",
+  "status": 1,
+  "coa_type": "集团",
+  "sortKey": "000002",
+  "fullText": "GRP 集团合并科目表",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

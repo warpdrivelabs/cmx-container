@@ -1,0 +1,76 @@
+[
+  {
+    "id": 1,
+    "code": "RG_BS",
+    "name": "资产负债表分组",
+    "sort_no": 1,
+    "status": 1,
+    "parent_id": null,
+    "full_path": "1",
+    "level_no": 1,
+    "is_leaf": 0,
+    "is_system": 1,
+    "sortKey": "1",
+    "fullText": "RG_BS 资产负债表分组",
+    "path": [
+      1
+    ],
+    "pathStr": "1"
+  },
+  {
+    "id": 2,
+    "code": "RG_BS_A",
+    "name": "资产类",
+    "sort_no": 2,
+    "status": 1,
+    "parent_id": 1,
+    "full_path": "1.2",
+    "level_no": 2,
+    "is_leaf": 1,
+    "is_system": 1,
+    "sortKey": "2",
+    "fullText": "RG_BS_A 资产类",
+    "path": [
+      1,
+      2
+    ],
+    "pathStr": "1/2"
+  },
+  {
+    "id": 3,
+    "code": "RG_BS_L",
+    "name": "负债类",
+    "sort_no": 3,
+    "status": 1,
+    "parent_id": 1,
+    "full_path": "1.3",
+    "level_no": 2,
+    "is_leaf": 1,
+    "is_system": 1,
+    "sortKey": "3",
+    "fullText": "RG_BS_L 负债类",
+    "path": [
+      1,
+      3
+    ],
+    "pathStr": "1/3"
+  },
+  {
+    "id": 4,
+    "code": "RG_IS",
+    "name": "利润表分组",
+    "sort_no": 4,
+    "status": 1,
+    "parent_id": null,
+    "full_path": "4",
+    "level_no": 1,
+    "is_leaf": 1,
+    "is_system": 1,
+    "sortKey": "4",
+    "fullText": "RG_IS 利润表分组",
+    "path": [
+      4
+    ],
+    "pathStr": "4"
+  }
+]

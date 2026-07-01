@@ -1,0 +1,18 @@
+[
+  {
+    "id": "D",
+    "code": "D",
+    "name": "借",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "D 借"
+  },
+  {
+    "id": "C",
+    "code": "C",
+    "name": "贷",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "C 贷"
+  }
+]

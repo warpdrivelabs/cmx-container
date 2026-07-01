@@ -10,6 +10,9 @@ mod routes;
 pub use self::error::{Error, Result};
 use config::web_config;
 
+/// 启动字符画 Logo（编译期嵌入二进制，无运行时文件路径依赖）
+const BANNER: &str = include_str!("banner.txt");
+
 use axum::{middleware, Router};
 use axum::extract::DefaultBodyLimit;
 use crate::config::{
@@ -233,6 +236,49 @@ async fn main() -> Result<()> {
         router
     };
 
+    // 同源托管两个迁移前端的生产构建（dist）+ 共享 UI5 运行时（/shared）：
+    //   /portal -> CMXPortalManager/dist（base=/portal/），/html -> CMXHTMLDesigner/dist（base=/html/），
+    //   /shared -> cmx-ui5-runtime/dist（UI5/Tabler 运行时，前端用 import("/shared/assets/...") 动态加载）。
+    // 路径由配置 portal.web_portal_dist / portal.web_html_dist / portal.web_shared_dist 给出；
+    // 未配置则跳过（开发时走 vite 代理）。spa=true 的前端未命中文件回退到 index.html（支持 history 路由）；
+    // /shared 是纯静态资源（spa=false），缺文件即 404，绝不能回退到某个 index.html。
+    let routes_all = {
+        let mut router = routes_all;
+        for (key, prefix, spa) in [
+            ("portal.web_portal_dist", "/portal", true),
+            ("portal.web_html_dist", "/html", true),
+            ("portal.web_shared_dist", "/shared", false),
+        ] {
+            let dist = ConfigManager::global().get_string(key).unwrap_or_default();
+            let dist = dist.trim();
+            if dist.is_empty() {
+                continue;
+            }
+            if !std::path::Path::new(dist).exists() {
+                info!("前端 dist 未找到，跳过静态托管: {} -> {}", prefix, dist);
+                continue;
+            }
+            info!("挂载前端静态托管: {} -> {}", prefix, dist);
+            // 用 nest_service 直接挂 ServeDir（而非包一层 Router），使 /portal 与 /portal/ 都正确命中。
+            let serve = if spa {
+                // SPA fallback：未命中文件回退到该 dist 的 index.html，支持前端 history 路由（如 /portal/login）。
+                let index = format!("{}/index.html", dist.trim_end_matches('/'));
+                tower_http::services::ServeDir::new(dist)
+                    .fallback(tower_http::services::ServeFile::new(index))
+            } else {
+                tower_http::services::ServeDir::new(dist).fallback(
+                    // 纯静态：占位 fallback 永不命中存在的文件，缺失即由 ServeDir 返回 404。
+                    tower_http::services::ServeFile::new(format!(
+                        "{}/__nonexistent__",
+                        dist.trim_end_matches('/')
+                    )),
+                )
+            };
+            router = router.nest_service(prefix, serve);
+        }
+        router
+    };
+
     let server_host = ConfigManager::global()
         .get_string("server.host")
         .unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -260,6 +306,10 @@ async fn main() -> Result<()> {
     }
     info!("{}", "-".repeat(60));
 
+    // 启动字符画 Logo（直接打印到 stdout，避免被日志格式化器加上时间戳/级别前缀，
+    // 仿照 Redis 启动时的 ASCII 艺术字效果）。放在所有启动日志之后，作为最后输出。
+    print_banner();
+
     axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -270,6 +320,70 @@ async fn main() -> Result<()> {
     info!("服务已优雅关闭");
 
     Ok(())
+}
+
+/// 打印带渐变色的启动 Logo。
+///
+/// 对 [`BANNER`] 逐行施加「青 → 蓝 → 紫 → 品红」的纵向 24-bit 真彩渐变。
+/// 当 stdout 不是终端时（如重定向到文件 / 日志收集管道）降级为纯文本输出，
+/// 避免把 ANSI 转义码写进日志。
+fn print_banner() {
+    use std::io::IsTerminal;
+
+    // Logo 下方的标语
+    const TAGLINE: &str = "  Enterprise Business Container V1.1.6 ";
+
+    // 非终端：输出纯文本，避免 ANSI 码污染日志
+    if !std::io::stdout().is_terminal() {
+        println!("{}", BANNER);
+        println!("{}", TAGLINE);
+        return;
+    }
+
+    // 渐变停靠点（RGB）：青 → 蓝 → 紫 → 品红
+    const STOPS: [(u8, u8, u8); 4] = [
+        (0, 229, 255),   // 青
+        (41, 121, 255),  // 蓝
+        (124, 77, 255),  // 紫
+        (255, 64, 200),  // 品红
+    ];
+
+    let lines: Vec<&str> = BANNER.lines().collect();
+    // 仅按「有内容的行」计算渐变位置，空行不参与
+    let total = lines.iter().filter(|l| !l.trim().is_empty()).count();
+    let denom = total.saturating_sub(1).max(1) as f32;
+
+    let mut content_idx = 0usize;
+    for line in &lines {
+        if line.trim().is_empty() {
+            println!();
+            continue;
+        }
+        let t = content_idx as f32 / denom;
+        let (r, g, b) = gradient_color(&STOPS, t);
+        // \x1b[1;38;2;R;G;Bm = 加粗 + 24-bit 前景色
+        println!("\x1b[1;38;2;{};{};{}m{}\x1b[0m", r, g, b, line);
+        content_idx += 1;
+    }
+
+    // 字符画之后换行，再打印标语（取渐变末端的品红色，加粗）
+    let (r, g, b) = STOPS[STOPS.len() - 1];
+    println!("\n\x1b[1;38;2;{};{};{}m{}\x1b[0m", r, g, b, TAGLINE);
+}
+
+/// 在多个 RGB 停靠点之间按 `t ∈ [0,1]` 线性插值，得到渐变色。
+fn gradient_color(stops: &[(u8, u8, u8)], t: f32) -> (u8, u8, u8) {
+    let seg = stops.len().saturating_sub(1);
+    if seg == 0 {
+        return stops.first().copied().unwrap_or((255, 255, 255));
+    }
+    let scaled = t.clamp(0.0, 1.0) * seg as f32;
+    let i = (scaled.floor() as usize).min(seg - 1);
+    let local = scaled - i as f32;
+    let (r0, g0, b0) = stops[i];
+    let (r1, g1, b1) = stops[i + 1];
+    let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * local).round() as u8;
+    (lerp(r0, r1), lerp(g0, g1), lerp(b0, b1))
 }
 
 /// 监听优雅关闭信号

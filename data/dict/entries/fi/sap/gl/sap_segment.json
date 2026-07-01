@@ -1,0 +1,50 @@
+[
+  {
+    "id": "UPSTREAM",
+    "code": "UPSTREAM",
+    "name": "上游-勘探开发",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "UPSTREAM 上游-勘探开发"
+  },
+  {
+    "id": "REFINING",
+    "code": "REFINING",
+    "name": "炼油化工",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "REFINING 炼油化工"
+  },
+  {
+    "id": "MARKETING",
+    "code": "MARKETING",
+    "name": "销售",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "MARKETING 销售"
+  },
+  {
+    "id": "PIPELINE",
+    "code": "PIPELINE",
+    "name": "管道天然气",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "PIPELINE 管道天然气"
+  },
+  {
+    "id": "OILSVC",
+    "code": "OILSVC",
+    "name": "油田服务(未上市)",
+    "status": 1,
+    "sortKey": "000005",
+    "fullText": "OILSVC 油田服务(未上市)"
+  },
+  {
+    "id": "OVERSEAS",
+    "code": "OVERSEAS",
+    "name": "海外油气",
+    "status": 1,
+    "sortKey": "000006",
+    "fullText": "OVERSEAS 海外油气"
+  }
+]

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "PRJ-DQ-W",
+    "code": "PRJ-DQ-W",
+    "name": "大庆新井开发",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "PRJ-DQ-W 大庆新井开发"
+  },
+  {
+    "id": "PRJ-PIPE-W",
+    "code": "PRJ-PIPE-W",
+    "name": "西气东输三线",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "PRJ-PIPE-W 西气东输三线"
+  },
+  {
+    "id": "PRJ-OVS-KZ",
+    "code": "PRJ-OVS-KZ",
+    "name": "哈萨克勘探区块",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "PRJ-OVS-KZ 哈萨克勘探区块"
+  },
+  {
+    "id": "PRJ-DL-EXP",
+    "code": "PRJ-DL-EXP",
+    "name": "大连石化扩能",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "PRJ-DL-EXP 大连石化扩能"
+  }
+]

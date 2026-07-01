@@ -1,0 +1,79 @@
+{
+  "_remark": "EBS 示例凭证：批(GL_JE_BATCHES)→头(GL_JE_HEADERS)→行(GL_JE_LINES)。行只引 CCID,各段在 code_combination 字典。江苏销售确认成品油销售。",
+  "batch": {
+    "id": "EBSBATCH-2026060001",
+    "ledger_id": "CNPC_PL",
+    "period_name": "JUN-26",
+    "journal_source_id": "Receivables",
+    "balance_type": "A",
+    "batch_name": "JS销售6月收入批",
+    "posting_date": "2026-06-15",
+    "batch_status": "P",
+    "approval_status": "A",
+    "document_status": "posted",
+    "control_total": 1130000.0,
+    "running_total_dr": 1130000.0,
+    "running_total_cr": 1130000.0
+  },
+  "headers": [
+    {
+      "id": "EBSHDR-1",
+      "batch_id": "EBSBATCH-2026060001",
+      "ledger_id": "CNPC_PL",
+      "legal_entity_id": "LE-PCL",
+      "period_name": "JUN-26",
+      "journal_category_id": "Sales Invoices",
+      "journal_source_id": "Receivables",
+      "currency_code": "CNY",
+      "balance_type": "A",
+      "journal_name": "江苏销售-成品油批发收入",
+      "accounting_date": "2026-06-15",
+      "conversion_rate": 1.0,
+      "posting_status": "P",
+      "document_no_seq": "1000000001",
+      "document_status": "posted",
+      "running_total_accounted_dr": 1130000.0,
+      "running_total_accounted_cr": 1130000.0
+    }
+  ],
+  "lines": [
+    {
+      "id": "EBSLN-1",
+      "header_id": "EBSHDR-1",
+      "line_num": 1,
+      "code_combination_id": "21-500-1122-MARKETING",
+      "account_type": "A",
+      "customer_id": "",
+      "line_description": "应收成品油款",
+      "entered_dr": 1130000.0,
+      "entered_cr": 0,
+      "accounted_dr": 1130000.0,
+      "accounted_cr": 0
+    },
+    {
+      "id": "EBSLN-2",
+      "header_id": "EBSHDR-1",
+      "line_num": 2,
+      "code_combination_id": "21-500-6001-MARKETING",
+      "account_type": "R",
+      "line_description": "成品油销售收入",
+      "entered_dr": 0,
+      "entered_cr": 1000000.0,
+      "accounted_dr": 0,
+      "accounted_cr": 1000000.0
+    },
+    {
+      "id": "EBSLN-3",
+      "header_id": "EBSHDR-1",
+      "line_num": 3,
+      "code_combination_id": "21-500-2221-MARKETING",
+      "account_type": "L",
+      "tax_rate_id": "VAT13",
+      "line_description": "销项税额13%",
+      "entered_dr": 0,
+      "entered_cr": 130000.0,
+      "accounted_dr": 0,
+      "accounted_cr": 130000.0
+    }
+  ]
+}
