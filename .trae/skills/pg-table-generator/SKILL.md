@@ -29,6 +29,31 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 | update_by | varchar(100) | - | 更新人ID |
 | update_name | varchar(100) | - | 更新人姓名 |
 
+### 标准分级字段（树形/层级结构表必需）
+
+当表具有树形或层级结构时，必须包含以下分级字段（放在业务字段之后、审计字段之前）：
+
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| leaf | int4 | DEFAULT 0 | 是否明细：1-是叶子节点，0-非叶子节点 |
+| depth | int4 | DEFAULT 1 | 级数：根节点为1，逐层递增 |
+| parent_id | varchar(64) | - | 父节点ID，根节点为空 |
+| id_path | varchar(1000) | - | ID全路径，以/分隔，如 /root_id/parent_id/current_id |
+| code_path | varchar(1000) | - | 编号全路径，以/分隔，如 /ROOT_CODE/PARENT_CODE/CURRENT_CODE |
+
+**使用场景**：
+- 组织架构、菜单、分类、地区等树形结构数据
+- 需要快速查询子树、祖先链的场景
+- 用户未明确说明是否为树形表时，**不添加**这些字段
+
+### 标准扩展信息字段（所有表必需）
+
+所有表必须包含以下扩展字段（放在审计字段之后）：
+
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| ext_attributes | text | - | 扩展属性，存储 JSON 格式的额外业务属性 |
+
 ### 字段约束规则
 
 1. **必填字段**：仅主键字段（id）和唯一索引字段设置为 NOT NULL
@@ -64,6 +89,13 @@ CREATE TABLE table_name (
     field_name varchar(255),
     -- ... 其他业务字段 ...
 
+    -- 标准分级字段（仅树形/层级结构表包含）
+    leaf int4 DEFAULT 1,
+    depth int4 DEFAULT 1,
+    parent_id varchar(64),
+    id_path varchar(1000),
+    code_path varchar(1000),
+
     -- 标准审计字段（除id外按此顺序排列）
     archived int4 DEFAULT 0,
     create_time timestamp DEFAULT CURRENT_TIMESTAMP,
@@ -73,11 +105,17 @@ CREATE TABLE table_name (
     update_by varchar(100),
     update_name varchar(100),
 
+    -- 标准扩展信息字段
+    ext_attributes text,
+
     CONSTRAINT pk_table_name PRIMARY KEY (id)
 );
 
 -- 唯一索引（如有）
 CREATE UNIQUE INDEX uk_table_name_field ON table_name (field_name);
+
+-- 分级字段索引（仅树形表）
+CREATE INDEX idx_table_name_parent_id ON table_name (parent_id);
 
 COMMENT ON TABLE table_name IS '表业务注释';
 COMMENT ON COLUMN table_name.id IS '主键ID';
@@ -114,6 +152,9 @@ CREATE TABLE user (
     update_by varchar(100),
     update_name varchar(100),
 
+    -- 标准扩展信息字段
+    ext_attributes text,
+
     CONSTRAINT pk_user PRIMARY KEY (id)
 );
 
@@ -129,6 +170,7 @@ COMMENT ON COLUMN user.create_by IS '创建人ID';
 COMMENT ON COLUMN user.create_name IS '创建人姓名';
 COMMENT ON COLUMN user.update_by IS '更新人ID';
 COMMENT ON COLUMN user.update_name IS '更新人姓名';
+COMMENT ON COLUMN user.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
 ```
 
 ### 示例2：带唯一索引的表
@@ -160,6 +202,9 @@ CREATE TABLE product (
     update_by varchar(100),
     update_name varchar(100),
 
+    -- 标准扩展信息字段
+    ext_attributes text,
+
     CONSTRAINT pk_product PRIMARY KEY (id),
     CONSTRAINT uk_product_code UNIQUE (code)
 );
@@ -179,6 +224,7 @@ COMMENT ON COLUMN product.create_by IS '创建人ID';
 COMMENT ON COLUMN product.create_name IS '创建人姓名';
 COMMENT ON COLUMN product.update_by IS '更新人ID';
 COMMENT ON COLUMN product.update_name IS '更新人姓名';
+COMMENT ON COLUMN product.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
 ```
 
 ### 示例3：订单表
