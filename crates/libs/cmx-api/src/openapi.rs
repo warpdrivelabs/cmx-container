@@ -41,10 +41,33 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::module_crud::list,
         crate::routes::crud_handlers::module_crud::page,
         crate::handlers::module::handler::module_custom_page,
+        // Module package 导入/导出
+        crate::handlers::module::package_handler::module_package_import,
+        crate::handlers::module::package_handler::module_package_export,
         // SysDatasource CRUD handlers
         crate::routes::crud_handlers::sys_datasource_crud::get,
         crate::routes::crud_handlers::sys_datasource_crud::list,
         crate::routes::crud_handlers::sys_datasource_crud::page,
+        // Form CRUD handlers
+        crate::routes::crud_handlers::form_crud::create,
+        crate::routes::crud_handlers::form_crud::create_many,
+        crate::routes::crud_handlers::form_crud::get,
+        crate::routes::crud_handlers::form_crud::update,
+        crate::routes::crud_handlers::form_crud::update_many,
+        crate::routes::crud_handlers::form_crud::delete,
+        crate::routes::crud_handlers::form_crud::list,
+        crate::routes::crud_handlers::form_crud::page,
+        // Menu CRUD handlers
+        crate::routes::crud_handlers::menu_crud::create,
+        crate::routes::crud_handlers::menu_crud::create_many,
+        crate::routes::crud_handlers::menu_crud::get,
+        crate::routes::crud_handlers::menu_crud::update,
+        crate::routes::crud_handlers::menu_crud::update_many,
+        crate::routes::crud_handlers::menu_crud::delete,
+        crate::routes::crud_handlers::menu_crud::list,
+        crate::routes::crud_handlers::menu_crud::page,
+        // Menu 自定义 handler
+        crate::handlers::menu::handler::menu_tree,
 
         // Domain handlers
         crate::handlers::domain::handler::get_tree,
@@ -220,6 +243,16 @@ use utoipa::OpenApi;
             crate::handlers::sys_datasource::handler::GetByDbIdParams,
             crate::handlers::sys_datasource::handler::DatasourceUpdatePayload,
             crate::handlers::sys_datasource::handler::DatasourceDeletePayload,
+            // Form schemas
+            crate::handlers::form::Form,
+            crate::handlers::form::FormForCreate,
+            crate::handlers::form::FormForUpdate,
+            // Menu schemas
+            crate::handlers::menu::Menu,
+            crate::handlers::menu::MenuForCreate,
+            crate::handlers::menu::MenuForUpdate,
+            // Module package schemas
+            crate::handlers::module::package_handler::ModuleImportResponse,
             crate::handlers::plugin::request::PluginInstallRequest,
             crate::handlers::plugin::request::PluginUninstallRequest,
             crate::handlers::plugin::request::PluginUpgradeRequest,

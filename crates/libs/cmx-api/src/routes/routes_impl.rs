@@ -8,8 +8,10 @@ use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;
 use crate::handlers::domain;
+use crate::handlers::form;
 use crate::handlers::iam;
 use crate::handlers::marketplace;
+use crate::handlers::menu;
 use crate::handlers::module;
 use crate::handlers::plugin;
 use crate::handlers::service;
@@ -59,6 +61,12 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册 SysDatasource 模块路由（使用 ModuleRoutes）
     let router = router.merge(sys_datasource::SysDatasourceModule.routes());
+
+    // 注册 Form 模块路由（使用 ModuleRoutes）
+    let router = router.merge(form::FormModule.routes());
+
+    // 注册 Menu 模块路由（使用 ModuleRoutes）
+    let router = router.merge(menu::MenuModule.routes());
 
     // 注册插件管理路由（使用 ModuleRoutes）
     let router = router.merge(plugin::PluginModule.routes());

@@ -49,3 +49,25 @@ declare_crud_handlers!(
     "SysDatasource",
     "/sys-datasource"
 );
+
+declare_crud_handlers!(
+    form_crud,
+    crate::handlers::form::Form,
+    crate::handlers::form::FormBmc,
+    crate::handlers::form::FormForCreate,
+    crate::handlers::form::FormForUpdate,
+    crate::handlers::form::FormFilter,
+    "Form",
+    "/form"
+);
+
+declare_crud_handlers!(
+    menu_crud,
+    crate::handlers::menu::Menu,
+    crate::handlers::menu::MenuBmc,
+    crate::handlers::menu::MenuForCreate,
+    crate::handlers::menu::MenuForUpdate,
+    crate::handlers::menu::MenuFilter,
+    "Menu",
+    "/menu"
+);
