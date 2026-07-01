@@ -10,7 +10,7 @@ use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
 use modql::filter::ListOptions;
 use serde_json::Value;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::error::{BizError, Result};
 use crate::menu::{MenuBmc, MenuFilter, MenuForCreate, MenuForUpdate};
@@ -235,5 +235,94 @@ impl MenuService {
         GenericCrudService::<MenuBmc, MenuFilter>::page(mm, db_id, None, filters, list_options)
             .await
             .map_err(Into::into)
+    }
+
+    /// 查询菜单树(按域/应用/模块过滤,组装为树形结构)
+    ///
+    /// 参照 DomainService::get_tree / PermissionService::get_permission_tree 模式:
+    /// 查全量扁平数据 → 转 MenuTreeNodeData → TreeNode::from_list 组装。
+    ///
+    /// # Errors
+    /// 数据库查询失败时返回错误
+    pub async fn get_tree(
+        mm: &DatabaseManager,
+        db_id: &str,
+        domain_code: Option<&str>,
+        application_code: Option<&str>,
+        module_code: Option<&str>,
+    ) -> Result<Vec<cmx_api_types::TreeNode<crate::menu::MenuTreeNodeData>>> {
+        debug!("{:<12} - MenuService::get_tree", "SERVICE");
+
+        // 动态构建 WHERE(可选过滤)
+        let mut conditions: Vec<String> = vec!["archived = 0".to_string()];
+        let mut params: Vec<DataValue> = Vec::new();
+        let mut idx = 1;
+        if let Some(dc) = domain_code {
+            conditions.push(format!("domain_code = ${idx}"));
+            params.push(DataValue::String(dc.to_string()));
+            idx += 1;
+        }
+        if let Some(ac) = application_code {
+            conditions.push(format!("application_code = ${idx}"));
+            params.push(DataValue::String(ac.to_string()));
+            idx += 1;
+        }
+        if let Some(mc) = module_code {
+            conditions.push(format!("module_code = ${idx}"));
+            params.push(DataValue::String(mc.to_string()));
+        }
+        let where_clause = conditions.join(" AND ");
+
+        let sql = format!(
+            "SELECT id, code, name, description, path, icon, component, sort_order, visible, \
+             depth, parent_code, domain_code, application_code, module_code, definition, ext_attributes \
+             FROM cmx_menu WHERE {where_clause} ORDER BY sort_order"
+        );
+
+        let dataset = mm
+            .query_sql_with_datavalues(db_id, None, &sql, params, "menu_tree")
+            .await
+            .map_err(|e| BizError::internal(format!("查询菜单树形数据失败: {e}")))?;
+
+        let items: Vec<crate::menu::MenuTreeNodeData> = dataset
+            .iter()
+            .map(|row| Self::row_to_tree_node(row, &dataset.schema))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(cmx_api_types::TreeNode::from_list(items))
+    }
+
+    /// 将 DataSet 一行转换为 MenuTreeNodeData
+    fn row_to_tree_node(
+        row: &cmx_core::model::data::dataset::Row,
+        schema: &cmx_core::model::data::dataset::Schema,
+    ) -> Result<crate::menu::MenuTreeNodeData> {
+        let get_str = |name: &str| -> Option<String> { row.get_by_name_as(schema, name) };
+        let get_i32 = |name: &str| -> i32 { row.get_by_name_as::<i32>(schema, name).unwrap_or(0) };
+        let _ = get_str;
+        let _ = get_i32;
+        Ok(crate::menu::MenuTreeNodeData {
+            id: get_str("id").unwrap_or_default(),
+            code: get_str("code").unwrap_or_default(),
+            name: get_str("name").unwrap_or_default(),
+            parent_code: get_str("parent_code"),
+            description: get_str("description"),
+            path: get_str("path"),
+            icon: get_str("icon"),
+            component: get_str("component"),
+            sort_order: get_i32("sort_order"),
+            visible: get_i32("visible"),
+            depth: get_i32("depth"),
+            domain_code: get_str("domain_code").unwrap_or_default(),
+            application_code: get_str("application_code").unwrap_or_default(),
+            module_code: get_str("module_code").unwrap_or_default(),
+            definition: row
+                .get_by_name_as::<serde_json::Value>(schema, "definition")
+                .or_else(|| {
+                    get_str("definition")
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                }),
+            ext_attributes: get_str("ext_attributes"),
+        })
     }
 }

@@ -133,3 +133,61 @@ pub struct MenuForUpdate {
     /// 扩展属性，存储JSON格式的额外业务属性
     pub ext_attributes: Option<String>,
 }
+
+/// 菜单树节点数据(用于 TreeNode::from_list 组装树形结构)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct MenuTreeNodeData {
+    /// 节点 ID(code 字段)
+    pub id: String,
+    /// 父节点编码(根节点为 None)
+    pub parent_code: Option<String>,
+    /// 菜单编码(唯一标识)
+    pub code: String,
+    /// 菜单名称
+    pub name: String,
+    /// 菜单描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 前端路由路径
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// 菜单图标
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// 前端组件路径
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
+    /// 排序序号
+    pub sort_order: i32,
+    /// 是否可见：0-隐藏，1-显示
+    pub visible: i32,
+    /// 级数：根节点为1
+    pub depth: i32,
+    /// 所属域编码
+    pub domain_code: String,
+    /// 所属应用编码
+    pub application_code: String,
+    /// 所属模块编码
+    pub module_code: String,
+    /// 菜单完整定义JSON
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definition: Option<serde_json::Value>,
+    /// 扩展属性
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_attributes: Option<String>,
+}
+
+impl cmx_api_types::TreeNodeData for MenuTreeNodeData {
+    fn node_id(&self) -> &str {
+        &self.code
+    }
+
+    fn parent_id(&self) -> Option<&str> {
+        self.parent_code.as_deref()
+    }
+
+    fn sort_key(&self) -> i32 {
+        self.sort_order
+    }
+}

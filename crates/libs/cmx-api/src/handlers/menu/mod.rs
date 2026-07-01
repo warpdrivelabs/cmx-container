@@ -6,11 +6,13 @@
 pub mod handler;
 
 // 从 cmx-biz re-export 业务层类型
-pub use cmx_biz::menu::{Menu, MenuBmc, MenuFilter, MenuForCreate, MenuForUpdate, MenuService};
+pub use cmx_biz::menu::{
+    Menu, MenuBmc, MenuFilter, MenuForCreate, MenuForUpdate, MenuService, MenuTreeNodeData,
+};
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::post;
+use axum::routing::get;
 use axum::Router;
 
 /// Menu 模块路由
@@ -22,7 +24,9 @@ impl ModuleRoutes for MenuModule {
         // 注册 Menu 标准 CRUD 路由
         let router = crate::register_crud_handlers_module!(router, menu_crud, "/menu");
         // 注册自定义路由
-        router.route("/menu/tree", post(handler::menu_tree))
+        router
+            // .route("/menu/list", post(handler::menu_list))  // 通用的 list 接口已由宏生成
+            .route("/menu/tree", get(handler::get_menu_tree))
     }
 
     fn prefix() -> &'static str {

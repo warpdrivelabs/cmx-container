@@ -7,7 +7,7 @@ pub mod bmc;
 pub mod filter;
 pub mod service;
 
-pub use entity::{Menu, MenuForCreate, MenuForUpdate};
+pub use entity::{Menu, MenuForCreate, MenuForUpdate, MenuTreeNodeData};
 pub use bmc::MenuBmc;
 pub use filter::MenuFilter;
 pub use service::MenuService;

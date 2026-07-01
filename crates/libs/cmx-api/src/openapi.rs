@@ -67,7 +67,7 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::menu_crud::list,
         crate::routes::crud_handlers::menu_crud::page,
         // Menu 自定义 handler
-        crate::handlers::menu::handler::menu_tree,
+        crate::handlers::menu::handler::get_menu_tree,
 
         // Domain handlers
         crate::handlers::domain::handler::get_tree,
@@ -251,6 +251,8 @@ use utoipa::OpenApi;
             crate::handlers::menu::Menu,
             crate::handlers::menu::MenuForCreate,
             crate::handlers::menu::MenuForUpdate,
+            crate::handlers::menu::MenuTreeNodeData,
+            crate::TreeNode<crate::handlers::menu::MenuTreeNodeData>,
             // Module package schemas
             crate::handlers::module::package_handler::ModuleImportResponse,
             crate::handlers::plugin::request::PluginInstallRequest,
