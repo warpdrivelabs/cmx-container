@@ -7,6 +7,8 @@ pub mod domain;
 pub mod application;
 pub mod module;
 pub mod datasource;
+pub mod form;
+pub mod menu;
 
 // 插件函数调用核心逻辑（协议无关）
 pub mod function_invoker;
