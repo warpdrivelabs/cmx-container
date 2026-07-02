@@ -4,9 +4,9 @@
 //! 将 JSON 格式的编排定义转换为 ServiceDefinition 结构体，
 //! 供插件安装时入库使用。
 
-use std::path::Path;
-use cmx_core::model::service::{ServiceOrchestration, ServiceDefinition};
 use crate::error::PluginResult;
+use cmx_core::model::service::{ServiceDefinition, ServiceOrchestration};
+use std::path::Path;
 use uuid::Uuid;
 
 /// 服务数据解析器
@@ -86,10 +86,8 @@ impl ServiceDataParser {
                 match Self::parse_service_file(&path) {
                     Ok(orchestration) => {
                         // 将编排转换为服务定义结构体
-                        let service_def = Self::orchestration_to_service_definition(
-                            &orchestration,
-                            params,
-                        )?;
+                        let service_def =
+                            Self::orchestration_to_service_definition(&orchestration, params)?;
 
                         // 添加到结果列表
                         results.push(ParsedServiceDefinition {
@@ -232,13 +230,13 @@ impl ServiceDataParser {
 
         // 构造型服务定义结构体
         Ok(ServiceDefinition {
-            id: Uuid::new_v4().to_string(),  // 生成新的 UUID 作为主键
+            id: Uuid::new_v4().to_string(), // 生成新的 UUID 作为主键
             app_id: params.app_id.clone(),
             service_key,
             service_name: orchestration.name.clone(),
             description: orchestration.description.clone(),
             plugin_id: params.plugin_id.clone(),
-            status: 1,  // 默认启用状态
+            status: 1, // 默认启用状态
             version: params.plugin_version.clone(),
             config: Some(config),
             domain_code: params.domain_code.clone(),

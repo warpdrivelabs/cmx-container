@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::common::{PackageUtils, PackageUtilsDeps};
 use crate::common::source_utils::build_plugin_source;
+use crate::common::{PackageUtils, PackageUtilsDeps};
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
@@ -65,7 +65,10 @@ impl RuntimeOps {
             temp_root: deps.temp_root.clone(),
             storage: None,
         });
-        Self { deps, package_utils }
+        Self {
+            deps,
+            package_utils,
+        }
     }
 
     /// 注册插件到内存。
@@ -125,13 +128,12 @@ impl RuntimeOps {
 
         // 4. 写入 Cache
         let cache_key = format!("plugin:{}:{}", result.app_id, result.plugin_id);
-        let cache_value = crate::infrastructure::cache::layered::CacheValue::Json(
-            serde_json::json!({
+        let cache_value =
+            crate::infrastructure::cache::layered::CacheValue::Json(serde_json::json!({
                 "plugin_id": result.plugin_id,
                 "app_id": result.app_id,
                 "version": result.version,
-            }),
-        );
+            }));
         self.deps.cache.set(&cache_key, cache_value, None).await;
 
         tracing::info!(
@@ -157,15 +159,13 @@ impl RuntimeOps {
     ///
     /// 其他节点收到 Installed/Upgraded/Downgraded 通知时使用，
     /// 包含幂等检查：如果插件已注册且版本一致，跳过。
-    pub async fn sync_and_register(
-        &self,
-        plugin_id: &str,
-        version: &str,
-    ) -> PluginResult<()> {
+    pub async fn sync_and_register(&self, plugin_id: &str, version: &str) -> PluginResult<()> {
         // 1. 幂等检查：已注册且版本一致则跳过
         {
             let registry = self.deps.registry.read().await;
-            if let Some(existing) = registry.get(plugin_id) && existing.version == version {
+            if let Some(existing) = registry.get(plugin_id)
+                && existing.version == version
+            {
                 tracing::info!(
                     plugin_id = plugin_id,
                     version = version,
@@ -377,10 +377,7 @@ impl RuntimeOps {
     /// 注销并清理本地文件。
     ///
     /// 用于 Removed 场景，先从内存注销，再删除本地插件文件目录。
-    pub async fn unregister_and_cleanup(
-        &self,
-        plugin_id: &str,
-    ) -> PluginResult<()> {
+    pub async fn unregister_and_cleanup(&self, plugin_id: &str) -> PluginResult<()> {
         // 1. 从内存注销
         self.unregister_plugin(plugin_id).await?;
 
@@ -454,21 +451,22 @@ impl RuntimeOps {
 
             tokio::fs::create_dir_all(&temp_extract_dir).await?;
 
-            self.package_utils
-                .prepare_package_for_validation(
-                    &package_path,
-                    &temp_extract_dir,
-                    "运行时同步",
-                )?;
+            self.package_utils.prepare_package_for_validation(
+                &package_path,
+                &temp_extract_dir,
+                "运行时同步",
+            )?;
 
-            let plugin_root_in_temp =
-                PackageUtils::find_plugin_root_in_dir(&temp_extract_dir)?;
+            let plugin_root_in_temp = PackageUtils::find_plugin_root_in_dir(&temp_extract_dir)?;
 
             if let Some(parent) = target_dir.parent() {
                 tokio::fs::create_dir_all(parent).await?;
             }
             // rename 在跨文件系统（如 tmpfs → 持久卷）时会失败，fallback 到 copy + delete
-            if tokio::fs::rename(&plugin_root_in_temp, &target_dir).await.is_err() {
+            if tokio::fs::rename(&plugin_root_in_temp, &target_dir)
+                .await
+                .is_err()
+            {
                 tracing::debug!("rename 跨文件系统失败，fallback 到 copy + delete");
                 tokio::fs::copy(&plugin_root_in_temp, &target_dir).await?;
                 let _ = tokio::fs::remove_dir_all(&plugin_root_in_temp).await;

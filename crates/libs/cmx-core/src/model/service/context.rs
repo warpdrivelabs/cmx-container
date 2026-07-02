@@ -2,9 +2,9 @@
 //!
 //! 包含服务调用上下文 SVRContext，用于在节点间传递数据。
 
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// 服务调用上下文 key 常量
 pub mod svrkey {
@@ -82,75 +82,124 @@ impl AuthContext {
 
     /// 必须拥有指定权限
     /// Spring Security: hasAuthority(key)
-    pub fn require_permission(&self, key: &str) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        if self.has_permission(key) { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Permission {
-            user_id: self.user_id.clone(), permission: key.to_string(),
-        })}
+    pub fn require_permission(
+        &self,
+        key: &str,
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        if self.has_permission(key) {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Permission {
+                user_id: self.user_id.clone(),
+                permission: key.to_string(),
+            })
+        }
     }
 
     /// 必须拥有所有指定权限(AND 语义)
     /// 一次性收集全部缺失权限后返回
-    pub fn require_all_permissions(&self, keys: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        let missing: Vec<&str> = keys.iter()
+    pub fn require_all_permissions(
+        &self,
+        keys: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        let missing: Vec<&str> = keys
+            .iter()
             .filter(|k| !self.has_permission(k))
             .copied()
             .collect();
-        if missing.is_empty() { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Permission {
-            user_id: self.user_id.clone(),
-            permission: missing.join(", "),
-        })}
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Permission {
+                user_id: self.user_id.clone(),
+                permission: missing.join(", "),
+            })
+        }
     }
 
     /// 拥有任一权限即可(OR 语义)
-    pub fn require_any_permission(&self, keys: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        if keys.iter().any(|k| self.has_permission(k)) { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Permission {
-            user_id: self.user_id.clone(),
-            permission: keys.join("|"),
-        })}
+    pub fn require_any_permission(
+        &self,
+        keys: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        if keys.iter().any(|k| self.has_permission(k)) {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Permission {
+                user_id: self.user_id.clone(),
+                permission: keys.join("|"),
+            })
+        }
     }
 
     /// 必须拥有指定角色
     /// Spring Security: hasRole(role)
     pub fn require_role(&self, role: &str) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        if self.has_role(role) { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Role {
-            user_id: self.user_id.clone(), role: role.to_string(),
-        })}
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        if self.has_role(role) {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Role {
+                user_id: self.user_id.clone(),
+                role: role.to_string(),
+            })
+        }
     }
 
     /// 必须拥有所有指定角色(AND 语义)
     /// 一次性收集全部缺失角色后返回
-    pub fn require_all_roles(&self, roles: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        let missing: Vec<&str> = roles.iter()
+    pub fn require_all_roles(
+        &self,
+        roles: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        let missing: Vec<&str> = roles
+            .iter()
             .filter(|r| !self.has_role(r))
             .copied()
             .collect();
-        if missing.is_empty() { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Roles {
-            user_id: self.user_id.clone(),
-            requirement: crate::model::iam::RoleRequirement::All,
-            roles: missing.join(", "),
-        })}
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Roles {
+                user_id: self.user_id.clone(),
+                requirement: crate::model::iam::RoleRequirement::All,
+                roles: missing.join(", "),
+            })
+        }
     }
 
     /// 拥有任一角色即可(OR 语义)
     /// Spring Security: hasAnyRole(roles...)
-    pub fn require_any_role(&self, roles: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        if self.is_short_circuited() { return Ok(()); }
-        if roles.iter().any(|r| self.has_role(r)) { Ok(()) }
-        else { Err(crate::model::iam::PermissionDeniedError::Roles {
-            user_id: self.user_id.clone(),
-            requirement: crate::model::iam::RoleRequirement::Any,
-            roles: roles.join("|"),
-        })}
+    pub fn require_any_role(
+        &self,
+        roles: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        if self.is_short_circuited() {
+            return Ok(());
+        }
+        if roles.iter().any(|r| self.has_role(r)) {
+            Ok(())
+        } else {
+            Err(crate::model::iam::PermissionDeniedError::Roles {
+                user_id: self.user_id.clone(),
+                requirement: crate::model::iam::RoleRequirement::Any,
+                roles: roles.join("|"),
+            })
+        }
     }
 }
 
@@ -196,7 +245,12 @@ impl SVRContext {
     /// - `headers`: 请求头
     /// - `time_in`: 请求进入时间
     /// - `request_id`: 请求ID
-    pub fn new(initial_input: serde_json::Value, headers: HashMap<String, String>, time_in: DateTime<Utc>, request_id: String) -> Self {
+    pub fn new(
+        initial_input: serde_json::Value,
+        headers: HashMap<String, String>,
+        time_in: DateTime<Utc>,
+        request_id: String,
+    ) -> Self {
         Self {
             initial_input,
             headers,
@@ -274,43 +328,70 @@ impl SVRContext {
     // ========================================================
 
     /// 权限检查(委托 AuthContext)
-    pub fn require_permission(&self, key: &str) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+    pub fn require_permission(
+        &self,
+        key: &str,
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_permission(key)
     }
 
     /// 全部权限检查(委托 AuthContext)
-    pub fn require_all_permissions(&self, keys: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+    pub fn require_all_permissions(
+        &self,
+        keys: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_all_permissions(keys)
     }
 
     /// 任一权限检查(委托 AuthContext)
-    pub fn require_any_permission(&self, keys: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+    pub fn require_any_permission(
+        &self,
+        keys: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_any_permission(keys)
     }
 
     /// 角色检查(委托 AuthContext)
     pub fn require_role(&self, role: &str) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_role(role)
     }
 
     /// 全部角色检查(委托 AuthContext)
-    pub fn require_all_roles(&self, roles: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+    pub fn require_all_roles(
+        &self,
+        roles: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_all_roles(roles)
     }
 
     /// 任一角色检查(委托 AuthContext)
-    pub fn require_any_role(&self, roles: &[&str]) -> Result<(), crate::model::iam::PermissionDeniedError> {
-        let auth = self.auth_context.as_ref()
+    pub fn require_any_role(
+        &self,
+        roles: &[&str],
+    ) -> Result<(), crate::model::iam::PermissionDeniedError> {
+        let auth = self
+            .auth_context
+            .as_ref()
             .ok_or(crate::model::iam::PermissionDeniedError::Unauthenticated)?;
         auth.require_any_role(roles)
     }

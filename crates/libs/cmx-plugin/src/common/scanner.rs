@@ -59,7 +59,12 @@ pub async fn scan_local_plugins(
 
         let mut max_version = String::new();
         while let Ok(Some(version_entry)) = version_dir_entries.next_entry().await {
-            if !version_entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+            if !version_entry
+                .file_type()
+                .await
+                .map(|t| t.is_dir())
+                .unwrap_or(false)
+            {
                 continue;
             }
 

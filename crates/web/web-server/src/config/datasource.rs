@@ -30,8 +30,9 @@ pub async fn init_datasources() -> crate::Result<()> {
     info!("开始初始化数据源...");
 
     let config = ConfigManager::global();
-    let mut configs: Vec<DbConfig> = config.get_as("databases")
-        .map_err(|e| Error::DatasourceInit(format!("无法从配置管理器获取 databases 配置: {}", e)))?;
+    let mut configs: Vec<DbConfig> = config.get_as("databases").map_err(|e| {
+        Error::DatasourceInit(format!("无法从配置管理器获取 databases 配置: {}", e))
+    })?;
 
     info!("成功解析到 {} 个数据源配置", configs.len());
 
@@ -48,7 +49,11 @@ pub async fn init_datasources() -> crate::Result<()> {
             c.module_code = Some(app_identity.module_code.clone());
         }
         if c.source_type.is_none() {
-            c.source_type = Some(if c.default { "default".to_string() } else { "other".to_string() });
+            c.source_type = Some(if c.default {
+                "default".to_string()
+            } else {
+                "other".to_string()
+            });
         }
         // db_name 未显式配置时，从 db_url 解析数据库名作为默认显示名称
         if c.db_name.is_none() {
@@ -60,7 +65,8 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     if let Err(e) = register_datasources(db_manager, configs.clone()).await {
         return Err(Error::DatasourceInit(format!(
-            "注册配置文件数据源失败: {}", e
+            "注册配置文件数据源失败: {}",
+            e
         )));
     }
 
@@ -70,11 +76,13 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, &app_identity, &configs).await {
         return Err(Error::DatasourceInit(format!(
-            "持久化数据源配置失败: {}", e
+            "持久化数据源配置失败: {}",
+            e
         )));
     }
 
-    let active_datasources = load_active_datasources(db_manager, &default_db_id, &app_identity).await?;
+    let active_datasources =
+        load_active_datasources(db_manager, &default_db_id, &app_identity).await?;
 
     // 过滤掉配置文件中的数据源（只保留数据库中的数据源）
     let mut filtered_datasources = Vec::new();
@@ -119,9 +127,15 @@ async fn persist_datasource_configs(
         // 按 db_id + 域应用模块联合查重（db_id 在不同域下可重复）
         let filter = SysDatasourceFilter {
             db_id: Some(OpValsString(vec![OpValString::Eq(config.db_id.clone())])),
-            domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
-            application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
-            module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
+            domain_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.domain_code.clone(),
+            )])),
+            application_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.application_code.clone(),
+            )])),
+            module_code: Some(OpValsString(vec![OpValString::Eq(
+                app_identity.module_code.clone(),
+            )])),
             ..Default::default()
         };
 
@@ -132,8 +146,8 @@ async fn persist_datasource_configs(
             Some(vec![filter]),
             None,
         )
-            .await
-            .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
+        .await
+        .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
 
         let entity_for_update = dbconfig_to_entity_for_update(&config);
 
@@ -148,10 +162,10 @@ async fn persist_datasource_configs(
                         serde_json::Value::String(id_str.clone()),
                         entity_for_update,
                     )
-                        .await
-                        .map_err(|e| Error::DatasourceInit(format!(
-                            "更新数据源 {} 失败: {}", config.db_id, e
-                        )))?;
+                    .await
+                    .map_err(|e| {
+                        Error::DatasourceInit(format!("更新数据源 {} 失败: {}", config.db_id, e))
+                    })?;
                     info!("成功更新数据源: {}", config.db_id);
                 }
             }
@@ -162,9 +176,9 @@ async fn persist_datasource_configs(
 
         GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, None, entity)
             .await
-            .map_err(|e| Error::DatasourceInit(format!(
-                "持久化数据源 {} 失败: {}", config.db_id, e
-            )))?;
+            .map_err(|e| {
+                Error::DatasourceInit(format!("持久化数据源 {} 失败: {}", config.db_id, e))
+            })?;
         info!("成功持久化数据源: {}", config.db_id);
     }
 
@@ -232,13 +246,21 @@ async fn load_active_datasources(
     db_id: &str,
     app_identity: &crate::config::AppIdentity,
 ) -> crate::Result<Vec<DbConfig>> {
-    info!("开始加载有效数据源（域: {}/{}/{}）...",
-        app_identity.domain_code, app_identity.application_code, app_identity.module_code);
+    info!(
+        "开始加载有效数据源（域: {}/{}/{}）...",
+        app_identity.domain_code, app_identity.application_code, app_identity.module_code
+    );
 
     let filter = SysDatasourceFilter {
-        domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
-        application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
-        module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
+        domain_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.domain_code.clone(),
+        )])),
+        application_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.application_code.clone(),
+        )])),
+        module_code: Some(OpValsString(vec![OpValString::Eq(
+            app_identity.module_code.clone(),
+        )])),
         status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
         archived: Some(OpValsInt64(vec![OpValInt64::Eq(0)])),
         ..Default::default()
@@ -251,8 +273,8 @@ async fn load_active_datasources(
         Some(vec![filter]),
         None,
     )
-        .await
-        .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
+    .await
+    .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
 
     let mut datasources = Vec::new();
     let schema = &dataset.schema;
@@ -305,7 +327,10 @@ async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> c
     );
 
     if fail_count > 0 {
-        Err(Error::DatasourceInit(format!("有 {} 个数据源注册失败", fail_count)))
+        Err(Error::DatasourceInit(format!(
+            "有 {} 个数据源注册失败",
+            fail_count
+        )))
     } else {
         Ok(())
     }

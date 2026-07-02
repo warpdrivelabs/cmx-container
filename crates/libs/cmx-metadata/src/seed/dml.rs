@@ -2,8 +2,8 @@
 //!
 //! 根据表定义和数据行，生成 PostgreSQL INSERT / UPSERT 语句。
 
-use cmx_core::model::cell::{ColumnDefine, FieldType};
 use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, FieldType};
 
 /// 将 serde_json::Value 转义为 SQL 字面量
 ///
@@ -45,13 +45,22 @@ fn escape_sql_value(value: &serde_json::Value, field_type: &FieldType) -> String
             }
         }
         serde_json::Value::Array(arr) => {
-            format!("'{}'", escape_string(&serde_json::to_string(arr).unwrap_or_default()))
+            format!(
+                "'{}'",
+                escape_string(&serde_json::to_string(arr).unwrap_or_default())
+            )
         }
         serde_json::Value::Object(obj) => {
             if matches!(field_type, FieldType::Json) {
-                format!("'{}'::jsonb", escape_string(&serde_json::to_string(obj).unwrap_or_default()))
+                format!(
+                    "'{}'::jsonb",
+                    escape_string(&serde_json::to_string(obj).unwrap_or_default())
+                )
             } else {
-                format!("'{}'", escape_string(&serde_json::to_string(obj).unwrap_or_default()))
+                format!(
+                    "'{}'",
+                    escape_string(&serde_json::to_string(obj).unwrap_or_default())
+                )
             }
         }
     }
@@ -94,7 +103,9 @@ pub fn generate_pg_insert_or_upsert(
     conflict_columns: &[String],
 ) -> Result<String, MetadataError> {
     if rows.is_empty() {
-        return Err(MetadataError::SeedData("数据行为空，无法生成 DML 语句".to_string()));
+        return Err(MetadataError::SeedData(
+            "数据行为空，无法生成 DML 语句".to_string(),
+        ));
     }
 
     // 构建带 schema 的表名
@@ -161,9 +172,7 @@ pub fn generate_pg_insert_or_upsert(
         let update_columns: Vec<String> = insertable_columns
             .iter()
             .filter(|c| !conflict_columns.contains(&c.name))
-            .map(|c| {
-                format!("\"{0}\" = EXCLUDED.\"{0}\"", c.name)
-            })
+            .map(|c| format!("\"{0}\" = EXCLUDED.\"{0}\"", c.name))
             .collect();
 
         if !update_columns.is_empty() {
@@ -175,10 +184,7 @@ pub fn generate_pg_insert_or_upsert(
             ));
         } else {
             // 所有列都是冲突列，只做冲突检测
-            sql.push_str(&format!(
-                "\nON CONFLICT ({}) DO NOTHING",
-                conflict_clause
-            ));
+            sql.push_str(&format!("\nON CONFLICT ({}) DO NOTHING", conflict_clause));
         }
     }
 
@@ -193,7 +199,13 @@ pub fn generate_pg_single_insert_or_upsert(
     row: &serde_json::Value,
     conflict_columns: &[String],
 ) -> Result<String, MetadataError> {
-    generate_pg_insert_or_upsert(table_name, schema, columns, std::slice::from_ref(row), conflict_columns)
+    generate_pg_insert_or_upsert(
+        table_name,
+        schema,
+        columns,
+        std::slice::from_ref(row),
+        conflict_columns,
+    )
 }
 
 #[cfg(test)]
@@ -235,9 +247,7 @@ mod tests {
             make_col("id", FieldType::Int),
             make_col("name", FieldType::String),
         ];
-        let rows = vec![
-            serde_json::json!({"id": 1, "name": "测试"}),
-        ];
+        let rows = vec![serde_json::json!({"id": 1, "name": "测试"})];
 
         let sql = generate_pg_insert_or_upsert("test_table", None, &columns, &rows, &[]).unwrap();
         assert!(sql.contains("INSERT INTO \"test_table\""));
@@ -253,12 +263,11 @@ mod tests {
             make_col("code", FieldType::String),
             make_col("name", FieldType::String),
         ];
-        let rows = vec![
-            serde_json::json!({"id": 1, "code": "FIN", "name": "财务域"}),
-        ];
+        let rows = vec![serde_json::json!({"id": 1, "code": "FIN", "name": "财务域"})];
         let conflict_cols = vec!["code".to_string()];
 
-        let sql = generate_pg_insert_or_upsert("test_table", None, &columns, &rows, &conflict_cols).unwrap();
+        let sql = generate_pg_insert_or_upsert("test_table", None, &columns, &rows, &conflict_cols)
+            .unwrap();
         assert!(sql.contains("ON CONFLICT (\"code\")"));
         assert!(sql.contains("DO UPDATE SET"));
         assert!(sql.contains("\"id\" = EXCLUDED.\"id\""));

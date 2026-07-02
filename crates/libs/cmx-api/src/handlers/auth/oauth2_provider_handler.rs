@@ -7,9 +7,9 @@
 //! - 授权码换 Token
 //! - 绑定/解绑
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::Json;
 use serde::Deserialize;
 use tracing::{error, info};
 
@@ -21,9 +21,9 @@ use crate::{ApiResp, Error, Result};
 pub async fn oauth2_providers(
     State(state): State<CmxAppState>,
 ) -> Result<Json<ApiResp<Vec<cmx_traits::auth::ProviderInfo>>>> {
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     let providers = auth_service.list_oauth2_providers().await.map_err(|e| {
         error!(error = %e, "列出 OAuth2 Provider 失败");
@@ -39,26 +39,28 @@ pub async fn oauth2_provider_authorize(
     Path(provider): Path<String>,
 ) -> Result<axum::response::Redirect> {
     // 1. 获取 Provider Registry
-    let registry = GlobalAuthService::get_provider_registry().ok_or_else(|| {
-        Error::InternalError("OAuth2 Provider 注册表未初始化".to_string())
-    })?;
+    let registry = GlobalAuthService::get_provider_registry()
+        .ok_or_else(|| Error::InternalError("OAuth2 Provider 注册表未初始化".to_string()))?;
 
     // 2. 获取 Provider
-    let provider_impl = registry.get_provider(&provider).map_err(|e| {
-        Error::BadRequest(e.to_string())
-    })?;
+    let provider_impl = registry
+        .get_provider(&provider)
+        .map_err(|e| Error::BadRequest(e.to_string()))?;
 
     // 3. 生成 state 并通过 AuthService 存储
     let state_value = uuid::Uuid::new_v4().to_string();
     let redirect_uri = provider_impl.redirect_uri().to_string();
 
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
-    auth_service.store_oauth2_provider_state(&state_value, &provider).await.map_err(|e| {
-        error!(error = %e, "存储 OAuth2 state 失败");
-        Error::InternalError("存储 state 失败".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
+    auth_service
+        .store_oauth2_provider_state(&state_value, &provider)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "存储 OAuth2 state 失败");
+            Error::InternalError("存储 state 失败".to_string())
+        })?;
 
     // 4. 构建授权 URL
     let scopes = provider_impl.default_scopes();
@@ -86,20 +88,21 @@ pub async fn oauth2_provider_callback(
     Query(params): Query<CallbackParams>,
     headers: HeaderMap,
 ) -> Result<axum::response::Redirect> {
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     let device_info = extract_device_info(&headers);
 
-    match auth_service.handle_oauth2_callback(&provider, &params.code, &params.state, device_info).await {
+    match auth_service
+        .handle_oauth2_callback(&provider, &params.code, &params.state, device_info)
+        .await
+    {
         Ok(result) => {
             let frontend_url = get_frontend_callback_url()?;
             let redirect_url = format!(
                 "{}?code={}&state={}",
-                frontend_url,
-                result.callback_code,
-                result.state
+                frontend_url, result.callback_code, result.state
             );
             info!(provider = %provider, is_new = result.is_new, "第三方 OAuth2 回调成功，重定向前端");
             Ok(axum::response::Redirect::temporary(&redirect_url))
@@ -108,7 +111,10 @@ pub async fn oauth2_provider_callback(
             error!(provider = %provider, error = %e, "第三方 OAuth2 回调失败");
             let frontend_url = get_frontend_callback_url()?;
             let error_code = sanitize_oauth2_error(&e);
-            let redirect_url = format!("{}?error={}&state={}", frontend_url, error_code, params.state);
+            let redirect_url = format!(
+                "{}?error={}&state={}",
+                frontend_url, error_code, params.state
+            );
             Ok(axum::response::Redirect::temporary(&redirect_url))
         }
     }
@@ -159,41 +165,42 @@ pub async fn oauth2_provider_exchange(
     headers: HeaderMap,
     Json(req): Json<ExchangeCodeRequest>,
 ) -> Result<Json<ApiResp<ExchangeCodeResponse>>> {
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     // 提取设备信息（前端直调模式签发 TokenPair 时使用）
     let device_info = extract_device_info(&headers);
 
-    let exchange_result = auth_service.exchange_oauth2_callback_code(&req.code, &req.state, device_info).await.map_err(|e| {
-        error!(error = %e, "授权码换 Token 失败");
-        match e {
-            cmx_traits::auth::AuthError::OAuth2CallbackCodeInvalid => {
-                Error::Unauthorized("授权码或 state 无效或已过期".to_string())
+    let exchange_result = auth_service
+        .exchange_oauth2_callback_code(&req.code, &req.state, device_info)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "授权码换 Token 失败");
+            match e {
+                cmx_traits::auth::AuthError::OAuth2CallbackCodeInvalid => {
+                    Error::Unauthorized("授权码或 state 无效或已过期".to_string())
+                }
+                // state 不匹配属于 CSRF 攻击迹象，返回 401 Unauthorized
+                cmx_traits::auth::AuthError::OAuth2(msg) if msg.contains("不匹配") => {
+                    Error::Unauthorized(msg)
+                }
+                cmx_traits::auth::AuthError::OAuth2(msg) => Error::BadRequest(msg),
+                cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => {
+                    Error::BadRequest("Provider 不存在".to_string())
+                }
+                cmx_traits::auth::AuthError::OAuth2ProviderUnavailable(_) => {
+                    Error::BadRequest("Provider 服务不可用".to_string())
+                }
+                cmx_traits::auth::AuthError::OAuth2ProviderTokenError(_) => {
+                    Error::BadRequest("Provider 授权失败".to_string())
+                }
+                cmx_traits::auth::AuthError::OAuth2ProviderUserInfoError(_) => {
+                    Error::BadRequest("Provider 用户信息获取失败".to_string())
+                }
+                other => Error::InternalError(other.to_string()),
             }
-            // state 不匹配属于 CSRF 攻击迹象，返回 401 Unauthorized
-            cmx_traits::auth::AuthError::OAuth2(msg) if msg.contains("不匹配") => {
-                Error::Unauthorized(msg)
-            }
-            cmx_traits::auth::AuthError::OAuth2(msg) => {
-                Error::BadRequest(msg)
-            }
-            cmx_traits::auth::AuthError::OAuth2ProviderNotFound(_) => {
-                Error::BadRequest("Provider 不存在".to_string())
-            }
-            cmx_traits::auth::AuthError::OAuth2ProviderUnavailable(_) => {
-                Error::BadRequest("Provider 服务不可用".to_string())
-            }
-            cmx_traits::auth::AuthError::OAuth2ProviderTokenError(_) => {
-                Error::BadRequest("Provider 授权失败".to_string())
-            }
-            cmx_traits::auth::AuthError::OAuth2ProviderUserInfoError(_) => {
-                Error::BadRequest("Provider 用户信息获取失败".to_string())
-            }
-            other => Error::InternalError(other.to_string()),
-        }
-    })?;
+        })?;
 
     // 校验 state 一致性（防 CSRF 二次防护）
     if !req.state.is_empty() && req.state != exchange_result.state {
@@ -231,13 +238,13 @@ pub async fn oauth2_provider_link(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<LinkAccountRequest>,
 ) -> Result<Json<ApiResp<()>>> {
-    let auth_ctx = svr_ctx.auth_context.ok_or_else(|| {
-        Error::Unauthorized("未认证".to_string())
-    })?;
+    let auth_ctx = svr_ctx
+        .auth_context
+        .ok_or_else(|| Error::Unauthorized("未认证".to_string()))?;
 
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     auth_service.link_oauth2_account(&auth_ctx.user_id, &provider, &req.code).await.map_err(|e| {
         error!(user_id = %auth_ctx.user_id, provider = %provider, error = %e, "绑定第三方账号失败");
@@ -263,13 +270,13 @@ pub async fn oauth2_provider_unlink(
     Path(provider): Path<String>,
     CmxSvrContext(svr_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<()>>> {
-    let auth_ctx = svr_ctx.auth_context.ok_or_else(|| {
-        Error::Unauthorized("未认证".to_string())
-    })?;
+    let auth_ctx = svr_ctx
+        .auth_context
+        .ok_or_else(|| Error::Unauthorized("未认证".to_string()))?;
 
-    let auth_service = state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     auth_service.unlink_oauth2_account(&auth_ctx.user_id, &provider).await.map_err(|e| {
         error!(user_id = %auth_ctx.user_id, provider = %provider, error = %e, "解绑第三方账号失败");
@@ -312,16 +319,20 @@ fn sanitize_oauth2_error(e: &cmx_traits::auth::AuthError) -> &'static str {
 
 /// 从请求头提取设备信息
 fn extract_device_info(headers: &HeaderMap) -> Option<cmx_traits::auth::DeviceInfo> {
-    let device_type = headers.get("X-Device-Type")
+    let device_type = headers
+        .get("X-Device-Type")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
-    let device_id = headers.get("X-Device-Id")
+    let device_id = headers
+        .get("X-Device-Id")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
-    let ip = headers.get("X-Forwarded-For")
+    let ip = headers
+        .get("X-Forwarded-For")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
-    let user_agent = headers.get("User-Agent")
+    let user_agent = headers
+        .get("User-Agent")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
 

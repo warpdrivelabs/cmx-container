@@ -4,8 +4,8 @@ pub mod handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// 互斥规则模块路由
 pub struct RuleModule;
@@ -15,8 +15,14 @@ impl ModuleRoutes for RuleModule {
         Router::new()
             // CRUD
             .route("/iam/exclusion-rules/create", post(handler::create_rule))
-            .route("/iam/exclusion-rules/update/{rule_id}", post(handler::update_rule))
-            .route("/iam/exclusion-rules/delete/{rule_id}", post(handler::delete_rule))
+            .route(
+                "/iam/exclusion-rules/update/{rule_id}",
+                post(handler::update_rule),
+            )
+            .route(
+                "/iam/exclusion-rules/delete/{rule_id}",
+                post(handler::delete_rule),
+            )
             .route("/iam/exclusion-rules/get/{rule_id}", get(handler::get_rule))
             // 分页查询
             .route("/iam/exclusion-rules/page", post(handler::page_rules))
@@ -35,7 +41,10 @@ impl ModuleRoutes for RuleModule {
                 post(handler::remove_rule_items),
             )
             // 规则校验测试
-            .route("/iam/exclusion-rules/validate", post(handler::validate_rule))
+            .route(
+                "/iam/exclusion-rules/validate",
+                post(handler::validate_rule),
+            )
     }
 
     fn prefix() -> &'static str {

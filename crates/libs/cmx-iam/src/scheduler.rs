@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use cmx_audit::{AuditDomain, AuditLogger, AuditRecord, OperationResult};
-use cmx_database::DatabaseManager;
 use cmx_core::model::cell::DataValue;
+use cmx_database::DatabaseManager;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 

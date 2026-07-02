@@ -2,11 +2,11 @@
 //!
 //! 提供服务信息的内存缓存管理。
 
+use cmx_core::model::service::ServiceDefinition;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-use cmx_core::model::service::ServiceDefinition;
 
 /// 服务注册中心
 ///
@@ -39,18 +39,30 @@ impl ServiceRegistry {
     /// # 参数
     /// * `service` - 服务信息
     /// * `orchestration` - 编排定义（可选）
-    pub async fn register(&self, service: ServiceDefinition, orchestration: Option<serde_json::Value>) {
+    pub async fn register(
+        &self,
+        service: ServiceDefinition,
+        orchestration: Option<serde_json::Value>,
+    ) {
         let service_key = service.service_key.clone();
         let plugin_id = service.plugin_id.clone();
-        info!("注册插件{}服务：{}",&plugin_id, &service_key);
+        info!("注册插件{}服务：{}", &plugin_id, &service_key);
 
-        self.services.write().await.insert(service_key.clone(), service);
+        self.services
+            .write()
+            .await
+            .insert(service_key.clone(), service);
 
         if let Some(orch) = orchestration {
-            self.orchestration_cache.write().await.insert(service_key.clone(), orch);
+            self.orchestration_cache
+                .write()
+                .await
+                .insert(service_key.clone(), orch);
         }
 
-        self.plugin_services.write().await
+        self.plugin_services
+            .write()
+            .await
             .entry(plugin_id)
             .or_insert_with(Vec::new)
             .push(service_key);
@@ -66,9 +78,10 @@ impl ServiceRegistry {
         self.orchestration_cache.write().await.remove(service_key);
 
         if let Ok(mut map) = self.plugin_services.try_write()
-            && let Some(keys) = map.get_mut(plugin_id) {
-                keys.retain(|k| k != service_key);
-            }
+            && let Some(keys) = map.get_mut(plugin_id)
+        {
+            keys.retain(|k| k != service_key);
+        }
     }
 
     /// 获取服务信息
@@ -112,7 +125,11 @@ impl ServiceRegistry {
     /// # 返回值
     /// 返回编排定义的 JSON 值，如果不存在则返回 None
     pub async fn get_orchestration(&self, service_key: &str) -> Option<serde_json::Value> {
-        self.orchestration_cache.read().await.get(service_key).cloned()
+        self.orchestration_cache
+            .read()
+            .await
+            .get(service_key)
+            .cloned()
     }
 
     /// 获取所有服务键
@@ -128,7 +145,11 @@ impl ServiceRegistry {
     /// # 参数
     /// * `services` - 服务信息列表
     /// * `orchestrations` - 编排定义映射（service_key -> JSON）
-    pub async fn load_all(&self, services: Vec<ServiceDefinition>, orchestrations: HashMap<String, serde_json::Value>) {
+    pub async fn load_all(
+        &self,
+        services: Vec<ServiceDefinition>,
+        orchestrations: HashMap<String, serde_json::Value>,
+    ) {
         let mut services_map = self.services.write().await;
         let mut plugin_map = self.plugin_services.write().await;
         let mut orch_map = self.orchestration_cache.write().await;
@@ -162,8 +183,16 @@ impl ServiceRegistry {
     /// * `plugin_id` - 插件ID
     /// * `services` - 新的服务信息列表
     /// * `orchestrations` - 编排定义映射（service_key -> JSON）
-    pub async fn sync_plugin_services(&self, plugin_id: &str, services: Vec<ServiceDefinition>, orchestrations: HashMap<String, serde_json::Value>) {
-        let existing_keys = self.plugin_services.read().await
+    pub async fn sync_plugin_services(
+        &self,
+        plugin_id: &str,
+        services: Vec<ServiceDefinition>,
+        orchestrations: HashMap<String, serde_json::Value>,
+    ) {
+        let existing_keys = self
+            .plugin_services
+            .read()
+            .await
             .get(plugin_id)
             .cloned()
             .unwrap_or_default();
@@ -176,15 +205,24 @@ impl ServiceRegistry {
         let mut keys = Vec::new();
         for service in services {
             let service_key = service.service_key.clone();
-            self.services.write().await.insert(service_key.clone(), service);
+            self.services
+                .write()
+                .await
+                .insert(service_key.clone(), service);
             keys.push(service_key.clone());
 
             if let Some(orch) = orchestrations.get(&service_key) {
-                self.orchestration_cache.write().await.insert(service_key, orch.clone());
+                self.orchestration_cache
+                    .write()
+                    .await
+                    .insert(service_key, orch.clone());
             }
         }
 
-        self.plugin_services.write().await.insert(plugin_id.to_string(), keys);
+        self.plugin_services
+            .write()
+            .await
+            .insert(plugin_id.to_string(), keys);
     }
 }
 

@@ -3,8 +3,8 @@
 //! 提供高性能、趋势递增的分布式 ID 生成功能。
 
 use rand::Rng;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 雪花算法 ID 生成器
@@ -87,7 +87,8 @@ impl SnowflakeGenerator {
                     continue;
                 }
 
-                if self.sequence
+                if self
+                    .sequence
                     .compare_exchange(current_seq, new_seq, Ordering::Release, Ordering::Acquire)
                     .is_ok()
                 {

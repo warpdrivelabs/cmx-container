@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use cmx_database::crud::{GenericCrudService, DbBmc};
-use cmx_database::{DatabaseManager, get_default_db_manager, DataSet};
-use cmx_traits::auth::{AuthError, UserAuthQuery, OAuth2UserInfo};
-use modql::filter::{OpValsString, OpValsInt64, OpValString, OpValInt64};
+use cmx_database::crud::{DbBmc, GenericCrudService};
+use cmx_database::{DataSet, DatabaseManager, get_default_db_manager};
+use cmx_traits::auth::{AuthError, OAuth2UserInfo, UserAuthQuery};
 use modql::field::Fields;
-use serde::{Serialize, Deserialize};
+use modql::filter::{OpValInt64, OpValString, OpValsInt64, OpValsString};
+use serde::{Deserialize, Serialize};
 
 use super::ProviderUserInfo;
 use crate::config::AccountLinkConfig;
@@ -70,7 +70,11 @@ pub enum LinkResult {
     /// 账号未注册（企业场景下 `auto_register=false` 且无邮箱匹配时触发）。
     ///
     /// N-8: 语义已从"需要前端绑定"变更为"未注册错误"，由上层转换为 `AuthError`。
-    BindingRequired { provider: String, provider_user_id: String, email: Option<String> },
+    BindingRequired {
+        provider: String,
+        provider_user_id: String,
+        email: Option<String>,
+    },
 }
 
 /// 第三方 OAuth2 账号关联/注册逻辑。
@@ -129,7 +133,10 @@ impl AccountLinker {
         provider: &str,
         provider_user_id: &str,
     ) -> Result<bool, AuthError> {
-        Ok(self.find_account(provider, provider_user_id).await?.is_some())
+        Ok(self
+            .find_account(provider, provider_user_id)
+            .await?
+            .is_some())
     }
 
     /// 查询第三方账号关联记录。
@@ -140,7 +147,9 @@ impl AccountLinker {
     ) -> Result<Option<OAuth2Account>, AuthError> {
         let filters = Some(vec![OAuth2AccountFilter {
             provider: Some(OpValsString(vec![OpValString::Eq(provider.to_string())])),
-            provider_user_id: Some(OpValsString(vec![OpValString::Eq(provider_user_id.to_string())])),
+            provider_user_id: Some(OpValsString(vec![OpValString::Eq(
+                provider_user_id.to_string(),
+            )])),
             ..Default::default()
         }]);
         let dataset = GenericCrudService::<OAuth2AccountBmc, OAuth2AccountFilter>::list(
@@ -149,7 +158,9 @@ impl AccountLinker {
             None,
             filters,
             None,
-        ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         Ok(extract_oauth2_account(dataset))
     }
@@ -158,7 +169,9 @@ impl AccountLinker {
     async fn update_last_login_at(&self, account_id: &str) -> Result<(), AuthError> {
         let sql = "UPDATE cmx_auth_oauth2_account SET last_login_at = NOW() WHERE id = $1";
         let params: Vec<cmx_core::model::cell::DataValue> =
-            vec![cmx_core::model::cell::DataValue::String(account_id.to_string())];
+            vec![cmx_core::model::cell::DataValue::String(
+                account_id.to_string(),
+            )];
 
         Self::get_db_manager()
             .execute_sql_with_datavalues(&Self::default_db_id().await, None, sql, params)
@@ -203,7 +216,9 @@ impl AccountLinker {
             &Self::default_db_id().await,
             None,
             data,
-        ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
         Ok(())
     }
 
@@ -215,7 +230,9 @@ impl AccountLinker {
     ) -> Result<usize, AuthError> {
         let filters = Some(vec![OAuth2AccountFilter {
             user_id: Some(OpValsString(vec![OpValString::Eq(user_id.to_string())])),
-            provider: Some(OpValsString(vec![OpValString::Not(exclude_provider.to_string())])),
+            provider: Some(OpValsString(vec![OpValString::Not(
+                exclude_provider.to_string(),
+            )])),
             status: Some(OpValsInt64(vec![OpValInt64::Eq(1)])),
             ..Default::default()
         }]);
@@ -224,16 +241,14 @@ impl AccountLinker {
             &Self::default_db_id().await,
             None,
             filters,
-        ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
         Ok(count as usize)
     }
 
     /// 删除第三方账号关联记录。
-    async fn remove_account(
-        &self,
-        user_id: &str,
-        provider: &str,
-    ) -> Result<(), AuthError> {
+    async fn remove_account(&self, user_id: &str, provider: &str) -> Result<(), AuthError> {
         let filters = Some(vec![OAuth2AccountFilter {
             user_id: Some(OpValsString(vec![OpValString::Eq(user_id.to_string())])),
             provider: Some(OpValsString(vec![OpValString::Eq(provider.to_string())])),
@@ -245,10 +260,13 @@ impl AccountLinker {
             None,
             filters,
             None,
-        ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         let schema = dataset.schema.as_ref();
-        let ids: Vec<serde_json::Value> = dataset.iter()
+        let ids: Vec<serde_json::Value> = dataset
+            .iter()
             .filter_map(|row| row.get_by_name_as::<String>(schema, "id"))
             .map(serde_json::Value::String)
             .collect();
@@ -259,7 +277,9 @@ impl AccountLinker {
                 &Self::default_db_id().await,
                 None,
                 ids,
-            ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
         }
         Ok(())
     }
@@ -309,55 +329,70 @@ impl AccountLinker {
         // 2. 自动关联策略（根据邮箱匹配）
         // N-9 降级处理：邮箱未验证时跳过邮箱关联，继续尝试自动注册或返回未注册错误
         if self.config.auto_link_by_email
-            && let Some(email) = &user_info.email {
-                if user_info.email_verified != Some(true) {
-                    tracing::warn!(provider = %provider, email = %email, "Provider 邮箱未验证，跳过邮箱自动关联");
-                } else {
-                    let user = self.user_query.get_user_by_email(email).await
-                        .map_err(|e| AuthError::Internal(e.to_string()))?;
-                    if let Some(user) = user {
-                        tracing::info!(provider = %provider, email = %email, user_id = %user.user_id, "邮箱匹配，自动关联");
-                        self.create_account(provider, provider_user_id, &user.user_id, user_info).await?;
-                        return Ok(LinkResult::Linked {
-                            user_id: user.user_id,
-                            is_new: false,
-                        });
-                    }
-                }
-            }
-
-        // 3. 用户名自动关联（企业场景，仅对可信 Provider 启用）
-        // 注意：与邮箱关联不同，username 无"已验证"概念，直接匹配
-        if self.config.auto_link_by_username
-            && let Some(username) = &user_info.username {
-                let user = self.user_query.get_user_by_username(username).await
+            && let Some(email) = &user_info.email
+        {
+            if user_info.email_verified != Some(true) {
+                tracing::warn!(provider = %provider, email = %email, "Provider 邮箱未验证，跳过邮箱自动关联");
+            } else {
+                let user = self
+                    .user_query
+                    .get_user_by_email(email)
+                    .await
                     .map_err(|e| AuthError::Internal(e.to_string()))?;
                 if let Some(user) = user {
-                    tracing::info!(provider = %provider, username = %username, user_id = %user.user_id, "username 匹配，自动关联");
-                    self.create_account(provider, provider_user_id, &user.user_id, user_info).await?;
+                    tracing::info!(provider = %provider, email = %email, user_id = %user.user_id, "邮箱匹配，自动关联");
+                    self.create_account(provider, provider_user_id, &user.user_id, user_info)
+                        .await?;
                     return Ok(LinkResult::Linked {
                         user_id: user.user_id,
                         is_new: false,
                     });
                 }
             }
+        }
+
+        // 3. 用户名自动关联（企业场景，仅对可信 Provider 启用）
+        // 注意：与邮箱关联不同，username 无"已验证"概念，直接匹配
+        if self.config.auto_link_by_username
+            && let Some(username) = &user_info.username
+        {
+            let user = self
+                .user_query
+                .get_user_by_username(username)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            if let Some(user) = user {
+                tracing::info!(provider = %provider, username = %username, user_id = %user.user_id, "username 匹配，自动关联");
+                self.create_account(provider, provider_user_id, &user.user_id, user_info)
+                    .await?;
+                return Ok(LinkResult::Linked {
+                    user_id: user.user_id,
+                    is_new: false,
+                });
+            }
+        }
 
         // 4. 自动注册策略
         if self.config.auto_register {
             let username = self.generate_username(provider, user_info).await?;
-            let user_id = self.user_query.create_user_from_oauth2(
-                provider,
-                &OAuth2UserInfo {
-                    provider: provider.to_string(),
-                    provider_user_id: user_info.provider_user_id.clone(),
-                    email: user_info.email.clone(),
-                    username: Some(username),
-                    display_name: user_info.display_name.clone(),
-                    avatar_url: user_info.avatar_url.clone(),
-                    default_role: self.config.default_role.clone(),
-                },
-            ).await.map_err(|e| AuthError::Internal(e.to_string()))?;
-            self.create_account(provider, provider_user_id, &user_id, user_info).await?;
+            let user_id = self
+                .user_query
+                .create_user_from_oauth2(
+                    provider,
+                    &OAuth2UserInfo {
+                        provider: provider.to_string(),
+                        provider_user_id: user_info.provider_user_id.clone(),
+                        email: user_info.email.clone(),
+                        username: Some(username),
+                        display_name: user_info.display_name.clone(),
+                        avatar_url: user_info.avatar_url.clone(),
+                        default_role: self.config.default_role.clone(),
+                    },
+                )
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
+            self.create_account(provider, provider_user_id, &user_id, user_info)
+                .await?;
             tracing::info!(provider = %provider, provider_user_id = %provider_user_id, user_id = %user_id, "自动注册并关联");
             return Ok(LinkResult::Linked {
                 user_id,
@@ -375,27 +410,35 @@ impl AccountLinker {
     }
 
     /// 根据配置策略生成用户名（含冲突重试）。
-    async fn generate_username(&self, provider: &str, user_info: &ProviderUserInfo) -> Result<String, AuthError> {
+    async fn generate_username(
+        &self,
+        provider: &str,
+        user_info: &ProviderUserInfo,
+    ) -> Result<String, AuthError> {
         const MAX_RETRIES: usize = 3;
 
         let base = match self.config.username_strategy.as_str() {
             "provider_prefix" => format!("{}_{}", provider, user_info.provider_user_id),
             "provider_user_id" => user_info.provider_user_id.clone(),
-            "username" => user_info.username.clone()
+            "username" => user_info
+                .username
+                .clone()
                 .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
-            "email_prefix" => {
-                user_info.email
-                    .as_ref()
-                    .map(|e| e.split('@').next().unwrap_or(e).to_string())
-                    .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id))
-            }
-            _ => {
-                user_info.display_name.clone()
-                    .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id))
-            }
+            "email_prefix" => user_info
+                .email
+                .as_ref()
+                .map(|e| e.split('@').next().unwrap_or(e).to_string())
+                .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
+            _ => user_info
+                .display_name
+                .clone()
+                .unwrap_or_else(|| format!("{}_{}", provider, user_info.provider_user_id)),
         };
 
-        if self.user_query.get_user_by_username(&base).await
+        if self
+            .user_query
+            .get_user_by_username(&base)
+            .await
             .map_err(|e| AuthError::Internal(e.to_string()))?
             .is_none()
         {
@@ -406,7 +449,10 @@ impl AccountLinker {
         for i in 0..MAX_RETRIES {
             let suffix = Self::random_suffix();
             let candidate = format!("{}_{}", base, suffix);
-            if self.user_query.get_user_by_username(&candidate).await
+            if self
+                .user_query
+                .get_user_by_username(&candidate)
+                .await
                 .map_err(|e| AuthError::Internal(e.to_string()))?
                 .is_none()
             {
@@ -442,15 +488,17 @@ impl AccountLinker {
     ///
     /// * `AuthError::OAuth2LastBindingCannotRemove` - 解绑会导致用户无可用登录方式。
     /// * `AuthError::Internal` - 数据库查询或删除失败。
-    pub async fn unlink_account(
-        &self,
-        user_id: &str,
-        provider: &str,
-    ) -> Result<(), AuthError> {
+    pub async fn unlink_account(&self, user_id: &str, provider: &str) -> Result<(), AuthError> {
         // 1. 检查用户是否设置了密码
-        let user = self.user_query.get_user_by_id(user_id).await
+        let user = self
+            .user_query
+            .get_user_by_id(user_id)
+            .await
             .map_err(|e| AuthError::Internal(e.to_string()))?;
-        let has_password = user.as_ref().and_then(|u| u.password_hash.as_ref()).is_some();
+        let has_password = user
+            .as_ref()
+            .and_then(|u| u.password_hash.as_ref())
+            .is_some();
 
         // 2. 检查是否还绑定了其他第三方 Provider
         let other_bindings = self.count_other_bindings(user_id, provider).await?;
@@ -477,7 +525,9 @@ fn extract_oauth2_account(dataset: DataSet) -> Option<OAuth2Account> {
         id: row.get_by_name_as(schema, "id").unwrap_or_default(),
         user_id: row.get_by_name_as(schema, "user_id").unwrap_or_default(),
         provider: row.get_by_name_as(schema, "provider").unwrap_or_default(),
-        provider_user_id: row.get_by_name_as(schema, "provider_user_id").unwrap_or_default(),
+        provider_user_id: row
+            .get_by_name_as(schema, "provider_user_id")
+            .unwrap_or_default(),
         provider_username: row.get_by_name_as(schema, "provider_username"),
         provider_email: row.get_by_name_as(schema, "provider_email"),
         provider_email_verified: row.get_by_name_as(schema, "provider_email_verified"),

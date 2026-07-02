@@ -2,4 +2,4 @@
 
 pub mod ast_json_gen;
 
-pub use ast_json_gen::{generate_ast_document, AstScanResult};
+pub use ast_json_gen::{AstScanResult, generate_ast_document};

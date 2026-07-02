@@ -75,10 +75,7 @@ impl GlobalPermissionConfig {
     /// 在给定映射表中按最长前缀匹配查找路径所需权限码（纯函数，便于单元测试）。
     ///
     /// 规则：路径 `path` 以某 `prefix` 开头即视为匹配；多个匹配时取最长前缀对应的权限码。
-    pub(super) fn find_in_map(
-        map: &HashMap<String, String>,
-        path: &str,
-    ) -> Option<String> {
+    pub(super) fn find_in_map(map: &HashMap<String, String>, path: &str) -> Option<String> {
         let mut best_match: Option<(&String, &String)> = None;
         for (prefix, perm) in map.iter() {
             if path.starts_with(prefix) {
@@ -99,9 +96,7 @@ impl GlobalPermissionConfig {
     /// 运行时更新权限映射（支持热更新）
     pub fn update_permission_map(new_map: HashMap<String, String>) -> Result<(), String> {
         if let Some(rw) = GLOBAL_PERMISSION_MAP.get() {
-            let mut guard = rw
-                .write()
-                .map_err(|e| format!("获取写锁失败: {e}"))?;
+            let mut guard = rw.write().map_err(|e| format!("获取写锁失败: {e}"))?;
             *guard = new_map;
             Ok(())
         } else {
@@ -222,10 +217,7 @@ mod tests {
 
     #[test]
     fn test_find_required_permission_longest_prefix() {
-        let map = build_map(&[
-            ("/api/iam", "iam:access"),
-            ("/api/iam/users", "user:read"),
-        ]);
+        let map = build_map(&[("/api/iam", "iam:access"), ("/api/iam/users", "user:read")]);
 
         // /api/iam/users 应匹配更长的前缀 user:read
         assert_eq!(

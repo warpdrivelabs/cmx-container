@@ -3,16 +3,16 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde_json::json;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
 
-use crate::manager::DatabaseManager;
 use super::error::{MigrationError, MigrationResult};
 use super::loader::MigrationLoader;
 use super::record::{
     ChecksumMismatch, FailedMigration, MigrationRecord, MigrationStatus, MigrationSummary,
     PendingMigration, ValidationResult,
 };
+use crate::manager::DatabaseManager;
 
 /// 迁移锁的 Redis 键名
 const MIGRATION_LOCK_KEY: &str = "cmx:database:migration";
@@ -49,11 +49,7 @@ impl MigrationRunner {
     /// * `db` - 数据库管理器实例
     /// * `default_db_id` - 默认数据库ID
     /// * `migration_dir` - 迁移文件目录路径
-    pub fn new(
-        db: Arc<DatabaseManager>,
-        default_db_id: String,
-        migration_dir: PathBuf,
-    ) -> Self {
+    pub fn new(db: Arc<DatabaseManager>, default_db_id: String, migration_dir: PathBuf) -> Self {
         Self {
             db,
             default_db_id,
@@ -161,7 +157,10 @@ impl MigrationRunner {
                 if waited {
                     info!("其他节点已完成数据库迁移，本节点继续启动");
                 } else {
-                    warn!("等待迁移锁超时（{}秒），继续启动（迁移可能仍在进行中）", self.lock_wait_timeout);
+                    warn!(
+                        "等待迁移锁超时（{}秒），继续启动（迁移可能仍在进行中）",
+                        self.lock_wait_timeout
+                    );
                 }
                 return Ok(MigrationSummary {
                     executed_count: 0,
@@ -341,9 +340,7 @@ impl MigrationRunner {
     /// * `Ok(Some(LockGuard))` - 成功获取锁
     /// * `Ok(None)` - 其他节点持有锁
     /// * `Err` - 锁管理器不可用
-    async fn try_acquire_migration_lock(
-        &self,
-    ) -> MigrationResult<Option<cmx_buffer::LockGuard>> {
+    async fn try_acquire_migration_lock(&self) -> MigrationResult<Option<cmx_buffer::LockGuard>> {
         let lock_manager = match &self.lock_manager {
             Some(lm) => lm,
             None => {
@@ -426,31 +423,34 @@ impl MigrationRunner {
         // 从 DataSet 中解析迁移记录
         for row in &dataset.rows {
             /// 从行中获取字符串值
-            fn get_string(row: &cmx_core::model::data::dataset::Row, schema: &cmx_core::model::data::dataset::Schema, col_name: &str) -> Option<String> {
-                row.get_by_name(schema, col_name)
-                    .and_then(|v| match v {
-                        cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
-                        cmx_core::model::cell::DataValue::ShortStr(s) => Some(s.to_string()),
-                        cmx_core::model::cell::DataValue::LongStr(s) => Some(s.to_string()),
-                        cmx_core::model::cell::DataValue::Int(i) => Some(i.to_string()),
-                        cmx_core::model::cell::DataValue::Null => None,
-                        _ => {
-                            // 尝试 TryFrom 转换
-                            <String as TryFrom<cmx_core::model::cell::DataValue>>::try_from(v.clone()).ok()
-                        }
-                    })
+            fn get_string(
+                row: &cmx_core::model::data::dataset::Row,
+                schema: &cmx_core::model::data::dataset::Schema,
+                col_name: &str,
+            ) -> Option<String> {
+                row.get_by_name(schema, col_name).and_then(|v| match v {
+                    cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
+                    cmx_core::model::cell::DataValue::ShortStr(s) => Some(s.to_string()),
+                    cmx_core::model::cell::DataValue::LongStr(s) => Some(s.to_string()),
+                    cmx_core::model::cell::DataValue::Int(i) => Some(i.to_string()),
+                    cmx_core::model::cell::DataValue::Null => None,
+                    _ => {
+                        // 尝试 TryFrom 转换
+                        <String as TryFrom<cmx_core::model::cell::DataValue>>::try_from(v.clone())
+                            .ok()
+                    }
+                })
             }
 
             let version = get_string(row, schema, "version").unwrap_or_default();
             let name = get_string(row, schema, "name").unwrap_or_default();
             let checksum = get_string(row, schema, "checksum").unwrap_or_default();
-            let status_str = get_string(row, schema, "status").unwrap_or_else(|| "pending".to_string());
-            let status: MigrationStatus = status_str
-                .parse()
-                .unwrap_or(MigrationStatus::Pending);
+            let status_str =
+                get_string(row, schema, "status").unwrap_or_else(|| "pending".to_string());
+            let status: MigrationStatus = status_str.parse().unwrap_or(MigrationStatus::Pending);
             let executed_by = get_string(row, schema, "executed_by").unwrap_or_default();
-            let execution_time_ms = get_string(row, schema, "execution_time_ms")
-                .and_then(|s| s.parse::<i64>().ok());
+            let execution_time_ms =
+                get_string(row, schema, "execution_time_ms").and_then(|s| s.parse::<i64>().ok());
             let error_message = get_string(row, schema, "error_message");
             let created_at = get_string(row, schema, "created_at");
             let updated_at = get_string(row, schema, "updated_at");
@@ -481,10 +481,8 @@ impl MigrationRunner {
         migrations: &[PendingMigration],
         executed: &[MigrationRecord],
     ) -> MigrationResult<ValidationResult> {
-        let migration_map: std::collections::HashMap<&str, &PendingMigration> = migrations
-            .iter()
-            .map(|m| (m.version.as_str(), m))
-            .collect();
+        let migration_map: std::collections::HashMap<&str, &PendingMigration> =
+            migrations.iter().map(|m| (m.version.as_str(), m)).collect();
 
         let mut mismatches = Vec::new();
 
@@ -526,16 +524,19 @@ impl MigrationRunner {
             .map_err(|e| MigrationError::SqlExecutionError(format!("开启事务失败: {}", e)))?;
             let txn_id = guard.txn_id().to_string();
 
-            self.execute_sql_statements_with_txn(&migration.up_sql, Some(&txn_id)).await?;
+            self.execute_sql_statements_with_txn(&migration.up_sql, Some(&txn_id))
+                .await?;
 
             Ok(guard)
-        }.await;
+        }
+        .await;
 
         match txn_result {
             Ok(guard) => {
                 // 提交事务
-                guard.commit().await
-                    .map_err(|e| MigrationError::SqlExecutionError(format!("提交事务失败: {}", e)))?;
+                guard.commit().await.map_err(|e| {
+                    MigrationError::SqlExecutionError(format!("提交事务失败: {}", e))
+                })?;
 
                 let duration_ms = start.elapsed().as_millis() as i64;
 
@@ -569,7 +570,11 @@ impl MigrationRunner {
     /// 在事务中执行 SQL 语句
     ///
     /// 将 SQL 按分号分割（跳过单引号字符串内的分号），逐条在指定事务中执行
-    async fn execute_sql_statements_with_txn(&self, sql: &str, txn_id: Option<&str>) -> MigrationResult<()> {
+    async fn execute_sql_statements_with_txn(
+        &self,
+        sql: &str,
+        txn_id: Option<&str>,
+    ) -> MigrationResult<()> {
         let statements = split_sql_statements(sql);
 
         for statement in statements {
@@ -731,16 +736,15 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
                 statements.push(&sql[last_pos..byte_pos]);
                 last_pos = byte_pos + 1;
             }
-            '-'
-                if iter.peek().map(|&(_, c)| c) == Some('-') => {
-                    iter.next();
-                    while let Some(&(_, c)) = iter.peek() {
-                        if c == '\n' {
-                            break;
-                        }
-                        iter.next();
+            '-' if iter.peek().map(|&(_, c)| c) == Some('-') => {
+                iter.next();
+                while let Some(&(_, c)) = iter.peek() {
+                    if c == '\n' {
+                        break;
                     }
+                    iter.next();
                 }
+            }
             _ => {}
         }
     }

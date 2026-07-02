@@ -13,11 +13,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
 use crate::cluster::notification::{PluginChangeAction, PluginChangeNotification};
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::service::event_publisher::EventPublisher;
 use crate::service::runtime_ops::RuntimeOps;
+use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
 
 /// 插件变更通知处理器
 ///
@@ -77,13 +77,17 @@ impl PluginChangeHandler {
         if notification.instance_id == self.instance_id {
             tracing::info!(
                 "跳过处理自身发出的redis通知: {} {:?} (instance_id={})",
-                notification.plugin_id, notification.action, notification.instance_id
+                notification.plugin_id,
+                notification.action,
+                notification.instance_id
             );
             return;
         }
         tracing::debug!(
             "收到插件变更redis通知: {} {:?} (instance_id={})",
-            notification.plugin_id, notification.action, notification.instance_id
+            notification.plugin_id,
+            notification.action,
+            notification.instance_id
         );
 
         // 2. 过滤非本应用的通知
@@ -107,13 +111,12 @@ impl PluginChangeHandler {
             }
             PluginChangeAction::Removed => {
                 self.handle_plugin_removed(notification).await;
-            }
-            // PluginChangeAction::RuntimeLoad => {
-            //     self.handle_runtime_load(notification).await;
-            // }
-            // PluginChangeAction::RuntimeUnload => {
-            //     self.handle_runtime_unload(notification).await;
-            // }
+            } // PluginChangeAction::RuntimeLoad => {
+              //     self.handle_runtime_load(notification).await;
+              // }
+              // PluginChangeAction::RuntimeUnload => {
+              //     self.handle_runtime_unload(notification).await;
+              // }
         }
     }
 
@@ -141,7 +144,11 @@ impl PluginChangeHandler {
         };
 
         // 2. 同步文件并注册到内存（幂等操作）
-        if let Err(e) = self.runtime.sync_and_register(plugin_id, &db_plugin.version).await {
+        if let Err(e) = self
+            .runtime
+            .sync_and_register(plugin_id, &db_plugin.version)
+            .await
+        {
             tracing::error!("插件 {} 运行时同步失败: {}", plugin_id, e);
             return;
         }
@@ -160,13 +167,11 @@ impl PluginChangeHandler {
             _ => return,
         };
 
-        let payload = PluginLifecyclePayload::new(
-            &self.app_id,
-            plugin_id,
-            &db_plugin.version,
-        );
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, &db_plugin.version);
 
-        self.event_publisher.publish_local_event(event_name, payload).await;
+        self.event_publisher
+            .publish_local_event(event_name, payload)
+            .await;
     }
 
     /// 处理插件覆盖安装。
@@ -199,7 +204,11 @@ impl PluginChangeHandler {
         );
 
         // 2. 强制重新同步并注册（不检查本地路径）
-        if let Err(e) = self.runtime.force_resync_and_register(plugin_id, &db_plugin.version).await {
+        if let Err(e) = self
+            .runtime
+            .force_resync_and_register(plugin_id, &db_plugin.version)
+            .await
+        {
             tracing::error!("插件 {} 覆盖安装运行时同步失败: {}", plugin_id, e);
             return;
         }
@@ -211,14 +220,12 @@ impl PluginChangeHandler {
         );
 
         // 3. 发布进程内事件
-        let payload = PluginLifecyclePayload::new(
-            &self.app_id,
-            plugin_id,
-            &db_plugin.version,
-        )
+        let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, &db_plugin.version)
             .with_old_version(notification.version.as_str());
 
-        self.event_publisher.publish_local_event(plugin_events::REINSTALLED, payload).await;
+        self.event_publisher
+            .publish_local_event(plugin_events::REINSTALLED, payload)
+            .await;
     }
 
     /// 处理插件移除。
@@ -234,7 +241,9 @@ impl PluginChangeHandler {
 
         // 2. 发布进程内事件
         let payload = PluginLifecyclePayload::new(&self.app_id, plugin_id, &notification.version);
-        self.event_publisher.publish_local_event(plugin_events::UNINSTALLED, payload).await;
+        self.event_publisher
+            .publish_local_event(plugin_events::UNINSTALLED, payload)
+            .await;
     }
 
     // /// 处理运行时加载。

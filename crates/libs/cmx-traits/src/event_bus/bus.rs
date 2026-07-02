@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::types::{EventTopic, EventPayload, EventHandler};
+use super::types::{EventHandler, EventPayload, EventTopic};
 
 /// 事件总线。
 ///
@@ -67,7 +67,11 @@ impl EventBus {
     ///
     /// * `topic` - 事件主题。
     /// * `payload` - 事件载荷。
-    pub async fn publish_sync(&self, topic: impl Into<EventTopic>, payload: impl Into<EventPayload>) {
+    pub async fn publish_sync(
+        &self,
+        topic: impl Into<EventTopic>,
+        payload: impl Into<EventPayload>,
+    ) {
         let topic = topic.into();
         let payload = payload.into();
 

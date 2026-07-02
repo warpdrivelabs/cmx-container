@@ -36,11 +36,7 @@ impl SeedDataTableResult {
     }
 
     /// 加载文件失败时创建结果
-    pub fn new_load_failure(
-        table_name: String,
-        file_path: String,
-        error: &str,
-    ) -> Self {
+    pub fn new_load_failure(table_name: String, file_path: String, error: &str) -> Self {
         Self {
             table_name,
             file_path,
@@ -96,7 +92,8 @@ impl SeedDataSummary {
     /// 是否有数据条数不一致的警告
     pub fn has_warnings(&self) -> bool {
         self.table_results.iter().any(|r| {
-            r.db_row_count.is_some_and(|db_count| db_count < r.file_row_count)
+            r.db_row_count
+                .is_some_and(|db_count| db_count < r.file_row_count)
         })
     }
 

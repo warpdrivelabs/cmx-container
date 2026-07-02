@@ -38,7 +38,6 @@ impl ServiceRepository {
         }
     }
 
-
     /// 设置默认数据库ID
     ///
     /// # 参数
@@ -124,7 +123,11 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回服务定义（包含最新版本的 config），如果不存在则返回 None
-    pub async fn get_service(&self, service_key: &str, app_id: &str) -> Result<Option<ServiceDefinition>, ServiceError> {
+    pub async fn get_service(
+        &self,
+        service_key: &str,
+        app_id: &str,
+    ) -> Result<Option<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
@@ -138,7 +141,8 @@ impl ServiceRepository {
 
         let params = json!([service_key, app_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "cmx_service_define")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
@@ -162,16 +166,18 @@ impl ServiceRepository {
                     version: r.get_by_name_as(schema, "version").unwrap_or_default(),
                     config: r.get_by_name_as(schema, "config"),
                     domain_code: r.get_by_name_as(schema, "domain_code").unwrap_or_default(),
-                    application_code: r.get_by_name_as(schema, "application_code").unwrap_or_default(),
+                    application_code: r
+                        .get_by_name_as(schema, "application_code")
+                        .unwrap_or_default(),
                     module_code: r.get_by_name_as(schema, "module_code").unwrap_or_default(),
                     domain_name: String::new(),
                     application_name: String::new(),
                     module_name: String::new(),
-                    plugin_name:String::new(),
+                    plugin_name: String::new(),
                     api_doc: Some(r.get_by_name_as(schema, "api_doc").unwrap_or_default()),
                 }))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -182,7 +188,10 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回所有服务定义列表，按更新时间降序排列
-    pub async fn list_services(&self, app_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
+    pub async fn list_services(
+        &self,
+        app_id: &str,
+    ) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
@@ -196,7 +205,8 @@ impl ServiceRepository {
 
         let params = json!([app_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "list_services")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
@@ -207,20 +217,32 @@ impl ServiceRepository {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
-                service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
-                service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
-                description: row.get_by_name_as(schema, "description").unwrap_or_default(),
+                service_key: row
+                    .get_by_name_as(schema, "service_key")
+                    .unwrap_or_default(),
+                service_name: row
+                    .get_by_name_as(schema, "service_name")
+                    .unwrap_or_default(),
+                description: row
+                    .get_by_name_as(schema, "description")
+                    .unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
                 config: row.get_by_name_as(schema, "config"),
-                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
-                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
-                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                domain_code: row
+                    .get_by_name_as(schema, "domain_code")
+                    .unwrap_or_default(),
+                application_code: row
+                    .get_by_name_as(schema, "application_code")
+                    .unwrap_or_default(),
+                module_code: row
+                    .get_by_name_as(schema, "module_code")
+                    .unwrap_or_default(),
                 domain_name: String::new(),
                 application_name: String::new(),
                 module_name: String::new(),
-                plugin_name:String::new(),
+                plugin_name: String::new(),
                 api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }
@@ -235,7 +257,11 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回该插件下所有服务定义列表（包含最新版本的 config）
-    pub async fn get_services_by_plugin(&self, plugin_id: &str, app_id: &str) -> Result<Vec<ServiceDefinition>, ServiceError> {
+    pub async fn get_services_by_plugin(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+    ) -> Result<Vec<ServiceDefinition>, ServiceError> {
         let sql = r#"
             SELECT d.id, d.app_id, d.service_key, d.service_name, d.description, d.plugin_id,
                    d.status, d.version, d.domain_code, d.application_code, d.module_code,
@@ -246,10 +272,17 @@ impl ServiceRepository {
             WHERE d.plugin_id = $1 AND d.app_id = $3
             ORDER BY d.create_time DESC
         "#;
-        let params = json!([plugin_id, app_id,app_id]);
+        let params = json!([plugin_id, app_id, app_id]);
 
-        let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_services_by_plugin")
+        let result = self
+            .db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "get_services_by_plugin",
+            )
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -259,20 +292,32 @@ impl ServiceRepository {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
-                service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
-                service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
-                description: row.get_by_name_as(schema, "description").unwrap_or_default(),
+                service_key: row
+                    .get_by_name_as(schema, "service_key")
+                    .unwrap_or_default(),
+                service_name: row
+                    .get_by_name_as(schema, "service_name")
+                    .unwrap_or_default(),
+                description: row
+                    .get_by_name_as(schema, "description")
+                    .unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
                 config: row.get_by_name_as(schema, "config"),
-                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
-                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
-                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
+                domain_code: row
+                    .get_by_name_as(schema, "domain_code")
+                    .unwrap_or_default(),
+                application_code: row
+                    .get_by_name_as(schema, "application_code")
+                    .unwrap_or_default(),
+                module_code: row
+                    .get_by_name_as(schema, "module_code")
+                    .unwrap_or_default(),
                 domain_name: String::new(),
                 application_name: String::new(),
                 module_name: String::new(),
-                plugin_name:String::new(),
+                plugin_name: String::new(),
                 api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }
@@ -295,7 +340,13 @@ impl ServiceRepository {
     /// # Errors
     ///
     /// 数据库执行失败时返回 `ServiceError::DatabaseError`
-    pub async fn delete_service(&self, service_key: &str, app_id: &str, txn_id: Option<&str>, _version: Option<&str>) -> Result<(), ServiceError> {
+    pub async fn delete_service(
+        &self,
+        service_key: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+        _version: Option<&str>,
+    ) -> Result<(), ServiceError> {
         let sql_version = r#"
             DELETE FROM cmx_service_define_version WHERE service_key = $1 AND app_id = $2
         "#;
@@ -327,10 +378,16 @@ impl ServiceRepository {
     /// # Errors
     ///
     /// 数据库执行失败时返回 `ServiceError::DatabaseError`
-    pub async fn delete_services_by_plugin(&self, plugin_id: &str, app_id: &str, txn_id: Option<&str>) -> Result<(), ServiceError> {
+    pub async fn delete_services_by_plugin(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+    ) -> Result<(), ServiceError> {
         let services = self.get_services_by_plugin(plugin_id, app_id).await?;
         for service in services {
-            self.delete_service(&service.service_key, app_id, txn_id, None).await?;
+            self.delete_service(&service.service_key, app_id, txn_id, None)
+                .await?;
         }
         Ok(())
     }
@@ -397,7 +454,16 @@ impl ServiceRepository {
         "#;
 
         let id = Uuid::new_v4().to_string();
-        let params = json!([id, service_key, app_id, version, plugin_id, plugin_version, config, api_doc]);
+        let params = json!([
+            id,
+            service_key,
+            app_id,
+            version,
+            plugin_id,
+            plugin_version,
+            config,
+            api_doc
+        ]);
 
         self.db_manager
             .execute_sql_with_json(&self.default_db_id, txn_id, sql, params)
@@ -415,7 +481,11 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回 (version, plugin_version) 元组列表，按创建时间降序排列
-    pub async fn get_service_versions(&self, service_key: &str, app_id: &str) -> Result<Vec<(String, String)>, ServiceError> {
+    pub async fn get_service_versions(
+        &self,
+        service_key: &str,
+        app_id: &str,
+    ) -> Result<Vec<(String, String)>, ServiceError> {
         let sql = r#"
             SELECT version, plugin_version
             FROM cmx_service_define_version
@@ -425,8 +495,15 @@ impl ServiceRepository {
 
         let params = json!([service_key, app_id]);
 
-        let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_service_versions")
+        let result = self
+            .db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "get_service_versions",
+            )
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -435,7 +512,8 @@ impl ServiceRepository {
         for row in result.iter() {
             versions.push((
                 row.get_by_name_as(schema, "version").unwrap_or_default(),
-                row.get_by_name_as(schema, "plugin_version").unwrap_or_default(),
+                row.get_by_name_as(schema, "plugin_version")
+                    .unwrap_or_default(),
             ));
         }
 
@@ -451,7 +529,12 @@ impl ServiceRepository {
     ///
     /// # 返回值
     /// 返回编排配置 JSON 字符串，如果不存在则返回 None
-    pub async fn get_service_config(&self, service_key: &str, version: &str, app_id: &str) -> Result<Option<String>, ServiceError> {
+    pub async fn get_service_config(
+        &self,
+        service_key: &str,
+        version: &str,
+        app_id: &str,
+    ) -> Result<Option<String>, ServiceError> {
         let sql = r#"
             SELECT config
             FROM cmx_service_define_version
@@ -460,7 +543,8 @@ impl ServiceRepository {
 
         let params = json!([service_key, version, app_id]);
 
-        let result = self.db_manager
+        let result = self
+            .db_manager
             .query_sql_with_json(&self.default_db_id, None, sql, params, "get_service_config")
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
@@ -475,7 +559,7 @@ impl ServiceRepository {
                 let schema = result.schema.as_ref();
                 Ok(r.get_by_name_as(schema, "config"))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -509,15 +593,17 @@ impl ServiceRepository {
         }
 
         if let Some(ref keyword) = filter.keyword
-            && !keyword.is_empty() {
-                where_clauses.push(format!("(s.service_key LIKE ${} OR S.service_name LIKE ${} )", param_index,param_index+1));
-                params.push(json!(format!("%{}%", keyword)));
-                params.push(json!(format!("%{}%", keyword)));
-                param_index += 2;
-
-            }
-
-
+            && !keyword.is_empty()
+        {
+            where_clauses.push(format!(
+                "(s.service_key LIKE ${} OR S.service_name LIKE ${} )",
+                param_index,
+                param_index + 1
+            ));
+            params.push(json!(format!("%{}%", keyword)));
+            params.push(json!(format!("%{}%", keyword)));
+            param_index += 2;
+        }
 
         if let Some(ref plugin_id) = filter.plugin_id {
             where_clauses.push(format!("s.plugin_id = ${}", param_index));
@@ -543,7 +629,6 @@ impl ServiceRepository {
             param_index += 1;
         }
 
-
         let where_clause = if where_clauses.is_empty() {
             String::new()
         } else {
@@ -555,7 +640,8 @@ impl ServiceRepository {
             where_clause
         );
 
-        let count_result = self.db_manager
+        let count_result = self
+            .db_manager
             .query_sql_with_json(
                 &self.default_db_id,
                 None,
@@ -595,14 +681,23 @@ impl ServiceRepository {
             ORDER BY s.update_time DESC
             LIMIT ${} OFFSET ${}
             "#,
-            where_clause, param_index, param_index + 1
+            where_clause,
+            param_index,
+            param_index + 1
         );
 
         params.push(json!(size));
         params.push(json!(offset));
 
-        let result = self.db_manager
-            .query_sql_with_json(&self.default_db_id, None, &data_sql, json!(params), "page_services")
+        let result = self
+            .db_manager
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                &data_sql,
+                json!(params),
+                "page_services",
+            )
             .await
             .map_err(|e| ServiceError::DatabaseError(e.to_string()))?;
 
@@ -612,20 +707,40 @@ impl ServiceRepository {
             services.push(ServiceDefinition {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 app_id: row.get_by_name_as(schema, "app_id").unwrap_or_default(),
-                service_key: row.get_by_name_as(schema, "service_key").unwrap_or_default(),
-                service_name: row.get_by_name_as(schema, "service_name").unwrap_or_default(),
-                description: row.get_by_name_as(schema, "description").unwrap_or_default(),
+                service_key: row
+                    .get_by_name_as(schema, "service_key")
+                    .unwrap_or_default(),
+                service_name: row
+                    .get_by_name_as(schema, "service_name")
+                    .unwrap_or_default(),
+                description: row
+                    .get_by_name_as(schema, "description")
+                    .unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 status: row.get_by_name_as(schema, "status").unwrap_or(1) as i32,
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
                 config: None,
-                domain_code: row.get_by_name_as(schema, "domain_code").unwrap_or_default(),
-                application_code: row.get_by_name_as(schema, "application_code").unwrap_or_default(),
-                module_code: row.get_by_name_as(schema, "module_code").unwrap_or_default(),
-                domain_name: row.get_by_name_as(schema, "domain_name").unwrap_or_default(),
-                application_name: row.get_by_name_as(schema, "application_name").unwrap_or_default(),
-                module_name: row.get_by_name_as(schema, "module_name").unwrap_or_default(),
-                plugin_name: row.get_by_name_as(schema, "plugin_name").unwrap_or_default(),
+                domain_code: row
+                    .get_by_name_as(schema, "domain_code")
+                    .unwrap_or_default(),
+                application_code: row
+                    .get_by_name_as(schema, "application_code")
+                    .unwrap_or_default(),
+                module_code: row
+                    .get_by_name_as(schema, "module_code")
+                    .unwrap_or_default(),
+                domain_name: row
+                    .get_by_name_as(schema, "domain_name")
+                    .unwrap_or_default(),
+                application_name: row
+                    .get_by_name_as(schema, "application_name")
+                    .unwrap_or_default(),
+                module_name: row
+                    .get_by_name_as(schema, "module_name")
+                    .unwrap_or_default(),
+                plugin_name: row
+                    .get_by_name_as(schema, "plugin_name")
+                    .unwrap_or_default(),
                 api_doc: Some(row.get_by_name_as(schema, "api_doc").unwrap_or_default()),
             });
         }

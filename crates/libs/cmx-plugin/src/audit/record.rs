@@ -3,8 +3,8 @@
 //! 定义审计记录结构
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use cmx_utils::snowflake_id_str;
+use serde::{Deserialize, Serialize};
 
 /// 操作类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,11 +104,7 @@ pub struct AuditRecord {
 
 impl AuditRecord {
     /// 创建新的审计记录
-    pub fn new(
-        plugin_id: String,
-        operation: OperationType,
-        result: OperationResult,
-    ) -> Self {
+    pub fn new(plugin_id: String, operation: OperationType, result: OperationResult) -> Self {
         Self {
             id: snowflake_id_str(),
             plugin_id,
@@ -171,7 +167,6 @@ impl AuditRecord {
         self.request_id = Some(request_id);
         self
     }
-
 
     /// 设置旧值
     pub fn with_old_value(mut self, old_value: String) -> Self {

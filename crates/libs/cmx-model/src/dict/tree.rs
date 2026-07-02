@@ -1,6 +1,6 @@
 //! 结果转换：分页结果 + 平铺→树形（复刻 Node `ResultTransformer`）。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::dict::schema::DictSchema;
 
@@ -29,7 +29,13 @@ fn field_str(row: &Value, field: &str) -> String {
 ///
 /// 前提：hits 为全量节点（调用方已用大 pageSize 拉全）。按 parentField 自底向上组装多级子树，
 /// 无父或父不在集合内的成为根；剪掉空 children（与 Node `pruneEmpty` 一致）。
-pub fn to_tree_result(hits: Vec<Value>, total: usize, schema: &DictSchema, page: i64, page_size: i64) -> Value {
+pub fn to_tree_result(
+    hits: Vec<Value>,
+    total: usize,
+    schema: &DictSchema,
+    page: i64,
+    page_size: i64,
+) -> Value {
     let id_field = schema.id_field();
     let parent_field = schema.parent_field();
 
@@ -81,7 +87,11 @@ fn build_forest(sorted: &[Value], id_field: &str, parent_field: &str) -> Value {
         let mut node = by_id[id].clone();
         let kids: Vec<Value> = children_of
             .get(id)
-            .map(|cids| cids.iter().map(|cid| assemble(cid, by_id, children_of)).collect())
+            .map(|cids| {
+                cids.iter()
+                    .map(|cid| assemble(cid, by_id, children_of))
+                    .collect()
+            })
             .unwrap_or_default();
         if let Some(obj) = node.as_object_mut() {
             if kids.is_empty() {

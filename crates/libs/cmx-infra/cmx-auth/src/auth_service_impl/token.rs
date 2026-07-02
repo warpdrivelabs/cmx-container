@@ -111,9 +111,7 @@ impl AuthServiceImpl {
             session_id: session_id.clone(),
             user_id: user_id.to_string(),
             device_type: device_type.clone(),
-            device_id: device_info
-                .map(|d| d.device_id.clone())
-                .unwrap_or_default(),
+            device_id: device_info.map(|d| d.device_id.clone()).unwrap_or_default(),
             login_at: now,
             last_active_at: now,
             ip: device_info.and_then(|d| d.ip.clone()),
@@ -128,7 +126,13 @@ impl AuthServiceImpl {
             .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         // 审计：Token 签发
-        self.audit_token_event("token_issued", user_id, &session.access_jti, "access_token_issued").await;
+        self.audit_token_event(
+            "token_issued",
+            user_id,
+            &session.access_jti,
+            "access_token_issued",
+        )
+        .await;
 
         let now_ts = Utc::now().timestamp();
         Ok(TokenPair {
@@ -142,15 +146,26 @@ impl AuthServiceImpl {
 
     /// P0-2.3: 发布 Pub/Sub 缓存失效消息
     pub(super) async fn publish_cache_invalidate(&self, message: &str) {
-        if let Err(e) = self.cache.pubsub().publish(CACHE_INVALIDATE_CHANNEL, message).await {
+        if let Err(e) = self
+            .cache
+            .pubsub()
+            .publish(CACHE_INVALIDATE_CHANNEL, message)
+            .await
+        {
             warn!(channel = CACHE_INVALIDATE_CHANNEL, error = %e, "Pub/Sub 缓存失效消息发布失败");
         }
     }
 
     /// 记录 Token 审计日志
-    pub(super) async fn audit_token_event(&self, event_type: &str, user_id: &str, jti: &str, detail: &str) {
-        if let Err(e) = AuthStorageQuery::record_token_event(self, event_type, user_id, jti, detail)
-            .await
+    pub(super) async fn audit_token_event(
+        &self,
+        event_type: &str,
+        user_id: &str,
+        jti: &str,
+        detail: &str,
+    ) {
+        if let Err(e) =
+            AuthStorageQuery::record_token_event(self, event_type, user_id, jti, detail).await
         {
             warn!(event_type = event_type, user_id = user_id, error = %e, "审计日志写入失败");
         }
@@ -159,7 +174,10 @@ impl AuthServiceImpl {
     /// 验证 Access Token 并返回 `AuthContext`。
     ///
     /// 解码 Token → 检查黑名单 → 检查会话活跃度，并记录验证耗时指标。
-    pub(super) async fn validate_token(&self, token: &str) -> std::result::Result<AuthContext, AuthError> {
+    pub(super) async fn validate_token(
+        &self,
+        token: &str,
+    ) -> std::result::Result<AuthContext, AuthError> {
         // 2.1 修复：记录 Token 验证耗时
         let start = std::time::Instant::now();
 
@@ -281,18 +299,24 @@ impl AuthServiceImpl {
     pub(super) async fn revoke_token(&self, token: &str) -> std::result::Result<(), AuthError> {
         // 尝试解码为 Access Token
         if let Ok(claims) = self.jwt_manager.decode_access_token(token) {
-            let remaining = Duration::from_secs(
-                (claims.exp - Utc::now().timestamp()).max(0) as u64,
-            );
+            let remaining =
+                Duration::from_secs((claims.exp - Utc::now().timestamp()).max(0) as u64);
             self.token_manager
                 .blacklist_access_token(&claims.jti, remaining)
                 .await
                 .map_err(|e| AuthError::Internal(e.to_string()))?;
             // P0-2.3: Pub/Sub 广播本地缓存失效
-            self.publish_cache_invalidate(&format!("blacklist:{}", claims.jti)).await;
+            self.publish_cache_invalidate(&format!("blacklist:{}", claims.jti))
+                .await;
             info!(jti = %claims.jti, "Access Token 已撤销");
             metrics::record_token_revoked("access");
-            self.audit_token_event("token_revoked", &claims.sub, &claims.jti, "single_token_revoked").await;
+            self.audit_token_event(
+                "token_revoked",
+                &claims.sub,
+                &claims.jti,
+                "single_token_revoked",
+            )
+            .await;
             return Ok(());
         }
 
@@ -304,7 +328,13 @@ impl AuthServiceImpl {
                 .map_err(|e| AuthError::Internal(e.to_string()))?;
             info!(jti = %claims.jti, "Refresh Token 已撤销");
             metrics::record_token_revoked("refresh");
-            self.audit_token_event("token_revoked", &claims.sub, &claims.jti, "single_token_revoked").await;
+            self.audit_token_event(
+                "token_revoked",
+                &claims.sub,
+                &claims.jti,
+                "single_token_revoked",
+            )
+            .await;
             return Ok(());
         }
 
@@ -315,7 +345,10 @@ impl AuthServiceImpl {
     ///
     /// 撤销所有 Refresh Token + 将所有 Access Token 加入黑名单（TTL 取剩余有效期）+
     /// 销毁所有会话 + Pub/Sub 广播本地缓存失效。
-    pub(super) async fn revoke_all_tokens(&self, user_id: &str) -> std::result::Result<(), AuthError> {
+    pub(super) async fn revoke_all_tokens(
+        &self,
+        user_id: &str,
+    ) -> std::result::Result<(), AuthError> {
         // 撤销所有 Refresh Token
         // 此步失败属于关键错误，直接返回（Refresh Token 未撤销会导致用户仍可刷新 Token）
         self.token_manager
@@ -340,10 +373,12 @@ impl AuthServiceImpl {
             match session_result {
                 Ok(Some(session)) => {
                     // 2.2 修复：使用 Access Token 实际剩余有效期，而非完整 access_ttl_secs
-                    let remaining_secs = (session.access_expires_at - Utc::now().timestamp()).max(0) as u64;
+                    let remaining_secs =
+                        (session.access_expires_at - Utc::now().timestamp()).max(0) as u64;
                     let remaining = Duration::from_secs(remaining_secs);
                     // blacklist 失败不影响后续销毁，Access Token 会在过期后自然失效
-                    if let Err(e) = self.token_manager
+                    if let Err(e) = self
+                        .token_manager
                         .blacklist_access_token(&session.access_jti, remaining)
                         .await
                     {
@@ -363,10 +398,7 @@ impl AuthServiceImpl {
             }
 
             // 销毁会话失败时记录 warn 并继续处理其他设备，避免单个设备失败导致整个撤销流程中断
-            if let Err(e) = self.session_manager
-                .destroy_session(user_id, device)
-                .await
-            {
+            if let Err(e) = self.session_manager.destroy_session(user_id, device).await {
                 warn!(user_id = user_id, device = %device, error = %e, "销毁会话失败，继续处理其他设备");
                 failed_devices.push(device.clone());
             }
@@ -377,7 +409,8 @@ impl AuthServiceImpl {
         // - Refresh Token 已在开头撤销，即使会话残留也无法刷新 Token
         // - 广播确保其他实例尽快清空本地缓存，避免使用过期的权限快照
         // - 残留的 Access Token 会按自身 TTL 自然过期，安全风险可控
-        self.publish_cache_invalidate(&format!("revoke_all:{}", user_id)).await;
+        self.publish_cache_invalidate(&format!("revoke_all:{}", user_id))
+            .await;
         // 本实例也立即失效本地缓存
         self.token_manager.invalidate_local_cache_all().await;
 
@@ -394,7 +427,8 @@ impl AuthServiceImpl {
                 "用户 Token 撤销完成，但部分设备会话销毁失败（缓存已失效，残留 Access Token 将按 TTL 自然过期）"
             );
         }
-        self.audit_token_event("tokens_revoked", user_id, "", "all_tokens_revoked").await;
+        self.audit_token_event("tokens_revoked", user_id, "", "all_tokens_revoked")
+            .await;
         Ok(())
     }
 

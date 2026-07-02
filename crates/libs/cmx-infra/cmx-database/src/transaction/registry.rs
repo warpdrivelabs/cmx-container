@@ -2,10 +2,10 @@
 //!
 //! 该模块定义了全局TxnHolder注册表及相关操作函数
 
-use std::sync::{Arc, OnceLock};
-use std::collections::HashMap;
-use tokio::sync::{Mutex, RwLock};
 use crate::transaction::core::TxnHolder;
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{Mutex, RwLock};
 
 /// TxnHolder 的可锁容器类型
 type TxnHolderMutex = Arc<Mutex<Option<TxnHolder>>>;

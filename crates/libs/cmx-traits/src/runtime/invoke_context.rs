@@ -17,9 +17,9 @@
 //! └─────────────────────────────────────┘
 //! ```
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::time::Duration;
-use std::cell::RefCell;
 
 /// 默认超时时间（30 秒）。
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -44,7 +44,7 @@ pub struct InvokeOptions {
     pub max_depth: u32,
 
     /// 是否调试模式。
-    pub  debug:bool,
+    pub debug: bool,
 }
 
 impl Default for InvokeOptions {
@@ -52,7 +52,7 @@ impl Default for InvokeOptions {
         Self {
             timeout: DEFAULT_TIMEOUT,
             max_depth: DEFAULT_MAX_DEPTH,
-            debug:false
+            debug: false,
         }
     }
 }
@@ -175,12 +175,14 @@ impl InvokeContext {
             Ok(depth)
         });
 
-        if let Err(limit) = current_depth { return Err(InvokeGuardError::DepthExceeded {
-            current: limit,
-            max: limit,
-            plugin_id: plugin_id.to_string(),
-            function_name: function_name.to_string(),
-        }) }
+        if let Err(limit) = current_depth {
+            return Err(InvokeGuardError::DepthExceeded {
+                current: limit,
+                max: limit,
+                plugin_id: plugin_id.to_string(),
+                function_name: function_name.to_string(),
+            });
+        }
 
         // 检查循环调用（基于 plugin_id/function_name 组合，检测函数级别递归）
         // 例如 A.a → B.b → A.a 会触发循环检测
@@ -296,12 +298,27 @@ pub enum InvokeGuardError {
 impl std::fmt::Display for InvokeGuardError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DepthExceeded { current, max, plugin_id, function_name } => {
-                write!(f, "调用深度超限: 当前深度 {} >= 最大深度 {}，插件 {} 函数 {}",
-                    current, max, plugin_id, function_name)
+            Self::DepthExceeded {
+                current,
+                max,
+                plugin_id,
+                function_name,
+            } => {
+                write!(
+                    f,
+                    "调用深度超限: 当前深度 {} >= 最大深度 {}，插件 {} 函数 {}",
+                    current, max, plugin_id, function_name
+                )
             }
-            Self::CycleDetected { plugin_id, function_name } => {
-                write!(f, "检测到循环调用: 插件 {} 函数 {}", plugin_id, function_name)
+            Self::CycleDetected {
+                plugin_id,
+                function_name,
+            } => {
+                write!(
+                    f,
+                    "检测到循环调用: 插件 {} 函数 {}",
+                    plugin_id, function_name
+                )
             }
         }
     }

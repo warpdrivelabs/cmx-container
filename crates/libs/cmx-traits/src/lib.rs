@@ -23,13 +23,13 @@
 //! - [`step_status`] — StepStatus 字符串编解码（跨模块单一来源）。
 
 // 模块声明
-pub mod error;
 pub mod auth;
-pub mod iam;
-pub mod plugin;
-pub mod runtime;
-pub mod service;
-pub mod rpc;
+pub mod error;
 pub mod event_bus;
 pub mod function_invoker;
+pub mod iam;
+pub mod plugin;
+pub mod rpc;
+pub mod runtime;
+pub mod service;
 pub mod step_status;

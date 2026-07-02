@@ -108,10 +108,6 @@ pub fn is_image(content_type: &str) -> bool {
 pub fn is_thumbnail_supported(content_type: &str) -> bool {
     matches!(
         content_type,
-        "image/jpeg"
-            | "image/png"
-            | "image/gif"
-            | "image/webp"
-            | "image/bmp"
+        "image/jpeg" | "image/png" | "image/gif" | "image/webp" | "image/bmp"
     )
 }

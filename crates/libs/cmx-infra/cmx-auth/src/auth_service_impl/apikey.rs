@@ -12,7 +12,7 @@ use cmx_traits::auth::{AuthError, AuthStorageQuery};
 use tracing::{info, warn};
 
 use crate::api_key::ApiKeyEntity;
-use crate::auth_service_impl::{AuthServiceImpl, API_KEY_CTX_CACHE_TTL_SECS};
+use crate::auth_service_impl::{API_KEY_CTX_CACHE_TTL_SECS, AuthServiceImpl};
 use crate::metrics;
 use crate::session::UserSession;
 
@@ -85,9 +85,16 @@ impl AuthServiceImpl {
     ///
     /// * `AuthError::InvalidApiKey` - Key 格式错误、状态禁用或哈希不匹配。
     /// * `AuthError::UserDisabled` - 关联用户已禁用。
-    pub(super) async fn validate_api_key(&self, key: &str) -> std::result::Result<AuthContext, AuthError> {
+    pub(super) async fn validate_api_key(
+        &self,
+        key: &str,
+    ) -> std::result::Result<AuthContext, AuthError> {
         // 提取 key_prefix 用于缓存查找
-        let key_prefix = if key.len() >= 8 { &key[..8] } else { return Err(AuthError::InvalidApiKey); };
+        let key_prefix = if key.len() >= 8 {
+            &key[..8]
+        } else {
+            return Err(AuthError::InvalidApiKey);
+        };
 
         // 2.1 修复：API Key 验证不计入 LOGIN_TOTAL，使用专用指标
         metrics::record_api_key_validation();
@@ -95,13 +102,14 @@ impl AuthServiceImpl {
         // === 第二层缓存：key_prefix → AuthContext ===
         let ctx_cache_key = format!("auth:api_key_ctx:{}", key_prefix);
         if let Ok(Some(cached)) = self.cache.ops().get(&ctx_cache_key).await
-            && let Ok(auth_ctx) = serde_json::from_str::<AuthContext>(&cached) {
-                // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
-                // validate_api_key_entity 内部走第一层缓存，命中时仅做 SHA256 比对
-                self.validate_api_key_entity(key).await?;
-                tracing::debug!(key_prefix = %key_prefix, "API Key AuthContext 缓存命中，跳过 user/roles/permissions 查询");
-                return Ok(auth_ctx);
-            }
+            && let Ok(auth_ctx) = serde_json::from_str::<AuthContext>(&cached)
+        {
+            // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
+            // validate_api_key_entity 内部走第一层缓存，命中时仅做 SHA256 比对
+            self.validate_api_key_entity(key).await?;
+            tracing::debug!(key_prefix = %key_prefix, "API Key AuthContext 缓存命中，跳过 user/roles/permissions 查询");
+            return Ok(auth_ctx);
+        }
 
         // === 缓存未命中，走完整验证流程 ===
         let api_key_entity = self.validate_api_key_entity(key).await?;
@@ -122,11 +130,15 @@ impl AuthServiceImpl {
             };
             // 写入缓存
             if let Ok(json) = serde_json::to_string(&auth_ctx) {
-                let _ = self.cache.ttl().set_with_ttl(
-                    &ctx_cache_key,
-                    &json,
-                    Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
-                ).await;
+                let _ = self
+                    .cache
+                    .ttl()
+                    .set_with_ttl(
+                        &ctx_cache_key,
+                        &json,
+                        Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
+                    )
+                    .await;
             }
             return Ok(auth_ctx);
         }
@@ -166,11 +178,15 @@ impl AuthServiceImpl {
 
         // 写入第二层缓存（TTL 60 秒）
         if let Ok(json) = serde_json::to_string(&auth_ctx) {
-            let _ = self.cache.ttl().set_with_ttl(
-                &ctx_cache_key,
-                &json,
-                Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
-            ).await;
+            let _ = self
+                .cache
+                .ttl()
+                .set_with_ttl(
+                    &ctx_cache_key,
+                    &json,
+                    Duration::from_secs(API_KEY_CTX_CACHE_TTL_SECS),
+                )
+                .await;
             tracing::debug!(key_prefix = %key_prefix, "API Key AuthContext 已写入缓存");
         }
 
@@ -329,20 +345,22 @@ impl AuthServiceImpl {
                     let mut all_expired = true;
                     for device in &devices {
                         if let Ok(Some(json)) = cache.hash().hget(&key, device).await
-                            && let Ok(session) = serde_json::from_str::<UserSession>(&json) {
-                                if now - session.last_active_at > idle_timeout as i64 {
-                                    // 过期，删除会话 Hash field
-                                    let _ = cache.hash().hdel(&key, &[device]).await;
-                                    // 2.3 修复：删除 session_detail Key
-                                    let detail_key = format!("auth:{}:session_detail", session.session_id);
-                                    let _ = cache.ops().del(&detail_key).await;
-                                    // 2.2 修复：清理 SessionManager 本地缓存
-                                    session_manager.invalidate_local(user_id, device).await;
-                                    info!(user_id = user_id, device = %device, "过期会话已清理");
-                                } else {
-                                    all_expired = false;
-                                }
+                            && let Ok(session) = serde_json::from_str::<UserSession>(&json)
+                        {
+                            if now - session.last_active_at > idle_timeout as i64 {
+                                // 过期，删除会话 Hash field
+                                let _ = cache.hash().hdel(&key, &[device]).await;
+                                // 2.3 修复：删除 session_detail Key
+                                let detail_key =
+                                    format!("auth:{}:session_detail", session.session_id);
+                                let _ = cache.ops().del(&detail_key).await;
+                                // 2.2 修复：清理 SessionManager 本地缓存
+                                session_manager.invalidate_local(user_id, device).await;
+                                info!(user_id = user_id, device = %device, "过期会话已清理");
+                            } else {
+                                all_expired = false;
                             }
+                        }
                     }
                     // 如果所有会话都过期，从在线用户集合移除
                     if all_expired {

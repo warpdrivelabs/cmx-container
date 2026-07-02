@@ -2,7 +2,7 @@
 //!
 //! 提供自定义的日志格式化器，优化日志输出的颜色和间距。
 
-use tracing_subscriber::fmt::{format::FormatFields, FmtContext};
+use tracing_subscriber::fmt::{FmtContext, format::FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
 /// 自定义日志格式化器：紧凑格式，优化颜色和间距
@@ -89,7 +89,10 @@ where
 }
 
 impl CompactFormatter {
-    fn write_timestamp(&self, writer: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+    fn write_timestamp(
+        &self,
+        writer: &mut tracing_subscriber::fmt::format::Writer<'_>,
+    ) -> std::fmt::Result {
         let now = chrono::Utc::now();
         // 格式: 2026-05-20T13:19:16.226370Z
         write!(writer, "{} ", now.format("%Y-%m-%dT%H:%M:%S%.6fZ"))

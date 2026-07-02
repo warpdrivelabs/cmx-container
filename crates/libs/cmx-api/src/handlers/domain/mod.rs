@@ -13,8 +13,8 @@ pub use cmx_biz::domain::{
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::post;
 use axum::Router;
+use axum::routing::post;
 
 /// Domain 模块路由
 pub struct DomainModule;

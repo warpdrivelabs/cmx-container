@@ -28,12 +28,10 @@ impl GlobalServiceInstanceCache {
     /// * `Ok(())` - 首次设置成功。
     /// * `Err(GlobalStorageError::ALREADY_SET)` - 已被设置过。
     pub fn set(cache: Arc<ServiceInstanceCache>) -> Result<(), GlobalStorageError> {
-        CACHE
-            .set(cache)
-            .map_err(|_| {
-                tracing::warn!("GlobalServiceInstanceCache 重复初始化被拒绝");
-                GlobalStorageError::ALREADY_SET
-            })?;
+        CACHE.set(cache).map_err(|_| {
+            tracing::warn!("GlobalServiceInstanceCache 重复初始化被拒绝");
+            GlobalStorageError::ALREADY_SET
+        })?;
         tracing::info!("GlobalServiceInstanceCache 初始化完成");
         Ok(())
     }
@@ -44,9 +42,9 @@ impl GlobalServiceInstanceCache {
     ///
     /// 如果未调用 [`Self::set`] 完成初始化则 panic。
     pub fn get() -> &'static Arc<ServiceInstanceCache> {
-        CACHE
-            .get()
-            .expect("GlobalServiceInstanceCache 未初始化，请先调用 GlobalServiceInstanceCache::set()")
+        CACHE.get().expect(
+            "GlobalServiceInstanceCache 未初始化，请先调用 GlobalServiceInstanceCache::set()",
+        )
     }
 
     /// 检查是否已初始化。

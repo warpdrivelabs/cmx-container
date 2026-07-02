@@ -56,10 +56,7 @@ impl PubSubOps {
             cmd.arg(p);
         }
 
-        let channels: Vec<String> = cmd
-            .query_async(&mut conn)
-            .await
-            .map_err(Error::from)?;
+        let channels: Vec<String> = cmd.query_async(&mut conn).await.map_err(Error::from)?;
 
         Ok(channels)
     }
@@ -74,10 +71,7 @@ impl PubSubOps {
             cmd.arg(ch);
         }
 
-        let result: Vec<(String, u64)> = cmd
-            .query_async(&mut conn)
-            .await
-            .map_err(Error::from)?;
+        let result: Vec<(String, u64)> = cmd.query_async(&mut conn).await.map_err(Error::from)?;
 
         Ok(result)
     }
@@ -244,8 +238,7 @@ impl GlobalSubscriber {
             conn.psubscribe(pattern).await?;
             info!(pattern = %pattern, "已订阅模式");
         }
-        self.pattern_handlers
-            .insert(pattern.to_string(), handler);
+        self.pattern_handlers.insert(pattern.to_string(), handler);
         Ok(())
     }
 
@@ -270,13 +263,10 @@ impl GlobalSubscriber {
             loop {
                 ticker.tick().await;
                 let mut conn = conn.lock().await;
-                let result: std::result::Result<redis::Value, redis::RedisError> = match &mut *conn {
-                    SubscriberConnection::Standalone(c) => {
-                        redis::cmd("PING").query_async(c).await
-                    }
-                    SubscriberConnection::Cluster(c) => {
-                        redis::cmd("PING").query_async(c).await
-                    }
+                let result: std::result::Result<redis::Value, redis::RedisError> = match &mut *conn
+                {
+                    SubscriberConnection::Standalone(c) => redis::cmd("PING").query_async(c).await,
+                    SubscriberConnection::Cluster(c) => redis::cmd("PING").query_async(c).await,
                 };
                 if let Err(e) = result {
                     warn!(error = %e, "PubSub 心跳失败，连接可能已断开，等待 dispatch 任务重建连接");
@@ -292,10 +282,7 @@ impl GlobalSubscriber {
     /// 核心职责：
     /// 1. 接收 Redis Push 消息并路由到对应 handler
     /// 2. 检测 Disconnection 事件，重建订阅连接并重新订阅所有频道
-    fn start_dispatch_task(
-        &self,
-        rx: tokio::sync::mpsc::UnboundedReceiver<redis::PushInfo>,
-    ) {
+    fn start_dispatch_task(&self, rx: tokio::sync::mpsc::UnboundedReceiver<redis::PushInfo>) {
         // let conn = self.conn.clone();
         // let client = self.client.clone();
         let handlers = self.handlers.clone();
@@ -305,76 +292,76 @@ impl GlobalSubscriber {
             let mut rx = rx;
 
             // loop {
-                while let Some(push_info) = rx.recv().await {
-                    match push_info.kind {
-                        redis::PushKind::Message | redis::PushKind::SMessage => {
-                            if push_info.data.len() >= 2 {
-                                let channel = value_to_string(&push_info.data[0]);
-                                let payload = value_to_string(&push_info.data[1]);
-                                if let (Some(ch), Some(pl)) = (channel, payload) {
-                                    trace!(channel = %ch, "收到 Pub/Sub 消息");
-                                    if let Some(handler) = handlers.get(&ch) {
-                                        handler.handle(&ch, &pl).await;
-                                    }
+            while let Some(push_info) = rx.recv().await {
+                match push_info.kind {
+                    redis::PushKind::Message | redis::PushKind::SMessage => {
+                        if push_info.data.len() >= 2 {
+                            let channel = value_to_string(&push_info.data[0]);
+                            let payload = value_to_string(&push_info.data[1]);
+                            if let (Some(ch), Some(pl)) = (channel, payload) {
+                                trace!(channel = %ch, "收到 Pub/Sub 消息");
+                                if let Some(handler) = handlers.get(&ch) {
+                                    handler.handle(&ch, &pl).await;
                                 }
                             }
-                        }
-                        redis::PushKind::PMessage => {
-                            if push_info.data.len() >= 3 {
-                                let pattern = value_to_string(&push_info.data[0]);
-                                let channel = value_to_string(&push_info.data[1]);
-                                let payload = value_to_string(&push_info.data[2]);
-                                if let (Some(pat), Some(ch), Some(pl)) = (pattern, channel, payload) {
-                                    trace!(pattern = %pat, channel = %ch, "收到 Pub/Sub 模式消息");
-                                    if let Some(handler) = pattern_handlers.get(&pat) {
-                                        handler.handle(&ch, &pl).await;
-                                    }
-                                }
-                            }
-                        }
-                        redis::PushKind::Subscribe
-                        | redis::PushKind::SSubscribe
-                        | redis::PushKind::PSubscribe => {
-                            info!(kind = ?push_info.kind, "订阅确认");
-                        }
-                        redis::PushKind::Unsubscribe
-                        | redis::PushKind::SUnsubscribe
-                        | redis::PushKind::PUnsubscribe => {
-                            info!(kind = ?push_info.kind, "取消订阅确认");
-                        }
-                        redis::PushKind::Disconnection => {
-                            warn!("Pub/Sub 连接断开，redis-rs 将自动重连并重新订阅");
-                            // warn!("Pub/Sub 连接断开，开始重建连接...");
-                            // match Self::rebuild_connection(client.clone(), conn.clone(), handlers.clone(), pattern_handlers.clone()).await {
-                            //     Ok(new_rx) => {
-                            //         rx = new_rx;
-                            //         info!("Pub/Sub 连接重建完成，已重新订阅所有频道");
-                            //     }
-                            //     Err(e) => {
-                            //         warn!(error = %e, "重建连接失败，将退出消息循环并重试");
-                            //         break;
-                            //     }
-                            // }
-                        }
-                        _ => {
-                            trace!(kind = ?push_info.kind, "收到其他推送");
                         }
                     }
+                    redis::PushKind::PMessage => {
+                        if push_info.data.len() >= 3 {
+                            let pattern = value_to_string(&push_info.data[0]);
+                            let channel = value_to_string(&push_info.data[1]);
+                            let payload = value_to_string(&push_info.data[2]);
+                            if let (Some(pat), Some(ch), Some(pl)) = (pattern, channel, payload) {
+                                trace!(pattern = %pat, channel = %ch, "收到 Pub/Sub 模式消息");
+                                if let Some(handler) = pattern_handlers.get(&pat) {
+                                    handler.handle(&ch, &pl).await;
+                                }
+                            }
+                        }
+                    }
+                    redis::PushKind::Subscribe
+                    | redis::PushKind::SSubscribe
+                    | redis::PushKind::PSubscribe => {
+                        info!(kind = ?push_info.kind, "订阅确认");
+                    }
+                    redis::PushKind::Unsubscribe
+                    | redis::PushKind::SUnsubscribe
+                    | redis::PushKind::PUnsubscribe => {
+                        info!(kind = ?push_info.kind, "取消订阅确认");
+                    }
+                    redis::PushKind::Disconnection => {
+                        warn!("Pub/Sub 连接断开，redis-rs 将自动重连并重新订阅");
+                        // warn!("Pub/Sub 连接断开，开始重建连接...");
+                        // match Self::rebuild_connection(client.clone(), conn.clone(), handlers.clone(), pattern_handlers.clone()).await {
+                        //     Ok(new_rx) => {
+                        //         rx = new_rx;
+                        //         info!("Pub/Sub 连接重建完成，已重新订阅所有频道");
+                        //     }
+                        //     Err(e) => {
+                        //         warn!(error = %e, "重建连接失败，将退出消息循环并重试");
+                        //         break;
+                        //     }
+                        // }
+                    }
+                    _ => {
+                        trace!(kind = ?push_info.kind, "收到其他推送");
+                    }
                 }
+            }
             info!("PubSub 消息分发任务结束");
 
-                // // rx 返回 None 表示 push_sender 已关闭（连接已断开），尝试重建
-                // warn!("Push sender 已关闭，尝试重建连接...");
-                // match Self::rebuild_connection(client.clone(), conn.clone(), handlers.clone(), pattern_handlers.clone()).await {
-                //     Ok(new_rx) => {
-                //         rx = new_rx;
-                //         info!("Pub/Sub 连接重建完成，已重新订阅所有频道");
-                //     }
-                //     Err(e) => {
-                //         warn!(error = %e, "重建连接失败，5秒后重试");
-                //         tokio::time::sleep(Duration::from_secs(5)).await;
-                //     }
-                // }
+            // // rx 返回 None 表示 push_sender 已关闭（连接已断开），尝试重建
+            // warn!("Push sender 已关闭，尝试重建连接...");
+            // match Self::rebuild_connection(client.clone(), conn.clone(), handlers.clone(), pattern_handlers.clone()).await {
+            //     Ok(new_rx) => {
+            //         rx = new_rx;
+            //         info!("Pub/Sub 连接重建完成，已重新订阅所有频道");
+            //     }
+            //     Err(e) => {
+            //         warn!(error = %e, "重建连接失败，5秒后重试");
+            //         tokio::time::sleep(Duration::from_secs(5)).await;
+            //     }
+            // }
             // }
         });
 

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use crate::agent::{planner, root_dir, schemas, tools};
@@ -28,7 +28,10 @@ fn pending() -> &'static Mutex<HashMap<String, PendingApproval>> {
 }
 
 fn now_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
 /// 生成带时间戳的伪唯一 id（用 ms + 计数器，避免依赖 rand）。
@@ -76,7 +79,11 @@ pub fn normalize_messages(raw: &Value) -> Vec<Value> {
 }
 
 /// 运行 agent 流程，收集事件（非流式）。`emit` 回调用于流式增量推送。
-pub async fn run_agent_flow<F>(messages: &[Value], context: &Value, mut emit: F) -> PortalResult<Vec<Value>>
+pub async fn run_agent_flow<F>(
+    messages: &[Value],
+    context: &Value,
+    mut emit: F,
+) -> PortalResult<Vec<Value>>
 where
     F: FnMut(Value),
 {
@@ -104,50 +111,102 @@ where
         return Ok(emitted);
     }
 
-    send!(event("assistant", json!({ "text": decision.get("intro").and_then(|v| v.as_str()).unwrap_or("我先查看项目上下文。") })));
-    send!(event("plan", json!({ "items": decision.get("plan").cloned().unwrap_or(json!([])) })));
+    send!(event(
+        "assistant",
+        json!({ "text": decision.get("intro").and_then(|v| v.as_str()).unwrap_or("我先查看项目上下文。") })
+    ));
+    send!(event(
+        "plan",
+        json!({ "items": decision.get("plan").cloned().unwrap_or(json!([])) })
+    ));
 
     // 只读工具按 decision 触发
-    if decision.get("wantsDefinitions").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if decision
+        .get("wantsDefinitions")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         let id = now_id("tool");
         let args = json!({ "limit": 60 });
-        send!(event("tool_call", json!({ "id": id, "name": "list_definitions", "args": args })));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "list_definitions", "args": args })
+        ));
         match tools::run_tool(&root, "list_definitions", &args).await {
             Ok(data) => {
                 let n = data.as_array().map(|a| a.len()).unwrap_or(0);
-                send!(event("tool_result", json!({ "id": id, "status": "ok", "summary": format!("找到 {n} 个定义文件摘要。"), "data": data })));
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": "ok", "summary": format!("找到 {n} 个定义文件摘要。"), "data": data })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     }
-    if decision.get("wantsHtmlPages").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if decision
+        .get("wantsHtmlPages")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         let id = now_id("tool");
-        let args = decision.get("htmlPagesFilter").filter(|v| v.is_object()).cloned().unwrap_or(json!({ "page": 1, "pageSize": 20 }));
-        send!(event("tool_call", json!({ "id": id, "name": "list_html_pages", "args": args })));
+        let args = decision
+            .get("htmlPagesFilter")
+            .filter(|v| v.is_object())
+            .cloned()
+            .unwrap_or(json!({ "page": 1, "pageSize": 20 }));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "list_html_pages", "args": args })
+        ));
         match tools::run_tool(&root, "list_html_pages", &args).await {
             Ok(data) => {
                 let total = data.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
-                let n = data.get("items").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-                send!(event("tool_result", json!({ "id": id, "status": "ok", "summary": format!("找到 {total} 个自定义 HTML 页面，本次返回 {n} 个。"), "data": data })));
+                let n = data
+                    .get("items")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": "ok", "summary": format!("找到 {total} 个自定义 HTML 页面，本次返回 {n} 个。"), "data": data })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     }
     if let Some(args) = decision.get("readHtmlPage").filter(|v| v.is_object()) {
         let id = now_id("tool");
-        send!(event("tool_call", json!({ "id": id, "name": "read_html_page", "args": args })));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "read_html_page", "args": args })
+        ));
         match tools::run_tool(&root, "read_html_page", args).await {
             Ok(data) => {
                 let pid = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
                 let bytes = data.get("bytes").and_then(|v| v.as_i64()).unwrap_or(0);
-                send!(event("tool_result", json!({ "id": id, "status": "ok", "summary": format!("读取 HTML 页面 {pid}，{bytes} bytes。"), "data": data })));
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": "ok", "summary": format!("读取 HTML 页面 {pid}，{bytes} bytes。"), "data": data })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     }
     if let Some(args) = decision.get("readFile").filter(|v| v.is_object()) {
         let id = now_id("tool");
-        send!(event("tool_call", json!({ "id": id, "name": "read_file", "args": args })));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "read_file", "args": args })
+        ));
         match tools::run_tool(&root, "read_file", args).await {
             Ok(data) => {
                 let path = data.get("path").and_then(|v| v.as_str()).unwrap_or("");
@@ -156,45 +215,86 @@ where
                 let mut d = data.clone();
                 if let Some(c) = d.get("content").and_then(|v| v.as_str()) {
                     let t: String = c.chars().take(12000).collect();
-                    d.as_object_mut().unwrap().insert("content".to_string(), json!(t));
+                    d.as_object_mut()
+                        .unwrap()
+                        .insert("content".to_string(), json!(t));
                 }
-                send!(event("tool_result", json!({ "id": id, "status": "ok", "summary": format!("读取 {path}，{bytes} bytes。"), "data": d })));
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": "ok", "summary": format!("读取 {path}，{bytes} bytes。"), "data": d })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     } else if let Some(args) = decision.get("search").filter(|v| v.is_object()) {
         let id = now_id("tool");
-        send!(event("tool_call", json!({ "id": id, "name": "search_files", "args": args })));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "search_files", "args": args })
+        ));
         match tools::run_tool(&root, "search_files", args).await {
             Ok(data) => {
                 let n = data.as_array().map(|a| a.len()).unwrap_or(0);
-                let summary = if n > 0 { format!("搜索到 {n} 处匹配。") } else { "没有搜索到匹配项。".to_string() };
-                send!(event("tool_result", json!({ "id": id, "status": "ok", "summary": summary, "data": data })));
+                let summary = if n > 0 {
+                    format!("搜索到 {n} 处匹配。")
+                } else {
+                    "没有搜索到匹配项。".to_string()
+                };
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": "ok", "summary": summary, "data": data })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     }
-    if decision.get("wantsValidate").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if decision
+        .get("wantsValidate")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         let id = now_id("tool");
         let args = json!({});
-        send!(event("tool_call", json!({ "id": id, "name": "validate_metadata", "args": args })));
+        send!(event(
+            "tool_call",
+            json!({ "id": id, "name": "validate_metadata", "args": args })
+        ));
         match tools::run_tool(&root, "validate_metadata", &args).await {
             Ok(data) => {
                 let checked = data.get("checked").and_then(|v| v.as_i64()).unwrap_or(0);
-                let errs = data.get("errors").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+                let errs = data
+                    .get("errors")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
                 let status = if errs > 0 { "warning" } else { "ok" };
-                send!(event("tool_result", json!({ "id": id, "status": status, "summary": format!("检查 {checked} 个 JSON，错误 {errs} 个。"), "data": data })));
+                send!(event(
+                    "tool_result",
+                    json!({ "id": id, "status": status, "summary": format!("检查 {checked} 个 JSON，错误 {errs} 个。"), "data": data })
+                ));
             }
-            Err(e) => send!(event("tool_result", json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null }))),
+            Err(e) => send!(event(
+                "tool_result",
+                json!({ "id": id, "status": "error", "summary": e.to_string(), "data": null })
+            )),
         }
     }
 
     // workflow + 总结
     let workflow_id = now_id("workflow");
-    send!(event("workflow", json!({
-        "id": workflow_id, "status": "running", "title": "生成回复",
-        "steps": [{ "label": "收集上下文", "status": "done" }, { "label": "汇总结果", "status": "running" }]
-    })));
+    send!(event(
+        "workflow",
+        json!({
+            "id": workflow_id, "status": "running", "title": "生成回复",
+            "steps": [{ "label": "收集上下文", "status": "done" }, { "label": "汇总结果", "status": "running" }]
+        })
+    ));
     let stream_id = now_id("assistant");
     send!(event("assistant_start", json!({ "id": stream_id })));
     // 逐字流式：build_summary 的 on_delta 每收到一个 token 增量即 emit 一个 assistant_delta，
@@ -203,55 +303,98 @@ where
     let summary_events = emitted.clone();
     let delta_sid = stream_id.clone();
     let summary = planner::build_summary(&summary_events, context, messages, |delta| {
-        let ev = event("assistant_delta", json!({ "id": delta_sid, "delta": delta }));
+        let ev = event(
+            "assistant_delta",
+            json!({ "id": delta_sid, "delta": delta }),
+        );
         emitted.push(ev.clone());
         emit(ev);
     })
     .await;
-    send!(event("assistant_done", json!({ "id": stream_id, "text": summary })));
-    send!(event("workflow", json!({
-        "id": workflow_id, "status": "done", "title": "生成回复",
-        "steps": [{ "label": "收集上下文", "status": "done" }, { "label": "汇总结果", "status": "done" }]
-    })));
+    send!(event(
+        "assistant_done",
+        json!({ "id": stream_id, "text": summary })
+    ));
+    send!(event(
+        "workflow",
+        json!({
+            "id": workflow_id, "status": "done", "title": "生成回复",
+            "steps": [{ "label": "收集上下文", "status": "done" }, { "label": "汇总结果", "status": "done" }]
+        })
+    ));
 
     Ok(emitted)
 }
 
 /// 审批分支：生成补丁预览 + approval_required，并暂存 pending。
-async fn build_approval_events(root: &std::path::Path, decision: &Value, context: &Value) -> PortalResult<Vec<Value>> {
-    let action = decision.get("action").and_then(|v| v.as_str()).unwrap_or("");
+async fn build_approval_events(
+    root: &std::path::Path,
+    decision: &Value,
+    context: &Value,
+) -> PortalResult<Vec<Value>> {
+    let action = decision
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let args = decision.get("args").cloned().unwrap_or(json!({}));
     let approval_id = now_id("approval");
     let mut preview: Option<Value> = None;
-    let mut title = decision.get("title").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let mut risk = decision.get("risk").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let mut title = decision
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let mut risk = decision
+        .get("risk")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let mut approval_args = args.clone();
 
     if action == "apply_json_patch" {
         let p = tools::prepare_json_patch(root, &args).await?;
-        title = title.or_else(|| Some(format!("修改 {}", p.get("path").and_then(|v| v.as_str()).unwrap_or(""))));
-        approval_args = json!({ "path": p.get("path"), "pointer": p.get("pointer"), "value": p.get("value") });
+        title = title.or_else(|| {
+            Some(format!(
+                "修改 {}",
+                p.get("path").and_then(|v| v.as_str()).unwrap_or("")
+            ))
+        });
+        approval_args =
+            json!({ "path": p.get("path"), "pointer": p.get("pointer"), "value": p.get("value") });
         preview = Some(p);
     } else if action == "apply_text_replace" {
         let p = tools::prepare_text_replace(root, &args).await?;
-        title = title.or_else(|| Some(format!("替换 {} 中的文本", p.get("path").and_then(|v| v.as_str()).unwrap_or(""))));
+        title = title.or_else(|| {
+            Some(format!(
+                "替换 {} 中的文本",
+                p.get("path").and_then(|v| v.as_str()).unwrap_or("")
+            ))
+        });
         let reps = p.get("replacements").and_then(|v| v.as_i64()).unwrap_or(0);
-        risk = risk.or_else(|| Some(format!("审批通过后会写入项目文件；本次预计替换 {reps} 处。")));
+        risk = risk.or_else(|| {
+            Some(format!(
+                "审批通过后会写入项目文件；本次预计替换 {reps} 处。"
+            ))
+        });
         approval_args = json!({ "path": p.get("path"), "oldText": p.get("oldText"), "newText": p.get("newText"), "occurrence": p.get("occurrence") });
         preview = Some(p);
     }
 
     // 暂存
-    pending().lock().await.insert(approval_id.clone(), PendingApproval {
-        action: action.to_string(),
-        args: args.clone(),
-        created_at: now_ms(),
-        context: context.clone(),
-    });
+    pending().lock().await.insert(
+        approval_id.clone(),
+        PendingApproval {
+            action: action.to_string(),
+            args: args.clone(),
+            created_at: now_ms(),
+            context: context.clone(),
+        },
+    );
 
     let mut events = Vec::new();
     events.push(event("assistant", json!({ "text": decision.get("intro").and_then(|v| v.as_str()).unwrap_or("这一步需要审批。") })));
-    events.push(event("plan", json!({ "items": decision.get("plan").cloned().unwrap_or(json!([])) })));
+    events.push(event(
+        "plan",
+        json!({ "items": decision.get("plan").cloned().unwrap_or(json!([])) }),
+    ));
     let preview_out = preview.as_ref().map(|p| {
         json!({
             "diff": p.get("diff"),
@@ -264,7 +407,9 @@ async fn build_approval_events(root: &std::path::Path, decision: &Value, context
         "args": approval_args, "expiresInMs": 10 * 60 * 1000,
     });
     if let Some(pv) = preview_out {
-        req.as_object_mut().unwrap().insert("preview".to_string(), pv);
+        req.as_object_mut()
+            .unwrap()
+            .insert("preview".to_string(), pv);
     }
     events.push(event("approval_required", req));
     events.push(event("assistant", json!({ "text": decision.get("outro").and_then(|v| v.as_str()).unwrap_or("请在审批卡片中选择同意或拒绝。") })));
@@ -273,17 +418,99 @@ async fn build_approval_events(root: &std::path::Path, decision: &Value, context
 
 fn tool_result_summary(action: &str, data: &Value) -> String {
     match action {
-        "run_command" => format!("{} 退出码 {}", data.get("command").and_then(|v| v.as_str()).unwrap_or(""), data.get("exitCode").and_then(|v| v.as_i64()).unwrap_or(0)),
-        "apply_json_patch" => format!("已修改 {} 的 {}", data.get("path").and_then(|v| v.as_str()).unwrap_or(""), data.get("pointer").and_then(|v| v.as_str()).unwrap_or("")),
-        "apply_text_replace" => format!("已修改 {}，替换 {} 处", data.get("path").and_then(|v| v.as_str()).unwrap_or(""), data.get("replacements").and_then(|v| v.as_i64()).unwrap_or(0)),
-        "apply_file_patch" => format!("patch 应用{}", if data.get("applied").and_then(|v| v.as_bool()).unwrap_or(false) { "成功" } else { "失败" }),
-        "create_file" => format!("已创建 {}，{} bytes", data.get("path").and_then(|v| v.as_str()).unwrap_or(""), data.get("bytes").and_then(|v| v.as_i64()).unwrap_or(0)),
-        "rename_file" => format!("已移动 {} -> {}", data.get("from").and_then(|v| v.as_str()).unwrap_or(""), data.get("to").and_then(|v| v.as_str()).unwrap_or("")),
-        "call_plugin_function" => format!("插件函数调用桥接{}", if data.get("configured").and_then(|v| v.as_bool()).unwrap_or(false) { "已执行" } else { "未配置" }),
-        "call_service_flow" => format!("服务编排调用桥接{}", if data.get("configured").and_then(|v| v.as_bool()).unwrap_or(false) { "已执行" } else { "未配置" }),
-        "generate_api_doc" => format!("API 文档生成桥接{}", if data.get("configured").and_then(|v| v.as_bool()).unwrap_or(false) { "已执行" } else { "未配置" }),
-        "format_file" | "cargo_check" | "cargo_build" | "cargo_test" | "cargo_clippy" | "npm_test" | "npm_build_workspace" | "run_playwright" | "capture_page_screenshot" | "inspect_dom" | "check_accessibility" => {
-            format!("{} 退出码 {}", data.get("command").and_then(|v| v.as_str()).unwrap_or(action), data.get("exitCode").and_then(|v| v.as_i64()).unwrap_or(0))
+        "run_command" => format!(
+            "{} 退出码 {}",
+            data.get("command").and_then(|v| v.as_str()).unwrap_or(""),
+            data.get("exitCode").and_then(|v| v.as_i64()).unwrap_or(0)
+        ),
+        "apply_json_patch" => format!(
+            "已修改 {} 的 {}",
+            data.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+            data.get("pointer").and_then(|v| v.as_str()).unwrap_or("")
+        ),
+        "apply_text_replace" => format!(
+            "已修改 {}，替换 {} 处",
+            data.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+            data.get("replacements")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+        ),
+        "apply_file_patch" => format!(
+            "patch 应用{}",
+            if data
+                .get("applied")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "成功"
+            } else {
+                "失败"
+            }
+        ),
+        "create_file" => format!(
+            "已创建 {}，{} bytes",
+            data.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+            data.get("bytes").and_then(|v| v.as_i64()).unwrap_or(0)
+        ),
+        "rename_file" => format!(
+            "已移动 {} -> {}",
+            data.get("from").and_then(|v| v.as_str()).unwrap_or(""),
+            data.get("to").and_then(|v| v.as_str()).unwrap_or("")
+        ),
+        "call_plugin_function" => format!(
+            "插件函数调用桥接{}",
+            if data
+                .get("configured")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "已执行"
+            } else {
+                "未配置"
+            }
+        ),
+        "call_service_flow" => format!(
+            "服务编排调用桥接{}",
+            if data
+                .get("configured")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "已执行"
+            } else {
+                "未配置"
+            }
+        ),
+        "generate_api_doc" => format!(
+            "API 文档生成桥接{}",
+            if data
+                .get("configured")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "已执行"
+            } else {
+                "未配置"
+            }
+        ),
+        "format_file"
+        | "cargo_check"
+        | "cargo_build"
+        | "cargo_test"
+        | "cargo_clippy"
+        | "npm_test"
+        | "npm_build_workspace"
+        | "run_playwright"
+        | "capture_page_screenshot"
+        | "inspect_dom"
+        | "check_accessibility" => {
+            format!(
+                "{} 退出码 {}",
+                data.get("command")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(action),
+                data.get("exitCode").and_then(|v| v.as_i64()).unwrap_or(0)
+            )
         }
         _ => "工具执行完成".to_string(),
     }
@@ -291,15 +518,65 @@ fn tool_result_summary(action: &str, data: &Value) -> String {
 
 fn tool_result_status(action: &str, data: &Value) -> &'static str {
     match action {
-        "run_command" => if data.get("exitCode").and_then(|v| v.as_i64()) == Some(0) { "ok" } else { "error" },
-        "format_file" | "cargo_check" | "cargo_build" | "cargo_test" | "cargo_clippy" | "npm_test" | "npm_build_workspace" | "run_playwright" | "capture_page_screenshot" | "inspect_dom" | "check_accessibility" => {
-            if data.get("exitCode").and_then(|v| v.as_i64()) == Some(0) { "ok" } else { "error" }
+        "run_command" => {
+            if data.get("exitCode").and_then(|v| v.as_i64()) == Some(0) {
+                "ok"
+            } else {
+                "error"
+            }
         }
-        "apply_json_patch" | "apply_text_replace" | "create_file" => if data.get("path").is_some() { "ok" } else { "error" },
-        "rename_file" => if data.get("to").is_some() { "ok" } else { "error" },
-        "apply_file_patch" => if data.get("applied").and_then(|v| v.as_bool()).unwrap_or(false) { "ok" } else { "error" },
+        "format_file"
+        | "cargo_check"
+        | "cargo_build"
+        | "cargo_test"
+        | "cargo_clippy"
+        | "npm_test"
+        | "npm_build_workspace"
+        | "run_playwright"
+        | "capture_page_screenshot"
+        | "inspect_dom"
+        | "check_accessibility" => {
+            if data.get("exitCode").and_then(|v| v.as_i64()) == Some(0) {
+                "ok"
+            } else {
+                "error"
+            }
+        }
+        "apply_json_patch" | "apply_text_replace" | "create_file" => {
+            if data.get("path").is_some() {
+                "ok"
+            } else {
+                "error"
+            }
+        }
+        "rename_file" => {
+            if data.get("to").is_some() {
+                "ok"
+            } else {
+                "error"
+            }
+        }
+        "apply_file_patch" => {
+            if data
+                .get("applied")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "ok"
+            } else {
+                "error"
+            }
+        }
         "call_plugin_function" | "call_service_flow" | "generate_api_doc" => {
-            if data.get("configured").and_then(|v| v.as_bool()).unwrap_or(false) { "ok" } else { "warning" }
+            if data
+                .get("configured")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                "ok"
+            } else {
+                "warning"
+            }
         }
         _ => "ok",
     }
@@ -307,13 +584,16 @@ fn tool_result_status(action: &str, data: &Value) -> &'static str {
 
 /// 生成 lint 验证审批（补丁应用后）。
 fn create_lint_approval(approval_id: &str) -> Value {
-    event("approval_required", json!({
-        "id": approval_id, "action": "run_command",
-        "title": "运行 lint 验证本次修改",
-        "risk": "补丁已应用。建议运行只读 lint 检查，确认没有引入新的代码问题。",
-        "args": { "command": "npm", "args": ["run", "lint", "-w", "cmx-portal-manager"] },
-        "workflowStep": "verify", "expiresInMs": 10 * 60 * 1000,
-    }))
+    event(
+        "approval_required",
+        json!({
+            "id": approval_id, "action": "run_command",
+            "title": "运行 lint 验证本次修改",
+            "risk": "补丁已应用。建议运行只读 lint 检查，确认没有引入新的代码问题。",
+            "args": { "command": "npm", "args": ["run", "lint", "-w", "cmx-portal-manager"] },
+            "workflowStep": "verify", "expiresInMs": 10 * 60 * 1000,
+        }),
+    )
 }
 
 /// 处理审批决定。
@@ -336,23 +616,40 @@ pub async fn handle_approval(id: &str, decision: &str) -> PortalResult<Value> {
 
     let tool_id = now_id("tool");
     let mut events = vec![
-        event("approval_decision", json!({ "id": id, "decision": "approve" })),
-        event("tool_call", json!({ "id": tool_id, "name": approval.action, "args": approval.args })),
+        event(
+            "approval_decision",
+            json!({ "id": id, "decision": "approve" }),
+        ),
+        event(
+            "tool_call",
+            json!({ "id": tool_id, "name": approval.action, "args": approval.args }),
+        ),
     ];
     let data = tools::run_tool(&root, &approval.action, &approval.args).await?;
     let status = tool_result_status(&approval.action, &data);
-    let is_patch = matches!(approval.action.as_str(), "apply_json_patch" | "apply_text_replace" | "apply_file_patch" | "create_file" | "rename_file" | "format_file");
+    let is_patch = matches!(
+        approval.action.as_str(),
+        "apply_json_patch"
+            | "apply_text_replace"
+            | "apply_file_patch"
+            | "create_file"
+            | "rename_file"
+            | "format_file"
+    );
     events.push(event("tool_result", json!({ "id": tool_id, "status": status, "summary": tool_result_summary(&approval.action, &data), "data": data })));
 
     if is_patch && status == "ok" {
-        events.push(event("workflow", json!({
-            "status": "waiting", "title": "修改已应用，等待验证",
-            "steps": [
-                { "label": "生成补丁", "status": "done" },
-                { "label": "应用补丁", "status": "done" },
-                { "label": "运行 lint", "status": "waiting" }
-            ]
-        })));
+        events.push(event(
+            "workflow",
+            json!({
+                "status": "waiting", "title": "修改已应用，等待验证",
+                "steps": [
+                    { "label": "生成补丁", "status": "done" },
+                    { "label": "应用补丁", "status": "done" },
+                    { "label": "运行 lint", "status": "waiting" }
+                ]
+            }),
+        ));
         // 暂存 lint 审批
         let lint_id = now_id("approval");
         pending().lock().await.insert(lint_id.clone(), PendingApproval {
@@ -386,8 +683,16 @@ pub fn capabilities() -> Value {
 /// /agent/message：一次性返回所有事件。
 pub async fn message(body: &Value) -> PortalResult<Value> {
     let messages = normalize_messages(body.get("messages").unwrap_or(&Value::Null));
-    let context = body.get("context").filter(|v| v.is_object()).cloned().unwrap_or(json!({}));
+    let context = body
+        .get("context")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or(json!({}));
     let events = run_agent_flow(&messages, &context, |_| {}).await?;
-    let conv_id = body.get("conversationId").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| now_id("conv"));
+    let conv_id = body
+        .get("conversationId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| now_id("conv"));
     Ok(json!({ "conversationId": conv_id, "events": events }))
 }

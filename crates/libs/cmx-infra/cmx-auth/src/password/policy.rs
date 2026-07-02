@@ -116,11 +116,7 @@ mod tests {
         let result = policy.validate("Ab1!");
         assert!(result.is_err(), "过短密码应违反策略");
         if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
-            assert!(
-                msg.contains("长度"),
-                "错误信息应包含 '长度'，实际: {}",
-                msg
-            );
+            assert!(msg.contains("长度"), "错误信息应包含 '长度'，实际: {}", msg);
         } else {
             panic!("期望 PasswordPolicyViolated 错误");
         }
@@ -166,11 +162,7 @@ mod tests {
         let result = policy.validate("Abcdefgh!");
         assert!(result.is_err(), "缺少数字应违反策略");
         if let Err(AuthError::PasswordPolicyViolated(msg)) = result {
-            assert!(
-                msg.contains("数字"),
-                "错误信息应包含 '数字'，实际: {}",
-                msg
-            );
+            assert!(msg.contains("数字"), "错误信息应包含 '数字'，实际: {}", msg);
         }
     }
 

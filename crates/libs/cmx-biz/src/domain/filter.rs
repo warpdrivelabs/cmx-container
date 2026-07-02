@@ -2,7 +2,7 @@
 //!
 //! 使用 modql 定义查询过滤器
 
-use modql::filter::{FilterNodes, OpValsString, OpValsInt64};
+use modql::filter::{FilterNodes, OpValsInt64, OpValsString};
 use serde::Deserialize;
 
 /// Domain 查询过滤器

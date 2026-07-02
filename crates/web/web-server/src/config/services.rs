@@ -2,6 +2,8 @@
 //!
 //! 提供服务仓储、注册中心和生命周期监听器的初始化功能。
 
+pub use crate::Error;
+use cmx_database::get_default_db_manager;
 use cmx_runtime::RuntimeLifecycleListener;
 use cmx_service::{
     GlobalServiceQuery, GlobalServiceRegistry, GlobalServiceStorage, ServiceInvokerImpl,
@@ -9,10 +11,8 @@ use cmx_service::{
     ServiceStorageImpl,
 };
 use cmx_traits::service::{GlobalServiceInvoker, ServiceQuery, ServiceStorage};
-use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::info;
-pub use crate::Error;
 
 /// 初始化服务管理器。
 ///
@@ -44,14 +44,22 @@ pub async fn init_services() -> crate::Result<()> {
         .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
         .unwrap_or_else(|| "default".to_string());
 
-    let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id.clone()));
+    let repository = Arc::new(ServiceRepository::new(
+        db_manager.clone(),
+        default_db_id.clone(),
+    ));
     let registry = Arc::new(ServiceRegistry::new());
 
     GlobalServiceRegistry::set(registry.clone())
         .map_err(|e| Error::ServiceInit(format!("初始化服务注册中心失败: {}", e)))?;
 
-    let service_query = Arc::new(ServiceQueryImpl::new(repository.clone(), registry.clone(), app_id.clone())) as Arc<dyn ServiceQuery>;
-    let service_storage = Arc::new(ServiceStorageImpl::new(repository.clone())) as Arc<dyn ServiceStorage>;
+    let service_query = Arc::new(ServiceQueryImpl::new(
+        repository.clone(),
+        registry.clone(),
+        app_id.clone(),
+    )) as Arc<dyn ServiceQuery>;
+    let service_storage =
+        Arc::new(ServiceStorageImpl::new(repository.clone())) as Arc<dyn ServiceStorage>;
 
     GlobalServiceQuery::set(service_query.clone())
         .map_err(|e| Error::ServiceInit(format!("初始化服务查询器失败: {}", e)))?;
@@ -69,10 +77,8 @@ pub async fn init_services() -> crate::Result<()> {
     );
     service_listener.register().await;
 
-    let runtime_listener = RuntimeLifecycleListener::new(
-        cmx_runtime::GlobalExtismEngine::get_as_invoker(),
-        app_id,
-    );
+    let runtime_listener =
+        RuntimeLifecycleListener::new(cmx_runtime::GlobalExtismEngine::get_as_invoker(), app_id);
     runtime_listener.register().await;
 
     info!("生命周期监听器已注册");

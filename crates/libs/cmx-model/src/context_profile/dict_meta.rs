@@ -3,7 +3,7 @@
 //! resolve/rule/preview 前对 profile 的每个维度 `dim.dict` 补全 id/code/label 列、columns 默认等，
 //! 并标 `dim.valueType = 'dict-select'`。dict schema 取自字典注册表（registry.json）。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::dict::schema::try_get_schema;
 use crate::error::PortalResult;
@@ -55,13 +55,21 @@ fn default_dict_help_columns(id_col: &str, code_col: &str, label_col: &str) -> V
 }
 
 /// 由字典 schema 推断 code 字段（fullTextFields 含 code → code，否则 fallback）。
-fn derive_dict_code_field(schema: Option<&crate::dict::schema::DictSchema>, fallback: &str) -> String {
+fn derive_dict_code_field(
+    schema: Option<&crate::dict::schema::DictSchema>,
+    fallback: &str,
+) -> String {
     if let Some(s) = schema
         && let Some(fields) = &s.full_text_fields
-            && fields.iter().any(|f| f == "code") {
-                return "code".to_string();
-            }
-    if fallback.is_empty() { "id".to_string() } else { fallback.to_string() }
+        && fields.iter().any(|f| f == "code")
+    {
+        return "code".to_string();
+    }
+    if fallback.is_empty() {
+        "id".to_string()
+    } else {
+        fallback.to_string()
+    }
 }
 
 /// 补全单个维度的 dict 元数据。
@@ -73,31 +81,62 @@ async fn enrich_dimension_dict_meta(dict_def: &Value, dim: &Value) -> PortalResu
         _ => json!({}),
     };
     let bget = |k: &str| base.get(k).cloned();
-    let dict_id = bget("dictId").or_else(|| bget("dictCode")).or_else(|| bget("code"))
+    let dict_id = bget("dictId")
+        .or_else(|| bget("dictCode"))
+        .or_else(|| bget("code"))
         .and_then(|v| v.as_str().map(|s| s.to_string()));
     let Some(dict_id) = dict_id else {
         return Ok(base);
     };
     let schema = try_get_schema(&dict_id).await?;
 
-    let id_col = bget("idCol").or_else(|| bget("idField")).and_then(|v| v.as_str().map(|s| s.to_string()))
+    let id_col = bget("idCol")
+        .or_else(|| bget("idField"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
         .or_else(|| schema.as_ref().and_then(|s| s.id_field.clone()))
         .unwrap_or_else(|| "id".to_string());
-    let label_col = bget("labelCol").or_else(|| bget("labelField")).and_then(|v| v.as_str().map(|s| s.to_string()))
+    let label_col = bget("labelCol")
+        .or_else(|| bget("labelField"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
         .or_else(|| schema.as_ref().and_then(|s| s.label_field.clone()))
         .unwrap_or_else(|| "name".to_string());
-    let code_col = bget("codeCol").or_else(|| bget("codeField")).or_else(|| bget("valueField")).and_then(|v| v.as_str().map(|s| s.to_string()))
+    let code_col = bget("codeCol")
+        .or_else(|| bget("codeField"))
+        .or_else(|| bget("valueField"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
         .unwrap_or_else(|| derive_dict_code_field(schema.as_ref(), &id_col));
-    let parent_col = bget("parentCol").or_else(|| bget("parentField")).and_then(|v| v.as_str().map(|s| s.to_string()))
+    let parent_col = bget("parentCol")
+        .or_else(|| bget("parentField"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
         .or_else(|| schema.as_ref().and_then(|s| s.parent_field.clone()));
-    let hierarchical = bget("hierarchical").and_then(|v| v.as_bool())
+    let hierarchical = bget("hierarchical")
+        .and_then(|v| v.as_bool())
         .unwrap_or_else(|| schema.as_ref().map(|s| s.hierarchical).unwrap_or(false));
     let dim_name = dim.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let schema_label = schema.as_ref().and_then(|s| s.label.as_deref()).unwrap_or("");
-    let value_field = bget("valueField").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_else(|| code_col.clone());
-    let columns = bget("columns").filter(|v| v.is_array()).unwrap_or_else(|| default_dict_help_columns(&id_col, &code_col, &label_col));
-    let dict_title = bget("dictTitle").and_then(|v| v.as_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| format!("选择{}", if !dim_name.is_empty() { dim_name } else if !schema_label.is_empty() { schema_label } else { &dict_id }));
+    let schema_label = schema
+        .as_ref()
+        .and_then(|s| s.label.as_deref())
+        .unwrap_or("");
+    let value_field = bget("valueField")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| code_col.clone());
+    let columns = bget("columns")
+        .filter(|v| v.is_array())
+        .unwrap_or_else(|| default_dict_help_columns(&id_col, &code_col, &label_col));
+    let dict_title = bget("dictTitle")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| {
+            format!(
+                "选择{}",
+                if !dim_name.is_empty() {
+                    dim_name
+                } else if !schema_label.is_empty() {
+                    schema_label
+                } else {
+                    &dict_id
+                }
+            )
+        });
 
     Ok(json!({
         "dictId": dict_id,

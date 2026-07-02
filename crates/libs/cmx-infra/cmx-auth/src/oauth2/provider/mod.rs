@@ -3,11 +3,11 @@
 //! 定义 `OAuth2Provider` trait，提供统一的第三方 Provider 接口。
 //! 内置 Provider（Google/GitHub）和通用 Provider 均实现此 trait。
 
-pub mod generic;
-pub mod google;
-pub mod github;
-pub mod registry;
 pub mod account_linker;
+pub mod generic;
+pub mod github;
+pub mod google;
+pub mod registry;
 
 use async_trait::async_trait;
 use cmx_traits::auth::AuthError;
@@ -130,6 +130,6 @@ pub struct ProviderUserInfo {
     pub avatar_url: Option<String>,
 }
 
-pub use registry::OAuth2ProviderRegistry;
 pub use account_linker::AccountLinker;
 pub use account_linker::LinkResult;
+pub use registry::OAuth2ProviderRegistry;

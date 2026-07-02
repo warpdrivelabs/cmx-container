@@ -126,7 +126,12 @@ impl DataSetBuilder {
     /// - `name`: 字段名称
     /// - `field_type`: 字段类型
     /// - `label`: 前端显示标签
-    pub fn field(mut self, name: impl Into<String>, field_type: FieldType, label: impl Into<String>) -> Self {
+    pub fn field(
+        mut self,
+        name: impl Into<String>,
+        field_type: FieldType,
+        label: impl Into<String>,
+    ) -> Self {
         self.fields.push(Field {
             name: name.into(),
             field_type,
@@ -202,7 +207,11 @@ impl DataSetBuilder {
         for pending in self.pending_rows {
             let mut values = Vec::with_capacity(schema_arc.field_count());
             for field in &schema_arc.fields {
-                let val = pending.values.get(&field.name).cloned().unwrap_or(DataValue::Null);
+                let val = pending
+                    .values
+                    .get(&field.name)
+                    .cloned()
+                    .unwrap_or(DataValue::Null);
                 values.push(val);
             }
 

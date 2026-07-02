@@ -3,10 +3,10 @@
 //! 为 WASM 插件提供数据库操作能力的宿主函数。
 //! 封装 DatabaseManager 的核心 API，通过 MsgPack 格式传递参数和结果。
 
-use std::sync::Arc;
-use cmx_traits::error::HostFuncError;
-use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef};
 use cmx_core::wasm_types::{DbRequest, DbResponse};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::runtime::{HostFunctionDef, HostFunctionProvider};
+use std::sync::Arc;
 
 use crate::DatabaseManager;
 
@@ -46,7 +46,11 @@ impl DatabaseHostFunctions {
         let request: DbRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => {
-                return Ok(rmp_serde::to_vec(&Self::error_response(format!("解析请求失败: {}", e))).unwrap_or_default());
+                return Ok(rmp_serde::to_vec(&Self::error_response(format!(
+                    "解析请求失败: {}",
+                    e
+                )))
+                .unwrap_or_default());
             }
         };
 
@@ -54,7 +58,9 @@ impl DatabaseHostFunctions {
         let sql = request.sql;
         let params = request.params;
         let data_values = request.data_values;
-        let dataset_id = request.dataset_id.unwrap_or_else(|| "wasm_query".to_string());
+        let dataset_id = request
+            .dataset_id
+            .unwrap_or_else(|| "wasm_query".to_string());
         let request_db_id = request.db_id;
         let request_txn_id = request.txn_id;
 
@@ -68,24 +74,30 @@ impl DatabaseHostFunctions {
 
                 // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
                 match (data_values, params) {
-                    (Some(data_values), _) => {
-                        db_manager
-                            .query_sql_with_datavalues(&db_id, request_txn_id.as_deref(), &sql, data_values, &dataset_id)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
-                    (None, Some(params_value)) => {
-                        db_manager
-                            .query_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value, &dataset_id)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
-                    (None, None) => {
-                        db_manager
-                            .query_sql(&db_id, request_txn_id.as_deref(), &sql, &dataset_id)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
+                    (Some(data_values), _) => db_manager
+                        .query_sql_with_datavalues(
+                            &db_id,
+                            request_txn_id.as_deref(),
+                            &sql,
+                            data_values,
+                            &dataset_id,
+                        )
+                        .await
+                        .map_err(|e| e.to_string()),
+                    (None, Some(params_value)) => db_manager
+                        .query_sql_with_json(
+                            &db_id,
+                            request_txn_id.as_deref(),
+                            &sql,
+                            params_value,
+                            &dataset_id,
+                        )
+                        .await
+                        .map_err(|e| e.to_string()),
+                    (None, None) => db_manager
+                        .query_sql(&db_id, request_txn_id.as_deref(), &sql, &dataset_id)
+                        .await
+                        .map_err(|e| e.to_string()),
                 }
             })
         };
@@ -115,7 +127,11 @@ impl DatabaseHostFunctions {
         let request: DbRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
             Err(e) => {
-                return Ok(rmp_serde::to_vec(&Self::error_response(format!("解析请求失败: {}", e))).unwrap_or_default());
+                return Ok(rmp_serde::to_vec(&Self::error_response(format!(
+                    "解析请求失败: {}",
+                    e
+                )))
+                .unwrap_or_default());
             }
         };
 
@@ -136,24 +152,28 @@ impl DatabaseHostFunctions {
 
                 // data_values 优先(带类型 NULL),其次 params JSON(向后兼容),最后无参数
                 match (data_values, params) {
-                    (Some(data_values), _) => {
-                        db_manager
-                            .execute_sql_with_datavalues(&db_id, request_txn_id.as_deref(), &sql, data_values)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
-                    (None, Some(params_value)) => {
-                        db_manager
-                            .execute_sql_with_json(&db_id, request_txn_id.as_deref(), &sql, params_value)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
-                    (None, None) => {
-                        db_manager
-                            .execute_sql(&db_id, request_txn_id.as_deref(), &sql)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
+                    (Some(data_values), _) => db_manager
+                        .execute_sql_with_datavalues(
+                            &db_id,
+                            request_txn_id.as_deref(),
+                            &sql,
+                            data_values,
+                        )
+                        .await
+                        .map_err(|e| e.to_string()),
+                    (None, Some(params_value)) => db_manager
+                        .execute_sql_with_json(
+                            &db_id,
+                            request_txn_id.as_deref(),
+                            &sql,
+                            params_value,
+                        )
+                        .await
+                        .map_err(|e| e.to_string()),
+                    (None, None) => db_manager
+                        .execute_sql(&db_id, request_txn_id.as_deref(), &sql)
+                        .await
+                        .map_err(|e| e.to_string()),
                 }
             })
         };

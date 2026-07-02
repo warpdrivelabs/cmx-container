@@ -3,9 +3,9 @@
 //! 定义跨模块的插件状态查询接口，cmx-plugin 的 PluginManager 将实现此 trait，
 //! cmx-service 等模块通过此 trait 查询插件信息而无需直接依赖 cmx-plugin。
 
-use std::path::PathBuf;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use crate::error::TraitError;
 

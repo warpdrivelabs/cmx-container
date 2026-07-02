@@ -1,11 +1,6 @@
 //! 安全响应头中间件
 
-use axum::{
-    body::Body,
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 
 /// 安全头配置
 #[derive(Debug, Clone)]
@@ -36,24 +31,18 @@ impl SecurityHeadersConfig {
 }
 
 /// 添加安全头到响应
-pub async fn mw_security_headers(
-     req: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn mw_security_headers(req: Request<Body>, next: Next) -> Response {
     let mut response = next.run(req).await;
 
-    response.headers_mut().insert(
-        "x-content-type-options",
-        "nosniff".parse().unwrap(),
-    );
-    response.headers_mut().insert(
-        "x-frame-options",
-        "DENY".parse().unwrap(),
-    );
-    response.headers_mut().insert(
-        "x-xss-protection",
-        "1; mode=block".parse().unwrap(),
-    );
+    response
+        .headers_mut()
+        .insert("x-content-type-options", "nosniff".parse().unwrap());
+    response
+        .headers_mut()
+        .insert("x-frame-options", "DENY".parse().unwrap());
+    response
+        .headers_mut()
+        .insert("x-xss-protection", "1; mode=block".parse().unwrap());
     response.headers_mut().insert(
         "referrer-policy",
         "strict-origin-when-cross-origin".parse().unwrap(),

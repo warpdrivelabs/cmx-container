@@ -2,8 +2,8 @@
 //!
 //! 提供规则 CRUD、启用/禁用、规则项管理、校验测试等 API。
 
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -302,7 +302,9 @@ pub async fn add_rule_items(
 ) -> Result<Json<ApiResp<BatchResponse>>> {
     debug!(
         "{:<12} - handler::add_rule_items - rule_id: {}, count: {}",
-        "HANDLER", req.rule_id, req.subject_ids.len()
+        "HANDLER",
+        req.rule_id,
+        req.subject_ids.len()
     );
 
     let iam = cmx_state
@@ -339,7 +341,9 @@ pub async fn remove_rule_items(
 ) -> Result<Json<ApiResp<BatchResponse>>> {
     debug!(
         "{:<12} - handler::remove_rule_items - rule_id: {}, count: {}",
-        "HANDLER", req.rule_id, req.item_ids.len()
+        "HANDLER",
+        req.rule_id,
+        req.item_ids.len()
     );
 
     let iam = cmx_state
@@ -413,7 +417,10 @@ pub async fn validate_rule(
 ) -> Result<Json<ApiResp<ValidateRuleResponse>>> {
     debug!(
         "{:<12} - handler::validate_rule - perm_count: {}, role_count: {}, user: {:?}",
-        "HANDLER", req.permission_ids.len(), req.role_ids.len(), req.user_id
+        "HANDLER",
+        req.permission_ids.len(),
+        req.role_ids.len(),
+        req.user_id
     );
 
     let iam = cmx_state

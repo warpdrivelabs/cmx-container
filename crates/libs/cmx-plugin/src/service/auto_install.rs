@@ -9,11 +9,11 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
+use crate::domain::plugin::PluginSource;
 use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
 use crate::service::install::{InstallRequest, InstallService};
 use crate::service::upgrade::{UpgradeRequest, UpgradeService};
-use crate::domain::plugin::PluginSource;
 
 /// 自动安装配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,29 +162,32 @@ impl AutoInstallService {
 
         for plugin_config in &config.plugins {
             match self.process_plugin(plugin_config).await {
-                Ok(action) => {
-                    match action {
-                        InstallAction::Installed => {
-                            info!("插件 [{}] 自动安装成功", plugin_config.plugin_id);
-                            result.installed.push(plugin_config.plugin_id.clone());
-                        }
-                        InstallAction::Upgraded => {
-                            info!("插件 [{}] 自动升级成功", plugin_config.plugin_id);
-                            result.upgraded.push(plugin_config.plugin_id.clone());
-                        }
-                        InstallAction::Skipped => {
-                            info!("插件 [{}] 已安装且版本一致，跳过", plugin_config.plugin_id);
-                            result.skipped.push(plugin_config.plugin_id.clone());
-                        }
+                Ok(action) => match action {
+                    InstallAction::Installed => {
+                        info!("插件 [{}] 自动安装成功", plugin_config.plugin_id);
+                        result.installed.push(plugin_config.plugin_id.clone());
                     }
-                }
+                    InstallAction::Upgraded => {
+                        info!("插件 [{}] 自动升级成功", plugin_config.plugin_id);
+                        result.upgraded.push(plugin_config.plugin_id.clone());
+                    }
+                    InstallAction::Skipped => {
+                        info!("插件 [{}] 已安装且版本一致，跳过", plugin_config.plugin_id);
+                        result.skipped.push(plugin_config.plugin_id.clone());
+                    }
+                },
                 Err(e) => {
                     let err_msg = e.to_string();
-                    error!("插件 [{}] 自动安装失败: {}", plugin_config.plugin_id, err_msg);
+                    error!(
+                        "插件 [{}] 自动安装失败: {}",
+                        plugin_config.plugin_id, err_msg
+                    );
                     if plugin_config.is_critical {
                         result.has_critical_failure = true;
                     }
-                    result.failed.push((plugin_config.plugin_id.clone(), err_msg));
+                    result
+                        .failed
+                        .push((plugin_config.plugin_id.clone(), err_msg));
                 }
             }
         }
@@ -197,7 +200,10 @@ impl AutoInstallService {
     /// 检查插件是否已安装，根据状态决定执行安装、升级或跳过操作。
     async fn process_plugin(&self, config: &AutoInstallPlugin) -> PluginResult<InstallAction> {
         // 检查插件是否已安装
-        let existing = self.repository.find_plugin(&config.plugin_id, &self.app_id).await?;
+        let existing = self
+            .repository
+            .find_plugin(&config.plugin_id, &self.app_id)
+            .await?;
 
         match existing {
             Some(plugin) => {
@@ -273,10 +279,7 @@ impl AutoInstallService {
                 checksum: None,
             },
             _ => {
-                warn!(
-                    "未知的来源类型 '{}'，默认使用 local",
-                    config.source_type
-                );
+                warn!("未知的来源类型 '{}'，默认使用 local", config.source_type);
                 PluginSource::Local {
                     path: PathBuf::from(&config.source_path),
                 }

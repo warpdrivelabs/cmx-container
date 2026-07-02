@@ -14,14 +14,15 @@
 
 mod common;
 
-use cmx_core::model::service::{ServiceFlow, ServiceNode};
 use cmx_core::StepStatus;
+use cmx_core::model::service::{ServiceFlow, ServiceNode};
 use cmx_service::ExecuteOptions;
 use serde_json::json;
 
 use common::{
-    create_orchestrator, make_edge, make_end_node, make_func_node, make_func_node_with_parent,
-    make_orchestration, make_start_node, make_svr_context, MockRuntimeInvoker, MockServiceQuery,
+    MockRuntimeInvoker, MockServiceQuery, create_orchestrator, make_edge, make_end_node,
+    make_func_node, make_func_node_with_parent, make_orchestration, make_start_node,
+    make_svr_context,
 };
 
 /// 构造事务框流程：start -> [txn_box: func_1 -> func_2] -> end
@@ -34,20 +35,8 @@ fn make_transaction_flow() -> ServiceFlow {
         nodes: vec![
             make_start_node("start_1"),
             // 事务框内的两个函数节点
-            make_func_node_with_parent(
-                "func_1",
-                "事务步骤1",
-                "plugin_a",
-                "tx_insert",
-                "txn_box",
-            ),
-            make_func_node_with_parent(
-                "func_2",
-                "事务步骤2",
-                "plugin_a",
-                "tx_update",
-                "txn_box",
-            ),
+            make_func_node_with_parent("func_1", "事务步骤1", "plugin_a", "tx_insert", "txn_box"),
+            make_func_node_with_parent("func_2", "事务步骤2", "plugin_a", "tx_update", "txn_box"),
             make_end_node("end_1"),
         ],
         edges: vec![
@@ -68,7 +57,10 @@ fn make_transaction_flow_with_txn_node() -> ServiceFlow {
         parent: None,
         meta: NodeMeta {
             z_index: 1,
-            size: NodeSize { width: 800, height: 600 },
+            size: NodeSize {
+                width: 800,
+                height: 600,
+            },
             position: NodePosition { x: 100.0, y: 100.0 },
         },
         data: Some(NodeData {
@@ -90,20 +82,8 @@ fn make_transaction_flow_with_txn_node() -> ServiceFlow {
         nodes: vec![
             make_start_node("start_1"),
             txn_node,
-            make_func_node_with_parent(
-                "func_1",
-                "事务步骤1",
-                "plugin_a",
-                "tx_insert",
-                "txn_box",
-            ),
-            make_func_node_with_parent(
-                "func_2",
-                "事务步骤2",
-                "plugin_a",
-                "tx_update",
-                "txn_box",
-            ),
+            make_func_node_with_parent("func_1", "事务步骤1", "plugin_a", "tx_insert", "txn_box"),
+            make_func_node_with_parent("func_2", "事务步骤2", "plugin_a", "tx_update", "txn_box"),
             make_end_node("end_1"),
         ],
         edges: vec![

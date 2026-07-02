@@ -81,9 +81,9 @@ impl From<IamError> for cmx_api_types::Error {
             IamError::RoleNotFound(msg) => cmx_api_types::Error::NotFound(msg),
             IamError::PermissionNotFound(msg) => cmx_api_types::Error::NotFound(msg),
             IamError::RoleGroupNotFound(msg) => cmx_api_types::Error::NotFound(msg),
-            IamError::RoleGroupInUse => {
-                cmx_api_types::Error::BusinessError("角色组下存在子组或关联角色，无法删除".to_string())
-            }
+            IamError::RoleGroupInUse => cmx_api_types::Error::BusinessError(
+                "角色组下存在子组或关联角色，无法删除".to_string(),
+            ),
             IamError::UsernameExists(msg) => cmx_api_types::Error::BusinessError(msg),
             IamError::RoleCodeExists(msg) => cmx_api_types::Error::BusinessError(msg),
             IamError::PermissionCodeExists(msg) => cmx_api_types::Error::BusinessError(msg),
@@ -113,9 +113,9 @@ impl From<IamError> for cmx_traits::error::TraitError {
             IamError::RoleNotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
             IamError::PermissionNotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
             IamError::RoleGroupNotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
-            IamError::RoleGroupInUse => {
-                cmx_traits::error::TraitError::Business("角色组下存在子组或关联角色，无法删除".to_string())
-            }
+            IamError::RoleGroupInUse => cmx_traits::error::TraitError::Business(
+                "角色组下存在子组或关联角色，无法删除".to_string(),
+            ),
             IamError::UsernameExists(msg) => cmx_traits::error::TraitError::Business(msg),
             IamError::RoleCodeExists(msg) => cmx_traits::error::TraitError::Business(msg),
             IamError::PermissionCodeExists(msg) => cmx_traits::error::TraitError::Business(msg),

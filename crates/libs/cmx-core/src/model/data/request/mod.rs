@@ -1,8 +1,8 @@
 pub mod params;
-pub use params::{PageParams, ListParams,UpdatePayload, DeletePayload};
+pub use params::{DeletePayload, ListParams, PageParams, UpdatePayload};
 
-use std::{any::Any, collections::HashMap};
 use serde::{Deserialize, Serialize};
+use std::{any::Any, collections::HashMap};
 
 pub trait CMXRequest: Any + Send + Sync {
     fn get_request_id(&self) -> &str;
@@ -14,8 +14,6 @@ pub trait CMXRequest: Any + Send + Sync {
     fn set_timeout(&mut self, timeout: u64);
     fn add_header(&mut self, key: String, value: String);
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestRequest {
@@ -66,7 +64,6 @@ impl CMXRequest for RestRequest {
         self.headers.insert(key, value);
     }
 }
-
 
 // 分页响应的分页元数据
 #[derive(Debug, Serialize)]

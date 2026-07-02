@@ -80,16 +80,22 @@ where
             let id = item.node_id().to_string();
             match item.parent_id() {
                 Some(pid) if !pid.is_empty() => {
-                    child_map.entry(pid.to_string()).or_default().push(id.clone());
+                    child_map
+                        .entry(pid.to_string())
+                        .or_default()
+                        .push(id.clone());
                 }
                 _ => {
                     root_ids.push(id.clone());
                 }
             }
-            node_map.insert(id, TreeNode {
-                data: item,
-                children: Vec::new(),
-            });
+            node_map.insert(
+                id,
+                TreeNode {
+                    data: item,
+                    children: Vec::new(),
+                },
+            );
         }
 
         fn build_children<T: TreeNodeData + Clone>(

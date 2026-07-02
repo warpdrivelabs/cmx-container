@@ -1,9 +1,9 @@
 //! 字典条目仓库 + 内存检索引擎（复刻 Node `JsonFileRepo`）。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::data_path;
-use crate::dict::schema::{get_schema, try_get_schema, DictSchema};
+use crate::dict::schema::{DictSchema, get_schema, try_get_schema};
 use crate::error::PortalResult;
 use crate::fsutil::{read_json_opt, write_json_atomic};
 use crate::util::write_lock;
@@ -33,16 +33,28 @@ impl SearchQuery {
             .unwrap_or_default();
         let sort = body.get("sort");
         SearchQuery {
-            q: body.get("q").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            q: body
+                .get("q")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             filters,
             parent_id: body.get("parentId").cloned(),
             ancestor_id: body.get("ancestorId").cloned(),
             page: body.get("page").and_then(|v| v.as_i64()).unwrap_or(1),
             page_size: body.get("pageSize").and_then(|v| v.as_i64()).unwrap_or(20),
-            sort_field: sort.and_then(|s| s.get("field")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+            sort_field: sort
+                .and_then(|s| s.get("field"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             sort_desc: sort.and_then(|s| s.get("order")).and_then(|v| v.as_str()) == Some("desc"),
-            include_inactive: body.get("includeInactive").and_then(|v| v.as_bool()).unwrap_or(false),
-            as_of: body.get("asOf").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            include_inactive: body
+                .get("includeInactive")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            as_of: body
+                .get("asOf")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         }
     }
 }
@@ -61,10 +73,15 @@ fn entries_dir() -> std::path::PathBuf {
 fn entries_path_candidates(dict_id: &str, schema: Option<&DictSchema>) -> Vec<std::path::PathBuf> {
     let flat = entries_dir().join(format!("{dict_id}.json"));
     if let Some(s) = schema
-        && let (Some(d), Some(a), Some(m)) = (&s.domain, &s.app, &s.module) {
-            let dam = entries_dir().join(d).join(a).join(m).join(format!("{dict_id}.json"));
-            return vec![dam, flat];
-        }
+        && let (Some(d), Some(a), Some(m)) = (&s.domain, &s.app, &s.module)
+    {
+        let dam = entries_dir()
+            .join(d)
+            .join(a)
+            .join(m)
+            .join(format!("{dict_id}.json"));
+        return vec![dam, flat];
+    }
     vec![flat]
 }
 
@@ -79,7 +96,11 @@ async fn load_entries(dict_id: &str, schema: Option<&DictSchema>) -> PortalResul
 }
 
 /// 写回条目（写到候选路径首项 = schema 决定的主路径）。
-async fn save_entries(dict_id: &str, schema: Option<&DictSchema>, rows: &[Value]) -> PortalResult<()> {
+async fn save_entries(
+    dict_id: &str,
+    schema: Option<&DictSchema>,
+    rows: &[Value],
+) -> PortalResult<()> {
     let path = entries_path_candidates(dict_id, schema)
         .into_iter()
         .next()
@@ -171,7 +192,12 @@ fn fuzzy_match_cjk(text: &str, term: &str) -> bool {
         return false;
     }
     for i in 0..chars.len() {
-        let sub: String = chars.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, c)| *c).collect();
+        let sub: String = chars
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, c)| *c)
+            .collect();
         if is_subsequence(&sub, text) {
             return true;
         }
@@ -203,9 +229,15 @@ pub async fn search(dict_id: &str, query: &SearchQuery) -> PortalResult<SearchRe
     let rows = load_entries(dict_id, schema.as_ref()).await?;
     let mut result: Vec<Value> = rows;
 
-    let id_field = schema.as_ref().map(|s| s.id_field().to_string()).unwrap_or_else(|| "id".to_string());
+    let id_field = schema
+        .as_ref()
+        .map(|s| s.id_field().to_string())
+        .unwrap_or_else(|| "id".to_string());
     let hierarchical = schema.as_ref().map(|s| s.hierarchical).unwrap_or(false);
-    let parent_field = schema.as_ref().map(|s| s.parent_field().to_string()).unwrap_or_else(|| "parentId".to_string());
+    let parent_field = schema
+        .as_ref()
+        .map(|s| s.parent_field().to_string())
+        .unwrap_or_else(|| "parentId".to_string());
 
     // 显式按主键查找 → 放宽有效性过滤
     let explicit_key_lookup = query
@@ -271,7 +303,8 @@ pub async fn search(dict_id: &str, query: &SearchQuery) -> PortalResult<SearchRe
             result.retain(|r| {
                 let vf = r.get("valid_from").and_then(|v| v.as_str());
                 let vt = r.get("valid_to").and_then(|v| v.as_str());
-                vf.map(|x| x <= t.as_str()).unwrap_or(true) && vt.map(|x| t.as_str() < x).unwrap_or(true)
+                vf.map(|x| x <= t.as_str()).unwrap_or(true)
+                    && vt.map(|x| t.as_str() < x).unwrap_or(true)
             });
         } else if !query.include_inactive {
             let today = current_date_str();
@@ -308,22 +341,25 @@ pub async fn search(dict_id: &str, query: &SearchQuery) -> PortalResult<SearchRe
     }
 
     // 排序
-    let sf = query.sort_field.clone().unwrap_or_else(|| "sortKey".to_string());
+    let sf = query
+        .sort_field
+        .clone()
+        .unwrap_or_else(|| "sortKey".to_string());
     let desc = query.sort_desc;
     result.sort_by(|a, b| {
         let av = field_str(a, &sf);
         let bv = field_str(b, &sf);
-        if desc {
-            bv.cmp(&av)
-        } else {
-            av.cmp(&bv)
-        }
+        if desc { bv.cmp(&av) } else { av.cmp(&bv) }
     });
 
     let total = result.len();
     let page = query.page.max(1);
     let from = ((page - 1) * query.page_size).max(0) as usize;
-    let hits: Vec<Value> = result.into_iter().skip(from).take(query.page_size.max(0) as usize).collect();
+    let hits: Vec<Value> = result
+        .into_iter()
+        .skip(from)
+        .take(query.page_size.max(0) as usize)
+        .collect();
     Ok(SearchResult { hits, total })
 }
 
@@ -360,7 +396,10 @@ fn regex_escape_glob(s: &str) -> String {
 pub async fn upsert_entries(dict_id: &str, entries: &[Value]) -> PortalResult<serde_json::Value> {
     let _guard = write_lock().lock().await;
     let schema = try_get_schema(dict_id).await?;
-    let id_field = schema.as_ref().map(|s| s.id_field().to_string()).unwrap_or_else(|| "id".to_string());
+    let id_field = schema
+        .as_ref()
+        .map(|s| s.id_field().to_string())
+        .unwrap_or_else(|| "id".to_string());
     let mut rows = load_entries(dict_id, schema.as_ref()).await?;
     // 用 idField 建索引
     let mut index: std::collections::HashMap<String, usize> = rows
@@ -385,7 +424,10 @@ pub async fn upsert_entries(dict_id: &str, entries: &[Value]) -> PortalResult<se
 pub async fn delete_entry(dict_id: &str, id: &str) -> PortalResult<serde_json::Value> {
     let _guard = write_lock().lock().await;
     let schema = try_get_schema(dict_id).await?;
-    let id_field = schema.as_ref().map(|s| s.id_field().to_string()).unwrap_or_else(|| "id".to_string());
+    let id_field = schema
+        .as_ref()
+        .map(|s| s.id_field().to_string())
+        .unwrap_or_else(|| "id".to_string());
     let mut rows = load_entries(dict_id, schema.as_ref()).await?;
     rows.retain(|r| field_str(r, &id_field) != id);
     save_entries(dict_id, schema.as_ref(), &rows).await?;

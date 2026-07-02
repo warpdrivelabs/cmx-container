@@ -49,11 +49,10 @@ pub use host_calls::HostCaller;
 // ==================== WASM 类型（从 cmx_core 导出） ====================
 
 pub use cmx_core::{
-    DbRequest, DbResponse,
-    CacheGetRequest, CacheSetRequest, CacheResponse,
-    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
-    ExecutionStep, StepStatus, OrchestrationError,
-    IamRequest, IamResponse, WasmUserDetails, WasmEffectivePermissions, WasmCheckResult,
+    CacheGetRequest, CacheResponse, CacheSetRequest, CallServiceRequest, CallServiceResponse,
+    DbRequest, DbResponse, ExecutionStep, IamRequest, IamResponse, OrchestrationError,
+    PluginFunCallResponse, PluginFunRequest, StepStatus, WasmCheckResult, WasmEffectivePermissions,
+    WasmUserDetails,
 };
 
 // ==================== 错误类型 ====================

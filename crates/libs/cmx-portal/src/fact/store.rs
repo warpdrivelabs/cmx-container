@@ -38,7 +38,11 @@ pub struct FactItem {
 
 /// 校验 DAM 三段 + file，返回相对路径段。
 fn validate_ref(r: &FactRef) -> PortalResult<[String; 4]> {
-    for (k, v) in [("domain", &r.domain), ("app", &r.app), ("module", &r.module)] {
+    for (k, v) in [
+        ("domain", &r.domain),
+        ("app", &r.app),
+        ("module", &r.module),
+    ] {
         let t = v.trim();
         if t.is_empty() {
             return Err(PortalError::bad_request(format!("缺少必填参数 {k}")));

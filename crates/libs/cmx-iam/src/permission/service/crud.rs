@@ -5,9 +5,9 @@
 
 use std::collections::HashSet;
 
+use cmx_core::SVRContext;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::iam::Permission;
-use cmx_core::SVRContext;
 use cmx_database::crud::GenericCrudService;
 use cmx_traits::error::TraitError;
 use serde_json::Value;
@@ -37,11 +37,19 @@ impl PermissionServiceImpl {
         let check_params = vec![DataValue::String(data.code.clone())];
         let existing = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, check_sql, check_params, "check_perm_code")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                check_sql,
+                check_params,
+                "check_perm_code",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询权限编码失败: {e}"))))?;
         if existing.iter().next().is_some() {
-            return Err(TraitError::from(IamError::PermissionCodeExists(data.code.clone())));
+            return Err(TraitError::from(IamError::PermissionCodeExists(
+                data.code.clone(),
+            )));
         }
 
         // 开启事务（INSERT + 父 is_leaf 更新需原子）
@@ -57,9 +65,15 @@ impl PermissionServiceImpl {
             let meta = self
                 .query_parent_meta_txn(txn_id, pid)
                 .await?
-                .ok_or_else(|| TraitError::from(IamError::Business(format!("父权限不存在: {pid}"))))?;
+                .ok_or_else(|| {
+                    TraitError::from(IamError::Business(format!("父权限不存在: {pid}")))
+                })?;
             let (p_code, p_path, p_level) = meta;
-            (Some(p_code), format!("{}/{}", p_path, data.code), p_level + 1)
+            (
+                Some(p_code),
+                format!("{}/{}", p_path, data.code),
+                p_level + 1,
+            )
         } else {
             (None, format!("/{}", data.code), 1i64)
         };
@@ -100,7 +114,12 @@ impl PermissionServiceImpl {
             let upd_sql = "UPDATE cmx_permission SET is_leaf = 0 WHERE id = $1";
             let _ = self
                 .mm
-                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), upd_sql, vec![DataValue::String(pid.clone())])
+                .execute_sql_with_datavalues(
+                    &self.db_id,
+                    Some(txn_id),
+                    upd_sql,
+                    vec![DataValue::String(pid.clone())],
+                )
                 .await;
         }
 
@@ -117,15 +136,24 @@ impl PermissionServiceImpl {
             "code": &data.code,
             "name": &data.name,
         });
-        self.audit_write(svr_ctx, "create_permission", "permission", &permission.id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "create_permission",
+            "permission",
+            &permission.id,
+            &audit_detail,
+        )
+        .await;
 
         info!(permission_id = %permission.id, code = %data.code, "权限创建成功");
         Ok(permission)
     }
 
     /// 获取单个权限（[`crate::service_traits::PermissionService::get_permission`] 的实现）。
-    pub(super) async fn get_permission(&self, permission_id: &str) -> Result<Permission, TraitError> {
+    pub(super) async fn get_permission(
+        &self,
+        permission_id: &str,
+    ) -> Result<Permission, TraitError> {
         debug!(
             "{:<12} - PermissionServiceImpl::get_permission - {}",
             "IAM", permission_id
@@ -141,7 +169,9 @@ impl PermissionServiceImpl {
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         if dataset.iter().next().is_none() {
-            return Err(TraitError::from(IamError::PermissionNotFound(permission_id.to_string())));
+            return Err(TraitError::from(IamError::PermissionNotFound(
+                permission_id.to_string(),
+            )));
         }
 
         Self::extract_permission(dataset).map_err(TraitError::from)
@@ -170,21 +200,34 @@ impl PermissionServiceImpl {
         let txn_id = guard.txn_id();
 
         // 查询当前权限的 parent_id / full_code_path / level / code
-        let meta_sql = "SELECT parent_id, full_code_path, level, code FROM cmx_permission WHERE id = $1";
+        let meta_sql =
+            "SELECT parent_id, full_code_path, level, code FROM cmx_permission WHERE id = $1";
         let meta_params = vec![DataValue::String(permission_id.to_string())];
         let meta_dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), meta_sql, meta_params, "update_perm_meta")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                meta_sql,
+                meta_params,
+                "update_perm_meta",
+            )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询权限元数据失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询权限元数据失败: {e}")))
+            })?;
         let schema = meta_dataset.schema.as_ref();
         let row = meta_dataset.iter().next().ok_or_else(|| {
             TraitError::from(IamError::PermissionNotFound(permission_id.to_string()))
         })?;
         let old_parent_id = row.get_by_name_as::<String>(schema, "parent_id");
-        let old_path = row.get_by_name_as::<String>(schema, "full_code_path").unwrap_or_default();
+        let old_path = row
+            .get_by_name_as::<String>(schema, "full_code_path")
+            .unwrap_or_default();
         let old_level = row.get_by_name_as::<i64>(schema, "level").unwrap_or(1);
-        let perm_code = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
+        let perm_code = row
+            .get_by_name_as::<String>(schema, "code")
+            .unwrap_or_default();
 
         // 规范化：空字符串视为 None（根节点）
         let old_parent_norm = old_parent_id.as_deref().filter(|s| !s.is_empty());
@@ -204,7 +247,11 @@ impl PermissionServiceImpl {
                         TraitError::from(IamError::Business(format!("新父权限不存在: {new_pid}")))
                     })?;
                 let (p_code, p_path, p_level) = meta;
-                (Some(p_code), format!("{}/{}", p_path, perm_code), p_level + 1)
+                (
+                    Some(p_code),
+                    format!("{}/{}", p_path, perm_code),
+                    p_level + 1,
+                )
             } else {
                 (None, format!("/{perm_code}"), 1i64)
             };
@@ -224,7 +271,9 @@ impl PermissionServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), cascade_sql, cascade_params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("级联更新路径失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("级联更新路径失败: {e}")))
+                })?;
 
             // 更新节点 parent_id / parent_code + 普通字段，RETURNING *
             let upd_sql = "UPDATE cmx_permission SET \
@@ -256,7 +305,13 @@ impl PermissionServiceImpl {
             ];
             let ds = self
                 .mm
-                .query_sql_with_datavalues(&self.db_id, Some(txn_id), upd_sql, params, "update_perm")
+                .query_sql_with_datavalues(
+                    &self.db_id,
+                    Some(txn_id),
+                    upd_sql,
+                    params,
+                    "update_perm",
+                )
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("更新权限失败: {e}"))))?;
 
@@ -301,7 +356,13 @@ impl PermissionServiceImpl {
                 DataValue::String(permission_id.to_string()),
             ];
             self.mm
-                .query_sql_with_datavalues(&self.db_id, Some(txn_id), upd_sql, params, "update_perm")
+                .query_sql_with_datavalues(
+                    &self.db_id,
+                    Some(txn_id),
+                    upd_sql,
+                    params,
+                    "update_perm",
+                )
                 .await
                 .map_err(|e| TraitError::from(IamError::Business(format!("更新权限失败: {e}"))))?
         };
@@ -313,9 +374,7 @@ impl PermissionServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
 
         // 旧父重算 is_leaf（提交后，因为 recompute 使用 None txn_id）
-        if parent_changed
-            && let Some(ref old_pid) = old_parent_for_recompute
-        {
+        if parent_changed && let Some(ref old_pid) = old_parent_for_recompute {
             self.recompute_parent_is_leaf(old_pid).await;
         }
 
@@ -326,8 +385,14 @@ impl PermissionServiceImpl {
             "name": &data.name,
             "description": &data.description,
         });
-        self.audit_write(svr_ctx, "update_permission", "permission", permission_id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "update_permission",
+            "permission",
+            permission_id,
+            &audit_detail,
+        )
+        .await;
 
         info!(permission_id = permission_id, "权限更新成功");
         Ok(permission)
@@ -380,9 +445,17 @@ impl PermissionServiceImpl {
             .collect();
         let meta_dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), &meta_sql, meta_params, "delete_perm_meta")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                &meta_sql,
+                meta_params,
+                "delete_perm_meta",
+            )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询删除权限元数据失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询删除权限元数据失败: {e}")))
+            })?;
         let schema = meta_dataset.schema.as_ref();
 
         // 2. 收集每个根的所有后代 ID（含自身），用 HashSet 去重
@@ -419,13 +492,11 @@ impl PermissionServiceImpl {
         let affected_roles = self.query_affected_roles_txn(txn_id, &all_ids_vec).await?;
 
         // 5. 物理删除角色关联
-        let del_placeholders: Vec<String> = (1..=all_ids_vec.len())
-            .map(|i| format!("${i}"))
-            .collect();
+        let del_placeholders: Vec<String> =
+            (1..=all_ids_vec.len()).map(|i| format!("${i}")).collect();
         let del_in_clause = del_placeholders.join(",");
-        let del_rp_sql = format!(
-            "DELETE FROM cmx_role_permission WHERE permission_id IN ({del_in_clause})"
-        );
+        let del_rp_sql =
+            format!("DELETE FROM cmx_role_permission WHERE permission_id IN ({del_in_clause})");
         let del_rp_params: Vec<DataValue> = all_ids_vec
             .iter()
             .map(|s| DataValue::String(s.clone()))
@@ -433,12 +504,12 @@ impl PermissionServiceImpl {
         self.mm
             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), &del_rp_sql, del_rp_params)
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}")))
+            })?;
 
         // 6. 物理删除权限
-        let del_perm_sql = format!(
-            "DELETE FROM cmx_permission WHERE id IN ({del_in_clause})"
-        );
+        let del_perm_sql = format!("DELETE FROM cmx_permission WHERE id IN ({del_in_clause})");
         let del_perm_params: Vec<DataValue> = all_ids_vec
             .iter()
             .map(|s| DataValue::String(s.clone()))
@@ -466,8 +537,14 @@ impl PermissionServiceImpl {
             "deleted_permission_ids": all_ids_vec,
             "deleted_count": deleted_count,
         });
-        self.audit_write(svr_ctx, "delete_permission", "permission", "batch", &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "delete_permission",
+            "permission",
+            "batch",
+            &audit_detail,
+        )
+        .await;
 
         // 10. 精准缓存失效
         if !affected_roles.is_empty()

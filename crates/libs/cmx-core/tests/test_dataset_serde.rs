@@ -2,24 +2,63 @@
 //!
 //! 测试 cmx-core 中 Dataset 结构的序列化和反序列化功能
 
-use std::sync::Arc;
 use cmx_core::model::cell::{DataValue, Field, FieldType};
-use cmx_core::model::data::dataset::{DataSet, Schema, Row};
+use cmx_core::model::data::dataset::{DataSet, Row, Schema};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// 创建带有多类型字段的 Schema
 fn create_test_schema() -> Arc<Schema> {
-    Arc::new(Schema::new_unchecked("test_table", vec![
-        Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-        Field { name: "name".into(), field_type: FieldType::String, label: "名称".into() },
-        Field { name: "price".into(), field_type: FieldType::Decimal, label: "价格".into() },
-        Field { name: "created_at".into(), field_type: FieldType::DateTime, label: "创建时间".into() },
-        Field { name: "is_active".into(), field_type: FieldType::Bool, label: "是否激活".into() },
-        Field { name: "file_data".into(), field_type: FieldType::Binary, label: "文件数据".into() },
-        Field { name: "tags".into(), field_type: FieldType::Array, label: "标签".into() },
-        Field { name: "metadata".into(), field_type: FieldType::Json, label: "元数据".into() },
-        Field { name: "record_id".into(), field_type: FieldType::Uuid, label: "记录ID".into() },
-    ]))
+    Arc::new(Schema::new_unchecked(
+        "test_table",
+        vec![
+            Field {
+                name: "id".into(),
+                field_type: FieldType::Int,
+                label: "ID".into(),
+            },
+            Field {
+                name: "name".into(),
+                field_type: FieldType::String,
+                label: "名称".into(),
+            },
+            Field {
+                name: "price".into(),
+                field_type: FieldType::Decimal,
+                label: "价格".into(),
+            },
+            Field {
+                name: "created_at".into(),
+                field_type: FieldType::DateTime,
+                label: "创建时间".into(),
+            },
+            Field {
+                name: "is_active".into(),
+                field_type: FieldType::Bool,
+                label: "是否激活".into(),
+            },
+            Field {
+                name: "file_data".into(),
+                field_type: FieldType::Binary,
+                label: "文件数据".into(),
+            },
+            Field {
+                name: "tags".into(),
+                field_type: FieldType::Array,
+                label: "标签".into(),
+            },
+            Field {
+                name: "metadata".into(),
+                field_type: FieldType::Json,
+                label: "元数据".into(),
+            },
+            Field {
+                name: "record_id".into(),
+                field_type: FieldType::Uuid,
+                label: "记录ID".into(),
+            },
+        ],
+    ))
 }
 
 #[test]
@@ -30,7 +69,11 @@ fn test_dataset_basic_serialization() {
         DataValue::Int(1),
         DataValue::String("Test Product".into()),
         DataValue::Decimal("99.99".parse().unwrap()),
-        DataValue::DateTime(chrono::DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().with_timezone(&chrono::Utc)),
+        DataValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        ),
         DataValue::Bool(true),
         DataValue::Binary(vec![0x00, 0x01, 0x02, 0xFF]),
         DataValue::Array(vec![
@@ -61,7 +104,11 @@ fn test_dataset_roundtrip_all_types() {
         DataValue::Int(42),
         DataValue::String("Complete Test".into()),
         DataValue::Decimal("123.45".parse().unwrap()),
-        DataValue::DateTime(chrono::DateTime::parse_from_rfc3339("2024-06-20T15:45:00Z").unwrap().with_timezone(&chrono::Utc)),
+        DataValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2024-06-20T15:45:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        ),
         DataValue::Bool(false),
         DataValue::Binary(vec![0xDE, 0xAD, 0xBE, 0xEF]),
         DataValue::Array(vec![
@@ -77,7 +124,10 @@ fn test_dataset_roundtrip_all_types() {
     original_ds.add_row(row);
 
     let json = serde_json::to_string(&original_ds).unwrap();
-    println!("[test_dataset_roundtrip_all_types] Serialized JSON:\n{}", json);
+    println!(
+        "[test_dataset_roundtrip_all_types] Serialized JSON:\n{}",
+        json
+    );
 
     let deserialized_ds: DataSet = serde_json::from_str(&json).unwrap();
 
@@ -87,9 +137,18 @@ fn test_dataset_roundtrip_all_types() {
     let deserialized_row = deserialized_ds.iter().next().unwrap();
     let schema = deserialized_ds.schema.as_ref();
 
-    assert_eq!(deserialized_row.get_by_name(schema, "id"), Some(&DataValue::Int(42)));
-    assert_eq!(deserialized_row.get_by_name(schema, "name"), Some(&DataValue::String("Complete Test".into())));
-    assert_eq!(deserialized_row.get_by_name(schema, "is_active"), Some(&DataValue::Bool(false)));
+    assert_eq!(
+        deserialized_row.get_by_name(schema, "id"),
+        Some(&DataValue::Int(42))
+    );
+    assert_eq!(
+        deserialized_row.get_by_name(schema, "name"),
+        Some(&DataValue::String("Complete Test".into()))
+    );
+    assert_eq!(
+        deserialized_row.get_by_name(schema, "is_active"),
+        Some(&DataValue::Bool(false))
+    );
 
     if let Some(DataValue::Binary(bytes)) = deserialized_row.get_by_name(schema, "file_data") {
         assert_eq!(bytes, &vec![0xDE, 0xAD, 0xBE, 0xEF]);
@@ -118,23 +177,68 @@ fn test_dataset_roundtrip_all_types() {
 
 #[test]
 fn test_dataset_nested_serialization() {
-    let header_schema = Arc::new(Schema::new_unchecked("order_header", vec![
-        Field { name: "order_id".into(), field_type: FieldType::Int, label: "订单ID".into() },
-        Field { name: "order_no".into(), field_type: FieldType::String, label: "订单号".into() },
-        Field { name: "total_amount".into(), field_type: FieldType::Decimal, label: "总金额".into() },
-    ]));
+    let header_schema = Arc::new(Schema::new_unchecked(
+        "order_header",
+        vec![
+            Field {
+                name: "order_id".into(),
+                field_type: FieldType::Int,
+                label: "订单ID".into(),
+            },
+            Field {
+                name: "order_no".into(),
+                field_type: FieldType::String,
+                label: "订单号".into(),
+            },
+            Field {
+                name: "total_amount".into(),
+                field_type: FieldType::Decimal,
+                label: "总金额".into(),
+            },
+        ],
+    ));
 
-    let line_schema = Arc::new(Schema::new_unchecked("order_line", vec![
-        Field { name: "line_id".into(), field_type: FieldType::Int, label: "行ID".into() },
-        Field { name: "material_code".into(), field_type: FieldType::String, label: "物料编码".into() },
-        Field { name: "quantity".into(), field_type: FieldType::Int, label: "数量".into() },
-        Field { name: "unit_price".into(), field_type: FieldType::Decimal, label: "单价".into() },
-    ]));
+    let line_schema = Arc::new(Schema::new_unchecked(
+        "order_line",
+        vec![
+            Field {
+                name: "line_id".into(),
+                field_type: FieldType::Int,
+                label: "行ID".into(),
+            },
+            Field {
+                name: "material_code".into(),
+                field_type: FieldType::String,
+                label: "物料编码".into(),
+            },
+            Field {
+                name: "quantity".into(),
+                field_type: FieldType::Int,
+                label: "数量".into(),
+            },
+            Field {
+                name: "unit_price".into(),
+                field_type: FieldType::Decimal,
+                label: "单价".into(),
+            },
+        ],
+    ));
 
-    let attachment_schema = Arc::new(Schema::new_unchecked("attachments", vec![
-        Field { name: "file_name".into(), field_type: FieldType::String, label: "文件名".into() },
-        Field { name: "file_content".into(), field_type: FieldType::Binary, label: "文件内容".into() },
-    ]));
+    let attachment_schema = Arc::new(Schema::new_unchecked(
+        "attachments",
+        vec![
+            Field {
+                name: "file_name".into(),
+                field_type: FieldType::String,
+                label: "文件名".into(),
+            },
+            Field {
+                name: "file_content".into(),
+                field_type: FieldType::Binary,
+                label: "文件内容".into(),
+            },
+        ],
+    ));
 
     let mut attachments_ds = DataSet::empty("attachments", attachment_schema);
     attachments_ds.add_row(Row::new(vec![
@@ -195,11 +299,26 @@ fn test_dataset_nested_serialization() {
 
 #[test]
 fn test_dataset_empty_and_null_handling() {
-    let schema = Arc::new(Schema::new_unchecked("nullable_test", vec![
-        Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-        Field { name: "value".into(), field_type: FieldType::String, label: "值".into() },
-        Field { name: "optional_data".into(), field_type: FieldType::Binary, label: "可选数据".into() },
-    ]));
+    let schema = Arc::new(Schema::new_unchecked(
+        "nullable_test",
+        vec![
+            Field {
+                name: "id".into(),
+                field_type: FieldType::Int,
+                label: "ID".into(),
+            },
+            Field {
+                name: "value".into(),
+                field_type: FieldType::String,
+                label: "值".into(),
+            },
+            Field {
+                name: "optional_data".into(),
+                field_type: FieldType::Binary,
+                label: "可选数据".into(),
+            },
+        ],
+    ));
 
     let mut ds = DataSet::empty("nullable", schema.clone());
     ds.add_row(Row::new(vec![
@@ -209,7 +328,10 @@ fn test_dataset_empty_and_null_handling() {
     ]));
 
     let json = serde_json::to_string(&ds).unwrap();
-    println!("[test_dataset_empty_and_null_handling] JSON with Null: {}", json);
+    println!(
+        "[test_dataset_empty_and_null_handling] JSON with Null: {}",
+        json
+    );
 
     let deserialized_ds: DataSet = serde_json::from_str(&json).unwrap();
 
@@ -219,15 +341,29 @@ fn test_dataset_empty_and_null_handling() {
 
     assert_eq!(row.get_by_name(schema, "id"), Some(&DataValue::Int(1)));
     assert_eq!(row.get_by_name(schema, "value"), Some(&DataValue::Null));
-    assert_eq!(row.get_by_name(schema, "optional_data"), Some(&DataValue::Null));
+    assert_eq!(
+        row.get_by_name(schema, "optional_data"),
+        Some(&DataValue::Null)
+    );
 }
 
 #[test]
 fn test_dataset_multiple_rows() {
-    let schema = Arc::new(Schema::new_unchecked("multi_row", vec![
-        Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-        Field { name: "name".into(), field_type: FieldType::String, label: "名称".into() },
-    ]));
+    let schema = Arc::new(Schema::new_unchecked(
+        "multi_row",
+        vec![
+            Field {
+                name: "id".into(),
+                field_type: FieldType::Int,
+                label: "ID".into(),
+            },
+            Field {
+                name: "name".into(),
+                field_type: FieldType::String,
+                label: "名称".into(),
+            },
+        ],
+    ));
 
     let mut ds = DataSet::empty("multiple_rows", schema);
 
@@ -250,17 +386,34 @@ fn test_dataset_multiple_rows() {
     for (i, row) in deserialized_ds.iter().enumerate() {
         let expected_id = (i + 1) as i64;
         let expected_name = format!("Item {}", i + 1);
-        assert_eq!(row.get_by_name(schema, "id"), Some(&DataValue::Int(expected_id)));
-        assert_eq!(row.get_by_name(schema, "name"), Some(&DataValue::String(expected_name)));
+        assert_eq!(
+            row.get_by_name(schema, "id"),
+            Some(&DataValue::Int(expected_id))
+        );
+        assert_eq!(
+            row.get_by_name(schema, "name"),
+            Some(&DataValue::String(expected_name))
+        );
     }
 }
 
 #[test]
 fn test_dataset_binary_with_special_characters() {
-    let schema = Arc::new(Schema::new_unchecked("binary_test", vec![
-        Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-        Field { name: "data".into(), field_type: FieldType::Binary, label: "二进制数据".into() },
-    ]));
+    let schema = Arc::new(Schema::new_unchecked(
+        "binary_test",
+        vec![
+            Field {
+                name: "id".into(),
+                field_type: FieldType::Int,
+                label: "ID".into(),
+            },
+            Field {
+                name: "data".into(),
+                field_type: FieldType::Binary,
+                label: "二进制数据".into(),
+            },
+        ],
+    ));
 
     let test_bytes: Vec<u8> = (0..=255).collect();
 
@@ -292,11 +445,26 @@ fn test_dataset_binary_with_special_characters() {
 
 #[test]
 fn test_dataset_with_unicode_content() {
-    let schema = Arc::new(Schema::new_unchecked("unicode_test", vec![
-        Field { name: "id".into(), field_type: FieldType::Int, label: "ID".into() },
-        Field { name: "chinese_text".into(), field_type: FieldType::String, label: "中文文本".into() },
-        Field { name: "tags".into(), field_type: FieldType::Array, label: "标签".into() },
-    ]));
+    let schema = Arc::new(Schema::new_unchecked(
+        "unicode_test",
+        vec![
+            Field {
+                name: "id".into(),
+                field_type: FieldType::Int,
+                label: "ID".into(),
+            },
+            Field {
+                name: "chinese_text".into(),
+                field_type: FieldType::String,
+                label: "中文文本".into(),
+            },
+            Field {
+                name: "tags".into(),
+                field_type: FieldType::Array,
+                label: "标签".into(),
+            },
+        ],
+    ));
 
     let row = Row::new(vec![
         DataValue::Int(1),
@@ -312,7 +480,10 @@ fn test_dataset_with_unicode_content() {
     ds.add_row(row);
 
     let json = serde_json::to_string_pretty(&ds).unwrap();
-    println!("[test_dataset_with_unicode_content] Unicode JSON:\n{}", json);
+    println!(
+        "[test_dataset_with_unicode_content] Unicode JSON:\n{}",
+        json
+    );
 
     let deserialized_ds: DataSet = serde_json::from_str(&json).unwrap();
 
@@ -335,9 +506,14 @@ fn test_dataset_with_unicode_content() {
 
 #[test]
 fn test_dataset_schema_id_preserved() {
-    let schema = Arc::new(Schema::new_unchecked("schema_identity_test", vec![
-        Field { name: "field1".into(), field_type: FieldType::Int, label: "字段1".into() },
-    ]));
+    let schema = Arc::new(Schema::new_unchecked(
+        "schema_identity_test",
+        vec![Field {
+            name: "field1".into(),
+            field_type: FieldType::Int,
+            label: "字段1".into(),
+        }],
+    ));
 
     let row = Row::new(vec![DataValue::Int(100)]);
 

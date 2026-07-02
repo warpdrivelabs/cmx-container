@@ -25,13 +25,18 @@ const DAM_TREE_ROOTS: &[&[&str]] = &[
 
 /// id 段：`[a-zA-Z0-9_-]{1,64}`。
 fn is_dam_id(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    !s.is_empty()
+        && s.len() <= 64
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 fn assert_id(field: &str, value: &str) -> PortalResult<String> {
     let s = value.trim();
     if !is_dam_id(s) {
-        return Err(PortalError::bad_request(format!("{field} 仅允许字母、数字、_-，长度 1-64")));
+        return Err(PortalError::bad_request(format!(
+            "{field} 仅允许字母、数字、_-，长度 1-64"
+        )));
     }
     Ok(s.to_string())
 }
@@ -42,7 +47,11 @@ fn clean_text(v: Option<&str>) -> String {
 
 fn clean_status(v: Option<&str>) -> String {
     let s = v.unwrap_or("active").trim();
-    if s.is_empty() { "active".to_string() } else { s.to_string() }
+    if s.is_empty() {
+        "active".to_string()
+    } else {
+        s.to_string()
+    }
 }
 
 // ───────────────────────── 实体结构 ─────────────────────────
@@ -112,7 +121,11 @@ fn registry_path() -> std::path::PathBuf {
 
 fn str_field<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
     for k in keys {
-        if let Some(s) = v.get(*k).and_then(|x| x.as_str()).filter(|s| !s.trim().is_empty()) {
+        if let Some(s) = v
+            .get(*k)
+            .and_then(|x| x.as_str())
+            .filter(|s| !s.trim().is_empty())
+        {
             return Some(s);
         }
     }
@@ -121,9 +134,18 @@ fn str_field<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
 
 fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
     let empty = vec![];
-    let domains_raw = doc.get("domains").and_then(|v| v.as_array()).unwrap_or(&empty);
-    let apps_raw = doc.get("applications").and_then(|v| v.as_array()).unwrap_or(&empty);
-    let mods_raw = doc.get("modules").and_then(|v| v.as_array()).unwrap_or(&empty);
+    let domains_raw = doc
+        .get("domains")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
+    let apps_raw = doc
+        .get("applications")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
+    let mods_raw = doc
+        .get("modules")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
 
     let mut domains = Vec::with_capacity(domains_raw.len());
     for d in domains_raw {
@@ -140,8 +162,14 @@ fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
 
     let mut applications = Vec::with_capacity(apps_raw.len());
     for a in apps_raw {
-        let domain = assert_id("application.domain", str_field(a, &["domain"]).unwrap_or(""))?;
-        let id = assert_id("application.id", str_field(a, &["id", "application", "app"]).unwrap_or(""))?;
+        let domain = assert_id(
+            "application.domain",
+            str_field(a, &["domain"]).unwrap_or(""),
+        )?;
+        let id = assert_id(
+            "application.id",
+            str_field(a, &["id", "application", "app"]).unwrap_or(""),
+        )?;
         applications.push(DamApplication {
             name: clean_text(str_field(a, &["name", "label", "id", "application", "app"])),
             title: clean_text(str_field(a, &["title"])),
@@ -156,12 +184,20 @@ fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
     let mut modules = Vec::with_capacity(mods_raw.len());
     for m in mods_raw {
         let domain = assert_id("module.domain", str_field(m, &["domain"]).unwrap_or(""))?;
-        let application = assert_id("module.application", str_field(m, &["application", "app"]).unwrap_or(""))?;
+        let application = assert_id(
+            "module.application",
+            str_field(m, &["application", "app"]).unwrap_or(""),
+        )?;
         let id = assert_id("module.id", str_field(m, &["id", "module"]).unwrap_or(""))?;
         let aliases = m
             .get("aliases")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
             .unwrap_or_default();
         let theme = m.get("theme").filter(|v| v.is_object()).cloned();
         modules.push(DamModule {
@@ -197,13 +233,18 @@ fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
         });
     }
 
-    Ok(DamRegistry { version: 1, domains, applications, modules })
+    Ok(DamRegistry {
+        version: 1,
+        domains,
+        applications,
+        modules,
+    })
 }
 
 async fn load_registry() -> PortalResult<DamRegistry> {
-    let doc = read_json_opt(&registry_path())
-        .await?
-        .unwrap_or_else(|| json!({ "version": 1, "domains": [], "applications": [], "modules": [] }));
+    let doc = read_json_opt(&registry_path()).await?.unwrap_or_else(
+        || json!({ "version": 1, "domains": [], "applications": [], "modules": [] }),
+    );
     normalize(&doc)
 }
 
@@ -226,7 +267,9 @@ async fn ensure_tree_dirs(parts: &[String]) -> PortalResult<()> {
         for seg in parts {
             p.push(seg);
         }
-        tokio::fs::create_dir_all(&p).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(&p)
+            .await
+            .map_err(PortalError::Io)?;
     }
     Ok(())
 }
@@ -250,7 +293,9 @@ async fn move_dir_contents(from: &std::path::Path, to: &std::path::Path) -> Port
     if tokio::fs::metadata(from).await.is_err() {
         return Ok(());
     }
-    tokio::fs::create_dir_all(to).await.map_err(PortalError::Io)?;
+    tokio::fs::create_dir_all(to)
+        .await
+        .map_err(PortalError::Io)?;
     // 用栈做迭代式递归，避免 async 递归装箱
     let mut stack = vec![(from.to_path_buf(), to.to_path_buf())];
     while let Some((fd, td)) = stack.pop() {
@@ -259,21 +304,31 @@ async fn move_dir_contents(from: &std::path::Path, to: &std::path::Path) -> Port
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(PortalError::Io(e)),
         };
-        tokio::fs::create_dir_all(&td).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(&td)
+            .await
+            .map_err(PortalError::Io)?;
         while let Some(entry) = rd.next_entry().await.map_err(PortalError::Io)? {
             let from_path = entry.path();
             let to_path = td.join(entry.file_name());
             let ft = entry.file_type().await.map_err(PortalError::Io)?;
             let to_exists = tokio::fs::metadata(&to_path).await.is_ok();
-            let to_is_dir = tokio::fs::metadata(&to_path).await.map(|m| m.is_dir()).unwrap_or(false);
+            let to_is_dir = tokio::fs::metadata(&to_path)
+                .await
+                .map(|m| m.is_dir())
+                .unwrap_or(false);
             if ft.is_dir() && to_exists && to_is_dir {
                 stack.push((from_path, to_path));
                 continue;
             }
             if to_exists {
-                return Err(PortalError::bad_request(format!("目标路径已存在，不能覆盖：{}", to_path.display())));
+                return Err(PortalError::bad_request(format!(
+                    "目标路径已存在，不能覆盖：{}",
+                    to_path.display()
+                )));
             }
-            tokio::fs::rename(&from_path, &to_path).await.map_err(PortalError::Io)?;
+            tokio::fs::rename(&from_path, &to_path)
+                .await
+                .map_err(PortalError::Io)?;
         }
         // 该层处理完后删源目录（叶子在出栈时已空）
         let _ = tokio::fs::remove_dir_all(&fd).await;
@@ -331,7 +386,10 @@ pub async fn list_applications(domain: Option<&str>) -> PortalResult<Vec<DamAppl
 }
 
 /// 模块列表（按 domain/application 过滤）。
-pub async fn list_modules(domain: Option<&str>, application: Option<&str>) -> PortalResult<Vec<DamModule>> {
+pub async fn list_modules(
+    domain: Option<&str>,
+    application: Option<&str>,
+) -> PortalResult<Vec<DamModule>> {
     let d = domain.unwrap_or("").trim();
     let a = application.unwrap_or("").trim();
     Ok(load_registry()
@@ -371,7 +429,10 @@ pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain>
         None => item.id.clone(),
     };
     if old_id != item.id && reg.domains.iter().any(|d| d.id == item.id) {
-        return Err(PortalError::bad_request(format!("Domain 已存在：{}", item.id)));
+        return Err(PortalError::bad_request(format!(
+            "Domain 已存在：{}",
+            item.id
+        )));
     }
     if let Some(existing) = reg.domains.iter_mut().find(|d| d.id == old_id) {
         *existing = item.clone();
@@ -389,7 +450,8 @@ pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain>
                 m.resource_root = format!("{}/{}/{}", item.id, m.application, m.id);
             }
             if m.manifest_path == mp_old {
-                m.manifest_path = format!("modules/{}/{}/{}/module.json", item.id, m.application, m.id);
+                m.manifest_path =
+                    format!("modules/{}/{}/{}/module.json", item.id, m.application, m.id);
             }
             m.domain = item.id.clone();
         }
@@ -407,16 +469,28 @@ pub async fn upsert_application(input: &serde_json::Value) -> PortalResult<DamAp
     let original = parse_original_key(input.get("originalKey").and_then(|v| v.as_str()));
 
     let item = DamApplication {
-        domain: assert_id("application.domain", str_field(input, &["domain"]).unwrap_or(""))?,
-        id: assert_id("application.id", str_field(input, &["id", "application", "app"]).unwrap_or(""))?,
-        name: clean_text(str_field(input, &["name", "label", "id", "application", "app"])),
+        domain: assert_id(
+            "application.domain",
+            str_field(input, &["domain"]).unwrap_or(""),
+        )?,
+        id: assert_id(
+            "application.id",
+            str_field(input, &["id", "application", "app"]).unwrap_or(""),
+        )?,
+        name: clean_text(str_field(
+            input,
+            &["name", "label", "id", "application", "app"],
+        )),
         title: clean_text(str_field(input, &["title"])),
         icon: clean_text(str_field(input, &["icon"])),
         status: clean_status(input.get("status").and_then(|v| v.as_str())),
         description: clean_text(str_field(input, &["description"])),
     };
     if !reg.domains.iter().any(|d| d.id == item.domain) {
-        return Err(PortalError::bad_request(format!("Domain 不存在：{}", item.domain)));
+        return Err(PortalError::bad_request(format!(
+            "Domain 不存在：{}",
+            item.domain
+        )));
     }
     let old_domain = match original.first() {
         Some(s) => assert_id("application.originalDomain", s)?,
@@ -428,30 +502,48 @@ pub async fn upsert_application(input: &serde_json::Value) -> PortalResult<DamAp
     };
     let new_key = format!("{}/{}", item.domain, item.id);
     if (old_domain != item.domain || old_app != item.id)
-        && reg.applications.iter().any(|a| format!("{}/{}", a.domain, a.id) == new_key)
+        && reg
+            .applications
+            .iter()
+            .any(|a| format!("{}/{}", a.domain, a.id) == new_key)
     {
-        return Err(PortalError::bad_request(format!("Application 已存在：{new_key}")));
+        return Err(PortalError::bad_request(format!(
+            "Application 已存在：{new_key}"
+        )));
     }
-    if let Some(existing) = reg.applications.iter_mut().find(|a| a.domain == old_domain && a.id == old_app) {
+    if let Some(existing) = reg
+        .applications
+        .iter_mut()
+        .find(|a| a.domain == old_domain && a.id == old_app)
+    {
         *existing = item.clone();
     } else {
         reg.applications.push(item.clone());
     }
     if old_domain != item.domain || old_app != item.id {
-        for m in reg.modules.iter_mut().filter(|m| m.domain == old_domain && m.application == old_app) {
+        for m in reg
+            .modules
+            .iter_mut()
+            .filter(|m| m.domain == old_domain && m.application == old_app)
+        {
             let rr_old = format!("{}/{}/{}", old_domain, old_app, m.id);
             let mp_old = format!("modules/{}/{}/{}/module.json", old_domain, old_app, m.id);
             if m.resource_root == rr_old {
                 m.resource_root = format!("{}/{}/{}", item.domain, item.id, m.id);
             }
             if m.manifest_path == mp_old {
-                m.manifest_path = format!("modules/{}/{}/{}/module.json", item.domain, item.id, m.id);
+                m.manifest_path =
+                    format!("modules/{}/{}/{}/module.json", item.domain, item.id, m.id);
             }
             m.domain = item.domain.clone();
             m.application = item.id.clone();
             m.app = item.id.clone();
         }
-        rename_tree_dirs(&[old_domain.clone(), old_app.clone()], &[item.domain.clone(), item.id.clone()]).await?;
+        rename_tree_dirs(
+            &[old_domain.clone(), old_app.clone()],
+            &[item.domain.clone(), item.id.clone()],
+        )
+        .await?;
     }
     ensure_registry_dirs(&reg).await?;
     save_registry(&reg).await?;
@@ -465,29 +557,57 @@ pub async fn upsert_module(input: &serde_json::Value) -> PortalResult<DamModule>
     let original = parse_original_key(input.get("originalKey").and_then(|v| v.as_str()));
 
     let domain = assert_id("module.domain", str_field(input, &["domain"]).unwrap_or(""))?;
-    let application = assert_id("module.application", str_field(input, &["application", "app"]).unwrap_or(""))?;
-    let id = assert_id("module.id", str_field(input, &["id", "module"]).unwrap_or(""))?;
+    let application = assert_id(
+        "module.application",
+        str_field(input, &["application", "app"]).unwrap_or(""),
+    )?;
+    let id = assert_id(
+        "module.id",
+        str_field(input, &["id", "module"]).unwrap_or(""),
+    )?;
     if !reg.domains.iter().any(|d| d.id == domain) {
         return Err(PortalError::bad_request(format!("Domain 不存在：{domain}")));
     }
-    if !reg.applications.iter().any(|a| a.domain == domain && a.id == application) {
-        return Err(PortalError::bad_request(format!("Application 不存在：{domain}/{application}")));
+    if !reg
+        .applications
+        .iter()
+        .any(|a| a.domain == domain && a.id == application)
+    {
+        return Err(PortalError::bad_request(format!(
+            "Application 不存在：{domain}/{application}"
+        )));
     }
     let resource_root = {
         let rr = clean_text(str_field(input, &["resourceRoot"]));
-        if rr.is_empty() { format!("{domain}/{application}/{id}") } else { rr }
+        if rr.is_empty() {
+            format!("{domain}/{application}/{id}")
+        } else {
+            rr
+        }
     };
     let manifest_path = {
         let mp = clean_text(str_field(input, &["manifestPath"]));
-        if mp.is_empty() { format!("modules/{domain}/{application}/{id}/module.json") } else { mp }
+        if mp.is_empty() {
+            format!("modules/{domain}/{application}/{id}/module.json")
+        } else {
+            mp
+        }
     };
     let aliases = input
         .get("aliases")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
     let item = DamModule {
-        name: clean_text(str_field(input, &["name", "label", "title", "id", "module"])),
+        name: clean_text(str_field(
+            input,
+            &["name", "label", "title", "id", "module"],
+        )),
         title: clean_text(str_field(input, &["title", "name", "id", "module"])),
         icon: clean_text(str_field(input, &["icon"])),
         status: clean_status(input.get("status").and_then(|v| v.as_str())),
@@ -503,16 +623,37 @@ pub async fn upsert_module(input: &serde_json::Value) -> PortalResult<DamModule>
         application: application.clone(),
         id: id.clone(),
     };
-    let old_domain = original.first().map(|s| assert_id("module.originalDomain", s)).transpose()?.unwrap_or_else(|| domain.clone());
-    let old_app = original.get(1).map(|s| assert_id("module.originalApplication", s)).transpose()?.unwrap_or_else(|| application.clone());
-    let old_id = original.get(2).map(|s| assert_id("module.originalId", s)).transpose()?.unwrap_or_else(|| id.clone());
+    let old_domain = original
+        .first()
+        .map(|s| assert_id("module.originalDomain", s))
+        .transpose()?
+        .unwrap_or_else(|| domain.clone());
+    let old_app = original
+        .get(1)
+        .map(|s| assert_id("module.originalApplication", s))
+        .transpose()?
+        .unwrap_or_else(|| application.clone());
+    let old_id = original
+        .get(2)
+        .map(|s| assert_id("module.originalId", s))
+        .transpose()?
+        .unwrap_or_else(|| id.clone());
     let new_key = format!("{}/{}/{}", domain, application, id);
     if (old_domain != domain || old_app != application || old_id != id)
-        && reg.modules.iter().any(|m| format!("{}/{}/{}", m.domain, m.application, m.id) == new_key)
+        && reg
+            .modules
+            .iter()
+            .any(|m| format!("{}/{}/{}", m.domain, m.application, m.id) == new_key)
     {
-        return Err(PortalError::bad_request(format!("Module 已存在：{new_key}")));
+        return Err(PortalError::bad_request(format!(
+            "Module 已存在：{new_key}"
+        )));
     }
-    if let Some(existing) = reg.modules.iter_mut().find(|m| m.domain == old_domain && m.application == old_app && m.id == old_id) {
+    if let Some(existing) = reg
+        .modules
+        .iter_mut()
+        .find(|m| m.domain == old_domain && m.application == old_app && m.id == old_id)
+    {
         *existing = item.clone();
     } else {
         reg.modules.push(item.clone());
@@ -542,8 +683,12 @@ pub async fn delete_domain(id: &str) -> PortalResult<serde_json::Value> {
     let domain = assert_id("domain.id", id)?;
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
-    if reg.applications.iter().any(|a| a.domain == domain) || reg.modules.iter().any(|m| m.domain == domain) {
-        return Err(PortalError::bad_request(format!("Domain {domain} 下仍有 application/module，不能删除")));
+    if reg.applications.iter().any(|a| a.domain == domain)
+        || reg.modules.iter().any(|m| m.domain == domain)
+    {
+        return Err(PortalError::bad_request(format!(
+            "Domain {domain} 下仍有 application/module，不能删除"
+        )));
     }
     let before = reg.domains.len();
     reg.domains.retain(|d| d.id != domain);
@@ -560,29 +705,45 @@ pub async fn delete_application(domain: &str, app: &str) -> PortalResult<serde_j
     let id = assert_id("application.id", app)?;
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
-    if reg.modules.iter().any(|m| m.domain == domain && m.application == id) {
-        return Err(PortalError::bad_request(format!("Application {domain}/{id} 下仍有 module，不能删除")));
+    if reg
+        .modules
+        .iter()
+        .any(|m| m.domain == domain && m.application == id)
+    {
+        return Err(PortalError::bad_request(format!(
+            "Application {domain}/{id} 下仍有 module，不能删除"
+        )));
     }
     let before = reg.applications.len();
-    reg.applications.retain(|a| !(a.domain == domain && a.id == id));
+    reg.applications
+        .retain(|a| !(a.domain == domain && a.id == id));
     if reg.applications.len() == before {
-        return Err(PortalError::not_found(format!("Application 不存在：{domain}/{id}")));
+        return Err(PortalError::not_found(format!(
+            "Application 不存在：{domain}/{id}"
+        )));
     }
     save_registry(&reg).await?;
     Ok(json!({ "ok": true }))
 }
 
 /// 删除模块。
-pub async fn delete_module(domain: &str, app: &str, module: &str) -> PortalResult<serde_json::Value> {
+pub async fn delete_module(
+    domain: &str,
+    app: &str,
+    module: &str,
+) -> PortalResult<serde_json::Value> {
     let domain = assert_id("module.domain", domain)?;
     let application = assert_id("module.application", app)?;
     let id = assert_id("module.id", module)?;
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
     let before = reg.modules.len();
-    reg.modules.retain(|m| !(m.domain == domain && m.application == application && m.id == id));
+    reg.modules
+        .retain(|m| !(m.domain == domain && m.application == application && m.id == id));
     if reg.modules.len() == before {
-        return Err(PortalError::not_found(format!("Module 不存在：{domain}/{application}/{id}")));
+        return Err(PortalError::not_found(format!(
+            "Module 不存在：{domain}/{application}/{id}"
+        )));
     }
     save_registry(&reg).await?;
     Ok(json!({ "ok": true }))

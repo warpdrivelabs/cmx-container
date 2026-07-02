@@ -40,7 +40,10 @@ struct HostFunctionContext {
 impl HostFunctionContext {
     /// 创建新的宿主函数上下文
     fn new(provider: Arc<dyn HostFunctionProvider>, func_name: String) -> Self {
-        Self { provider, func_name }
+        Self {
+            provider,
+            func_name,
+        }
     }
 }
 

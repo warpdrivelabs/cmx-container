@@ -5,19 +5,24 @@
 pub mod handler;
 pub mod models;
 
-pub use handler::{service_call, execute_service, execute_service_by_key, page_services, get_service, get_services_by_plugin, delete_service, service_exists};
+pub use handler::{
+    delete_service, execute_service, execute_service_by_key, get_service, get_services_by_plugin,
+    page_services, service_call, service_exists,
+};
 
 // 重新导出请求/响应结构体，方便外部使用
 pub use models::{
-    FunctionCallRequest, FunctionCallResponse,
-    ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
-    ServiceGetQuery, ServiceByPluginQuery, ServiceDeleteQuery,
-    ServiceListItem, ServiceDetailResponse,
+    FunctionCallRequest, FunctionCallResponse, ServiceByPluginQuery, ServiceDeleteQuery,
+    ServiceDetailResponse, ServiceExecuteRequest, ServiceExecuteResponse, ServiceExecutionStep,
+    ServiceGetQuery, ServiceListItem,
 };
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::{routing::{post, get}, Router};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use handler::get_openapi_spec;
 

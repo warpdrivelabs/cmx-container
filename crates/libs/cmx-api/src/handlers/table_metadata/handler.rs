@@ -2,22 +2,22 @@
 //!
 //! 提供 cmx_meta_table_define 表的列表和分页查询功能
 
-use axum::http::HeaderMap;
-use axum::extract::{Query, State};
 use axum::Json;
-use modql::filter::OpValsString;
+use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_core::model::data::request::params::GetParams;
 use cmx_database::get_default_db_manager;
 use cmx_plugin::infrastructure::database::table_metadata::{
     TableMetadataFilter, TableMetadataService,
 };
+use modql::filter::OpValsString;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
 
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
 use crate::Result;
+use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
 
@@ -84,7 +84,9 @@ pub async fn table_metadata_list(
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
-            filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
+            filter
+                .app_id
+                .get_or_insert(OpValsString::from(app_id.clone()));
         }
     } else {
         // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
@@ -95,10 +97,9 @@ pub async fn table_metadata_list(
         filters = Some(vec![default_filter]);
     }
 
-    let dataset =
-        TableMetadataService::list(mm, &db_id, filters, Some(list_options))
-            .await
-            .map_err(|e| crate::Error::InternalError(format!("列表查询失败: {}", e)))?;
+    let dataset = TableMetadataService::list(mm, &db_id, filters, Some(list_options))
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("列表查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -133,7 +134,9 @@ pub async fn table_metadata_page(
     // 如果 filters 是 Some，就自动解包并进入循环；如果是 None，需要手动构建一个只包含 app_id 的 filter
     if let Some(filters_vec) = &mut filters {
         for filter in filters_vec.iter_mut() {
-            filter.app_id.get_or_insert(OpValsString::from(app_id.clone()));
+            filter
+                .app_id
+                .get_or_insert(OpValsString::from(app_id.clone()));
         }
     } else {
         // filters 为 None 时，手动构建一个只包含 app_id 条件的 filter
@@ -144,10 +147,9 @@ pub async fn table_metadata_page(
         filters = Some(vec![default_filter]);
     }
 
-    let (dataset, total) =
-        TableMetadataService::page(mm, &db_id, filters, list_options)
-            .await
-            .map_err(|e| crate::Error::InternalError(format!("分页查询失败: {}", e)))?;
+    let (dataset, total) = TableMetadataService::page(mm, &db_id, filters, list_options)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("分页查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
@@ -179,9 +181,10 @@ pub async fn table_metadata_get_by_name(
     let db_id = get_db_id_from_header(&headers).await;
     let app_id = cmx_state.app_id();
 
-    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
-        .await
-        .map_err(|e| crate::Error::InternalError(format!("根据表名查询失败: {}", e)))?;
+    let dataset =
+        TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
+            .await
+            .map_err(|e| crate::Error::InternalError(format!("根据表名查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -225,10 +228,13 @@ pub async fn table_metadata_exists(
     let db_id = get_db_id_from_header(&headers).await;
     let app_id = _cmx_state.app_id();
 
-    let dataset = TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
-        .await
-        .map_err(|e| crate::Error::InternalError(format!("查询表存在性失败: {}", e)))?;
+    let dataset =
+        TableMetadataService::get_by_table_name(mm, &db_id, &params.table_name, None, &app_id)
+            .await
+            .map_err(|e| crate::Error::InternalError(format!("查询表存在性失败: {}", e)))?;
 
     let exists = !dataset.rows.is_empty();
-    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
+    Ok(Json(ApiResp::ok(
+        if exists { "1" } else { "0" }.to_string(),
+    )))
 }

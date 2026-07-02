@@ -3,8 +3,8 @@
 //! 提供 OAuth2 客户端的 CRUD 管理接口。
 //! client_secret 在创建时哈希存储，更新时支持重置。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -22,8 +22,7 @@ fn hash_secret(secret: &str) -> String {
 }
 
 /// 创建 OAuth2 客户端请求
-#[derive(Debug, Deserialize, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct CreateOAuth2ClientRequest {
     /// 客户端标识（唯一）
     pub client_id: String,
@@ -54,8 +53,7 @@ fn default_pkce() -> bool {
 }
 
 /// 更新 OAuth2 客户端请求
-#[derive(Debug, Deserialize, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct UpdateOAuth2ClientRequest {
     /// 客户端名称
     #[serde(default)]
@@ -84,8 +82,7 @@ pub struct UpdateOAuth2ClientRequest {
 }
 
 /// OAuth2 客户端响应
-#[derive(Debug, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct OAuth2ClientResponse {
     pub id: String,
     pub client_id: String,
@@ -102,8 +99,7 @@ pub struct OAuth2ClientResponse {
 }
 
 /// OAuth2 客户端查询参数
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct OAuth2ClientQuery {
     /// 按状态过滤
     pub status: Option<i64>,
@@ -132,16 +128,16 @@ pub async fn create_oauth2_client(
     );
 
     let id = cmx_utils::snowflake_id_str();
-    let redirect_uris_json = serde_json::to_string(&req.redirect_uris).unwrap_or_else(|_| "[]".to_string());
+    let redirect_uris_json =
+        serde_json::to_string(&req.redirect_uris).unwrap_or_else(|_| "[]".to_string());
     let grant_types_str = req.grant_types.join(",");
     let allowed_scopes_str = req.allowed_scopes.join(",");
 
     // confidential 类型必须有 secret
     let secret_hash = if req.client_type == "confidential" {
-        let secret = req
-            .client_secret
-            .as_deref()
-            .ok_or_else(|| Error::BusinessError("confidential 客户端必须提供 client_secret".to_string()))?;
+        let secret = req.client_secret.as_deref().ok_or_else(|| {
+            Error::BusinessError("confidential 客户端必须提供 client_secret".to_string())
+        })?;
         if secret.len() < 8 {
             return Err(Error::BusinessError(
                 "client_secret 长度不能少于 8 位".to_string(),
@@ -252,19 +248,22 @@ pub async fn list_oauth2_clients(
     let items: Vec<OAuth2ClientResponse> = dataset
         .iter()
         .filter_map(|row| {
-            let redirect_uris_str: String =
-                row.get_by_name_as(schema, "redirect_uris").unwrap_or_default();
+            let redirect_uris_str: String = row
+                .get_by_name_as(schema, "redirect_uris")
+                .unwrap_or_default();
             let redirect_uris: Vec<String> =
                 serde_json::from_str(&redirect_uris_str).unwrap_or_default();
-            let grant_types_str: String =
-                row.get_by_name_as(schema, "grant_types").unwrap_or_default();
+            let grant_types_str: String = row
+                .get_by_name_as(schema, "grant_types")
+                .unwrap_or_default();
             let grant_types: Vec<String> = grant_types_str
                 .split(',')
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
                 .collect();
-            let allowed_scopes_str: String =
-                row.get_by_name_as(schema, "allowed_scopes").unwrap_or_default();
+            let allowed_scopes_str: String = row
+                .get_by_name_as(schema, "allowed_scopes")
+                .unwrap_or_default();
             let allowed_scopes: Vec<String> = allowed_scopes_str
                 .split(',')
                 .filter(|s| !s.is_empty())
@@ -314,11 +313,7 @@ pub async fn update_oauth2_client(
     debug!("{:<12} - handler::update_oauth2_client", "HANDLER");
 
     // 需要提供 client_id 来定位记录
-    let client_id = req
-        .client_name
-        .as_ref()
-        .map(|_| ())
-        .and(None::<&str>);
+    let client_id = req.client_name.as_ref().map(|_| ()).and(None::<&str>);
     let _ = client_id; // placeholder
 
     // 使用 client_id 字段定位（从请求中获取，需要额外字段）
@@ -329,8 +324,7 @@ pub async fn update_oauth2_client(
 }
 
 /// 更新 OAuth2 客户端（按 client_id）
-#[derive(Debug, Deserialize, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct UpdateOAuth2ClientByIdRequest {
     /// 客户端标识（定位用）
     pub client_id: String,

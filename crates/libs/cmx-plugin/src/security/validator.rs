@@ -2,9 +2,9 @@
 //!
 //! 验证插件安全性，包括包结构、签名、权限等
 
+use super::signature::{SignatureInfo, SignatureValidator};
 use std::path::Path;
 use tracing::error;
-use super::signature::{SignatureValidator, SignatureInfo};
 
 /// 验证结果
 #[derive(Debug, Clone)]
@@ -190,13 +190,11 @@ impl SecurityValidator {
         if package_path.is_file() {
             // ZIP 文件
             if let Some(ext) = package_path.extension()
-                && ext != "zip" {
-                    result.add_error(format!(
-                        "不支持的插件包格式: {:?}",
-                        ext
-                    ));
-                    return;
-                }
+                && ext != "zip"
+            {
+                result.add_error(format!("不支持的插件包格式: {:?}", ext));
+                return;
+            }
 
             // 验证 ZIP 内容
             self.validate_zip_contents(package_path, result);
@@ -250,7 +248,11 @@ impl SecurityValidator {
                 // 检查文件扩展名
                 if let Some(ext) = Path::new(name).extension() {
                     let ext_str = ext.to_string_lossy();
-                    if !self.config.allowed_extensions.contains(&ext_str.to_string()) {
+                    if !self
+                        .config
+                        .allowed_extensions
+                        .contains(&ext_str.to_string())
+                    {
                         result.add_warning(format!("不推荐的文件扩展名: {}", name));
                     }
                 }
@@ -275,7 +277,9 @@ impl SecurityValidator {
         }
 
         if !has_wasm {
-            result.add_error("插件包中缺少 WASM 文件（递归搜索所有子目录未找到 .wasm 文件）".to_string());
+            result.add_error(
+                "插件包中缺少 WASM 文件（递归搜索所有子目录未找到 .wasm 文件）".to_string(),
+            );
         }
         // if !_has_plugin_json {
         //     result.add_warning("插件包中缺少 plugin.json 文件".to_string());
@@ -306,7 +310,9 @@ impl SecurityValidator {
         }
 
         if !has_wasm {
-            result.add_error("插件目录中缺少 WASM 文件（递归搜索所有子目录未找到 .wasm 文件）".to_string());
+            result.add_error(
+                "插件目录中缺少 WASM 文件（递归搜索所有子目录未找到 .wasm 文件）".to_string(),
+            );
         }
         // if !has_plugin_json {
         //     result.add_warning("插件目录中缺少 plugin.json 文件".to_string());
@@ -347,14 +353,22 @@ impl SecurityValidator {
                 let path_str = path.to_string_lossy();
                 for pattern in &self.config.forbidden_patterns {
                     if path_str.contains(pattern) {
-                        result.add_error(format!("发现禁止的路径模式: {} ({})", path.display(), pattern));
+                        result.add_error(format!(
+                            "发现禁止的路径模式: {} ({})",
+                            path.display(),
+                            pattern
+                        ));
                     }
                 }
 
                 // 检查文件扩展名
                 if let Some(ext) = path.extension() {
                     let ext_str = ext.to_string_lossy();
-                    if !self.config.allowed_extensions.contains(&ext_str.to_string()) {
+                    if !self
+                        .config
+                        .allowed_extensions
+                        .contains(&ext_str.to_string())
+                    {
                         result.add_warning(format!("不推荐的文件扩展名: {}", path.display()));
                     }
 
@@ -453,15 +467,17 @@ impl SecurityValidator {
 
         // 验证 ID 格式
         if let Some(id) = plugin.get("id").and_then(|v| v.as_str())
-            && !self.is_valid_plugin_id(id) {
-                result.add_error(format!("无效的插件 ID 格式: {}", id));
-            }
+            && !self.is_valid_plugin_id(id)
+        {
+            result.add_error(format!("无效的插件 ID 格式: {}", id));
+        }
 
         // 验证版本格式
         if let Some(version) = plugin.get("version").and_then(|v| v.as_str())
-            && !self.is_valid_version(version) {
-                result.add_warning(format!("版本格式可能无效: {}", version));
-            }
+            && !self.is_valid_version(version)
+        {
+            result.add_warning(format!("版本格式可能无效: {}", version));
+        }
 
         // 验证依赖格式（可选）
         if let Some(deps) = plugin.get("dependencies").and_then(|v| v.as_array()) {
@@ -529,7 +545,12 @@ impl SecurityValidator {
     }
 
     /// 使用签名信息验证
-    fn verify_signature_with_info(&self, package_path: &Path, sig: &SignatureInfo, result: &mut ValidationResult) {
+    fn verify_signature_with_info(
+        &self,
+        package_path: &Path,
+        sig: &SignatureInfo,
+        result: &mut ValidationResult,
+    ) {
         // 读取 manifest 文件作为待验证数据
         let manifest_path = if package_path.is_dir() {
             package_path.join("manifest.json")
@@ -543,7 +564,10 @@ impl SecurityValidator {
             return;
         }
 
-        match self.signature_validator.verify_file_base64(&manifest_path, &sig.signature) {
+        match self
+            .signature_validator
+            .verify_file_base64(&manifest_path, &sig.signature)
+        {
             Ok(true) => {
                 tracing::info!("签名验证通过: {}", package_path.display());
             }
@@ -642,16 +666,19 @@ mod tests {
     use std::fs;
     use std::io::{Cursor, Write};
     use std::path::PathBuf;
-    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     /// 临时目录守卫，Drop 时自动清理
     struct TempDir(PathBuf);
 
     impl TempDir {
         fn new(label: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("cmx_plugin_validator_{}_{}", label, uuid::Uuid::new_v4()));
+            let path = std::env::temp_dir().join(format!(
+                "cmx_plugin_validator_{}_{}",
+                label,
+                uuid::Uuid::new_v4()
+            ));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -859,7 +886,11 @@ mod tests {
 
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
-        assert!(result.passed, "有效插件目录应通过校验，错误: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "有效插件目录应通过校验，错误: {:?}",
+            result.errors
+        );
     }
 
     #[tokio::test]
@@ -881,7 +912,8 @@ mod tests {
         assert!(!result.passed, "缺少 WASM 文件应校验失败");
         assert!(
             result.errors.iter().any(|e| e.contains("WASM")),
-            "应报告缺少 WASM 文件错误，错误: {:?}", result.errors
+            "应报告缺少 WASM 文件错误，错误: {:?}",
+            result.errors
         );
     }
 
@@ -896,7 +928,8 @@ mod tests {
         assert!(result.passed, "缺少 manifest 不应导致校验失败");
         assert!(
             !result.warnings.is_empty(),
-            "缺少 manifest 应产生警告: {:?}", result.warnings
+            "缺少 manifest 应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -913,7 +946,8 @@ mod tests {
         assert!(result.passed, "非白名单扩展名仅产生警告");
         assert!(
             result.warnings.iter().any(|w| w.contains("helper.exe")),
-            "应针对非白名单扩展名产生警告: {:?}", result.warnings
+            "应针对非白名单扩展名产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -930,7 +964,8 @@ mod tests {
         assert!(!result.passed);
         assert!(
             result.errors.iter().any(|e| e.contains("plugin 对象")),
-            "应报告缺少 plugin 对象，错误: {:?}", result.errors
+            "应报告缺少 plugin 对象，错误: {:?}",
+            result.errors
         );
     }
 
@@ -947,8 +982,14 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(!result.passed);
-        assert!(result.errors.iter().any(|e| e.contains("version")), "缺少 version 字段应报错");
-        assert!(result.errors.iter().any(|e| e.contains("main_file")), "缺少 main_file 字段应报错");
+        assert!(
+            result.errors.iter().any(|e| e.contains("version")),
+            "缺少 version 字段应报错"
+        );
+        assert!(
+            result.errors.iter().any(|e| e.contains("main_file")),
+            "缺少 main_file 字段应报错"
+        );
     }
 
     #[tokio::test]
@@ -966,7 +1007,8 @@ mod tests {
         assert!(!result.passed);
         assert!(
             result.errors.iter().any(|e| e.contains("插件 ID 格式")),
-            "非法插件 ID 应报错，错误: {:?}", result.errors
+            "非法插件 ID 应报错，错误: {:?}",
+            result.errors
         );
     }
 
@@ -985,7 +1027,8 @@ mod tests {
         // 版本格式无效仅产生警告，不改变通过状态
         assert!(
             result.warnings.iter().any(|w| w.contains("版本格式")),
-            "无效版本应产生警告: {:?}", result.warnings
+            "无效版本应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -999,8 +1042,12 @@ mod tests {
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(!result.passed);
         assert!(
-            result.errors.iter().any(|e| e.contains("manifest 文件失败")),
-            "无效 JSON 应报告 manifest 解析失败，错误: {:?}", result.errors
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("manifest 文件失败")),
+            "无效 JSON 应报告 manifest 解析失败，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1022,7 +1069,8 @@ mod tests {
         assert!(!result.passed);
         assert!(
             result.errors.iter().any(|e| e.contains("超出限制")),
-            "超尺寸包应报错，错误: {:?}", result.errors
+            "超尺寸包应报错，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1046,7 +1094,8 @@ mod tests {
         let result = v.validate_plugin_package(&zip_path).await;
         assert!(
             result.errors.iter().any(|e| e.contains("禁止的路径模式")),
-            "应检测到路径穿越条目，错误: {:?}", result.errors
+            "应检测到路径穿越条目，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1068,7 +1117,8 @@ mod tests {
         let result = v.validate_plugin_package(&zip_path).await;
         assert!(
             result.errors.iter().any(|e| e.contains("禁止的路径模式")),
-            "应检测到 Windows 路径穿越条目，错误: {:?}", result.errors
+            "应检测到 Windows 路径穿越条目，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1076,10 +1126,7 @@ mod tests {
     async fn test_validate_zip_missing_wasm_errors() {
         let dir = TempDir::new("zip_no_wasm");
         let zip_path = dir.path().join("plugin.zip");
-        write_zip(
-            &zip_path,
-            &[("manifest.json", b"{}"), ("readme.md", b"hi")],
-        );
+        write_zip(&zip_path, &[("manifest.json", b"{}"), ("readme.md", b"hi")]);
 
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(&zip_path).await;
@@ -1102,7 +1149,11 @@ mod tests {
 
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(&zip_path).await;
-        assert!(result.passed, "结构合法的 ZIP 应通过校验，错误: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "结构合法的 ZIP 应通过校验，错误: {:?}",
+            result.errors
+        );
     }
 
     #[tokio::test]
@@ -1116,8 +1167,12 @@ mod tests {
         let result = v.validate_plugin_package(&tar_path).await;
         assert!(!result.passed);
         assert!(
-            result.errors.iter().any(|e| e.contains("不支持的插件包格式")),
-            "应报告不支持的包格式，错误: {:?}", result.errors
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("不支持的插件包格式")),
+            "应报告不支持的包格式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1144,7 +1199,9 @@ mod tests {
             ..SecurityConfig::default()
         };
         let v = SecurityValidator::with_config(cfg);
-        let result = v.check_permissions(&["filesystem.write.root".to_string()]).await;
+        let result = v
+            .check_permissions(&["filesystem.write.root".to_string()])
+            .await;
         assert!(result.unwrap(), "关闭权限检查时应直接通过");
     }
 
@@ -1178,8 +1235,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.errors.iter().any(|e| e.contains("禁止的路径模式") && e.contains("/etc/")),
-            "应检测到目录中的 /etc/ 路径模式，错误: {:?}", result.errors
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("禁止的路径模式") && e.contains("/etc/")),
+            "应检测到目录中的 /etc/ 路径模式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1197,8 +1258,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.errors.iter().any(|e| e.contains("禁止的路径模式") && e.contains("/root/")),
-            "应检测到目录中的 /root/ 路径模式，错误: {:?}", result.errors
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("禁止的路径模式") && e.contains("/root/")),
+            "应检测到目录中的 /root/ 路径模式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1220,7 +1285,8 @@ mod tests {
         let result = v.validate_plugin_package(&zip_path).await;
         assert!(
             result.errors.iter().any(|e| e.contains("/etc/")),
-            "应检测到 /etc/ 路径模式，错误: {:?}", result.errors
+            "应检测到 /etc/ 路径模式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1242,7 +1308,8 @@ mod tests {
         let result = v.validate_plugin_package(&zip_path).await;
         assert!(
             result.errors.iter().any(|e| e.contains("/root/")),
-            "应检测到 /root/ 路径模式，错误: {:?}", result.errors
+            "应检测到 /root/ 路径模式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1264,7 +1331,8 @@ mod tests {
         let result = v.validate_plugin_package(&zip_path).await;
         assert!(
             result.errors.iter().any(|e| e.contains("C:\\Windows\\")),
-            "应检测到 Windows 系统路径模式，错误: {:?}", result.errors
+            "应检测到 Windows 系统路径模式，错误: {:?}",
+            result.errors
         );
     }
 
@@ -1314,7 +1382,8 @@ mod tests {
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
             result.warnings.iter().all(|w| !w.contains("config.json")),
-            "白名单中的 .json 不应产生警告: {:?}", result.warnings
+            "白名单中的 .json 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1330,7 +1399,8 @@ mod tests {
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
             result.warnings.iter().all(|w| !w.contains("config.toml")),
-            "白名单中的 .toml 不应产生警告: {:?}", result.warnings
+            "白名单中的 .toml 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1346,8 +1416,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.warnings.iter().all(|w| !w.contains("config.yaml") && !w.contains("config2.yml")),
-            "白名单中的 .yaml/.yml 不应产生警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .all(|w| !w.contains("config.yaml") && !w.contains("config2.yml")),
+            "白名单中的 .yaml/.yml 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1363,8 +1437,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.warnings.iter().all(|w| !w.contains("readme.md") && !w.contains("notes.txt")),
-            "白名单中的 .md/.txt 不应产生警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .all(|w| !w.contains("readme.md") && !w.contains("notes.txt")),
+            "白名单中的 .md/.txt 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1395,7 +1473,8 @@ mod tests {
         // .rs 在自定义白名单中，不应产生警告
         assert!(
             result.warnings.iter().all(|w| !w.contains("helper.rs")),
-            "自定义白名单中的 .rs 不应产生警告: {:?}", result.warnings
+            "自定义白名单中的 .rs 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1412,8 +1491,12 @@ mod tests {
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(result.passed);
         assert!(
-            result.warnings.iter().all(|w| !w.contains("manifest_version") && !w.contains("Manifest 版本")),
-            "manifest_version 1.0 不应产生兼容性警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .all(|w| !w.contains("manifest_version") && !w.contains("Manifest 版本")),
+            "manifest_version 1.0 不应产生兼容性警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1438,8 +1521,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.warnings.iter().any(|w| w.contains("Manifest 版本可能不兼容")),
-            "非 1.0 manifest_version 应产生兼容性警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("Manifest 版本可能不兼容")),
+            "非 1.0 manifest_version 应产生兼容性警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1463,8 +1550,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.warnings.iter().any(|w| w.contains("manifest_version 字段")),
-            "缺少 manifest_version 应产生警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("manifest_version 字段")),
+            "缺少 manifest_version 应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1494,7 +1585,8 @@ mod tests {
         assert!(result.passed);
         assert!(
             result.warnings.iter().all(|w| !w.contains("依赖插件 ID")),
-            "合法依赖 ID 不应产生警告: {:?}", result.warnings
+            "合法依赖 ID 不应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1520,8 +1612,12 @@ mod tests {
         let v = SecurityValidator::new();
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
-            result.warnings.iter().any(|w| w.contains("依赖插件 ID 格式")),
-            "非法依赖 ID 应产生警告: {:?}", result.warnings
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("依赖插件 ID 格式")),
+            "非法依赖 ID 应产生警告: {:?}",
+            result.warnings
         );
     }
 
@@ -1548,7 +1644,8 @@ mod tests {
         let result = v.validate_plugin_package(dir.path()).await;
         assert!(
             result.warnings.iter().any(|w| w.contains("非字符串项")),
-            "非字符串依赖项应产生警告: {:?}", result.warnings
+            "非字符串依赖项应产生警告: {:?}",
+            result.warnings
         );
     }
 

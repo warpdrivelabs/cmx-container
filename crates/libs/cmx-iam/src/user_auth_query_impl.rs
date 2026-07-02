@@ -44,7 +44,8 @@ impl UserAuthQueryImpl {
             org_id: row.get_by_name_as(schema, "org_id"),
             gender: row.get_by_name_as::<i64>(schema, "gender").unwrap_or(0),
             status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
-            last_login_at: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "last_login_at")
+            last_login_at: row
+                .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "last_login_at")
                 .map(|dt| dt.timestamp()),
             last_login_ip: row.get_by_name_as(schema, "last_login_ip"),
             description: row.get_by_name_as(schema, "description"),
@@ -209,11 +210,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
         Ok(permissions)
     }
 
-    async fn update_password_hash(
-        &self,
-        user_id: &str,
-        new_hash: &str,
-    ) -> Result<(), TraitError> {
+    async fn update_password_hash(&self, user_id: &str, new_hash: &str) -> Result<(), TraitError> {
         debug!(
             "{:<12} - UserAuthQueryImpl::update_password_hash - user_id: {}",
             "IAM", user_id
@@ -324,7 +321,12 @@ impl UserAuthQuery for UserAuthQueryImpl {
                     ];
 
                     self.mm
-                        .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_ur_sql, ur_params)
+                        .execute_sql_with_datavalues(
+                            &self.db_id,
+                            Some(txn_id),
+                            insert_ur_sql,
+                            ur_params,
+                        )
                         .await
                         .map_err(|e| TraitError::Internal(format!("关联超管角色失败: {}", e)))?;
                 }
@@ -432,22 +434,28 @@ impl UserAuthQuery for UserAuthQueryImpl {
 
             let role_schema = role_dataset.schema.as_ref();
             if let Some(role_row) = role_dataset.iter().next()
-                && let Some(role_id) = role_row.get_by_name_as::<String>(role_schema, "id") {
-                    let ur_id = cmx_utils::snowflake_id_str();
-                    let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
+                && let Some(role_id) = role_row.get_by_name_as::<String>(role_schema, "id")
+            {
+                let ur_id = cmx_utils::snowflake_id_str();
+                let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
                                          VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
-                    let ur_params: Vec<DataValue> = vec![
-                        DataValue::String(ur_id),
-                        DataValue::String(user_id.clone()),
-                        DataValue::String(role_id),
-                    ];
+                let ur_params: Vec<DataValue> = vec![
+                    DataValue::String(ur_id),
+                    DataValue::String(user_id.clone()),
+                    DataValue::String(role_id),
+                ];
 
-                    self.mm
-                        .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_ur_sql, ur_params)
-                        .await
-                        .map_err(|e| TraitError::Internal(format!("关联默认角色失败: {}", e)))?;
-                    info!(user_id = %user_id, role_code = %role_code, "OAuth2 自动注册用户已关联默认角色");
-                }
+                self.mm
+                    .execute_sql_with_datavalues(
+                        &self.db_id,
+                        Some(txn_id),
+                        insert_ur_sql,
+                        ur_params,
+                    )
+                    .await
+                    .map_err(|e| TraitError::Internal(format!("关联默认角色失败: {}", e)))?;
+                info!(user_id = %user_id, role_code = %role_code, "OAuth2 自动注册用户已关联默认角色");
+            }
         }
 
         // 提交事务

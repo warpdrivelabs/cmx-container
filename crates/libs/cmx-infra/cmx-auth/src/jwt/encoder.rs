@@ -1,12 +1,14 @@
 //! JWT 编解码器。
 
 use chrono::Utc;
-use jsonwebtoken::{decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, decode_header, encode,
+};
 use uuid::Uuid;
 
+use super::claims::{AccessClaims, RefreshClaims};
 use crate::config::AuthConfig;
 use crate::error::{AuthInfraError, Result};
-use super::claims::{AccessClaims, RefreshClaims};
 
 /// JWT 管理器。
 ///
@@ -50,9 +52,12 @@ impl JwtManager {
             "RS256" => Algorithm::RS256,
             "HS256" => Algorithm::HS256,
             other => {
-                return Err(AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
-                    format!("不支持的 JWT 算法: {}", other),
-                )))
+                return Err(AuthInfraError::Auth(
+                    cmx_traits::auth::AuthError::InvalidToken(format!(
+                        "不支持的 JWT 算法: {}",
+                        other
+                    )),
+                ));
             }
         };
 
@@ -123,8 +128,7 @@ impl JwtManager {
             header.kid = Some(kid.clone());
         }
 
-        encode(&header, &claims, &self.encoding_key)
-            .map_err(AuthInfraError::Jwt)
+        encode(&header, &claims, &self.encoding_key).map_err(AuthInfraError::Jwt)
     }
 
     /// 编码 Refresh Token。
@@ -163,8 +167,7 @@ impl JwtManager {
         };
 
         let header = Header::new(self.algorithm);
-        encode(&header, &claims, &self.encoding_key)
-            .map_err(AuthInfraError::Jwt)
+        encode(&header, &claims, &self.encoding_key).map_err(AuthInfraError::Jwt)
     }
 
     /// 解码 Access Token。
@@ -220,9 +223,10 @@ impl JwtManager {
             // 3. 在 legacy 列表中查找匹配的密钥
             for (legacy_kid, legacy_key) in &self.legacy_decoding_keys {
                 if legacy_kid == kid
-                    && let Ok(token_data) = decode::<T>(token, legacy_key, &self.validation()) {
-                        return Ok(token_data.claims);
-                    }
+                    && let Ok(token_data) = decode::<T>(token, legacy_key, &self.validation())
+                {
+                    return Ok(token_data.claims);
+                }
             }
         }
 
@@ -246,25 +250,17 @@ impl JwtManager {
                 ))
             }
             Algorithm::RS256 => {
-                let private_key_pem = config
-                    .jwt
-                    .private_key
-                    .as_deref()
-                    .ok_or_else(|| {
-                        AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
-                            "RS256 需要 private_key 配置".to_string(),
-                        ))
-                    })?;
+                let private_key_pem = config.jwt.private_key.as_deref().ok_or_else(|| {
+                    AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
+                        "RS256 需要 private_key 配置".to_string(),
+                    ))
+                })?;
 
-                let public_key_pem = config
-                    .jwt
-                    .public_key
-                    .as_deref()
-                    .ok_or_else(|| {
-                        AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
-                            "RS256 需要 public_key 配置".to_string(),
-                        ))
-                    })?;
+                let public_key_pem = config.jwt.public_key.as_deref().ok_or_else(|| {
+                    AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
+                        "RS256 需要 public_key 配置".to_string(),
+                    ))
+                })?;
 
                 // 支持文件路径或 PEM 内容
                 let private_pem = Self::resolve_key_content(private_key_pem)?;
@@ -277,9 +273,12 @@ impl JwtManager {
                         .map_err(AuthInfraError::Jwt)?,
                 ))
             }
-            _ => Err(AuthInfraError::Auth(cmx_traits::auth::AuthError::InvalidToken(
-                format!("不支持的 JWT 算法: {:?}", algorithm),
-            ))),
+            _ => Err(AuthInfraError::Auth(
+                cmx_traits::auth::AuthError::InvalidToken(format!(
+                    "不支持的 JWT 算法: {:?}",
+                    algorithm
+                )),
+            )),
         }
     }
 
@@ -293,8 +292,8 @@ impl JwtManager {
             let pem = Self::resolve_key_content(key_pem)?;
             match algorithm {
                 Algorithm::RS256 => {
-                    let dk = DecodingKey::from_rsa_pem(pem.as_bytes())
-                        .map_err(AuthInfraError::Jwt)?;
+                    let dk =
+                        DecodingKey::from_rsa_pem(pem.as_bytes()).map_err(AuthInfraError::Jwt)?;
                     keys.push((kid.clone(), dk));
                 }
                 Algorithm::HS256 => {
@@ -430,7 +429,7 @@ mod tests {
     #[test]
     fn test_jwt_expired_access_token_fails() {
         // 手工构造一个已过期的 Access Token（exp 在过去）
-        use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey, Header};
+        use jsonwebtoken::{Algorithm, EncodingKey, Header, encode as jwt_encode};
 
         let mgr = make_manager("expired-secret-access");
         let secret = "expired-secret-access";
@@ -467,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_jwt_expired_refresh_token_fails() {
-        use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey, Header};
+        use jsonwebtoken::{Algorithm, EncodingKey, Header, encode as jwt_encode};
 
         let mgr = make_manager("expired-secret-refresh");
         let secret = "expired-secret-refresh";
@@ -486,7 +485,8 @@ mod tests {
 
         let header = Header::new(Algorithm::HS256);
         let encoding_key = EncodingKey::from_secret(secret.as_bytes());
-        let token = jwt_encode(&header, &claims, &encoding_key).expect("编码过期 Refresh Token 失败");
+        let token =
+            jwt_encode(&header, &claims, &encoding_key).expect("编码过期 Refresh Token 失败");
 
         let result = mgr.decode_refresh_token(&token);
         assert!(
@@ -552,7 +552,15 @@ mod tests {
         let mgr = make_manager("tamper-test-secret");
 
         let token = mgr
-            .encode_access_token("user-tamper", "dave", &[], &[], None, "session-tamper", "web")
+            .encode_access_token(
+                "user-tamper",
+                "dave",
+                &[],
+                &[],
+                None,
+                "session-tamper",
+                "web",
+            )
             .expect("编码 Access Token 失败");
 
         // 篡改 signature 部分的最后一个字符（破坏签名）
@@ -577,10 +585,7 @@ mod tests {
         config.jwt.algorithm = "ES256".to_string(); // 不支持的算法
 
         let result = JwtManager::new(config);
-        assert!(
-            result.is_err(),
-            "不支持的算法应导致 JwtManager 构造失败"
-        );
+        assert!(result.is_err(), "不支持的算法应导致 JwtManager 构造失败");
     }
 
     #[test]

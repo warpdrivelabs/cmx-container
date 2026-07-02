@@ -61,26 +61,28 @@ pub mod global_config_center;
 pub mod global_instance_cache;
 pub mod global_registry;
 pub mod notifier;
-pub mod reloader;
 pub mod registry;
+pub mod reloader;
 pub(crate) mod utils;
 
 #[cfg(test)]
 mod tests;
 
+pub use config_center::{
+    ConfigCenter, ConfigChangeCallback, MockConfigCenter, NacosConfigCenter, create_config_center,
+};
 pub use config_model::{
     ConfigCenterFullConfig, ConfigListener, NacosConfigCenterConfig, NacosNamingConfig,
     RegistryConfig,
 };
-pub use config_center::{create_config_center, ConfigCenter, ConfigChangeCallback, MockConfigCenter, NacosConfigCenter};
 pub use config_source::RemoteConfigSource;
 pub use error::{ConfigCenterError, RegistryError};
 pub use global_config_center::GlobalConfigCenter;
+pub use global_instance_cache::GlobalServiceInstanceCache;
 pub use global_registry::GlobalServiceRegistry;
 pub use notifier::{ChangeNotifier, ConfigChangeEvent, ConfigChangeListener, GlobalChangeNotifier};
-pub use reloader::ConfigReloader;
-pub use global_instance_cache::GlobalServiceInstanceCache;
 pub use registry::{
-    create_registry, create_registry_with_cache, InstanceChangeCallback, MockRegistry,
-    NacosRegistry, ServiceInstance, ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
+    InstanceChangeCallback, MockRegistry, NacosRegistry, ServiceInstance, ServiceInstanceCache,
+    ServiceListSyncer, ServiceRegistry, create_registry, create_registry_with_cache,
 };
+pub use reloader::ConfigReloader;

@@ -3,11 +3,11 @@
 //! 该模块提供了 REST API 接口中常用的请求参数结构，用于自动生成 OpenAPI 文档。
 //! 包括单条查询、更新/删除载荷、列表过滤和分页查询等场景的参数类型。
 
+use cmx_core::LIST_LIMIT_DEFAULT;
 use modql::filter::ListOptions;
 use serde::Deserialize;
 use serde_json::Value;
 use utoipa::ToSchema;
-use cmx_core::LIST_LIMIT_DEFAULT;
 
 /// 默认每页条数。
 pub const PAGE_SIZE_DEFAULT: i64 = 20;

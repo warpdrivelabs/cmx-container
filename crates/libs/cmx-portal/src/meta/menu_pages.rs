@@ -3,7 +3,7 @@
 //!
 //! 复刻 Node `lib/menuPagesStore.js`：`parseMenuRef`（文件读）+ `getDamMenuPageJson`（DAM 派生）。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::data_path;
 use crate::dam::store::list_modules;
@@ -39,21 +39,30 @@ fn parse_menu_ref(menu_ref: &str) -> PortalResult<Vec<String>> {
         return Err(PortalError::bad_request("缺少必填查询参数 menu"));
     }
     if !is_safe_id(r) {
-        return Err(PortalError::bad_request("menu 仅允许字母、数字、._-，长度 1–128"));
+        return Err(PortalError::bad_request(
+            "menu 仅允许字母、数字、._-，长度 1–128",
+        ));
     }
     let segs: Vec<&str> = r.split('.').collect();
     for s in &segs {
         if s.is_empty() {
-            return Err(PortalError::bad_request("menu 段不能为空（禁止前导/尾随点或连续点）"));
+            return Err(PortalError::bad_request(
+                "menu 段不能为空（禁止前导/尾随点或连续点）",
+            ));
         }
         if !is_safe_segment(s) {
-            return Err(PortalError::bad_request(format!("menu 段非法：\"{s}\"（仅允许字母、数字、_-）")));
+            return Err(PortalError::bad_request(format!(
+                "menu 段非法：\"{s}\"（仅允许字母、数字、_-）"
+            )));
         }
     }
     let mut parts: Vec<String> = if segs.len() == 1 {
         vec![format!("{}.json", segs[0])]
     } else {
-        let mut middle: Vec<String> = segs[..segs.len() - 1].iter().map(|s| s.to_string()).collect();
+        let mut middle: Vec<String> = segs[..segs.len() - 1]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         middle.push(format!("{}.json", segs[segs.len() - 1]));
         middle
     };
@@ -93,10 +102,18 @@ fn first_menu_ref(manifest: &Value) -> String {
         _ => vec![],
     };
     for item in list {
-        if let Some(mr) = item.get("menuRef").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        if let Some(mr) = item
+            .get("menuRef")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
             return mr.to_string();
         }
-        if let Some(p) = item.get("path").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        if let Some(p) = item
+            .get("path")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
             return menu_ref_from_path(p);
         }
     }
@@ -105,12 +122,19 @@ fn first_menu_ref(manifest: &Value) -> String {
 
 /// 从资源 path（`menu-pages/<...>.json`）反推点分 menuRef。
 fn menu_ref_from_path(entry_path: &str) -> String {
-    let rel = entry_path.trim_start_matches('/').strip_prefix("data/").unwrap_or(entry_path.trim_start_matches('/'));
+    let rel = entry_path
+        .trim_start_matches('/')
+        .strip_prefix("data/")
+        .unwrap_or(entry_path.trim_start_matches('/'));
     let prefix = "menu-pages/";
     if !rel.starts_with(prefix) || !rel.ends_with(".json") {
         return String::new();
     }
-    rel[prefix.len()..rel.len() - 5].split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>().join(".")
+    rel[prefix.len()..rel.len() - 5]
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 /// 从菜单文档取 items 数组。
@@ -133,9 +157,18 @@ fn build_dam_resource_menu(manifest: &Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("模块资源")
         .to_string();
-    let domain = manifest.get("domain").and_then(|v| v.as_str()).unwrap_or("");
-    let application = manifest.get("application").and_then(|v| v.as_str()).unwrap_or("");
-    let module = manifest.get("module").and_then(|v| v.as_str()).unwrap_or("");
+    let domain = manifest
+        .get("domain")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let application = manifest
+        .get("application")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let module = manifest
+        .get("module")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let mut types: Vec<String> = manifest
         .get("resources")
         .and_then(|r| r.as_object())
@@ -174,13 +207,17 @@ async fn build_dam_module_group(
     registry_module: Option<&crate::dam::store::DamModule>,
     index: usize,
 ) -> PortalResult<Value> {
-    let manifest = load_module_manifest(domain, application, module).await.unwrap_or(json!({
-        "domain": domain, "application": application, "module": module, "resources": {}
-    }));
+    let manifest = load_module_manifest(domain, application, module)
+        .await
+        .unwrap_or(json!({
+            "domain": domain, "application": application, "module": module, "resources": {}
+        }));
     let menu_ref = first_menu_ref(&manifest);
     let doc = if !menu_ref.is_empty() {
         // 递归读引用的菜单文件
-        get_menu_page_json_inner(&menu_ref, 1).await.unwrap_or_else(|_| build_dam_resource_menu(&manifest))
+        get_menu_page_json_inner(&menu_ref, 1)
+            .await
+            .unwrap_or_else(|_| build_dam_resource_menu(&manifest))
     } else {
         build_dam_resource_menu(&manifest)
     };
@@ -188,22 +225,50 @@ async fn build_dam_module_group(
     let theme_color = registry_module
         .map(|m| m.theme_color.clone())
         .filter(|s| !s.is_empty())
-        .or_else(|| manifest.get("themeColor").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .or_else(|| {
+            manifest
+                .get("themeColor")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_default();
     let raw_theme = registry_module
         .and_then(|m| m.theme.clone())
         .or_else(|| manifest.get("theme").filter(|v| v.is_object()).cloned());
     let theme = resolve_module_theme(&key, raw_theme.as_ref(), index, &theme_color);
     let title = registry_module
-        .map(|m| if !m.name.is_empty() { m.name.clone() } else if !m.title.is_empty() { m.title.clone() } else { m.id.clone() })
+        .map(|m| {
+            if !m.name.is_empty() {
+                m.name.clone()
+            } else if !m.title.is_empty() {
+                m.title.clone()
+            } else {
+                m.id.clone()
+            }
+        })
         .filter(|s| !s.is_empty())
-        .or_else(|| manifest.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
-        .or_else(|| manifest.get("title").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .or_else(|| {
+            manifest
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+        .or_else(|| {
+            manifest
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_else(|| module.to_string());
     let icon = registry_module
         .map(|m| m.icon.clone())
         .filter(|s| !s.is_empty())
-        .or_else(|| manifest.get("icon").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .or_else(|| {
+            manifest
+                .get("icon")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_else(|| "folder".to_string());
     Ok(json!({
         "id": format!("{domain}-{application}-{module}"),
@@ -219,14 +284,17 @@ async fn get_dam_menu_page_json(menu_name: &str) -> PortalResult<Option<Value>> 
         return Ok(None);
     };
     if application.is_empty() {
-        return Err(PortalError::bad_request(format!("DAM 菜单引用需至少包含 domain/application：{menu_name}")));
+        return Err(PortalError::bad_request(format!(
+            "DAM 菜单引用需至少包含 domain/application：{menu_name}"
+        )));
     }
     if module.is_empty() {
         // 应用级：列出该 app 下所有模块各成一组
         let modules = list_modules(Some(&domain), Some(&application)).await?;
         let mut groups = Vec::new();
         for (i, m) in modules.iter().enumerate() {
-            groups.push(build_dam_module_group(&m.domain, &m.application, &m.id, Some(m), i).await?);
+            groups
+                .push(build_dam_module_group(&m.domain, &m.application, &m.id, Some(m), i).await?);
         }
         return Ok(Some(json!({
             "version": 1, "source": "dam", "domain": domain, "application": application, "modules": groups
@@ -258,7 +326,9 @@ fn get_menu_page_json_inner(
         let path = data_path(rel);
         match read_json::<serde_json::Value>(&path).await {
             Ok(v) => Ok(v),
-            Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!("菜单数据不存在：{menu_name}"))),
+            Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!(
+                "菜单数据不存在：{menu_name}"
+            ))),
             Err(e) => Err(e),
         }
     })

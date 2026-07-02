@@ -2,11 +2,11 @@
 //!
 //! 实现 cmx_traits::service::ServiceStorage trait。
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::service::{ServiceStorage, SaveServiceVersionParams};
 use cmx_traits::error::TraitError;
+use cmx_traits::service::{SaveServiceVersionParams, ServiceStorage};
+use std::sync::Arc;
 
 use crate::repository::ServiceRepository;
 
@@ -80,7 +80,13 @@ impl ServiceStorage for ServiceStorageImpl {
     /// # 参数
     /// * `service_key` - 服务唯一标识
     /// * `app_id` - 应用隔离标识
-    async fn delete_service(&self, service_key: &str, app_id: &str, txn_id: Option<&str>, version: Option<&str>) -> Result<(), TraitError> {
+    async fn delete_service(
+        &self,
+        service_key: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+        version: Option<&str>,
+    ) -> Result<(), TraitError> {
         self.repository
             .delete_service(service_key, app_id, txn_id, version)
             .await
@@ -93,7 +99,12 @@ impl ServiceStorage for ServiceStorageImpl {
     /// # 参数
     /// * `plugin_id` - 插件ID
     /// * `app_id` - 应用隔离标识
-    async fn delete_services_by_plugin(&self, plugin_id: &str, app_id: &str, txn_id: Option<&str>) -> Result<(), TraitError> {
+    async fn delete_services_by_plugin(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+    ) -> Result<(), TraitError> {
         self.repository
             .delete_services_by_plugin(plugin_id, app_id, txn_id)
             .await

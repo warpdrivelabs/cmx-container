@@ -3,8 +3,8 @@
 //! 实现 [`crate::service_traits::UserService`] 的创建/查询/更新/删除方法。
 //! 方法体集中在本固有方法中，trait 实现在 `mod.rs` 中逐方法委托。
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
 use cmx_database::crud::GenericCrudService;
 use cmx_traits::error::TraitError;
 use serde_json::Value;
@@ -46,7 +46,9 @@ impl UserServiceImpl {
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户名失败: {e}"))))?;
         if existing.iter().next().is_some() {
-            return Err(TraitError::from(IamError::UsernameExists(data.username.clone())));
+            return Err(TraitError::from(IamError::UsernameExists(
+                data.username.clone(),
+            )));
         }
 
         // 3. 密码哈希
@@ -115,7 +117,9 @@ impl UserServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
 
         if dataset.iter().next().is_none() {
-            return Err(TraitError::from(IamError::UserNotFound(username.to_string())));
+            return Err(TraitError::from(IamError::UserNotFound(
+                username.to_string(),
+            )));
         }
 
         Self::extract_user(dataset).map_err(TraitError::from)
@@ -130,10 +134,7 @@ impl UserServiceImpl {
         user_id: &str,
         data: UserForUpdate,
     ) -> Result<cmx_core::model::iam::User, TraitError> {
-        debug!(
-            "{:<12} - UserServiceImpl::update_user - {}",
-            "IAM", user_id
-        );
+        debug!("{:<12} - UserServiceImpl::update_user - {}", "IAM", user_id);
 
         // 若提供了密码，校验长度并哈希
         let password_hash = if let Some(ref pwd) = data.password {
@@ -221,7 +222,9 @@ impl UserServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("软删除用户失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("软删除用户失败: {e}")))
+                })?;
         }
 
         // 2. 物理删除 cmx_user_role 关联
@@ -231,7 +234,9 @@ impl UserServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("删除用户角色关联失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("删除用户角色关联失败: {e}")))
+                })?;
         }
 
         // 提交事务

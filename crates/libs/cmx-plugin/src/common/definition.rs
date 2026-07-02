@@ -26,9 +26,9 @@
 //! }
 //! ```
 
-use std::path::Path;
-use cmx_core::model::meta::plugin::PluginManifest;
 use crate::error::{PluginError, PluginResult};
+use cmx_core::model::meta::plugin::PluginManifest;
+use std::path::Path;
 use zip::ZipArchive;
 
 /// 插件定义工具
@@ -113,9 +113,9 @@ impl DefinitionUtils {
         let manifest_json: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| PluginError::Metadata(format!("解析 manifest.json 失败: {}", e)))?;
 
-        let plugin_value = manifest_json.get("plugin").ok_or_else(|| {
-            PluginError::Metadata("manifest.json 缺少 plugin 对象".to_string())
-        })?;
+        let plugin_value = manifest_json
+            .get("plugin")
+            .ok_or_else(|| PluginError::Metadata("manifest.json 缺少 plugin 对象".to_string()))?;
 
         let definition: cmx_core::model::meta::plugin::PluginDefinition =
             serde_json::from_value(plugin_value.clone())
@@ -246,8 +246,11 @@ impl DefinitionUtils {
     ///
     /// - `PluginError::Io` - ZIP 解压失败或 manifest.json 读取失败
     /// - `PluginError::Metadata` - manifest.json 解析失败
-    pub fn parse_from_zip(zip_path: &Path) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
-        let temp_dir = std::env::temp_dir().join(format!("cmx_plugin_parse_{}", uuid::Uuid::new_v4()));
+    pub fn parse_from_zip(
+        zip_path: &Path,
+    ) -> PluginResult<cmx_core::model::meta::plugin::PluginDefinition> {
+        let temp_dir =
+            std::env::temp_dir().join(format!("cmx_plugin_parse_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir)?;
 
         // 解压 ZIP
@@ -255,7 +258,8 @@ impl DefinitionUtils {
         let mut zip_archive = ZipArchive::new(std::io::BufReader::new(zip_file))
             .map_err(|e| PluginError::Zip(e.to_string()))?;
 
-        zip_archive.extract(&temp_dir)
+        zip_archive
+            .extract(&temp_dir)
             .map_err(|e| PluginError::Zip(e.to_string()))?;
 
         // 解析插件定义
@@ -280,8 +284,11 @@ mod tests {
 
     impl TempDir {
         fn new(label: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("cmx_plugin_def_{}_{}", label, uuid::Uuid::new_v4()));
+            let path = std::env::temp_dir().join(format!(
+                "cmx_plugin_def_{}_{}",
+                label,
+                uuid::Uuid::new_v4()
+            ));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -450,7 +457,9 @@ mod tests {
         let dir = TempDir::new("async");
         dir.write("manifest.json", &valid_manifest_json());
 
-        let def = DefinitionUtils::parse_plugin_definition_async(dir.path()).await.unwrap();
+        let def = DefinitionUtils::parse_plugin_definition_async(dir.path())
+            .await
+            .unwrap();
         assert_eq!(def.id, "my_plugin");
         assert_eq!(def.version.as_deref(), Some("1.0.0"));
     }

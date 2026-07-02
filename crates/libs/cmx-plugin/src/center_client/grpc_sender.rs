@@ -10,13 +10,11 @@ use async_trait::async_trait;
 use tracing::info;
 
 use cmx_rpc::GlobalRpcClient;
-use cmx_traits::plugin::{
-    PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest,
-};
+use cmx_traits::plugin::{PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest};
 
 use super::config::CenterClientConfig;
 use super::sender::{CenterError, ServiceCenterSender};
-use super::types::{CenterCleanupRequest, CenterSendRequest, CenterResponse, DataCategory};
+use super::types::{CenterCleanupRequest, CenterResponse, CenterSendRequest, DataCategory};
 
 /// gRPC 服务中心 Sender。
 ///
@@ -38,13 +36,16 @@ impl GrpcServiceCenterSender {
     /// 如 `perm_service`、`menu_service` 等。
     /// 未配置时返回 `CenterError::Config`。
     fn resolve_service_name(&self, category: DataCategory) -> Result<&str, CenterError> {
-        self.config.discovery.get_service_name(category).ok_or_else(|| {
-            CenterError::Config(format!(
-                "{} 服务名未配置（需在 [center_client.discovery] 中配置 {}_service）",
-                category.center_name(),
-                category.dir_name().trim_end_matches("data")
-            ))
-        })
+        self.config
+            .discovery
+            .get_service_name(category)
+            .ok_or_else(|| {
+                CenterError::Config(format!(
+                    "{} 服务名未配置（需在 [center_client.discovery] 中配置 {}_service）",
+                    category.center_name(),
+                    category.dir_name().trim_end_matches("data")
+                ))
+            })
     }
 }
 
@@ -60,10 +61,7 @@ fn to_plugin_category(category: DataCategory) -> PluginDataCategory {
 
 #[async_trait]
 impl ServiceCenterSender for GrpcServiceCenterSender {
-    async fn send_data(
-        &self,
-        request: CenterSendRequest,
-    ) -> Result<CenterResponse, CenterError> {
+    async fn send_data(&self, request: CenterSendRequest) -> Result<CenterResponse, CenterError> {
         if !GlobalRpcClient::is_initialized() {
             return Err(CenterError::Unavailable {
                 center: request.category.center_name().to_string(),

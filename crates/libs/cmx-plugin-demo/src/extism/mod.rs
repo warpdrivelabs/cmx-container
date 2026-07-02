@@ -42,10 +42,7 @@ impl HostFunctions for ExtismHost {
     fn cache_delete(&self, key: &str) -> Result<CacheResponse, String> {
         HostCaller::cache_delete(key).map_err(|e| e.to_string())
     }
-    fn call_plugin(
-        &self,
-        request: PluginFunRequest,
-    ) -> Result<PluginFunCallResponse, String> {
+    fn call_plugin(&self, request: PluginFunRequest) -> Result<PluginFunCallResponse, String> {
         HostCaller::call_plugin(request).map_err(|e| e.to_string())
     }
     fn call_remote_plugin(
@@ -102,11 +99,7 @@ impl HostFunctions for ExtismHost {
         HostCaller::has_permissions(user_id, codes).map_err(|e| e.to_string())
     }
 
-    fn has_roles(
-        &self,
-        user_id: &str,
-        codes: &[String],
-    ) -> Result<Vec<WasmCheckResult>, String> {
+    fn has_roles(&self, user_id: &str, codes: &[String]) -> Result<Vec<WasmCheckResult>, String> {
         HostCaller::has_roles(user_id, codes).map_err(|e| e.to_string())
     }
 }
@@ -115,5 +108,5 @@ pub mod basic;
 pub mod cache;
 pub mod database;
 pub mod iam;
-pub mod plugin_call;
 pub mod orchestration;
+pub mod plugin_call;

@@ -82,15 +82,17 @@ pub fn flex_get(obj: &Value, key: &str) -> Option<Value> {
     // snake_case -> camelCase
     let camel = snake_to_camel(key);
     if camel != key
-        && let Some(v) = obj.get(&camel) {
-            return Some(v.clone());
-        }
+        && let Some(v) = obj.get(&camel)
+    {
+        return Some(v.clone());
+    }
     // camelCase -> snake_case
     let snake = camel_to_snake(key);
     if snake != key
-        && let Some(v) = obj.get(&snake) {
-            return Some(v.clone());
-        }
+        && let Some(v) = obj.get(&snake)
+    {
+        return Some(v.clone());
+    }
     None
 }
 
@@ -157,10 +159,7 @@ pub fn gen_id(prefix: &str) -> String {
 
 /// 发送请求并解析为统一响应。
 pub async fn send(_client: &reqwest::Client, req: reqwest::RequestBuilder) -> ApiResult {
-    let resp = req
-        .send()
-        .await
-        .unwrap_or_else(|e| panic!("请求失败: {e}"));
+    let resp = req.send().await.unwrap_or_else(|e| panic!("请求失败: {e}"));
     let status = resp.status().as_u16();
     let text = resp.text().await.unwrap_or_default();
     let raw: Value = serde_json::from_str(&text).unwrap_or_else(|e| {

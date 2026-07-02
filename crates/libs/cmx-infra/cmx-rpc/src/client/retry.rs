@@ -140,8 +140,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn status(code: Code) -> Status {
         Status::new(code, "test")
@@ -170,7 +170,9 @@ mod tests {
     #[test]
     fn test_retry_backoff_sequence() {
         // 50 → 100 → 200 → 400 → 800 → 800（上限）
-        let seq: Vec<u64> = (0..6).map(|i| retry_backoff(i).as_millis() as u64).collect();
+        let seq: Vec<u64> = (0..6)
+            .map(|i| retry_backoff(i).as_millis() as u64)
+            .collect();
         assert_eq!(seq, vec![50, 100, 200, 400, 800, 800]);
     }
 

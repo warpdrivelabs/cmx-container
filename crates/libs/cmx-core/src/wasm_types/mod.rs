@@ -11,18 +11,23 @@
 //! - `common`: 通用包装类型
 //! - `iam`: 用户/权限查询类型（`cmx:iam` 宿主函数）
 
-pub mod database;
 pub mod cache;
-pub mod plugin;
-pub mod context;
 pub mod common;
+pub mod context;
+pub mod database;
 pub mod execution;
 pub mod iam;
+pub mod plugin;
 
-pub use database::{DbRequest, DbResponse};
-pub use cache::{CacheGetRequest, CacheSetRequest, CacheResponse};
-pub use plugin::{ PluginInfoResponse, PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse};
-pub use context::WasmContext;
+pub use cache::{CacheGetRequest, CacheResponse, CacheSetRequest};
 pub use common::{WasmFunctionRequest, WasmFunctionResponse};
-pub use execution::{ExecutionStep, StepStatus, OrchestrationError};
-pub use iam::{IamRequest, IamResponse, WasmCheckResult, WasmEffectivePermissions, WasmUserDetails};
+pub use context::WasmContext;
+pub use database::{DbRequest, DbResponse};
+pub use execution::{ExecutionStep, OrchestrationError, StepStatus};
+pub use iam::{
+    IamRequest, IamResponse, WasmCheckResult, WasmEffectivePermissions, WasmUserDetails,
+};
+pub use plugin::{
+    CallServiceRequest, CallServiceResponse, PluginFunCallResponse, PluginFunRequest,
+    PluginInfoResponse,
+};

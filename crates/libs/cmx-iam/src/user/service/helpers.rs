@@ -7,9 +7,9 @@
 use modql::filter::{OpValInt64, OpValsInt64};
 
 use crate::error::IamError;
-use crate::user::service::UserServiceImpl;
 use crate::service_traits::UserRoleAssignment;
 use crate::user::UserFilter;
+use crate::user::service::UserServiceImpl;
 use cmx_core::model::iam::{Role, User};
 
 impl UserServiceImpl {
@@ -81,8 +81,10 @@ impl UserServiceImpl {
                     role_id: row.get_by_name_as(schema, "role_id")?,
                     role_code: row.get_by_name_as(schema, "code").unwrap_or_default(),
                     role_name: row.get_by_name_as(schema, "name").unwrap_or_default(),
-                    effective_from: row
-                        .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "effective_from")?,
+                    effective_from: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(
+                        schema,
+                        "effective_from",
+                    )?,
                     effective_until: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(
                         schema,
                         "effective_until",

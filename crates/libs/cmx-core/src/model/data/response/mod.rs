@@ -34,7 +34,7 @@ where
         }
     }
 
-    pub  fn get_data(&self) -> Option<&T> {
+    pub fn get_data(&self) -> Option<&T> {
         self.data.as_ref()
     }
 }
@@ -64,5 +64,3 @@ where
         self.error.as_deref()
     }
 }
-
-

@@ -9,12 +9,12 @@
 //! - [`invoker`] — 服务调用 trait（ServiceInvoker）。
 //! - [`global_invoker`] — 全局服务调用器存储器（GlobalServiceInvoker）。
 
+pub mod global_invoker;
+pub mod invoker;
 pub mod query;
 pub mod storage;
-pub mod invoker;
-pub mod global_invoker;
 
-pub use query::{ServiceQuery, ServicePageFilter, ServicePageResult};
-pub use storage::{ServiceStorage, SaveServiceVersionParams};
-pub use invoker::{ServiceInvoker, ServiceInvokeOptions};
 pub use global_invoker::{GlobalServiceInvoker, GlobalServiceInvokerError};
+pub use invoker::{ServiceInvokeOptions, ServiceInvoker};
+pub use query::{ServicePageFilter, ServicePageResult, ServiceQuery};
+pub use storage::{SaveServiceVersionParams, ServiceStorage};

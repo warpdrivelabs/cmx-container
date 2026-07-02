@@ -41,12 +41,11 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use base64::Engine;
-use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::{SerializeMap, SerializeSeq};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::model::cell::DataValue;
 use crate::model::data::dataset::Schema;
-
 
 // ==========================================
 // Row - 支持树形结构
@@ -288,23 +287,29 @@ impl Row {
     /// # 参数
     /// - `value`: JSON Value，应为对象类型
     /// - `schema`: Schema 定义，用于字段映射
-    pub fn from_json_value(value: serde_json::Value, schema: &Schema) -> Result<Self, super::error::DataSetError> {
+    pub fn from_json_value(
+        value: serde_json::Value,
+        schema: &Schema,
+    ) -> Result<Self, super::error::DataSetError> {
         use super::error::DataSetError;
         let mut obj = match value {
             serde_json::Value::Object(map) => map,
-            _ => return Err(DataSetError::SerializationError {
-                reason: "Row::from_json_value: JSON 值应为对象".to_string(),
-            }),
+            _ => {
+                return Err(DataSetError::SerializationError {
+                    reason: "Row::from_json_value: JSON 值应为对象".to_string(),
+                });
+            }
         };
         let mut values = Vec::with_capacity(schema.field_count());
         for field in &schema.fields {
             let dv = match obj.remove(&field.name) {
-                Some(v) => serde_json::from_value::<DataValue>(v)
-                    .map_err(|e| DataSetError::JsonConversionError {
+                Some(v) => serde_json::from_value::<DataValue>(v).map_err(|e| {
+                    DataSetError::JsonConversionError {
                         field_name: field.name.clone(),
                         target_type: format!("{:?}", field.field_type),
                         reason: e.to_string(),
-                    })?,
+                    }
+                })?,
                 None => DataValue::Null,
             };
             values.push(dv);
@@ -312,10 +317,11 @@ impl Row {
         let mut children = HashMap::new();
         for (k, val) in obj {
             if schema.get_index(&k).is_none() {
-                let ds = serde_json::from_value::<DataSet>(val)
-                    .map_err(|e| DataSetError::SerializationError {
+                let ds = serde_json::from_value::<DataSet>(val).map_err(|e| {
+                    DataSetError::SerializationError {
                         reason: format!("子 DataSet '{}' 解析失败: {}", k, e),
-                    })?;
+                    }
+                })?;
                 children.insert(k, ds);
             }
         }
@@ -330,11 +336,17 @@ impl Row {
         let mut map = serde_json::Map::new();
         for (i, field) in schema.fields.iter().enumerate() {
             if let Some(value) = self.values.get(i) {
-                map.insert(field.name.clone(), serde_json::to_value(value).unwrap_or(serde_json::Value::Null));
+                map.insert(
+                    field.name.clone(),
+                    serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
+                );
             }
         }
         for (key, child_ds) in &self.children {
-            map.insert(key.clone(), serde_json::to_value(child_ds).unwrap_or(serde_json::Value::Null));
+            map.insert(
+                key.clone(),
+                serde_json::to_value(child_ds).unwrap_or(serde_json::Value::Null),
+            );
         }
         serde_json::Value::Object(map)
     }
@@ -349,12 +361,7 @@ impl Row {
             .values
             .iter()
             .enumerate()
-            .filter_map(|(i, v)| {
-                schema
-                    .fields
-                    .get(i)
-                    .map(|f| format!("{}: {:?}", f.name, v))
-            })
+            .filter_map(|(i, v)| schema.fields.get(i).map(|f| format!("{}: {:?}", f.name, v)))
             .collect();
         let children_info = if self.children.is_empty() {
             String::new()
@@ -363,7 +370,6 @@ impl Row {
         };
         format!("Row {{ {}{} }}", pairs.join(", "), children_info)
     }
-
 }
 
 // ==========================================
@@ -685,9 +691,10 @@ fn row_from_value(v: serde_json::Value, schema: &Schema) -> Result<Row, String> 
     let mut children = HashMap::new();
     for (k, val) in obj {
         if schema.get_index(&k).is_none()
-            && let Ok(ds) = serde_json::from_value::<DataSet>(val) {
-                children.insert(k, ds);
-            }
+            && let Ok(ds) = serde_json::from_value::<DataSet>(val)
+        {
+            children.insert(k, ds);
+        }
     }
     Ok(Row { values, children })
 }
@@ -792,7 +799,9 @@ fn json_value_to_typed_data(
             serde_json::Value::Array(arr) => {
                 let items: Result<Vec<DataValue>, _> = arr
                     .into_iter()
-                    .map(|item| serde_json::from_value::<DataValue>(item).map_err(|e| e.to_string()))
+                    .map(|item| {
+                        serde_json::from_value::<DataValue>(item).map_err(|e| e.to_string())
+                    })
                     .collect();
                 Ok(DataValue::Array(items?))
             }
@@ -800,12 +809,12 @@ fn json_value_to_typed_data(
         },
         FieldType::Json => match v {
             serde_json::Value::String(s) => Ok(DataValue::Json(s)),
-            obj @ serde_json::Value::Object(_) => {
-                Ok(DataValue::Json(serde_json::to_string(&obj).unwrap_or_default()))
-            }
-            arr @ serde_json::Value::Array(_) => {
-                Ok(DataValue::Json(serde_json::to_string(&arr).unwrap_or_default()))
-            }
+            obj @ serde_json::Value::Object(_) => Ok(DataValue::Json(
+                serde_json::to_string(&obj).unwrap_or_default(),
+            )),
+            arr @ serde_json::Value::Array(_) => Ok(DataValue::Json(
+                serde_json::to_string(&arr).unwrap_or_default(),
+            )),
             _ => serde_json::from_value::<DataValue>(v).map_err(|e| e.to_string()),
         },
         FieldType::Uuid => match v {
@@ -814,8 +823,6 @@ fn json_value_to_typed_data(
                 .map_err(|e| format!("Uuid 解析失败 '{}': {}", s, e)),
             _ => serde_json::from_value::<DataValue>(v).map_err(|e| e.to_string()),
         },
-        FieldType::Unknown => {
-            serde_json::from_value::<DataValue>(v).map_err(|e| e.to_string())
-        }
+        FieldType::Unknown => serde_json::from_value::<DataValue>(v).map_err(|e| e.to_string()),
     }
 }

@@ -56,7 +56,9 @@ fn source_abs(rel: &str) -> std::path::PathBuf {
 fn validate_id(id: &str) -> PortalResult<String> {
     let s = id.trim();
     if s.is_empty() || !is_safe_id(s) {
-        return Err(PortalError::bad_request("native page id 仅允许字母、数字、._-，长度 1-128"));
+        return Err(PortalError::bad_request(
+            "native page id 仅允许字母、数字、._-，长度 1-128",
+        ));
     }
     for part in s.split('.') {
         if part.is_empty() || !is_safe_segment(part) {
@@ -110,13 +112,22 @@ fn validate_rel_path(rel: &str) -> PortalResult<String> {
 
 async fn load_index() -> PortalResult<Vec<serde_json::Value>> {
     match read_json_opt(&index_path()).await? {
-        Some(doc) => Ok(doc.get("pages").and_then(|p| p.as_array()).cloned().unwrap_or_default()),
+        Some(doc) => Ok(doc
+            .get("pages")
+            .and_then(|p| p.as_array())
+            .cloned()
+            .unwrap_or_default()),
         None => Ok(Vec::new()),
     }
 }
 
 async fn save_index(pages: &[serde_json::Value]) -> PortalResult<()> {
-    write_json_atomic(&index_path(), &json!({ "version": 1, "pages": pages }), true).await
+    write_json_atomic(
+        &index_path(),
+        &json!({ "version": 1, "pages": pages }),
+        true,
+    )
+    .await
 }
 
 /// 从索引行读取完整页面（含源码）。
@@ -133,9 +144,21 @@ async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageF
         .await?
         .ok_or_else(|| PortalError::not_found("native page 源文件不存在"))?;
     Ok(NativePageFull {
-        id: row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        details: row.get("details").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        id: row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        name: row
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        details: row
+            .get("details")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         source_type,
         rel_path: rel_raw.to_string(),
         source,
@@ -143,13 +166,21 @@ async fn full_page_from_row(row: &serde_json::Value) -> PortalResult<NativePageF
 }
 
 /// 分页列出原生页面（索引项原样返回）。
-pub async fn list_native_pages_paged(page: Option<i64>, page_size: Option<i64>) -> PortalResult<serde_json::Value> {
+pub async fn list_native_pages_paged(
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> PortalResult<serde_json::Value> {
     let p = page.unwrap_or(1).max(1);
     let size = page_size.unwrap_or(20).clamp(1, 200);
     let pages = load_index().await?;
     let total = pages.len() as i64;
     let start = ((p - 1) * size).max(0) as usize;
-    let items: Vec<serde_json::Value> = pages.iter().skip(start).take(size as usize).cloned().collect();
+    let items: Vec<serde_json::Value> = pages
+        .iter()
+        .skip(start)
+        .take(size as usize)
+        .cloned()
+        .collect();
     Ok(json!({ "items": items, "total": total, "page": p, "pageSize": size }))
 }
 
@@ -168,22 +199,34 @@ pub async fn get_native_page_by_id(id: &str) -> PortalResult<NativePageFull> {
 pub async fn get_native_pages_by_ids(body: &serde_json::Value) -> PortalResult<serde_json::Value> {
     // 支持 { ids: [...] } 或 [...]
     let ids: Vec<String> = if let Some(arr) = body.as_array() {
-        arr.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).collect()
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+            .collect()
     } else if let Some(arr) = body.get("ids").and_then(|v| v.as_array()) {
-        arr.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).collect()
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+            .collect()
     } else {
-        return Err(PortalError::bad_request("请求体须为 { ids: string[] } 或 string[]"));
+        return Err(PortalError::bad_request(
+            "请求体须为 { ids: string[] } 或 string[]",
+        ));
     };
     // 去重 + 去空
     let mut seen = std::collections::HashSet::new();
-    let cleaned: Vec<String> = ids.into_iter().filter(|s| !s.is_empty() && seen.insert(s.clone())).collect();
+    let cleaned: Vec<String> = ids
+        .into_iter()
+        .filter(|s| !s.is_empty() && seen.insert(s.clone()))
+        .collect();
 
     let pages_index = load_index().await?;
     let mut pages = Vec::new();
     let mut errors = Vec::new();
     for raw_id in cleaned {
         match validate_id(&raw_id) {
-            Ok(id) => match pages_index.iter().find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str())) {
+            Ok(id) => match pages_index
+                .iter()
+                .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
+            {
                 Some(row) => match full_page_from_row(row).await {
                     Ok(full) => pages.push(serde_json::to_value(full)?),
                     Err(e) => errors.push(json!({ "id": id, "error": e.to_string() })),
@@ -215,9 +258,13 @@ pub async fn save_native_page(input: NativePageInput) -> PortalResult<serde_json
             .unwrap_or_else(|| default_rel_path(&id, &source_type)),
     )?;
     if source_type_from_rel(&rel_path) != source_type {
-        return Err(PortalError::bad_request("sourceType 与 relPath 扩展名不一致"));
+        return Err(PortalError::bad_request(
+            "sourceType 与 relPath 扩展名不一致",
+        ));
     }
-    let source = input.source.ok_or_else(|| PortalError::bad_request("source 必须为字符串"))?;
+    let source = input
+        .source
+        .ok_or_else(|| PortalError::bad_request("source 必须为字符串"))?;
     let row = json!({
         "id": id,
         "name": input.name.unwrap_or_default(),
@@ -229,7 +276,10 @@ pub async fn save_native_page(input: NativePageInput) -> PortalResult<serde_json
     let _guard = write_lock().lock().await;
     write_text_atomic(&source_abs(&rel_path), &source).await?;
     let mut pages = load_index().await?;
-    if let Some(existing) = pages.iter_mut().find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str())) {
+    if let Some(existing) = pages
+        .iter_mut()
+        .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
+    {
         // 合并（与 Node 的 { ...old, ...row } 一致）
         if let (Some(eo), Some(ro)) = (existing.as_object_mut(), row.as_object()) {
             for (k, v) in ro {

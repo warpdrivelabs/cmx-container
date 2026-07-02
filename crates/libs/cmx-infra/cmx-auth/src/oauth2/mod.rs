@@ -2,10 +2,10 @@
 
 pub mod flows;
 pub mod pkce;
-pub mod store;
 pub mod provider;
+pub mod store;
 
 pub use flows::OAuth2FlowService;
 pub use pkce::PkceVerifier;
-pub use store::{AuthorizationCode, OAuth2Client, OAuth2Store};
 pub use provider::OAuth2ProviderRegistry;
+pub use store::{AuthorizationCode, OAuth2Client, OAuth2Store};

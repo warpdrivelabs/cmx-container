@@ -16,14 +16,19 @@ use crate::domain::plugin::PluginSource;
 /// 返回元组 (来源类型, 地址)，来源类型为 "local"、"remote"、"marketplace" 或 "storage"。
 pub fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<String>) {
     match source {
-        PluginSource::Local { path } => {
-            (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
-        }
-        PluginSource::Remote { url, .. } => {
-            (Some("remote".to_string()), Some(url.clone()))
-        }
-        PluginSource::Marketplace { marketplace_url, plugin_id } => {
-            let url = marketplace_url.as_ref().map(|s| s.as_str()).unwrap_or(plugin_id);
+        PluginSource::Local { path } => (
+            Some("local".to_string()),
+            Some(path.to_string_lossy().to_string()),
+        ),
+        PluginSource::Remote { url, .. } => (Some("remote".to_string()), Some(url.clone())),
+        PluginSource::Marketplace {
+            marketplace_url,
+            plugin_id,
+        } => {
+            let url = marketplace_url
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(plugin_id);
             (Some("marketplace".to_string()), Some(url.to_string()))
         }
         PluginSource::Storage { file_id, .. } => {
@@ -36,7 +41,10 @@ pub fn extract_source_info(source: &PluginSource) -> (Option<String>, Option<Str
 ///
 /// 支持的来源类型：local、url/remote、registry/marketplace、storage。
 /// 未匹配时默认构建 Local 类型。
-pub fn build_plugin_source(zip_source_url: Option<&str>, zip_source_type: Option<&str>) -> PluginSource {
+pub fn build_plugin_source(
+    zip_source_url: Option<&str>,
+    zip_source_type: Option<&str>,
+) -> PluginSource {
     match zip_source_type {
         Some("local") => {
             let path = zip_source_url.map(PathBuf::from).unwrap_or_default();
@@ -44,7 +52,10 @@ pub fn build_plugin_source(zip_source_url: Option<&str>, zip_source_type: Option
         }
         Some("url") | Some("remote") => {
             let url = zip_source_url.unwrap_or_default().to_string();
-            PluginSource::Remote { url, checksum: None }
+            PluginSource::Remote {
+                url,
+                checksum: None,
+            }
         }
         Some("registry") | Some("marketplace") => {
             let plugin_id = zip_source_url.unwrap_or_default().to_string();
@@ -53,12 +64,10 @@ pub fn build_plugin_source(zip_source_url: Option<&str>, zip_source_type: Option
                 plugin_id,
             }
         }
-        Some("storage") => {
-            PluginSource::Storage {
-                file_id: zip_source_url.unwrap_or_default().to_string(),
-                checksum: None,
-            }
-        }
+        Some("storage") => PluginSource::Storage {
+            file_id: zip_source_url.unwrap_or_default().to_string(),
+            checksum: None,
+        },
         _ => {
             let path = zip_source_url.map(PathBuf::from).unwrap_or_default();
             PluginSource::Local { path }
@@ -133,7 +142,9 @@ mod tests {
     #[test]
     fn test_build_plugin_source_local() {
         let source = build_plugin_source(Some("/tmp/plugin.zip"), Some("local"));
-        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/plugin.zip")));
+        assert!(
+            matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/plugin.zip"))
+        );
     }
 
     #[test]
@@ -147,10 +158,14 @@ mod tests {
         // "url" 与 "remote" 均应构建 Remote 来源
         let from_url = build_plugin_source(Some("https://example.com/a.zip"), Some("url"));
         let from_remote = build_plugin_source(Some("https://example.com/a.zip"), Some("remote"));
-        assert!(matches!(from_url, PluginSource::Remote { url, checksum: None }
-            if url == "https://example.com/a.zip"));
-        assert!(matches!(from_remote, PluginSource::Remote { url, checksum: None }
-            if url == "https://example.com/a.zip"));
+        assert!(
+            matches!(from_url, PluginSource::Remote { url, checksum: None }
+            if url == "https://example.com/a.zip")
+        );
+        assert!(
+            matches!(from_remote, PluginSource::Remote { url, checksum: None }
+            if url == "https://example.com/a.zip")
+        );
     }
 
     #[test]
@@ -164,31 +179,41 @@ mod tests {
         // "registry" 与 "marketplace" 均应构建 Marketplace 来源
         let from_registry = build_plugin_source(Some("pid-1"), Some("registry"));
         let from_market = build_plugin_source(Some("pid-1"), Some("marketplace"));
-        assert!(matches!(from_registry, PluginSource::Marketplace { marketplace_url: None, plugin_id }
-            if plugin_id == "pid-1"));
-        assert!(matches!(from_market, PluginSource::Marketplace { marketplace_url: None, plugin_id }
-            if plugin_id == "pid-1"));
+        assert!(
+            matches!(from_registry, PluginSource::Marketplace { marketplace_url: None, plugin_id }
+            if plugin_id == "pid-1")
+        );
+        assert!(
+            matches!(from_market, PluginSource::Marketplace { marketplace_url: None, plugin_id }
+            if plugin_id == "pid-1")
+        );
     }
 
     #[test]
     fn test_build_plugin_source_storage() {
         let source = build_plugin_source(Some("fid-9"), Some("storage"));
-        assert!(matches!(source, PluginSource::Storage { file_id, checksum: None }
-            if file_id == "fid-9"));
+        assert!(
+            matches!(source, PluginSource::Storage { file_id, checksum: None }
+            if file_id == "fid-9")
+        );
     }
 
     #[test]
     fn test_build_plugin_source_unknown_type_defaults_to_local() {
         // 未知类型应回退为 Local，且使用 url 作为 path
         let source = build_plugin_source(Some("/some/path"), Some("unknown_type"));
-        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path")));
+        assert!(
+            matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path"))
+        );
     }
 
     #[test]
     fn test_build_plugin_source_none_type_defaults_to_local() {
         // 类型为 None 时也应回退为 Local
         let source = build_plugin_source(Some("/some/path"), None);
-        assert!(matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path")));
+        assert!(
+            matches!(source, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/some/path"))
+        );
     }
 
     #[test]

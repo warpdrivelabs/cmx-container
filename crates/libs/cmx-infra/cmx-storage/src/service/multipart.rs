@@ -17,21 +17,27 @@ use crate::types::*;
 
 impl DefaultStorageService {
     /// 初始化分片上传（[`crate::service::StorageService::init_multipart_upload`] 的实现）。
-    pub(super) async fn init_multipart_upload(&self, request: MultipartInitRequest) -> Result<MultipartSession> {
+    pub(super) async fn init_multipart_upload(
+        &self,
+        request: MultipartInitRequest,
+    ) -> Result<MultipartSession> {
         let backend = self.manager.get_backend(request.platform.as_deref())?;
         let caps = backend.capabilities();
 
         if !caps.presign_write {
-            return Err(Error::UnsupportedError(
-                format!("存储平台 {} 不支持预签名上传（分片上传必需）", backend.platform())
-            ));
+            return Err(Error::UnsupportedError(format!(
+                "存储平台 {} 不支持预签名上传（分片上传必需）",
+                backend.platform()
+            )));
         }
 
         let upload_id = uuid::Uuid::new_v4().to_string();
         let file_id = uuid::Uuid::new_v4().to_string();
 
         let ext = extract_extension(&request.filename);
-        let config = self.manager.get_config(backend.platform())
+        let config = self
+            .manager
+            .get_config(backend.platform())
             .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", backend.platform())))?;
 
         let (storage_path, _) = generate_storage_path(
@@ -51,7 +57,11 @@ impl DefaultStorageService {
             platform: Some(backend.platform().to_string()),
             original_filename: Some(request.filename.clone()),
             content_type: request.content_type.clone(),
-            ext: Some(if ext.starts_with('.') { ext.clone() } else { format!(".{}", ext) }),
+            ext: Some(if ext.starts_with('.') {
+                ext.clone()
+            } else {
+                format!(".{}", ext)
+            }),
             upload_id: Some(upload_id.clone()),
             upload_status: Some(1),
             object_id: request.object_id.clone(),
@@ -66,7 +76,9 @@ impl DefaultStorageService {
         let mut presigned_urls = Vec::new();
         for part_num in 1..=request.total_parts {
             let part_path = format!("{}.part.{}", storage_path, part_num);
-            let url = backend.presign_write(&part_path, Duration::from_secs(3600)).await?;
+            let url = backend
+                .presign_write(&part_path, Duration::from_secs(3600))
+                .await?;
             presigned_urls.push(PresignedPartUrl {
                 part_number: part_num,
                 upload_url: url,
@@ -99,10 +111,14 @@ impl DefaultStorageService {
         };
 
         let (dataset, _) = GenericCrudService::<FileDetailBmc, FileDetailFilter>::page(
-            mm, &db_id, None, Some(vec![filter]), list_options,
+            mm,
+            &db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         let detail = Self::dataset_to_file_detail(&dataset)
             .ok_or_else(|| Error::MultipartError(format!("分片上传会话不存在: {}", session_id)))?;
@@ -122,7 +138,12 @@ impl DefaultStorageService {
             .await
             .map_err(Error::from)?;
 
-        info!(upload_id = session_id, part_number = part.part_number, part_size = part.part_size, "分片上传完成");
+        info!(
+            upload_id = session_id,
+            part_number = part.part_number,
+            part_size = part.part_size,
+            "分片上传完成"
+        );
 
         Ok(PartInfo {
             part_number: part.part_number,
@@ -147,10 +168,14 @@ impl DefaultStorageService {
         };
 
         let (dataset, _) = GenericCrudService::<FileDetailBmc, FileDetailFilter>::page(
-            mm, &db_id, None, Some(vec![filter]), list_options,
+            mm,
+            &db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         let detail = Self::dataset_to_file_detail(&dataset)
             .ok_or_else(|| Error::MultipartError(format!("分片上传会话不存在: {}", session_id)))?;
@@ -168,10 +193,14 @@ impl DefaultStorageService {
         };
 
         GenericCrudService::<FileDetailBmc>::update(
-            mm, &db_id, None, Value::String(detail.id.clone()), update_data,
+            mm,
+            &db_id,
+            None,
+            Value::String(detail.id.clone()),
+            update_data,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         info!(upload_id = session_id, file_id = %detail.id, "分片上传完成");
         Ok(detail.to_file_info())
@@ -193,10 +222,14 @@ impl DefaultStorageService {
         };
 
         let (dataset, _) = GenericCrudService::<FileDetailBmc, FileDetailFilter>::page(
-            mm, &db_id, None, Some(vec![filter]), list_options,
+            mm,
+            &db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         if let Some(detail) = Self::dataset_to_file_detail(&dataset) {
             let file_id = detail.id.clone();
@@ -210,9 +243,14 @@ impl DefaultStorageService {
                 offset: Some(0),
                 order_bys: None,
             };
-            let (parts_dataset, _) = GenericCrudService::<FilePartDetailBmc, FilePartDetailFilter>::page(
-                mm, &db_id, None, Some(vec![filter_parts]), list_opts_parts,
-            )
+            let (parts_dataset, _) =
+                GenericCrudService::<FilePartDetailBmc, FilePartDetailFilter>::page(
+                    mm,
+                    &db_id,
+                    None,
+                    Some(vec![filter_parts]),
+                    list_opts_parts,
+                )
                 .await
                 .map_err(Error::from)?;
 
@@ -221,7 +259,8 @@ impl DefaultStorageService {
                 if let Ok(backend) = self.manager.get_backend(Some(platform)) {
                     for row in parts_dataset.iter() {
                         let schema = &parts_dataset.schema;
-                        if let Some(part_number) = row.get_by_name_as::<i32>(schema, "part_number") {
+                        if let Some(part_number) = row.get_by_name_as::<i32>(schema, "part_number")
+                        {
                             let part_path = format!("{}.part.{}", path, part_number);
                             let _ = backend.delete(&part_path).await;
                         }
@@ -233,16 +272,22 @@ impl DefaultStorageService {
                 let schema = &parts_dataset.schema;
                 if let Some(part_id) = row.get_by_name_as::<String>(schema, "id") {
                     let _ = GenericCrudService::<FilePartDetailBmc>::delete(
-                        mm, &db_id, None, vec![Value::String(part_id)],
+                        mm,
+                        &db_id,
+                        None,
+                        vec![Value::String(part_id)],
                     )
-                        .await;
+                    .await;
                 }
             }
 
             let _ = GenericCrudService::<FileDetailBmc>::delete(
-                mm, &db_id, None, vec![Value::String(file_id)],
+                mm,
+                &db_id,
+                None,
+                vec![Value::String(file_id)],
             )
-                .await;
+            .await;
         }
 
         info!(upload_id = session_id, "分片上传已取消");

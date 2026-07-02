@@ -2,21 +2,20 @@
 //!
 //! 提供自定义 SQL 查询功能，支持动态过滤、分页和排序
 
-use sea_query::{Alias, Condition, PostgresQueryBuilder, Query};
 use modql::filter::{FilterGroups, IntoFilterNodes, ListOptions};
-use tracing::debug;
+use sea_query::{Alias, Condition, PostgresQueryBuilder, Query};
 use std::sync::Arc;
+use tracing::debug;
 
 use crate::DatabaseManager;
+use crate::crud::count_optimizer::{CountOptimizerConfig, generate_count_sql};
 use crate::crud::error::{Result, ServiceError};
-use crate::crud::count_optimizer::{generate_count_sql, CountOptimizerConfig};
 use cmx_core::model::data::dataset::{DataSet, Schema};
 
 /// 自定义查询服务
 ///
 /// 提供自定义 SQL 的分页查询功能
 pub struct CustomQueryService;
-
 
 impl CustomQueryService {
     /// 自定义分页查询
@@ -112,15 +111,17 @@ impl CustomQueryService {
             temp_query.from(Alias::new("temp_table"));
 
             let filters: FilterGroups = Vec::into(filters);
-            let cond: Condition = filters.try_into().map_err(|e| {
-                ServiceError::bad_request(format!("过滤条件错误: {}", e))
-            })?;
+            let cond: Condition = filters
+                .try_into()
+                .map_err(|e| ServiceError::bad_request(format!("过滤条件错误: {}", e)))?;
 
             temp_query.cond_where(cond);
 
             let sql = temp_query.to_string(PostgresQueryBuilder);
 
-            let where_clause = sql.find("WHERE").map(|pos| sql[pos + 5..].trim().to_string());
+            let where_clause = sql
+                .find("WHERE")
+                .map(|pos| sql[pos + 5..].trim().to_string());
 
             Ok(where_clause)
         } else {
@@ -281,7 +282,7 @@ impl CustomQueryService {
     }
 
     /// 创建一个空的 DataSet（用于返回操作结果）
-    fn empty_dataset(dataset_id:&str) -> DataSet {
+    fn empty_dataset(dataset_id: &str) -> DataSet {
         let schema = Arc::new(Schema::new_unchecked(dataset_id, vec![]));
         DataSet::empty(dataset_id, schema)
     }

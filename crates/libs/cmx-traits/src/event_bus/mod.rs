@@ -37,4 +37,4 @@ mod types;
 
 pub use bus::EventBus;
 pub use global::GlobalEventBus;
-pub use types::{EventTopic, EventPayload, EventHandler};
+pub use types::{EventHandler, EventPayload, EventTopic};

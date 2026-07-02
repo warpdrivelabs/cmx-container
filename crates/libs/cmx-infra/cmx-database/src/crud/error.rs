@@ -21,7 +21,6 @@ pub enum ServiceError {
     //业务数据异常
     #[error("{0}")]
     BusinessError(String),
-
 }
 
 impl ServiceError {

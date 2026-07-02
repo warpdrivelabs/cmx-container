@@ -3,8 +3,8 @@
 //! 通过 multipart form-data 接收 ZIP 文件，委托给 PluginDataImporter trait 处理。
 //! 与 gRPC 路径统一走同一个 trait，保证 category 路由和缓存失效逻辑一致。
 
-use axum::extract::{Multipart, State};
 use axum::Json;
+use axum::extract::{Multipart, State};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -153,9 +153,7 @@ pub async fn import_permissions(
     }
 
     if plugin_id.is_empty() || app_id.is_empty() {
-        return Err(Error::bad_request(
-            "plugin_id/app_id 不能为空".to_string(),
-        ));
+        return Err(Error::bad_request("plugin_id/app_id 不能为空".to_string()));
     }
 
     if version.is_empty() {

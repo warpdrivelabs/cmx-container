@@ -9,8 +9,8 @@ pub mod service;
 
 pub use bmc::PermissionBmc;
 pub use consistency_check::{
-    run_consistency_check, warn_handler_annotation_status, log_registered_permissions,
-    ConsistencyReport,
+    ConsistencyReport, log_registered_permissions, run_consistency_check,
+    warn_handler_annotation_status,
 };
 pub use entity::{
     BlockedPermissionInfo, BlockedRoleInfo, DeletePermissionBlocked, DeletePermissionOutcome,

@@ -40,7 +40,6 @@ pub enum PluginChangeAction {
     Reinstalled,
     /// 插件卸载
     Removed,
-
     // // === 运行时变更（仅内存状态变更，其他实例只需加载/卸载运行时） ===
     // /// 插件运行时加载
     // RuntimeLoad,
@@ -84,7 +83,10 @@ impl PluginNotifier {
     /// * `pubsub` - Redis Pub/Sub 操作实例
     /// * `instance_id` - 当前实例的唯一标识，用于接收方跳过自己的通知
     pub fn new(pubsub: Arc<cmx_buffer::PubSubOps>, instance_id: String) -> Self {
-        Self { pubsub, instance_id }
+        Self {
+            pubsub,
+            instance_id,
+        }
     }
 
     /// 获取当前实例ID
@@ -94,24 +96,39 @@ impl PluginNotifier {
 
     /// 发布通知的内部方法
     async fn publish(&self, notification: PluginChangeNotification) {
-        match self.pubsub.publish_json(PLUGIN_CHANGE_CHANNEL, &notification).await {
+        match self
+            .pubsub
+            .publish_json(PLUGIN_CHANGE_CHANNEL, &notification)
+            .await
+        {
             Ok(subscribers) => {
                 tracing::info!(
                     "已发布插件通知到redis: {} {:?} v{} (订阅者: {})",
-                    notification.plugin_id, notification.action, notification.version, subscribers
+                    notification.plugin_id,
+                    notification.action,
+                    notification.version,
+                    subscribers
                 );
             }
             Err(e) => {
                 tracing::error!(
                     "发布插件通知到redis失败: {} {:?} - {}",
-                    notification.plugin_id, notification.action, e
+                    notification.plugin_id,
+                    notification.action,
+                    e
                 );
             }
         }
     }
 
     /// 构造通知的辅助方法
-    fn build_notification(&self, plugin_id: &str, action: PluginChangeAction, version: &str, app_id: &str) -> PluginChangeNotification {
+    fn build_notification(
+        &self,
+        plugin_id: &str,
+        action: PluginChangeAction,
+        version: &str,
+        app_id: &str,
+    ) -> PluginChangeNotification {
         PluginChangeNotification {
             plugin_id: plugin_id.to_string(),
             action,
@@ -126,27 +143,57 @@ impl PluginNotifier {
 
     /// 发布插件安装通知
     pub async fn notify_installed(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::Installed, version, app_id)).await;
+        self.publish(self.build_notification(
+            plugin_id,
+            PluginChangeAction::Installed,
+            version,
+            app_id,
+        ))
+        .await;
     }
 
     /// 发布插件升级通知
     pub async fn notify_upgraded(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::Upgraded, version, app_id)).await;
+        self.publish(self.build_notification(
+            plugin_id,
+            PluginChangeAction::Upgraded,
+            version,
+            app_id,
+        ))
+        .await;
     }
 
     /// 发布插件降级通知
     pub async fn notify_downgraded(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::Downgraded, version, app_id)).await;
+        self.publish(self.build_notification(
+            plugin_id,
+            PluginChangeAction::Downgraded,
+            version,
+            app_id,
+        ))
+        .await;
     }
 
     /// 发布插件覆盖安装通知
     pub async fn notify_reinstalled(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::Reinstalled, version, app_id)).await;
+        self.publish(self.build_notification(
+            plugin_id,
+            PluginChangeAction::Reinstalled,
+            version,
+            app_id,
+        ))
+        .await;
     }
 
     /// 发布插件卸载通知
     pub async fn notify_removed(&self, plugin_id: &str, version: &str, app_id: &str) {
-        self.publish(self.build_notification(plugin_id, PluginChangeAction::Removed, version, app_id)).await;
+        self.publish(self.build_notification(
+            plugin_id,
+            PluginChangeAction::Removed,
+            version,
+            app_id,
+        ))
+        .await;
     }
 
     // // === 运行时变更通知 ===

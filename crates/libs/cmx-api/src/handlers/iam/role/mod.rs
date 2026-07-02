@@ -5,8 +5,8 @@ pub mod handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// 角色模块路由
 pub struct RoleModule;
@@ -22,7 +22,10 @@ impl ModuleRoutes for RoleModule {
             .route("/iam/roles/page", post(handler::page_roles))
             .route("/iam/roles/list", post(handler::list_roles))
             // 关联操作
-            .route("/iam/roles/assign-permissions", post(handler::assign_permissions))
+            .route(
+                "/iam/roles/assign-permissions",
+                post(handler::assign_permissions),
+            )
             .route("/iam/roles/assign-users", post(handler::assign_role_users))
             .route("/iam/roles/permissions", get(handler::get_role_permissions))
             // 审计查询（阶段5新增）

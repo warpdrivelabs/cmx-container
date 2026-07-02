@@ -105,7 +105,9 @@ fn safe_user(user_id: &str) -> PortalResult<String> {
         return Err(PortalError::bad_request("缺少用户标识"));
     }
     if !is_safe_segment(u) {
-        return Err(PortalError::bad_request(format!("用户标识非法（仅允许字母数字 _-）：\"{user_id}\"")));
+        return Err(PortalError::bad_request(format!(
+            "用户标识非法（仅允许字母数字 _-）：\"{user_id}\""
+        )));
     }
     Ok(u.to_string())
 }
@@ -170,9 +172,18 @@ pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<V
 /// 计算某用户各中心未读数 + 合计。
 pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
     let u = safe_user(user_id)?;
-    let mut c = NotifyCounts { task: 0, message: 0, log: 0, total: 0 };
+    let mut c = NotifyCounts {
+        task: 0,
+        message: 0,
+        log: 0,
+        total: 0,
+    };
     for center in NotifyCenter::all() {
-        let unread = read_center(&u, center).await?.iter().filter(|x| !x.read).count() as i64;
+        let unread = read_center(&u, center)
+            .await?
+            .iter()
+            .filter(|x| !x.read)
+            .count() as i64;
         match center {
             NotifyCenter::Task => c.task = unread,
             NotifyCenter::Message => c.message = unread,
@@ -199,7 +210,10 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
         center: center.as_str().to_string(),
         title,
         body: input.body.unwrap_or_default(),
-        level: input.level.filter(|s| !s.trim().is_empty()).unwrap_or_else(default_level),
+        level: input
+            .level
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(default_level),
         link: input.link.unwrap_or_default(),
         read: false,
         created_at: ts,
@@ -207,7 +221,12 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
 
     {
         let _guard = write_lock().lock().await;
-        write_json_atomic(&item_path(&user_id, center, &format!("{id}.json")), &item, true).await?;
+        write_json_atomic(
+            &item_path(&user_id, center, &format!("{id}.json")),
+            &item,
+            true,
+        )
+        .await?;
     }
 
     // 广播：先发新通知，再发最新计数（前端据此更新列表与红色角标）。
@@ -268,7 +287,8 @@ pub async fn mark_all_read(user_id: &str, center: Option<NotifyCenter>) -> Porta
                 if !item.read {
                     let mut it = item;
                     it.read = true;
-                    write_json_atomic(&item_path(&u, c, &format!("{}.json", it.id)), &it, true).await?;
+                    write_json_atomic(&item_path(&u, c, &format!("{}.json", it.id)), &it, true)
+                        .await?;
                     n += 1;
                 }
             }
@@ -310,7 +330,10 @@ mod tests {
     async fn publish_count_read_roundtrip() {
         let _env = crate::util::test_data_root_lock().lock().unwrap();
         let unique = format!("notify-it-{}-{}", std::process::id(), now_millis());
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target").join("test-data").join(unique);
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test-data")
+            .join(unique);
         unsafe { std::env::set_var("CMX_PORTAL_DATA_ROOT", &root) };
 
         let uid = "u1";
@@ -320,12 +343,34 @@ mod tests {
 
         // 发布 2 条 task + 1 条 message
         for t in ["t1", "t2"] {
-            publish(NotifyInput { user_id: Some(uid.into()), center: "task".into(), title: t.into(), body: None, level: None, link: None }).await.unwrap();
+            publish(NotifyInput {
+                user_id: Some(uid.into()),
+                center: "task".into(),
+                title: t.into(),
+                body: None,
+                level: None,
+                link: None,
+            })
+            .await
+            .unwrap();
         }
-        let m = publish(NotifyInput { user_id: Some(uid.into()), center: "message".into(), title: "m1".into(), body: None, level: None, link: None }).await.unwrap();
+        let m = publish(NotifyInput {
+            user_id: Some(uid.into()),
+            center: "message".into(),
+            title: "m1".into(),
+            body: None,
+            level: None,
+            link: None,
+        })
+        .await
+        .unwrap();
 
         let c1 = counts(uid).await.unwrap();
-        assert_eq!((c1.task, c1.message, c1.log, c1.total), (2, 1, 0, 3), "未读计数");
+        assert_eq!(
+            (c1.task, c1.message, c1.log, c1.total),
+            (2, 1, 0, 3),
+            "未读计数"
+        );
 
         // 列表（全部）应有 3 条，倒序
         let all = list(uid, None).await.unwrap();
@@ -345,7 +390,18 @@ mod tests {
         assert_eq!(counts("u2").await.unwrap().total, 0);
 
         // 非法 center / 用户
-        assert!(publish(NotifyInput { user_id: Some(uid.into()), center: "bad".into(), title: "x".into(), body: None, level: None, link: None }).await.is_err());
+        assert!(
+            publish(NotifyInput {
+                user_id: Some(uid.into()),
+                center: "bad".into(),
+                title: "x".into(),
+                body: None,
+                level: None,
+                link: None
+            })
+            .await
+            .is_err()
+        );
         assert!(counts("../etc").await.is_err());
 
         let _ = tokio::fs::remove_dir_all(&root).await;

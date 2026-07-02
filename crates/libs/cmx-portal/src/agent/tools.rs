@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::error::{PortalError, PortalResult};
 
@@ -58,11 +58,16 @@ fn relative_from_root(root: &Path, abs: &Path) -> String {
 
 fn has_text_ext(name: &str) -> bool {
     let lower = name.to_lowercase();
-    TEXT_FILE_EXTS.iter().any(|e| lower.ends_with(&format!(".{e}")))
+    TEXT_FILE_EXTS
+        .iter()
+        .any(|e| lower.ends_with(&format!(".{e}")))
 }
 
 fn opt_str<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
-    args.get(key).and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty())
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
 }
 
 fn app_arg<'a>(args: &'a Value) -> Option<&'a str> {
@@ -70,7 +75,10 @@ fn app_arg<'a>(args: &'a Value) -> Option<&'a str> {
 }
 
 fn limit_arg(args: &Value, default: usize, max: usize) -> usize {
-    args.get("limit").and_then(|v| v.as_u64()).unwrap_or(default as u64).clamp(1, max as u64) as usize
+    args.get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(default as u64)
+        .clamp(1, max as u64) as usize
 }
 
 fn cp_ref_from_args(args: &Value) -> crate::context_profile::store::CpRef {
@@ -83,14 +91,21 @@ fn cp_ref_from_args(args: &Value) -> crate::context_profile::store::CpRef {
 }
 
 fn anchor_from_args(args: &Value) -> Map<String, Value> {
-    args.get("anchor").and_then(|v| v.as_object()).cloned().unwrap_or_default()
+    args.get("anchor")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn repo_root(root: &Path) -> PathBuf {
-    if root.join("Cargo.toml").exists() || root.join("package.json").exists() || root.join(".git").exists() {
+    if root.join("Cargo.toml").exists()
+        || root.join("package.json").exists()
+        || root.join(".git").exists()
+    {
         return root.to_path_buf();
     }
-    if root.join("cmx-container").join("Cargo.toml").exists() || root.join("package.json").exists() {
+    if root.join("cmx-container").join("Cargo.toml").exists() || root.join("package.json").exists()
+    {
         return root.to_path_buf();
     }
     root.parent().unwrap_or(root).to_path_buf()
@@ -109,26 +124,58 @@ fn cargo_root(root: &Path) -> PathBuf {
 fn npm_root(root: &Path) -> PathBuf {
     if root.join("package.json").exists() {
         root.to_path_buf()
-    } else if root.parent().map(|p| p.join("package.json").exists()).unwrap_or(false) {
+    } else if root
+        .parent()
+        .map(|p| p.join("package.json").exists())
+        .unwrap_or(false)
+    {
         root.parent().unwrap_or(root).to_path_buf()
     } else {
         repo_root(root)
     }
 }
 
-async fn run_process(cwd: &Path, command: &str, argv: &[String], timeout_ms: u64) -> PortalResult<Value> {
+async fn run_process(
+    cwd: &Path,
+    command: &str,
+    argv: &[String],
+    timeout_ms: u64,
+) -> PortalResult<Value> {
     let timeout_ms = timeout_ms.clamp(1000, 300000);
-    let cmd_str = std::iter::once(command.to_string()).chain(argv.iter().cloned()).collect::<Vec<_>>().join(" ");
+    let cmd_str = std::iter::once(command.to_string())
+        .chain(argv.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut cmd = tokio::process::Command::new(command);
-    cmd.args(argv).current_dir(cwd).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    cmd.args(argv)
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     let child = cmd.spawn();
     let output = match child {
-        Ok(c) => match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), c.wait_with_output()).await {
+        Ok(c) => match tokio::time::timeout(
+            std::time::Duration::from_millis(timeout_ms),
+            c.wait_with_output(),
+        )
+        .await
+        {
             Ok(Ok(o)) => o,
-            Ok(Err(e)) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false })),
-            Err(_) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "timedOut": true })),
+            Ok(Err(e)) => {
+                return Ok(
+                    json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false }),
+                );
+            }
+            Err(_) => {
+                return Ok(
+                    json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "timedOut": true }),
+                );
+            }
         },
-        Err(e) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false })),
+        Err(e) => {
+            return Ok(
+                json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false }),
+            );
+        }
     };
     Ok(json!({
         "command": cmd_str,
@@ -140,11 +187,20 @@ async fn run_process(cwd: &Path, command: &str, argv: &[String], timeout_ms: u64
     }))
 }
 
-async fn run_process_with_stdin(cwd: &Path, command: &str, argv: &[String], stdin: &str, timeout_ms: u64) -> PortalResult<Value> {
+async fn run_process_with_stdin(
+    cwd: &Path,
+    command: &str,
+    argv: &[String],
+    stdin: &str,
+    timeout_ms: u64,
+) -> PortalResult<Value> {
     use tokio::io::AsyncWriteExt;
 
     let timeout_ms = timeout_ms.clamp(1000, 300000);
-    let cmd_str = std::iter::once(command.to_string()).chain(argv.iter().cloned()).collect::<Vec<_>>().join(" ");
+    let cmd_str = std::iter::once(command.to_string())
+        .chain(argv.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut cmd = tokio::process::Command::new(command);
     cmd.args(argv)
         .current_dir(cwd)
@@ -153,15 +209,35 @@ async fn run_process_with_stdin(cwd: &Path, command: &str, argv: &[String], stdi
         .stderr(std::process::Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false })),
+        Err(e) => {
+            return Ok(
+                json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false }),
+            );
+        }
     };
     if let Some(mut child_stdin) = child.stdin.take() {
-        child_stdin.write_all(stdin.as_bytes()).await.map_err(PortalError::Io)?;
+        child_stdin
+            .write_all(stdin.as_bytes())
+            .await
+            .map_err(PortalError::Io)?;
     }
-    let output = match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), child.wait_with_output()).await {
+    let output = match tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms),
+        child.wait_with_output(),
+    )
+    .await
+    {
         Ok(Ok(o)) => o,
-        Ok(Err(e)) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false })),
-        Err(_) => return Ok(json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "timedOut": true })),
+        Ok(Err(e)) => {
+            return Ok(
+                json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "timedOut": false }),
+            );
+        }
+        Err(_) => {
+            return Ok(
+                json!({ "command": cmd_str, "cwd": cwd, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "timedOut": true }),
+            );
+        }
     };
     Ok(json!({
         "command": cmd_str,
@@ -185,7 +261,10 @@ pub fn line_diff(before: &str, after: &str) -> String {
     }
     let mut end_a = a.len() as isize - 1;
     let mut end_b = b.len() as isize - 1;
-    while end_a >= start as isize && end_b >= start as isize && a[end_a as usize] == b[end_b as usize] {
+    while end_a >= start as isize
+        && end_b >= start as isize
+        && a[end_a as usize] == b[end_b as usize]
+    {
         end_a -= 1;
         end_b -= 1;
     }
@@ -234,7 +313,10 @@ fn json_pointer_parts(pointer: &str) -> PortalResult<Vec<String>> {
     if !p.starts_with('/') {
         return Err(bad("JSON Pointer 必须以 / 开头"));
     }
-    Ok(p.split('/').skip(1).map(|seg| seg.replace("~1", "/").replace("~0", "~")).collect())
+    Ok(p.split('/')
+        .skip(1)
+        .map(|seg| seg.replace("~1", "/").replace("~0", "~"))
+        .collect())
 }
 
 fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResult<()> {
@@ -250,21 +332,33 @@ fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResul
         match cur {
             Value::Object(obj) => {
                 if !obj.contains_key(key) {
-                    obj.insert(key.clone(), if next_is_index { json!([]) } else { json!({}) });
+                    obj.insert(
+                        key.clone(),
+                        if next_is_index { json!([]) } else { json!({}) },
+                    );
                 }
                 cur = obj.get_mut(key).unwrap();
             }
             Value::Array(arr) => {
-                let idx: usize = key
-                    .parse()
-                    .map_err(|_| bad(format!("JSON Pointer 数组下标非法：/{}", parts[..=i].join("/"))))?;
+                let idx: usize = key.parse().map_err(|_| {
+                    bad(format!(
+                        "JSON Pointer 数组下标非法：/{}",
+                        parts[..=i].join("/")
+                    ))
+                })?;
                 if idx >= arr.len() {
-                    return Err(bad(format!("JSON Pointer 中间节点不存在：/{}", parts[..=i].join("/"))));
+                    return Err(bad(format!(
+                        "JSON Pointer 中间节点不存在：/{}",
+                        parts[..=i].join("/")
+                    )));
                 }
                 cur = &mut arr[idx];
             }
             _ => {
-                return Err(bad(format!("JSON Pointer 中间节点不存在：/{}", parts[..=i].join("/"))));
+                return Err(bad(format!(
+                    "JSON Pointer 中间节点不存在：/{}",
+                    parts[..=i].join("/")
+                )));
             }
         }
     }
@@ -279,7 +373,9 @@ fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResul
                 arr.push(value);
                 return Ok(());
             }
-            let idx: usize = last.parse().map_err(|_| bad(format!("JSON Pointer 父节点不可写：{pointer}")))?;
+            let idx: usize = last
+                .parse()
+                .map_err(|_| bad(format!("JSON Pointer 父节点不可写：{pointer}")))?;
             if idx < arr.len() {
                 arr[idx] = value;
             } else if idx == arr.len() {
@@ -297,11 +393,20 @@ fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResul
 
 /// search_files：优先 ripgrep（若可用），回退目录遍历。
 pub async fn search_files(root: &Path, args: &Value) -> PortalResult<Value> {
-    let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if query.is_empty() {
         return Err(bad("search_files 需要 query"));
     }
-    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20).clamp(1, 50) as usize;
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(20)
+        .clamp(1, 50) as usize;
     // 直接走目录遍历（不依赖外部 rg，跨平台稳定）
     let results = walk_search(root, &query, limit).await?;
     Ok(Value::Array(results))
@@ -340,7 +445,11 @@ async fn walk_search(root: &Path, query: &str, limit: usize) -> PortalResult<Vec
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                if let Some((idx, line)) = content.lines().enumerate().find(|(_, l)| l.to_lowercase().contains(&q)) {
+                if let Some((idx, line)) = content
+                    .lines()
+                    .enumerate()
+                    .find(|(_, l)| l.to_lowercase().contains(&q))
+                {
                     let text: String = line.trim().chars().take(240).collect();
                     out.push(json!({ "file": relative_from_root(root, &entry.path()), "line": idx + 1, "text": text }));
                 }
@@ -353,36 +462,62 @@ async fn walk_search(root: &Path, query: &str, limit: usize) -> PortalResult<Vec
 // ── 工具：读文件 / 数据列举 ────────────────────────────────────────
 
 pub async fn read_file(root: &Path, args: &Value) -> PortalResult<Value> {
-    let p = resolve_inside_root(root, args.get("path").and_then(|v| v.as_str()).unwrap_or(""))?;
-    let meta = tokio::fs::metadata(&p).await.map_err(|_| bad("只能读取文件"))?;
+    let p = resolve_inside_root(
+        root,
+        args.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+    )?;
+    let meta = tokio::fs::metadata(&p)
+        .await
+        .map_err(|_| bad("只能读取文件"))?;
     if !meta.is_file() {
         return Err(bad("只能读取文件"));
     }
     if meta.len() > MAX_FILE_BYTES {
         return Err(bad(format!("文件过大，当前限制 {MAX_FILE_BYTES} bytes")));
     }
-    let content = tokio::fs::read_to_string(&p).await.map_err(PortalError::Io)?;
+    let content = tokio::fs::read_to_string(&p)
+        .await
+        .map_err(PortalError::Io)?;
     Ok(json!({ "path": relative_from_root(root, &p), "bytes": meta.len(), "content": content }))
 }
 
 /// list_definitions：复用 definitions store。
 pub async fn list_definitions(args: &Value) -> PortalResult<Value> {
-    let kind = args.get("kind").and_then(|v| v.as_str()).map(|s| s.to_uppercase());
+    let kind = args
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_uppercase());
     let domain = args.get("domain").and_then(|v| v.as_str());
     let module = args.get("module").and_then(|v| v.as_str());
-    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(60).clamp(1, 100) as usize;
-    let items = crate::definitions::store::list_definitions(kind.as_deref(), domain, None, module).await?;
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(60)
+        .clamp(1, 100) as usize;
+    let items =
+        crate::definitions::store::list_definitions(kind.as_deref(), domain, None, module).await?;
     Ok(Value::Array(items.into_iter().take(limit).collect()))
 }
 
 /// list_html_pages：复用 html store（裁剪字段）。
 pub async fn list_html_pages(args: &Value) -> PortalResult<Value> {
-    let page = args.get("page").and_then(|v| v.as_i64()).unwrap_or(1).max(1);
-    let page_size = args.get("pageSize").or_else(|| args.get("limit")).and_then(|v| v.as_i64()).unwrap_or(20).clamp(1, 50);
+    let page = args
+        .get("page")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1)
+        .max(1);
+    let page_size = args
+        .get("pageSize")
+        .or_else(|| args.get("limit"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(20)
+        .clamp(1, 50);
     let domain = args.get("domain").and_then(|v| v.as_str());
     let app = args.get("app").and_then(|v| v.as_str());
     let module = args.get("module").and_then(|v| v.as_str());
-    let out = crate::pages::html::list_html_pages_paged(Some(page), Some(page_size), domain, app, module).await?;
+    let out =
+        crate::pages::html::list_html_pages_paged(Some(page), Some(page_size), domain, app, module)
+            .await?;
     // 裁剪 items 字段
     let items: Vec<Value> = out
         .get("items")
@@ -400,13 +535,20 @@ pub async fn list_html_pages(args: &Value) -> PortalResult<Value> {
         })
         .unwrap_or_default();
     let mut res = out;
-    res.as_object_mut().unwrap().insert("items".to_string(), Value::Array(items));
+    res.as_object_mut()
+        .unwrap()
+        .insert("items".to_string(), Value::Array(items));
     Ok(res)
 }
 
 /// read_html_page：复用 html store（截断 html 到 24000 字符）。
 pub async fn read_html_page(args: &Value) -> PortalResult<Value> {
-    let id = args.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let id = args
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if id.is_empty() {
         return Err(bad("read_html_page 需要 id"));
     }
@@ -425,7 +567,8 @@ pub async fn read_html_page(args: &Value) -> PortalResult<Value> {
 
 pub async fn list_modules_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
-    let items = crate::meta::modules::list_module_manifests(opt_str(args, "domain"), app_arg(args)).await?;
+    let items =
+        crate::meta::modules::list_module_manifests(opt_str(args, "domain"), app_arg(args)).await?;
     Ok(json!({ "items": items.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
@@ -447,18 +590,32 @@ pub async fn get_module_resource_tool(args: &Value) -> PortalResult<Value> {
 pub async fn list_dict_schemas_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 200, 500);
     let schemas = crate::dict::schema::list_schemas_json().await?;
-    let items = schemas.as_array().cloned().unwrap_or_default().into_iter().take(limit).collect::<Vec<_>>();
+    let items = schemas
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .take(limit)
+        .collect::<Vec<_>>();
     Ok(json!({ "schemas": items }))
 }
 
 pub async fn dict_search_tool(args: &Value) -> PortalResult<Value> {
     let dict_id = opt_str(args, "dictId").ok_or_else(|| bad("dict_search 需要 dictId"))?;
-    let mut body = args.get("body").filter(|v| v.is_object()).cloned().unwrap_or_else(|| json!({}));
+    let mut body = args
+        .get("body")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     if let Some(q) = opt_str(args, "q").or_else(|| opt_str(args, "query")) {
-        body.as_object_mut().unwrap().insert("q".to_string(), json!(q));
+        body.as_object_mut()
+            .unwrap()
+            .insert("q".to_string(), json!(q));
     }
     if let Some(limit) = args.get("limit").and_then(|v| v.as_u64()) {
-        body.as_object_mut().unwrap().insert("limit".to_string(), json!(limit));
+        body.as_object_mut()
+            .unwrap()
+            .insert("limit".to_string(), json!(limit));
     }
     crate::dict::api::search_endpoint(dict_id, &body).await
 }
@@ -476,23 +633,40 @@ pub async fn list_facts_tool(args: &Value) -> PortalResult<Value> {
         module: opt_str(args, "module").map(str::to_string),
     };
     let items = crate::fact::store::list_facts(&q).await?;
-    let values = items.into_iter().take(limit).map(|x| serde_json::to_value(x).unwrap_or(Value::Null)).collect::<Vec<_>>();
+    let values = items
+        .into_iter()
+        .take(limit)
+        .map(|x| serde_json::to_value(x).unwrap_or(Value::Null))
+        .collect::<Vec<_>>();
     Ok(json!({ "items": values }))
 }
 
 pub async fn get_fact_tool(args: &Value) -> PortalResult<Value> {
     let r = crate::fact::store::FactRef {
-        domain: opt_str(args, "domain").ok_or_else(|| bad("get_fact 需要 domain"))?.to_string(),
-        app: app_arg(args).ok_or_else(|| bad("get_fact 需要 app/application"))?.to_string(),
-        module: opt_str(args, "module").ok_or_else(|| bad("get_fact 需要 module"))?.to_string(),
-        file: opt_str(args, "file").ok_or_else(|| bad("get_fact 需要 file"))?.to_string(),
+        domain: opt_str(args, "domain")
+            .ok_or_else(|| bad("get_fact 需要 domain"))?
+            .to_string(),
+        app: app_arg(args)
+            .ok_or_else(|| bad("get_fact 需要 app/application"))?
+            .to_string(),
+        module: opt_str(args, "module")
+            .ok_or_else(|| bad("get_fact 需要 module"))?
+            .to_string(),
+        file: opt_str(args, "file")
+            .ok_or_else(|| bad("get_fact 需要 file"))?
+            .to_string(),
     };
     crate::fact::store::get_fact(&r).await
 }
 
 pub async fn service_catalog_list_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
-    let services = crate::service_catalog::store::list_services(opt_str(args, "domain"), app_arg(args), opt_str(args, "module")).await?;
+    let services = crate::service_catalog::store::list_services(
+        opt_str(args, "domain"),
+        app_arg(args),
+        opt_str(args, "module"),
+    )
+    .await?;
     Ok(json!({ "services": services.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
@@ -506,7 +680,12 @@ pub async fn service_catalog_get_tool(args: &Value) -> PortalResult<Value> {
 
 pub async fn context_profile_list_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
-    let items = crate::context_profile::store::list_context_profiles(opt_str(args, "domain"), app_arg(args), opt_str(args, "module")).await?;
+    let items = crate::context_profile::store::list_context_profiles(
+        opt_str(args, "domain"),
+        app_arg(args),
+        opt_str(args, "module"),
+    )
+    .await?;
     Ok(json!({ "items": items.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
@@ -525,7 +704,9 @@ pub async fn context_profile_preview_tool(args: &Value) -> PortalResult<Value> {
         if !body.is_object() {
             body = json!({});
         }
-        body.as_object_mut().unwrap().insert("anchor".to_string(), anchor.clone());
+        body.as_object_mut()
+            .unwrap()
+            .insert("anchor".to_string(), anchor.clone());
     }
     crate::context_profile::api::preview(&body, &cp_ref_from_args(args)).await
 }
@@ -542,7 +723,11 @@ pub async fn context_profile_rule_tool(args: &Value) -> PortalResult<Value> {
 pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value> {
     let target = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) if !p.trim().is_empty() => resolve_inside_root(root, p)?,
-        _ => root.join("cmx-node-server").join("data").join("meta").join("definitions"),
+        _ => root
+            .join("cmx-node-server")
+            .join("data")
+            .join("meta")
+            .join("definitions"),
     };
     let mut files: Vec<PathBuf> = Vec::new();
     let mut stack = vec![target];
@@ -573,7 +758,9 @@ pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value>
     for file in files.iter().take(200) {
         if let Ok(content) = tokio::fs::read_to_string(file).await {
             if let Err(e) = serde_json::from_str::<Value>(&content) {
-                diagnostics.push(json!({ "file": relative_from_root(root, file), "error": e.to_string() }));
+                diagnostics.push(
+                    json!({ "file": relative_from_root(root, file), "error": e.to_string() }),
+                );
             }
         }
     }
@@ -583,12 +770,22 @@ pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value>
 // ── 工具：Git / 插件发现 ───────────────────────────────────────────
 
 pub async fn git_status_tool(root: &Path, _args: &Value) -> PortalResult<Value> {
-    run_process(&repo_root(root), "git", &["status".to_string(), "--short".to_string()], 30_000).await
+    run_process(
+        &repo_root(root),
+        "git",
+        &["status".to_string(), "--short".to_string()],
+        30_000,
+    )
+    .await
 }
 
 pub async fn git_diff_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["diff".to_string()];
-    if args.get("staged").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if args
+        .get("staged")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         argv.push("--staged".to_string());
     }
     if let Some(path) = opt_str(args, "path") {
@@ -598,16 +795,37 @@ pub async fn git_diff_tool(root: &Path, args: &Value) -> PortalResult<Value> {
         argv.push(path.trim_start_matches('/').to_string());
     }
     let mut out = run_process(&repo_root(root), "git", &argv, 30_000).await?;
-    let max = args.get("maxBytes").and_then(|v| v.as_u64()).unwrap_or(80_000).clamp(1_000, 200_000) as usize;
-    if let Some(stdout) = out.get("stdout").and_then(|v| v.as_str()).map(|s| s.to_string()) {
-        out.as_object_mut().unwrap().insert("stdout".to_string(), json!(tail_str(&stdout, max)));
+    let max = args
+        .get("maxBytes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(80_000)
+        .clamp(1_000, 200_000) as usize;
+    if let Some(stdout) = out
+        .get("stdout")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+    {
+        out.as_object_mut()
+            .unwrap()
+            .insert("stdout".to_string(), json!(tail_str(&stdout, max)));
     }
     Ok(out)
 }
 
 pub async fn git_log_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 10, 50).to_string();
-    run_process(&repo_root(root), "git", &["log".to_string(), "--oneline".to_string(), "-n".to_string(), limit], 30_000).await
+    run_process(
+        &repo_root(root),
+        "git",
+        &[
+            "log".to_string(),
+            "--oneline".to_string(),
+            "-n".to_string(),
+            limit,
+        ],
+        30_000,
+    )
+    .await
 }
 
 pub async fn list_local_plugins(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -663,36 +881,47 @@ pub async fn list_local_plugins(root: &Path, args: &Value) -> PortalResult<Value
 
 pub async fn inspect_plugin_manifest(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(path) = opt_str(args, "path") {
-        return read_file(root, &json!({ "path": path })).await.and_then(|v| {
-            let content = v.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            let manifest: Value = serde_json::from_str(content)?;
-            Ok(json!({ "path": v.get("path"), "manifest": manifest }))
-        });
+        return read_file(root, &json!({ "path": path }))
+            .await
+            .and_then(|v| {
+                let content = v.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let manifest: Value = serde_json::from_str(content)?;
+                Ok(json!({ "path": v.get("path"), "manifest": manifest }))
+            });
     }
-    let plugin_id = opt_str(args, "pluginId").ok_or_else(|| bad("inspect_plugin_manifest 需要 path 或 pluginId"))?;
+    let plugin_id = opt_str(args, "pluginId")
+        .ok_or_else(|| bad("inspect_plugin_manifest 需要 path 或 pluginId"))?;
     let list = list_local_plugins(root, &json!({ "limit": 300 })).await?;
     let hit = list
         .get("plugins")
         .and_then(|v| v.as_array())
         .and_then(|arr| {
             arr.iter().find(|p| {
-                p.get("pluginId").map(|v| {
-                    v.as_str().map(|s| s == plugin_id).unwrap_or_else(|| v.get("plugin_id").and_then(|x| x.as_str()) == Some(plugin_id))
-                }).unwrap_or(false)
+                p.get("pluginId")
+                    .map(|v| {
+                        v.as_str().map(|s| s == plugin_id).unwrap_or_else(|| {
+                            v.get("plugin_id").and_then(|x| x.as_str()) == Some(plugin_id)
+                        })
+                    })
+                    .unwrap_or(false)
             })
         })
         .and_then(|p| p.get("path").and_then(|v| v.as_str()))
         .ok_or_else(|| PortalError::not_found(format!("未找到插件 manifest：{plugin_id}")))?;
-    read_file(root, &json!({ "path": hit })).await.and_then(|v| {
-        let content = v.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let manifest: Value = serde_json::from_str(content)?;
-        Ok(json!({ "path": v.get("path"), "manifest": manifest }))
-    })
+    read_file(root, &json!({ "path": hit }))
+        .await
+        .and_then(|v| {
+            let content = v.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let manifest: Value = serde_json::from_str(content)?;
+            Ok(json!({ "path": v.get("path"), "manifest": manifest }))
+        })
 }
 
 pub async fn call_plugin_function_tool(_root: &Path, args: &Value) -> PortalResult<Value> {
-    let plugin_id = opt_str(args, "pluginId").ok_or_else(|| bad("call_plugin_function 需要 pluginId"))?;
-    let function_name = opt_str(args, "functionName").ok_or_else(|| bad("call_plugin_function 需要 functionName"))?;
+    let plugin_id =
+        opt_str(args, "pluginId").ok_or_else(|| bad("call_plugin_function 需要 pluginId"))?;
+    let function_name = opt_str(args, "functionName")
+        .ok_or_else(|| bad("call_plugin_function 需要 functionName"))?;
     Ok(json!({
         "configured": false,
         "pluginId": plugin_id,
@@ -704,7 +933,8 @@ pub async fn call_plugin_function_tool(_root: &Path, args: &Value) -> PortalResu
 }
 
 pub async fn call_service_flow_tool(_root: &Path, args: &Value) -> PortalResult<Value> {
-    let service_key = opt_str(args, "serviceKey").ok_or_else(|| bad("call_service_flow 需要 serviceKey"))?;
+    let service_key =
+        opt_str(args, "serviceKey").ok_or_else(|| bad("call_service_flow 需要 serviceKey"))?;
     Ok(json!({
         "configured": false,
         "serviceKey": service_key,
@@ -729,29 +959,56 @@ pub async fn generate_api_doc_tool(_root: &Path, args: &Value) -> PortalResult<V
 
 /// 文本替换补丁预览（不写盘）。
 pub async fn prepare_text_replace(root: &Path, args: &Value) -> PortalResult<Value> {
-    let p = resolve_inside_root(root, args.get("path").and_then(|v| v.as_str()).unwrap_or(""))?;
-    let meta = tokio::fs::metadata(&p).await.map_err(|_| bad("只能修改文件"))?;
+    let p = resolve_inside_root(
+        root,
+        args.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+    )?;
+    let meta = tokio::fs::metadata(&p)
+        .await
+        .map_err(|_| bad("只能修改文件"))?;
     if !meta.is_file() {
         return Err(bad("只能修改文件"));
     }
     if meta.len() > MAX_PATCH_BYTES {
-        return Err(bad(format!("文件过大，当前补丁限制 {MAX_PATCH_BYTES} bytes")));
+        return Err(bad(format!(
+            "文件过大，当前补丁限制 {MAX_PATCH_BYTES} bytes"
+        )));
     }
-    let old_text = args.get("oldText").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let new_text = args.get("newText").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let old_text = args
+        .get("oldText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let new_text = args
+        .get("newText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if old_text.is_empty() {
         return Err(bad("文本替换补丁需要 oldText"));
     }
-    let before = tokio::fs::read_to_string(&p).await.map_err(PortalError::Io)?;
+    let before = tokio::fs::read_to_string(&p)
+        .await
+        .map_err(PortalError::Io)?;
     let count = before.matches(&old_text).count();
     if count == 0 {
         return Err(bad("未找到要替换的文本"));
     }
-    let occurrence = if args.get("occurrence").and_then(|v| v.as_str()) == Some("all") { "all" } else { "first" };
+    let occurrence = if args.get("occurrence").and_then(|v| v.as_str()) == Some("all") {
+        "all"
+    } else {
+        "first"
+    };
     if occurrence == "all" && count > MAX_TEXT_REPLACEMENTS {
-        return Err(bad(format!("匹配过多，当前限制 {MAX_TEXT_REPLACEMENTS} 处")));
+        return Err(bad(format!(
+            "匹配过多，当前限制 {MAX_TEXT_REPLACEMENTS} 处"
+        )));
     }
-    let replacements = if occurrence == "all" { count.min(MAX_TEXT_REPLACEMENTS) } else { 1 };
+    let replacements = if occurrence == "all" {
+        count.min(MAX_TEXT_REPLACEMENTS)
+    } else {
+        1
+    };
     let after = if occurrence == "all" {
         before.replace(&old_text, &new_text)
     } else {
@@ -770,7 +1027,9 @@ pub async fn apply_text_replace(root: &Path, args: &Value) -> PortalResult<Value
     let rel = preview.get("path").and_then(|v| v.as_str()).unwrap_or("");
     let after = preview.get("after").and_then(|v| v.as_str()).unwrap_or("");
     let abs = resolve_inside_root(root, rel)?;
-    tokio::fs::write(&abs, after).await.map_err(PortalError::Io)?;
+    tokio::fs::write(&abs, after)
+        .await
+        .map_err(PortalError::Io)?;
     Ok(json!({
         "path": rel, "occurrence": preview.get("occurrence"), "replacements": preview.get("replacements"),
         "bytes": after.len(), "diff": preview.get("diff"),
@@ -779,16 +1038,26 @@ pub async fn apply_text_replace(root: &Path, args: &Value) -> PortalResult<Value
 
 /// JSON 补丁预览。
 pub async fn prepare_json_patch(root: &Path, args: &Value) -> PortalResult<Value> {
-    let p = resolve_inside_root(root, args.get("path").and_then(|v| v.as_str()).unwrap_or(""))?;
-    let meta = tokio::fs::metadata(&p).await.map_err(|_| bad("只能修改文件"))?;
+    let p = resolve_inside_root(
+        root,
+        args.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+    )?;
+    let meta = tokio::fs::metadata(&p)
+        .await
+        .map_err(|_| bad("只能修改文件"))?;
     if !meta.is_file() {
         return Err(bad("只能修改文件"));
     }
     if meta.len() > MAX_PATCH_BYTES {
-        return Err(bad(format!("文件过大，当前补丁限制 {MAX_PATCH_BYTES} bytes")));
+        return Err(bad(format!(
+            "文件过大，当前补丁限制 {MAX_PATCH_BYTES} bytes"
+        )));
     }
-    let before = tokio::fs::read_to_string(&p).await.map_err(PortalError::Io)?;
-    let mut doc: Value = serde_json::from_str(&before).map_err(|_| bad("当前仅支持可解析的 JSON 文件补丁"))?;
+    let before = tokio::fs::read_to_string(&p)
+        .await
+        .map_err(PortalError::Io)?;
+    let mut doc: Value =
+        serde_json::from_str(&before).map_err(|_| bad("当前仅支持可解析的 JSON 文件补丁"))?;
     let pointer = args.get("pointer").and_then(|v| v.as_str()).unwrap_or("");
     let value = args.get("value").cloned().unwrap_or(Value::Null);
     set_json_pointer(&mut doc, pointer, value.clone())?;
@@ -805,33 +1074,56 @@ pub async fn apply_json_patch(root: &Path, args: &Value) -> PortalResult<Value> 
     let rel = preview.get("path").and_then(|v| v.as_str()).unwrap_or("");
     let after = preview.get("after").and_then(|v| v.as_str()).unwrap_or("");
     let abs = resolve_inside_root(root, rel)?;
-    tokio::fs::write(&abs, after).await.map_err(PortalError::Io)?;
-    Ok(json!({ "path": rel, "pointer": preview.get("pointer"), "bytes": after.len(), "diff": preview.get("diff") }))
+    tokio::fs::write(&abs, after)
+        .await
+        .map_err(PortalError::Io)?;
+    Ok(
+        json!({ "path": rel, "pointer": preview.get("pointer"), "bytes": after.len(), "diff": preview.get("diff") }),
+    )
 }
 
 /// 创建文本文件。
 pub async fn create_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let path = opt_str(args, "path").ok_or_else(|| bad("create_file 需要 path"))?;
     let abs = resolve_inside_root(root, path)?;
-    if tokio::fs::metadata(&abs).await.is_ok() && !args.get("overwrite").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if tokio::fs::metadata(&abs).await.is_ok()
+        && !args
+            .get("overwrite")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    {
         return Err(bad("目标文件已存在；如需覆盖请设置 overwrite=true"));
     }
     if let Some(parent) = abs.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(PortalError::Io)?;
     }
     let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
     if content.len() as u64 > MAX_PATCH_BYTES {
-        return Err(bad(format!("文件内容过大，当前限制 {MAX_PATCH_BYTES} bytes")));
+        return Err(bad(format!(
+            "文件内容过大，当前限制 {MAX_PATCH_BYTES} bytes"
+        )));
     }
-    tokio::fs::write(&abs, content).await.map_err(PortalError::Io)?;
+    tokio::fs::write(&abs, content)
+        .await
+        .map_err(PortalError::Io)?;
     Ok(json!({ "path": relative_from_root(root, &abs), "bytes": content.len(), "created": true }))
 }
 
 /// 重命名/移动文件。
 pub async fn rename_file(root: &Path, args: &Value) -> PortalResult<Value> {
-    let from = resolve_inside_root(root, opt_str(args, "from").ok_or_else(|| bad("rename_file 需要 from"))?)?;
-    let to = resolve_inside_root(root, opt_str(args, "to").ok_or_else(|| bad("rename_file 需要 to"))?)?;
-    let meta = tokio::fs::metadata(&from).await.map_err(|_| bad("源文件不存在"))?;
+    let from = resolve_inside_root(
+        root,
+        opt_str(args, "from").ok_or_else(|| bad("rename_file 需要 from"))?,
+    )?;
+    let to = resolve_inside_root(
+        root,
+        opt_str(args, "to").ok_or_else(|| bad("rename_file 需要 to"))?,
+    )?;
+    let meta = tokio::fs::metadata(&from)
+        .await
+        .map_err(|_| bad("源文件不存在"))?;
     if !meta.is_file() {
         return Err(bad("当前仅允许移动文件"));
     }
@@ -839,10 +1131,16 @@ pub async fn rename_file(root: &Path, args: &Value) -> PortalResult<Value> {
         return Err(bad("目标路径已存在"));
     }
     if let Some(parent) = to.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(PortalError::Io)?;
     }
-    tokio::fs::rename(&from, &to).await.map_err(PortalError::Io)?;
-    Ok(json!({ "from": relative_from_root(root, &from), "to": relative_from_root(root, &to), "renamed": true }))
+    tokio::fs::rename(&from, &to)
+        .await
+        .map_err(PortalError::Io)?;
+    Ok(
+        json!({ "from": relative_from_root(root, &from), "to": relative_from_root(root, &to), "renamed": true }),
+    )
 }
 
 /// 应用 unified diff patch（stdin 传给 git apply）。
@@ -855,12 +1153,28 @@ pub async fn apply_file_patch(root: &Path, args: &Value) -> PortalResult<Value> 
         return Err(bad("patch 过大"));
     }
     let cwd = repo_root(root);
-    let check = run_process_with_stdin(&cwd, "git", &["apply".to_string(), "--check".to_string()], patch, 60_000).await?;
+    let check = run_process_with_stdin(
+        &cwd,
+        "git",
+        &["apply".to_string(), "--check".to_string()],
+        patch,
+        60_000,
+    )
+    .await?;
     if check.get("exitCode").and_then(|v| v.as_i64()) != Some(0) {
         return Ok(json!({ "applied": false, "check": check }));
     }
-    let result = run_process_with_stdin(&cwd, "git", &["apply".to_string(), "--whitespace=nowarn".to_string()], patch, 60_000).await?;
-    Ok(json!({ "applied": result.get("exitCode").and_then(|v| v.as_i64()) == Some(0), "check": check, "result": result }))
+    let result = run_process_with_stdin(
+        &cwd,
+        "git",
+        &["apply".to_string(), "--whitespace=nowarn".to_string()],
+        patch,
+        60_000,
+    )
+    .await?;
+    Ok(
+        json!({ "applied": result.get("exitCode").and_then(|v| v.as_i64()) == Some(0), "check": check, "result": result }),
+    )
 }
 
 /// 格式化单个文件。
@@ -868,11 +1182,30 @@ pub async fn format_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let path = opt_str(args, "path").ok_or_else(|| bad("format_file 需要 path"))?;
     let abs = resolve_inside_root(root, path)?;
     let ext = abs.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let timeout_ms = args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(60_000);
+    let timeout_ms = args
+        .get("timeoutMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(60_000);
     if ext == "rs" {
-        run_process(&cargo_root(root), "rustfmt", &[abs.to_string_lossy().to_string()], timeout_ms).await
+        run_process(
+            &cargo_root(root),
+            "rustfmt",
+            &[abs.to_string_lossy().to_string()],
+            timeout_ms,
+        )
+        .await
     } else if ["js", "ts", "json", "css", "html", "md"].contains(&ext) {
-        run_process(&npm_root(root), "npx", &["prettier".to_string(), "--write".to_string(), abs.to_string_lossy().to_string()], timeout_ms).await
+        run_process(
+            &npm_root(root),
+            "npx",
+            &[
+                "prettier".to_string(),
+                "--write".to_string(),
+                abs.to_string_lossy().to_string(),
+            ],
+            timeout_ms,
+        )
+        .await
     } else {
         Err(bad(format!("暂不支持格式化 .{ext} 文件")))
     }
@@ -883,7 +1216,15 @@ pub async fn cargo_check(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(pkg) = opt_str(args, "package") {
         argv.extend(["-p".to_string(), pkg.to_string()]);
     }
-    run_process(&cargo_root(root), "cargo", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(120_000)).await
+    run_process(
+        &cargo_root(root),
+        "cargo",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(120_000),
+    )
+    .await
 }
 
 pub async fn cargo_build(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -891,7 +1232,15 @@ pub async fn cargo_build(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(pkg) = opt_str(args, "package") {
         argv.extend(["-p".to_string(), pkg.to_string()]);
     }
-    run_process(&cargo_root(root), "cargo", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(180_000)).await
+    run_process(
+        &cargo_root(root),
+        "cargo",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(180_000),
+    )
+    .await
 }
 
 pub async fn cargo_test(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -902,7 +1251,15 @@ pub async fn cargo_test(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(test) = opt_str(args, "test") {
         argv.push(test.to_string());
     }
-    run_process(&cargo_root(root), "cargo", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(180_000)).await
+    run_process(
+        &cargo_root(root),
+        "cargo",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(180_000),
+    )
+    .await
 }
 
 pub async fn cargo_clippy(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -911,7 +1268,15 @@ pub async fn cargo_clippy(root: &Path, args: &Value) -> PortalResult<Value> {
         argv.extend(["-p".to_string(), pkg.to_string()]);
     }
     argv.extend(["--".to_string(), "-D".to_string(), "warnings".to_string()]);
-    run_process(&cargo_root(root), "cargo", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(180_000)).await
+    run_process(
+        &cargo_root(root),
+        "cargo",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(180_000),
+    )
+    .await
 }
 
 pub async fn npm_test(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -919,19 +1284,43 @@ pub async fn npm_test(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(workspace) = opt_str(args, "workspace") {
         argv.extend(["-w".to_string(), workspace.to_string()]);
     }
-    run_process(&npm_root(root), "npm", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(120_000)).await
+    run_process(
+        &npm_root(root),
+        "npm",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(120_000),
+    )
+    .await
 }
 
 pub async fn npm_build_workspace(root: &Path, args: &Value) -> PortalResult<Value> {
     let script = opt_str(args, "script").unwrap_or("build");
-    if !["build", "build:runtime", "build:portal", "build:html", "build:apps"].contains(&script) {
+    if ![
+        "build",
+        "build:runtime",
+        "build:portal",
+        "build:html",
+        "build:apps",
+    ]
+    .contains(&script)
+    {
         return Err(bad("npm_build_workspace 仅允许 build/build:* 预置脚本"));
     }
     let mut argv = vec!["run".to_string(), script.to_string()];
     if let Some(workspace) = opt_str(args, "workspace") {
         argv.extend(["-w".to_string(), workspace.to_string()]);
     }
-    run_process(&npm_root(root), "npm", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(180_000)).await
+    run_process(
+        &npm_root(root),
+        "npm",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(180_000),
+    )
+    .await
 }
 
 pub async fn run_playwright(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -942,7 +1331,15 @@ pub async fn run_playwright(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(grep) = opt_str(args, "grep") {
         argv.extend(["--grep".to_string(), grep.to_string()]);
     }
-    run_process(&npm_root(root), "npx", &argv, args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(180_000)).await
+    run_process(
+        &npm_root(root),
+        "npx",
+        &argv,
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(180_000),
+    )
+    .await
 }
 
 pub async fn capture_page_screenshot(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -950,7 +1347,9 @@ pub async fn capture_page_screenshot(root: &Path, args: &Value) -> PortalResult<
     let output = opt_str(args, "output").unwrap_or("agent-screenshot.png");
     let out_abs = resolve_inside_root(root, output)?;
     if let Some(parent) = out_abs.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(PortalError::Io)?;
     }
     let script = r#"
 const { chromium } = require('playwright');
@@ -963,7 +1362,20 @@ const { chromium } = require('playwright');
   await browser.close();
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 "#;
-    let res = run_process(&npm_root(root), "node", &["-e".to_string(), script.to_string(), url.to_string(), out_abs.to_string_lossy().to_string()], args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(60_000)).await?;
+    let res = run_process(
+        &npm_root(root),
+        "node",
+        &[
+            "-e".to_string(),
+            script.to_string(),
+            url.to_string(),
+            out_abs.to_string_lossy().to_string(),
+        ],
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(60_000),
+    )
+    .await?;
     Ok(json!({ "output": relative_from_root(root, &out_abs), "result": res }))
 }
 
@@ -983,7 +1395,20 @@ const { chromium } = require('playwright');
   await browser.close();
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 "#;
-    run_process(&npm_root(root), "node", &["-e".to_string(), script.to_string(), url.to_string(), selector.to_string()], args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(60_000)).await
+    run_process(
+        &npm_root(root),
+        "node",
+        &[
+            "-e".to_string(),
+            script.to_string(),
+            url.to_string(),
+            selector.to_string(),
+        ],
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(60_000),
+    )
+    .await
 }
 
 pub async fn check_accessibility(root: &Path, args: &Value) -> PortalResult<Value> {
@@ -1008,18 +1433,35 @@ const { chromium } = require('playwright');
   await browser.close();
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 "#;
-    run_process(&npm_root(root), "node", &["-e".to_string(), script.to_string(), url.to_string()], args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(60_000)).await
+    run_process(
+        &npm_root(root),
+        "node",
+        &["-e".to_string(), script.to_string(), url.to_string()],
+        args.get("timeoutMs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(60_000),
+    )
+    .await
 }
 
 // ── run_command（白名单）─────────────────────────────────────────
 
 /// 命令白名单校验，返回 (command, args)。
 fn normalize_command(args: &Value) -> PortalResult<(String, Vec<String>)> {
-    let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let command = args
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let argv: Vec<String> = args
         .get("args")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect())
+        .map(|a| {
+            a.iter()
+                .map(|x| x.as_str().unwrap_or("").to_string())
+                .collect()
+        })
         .unwrap_or_default();
     let allowed: &[(&str, &[&str])] = &[
         ("npm", &["run", "lint", "-w", "cmx-portal-manager"]),
@@ -1034,10 +1476,22 @@ fn normalize_command(args: &Value) -> PortalResult<(String, Vec<String>)> {
         ("cargo", &["clippy", "--", "-D", "warnings"]),
         ("git", &["status", "--short"]),
     ];
-    let hit = allowed.iter().any(|(c, a)| *c == command && a.len() == argv.len() && a.iter().zip(&argv).all(|(x, y)| *x == y));
+    let hit = allowed.iter().any(|(c, a)| {
+        *c == command && a.len() == argv.len() && a.iter().zip(&argv).all(|(x, y)| *x == y)
+    });
     if !hit {
-        let joined = std::iter::once(command.clone()).chain(argv.clone()).collect::<Vec<_>>().join(" ");
-        return Err(bad(format!("命令不在允许列表中：{}", if joined.trim().is_empty() { "(empty)".to_string() } else { joined })));
+        let joined = std::iter::once(command.clone())
+            .chain(argv.clone())
+            .collect::<Vec<_>>()
+            .join(" ");
+        return Err(bad(format!(
+            "命令不在允许列表中：{}",
+            if joined.trim().is_empty() {
+                "(empty)".to_string()
+            } else {
+                joined
+            }
+        )));
     }
     Ok((command, argv))
 }
@@ -1045,26 +1499,53 @@ fn normalize_command(args: &Value) -> PortalResult<(String, Vec<String>)> {
 /// run_command：执行白名单命令（cwd = rootDir 的父目录，与 Node 一致）。
 pub async fn run_command(root: &Path, args: &Value) -> PortalResult<Value> {
     let (command, argv) = normalize_command(args)?;
-    let timeout_ms = args.get("timeoutMs").and_then(|v| v.as_u64()).unwrap_or(60000).clamp(1000, 120000);
+    let timeout_ms = args
+        .get("timeoutMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(60000)
+        .clamp(1000, 120000);
     let cwd = match command.as_str() {
         "cargo" => cargo_root(root),
         "git" => repo_root(root),
         _ => npm_root(root),
     };
-    let cmd_str = std::iter::once(command.clone()).chain(argv.clone()).collect::<Vec<_>>().join(" ");
+    let cmd_str = std::iter::once(command.clone())
+        .chain(argv.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let mut cmd = tokio::process::Command::new(&command);
-    cmd.args(&argv).current_dir(&cwd).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    cmd.args(&argv)
+        .current_dir(&cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     let child = cmd.spawn();
     let output = match child {
         Ok(c) => {
-            match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), c.wait_with_output()).await {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                c.wait_with_output(),
+            )
+            .await
+            {
                 Ok(Ok(o)) => o,
-                Ok(Err(e)) => return Ok(json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "diagnostics": [], "timedOut": false })),
-                Err(_) => return Ok(json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "diagnostics": [], "timedOut": true })),
+                Ok(Err(e)) => {
+                    return Ok(
+                        json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "diagnostics": [], "timedOut": false }),
+                    );
+                }
+                Err(_) => {
+                    return Ok(
+                        json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": "命令执行超时", "diagnostics": [], "timedOut": true }),
+                    );
+                }
             }
         }
-        Err(e) => return Ok(json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "diagnostics": [], "timedOut": false })),
+        Err(e) => {
+            return Ok(
+                json!({ "command": cmd_str, "exitCode": 1, "stdout": "", "stderr": e.to_string(), "diagnostics": [], "timedOut": false }),
+            );
+        }
     };
     let stdout = tail_str(&String::from_utf8_lossy(&output.stdout), MAX_COMMAND_OUTPUT);
     let stderr = tail_str(&String::from_utf8_lossy(&output.stderr), MAX_COMMAND_OUTPUT);

@@ -26,9 +26,8 @@ pub const PAGE_SIZE_MAX: i64 = 500;
 #[derive(Debug, Deserialize, Clone)]
 pub struct GetParams {
     /// 主键值
-    pub id: String
+    pub id: String,
 }
-
 
 /// 更新请求 Payload
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -47,7 +46,6 @@ pub struct DeletePayload {
     /// 主键 ID 列表（单个删除传一个元素）
     pub ids: Vec<Value>,
 }
-
 
 /// 列表查询参数
 ///
@@ -92,7 +90,6 @@ pub struct PageParams<F> {
     pub size: Option<i64>,
     /// 排序字段（支持多个，用逗号分隔，前缀 - 表示降序）
     pub order_bys: Option<String>,
-
 }
 
 fn default_page() -> Option<i64> {
@@ -150,8 +147,6 @@ impl<F> PageParams<F> {
             order_bys: self.order_bys.as_ref().map(|s| s.as_str().into()),
         }
     }
-
-
 }
 
 #[cfg(test)]
@@ -162,7 +157,7 @@ mod tests {
     fn test_list_params_to_list_options() {
         let params: ListParams<()> = ListParams {
             filters: None,
-            order_bys: Some("create_time".to_string())
+            order_bys: Some("create_time".to_string()),
         };
         let options = params.to_list_options();
         assert_eq!(options.limit, Some(LIST_LIMIT_DEFAULT));
@@ -242,6 +237,4 @@ mod tests {
         let params: GetParams = serde_json::from_str(json).unwrap();
         assert_eq!(params.id, "test123");
     }
-
-
 }

@@ -127,7 +127,10 @@ pub fn parse_doc_comments(doc_comments: &[String]) -> Result<ParsedDoc> {
         let lines: Vec<&str> = main.lines().collect();
         if !lines.is_empty() {
             // 摘要取第一行，移除末尾的中文或英文句号
-            result.summary = lines[0].trim_end_matches('.').trim_end_matches('。').to_string();
+            result.summary = lines[0]
+                .trim_end_matches('.')
+                .trim_end_matches('。')
+                .to_string();
         }
         if lines.len() > 1 {
             let desc_lines: Vec<&str> = lines[1..]
@@ -307,7 +310,11 @@ fn parse_table(content: &str) -> Vec<FieldInfo> {
         // 按列顺序解析：字段名、类型、必填（可选）、说明（可选）
         if cells.len() >= 2 {
             let name = clean_field_name(&cells[0]);
-            let raw_type = if cells.len() > 1 { cells[1].trim().to_string() } else { "unknown".to_string() };
+            let raw_type = if cells.len() > 1 {
+                cells[1].trim().to_string()
+            } else {
+                "unknown".to_string()
+            };
             let type_name = clean_field_name(&raw_type);
             let required = if cells.len() > 2 {
                 Some(cells[2].contains("是") || cells[2].to_lowercase().contains("true"))
@@ -608,7 +615,14 @@ fn extract_type_from_description(desc: &str) -> (String, Option<String>) {
         if i == 0 && !c.is_ascii_uppercase() {
             break;
         }
-        if !c.is_alphanumeric() && c != '_' && c != '<' && c != '>' && c != '&' && c != '(' && c != ')' {
+        if !c.is_alphanumeric()
+            && c != '_'
+            && c != '<'
+            && c != '>'
+            && c != '&'
+            && c != '('
+            && c != ')'
+        {
             break;
         }
         type_end = i + c.len_utf8();
@@ -702,9 +716,10 @@ fn parse_list(content: &str) -> Vec<String> {
 /// 找到反引号内容时返回 `Some(value)`，否则返回 `None`。
 fn extract_code_value(line: &str) -> Option<String> {
     if let Some(start) = line.find('`')
-        && let Some(end) = line[start + 1..].find('`') {
-            return Some(line[start + 1..start + 1 + end].to_string());
-        }
+        && let Some(end) = line[start + 1..].find('`')
+    {
+        return Some(line[start + 1..start + 1 + end].to_string());
+    }
     None
 }
 
@@ -772,9 +787,10 @@ fn parse_examples(content: &str) -> Vec<ExampleInfo> {
 
     // 回退到简单格式解析
     if examples.is_empty()
-        && let Some(example) = parse_simple_example(content) {
-            examples.push(example);
-        }
+        && let Some(example) = parse_simple_example(content)
+    {
+        examples.push(example);
+    }
 
     examples
 }

@@ -120,7 +120,8 @@ mod tests {
 
     #[test]
     fn test_generate_storage_path_s3() {
-        let (path, filename) = generate_storage_path("s3/", Some("avatar"), "jpg", &StorageType::S3);
+        let (path, filename) =
+            generate_storage_path("s3/", Some("avatar"), "jpg", &StorageType::S3);
         assert!(path.starts_with("s3/avatar/20"));
         assert!(filename.ends_with(".jpg"));
         assert!(filename.len() > 36);
@@ -128,7 +129,8 @@ mod tests {
 
     #[test]
     fn test_generate_storage_path_local() {
-        let (path, filename) = generate_storage_path("uploads/", Some("avatar"), "jpg", &StorageType::Local);
+        let (path, filename) =
+            generate_storage_path("uploads/", Some("avatar"), "jpg", &StorageType::Local);
         assert!(path.starts_with("uploads/avatar/202"));
         assert!(filename.ends_with(".jpg"));
     }

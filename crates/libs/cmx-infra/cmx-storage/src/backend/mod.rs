@@ -12,7 +12,9 @@ use async_trait::async_trait;
 use bytes::Bytes;
 
 use crate::error::Result;
-use crate::types::{ListEntry, ListOptions, ObjectMetadata, StorageCapabilities, WriteOptions, WriteResult};
+use crate::types::{
+    ListEntry, ListOptions, ObjectMetadata, StorageCapabilities, WriteOptions, WriteResult,
+};
 
 /// 存储后端统一抽象接口
 ///
@@ -227,7 +229,9 @@ pub trait StorageBackend: Send + Sync + 'static {
 /// # Errors
 ///
 /// 当配置无效或创建失败时返回错误。
-pub fn create_backend(config: &crate::config::StorageInstanceConfig) -> Result<Box<dyn StorageBackend>> {
+pub fn create_backend(
+    config: &crate::config::StorageInstanceConfig,
+) -> Result<Box<dyn StorageBackend>> {
     match config.storage_type {
         crate::config::StorageType::Local => {
             let backend = local::LocalBackend::new(config)?;

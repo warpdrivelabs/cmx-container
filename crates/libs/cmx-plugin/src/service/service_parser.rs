@@ -2,14 +2,14 @@
 //!
 //! 提供插件安装/升级时解析和保存服务定义的共用函数。
 
-use std::path::Path;
-use std::sync::Arc;
-use cmx_core::model::service::ServiceDefinition;
-use cmx_traits::plugin::PluginQuery;
-use cmx_traits::service::SaveServiceVersionParams;
 use crate::error::{PluginError, PluginResult};
 use crate::service::api_doc_generator::ApiDocGenerator;
 use crate::service::data_parser::{ParsedServiceDefinition, ServiceDataParser, ServiceParseParams};
+use cmx_core::model::service::ServiceDefinition;
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::service::SaveServiceVersionParams;
+use std::path::Path;
+use std::sync::Arc;
 
 /// 从插件目录解析服务定义（不保存到数据库）
 ///
@@ -76,10 +76,16 @@ pub async fn parse_and_save_services(
         }
     };
     //删除插件的服务在保存新服务，避免有的插件删除了数据库中还存在
-    if let Err(e) = service_storage.delete_services_by_plugin(params.plugin_id.as_str(), &params.app_id, txn_id)
-        .await {
+    if let Err(e) = service_storage
+        .delete_services_by_plugin(params.plugin_id.as_str(), &params.app_id, txn_id)
+        .await
+    {
         tracing::error!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e);
-        return Err(PluginError::Plugin(format!("删除插件{}服务定义失败: {:?}", params.plugin_id.as_str(), e)));
+        return Err(PluginError::Plugin(format!(
+            "删除插件{}服务定义失败: {:?}",
+            params.plugin_id.as_str(),
+            e
+        )));
     }
 
     // 创建接口文档生成器
@@ -92,10 +98,7 @@ pub async fn parse_and_save_services(
     // 遍历并保存每个服务
     for svc in &parsed {
         // 保存服务定义（使用 txn_id）
-        if let Err(e) = service_storage.save_service(
-            &svc.definition,
-            txn_id,
-        ).await {
+        if let Err(e) = service_storage.save_service(&svc.definition, txn_id).await {
             tracing::error!("保存服务定义 {} 失败: {:?}", svc.definition.service_key, e);
             return Err(PluginError::Plugin(format!("保存服务定义失败: {:?}", e)));
         }
@@ -110,30 +113,39 @@ pub async fn parse_and_save_services(
         };
 
         // 生成接口文档（失败不影响主流程）
-        let api_doc = match generator.generate_api_doc(
-            &svc.orchestration,
-            &params.plugin_id,
-            &params.plugin_version,
-            install_path,
-        ).await {
-            Ok(doc) => {
-                match serde_json::to_string(&doc) {
-                    Ok(json) => Some(json),
-                    Err(e) => {
-                        tracing::warn!("序列化服务 {} 的接口文档失败: {:?}", svc.definition.service_key, e);
-                        None
-                    }
+        let api_doc = match generator
+            .generate_api_doc(
+                &svc.orchestration,
+                &params.plugin_id,
+                &params.plugin_version,
+                install_path,
+            )
+            .await
+        {
+            Ok(doc) => match serde_json::to_string(&doc) {
+                Ok(json) => Some(json),
+                Err(e) => {
+                    tracing::warn!(
+                        "序列化服务 {} 的接口文档失败: {:?}",
+                        svc.definition.service_key,
+                        e
+                    );
+                    None
                 }
-            }
+            },
             Err(e) => {
-                tracing::warn!("生成服务 {} 的接口文档失败: {:?}", svc.definition.service_key, e);
+                tracing::warn!(
+                    "生成服务 {} 的接口文档失败: {:?}",
+                    svc.definition.service_key,
+                    e
+                );
                 None
             }
         };
 
         // 保存服务版本
-        if let Err(e) = service_storage.save_service_version(
-            SaveServiceVersionParams {
+        if let Err(e) = service_storage
+            .save_service_version(SaveServiceVersionParams {
                 service_key: svc.definition.service_key.clone(),
                 app_id: params.app_id.clone(),
                 version: params.plugin_version.clone(),
@@ -142,8 +154,9 @@ pub async fn parse_and_save_services(
                 config,
                 api_doc,
                 txn_id: txn_id.map(|s| s.to_string()),
-            },
-        ).await {
+            })
+            .await
+        {
             tracing::error!(
                 "保存服务版本 {}:{} 失败: {:?}",
                 svc.definition.service_key,

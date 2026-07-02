@@ -45,7 +45,10 @@ impl DefaultStorageService {
     #[allow(dead_code)]
     pub(super) fn build_content_disposition(filename: &str) -> String {
         let encoded = encode(filename);
-        format!("attachment; filename=\"{}\"; filename*=UTF-8''{}", filename, encoded)
+        format!(
+            "attachment; filename=\"{}\"; filename*=UTF-8''{}",
+            filename, encoded
+        )
     }
 
     pub(super) async fn get_db(&self) -> Result<(&'static cmx_database::DatabaseManager, String)> {
@@ -110,9 +113,11 @@ impl DefaultStorageService {
             upload_id: row.get_by_name_as(schema, "upload_id"),
             upload_status: row.get_by_name_as(schema, "upload_status"),
             archived: row.get_by_name_as(schema, "archived"),
-            create_time: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "create_time")
+            create_time: row
+                .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "create_time")
                 .map(|dt| dt.naive_utc()),
-            update_time: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "update_time")
+            update_time: row
+                .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "update_time")
                 .map(|dt| dt.naive_utc()),
             create_by: row.get_by_name_as(schema, "create_by"),
             create_name: row.get_by_name_as(schema, "create_name"),
@@ -137,10 +142,13 @@ impl DefaultStorageService {
     pub(super) async fn find_file_detail(&self, file_id: &str) -> Result<crate::bmc::FileDetail> {
         let (mm, db_id) = self.get_db().await?;
         let dataset = GenericCrudService::<FileDetailBmc>::get(
-            mm, &db_id, None, Value::String(file_id.to_string()),
+            mm,
+            &db_id,
+            None,
+            Value::String(file_id.to_string()),
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         Self::dataset_to_file_detail(&dataset)
             .ok_or_else(|| Error::NotFoundError(format!("文件不存在: {}", file_id)))
@@ -220,7 +228,11 @@ impl DefaultStorageService {
     /// # Returns
     ///
     /// 找到匹配文件时返回 `Some(FileInfo)`，否则返回 `None`。
-    pub(super) async fn try_instant_upload(&self, hash_info: &str, platform: &str) -> Result<Option<FileInfo>> {
+    pub(super) async fn try_instant_upload(
+        &self,
+        hash_info: &str,
+        platform: &str,
+    ) -> Result<Option<FileInfo>> {
         let (mm, db_id) = self.get_db().await?;
         let filter = FileDetailFilter {
             hash_info: Some(OpValsString(vec![OpValString::Eq(hash_info.to_string())])),
@@ -240,10 +252,14 @@ impl DefaultStorageService {
         };
 
         let (dataset, _total) = GenericCrudService::<FileDetailBmc, FileDetailFilter>::page(
-            mm, &db_id, None, Some(vec![filter]), list_options,
+            mm,
+            &db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         if let Some(detail) = Self::dataset_to_file_detail(&dataset)
             && detail.archived.unwrap_or(0) == 0

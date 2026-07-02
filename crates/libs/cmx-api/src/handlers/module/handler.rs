@@ -2,21 +2,21 @@
 //!
 //! 提供模块实体的自定义分页查询功能
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::Json;
-use cmx_core::model::data::dataset::DataSet;
 use cmx_core::PageParams;
+use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
-use cmx_biz::module::ModuleFilter;
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
 use crate::Result;
+use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
+use cmx_biz::module::ModuleFilter;
 
 /// Module 自定义分页查询 Handler
 ///
@@ -74,21 +74,15 @@ pub async fn module_custom_page(
     let page_size = params.get_size() as u64;
     let filters = params.filters.clone().filter(|v| !v.is_empty());
 
-    let (dataset, total) = CustomQueryService::page_custom(
-        mm,
-        &db_id,
-        None,
-        filters,
-        list_options,
-        sql,
-        "cmx_module",
-    )
-    .await
-        .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
+    let (dataset, total) =
+        CustomQueryService::page_custom(mm, &db_id, None, filters, list_options, sql, "cmx_module")
+            .await
+            .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
-        page_number ,
-        page_size ,
+        page_number,
+        page_size,
         total as u64,
-    )))}
+    )))
+}

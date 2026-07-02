@@ -8,14 +8,14 @@
 
 mod common;
 
-use cmx_core::model::service::ServiceFlow;
 use cmx_core::StepStatus;
+use cmx_core::model::service::ServiceFlow;
 use cmx_service::ExecuteOptions;
 use serde_json::json;
 
 use common::{
-    create_orchestrator, make_edge, make_end_node, make_func_node, make_orchestration,
-    make_start_node, make_svr_context, MockRuntimeInvoker, MockServiceQuery,
+    MockRuntimeInvoker, MockServiceQuery, create_orchestrator, make_edge, make_end_node,
+    make_func_node, make_orchestration, make_start_node, make_svr_context,
 };
 
 /// 构造线性流程：start -> func1 -> func2 -> end
@@ -64,7 +64,11 @@ async fn 线性流程_多节点按顺序执行成功() {
 
     assert!(result.success, "执行应成功");
     assert!(result.output.is_some(), "应有最终输出");
-    assert_eq!(result.output.unwrap(), json!({"step": 2}), "最终输出应为 func_2 的返回值");
+    assert_eq!(
+        result.output.unwrap(),
+        json!({"step": 2}),
+        "最终输出应为 func_2 的返回值"
+    );
     assert_eq!(result.steps.len(), 2, "应记录 2 个步骤（func_1 和 func_2）");
     assert!(result.error.is_none(), "不应有错误");
     assert_eq!(result.debug_triggered, Some(false));
@@ -136,10 +140,16 @@ async fn 线性流程_链式输出传递() {
     // 验证步骤顺序
     assert_eq!(result.steps.len(), 2);
     assert_eq!(result.steps[0].node_id, "func_1");
-    assert_eq!(result.steps[0].output.clone().unwrap(), json!({"value": "first"}));
+    assert_eq!(
+        result.steps[0].output.clone().unwrap(),
+        json!({"value": "first"})
+    );
     assert_eq!(result.steps[0].status, StepStatus::Success);
     assert_eq!(result.steps[1].node_id, "func_2");
-    assert_eq!(result.steps[1].output.clone().unwrap(), json!({"value": "second"}));
+    assert_eq!(
+        result.steps[1].output.clone().unwrap(),
+        json!({"value": "second"})
+    );
     assert_eq!(result.steps[1].status, StepStatus::Success);
 }
 
@@ -245,7 +255,10 @@ async fn 线性流程_第一个节点失败时记录失败步骤() {
     assert_eq!(failed_step.node_id, "func_1");
     assert_eq!(failed_step.status, StepStatus::Failed);
     assert!(failed_step.error.is_some(), "失败步骤应有错误信息");
-    assert!(failed_step.previous_output.is_some(), "失败步骤应记录上一步输出");
+    assert!(
+        failed_step.previous_output.is_some(),
+        "失败步骤应记录上一步输出"
+    );
 }
 
 #[tokio::test]
@@ -329,9 +342,7 @@ async fn 线性流程_无开始节点时返回错误() {
             make_func_node("func_1", "步骤1", "plugin_a", "process_1"),
             make_end_node("end_1"),
         ],
-        edges: vec![
-            make_edge("func_1", "out", "end_1"),
-        ],
+        edges: vec![make_edge("func_1", "out", "end_1")],
     };
     let orchestration = make_orchestration("no_start", flow);
 

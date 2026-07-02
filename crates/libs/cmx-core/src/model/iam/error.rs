@@ -29,17 +29,11 @@ pub enum PermissionDeniedError {
 
     /// 权限不足
     #[error("用户 {user_id} 缺少权限: {permission}")]
-    Permission {
-        user_id: String,
-        permission: String,
-    },
+    Permission { user_id: String, permission: String },
 
     /// 角色不足(单角色)
     #[error("用户 {user_id} 缺少角色: {role}")]
-    Role {
-        user_id: String,
-        role: String,
-    },
+    Role { user_id: String, role: String },
 
     /// 角色不足(多角色,AND/OR 语义)
     #[error("用户 {user_id} 缺少角色(需{requirement}): {roles}")]

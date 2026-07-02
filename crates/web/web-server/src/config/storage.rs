@@ -36,7 +36,7 @@ pub async fn init_storage() -> crate::Result<()> {
 
     let manager = Arc::new(
         StorageManager::new(&storage_config)
-            .map_err(|e| Error::StorageInit(format!("存储管理器初始化失败: {}", e)))?
+            .map_err(|e| Error::StorageInit(format!("存储管理器初始化失败: {}", e)))?,
     );
 
     // 收集本地存储的静态文件访问配置

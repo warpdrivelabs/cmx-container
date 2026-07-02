@@ -10,9 +10,9 @@
 //! - 支持表和列的注释
 //! - 支持 round-trip 模式（保留原始 db_type）
 
-use cmx_core::model::cell::{ColumnDefine, FieldType, IndexKind, TableDefine};
-use crate::MetadataError;
 use super::DdlDialect;
+use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, FieldType, IndexKind, TableDefine};
 
 /// PostgreSQL DDL 方言
 ///
@@ -86,8 +86,6 @@ impl DdlDialect for PostgresDdlDialect {
             FieldType::Json => "JSONB".to_string(),
             FieldType::Uuid => "UUID".to_string(),
             FieldType::Unknown => "TEXT".to_string(),
-
-
         }
     }
 
@@ -111,13 +109,19 @@ impl DdlDialect for PostgresDdlDialect {
         let pk_cols: Vec<String> = if !table.primary_keys.is_empty() {
             table.primary_keys.clone()
         } else {
-            table.columns.iter()
+            table
+                .columns
+                .iter()
                 .filter(|c| c.is_primary_key)
                 .map(|c| c.name.clone())
                 .collect()
         };
         if !pk_cols.is_empty() {
-            let pk_list = pk_cols.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ");
+            let pk_list = pk_cols
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect::<Vec<_>>()
+                .join(", ");
             lines.push(format!("    PRIMARY KEY ({})", pk_list));
         }
 
@@ -137,12 +141,20 @@ impl DdlDialect for PostgresDdlDialect {
         let qualified = self.qualified_table_name(&table.table_name, table.schema.as_deref());
         let mut stmts = Vec::new();
         for idx in &table.indexes {
-            let cols = idx.columns.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ");
+            let cols = idx
+                .columns
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect::<Vec<_>>()
+                .join(", ");
             let unique = match idx.kind {
                 IndexKind::Unique => "UNIQUE ",
                 IndexKind::Normal => "",
             };
-            stmts.push(format!("CREATE {}INDEX \"{}\" ON {} ({});", unique, idx.name, qualified, cols));
+            stmts.push(format!(
+                "CREATE {}INDEX \"{}\" ON {} ({});",
+                unique, idx.name, qualified, cols
+            ));
         }
         Ok(stmts)
     }
@@ -171,7 +183,12 @@ impl DdlDialect for PostgresDdlDialect {
         Ok(stmts)
     }
 
-    fn generate_add_column(&self, table_name: &str, schema: Option<&str>, col: &ColumnDefine) -> Result<String, MetadataError> {
+    fn generate_add_column(
+        &self,
+        table_name: &str,
+        schema: Option<&str>,
+        col: &ColumnDefine,
+    ) -> Result<String, MetadataError> {
         let qualified = self.qualified_table_name(table_name, schema);
         let col_type = self.map_column_type(col);
         let nullable = if col.is_nullable { "" } else { " NOT NULL" };
@@ -185,9 +202,17 @@ impl DdlDialect for PostgresDdlDialect {
         ))
     }
 
-    fn generate_drop_column(&self, table_name: &str, schema: Option<&str>, col_name: &str) -> Result<String, MetadataError> {
+    fn generate_drop_column(
+        &self,
+        table_name: &str,
+        schema: Option<&str>,
+        col_name: &str,
+    ) -> Result<String, MetadataError> {
         let qualified = self.qualified_table_name(table_name, schema);
-        Ok(format!("ALTER TABLE {} DROP COLUMN \"{}\";", qualified, col_name))
+        Ok(format!(
+            "ALTER TABLE {} DROP COLUMN \"{}\";",
+            qualified, col_name
+        ))
     }
 
     fn generate_alter_column(
@@ -239,7 +264,9 @@ impl DdlDialect for PostgresDdlDialect {
                 Some(val) => {
                     stmts.push(format!(
                         "ALTER TABLE {} ALTER COLUMN \"{}\" SET DEFAULT {};",
-                        qualified, new_col.name, render_default_value(val)
+                        qualified,
+                        new_col.name,
+                        render_default_value(val)
                     ));
                 }
                 None => {
@@ -288,8 +315,8 @@ fn render_default_value(val: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use cmx_core::model::cell::IndexDefine;
+    use std::collections::HashMap;
 
     fn make_col(name: &str, label: &str, ft: FieldType, nullable: bool) -> ColumnDefine {
         ColumnDefine {
@@ -300,11 +327,16 @@ mod tests {
             is_nullable: nullable,
             default_value: None,
             i18n: false,
-            length: None, precision: None, scale: None,
-            db_type: None, ordinal: None,
-            create_time: None, update_time: None,
+            length: None,
+            precision: None,
+            scale: None,
+            db_type: None,
+            ordinal: None,
+            create_time: None,
+            update_time: None,
             is_foreign_key: false,
-            foreign_key_table: None, foreign_key_column: None,
+            foreign_key_table: None,
+            foreign_key_column: None,
             extensions: HashMap::new(),
         }
     }
@@ -358,7 +390,9 @@ mod tests {
 
     #[test]
     fn test_prefer_db_type() {
-        let dialect = PostgresDdlDialect { prefer_db_type: true };
+        let dialect = PostgresDdlDialect {
+            prefer_db_type: true,
+        };
         let mut col = make_col("c", "", FieldType::String, true);
         col.db_type = Some("VARCHAR2(30)".to_string());
         assert_eq!(dialect.map_column_type(&col), "VARCHAR2(30)");
@@ -393,7 +427,8 @@ mod tests {
             primary_keys: vec!["id".to_string()],
             indexes: vec![],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
             comment: Some("企业应用域".to_string()),
             schema: Some("public".to_string()),
@@ -433,9 +468,12 @@ mod tests {
                 },
             ],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
-            comment: None, schema: None, tablespace: None,
+            comment: None,
+            schema: None,
+            tablespace: None,
             is_partitioned: false,
             partition_type: None,
             partition_columns: vec![],
@@ -461,7 +499,8 @@ mod tests {
             primary_keys: vec![],
             indexes: vec![],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
             comment: Some("企业应用域".to_string()),
             schema: Some("public".to_string()),
@@ -485,7 +524,10 @@ mod tests {
         assert_eq!(render_default_value("true"), "TRUE");
         assert_eq!(render_default_value("false"), "FALSE");
         assert_eq!(render_default_value("NULL"), "NULL");
-        assert_eq!(render_default_value("CURRENT_TIMESTAMP"), "CURRENT_TIMESTAMP");
+        assert_eq!(
+            render_default_value("CURRENT_TIMESTAMP"),
+            "CURRENT_TIMESTAMP"
+        );
         assert_eq!(render_default_value("now()"), "now()");
         assert_eq!(render_default_value("active"), "'active'");
         assert_eq!(render_default_value("it's"), "'it''s'");
@@ -506,18 +548,18 @@ mod tests {
                 make_col("name", "名称", FieldType::String, false),
             ],
             primary_keys: vec!["id".to_string()],
-            indexes: vec![
-                IndexDefine {
-                    name: "idx_test_name".to_string(),
-                    columns: vec!["name".to_string()],
-                    kind: IndexKind::Normal,
-                },
-            ],
+            indexes: vec![IndexDefine {
+                name: "idx_test_name".to_string(),
+                columns: vec!["name".to_string()],
+                kind: IndexKind::Normal,
+            }],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
             comment: Some("测试表".to_string()),
-            schema: None, tablespace: None,
+            schema: None,
+            tablespace: None,
             is_partitioned: false,
             partition_type: None,
             partition_columns: vec![],
@@ -541,7 +583,8 @@ mod tests {
             primary_keys: vec![],
             indexes: vec![],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
             comment: None,
             schema: Some("public".to_string()),
@@ -559,7 +602,9 @@ mod tests {
     fn test_add_column() {
         let dialect = PostgresDdlDialect::default();
         let col = make_col("status", "状态", FieldType::String, true);
-        let ddl = dialect.generate_add_column("cmx_domain", Some("public"), &col).unwrap();
+        let ddl = dialect
+            .generate_add_column("cmx_domain", Some("public"), &col)
+            .unwrap();
         assert!(ddl.contains("ALTER TABLE"));
         assert!(ddl.contains("ADD COLUMN"));
         assert!(ddl.contains("\"status\" TEXT"));
@@ -573,7 +618,9 @@ mod tests {
         let mut new = make_col("name", "名称", FieldType::Text, false);
         new.default_value = Some("unnamed".to_string());
 
-        let stmts = dialect.generate_alter_column("test", None, &old, &new).unwrap();
+        let stmts = dialect
+            .generate_alter_column("test", None, &old, &new)
+            .unwrap();
         assert_eq!(stmts.len(), 3); // TYPE + SET NOT NULL + SET DEFAULT
         assert!(stmts[0].contains("TYPE TEXT"));
         assert!(stmts[1].contains("SET NOT NULL"));
@@ -586,19 +633,19 @@ mod tests {
         let table = TableDefine {
             table_name: "test".to_string(),
             display_name: "".to_string(),
-            columns: vec![
-                {
-                    let mut c = make_col("id", "", FieldType::Int, false);
-                    c.is_primary_key = true;
-                    c
-                },
-            ],
+            columns: vec![{
+                let mut c = make_col("id", "", FieldType::Int, false);
+                c.is_primary_key = true;
+                c
+            }],
             primary_keys: vec!["id".to_string()],
             indexes: vec![],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
-            comment: None, schema: None,
+            comment: None,
+            schema: None,
             tablespace: Some("my_tablespace".to_string()),
             is_partitioned: false,
             partition_type: None,

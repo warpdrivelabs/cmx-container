@@ -143,7 +143,10 @@ impl IamHostFunctions {
                    org_id, gender, status, description \
                    FROM cmx_user WHERE id = ANY($1) AND archived = 0";
         let params = vec![DataValue::Array(
-            user_ids.iter().map(|s| DataValue::String(s.clone())).collect(),
+            user_ids
+                .iter()
+                .map(|s| DataValue::String(s.clone()))
+                .collect(),
         )];
 
         let dataset = self
@@ -283,15 +286,8 @@ impl IamHostFunctions {
     ///
     /// 并发执行各角色判断（`futures::join_all`），每个判断独立走 IamChecker 缓存+熔断。
     /// 任一判断失败则整体返回错误；结果按入参 codes 顺序返回。
-    async fn do_has_roles(
-        &self,
-        user_id: &str,
-        codes: &[String],
-    ) -> Result<IamResponse, String> {
-        debug!(
-            "[cmx:iam] has_roles: user={user_id}, count={}",
-            codes.len()
-        );
+    async fn do_has_roles(&self, user_id: &str, codes: &[String]) -> Result<IamResponse, String> {
+        debug!("[cmx:iam] has_roles: user={user_id}, count={}", codes.len());
         let futs = codes.iter().map(|code| async move {
             let allowed = self.checker.has_role(user_id, code).await?;
             Ok::<_, cmx_traits::error::TraitError>(WasmCheckResult {

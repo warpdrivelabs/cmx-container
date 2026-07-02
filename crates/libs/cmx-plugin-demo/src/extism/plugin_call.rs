@@ -2,7 +2,6 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
-
 /// 调用订单服务编排
 ///
 /// 通过 call_service_by_key 调用订单服务编排，演示本地服务编排调用的使用方式。

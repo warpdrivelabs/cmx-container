@@ -7,21 +7,21 @@ use quote::quote;
 use syn::{parse_macro_input, Data, DataEnum, DataStruct, DeriveInput};
 
 pub fn derive_sqlite_to_value_inner(input: TokenStream) -> TokenStream {
-	// Parse the input tokens into a syntax tree
-	let input = parse_macro_input!(input as DeriveInput);
+    // Parse the input tokens into a syntax tree
+    let input = parse_macro_input!(input as DeriveInput);
 
-	// Get the identifier of the enum (e.g., "Model")
-	let name = input.ident;
+    // Get the identifier of the enum (e.g., "Model")
+    let name = input.ident;
 
-	// Build the match arms
-	let expanded = match input.data {
-		Data::Enum(data) => process_enum(name, data),
-		syn::Data::Struct(data) => process_struct(name, data),
-		_ => panic!("ToSqliteValue can only be used with enums or simple tuple struct for now"),
-	};
+    // Build the match arms
+    let expanded = match input.data {
+        Data::Enum(data) => process_enum(name, data),
+        syn::Data::Struct(data) => process_struct(name, data),
+        _ => panic!("ToSqliteValue can only be used with enums or simple tuple struct for now"),
+    };
 
-	// Return the generated token stream
-	TokenStream::from(expanded)
+    // Return the generated token stream
+    TokenStream::from(expanded)
 }
 
 /// For a type annotated like:
@@ -38,15 +38,15 @@ pub fn derive_sqlite_to_value_inner(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 fn process_struct(name: Ident, _data: DataStruct) -> proc_macro2::TokenStream {
-	// let first_tuple_field = match data.fields {
-	// 	Fields::Unnamed(fields) if fields.unnamed.len() == 1 => fields.unnamed.into_iter().next().unwrap(),
-	// 	_ => panic!("Expected a tuple struct with one field"),
-	// };
+    // let first_tuple_field = match data.fields {
+    // 	Fields::Unnamed(fields) if fields.unnamed.len() == 1 => fields.unnamed.into_iter().next().unwrap(),
+    // 	_ => panic!("Expected a tuple struct with one field"),
+    // };
 
-	// let field_type = &first_tuple_field.ty;
-	// let field_ident = &first_tuple_field.ident;
+    // let field_type = &first_tuple_field.ty;
+    // let field_ident = &first_tuple_field.ident;
 
-	#[rustfmt::skip]
+    #[rustfmt::skip]
 	let expanded = quote! {
 		/// Implement From for into rusqlite value
 	  impl From<#name> for rusqlite::types::Value {
@@ -63,7 +63,7 @@ fn process_struct(name: Ident, _data: DataStruct) -> proc_macro2::TokenStream {
 		}
 	};
 
-	expanded
+    expanded
 }
 
 /// For an enum type annotated like:
@@ -91,20 +91,20 @@ fn process_struct(name: Ident, _data: DataStruct) -> proc_macro2::TokenStream {
 /// }
 /// ```
 fn process_enum(name: Ident, data: DataEnum) -> proc_macro2::TokenStream {
-	let arms = data
-		.variants
-		.iter()
-		.map(|variant| {
-			let variant_ident = &variant.ident;
-			let variant_name_str = variant_ident.to_string();
-			quote! {
-			  #name::#variant_ident => #variant_name_str,
-			}
-		})
-		.collect::<Vec<_>>();
+    let arms = data
+        .variants
+        .iter()
+        .map(|variant| {
+            let variant_ident = &variant.ident;
+            let variant_name_str = variant_ident.to_string();
+            quote! {
+              #name::#variant_ident => #variant_name_str,
+            }
+        })
+        .collect::<Vec<_>>();
 
-	// Generate the final token stream
-	#[rustfmt::skip]
+    // Generate the final token stream
+    #[rustfmt::skip]
 	let expanded = quote! {
 
 		/// Implement from RustType into Rusqlite Value
@@ -130,5 +130,5 @@ fn process_enum(name: Ident, data: DataEnum) -> proc_macro2::TokenStream {
 
 	};
 
-	expanded
+    expanded
 }

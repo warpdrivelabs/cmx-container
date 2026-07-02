@@ -46,12 +46,10 @@ impl ConfigBuilder {
     /// 返回更新后的构建器实例
     pub fn add_toml_file(self, path: impl Into<PathBuf>) -> ConfigResult<Self> {
         let path = path.into();
-        let builder = self
-            .inner
-            .add_source(
-                config::File::new(path.to_str().unwrap_or(""), config::FileFormat::Toml)
-                    .required(false),
-            );
+        let builder = self.inner.add_source(
+            config::File::new(path.to_str().unwrap_or(""), config::FileFormat::Toml)
+                .required(false),
+        );
         Ok(ConfigBuilder { inner: builder })
     }
 
@@ -118,7 +116,8 @@ impl ConfigBuilder {
         default_path: impl Into<PathBuf>,
         _priority: u8,
     ) -> Self {
-        let path = std::env::var(env_var).unwrap_or_else(|_| default_path.into().to_string_lossy().to_string());
+        let path = std::env::var(env_var)
+            .unwrap_or_else(|_| default_path.into().to_string_lossy().to_string());
         let path_buf = PathBuf::from(&path);
         let builder = self.inner.add_source(
             config::File::new(path_buf.to_str().unwrap_or(""), config::FileFormat::Toml)
@@ -185,9 +184,7 @@ impl ConfigBuilder {
     /// # 返回值
     /// 返回更新后的构建器实例
     pub fn add_command_line<I: Iterator<Item = String> + 'static>(self, args: I) -> Self {
-        let builder = self
-            .inner
-            .add_source(CommandLineSource::from_args(args));
+        let builder = self.inner.add_source(CommandLineSource::from_args(args));
         ConfigBuilder { inner: builder }
     }
 
@@ -315,9 +312,7 @@ impl Config {
     /// # 返回值
     /// 成功返回转换后的值，失败返回错误
     pub fn get_as<T: DeserializeOwned>(&self, key: &str) -> ConfigResult<T> {
-        self.inner
-            .get::<T>(key)
-            .map_err(ConfigError::from)
+        self.inner.get::<T>(key).map_err(ConfigError::from)
     }
 
     /// 获取配置值并转换为指定类型，如果不存在则返回默认值
@@ -345,7 +340,9 @@ impl Config {
     pub fn get_string(&self, key: &str) -> ConfigResult<String> {
         self.inner
             .get_string(key)
-            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
+            .map_err(|_| ConfigError::KeyNotFound {
+                key: key.to_string(),
+            })
     }
 
     /// 获取整数配置值
@@ -358,7 +355,9 @@ impl Config {
     pub fn get_int(&self, key: &str) -> ConfigResult<i64> {
         self.inner
             .get_int(key)
-            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
+            .map_err(|_| ConfigError::KeyNotFound {
+                key: key.to_string(),
+            })
     }
 
     /// 获取浮点数配置值
@@ -371,7 +370,9 @@ impl Config {
     pub fn get_float(&self, key: &str) -> ConfigResult<f64> {
         self.inner
             .get_float(key)
-            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
+            .map_err(|_| ConfigError::KeyNotFound {
+                key: key.to_string(),
+            })
     }
 
     /// 获取布尔配置值
@@ -384,7 +385,9 @@ impl Config {
     pub fn get_bool(&self, key: &str) -> ConfigResult<bool> {
         self.inner
             .get_bool(key)
-            .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
+            .map_err(|_| ConfigError::KeyNotFound {
+                key: key.to_string(),
+            })
     }
 
     /// 获取可选配置值
@@ -489,13 +492,13 @@ impl Config {
         let table = self
             .inner
             .get_table(prefix)
-            .map_err(|_| ConfigError::KeyNotFound { key: prefix.to_string() })?;
+            .map_err(|_| ConfigError::KeyNotFound {
+                key: prefix.to_string(),
+            })?;
 
         let mut builder = config::Config::builder();
         for (key, value) in table {
-            builder = builder
-                .set_default(key, value)
-                .map_err(ConfigError::from)?;
+            builder = builder.set_default(key, value).map_err(ConfigError::from)?;
         }
 
         let sub_inner = builder.build().map_err(ConfigError::from)?;
@@ -847,10 +850,7 @@ port = 5432
 
         let config = Config::from_file(&config_path).unwrap();
 
-        assert_eq!(
-            config.get_as_or("existing", "default".to_string()),
-            "value"
-        );
+        assert_eq!(config.get_as_or("existing", "default".to_string()), "value");
         assert_eq!(
             config.get_as_or("non_existing", "default".to_string()),
             "default"
@@ -874,7 +874,11 @@ debug = false
         let config = Config::builder()
             .add_toml_file(&default_path)
             .unwrap()
-            .add_source(config::Environment::default().separator("__").try_parsing(true))
+            .add_source(
+                config::Environment::default()
+                    .separator("__")
+                    .try_parsing(true),
+            )
             .build()
             .unwrap();
 

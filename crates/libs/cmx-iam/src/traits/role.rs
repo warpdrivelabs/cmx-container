@@ -5,8 +5,8 @@
 //! 具体实现位于 `crate::role::service::RoleServiceImpl`。
 
 use async_trait::async_trait;
-use cmx_core::model::iam::{Permission, Role};
 use cmx_core::SVRContext;
+use cmx_core::model::iam::{Permission, Role};
 use cmx_traits::error::TraitError;
 use modql::filter::ListOptions;
 
@@ -104,7 +104,11 @@ pub trait RoleService: Send + Sync {
     /// # Errors
     ///
     /// 当尝试删除内置角色、事务开启/提交失败或 SQL 执行失败时返回错误。
-    async fn delete_role(&self, svr_ctx: &SVRContext, role_ids: &[String]) -> Result<(), TraitError>;
+    async fn delete_role(
+        &self,
+        svr_ctx: &SVRContext,
+        role_ids: &[String],
+    ) -> Result<(), TraitError>;
 
     /// 分页查询角色。
     ///

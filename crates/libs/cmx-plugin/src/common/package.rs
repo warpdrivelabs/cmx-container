@@ -129,7 +129,10 @@ impl PackageUtils {
                 fetcher
                     .fetch(&crate::fetcher::source::PluginSource::local(path.clone()))
                     .await
-                    .map_err(|e| { tracing::error!("获取本地插件包失败: {} - {}", error_context, e); e })
+                    .map_err(|e| {
+                        tracing::error!("获取本地插件包失败: {} - {}", error_context, e);
+                        e
+                    })
             }
             PluginSource::Remote { url, checksum } => {
                 let fetcher = RemoteFetcher::new(self.deps.temp_root.clone());
@@ -139,15 +142,19 @@ impl PackageUtils {
                         checksum.clone(),
                     ))
                     .await
-                    .map_err(|e| { tracing::error!("获取远程插件包失败: {} - {}", error_context, e); e })
+                    .map_err(|e| {
+                        tracing::error!("获取远程插件包失败: {} - {}", error_context, e);
+                        e
+                    })
             }
             PluginSource::Marketplace {
                 marketplace_url,
                 plugin_id,
             } => {
-                let marketplace_source_info = crate::fetcher::marketplace_fetcher::MarketplaceSourceInfo::new(
-                    marketplace_url.clone().unwrap_or_default(),
-                );
+                let marketplace_source_info =
+                    crate::fetcher::marketplace_fetcher::MarketplaceSourceInfo::new(
+                        marketplace_url.clone().unwrap_or_default(),
+                    );
                 let fetcher = crate::fetcher::marketplace_fetcher::MarketplaceFetcher::new(
                     marketplace_source_info,
                     self.deps.temp_root.clone(),
@@ -162,7 +169,8 @@ impl PackageUtils {
                     })
             }
             PluginSource::Storage { file_id, checksum } => {
-                let fetcher = crate::fetcher::storage::StorageFetcher::new(self.deps.temp_root.clone());
+                let fetcher =
+                    crate::fetcher::storage::StorageFetcher::new(self.deps.temp_root.clone());
                 fetcher
                     .fetch(&crate::fetcher::source::PluginSource::storage(
                         file_id.clone(),
@@ -232,8 +240,9 @@ impl PackageUtils {
             .unwrap_or(false);
 
         if is_zip {
-            std::fs::create_dir_all(temp_dir)
-                .map_err(|e| PluginError::Install(format!("创建临时目录失败: {} - {}", error_context, e)))?;
+            std::fs::create_dir_all(temp_dir).map_err(|e| {
+                PluginError::Install(format!("创建临时目录失败: {} - {}", error_context, e))
+            })?;
 
             self.extract_zip(package_path, temp_dir, error_context)?;
 
@@ -325,9 +334,15 @@ impl PackageUtils {
     /// - ZIP 文件不存在或无法读取
     /// - 解压过程中发生错误
     /// - 目标目录权限不足
-    pub fn extract_zip(&self, zip_path: &Path, target: &Path, error_context: &str) -> PluginResult<()> {
-        cmx_utils::zip::ZipExtractor::extract(zip_path, target)
-            .map_err(|e| PluginError::Install(format!("解压插件包失败: {} - {}", error_context, e)))?;
+    pub fn extract_zip(
+        &self,
+        zip_path: &Path,
+        target: &Path,
+        error_context: &str,
+    ) -> PluginResult<()> {
+        cmx_utils::zip::ZipExtractor::extract(zip_path, target).map_err(|e| {
+            PluginError::Install(format!("解压插件包失败: {} - {}", error_context, e))
+        })?;
 
         Ok(())
     }
@@ -364,9 +379,9 @@ impl PackageUtils {
     ) -> PluginResult<()> {
         if source.is_dir() {
             if let Some(ref storage) = self.deps.storage {
-                storage
-                    .copy_dir(source, target)
-                    .map_err(|e| PluginError::Install(format!("复制插件文件失败: {} - {}", error_context, e)))?;
+                storage.copy_dir(source, target).map_err(|e| {
+                    PluginError::Install(format!("复制插件文件失败: {} - {}", error_context, e))
+                })?;
             } else {
                 Self::copy_dir_fallback(source, target, error_context)?;
             }
@@ -392,8 +407,9 @@ impl PackageUtils {
             )));
         }
 
-        std::fs::create_dir_all(target)
-            .map_err(|e| PluginError::Install(format!("创建目标目录失败: {} - {}", error_context, e)))?;
+        std::fs::create_dir_all(target).map_err(|e| {
+            PluginError::Install(format!("创建目标目录失败: {} - {}", error_context, e))
+        })?;
 
         fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
             if src.is_dir() {
@@ -410,8 +426,9 @@ impl PackageUtils {
             Ok(())
         }
 
-        copy_dir_recursive(source, target)
-            .map_err(|e| PluginError::Install(format!("复制目录失败: {} - {}", error_context, e)))?;
+        copy_dir_recursive(source, target).map_err(|e| {
+            PluginError::Install(format!("复制目录失败: {} - {}", error_context, e))
+        })?;
 
         Ok(())
     }
@@ -444,8 +461,11 @@ mod tests {
 
     impl TempDir {
         fn new(label: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("cmx_plugin_pkg_{}_{}", label, uuid::Uuid::new_v4()));
+            let path = std::env::temp_dir().join(format!(
+                "cmx_plugin_pkg_{}_{}",
+                label,
+                uuid::Uuid::new_v4()
+            ));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -600,7 +620,11 @@ mod tests {
         let result = utils.prepare_package_for_validation(&bad_path, temp.path(), "测试");
         assert!(result.is_err(), "不支持的格式应返回错误");
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("不支持的插件包格式"), "应报告不支持格式: {}", err);
+        assert!(
+            err.to_string().contains("不支持的插件包格式"),
+            "应报告不支持格式: {}",
+            err
+        );
     }
 
     #[test]
@@ -608,7 +632,10 @@ mod tests {
         // ZIP 应解压到临时目录，并标记需要清理
         let dir = TempDir::new("prepare_zip");
         let zip_path = dir.join("plugin.zip");
-        write_zip(&zip_path, &[("manifest.json", b"{}"), ("plugin.wasm", b"\0asm")]);
+        write_zip(
+            &zip_path,
+            &[("manifest.json", b"{}"), ("plugin.wasm", b"\0asm")],
+        );
 
         let utils = PackageUtils::default();
         let temp = TempDir::new("prepare_zip_temp");
@@ -617,7 +644,10 @@ mod tests {
             .unwrap();
         assert!(needs_cleanup, "ZIP 解压结果应需要清理");
         // 解压目录应包含 manifest.json
-        assert!(extract_path.join("manifest.json").exists(), "应解压出 manifest.json");
+        assert!(
+            extract_path.join("manifest.json").exists(),
+            "应解压出 manifest.json"
+        );
     }
 
     // ==================== extract_zip / copy_plugin_files 集成 ====================
@@ -654,7 +684,9 @@ mod tests {
 
         let target = TempDir::new("copy_dst").join("dest");
         let utils = PackageUtils::default();
-        utils.copy_plugin_files(dir.path(), &target, "测试").unwrap();
+        utils
+            .copy_plugin_files(dir.path(), &target, "测试")
+            .unwrap();
 
         assert!(target.join("manifest.json").exists());
         assert!(target.join("plugin.wasm").exists());
@@ -676,8 +708,8 @@ mod tests {
     /// 构造一个 ZIP 文件到指定路径
     fn write_zip(zip_path: &Path, entries: &[(&str, &[u8])]) {
         use std::io::{Cursor, Write};
-        use zip::write::SimpleFileOptions;
         use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
 
         let buf = Cursor::new(Vec::new());
         let mut zip = ZipWriter::new(buf);

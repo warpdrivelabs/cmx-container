@@ -2,7 +2,6 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
-
 /// 查询订单列表
 ///
 /// 执行参数化查询获取订单列表，演示 db_query 的使用方式。
@@ -17,9 +16,7 @@ use cmx_plugin_sdk::*;
 /// | `customer_name` | string | 否 | 客户名称 |
 /// | `status` | string | 否 | 订单状态 |
 #[plugin_fn]
-pub fn query_orders(
-    Msgpack(input): Msgpack<FunctionInput>,
-) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn query_orders(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
     let output = core.query_orders(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))
@@ -40,9 +37,7 @@ pub fn query_orders(
 /// | `quantity` | integer | 是 | 数量 |
 /// | `unit_price` | number | 是 | 单价 |
 #[plugin_fn]
-pub fn create_order(
-    Msgpack(input): Msgpack<FunctionInput>,
-) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn create_order(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
     let output = core.create_order(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))
@@ -62,9 +57,7 @@ pub fn create_order(
 /// | `status` | string | 否 | 订单状态 |
 /// | `quantity` | integer | 否 | 数量 |
 #[plugin_fn]
-pub fn update_order(
-    Msgpack(input): Msgpack<FunctionInput>,
-) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn update_order(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
     let output = core.update_order(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))
@@ -78,9 +71,7 @@ pub fn update_order(
 ///
 /// * `input` - `string` 订单ID。
 #[plugin_fn]
-pub fn delete_order(
-    Msgpack(input): Msgpack<FunctionInput>,
-) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn delete_order(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
     let output = core.delete_order(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))

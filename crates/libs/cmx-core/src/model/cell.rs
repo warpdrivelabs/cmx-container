@@ -1,16 +1,14 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::SerializeSeq;
-use serde_json::Value as JsonValue;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc, NaiveDate};
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value as JsonValue;
 use smol_str::SmolStr;
 use uuid::Uuid;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 /// ```
 pub type CellValue = DataValue;
-
-
 
 // ==========================================
 // 1. 值类型系统 (Type System)
@@ -195,8 +193,10 @@ impl<'de> Deserialize<'de> for DataValue {
             JsonValue::String(s) => {
                 // 尝试解析为 NullTyped(通过 $null: 前缀识别,如 "$null:Int")
                 if let Some(type_str) = s.strip_prefix("$null:") {
-                    let t: SqlTypeMarker = serde_json::from_value(JsonValue::String(type_str.to_string()))
-                        .map_err(|e| serde::de::Error::custom(format!("invalid $null type: {}", e)))?;
+                    let t: SqlTypeMarker = serde_json::from_value(JsonValue::String(
+                        type_str.to_string(),
+                    ))
+                    .map_err(|e| serde::de::Error::custom(format!("invalid $null type: {}", e)))?;
                     return Ok(DataValue::NullTyped(t));
                 }
                 // 尝试解析为 DateTime（RFC3339 格式，如 "2024-01-01T12:00:00Z" 或 "2024-01-01T12:00:00+00:00"）
@@ -213,14 +213,16 @@ impl<'de> Deserialize<'de> for DataValue {
                 }
                 // 尝试解析为 base64 编码的二进制数据（通过 B64: 前缀识别）
                 if let Some(encoded) = s.strip_prefix("B64:")
-                    && let Ok(bytes) = BASE64.decode(encoded) {
-                        return Ok(DataValue::Binary(bytes));
-                    }
+                    && let Ok(bytes) = BASE64.decode(encoded)
+                {
+                    return Ok(DataValue::Binary(bytes));
+                }
                 // 尝试解析为 JSON（如果是以 { 或 [ 开头）
                 if (s.starts_with('{') || s.starts_with('['))
-                    && serde_json::from_str::<JsonValue>(&s).is_ok() {
-                        return Ok(DataValue::Json(s));
-                    }
+                    && serde_json::from_str::<JsonValue>(&s).is_ok()
+                {
+                    return Ok(DataValue::Json(s));
+                }
                 Ok(DataValue::String(s))
             }
             JsonValue::Array(arr) => {
@@ -235,7 +237,8 @@ impl<'de> Deserialize<'de> for DataValue {
                 });
 
                 if is_binary {
-                    let bytes: Vec<u8> = arr.iter()
+                    let bytes: Vec<u8> = arr
+                        .iter()
                         .filter_map(|v| v.as_u64())
                         .map(|n| n as u8)
                         .collect();
@@ -243,10 +246,11 @@ impl<'de> Deserialize<'de> for DataValue {
                 }
 
                 // 否则作为 Array 处理
-                let items: Result<Vec<DataValue>, _> = arr.iter()
-                    .map(DataValue::deserialize)
-                    .collect();
-                Ok(DataValue::Array(items.map_err(|e| serde::de::Error::custom(e.to_string()))?))
+                let items: Result<Vec<DataValue>, _> =
+                    arr.iter().map(DataValue::deserialize).collect();
+                Ok(DataValue::Array(
+                    items.map_err(|e| serde::de::Error::custom(e.to_string()))?,
+                ))
             }
             JsonValue::Object(_) => {
                 // 对象类型暂不支持直接反序列化
@@ -260,16 +264,51 @@ impl<'de> Deserialize<'de> for DataValue {
 // ========================================
 // 基础类型转换
 // ========================================
-impl From<i32> for DataValue { fn from(v: i32) -> Self { DataValue::Int(v as i64) } }
-impl From<i64> for DataValue { fn from(v: i64) -> Self { DataValue::Int(v) } }
-impl From<f64> for DataValue { fn from(v: f64) -> Self { DataValue::Float(v) } }
-impl From<bool> for DataValue { fn from(v: bool) -> Self { DataValue::Bool(v) } }
-impl From<String> for DataValue { fn from(v: String) -> Self { DataValue::String(v) } }
-impl From<&str> for DataValue { fn from(v: &str) -> Self { DataValue::String(v.to_string()) } }
-impl From<Decimal> for DataValue { fn from(v: Decimal) -> Self { DataValue::Decimal(v) } }
-impl From<DateTime<Utc>> for DataValue { fn from(v: DateTime<Utc>) -> Self { DataValue::DateTime(v) } }
-impl From<NaiveDate> for DataValue { fn from(v: NaiveDate) -> Self { DataValue::Date(v) } }
-
+impl From<i32> for DataValue {
+    fn from(v: i32) -> Self {
+        DataValue::Int(v as i64)
+    }
+}
+impl From<i64> for DataValue {
+    fn from(v: i64) -> Self {
+        DataValue::Int(v)
+    }
+}
+impl From<f64> for DataValue {
+    fn from(v: f64) -> Self {
+        DataValue::Float(v)
+    }
+}
+impl From<bool> for DataValue {
+    fn from(v: bool) -> Self {
+        DataValue::Bool(v)
+    }
+}
+impl From<String> for DataValue {
+    fn from(v: String) -> Self {
+        DataValue::String(v)
+    }
+}
+impl From<&str> for DataValue {
+    fn from(v: &str) -> Self {
+        DataValue::String(v.to_string())
+    }
+}
+impl From<Decimal> for DataValue {
+    fn from(v: Decimal) -> Self {
+        DataValue::Decimal(v)
+    }
+}
+impl From<DateTime<Utc>> for DataValue {
+    fn from(v: DateTime<Utc>) -> Self {
+        DataValue::DateTime(v)
+    }
+}
+impl From<NaiveDate> for DataValue {
+    fn from(v: NaiveDate) -> Self {
+        DataValue::Date(v)
+    }
+}
 
 /// 从 Vec<u8> 转换为 Binary 类型
 impl From<Vec<u8>> for DataValue {
@@ -283,7 +322,9 @@ impl From<Vec<u8>> for DataValue {
     /// let bytes = vec![0x00, 0x01, 0x02];
     /// let value = DataValue::from(bytes);
     /// ```
-    fn from(v: Vec<u8>) -> Self { DataValue::Binary(v) }
+    fn from(v: Vec<u8>) -> Self {
+        DataValue::Binary(v)
+    }
 }
 
 /// 从 &[u8] 切片转换为 Binary 类型
@@ -292,7 +333,9 @@ impl From<&[u8]> for DataValue {
     ///
     /// # 参数
     /// - v: 字节切片，表示二进制数据
-    fn from(v: &[u8]) -> Self { DataValue::Binary(v.to_vec()) }
+    fn from(v: &[u8]) -> Self {
+        DataValue::Binary(v.to_vec())
+    }
 }
 
 /// 从 String 转换为 Json 类型
@@ -308,7 +351,9 @@ impl From<JsonValue> for DataValue {
     /// let json_val = json!({"key": "value"});
     /// let data_value = DataValue::from(json_val);
     /// ```
-    fn from(v: JsonValue) -> Self { DataValue::Json(v.to_string()) }
+    fn from(v: JsonValue) -> Self {
+        DataValue::Json(v.to_string())
+    }
 }
 
 /// 从 Uuid 转换为 Uuid 类型
@@ -324,7 +369,9 @@ impl From<Uuid> for DataValue {
     /// let id = Uuid::new_v4();
     /// let value = DataValue::from(id);
     /// ```
-    fn from(v: Uuid) -> Self { DataValue::Uuid(v) }
+    fn from(v: Uuid) -> Self {
+        DataValue::Uuid(v)
+    }
 }
 
 /// 从 Vec<DataValue> 转换为 Array 类型
@@ -339,7 +386,9 @@ impl From<Vec<DataValue>> for DataValue {
     /// let arr = vec![1i32.into(), "hello".into(), true.into()];
     /// let value = DataValue::from(arr);
     /// ```
-    fn from(v: Vec<DataValue>) -> Self { DataValue::Array(v) }
+    fn from(v: Vec<DataValue>) -> Self {
+        DataValue::Array(v)
+    }
 }
 
 // ==========================================
@@ -354,55 +403,64 @@ impl From<Option<String>> for DataValue {
 
 impl From<Option<&str>> for DataValue {
     fn from(v: Option<&str>) -> Self {
-        v.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null)
+        v.map(|s| DataValue::String(s.to_string()))
+            .unwrap_or(DataValue::Null)
     }
 }
 
 impl From<Option<i64>> for DataValue {
     fn from(v: Option<i64>) -> Self {
-        v.map(DataValue::Int).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
+        v.map(DataValue::Int)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
     }
 }
 
 impl From<Option<i32>> for DataValue {
     fn from(v: Option<i32>) -> Self {
-        v.map(|i| DataValue::Int(i as i64)).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
+        v.map(|i| DataValue::Int(i as i64))
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Int))
     }
 }
 
 impl From<Option<f64>> for DataValue {
     fn from(v: Option<f64>) -> Self {
-        v.map(DataValue::Float).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Float))
+        v.map(DataValue::Float)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Float))
     }
 }
 
 impl From<Option<bool>> for DataValue {
     fn from(v: Option<bool>) -> Self {
-        v.map(DataValue::Bool).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Bool))
+        v.map(DataValue::Bool)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Bool))
     }
 }
 
 impl From<Option<Uuid>> for DataValue {
     fn from(v: Option<Uuid>) -> Self {
-        v.map(DataValue::Uuid).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Uuid))
+        v.map(DataValue::Uuid)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Uuid))
     }
 }
 
 impl From<Option<DateTime<Utc>>> for DataValue {
     fn from(v: Option<DateTime<Utc>>) -> Self {
-        v.map(DataValue::DateTime).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Timestamp))
+        v.map(DataValue::DateTime)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Timestamp))
     }
 }
 
 impl From<Option<NaiveDate>> for DataValue {
     fn from(v: Option<NaiveDate>) -> Self {
-        v.map(DataValue::Date).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Date))
+        v.map(DataValue::Date)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Date))
     }
 }
 
 impl From<Option<Decimal>> for DataValue {
     fn from(v: Option<Decimal>) -> Self {
-        v.map(DataValue::Decimal).unwrap_or(DataValue::NullTyped(SqlTypeMarker::Decimal))
+        v.map(DataValue::Decimal)
+            .unwrap_or(DataValue::NullTyped(SqlTypeMarker::Decimal))
     }
 }
 
@@ -552,8 +610,9 @@ impl TryFrom<DataValue> for NaiveDate {
     fn try_from(v: DataValue) -> Result<Self, Self::Error> {
         match v {
             DataValue::Date(d) => Ok(d),
-            DataValue::String(s) => NaiveDate::parse_from_str(&s, "%Y-%m-%d")
-                .map_err(|e| e.to_string()),
+            DataValue::String(s) => {
+                NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(|e| e.to_string())
+            }
             _ => Err(format!("cannot convert {:?} to NaiveDate", v)),
         }
     }
@@ -594,8 +653,12 @@ impl TryFrom<DataValue> for serde_json::Value {
     type Error = String;
     fn try_from(v: DataValue) -> Result<Self, Self::Error> {
         match v {
-            DataValue::Json(json_str) => serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string()),
-            DataValue::String(json_str) => serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string()),
+            DataValue::Json(json_str) => {
+                serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string())
+            }
+            DataValue::String(json_str) => {
+                serde_json::from_str(json_str.as_str()).map_err(|e| e.to_string())
+            }
             _ => Err(format!("cannot convert {:?} to serde_json::Value", v)),
         }
     }
@@ -608,7 +671,7 @@ impl TryFrom<DataValue> for serde_json::Value {
 // 注意：TableDefine 相关类型已迁移到 super::meta::table 模块
 // 此处保留重导出以保持向后兼容
 pub use super::meta::table::{
-    FieldType, Field, ColumnDefine, IndexKind, IndexDefine, PartitionType, TableDefine,
+    ColumnDefine, Field, FieldType, IndexDefine, IndexKind, PartitionType, TableDefine,
 };
 
 // ============================================
@@ -666,8 +729,8 @@ macro_rules! dv {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Datelike;
     use super::*;
+    use chrono::Datelike;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1069,7 +1132,10 @@ mod tests {
 
         match deserialized {
             DataValue::DateTime(dt) => {
-                assert_eq!(dt.format("%Y-%m-%dT%H:%M:%S").to_string(), "2024-01-15T10:30:00");
+                assert_eq!(
+                    dt.format("%Y-%m-%dT%H:%M:%S").to_string(),
+                    "2024-01-15T10:30:00"
+                );
             }
             _ => panic!("Expected DateTime after roundtrip"),
         }

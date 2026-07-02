@@ -22,7 +22,7 @@ pub struct UpgradeRequest {
     /// 操作者
     pub operator: Option<String>,
     /// 构建类型 debug release
-    pub  build_type : Option<String>,
+    pub build_type: Option<String>,
     /// 市场版本来源 ID，关联 `cmx_marketplace_plugin_version.id`。
     pub marketplace_source_id: Option<String>,
     /// 应用ID
@@ -58,7 +58,10 @@ impl UpgradeService {
     }
 
     /// 执行升级操作
-    pub async fn upgrade(&self, request: UpgradeRequest) -> crate::error::PluginResult<UpgradeResponse> {
+    pub async fn upgrade(
+        &self,
+        request: UpgradeRequest,
+    ) -> crate::error::PluginResult<UpgradeResponse> {
         self.executor.execute_upgrade(request).await
     }
 }

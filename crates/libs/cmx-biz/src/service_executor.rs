@@ -105,9 +105,7 @@ fn map_execution_step(step: ExecutionStep) -> CoreExecutionStep {
 
 /// 将 `OrchestrationError` 转换为协议无关的 `CoreOrchestrationError`
 fn map_orchestration_error(e: OrchestrationError) -> CoreOrchestrationError {
-    CoreOrchestrationError {
-        message: e.message,
-    }
+    CoreOrchestrationError { message: e.message }
 }
 
 /// 服务编排执行的核心逻辑（协议无关）

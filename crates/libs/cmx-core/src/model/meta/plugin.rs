@@ -194,7 +194,9 @@ impl PluginManifest {
 
     /// 是否包含签名信息（algorithm + signature 均存在）。
     pub fn has_signature(&self) -> bool {
-        self.signature_algorithm.as_ref().is_some_and(|a| !a.is_empty())
+        self.signature_algorithm
+            .as_ref()
+            .is_some_and(|a| !a.is_empty())
             && self.signature.as_ref().is_some_and(|s| !s.is_empty())
     }
 }
@@ -218,7 +220,9 @@ pub struct SeedDataConfig {
 }
 
 /// 默认返回 true 的辅助函数
-fn default_true_bool() -> bool { true }
+fn default_true_bool() -> bool {
+    true
+}
 
 /// 建表 JSON 配置文件：描述一组表定义文件
 #[derive(Debug, Clone, Serialize, Deserialize)]

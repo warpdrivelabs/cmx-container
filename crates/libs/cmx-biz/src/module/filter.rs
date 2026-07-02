@@ -2,7 +2,7 @@
 //!
 //! 使用 modql 定义查询过滤器
 
-use modql::filter::{FilterNodes, OpValsString, OpValsInt64};
+use modql::filter::{FilterNodes, OpValsInt64, OpValsString};
 use serde::Deserialize;
 
 /// Module 查询过滤器
@@ -11,19 +11,19 @@ use serde::Deserialize;
 #[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
 pub struct ModuleFilter {
     /// 编码过滤
-    #[modql(rel="m")]
+    #[modql(rel = "m")]
     pub code: Option<OpValsString>,
     /// 名称过滤
-    #[modql(rel="m")]
+    #[modql(rel = "m")]
     pub name: Option<OpValsString>,
     /// 域编码过滤
-   #[modql(rel="m")]
+    #[modql(rel = "m")]
     pub domain_code: Option<OpValsString>,
     /// 应用编码过滤
-    #[modql(rel="m")]
+    #[modql(rel = "m")]
     pub application_code: Option<OpValsString>,
     /// 类型过滤
-    #[modql(rel="m")]
+    #[modql(rel = "m")]
     pub r#type: Option<OpValsString>,
     /// 状态过滤
     pub status: Option<OpValsInt64>,

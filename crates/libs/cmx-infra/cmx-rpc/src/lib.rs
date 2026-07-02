@@ -25,10 +25,10 @@ pub use client::orchestrator_client;
 pub use client::plugin_data_client;
 
 // 共享类型
+pub use cmx_traits::plugin::PluginDataImporter;
 pub use config::{GrpcConfig, HttpRestConfig, RpcConfig};
 pub use discover::RegistryAwareDiscover;
 pub use error::RpcFrameworkError;
-pub use cmx_traits::plugin::PluginDataImporter;
-pub use factory::{init_rpc_clients, ClientInitError};
+pub use factory::{ClientInitError, init_rpc_clients};
 pub use global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
 pub use server_runner::start_grpc_server;

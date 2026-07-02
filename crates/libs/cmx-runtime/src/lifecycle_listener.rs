@@ -1,7 +1,7 @@
 /*
  * @Author: yqs
  * @Date: 2026-04-11 07:59:57
- * @Describe: 
+ * @Describe:
  * @LastEditors: yqs
  * @LastEditTime: 2026-04-11 09:21:41
  */
@@ -9,10 +9,10 @@
 //!
 //! 监听插件升级、卸载、降级事件，清除 WASM 实例缓存。
 
-use std::sync::Arc;
-use cmx_traits::event_bus::{GlobalEventBus, EventHandler};
-use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
+use cmx_traits::event_bus::{EventHandler, GlobalEventBus};
+use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
 use cmx_traits::runtime::RuntimeInvoker;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 /// 运行时生命周期监听器
@@ -33,7 +33,10 @@ impl RuntimeLifecycleListener {
     /// * `runtime_invoker` - 运行时调用器接口
     /// * `app_id` - 当前应用ID，用于过滤非本应用的事件
     pub fn new(runtime_invoker: Arc<dyn RuntimeInvoker>, app_id: String) -> Self {
-        Self { runtime_invoker, app_id }
+        Self {
+            runtime_invoker,
+            app_id,
+        }
     }
 
     /// 注册到全局事件总线。
@@ -51,7 +54,8 @@ impl RuntimeLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的升级事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -61,7 +65,9 @@ impl RuntimeLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UPGRADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UPGRADED, handler)
+            .await;
 
         // 订阅卸载事件
         let invoker = self.runtime_invoker.clone();
@@ -74,7 +80,8 @@ impl RuntimeLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -84,7 +91,9 @@ impl RuntimeLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UNINSTALLED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UNINSTALLED, handler)
+            .await;
 
         // 订阅降级事件
         let invoker = self.runtime_invoker.clone();
@@ -97,7 +106,8 @@ impl RuntimeLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的降级事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -107,7 +117,9 @@ impl RuntimeLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::DOWNGRADED, handler)
+            .await;
 
         // 订阅覆盖安装事件
         let invoker = self.runtime_invoker.clone();
@@ -120,7 +132,8 @@ impl RuntimeLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的覆盖安装事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -130,7 +143,9 @@ impl RuntimeLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::REINSTALLED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::REINSTALLED, handler)
+            .await;
 
         // 订阅运行时卸载事件
         let invoker = self.runtime_invoker.clone();
@@ -143,7 +158,8 @@ impl RuntimeLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的运行时卸载事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -153,9 +169,14 @@ impl RuntimeLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UNLOADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UNLOADED, handler)
+            .await;
 
-        info!("运行时生命周期监听器已注册 (app_id={}, 订阅: 升级/卸载/降级/覆盖安装/运行时卸载)", self.app_id);
+        info!(
+            "运行时生命周期监听器已注册 (app_id={}, 订阅: 升级/卸载/降级/覆盖安装/运行时卸载)",
+            self.app_id
+        );
     }
 
     /// 处理升级事件：清除 WASM 实例缓存。
@@ -169,8 +190,14 @@ impl RuntimeLifecycleListener {
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+            Ok(()) => info!(
+                "已清除插件 {} WASM 实例缓存 (app_id={})",
+                event.plugin_id, event.app_id
+            ),
+            Err(e) => warn!(
+                "清除插件 {} WASM 缓存失败: {} (app_id={})",
+                event.plugin_id, e, event.app_id
+            ),
         }
     }
 
@@ -182,8 +209,14 @@ impl RuntimeLifecycleListener {
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+            Ok(()) => info!(
+                "已清除插件 {} WASM 实例缓存 (app_id={})",
+                event.plugin_id, event.app_id
+            ),
+            Err(e) => warn!(
+                "清除插件 {} WASM 缓存失败: {} (app_id={})",
+                event.plugin_id, e, event.app_id
+            ),
         }
     }
 
@@ -198,8 +231,14 @@ impl RuntimeLifecycleListener {
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+            Ok(()) => info!(
+                "已清除插件 {} WASM 实例缓存 (app_id={})",
+                event.plugin_id, event.app_id
+            ),
+            Err(e) => warn!(
+                "清除插件 {} WASM 缓存失败: {} (app_id={})",
+                event.plugin_id, e, event.app_id
+            ),
         }
     }
 
@@ -214,8 +253,14 @@ impl RuntimeLifecycleListener {
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+            Ok(()) => info!(
+                "已清除插件 {} WASM 实例缓存 (app_id={})",
+                event.plugin_id, event.app_id
+            ),
+            Err(e) => warn!(
+                "清除插件 {} WASM 缓存失败: {} (app_id={})",
+                event.plugin_id, e, event.app_id
+            ),
         }
     }
 
@@ -227,8 +272,14 @@ impl RuntimeLifecycleListener {
         );
 
         match invoker.unload_module(&event.plugin_id).await {
-            Ok(()) => info!("已清除插件 {} WASM 实例缓存 (app_id={})", event.plugin_id, event.app_id),
-            Err(e) => warn!("清除插件 {} WASM 缓存失败: {} (app_id={})", event.plugin_id, e, event.app_id),
+            Ok(()) => info!(
+                "已清除插件 {} WASM 实例缓存 (app_id={})",
+                event.plugin_id, event.app_id
+            ),
+            Err(e) => warn!(
+                "清除插件 {} WASM 缓存失败: {} (app_id={})",
+                event.plugin_id, e, event.app_id
+            ),
         }
     }
 }

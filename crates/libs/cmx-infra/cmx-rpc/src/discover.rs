@@ -9,11 +9,11 @@ use std::sync::{Arc, RwLock};
 
 use async_broadcast::{Receiver, Sender, broadcast};
 use tracing::instrument;
+use volo::FastStr;
 use volo::context::Endpoint;
 use volo::discovery::{Change, Discover, Instance};
 use volo::loadbalance::error::LoadBalanceError;
 use volo::net::Address;
-use volo::FastStr;
 
 use cmx_registry_config::registry::{ServiceInstance, ServiceInstanceCache};
 
@@ -38,11 +38,7 @@ impl Clone for RegistryAwareDiscover {
         Self {
             cache: self.cache.clone(),
             change_tx: self.change_tx.clone(),
-            change_rx: RwLock::new(
-                cmx_utils::read_lock(&self.change_rx)
-                    .as_ref()
-                    .cloned(),
-            ),
+            change_rx: RwLock::new(cmx_utils::read_lock(&self.change_rx).as_ref().cloned()),
         }
     }
 }
@@ -53,7 +49,11 @@ impl RegistryAwareDiscover {
     /// `channel_capacity` 为内部 broadcast 通道容量，默认 1024。
     /// 值越大越能缓冲高频服务变更（如 k8s 滚动更新）。
     pub fn new(cache: Arc<ServiceInstanceCache>, channel_capacity: usize) -> Self {
-        let capacity = if channel_capacity == 0 { DEFAULT_CHANNEL_CAPACITY } else { channel_capacity };
+        let capacity = if channel_capacity == 0 {
+            DEFAULT_CHANNEL_CAPACITY
+        } else {
+            channel_capacity
+        };
         let (tx, rx) = broadcast(capacity);
         Self {
             cache,
@@ -149,7 +149,8 @@ fn instances_to_volo(instances: &[ServiceInstance]) -> Vec<Arc<Instance>> {
         .iter()
         .filter_map(|i| {
             // 优先使用 metadata 中的 grpc_port，回退到 ServiceInstance.port
-            let port = i.metadata
+            let port = i
+                .metadata
                 .get("grpc_port")
                 .and_then(|v| v.parse::<u16>().ok())
                 .unwrap_or(i.port);

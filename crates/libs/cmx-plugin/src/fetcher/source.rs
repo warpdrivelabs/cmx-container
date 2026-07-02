@@ -1,9 +1,9 @@
 //! 来源定义模块
-//! 
+//!
 //! 定义插件来源类型
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// 插件来源
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,14 +43,18 @@ impl PluginSource {
     pub fn local(path: PathBuf) -> Self {
         Self::Local { path }
     }
-    
+
     /// 创建远程来源
     pub fn remote(url: String, checksum: Option<String>) -> Self {
         Self::Remote { url, checksum }
     }
 
     /// 创建插件市场来源。
-    pub fn marketplace(marketplace_url: String, plugin_id: String, version_constraint: Option<String>) -> Self {
+    pub fn marketplace(
+        marketplace_url: String,
+        plugin_id: String,
+        version_constraint: Option<String>,
+    ) -> Self {
         Self::Marketplace {
             marketplace_url,
             plugin_id,
@@ -62,12 +66,12 @@ impl PluginSource {
     pub fn storage(file_id: String, checksum: Option<String>) -> Self {
         Self::Storage { file_id, checksum }
     }
-    
+
     /// 检查是否为本地来源
     pub fn is_local(&self) -> bool {
         matches!(self, PluginSource::Local { .. })
     }
-    
+
     /// 检查是否为远程来源
     pub fn is_remote(&self) -> bool {
         matches!(self, PluginSource::Remote { .. })
@@ -118,12 +122,17 @@ mod tests {
     #[test]
     fn test_local_constructor() {
         let src = PluginSource::local(PathBuf::from("/tmp/a.zip"));
-        assert!(matches!(src, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/a.zip")));
+        assert!(
+            matches!(src, PluginSource::Local { path } if path.as_path() == std::path::Path::new("/tmp/a.zip"))
+        );
     }
 
     #[test]
     fn test_remote_constructor_with_checksum() {
-        let src = PluginSource::remote("https://example.com/a.zip".to_string(), Some("ck".to_string()));
+        let src = PluginSource::remote(
+            "https://example.com/a.zip".to_string(),
+            Some("ck".to_string()),
+        );
         assert!(matches!(src, PluginSource::Remote { url, checksum }
             if url == "https://example.com/a.zip" && checksum.as_deref() == Some("ck")));
     }
@@ -141,16 +150,20 @@ mod tests {
             "my-plugin".to_string(),
             Some("^1.0.0".to_string()),
         );
-        assert!(matches!(src, PluginSource::Marketplace { marketplace_url, plugin_id, version_constraint }
+        assert!(
+            matches!(src, PluginSource::Marketplace { marketplace_url, plugin_id, version_constraint }
             if marketplace_url == "https://market.example.com"
             && plugin_id == "my-plugin"
-            && version_constraint.as_deref() == Some("^1.0.0")));
+            && version_constraint.as_deref() == Some("^1.0.0"))
+        );
     }
 
     #[test]
     fn test_storage_constructor() {
         let src = PluginSource::storage("fid-1".to_string(), None);
-        assert!(matches!(src, PluginSource::Storage { file_id, checksum: None } if file_id == "fid-1"));
+        assert!(
+            matches!(src, PluginSource::Storage { file_id, checksum: None } if file_id == "fid-1")
+        );
     }
 
     // ==================== is_local / is_remote / is_marketplace / is_storage ====================
@@ -195,7 +208,10 @@ mod tests {
 
     #[test]
     fn test_source_type_local() {
-        assert_eq!(PluginSource::local(PathBuf::from("/x")).source_type(), SourceType::Local);
+        assert_eq!(
+            PluginSource::local(PathBuf::from("/x")).source_type(),
+            SourceType::Local
+        );
     }
 
     #[test]
@@ -209,7 +225,8 @@ mod tests {
     #[test]
     fn test_source_type_marketplace() {
         assert_eq!(
-            PluginSource::marketplace("https://m".to_string(), "pid".to_string(), None).source_type(),
+            PluginSource::marketplace("https://m".to_string(), "pid".to_string(), None)
+                .source_type(),
             SourceType::Marketplace
         );
     }

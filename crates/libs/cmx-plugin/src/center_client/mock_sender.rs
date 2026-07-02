@@ -3,9 +3,9 @@
 //! 当前阶段的 Mock 实现，模拟向各中心发送数据和清理数据的接口调用，
 //! 始终返回成功结果。后续替换为 `HttpServiceCenterSender` 即可对接真实服务。
 
-use async_trait::async_trait;
 use super::sender::{CenterError, ServiceCenterSender};
 use super::types::*;
+use async_trait::async_trait;
 
 /// Mock 服务中心发送器。
 ///

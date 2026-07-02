@@ -17,7 +17,7 @@ use std::sync::Arc;
 use cmx_core::model::service::{ServiceEdge, ServiceNode, ServiceOrchestration};
 use cmx_traits::plugin::PluginQuery;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::error::PluginResult;
 
@@ -268,10 +268,7 @@ impl ApiDocGenerator {
         let output_schema = build_output_schema(&exit_nodes, &api_cache, &schema_prefix);
 
         let mut schemas = serde_json::Map::new();
-        schemas.insert(
-            format!("{schema_prefix}Input"),
-            input_schema,
-        );
+        schemas.insert(format!("{schema_prefix}Input"), input_schema);
 
         let request_schema = json!({
             "type": "object",
@@ -292,14 +289,8 @@ impl ApiDocGenerator {
         });
 
         let response_data_schema = build_response_data_schema(&schema_prefix, &output_schema);
-        schemas.insert(
-            format!("{schema_prefix}Output"),
-            output_schema,
-        );
-        schemas.insert(
-            format!("{schema_prefix}ResponseData"),
-            response_data_schema,
-        );
+        schemas.insert(format!("{schema_prefix}Output"), output_schema);
+        schemas.insert(format!("{schema_prefix}ResponseData"), response_data_schema);
 
         let response_schema = json!({
             "type": "object",
@@ -437,9 +428,10 @@ impl ApiDocGenerator {
                 // 检查是否有从事务框内其他节点指向此节点的边
                 let has_internal_input = edges.iter().any(|e| {
                     e.target_node_id == child.id
-                        && nodes
-                            .iter()
-                            .any(|n| n.id == e.source_node_id && n.parent.as_deref() == Some(&transaction_node.id))
+                        && nodes.iter().any(|n| {
+                            n.id == e.source_node_id
+                                && n.parent.as_deref() == Some(&transaction_node.id)
+                        })
                 });
                 if !has_internal_input {
                     return Some(child);
@@ -518,7 +510,8 @@ impl ApiDocGenerator {
 
         // 降级：返回事务框内最后一个可执行节点
         children
-            .iter().rfind(|n| EXECUTABLE_NODE_TYPES.contains(&n.node_type.as_str()))
+            .iter()
+            .rfind(|n| EXECUTABLE_NODE_TYPES.contains(&n.node_type.as_str()))
             .copied()
     }
 
@@ -629,18 +622,10 @@ impl ApiDocGenerator {
         for (node, step_index) in executable_nodes {
             let (plugin_id, function_name) = extract_node_meta(node);
 
-            let input_parameters = Self::resolve_parameters(
-                &plugin_id,
-                &function_name,
-                true,
-                api_cache,
-            );
-            let output_parameters = Self::resolve_parameters(
-                &plugin_id,
-                &function_name,
-                false,
-                api_cache,
-            );
+            let input_parameters =
+                Self::resolve_parameters(&plugin_id, &function_name, true, api_cache);
+            let output_parameters =
+                Self::resolve_parameters(&plugin_id, &function_name, false, api_cache);
 
             // 从 api.json 获取 summary
             let summary = api_cache
@@ -698,10 +683,7 @@ impl ApiDocGenerator {
 
         match api_fields {
             Some(fields) if !fields.is_empty() => {
-                fields
-                    .iter()
-                    .map(Self::api_field_to_param_doc)
-                    .collect()
+                fields.iter().map(Self::api_field_to_param_doc).collect()
             }
             _ => {
                 if !is_input {
@@ -759,18 +741,23 @@ fn to_pascal_case(s: &str) -> String {
             let mut chars = part.chars();
             match chars.next() {
                 None => String::new(),
-                Some(first) => first.to_ascii_uppercase().to_string() + &chars.as_str().to_lowercase(),
+                Some(first) => {
+                    first.to_ascii_uppercase().to_string() + &chars.as_str().to_lowercase()
+                }
             }
         })
         .collect()
 }
 
 fn unwrap_input_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
-    if params.len() == 1 && params[0].name == "input" && params[0].param_type == "object"
+    if params.len() == 1
+        && params[0].name == "input"
+        && params[0].param_type == "object"
         && let Some(props) = &params[0].properties
-            && !props.is_empty() {
-                return props;
-            }
+        && !props.is_empty()
+    {
+        return props;
+    }
     params
 }
 
@@ -779,11 +766,14 @@ fn is_basic_type(t: &str) -> bool {
 }
 
 fn unwrap_output_params(params: &[ParameterDoc]) -> &[ParameterDoc] {
-    if params.len() == 1 && params[0].name == "output" && params[0].param_type == "object"
+    if params.len() == 1
+        && params[0].name == "output"
+        && params[0].param_type == "object"
         && let Some(props) = &params[0].properties
-            && !props.is_empty() {
-                return props;
-            }
+        && !props.is_empty()
+    {
+        return props;
+    }
     params
 }
 
@@ -838,24 +828,16 @@ fn build_output_schema(
     if exit_nodes.len() == 1 {
         let node = exit_nodes[0];
         let (plugin_id, function_name) = extract_node_meta(node);
-        let params = ApiDocGenerator::resolve_parameters(
-            &plugin_id,
-            &function_name,
-            false,
-            api_cache,
-        );
+        let params =
+            ApiDocGenerator::resolve_parameters(&plugin_id, &function_name, false, api_cache);
         return params_to_object_schema(&params);
     }
 
     let mut branch_schemas = Vec::new();
     for (idx, node) in exit_nodes.iter().enumerate() {
         let (plugin_id, function_name) = extract_node_meta(node);
-        let params = ApiDocGenerator::resolve_parameters(
-            &plugin_id,
-            &function_name,
-            false,
-            api_cache,
-        );
+        let params =
+            ApiDocGenerator::resolve_parameters(&plugin_id, &function_name, false, api_cache);
 
         let branch_name = node
             .data
@@ -924,21 +906,22 @@ fn param_doc_to_openapi_schema(param: &ParameterDoc) -> Value {
     }
 
     if let Some(props) = &param.properties
-        && !props.is_empty() {
-            let mut properties = serde_json::Map::new();
-            let mut required = Vec::new();
-            for p in props {
-                properties.insert(p.name.clone(), param_doc_to_openapi_schema(p));
-                if p.required.unwrap_or(false) {
-                    required.push(p.name.clone());
-                }
-            }
-            schema["type"] = json!("object");
-            schema["properties"] = json!(properties);
-            if !required.is_empty() {
-                schema["required"] = json!(required);
+        && !props.is_empty()
+    {
+        let mut properties = serde_json::Map::new();
+        let mut required = Vec::new();
+        for p in props {
+            properties.insert(p.name.clone(), param_doc_to_openapi_schema(p));
+            if p.required.unwrap_or(false) {
+                required.push(p.name.clone());
             }
         }
+        schema["type"] = json!("object");
+        schema["properties"] = json!(properties);
+        if !required.is_empty() {
+            schema["required"] = json!(required);
+        }
+    }
 
     schema
 }

@@ -51,7 +51,10 @@ async fn test_try_lock_success() {
     let guard = manager.try_lock("resource_1").await.expect("加锁应该成功");
     assert!(guard.is_some(), "首次加锁应返回 Some");
 
-    let is_locked = manager.is_locked("resource_1").await.expect("查询锁状态失败");
+    let is_locked = manager
+        .is_locked("resource_1")
+        .await
+        .expect("查询锁状态失败");
     assert!(is_locked, "锁应该处于持有状态");
 
     // 主动释放以避免后台看门狗任务干扰后续测试
@@ -63,7 +66,10 @@ async fn test_try_lock_conflict_when_held() {
     // 重复加锁失败：锁已被持有时，再次 try_lock 应返回 None
     let (manager, _backend) = setup_lock_manager(30, 0.3);
 
-    let guard = manager.try_lock("resource_2").await.expect("首次加锁应成功");
+    let guard = manager
+        .try_lock("resource_2")
+        .await
+        .expect("首次加锁应成功");
     assert!(guard.is_some(), "首次加锁应返回 Some");
 
     // 不释放，再次尝试加锁
@@ -81,7 +87,10 @@ async fn test_unlock_then_relock() {
     // 解锁后可以重新加锁
     let (manager, _backend) = setup_lock_manager(30, 0.3);
 
-    let guard = manager.try_lock("resource_3").await.expect("首次加锁应成功");
+    let guard = manager
+        .try_lock("resource_3")
+        .await
+        .expect("首次加锁应成功");
     assert!(guard.is_some());
 
     // 主动释放
@@ -95,7 +104,10 @@ async fn test_unlock_then_relock() {
     assert!(!is_locked, "解锁后锁不应再持有");
 
     // 重新加锁应成功
-    let guard2 = manager.try_lock("resource_3").await.expect("重新加锁应成功");
+    let guard2 = manager
+        .try_lock("resource_3")
+        .await
+        .expect("重新加锁应成功");
     assert!(guard2.is_some(), "释放后应能重新加锁");
     guard2.unwrap().unlock().await.expect("解锁失败");
 }
@@ -143,7 +155,10 @@ async fn test_lock_extend_by_owner() {
     let guard = manager.lock("resource_5").await.expect("加锁失败");
 
     // 续期到 10 秒
-    guard.extend(Duration::from_secs(10)).await.expect("续期失败");
+    guard
+        .extend(Duration::from_secs(10))
+        .await
+        .expect("续期失败");
 
     // 验证剩余 TTL 被延长
     let remaining = manager

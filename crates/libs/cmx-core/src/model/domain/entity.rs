@@ -1,7 +1,5 @@
-
-
-use serde::{Deserialize, Serialize};
 use crate::model::data::dataset::rds::RowDataSet;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainEntity {

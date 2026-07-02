@@ -6,14 +6,14 @@
 use std::path::Path;
 
 use cmx_core::model::cell::FieldType;
-use cmx_metadata::config::{load_table_defines_config_from_path, TableDefinesConfigManager};
-use cmx_metadata::ddl::{table_to_pg_ddl, table_to_pg_ddl_roundtrip, tables_to_pg_ddl, DdlDialect};
+use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
 use cmx_metadata::ddl::diff::{ColumnChange, DdlDiff, TableChange};
 use cmx_metadata::ddl::postgres::PostgresDdlDialect;
+use cmx_metadata::ddl::{DdlDialect, table_to_pg_ddl, table_to_pg_ddl_roundtrip, tables_to_pg_ddl};
 use cmx_metadata::i18n::derive_i18n_table_define;
 use cmx_metadata::loader::{load_table_defines_from_path, table_defines_from_str};
-use cmx_metadata::parser::{pg_ddl_to_table_define, pg_ddl_to_table_defines, DdlParser};
 use cmx_metadata::parser::postgres::PostgresDdlParser;
+use cmx_metadata::parser::{DdlParser, pg_ddl_to_table_define, pg_ddl_to_table_defines};
 
 /// 测试数据目录
 fn tests_dir() -> &'static Path {
@@ -106,10 +106,7 @@ fn test_loaded_table_foreign_keys() {
         .find(|c| c.name == "application_id")
         .unwrap();
     assert!(fk_col.is_foreign_key);
-    assert_eq!(
-        fk_col.foreign_key_table.as_deref(),
-        Some("cmx_application")
-    );
+    assert_eq!(fk_col.foreign_key_table.as_deref(), Some("cmx_application"));
 }
 
 #[test]
@@ -286,11 +283,7 @@ fn test_ddl_roundtrip_all_tables() {
     let ddl = tables_to_pg_ddl(&tables).unwrap();
     let parsed = pg_ddl_to_table_defines(&ddl).unwrap();
 
-    assert_eq!(
-        parsed.len(),
-        tables.len(),
-        "解析回的表数量应与原始一致"
-    );
+    assert_eq!(parsed.len(), tables.len(), "解析回的表数量应与原始一致");
     for (orig, back) in tables.iter().zip(parsed.iter()) {
         assert_eq!(back.table_name, orig.table_name);
         assert_eq!(back.columns.len(), orig.columns.len());
@@ -336,10 +329,7 @@ fn test_diff_add_column_to_loaded_table() {
     let changes = DdlDiff::diff(&[old], &[new_table]);
     assert_eq!(changes.len(), 1);
 
-    if let TableChange::AlterTable {
-        column_changes, ..
-    } = &changes[0]
-    {
+    if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
         let added: Vec<_> = column_changes
             .iter()
             .filter_map(|c| match c {
@@ -347,7 +337,10 @@ fn test_diff_add_column_to_loaded_table() {
                 _ => None,
             })
             .collect();
-        assert!(added.contains(&"update_time"), "应检测到新增 update_time 列");
+        assert!(
+            added.contains(&"update_time"),
+            "应检测到新增 update_time 列"
+        );
     } else {
         panic!("应为 AlterTable 变更");
     }
@@ -360,10 +353,7 @@ fn test_diff_add_column_to_loaded_table() {
         joined.contains("ALTER TABLE"),
         "增量 DDL 应包含 ALTER TABLE"
     );
-    assert!(
-        joined.contains("ADD COLUMN"),
-        "增量 DDL 应包含 ADD COLUMN"
-    );
+    assert!(joined.contains("ADD COLUMN"), "增量 DDL 应包含 ADD COLUMN");
 }
 
 #[test]
@@ -379,10 +369,7 @@ fn test_diff_drop_column() {
     let changes = DdlDiff::diff(&[old], &[new_table]);
     assert_eq!(changes.len(), 1);
 
-    if let TableChange::AlterTable {
-        column_changes, ..
-    } = &changes[0]
-    {
+    if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
         let dropped: Vec<_> = column_changes
             .iter()
             .filter_map(|c| match c {
@@ -551,10 +538,7 @@ fn test_end_to_end_schema_evolution() {
     let changes = DdlDiff::diff(&[v1], &[v2]);
     assert_eq!(changes.len(), 1);
 
-    if let TableChange::AlterTable {
-        column_changes, ..
-    } = &changes[0]
-    {
+    if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
         let dropped: Vec<_> = column_changes
             .iter()
             .filter_map(|c| match c {

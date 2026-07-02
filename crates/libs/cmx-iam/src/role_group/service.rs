@@ -3,13 +3,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_core::model::iam::{RoleGroup, RoleGroupTreeNode};
 use cmx_core::SVRContext;
-use cmx_database::crud::GenericCrudService;
+use cmx_core::model::cell::DataValue;
+use cmx_core::model::iam::{RoleGroup, RoleGroupTreeNode};
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use cmx_traits::error::TraitError;
 use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
-use cmx_core::model::cell::DataValue;
 use serde_json::Value;
 use tracing::{debug, info};
 
@@ -176,8 +176,14 @@ impl RoleGroupService for RoleGroupServiceImpl {
             "name": &data.name,
             "parent_id": &data.parent_id,
         });
-        self.audit_write(svr_ctx, "create_role_group", "role_group", &role_group.id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "create_role_group",
+            "role_group",
+            &role_group.id,
+            &audit_detail,
+        )
+        .await;
 
         info!(role_group_id = %role_group.id, name = %data.name, "角色组创建成功");
         Ok(role_group)
@@ -259,8 +265,14 @@ impl RoleGroupService for RoleGroupServiceImpl {
             "name": &data.name,
             "description": &data.description,
         });
-        self.audit_write(svr_ctx, "update_role_group", "role_group", role_group_id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "update_role_group",
+            "role_group",
+            role_group_id,
+            &audit_detail,
+        )
+        .await;
 
         info!(role_group_id = role_group_id, "角色组更新成功");
         Ok(role_group)
@@ -292,12 +304,18 @@ impl RoleGroupService for RoleGroupServiceImpl {
         let child_check_sql =
             "SELECT id FROM cmx_role_group WHERE parent_id = ANY($1) AND archived = 0 LIMIT 1";
         let child_params: Vec<DataValue> = role_group_ids
-                .iter()
-                .map(|id| DataValue::String(id.clone()))
-                .collect();
+            .iter()
+            .map(|id| DataValue::String(id.clone()))
+            .collect();
         let existing = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, child_check_sql, child_params, "check_child_groups")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                child_check_sql,
+                child_params,
+                "check_child_groups",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询子角色组失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -308,12 +326,18 @@ impl RoleGroupService for RoleGroupServiceImpl {
         let role_check_sql =
             "SELECT id FROM cmx_role WHERE role_group_id = ANY($1) AND archived = 0 LIMIT 1";
         let role_params: Vec<DataValue> = role_group_ids
-                .iter()
-                .map(|id| DataValue::String(id.clone()))
-                .collect();
+            .iter()
+            .map(|id| DataValue::String(id.clone()))
+            .collect();
         let existing = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, role_check_sql, role_params, "check_role_group_usage")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                role_check_sql,
+                role_params,
+                "check_role_group_usage",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询关联角色失败: {e}"))))?;
         if existing.iter().next().is_some() {
@@ -327,7 +351,9 @@ impl RoleGroupService for RoleGroupServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, None, sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色组失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("软删除角色组失败: {e}")))
+                })?;
         }
 
         // 4. 审计日志
@@ -335,8 +361,14 @@ impl RoleGroupService for RoleGroupServiceImpl {
             "role_group_ids": role_group_ids,
             "count": role_group_ids.len(),
         });
-        self.audit_write(svr_ctx, "delete_role_group", "role_group", "batch", &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "delete_role_group",
+            "role_group",
+            "batch",
+            &audit_detail,
+        )
+        .await;
 
         info!(count = role_group_ids.len(), "角色组删除成功");
         Ok(())
@@ -368,19 +400,20 @@ impl RoleGroupService for RoleGroupServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
-        let (dataset, total) =
-            GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::page(
-                &self.mm,
-                &self.db_id,
-                None,
-                filters,
-                list_options,
-            )
-            .await
-            .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let (dataset, total) = GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::page(
+            &self.mm,
+            &self.db_id,
+            None,
+            filters,
+            list_options,
+        )
+        .await
+        .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         let role_groups = Self::extract_role_groups(dataset);
         Ok((role_groups, total))
@@ -410,7 +443,9 @@ impl RoleGroupService for RoleGroupServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
         let dataset = GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::list(

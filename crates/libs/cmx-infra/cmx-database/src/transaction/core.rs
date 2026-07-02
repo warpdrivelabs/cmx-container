@@ -7,14 +7,16 @@
 
 use crate::connection::DbPool;
 use crate::error::{Error, Result};
-use crate::executor::{bind_data_value_postgres, bind_data_value_mysql, bind_data_value_sqlite, ResultConverter};
+use crate::executor::{
+    ResultConverter, bind_data_value_mysql, bind_data_value_postgres, bind_data_value_sqlite,
+};
 use crate::transaction::metadata::{TransactionStatus, register_txn};
 use crate::transaction::registry::get_txn_holder_registry;
-use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
-use sea_query_sqlx::SqlxValues;
 use cmx_core::model::cell::DataValue;
+use sea_query_sqlx::SqlxValues;
+use sqlx::{Executor, MySql, Postgres, Sqlite, Transaction as SqlxTransaction};
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid;
 
@@ -69,9 +71,7 @@ impl Dbx {
 
         // 根据传播行为执行不同的逻辑
         match propagation {
-            Propagation::Required => {
-                self.do_required(db_id).await
-            },
+            Propagation::Required => self.do_required(db_id).await,
             // Propagation::RequiresNew => {
             //     self.do_requires_new(db_id).await
             // },
@@ -236,15 +236,15 @@ impl Dbx {
             DbPool::Postgres(pool) => {
                 let transaction = pool.begin().await?;
                 DbTransaction::Postgres(transaction)
-            },
+            }
             DbPool::MySql(pool) => {
                 let transaction = pool.begin().await?;
                 DbTransaction::MySql(transaction)
-            },
+            }
             DbPool::Sqlite(pool) => {
                 let transaction = pool.begin().await?;
                 DbTransaction::Sqlite(transaction)
-            },
+            }
         };
 
         // 创建事务持有器
@@ -259,7 +259,10 @@ impl Dbx {
         register_txn(txn_id.clone(), db_id.to_string()).await;
 
         // 注册TxnHolder到全局注册表，以便通过事务ID操作事务
-        get_txn_holder_registry().write().await.insert(txn_id.clone(), self.txn_holder.clone());
+        get_txn_holder_registry()
+            .write()
+            .await
+            .insert(txn_id.clone(), self.txn_holder.clone());
 
         // 返回事务ID
         Ok(txn_id)
@@ -307,16 +310,16 @@ impl Dbx {
         result?;
 
         // 如果需要回滚，执行回滚操作并更新事务状态
-        if should_rollback
-            && let (Some(txn), Some(txn_id)) = (txn_to_rollback, txn_id) {
-                // 执行回滚操作
-                txn.rollback().await?;
+        if should_rollback && let (Some(txn), Some(txn_id)) = (txn_to_rollback, txn_id) {
+            // 执行回滚操作
+            txn.rollback().await?;
 
-                // 更新事务状态为已回滚
-                crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack).await;
-                // 从全局TxnHolder注册表中移除
-                get_txn_holder_registry().write().await.remove(&txn_id);
-            }
+            // 更新事务状态为已回滚
+            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::RolledBack)
+                .await;
+            // 从全局TxnHolder注册表中移除
+            get_txn_holder_registry().write().await.remove(&txn_id);
+        }
 
         Ok(())
     }
@@ -362,16 +365,16 @@ impl Dbx {
         result?;
 
         // 如果需要提交，执行提交操作并更新事务状态
-        if should_commit
-            && let (Some(txn), Some(txn_id)) = (txn_to_commit, txn_id) {
-                // 执行提交操作
-                txn.commit().await?;
+        if should_commit && let (Some(txn), Some(txn_id)) = (txn_to_commit, txn_id) {
+            // 执行提交操作
+            txn.commit().await?;
 
-                // 更新事务状态为已提交
-                crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed).await;
-                // 从全局TxnHolder注册表中移除
-                get_txn_holder_registry().write().await.remove(&txn_id);
-            }
+            // 更新事务状态为已提交
+            crate::transaction::metadata::update_txn_status(&txn_id, TransactionStatus::Committed)
+                .await;
+            // 从全局TxnHolder注册表中移除
+            get_txn_holder_registry().write().await.remove(&txn_id);
+        }
 
         Ok(())
     }
@@ -402,7 +405,10 @@ impl Dbx {
     /// * `bool` - 如果事务超时则返回 true
     pub async fn is_txn_timeout(&self, timeout: std::time::Duration) -> bool {
         let txh_g = self.txn_holder.lock().await;
-        txh_g.as_ref().map(|txh| txh.elapsed() > timeout).unwrap_or(false)
+        txh_g
+            .as_ref()
+            .map(|txh| txh.elapsed() > timeout)
+            .unwrap_or(false)
     }
 
     /// 创建一个支持事务的 Dbx 实例
@@ -420,7 +426,6 @@ impl Dbx {
             // suspended_txns: Arc::new(Mutex::new(Vec::new())),
         })
     }
-
 }
 
 /// 统一的数据库事务类型
@@ -479,9 +484,15 @@ impl DbTransaction {
     /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
     pub async fn execute(&mut self, sql: &str) -> sqlx::Result<u64> {
         match self {
-            DbTransaction::Postgres(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
-            DbTransaction::MySql(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
-            DbTransaction::Sqlite(txn) => Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected()),
+            DbTransaction::Postgres(txn) => {
+                Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected())
+            }
+            DbTransaction::MySql(txn) => {
+                Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected())
+            }
+            DbTransaction::Sqlite(txn) => {
+                Ok(txn.execute(sqlx::AssertSqlSafe(sql)).await?.rows_affected())
+            }
         }
     }
 
@@ -493,7 +504,11 @@ impl DbTransaction {
     ///
     /// # 返回值
     /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
-    pub async fn execute_with_datavalues(&mut self, sql: &str, params: &[DataValue]) -> sqlx::Result<u64> {
+    pub async fn execute_with_datavalues(
+        &mut self,
+        sql: &str,
+        params: &[DataValue],
+    ) -> sqlx::Result<u64> {
         if params.is_empty() {
             return self.execute(sql).await;
         }
@@ -506,7 +521,7 @@ impl DbTransaction {
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
-            },
+            }
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
@@ -514,7 +529,7 @@ impl DbTransaction {
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
-            },
+            }
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
@@ -522,7 +537,7 @@ impl DbTransaction {
                 }
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
-            },
+            }
         }
     }
 
@@ -534,9 +549,13 @@ impl DbTransaction {
     ///
     /// # 返回值
     /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
-    pub async fn execute_with_json(&mut self, sql: &str, params: serde_json::Value) -> sqlx::Result<u64> {
-        let values: Vec<DataValue> = serde_json::from_value(params)
-            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    pub async fn execute_with_json(
+        &mut self,
+        sql: &str,
+        params: serde_json::Value,
+    ) -> sqlx::Result<u64> {
+        let values: Vec<DataValue> =
+            serde_json::from_value(params).map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
         self.execute_with_datavalues(sql, &values).await
     }
 
@@ -548,25 +567,34 @@ impl DbTransaction {
     ///
     /// # 返回值
     /// * `sqlx::Result<DataSet>` - 查询结果转换为DataSet
-    pub async fn query(&mut self, sql: &str, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+    pub async fn query(
+        &mut self,
+        sql: &str,
+        dataset_id: &str,
+    ) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         match self {
             DbTransaction::Postgres(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
-            },
+            }
             DbTransaction::MySql(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
-            },
+            }
             DbTransaction::Sqlite(txn) => {
                 let rows = txn.fetch_all(sqlx::query(sqlx::AssertSqlSafe(sql))).await?;
                 Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
-            },
+            }
         }
     }
 
     /// 执行带参数的SQL查询并返回DataSet
-    pub async fn query_with_datavalues(&mut self, sql: &str, params: &[DataValue], dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+    pub async fn query_with_datavalues(
+        &mut self,
+        sql: &str,
+        params: &[DataValue],
+        dataset_id: &str,
+    ) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         if params.is_empty() {
             return self.query(sql, dataset_id).await;
         }
@@ -579,7 +607,7 @@ impl DbTransaction {
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
-            },
+            }
             DbTransaction::MySql(txn) => {
                 let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
@@ -587,7 +615,7 @@ impl DbTransaction {
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
-            },
+            }
             DbTransaction::Sqlite(txn) => {
                 let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
                 for param in params {
@@ -595,14 +623,19 @@ impl DbTransaction {
                 }
                 let rows = txn.fetch_all(query).await?;
                 Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
-            },
+            }
         }
     }
 
     /// 执行带 serde_json::Value 参数的 SQL 查询并返回 DataSet
-    pub async fn query_with_json(&mut self, sql: &str, params: serde_json::Value, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
-        let values: Vec<DataValue> = serde_json::from_value(params)
-            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    pub async fn query_with_json(
+        &mut self,
+        sql: &str,
+        params: serde_json::Value,
+        dataset_id: &str,
+    ) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+        let values: Vec<DataValue> =
+            serde_json::from_value(params).map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
         self.query_with_datavalues(sql, &values, dataset_id).await
     }
 
@@ -614,19 +647,23 @@ impl DbTransaction {
     ///
     /// # 返回值
     /// * `sqlx::Result<u64>` - 执行结果，返回受影响的行数
-    pub async fn execute_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues) -> sqlx::Result<u64> {
+    pub async fn execute_with_sqlxvalues(
+        &mut self,
+        sql: &str,
+        params: SqlxValues,
+    ) -> sqlx::Result<u64> {
         match self {
             DbTransaction::Postgres(txn) => {
                 let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let result = query.execute(txn.as_mut()).await?;
                 Ok(result.rows_affected())
-            },
-            DbTransaction::MySql(_txn) => {
-                Err(sqlx::Error::Protocol("MySql not supported with sea-query yet".to_string()))
-            },
-            DbTransaction::Sqlite(_txn) => {
-                Err(sqlx::Error::Protocol("Sqlite not supported with sea-query yet".to_string()))
-            },
+            }
+            DbTransaction::MySql(_txn) => Err(sqlx::Error::Protocol(
+                "MySql not supported with sea-query yet".to_string(),
+            )),
+            DbTransaction::Sqlite(_txn) => Err(sqlx::Error::Protocol(
+                "Sqlite not supported with sea-query yet".to_string(),
+            )),
         }
     }
 
@@ -639,19 +676,24 @@ impl DbTransaction {
     ///
     /// # 返回值
     /// * `sqlx::Result<DataSet>` - 查询结果转换为DataSet
-    pub async fn query_with_sqlxvalues(&mut self, sql: &str, params: SqlxValues, dataset_id: &str) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
+    pub async fn query_with_sqlxvalues(
+        &mut self,
+        sql: &str,
+        params: SqlxValues,
+        dataset_id: &str,
+    ) -> sqlx::Result<cmx_core::model::data::dataset::DataSet> {
         match self {
             DbTransaction::Postgres(txn) => {
                 let query = sqlx::query_with(sqlx::AssertSqlSafe(sql), params);
                 let rows = txn.fetch_all(query).await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
-            },
-            DbTransaction::MySql(_txn) => {
-                Err(sqlx::Error::Protocol("MySql not supported with sea-query yet".to_string()))
-            },
-            DbTransaction::Sqlite(_txn) => {
-                Err(sqlx::Error::Protocol("Sqlite not supported with sea-query yet".to_string()))
-            },
+            }
+            DbTransaction::MySql(_txn) => Err(sqlx::Error::Protocol(
+                "MySql not supported with sea-query yet".to_string(),
+            )),
+            DbTransaction::Sqlite(_txn) => Err(sqlx::Error::Protocol(
+                "Sqlite not supported with sea-query yet".to_string(),
+            )),
         }
     }
 }
@@ -685,10 +727,10 @@ impl TxnHolder {
     pub fn new(txn: DbTransaction, db_id: &str) -> Self {
         TxnHolder {
             txn,
-            counter: 1,  // 初始引用计数为1
-            txn_id: uuid::Uuid::new_v4().to_string(),  // 生成唯一事务ID
+            counter: 1,                               // 初始引用计数为1
+            txn_id: uuid::Uuid::new_v4().to_string(), // 生成唯一事务ID
             db_id: db_id.to_string(),
-            create_time: std::time::Instant::now(),  // 记录创建时间
+            create_time: std::time::Instant::now(), // 记录创建时间
         }
     }
 

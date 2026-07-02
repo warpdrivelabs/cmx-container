@@ -7,7 +7,7 @@
 //! - 命中后从菜单里取出该项**完整 workspace** 一并返回，前端据此打开。
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::ai;
 use crate::config::data_path;
@@ -36,7 +36,10 @@ pub struct ResolveInput {
 
 /// 所有 menu-pages 文件的点分 menuRef。当前固定枚举（与 data/menu-pages 对齐）；
 /// 未来菜单增多可改为扫描目录。保持与 get_menu_page_json 的 menuRef 语义一致。
-const MENU_REFS: &[&str] = &["fi.cmxfico.gl.explorer-menu", "fi.cmxfico.report.report-menu"];
+const MENU_REFS: &[&str] = &[
+    "fi.cmxfico.gl.explorer-menu",
+    "fi.cmxfico.report.report-menu",
+];
 
 /// 递归收集一棵菜单树里所有 `type:"workspace-node"` 且带 workspace 的项。
 fn collect_nodes(items: &[Value], menu_ref: &str, out: &mut Vec<LauncherItem>) {
@@ -44,7 +47,11 @@ fn collect_nodes(items: &[Value], menu_ref: &str, out: &mut Vec<LauncherItem>) {
         let is_node = it.get("type").and_then(|v| v.as_str()) == Some("workspace-node");
         let has_ws = it.get("workspace").map(|w| w.is_object()).unwrap_or(false);
         if is_node && has_ws {
-            let id = it.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = it
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let caption = it
                 .get("caption")
                 .and_then(|v| v.as_str())
@@ -56,7 +63,11 @@ fn collect_nodes(items: &[Value], menu_ref: &str, out: &mut Vec<LauncherItem>) {
                     keywords: derive_keywords(&caption, &id),
                     id,
                     caption,
-                    icon: it.get("icon").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    icon: it
+                        .get("icon")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     menu_ref: menu_ref.to_string(),
                 });
             }
@@ -88,8 +99,12 @@ fn split_cjk_runs(s: &str) -> Vec<String> {
 fn derive_keywords(caption: &str, id: &str) -> Vec<String> {
     let mut kws: Vec<String> = Vec::new();
     // caption 去掉括号内容后整体保留 + 切词
-    let base: String = caption.chars().filter(|c| !matches!(c, '(' | ')' | '（' | '）')).collect();
-    for tok in base.split(|c: char| !c.is_alphanumeric() && !('\u{4e00}'..='\u{9fff}').contains(&c)) {
+    let base: String = caption
+        .chars()
+        .filter(|c| !matches!(c, '(' | ')' | '（' | '）'))
+        .collect();
+    for tok in base.split(|c: char| !c.is_alphanumeric() && !('\u{4e00}'..='\u{9fff}').contains(&c))
+    {
         let t = tok.trim();
         if t.chars().count() < 2 {
             continue;
@@ -179,7 +194,10 @@ async fn find_full_node(menu_ref: &str, id: &str) -> PortalResult<Option<Value>>
         }
         None
     }
-    Ok(doc.get("items").and_then(|v| v.as_array()).and_then(|items| dfs(items, id)))
+    Ok(doc
+        .get("items")
+        .and_then(|v| v.as_array())
+        .and_then(|items| dfs(items, id)))
 }
 
 /// 规则兜底匹配：query 与各项 caption/keywords 的字符重叠打分，取最高。
@@ -212,7 +230,10 @@ fn rule_match<'a>(query: &str, catalog: &'a [LauncherItem]) -> Option<(&'a Launc
 }
 
 /// 让 AI 从功能清单里选最匹配 query 的 id（json 模式）。返回 (id, confidence, reason)。
-async fn ai_match(query: &str, catalog: &[LauncherItem]) -> PortalResult<Option<(String, f64, String)>> {
+async fn ai_match(
+    query: &str,
+    catalog: &[LauncherItem],
+) -> PortalResult<Option<(String, f64, String)>> {
     if !ai::is_configured() {
         return Ok(None);
     }
@@ -231,14 +252,29 @@ async fn ai_match(query: &str, catalog: &[LauncherItem]) -> PortalResult<Option<
     ]);
     let raw = ai::raw_chat_completion(messages, true, 0.0).await?;
     let parsed: Value = serde_json::from_str(raw.trim()).map_err(|e| {
-        PortalError::business(format!("AI 返回非法 JSON：{e}；原文：{}", raw.chars().take(200).collect::<String>()))
+        PortalError::business(format!(
+            "AI 返回非法 JSON：{e}；原文：{}",
+            raw.chars().take(200).collect::<String>()
+        ))
     })?;
-    let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let id = parsed
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if id.is_empty() {
         return Ok(None);
     }
-    let confidence = parsed.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.6);
-    let reason = parsed.get("reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let confidence = parsed
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.6);
+    let reason = parsed
+        .get("reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     // 防 AI 编造不存在的 id
     if !catalog.iter().any(|c| c.id == id) {
         return Ok(None);
@@ -279,7 +315,11 @@ pub async fn resolve(input: ResolveInput) -> PortalResult<Value> {
 
     let Some((id, confidence, reason, source)) = hit else {
         // 未命中：返回少量候选给前端做提示
-        let candidates: Vec<Value> = catalog.iter().take(8).map(|i| json!({ "id": i.id, "caption": i.caption })).collect();
+        let candidates: Vec<Value> = catalog
+            .iter()
+            .take(8)
+            .map(|i| json!({ "id": i.id, "caption": i.caption }))
+            .collect();
         return Ok(json!({ "matched": false, "query": query, "candidates": candidates }));
     };
 
@@ -312,8 +352,20 @@ mod tests {
     #[test]
     fn keywords_and_rule_match() {
         let catalog = vec![
-            LauncherItem { id: "fi-gl-fico-ws".into(), caption: "ERP凭证(三区工作台)".into(), icon: "".into(), menu_ref: "m".into(), keywords: derive_keywords("ERP凭证(三区工作台)", "fi-gl-fico-ws") },
-            LauncherItem { id: "fi-gl-acct-ws".into(), caption: "会计核算管理".into(), icon: "".into(), menu_ref: "m".into(), keywords: derive_keywords("会计核算管理", "fi-gl-acct-ws") },
+            LauncherItem {
+                id: "fi-gl-fico-ws".into(),
+                caption: "ERP凭证(三区工作台)".into(),
+                icon: "".into(),
+                menu_ref: "m".into(),
+                keywords: derive_keywords("ERP凭证(三区工作台)", "fi-gl-fico-ws"),
+            },
+            LauncherItem {
+                id: "fi-gl-acct-ws".into(),
+                caption: "会计核算管理".into(),
+                icon: "".into(),
+                menu_ref: "m".into(),
+                keywords: derive_keywords("会计核算管理", "fi-gl-acct-ws"),
+            },
         ];
         // “录入凭证” 应命中含“凭证”的项
         let (hit, _score) = rule_match("我要录入凭证", &catalog).expect("应命中");

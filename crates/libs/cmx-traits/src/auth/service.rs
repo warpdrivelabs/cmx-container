@@ -358,11 +358,8 @@ pub trait AuthService: Send + Sync {
     ///
     /// * [`AuthError::InvalidCredentials`] - 用户名或密码错误。
     /// * [`AuthError::UserDisabled`] - 用户已被禁用。
-    async fn verify_credentials(
-        &self,
-        username: &str,
-        password: &str,
-    ) -> Result<String, AuthError>;
+    async fn verify_credentials(&self, username: &str, password: &str)
+    -> Result<String, AuthError>;
 
     /// 验证 API Key 并返回 AuthContext（无状态，不创建会话）。
     ///
@@ -500,11 +497,7 @@ pub trait AuthService: Send + Sync {
     /// # Errors
     ///
     /// * [`AuthError::OAuth2LastBindingCannotRemove`] - 无法解除最后一个登录绑定。
-    async fn unlink_oauth2_account(
-        &self,
-        user_id: &str,
-        provider: &str,
-    ) -> Result<(), AuthError>;
+    async fn unlink_oauth2_account(&self, user_id: &str, provider: &str) -> Result<(), AuthError>;
 
     /// 存储第三方 OAuth2 Provider state（用于 authorize 重定向）。
     ///

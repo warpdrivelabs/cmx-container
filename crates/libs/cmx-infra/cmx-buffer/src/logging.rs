@@ -153,10 +153,6 @@ impl ConnLog {
 
     /// 记录连接池状态
     pub fn pool_status(pool_size: usize, available: usize) {
-        debug!(
-            pool_size = pool_size,
-            available = available,
-            "连接池状态"
-        );
+        debug!(pool_size = pool_size, available = available, "连接池状态");
     }
 }

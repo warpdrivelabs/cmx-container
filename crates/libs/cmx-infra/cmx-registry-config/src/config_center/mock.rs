@@ -106,9 +106,7 @@ impl ConfigCenter for MockConfigCenter {
         read_lock(&self.configs)
             .get(&key)
             .cloned()
-            .ok_or_else(|| {
-                ConfigCenterError::GetFailed(format!("配置不存在: {}", key))
-            })
+            .ok_or_else(|| ConfigCenterError::GetFailed(format!("配置不存在: {}", key)))
     }
 
     /// 注册配置变更监听器。
@@ -120,8 +118,7 @@ impl ConfigCenter for MockConfigCenter {
         group: &str,
         callback: ConfigChangeCallback,
     ) -> Result<(), ConfigCenterError> {
-        write_lock(&self.listeners)
-            .push((data_id.to_string(), group.to_string(), callback));
+        write_lock(&self.listeners).push((data_id.to_string(), group.to_string(), callback));
         info!("[MockConfigCenter] 已添加配置监听: {}/{}", group, data_id);
         Ok(())
     }

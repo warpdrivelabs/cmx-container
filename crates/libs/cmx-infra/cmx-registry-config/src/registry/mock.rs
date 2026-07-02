@@ -149,10 +149,7 @@ impl ServiceRegistry for MockRegistry {
 
     async fn get_service_list(&self) -> Result<Vec<String>, RegistryError> {
         let registered = read_lock(&self.registered);
-        let mut names: Vec<String> = registered
-            .iter()
-            .map(|i| i.service_name.clone())
-            .collect();
+        let mut names: Vec<String> = registered.iter().map(|i| i.service_name.clone()).collect();
         names.sort();
         names.dedup();
         Ok(names)

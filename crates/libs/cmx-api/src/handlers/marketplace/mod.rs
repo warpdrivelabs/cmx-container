@@ -38,8 +38,8 @@ pub use request::*;
 pub use response::*;
 
 use crate::app_state::CmxAppState;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 use crate::routes::traits::ModuleRoutes;
 
@@ -53,11 +53,20 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/plugin/publish", post(marketplace_plugin_publish))
         .route("/plugin/update", post(marketplace_plugin_update))
         .route("/plugin/delete", post(marketplace_plugin_delete))
-        .route("/plugin/version/list", post(marketplace_plugin_version_list))
-        .route("/plugin/version/get", get(marketplace_plugin_version_get_by_id))
+        .route(
+            "/plugin/version/list",
+            post(marketplace_plugin_version_list),
+        )
+        .route(
+            "/plugin/version/get",
+            get(marketplace_plugin_version_get_by_id),
+        )
         .route("/plugin/install", post(marketplace_plugin_install))
         .route("/plugin/upgrade", post(marketplace_plugin_upgrade))
-        .route("/plugin/check-updates", post(marketplace_plugin_check_updates))
+        .route(
+            "/plugin/check-updates",
+            post(marketplace_plugin_check_updates),
+        )
         .route("/plugin/download", get(marketplace_plugin_download))
         .route("/plugin/rate", post(marketplace_plugin_rate))
         .route("/plugin/rating/list", post(marketplace_plugin_rating_list))

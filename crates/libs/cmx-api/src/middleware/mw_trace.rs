@@ -2,15 +2,10 @@
 //!
 //! 打印请求参数、请求头和响应结果，用于调试和日志追踪。
 
-use axum::{
-    body::Body,
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
 use axum::body::HttpBody;
+use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use std::time::Instant;
-use tracing::{ info, warn};
+use tracing::{info, warn};
 
 /// 请求追踪中间件
 ///
@@ -169,22 +164,25 @@ fn sanitize_body(body: &[u8]) -> String {
     }
 
     if let Ok(s) = std::str::from_utf8(body)
-        && s.contains('=') && !s.contains('{') && !s.contains('[') {
-            let params: Vec<_> = s
-                .split('&')
-                .filter_map(|pair| {
-                    let mut parts = pair.splitn(2, '=');
-                    let key = parts.next()?;
-                    let val = parts.next().unwrap_or("");
-                    Some(format!("{}={}", key, sanitize_field_value(key, val)))
-                })
-                .take(20)
-                .collect();
-            if params.len() < 20 {
-                return params.join("&");
-            }
-            return format!("{}... (truncated)", params.join("&"));
+        && s.contains('=')
+        && !s.contains('{')
+        && !s.contains('[')
+    {
+        let params: Vec<_> = s
+            .split('&')
+            .filter_map(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                let key = parts.next()?;
+                let val = parts.next().unwrap_or("");
+                Some(format!("{}={}", key, sanitize_field_value(key, val)))
+            })
+            .take(20)
+            .collect();
+        if params.len() < 20 {
+            return params.join("&");
         }
+        return format!("{}... (truncated)", params.join("&"));
+    }
 
     if body.iter().take(100).any(|&b| b == 0 || b > 127) {
         return format!("<binary data: {} bytes>", body.len());
@@ -238,7 +236,11 @@ async fn extract_and_log_response_body(response: &mut Response<Body>) -> String 
 
             // 如果预览内容超过 2000 字符，只显示字符数和字节数
             let final_preview = if preview.len() > 2000 {
-                format!("<response body too large: {} chars, {} bytes>", preview.len(), byte_count)
+                format!(
+                    "<response body too large: {} chars, {} bytes>",
+                    preview.len(),
+                    byte_count
+                )
             } else {
                 preview
             };

@@ -1,7 +1,7 @@
-use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_core::model::cell::{DataValue, Field, FieldType};
-use sqlx::{Row as SqlxRow, Column};
+use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use rust_decimal::Decimal;
+use sqlx::{Column, Row as SqlxRow};
 use uuid::Uuid;
 
 /// 参数值类型，用于 SQL 参数绑定
@@ -66,13 +66,22 @@ impl ParamValue {
                     return ParamValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f") {
-                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
-                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
-                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return ParamValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
 
                 // 4. 尝试解析为 Date
@@ -88,9 +97,10 @@ impl ParamValue {
 
                 // 6. 尝试解析为 JSON（以 { 或 [ 开头）
                 if (s.starts_with('{') || s.starts_with('['))
-                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                        return ParamValue::Json(v);
-                    }
+                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+                {
+                    return ParamValue::Json(v);
+                }
 
                 // 默认作为字符串
                 ParamValue::String(s)
@@ -106,7 +116,8 @@ impl ParamValue {
                 });
 
                 if is_binary {
-                    let bytes: Vec<u8> = arr.iter()
+                    let bytes: Vec<u8> = arr
+                        .iter()
                         .filter_map(|v| v.as_u64())
                         .map(|n| n as u8)
                         .collect();
@@ -137,30 +148,30 @@ pub fn bind_data_value_postgres<'q>(
     match param {
         DataValue::Null => query.bind(None::<String>),
         DataValue::NullTyped(t) => match t {
-            SqlTypeMarker::Bool      => query.bind(None::<bool>),
-            SqlTypeMarker::Int       => query.bind(None::<i64>),
-            SqlTypeMarker::Float     => query.bind(None::<f64>),
-            SqlTypeMarker::Decimal   => query.bind(None::<rust_decimal::Decimal>),
-            SqlTypeMarker::Text      => query.bind(None::<String>),
+            SqlTypeMarker::Bool => query.bind(None::<bool>),
+            SqlTypeMarker::Int => query.bind(None::<i64>),
+            SqlTypeMarker::Float => query.bind(None::<f64>),
+            SqlTypeMarker::Decimal => query.bind(None::<rust_decimal::Decimal>),
+            SqlTypeMarker::Text => query.bind(None::<String>),
             SqlTypeMarker::Timestamp => query.bind(None::<chrono::DateTime<chrono::Utc>>),
-            SqlTypeMarker::Date      => query.bind(None::<chrono::NaiveDate>),
-            SqlTypeMarker::Uuid      => query.bind(None::<uuid::Uuid>),
-            SqlTypeMarker::Json      => query.bind(None::<serde_json::Value>),
-            SqlTypeMarker::Binary    => query.bind(None::<Vec<u8>>),
+            SqlTypeMarker::Date => query.bind(None::<chrono::NaiveDate>),
+            SqlTypeMarker::Uuid => query.bind(None::<uuid::Uuid>),
+            SqlTypeMarker::Json => query.bind(None::<serde_json::Value>),
+            SqlTypeMarker::Binary => query.bind(None::<Vec<u8>>),
         },
-        DataValue::Bool(v)    => query.bind(*v),
-        DataValue::Int(v)     => query.bind(*v),
-        DataValue::Float(v)   => query.bind(*v),
-        DataValue::String(v)  => query.bind(v.as_str()),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.as_str()),
         DataValue::Decimal(v) => query.bind(*v),
         DataValue::DateTime(v) => query.bind(*v),
-        DataValue::Date(v)    => query.bind(*v),
-        DataValue::Json(v)    => query.bind(v.clone()),
-        DataValue::Binary(v)  => query.bind(v.as_slice()),
-        DataValue::Uuid(v)    => query.bind(*v),
+        DataValue::Date(v) => query.bind(*v),
+        DataValue::Json(v) => query.bind(v.clone()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(*v),
         DataValue::Array(els) => bind_pg_array_postgres(query, els),
         DataValue::ShortStr(s) => query.bind(s.as_str()),
-        DataValue::LongStr(s)  => query.bind(s.as_str()),
+        DataValue::LongStr(s) => query.bind(s.as_str()),
     }
 }
 
@@ -178,26 +189,35 @@ fn bind_pg_array_postgres<'q>(
     // 按首个元素类型分发
     match &els[0] {
         DataValue::String(_) | DataValue::ShortStr(_) | DataValue::LongStr(_) => {
-            let v: Vec<&str> = els.iter().filter_map(|e| match e {
-                DataValue::String(s) => Some(s.as_str()),
-                DataValue::ShortStr(s) => Some(s.as_str()),
-                DataValue::LongStr(s) => Some(s.as_str()),
-                _ => None,
-            }).collect();
+            let v: Vec<&str> = els
+                .iter()
+                .filter_map(|e| match e {
+                    DataValue::String(s) => Some(s.as_str()),
+                    DataValue::ShortStr(s) => Some(s.as_str()),
+                    DataValue::LongStr(s) => Some(s.as_str()),
+                    _ => None,
+                })
+                .collect();
             query.bind(v)
         }
         DataValue::Int(_) => {
-            let v: Vec<i64> = els.iter().filter_map(|e| match e {
-                DataValue::Int(i) => Some(*i),
-                _ => None,
-            }).collect();
+            let v: Vec<i64> = els
+                .iter()
+                .filter_map(|e| match e {
+                    DataValue::Int(i) => Some(*i),
+                    _ => None,
+                })
+                .collect();
             query.bind(v)
         }
         DataValue::Uuid(_) => {
-            let v: Vec<uuid::Uuid> = els.iter().filter_map(|e| match e {
-                DataValue::Uuid(u) => Some(*u),
-                _ => None,
-            }).collect();
+            let v: Vec<uuid::Uuid> = els
+                .iter()
+                .filter_map(|e| match e {
+                    DataValue::Uuid(u) => Some(*u),
+                    _ => None,
+                })
+                .collect();
             query.bind(v)
         }
         _ => query.bind(None::<Vec<String>>),
@@ -215,26 +235,30 @@ pub fn bind_data_value_mysql<'q>(
 ) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
     match param {
         DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
-        DataValue::Bool(v)    => query.bind(*v),
-        DataValue::Int(v)     => query.bind(*v),
-        DataValue::Float(v)   => query.bind(*v),
-        DataValue::String(v)  => query.bind(v.clone()),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.clone()),
         DataValue::Decimal(v) => query.bind(v.to_string()),
         DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
-        DataValue::Date(v)    => query.bind(v.to_string()),
-        DataValue::Json(v)    => query.bind(v.to_string()),
-        DataValue::Binary(v)  => query.bind(v.as_slice()),
-        DataValue::Uuid(v)    => query.bind(v.to_string()),
+        DataValue::Date(v) => query.bind(v.to_string()),
+        DataValue::Json(v) => query.bind(v.to_string()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(v.to_string()),
         DataValue::Array(els) => {
-            let s = els.iter().map(|e| match e {
-                DataValue::String(s) => s.clone(),
-                DataValue::ShortStr(s) | DataValue::LongStr(s) => s.to_string(),
-                other => format!("{:?}", other),
-            }).collect::<Vec<_>>().join(",");
+            let s = els
+                .iter()
+                .map(|e| match e {
+                    DataValue::String(s) => s.clone(),
+                    DataValue::ShortStr(s) | DataValue::LongStr(s) => s.to_string(),
+                    other => format!("{:?}", other),
+                })
+                .collect::<Vec<_>>()
+                .join(",");
             query.bind(s)
         }
         DataValue::ShortStr(s) => query.bind(s.to_string()),
-        DataValue::LongStr(s)  => query.bind(s.to_string()),
+        DataValue::LongStr(s) => query.bind(s.to_string()),
     }
 }
 
@@ -249,30 +273,29 @@ pub fn bind_data_value_sqlite<'q>(
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     match param {
         DataValue::Null | DataValue::NullTyped(_) => query.bind(None::<String>),
-        DataValue::Bool(v)    => query.bind(*v),
-        DataValue::Int(v)     => query.bind(*v),
-        DataValue::Float(v)   => query.bind(*v),
-        DataValue::String(v)  => query.bind(v.clone()),
+        DataValue::Bool(v) => query.bind(*v),
+        DataValue::Int(v) => query.bind(*v),
+        DataValue::Float(v) => query.bind(*v),
+        DataValue::String(v) => query.bind(v.clone()),
         DataValue::Decimal(v) => query.bind(v.to_string()),
         DataValue::DateTime(v) => query.bind(v.to_rfc3339()),
-        DataValue::Date(v)    => query.bind(v.to_string()),
-        DataValue::Json(v)    => query.bind(v.to_string()),
-        DataValue::Binary(v)  => query.bind(v.as_slice()),
-        DataValue::Uuid(v)    => query.bind(v.to_string()),
+        DataValue::Date(v) => query.bind(v.to_string()),
+        DataValue::Json(v) => query.bind(v.to_string()),
+        DataValue::Binary(v) => query.bind(v.as_slice()),
+        DataValue::Uuid(v) => query.bind(v.to_string()),
         DataValue::Array(els) => query.bind(serde_json::to_string(els).unwrap_or_default()),
         DataValue::ShortStr(s) => query.bind(s.to_string()),
-        DataValue::LongStr(s)  => query.bind(s.to_string()),
+        DataValue::LongStr(s) => query.bind(s.to_string()),
     }
 }
 
 /// 将 serde_json::Value 数组转换为 Vec<DataValue>
 pub fn json_to_data_values(json: serde_json::Value) -> Result<Vec<DataValue>, String> {
     match json {
-        serde_json::Value::Array(arr) => {
-            arr.into_iter()
-                .map(|v| serde_json::from_value(v).map_err(|e| e.to_string()))
-                .collect()
-        }
+        serde_json::Value::Array(arr) => arr
+            .into_iter()
+            .map(|v| serde_json::from_value(v).map_err(|e| e.to_string()))
+            .collect(),
         _ => Err("params must be an array".to_string()),
     }
 }
@@ -294,7 +317,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
+            let field_type = Self::map_sql_type_to_field_type(column.type_info());
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -330,7 +353,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
+            let field_type = Self::map_sql_type_to_field_type(column.type_info());
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -366,7 +389,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
+            let field_type = Self::map_sql_type_to_field_type(column.type_info());
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -390,7 +413,10 @@ impl ResultConverter {
     }
 
     /// 从 PostgreSQL 行中获取值
-    pub(crate) fn get_postgres_value_from_row(row: &sqlx::postgres::PgRow, index: usize) -> DataValue {
+    pub(crate) fn get_postgres_value_from_row(
+        row: &sqlx::postgres::PgRow,
+        index: usize,
+    ) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
@@ -406,10 +432,17 @@ impl ResultConverter {
                 return DataValue::Int(v as i64);
             }
             DataValue::Null
-        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
-            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float")
+            || type_name.contains("double")
+            || type_name.contains("real")
+        {
+            row.try_get::<f64, _>(index)
+                .map(DataValue::Float)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
-            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+            row.try_get::<bool, _>(index)
+                .map(DataValue::Bool)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("decimal") || type_name.contains("numeric") {
             row.try_get::<String, _>(index)
                 .ok()
@@ -438,9 +471,10 @@ impl ResultConverter {
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
             if let Ok(s) = row.try_get::<String, _>(index)
-                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
-                    return DataValue::Date(date);
-                }
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            {
+                return DataValue::Date(date);
+            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
@@ -450,7 +484,10 @@ impl ResultConverter {
             }
             // 尝试获取 NaiveDateTime 然后转换为 DateTime<Utc>
             if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
-                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                    ndt,
+                    chrono::Utc,
+                ));
             }
             // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
@@ -458,17 +495,25 @@ impl ResultConverter {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 return DataValue::String(s);
             }
             DataValue::Null
         } else {
             // 默认尝试获取字符串
-            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
+            row.try_get::<String, _>(index)
+                .map(DataValue::String)
+                .unwrap_or(DataValue::Null)
         }
     }
 
@@ -489,10 +534,17 @@ impl ResultConverter {
                 return DataValue::Int(v as i64);
             }
             DataValue::Null
-        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
-            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float")
+            || type_name.contains("double")
+            || type_name.contains("real")
+        {
+            row.try_get::<f64, _>(index)
+                .map(DataValue::Float)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
-            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+            row.try_get::<bool, _>(index)
+                .map(DataValue::Bool)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("decimal") || type_name.contains("numeric") {
             row.try_get::<String, _>(index)
                 .ok()
@@ -506,7 +558,10 @@ impl ResultConverter {
                 .and_then(|s| Uuid::parse_str(&s).ok())
                 .map(DataValue::Uuid)
                 .unwrap_or(DataValue::Null)
-        } else if type_name.contains("binary") || type_name.contains("blob") || type_name.contains("bytea") {
+        } else if type_name.contains("binary")
+            || type_name.contains("blob")
+            || type_name.contains("bytea")
+        {
             // 处理二进制类型
             row.try_get::<Vec<u8>, _>(index)
                 .map(DataValue::Binary)
@@ -519,9 +574,10 @@ impl ResultConverter {
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
             if let Ok(s) = row.try_get::<String, _>(index)
-                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
-                    return DataValue::Date(date);
-                }
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            {
+                return DataValue::Date(date);
+            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
@@ -531,7 +587,10 @@ impl ResultConverter {
             }
             // 尝试获取 NaiveDateTime 然后转换为 DateTime<Utc>
             if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
-                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                    ndt,
+                    chrono::Utc,
+                ));
             }
             // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
@@ -539,22 +598,33 @@ impl ResultConverter {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 return DataValue::String(s);
             }
             DataValue::Null
         } else {
             // 默认尝试获取字符串
-            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
+            row.try_get::<String, _>(index)
+                .map(DataValue::String)
+                .unwrap_or(DataValue::Null)
         }
     }
 
     /// 从 SQLite 行中获取值
-    pub(crate) fn get_sqlite_value_from_row(row: &sqlx::sqlite::SqliteRow, index: usize) -> DataValue {
+    pub(crate) fn get_sqlite_value_from_row(
+        row: &sqlx::sqlite::SqliteRow,
+        index: usize,
+    ) -> DataValue {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
@@ -570,10 +640,17 @@ impl ResultConverter {
                 return DataValue::Int(v as i64);
             }
             DataValue::Null
-        } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("real") {
-            row.try_get::<f64, _>(index).map(DataValue::Float).unwrap_or(DataValue::Null)
+        } else if type_name.contains("float")
+            || type_name.contains("double")
+            || type_name.contains("real")
+        {
+            row.try_get::<f64, _>(index)
+                .map(DataValue::Float)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("bool") {
-            row.try_get::<bool, _>(index).map(DataValue::Bool).unwrap_or(DataValue::Null)
+            row.try_get::<bool, _>(index)
+                .map(DataValue::Bool)
+                .unwrap_or(DataValue::Null)
         } else if type_name.contains("decimal") || type_name.contains("numeric") {
             row.try_get::<String, _>(index)
                 .ok()
@@ -593,15 +670,19 @@ impl ResultConverter {
         } else if type_name.contains("date") && !type_name.contains("time") {
             // 处理纯日期类型 - 作为字符串获取后解析
             if let Ok(s) = row.try_get::<String, _>(index)
-                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
-                    return DataValue::Date(date);
-                }
+                && let Ok(date) = chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            {
+                return DataValue::Date(date);
+            }
             DataValue::Null
         } else if type_name.contains("timestamp") || type_name.contains("datetime") {
             // 处理时间戳类型 - 直接使用 chrono 类型获取（sqlx chrono feature 启用）
             // 优先尝试直接获取 NaiveDateTime
             if let Ok(ndt) = row.try_get::<chrono::NaiveDateTime, _>(index) {
-                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(ndt, chrono::Utc));
+                return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                    ndt,
+                    chrono::Utc,
+                ));
             }
             // 如果都失败，作为字符串处理
             if let Ok(s) = row.try_get::<String, _>(index) {
@@ -609,38 +690,54 @@ impl ResultConverter {
                     return DataValue::DateTime(dt.with_timezone(&chrono::Utc));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
-                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+                    return DataValue::DateTime(chrono::DateTime::from_naive_utc_and_offset(
+                        dt,
+                        chrono::Utc,
+                    ));
                 }
                 return DataValue::String(s);
             }
             DataValue::Null
         } else {
             // 默认尝试获取字符串
-            row.try_get::<String, _>(index).map(DataValue::String).unwrap_or(DataValue::Null)
+            row.try_get::<String, _>(index)
+                .map(DataValue::String)
+                .unwrap_or(DataValue::Null)
         }
     }
 
     /// 将 SQL 类型映射为 FieldType
-    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo, column_name: &str) -> FieldType {
+    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo) -> FieldType {
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
 
-        //NAME 是 PostgreSQL 的标识符类型（字符串类似），把 name 加到字符串匹配分支即可， NAME[] 也会被 contains("name") 覆盖。
-        if type_name_lower.contains("varchar") || type_name_lower.contains("text")
-            || type_name_lower.contains("string") || type_name_lower.contains("char")
-            || type_name_lower.contains("name") {
+        if type_name_lower.contains("varchar")
+            || type_name_lower.contains("text")
+            || type_name_lower.contains("string")
+            || type_name_lower.contains("char")
+        {
             FieldType::String
-        } else if type_name_lower.contains("int") || type_name_lower.contains("bigint")
-            || type_name_lower.contains("smallint") || type_name_lower.contains("tinyint") {
+        } else if type_name_lower.contains("int")
+            || type_name_lower.contains("bigint")
+            || type_name_lower.contains("smallint")
+            || type_name_lower.contains("tinyint")
+        {
             FieldType::Int
-        } else if type_name_lower.contains("float") || type_name_lower.contains("double")
-            || type_name_lower.contains("real") {
+        } else if type_name_lower.contains("float")
+            || type_name_lower.contains("double")
+            || type_name_lower.contains("real")
+        {
             FieldType::Float
-        } else if type_name_lower.contains("decimal") || type_name_lower.contains("numeric")
-            || type_name_lower.contains("money") {
+        } else if type_name_lower.contains("decimal")
+            || type_name_lower.contains("numeric")
+            || type_name_lower.contains("money")
+        {
             FieldType::Decimal
         } else if type_name_lower.contains("timestamp") || type_name_lower.contains("datetime") {
             FieldType::DateTime
@@ -648,14 +745,17 @@ impl ResultConverter {
             FieldType::Bool
         } else if type_name_lower.contains("uuid") {
             FieldType::Uuid
-        } else if type_name_lower.contains("bytea") || type_name_lower.contains("blob") || type_name_lower.contains("binary") {
+        } else if type_name_lower.contains("bytea")
+            || type_name_lower.contains("blob")
+            || type_name_lower.contains("binary")
+        {
             FieldType::Binary
         } else if type_name_lower.contains("json") {
             FieldType::Json
         } else if type_name_lower.contains("array") {
             FieldType::Array
         } else {
-            tracing::warn!("未处理的数据库字段类型: column={}, type={}", column_name, type_name);
+            tracing::warn!("未处理的数据库字段类型: {}", type_name);
             FieldType::Unknown
         }
     }

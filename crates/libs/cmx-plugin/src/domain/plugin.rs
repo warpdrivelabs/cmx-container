@@ -2,8 +2,8 @@
 //!
 //! 定义插件的核心数据结构
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 fn default_app_id() -> String {
     "default".to_string()
@@ -45,7 +45,6 @@ pub struct PluginInfo {
     /// 应用ID
     #[serde(default = "default_app_id")]
     pub app_id: String,
-
     // /// 创建时间
     // pub create_time: DateTime<Utc>,
     // /// 更新时间
@@ -64,9 +63,7 @@ pub struct PluginInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PluginSource {
     /// 本地文件
-    Local {
-        path: PathBuf,
-    },
+    Local { path: PathBuf },
     /// 远程URL
     Remote {
         url: String,
@@ -127,9 +124,8 @@ impl std::str::FromStr for PluginStatus {
     }
 }
 
-
 /// 插件筛选条件
-#[derive(Debug, Clone, Default,Serialize,Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PluginFilter {
     /// 按应用ID筛选
     pub app_id: Option<String>,
@@ -219,10 +215,22 @@ mod tests {
     #[test]
     fn test_plugin_status_from_str_case_insensitive() {
         // 大小写不敏感：均应解析成功
-        assert_eq!(PluginStatus::from_str("INSTALLED").unwrap(), PluginStatus::Installed);
-        assert_eq!(PluginStatus::from_str("Activated").unwrap(), PluginStatus::Activated);
-        assert_eq!(PluginStatus::from_str("Deactivated").unwrap(), PluginStatus::Deactivated);
-        assert_eq!(PluginStatus::from_str("ERROR").unwrap(), PluginStatus::Error);
+        assert_eq!(
+            PluginStatus::from_str("INSTALLED").unwrap(),
+            PluginStatus::Installed
+        );
+        assert_eq!(
+            PluginStatus::from_str("Activated").unwrap(),
+            PluginStatus::Activated
+        );
+        assert_eq!(
+            PluginStatus::from_str("Deactivated").unwrap(),
+            PluginStatus::Deactivated
+        );
+        assert_eq!(
+            PluginStatus::from_str("ERROR").unwrap(),
+            PluginStatus::Error
+        );
     }
 
     #[test]
@@ -230,7 +238,11 @@ mod tests {
         let result = PluginStatus::from_str("unknown");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("未知插件状态"), "错误消息应包含未知状态提示: {}", err);
+        assert!(
+            err.contains("未知插件状态"),
+            "错误消息应包含未知状态提示: {}",
+            err
+        );
         assert!(err.contains("unknown"), "错误消息应包含原状态值: {}", err);
     }
 
@@ -317,8 +329,12 @@ mod tests {
             marketplace_url: None,
             plugin_id: "p2".to_string(),
         };
-        assert!(matches!(with_url, PluginSource::Marketplace { marketplace_url: Some(_), plugin_id } if plugin_id == "p1"));
-        assert!(matches!(without_url, PluginSource::Marketplace { marketplace_url: None, plugin_id } if plugin_id == "p2"));
+        assert!(
+            matches!(with_url, PluginSource::Marketplace { marketplace_url: Some(_), plugin_id } if plugin_id == "p1")
+        );
+        assert!(
+            matches!(without_url, PluginSource::Marketplace { marketplace_url: None, plugin_id } if plugin_id == "p2")
+        );
     }
 
     #[test]
@@ -359,7 +375,10 @@ mod tests {
             "module_code": ""
         }"#;
         let info: PluginInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(info.app_id, "default", "缺失 app_id 时应使用默认值 'default'");
+        assert_eq!(
+            info.app_id, "default",
+            "缺失 app_id 时应使用默认值 'default'"
+        );
     }
 
     #[test]

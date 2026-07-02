@@ -334,8 +334,7 @@ impl RegistryConfig {
             group_name: env_string("SERVICE_REGISTRY_GROUP")
                 .or_else(|| env_string("NACOS_NAMING_GROUP_NAME"))
                 .unwrap_or_else(default_group),
-            cluster_name: env_string("SERVICE_REGISTRY_CLUSTER")
-                .unwrap_or_else(default_cluster),
+            cluster_name: env_string("SERVICE_REGISTRY_CLUSTER").unwrap_or_else(default_cluster),
             weight: env_string("SERVICE_REGISTRY_WEIGHT")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or_else(default_weight),
@@ -455,7 +454,10 @@ impl ConfigCenterFullConfig {
                 let data_id = env_string("NACOS_CONFIG_DATA_ID");
                 let group = env_string("NACOS_CONFIG_GROUP").unwrap_or_else(default_group);
                 if let Some(did) = data_id {
-                    vec![ConfigListener { data_id: did, group }]
+                    vec![ConfigListener {
+                        data_id: did,
+                        group,
+                    }]
                 } else {
                     vec![]
                 }

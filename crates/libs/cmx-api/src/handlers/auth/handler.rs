@@ -2,14 +2,14 @@
 //!
 //! 提供登录/登出/刷新Token/校验Token/修改密码等 HTTP API。
 
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use cmx_traits::auth::{Credentials, DeviceInfo};
 use tracing::{debug, info, warn};
 
-use crate::{ApiResp, Error, Result};
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
+use crate::{ApiResp, Error, Result};
 
 use super::request::*;
 use super::response::*;
@@ -29,11 +29,14 @@ pub async fn auth_login(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<ApiResp<LoginResponse>>> {
-    debug!("{:<12} - handler::auth_login - username: {}", "HANDLER", req.username);
+    debug!(
+        "{:<12} - handler::auth_login - username: {}",
+        "HANDLER", req.username
+    );
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     let credentials = Credentials::Password {
         username: req.username.clone(),
@@ -60,7 +63,11 @@ pub async fn auth_login(
             warn!(username = %req.username, "用户已被禁用");
             return Ok(Json(ApiResp::fail(403, "用户已被禁用")));
         }
-        Err(cmx_traits::auth::AuthError::TooManyAttempts { secs, limit, window }) => {
+        Err(cmx_traits::auth::AuthError::TooManyAttempts {
+            secs,
+            limit,
+            window,
+        }) => {
             // 5.1 修复：映射为 429 Too Many Requests 而非 403
             return Err(Error::RateLimitExceeded {
                 retry_after: secs,
@@ -101,9 +108,9 @@ pub async fn auth_refresh(
 ) -> Result<Json<ApiResp<LoginResponse>>> {
     debug!("{:<12} - handler::auth_refresh", "HANDLER");
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     let token_pair = auth_service
         .refresh_token(&req.refresh_token)
@@ -112,9 +119,7 @@ pub async fn auth_refresh(
             cmx_traits::auth::AuthError::TokenExpired
             | cmx_traits::auth::AuthError::TokenRevoked
             | cmx_traits::auth::AuthError::ReplayDetected
-            | cmx_traits::auth::AuthError::InvalidToken(_) => {
-                Error::Unauthorized(e.to_string())
-            }
+            | cmx_traits::auth::AuthError::InvalidToken(_) => Error::Unauthorized(e.to_string()),
             other => Error::business_error(other.to_string()),
         })?;
 
@@ -155,9 +160,9 @@ pub async fn auth_logout(
         .map(|s| s.trim().to_string())
         .ok_or_else(|| Error::Unauthorized("缺少 Authorization 头".to_string()))?;
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     auth_service
         .revoke_token(&token)
@@ -189,9 +194,9 @@ pub async fn auth_validate(
 ) -> Result<Json<ApiResp<ValidateResponse>>> {
     debug!("{:<12} - handler::auth_validate", "HANDLER");
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     let auth_ctx = auth_service
         .validate_token(&req.token)
@@ -199,9 +204,7 @@ pub async fn auth_validate(
         .map_err(|e| match e {
             cmx_traits::auth::AuthError::TokenExpired
             | cmx_traits::auth::AuthError::TokenRevoked
-            | cmx_traits::auth::AuthError::InvalidToken(_) => {
-                Error::Unauthorized(e.to_string())
-            }
+            | cmx_traits::auth::AuthError::InvalidToken(_) => Error::Unauthorized(e.to_string()),
             other => Error::business_error(other.to_string()),
         })?;
 
@@ -297,20 +300,28 @@ pub async fn auth_revoke_all(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<RevokeAllRequest>,
 ) -> Result<Json<ApiResp<()>>> {
-    debug!("{:<12} - handler::auth_revoke_all - user_id: {}", "HANDLER", req.user_id);
+    debug!(
+        "{:<12} - handler::auth_revoke_all - user_id: {}",
+        "HANDLER", req.user_id
+    );
 
     // P1-6.4: 权限校验 — 需要 system:auth:kick 权限
     if let Some(auth_ctx) = &svr_ctx.auth_context {
-        if !auth_ctx.permissions.contains(&"system:auth:kick".to_string()) {
-            return Err(Error::Forbidden("无权执行强制下线操作，需要 system:auth:kick 权限".to_string()));
+        if !auth_ctx
+            .permissions
+            .contains(&"system:auth:kick".to_string())
+        {
+            return Err(Error::Forbidden(
+                "无权执行强制下线操作，需要 system:auth:kick 权限".to_string(),
+            ));
         }
     } else {
         return Err(Error::Forbidden("未认证".to_string()));
     }
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     auth_service
         .revoke_all_tokens(&req.user_id)
@@ -335,13 +346,13 @@ pub async fn auth_heartbeat(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(svr_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<()>>> {
-    let auth_ctx = svr_ctx.auth_context.ok_or_else(|| {
-        Error::Unauthorized("未认证".to_string())
-    })?;
+    let auth_ctx = svr_ctx
+        .auth_context
+        .ok_or_else(|| Error::Unauthorized("未认证".to_string()))?;
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     let device_type = auth_ctx.device_type.as_deref().unwrap_or("unknown");
 
@@ -419,13 +430,13 @@ pub async fn auth_change_password(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<ApiResp<()>>> {
-    let auth_ctx = svr_ctx.auth_context.ok_or_else(|| {
-        Error::Unauthorized("未认证".to_string())
-    })?;
+    let auth_ctx = svr_ctx
+        .auth_context
+        .ok_or_else(|| Error::Unauthorized("未认证".to_string()))?;
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::business_error("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::business_error("认证服务未初始化".to_string()))?;
 
     auth_service
         .change_password(&auth_ctx.user_id, &req.old_password, &req.new_password)
@@ -434,9 +445,7 @@ pub async fn auth_change_password(
             cmx_traits::auth::AuthError::InvalidCredentials => {
                 Error::Unauthorized("旧密码错误".to_string())
             }
-            cmx_traits::auth::AuthError::PasswordPolicyViolated(msg) => {
-                Error::BadRequest(msg)
-            }
+            cmx_traits::auth::AuthError::PasswordPolicyViolated(msg) => Error::BadRequest(msg),
             cmx_traits::auth::AuthError::PasswordReused => {
                 Error::BadRequest("新密码与历史密码重复".to_string())
             }

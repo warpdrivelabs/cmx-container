@@ -155,7 +155,9 @@ impl MarketplaceFetcher {
                 plugin_id,
                 version_constraint,
             } => {
-                let info = self.resolve_package(marketplace_url, plugin_id, version_constraint).await?;
+                let info = self
+                    .resolve_package(marketplace_url, plugin_id, version_constraint)
+                    .await?;
                 self.download_package(&info).await
             }
             _ => Err(PluginError::Fetcher("来源类型不是插件市场".to_string())),
@@ -163,8 +165,14 @@ impl MarketplaceFetcher {
     }
 
     /// 根据名称获取插件
-    pub async fn fetch_by_name(&self, plugin_id: &str, version_constraint: Option<String>) -> PluginResult<PathBuf> {
-        let info = self.resolve_package(&self.registry_info.url, plugin_id, &version_constraint).await?;
+    pub async fn fetch_by_name(
+        &self,
+        plugin_id: &str,
+        version_constraint: Option<String>,
+    ) -> PluginResult<PathBuf> {
+        let info = self
+            .resolve_package(&self.registry_info.url, plugin_id, &version_constraint)
+            .await?;
         self.download_package(&info).await
     }
 
@@ -181,16 +189,23 @@ impl MarketplaceFetcher {
 
         tracing::info!("查询插件市场: {}", url);
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("请求插件市场失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("插件市场响应错误: {} - {}", response.status(), plugin_id)));
+            return Err(PluginError::Fetcher(format!(
+                "插件市场响应错误: {} - {}",
+                response.status(),
+                plugin_id
+            )));
         }
 
-        let detail: MarketplacePackageDetail = response.json()
+        let detail: MarketplacePackageDetail = response
+            .json()
             .await
             .map_err(|e| PluginError::Fetcher(format!("解析插件市场响应失败: {}", e)))?;
 
@@ -239,18 +254,28 @@ impl MarketplaceFetcher {
             return Ok(target_path);
         }
 
-        tracing::info!("开始下载: {} -> {}", info.download_url, target_path.display());
+        tracing::info!(
+            "开始下载: {} -> {}",
+            info.download_url,
+            target_path.display()
+        );
 
-        let response = self.client.get(&info.download_url)
+        let response = self
+            .client
+            .get(&info.download_url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("下载请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("下载响应错误: {}", response.status())));
+            return Err(PluginError::Fetcher(format!(
+                "下载响应错误: {}",
+                response.status()
+            )));
         }
 
-        let bytes = response.bytes()
+        let bytes = response
+            .bytes()
             .await
             .map_err(|e| PluginError::Fetcher(format!("读取响应体失败: {}", e)))?;
 
@@ -273,21 +298,31 @@ impl MarketplaceFetcher {
     /// 搜索插件
     ///
     /// 在插件市场中搜索插件。
-    pub async fn search(&self, marketplace_url: &str, query: &str) -> PluginResult<Vec<MarketplaceSearchResult>> {
+    pub async fn search(
+        &self,
+        marketplace_url: &str,
+        query: &str,
+    ) -> PluginResult<Vec<MarketplaceSearchResult>> {
         let url = self.build_search_url(marketplace_url, query);
 
         tracing::info!("搜索插件市场: {}", url);
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("搜索请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("搜索响应错误: {}", response.status())));
+            return Err(PluginError::Fetcher(format!(
+                "搜索响应错误: {}",
+                response.status()
+            )));
         }
 
-        let results: Vec<MarketplaceSearchResult> = response.json()
+        let results: Vec<MarketplaceSearchResult> = response
+            .json()
             .await
             .map_err(|e| PluginError::Fetcher(format!("解析搜索结果失败: {}", e)))?;
 
@@ -299,21 +334,31 @@ impl MarketplaceFetcher {
     /// 获取插件详情
     ///
     /// 获取插件在插件市场中的详细信息。
-    pub async fn get_package_info(&self, marketplace_url: &str, plugin_id: &str) -> PluginResult<MarketplacePackageDetail> {
+    pub async fn get_package_info(
+        &self,
+        marketplace_url: &str,
+        plugin_id: &str,
+    ) -> PluginResult<MarketplacePackageDetail> {
         let url = self.build_package_url(marketplace_url, plugin_id);
 
         tracing::info!("获取包详情: {}", url);
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("请求包详情失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("获取详情响应错误: {}", response.status())));
+            return Err(PluginError::Fetcher(format!(
+                "获取详情响应错误: {}",
+                response.status()
+            )));
         }
 
-        let detail: MarketplacePackageDetail = response.json()
+        let detail: MarketplacePackageDetail = response
+            .json()
             .await
             .map_err(|e| PluginError::Fetcher(format!("解析包详情失败: {}", e)))?;
 
@@ -325,7 +370,10 @@ impl MarketplaceFetcher {
     /// 构建包URL
     fn build_package_url(&self, marketplace_url: &str, plugin_id: &str) -> String {
         let base = marketplace_url.trim_end_matches('/');
-        format!("{}/api/marketplace/plugin/download?plugin_id={}", base, plugin_id)
+        format!(
+            "{}/api/marketplace/plugin/download?plugin_id={}",
+            base, plugin_id
+        )
     }
 
     /// 构建搜索URL
@@ -342,17 +390,25 @@ impl MarketplaceFetcher {
         version_constraint: &Option<String>,
     ) -> PluginResult<MarketplacePackageVersion> {
         if detail.versions.is_empty() {
-            return Err(PluginError::Fetcher(format!("包 {} 没有可用版本", detail.name)));
+            return Err(PluginError::Fetcher(format!(
+                "包 {} 没有可用版本",
+                detail.name
+            )));
         }
 
         match version_constraint {
             Some(constraint) => {
-                let parsed_constraint = crate::domain::version::VersionConstraint::parse(constraint)
-                    .map_err(|e| PluginError::Fetcher(format!("解析版本约束失败: {}", e)))?;
+                let parsed_constraint =
+                    crate::domain::version::VersionConstraint::parse(constraint)
+                        .map_err(|e| PluginError::Fetcher(format!("解析版本约束失败: {}", e)))?;
 
-                let matching_versions: Vec<_> = detail.versions.iter()
+                let matching_versions: Vec<_> = detail
+                    .versions
+                    .iter()
                     .filter(|v| {
-                        if let Ok(version) = crate::domain::version::SemanticVersion::parse(&v.version) {
+                        if let Ok(version) =
+                            crate::domain::version::SemanticVersion::parse(&v.version)
+                        {
                             parsed_constraint.satisfies(&version)
                         } else {
                             false
@@ -367,23 +423,25 @@ impl MarketplaceFetcher {
                     )));
                 }
 
-                matching_versions.into_iter()
+                matching_versions
+                    .into_iter()
                     .max_by_key(|v| {
-                        crate::domain::version::SemanticVersion::parse(&v.version).ok()
-                            .unwrap_or_else(|| crate::domain::version::SemanticVersion::new(0, 0, 0))
+                        crate::domain::version::SemanticVersion::parse(&v.version)
+                            .ok()
+                            .unwrap_or_else(|| {
+                                crate::domain::version::SemanticVersion::new(0, 0, 0)
+                            })
                     })
                     .cloned()
                     .ok_or_else(|| PluginError::Fetcher("选择版本失败".to_string()))
             }
-            None => {
-                detail.versions.iter()
-                    .find(|v| v.is_latest)
-                    .cloned()
-                    .or_else(|| {
-                        detail.versions.first().cloned()
-                    })
-                    .ok_or_else(|| PluginError::Fetcher("没有可用版本".to_string()))
-            }
+            None => detail
+                .versions
+                .iter()
+                .find(|v| v.is_latest)
+                .cloned()
+                .or_else(|| detail.versions.first().cloned())
+                .ok_or_else(|| PluginError::Fetcher("没有可用版本".to_string())),
         }
     }
 
@@ -395,7 +453,8 @@ impl MarketplaceFetcher {
             && let Some(mut segments) = parsed.path_segments()
             && let Some(filename) = segments.next_back()
             && !filename.is_empty()
-            && filename.rsplit_once('.').is_some() {
+            && filename.rsplit_once('.').is_some()
+        {
             return filename.to_string();
         }
 
@@ -403,7 +462,12 @@ impl MarketplaceFetcher {
     }
 
     /// 验证校验和
-    fn verify_checksum(&self, file_path: &PathBuf, expected: &str, checksum_type: Option<&str>) -> PluginResult<()> {
+    fn verify_checksum(
+        &self,
+        file_path: &PathBuf,
+        expected: &str,
+        checksum_type: Option<&str>,
+    ) -> PluginResult<()> {
         use std::io::Read;
 
         let mut file = std::fs::File::open(file_path)
@@ -415,13 +479,13 @@ impl MarketplaceFetcher {
 
         let actual = match checksum_type {
             Some("sha256") | Some("SHA256") => {
-                use sha2::{Sha256, Digest};
+                use sha2::{Digest, Sha256};
                 let mut hasher = Sha256::new();
                 hasher.update(&buffer);
                 format!("{:x}", hasher.finalize())
             }
             Some("sha1") | Some("SHA1") => {
-                use sha1::{Sha1, Digest as Sha1Digest};
+                use sha1::{Digest as Sha1Digest, Sha1};
                 let mut hasher = Sha1::new();
                 hasher.update(&buffer);
                 format!("{:x}", hasher.finalize())
@@ -432,7 +496,10 @@ impl MarketplaceFetcher {
         };
 
         if actual != expected.to_lowercase() {
-            return Err(PluginError::Fetcher(format!("校验和不匹配: 期望 {}, 实际 {}", expected, actual)));
+            return Err(PluginError::Fetcher(format!(
+                "校验和不匹配: 期望 {}, 实际 {}",
+                expected, actual
+            )));
         }
 
         tracing::info!("校验和验证通过: {}", file_path.display());
@@ -466,11 +533,8 @@ mod tests {
         );
         assert_eq!(filename, "my-plugin-1.0.0.zip");
 
-        let filename = fetcher.extract_filename(
-            "https://example.com/download",
-            "my-plugin",
-            "1.0.0",
-        );
+        let filename =
+            fetcher.extract_filename("https://example.com/download", "my-plugin", "1.0.0");
         assert_eq!(filename, "my-plugin-1.0.0.zip");
     }
 }

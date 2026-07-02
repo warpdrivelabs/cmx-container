@@ -1,11 +1,11 @@
 //! 审计日志存储后端
 
-pub mod memory;
 pub mod database;
+pub mod memory;
 
-use async_trait::async_trait;
-use crate::{AuditRecord, Result};
 use crate::record::AuditDomain;
+use crate::{AuditRecord, Result};
+use async_trait::async_trait;
 
 /// 审计日志查询过滤器
 #[derive(Debug, Clone, Default)]
@@ -50,5 +50,10 @@ pub trait AuditStore: Send + Sync {
     }
 
     /// 查询审计记录
-    async fn query(&self, filter: &AuditFilter, limit: u64, offset: u64) -> Result<Vec<AuditRecord>>;
+    async fn query(
+        &self,
+        filter: &AuditFilter,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<AuditRecord>>;
 }

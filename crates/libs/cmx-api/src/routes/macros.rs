@@ -21,14 +21,38 @@
 macro_rules! register_crud_routes {
     ($router:expr, $bmc:ty, $filter:ty, $entity_create:ty, $entity_update:ty, $prefix:expr) => {
         $router
-            .route(concat!($prefix, "/create"), axum::routing::post($crate::rest::handler::create::<$bmc, $entity_create>))
-            .route(concat!($prefix, "/create-many"), axum::routing::post($crate::rest::handler::create_many::<$bmc, $entity_create>))
-            .route(concat!($prefix, "/get"), axum::routing::get($crate::rest::handler::get_by_id::<$bmc>))
-            .route(concat!($prefix, "/update"), axum::routing::post($crate::rest::handler::update::<$bmc, $entity_update>))
-            .route(concat!($prefix, "/update-many"), axum::routing::post($crate::rest::handler::update_many::<$bmc, $entity_update>))
-            .route(concat!($prefix, "/delete"), axum::routing::post($crate::rest::handler::delete::<$bmc>))
-            .route(concat!($prefix, "/list"), axum::routing::post($crate::rest::handler::list::<$bmc, $filter>))
-            .route(concat!($prefix, "/page"), axum::routing::post($crate::rest::handler::page::<$bmc, $filter>))
+            .route(
+                concat!($prefix, "/create"),
+                axum::routing::post($crate::rest::handler::create::<$bmc, $entity_create>),
+            )
+            .route(
+                concat!($prefix, "/create-many"),
+                axum::routing::post($crate::rest::handler::create_many::<$bmc, $entity_create>),
+            )
+            .route(
+                concat!($prefix, "/get"),
+                axum::routing::get($crate::rest::handler::get_by_id::<$bmc>),
+            )
+            .route(
+                concat!($prefix, "/update"),
+                axum::routing::post($crate::rest::handler::update::<$bmc, $entity_update>),
+            )
+            .route(
+                concat!($prefix, "/update-many"),
+                axum::routing::post($crate::rest::handler::update_many::<$bmc, $entity_update>),
+            )
+            .route(
+                concat!($prefix, "/delete"),
+                axum::routing::post($crate::rest::handler::delete::<$bmc>),
+            )
+            .route(
+                concat!($prefix, "/list"),
+                axum::routing::post($crate::rest::handler::list::<$bmc, $filter>),
+            )
+            .route(
+                concat!($prefix, "/page"),
+                axum::routing::post($crate::rest::handler::page::<$bmc, $filter>),
+            )
     };
 }
 
@@ -201,29 +225,28 @@ macro_rules! __declare_crud_handlers_inner {
         $p_delete:expr
     ) => {
         pub mod $module_name {
+            use axum::Json;
             use axum::extract::{Query, State};
             use axum::http::HeaderMap;
-            use axum::Json;
             use cmx_core::model::data::dataset::DataSet;
             use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
             use $crate::ApiResp;
-            use $crate::app_state::CmxAppState;
             use $crate::Result;
+            use $crate::app_state::CmxAppState;
             use $crate::middleware::CmxSvrContext;
-
 
             /// 创建实体 Handler
             ///
             /// 创建单个实体记录，请求体为实体的创建 DTO。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/create"),
-                request_body = $entity_create,
-                responses(
-                    (status = 200, description = "创建成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/create"),
+                        request_body = $entity_create,
+                        responses(
+                            (status = 200, description = "创建成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn create(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -231,7 +254,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(data): Json<$entity_create>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_create.is_empty() {
-                    svr_ctx.require_permission(concat!($p_create, ":create")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_create, ":create"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::create::<$bmc, $entity_create>(
                     State(cmx_state),
@@ -246,14 +271,14 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 批量创建多个实体记录，请求体为实体创建 DTO 的数组。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/create-many"),
-                request_body = Vec<$entity_create>,
-                responses(
-                    (status = 200, description = "批量创建成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/create-many"),
+                        request_body = Vec<$entity_create>,
+                        responses(
+                            (status = 200, description = "批量创建成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn create_many(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -261,7 +286,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(data): Json<Vec<$entity_create>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_create.is_empty() {
-                    svr_ctx.require_permission(concat!($p_create, ":create")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_create, ":create"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::create_many::<$bmc, $entity_create>(
                     State(cmx_state),
@@ -276,16 +303,16 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 根据主键 ID 查询单个实体的详细信息。
             #[utoipa::path(
-                get,
-                path = concat!("/api",$prefix, "/get"),
-                params(
-                    ("id" = String, Path, description = "实体主键ID")
-                ),
-                responses(
-                    (status = 200, description = "获取成功")
-                ),
-                tag = $tag
-            )]
+                        get,
+                        path = concat!("/api",$prefix, "/get"),
+                        params(
+                            ("id" = String, Path, description = "实体主键ID")
+                        ),
+                        responses(
+                            (status = 200, description = "获取成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn get(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -293,7 +320,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Query(params): Query<GetParams>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_read.is_empty() {
-                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_read, ":read"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::get_by_id::<$bmc>(
                     State(cmx_state),
@@ -308,15 +337,15 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 根据主键 ID 更新单个实体记录，请求体包含 ID 和更新字段。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/update"),
-                request_body = cmx_core::UpdatePayload<$entity_update>,
-                // request_body = serde_json::Value,
-                responses(
-                    (status = 200, description = "更新成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/update"),
+                        request_body = cmx_core::UpdatePayload<$entity_update>,
+                        // request_body = serde_json::Value,
+                        responses(
+                            (status = 200, description = "更新成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn update(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -324,7 +353,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(payload): Json<UpdatePayload<$entity_update>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_update.is_empty() {
-                    svr_ctx.require_permission(concat!($p_update, ":update")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_update, ":update"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::update::<$bmc, $entity_update>(
                     State(cmx_state),
@@ -339,15 +370,15 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 批量更新多个实体记录，请求体为包含 ID 和更新字段的对象数组。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/update-many"),
-                // request_body = Vec<cmx_core::UpdatePayload<serde_json::Value>>,
-                request_body = inline(Vec<cmx_core::UpdatePayload<$entity_update>>),
-                responses(
-                    (status = 200, description = "批量更新成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/update-many"),
+                        // request_body = Vec<cmx_core::UpdatePayload<serde_json::Value>>,
+                        request_body = inline(Vec<cmx_core::UpdatePayload<$entity_update>>),
+                        responses(
+                            (status = 200, description = "批量更新成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn update_many(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -355,7 +386,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(data): Json<Vec<UpdatePayload<$entity_update>>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_update.is_empty() {
-                    svr_ctx.require_permission(concat!($p_update, ":update")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_update, ":update"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::update_many::<$bmc, $entity_update>(
                     State(cmx_state),
@@ -370,14 +403,14 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 根据主键 ID 删除单个或多个实体记录。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/delete"),
-                request_body = cmx_core::DeletePayload,
-                responses(
-                    (status = 200, description = "删除成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/delete"),
+                        request_body = cmx_core::DeletePayload,
+                        responses(
+                            (status = 200, description = "删除成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn delete(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -385,7 +418,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(payload): Json<DeletePayload>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_delete.is_empty() {
-                    svr_ctx.require_permission(concat!($p_delete, ":delete")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_delete, ":delete"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::delete::<$bmc>(
                     State(cmx_state),
@@ -400,14 +435,14 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 根据过滤条件查询实体列表，返回符合条件的所有记录。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/list"),
-                request_body = cmx_core::ListParams<serde_json::Value>,
-                responses(
-                    (status = 200, description = "列表查询成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/list"),
+                        request_body = cmx_core::ListParams<serde_json::Value>,
+                        responses(
+                            (status = 200, description = "列表查询成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn list(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -415,7 +450,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(params): Json<ListParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_read.is_empty() {
-                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_read, ":read"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::list::<$bmc, $filter>(
                     State(cmx_state),
@@ -430,14 +467,14 @@ macro_rules! __declare_crud_handlers_inner {
             ///
             /// 根据过滤条件和分页参数查询实体数据，返回分页结果。
             #[utoipa::path(
-                post,
-                path = concat!("/api",$prefix, "/page"),
-                request_body = cmx_core::PageParams<serde_json::Value>,
-                responses(
-                    (status = 200, description = "分页查询成功")
-                ),
-                tag = $tag
-            )]
+                        post,
+                        path = concat!("/api",$prefix, "/page"),
+                        request_body = cmx_core::PageParams<serde_json::Value>,
+                        responses(
+                            (status = 200, description = "分页查询成功")
+                        ),
+                        tag = $tag
+                    )]
             pub async fn page(
                 State(cmx_state): State<CmxAppState>,
                 CmxSvrContext(svr_ctx): CmxSvrContext,
@@ -445,7 +482,9 @@ macro_rules! __declare_crud_handlers_inner {
                 Json(params): Json<PageParams<$filter>>,
             ) -> Result<Json<ApiResp<DataSet>>> {
                 if !$p_read.is_empty() {
-                    svr_ctx.require_permission(concat!($p_read, ":read")).map_err($crate::Error::from)?;
+                    svr_ctx
+                        .require_permission(concat!($p_read, ":read"))
+                        .map_err($crate::Error::from)?;
                 }
                 $crate::rest::handler::page::<$bmc, $filter>(
                     State(cmx_state),

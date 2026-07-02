@@ -11,18 +11,18 @@ use std::time::Duration;
 use axum::{
     Json,
     extract::{Multipart, Query, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
 use serde::Deserialize;
 use utoipa::ToSchema;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
+pub use crate::ApiResp;
 use crate::service::StorageService;
 use crate::types::*;
-pub use crate::ApiResp;
 
 /// 应用共享状态
 ///
@@ -268,21 +268,22 @@ pub async fn download_handler(
     Query(query): Query<DownloadQuery>,
 ) -> impl IntoResponse {
     let result = if query.thumbnail.as_deref() == Some("1") {
-        state.storage_service.download_thumbnail(&query.file_id).await
+        state
+            .storage_service
+            .download_thumbnail(&query.file_id)
+            .await
     } else {
         state.storage_service.download(&query.file_id).await
     };
 
     match result {
-        Ok(download) => {
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, &download.content_type)
-                .header(header::CONTENT_DISPOSITION, &download.content_disposition)
-                .header(header::CONTENT_LENGTH, download.content_length)
-                .body(download.data.into())
-                .unwrap()
-        }
+        Ok(download) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, &download.content_type)
+            .header(header::CONTENT_DISPOSITION, &download.content_disposition)
+            .header(header::CONTENT_LENGTH, download.content_length)
+            .body(download.data.into())
+            .unwrap(),
         Err(e) => biz_err(&format!("文件下载失败: {}", e)),
     }
 }
@@ -324,7 +325,9 @@ pub async fn batch_download_handler(
     for file_id in &body.file_ids {
         match state.storage_service.download(file_id).await {
             Ok(download) => {
-                let filename = download.file_info.original_filename
+                let filename = download
+                    .file_info
+                    .original_filename
                     .unwrap_or_else(|| download.file_info.filename.clone());
                 file_data_list.push((filename, download.data, download.content_type));
             }
@@ -343,8 +346,8 @@ pub async fn batch_download_handler(
         let cursor = Cursor::new(&mut buffer);
         let mut zip = ZipWriter::new(cursor);
 
-        let options = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for (filename, data, _content_type) in &file_data_list {
             let name = sanitize_filename(filename);
@@ -365,12 +368,17 @@ pub async fn batch_download_handler(
     }
 
     let total_size: usize = file_data_list.iter().map(|(_, d, _)| d.len()).sum();
-    tracing::info!(file_count = file_data_list.len(), total_bytes = total_size, "批量下载ZIP打包完成");
+    tracing::info!(
+        file_count = file_data_list.len(),
+        total_bytes = total_size,
+        "批量下载ZIP打包完成"
+    );
 
     let filename = format!("files_{}.zip", chrono::Local::now().format("%Y%m%d%H%M%S"));
     let disposition = format!(
         "attachment; filename=\"{}\"; filename*=UTF-8''{}",
-        filename, urlencoding::encode(&filename)
+        filename,
+        urlencoding::encode(&filename)
     );
 
     (
@@ -381,7 +389,8 @@ pub async fn batch_download_handler(
             (header::CONTENT_LENGTH, buffer.len().to_string().as_str()),
         ],
         buffer,
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// 清理文件名，移除路径分隔符
@@ -394,8 +403,7 @@ pub async fn batch_download_handler(
 ///
 /// 清理后的安全文件名。
 fn sanitize_filename(filename: &str) -> String {
-    filename
-        .replace(['/', '\\', ':'], "_")
+    filename.replace(['/', '\\', ':'], "_")
 }
 
 /// 获取文件信息 handler
@@ -537,7 +545,11 @@ pub async fn presign_download_handler(
     Json(body): Json<PresignDownloadRequest>,
 ) -> impl IntoResponse {
     let expires = Duration::from_secs(body.expires.unwrap_or(3600));
-    match state.storage_service.presign_download(&body.file_id, expires).await {
+    match state
+        .storage_service
+        .presign_download(&body.file_id, expires)
+        .await
+    {
         Ok(url) => Json(ApiResp::ok(url)).into_response(),
         Err(e) => biz_err(&format!("生成预签名下载URL失败: {}", e)),
     }
@@ -662,7 +674,11 @@ pub async fn multipart_part_handler(
         e_tag: body.e_tag,
         part_size: body.part_size,
     };
-    match state.storage_service.upload_part(&body.upload_id, part).await {
+    match state
+        .storage_service
+        .upload_part(&body.upload_id, part)
+        .await
+    {
         Ok(info) => Json(ApiResp::ok(info)).into_response(),
         Err(e) => biz_err(&format!("分片上传回调失败: {}", e)),
     }
@@ -697,7 +713,11 @@ pub async fn multipart_complete_handler(
     State(state): State<AppState>,
     Json(body): Json<MultipartCompleteBody>,
 ) -> impl IntoResponse {
-    match state.storage_service.complete_multipart_upload(&body.upload_id).await {
+    match state
+        .storage_service
+        .complete_multipart_upload(&body.upload_id)
+        .await
+    {
         Ok(file_info) => Json(ApiResp::ok(file_info)).into_response(),
         Err(e) => biz_err(&format!("完成分片上传失败: {}", e)),
     }
@@ -732,7 +752,11 @@ pub async fn multipart_abort_handler(
     State(state): State<AppState>,
     Json(body): Json<MultipartAbortBody>,
 ) -> impl IntoResponse {
-    match state.storage_service.abort_multipart_upload(&body.upload_id).await {
+    match state
+        .storage_service
+        .abort_multipart_upload(&body.upload_id)
+        .await
+    {
         Ok(()) => Json(ApiResp::<()>::ok_no_data()).into_response(),
         Err(e) => biz_err(&format!("取消分片上传失败: {}", e)),
     }

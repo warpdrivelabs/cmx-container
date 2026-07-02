@@ -14,8 +14,7 @@ use crate::routes::traits::ModuleRoutes;
 pub use handler::get_current_debug_session;
 
 fn inner_routes() -> Router<CmxAppState> {
-    Router::new()
-        .route("/current", get(get_current_debug_session))
+    Router::new().route("/current", get(get_current_debug_session))
 }
 
 pub struct DebugModule;

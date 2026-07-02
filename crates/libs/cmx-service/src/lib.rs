@@ -28,13 +28,13 @@
 //! - **不依赖** cmx-runtime（通过 RuntimeInvoker trait 交互）
 
 pub mod error;
+pub mod lifecycle_listener;
 pub mod orchestrator;
-pub mod repository;
 pub mod registry;
+pub mod repository;
+pub mod service_invoker_impl;
 pub mod service_query_impl;
 pub mod service_storage_impl;
-pub mod service_invoker_impl;
-pub mod lifecycle_listener;
 
 // [预留] handler / service / request 模块暂未启用
 // 目前 cmx-api 直接通过 Orchestrator + RuntimeInvoker 执行服务编排，
@@ -45,13 +45,16 @@ pub mod lifecycle_listener;
 // pub mod request;
 
 pub use error::ServiceError;
-pub use orchestrator::{Orchestrator, OrchestrationResult, ExecutionStep, ExecutionContext, ExecuteOptions, OrchestrationError, StepStatus, DebugOptions, DebugPrepareResult};
+pub use lifecycle_listener::ServiceLifecycleListener;
+pub use orchestrator::{
+    DebugOptions, DebugPrepareResult, ExecuteOptions, ExecutionContext, ExecutionStep,
+    OrchestrationError, OrchestrationResult, Orchestrator, StepStatus,
+};
 pub use registry::ServiceRegistry;
 pub use repository::ServiceRepository;
+pub use service_invoker_impl::ServiceInvokerImpl;
 pub use service_query_impl::ServiceQueryImpl;
 pub use service_storage_impl::ServiceStorageImpl;
-pub use service_invoker_impl::ServiceInvokerImpl;
-pub use lifecycle_listener::ServiceLifecycleListener;
 
 // [预留] 以下导出随 handler/service/request 模块暂未启用
 // pub use handler::ServiceHandler;
@@ -60,8 +63,8 @@ pub use lifecycle_listener::ServiceLifecycleListener;
 
 // ==================== 全局单例 ====================
 
-use std::sync::{Arc, OnceLock};
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
+use std::sync::{Arc, OnceLock};
 
 /// 全局服务查询器单例
 static GLOBAL_SERVICE_QUERY: OnceLock<Arc<dyn ServiceQuery>> = OnceLock::new();
@@ -85,9 +88,9 @@ impl GlobalServiceQuery {
 
     /// 获取全局服务查询器引用
     pub fn get() -> &'static Arc<dyn ServiceQuery> {
-        GLOBAL_SERVICE_QUERY.get().expect(
-            "服务查询器未初始化，请先调用 GlobalServiceQuery::set()"
-        )
+        GLOBAL_SERVICE_QUERY
+            .get()
+            .expect("服务查询器未初始化，请先调用 GlobalServiceQuery::set()")
     }
 
     /// 检查是否已初始化
@@ -109,9 +112,9 @@ impl GlobalServiceStorage {
 
     /// 获取全局服务存储引用
     pub fn get() -> &'static Arc<dyn ServiceStorage> {
-        GLOBAL_SERVICE_STORAGE.get().expect(
-            "服务存储未初始化，请先调用 GlobalServiceStorage::set()"
-        )
+        GLOBAL_SERVICE_STORAGE
+            .get()
+            .expect("服务存储未初始化，请先调用 GlobalServiceStorage::set()")
     }
 
     /// 检查是否已初始化
@@ -133,9 +136,9 @@ impl GlobalServiceRegistry {
 
     /// 获取全局服务注册中心引用
     pub fn get() -> &'static Arc<ServiceRegistry> {
-        GLOBAL_SERVICE_REGISTRY.get().expect(
-            "服务注册中心未初始化，请先调用 GlobalServiceRegistry::set()"
-        )
+        GLOBAL_SERVICE_REGISTRY
+            .get()
+            .expect("服务注册中心未初始化，请先调用 GlobalServiceRegistry::set()")
     }
 
     /// 检查是否已初始化

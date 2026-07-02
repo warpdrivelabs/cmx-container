@@ -5,13 +5,15 @@ use crate::models::*;
 impl<H: HostFunctions> PluginCore<H> {
     /// 查询订单列表（演示 db_query + 参数化查询）。
     pub fn query_orders(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
-        let request: OrderQueryRequest = serde_json::from_value(input.input.clone())
-            .unwrap_or(OrderQueryRequest {
+        let request: OrderQueryRequest =
+            serde_json::from_value(input.input.clone()).unwrap_or(OrderQueryRequest {
                 order_id: None,
                 customer_name: None,
                 status: None,
             });
-        let mut sql = "SELECT id, customer_name, product_name, quantity, status FROM cmx_order WHERE 1=1".to_string();
+        let mut sql =
+            "SELECT id, customer_name, product_name, quantity, status FROM cmx_order WHERE 1=1"
+                .to_string();
         let mut params = Vec::new();
         let mut param_idx = 1;
         if let Some(ref order_id) = request.order_id {

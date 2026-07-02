@@ -57,10 +57,14 @@ impl DefaultStorageService {
         };
 
         let (dataset, total) = GenericCrudService::<FileDetailBmc, FileDetailFilter>::page(
-            mm, &db_id, None, Some(vec![filter]), list_options,
+            mm,
+            &db_id,
+            None,
+            Some(vec![filter]),
+            list_options,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         let items: Vec<FileInfo> = Self::dataset_to_file_details(&dataset)
             .into_iter()
@@ -79,9 +83,12 @@ impl DefaultStorageService {
     pub(super) async fn exists(&self, file_id: &str) -> Result<bool> {
         let (mm, db_id) = self.get_db().await?;
         let result = GenericCrudService::<FileDetailBmc>::get(
-            mm, &db_id, None, Value::String(file_id.to_string()),
+            mm,
+            &db_id,
+            None,
+            Value::String(file_id.to_string()),
         )
-            .await;
+        .await;
 
         match result {
             Ok(dataset) => Ok(dataset.iter().next().is_some()),

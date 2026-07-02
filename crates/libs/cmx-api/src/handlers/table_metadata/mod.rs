@@ -6,16 +6,15 @@ pub mod handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// TableMetadata 模块路由
 pub struct TableMetadataModule;
 
 impl ModuleRoutes for TableMetadataModule {
     fn routes(self) -> Router<CmxAppState> {
-        Router::new()
-            .nest("/table-metadata", inner_routes())
+        Router::new().nest("/table-metadata", inner_routes())
     }
 
     fn prefix() -> &'static str {

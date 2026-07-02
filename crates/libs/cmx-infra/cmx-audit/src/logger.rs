@@ -1,11 +1,11 @@
 //! 审计日志记录器
 
-use async_trait::async_trait;
-use std::sync::Arc;
-use cmx_database::DatabaseManager;
-use crate::{AuditRecord, Result};
-use crate::store::{AuditStore, AuditFilter};
 use crate::store::database::DatabaseAuditStore;
+use crate::store::{AuditFilter, AuditStore};
+use crate::{AuditRecord, Result};
+use async_trait::async_trait;
+use cmx_database::DatabaseManager;
+use std::sync::Arc;
 
 /// 审计日志记录器 trait
 ///
@@ -16,7 +16,12 @@ pub trait AuditLogger: Send + Sync {
     async fn log(&self, record: AuditRecord) -> Result<()>;
 
     /// 查询审计日志
-    async fn query(&self, filter: &AuditFilter, limit: u64, offset: u64) -> Result<Vec<AuditRecord>>;
+    async fn query(
+        &self,
+        filter: &AuditFilter,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<AuditRecord>>;
 }
 
 /// 默认审计日志记录器实现
@@ -49,7 +54,12 @@ impl AuditLogger for DefaultAuditLogger {
         self.store.save(&record).await
     }
 
-    async fn query(&self, filter: &AuditFilter, limit: u64, offset: u64) -> Result<Vec<AuditRecord>> {
+    async fn query(
+        &self,
+        filter: &AuditFilter,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<AuditRecord>> {
         self.store.query(filter, limit, offset).await
     }
 }

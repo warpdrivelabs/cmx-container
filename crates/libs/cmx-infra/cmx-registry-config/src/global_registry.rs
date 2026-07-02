@@ -39,7 +39,9 @@ impl GlobalServiceRegistry {
     /// * `Ok(())` - 首次设置成功。
     /// * `Err(GlobalStorageError::ALREADY_SET)` - 已被设置过。
     pub fn set(registry: Arc<dyn ServiceRegistry>) -> Result<(), GlobalStorageError> {
-        REGISTRY.set(registry).map_err(|_| GlobalStorageError::ALREADY_SET)
+        REGISTRY
+            .set(registry)
+            .map_err(|_| GlobalStorageError::ALREADY_SET)
     }
 
     /// 获取全局服务注册中心实例。
