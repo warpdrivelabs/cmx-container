@@ -20,6 +20,19 @@ application_code = "FI"
 # 所属模块编码（必需，默认 default）
 module_code = "GL"
 
+# ============================================
+# 门户/设计器业务数据根（迁移自 CMXPortalManager/CMXHTMLDesigner 的 Node 后端）
+# cmx-portal 的 JSON 文件存储根目录；缺省时回退环境变量 CMX_PORTAL_DATA_ROOT 或 ./data
+# ============================================
+[portal]
+data_root = "./data"
+# 同源托管两个迁移前端的生产构建（npm run build 产物）。留空=不托管（开发走 vite dev）。
+# 访问：http://<host>:8080/portal/  与  /html/
+web_portal_dist = "../CMXPortalManager/dist"
+web_html_dist = "../CMXHTMLDesigner/dist"
+# 共享 UI5/Tabler 运行时（cmx-ui5-runtime 构建产物）。前端用 import("/shared/assets/...") 动态加载。
+# 缺它会导致 /shared/assets/install-*.js 404 → UI5 加载失败 → 白屏。
+web_shared_dist = "../packages/cmx-ui5-runtime/dist"
 
 # ============================================
 # 数据源配置数组
@@ -38,7 +51,9 @@ db_url = "postgresql://postgres:postgres@localhost:5432/fico"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 # 是否为默认数据库（可选，默认 false）
 default = true
-
+## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+## 取值：default-默认库，biz-业务库，other-其他
+# source_type = "default"
 # 连接池配置（可选，使用默认值时可省略）
 [databases.pool_config]
 # 最大连接数（可选，默认 10，测试环境为 1）
@@ -59,13 +74,16 @@ health_check_interval = 60
 health_check_timeout = 5
 
 
-## 第二个数据源 - Postgres
+### 第二个数据源 - Postgres
 #[[databases]]
 #db_id = "postgres2"
 #db_type = "postgres"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 ##db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
 #default = false
+### 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+### 取值：default-默认库，biz-业务库，other-其他
+#source_type = "biz"
 #health_check_interval = 30
 #health_check_timeout = 3
 #pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }

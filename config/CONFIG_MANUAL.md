@@ -143,6 +143,14 @@
 - **格式**: `<driver>://<user>:<password>@<host>:<port>/<database>`
 - **示例**: `"postgresql://postgres:postgres@192.168.1.100:5432/cmx"`
 
+#### `db_name`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: 未配置时从 `db_url` 的 path 部分解析数据库名作为显示名称
+- **说明**: 数据源显示名称，便于运维识别和后台展示。仅用于展示，不参与连接逻辑
+- **示例**: `"cmx"`, `"cmx-biz"`
+
 #### `default`
 
 - **类型**: Boolean

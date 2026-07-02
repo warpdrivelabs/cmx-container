@@ -7,13 +7,15 @@ use serde::Deserialize;
 
 /// SysDatasource 查询过滤器
 ///
-/// 支持按 id、db_id、db_type、域应用模块、source_type、status 等字段进行过滤
+/// 支持按 id、db_id、db_name、db_type、域应用模块、source_type、status 等字段进行过滤
 #[derive(Debug, Clone, FilterNodes, Deserialize, Default)]
 pub struct SysDatasourceFilter {
     /// 主键过滤
     pub id: Option<OpValsString>,
     /// 数据源标识过滤
     pub db_id: Option<OpValsString>,
+    /// 数据源名称过滤
+    pub db_name: Option<OpValsString>,
     /// 数据库类型过滤
     pub db_type: Option<OpValsString>,
     /// 默认标志过滤

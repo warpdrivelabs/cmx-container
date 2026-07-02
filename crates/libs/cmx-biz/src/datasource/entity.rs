@@ -20,6 +20,9 @@ pub struct SysDatasource {
     /// 数据源标识
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_id: Option<String>,
+    /// 数据源名称（便于识别的显示名称）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_name: Option<String>,
     /// 数据源描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -145,6 +148,9 @@ fn default_source_type() -> Option<String> {
 pub struct SysDatasourceForCreate {
     /// 数据源标识（唯一）
     pub db_id: String,
+    /// 数据源名称（便于识别的显示名称）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_name: Option<String>,
     /// 数据源描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -207,6 +213,9 @@ pub struct SysDatasourceForUpdate {
     /// 数据源标识
     #[serde(skip_serializing_if = "Option::is_none")]
     pub db_id: Option<String>,
+    /// 数据源名称（便于识别的显示名称）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_name: Option<String>,
     /// 数据源描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

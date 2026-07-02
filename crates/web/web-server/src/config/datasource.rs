@@ -55,6 +55,10 @@ pub async fn init_datasources() -> crate::Result<()> {
                 "other".to_string()
             });
         }
+        // db_name 未显式配置时，从 db_url 解析数据库名作为默认显示名称
+        if c.db_name.is_none() {
+            c.db_name = c.parse_db_name();
+        }
     }
 
     let db_manager = get_default_db_manager();
@@ -70,9 +74,7 @@ pub async fn init_datasources() -> crate::Result<()> {
 
     crate::config::init_database_migrations().await?;
 
-    if let Err(e) =
-        persist_datasource_configs(db_manager, &default_db_id, &app_identity, configs).await
-    {
+    if let Err(e) = persist_datasource_configs(db_manager, &default_db_id, &app_identity, &configs).await {
         return Err(Error::DatasourceInit(format!(
             "持久化数据源配置失败: {}",
             e
@@ -102,22 +104,22 @@ pub async fn init_datasources() -> crate::Result<()> {
 
 /// 持久化数据源配置到数据库
 ///
-/// 检查每个 db_id 是否已存在于数据库中：
-/// - 存在则用配置文件信息更新数据库记录
-/// - 不存在则插入新记录
-///
-/// 使用 UPSERT 语义保证幂等性。
+/// 执行以下操作：
+/// 1. **upsert**：对配置文件中的每个数据源，按 db_id + 域应用模块查重，存在则更新、不存在则插入。
+/// 2. **清理**：查询数据库中 `source="config"` 且匹配当前域应用模块的记录，
+///    将配置文件中已删除的（db_id 不在配置文件中）归档（archived=1），避免残留无效数据源。
 ///
 /// # Arguments
 ///
 /// * `mm` - 数据库管理器
 /// * `db_id` - 默认数据库ID
+/// * `app_identity` - 当前实例应用标识
 /// * `configs` - 配置文件中的数据源配置列表
 async fn persist_datasource_configs(
     mm: &DatabaseManager,
     db_id: &str,
     app_identity: &crate::config::AppIdentity,
-    configs: Vec<DbConfig>,
+    configs: &[DbConfig],
 ) -> crate::Result<()> {
     info!("开始持久化数据源配置...");
 
@@ -178,6 +180,49 @@ async fn persist_datasource_configs(
                 Error::DatasourceInit(format!("持久化数据源 {} 失败: {}", config.db_id, e))
             })?;
         info!("成功持久化数据源: {}", config.db_id);
+    }
+
+    // 清理：查询数据库中 source="config" 且匹配当前域应用模块的记录，
+    // 配置文件中已删除的（db_id 不在配置文件中）物理删除，避免残留无效数据源。
+    let config_db_ids: Vec<String> = configs.iter().map(|c| c.db_id.clone()).collect();
+
+    let cleanup_filter = SysDatasourceFilter {
+        source: Some(OpValsString(vec![OpValString::Eq("config".to_string())])),
+        domain_code: Some(OpValsString(vec![OpValString::Eq(app_identity.domain_code.clone())])),
+        application_code: Some(OpValsString(vec![OpValString::Eq(app_identity.application_code.clone())])),
+        module_code: Some(OpValsString(vec![OpValString::Eq(app_identity.module_code.clone())])),
+        ..Default::default()
+    };
+
+    let existing_configs = GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(
+        mm,
+        db_id,
+        None,
+        Some(vec![cleanup_filter]),
+        None,
+    )
+        .await
+        .map_err(|e| Error::DatasourceInit(format!("查询待清理数据源失败: {}", e)))?;
+
+    let schema = &existing_configs.schema;
+    for row in existing_configs.iter() {
+        let row_db_id: String = row.get_by_name_as(schema, "db_id").unwrap_or_default();
+        if !row_db_id.is_empty() && !config_db_ids.contains(&row_db_id) {
+            // 配置文件中已不存在，物理删除
+            if let Some(id) = row.get_by_name_as::<String>(schema, "id") {
+                GenericCrudService::<SysDatasourceBmc>::delete(
+                    mm,
+                    db_id,
+                    None,
+                    vec![serde_json::Value::String(id)],
+                )
+                    .await
+                    .map_err(|e| Error::DatasourceInit(format!(
+                        "清理已删除数据源 {} 失败: {}", row_db_id, e
+                    )))?;
+                info!("已清理配置文件中已移除的数据源: {}", row_db_id);
+            }
+        }
     }
 
     info!("数据源配置持久化完成");
@@ -302,6 +347,7 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
     SysDatasourceForCreate {
         db_id: config.db_id.clone(),
         description: None,
+        db_name: config.db_name.clone(),
         db_type: format!("{:?}", config.db_type).to_lowercase(),
         db_url: config.db_url.clone(),
         db_schema: config.db_schema.clone(),
@@ -333,6 +379,7 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
     SysDatasourceForUpdate {
         db_id: Some(config.db_id.clone()),
         description: None,
+        db_name: config.db_name.clone(),
         db_type: Some(format!("{:?}", config.db_type).to_lowercase()),
         db_url: Some(config.db_url.clone()),
         db_schema: config.db_schema.clone(),
@@ -388,6 +435,7 @@ fn build_dbconfig_from_row(
     let application_code = get_string_field(row, schema, "application_code");
     let module_code = get_string_field(row, schema, "module_code");
     let source_type = get_string_field(row, schema, "source_type");
+    let db_name = get_string_field(row, schema, "db_name");
 
     let max_connections = get_int_field(row, schema, "max_connections").unwrap_or(10) as usize;
     let min_connections = get_int_field(row, schema, "min_connections").unwrap_or(2) as usize;
@@ -404,6 +452,7 @@ fn build_dbconfig_from_row(
         db_url,
         db_id,
         db_schema,
+        db_name,
         default: default_flag == 1,
         pool_config: cmx_database::PoolConfig {
             max_connections,
