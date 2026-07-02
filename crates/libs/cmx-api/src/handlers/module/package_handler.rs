@@ -4,6 +4,7 @@
 //! - GET  /api/module/package/export  导出模块迁移包(返回 zip)
 
 use axum::extract::{Multipart, Query, State};
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ use cmx_plugin::service::module_export::ModuleExportService;
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
+use crate::rest::header_parse::get_db_id_from_header;
 
 /// 导入查询参数
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -127,6 +129,7 @@ pub async fn module_package_import(
 pub async fn module_package_export(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
     Query(q): Query<ExportQuery>,
 ) -> Result<axum::response::Response> {
     debug!("{:<12} - handler::module_package_export", "HANDLER");
@@ -136,8 +139,9 @@ pub async fn module_package_export(
     let export_svc = ModuleExportService::new(plugin_root);
 
     let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
     let zip_bytes = export_svc
-        .export_module(mm, "default", &q.domain_code, &q.application_code, &q.module_code)
+        .export_module(mm, &db_id, &q.domain_code, &q.application_code, &q.module_code)
         .await
         .map_err(|e| crate::Error::InternalError(format!("导出失败: {e}")))?;
 

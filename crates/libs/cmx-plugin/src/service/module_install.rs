@@ -90,7 +90,7 @@ impl ModuleInstallService {
 
         // 3. 版本校验
         let mm = get_default_db_manager();
-        let db_id = "default".to_string();
+        let db_id =mm.get_default_db_id().await;
         let action =
             Self::validate_import(mm, &db_id, &manifest, force).await?;
         match action {
