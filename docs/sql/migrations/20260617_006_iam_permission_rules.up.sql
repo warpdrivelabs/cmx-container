@@ -130,4 +130,4 @@ COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限
 --        '1898765432100001001',
 --        id
 -- FROM new_perms
-ON CONFLICT DO NOTHING;
+-- ON CONFLICT DO NOTHING;
