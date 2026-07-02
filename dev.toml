@@ -59,7 +59,7 @@ default = true
 # 最大连接数（可选，默认 10，测试环境为 1）
 max_connections = 20
 # 最小空闲连接数（可选，默认 2）
-min_connections = 5
+min_connections = 1
 # 连接超时时间（秒，可选，默认 30）
 connect_timeout = 30
 # 空闲连接超时时间（秒，可选，默认 600）
@@ -74,19 +74,20 @@ health_check_interval = 60
 health_check_timeout = 5
 
 
-### 第二个数据源 - Postgres
-#[[databases]]
-#db_id = "postgres2"
-#db_type = "postgres"
+## 第二个数据源 - Postgres
+[[databases]]
+db_id = "biz"
+db_type = "postgres"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
-##db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
-#default = false
-### 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
-### 取值：default-默认库，biz-业务库，other-其他
-#source_type = "biz"
-#health_check_interval = 30
-#health_check_timeout = 3
-#pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
+#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
+db_url = "postgresql://postgres:postgres@192.168.137.80:5432/testyqs"
+default = false
+## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+## 取值：default-默认库，biz-业务库，other-其他
+source_type = "biz"
+health_check_interval = 30
+health_check_timeout = 3
+pool_config = { max_connections = 15, min_connections = 1, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
 
 [redis]
 url = "redis://192.168.137.95:32496/13"

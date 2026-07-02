@@ -84,7 +84,7 @@ pub async fn init_datasources() -> crate::Result<()> {
         }
     }
 
-    info!("从数据库加载到 {} 个有效数据源", filtered_datasources.len());
+    info!("从数据库加载到 {} 个有效数据源(已过滤配置文件中的)", filtered_datasources.len());
 
     if let Err(e) = register_datasources(db_manager, filtered_datasources).await {
         warn!("注册数据库中的数据源失败: {}", e);
