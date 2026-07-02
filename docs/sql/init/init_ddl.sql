@@ -146,6 +146,7 @@ CREATE TABLE cmx_sys_datasource
 (
     id                    VARCHAR(64)  NOT NULL,
     db_id                 VARCHAR(64),
+    db_name               VARCHAR(128),
     db_schema             VARCHAR(64),
     description           VARCHAR(255),
     db_type               VARCHAR(255) NOT NULL,
@@ -177,6 +178,7 @@ CREATE TABLE cmx_sys_datasource
 COMMENT ON TABLE cmx_sys_datasource IS 'cmx数据源管理';
 COMMENT ON COLUMN cmx_sys_datasource.id IS '主键';
 COMMENT ON COLUMN cmx_sys_datasource.db_id IS '数据源标识';
+COMMENT ON COLUMN cmx_sys_datasource.db_name IS '数据源名称（便于识别的显示名称）';
 COMMENT ON COLUMN cmx_sys_datasource.db_schema IS '数据库模式';
 COMMENT ON COLUMN cmx_sys_datasource.description IS '数据源描述';
 COMMENT ON COLUMN cmx_sys_datasource.db_type IS '数据库类型(postgres;mysql)';
