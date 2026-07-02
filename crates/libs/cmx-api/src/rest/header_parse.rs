@@ -1,7 +1,6 @@
 use axum::http::HeaderMap;
 use cmx_database::get_default_db_manager;
 
-
 /// 从请求头中提取 `db_id`，如果不存在则返回默认数据库 ID。
 ///
 /// # 参数

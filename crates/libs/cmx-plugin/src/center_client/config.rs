@@ -4,9 +4,9 @@
 //! 支持四种模式：`mock`（默认）、`http_url`（URL 直连）、`http_discovery`（服务发现）、`grpc`（gRPC 调用）。
 //! 配置优先级：dev.toml < 环境变量（`CENTER_CLIENT__*`）。
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use super::types::DataCategory;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// 服务中心客户端配置。
 ///

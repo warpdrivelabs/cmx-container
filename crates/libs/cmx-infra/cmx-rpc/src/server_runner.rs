@@ -35,17 +35,19 @@ pub async fn start_grpc_server(
     deps: ServerDeps,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), RpcFrameworkError> {
-    let addr: std::net::SocketAddr = format!("[::]:{port}")
-        .parse()
-        .map_err(|e: std::net::AddrParseError| {
-            RpcFrameworkError::ServerStartFailed(e.to_string())
-        })?;
+    let addr: std::net::SocketAddr =
+        format!("[::]:{port}")
+            .parse()
+            .map_err(|e: std::net::AddrParseError| {
+                RpcFrameworkError::ServerStartFailed(e.to_string())
+            })?;
 
     // OCP：fold 迭代 bundles，每个 bundle 把自己的 service 加到 server
-    let server = bundles.into_iter().fold(
-        volo_grpc::server::Server::new(),
-        |server, bundle| bundle.build_server(&deps).apply(server),
-    );
+    let server = bundles
+        .into_iter()
+        .fold(volo_grpc::server::Server::new(), |server, bundle| {
+            bundle.build_server(&deps).apply(server)
+        });
 
     tracing::info!(target: "cmx_rpc", port = port, "启动 gRPC 服务");
 

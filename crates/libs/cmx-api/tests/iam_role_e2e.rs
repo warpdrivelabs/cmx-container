@@ -46,15 +46,17 @@ async fn test_role_crud() {
     )
     .await
     .assert_success();
-    assert_eq!(
-        get_str(&updated, "name").as_deref(),
-        Some(new_name)
-    );
+    assert_eq!(get_str(&updated, "name").as_deref(), Some(new_name));
 
     // delete（软删除）
-    post_json(&client, "/api/iam/roles/delete", &json!({ "ids": [id] }), None)
-        .await
-        .assert_success();
+    post_json(
+        &client,
+        "/api/iam/roles/delete",
+        &json!({ "ids": [id] }),
+        None,
+    )
+    .await
+    .assert_success();
 
     // delete 后 get 仍返回记录，但 archived=1
     let after = get(
@@ -66,7 +68,11 @@ async fn test_role_crud() {
     .await
     .assert_success();
     let archived = after.get("archived").and_then(|v| v.as_i64());
-    assert_eq!(archived, Some(1), "软删除后 archived 应为 1，实际 {archived:?}");
+    assert_eq!(
+        archived,
+        Some(1),
+        "软删除后 archived 应为 1，实际 {archived:?}"
+    );
 }
 
 #[tokio::test]
@@ -152,11 +158,19 @@ async fn test_assign_and_get_permissions() {
     .await
     .assert_success();
     let arr = perms.as_array().expect("角色权限非数组");
-    let found = arr.iter().any(|p| get_str(p, "id").as_deref() == Some(perm_id.as_str()));
+    let found = arr
+        .iter()
+        .any(|p| get_str(p, "id").as_deref() == Some(perm_id.as_str()));
     assert!(found, "角色权限反查未包含已分配权限 {perm_id}");
 
     // 清理
-    let _ = post_json(&client, "/api/iam/roles/delete", &json!({ "ids": [role_id] }), None).await;
+    let _ = post_json(
+        &client,
+        "/api/iam/roles/delete",
+        &json!({ "ids": [role_id] }),
+        None,
+    )
+    .await;
     let _ = post_json(
         &client,
         "/api/iam/permissions/delete",
@@ -175,9 +189,9 @@ async fn test_delete_builtin_role() {
         .assert_success();
     let arr = list.as_array().expect("角色列表非数组");
     // 找一个 code 为 admin 的内置角色
-    let builtin = arr.iter().find(|r| {
-        matches!(get_str(r, "code").as_deref(), Some("admin"))
-    });
+    let builtin = arr
+        .iter()
+        .find(|r| matches!(get_str(r, "code").as_deref(), Some("admin")));
 
     if let Some(b) = builtin {
         let id = flex_get(b, "id")
@@ -187,7 +201,13 @@ async fn test_delete_builtin_role() {
             eprintln!("跳过内置角色删除测试：未取到 id");
             return;
         }
-        let res = post_json(&client, "/api/iam/roles/delete", &json!({ "ids": [id] }), None).await;
+        let res = post_json(
+            &client,
+            "/api/iam/roles/delete",
+            &json!({ "ids": [id] }),
+            None,
+        )
+        .await;
         // 内置角色不可删除，预期业务错误
         res.assert_error(None);
     } else {

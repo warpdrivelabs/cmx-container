@@ -11,17 +11,15 @@ use axum::extract::FromRef;
 use axum::routing::{delete, get, post};
 
 use cmx_storage::handler::{
-    batch_download_handler, delete_handler, download_handler, file_info_handler,
+    AppState, batch_download_handler, delete_handler, download_handler, file_info_handler,
     multipart_abort_handler, multipart_complete_handler, multipart_init_handler,
     multipart_part_handler, page_handler, presign_download_handler, presign_upload_handler,
-    upload_handler, AppState,
+    upload_handler,
 };
 
 impl FromRef<CmxAppState> for AppState {
     fn from_ref(state: &CmxAppState) -> Self {
-        let storage_service = state
-            .storage_service()
-            .expect("storage_service 未初始化");
+        let storage_service = state.storage_service().expect("storage_service 未初始化");
         Self {
             storage_service: storage_service.clone(),
         }
@@ -43,7 +41,10 @@ impl ModuleRoutes for StorageModule {
             .route("/storage/presign-upload", post(presign_upload_handler))
             .route("/storage/multipart/init", post(multipart_init_handler))
             .route("/storage/multipart/part", post(multipart_part_handler))
-            .route("/storage/multipart/complete", post(multipart_complete_handler))
+            .route(
+                "/storage/multipart/complete",
+                post(multipart_complete_handler),
+            )
             .route("/storage/multipart/abort", post(multipart_abort_handler))
     }
 

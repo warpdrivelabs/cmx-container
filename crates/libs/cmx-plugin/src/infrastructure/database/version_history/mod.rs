@@ -7,4 +7,3 @@ mod repository;
 
 pub use model::{VersionCreateParams, VersionRecord, VersionUpdateParams};
 pub use repository::VersionHistoryRepository;
-

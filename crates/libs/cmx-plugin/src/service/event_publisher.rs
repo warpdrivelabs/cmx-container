@@ -11,8 +11,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
 use cmx_traits::event_bus::GlobalEventBus;
+use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
 
 use crate::cluster::notification::PluginNotifier;
 use crate::service::persistence::PersistResult;
@@ -40,92 +40,122 @@ impl EventPublisher {
     /// 发布安装完成事件（进程内 + 跨实例）。
     pub async fn publish_installed(&self, result: &PersistResult) {
         // 1. 构建生命周期负载
-        let payload = PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
-            .with_install_path(result.install_path.clone())
-            .with_wasm_path(PathBuf::from(&result.wasm_path));
+        let payload =
+            PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
+                .with_install_path(result.install_path.clone())
+                .with_wasm_path(PathBuf::from(&result.wasm_path));
 
         // 2. 发布进程内事件
         GlobalEventBus::get()
-            .publish(plugin_events::INSTALLED, serde_json::to_value(&payload).unwrap_or_default())
+            .publish(
+                plugin_events::INSTALLED,
+                serde_json::to_value(&payload).unwrap_or_default(),
+            )
             .await;
 
         // 3. 发布跨实例通知
         if let Some(notifier) = &self.notifier {
-            notifier.notify_installed(&result.plugin_id, &result.version, &result.app_id).await;
+            notifier
+                .notify_installed(&result.plugin_id, &result.version, &result.app_id)
+                .await;
         }
     }
 
     /// 发布升级完成事件（进程内 + 跨实例）。
     pub async fn publish_upgraded(&self, result: &PersistResult) {
         // 1. 构建生命周期负载
-        let payload = PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
-            .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
-            .with_install_path(result.install_path.clone())
-            .with_wasm_path(PathBuf::from(&result.wasm_path));
+        let payload =
+            PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
+                .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
+                .with_install_path(result.install_path.clone())
+                .with_wasm_path(PathBuf::from(&result.wasm_path));
 
         // 2. 发布进程内事件
         GlobalEventBus::get()
-            .publish(plugin_events::UPGRADED, serde_json::to_value(&payload).unwrap_or_default())
+            .publish(
+                plugin_events::UPGRADED,
+                serde_json::to_value(&payload).unwrap_or_default(),
+            )
             .await;
 
         // 3. 发布跨实例通知
         if let Some(notifier) = &self.notifier {
-            notifier.notify_upgraded(&result.plugin_id, &result.version, &result.app_id).await;
+            notifier
+                .notify_upgraded(&result.plugin_id, &result.version, &result.app_id)
+                .await;
         }
     }
 
     /// 发布降级完成事件（进程内 + 跨实例）。
     pub async fn publish_downgraded(&self, result: &PersistResult) {
         // 1. 构建生命周期负载
-        let payload = PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
-            .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
-            .with_install_path(result.install_path.clone())
-            .with_wasm_path(PathBuf::from(&result.wasm_path));
+        let payload =
+            PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
+                .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
+                .with_install_path(result.install_path.clone())
+                .with_wasm_path(PathBuf::from(&result.wasm_path));
 
         // 2. 发布进程内事件
         GlobalEventBus::get()
-            .publish(plugin_events::DOWNGRADED, serde_json::to_value(&payload).unwrap_or_default())
+            .publish(
+                plugin_events::DOWNGRADED,
+                serde_json::to_value(&payload).unwrap_or_default(),
+            )
             .await;
 
         // 3. 发布跨实例通知
         if let Some(notifier) = &self.notifier {
-            notifier.notify_downgraded(&result.plugin_id, &result.version, &result.app_id).await;
+            notifier
+                .notify_downgraded(&result.plugin_id, &result.version, &result.app_id)
+                .await;
         }
     }
 
     /// 发布卸载完成事件（进程内 + 跨实例）。
     pub async fn publish_uninstalled(&self, result: &PersistResult) {
         // 1. 构建生命周期负载
-        let payload = PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
-            .with_install_path(result.install_path.clone())
-            .with_wasm_path(PathBuf::from(&result.wasm_path));
+        let payload =
+            PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
+                .with_install_path(result.install_path.clone())
+                .with_wasm_path(PathBuf::from(&result.wasm_path));
 
         // 2. 发布进程内事件
         GlobalEventBus::get()
-            .publish(plugin_events::UNINSTALLED, serde_json::to_value(&payload).unwrap_or_default())
+            .publish(
+                plugin_events::UNINSTALLED,
+                serde_json::to_value(&payload).unwrap_or_default(),
+            )
             .await;
 
         // 3. 发布跨实例通知
         if let Some(notifier) = &self.notifier {
-            notifier.notify_removed(&result.plugin_id, &result.version, &result.app_id).await;
+            notifier
+                .notify_removed(&result.plugin_id, &result.version, &result.app_id)
+                .await;
         }
     }
 
     /// 发布覆盖安装完成事件（进程内 + 跨实例）。
     pub async fn publish_reinstalled(&self, result: &PersistResult) {
         // 1. 构建生命周期负载
-        let payload = PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
-            .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
-            .with_install_path(result.install_path.clone());
+        let payload =
+            PluginLifecyclePayload::new(&result.app_id, &result.plugin_id, &result.version)
+                .with_old_version(result.old_version.as_deref().unwrap_or("unknown"))
+                .with_install_path(result.install_path.clone());
 
         // 2. 发布进程内事件
         GlobalEventBus::get()
-            .publish(plugin_events::REINSTALLED, serde_json::to_value(&payload).unwrap_or_default())
+            .publish(
+                plugin_events::REINSTALLED,
+                serde_json::to_value(&payload).unwrap_or_default(),
+            )
             .await;
 
         // 3. 发布跨实例通知
         if let Some(notifier) = &self.notifier {
-            notifier.notify_reinstalled(&result.plugin_id, &result.version, &result.app_id).await;
+            notifier
+                .notify_reinstalled(&result.plugin_id, &result.version, &result.app_id)
+                .await;
         }
     }
 
@@ -146,7 +176,7 @@ impl EventPublisher {
     //         notifier.notify_runtime_load(plugin_id, version, app_id).await;
     //     }
     // }
-    // 
+    //
     // /// 仅发布 Redis 运行时卸载通知（管控模式使用）。
     // pub async fn notify_runtime_unload(&self, plugin_id: &str, version: &str, app_id: &str) {
     //     // 管控模式使用：仅通知其他节点从运行时卸载插件，不发布完整生命周期事件

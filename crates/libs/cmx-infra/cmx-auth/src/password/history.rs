@@ -97,8 +97,10 @@ impl PasswordHistory {
             // 删除最旧的 (count - MAX_HISTORY) 条
             let to_delete = count as usize - MAX_HISTORY;
             if to_delete > 0 && to_delete <= sorted_fields.len() {
-                let delete_fields: Vec<&str> =
-                    sorted_fields[..to_delete].iter().map(|s| s.as_str()).collect();
+                let delete_fields: Vec<&str> = sorted_fields[..to_delete]
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
                 hash_ops.hdel(&key, &delete_fields).await?;
             }
         }

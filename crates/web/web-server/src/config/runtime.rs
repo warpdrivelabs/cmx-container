@@ -5,7 +5,7 @@
 use cmx_buffer::BufferHostFunctions;
 use cmx_database::DatabaseHostFunctions;
 use cmx_database::get_default_db_manager;
-use cmx_iam::{IamHostFunctions, IamChecker, UserAuthQueryImpl};
+use cmx_iam::{IamChecker, IamHostFunctions, UserAuthQueryImpl};
 use cmx_plugin::PluginHostFunctions;
 use cmx_runtime::{ExtismEngine, ExtismEngineConfig, GlobalExtismEngine, LoggingHostFunctions};
 use cmx_traits::auth::UserAuthQuery;
@@ -30,26 +30,29 @@ pub async fn init_runtime() -> crate::Result<()> {
 
     let engine = Arc::new(
         ExtismEngine::new(ExtismEngineConfig::default())
-            .map_err(|e| Error::RuntimeInit(format!("Extism 引擎初始化失败: {}", e)))?
+            .map_err(|e| Error::RuntimeInit(format!("Extism 引擎初始化失败: {}", e)))?,
     );
 
     let logging_provider: Arc<dyn HostFunctionProvider> = Arc::new(LoggingHostFunctions::new());
-    engine.register_provider(logging_provider)
+    engine
+        .register_provider(logging_provider)
         .map_err(|e| Error::RuntimeInit(format!("注册日志宿主函数失败: {}", e)))?;
 
     let db_manager = get_default_db_manager();
-    let db_provider: Arc<dyn HostFunctionProvider> = Arc::new(
-        DatabaseHostFunctions::new(db_manager.clone())
-    );
-    engine.register_provider(db_provider)
+    let db_provider: Arc<dyn HostFunctionProvider> =
+        Arc::new(DatabaseHostFunctions::new(db_manager.clone()));
+    engine
+        .register_provider(db_provider)
         .map_err(|e| Error::RuntimeInit(format!("注册数据库宿主函数失败: {}", e)))?;
 
     let buffer_provider: Arc<dyn HostFunctionProvider> = Arc::new(BufferHostFunctions::new());
-    engine.register_provider(buffer_provider)
+    engine
+        .register_provider(buffer_provider)
         .map_err(|e| Error::RuntimeInit(format!("注册缓存宿主函数失败: {}", e)))?;
 
     let plugin_provider: Arc<dyn HostFunctionProvider> = Arc::new(PluginHostFunctions::new());
-    engine.register_provider(plugin_provider)
+    engine
+        .register_provider(plugin_provider)
         .map_err(|e| Error::RuntimeInit(format!("注册插件宿主函数失败: {}", e)))?;
 
     // 注册 cmx:iam 宿主函数（用户详情/角色权限/权限校验/角色判断）。
@@ -66,14 +69,16 @@ pub async fn init_runtime() -> crate::Result<()> {
             .await
             .map_err(|e| Error::RuntimeInit(format!("UserAuthQueryImpl 初始化失败: {}", e)))?,
     );
-    let iam_checker: Arc<dyn PermissionChecker> = Arc::new(IamChecker::new(db_manager.clone(), iam_config).await);
+    let iam_checker: Arc<dyn PermissionChecker> =
+        Arc::new(IamChecker::new(db_manager.clone(), iam_config).await);
     let iam_provider: Arc<dyn HostFunctionProvider> = Arc::new(IamHostFunctions::new(
         iam_checker,
         user_auth_query,
         db_manager.clone(),
         iam_db_id,
     ));
-    engine.register_provider(iam_provider)
+    engine
+        .register_provider(iam_provider)
         .map_err(|e| Error::RuntimeInit(format!("注册 IAM 宿主函数失败: {}", e)))?;
 
     GlobalRuntime::set(engine.clone())

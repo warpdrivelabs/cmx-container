@@ -39,9 +39,11 @@ impl<H: HostFunctions> PluginCore<H> {
     /// 从 initial_input 获取原始业务参数，因为 switch 节点后 current_output 自动恢复为初始输入。
     pub fn tx_create_order(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
-        self.host.log_info(&format!("事务创建订单, txn_id={:?}", txn_id))?;
-        let request: CreateOrderRequest = serde_json::from_value(input.context.initial_input.clone())
-            .map_err(|e| format!("参数解析失败: {}", e))?;
+        self.host
+            .log_info(&format!("事务创建订单, txn_id={:?}", txn_id))?;
+        let request: CreateOrderRequest =
+            serde_json::from_value(input.context.initial_input.clone())
+                .map_err(|e| format!("参数解析失败: {}", e))?;
         let id = uuid::Uuid::new_v4().to_string();
         let sql = "INSERT INTO cmx_order (id, customer_name, product_name, quantity, unit_price, status) VALUES ($1, $2, $3, $4, $5, 'pending')".to_string();
         let params = vec![
@@ -75,7 +77,8 @@ impl<H: HostFunctions> PluginCore<H> {
     /// 从 initial_input 获取原始业务参数，因为前序节点 tx_create_order 的输出不含库存字段。
     pub fn tx_update_stock(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
-        self.host.log_info(&format!("事务扣减库存, txn_id={:?}", txn_id))?;
+        self.host
+            .log_info(&format!("事务扣减库存, txn_id={:?}", txn_id))?;
         let product_name = input
             .context
             .initial_input
@@ -89,10 +92,7 @@ impl<H: HostFunctions> PluginCore<H> {
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         let sql = "UPDATE cmx_inventory SET stock = stock - $1 WHERE product_name = $2".to_string();
-        let params = vec![
-            serde_json::json!(quantity),
-            serde_json::json!(product_name),
-        ];
+        let params = vec![serde_json::json!(quantity), serde_json::json!(product_name)];
         let db_request = DbRequest {
             sql,
             params: Some(serde_json::Value::Array(params)),
@@ -118,7 +118,8 @@ impl<H: HostFunctions> PluginCore<H> {
     /// 从 initial_input 获取原始业务参数，从 step_outputs 获取创建订单的输出。
     pub fn tx_record_approval(&self, input: &FunctionInput) -> Result<FunctionOutput, String> {
         let txn_id = input.context.txn_id.clone();
-        self.host.log_info(&format!("事务记录审批, txn_id={:?}", txn_id))?;
+        self.host
+            .log_info(&format!("事务记录审批, txn_id={:?}", txn_id))?;
         let customer_name = input
             .context
             .initial_input

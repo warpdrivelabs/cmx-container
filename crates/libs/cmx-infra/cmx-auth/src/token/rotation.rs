@@ -81,11 +81,7 @@ impl RefreshRotation {
     /// # Errors
     ///
     /// 当 Lua 脚本执行失败时返回 `AuthInfraError`。
-    pub async fn rotate_refresh_token(
-        &self,
-        user_id: &str,
-        old_jti: &str,
-    ) -> Result<bool> {
+    pub async fn rotate_refresh_token(&self, user_id: &str, old_jti: &str) -> Result<bool> {
         let refresh_key = format!("auth:{{{}}}:refresh:{}", user_id, old_jti);
         let index_key = format!("auth:{{{}}}:refresh_index", user_id);
 
@@ -122,10 +118,7 @@ mod tests {
             "脚本应包含 SREM 从 index 集合移除旧 jti"
         );
         // 检查返回值约定：1=成功，0=失败（不存在）
-        assert!(
-            ROTATE_LUA_SCRIPT.contains("return 1"),
-            "脚本成功时应返回 1"
-        );
+        assert!(ROTATE_LUA_SCRIPT.contains("return 1"), "脚本成功时应返回 1");
         assert!(
             ROTATE_LUA_SCRIPT.contains("return 0"),
             "脚本失败（token 不存在）时应返回 0"
@@ -332,9 +325,6 @@ mod tests {
             .await
             .expect("轮换调用失败");
 
-        assert!(
-            !result,
-            "不存在的旧 token 轮换应返回 false（重放检测）"
-        );
+        assert!(!result, "不存在的旧 token 轮换应返回 false（重放检测）");
     }
 }

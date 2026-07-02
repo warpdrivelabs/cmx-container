@@ -1,10 +1,10 @@
 //! 字典写入服务（复刻 Node `DictWriteService`）：
 //! upsert 时计算 level/path/pathStr/sortKey/fullText；SCD 停旧启新 deactivate/supersede。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::dict::repo;
-use crate::dict::schema::{get_schema, DictSchema};
+use crate::dict::schema::{DictSchema, get_schema};
 use crate::error::{PortalError, PortalResult};
 
 fn today_str() -> String {
@@ -24,7 +24,10 @@ fn field_str(row: &Value, field: &str) -> String {
 fn enrich_full_text(entry: &mut Value, schema: &DictSchema) {
     let fields: Vec<String> = match &schema.full_text_fields {
         Some(f) if !f.is_empty() => f.clone(),
-        _ => vec![schema.id_field().to_string(), schema.label_field().to_string()],
+        _ => vec![
+            schema.id_field().to_string(),
+            schema.label_field().to_string(),
+        ],
     };
     let parts: Vec<String> = fields
         .iter()
@@ -39,7 +42,11 @@ fn enrich_full_text(entry: &mut Value, schema: &DictSchema) {
 }
 
 /// upsert 条目（增量推算 level/path，或 rebuild 全量重建）。
-pub async fn upsert(dict_id: &str, raw_entries: Vec<Value>, rebuild: bool) -> PortalResult<serde_json::Value> {
+pub async fn upsert(
+    dict_id: &str,
+    raw_entries: Vec<Value>,
+    rebuild: bool,
+) -> PortalResult<serde_json::Value> {
     let schema = get_schema(dict_id).await?;
     let id_field = schema.id_field().to_string();
     let parent_field = schema.parent_field().to_string();
@@ -66,12 +73,22 @@ pub async fn upsert(dict_id: &str, raw_entries: Vec<Value>, rebuild: bool) -> Po
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    let external_parent_ids: Vec<String> = parent_ids.iter().filter(|id| !batch_map.contains_key(*id)).cloned().collect();
+    let external_parent_ids: Vec<String> = parent_ids
+        .iter()
+        .filter(|id| !batch_map.contains_key(*id))
+        .cloned()
+        .collect();
 
-    let mut enriched_map: std::collections::HashMap<String, Option<Value>> = std::collections::HashMap::new();
+    let mut enriched_map: std::collections::HashMap<String, Option<Value>> =
+        std::collections::HashMap::new();
     if !external_parent_ids.is_empty() {
-        let mut q = repo::SearchQuery { page: 1, page_size: external_parent_ids.len() as i64 + 10, ..Default::default() };
-        q.filters.insert(id_field.clone(), json!(external_parent_ids));
+        let mut q = repo::SearchQuery {
+            page: 1,
+            page_size: external_parent_ids.len() as i64 + 10,
+            ..Default::default()
+        };
+        q.filters
+            .insert(id_field.clone(), json!(external_parent_ids));
         let parents = repo::search(dict_id, &q).await?.hits;
         for p in parents {
             enriched_map.insert(field_str(&p, &id_field), Some(p));
@@ -79,12 +96,24 @@ pub async fn upsert(dict_id: &str, raw_entries: Vec<Value>, rebuild: bool) -> Po
     }
 
     // 迭代式 enrich（带循环保护）
-    let enriched = enrich_batch(&raw_entries, &batch_map, &mut enriched_map, &id_field, &parent_field, &schema);
+    let enriched = enrich_batch(
+        &raw_entries,
+        &batch_map,
+        &mut enriched_map,
+        &id_field,
+        &parent_field,
+        &schema,
+    );
     repo::upsert_entries(dict_id, &enriched).await
 }
 
 fn big_query() -> repo::SearchQuery {
-    repo::SearchQuery { page: 1, page_size: 99999, include_inactive: true, ..Default::default() }
+    repo::SearchQuery {
+        page: 1,
+        page_size: 99999,
+        include_inactive: true,
+        ..Default::default()
+    }
 }
 
 fn merge_by_id(existing: Vec<Value>, incoming: Vec<Value>, id_field: &str) -> Vec<Value> {
@@ -101,7 +130,12 @@ fn merge_by_id(existing: Vec<Value>, incoming: Vec<Value>, id_field: &str) -> Ve
 }
 
 /// 拓扑计算 level/path/pathStr/sortKey + fullText（全量）。
-fn build_tree_fields(rows: Vec<Value>, id_field: &str, parent_field: &str, schema: &DictSchema) -> Vec<Value> {
+fn build_tree_fields(
+    rows: Vec<Value>,
+    id_field: &str,
+    parent_field: &str,
+    schema: &DictSchema,
+) -> Vec<Value> {
     use std::collections::HashMap;
     let mut order: Vec<String> = Vec::with_capacity(rows.len());
     let mut map: HashMap<String, Value> = HashMap::new();
@@ -130,7 +164,10 @@ fn build_tree_fields(rows: Vec<Value>, id_field: &str, parent_field: &str, schem
         let pid = field_str(node, parent_field);
         let (level, path) = if !pid.is_empty() && map.contains_key(&pid) {
             visit(&pid, map, id_field, parent_field, visited, computed);
-            let (plevel, ppath) = computed.get(&pid).cloned().unwrap_or((1, vec![pid.clone()]));
+            let (plevel, ppath) = computed
+                .get(&pid)
+                .cloned()
+                .unwrap_or((1, vec![pid.clone()]));
             let mut path = ppath;
             path.push(id.to_string());
             (plevel + 1, path)
@@ -141,7 +178,14 @@ fn build_tree_fields(rows: Vec<Value>, id_field: &str, parent_field: &str, schem
     }
 
     for id in &order {
-        visit(id, &map, id_field, parent_field, &mut visited, &mut computed);
+        visit(
+            id,
+            &map,
+            id_field,
+            parent_field,
+            &mut visited,
+            &mut computed,
+        );
     }
 
     order
@@ -183,12 +227,21 @@ fn enrich_batch(
         if let Some(v) = enriched_map.get(id) {
             return v.clone();
         }
-        let Some(e) = batch_map.get(id) else { return None };
+        let Some(e) = batch_map.get(id) else {
+            return None;
+        };
         // 占位防循环
         enriched_map.insert(id.to_string(), None);
         let pid = field_str(e, parent_field);
         let parent = if !pid.is_empty() {
-            enrich(&pid, batch_map, enriched_map, id_field, parent_field, schema)
+            enrich(
+                &pid,
+                batch_map,
+                enriched_map,
+                id_field,
+                parent_field,
+                schema,
+            )
         } else {
             None
         };
@@ -198,7 +251,14 @@ fn enrich_batch(
                 let ppath: Vec<String> = p
                     .get("path")
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().map(|x| match x { Value::String(s) => s.clone(), o => o.to_string() }).collect())
+                    .map(|a| {
+                        a.iter()
+                            .map(|x| match x {
+                                Value::String(s) => s.clone(),
+                                o => o.to_string(),
+                            })
+                            .collect()
+                    })
                     .unwrap_or_else(|| vec![field_str(p, id_field)]);
                 let mut path = ppath;
                 path.push(id.to_string());
@@ -232,14 +292,23 @@ fn enrich_batch(
 // ── SCD 停旧启新 ────────────────────────────────────────────────────────
 
 async fn get_by_key(dict_id: &str, id_field: &str, key: &str) -> PortalResult<Option<Value>> {
-    let mut q = repo::SearchQuery { page: 1, page_size: 5, ..Default::default() };
+    let mut q = repo::SearchQuery {
+        page: 1,
+        page_size: 5,
+        ..Default::default()
+    };
     q.filters.insert(id_field.to_string(), json!(key));
     let hits = repo::search(dict_id, &q).await?.hits;
     Ok(hits.into_iter().find(|r| field_str(r, id_field) == key))
 }
 
 /// 停用一个码：status=0 + valid_to。
-pub async fn deactivate(dict_id: &str, code: &str, valid_to: Option<&str>, successor_code: Option<&str>) -> PortalResult<serde_json::Value> {
+pub async fn deactivate(
+    dict_id: &str,
+    code: &str,
+    valid_to: Option<&str>,
+    successor_code: Option<&str>,
+) -> PortalResult<serde_json::Value> {
     let schema = get_schema(dict_id).await?;
     let id_field = schema.id_field();
     let row = get_by_key(dict_id, id_field, code)
@@ -262,7 +331,13 @@ pub async fn deactivate(dict_id: &str, code: &str, valid_to: Option<&str>, succe
 }
 
 /// 停旧启新：停 oldCode 指向 newCode，newCode 记前驱。
-pub async fn supersede(dict_id: &str, old_code: &str, new_code: &str, as_of: Option<&str>, new_entry: Option<&Value>) -> PortalResult<serde_json::Value> {
+pub async fn supersede(
+    dict_id: &str,
+    old_code: &str,
+    new_code: &str,
+    as_of: Option<&str>,
+    new_entry: Option<&Value>,
+) -> PortalResult<serde_json::Value> {
     let schema = get_schema(dict_id).await?;
     let id_field = schema.id_field().to_string();
     if old_code == new_code {
@@ -320,7 +395,9 @@ pub async fn supersede(dict_id: &str, old_code: &str, new_code: &str, as_of: Opt
     // 新码经 upsert 补树字段；旧码直接 upsertEntries
     upsert(dict_id, vec![strip_tree_aux(&new_row)], false).await?;
     repo::upsert_entries(dict_id, &[old_patched]).await?;
-    Ok(json!({ "ok": true, "dictId": dict_id, "oldCode": old_code, "newCode": new_code, "asOf": cut }))
+    Ok(
+        json!({ "ok": true, "dictId": dict_id, "oldCode": old_code, "newCode": new_code, "asOf": cut }),
+    )
 }
 
 async fn next_surrogate_id(dict_id: &str) -> PortalResult<i64> {
@@ -328,9 +405,10 @@ async fn next_surrogate_id(dict_id: &str) -> PortalResult<i64> {
     let mut max = 0i64;
     for r in &hits {
         if let Some(n) = r.get("id").and_then(|v| v.as_i64())
-            && n > max {
-                max = n;
-            }
+            && n > max
+        {
+            max = n;
+        }
     }
     Ok(if max == 0 { 1000000 } else { max } + 1)
 }
@@ -338,8 +416,19 @@ async fn next_surrogate_id(dict_id: &str) -> PortalResult<i64> {
 /// 克隆旧码业务字段（去主键/树辅助/生命周期）。
 fn clone_business(row: &Value, id_field: &str) -> Value {
     let drop: std::collections::HashSet<&str> = [
-        id_field, "id", "level", "path", "pathStr", "level_no", "full_path", "is_leaf", "fullText",
-        "valid_from", "valid_to", "predecessor_code", "successor_code",
+        id_field,
+        "id",
+        "level",
+        "path",
+        "pathStr",
+        "level_no",
+        "full_path",
+        "is_leaf",
+        "fullText",
+        "valid_from",
+        "valid_to",
+        "predecessor_code",
+        "successor_code",
     ]
     .into_iter()
     .collect();

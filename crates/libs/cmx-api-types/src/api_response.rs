@@ -176,8 +176,17 @@ impl Pagination {
     ///
     /// 包含计算后 `total_pages` 的 `Pagination` 实例。
     pub fn new(page: u64, page_size: u64, total: u64) -> Self {
-        let total_pages = if page_size == 0 { 0 } else { (total as f64 / page_size as f64).ceil() as u64 };
-        Self { page, page_size, total, total_pages }
+        let total_pages = if page_size == 0 {
+            0
+        } else {
+            (total as f64 / page_size as f64).ceil() as u64
+        };
+        Self {
+            page,
+            page_size,
+            total,
+            total_pages,
+        }
     }
 
     /// 计算当前页在数据库中的偏移量。

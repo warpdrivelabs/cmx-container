@@ -6,12 +6,12 @@ use std::path::Path;
 
 use cmx_core::model::cell::TableDefine;
 use cmx_database::get_default_db_manager;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 use crate::MetadataError;
-use crate::seed::config::{SeedDataConfig, SeedDataTableResult, SeedDataFailure, SeedDataSummary};
-use crate::seed::loader::load_seed_data;
+use crate::seed::config::{SeedDataConfig, SeedDataFailure, SeedDataSummary, SeedDataTableResult};
 use crate::seed::dml::{generate_pg_insert_or_upsert, generate_pg_single_insert_or_upsert};
+use crate::seed::loader::load_seed_data;
 
 /// 默认批次大小
 const DEFAULT_BATCH_SIZE: usize = 100;
@@ -37,7 +37,11 @@ impl PgSeedDataExecutor {
     }
 
     /// 创建执行器实例（可指定批次大小）
-    pub fn with_batch_size(db_id: impl Into<String>, txn_id: Option<String>, batch_size: usize) -> Self {
+    pub fn with_batch_size(
+        db_id: impl Into<String>,
+        txn_id: Option<String>,
+        batch_size: usize,
+    ) -> Self {
         Self {
             db_id: db_id.into(),
             txn_id,
@@ -71,19 +75,28 @@ impl PgSeedDataExecutor {
 
         for config in seed_configs {
             if !config.enabled {
-                debug!("跳过已禁用的种子数据配置: 表={}, 文件={}", config.table_name, config.file);
+                debug!(
+                    "跳过已禁用的种子数据配置: 表={}, 文件={}",
+                    config.table_name, config.file
+                );
                 continue;
             }
 
             let table_define = match table_map.get(config.table_name.as_str()) {
                 Some(td) => td,
                 None => {
-                    warn!("种子数据配置中的表 '{}' 在表定义中不存在，跳过", config.table_name);
+                    warn!(
+                        "种子数据配置中的表 '{}' 在表定义中不存在，跳过",
+                        config.table_name
+                    );
                     continue;
                 }
             };
 
-            info!("开始执行种子数据: 表={}, 文件={}", config.table_name, config.file);
+            info!(
+                "开始执行种子数据: 表={}, 文件={}",
+                config.table_name, config.file
+            );
 
             let result = self
                 .execute_seed_data(table_define, config, base_path)
@@ -153,10 +166,8 @@ impl PgSeedDataExecutor {
         };
 
         let file_row_count = rows.len();
-        let mut table_result = SeedDataTableResult::new(
-            table_define.table_name.clone(),
-            seed_config.file.clone(),
-        );
+        let mut table_result =
+            SeedDataTableResult::new(table_define.table_name.clone(), seed_config.file.clone());
         table_result.file_row_count = file_row_count;
 
         if file_row_count == 0 {
@@ -185,13 +196,7 @@ impl PgSeedDataExecutor {
                 batch.len()
             );
 
-            match generate_pg_insert_or_upsert(
-                table_name,
-                schema,
-                columns,
-                batch,
-                conflict_cols,
-            ) {
+            match generate_pg_insert_or_upsert(table_name, schema, columns, batch, conflict_cols) {
                 Ok(sql) => {
                     // 尝试批次执行
                     match self.execute_sql(&sql).await {
@@ -200,7 +205,11 @@ impl PgSeedDataExecutor {
                         }
                         Err(batch_err) => {
                             // 批次执行失败，降级为逐行执行
-                            warn!("批次 {} 执行失败，降级为逐行执行: {}", batch_idx + 1, batch_err);
+                            warn!(
+                                "批次 {} 执行失败，降级为逐行执行: {}",
+                                batch_idx + 1,
+                                batch_err
+                            );
                             for (row_idx_in_batch, row) in batch.iter().enumerate() {
                                 match generate_pg_single_insert_or_upsert(
                                     table_name,
@@ -209,23 +218,25 @@ impl PgSeedDataExecutor {
                                     row,
                                     conflict_cols,
                                 ) {
-                                    Ok(single_sql) => {
-                                        match self.execute_sql(&single_sql).await {
-                                            Ok(_) => {
-                                                success_count += 1;
-                                            }
-                                            Err(single_err) => {
-                                                failures.push(SeedDataFailure {
-                                                    row_index: batch_idx * self.batch_size + row_idx_in_batch + 1,
-                                                    row_data: row.clone(),
-                                                    error_message: single_err.to_string(),
-                                                });
-                                            }
+                                    Ok(single_sql) => match self.execute_sql(&single_sql).await {
+                                        Ok(_) => {
+                                            success_count += 1;
                                         }
-                                    }
+                                        Err(single_err) => {
+                                            failures.push(SeedDataFailure {
+                                                row_index: batch_idx * self.batch_size
+                                                    + row_idx_in_batch
+                                                    + 1,
+                                                row_data: row.clone(),
+                                                error_message: single_err.to_string(),
+                                            });
+                                        }
+                                    },
                                     Err(gen_err) => {
                                         failures.push(SeedDataFailure {
-                                            row_index: batch_idx * self.batch_size + row_idx_in_batch + 1,
+                                            row_index: batch_idx * self.batch_size
+                                                + row_idx_in_batch
+                                                + 1,
                                             row_data: row.clone(),
                                             error_message: format!("生成 SQL 失败: {}", gen_err),
                                         });
@@ -290,10 +301,7 @@ impl PgSeedDataExecutor {
 
     /// 查询表中的行数
     async fn verify_row_count(&self, table_name: &str) -> Option<usize> {
-        let count_sql = format!(
-            "SELECT COUNT(*) FROM \"{}\"",
-            table_name
-        );
+        let count_sql = format!("SELECT COUNT(*) FROM \"{}\"", table_name);
 
         match get_default_db_manager()
             .query_sql(&self.db_id, self.txn_id.as_deref(), &count_sql, "count")
@@ -301,13 +309,14 @@ impl PgSeedDataExecutor {
         {
             Ok(ds) => {
                 if let Some(row) = ds.rows.first()
-                    && let Some(val) = row.get(0) {
-                        return match val {
-                            cmx_core::model::cell::DataValue::Int(v) => Some(*v as usize),
-                            cmx_core::model::cell::DataValue::String(s) => s.parse().ok(),
-                            _ => None,
-                        };
-                    }
+                    && let Some(val) = row.get(0)
+                {
+                    return match val {
+                        cmx_core::model::cell::DataValue::Int(v) => Some(*v as usize),
+                        cmx_core::model::cell::DataValue::String(s) => s.parse().ok(),
+                        _ => None,
+                    };
+                }
                 None
             }
             Err(e) => {

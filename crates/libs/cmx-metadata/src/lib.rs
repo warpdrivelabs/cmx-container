@@ -4,14 +4,17 @@
 //! 基础结构体（TableDefine、ColumnDefine 等）定义在 cmx-core 中。
 //! DDL 执行依赖 cmx-database 提供的底层 SQL 执行能力。
 
-pub mod error;
-pub mod loader;
 pub mod config;
-pub mod i18n;
 pub mod ddl;
-pub mod parser;
+pub mod error;
 pub mod executor;
+pub mod i18n;
+pub mod loader;
+pub mod parser;
 pub mod seed;
 
 pub use error::MetadataError;
-pub use executor::{execute_ddl_by_ids, execute_ddl_statement_by_ids, BaseError, PgTableDefineExecutor, TableDefineDbExecutor};
+pub use executor::{
+    BaseError, PgTableDefineExecutor, TableDefineDbExecutor, execute_ddl_by_ids,
+    execute_ddl_statement_by_ids,
+};

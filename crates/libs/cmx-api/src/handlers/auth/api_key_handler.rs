@@ -3,10 +3,10 @@
 //! 提供 API Key 的创建/列表/删除/启用禁用等管理 API。
 //! API Key 明文仅在创建时返回一次，后续不可查看。
 
-use axum::extract::{Query, State};
 use axum::Json;
-use serde::{Deserialize, Serialize};
+use axum::extract::{Query, State};
 use cmx_core::model::cell::DataValue;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::app_state::CmxAppState;
@@ -62,8 +62,7 @@ async fn invalidate_api_key_cache(key_prefix: &str) {
 }
 
 /// 创建 API Key 请求
-#[derive(Debug, Deserialize, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct CreateApiKeyRequest {
     /// 关联用户 ID（纯服务间调用时为空）
     #[serde(default)]
@@ -80,8 +79,7 @@ pub struct CreateApiKeyRequest {
 }
 
 /// API Key 响应（含明文，仅创建时返回）
-#[derive(Debug, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiKeyResponse {
     pub id: String,
     pub key_prefix: String,
@@ -96,8 +94,7 @@ pub struct ApiKeyResponse {
 }
 
 /// API Key 列表项（不含明文）
-#[derive(Debug, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiKeyListItem {
     pub id: String,
     pub key_prefix: String,
@@ -110,8 +107,7 @@ pub struct ApiKeyListItem {
 }
 
 /// API Key 查询参数
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct ApiKeyQuery {
     /// 按状态过滤：1-启用，0-禁用，不传=全部
     pub status: Option<i64>,
@@ -122,8 +118,7 @@ pub struct ApiKeyQuery {
 }
 
 /// 启用/禁用请求
-#[derive(Debug, Deserialize, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ToggleApiKeyStatusRequest {
     pub id: String,
     pub status: i64, // 0-禁用，1-启用
@@ -167,10 +162,19 @@ pub async fn create_api_key(
         DataValue::String(id.clone()),
         DataValue::String(key_prefix_str.to_string()),
         DataValue::String(key_hash),
-        req.user_id.clone().map(DataValue::String).unwrap_or(DataValue::Null),
-        req.service_name.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        req.user_id
+            .clone()
+            .map(DataValue::String)
+            .unwrap_or(DataValue::Null),
+        req.service_name
+            .clone()
+            .map(DataValue::String)
+            .unwrap_or(DataValue::Null),
         DataValue::String(scopes_json),
-        req.description.clone().map(DataValue::String).unwrap_or(DataValue::Null),
+        req.description
+            .clone()
+            .map(DataValue::String)
+            .unwrap_or(DataValue::Null),
     ];
     db_manager
         .execute_sql_with_datavalues(&db_id, None, sql, params)
@@ -222,7 +226,10 @@ pub async fn list_api_keys(
         where_clause.push_str(&format!(" AND user_id = '{}'", uid.replace('\'', "''")));
     }
     if let Some(svc) = &params.service_name {
-        where_clause.push_str(&format!(" AND service_name = '{}'", svc.replace('\'', "''")));
+        where_clause.push_str(&format!(
+            " AND service_name = '{}'",
+            svc.replace('\'', "''")
+        ));
     }
 
     let sql = format!(

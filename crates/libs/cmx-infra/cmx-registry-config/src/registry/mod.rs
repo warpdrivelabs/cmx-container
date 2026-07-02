@@ -40,7 +40,9 @@ use crate::error::RegistryError;
 /// - `config.registry_type == "nacos"` —— 创建 `NacosRegistry`。
 /// - `config.registry_type == "mock"` —— 创建 `MockRegistry`。
 /// - 其他类型 —— 返回 [`RegistryError::UnsupportedType`]。
-pub async fn create_registry(config: &RegistryConfig) -> Result<Arc<dyn ServiceRegistry>, RegistryError> {
+pub async fn create_registry(
+    config: &RegistryConfig,
+) -> Result<Arc<dyn ServiceRegistry>, RegistryError> {
     let (registry, _cache) = create_registry_with_cache(config).await?;
     Ok(registry)
 }

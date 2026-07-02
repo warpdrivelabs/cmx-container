@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use cmx_auth::{AuthConfig, AuthServiceImpl, SuperAdminConfig, StaticApiKeyConfig};
+use cmx_auth::{AuthConfig, AuthServiceImpl, StaticApiKeyConfig, SuperAdminConfig};
 use cmx_buffer::GlobalCacheManager;
 use cmx_buffer::GlobalSubscriberManager;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
@@ -27,9 +27,9 @@ pub async fn init_auth_service(
 
     // 1.5 初始化全局认证白名单（合并内置白名单 + TOML 自定义白名单）
     // 必须在 mw_auth 中间件被首次请求前完成初始化
-    if let Err(e) = cmx_api::middleware::GlobalAuthService::initialize_whitelist(
-        auth_config.whitelist.clone(),
-    ) {
+    if let Err(e) =
+        cmx_api::middleware::GlobalAuthService::initialize_whitelist(auth_config.whitelist.clone())
+    {
         warn!("全局认证白名单初始化失败: {}", e);
     }
 
@@ -42,46 +42,63 @@ pub async fn init_auth_service(
     // 4. 创建 AuthServiceImpl
     // 4.1 初始化第三方 OAuth2 Provider 注册表（在创建 AuthServiceImpl 之前，因为 auth_config 会被 move）
     if let Some(ref oauth2_config) = auth_config.oauth2
-        && !oauth2_config.providers.is_empty() {
-            let mut registry = cmx_auth::oauth2::OAuth2ProviderRegistry::new();
-            for provider_config in &oauth2_config.providers {
-                if !provider_config.enabled {
-                    continue;
-                }
-                let provider: std::sync::Arc<dyn cmx_auth::oauth2::provider::OAuth2Provider> = match provider_config.provider_type.as_str() {
+        && !oauth2_config.providers.is_empty()
+    {
+        let mut registry = cmx_auth::oauth2::OAuth2ProviderRegistry::new();
+        for provider_config in &oauth2_config.providers {
+            if !provider_config.enabled {
+                continue;
+            }
+            let provider: std::sync::Arc<dyn cmx_auth::oauth2::provider::OAuth2Provider> =
+                match provider_config.provider_type.as_str() {
                     "google" => std::sync::Arc::new(
-                        cmx_auth::oauth2::provider::google::GoogleProvider::new(provider_config.clone())
+                        cmx_auth::oauth2::provider::google::GoogleProvider::new(
+                            provider_config.clone(),
+                        ),
                     ),
                     "github" => std::sync::Arc::new(
-                        cmx_auth::oauth2::provider::github::GitHubProvider::new(provider_config.clone())
+                        cmx_auth::oauth2::provider::github::GitHubProvider::new(
+                            provider_config.clone(),
+                        ),
                     ),
                     _ => {
                         // 校验 generic 类型必需字段
                         if provider_config.authorize_url.is_empty() {
-                            warn!("Provider '{}' (generic) 缺少 authorize_url 配置，跳过", provider_config.name);
+                            warn!(
+                                "Provider '{}' (generic) 缺少 authorize_url 配置，跳过",
+                                provider_config.name
+                            );
                             continue;
                         }
                         if provider_config.token_url.is_empty() {
-                            warn!("Provider '{}' (generic) 缺少 token_url 配置，跳过", provider_config.name);
+                            warn!(
+                                "Provider '{}' (generic) 缺少 token_url 配置，跳过",
+                                provider_config.name
+                            );
                             continue;
                         }
                         if provider_config.userinfo_url.is_empty() {
-                            warn!("Provider '{}' (generic) 缺少 userinfo_url 配置，跳过", provider_config.name);
+                            warn!(
+                                "Provider '{}' (generic) 缺少 userinfo_url 配置，跳过",
+                                provider_config.name
+                            );
                             continue;
                         }
                         std::sync::Arc::new(
-                            cmx_auth::oauth2::provider::generic::GenericOAuth2Provider::new(provider_config.clone())
+                            cmx_auth::oauth2::provider::generic::GenericOAuth2Provider::new(
+                                provider_config.clone(),
+                            ),
                         )
                     }
                 };
-                registry.register(provider);
-            }
-
-            cmx_api::middleware::GlobalAuthService::initialize_provider_registry(registry)
-                .map_err(crate::error::Error::ServerSetup)?;
-
-            info!("第三方 OAuth2 Provider 注册表初始化完成");
+            registry.register(provider);
         }
+
+        cmx_api::middleware::GlobalAuthService::initialize_provider_registry(registry)
+            .map_err(crate::error::Error::ServerSetup)?;
+
+        info!("第三方 OAuth2 Provider 注册表初始化完成");
+    }
 
     // 4.2 创建 AuthServiceImpl 并注入审计日志器
     let auth_service_impl = AuthServiceImpl::new(cache, auth_config, user_query)
@@ -115,13 +132,18 @@ pub async fn init_auth_service(
     if GlobalSubscriberManager::is_initialized() {
         let subscriber = GlobalSubscriberManager::get();
         let auth_svc = auth_service.clone();
-        subscriber.register_channel_fn("auth:cache:invalidate", move |_channel, payload| {
-            let auth_svc = auth_svc.clone();
-            let payload = payload.to_string();
-            tokio::spawn(async move {
-                auth_svc.invalidate_local_cache(&payload).await;
-            });
-        }).await.map_err(|e| crate::error::Error::ServerSetup(format!("Pub/Sub 订阅注册失败: {}", e)))?;
+        subscriber
+            .register_channel_fn("auth:cache:invalidate", move |_channel, payload| {
+                let auth_svc = auth_svc.clone();
+                let payload = payload.to_string();
+                tokio::spawn(async move {
+                    auth_svc.invalidate_local_cache(&payload).await;
+                });
+            })
+            .await
+            .map_err(|e| {
+                crate::error::Error::ServerSetup(format!("Pub/Sub 订阅注册失败: {}", e))
+            })?;
         info!("Pub/Sub 缓存失效订阅已注册");
     }
 
@@ -235,8 +257,6 @@ fn load_auth_config() -> AuthConfig {
         auth_config.cache.lock_duration_secs = secs as u64;
     }
 
-
-
     // 确保 [auth.oauth2] 节存在时初始化 oauth2 配置
     // 当 auth_code_ttl_secs / pkce_required 被注释时，上面的 get_or_insert_with 不会执行，
     // 但 [auth.oauth2] 节下的其他配置（providers、frontend_callback_url 等）仍需加载
@@ -246,92 +266,119 @@ fn load_auth_config() -> AuthConfig {
 
     // OAuth2 配置
     if let Ok(ttl) = config.get_int("auth.oauth2.auth_code_ttl_secs") {
-        auth_config.oauth2.get_or_insert_with(Default::default).auth_code_ttl_secs = ttl as u64;
+        auth_config
+            .oauth2
+            .get_or_insert_with(Default::default)
+            .auth_code_ttl_secs = ttl as u64;
     }
     if let Ok(pkce) = config.get_bool("auth.oauth2.pkce_required") {
-        auth_config.oauth2.get_or_insert_with(Default::default).pkce_required = pkce;
+        auth_config
+            .oauth2
+            .get_or_insert_with(Default::default)
+            .pkce_required = pkce;
     }
 
     // OAuth2 Provider 配置
     if let Some(oauth2) = auth_config.oauth2.as_mut() {
-
         // 读取 providers 数组
         let mut providers = Vec::new();
         for i in 0..10 {
             let name_key = format!("auth.oauth2.providers[{}].name", i);
             if let Ok(name) = config.get_string(&name_key) {
-                let provider_type = config.get_string(&format!("auth.oauth2.providers[{}].provider_type", i))
+                let provider_type = config
+                    .get_string(&format!("auth.oauth2.providers[{}].provider_type", i))
                     .unwrap_or_else(|_| "generic".to_string());
-                let client_id = config.get_string(&format!("auth.oauth2.providers[{}].client_id", i))
+                let client_id = config
+                    .get_string(&format!("auth.oauth2.providers[{}].client_id", i))
                     .unwrap_or_default();
-                let client_secret = config.get_string(&format!("auth.oauth2.providers[{}].client_secret", i))
+                let client_secret = config
+                    .get_string(&format!("auth.oauth2.providers[{}].client_secret", i))
                     .unwrap_or_default();
-                let redirect_uri = config.get_string(&format!("auth.oauth2.providers[{}].redirect_uri", i))
+                let redirect_uri = config
+                    .get_string(&format!("auth.oauth2.providers[{}].redirect_uri", i))
                     .unwrap_or_default();
-                let display_name = config.get_string(&format!("auth.oauth2.providers[{}].display_name", i))
+                let display_name = config
+                    .get_string(&format!("auth.oauth2.providers[{}].display_name", i))
                     .unwrap_or_else(|_| name.clone());
-                let authorize_url = config.get_string(&format!("auth.oauth2.providers[{}].authorize_url", i))
+                let authorize_url = config
+                    .get_string(&format!("auth.oauth2.providers[{}].authorize_url", i))
                     .unwrap_or_default();
-                let token_url = config.get_string(&format!("auth.oauth2.providers[{}].token_url", i))
+                let token_url = config
+                    .get_string(&format!("auth.oauth2.providers[{}].token_url", i))
                     .unwrap_or_default();
-                let userinfo_url = config.get_string(&format!("auth.oauth2.providers[{}].userinfo_url", i))
+                let userinfo_url = config
+                    .get_string(&format!("auth.oauth2.providers[{}].userinfo_url", i))
                     .unwrap_or_default();
-                let scopes = config.get_string(&format!("auth.oauth2.providers[{}].scopes", i))
+                let scopes = config
+                    .get_string(&format!("auth.oauth2.providers[{}].scopes", i))
                     .map(|s| s.split(',').map(|sc| sc.trim().to_string()).collect())
                     .unwrap_or_default();
-                let enabled = config.get_bool(&format!("auth.oauth2.providers[{}].enabled", i))
+                let enabled = config
+                    .get_bool(&format!("auth.oauth2.providers[{}].enabled", i))
                     .unwrap_or(true);
-                let icon_url = config.get_string(&format!("auth.oauth2.providers[{}].icon_url", i))
+                let icon_url = config
+                    .get_string(&format!("auth.oauth2.providers[{}].icon_url", i))
                     .ok();
-                let brand_color = config.get_string(&format!("auth.oauth2.providers[{}].brand_color", i))
+                let brand_color = config
+                    .get_string(&format!("auth.oauth2.providers[{}].brand_color", i))
                     .ok();
-                let token_endpoint_auth_method = config.get_string(&format!("auth.oauth2.providers[{}].token_endpoint_auth_method", i))
+                let token_endpoint_auth_method = config
+                    .get_string(&format!(
+                        "auth.oauth2.providers[{}].token_endpoint_auth_method",
+                        i
+                    ))
                     .unwrap_or_else(|_| "client_secret_post".to_string());
 
                 // field_mapping 从配置读取内联表
-                let field_mapping = config.inner()
+                let field_mapping = config
+                    .inner()
                     .get_table(&format!("auth.oauth2.providers[{}].field_mapping", i))
                     .map(|table| {
-                        table.into_iter()
-                            .filter_map(|(k, v)| {
-                                v.clone().into_string().map(|s| (k, s)).ok()
-                            })
+                        table
+                            .into_iter()
+                            .filter_map(|(k, v)| v.clone().into_string().map(|s| (k, s)).ok())
                             .collect::<std::collections::HashMap<String, String>>()
                     })
                     .unwrap_or_default();
 
                 // token_field_mapping 从配置读取内联表
-                let token_field_mapping = config.inner()
+                let token_field_mapping = config
+                    .inner()
                     .get_table(&format!("auth.oauth2.providers[{}].token_field_mapping", i))
                     .map(|table| {
-                        table.into_iter()
-                            .filter_map(|(k, v)| {
-                                v.clone().into_string().map(|s| (k, s)).ok()
-                            })
+                        table
+                            .into_iter()
+                            .filter_map(|(k, v)| v.clone().into_string().map(|s| (k, s)).ok())
                             .collect::<std::collections::HashMap<String, String>>()
                     })
                     .unwrap_or_default();
 
                 // userinfo_extra_params 从配置读取内联表
-                let userinfo_extra_params = config.inner()
-                    .get_table(&format!("auth.oauth2.providers[{}].userinfo_extra_params", i))
+                let userinfo_extra_params = config
+                    .inner()
+                    .get_table(&format!(
+                        "auth.oauth2.providers[{}].userinfo_extra_params",
+                        i
+                    ))
                     .map(|table| {
-                        table.into_iter()
-                            .filter_map(|(k, v)| {
-                                v.clone().into_string().map(|s| (k, s)).ok()
-                            })
+                        table
+                            .into_iter()
+                            .filter_map(|(k, v)| v.clone().into_string().map(|s| (k, s)).ok())
                             .collect::<std::collections::HashMap<String, String>>()
                     })
                     .unwrap_or_default();
 
                 // authorize_extra_params 从配置读取内联表
-                let authorize_extra_params = config.inner()
-                    .get_table(&format!("auth.oauth2.providers[{}].authorize_extra_params", i))
+                let authorize_extra_params = config
+                    .inner()
+                    .get_table(&format!(
+                        "auth.oauth2.providers[{}].authorize_extra_params",
+                        i
+                    ))
                     .map(|table| {
-                        table.into_iter()
-                            .filter_map(|(k, v)| {
-                                v.clone().into_string().map(|s| (k, s)).ok()
-                            })
+                        table
+                            .into_iter()
+                            .filter_map(|(k, v)| v.clone().into_string().map(|s| (k, s)).ok())
                             .collect::<std::collections::HashMap<String, String>>()
                     })
                     .unwrap_or_default();
@@ -352,14 +399,33 @@ fn load_auth_config() -> AuthConfig {
                     icon_url,
                     brand_color,
                     enabled,
-                    token_response_path: config.get_string(&format!("auth.oauth2.providers[{}].token_response_path", i)).unwrap_or_default(),
+                    token_response_path: config
+                        .get_string(&format!("auth.oauth2.providers[{}].token_response_path", i))
+                        .unwrap_or_default(),
                     token_field_mapping,
-                    userinfo_method: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_method", i)).unwrap_or_else(|_| "GET".to_string()),
-                    userinfo_token_param: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_token_param", i)).unwrap_or_else(|_| "bearer".to_string()),
+                    userinfo_method: config
+                        .get_string(&format!("auth.oauth2.providers[{}].userinfo_method", i))
+                        .unwrap_or_else(|_| "GET".to_string()),
+                    userinfo_token_param: config
+                        .get_string(&format!(
+                            "auth.oauth2.providers[{}].userinfo_token_param",
+                            i
+                        ))
+                        .unwrap_or_else(|_| "bearer".to_string()),
                     userinfo_extra_params,
-                    userinfo_response_path: config.get_string(&format!("auth.oauth2.providers[{}].userinfo_response_path", i)).unwrap_or_default(),
+                    userinfo_response_path: config
+                        .get_string(&format!(
+                            "auth.oauth2.providers[{}].userinfo_response_path",
+                            i
+                        ))
+                        .unwrap_or_default(),
                     authorize_extra_params,
-                    skip_ssl_verification: config.get_bool(&format!("auth.oauth2.providers[{}].skip_ssl_verification", i)).unwrap_or(false),
+                    skip_ssl_verification: config
+                        .get_bool(&format!(
+                            "auth.oauth2.providers[{}].skip_ssl_verification",
+                            i
+                        ))
+                        .unwrap_or(false),
                 });
             }
         }
@@ -399,10 +465,12 @@ fn load_auth_config() -> AuthConfig {
         let default_sa = SuperAdminConfig::default();
         let sa_config = SuperAdminConfig {
             username,
-            password: config.get_string("auth.super_admin.password")
+            password: config
+                .get_string("auth.super_admin.password")
                 .unwrap_or(default_sa.password),
             email: config.get_string("auth.super_admin.email").ok(),
-            roles: config.get_string("auth.super_admin.roles")
+            roles: config
+                .get_string("auth.super_admin.roles")
                 .map(|s| s.split(',').map(|r| r.trim().to_string()).collect())
                 .unwrap_or(default_sa.roles),
         };
@@ -423,12 +491,19 @@ fn load_auth_config() -> AuthConfig {
             static_keys.push(StaticApiKeyConfig {
                 key_prefix,
                 key,
-                user_id: config.get_string(&format!("auth.static_api_keys[{}].user_id", i)).ok(),
-                service_name: config.get_string(&format!("auth.static_api_keys[{}].service_name", i)).ok(),
-                scopes: config.get_string(&format!("auth.static_api_keys[{}].scopes", i))
+                user_id: config
+                    .get_string(&format!("auth.static_api_keys[{}].user_id", i))
+                    .ok(),
+                service_name: config
+                    .get_string(&format!("auth.static_api_keys[{}].service_name", i))
+                    .ok(),
+                scopes: config
+                    .get_string(&format!("auth.static_api_keys[{}].scopes", i))
                     .map(|s| s.split(',').map(|sc| sc.trim().to_string()).collect())
                     .unwrap_or_default(),
-                description: config.get_string(&format!("auth.static_api_keys[{}].description", i)).ok(),
+                description: config
+                    .get_string(&format!("auth.static_api_keys[{}].description", i))
+                    .ok(),
             });
         }
     }

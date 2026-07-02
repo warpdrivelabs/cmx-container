@@ -13,12 +13,17 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
-use tracing::{info, warn};
-use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef, GlobalRuntime, WasmInvokeResult, InvokeOptions};
-use cmx_traits::error::HostFuncError;
-use cmx_traits::service::{GlobalServiceInvoker, ServiceInvokeOptions};
-use cmx_core::{PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse, OrchestrationError};
 use cmx_core::model::service::{FunctionInput, SVRContext};
+use cmx_core::{
+    CallServiceRequest, CallServiceResponse, OrchestrationError, PluginFunCallResponse,
+    PluginFunRequest,
+};
+use cmx_traits::error::HostFuncError;
+use cmx_traits::runtime::{
+    GlobalRuntime, HostFunctionDef, HostFunctionProvider, InvokeOptions, WasmInvokeResult,
+};
+use cmx_traits::service::{GlobalServiceInvoker, ServiceInvokeOptions};
+use tracing::{info, warn};
 
 /// 插件宿主函数提供者
 ///
@@ -31,7 +36,6 @@ impl PluginHostFunctions {
     pub fn new() -> Self {
         Self
     }
-
 
     /// 执行调用指定插件的指定函数
     ///
@@ -49,9 +53,17 @@ impl PluginHostFunctions {
     fn do_call_plugin(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         let req: PluginFunRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
-            Err(e) => return Ok(Self::err_plugin_response_msgpack(format!("解析请求失败: {}", e))),
+            Err(e) => {
+                return Ok(Self::err_plugin_response_msgpack(format!(
+                    "解析请求失败: {}",
+                    e
+                )));
+            }
         };
-        info!("[call_plugin] 目标插件: {}, 函数: {}", req.plugin_id, req.function_name);
+        info!(
+            "[call_plugin] 目标插件: {}, 函数: {}",
+            req.plugin_id, req.function_name
+        );
 
         // 跨服务 RPC 调用
         if let Some(ref server_name) = req.server_name {
@@ -61,7 +73,9 @@ impl PluginHostFunctions {
         let runtime = GlobalRuntime::get();
 
         let svr_ctx = SVRContext::new(
-            req.initial_input.clone().unwrap_or_else(|| req.input.clone()),
+            req.initial_input
+                .clone()
+                .unwrap_or_else(|| req.input.clone()),
             HashMap::new(),
             Utc::now(),
             generate_request_id(),
@@ -70,7 +84,12 @@ impl PluginHostFunctions {
 
         let input_bytes = match rmp_serde::to_vec(&func_input) {
             Ok(b) => b,
-            Err(e) => return Ok(Self::err_plugin_response_msgpack(format!("序列化输入失败: {}", e))),
+            Err(e) => {
+                return Ok(Self::err_plugin_response_msgpack(format!(
+                    "序列化输入失败: {}",
+                    e
+                )));
+            }
         };
 
         let invoke_options = InvokeOptions {
@@ -81,7 +100,14 @@ impl PluginHostFunctions {
 
         let rt = tokio::runtime::Handle::current();
         let result: Result<WasmInvokeResult, _> = rt.block_on(async {
-            runtime.invoke_with_options(&req.plugin_id, &req.function_name, &input_bytes, &invoke_options).await
+            runtime
+                .invoke_with_options(
+                    &req.plugin_id,
+                    &req.function_name,
+                    &input_bytes,
+                    &invoke_options,
+                )
+                .await
         });
 
         match result {
@@ -89,15 +115,15 @@ impl PluginHostFunctions {
                 let output = if invoke_result.output.is_empty() {
                     serde_json::Value::Null
                 } else {
-                    rmp_serde::from_slice(&invoke_result.output)
-                        .unwrap_or(serde_json::Value::Null)
+                    rmp_serde::from_slice(&invoke_result.output).unwrap_or(serde_json::Value::Null)
                 };
                 Ok(rmp_serde::to_vec(&PluginFunCallResponse {
                     success: true,
                     result: Some(output),
                     elapsed_us: Some(invoke_result.elapsed_us),
                     error: None,
-                }).unwrap_or_default())
+                })
+                .unwrap_or_default())
             }
             Err(e) => {
                 warn!("[call_plugin] 调用失败: {}", e);
@@ -125,7 +151,12 @@ impl PluginHostFunctions {
     fn do_call_service_by_key(&self, input: Vec<u8>) -> Result<Vec<u8>, HostFuncError> {
         let req: CallServiceRequest = match rmp_serde::from_slice(&input) {
             Ok(r) => r,
-            Err(e) => return Ok(Self::err_service_response_msgpack(format!("解析请求失败: {}", e))),
+            Err(e) => {
+                return Ok(Self::err_service_response_msgpack(format!(
+                    "解析请求失败: {}",
+                    e
+                )));
+            }
         };
         info!("[call_service_by_key] 服务: {}", req.service_key);
 
@@ -144,7 +175,9 @@ impl PluginHostFunctions {
 
         let rt = tokio::runtime::Handle::current();
         let result: Result<CallServiceResponse, _> = rt.block_on(async {
-            invoker.invoke_service(&req.service_key, req.input, options).await
+            invoker
+                .invoke_service(&req.service_key, req.input, options)
+                .await
         });
 
         match result {
@@ -153,7 +186,10 @@ impl PluginHostFunctions {
                     Ok(rmp_serde::to_vec(&response).unwrap_or_default())
                 } else {
                     Ok(Self::err_service_response_msgpack(
-                        response.error.map(|e| e.message).unwrap_or_else(|| "服务执行失败".to_string())
+                        response
+                            .error
+                            .map(|e| e.message)
+                            .unwrap_or_else(|| "服务执行失败".to_string()),
                     ))
                 }
             }
@@ -181,38 +217,57 @@ impl PluginHostFunctions {
     //     Ok(rmp_serde::to_vec(&info).unwrap_or_default())
     // }
 
-
-
     /// 通过 RPC 调用远程插件函数
-    fn do_call_plugin_via_rpc(&self, server_name: &str, req: &PluginFunRequest) -> Result<Vec<u8>, HostFuncError> {
+    fn do_call_plugin_via_rpc(
+        &self,
+        server_name: &str,
+        req: &PluginFunRequest,
+    ) -> Result<Vec<u8>, HostFuncError> {
         if !cmx_rpc::GlobalRpcClient::is_initialized() {
-            return Ok(Self::err_plugin_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
+            return Ok(Self::err_plugin_response_msgpack(
+                "RPC 服务未启用，无法进行跨服务调用".to_string(),
+            ));
         }
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            cmx_rpc::orchestrator_client().call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone()).await
+            cmx_rpc::orchestrator_client()
+                .call_function(
+                    server_name,
+                    &req.plugin_id,
+                    &req.function_name,
+                    req.input.clone(),
+                )
+                .await
         });
 
         match result {
-            Ok(call_result) => {
-                Ok(rmp_serde::to_vec(&PluginFunCallResponse {
-                    success: call_result.success,
-                    result: call_result.result,
-                    elapsed_us: Some(call_result.elapsed_us),
-                    error: call_result.error,
-                }).unwrap_or_default())
-            }
+            Ok(call_result) => Ok(rmp_serde::to_vec(&PluginFunCallResponse {
+                success: call_result.success,
+                result: call_result.result,
+                elapsed_us: Some(call_result.elapsed_us),
+                error: call_result.error,
+            })
+            .unwrap_or_default()),
             Err(e) => {
                 warn!("[call_plugin:rpc] RPC 调用失败: {}", e);
-                Ok(Self::err_plugin_response_msgpack(format!("RPC 调用失败: {}", e)))
+                Ok(Self::err_plugin_response_msgpack(format!(
+                    "RPC 调用失败: {}",
+                    e
+                )))
             }
         }
     }
 
     /// 通过 RPC 调用远程服务编排
-    fn do_call_service_via_rpc(&self, server_name: &str, req: &CallServiceRequest) -> Result<Vec<u8>, HostFuncError> {
+    fn do_call_service_via_rpc(
+        &self,
+        server_name: &str,
+        req: &CallServiceRequest,
+    ) -> Result<Vec<u8>, HostFuncError> {
         if !cmx_rpc::GlobalRpcClient::is_initialized() {
-            return Ok(Self::err_service_response_msgpack("RPC 服务未启用，无法进行跨服务调用".to_string()));
+            return Ok(Self::err_service_response_msgpack(
+                "RPC 服务未启用，无法进行跨服务调用".to_string(),
+            ));
         }
         let options = ServiceInvokeOptions {
             include_steps: req.include_steps.unwrap_or(false),
@@ -222,14 +277,19 @@ impl PluginHostFunctions {
         };
         let rt = tokio::runtime::Handle::current();
         let result = rt.block_on(async {
-            cmx_rpc::orchestrator_client().call_service(server_name, &req.service_key, req.input.clone(), options).await
+            cmx_rpc::orchestrator_client()
+                .call_service(server_name, &req.service_key, req.input.clone(), options)
+                .await
         });
 
         match result {
             Ok(response) => Ok(rmp_serde::to_vec(&response).unwrap_or_default()),
             Err(e) => {
                 warn!("[call_service_by_key:rpc] RPC 调用失败: {}", e);
-                Ok(Self::err_service_response_msgpack(format!("RPC 调用失败: {}", e)))
+                Ok(Self::err_service_response_msgpack(format!(
+                    "RPC 调用失败: {}",
+                    e
+                )))
             }
         }
     }

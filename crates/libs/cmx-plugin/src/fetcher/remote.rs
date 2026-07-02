@@ -71,14 +71,16 @@ impl RemoteFetcher {
         let parsed = url::Url::parse(url)
             .map_err(|e| PluginError::Fetcher(format!("解析URL失败: {}", e)))?;
 
-        let path_segments: Vec<&str> = parsed.path_segments()
+        let path_segments: Vec<&str> = parsed
+            .path_segments()
             .map(|s| s.collect())
             .unwrap_or_default();
 
         if let Some(filename) = path_segments.last()
-            && !filename.is_empty() {
-                return Ok(filename.to_string());
-            }
+            && !filename.is_empty()
+        {
+            return Ok(filename.to_string());
+        }
 
         // 如果无法提取，生成随机文件名
         Ok(format!("plugin_{}.zip", uuid::Uuid::new_v4()))
@@ -94,18 +96,17 @@ impl RemoteFetcher {
                 Err(e) => {
                     last_error = e.to_string();
                     if attempt < self.max_retries - 1 {
-                        tracing::warn!(
-                            "下载失败，第 {} 次重试: {}",
-                            attempt + 1,
-                            url
-                        );
+                        tracing::warn!("下载失败，第 {} 次重试: {}", attempt + 1, url);
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 }
             }
         }
 
-        Err(PluginError::Fetcher(format!("下载失败，已重试 {} 次: {}", self.max_retries, last_error)))
+        Err(PluginError::Fetcher(format!(
+            "下载失败，已重试 {} 次: {}",
+            self.max_retries, last_error
+        )))
     }
 
     /// 下载文件
@@ -120,16 +121,21 @@ impl RemoteFetcher {
 
         tracing::info!("开始下载: {}", url);
 
-        let response = client.get(url)
+        let response = client
+            .get(url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("HTTP请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("HTTP响应错误: {}", response.status())));
+            return Err(PluginError::Fetcher(format!(
+                "HTTP响应错误: {}",
+                response.status()
+            )));
         }
 
-        let bytes = response.bytes()
+        let bytes = response
+            .bytes()
             .await
             .map_err(|e| PluginError::Fetcher(format!("读取响应体失败: {}", e)))?;
 
@@ -162,7 +168,10 @@ impl RemoteFetcher {
         let actual = format!("{:x}", md5::compute(&buffer));
 
         if actual != expected.to_lowercase() {
-            return Err(PluginError::Fetcher(format!("校验和不匹配: 期望 {}, 实际 {}", expected, actual)));
+            return Err(PluginError::Fetcher(format!(
+                "校验和不匹配: 期望 {}, 实际 {}",
+                expected, actual
+            )));
         }
 
         tracing::info!("校验和验证通过: {}", file_path.display());
@@ -175,8 +184,8 @@ impl RemoteFetcher {
     /// 验证下载文件的 SHA256 校验和。
     #[allow(dead_code)]
     fn verify_sha256(&self, file_path: &Path, expected: &str) -> PluginResult<()> {
+        use sha2::{Digest, Sha256};
         use std::io::Read;
-        use sha2::{Sha256, Digest};
 
         let mut file = std::fs::File::open(file_path)
             .map_err(|e| PluginError::Fetcher(format!("打开文件失败: {}", e)))?;
@@ -191,7 +200,10 @@ impl RemoteFetcher {
         let actual = format!("{:x}", result);
 
         if actual != expected.to_lowercase() {
-            return Err(PluginError::Fetcher(format!("SHA256校验和不匹配: 期望 {}, 实际 {}", expected, actual)));
+            return Err(PluginError::Fetcher(format!(
+                "SHA256校验和不匹配: 期望 {}, 实际 {}",
+                expected, actual
+            )));
         }
 
         tracing::info!("SHA256校验和验证通过: {}", file_path.display());
@@ -209,21 +221,27 @@ impl RemoteFetcher {
             .build()
             .map_err(|e| PluginError::Fetcher(format!("创建HTTP客户端失败: {}", e)))?;
 
-        let response = client.head(url)
+        let response = client
+            .head(url)
             .send()
             .await
             .map_err(|e| PluginError::Fetcher(format!("HEAD请求失败: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PluginError::Fetcher(format!("HTTP响应错误: {}", response.status())));
+            return Err(PluginError::Fetcher(format!(
+                "HTTP响应错误: {}",
+                response.status()
+            )));
         }
 
         let headers = response.headers();
-        let content_length = headers.get("content-length")
+        let content_length = headers
+            .get("content-length")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<u64>().ok());
 
-        let content_type = headers.get("content-type")
+        let content_type = headers
+            .get("content-type")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 

@@ -57,7 +57,8 @@ pub trait ServiceQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, TraitError>;
+    async fn get_service(&self, service_key: &str)
+    -> Result<Option<ServiceDefinition>, TraitError>;
 
     /// 根据插件 ID 查询所有服务。
     ///
@@ -72,7 +73,10 @@ pub trait ServiceQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, TraitError>;
+    async fn get_services_by_plugin(
+        &self,
+        plugin_id: &str,
+    ) -> Result<Vec<ServiceDefinition>, TraitError>;
 
     /// 查询所有启用的服务。
     ///
@@ -99,7 +103,10 @@ pub trait ServiceQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_orchestration(&self, service_key: &str) -> Result<Option<ServiceOrchestration>, TraitError>;
+    async fn get_orchestration(
+        &self,
+        service_key: &str,
+    ) -> Result<Option<ServiceOrchestration>, TraitError>;
 
     /// 分页查询服务列表。
     ///

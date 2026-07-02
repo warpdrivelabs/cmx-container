@@ -7,8 +7,8 @@ use fs_err::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use walkdir::WalkDir;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 /// ZIP 压缩器
 ///
@@ -42,7 +42,11 @@ impl ZipCompressor {
      * }
      * ```
      */
-    pub fn compress_file(source: impl AsRef<Path>, output: impl AsRef<Path>, compression_level: u32) -> ZipResult<()> {
+    pub fn compress_file(
+        source: impl AsRef<Path>,
+        output: impl AsRef<Path>,
+        compression_level: u32,
+    ) -> ZipResult<()> {
         let source = source.as_ref();
         let output = output.as_ref();
 
@@ -61,7 +65,8 @@ impl ZipCompressor {
             .compression_method(zip::CompressionMethod::Deflated)
             .compression_level(Some(compression_level as i64));
 
-        let file_name = source.file_name()
+        let file_name = source
+            .file_name()
             .ok_or_else(|| ZipError::Path("无法获取文件名".to_string()))?
             .to_string_lossy()
             .to_string();
@@ -104,7 +109,11 @@ impl ZipCompressor {
      * }
      * ```
      */
-    pub fn compress_dir(source: impl AsRef<Path>, output: impl AsRef<Path>, compression_level: u32) -> ZipResult<()> {
+    pub fn compress_dir(
+        source: impl AsRef<Path>,
+        output: impl AsRef<Path>,
+        compression_level: u32,
+    ) -> ZipResult<()> {
         let source = source.as_ref();
         let output = output.as_ref();
 
@@ -135,7 +144,8 @@ impl ZipCompressor {
 
             has_files = true;
 
-            let relative_path = path.strip_prefix(&base_path)
+            let relative_path = path
+                .strip_prefix(&base_path)
                 .map_err(|_| ZipError::Path("路径解析失败".to_string()))?;
 
             let relative_str = relative_path.to_string_lossy().replace('\\', "/");
@@ -179,7 +189,10 @@ impl ZipCompressor {
     /// # Errors
     ///
     /// 当源目录不存在、不是目录、为空或 IO 操作失败时返回错误。
-    pub fn compress_dir_to_memory(source: impl AsRef<Path>, compression_level: u32) -> ZipResult<Vec<u8>> {
+    pub fn compress_dir_to_memory(
+        source: impl AsRef<Path>,
+        compression_level: u32,
+    ) -> ZipResult<Vec<u8>> {
         let source = source.as_ref();
 
         if !source.exists() {
@@ -209,7 +222,8 @@ impl ZipCompressor {
 
             has_files = true;
 
-            let relative_path = path.strip_prefix(&base_path)
+            let relative_path = path
+                .strip_prefix(&base_path)
                 .map_err(|_| ZipError::Path("路径解析失败".to_string()))?;
 
             let relative_str = relative_path.to_string_lossy().replace('\\', "/");
@@ -261,7 +275,11 @@ impl ZipCompressor {
      * }
      * ```
      */
-    pub fn compress_files(sources: Vec<impl AsRef<Path>>, output: impl AsRef<Path>, compression_level: u32) -> ZipResult<()> {
+    pub fn compress_files(
+        sources: Vec<impl AsRef<Path>>,
+        output: impl AsRef<Path>,
+        compression_level: u32,
+    ) -> ZipResult<()> {
         let output = output.as_ref();
 
         if sources.is_empty() {
@@ -286,7 +304,8 @@ impl ZipCompressor {
                 return Err(ZipError::NotFile(source.display().to_string()));
             }
 
-            let file_name = source.file_name()
+            let file_name = source
+                .file_name()
                 .ok_or_else(|| ZipError::Path("无法获取文件名".to_string()))?
                 .to_string_lossy()
                 .to_string();

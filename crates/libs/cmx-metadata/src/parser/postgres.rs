@@ -13,9 +13,9 @@ use std::collections::HashMap;
 
 use regex::Regex;
 
-use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, IndexKind, TableDefine};
-use crate::MetadataError;
 use super::DdlParser;
+use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, IndexKind, TableDefine};
 
 /// PostgreSQL DDL 解析器
 ///
@@ -133,20 +133,24 @@ fn is_comment_on(stmt: &str) -> bool {
 fn parse_create_table_stmt(stmt: &str) -> Result<TableDefine, MetadataError> {
     // 使用正则提取表名（支持 schema.table 和 引号格式）
     let re_table = Regex::new(
-        r#"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?(\w+)"?\.)?"?(\w+)"?\s*\("#
-    ).expect("编译静态正则失败: CREATE TABLE 表名提取模式");
+        r#"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"?(\w+)"?\.)?"?(\w+)"?\s*\("#,
+    )
+    .expect("编译静态正则失败: CREATE TABLE 表名提取模式");
 
     let caps = re_table.captures(stmt).ok_or_else(|| {
-        MetadataError::DdlParse(format!("无法解析 CREATE TABLE 语句: {}", &stmt[..stmt.len().min(100)]))
+        MetadataError::DdlParse(format!(
+            "无法解析 CREATE TABLE 语句: {}",
+            &stmt[..stmt.len().min(100)]
+        ))
     })?;
 
     let schema = caps.get(1).map(|m| m.as_str().to_string());
     let table_name = caps[2].to_string();
 
     // 找到 CREATE TABLE 后的左括号位置
-    let paren_start = stmt.find('(').ok_or_else(|| {
-        MetadataError::DdlParse("CREATE TABLE 缺少左括号".to_string())
-    })?;
+    let paren_start = stmt
+        .find('(')
+        .ok_or_else(|| MetadataError::DdlParse("CREATE TABLE 缺少左括号".to_string()))?;
 
     // 找到匹配的右括号（考虑嵌套括号）
     let body = find_matching_paren(&stmt[paren_start..])?;
@@ -303,9 +307,9 @@ fn parse_column_def(def: &str) -> Option<ColumnDefine> {
 
     // 解析修饰符（NOT NULL, DEFAULT）
     let remaining = &tokens[1 + type_end_idx..];
-    let is_not_null = remaining.windows(2).any(|w| {
-        w[0].to_uppercase() == "NOT" && w[1].to_uppercase() == "NULL"
-    });
+    let is_not_null = remaining
+        .windows(2)
+        .any(|w| w[0].to_uppercase() == "NOT" && w[1].to_uppercase() == "NULL");
 
     let default_value = extract_default_value(remaining);
 
@@ -368,7 +372,16 @@ fn tokenize_column_def(def: &str) -> Vec<String> {
 }
 
 /// 解析 PG 类型字符串 → (FieldType, length, precision, scale, db_type_string, consumed_tokens)
-fn parse_pg_type(tokens: &[String]) -> (FieldType, Option<u32>, Option<u32>, Option<u32>, String, usize) {
+fn parse_pg_type(
+    tokens: &[String],
+) -> (
+    FieldType,
+    Option<u32>,
+    Option<u32>,
+    Option<u32>,
+    String,
+    usize,
+) {
     if tokens.is_empty() {
         return (FieldType::String, None, None, None, "TEXT".to_string(), 0);
     }
@@ -381,14 +394,25 @@ fn parse_pg_type(tokens: &[String]) -> (FieldType, Option<u32>, Option<u32>, Opt
             let len = extract_single_param(&tokens[0]);
             let mut consumed = 1;
             // CHARACTER VARYING(n)
-            if first_base == "CHARACTER" && tokens.len() > 1 && tokens[1].to_uppercase().starts_with("VARYING") {
+            if first_base == "CHARACTER"
+                && tokens.len() > 1
+                && tokens[1].to_uppercase().starts_with("VARYING")
+            {
                 let len2 = extract_single_param(&tokens[1]);
                 consumed = 2;
                 let l = len2.or(len);
-                let db = if let Some(l) = l { format!("VARCHAR({})", l) } else { "VARCHAR".to_string() };
+                let db = if let Some(l) = l {
+                    format!("VARCHAR({})", l)
+                } else {
+                    "VARCHAR".to_string()
+                };
                 return (FieldType::String, l, None, None, db, consumed);
             }
-            let db = if let Some(l) = len { format!("VARCHAR({})", l) } else { "VARCHAR".to_string() };
+            let db = if let Some(l) = len {
+                format!("VARCHAR({})", l)
+            } else {
+                "VARCHAR".to_string()
+            };
             (FieldType::String, len, None, None, db, consumed)
         }
         "TEXT" => (FieldType::Text, None, None, None, "TEXT".to_string(), 1),
@@ -399,10 +423,28 @@ fn parse_pg_type(tokens: &[String]) -> (FieldType, Option<u32>, Option<u32>, Opt
         "BIGSERIAL" => (FieldType::Int, None, None, None, "BIGSERIAL".to_string(), 1),
         "DOUBLE" => {
             // DOUBLE PRECISION
-            let consumed = if tokens.len() > 1 && tokens[1].to_uppercase() == "PRECISION" { 2 } else { 1 };
-            (FieldType::Float, None, None, None, "DOUBLE PRECISION".to_string(), consumed)
+            let consumed = if tokens.len() > 1 && tokens[1].to_uppercase() == "PRECISION" {
+                2
+            } else {
+                1
+            };
+            (
+                FieldType::Float,
+                None,
+                None,
+                None,
+                "DOUBLE PRECISION".to_string(),
+                consumed,
+            )
         }
-        "FLOAT8" => (FieldType::Float, None, None, None, "DOUBLE PRECISION".to_string(), 1),
+        "FLOAT8" => (
+            FieldType::Float,
+            None,
+            None,
+            None,
+            "DOUBLE PRECISION".to_string(),
+            1,
+        ),
         "REAL" | "FLOAT4" => (FieldType::Float, None, None, None, "REAL".to_string(), 1),
         "NUMERIC" | "DECIMAL" => {
             let (p, s) = extract_precision_scale(&tokens[0]);
@@ -425,7 +467,14 @@ fn parse_pg_type(tokens: &[String]) -> (FieldType, Option<u32>, Option<u32>, Opt
             {
                 consumed = 4;
             }
-            (FieldType::DateTime, None, None, None, "TIMESTAMP WITH TIME ZONE".to_string(), consumed)
+            (
+                FieldType::DateTime,
+                None,
+                None,
+                None,
+                "TIMESTAMP WITH TIME ZONE".to_string(),
+                consumed,
+            )
         }
         "DATE" => (FieldType::Date, None, None, None, "DATE".to_string(), 1),
         "BYTEA" => (FieldType::Binary, None, None, None, "BYTEA".to_string(), 1),
@@ -470,7 +519,13 @@ fn extract_default_value(tokens: &[String]) -> Option<String> {
                 let mut val_parts = Vec::new();
                 for token in &tokens[i + 1..] {
                     let u = token.to_uppercase();
-                    if u == "NOT" || u == "NULL" || u == "PRIMARY" || u == "REFERENCES" || u == "CHECK" || u == "CONSTRAINT" {
+                    if u == "NOT"
+                        || u == "NULL"
+                        || u == "PRIMARY"
+                        || u == "REFERENCES"
+                        || u == "CHECK"
+                        || u == "CONSTRAINT"
+                    {
                         break;
                     }
                     val_parts.push(token.clone());
@@ -503,7 +558,11 @@ fn parse_create_index_stmt(stmt: &str) -> Option<(String, IndexDefine)> {
         .filter(|c| !c.is_empty())
         .collect();
 
-    let kind = if is_unique { IndexKind::Unique } else { IndexKind::Normal };
+    let kind = if is_unique {
+        IndexKind::Unique
+    } else {
+        IndexKind::Normal
+    };
 
     Some((
         table_name,
@@ -519,8 +578,9 @@ fn parse_create_index_stmt(stmt: &str) -> Option<(String, IndexDefine)> {
 fn apply_comment(stmt: &str, tables: &mut HashMap<String, TableDefine>) {
     // COMMENT ON TABLE
     let re_table = Regex::new(
-        r#"(?i)COMMENT\s+ON\s+TABLE\s+(?:"?\w+"?\.)?"?(\w+)"?\s+IS\s+'((?:[^']|'')*)'?"#
-    ).ok();
+        r#"(?i)COMMENT\s+ON\s+TABLE\s+(?:"?\w+"?\.)?"?(\w+)"?\s+IS\s+'((?:[^']|'')*)'?"#,
+    )
+    .ok();
     if let Some(re) = &re_table
         && let Some(caps) = re.captures(stmt)
     {
@@ -621,25 +681,25 @@ mod tests {
         let table = parser.parse_create_table(ddl).unwrap();
         assert_eq!(table.columns.len(), 16);
 
-        assert_eq!(table.columns[0].field_type, FieldType::Int);     // BIGINT
-        assert_eq!(table.columns[1].field_type, FieldType::Int);     // INTEGER
-        assert_eq!(table.columns[2].field_type, FieldType::Int);     // SMALLINT
-        assert_eq!(table.columns[3].field_type, FieldType::Float);   // DOUBLE PRECISION
-        assert_eq!(table.columns[4].field_type, FieldType::Float);   // REAL
+        assert_eq!(table.columns[0].field_type, FieldType::Int); // BIGINT
+        assert_eq!(table.columns[1].field_type, FieldType::Int); // INTEGER
+        assert_eq!(table.columns[2].field_type, FieldType::Int); // SMALLINT
+        assert_eq!(table.columns[3].field_type, FieldType::Float); // DOUBLE PRECISION
+        assert_eq!(table.columns[4].field_type, FieldType::Float); // REAL
         assert_eq!(table.columns[5].field_type, FieldType::Decimal); // NUMERIC
         assert_eq!(table.columns[5].precision, Some(10));
         assert_eq!(table.columns[5].scale, Some(2));
-        assert_eq!(table.columns[6].field_type, FieldType::Bool);     // BOOLEAN
+        assert_eq!(table.columns[6].field_type, FieldType::Bool); // BOOLEAN
         assert_eq!(table.columns[7].field_type, FieldType::DateTime); // TIMESTAMP WITH TZ
         assert_eq!(table.columns[8].field_type, FieldType::DateTime); // TIMESTAMPTZ
-        assert_eq!(table.columns[9].field_type, FieldType::Date);     // DATE
-        assert_eq!(table.columns[10].field_type, FieldType::Text);    // TEXT
-        assert_eq!(table.columns[11].field_type, FieldType::String);  // VARCHAR
+        assert_eq!(table.columns[9].field_type, FieldType::Date); // DATE
+        assert_eq!(table.columns[10].field_type, FieldType::Text); // TEXT
+        assert_eq!(table.columns[11].field_type, FieldType::String); // VARCHAR
         assert_eq!(table.columns[11].length, Some(100));
-        assert_eq!(table.columns[12].field_type, FieldType::Binary);  // BYTEA
-        assert_eq!(table.columns[13].field_type, FieldType::Json);    // JSONB
-        assert_eq!(table.columns[14].field_type, FieldType::Json);    // JSON
-        assert_eq!(table.columns[15].field_type, FieldType::Uuid);    // UUID
+        assert_eq!(table.columns[12].field_type, FieldType::Binary); // BYTEA
+        assert_eq!(table.columns[13].field_type, FieldType::Json); // JSONB
+        assert_eq!(table.columns[14].field_type, FieldType::Json); // JSON
+        assert_eq!(table.columns[15].field_type, FieldType::Uuid); // UUID
     }
 
     #[test]
@@ -676,8 +736,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_ddl() {
-        use crate::ddl::postgres::PostgresDdlDialect;
         use crate::ddl::DdlDialect;
+        use crate::ddl::postgres::PostgresDdlDialect;
 
         // 构造 TableDefine
         let original = TableDefine {
@@ -692,11 +752,16 @@ mod tests {
                     is_nullable: false,
                     default_value: None,
                     i18n: false,
-                    length: None, precision: None, scale: None,
-                    db_type: None, ordinal: Some(1),
-                    create_time: None, update_time: None,
+                    length: None,
+                    precision: None,
+                    scale: None,
+                    db_type: None,
+                    ordinal: Some(1),
+                    create_time: None,
+                    update_time: None,
                     is_foreign_key: false,
-                    foreign_key_table: None, foreign_key_column: None,
+                    foreign_key_table: None,
+                    foreign_key_column: None,
                     extensions: HashMap::new(),
                 },
                 ColumnDefine {
@@ -707,11 +772,16 @@ mod tests {
                     is_nullable: false,
                     default_value: None,
                     i18n: false,
-                    length: Some(32), precision: None, scale: None,
-                    db_type: None, ordinal: Some(2),
-                    create_time: None, update_time: None,
+                    length: Some(32),
+                    precision: None,
+                    scale: None,
+                    db_type: None,
+                    ordinal: Some(2),
+                    create_time: None,
+                    update_time: None,
                     is_foreign_key: false,
-                    foreign_key_table: None, foreign_key_column: None,
+                    foreign_key_table: None,
+                    foreign_key_column: None,
                     extensions: HashMap::new(),
                 },
                 ColumnDefine {
@@ -722,27 +792,32 @@ mod tests {
                     is_nullable: true,
                     default_value: Some("0".to_string()),
                     i18n: false,
-                    length: None, precision: Some(10), scale: Some(2),
-                    db_type: None, ordinal: Some(3),
-                    create_time: None, update_time: None,
+                    length: None,
+                    precision: Some(10),
+                    scale: Some(2),
+                    db_type: None,
+                    ordinal: Some(3),
+                    create_time: None,
+                    update_time: None,
                     is_foreign_key: false,
-                    foreign_key_table: None, foreign_key_column: None,
+                    foreign_key_table: None,
+                    foreign_key_column: None,
                     extensions: HashMap::new(),
                 },
             ],
             primary_keys: vec!["id".to_string()],
-            indexes: vec![
-                IndexDefine {
-                    name: "uk_code".to_string(),
-                    columns: vec!["code".to_string()],
-                    kind: IndexKind::Unique,
-                },
-            ],
+            indexes: vec![IndexDefine {
+                name: "uk_code".to_string(),
+                columns: vec!["code".to_string()],
+                kind: IndexKind::Unique,
+            }],
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
             comment: Some("往返测试表".to_string()),
-            schema: None, tablespace: None,
+            schema: None,
+            tablespace: None,
             is_partitioned: false,
             partition_type: None,
             partition_columns: vec![],

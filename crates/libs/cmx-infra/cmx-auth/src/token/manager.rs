@@ -63,12 +63,7 @@ impl TokenManager {
     /// # Errors
     ///
     /// 当 Redis 写入失败时返回 `AuthInfraError`。
-    pub async fn store_refresh_token(
-        &self,
-        user_id: &str,
-        jti: &str,
-        device: &str,
-    ) -> Result<()> {
+    pub async fn store_refresh_token(&self, user_id: &str, jti: &str, device: &str) -> Result<()> {
         let ttl = Duration::from_secs(self.config.token.refresh_ttl_secs);
 
         // SET auth:{user_id}:refresh:{jti} device EX ttl
@@ -137,11 +132,7 @@ impl TokenManager {
     /// # Errors
     ///
     /// 当 Redis 写入失败时返回 `AuthInfraError`。
-    pub async fn blacklist_access_token(
-        &self,
-        jti: &str,
-        remaining_ttl: Duration,
-    ) -> Result<()> {
+    pub async fn blacklist_access_token(&self, jti: &str, remaining_ttl: Duration) -> Result<()> {
         self.blacklist.add(jti, remaining_ttl).await
     }
 

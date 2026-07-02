@@ -5,17 +5,17 @@
 //! - 通过数据库ID和事务ID执行 SQL 操作的函数
 //! - 通过数据库ID和事务ID执行 SQL 查询的函数
 //! - RAII 模式的 TransactionGuard，用于自动管理事务生命周期
+use crate::error::{Error, Result};
+use crate::transaction::core::{DbTransaction, Dbx};
+use crate::transaction::metadata::TransactionStatus;
+use crate::transaction::registry::{get_txn_holder_by_id, get_txn_holder_registry};
 use futures::future::BoxFuture;
 use std::sync::OnceLock;
 use tokio::sync::mpsc;
-use crate::error::{Error, Result};
-use crate::transaction::core::{Dbx, DbTransaction};
-use crate::transaction::registry::{get_txn_holder_registry, get_txn_holder_by_id};
-use crate::transaction::metadata::TransactionStatus;
 
+use crate::DataSet;
 use crate::executor::json_to_data_values;
 use crate::get_default_db_manager;
-use crate::DataSet;
 use cmx_core::model::cell::DataValue;
 use sea_query_sqlx::SqlxValues;
 use tracing::debug;
@@ -38,18 +38,21 @@ fn get_cleanup_sender() -> &'static mpsc::Sender<TxnCleanupCommand> {
                 match cmd {
                     TxnCleanupCommand::Rollback(txn_id) => {
                         if let Err(e) = rollback_txn_by_id(&txn_id).await {
-                            tracing::error!("TransactionGuard 自动回滚失败: txn_id={}, error={}", txn_id, e);
+                            tracing::error!(
+                                "TransactionGuard 自动回滚失败: txn_id={}, error={}",
+                                txn_id,
+                                e
+                            );
                         } else {
                             tracing::debug!("TransactionGuard 自动回滚成功: txn_id={}", txn_id);
                         }
-                    },
-                    // TxnCleanupCommand::Commit(txn_id) => {
-                    //     if let Err(e) = commit_txn_by_id(&txn_id).await {
-                    //         tracing::error!("TransactionGuard 自动提交失败: txn_id={}, error={}", txn_id, e);
-                    //     } else {
-                    //         tracing::debug!("TransactionGuard 自动提交成功: txn_id={}", txn_id);
-                    //     }
-                    // }
+                    } // TxnCleanupCommand::Commit(txn_id) => {
+                      //     if let Err(e) = commit_txn_by_id(&txn_id).await {
+                      //         tracing::error!("TransactionGuard 自动提交失败: txn_id={}, error={}", txn_id, e);
+                      //     } else {
+                      //         tracing::debug!("TransactionGuard 自动提交成功: txn_id={}", txn_id);
+                      //     }
+                      // }
                 }
             }
         });
@@ -285,12 +288,12 @@ pub async fn commit_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_commit
-            && let Some(txn) = txn_to_commit {
-                txn.commit().await?;
-                crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed).await;
-                get_txn_holder_registry().write().await.remove(txn_id);
-            }
+        if should_commit && let Some(txn) = txn_to_commit {
+            txn.commit().await?;
+            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::Committed)
+                .await;
+            get_txn_holder_registry().write().await.remove(txn_id);
+        }
     } else {
         return Err(Error::NoTxn);
     }
@@ -339,12 +342,12 @@ pub async fn rollback_txn_by_id(txn_id: &str) -> Result<()> {
         };
         result?;
 
-        if should_rollback
-            && let Some(txn) = txn_to_rollback {
-                txn.rollback().await?;
-                crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack).await;
-                get_txn_holder_registry().write().await.remove(txn_id);
-            }
+        if should_rollback && let Some(txn) = txn_to_rollback {
+            txn.rollback().await?;
+            crate::transaction::metadata::update_txn_status(txn_id, TransactionStatus::RolledBack)
+                .await;
+            get_txn_holder_registry().write().await.remove(txn_id);
+        }
     } else {
         return Err(Error::NoTxn);
     }
@@ -425,18 +428,24 @@ where
 /// * 底层的 sqlx 执行错误。
 pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result<u64> {
     let sql = sql.to_string();
-    debug!("execute_sql: db_id: {}, txn_id: {:?}, sql: {}", db_id, txn_id, sql);
+    debug!(
+        "execute_sql: db_id: {}, txn_id: {:?}, sql: {}",
+        db_id, txn_id, sql
+    );
     match txn_id {
         Some(txn_id) => {
-            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
-                let result = txn.execute(&sql).await?;
-                Ok(result)
-            })).await
-        },
+            with_transaction_by_id(txn_id, move |txn| {
+                Box::pin(async move {
+                    let result = txn.execute(&sql).await?;
+                    Ok(result)
+                })
+            })
+            .await
+        }
         None => {
             let dbx = get_dbx_by_db_id(db_id).await.ok_or(Error::NoDb)?;
             dbx.db().execute(&sql).await
-        },
+        }
     }
 }
 
@@ -463,53 +472,61 @@ pub async fn execute_sql(db_id: &str, txn_id: Option<&str>, sql: &str) -> Result
 /// * `Error::NoTxn` - 指定的事务ID不存在。
 /// * `Error::InvalidParams` - 参数类型与数据库不兼容，或参数数量与占位符不匹配。
 /// * 底层的 sqlx 执行错误。
-pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams) -> Result<u64> {
+pub async fn execute_sql_with_params(
+    db_id: &str,
+    txn_id: Option<&str>,
+    sql: &str,
+    params: SqlParams,
+) -> Result<u64> {
     let sql = sql.to_string();
-    debug!("execute_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, ", db_id, txn_id, sql);
+    debug!(
+        "execute_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, ",
+        db_id, txn_id, sql
+    );
     match txn_id {
         Some(txn_id) => {
-            with_transaction_by_id(txn_id, move |txn| Box::pin(async move {
-                let result = match params {
-                    SqlParams::Json(json) => {
-                        let values = json_to_data_values(json)
-                            .map_err(Error::InvalidParams)?;
-                        txn.execute_with_datavalues(&sql, &values).await?
-                    },
-                    SqlParams::DataValues(values) => {
-                        txn.execute_with_datavalues(&sql, &values).await?
-                    },
-                    SqlParams::SqlxValues(sqlx_values) => {
-                        txn.execute_with_sqlxvalues(&sql, sqlx_values).await?
-                    },
-                    SqlParams::Typed(params) => {
-                        let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
-                        txn.execute_with_datavalues(&sql, &values).await?
-                    },
-                };
-                Ok(result)
-            })).await
-        },
+            with_transaction_by_id(txn_id, move |txn| {
+                Box::pin(async move {
+                    let result = match params {
+                        SqlParams::Json(json) => {
+                            let values = json_to_data_values(json).map_err(Error::InvalidParams)?;
+                            txn.execute_with_datavalues(&sql, &values).await?
+                        }
+                        SqlParams::DataValues(values) => {
+                            txn.execute_with_datavalues(&sql, &values).await?
+                        }
+                        SqlParams::SqlxValues(sqlx_values) => {
+                            txn.execute_with_sqlxvalues(&sql, sqlx_values).await?
+                        }
+                        SqlParams::Typed(params) => {
+                            let values: Vec<DataValue> =
+                                params.into_iter().map(Into::into).collect();
+                            txn.execute_with_datavalues(&sql, &values).await?
+                        }
+                    };
+                    Ok(result)
+                })
+            })
+            .await
+        }
         None => {
             let dbx = get_dbx_by_db_id(db_id).await.ok_or(Error::NoDb)?;
             let pool = dbx.db();
             match params {
                 SqlParams::Json(json) => {
-                    let values = json_to_data_values(json)
-                        .map_err(Error::InvalidParams)?;
+                    let values = json_to_data_values(json).map_err(Error::InvalidParams)?;
                     pool.execute_with_datavalues(&sql, &values).await
-                },
-                SqlParams::DataValues(values) => {
-                    pool.execute_with_datavalues(&sql, &values).await
-                },
+                }
+                SqlParams::DataValues(values) => pool.execute_with_datavalues(&sql, &values).await,
                 SqlParams::SqlxValues(sqlx_values) => {
                     pool.execute_with_sqlxvalues(&sql, sqlx_values).await
-                },
+                }
                 SqlParams::Typed(params) => {
                     let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
                     pool.execute_with_datavalues(&sql, &values).await
-                },
+                }
             }
-        },
+        }
     }
 }
 
@@ -534,22 +551,33 @@ pub async fn execute_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &st
 /// * `Error::NoDb` - 指定的数据库ID不存在。
 /// * `Error::NoTxn` - 指定的事务ID不存在。
 /// * 底层的 sqlx 执行错误。
-pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql(
+    db_id: &str,
+    txn_id: Option<&str>,
+    sql: &str,
+    dataset_id: &str,
+) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    debug!("query_sql: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}",  db_id, txn_id, sql, dataset_id);
+    debug!(
+        "query_sql: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}",
+        db_id, txn_id, sql, dataset_id
+    );
 
     match txn_id {
         Some(txn_id) => {
-            with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                let result = txn.query(&sql, &dataset_id).await?;
-                Ok(result)
-            })).await
-        },
+            with_transaction_by_id(txn_id, |txn| {
+                Box::pin(async move {
+                    let result = txn.query(&sql, &dataset_id).await?;
+                    Ok(result)
+                })
+            })
+            .await
+        }
         None => {
             let dbx = get_dbx_by_db_id(db_id).await.ok_or(Error::NoDb)?;
             dbx.db().query(&sql, &dataset_id).await
-        },
+        }
     }
 }
 
@@ -577,54 +605,70 @@ pub async fn query_sql(db_id: &str, txn_id: Option<&str>, sql: &str, dataset_id:
 /// * `Error::NoTxn` - 指定的事务ID不存在。
 /// * `Error::InvalidParams` - 参数类型与数据库不兼容，或参数数量与占位符不匹配。
 /// * 底层的 sqlx 执行错误。
-pub async fn query_sql_with_params(db_id: &str, txn_id: Option<&str>, sql: &str, params: SqlParams, dataset_id: &str) -> Result<DataSet> {
+pub async fn query_sql_with_params(
+    db_id: &str,
+    txn_id: Option<&str>,
+    sql: &str,
+    params: SqlParams,
+    dataset_id: &str,
+) -> Result<DataSet> {
     let sql = sql.to_string();
     let dataset_id = dataset_id.to_string();
-    debug!("query_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}", db_id, txn_id, sql, dataset_id);
+    debug!(
+        "query_sql_with_params: db_id: {}, txn_id: {:?}, sql: {}, dataset_id: {}",
+        db_id, txn_id, sql, dataset_id
+    );
     match txn_id {
         Some(txn_id) => {
-            with_transaction_by_id(txn_id, |txn| Box::pin(async move {
-                let result = match params {
-                    SqlParams::Json(json) => {
-                        let values = json_to_data_values(json)
-                            .map_err(Error::InvalidParams)?;
-                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
-                    },
-                    SqlParams::DataValues(values) => {
-                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
-                    },
-                    SqlParams::SqlxValues(sqlx_values) => {
-                        txn.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id).await?
-                    },
-                    SqlParams::Typed(params) => {
-                        let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
-                        txn.query_with_datavalues(&sql, &values, &dataset_id).await?
-                    },
-                };
-                Ok(result)
-            })).await
-        },
+            with_transaction_by_id(txn_id, |txn| {
+                Box::pin(async move {
+                    let result = match params {
+                        SqlParams::Json(json) => {
+                            let values = json_to_data_values(json).map_err(Error::InvalidParams)?;
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
+                        }
+                        SqlParams::DataValues(values) => {
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
+                        }
+                        SqlParams::SqlxValues(sqlx_values) => {
+                            txn.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id)
+                                .await?
+                        }
+                        SqlParams::Typed(params) => {
+                            let values: Vec<DataValue> =
+                                params.into_iter().map(Into::into).collect();
+                            txn.query_with_datavalues(&sql, &values, &dataset_id)
+                                .await?
+                        }
+                    };
+                    Ok(result)
+                })
+            })
+            .await
+        }
         None => {
             let dbx = get_dbx_by_db_id(db_id).await.ok_or(Error::NoDb)?;
             let pool = dbx.db();
             match params {
                 SqlParams::Json(json) => {
-                    let values = json_to_data_values(json)
-                        .map_err(Error::InvalidParams)?;
+                    let values = json_to_data_values(json).map_err(Error::InvalidParams)?;
                     pool.query_with_datavalues(&sql, &values, &dataset_id).await
-                },
+                }
                 SqlParams::DataValues(values) => {
                     pool.query_with_datavalues(&sql, &values, &dataset_id).await
-                },
+                }
                 SqlParams::SqlxValues(sqlx_values) => {
-                    pool.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id).await
-                },
+                    pool.query_with_sqlxvalues(&sql, sqlx_values, &dataset_id)
+                        .await
+                }
                 SqlParams::Typed(params) => {
                     let values: Vec<DataValue> = params.into_iter().map(Into::into).collect();
                     pool.query_with_datavalues(&sql, &values, &dataset_id).await
-                },
+                }
             }
-        },
+        }
     }
 }
 

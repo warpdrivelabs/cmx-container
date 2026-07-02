@@ -2,10 +2,10 @@
 //!
 //! 定义插件生命周期事件的主题常量和载荷结构。
 
-use std::path::PathBuf;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 // ==================== 事件主题常量 ====================
 
@@ -66,7 +66,11 @@ impl PluginLifecyclePayload {
     /// # Returns
     ///
     /// 返回新的 [`PluginLifecyclePayload`]，`old_version`、`wasm_path`、`install_path` 默认为 `None`。
-    pub fn new(app_id: impl Into<String>, plugin_id: impl Into<String>, version: impl Into<String>) -> Self {
+    pub fn new(
+        app_id: impl Into<String>,
+        plugin_id: impl Into<String>,
+        version: impl Into<String>,
+    ) -> Self {
         Self {
             app_id: app_id.into(),
             plugin_id: plugin_id.into(),

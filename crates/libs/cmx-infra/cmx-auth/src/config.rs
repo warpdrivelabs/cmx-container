@@ -178,7 +178,6 @@ pub struct OAuth2ProviderConfig {
     pub enabled: bool,
 
     // === Token 响应解析配置 ===
-
     /// Token 响应嵌套路径（点分 JSON 路径，如 `data` 或 `result.data`）。
     ///
     /// 部分厂商将 Token 响应包装在 `{"code":0,"data":{...}}` 中，
@@ -194,7 +193,6 @@ pub struct OAuth2ProviderConfig {
     pub token_field_mapping: std::collections::HashMap<String, String>,
 
     // === 用户信息端点配置 ===
-
     /// 用户信息端点请求方法：`GET`（默认）或 `POST`。
     #[serde(default = "default_userinfo_method")]
     pub userinfo_method: String,
@@ -214,13 +212,11 @@ pub struct OAuth2ProviderConfig {
     pub userinfo_response_path: String,
 
     // === 授权 URL 配置 ===
-
     /// 授权 URL 额外参数（如 Azure AD `resource` 参数）。
     #[serde(default)]
     pub authorize_extra_params: std::collections::HashMap<String, String>,
 
     // === 网络配置 ===
-
     /// 是否跳过 SSL 证书验证（仅内网自签名证书场景使用，生产环境慎用）。
     #[serde(default)]
     pub skip_ssl_verification: bool,
@@ -398,9 +394,10 @@ impl StaticApiKeyConfig {
     /// 否则从 `key` 前 8 位提取（key 长度不足 8 时取全部）。
     pub fn resolve_key_prefix(&self) -> String {
         if let Some(prefix) = &self.key_prefix
-            && !prefix.is_empty() {
-                return prefix.clone();
-            }
+            && !prefix.is_empty()
+        {
+            return prefix.clone();
+        }
         // 从 key 前 8 位提取（key 长度不足 8 时取全部）
         if self.key.len() >= 8 {
             self.key[..8].to_string()
@@ -487,10 +484,7 @@ mod tests {
     use super::*;
 
     /// 构造一个 `StaticApiKeyConfig`，便于测试。
-    fn make_config(
-        key: &str,
-        key_prefix: Option<&str>,
-    ) -> StaticApiKeyConfig {
+    fn make_config(key: &str, key_prefix: Option<&str>) -> StaticApiKeyConfig {
         StaticApiKeyConfig {
             key: key.to_string(),
             key_prefix: key_prefix.map(|s| s.to_string()),
@@ -522,10 +516,7 @@ mod tests {
         );
 
         let prefix = config.resolve_key_prefix();
-        assert_eq!(
-            prefix, "custom_prefix",
-            "显式配置的 key_prefix 应被使用"
-        );
+        assert_eq!(prefix, "custom_prefix", "显式配置的 key_prefix 应被使用");
     }
 
     #[test]
@@ -534,10 +525,7 @@ mod tests {
         let config = make_config("cmx_sk_Ab3dEf9hJkLmN2pQrStUvWxYz123456", Some(""));
 
         let prefix = config.resolve_key_prefix();
-        assert_eq!(
-            prefix, "cmx_sk_A",
-            "显式空配置应回退到 key 前 8 位"
-        );
+        assert_eq!(prefix, "cmx_sk_A", "显式空配置应回退到 key 前 8 位");
     }
 
     #[test]
@@ -546,10 +534,7 @@ mod tests {
         let config = make_config("short", None);
 
         let prefix = config.resolve_key_prefix();
-        assert_eq!(
-            prefix, "short",
-            "短 key 应直接使用整个 key 作为 prefix"
-        );
+        assert_eq!(prefix, "short", "短 key 应直接使用整个 key 作为 prefix");
     }
 
     #[test]
@@ -558,10 +543,7 @@ mod tests {
         let config = make_config("12345678", None);
 
         let prefix = config.resolve_key_prefix();
-        assert_eq!(
-            prefix, "12345678",
-            "8 位 key 应使用整个 key 作为 prefix"
-        );
+        assert_eq!(prefix, "12345678", "8 位 key 应使用整个 key 作为 prefix");
     }
 
     #[test]

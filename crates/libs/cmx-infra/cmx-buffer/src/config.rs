@@ -127,12 +127,22 @@ impl RedisConfig {
 
         let subscribe_channels = config
             .get_string("redis.subscribe_channels")
-            .map(|s| s.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect())
+            .map(|s| {
+                s.split(',')
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty())
+                    .collect()
+            })
             .unwrap_or_default();
 
         let subscribe_patterns = config
             .get_string("redis.subscribe_patterns")
-            .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+            .map(|s| {
+                s.split(',')
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty())
+                    .collect()
+            })
             .unwrap_or_default();
 
         RedisConfig {

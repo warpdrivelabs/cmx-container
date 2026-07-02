@@ -5,13 +5,13 @@
 //! 注意：DatabaseManager 通过 get_default_db_manager() 全局获取，不需要通过 state 传递
 
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
 use crate::Result;
+use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
+use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
-use axum::Json;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_core::{DeletePayload, GetParams, ListParams, PageParams, UpdatePayload};
 use cmx_database::crud::{DbBmc, GenericCrudService};
@@ -132,7 +132,8 @@ where
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = GenericCrudService::<MC>::update(mm, &db_id, None, payload.id, payload.data).await?;
+    let dataset =
+        GenericCrudService::<MC>::update(mm, &db_id, None, payload.id, payload.data).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -210,7 +211,10 @@ pub async fn list<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups> + modql::filter::IntoFilterNodes+ Clone,
+    F: DeserializeOwned
+        + Into<modql::filter::FilterGroups>
+        + modql::filter::IntoFilterNodes
+        + Clone,
 {
     debug!("{:<12} - handler::list", "HANDLER");
 
@@ -218,9 +222,10 @@ where
     let db_id = get_db_id_from_header(&headers).await;
     let list_options = params.to_list_options();
 
-    let  filters = params.filters.clone().filter(|v| !v.is_empty());
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
 
-    let dataset = GenericCrudService::<MC, F>::list(mm, &db_id, None, filters, Some(list_options)).await?;
+    let dataset =
+        GenericCrudService::<MC, F>::list(mm, &db_id, None, filters, Some(list_options)).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }
@@ -243,7 +248,10 @@ pub async fn page<MC, F>(
 ) -> Result<Json<ApiResp<DataSet>>>
 where
     MC: DbBmc,
-    F: DeserializeOwned + Into<modql::filter::FilterGroups> + modql::filter::IntoFilterNodes+ Clone,
+    F: DeserializeOwned
+        + Into<modql::filter::FilterGroups>
+        + modql::filter::IntoFilterNodes
+        + Clone,
 {
     debug!("{:<12} - handler::page", "HANDLER");
 
@@ -255,7 +263,8 @@ where
     let list_options = params.to_list_options();
     let filters = params.filters.clone().filter(|v| !v.is_empty());
 
-    let (dataset, total) = GenericCrudService::<MC, F>::page(mm, &db_id, None, filters, list_options).await?;
+    let (dataset, total) =
+        GenericCrudService::<MC, F>::page(mm, &db_id, None, filters, list_options).await?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
@@ -264,4 +273,3 @@ where
         total as u64,
     )))
 }
-

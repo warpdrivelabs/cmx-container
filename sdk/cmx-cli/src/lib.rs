@@ -9,9 +9,9 @@ pub mod generator;
 pub mod models;
 pub mod parser;
 
-pub use ast_parser::{parse_structs, TypeRegistry, ResolvedField};
+pub use ast_parser::{ResolvedField, TypeRegistry, parse_structs};
 pub use cli::commands::run;
 pub use generator::ast_json_gen::generate_ast_document;
-pub use models::doc_types::{PluginDocument, FunctionDoc};
+pub use models::doc_types::{FunctionDoc, PluginDocument};
 pub use parser::ast_parser::parse_rust_file;
 pub use parser::doc_parser::parse_doc_comments;

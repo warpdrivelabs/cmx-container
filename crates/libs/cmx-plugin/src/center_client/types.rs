@@ -1,7 +1,7 @@
 //! 基础服务中心数据类型定义。
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// 数据类别枚举。
 ///
@@ -111,12 +111,7 @@ impl DispatchResult {
         self.results
             .iter()
             .filter(|r| {
-                r.result.is_err()
-                    || !r
-                        .result
-                        .as_ref()
-                        .map(|resp| resp.success)
-                        .unwrap_or(false)
+                r.result.is_err() || !r.result.as_ref().map(|resp| resp.success).unwrap_or(false)
             })
             .collect()
     }
@@ -126,8 +121,7 @@ impl DispatchResult {
         self.results
             .iter()
             .filter(|r| {
-                r.result.is_ok()
-                    && r.result.as_ref().map(|resp| resp.success).unwrap_or(false)
+                r.result.is_ok() && r.result.as_ref().map(|resp| resp.success).unwrap_or(false)
             })
             .collect()
     }

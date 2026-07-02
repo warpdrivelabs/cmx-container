@@ -102,7 +102,7 @@ mod tests {
     fn build_basic() {
         let mut b = ParamsBuilder::new(1);
         b.set("name", "alice".to_string())
-         .set_opt("age", Some(30_i64));
+            .set_opt("age", Some(30_i64));
         let (clause, params) = b.build();
         assert_eq!(clause, "name = $2, age = $3");
         assert_eq!(params.len(), 2);
@@ -113,8 +113,7 @@ mod tests {
     #[test]
     fn set_opt_none_skips() {
         let mut b = ParamsBuilder::new(0);
-        b.set("a", "x".to_string())
-         .set_opt("b", None::<String>);
+        b.set("a", "x".to_string()).set_opt("b", None::<String>);
         let (clause, params) = b.build();
         assert_eq!(clause, "a = $1");
         assert_eq!(params.len(), 1);
@@ -168,9 +167,7 @@ mod tests {
     #[test]
     fn multiple_columns_with_offset() {
         let mut b = ParamsBuilder::new(2); // $1, $2 已占用
-        b.set("a", "x".to_string())
-         .set("b", 1_i64)
-         .set("c", true);
+        b.set("a", "x".to_string()).set("b", 1_i64).set("c", true);
         let (clause, params) = b.build();
         assert_eq!(clause, "a = $3, b = $4, c = $5");
         assert_eq!(params.len(), 3);

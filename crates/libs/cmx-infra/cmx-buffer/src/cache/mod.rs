@@ -13,8 +13,7 @@ pub mod ttl;
 pub use hash::HashOps;
 pub use ops::CacheOps;
 pub use pubsub::{
-    ChannelHandler, FnChannelHandler, GlobalSubscriber, GlobalSubscriberManager,
-    PubSubOps,
+    ChannelHandler, FnChannelHandler, GlobalSubscriber, GlobalSubscriberManager, PubSubOps,
 };
 pub use script::ScriptOps;
 pub use set::SetOps;

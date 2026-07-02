@@ -5,8 +5,8 @@
 
 use std::path::Path;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::io::AsyncWriteExt;
 
 use crate::error::{PortalError, PortalResult};
@@ -49,7 +49,9 @@ pub async fn write_json_atomic<T: Serialize>(
     pretty: bool,
 ) -> PortalResult<()> {
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(PortalError::Io)?;
     }
     let data = if pretty {
         serde_json::to_vec_pretty(value)?
@@ -60,7 +62,9 @@ pub async fn write_json_atomic<T: Serialize>(
     // 同目录临时文件：用 pid + 纳秒时间戳避免并发碰撞，写完 fsync 再 rename。
     let tmp = tmp_sibling(path);
     {
-        let mut f = tokio::fs::File::create(&tmp).await.map_err(PortalError::Io)?;
+        let mut f = tokio::fs::File::create(&tmp)
+            .await
+            .map_err(PortalError::Io)?;
         f.write_all(&data).await.map_err(PortalError::Io)?;
         f.flush().await.map_err(PortalError::Io)?;
         f.sync_all().await.map_err(PortalError::Io)?;
@@ -78,12 +82,18 @@ pub async fn write_json_atomic<T: Serialize>(
 /// 原子写入纯文本（用于 native page 源文件 js/html）：临时文件 + rename，自动建父目录。
 pub async fn write_text_atomic(path: &Path, text: &str) -> PortalResult<()> {
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(PortalError::Io)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(PortalError::Io)?;
     }
     let tmp = tmp_sibling(path);
     {
-        let mut f = tokio::fs::File::create(&tmp).await.map_err(PortalError::Io)?;
-        f.write_all(text.as_bytes()).await.map_err(PortalError::Io)?;
+        let mut f = tokio::fs::File::create(&tmp)
+            .await
+            .map_err(PortalError::Io)?;
+        f.write_all(text.as_bytes())
+            .await
+            .map_err(PortalError::Io)?;
         f.flush().await.map_err(PortalError::Io)?;
         f.sync_all().await.map_err(PortalError::Io)?;
     }

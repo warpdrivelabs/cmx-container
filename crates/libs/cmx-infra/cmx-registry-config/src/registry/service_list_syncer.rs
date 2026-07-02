@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time::interval;
-use tracing::{debug, info, warn, instrument};
+use tracing::{debug, info, instrument, warn};
 
 use super::instance_cache::ServiceInstanceCache;
 use super::registry_traits::{InstanceChangeCallback, ServiceInstance, ServiceRegistry};

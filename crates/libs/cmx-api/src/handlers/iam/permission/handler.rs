@@ -2,8 +2,8 @@
 //!
 //! 薄层 handler，调用 cmx-iam PermissionService 处理业务逻辑。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use cmx_core::model::iam::{Permission, PermissionTreeNode};
 use serde::Deserialize;
 use tracing::debug;
@@ -30,11 +30,14 @@ pub async fn create_permission(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(data): Json<PermissionForCreate>,
 ) -> Result<Json<ApiResp<Permission>>> {
-    debug!("{:<12} - handler::create_permission - code: {}", "HANDLER", data.code);
+    debug!(
+        "{:<12} - handler::create_permission - code: {}",
+        "HANDLER", data.code
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let permission = iam
         .permission_service
@@ -63,11 +66,14 @@ pub async fn get_permission(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Query(params): Query<cmx_core::GetParams>,
 ) -> Result<Json<ApiResp<Permission>>> {
-    debug!("{:<12} - handler::get_permission - id: {}", "HANDLER", params.id);
+    debug!(
+        "{:<12} - handler::get_permission - id: {}",
+        "HANDLER", params.id
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let permission = iam
         .permission_service
@@ -100,11 +106,14 @@ pub async fn update_permission(
         .ok_or_else(|| Error::business_error("无效的权限ID".to_string()))?
         .to_string();
 
-    debug!("{:<12} - handler::update_permission - id: {}", "HANDLER", permission_id);
+    debug!(
+        "{:<12} - handler::update_permission - id: {}",
+        "HANDLER", permission_id
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let permission = iam
         .permission_service
@@ -137,11 +146,15 @@ pub async fn delete_permission(
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
 
-    debug!("{:<12} - handler::delete_permission - count: {}", "HANDLER", permission_ids.len());
+    debug!(
+        "{:<12} - handler::delete_permission - count: {}",
+        "HANDLER",
+        permission_ids.len()
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let outcome = iam
         .permission_service
@@ -180,9 +193,9 @@ pub async fn page_permissions(
 ) -> Result<Json<ApiResp<Vec<Permission>>>> {
     debug!("{:<12} - handler::page_permissions", "HANDLER");
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let page_number = params.get_page() as u64;
     let page_size = params.get_size() as u64;
@@ -195,7 +208,12 @@ pub async fn page_permissions(
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok_with_pagination(permissions, page_number, page_size, total as u64)))
+    Ok(Json(ApiResp::ok_with_pagination(
+        permissions,
+        page_number,
+        page_size,
+        total as u64,
+    )))
 }
 
 /// 列表查询权限
@@ -215,9 +233,9 @@ pub async fn list_permissions(
 ) -> Result<Json<ApiResp<Vec<Permission>>>> {
     debug!("{:<12} - handler::list_permissions", "HANDLER");
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let list_options = params.to_list_options();
     let filters = params.filters.clone().filter(|v| !v.is_empty());
@@ -268,9 +286,9 @@ pub async fn get_permission_tree(
         "HANDLER", query.domain_code, query.app_code, query.module_code
     );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let tree = iam
         .permission_service

@@ -38,7 +38,9 @@ impl GlobalRuntime {
     /// - `Err(GlobalRuntimeError)` - 已设置过，无法重复设置。
     #[allow(clippy::result_unit_err)]
     pub fn set(runtime: std::sync::Arc<dyn RuntimeInvoker>) -> Result<(), GlobalRuntimeError> {
-        RUNTIME.set(runtime).map_err(|_| GlobalRuntimeError::ALREADY_SET)
+        RUNTIME
+            .set(runtime)
+            .map_err(|_| GlobalRuntimeError::ALREADY_SET)
     }
 
     /// 获取全局运行时实例。
@@ -47,7 +49,9 @@ impl GlobalRuntime {
     ///
     /// 如果未初始化则 panic。
     pub fn get() -> &'static std::sync::Arc<dyn RuntimeInvoker> {
-        RUNTIME.get().expect("GlobalRuntime 未初始化，请先调用 GlobalRuntime::set()")
+        RUNTIME
+            .get()
+            .expect("GlobalRuntime 未初始化，请先调用 GlobalRuntime::set()")
     }
 
     /// 检查是否已初始化。

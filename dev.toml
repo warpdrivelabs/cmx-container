@@ -47,7 +47,7 @@ db_id = "primary"
 db_type = "postgres"
 # 数据库连接 URL（必需）
 #db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
-db_url = "postgresql://postgres:postgres@192.168.137.80:5432/cmx"
+db_url = "postgresql://postgres:postgres@localhost:5432/fico"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 # 是否为默认数据库（可选，默认 false）
 default = true

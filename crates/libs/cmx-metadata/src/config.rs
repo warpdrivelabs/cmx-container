@@ -16,12 +16,12 @@
 //! let tables = manager.load_all_tables(&base_path)?;
 //! ```
 
+use crate::MetadataError;
+use crate::loader::load_table_defines_from_path;
+use cmx_core::model::cell::TableDefine;
+use cmx_core::model::meta::plugin::{SeedDataConfig, TableDefinesConfig};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use cmx_core::model::cell::TableDefine;
-use cmx_core::model::meta::plugin::{TableDefinesConfig, SeedDataConfig};
-use crate::loader::load_table_defines_from_path;
-use crate::MetadataError;
 
 /// 从 JSON 文件路径读取单个建表配置
 ///
@@ -31,7 +31,9 @@ use crate::MetadataError;
 /// # 返回值
 /// * 成功返回 `TableDefinesConfig`
 /// * 失败返回 `MetadataError`
-pub fn load_table_defines_config_from_path(path: &Path) -> Result<TableDefinesConfig, MetadataError> {
+pub fn load_table_defines_config_from_path(
+    path: &Path,
+) -> Result<TableDefinesConfig, MetadataError> {
     let s = std::fs::read_to_string(path)?;
     let config: TableDefinesConfig = serde_json::from_str(&s)?;
     Ok(config)
@@ -60,7 +62,9 @@ pub struct TableDefinesConfigManager {
 impl TableDefinesConfigManager {
     /// 创建一个新的配置管理器实例
     pub fn new() -> Self {
-        Self { configs: Vec::new() }
+        Self {
+            configs: Vec::new(),
+        }
     }
 
     /// 从多个配置文件路径创建配置管理器

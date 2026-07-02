@@ -16,28 +16,45 @@ use crate::types::*;
 
 impl DefaultStorageService {
     /// 生成下载预签名 URL（[`crate::service::StorageService::presign_download`] 的实现）。
-    pub(super) async fn presign_download(&self, file_id: &str, expires: Duration) -> Result<String> {
+    pub(super) async fn presign_download(
+        &self,
+        file_id: &str,
+        expires: Duration,
+    ) -> Result<String> {
         let detail = self.find_file_detail(file_id).await?;
 
-        let path = detail.path.as_deref()
+        let path = detail
+            .path
+            .as_deref()
             .ok_or_else(|| Error::PresignError(format!("文件 {} 无存储路径", file_id)))?;
 
         let backend = self.manager.get_backend(detail.platform.as_deref())?;
         let url = backend.presign_read(path, expires).await?;
 
-        info!(file_id = file_id, expires_secs = expires.as_secs(), "生成下载预签名 URL");
+        info!(
+            file_id = file_id,
+            expires_secs = expires.as_secs(),
+            "生成下载预签名 URL"
+        );
         Ok(url)
     }
 
     /// 生成上传预签名 URL（[`crate::service::StorageService::presign_upload`] 的实现）。
-    pub(super) async fn presign_upload(&self, request: PresignUploadRequest, expires: Duration) -> Result<PresignUploadResult> {
+    pub(super) async fn presign_upload(
+        &self,
+        request: PresignUploadRequest,
+        expires: Duration,
+    ) -> Result<PresignUploadResult> {
         let platform = request.platform.clone();
         let backend = self.manager.get_backend(platform.as_deref())?;
-        let config = self.manager.get_config(backend.platform())
+        let config = self
+            .manager
+            .get_config(backend.platform())
             .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", backend.platform())))?;
 
         let ext = extract_extension(&request.filename);
-        let (storage_path, _filename) = generate_storage_path(&config.base_path, None, &ext, &config.storage_type);
+        let (storage_path, _filename) =
+            generate_storage_path(&config.base_path, None, &ext, &config.storage_type);
 
         let url = backend.presign_write(&storage_path, expires).await?;
 
@@ -52,7 +69,11 @@ impl DefaultStorageService {
             platform: Some(backend.platform().to_string()),
             original_filename: Some(request.filename),
             content_type: request.content_type,
-            ext: Some(if ext.starts_with('.') { ext.clone() } else { format!(".{}", ext) }),
+            ext: Some(if ext.starts_with('.') {
+                ext.clone()
+            } else {
+                format!(".{}", ext)
+            }),
             upload_status: Some(0),
             ..Default::default()
         };

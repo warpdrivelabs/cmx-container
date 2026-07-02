@@ -224,8 +224,7 @@ impl RpcServiceBundle for PluginDataBundle {
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration {
         let data_importer = deps.data_importer.clone();
         ServerRegistration::new(move |server| {
-            let impl_ =
-                crate::server::plugin_data::CmxPluginDataServerImpl::new(data_importer);
+            let impl_ = crate::server::plugin_data::CmxPluginDataServerImpl::new(data_importer);
             let svc = volo_grpc::server::ServiceBuilder::new(
                 plugin_data_proto::CmxPluginDataServiceServer::new(impl_),
             )

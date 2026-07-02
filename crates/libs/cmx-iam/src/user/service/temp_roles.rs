@@ -3,18 +3,18 @@
 //! 实现 [`crate::service_traits::UserService`] 的临时角色授权生命周期方法
 //! （分配/撤销/批量撤销/延长）与有效权限聚合查询。
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
 use tracing::debug;
 
 use crate::audit_helper::AuditHelper;
 use crate::error::IamError;
-use crate::user::service::UserServiceImpl;
 use crate::service_traits::{
     EffectivePermissionsResponse, PermissionSummary, RoleSummary, UserRoleAssignment,
 };
+use crate::user::service::UserServiceImpl;
 
 impl UserServiceImpl {
     /// 分配临时角色（带有效期，[`crate::service_traits::UserService::assign_temp_role`] 的实现）。
@@ -62,15 +62,15 @@ impl UserServiceImpl {
             DataValue::String(role_id.to_string()),
             DataValue::DateTime(effective_from),
             DataValue::DateTime(effective_until),
-            reason.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null),
+            reason
+                .map(|s| DataValue::String(s.to_string()))
+                .unwrap_or(DataValue::Null),
             DataValue::String(source.to_string()),
         ];
         self.mm
             .execute_sql_with_datavalues(&self.db_id, None, insert_sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("分配临时角色失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("分配临时角色失败: {e}"))))?;
 
         // 审计日志
         let audit_detail = serde_json::json!({
@@ -103,9 +103,7 @@ impl UserServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "temp_assignment")
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("查询临时授权失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询临时授权失败: {e}"))))?;
 
         Self::extract_assignments(dataset)
             .into_iter()
@@ -146,9 +144,7 @@ impl UserServiceImpl {
             .mm
             .execute_sql_with_datavalues(&self.db_id, None, update_sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("撤销临时角色失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("撤销临时角色失败: {e}"))))?;
 
         if affected == 0 {
             return Err(TraitError::from(IamError::Business(format!(
@@ -164,7 +160,9 @@ impl UserServiceImpl {
                 .mm
                 .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "revoke_get_user")
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("查询用户ID失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("查询用户ID失败: {e}")))
+                })?;
             let schema = dataset.schema.as_ref();
             dataset
                 .iter()
@@ -226,7 +224,13 @@ impl UserServiceImpl {
             let params = vec![DataValue::String(assignment_id.clone())];
             if let Ok(dataset) = self
                 .mm
-                .query_sql_with_datavalues(&self.db_id, Some(txn_id), query_sql, params, "batch_revoke_get_user")
+                .query_sql_with_datavalues(
+                    &self.db_id,
+                    Some(txn_id),
+                    query_sql,
+                    params,
+                    "batch_revoke_get_user",
+                )
                 .await
             {
                 let schema = dataset.schema.as_ref();
@@ -234,9 +238,10 @@ impl UserServiceImpl {
                     .iter()
                     .next()
                     .and_then(|row| row.get_by_name_as::<String>(schema, "user_id"))
-                    && !affected_user_ids.contains(&uid) {
-                        affected_user_ids.push(uid);
-                    }
+                    && !affected_user_ids.contains(&uid)
+                {
+                    affected_user_ids.push(uid);
+                }
             }
 
             let update_sql = r#"
@@ -316,9 +321,7 @@ impl UserServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, None, query_sql, params, "query_assignment")
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("查询临时授权失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询临时授权失败: {e}"))))?;
 
         let schema = dataset.schema.as_ref();
         let row = dataset.iter().next().ok_or_else(|| {
@@ -355,9 +358,7 @@ impl UserServiceImpl {
         self.mm
             .execute_sql_with_datavalues(&self.db_id, None, update_sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("延长临时授权失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("延长临时授权失败: {e}"))))?;
 
         // 审计日志（target_id 为 user_id）
         let audit_detail = serde_json::json!({
@@ -503,7 +504,13 @@ impl UserServiceImpl {
         let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, expired_count_sql, params, "expired_count")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                expired_count_sql,
+                params,
+                "expired_count",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("统计过期角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -523,9 +530,17 @@ impl UserServiceImpl {
         let params = vec![DataValue::String(user_id.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, upcoming_sql, params, "upcoming_expirations")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                upcoming_sql,
+                params,
+                "upcoming_expirations",
+            )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("统计即将过期角色失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("统计即将过期角色失败: {e}")))
+            })?;
         let schema = dataset.schema.as_ref();
         let upcoming_expirations = dataset
             .iter()

@@ -21,13 +21,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use cmx_buffer::CacheManager;
-use cmx_core::AuthContext;
-use cmx_traits::auth::{
-    AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo, OAuth2CallbackExchangeResult,
-    OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserInfo, UserAuthQuery,
-};
 use crate::config::AuthConfig;
 use crate::error::Result;
 use crate::jwt::JwtManager;
@@ -36,6 +29,14 @@ use crate::password::{Argon2Hasher, PasswordHistory, PasswordPolicy};
 use crate::policy::OAuth2Policy;
 use crate::session::SessionManager;
 use crate::token::TokenManager;
+use async_trait::async_trait;
+use cmx_buffer::CacheManager;
+use cmx_core::AuthContext;
+use cmx_traits::auth::{
+    AuthError, AuthService, AuthStorageQuery, Credentials, DeviceInfo,
+    OAuth2CallbackExchangeResult, OAuth2CallbackResult, OAuth2ClientData, TokenPair, UserAuthQuery,
+    UserInfo,
+};
 
 mod apikey;
 mod login;
@@ -116,7 +117,8 @@ impl AuthServiceImpl {
         let password_policy = PasswordPolicy::new();
         let password_history = PasswordHistory::new(cache.clone(), password_hasher.clone());
         let oauth2_store = crate::oauth2::OAuth2Store::new(cache.clone(), config.clone());
-        let account_link_config = config.oauth2
+        let account_link_config = config
+            .oauth2
             .as_ref()
             .map(|c| c.account_link.clone())
             .unwrap_or_default();
@@ -173,7 +175,10 @@ impl AuthService for AuthServiceImpl {
         self.validate_token(token).await
     }
 
-    async fn refresh_token(&self, refresh_token: &str) -> std::result::Result<TokenPair, AuthError> {
+    async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> std::result::Result<TokenPair, AuthError> {
         self.refresh_token(refresh_token).await
     }
 
@@ -320,14 +325,22 @@ impl AuthStorageQuery for AuthServiceImpl {
         scopes: &[String],
         description: Option<&str>,
     ) -> std::result::Result<(), cmx_traits::error::TraitError> {
-        self.upsert_api_key(key_prefix, key_hash, user_id, service_name, scopes, description)
-            .await
+        self.upsert_api_key(
+            key_prefix,
+            key_hash,
+            user_id,
+            service_name,
+            scopes,
+            description,
+        )
+        .await
     }
 
     async fn get_api_key_by_prefix(
         &self,
         key_prefix: &str,
-    ) -> std::result::Result<Option<cmx_traits::auth::ApiKeyData>, cmx_traits::error::TraitError> {
+    ) -> std::result::Result<Option<cmx_traits::auth::ApiKeyData>, cmx_traits::error::TraitError>
+    {
         self.get_api_key_by_prefix(key_prefix).await
     }
 

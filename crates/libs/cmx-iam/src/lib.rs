@@ -23,7 +23,9 @@ pub mod user;
 pub mod user_auth_query_impl;
 
 // Re-export cmx-core 基础数据模型
-pub use cmx_core::model::iam::{Permission, PermissionTreeNode, Role, RoleGroup, RoleGroupTreeNode, User};
+pub use cmx_core::model::iam::{
+    Permission, PermissionTreeNode, Role, RoleGroup, RoleGroupTreeNode, User,
+};
 
 // Re-export WASM 宿主函数提供者
 pub use host_functions::IamHostFunctions;
@@ -36,6 +38,7 @@ pub use permission::PluginDataImporterImpl;
 pub use role_group::RoleGroupServiceImpl;
 pub use rule::{ExclusionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
 pub use service_traits::{
-    PermissionService, RoleGroupService, RoleService, TempAssignmentStatusFilter, UserService, UserRoleAssignment,
+    PermissionService, RoleGroupService, RoleService, TempAssignmentStatusFilter,
+    UserRoleAssignment, UserService,
 };
 pub use user_auth_query_impl::UserAuthQueryImpl;

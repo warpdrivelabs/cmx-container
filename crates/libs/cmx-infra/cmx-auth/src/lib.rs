@@ -24,9 +24,9 @@ pub mod api_key;
 pub mod metrics;
 
 pub use auth_service_impl::AuthServiceImpl;
-pub use config::AuthConfig;
-pub use config::SuperAdminConfig;
-pub use config::StaticApiKeyConfig;
-pub use config::OAuth2ProviderConfig;
 pub use config::AccountLinkConfig;
+pub use config::AuthConfig;
+pub use config::OAuth2ProviderConfig;
+pub use config::StaticApiKeyConfig;
+pub use config::SuperAdminConfig;
 pub use error::AuthInfraError;

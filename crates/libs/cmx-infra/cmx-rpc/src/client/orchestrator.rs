@@ -253,9 +253,9 @@ impl RpcServiceBundle for OrchestratorBundle {
                 service_invoker,
                 function_invoker,
             );
-            let svc = volo_grpc::server::ServiceBuilder::new(
-                CmxServiceOrchestratorServer::new(impl_),
-            )
+            let svc = volo_grpc::server::ServiceBuilder::new(CmxServiceOrchestratorServer::new(
+                impl_,
+            ))
             .build::<CmxServiceOrchestratorRequestRecv, CmxServiceOrchestratorResponseSend>();
             server.add_service(svc)
         })
@@ -289,10 +289,8 @@ fn proto_to_call_service_response(resp: ExecuteServiceResponse) -> CallServiceRe
             })
             .collect(),
         total_elapsed_us: Some(resp.total_elapsed_us),
-        error: resp
-            .error
-            .map(|e| cmx_core::OrchestrationError {
-                message: e.message.to_string(),
-            }),
+        error: resp.error.map(|e| cmx_core::OrchestrationError {
+            message: e.message.to_string(),
+        }),
     }
 }

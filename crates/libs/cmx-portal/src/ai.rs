@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::error::{PortalError, PortalResult};
 
@@ -22,11 +22,19 @@ fn ai_model() -> String {
 }
 
 fn ai_timeout_ms() -> u64 {
-    std::env::var("CMX_AI_TIMEOUT_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(30000).max(1000)
+    std::env::var("CMX_AI_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30000)
+        .max(1000)
 }
 
 fn ai_max_history() -> usize {
-    std::env::var("CMX_AI_MAX_HISTORY").ok().and_then(|s| s.parse().ok()).unwrap_or(20).clamp(1, 50)
+    std::env::var("CMX_AI_MAX_HISTORY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20)
+        .clamp(1, 50)
 }
 
 fn ai_system_prompt() -> String {
@@ -52,7 +60,11 @@ pub fn is_configured() -> bool {
 /// 调用 OpenAI 兼容 chat/completions，返回 assistant 文本（供 agent LlmPlanner 复用）。
 ///
 /// `messages` 为完整消息数组（含 system）。`json_mode` 为 true 时请求 `response_format: json_object`。
-pub async fn raw_chat_completion(messages: Value, json_mode: bool, temperature: f64) -> PortalResult<String> {
+pub async fn raw_chat_completion(
+    messages: Value,
+    json_mode: bool,
+    temperature: f64,
+) -> PortalResult<String> {
     if !is_configured() {
         return Err(PortalError::business("AI 服务未配置"));
     }
@@ -62,7 +74,10 @@ pub async fn raw_chat_completion(messages: Value, json_mode: bool, temperature: 
         "temperature": temperature,
     });
     if json_mode {
-        payload.as_object_mut().unwrap().insert("response_format".to_string(), serde_json::json!({ "type": "json_object" }));
+        payload.as_object_mut().unwrap().insert(
+            "response_format".to_string(),
+            serde_json::json!({ "type": "json_object" }),
+        );
     }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(ai_timeout_ms()))
@@ -84,7 +99,10 @@ pub async fn raw_chat_completion(messages: Value, json_mode: bool, temperature: 
     let status = resp.status();
     let data: Value = resp.json().await.unwrap_or(serde_json::json!({}));
     if !status.is_success() {
-        let msg = data.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str())
+        let msg = data
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("上游 AI 服务返回 {}", status.as_u16()));
         return Err(PortalError::business(msg));
@@ -96,14 +114,20 @@ pub async fn raw_chat_completion(messages: Value, json_mode: bool, temperature: 
         .and_then(|m| m.get("content"))
         .and_then(|v| v.as_str())
         .filter(|s| !s.trim().is_empty());
-    content.map(|s| s.to_string()).ok_or_else(|| PortalError::business("上游 AI 服务没有返回有效回复"))
+    content
+        .map(|s| s.to_string())
+        .ok_or_else(|| PortalError::business("上游 AI 服务没有返回有效回复"))
 }
 
 /// 流式调用 OpenAI 兼容 chat/completions（DeepSeek `stream:true`）。
 ///
 /// 每收到一个 token 增量即调用 `on_delta(&str)`，返回拼接后的完整文本。用于 agent 逐字输出。
 /// 任一环节失败返回 Err（调用方可回退到非流式或本地总结）。
-pub async fn stream_chat_completion<F>(messages: Value, temperature: f64, mut on_delta: F) -> PortalResult<String>
+pub async fn stream_chat_completion<F>(
+    messages: Value,
+    temperature: f64,
+    mut on_delta: F,
+) -> PortalResult<String>
 where
     F: FnMut(&str),
 {
@@ -138,7 +162,10 @@ where
     let status = resp.status();
     if !status.is_success() {
         let data: Value = resp.json().await.unwrap_or(serde_json::json!({}));
-        let msg = data.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str())
+        let msg = data
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("上游 AI 服务返回 {}", status.as_u16()));
         return Err(PortalError::business(msg));
@@ -155,7 +182,9 @@ where
         while let Some(nl) = buf.find('\n') {
             let line = buf[..nl].trim().to_string();
             buf.drain(..=nl);
-            let Some(data) = line.strip_prefix("data:") else { continue };
+            let Some(data) = line.strip_prefix("data:") else {
+                continue;
+            };
             let data = data.trim();
             if data.is_empty() || data == "[DONE]" {
                 continue;
@@ -222,7 +251,11 @@ pub async fn chat(body: &Value) -> PortalResult<Value> {
             "AI 服务未配置：请设置 CMX_AI_API_KEY 或 DEEPSEEK_API_KEY".to_string(),
         ));
     }
-    let raw_messages = body.get("messages").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let raw_messages = body
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     if raw_messages.is_empty() {
         return Err(PortalError::bad_request("messages 不能为空"));
     }
@@ -248,12 +281,24 @@ pub async fn chat(body: &Value) -> PortalResult<Value> {
     let system_content = if context_text.is_empty() {
         ai_system_prompt()
     } else {
-        format!("{}\n\n当前门户上下文：\n{}", ai_system_prompt(), context_text)
+        format!(
+            "{}\n\n当前门户上下文：\n{}",
+            ai_system_prompt(),
+            context_text
+        )
     };
-    let model = body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(ai_model);
+    let model = body
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(ai_model);
 
     let mut messages = vec![json!({ "role": "system", "content": system_content })];
-    messages.extend(safe_messages.into_iter().filter(|m| m.get("role").and_then(|v| v.as_str()) != Some("system")));
+    messages.extend(
+        safe_messages
+            .into_iter()
+            .filter(|m| m.get("role").and_then(|v| v.as_str()) != Some("system")),
+    );
 
     let payload = json!({ "model": model, "messages": messages, "temperature": 0.7 });
 
@@ -278,7 +323,10 @@ pub async fn chat(body: &Value) -> PortalResult<Value> {
     let status = resp.status();
     let data: Value = resp.json().await.unwrap_or(json!({}));
     if !status.is_success() {
-        let msg = data.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str())
+        let msg = data
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
             .or_else(|| data.get("message").and_then(|v| v.as_str()))
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("上游 AI 服务返回 {}", status.as_u16()));

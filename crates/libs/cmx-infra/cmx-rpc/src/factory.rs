@@ -51,7 +51,11 @@ pub fn init_rpc_clients(
         "初始化 RPC 客户端（gRPC）"
     );
 
-    let infra = Arc::new(GrpcInfrastructure::new(cache, config.grpc.clone(), registry));
+    let infra = Arc::new(GrpcInfrastructure::new(
+        cache,
+        config.grpc.clone(),
+        registry,
+    ));
     let bundles = bundle::default_bundles();
     for b in &bundles {
         b.init_client(infra.clone());

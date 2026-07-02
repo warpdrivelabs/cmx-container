@@ -191,7 +191,11 @@ pub trait StorageService: Send + Sync + 'static {
     ///
     /// * 当存储后端不支持预签名写入时返回 `UnsupportedError`
     /// * 当数据库操作失败时返回错误
-    async fn presign_upload(&self, request: PresignUploadRequest, expires: Duration) -> Result<PresignUploadResult>;
+    async fn presign_upload(
+        &self,
+        request: PresignUploadRequest,
+        expires: Duration,
+    ) -> Result<PresignUploadResult>;
 
     /// 复制文件
     ///
@@ -226,7 +230,10 @@ pub trait StorageService: Send + Sync + 'static {
     ///
     /// * 当存储后端不支持预签名写入时返回 `UnsupportedError`
     /// * 当数据库操作失败时返回错误
-    async fn init_multipart_upload(&self, request: MultipartInitRequest) -> Result<MultipartSession>;
+    async fn init_multipart_upload(
+        &self,
+        request: MultipartInitRequest,
+    ) -> Result<MultipartSession>;
 
     /// 上传分片回调
     ///
@@ -342,7 +349,11 @@ impl StorageService for DefaultStorageService {
         self.presign_download(file_id, expires).await
     }
 
-    async fn presign_upload(&self, request: PresignUploadRequest, expires: Duration) -> Result<PresignUploadResult> {
+    async fn presign_upload(
+        &self,
+        request: PresignUploadRequest,
+        expires: Duration,
+    ) -> Result<PresignUploadResult> {
         self.presign_upload(request, expires).await
     }
 
@@ -350,7 +361,10 @@ impl StorageService for DefaultStorageService {
         self.copy_file(file_id, target_platform).await
     }
 
-    async fn init_multipart_upload(&self, request: MultipartInitRequest) -> Result<MultipartSession> {
+    async fn init_multipart_upload(
+        &self,
+        request: MultipartInitRequest,
+    ) -> Result<MultipartSession> {
         self.init_multipart_upload(request).await
     }
 

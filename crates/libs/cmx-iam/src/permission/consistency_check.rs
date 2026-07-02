@@ -50,7 +50,10 @@ impl ConsistencyReport {
 /// 直接查询 DB 全部权限码（含已归档，绕过 archived 过滤）。
 ///
 /// 确保一致性校验比对的是全量数据。
-async fn list_all_permission_codes(mm: &DatabaseManager, db_id: &str) -> Result<Vec<String>, TraitError> {
+async fn list_all_permission_codes(
+    mm: &DatabaseManager,
+    db_id: &str,
+) -> Result<Vec<String>, TraitError> {
     let sql = "SELECT code FROM cmx_permission";
     let dataset = mm
         .query_sql(db_id, None, sql, "permission_codes")
@@ -62,11 +65,10 @@ async fn list_all_permission_codes(mm: &DatabaseManager, db_id: &str) -> Result<
         .rows
         .iter()
         .filter_map(|row| {
-            row.get_by_name(schema, "code")
-                .and_then(|v| match v {
-                    cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
-                    _ => None,
-                })
+            row.get_by_name(schema, "code").and_then(|v| match v {
+                cmx_core::model::cell::DataValue::String(s) => Some(s.clone()),
+                _ => None,
+            })
         })
         .collect();
 

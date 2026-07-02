@@ -1,10 +1,10 @@
 //! 内存审计存储（测试用）
 
+use super::{AuditFilter, AuditStore};
+use crate::{AuditRecord, Result};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::{AuditRecord, Result};
-use super::{AuditStore, AuditFilter};
 
 /// 内存审计存储
 pub struct MemoryAuditStore {
@@ -38,31 +38,63 @@ impl AuditStore for MemoryAuditStore {
         Ok(())
     }
 
-    async fn query(&self, filter: &AuditFilter, limit: u64, offset: u64) -> Result<Vec<AuditRecord>> {
+    async fn query(
+        &self,
+        filter: &AuditFilter,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<AuditRecord>> {
         let store = self.records.read().await;
         let filtered: Vec<AuditRecord> = store
             .iter()
             .filter(|r| {
                 if let Some(ref domain) = filter.domain
-                    && &r.domain != domain { return false; }
+                    && &r.domain != domain
+                {
+                    return false;
+                }
                 if let Some(ref actor_id) = filter.actor_id
-                    && r.actor_id.as_ref() != Some(actor_id) { return false; }
+                    && r.actor_id.as_ref() != Some(actor_id)
+                {
+                    return false;
+                }
                 if let Some(ref target_type) = filter.target_type
-                    && r.target_type.as_ref() != Some(target_type) { return false; }
+                    && r.target_type.as_ref() != Some(target_type)
+                {
+                    return false;
+                }
                 if let Some(ref target_id) = filter.target_id
-                    && r.target_id.as_ref() != Some(target_id) { return false; }
+                    && r.target_id.as_ref() != Some(target_id)
+                {
+                    return false;
+                }
                 if let Some(ref request_id) = filter.request_id
-                    && r.request_id.as_ref() != Some(request_id) { return false; }
+                    && r.request_id.as_ref() != Some(request_id)
+                {
+                    return false;
+                }
                 if let Some(ref result) = filter.result
-                    && &r.result != result { return false; }
+                    && &r.result != result
+                {
+                    return false;
+                }
                 if let Some(from) = filter.from
-                    && r.started_at < from { return false; }
+                    && r.started_at < from
+                {
+                    return false;
+                }
                 if let Some(to) = filter.to
-                    && r.started_at > to { return false; }
+                    && r.started_at > to
+                {
+                    return false;
+                }
                 // 按 ID 精确列表过滤（行级匹配，与 DatabaseAuditStore 行为一致）
                 if let Some(ref ids) = filter.ids
                     && !ids.is_empty()
-                    && !ids.iter().any(|id| id == &r.id) { return false; }
+                    && !ids.iter().any(|id| id == &r.id)
+                {
+                    return false;
+                }
                 // 注：app_id 不在内存存储过滤（进程内单租户，隐式归属同一 app_id）
                 true
             })
@@ -87,9 +119,15 @@ mod tests {
     #[tokio::test]
     async fn memory_save_and_query() -> Result<()> {
         let store = MemoryAuditStore::new();
-        store.save(&sample(AuditDomain::Auth, "login", "u1")).await?;
-        store.save(&sample(AuditDomain::Iam, "role_assign", "u2")).await?;
-        store.save(&sample(AuditDomain::Biz, "app_create", "u3")).await?;
+        store
+            .save(&sample(AuditDomain::Auth, "login", "u1"))
+            .await?;
+        store
+            .save(&sample(AuditDomain::Iam, "role_assign", "u2"))
+            .await?;
+        store
+            .save(&sample(AuditDomain::Biz, "app_create", "u3"))
+            .await?;
 
         let all = store.query(&AuditFilter::default(), 100, 0).await?;
         assert_eq!(all.len(), 3);
@@ -99,9 +137,15 @@ mod tests {
     #[tokio::test]
     async fn memory_query_with_filter() -> Result<()> {
         let store = MemoryAuditStore::new();
-        store.save(&sample(AuditDomain::Auth, "login", "u1")).await?;
-        store.save(&sample(AuditDomain::Iam, "role_assign", "u2")).await?;
-        store.save(&sample(AuditDomain::Auth, "logout", "u1")).await?;
+        store
+            .save(&sample(AuditDomain::Auth, "login", "u1"))
+            .await?;
+        store
+            .save(&sample(AuditDomain::Iam, "role_assign", "u2"))
+            .await?;
+        store
+            .save(&sample(AuditDomain::Auth, "logout", "u1"))
+            .await?;
 
         // 按 domain 过滤
         let auth = store
@@ -169,4 +213,3 @@ mod tests {
         Ok(())
     }
 }
-

@@ -18,8 +18,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_core::model::iam::{Role, User};
 use cmx_core::SVRContext;
+use cmx_core::model::iam::{Role, User};
 use cmx_database::DatabaseManager;
 use cmx_traits::auth::AuthService;
 use cmx_traits::error::TraitError;
@@ -138,7 +138,11 @@ impl UserService for UserServiceImpl {
         self.update_user(svr_ctx, user_id, data).await
     }
 
-    async fn delete_user(&self, svr_ctx: &SVRContext, user_ids: &[String]) -> Result<(), TraitError> {
+    async fn delete_user(
+        &self,
+        svr_ctx: &SVRContext,
+        user_ids: &[String],
+    ) -> Result<(), TraitError> {
         self.delete_user(svr_ctx, user_ids).await
     }
 
@@ -228,8 +232,7 @@ impl UserService for UserServiceImpl {
         user_id: &str,
         status_filter: TempAssignmentStatusFilter,
     ) -> Result<Vec<UserRoleAssignment>, TraitError> {
-        self.get_user_temp_assignments(user_id, status_filter)
-            .await
+        self.get_user_temp_assignments(user_id, status_filter).await
     }
 
     async fn get_role_temp_assigned_users(

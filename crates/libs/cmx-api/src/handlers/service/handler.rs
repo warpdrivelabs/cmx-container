@@ -34,27 +34,25 @@
 // ==================== 依赖导入 ====================
 
 use super::models::{
-    FunctionCallRequest, FunctionCallResponse,
-    OpenApiQuery,
-    ServiceByPluginQuery, ServiceDebugPrepareResult, ServiceDetailResponse, ServiceExecuteRequest,
-    ServiceExecuteResponse,
-    ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
+    FunctionCallRequest, FunctionCallResponse, OpenApiQuery, ServiceByPluginQuery,
+    ServiceDebugPrepareResult, ServiceDetailResponse, ServiceExecuteRequest,
+    ServiceExecuteResponse, ServiceExecutionStep, ServiceExistsQuery, ServiceGetQuery,
     ServiceListItem, ServiceOrchestrationError,
 };
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
 use crate::Error;
+use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
-use cmx_core::model::service::SVRContext;
 use cmx_core::PageParams;
+use cmx_core::model::service::SVRContext;
 use cmx_database::get_default_db_manager;
 use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::RuntimeInvoker;
-use cmx_traits::service::{ServicePageFilter, ServiceQuery, ServiceInvokeOptions};
+use cmx_traits::service::{ServiceInvokeOptions, ServicePageFilter, ServiceQuery};
 // use tracing::error;
 use std::sync::Arc;
 
@@ -193,10 +191,12 @@ pub async fn service_call(
 
     // ==================== 获取依赖组件 ====================
 
-    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
+    let runtime: &Arc<dyn RuntimeInvoker> = state
+        .runtime_invoker()
         .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
 
-    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
+    let plugin_query: &Arc<dyn PluginQuery> = state
+        .plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
     // ==================== 调用核心逻辑（cmx-biz） ====================
@@ -216,7 +216,9 @@ pub async fn service_call(
     // ==================== 构建响应 ====================
 
     if !invoke_result.success {
-        let error_msg = invoke_result.error.unwrap_or_else(|| "未知错误".to_string());
+        let error_msg = invoke_result
+            .error
+            .unwrap_or_else(|| "未知错误".to_string());
         return Err(Error::business_error(error_msg));
     }
 
@@ -271,13 +273,16 @@ async fn execute_service_inner(
     svr_context: SVRContext,
     options: cmx_service::ExecuteOptions,
 ) -> Result<ServiceExecuteResponse, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let runtime: &Arc<dyn RuntimeInvoker> = state.runtime_invoker()
+    let runtime: &Arc<dyn RuntimeInvoker> = state
+        .runtime_invoker()
         .ok_or_else(|| Error::internal_error("运行时未初始化"))?;
 
-    let plugin_query: &Arc<dyn PluginQuery> = state.plugin_query()
+    let plugin_query: &Arc<dyn PluginQuery> = state
+        .plugin_query()
         .ok_or_else(|| Error::internal_error("插件管理器未初始化"))?;
 
     let default_db_id = get_default_db_manager().get_default_db_id().await;
@@ -300,38 +305,44 @@ async fn execute_service_inner(
     let response = ServiceExecuteResponse {
         success: core_result.success,
         output: core_result.final_output,
-        steps: core_result.steps.into_iter().map(|s| ServiceExecutionStep {
-            node_id: s.node_id,
-            node_name: s.node_name,
-            node_type: s.node_type,
-            status: s.status,
-            output: s.output,
-            elapsed_us: s.elapsed_us,
-            error: s.error,
-            previous_output: s.previous_output,
-        }).collect(),
+        steps: core_result
+            .steps
+            .into_iter()
+            .map(|s| ServiceExecutionStep {
+                node_id: s.node_id,
+                node_name: s.node_name,
+                node_type: s.node_type,
+                status: s.status,
+                output: s.output,
+                elapsed_us: s.elapsed_us,
+                error: s.error,
+                previous_output: s.previous_output,
+            })
+            .collect(),
         total_elapsed_us: core_result.total_elapsed_us,
-        error: core_result.error.map(|e| ServiceOrchestrationError {
-            message: e.message,
-        }),
+        error: core_result
+            .error
+            .map(|e| ServiceOrchestrationError { message: e.message }),
         debug_triggered: core_result.debug_triggered,
-        debug_prepare_result: core_result.debug_prepare_result.map(|d| ServiceDebugPrepareResult {
-            code_server_url: d.code_server_url,
-            plugin_id: d.plugin_id,
-            plugin_name: d.plugin_name,
-            plugin_version: d.plugin_version,
-            plugin_status: d.plugin_status,
-            plugin_install_path: d.plugin_install_path,
-            plugin_wasm_path: d.plugin_wasm_path,
-            plugin_type: d.plugin_type,
-            domain_code: d.domain_code,
-            application_code: d.application_code,
-            module_code: d.module_code,
-            function_name: d.function_name,
-            source_path: d.source_path,
-            node_id: d.node_id,
-            node_name: d.node_name,
-        }),
+        debug_prepare_result: core_result
+            .debug_prepare_result
+            .map(|d| ServiceDebugPrepareResult {
+                code_server_url: d.code_server_url,
+                plugin_id: d.plugin_id,
+                plugin_name: d.plugin_name,
+                plugin_version: d.plugin_version,
+                plugin_status: d.plugin_status,
+                plugin_install_path: d.plugin_install_path,
+                plugin_wasm_path: d.plugin_wasm_path,
+                plugin_type: d.plugin_type,
+                domain_code: d.domain_code,
+                application_code: d.application_code,
+                module_code: d.module_code,
+                function_name: d.function_name,
+                source_path: d.source_path,
+                node_id: d.node_id,
+                node_name: d.node_name,
+            }),
     };
 
     Ok(response)
@@ -428,9 +439,12 @@ pub async fn execute_service(
     svr_ctx.initial_input = req.input.clone();
 
     let include_steps = include_steps || debug;
-    let options = cmx_service::ExecuteOptions::new(include_steps)
-        .with_debug(debug, debug_node_id, debug_params);
-    if req.service_key.clone().is_none(){
+    let options = cmx_service::ExecuteOptions::new(include_steps).with_debug(
+        debug,
+        debug_node_id,
+        debug_params,
+    );
+    if req.service_key.clone().is_none() {
         return Ok(Json(ApiResp::fail(1, "service_key 不能为空")));
     }
     let service_key = req.service_key.clone().unwrap();
@@ -444,7 +458,11 @@ pub async fn execute_service(
 
     // 失败时返回错误码
     if !response.success {
-        let error_message = response.error.as_ref().map(|e| e.message.clone()).unwrap_or_default();
+        let error_message = response
+            .error
+            .as_ref()
+            .map(|e| e.message.clone())
+            .unwrap_or_default();
         return Ok(Json(ApiResp::fail_with_data(1, error_message, response)));
     }
 
@@ -529,10 +547,12 @@ pub async fn execute_service_by_key(
     let mut svr_ctx = svr_ctx;
     svr_ctx.initial_input = req.input.clone();
 
-
     let include_steps = include_steps || debug;
-    let options = cmx_service::ExecuteOptions::new(include_steps)
-        .with_debug(debug, debug_node_id, debug_params);
+    let options = cmx_service::ExecuteOptions::new(include_steps).with_debug(
+        debug,
+        debug_node_id,
+        debug_params,
+    );
 
     // 跨服务 RPC 调用
     if let Some(ref server_name) = req.server_name {
@@ -557,7 +577,12 @@ async fn call_function_via_rpc(
         return Err(Error::business_error("RPC 服务未启用，无法进行跨服务调用"));
     }
     let result = cmx_rpc::orchestrator_client()
-        .call_function(server_name, &req.plugin_id, &req.function_name, req.input.clone())
+        .call_function(
+            server_name,
+            &req.plugin_id,
+            &req.function_name,
+            req.input.clone(),
+        )
         .await
         .map_err(|e| Error::business_error(format!("RPC 调用失败: {}", e)))?;
 
@@ -595,18 +620,24 @@ async fn execute_service_via_rpc(
     let response = ServiceExecuteResponse {
         success: result.success,
         output: result.output,
-        steps: result.steps.into_iter().map(|s| ServiceExecutionStep {
-            node_id: s.node_id,
-            node_name: s.node_name,
-            node_type: s.node_type,
-            status: cmx_biz::service_executor::step_status_to_str(&s.status).to_string(),
-            output: s.output,
-            elapsed_us: s.elapsed_us,
-            error: s.error,
-            previous_output: s.previous_output,
-        }).collect(),
+        steps: result
+            .steps
+            .into_iter()
+            .map(|s| ServiceExecutionStep {
+                node_id: s.node_id,
+                node_name: s.node_name,
+                node_type: s.node_type,
+                status: cmx_biz::service_executor::step_status_to_str(&s.status).to_string(),
+                output: s.output,
+                elapsed_us: s.elapsed_us,
+                error: s.error,
+                previous_output: s.previous_output,
+            })
+            .collect(),
         total_elapsed_us: result.total_elapsed_us.unwrap_or(0),
-        error: result.error.map(|e| ServiceOrchestrationError { message: e.message }),
+        error: result
+            .error
+            .map(|e| ServiceOrchestrationError { message: e.message }),
         debug_triggered: None,
         debug_prepare_result: None,
     };
@@ -678,10 +709,13 @@ pub async fn get_service(
     State(state): State<CmxAppState>,
     Query(query): Query<ServiceGetQuery>,
 ) -> Result<Json<ApiResp<ServiceDetailResponse>>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let service = service_query.get_service(&query.service_key).await
+    let service = service_query
+        .get_service(&query.service_key)
+        .await
         .map_err(|e| Error::business_error(format!("获取服务失败: {}", e)))?;
 
     match service {
@@ -704,7 +738,10 @@ pub async fn get_service(
             };
             Ok(Json(ApiResp::ok(detail)))
         }
-        None => Err(Error::business_error(format!("服务 {} 不存在", query.service_key))),
+        None => Err(Error::business_error(format!(
+            "服务 {} 不存在",
+            query.service_key
+        ))),
     }
 }
 
@@ -775,14 +812,18 @@ pub async fn get_services_by_plugin(
     State(state): State<CmxAppState>,
     Query(query): Query<ServiceByPluginQuery>,
 ) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let services = service_query.get_services_by_plugin(&query.plugin_id).await
+    let services = service_query
+        .get_services_by_plugin(&query.plugin_id)
+        .await
         .map_err(|e| Error::business_error(format!("获取插件服务失败: {}", e)))?;
 
-    let items: Vec<ServiceListItem> = services.into_iter().map(|s| {
-        ServiceListItem {
+    let items: Vec<ServiceListItem> = services
+        .into_iter()
+        .map(|s| ServiceListItem {
             id: s.id,
             service_key: s.service_key,
             service_name: s.service_name,
@@ -798,8 +839,8 @@ pub async fn get_services_by_plugin(
             module_name: s.module_name,
             plugin_name: s.plugin_name,
             api_doc: s.api_doc,
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(Json(ApiResp::ok(items)))
 }
@@ -875,20 +916,27 @@ pub async fn page_services(
     State(state): State<CmxAppState>,
     Json(params): Json<PageParams<ServicePageFilter>>,
 ) -> Result<Json<ApiResp<Vec<ServiceListItem>>>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let filter = params.filters.clone()
+    let filter = params
+        .filters
+        .clone()
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default();
     let page_number = params.get_page() as u64;
     let page_size = params.get_size() as u64;
 
-    let result = service_query.page_services(filter, page_number, page_size).await
+    let result = service_query
+        .page_services(filter, page_number, page_size)
+        .await
         .map_err(|e| Error::business_error(format!("分页查询失败: {}", e)))?;
 
-    let items: Vec<ServiceListItem> = result.items.into_iter().map(|s| {
-        ServiceListItem {
+    let items: Vec<ServiceListItem> = result
+        .items
+        .into_iter()
+        .map(|s| ServiceListItem {
             id: s.id,
             service_key: s.service_key,
             service_name: s.service_name,
@@ -904,8 +952,8 @@ pub async fn page_services(
             module_name: s.module_name,
             plugin_name: s.plugin_name,
             api_doc: s.api_doc,
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(Json(ApiResp::ok_with_pagination(
         items,
@@ -963,12 +1011,15 @@ pub async fn delete_service(
     State(state): State<CmxAppState>,
     Json(req): Json<crate::handlers::service::models::ServiceDeleteQuery>,
 ) -> Result<Json<crate::UnitResp>, Error> {
-    let service_storage: &Arc<dyn cmx_traits::service::ServiceStorage> = state.service_storage()
+    let service_storage: &Arc<dyn cmx_traits::service::ServiceStorage> = state
+        .service_storage()
         .ok_or_else(|| Error::internal_error("服务存储未初始化"))?;
 
     let app_id = state.app_id();
 
-    service_storage.delete_service(&req.service_key, &app_id, None, None).await
+    service_storage
+        .delete_service(&req.service_key, &app_id, None, None)
+        .await
         .map_err(|e| Error::business_error(format!("删除服务失败: {}", e)))?;
 
     Ok(Json(crate::UnitResp::msg("删除成功")))
@@ -1033,14 +1084,19 @@ pub async fn service_exists(
     State(state): State<CmxAppState>,
     Query(query): Query<ServiceExistsQuery>,
 ) -> Result<Json<ApiResp<String>>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
-    let service = service_query.get_service(&query.service_key).await
+    let service = service_query
+        .get_service(&query.service_key)
+        .await
         .map_err(|e| Error::business_error(format!("查询服务存在性失败: {}", e)))?;
 
     let exists = service.is_some();
-    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
+    Ok(Json(ApiResp::ok(
+        if exists { "1" } else { "0" }.to_string(),
+    )))
 }
 
 #[utoipa::path(
@@ -1056,7 +1112,8 @@ pub async fn get_openapi_spec(
     State(state): State<CmxAppState>,
     Query(query): Query<OpenApiQuery>,
 ) -> Result<Json<serde_json::Value>, Error> {
-    let service_query: &Arc<dyn ServiceQuery> = state.service_query()
+    let service_query: &Arc<dyn ServiceQuery> = state
+        .service_query()
         .ok_or_else(|| Error::internal_error("服务查询器未初始化"))?;
 
     let filter = ServicePageFilter {
@@ -1071,7 +1128,9 @@ pub async fn get_openapi_spec(
     let mut page = 1u64;
 
     loop {
-        let result = service_query.page_services(filter.clone(), page, page_size).await
+        let result = service_query
+            .page_services(filter.clone(), page, page_size)
+            .await
             .map_err(|e| Error::business_error(format!("查询服务失败: {}", e)))?;
         all_items.extend(result.items);
         let total = result.total;
@@ -1089,27 +1148,28 @@ pub async fn get_openapi_spec(
     for svc in &all_items {
         if let Some(api_doc_str) = &svc.api_doc
             && let Ok(doc) = serde_json::from_str::<serde_json::Value>(api_doc_str)
-                && let Some(path) = doc.get("path").and_then(|v| v.as_str()) {
-                    if let Some(path_item) = doc.get("path_item") {
-                        let mut op = path_item.clone();
-                        let tag = build_tag(&svc.domain_name, &svc.application_name, &svc.module_name);
-                        if !seen_tags.contains(&tag) {
-                            seen_tags.insert(tag.clone());
-                            tags.push(serde_json::json!({
-                                "name": tag,
-                                "description": format!("域:{} > 应用:{} > 模块:{}",
-                                    svc.domain_name, svc.application_name, svc.module_name)
-                            }));
-                        }
-                        if let Some(post) = op.get_mut("post") {
-                            post["tags"] = serde_json::json!([tag]);
-                        }
-                        paths.insert(path.to_string(), op);
-                    }
-                    if let Some(doc_schemas) = doc.get("schemas").and_then(|v| v.as_object()) {
-                        schemas.extend(doc_schemas.clone());
-                    }
+            && let Some(path) = doc.get("path").and_then(|v| v.as_str())
+        {
+            if let Some(path_item) = doc.get("path_item") {
+                let mut op = path_item.clone();
+                let tag = build_tag(&svc.domain_name, &svc.application_name, &svc.module_name);
+                if !seen_tags.contains(&tag) {
+                    seen_tags.insert(tag.clone());
+                    tags.push(serde_json::json!({
+                        "name": tag,
+                        "description": format!("域:{} > 应用:{} > 模块:{}",
+                            svc.domain_name, svc.application_name, svc.module_name)
+                    }));
                 }
+                if let Some(post) = op.get_mut("post") {
+                    post["tags"] = serde_json::json!([tag]);
+                }
+                paths.insert(path.to_string(), op);
+            }
+            if let Some(doc_schemas) = doc.get("schemas").and_then(|v| v.as_object()) {
+                schemas.extend(doc_schemas.clone());
+            }
+        }
     }
 
     let openapi = serde_json::json!({
@@ -1131,9 +1191,17 @@ pub async fn get_openapi_spec(
 
 fn build_tag(domain: &str, app: &str, module: &str) -> String {
     let mut parts = Vec::new();
-    if !domain.is_empty() { parts.push(domain); }
-    if !app.is_empty() { parts.push(app); }
-    if !module.is_empty() { parts.push(module); }
-    if parts.is_empty() { return "未分类".to_string(); }
+    if !domain.is_empty() {
+        parts.push(domain);
+    }
+    if !app.is_empty() {
+        parts.push(app);
+    }
+    if !module.is_empty() {
+        parts.push(module);
+    }
+    if parts.is_empty() {
+        return "未分类".to_string();
+    }
     parts.join("/")
 }

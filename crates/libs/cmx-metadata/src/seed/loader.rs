@@ -4,8 +4,8 @@
 
 use std::path::Path;
 
-use cmx_core::model::cell::{ColumnDefine, FieldType};
 use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, FieldType};
 
 /// 从文件加载种子数据，自动根据扩展名选择 JSON 或 CSV 解析器
 ///
@@ -80,8 +80,8 @@ fn load_seed_data_from_csv(
         .collect();
 
     let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)  // 首行是表头
-        .flexible(true)      // 允许列数不一致
+        .has_headers(true) // 首行是表头
+        .flexible(true) // 允许列数不一致
         .from_path(path)
         .map_err(|e| MetadataError::SeedData(format!("打开 CSV 文件失败: {}", e)))?;
 
@@ -151,9 +151,7 @@ fn convert_csv_value(value: &str, field_type: &FieldType) -> serde_json::Value {
                 serde_json::Value::String(value.to_string())
             }
         }
-        FieldType::Decimal => {
-            serde_json::Value::String(value.to_string())
-        }
+        FieldType::Decimal => serde_json::Value::String(value.to_string()),
         FieldType::Bool => {
             let lower = value.to_lowercase();
             match lower.as_str() {
@@ -162,9 +160,7 @@ fn convert_csv_value(value: &str, field_type: &FieldType) -> serde_json::Value {
                 _ => serde_json::Value::String(value.to_string()),
             }
         }
-        FieldType::Date | FieldType::DateTime => {
-            serde_json::Value::String(value.to_string())
-        }
+        FieldType::Date | FieldType::DateTime => serde_json::Value::String(value.to_string()),
         FieldType::Json => {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(value) {
                 v
@@ -183,16 +179,25 @@ mod tests {
     #[test]
     fn test_convert_csv_value_int() {
         let ft = FieldType::Int;
-        assert_eq!(convert_csv_value("42", &ft), serde_json::Value::Number(42.into()));
+        assert_eq!(
+            convert_csv_value("42", &ft),
+            serde_json::Value::Number(42.into())
+        );
         assert_eq!(convert_csv_value("", &ft), serde_json::Value::Null);
     }
 
     #[test]
     fn test_convert_csv_value_bool() {
         let ft = FieldType::Bool;
-        assert_eq!(convert_csv_value("true", &ft), serde_json::Value::Bool(true));
+        assert_eq!(
+            convert_csv_value("true", &ft),
+            serde_json::Value::Bool(true)
+        );
         assert_eq!(convert_csv_value("1", &ft), serde_json::Value::Bool(true));
-        assert_eq!(convert_csv_value("false", &ft), serde_json::Value::Bool(false));
+        assert_eq!(
+            convert_csv_value("false", &ft),
+            serde_json::Value::Bool(false)
+        );
         assert_eq!(convert_csv_value("0", &ft), serde_json::Value::Bool(false));
     }
 

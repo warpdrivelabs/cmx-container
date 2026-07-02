@@ -3,9 +3,9 @@
 //! 将插件安装目录下的数据子目录打包为 ZIP 字节，用于发送到外部服务中心。
 //! 底层复用 `cmx_utils::zip::ZipCompressor` 的 `compress_dir_to_memory` 方法。
 
-use std::path::Path;
-use cmx_utils::zip::ZipCompressor;
 use crate::error::{PluginError, PluginResult};
+use cmx_utils::zip::ZipCompressor;
+use std::path::Path;
 
 /// 默认 ZIP 压缩级别。
 const DEFAULT_COMPRESSION_LEVEL: u32 = 6;

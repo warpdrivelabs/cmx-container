@@ -19,13 +19,18 @@ fn assert_seg(name: &str, value: &str) -> PortalResult<String> {
         return Err(PortalError::bad_request(format!("缺少必填参数 {name}")));
     }
     if !is_safe_segment(v) {
-        return Err(PortalError::bad_request(format!("参数 {name} 非法（仅允许字母、数字、_-）：\"{value}\"")));
+        return Err(PortalError::bad_request(format!(
+            "参数 {name} 非法（仅允许字母、数字、_-）：\"{value}\""
+        )));
     }
     Ok(v.to_string())
 }
 
 /// 列出模块清单（DAM 优先）。
-pub async fn list_module_manifests(domain: Option<&str>, application: Option<&str>) -> PortalResult<Vec<serde_json::Value>> {
+pub async fn list_module_manifests(
+    domain: Option<&str>,
+    application: Option<&str>,
+) -> PortalResult<Vec<serde_json::Value>> {
     let modules = list_modules(domain, application).await?;
     if !modules.is_empty() {
         let mut items: Vec<serde_json::Value> = modules
@@ -49,8 +54,18 @@ pub async fn list_module_manifests(domain: Option<&str>, application: Option<&st
             })
             .collect();
         items.sort_by(|a, b| {
-            let ka = format!("{}/{}/{}", a["domain"].as_str().unwrap_or(""), a["application"].as_str().unwrap_or(""), a["module"].as_str().unwrap_or(""));
-            let kb = format!("{}/{}/{}", b["domain"].as_str().unwrap_or(""), b["application"].as_str().unwrap_or(""), b["module"].as_str().unwrap_or(""));
+            let ka = format!(
+                "{}/{}/{}",
+                a["domain"].as_str().unwrap_or(""),
+                a["application"].as_str().unwrap_or(""),
+                a["module"].as_str().unwrap_or("")
+            );
+            let kb = format!(
+                "{}/{}/{}",
+                b["domain"].as_str().unwrap_or(""),
+                b["application"].as_str().unwrap_or(""),
+                b["module"].as_str().unwrap_or("")
+            );
             ka.cmp(&kb)
         });
         return Ok(items);
@@ -60,7 +75,10 @@ pub async fn list_module_manifests(domain: Option<&str>, application: Option<&st
 }
 
 /// 文件系统扫描回退（DAM 为空时）。
-async fn list_manifests_from_fs(domain: Option<&str>, application: Option<&str>) -> PortalResult<Vec<serde_json::Value>> {
+async fn list_manifests_from_fs(
+    domain: Option<&str>,
+    application: Option<&str>,
+) -> PortalResult<Vec<serde_json::Value>> {
     let root = data_path(["modules"]);
     let wd = domain.unwrap_or("").trim().to_string();
     let wa = application.unwrap_or("").trim().to_string();
@@ -111,35 +129,65 @@ async fn list_manifests_from_fs(domain: Option<&str>, application: Option<&str>)
         }
     }
     out.sort_by(|a, b| {
-        let ka = format!("{}/{}/{}", a["domain"].as_str().unwrap_or(""), a["application"].as_str().unwrap_or(""), a["module"].as_str().unwrap_or(""));
-        let kb = format!("{}/{}/{}", b["domain"].as_str().unwrap_or(""), b["application"].as_str().unwrap_or(""), b["module"].as_str().unwrap_or(""));
+        let ka = format!(
+            "{}/{}/{}",
+            a["domain"].as_str().unwrap_or(""),
+            a["application"].as_str().unwrap_or(""),
+            a["module"].as_str().unwrap_or("")
+        );
+        let kb = format!(
+            "{}/{}/{}",
+            b["domain"].as_str().unwrap_or(""),
+            b["application"].as_str().unwrap_or(""),
+            b["module"].as_str().unwrap_or("")
+        );
         ka.cmp(&kb)
     });
     Ok(out)
 }
 
 /// 解析注册表中模块的 manifestPath（相对 data 根），无则用默认路径。
-async fn registered_manifest_path(domain: &str, application: &str, module: &str) -> PortalResult<std::path::PathBuf> {
+async fn registered_manifest_path(
+    domain: &str,
+    application: &str,
+    module: &str,
+) -> PortalResult<std::path::PathBuf> {
     let hit = list_modules(Some(domain), Some(application))
         .await?
         .into_iter()
         .find(|m| m.id == module);
-    let rel = hit.map(|m| m.manifest_path).filter(|s| !s.trim().is_empty());
+    let rel = hit
+        .map(|m| m.manifest_path)
+        .filter(|s| !s.trim().is_empty());
     match rel {
         Some(r) => {
-            let cleaned = r.trim_start_matches('/').strip_prefix("data/").unwrap_or(r.trim_start_matches('/')).to_string();
+            let cleaned = r
+                .trim_start_matches('/')
+                .strip_prefix("data/")
+                .unwrap_or(r.trim_start_matches('/'))
+                .to_string();
             let mut p = data_root();
             for seg in cleaned.split('/') {
                 p.push(seg);
             }
             Ok(p)
         }
-        None => Ok(data_path(["modules", domain, application, module, "module.json"])),
+        None => Ok(data_path([
+            "modules",
+            domain,
+            application,
+            module,
+            "module.json",
+        ])),
     }
 }
 
 /// 读取模块 manifest（含 manifestPath 字段，相对 data 根）。
-pub async fn load_module_manifest(domain: &str, application: &str, module: &str) -> PortalResult<serde_json::Value> {
+pub async fn load_module_manifest(
+    domain: &str,
+    application: &str,
+    module: &str,
+) -> PortalResult<serde_json::Value> {
     let d = assert_seg("domain", domain)?;
     let a = assert_seg("application", application)?;
     let m = assert_seg("module", module)?;
@@ -147,13 +195,18 @@ pub async fn load_module_manifest(domain: &str, application: &str, module: &str)
     match read_json::<serde_json::Value>(&path).await {
         Ok(mut doc) => {
             // 计算相对 data 根的 manifestPath
-            let rel = path.strip_prefix(data_root()).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+            let rel = path
+                .strip_prefix(data_root())
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
             if let Some(obj) = doc.as_object_mut() {
                 obj.insert("manifestPath".to_string(), json!(rel));
             }
             Ok(doc)
         }
-        Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!("模块清单不存在：{d}/{a}/{m}"))),
+        Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!(
+            "模块清单不存在：{d}/{a}/{m}"
+        ))),
         Err(e) => Err(e),
     }
 }
@@ -181,7 +234,12 @@ pub async fn resolve_module_resource(
         } else {
             item
         };
-        let rel = entry.get("path").and_then(|v| v.as_str()).unwrap_or("").trim_start_matches('/').to_string();
+        let rel = entry
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim_start_matches('/')
+            .to_string();
         let cleaned = rel.strip_prefix("data/").unwrap_or(&rel).to_string();
         let mut abs = data_root();
         for seg in cleaned.split('/') {
@@ -189,11 +247,22 @@ pub async fn resolve_module_resource(
         }
         let meta = tokio::fs::metadata(&abs).await.ok();
         let exists = meta.is_some();
-        let mut kind = entry.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let mut kind = entry
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         if kind.is_empty()
-            && let Some(m) = &meta {
-                kind = if m.is_dir() { "directory".to_string() } else if m.is_file() { "file".to_string() } else { "other".to_string() };
-            }
+            && let Some(m) = &meta
+        {
+            kind = if m.is_dir() {
+                "directory".to_string()
+            } else if m.is_file() {
+                "file".to_string()
+            } else {
+                "other".to_string()
+            };
+        }
         let mut out = entry.clone();
         if let Some(o) = out.as_object_mut() {
             o.insert("path".to_string(), json!(rel));

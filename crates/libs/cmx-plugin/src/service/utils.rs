@@ -5,17 +5,19 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use serde_json::Value;
+use crate::error::{PluginError, PluginResult};
+use crate::infrastructure::database::table_metadata::{
+    TableMetadataForCreate, TableMetadataForUpdate, TableMetadataService,
+};
 use cmx_buffer::LockManager;
-use cmx_metadata::TableDefineDbExecutor;
 use cmx_core::model::cell::TableDefine;
-use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
-use cmx_metadata::PgTableDefineExecutor;
-use cmx_metadata::seed::PgSeedDataExecutor;
 use cmx_core::model::meta::plugin::PluginDefinition;
 use cmx_database::get_default_db_manager;
-use crate::error::{PluginError, PluginResult};
-use crate::infrastructure::database::table_metadata::{TableMetadataForCreate, TableMetadataForUpdate, TableMetadataService};
+use cmx_metadata::PgTableDefineExecutor;
+use cmx_metadata::TableDefineDbExecutor;
+use cmx_metadata::config::{TableDefinesConfigManager, load_table_defines_config_from_path};
+use cmx_metadata::seed::PgSeedDataExecutor;
+use serde_json::Value;
 
 /// 插件表元数据保存上下文。
 ///
@@ -56,12 +58,7 @@ impl TableMetadataSaveContext {
     /// # Returns
     ///
     /// 返回新的 `TableMetadataSaveContext` 实例。
-    pub fn new(
-        db_id: String,
-        plugin_id: String,
-        app_id: String,
-        version: String,
-    ) -> Self {
+    pub fn new(db_id: String, plugin_id: String, app_id: String, version: String) -> Self {
         Self {
             db_id,
             plugin_id,
@@ -95,7 +92,7 @@ pub async fn create_plugin_tables(
     app_id: &str,
     version: &str,
     install_path: &Path,
-    plugin_define:&PluginDefinition,
+    plugin_define: &PluginDefinition,
     txn_id: Option<&str>,
 ) -> PluginResult<Vec<TableDefine>> {
     if plugin_define.table_config_files.clone().is_empty() {
@@ -108,8 +105,12 @@ pub async fn create_plugin_tables(
 
     for table_config_file in plugin_define.table_config_files.clone() {
         let config_path = install_path.join(table_config_file);
-        let table_df = load_table_defines_config_from_path(&config_path)
-            .map_err(|e| PluginError::Metadata(format!("加载表配置文件失败:路径{:?}，错误： {}",config_path, e)))?;
+        let table_df = load_table_defines_config_from_path(&config_path).map_err(|e| {
+            PluginError::Metadata(format!(
+                "加载表配置文件失败:路径{:?}，错误： {}",
+                config_path, e
+            ))
+        })?;
         table_config_manager.add_config(table_df);
     }
 
@@ -122,17 +123,18 @@ pub async fn create_plugin_tables(
             .create_or_upgrade_table(table_def)
             .await
             .map_err(|e| {
-                PluginError::Metadata(format!(
-                    "创建或升级表{}失败: {}",
-                    &table_def.table_name, e
-                ))
+                PluginError::Metadata(format!("创建或升级表{}失败: {}", &table_def.table_name, e))
             })?;
     }
 
     // 执行种子数据初始化
     let all_seed_configs = table_config_manager.collect_seed_configs();
     if !all_seed_configs.is_empty() {
-        tracing::info!("插件 {} 开始执行种子数据初始化，数据文件数{}", plugin_id, &all_seed_configs.len());
+        tracing::info!(
+            "插件 {} 开始执行种子数据初始化，数据文件数{}",
+            plugin_id,
+            &all_seed_configs.len()
+        );
         let seed_executor = PgSeedDataExecutor::new(db_id, None);
         let summary = seed_executor
             .execute_all_seed_data(&table_defs, &all_seed_configs, install_path)
@@ -160,16 +162,17 @@ pub async fn create_plugin_tables(
             }
             // 数据条数校验警告
             if let Some(db_count) = result.db_row_count
-                && db_count < result.file_row_count {
-                    tracing::warn!(
-                        "种子数据条数不一致: 表={}, 文件={}条, 数据库={}条",
-                        result.table_name,
-                        result.file_row_count,
-                        db_count,
-                    );
-                }
+                && db_count < result.file_row_count
+            {
+                tracing::warn!(
+                    "种子数据条数不一致: 表={}, 文件={}条, 数据库={}条",
+                    result.table_name,
+                    result.file_row_count,
+                    db_count,
+                );
+            }
         }
-    }else{
+    } else {
         tracing::info!("插件 {} 没有种子数据", plugin_id);
     }
 
@@ -190,7 +193,6 @@ pub async fn create_plugin_tables(
         tracing::error!("保存表元数据失败: {}", e);
         return Err(e);
     }
-
 
     Ok(table_defs)
 }
@@ -295,21 +297,26 @@ pub async fn execute_seed_data(
 /// # Returns
 ///
 /// 保存操作的结果
-pub async fn save_plugin_table_metadata(
-    ctx: TableMetadataSaveContext,
-) -> PluginResult<()> {
+pub async fn save_plugin_table_metadata(ctx: TableMetadataSaveContext) -> PluginResult<()> {
     for table_def in &ctx.table_defs {
         let dbm = get_default_db_manager();
         let default_db_id = dbm.get_default_db_id().await;
 
-        let table_metadata_result = TableMetadataService::get_by_table_name(dbm,default_db_id.as_str(),
-                                                                            table_def.table_name.as_str(), Some(&ctx.db_id), ctx.app_id.as_str()).await;
+        let table_metadata_result = TableMetadataService::get_by_table_name(
+            dbm,
+            default_db_id.as_str(),
+            table_def.table_name.as_str(),
+            Some(&ctx.db_id),
+            ctx.app_id.as_str(),
+        )
+        .await;
 
         if let Ok(metadata) = table_metadata_result {
             if !metadata.is_empty() {
                 //存在  更新下
                 //先查询
-                let table_meta_defines_result = TableMetadataService::parse_metadata_record(&metadata);
+                let table_meta_defines_result =
+                    TableMetadataService::parse_metadata_record(&metadata);
                 let record = table_meta_defines_result
                     .as_ref()
                     .expect("解析表元数据记录失败（已确认 metadata 非空）")
@@ -319,18 +326,28 @@ pub async fn save_plugin_table_metadata(
 
                 let table_define_primary_id = record.id.clone();
 
-                let update_info = TableMetadataForUpdate{
+                let update_info = TableMetadataForUpdate {
                     display_name: Some(table_def.display_name.clone()),
                     version: Some(ctx.version.clone()),
                     domain_code: ctx.domain_code.clone(),
                     application_code: ctx.application_code.clone(),
                     module_code: ctx.module_code.clone(),
-                    metadata: Some(serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null)),
+                    metadata: Some(
+                        serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
+                    ),
                 };
-                TableMetadataService::update(dbm, &ctx.plugin_id, default_db_id.as_str(), ctx.txn_id.as_deref(), Value::String(table_define_primary_id), update_info).await?;
+                TableMetadataService::update(
+                    dbm,
+                    &ctx.plugin_id,
+                    default_db_id.as_str(),
+                    ctx.txn_id.as_deref(),
+                    Value::String(table_define_primary_id),
+                    update_info,
+                )
+                .await?;
             } else {
                 //不存在  新增
-                let create_info = TableMetadataForCreate{
+                let create_info = TableMetadataForCreate {
                     table_name: table_def.table_name.clone(),
                     display_name: table_def.display_name.clone(),
                     db_id: ctx.db_id.clone(),
@@ -342,7 +359,13 @@ pub async fn save_plugin_table_metadata(
                     metadata: serde_json::to_value(table_def).unwrap_or(serde_json::Value::Null),
                     app_id: Some(ctx.app_id.clone()),
                 };
-                TableMetadataService::create(dbm, default_db_id.as_str(), ctx.txn_id.as_deref(), create_info).await?;
+                TableMetadataService::create(
+                    dbm,
+                    default_db_id.as_str(),
+                    ctx.txn_id.as_deref(),
+                    create_info,
+                )
+                .await?;
             }
         }
     }
@@ -388,9 +411,15 @@ pub async fn execute_ddl_with_lock(
             Ok(Some(_guard)) => {
                 tracing::info!("获取DDL锁成功，本实例负责创建/升级表: {}", plugin_id);
                 create_plugin_tables(
-                    target_db_id, plugin_id, app_id, version,
-                    install_path, plugin_def, txn_id,
-                ).await?;
+                    target_db_id,
+                    plugin_id,
+                    app_id,
+                    version,
+                    install_path,
+                    plugin_def,
+                    txn_id,
+                )
+                .await?;
             }
             Ok(None) => {
                 tracing::info!("其他实例正在创建/升级表，跳过DDL: {}", plugin_id);
@@ -398,16 +427,28 @@ pub async fn execute_ddl_with_lock(
             Err(e) => {
                 tracing::warn!("锁服务异常: {}，继续创建/升级表", e);
                 create_plugin_tables(
-                    target_db_id, plugin_id, app_id, version,
-                    install_path, plugin_def, None,
-                ).await?;
+                    target_db_id,
+                    plugin_id,
+                    app_id,
+                    version,
+                    install_path,
+                    plugin_def,
+                    None,
+                )
+                .await?;
             }
         }
     } else {
         create_plugin_tables(
-            target_db_id, plugin_id, app_id, version,
-            install_path, plugin_def, txn_id,
-        ).await?;
+            target_db_id,
+            plugin_id,
+            app_id,
+            version,
+            install_path,
+            plugin_def,
+            txn_id,
+        )
+        .await?;
     }
 
     Ok(())

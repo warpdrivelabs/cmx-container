@@ -2,8 +2,8 @@
 //!
 //! 使用 `syn` 解析 Rust 结构体定义，提取字段信息。
 
+use anyhow::{Context, Result};
 use syn::{Item, ItemStruct, Type, TypePath};
-use anyhow::{Result, Context};
 
 /// 结构体定义
 #[derive(Debug, Clone)]
@@ -31,8 +31,7 @@ pub struct FieldDefinition {
 
 /// 解析 Rust 文件中的所有结构体定义
 pub fn parse_structs(content: &str) -> Result<Vec<StructDefinition>> {
-    let file = syn::parse_file(content)
-        .context("Failed to parse Rust file")?;
+    let file = syn::parse_file(content).context("Failed to parse Rust file")?;
 
     let mut structs = Vec::new();
 
@@ -54,9 +53,7 @@ fn parse_struct(item: &ItemStruct) -> Result<StructDefinition> {
             .named
             .iter()
             .map(|f| {
-                let field_name = f.ident.as_ref()
-                    .map(|i| i.to_string())
-                    .unwrap_or_default();
+                let field_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
                 let type_name = type_to_string(&f.ty);
                 let description = extract_doc_comments(&f.attrs);
                 let required = !type_name.starts_with("Option<");
@@ -177,11 +174,7 @@ fn type_to_string(ty: &Type) -> String {
             if tuple.elems.is_empty() {
                 "()".to_string()
             } else {
-                let elems: Vec<String> = tuple
-                    .elems
-                    .iter()
-                    .map(type_to_string)
-                    .collect();
+                let elems: Vec<String> = tuple.elems.iter().map(type_to_string).collect();
                 format!("({})", elems.join(", "))
             }
         }

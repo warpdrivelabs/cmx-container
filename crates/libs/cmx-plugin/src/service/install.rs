@@ -5,6 +5,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::audit::logger::AuditLogger;
+use crate::core::context::PluginContext;
+use crate::core::registry::PluginRegistry;
 use crate::domain::plugin::PluginSource;
 use crate::error::PluginResult;
 use crate::infrastructure::cache::layered::LayeredCacheManager;
@@ -12,9 +15,6 @@ use crate::infrastructure::database::repository::PluginRepository;
 use crate::infrastructure::database::version_history::VersionHistoryRepository;
 use crate::infrastructure::storage::backup::BackupManager;
 use crate::infrastructure::storage::file::FileStorage;
-use crate::audit::logger::AuditLogger;
-use crate::core::context::PluginContext;
-use crate::core::registry::PluginRegistry;
 use crate::security::validator::SecurityValidator;
 use crate::service::executor::PluginOperationExecutor;
 use cmx_buffer::LockManager;

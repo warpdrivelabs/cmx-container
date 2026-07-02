@@ -20,12 +20,9 @@ impl AuthServiceImpl {
         details: Option<serde_json::Value>,
     ) {
         if let Some(ref logger) = self.audit_logger {
-            let mut record = cmx_audit::AuditRecord::new(
-                cmx_audit::AuditDomain::Auth,
-                operation,
-                result,
-            )
-            .with_actor(actor_id, "");
+            let mut record =
+                cmx_audit::AuditRecord::new(cmx_audit::AuditDomain::Auth, operation, result)
+                    .with_actor(actor_id, "");
 
             if let Some(tt) = target_type {
                 record = record.with_target(tt, target_id.unwrap_or(""));
@@ -58,7 +55,10 @@ impl AuthServiceImpl {
     /// * `AuthError::InvalidToken` - 用户不存在。
     /// * `AuthError::UserDisabled` - 用户已禁用。
     /// * `AuthError::Internal` - 数据库查询失败。
-    pub(super) async fn get_user_info(&self, user_id: &str) -> std::result::Result<UserInfo, AuthError> {
+    pub(super) async fn get_user_info(
+        &self,
+        user_id: &str,
+    ) -> std::result::Result<UserInfo, AuthError> {
         let user = self
             .user_query
             .get_user_by_id(user_id)

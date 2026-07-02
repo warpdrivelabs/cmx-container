@@ -9,14 +9,14 @@
 
 mod common;
 
-use cmx_core::model::service::ServiceFlow;
 use cmx_core::StepStatus;
+use cmx_core::model::service::ServiceFlow;
 use cmx_service::ExecuteOptions;
 use serde_json::json;
 
 use common::{
-    create_orchestrator, make_edge, make_end_node, make_func_node, make_orchestration,
-    make_start_node, make_svr_context, make_switch_node, MockRuntimeInvoker, MockServiceQuery,
+    MockRuntimeInvoker, MockServiceQuery, create_orchestrator, make_edge, make_end_node,
+    make_func_node, make_orchestration, make_start_node, make_svr_context, make_switch_node,
 };
 
 /// 构造 switch 分支流程：start -> switch -> [branch_1 | branch_2] -> merge -> end
@@ -162,7 +162,11 @@ async fn switch分支_无匹配分支时正常结束() {
 
     // current_output 应恢复为 previous_output（switch 执行前的输入）
     // 即 initial_input
-    assert_eq!(result.output.unwrap(), json!("initial_input"), "无匹配分支时输出应恢复为 switch 之前的输入");
+    assert_eq!(
+        result.output.unwrap(),
+        json!("initial_input"),
+        "无匹配分支时输出应恢复为 switch 之前的输入"
+    );
 }
 
 // ============================================================================
@@ -286,12 +290,23 @@ async fn switch分支_执行后恢复previous_output作为后续输入() {
     assert_eq!(result.output.unwrap(), json!({"final": "done"}));
 
     // 验证步骤：switch 的输出是 "1"（用于路由）
-    let switch_step = result.steps.iter().find(|s| s.node_id == "switch_1").unwrap();
+    let switch_step = result
+        .steps
+        .iter()
+        .find(|s| s.node_id == "switch_1")
+        .unwrap();
     assert_eq!(switch_step.output.as_ref().unwrap(), &json!("1"));
 
     // branch_1 的输出是 {"processed": true}
-    let branch_step = result.steps.iter().find(|s| s.node_id == "branch_1").unwrap();
-    assert_eq!(branch_step.output.as_ref().unwrap(), &json!({"processed": true}));
+    let branch_step = result
+        .steps
+        .iter()
+        .find(|s| s.node_id == "branch_1")
+        .unwrap();
+    assert_eq!(
+        branch_step.output.as_ref().unwrap(),
+        &json!({"processed": true})
+    );
 }
 
 // ============================================================================

@@ -64,16 +64,13 @@ impl ZipExtractor {
             };
 
             if file.name().ends_with('/') {
-                DirBuilder::new()
-                    .recursive(true)
-                    .create(&outpath)?;
+                DirBuilder::new().recursive(true).create(&outpath)?;
             } else {
                 if let Some(parent) = outpath.parent()
-                    && !parent.exists() {
-                        DirBuilder::new()
-                            .recursive(true)
-                            .create(parent)?;
-                    }
+                    && !parent.exists()
+                {
+                    DirBuilder::new().recursive(true).create(parent)?;
+                }
 
                 let mut outfile = File::create(&outpath)?;
                 std::io::copy(&mut file, &mut outfile)?;
@@ -101,7 +98,10 @@ impl ZipExtractor {
      * # 返回
      * - `ZipResult<Vec<PathBuf>>`: 解压后的文件路径列表
      */
-    pub fn extract_with_list(source: impl AsRef<Path>, output_dir: impl AsRef<Path>) -> ZipResult<Vec<PathBuf>> {
+    pub fn extract_with_list(
+        source: impl AsRef<Path>,
+        output_dir: impl AsRef<Path>,
+    ) -> ZipResult<Vec<PathBuf>> {
         let source = source.as_ref();
         let output_dir = output_dir.as_ref();
 
@@ -126,16 +126,13 @@ impl ZipExtractor {
             };
 
             if file.name().ends_with('/') {
-                DirBuilder::new()
-                    .recursive(true)
-                    .create(&outpath)?;
+                DirBuilder::new().recursive(true).create(&outpath)?;
             } else {
                 if let Some(parent) = outpath.parent()
-                    && !parent.exists() {
-                        DirBuilder::new()
-                            .recursive(true)
-                            .create(parent)?;
-                    }
+                    && !parent.exists()
+                {
+                    DirBuilder::new().recursive(true).create(parent)?;
+                }
 
                 let mut outfile = File::create(&outpath)?;
                 std::io::copy(&mut file, &mut outfile)?;
@@ -187,11 +184,10 @@ impl ZipExtractor {
         let mut zip_file = archive.by_name(file_name)?;
 
         if let Some(parent) = output_path.parent()
-            && !parent.exists() {
-                DirBuilder::new()
-                    .recursive(true)
-                    .create(parent)?;
-            }
+            && !parent.exists()
+        {
+            DirBuilder::new().recursive(true).create(parent)?;
+        }
 
         let mut outfile = File::create(output_path)?;
         std::io::copy(&mut zip_file, &mut outfile)?;

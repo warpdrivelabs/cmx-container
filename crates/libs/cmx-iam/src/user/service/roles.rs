@@ -3,8 +3,8 @@
 //! 实现 [`crate::service_traits::UserService::assign_roles`]，按 username 查询用户后
 //! 全量替换其角色关联（事务保证原子性），含 SoD 校验与缓存失效。
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
 use tracing::{debug, info};
@@ -25,7 +25,9 @@ impl UserServiceImpl {
     ) -> Result<(), TraitError> {
         debug!(
             "{:<12} - UserServiceImpl::assign_roles - username: {}, role_count: {}",
-            "IAM", username, role_ids.len()
+            "IAM",
+            username,
+            role_ids.len()
         );
 
         // 开启事务
@@ -41,7 +43,13 @@ impl UserServiceImpl {
         let resolve_params = vec![DataValue::String(username.to_string())];
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), resolve_sql, resolve_params, "resolve_user_id")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                resolve_sql,
+                resolve_params,
+                "resolve_user_id",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -65,7 +73,9 @@ impl UserServiceImpl {
         self.mm
             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("删除旧角色关联失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除旧角色关联失败: {e}")))
+            })?;
 
         // 2. 批量插入新关联
         for role_id in role_ids {
@@ -80,7 +90,9 @@ impl UserServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("插入用户角色关联失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("插入用户角色关联失败: {e}")))
+                })?;
         }
 
         // 3. 提交事务

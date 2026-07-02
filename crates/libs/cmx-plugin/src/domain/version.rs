@@ -1,10 +1,10 @@
 //! 版本管理模块
-//! 
+//!
 //! 定义语义版本、版本约束、版本比较
 
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 
 /// 语义版本
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,37 +32,41 @@ impl SemanticVersion {
             build: None,
         }
     }
-    
+
     /// 解析版本字符串
     pub fn parse(version: &str) -> Result<Self, VersionParseError> {
         let version = version.trim();
         if version.is_empty() {
             return Err(VersionParseError::EmptyString);
         }
-        
+
         let parts: Vec<&str> = version.splitn(2, '+').collect();
         let version_part = parts[0];
         let build = parts.get(1).map(|s| s.to_string());
-        
+
         let parts: Vec<&str> = version_part.splitn(2, '-').collect();
         let main_part = parts[0];
         let pre_release = parts.get(1).map(|s| PreRelease::parse(s)).transpose()?;
-        
+
         let nums: Vec<&str> = main_part.split('.').collect();
         if nums.is_empty() || nums.len() > 3 {
             return Err(VersionParseError::InvalidFormat);
         }
-        
-        let major = nums[0].parse().map_err(|_| VersionParseError::InvalidNumber)?;
-        let minor = nums.get(1)
+
+        let major = nums[0]
+            .parse()
+            .map_err(|_| VersionParseError::InvalidNumber)?;
+        let minor = nums
+            .get(1)
             .map(|s| s.parse().map_err(|_| VersionParseError::InvalidNumber))
             .transpose()?
             .unwrap_or(0);
-        let patch = nums.get(2)
+        let patch = nums
+            .get(2)
             .map(|s| s.parse().map_err(|_| VersionParseError::InvalidNumber))
             .transpose()?
             .unwrap_or(0);
-        
+
         Ok(Self {
             major,
             minor,
@@ -97,14 +101,12 @@ impl Ord for SemanticVersion {
         match self.major.cmp(&other.major) {
             Ordering::Equal => match self.minor.cmp(&other.minor) {
                 Ordering::Equal => match self.patch.cmp(&other.patch) {
-                    Ordering::Equal => {
-                        match (&self.pre_release, &other.pre_release) {
-                            (None, None) => Ordering::Equal,
-                            (None, Some(_)) => Ordering::Greater,
-                            (Some(_), None) => Ordering::Less,
-                            (Some(a), Some(b)) => a.cmp(b),
-                        }
-                    }
+                    Ordering::Equal => match (&self.pre_release, &other.pre_release) {
+                        (None, None) => Ordering::Equal,
+                        (None, Some(_)) => Ordering::Greater,
+                        (Some(_), None) => Ordering::Less,
+                        (Some(a), Some(b)) => a.cmp(b),
+                    },
                     other => other,
                 },
                 other => other,
@@ -124,7 +126,8 @@ pub struct PreRelease {
 impl PreRelease {
     /// 解析预发布版本字符串
     pub fn parse(s: &str) -> Result<Self, VersionParseError> {
-        let identifiers = s.split('.')
+        let identifiers = s
+            .split('.')
             .map(|id| {
                 if let Ok(num) = id.parse::<u64>() {
                     Ok(PreReleaseIdentifier::Numeric(num))
@@ -133,7 +136,7 @@ impl PreRelease {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        
+
         Ok(Self { identifiers })
     }
 }
@@ -191,9 +194,15 @@ impl Ord for PreReleaseIdentifier {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (PreReleaseIdentifier::Numeric(a), PreReleaseIdentifier::Numeric(b)) => a.cmp(b),
-            (PreReleaseIdentifier::Numeric(_), PreReleaseIdentifier::AlphaNumeric(_)) => Ordering::Less,
-            (PreReleaseIdentifier::AlphaNumeric(_), PreReleaseIdentifier::Numeric(_)) => Ordering::Greater,
-            (PreReleaseIdentifier::AlphaNumeric(a), PreReleaseIdentifier::AlphaNumeric(b)) => a.cmp(b),
+            (PreReleaseIdentifier::Numeric(_), PreReleaseIdentifier::AlphaNumeric(_)) => {
+                Ordering::Less
+            }
+            (PreReleaseIdentifier::AlphaNumeric(_), PreReleaseIdentifier::Numeric(_)) => {
+                Ordering::Greater
+            }
+            (PreReleaseIdentifier::AlphaNumeric(a), PreReleaseIdentifier::AlphaNumeric(b)) => {
+                a.cmp(b)
+            }
         }
     }
 }
@@ -212,7 +221,7 @@ impl VersionConstraint {
     pub fn new(relation: VersionRelation, version: SemanticVersion) -> Self {
         Self { relation, version }
     }
-    
+
     /// 解析版本约束字符串
     pub fn parse(constraint: &str) -> Result<Self, VersionParseError> {
         let constraint = constraint.trim();
@@ -238,7 +247,7 @@ impl VersionConstraint {
         let version = SemanticVersion::parse(version_str)?;
         Ok(Self { relation, version })
     }
-    
+
     /// 检查版本是否满足约束
     pub fn satisfies(&self, version: &SemanticVersion) -> bool {
         match self.relation {
@@ -251,8 +260,8 @@ impl VersionConstraint {
                 version >= &self.version && version.major == self.version.major
             }
             VersionRelation::Approximately => {
-                version >= &self.version 
-                    && version.major == self.version.major 
+                version >= &self.version
+                    && version.major == self.version.major
                     && version.minor == self.version.minor
             }
         }
@@ -388,7 +397,10 @@ mod tests {
 
     #[test]
     fn test_parse_empty_string_errors() {
-        assert_eq!(SemanticVersion::parse("").unwrap_err(), VersionParseError::EmptyString);
+        assert_eq!(
+            SemanticVersion::parse("").unwrap_err(),
+            VersionParseError::EmptyString
+        );
     }
 
     #[test]
@@ -630,7 +642,9 @@ mod tests {
 
     #[test]
     fn test_constraint_display_roundtrip() {
-        for s in ["=1.0.0", ">1.0.0", ">=1.0.0", "<1.0.0", "<=1.0.0", "^1.0.0", "~1.0.0"] {
+        for s in [
+            "=1.0.0", ">1.0.0", ">=1.0.0", "<1.0.0", "<=1.0.0", "^1.0.0", "~1.0.0",
+        ] {
             let c = VersionConstraint::parse(s).unwrap();
             assert_eq!(c.to_string(), s, "约束 {} 的 Display 应能往返", s);
         }
@@ -693,7 +707,13 @@ mod tests {
         let constraint = VersionConstraint::parse("^1.0.0").unwrap();
         let compatible_upgrade = SemanticVersion::parse("1.5.0").unwrap();
         let breaking_upgrade = SemanticVersion::parse("2.0.0").unwrap();
-        assert!(constraint.satisfies(&compatible_upgrade), "1.5.0 应满足 ^1.0.0");
-        assert!(!constraint.satisfies(&breaking_upgrade), "2.0.0 不满足 ^1.0.0");
+        assert!(
+            constraint.satisfies(&compatible_upgrade),
+            "1.5.0 应满足 ^1.0.0"
+        );
+        assert!(
+            !constraint.satisfies(&breaking_upgrade),
+            "2.0.0 不满足 ^1.0.0"
+        );
     }
 }

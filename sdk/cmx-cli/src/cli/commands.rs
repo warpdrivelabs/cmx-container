@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use walkdir::WalkDir;
 
 use crate::ast_parser::parse_structs;
-use crate::generator::{generate_ast_document, AstScanResult};
+use crate::generator::{AstScanResult, generate_ast_document};
 use crate::parser::{parse_doc_comments, parse_rust_file};
 
 /// CMX CLI - CMX 插件开发工具集
@@ -231,13 +231,14 @@ fn output_json(json: &str, output: &Option<String>) -> Result<()> {
         let path = Path::new(output_path);
 
         if let Some(parent) = path.parent()
-            && !parent.as_os_str().is_empty() && !parent.exists() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("无法创建目录: {}", parent.display()))?;
-            }
+            && !parent.as_os_str().is_empty()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("无法创建目录: {}", parent.display()))?;
+        }
 
-        fs::write(output_path, json)
-            .with_context(|| format!("无法写入文件: {}", output_path))?;
+        fs::write(output_path, json).with_context(|| format!("无法写入文件: {}", output_path))?;
         println!("文档已生成: {}", output_path);
     } else {
         println!("{}", json);
@@ -247,11 +248,10 @@ fn output_json(json: &str, output: &Option<String>) -> Result<()> {
 
 /// 处理验证命令（预留）
 fn handle_validate_command(args: ValidateArgs) -> Result<()> {
-    let content = fs::read_to_string(&args.file)
-        .with_context(|| format!("无法读取文件: {}", args.file))?;
+    let content =
+        fs::read_to_string(&args.file).with_context(|| format!("无法读取文件: {}", args.file))?;
 
-    let _: serde_json::Value = serde_json::from_str(&content)
-        .with_context(|| "JSON 格式无效")?;
+    let _: serde_json::Value = serde_json::from_str(&content).with_context(|| "JSON 格式无效")?;
 
     println!("✓ 文档格式验证通过: {}", args.file);
     Ok(())
@@ -365,9 +365,10 @@ fn collect_rust_files(paths: &[String], exclude: Option<&str>) -> Result<Vec<Str
                     let file_path = entry_path.to_string_lossy().to_string();
 
                     if let Some(exclude_pattern) = exclude
-                        && file_path.contains(exclude_pattern) {
-                            continue;
-                        }
+                        && file_path.contains(exclude_pattern)
+                    {
+                        continue;
+                    }
 
                     files.push(file_path);
                 }
@@ -393,34 +394,35 @@ fn get_plugin_info(
 
         if cargo_toml_path.exists()
             && let Ok(content) = fs::read_to_string(&cargo_toml_path)
-                && let Ok(value) = content.parse::<toml::Value>() {
-                    let name = override_name.map(|s| s.to_string()).unwrap_or_else(|| {
-                        value
-                            .get("package")
-                            .and_then(|p| p.get("name"))
-                            .and_then(|n| n.as_str())
-                            .unwrap_or("unknown")
-                            .to_string()
-                    });
+            && let Ok(value) = content.parse::<toml::Value>()
+        {
+            let name = override_name.map(|s| s.to_string()).unwrap_or_else(|| {
+                value
+                    .get("package")
+                    .and_then(|p| p.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
 
-                    let version = if let Some(version) = value
-                        .get("package")
-                        .and_then(|p| p.get("version"))
-                        .and_then(|v| v.as_str())
-                    {
-                        version.to_string()
-                    } else {
-                        get_workspace_version(&cargo_toml_path).unwrap_or_else(|| "0.0.0".to_string())
-                    };
+            let version = if let Some(version) = value
+                .get("package")
+                .and_then(|p| p.get("version"))
+                .and_then(|v| v.as_str())
+            {
+                version.to_string()
+            } else {
+                get_workspace_version(&cargo_toml_path).unwrap_or_else(|| "0.0.0".to_string())
+            };
 
-                    let description = value
-                        .get("package")
-                        .and_then(|p| p.get("description"))
-                        .and_then(|d| d.as_str())
-                        .map(|s| s.to_string());
+            let description = value
+                .get("package")
+                .and_then(|p| p.get("description"))
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
 
-                    return Ok((name, version, description));
-                }
+            return Ok((name, version, description));
+        }
     }
 
     Ok((
@@ -438,16 +440,16 @@ fn get_workspace_version(cargo_toml_path: &Path) -> Option<String> {
         let workspace_cargo = current.join("Cargo.toml");
         if workspace_cargo.exists()
             && let Ok(content) = fs::read_to_string(&workspace_cargo)
-                && let Ok(value) = content.parse::<toml::Value>()
-                    && value.get("workspace").is_some()
-                        && let Some(version) = value
-                            .get("workspace")
-                            .and_then(|w| w.get("package"))
-                            .and_then(|p| p.get("version"))
-                            .and_then(|v| v.as_str())
-                        {
-                            return Some(version.to_string());
-                        }
+            && let Ok(value) = content.parse::<toml::Value>()
+            && value.get("workspace").is_some()
+            && let Some(version) = value
+                .get("workspace")
+                .and_then(|w| w.get("package"))
+                .and_then(|p| p.get("version"))
+                .and_then(|v| v.as_str())
+        {
+            return Some(version.to_string());
+        }
 
         current = current.parent()?;
     }

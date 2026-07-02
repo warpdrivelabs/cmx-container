@@ -41,11 +41,15 @@ fn resolve_rel(r: &DefRef) -> PortalResult<Vec<String>> {
         return Err(PortalError::bad_request("缺少必填参数 domain"));
     }
     if !is_safe_segment(domain) {
-        return Err(PortalError::bad_request(format!("参数 domain 非法（仅允许字母、数字、_-）：\"{domain}\"")));
+        return Err(PortalError::bad_request(format!(
+            "参数 domain 非法（仅允许字母、数字、_-）：\"{domain}\""
+        )));
     }
     let file = r.file_value().unwrap_or("").trim();
     if !is_safe_json_file(file) {
-        return Err(PortalError::bad_request(format!("参数 file 非法（须 *.json，仅允许字母、数字、._-）：\"{file}\"")));
+        return Err(PortalError::bad_request(format!(
+            "参数 file 非法（须 *.json，仅允许字母、数字、._-）：\"{file}\""
+        )));
     }
     if domain == "base" {
         return Ok(vec!["base".to_string(), file.to_string()]);
@@ -55,16 +59,25 @@ fn resolve_rel(r: &DefRef) -> PortalResult<Vec<String>> {
         return Err(PortalError::bad_request("缺少必填参数 application"));
     }
     if !is_safe_segment(app) {
-        return Err(PortalError::bad_request(format!("参数 application 非法（仅允许字母、数字、_-）：\"{app}\"")));
+        return Err(PortalError::bad_request(format!(
+            "参数 application 非法（仅允许字母、数字、_-）：\"{app}\""
+        )));
     }
     let module = r.module.as_deref().unwrap_or("").trim();
     if module.is_empty() {
         return Err(PortalError::bad_request("缺少必填参数 module"));
     }
     if !is_safe_segment(module) {
-        return Err(PortalError::bad_request(format!("参数 module 非法（仅允许字母、数字、_-）：\"{module}\"")));
+        return Err(PortalError::bad_request(format!(
+            "参数 module 非法（仅允许字母、数字、_-）：\"{module}\""
+        )));
     }
-    Ok(vec![domain.to_string(), app.to_string(), module.to_string(), file.to_string()])
+    Ok(vec![
+        domain.to_string(),
+        app.to_string(),
+        module.to_string(),
+        file.to_string(),
+    ])
 }
 
 fn abs_path(rel_parts: &[String]) -> std::path::PathBuf {
@@ -93,7 +106,10 @@ pub async fn get_definition(r: &DefRef) -> PortalResult<serde_json::Value> {
 
 /// 由文档推断 base 文件名（DCT→baseDctMetaRef.file，DOC→baseDocMetaRef.file）。
 fn infer_base_file(doc: &serde_json::Value) -> Option<String> {
-    let kind = doc.get("moduleMeta").and_then(|m| m.get("metaKind")).and_then(|v| v.as_str());
+    let kind = doc
+        .get("moduleMeta")
+        .and_then(|m| m.get("metaKind"))
+        .and_then(|v| v.as_str());
     let key = match kind {
         Some("DCT") => "baseDctMetaRef",
         Some("DOC") => "baseDocMetaRef",
@@ -108,7 +124,11 @@ fn infer_base_file(doc: &serde_json::Value) -> Option<String> {
 
 /// 文档 kind 判定。
 fn doc_kind(doc: &serde_json::Value) -> String {
-    if let Some(k) = doc.get("moduleMeta").and_then(|m| m.get("metaKind")).and_then(|v| v.as_str()) {
+    if let Some(k) = doc
+        .get("moduleMeta")
+        .and_then(|m| m.get("metaKind"))
+        .and_then(|v| v.as_str())
+    {
         return k.to_string();
     }
     if doc.get("baseMeta").is_some() {
@@ -120,20 +140,27 @@ fn doc_kind(doc: &serde_json::Value) -> String {
 
 /// 批量读取定义 + 附带 base 字段集（去重）。
 pub async fn get_definitions_batch(input: &serde_json::Value) -> PortalResult<serde_json::Value> {
-    let include_base = input.get("includeBase").and_then(|v| v.as_bool()).unwrap_or(true);
+    let include_base = input
+        .get("includeBase")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     // refs：{ refs: [...] } 或顶层数组；元素为字符串(=file) 或对象
-    let raw_refs: Vec<serde_json::Value> = if let Some(arr) = input.get("refs").and_then(|v| v.as_array()) {
-        arr.clone()
-    } else if let Some(arr) = input.as_array() {
-        arr.clone()
-    } else {
-        vec![]
-    };
+    let raw_refs: Vec<serde_json::Value> =
+        if let Some(arr) = input.get("refs").and_then(|v| v.as_array()) {
+            arr.clone()
+        } else if let Some(arr) = input.as_array() {
+            arr.clone()
+        } else {
+            vec![]
+        };
     let refs: Vec<DefRef> = raw_refs
         .iter()
         .map(|r| {
             if let Some(s) = r.as_str() {
-                DefRef { file: Some(s.to_string()), ..Default::default() }
+                DefRef {
+                    file: Some(s.to_string()),
+                    ..Default::default()
+                }
             } else {
                 serde_json::from_value::<DefRef>(r.clone()).unwrap_or_default()
             }
@@ -173,14 +200,20 @@ pub async fn get_definitions_batch(input: &serde_json::Value) -> PortalResult<se
     let mut base_paths = serde_json::Map::new();
     if include_base {
         for file in &base_files {
-            let bref = DefRef { domain: Some("base".to_string()), file: Some(file.clone()), ..Default::default() };
+            let bref = DefRef {
+                domain: Some("base".to_string()),
+                file: Some(file.clone()),
+                ..Default::default()
+            };
             match get_definition(&bref).await {
                 Ok(doc) => {
                     bases.insert(file.clone(), doc);
                     let rel = resolve_rel(&bref).unwrap_or_default();
                     base_paths.insert(file.clone(), json!({ "path": abs_path(&rel).to_string_lossy(), "relPath": rel.join("/") }));
                 }
-                Err(e) => errors.push(json!({ "ref": { "domain": "base", "file": file }, "error": e.to_string() })),
+                Err(e) => errors.push(
+                    json!({ "ref": { "domain": "base", "file": file }, "error": e.to_string() }),
+                ),
             }
         }
     }
@@ -202,7 +235,13 @@ fn def_file_stem(file: &str) -> String {
 }
 
 /// 由已解析文档抽取列表摘要。
-fn summarize(domain: &str, application: &str, module: &str, file: &str, doc: &serde_json::Value) -> serde_json::Value {
+fn summarize(
+    domain: &str,
+    application: &str,
+    module: &str,
+    file: &str,
+    doc: &serde_json::Value,
+) -> serde_json::Value {
     let mm = doc.get("moduleMeta").cloned().unwrap_or(json!({}));
     let kind = doc_kind(doc);
     let version = mm
@@ -224,7 +263,11 @@ fn summarize(domain: &str, application: &str, module: &str, file: &str, doc: &se
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     // 最后修改时间（save 时写入，供版本管理列表展示）。
-    let updated_at = doc.get("updatedAt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let updated_at = doc
+        .get("updatedAt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     // stem：剥去文件名末尾的 _v<N>.json，使前端可按「逻辑定义」聚合多版本文件。
     let stem = def_file_stem(file);
     let mut base = json!({
@@ -236,23 +279,82 @@ fn summarize(domain: &str, application: &str, module: &str, file: &str, doc: &se
     let obj = base.as_object_mut().unwrap();
     match kind.as_str() {
         "DCT" => {
-            obj.insert("title".into(), json!(mm.get("moduleName").and_then(|v| v.as_str()).unwrap_or(file)));
-            obj.insert("moduleCode".into(), json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("remark".into(), json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("tableCount".into(), json!(doc.get("dictionaryTables").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0)));
+            obj.insert(
+                "title".into(),
+                json!(
+                    mm.get("moduleName")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(file)
+                ),
+            );
+            obj.insert(
+                "moduleCode".into(),
+                json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "remark".into(),
+                json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "tableCount".into(),
+                json!(
+                    doc.get("dictionaryTables")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0)
+                ),
+            );
         }
         "DOC" => {
-            obj.insert("title".into(), json!(mm.get("moduleName").and_then(|v| v.as_str()).unwrap_or(file)));
-            obj.insert("moduleCode".into(), json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("remark".into(), json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("tableCount".into(), json!(doc.get("voucherTables").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0)));
+            obj.insert(
+                "title".into(),
+                json!(
+                    mm.get("moduleName")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(file)
+                ),
+            );
+            obj.insert(
+                "moduleCode".into(),
+                json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "remark".into(),
+                json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "tableCount".into(),
+                json!(
+                    doc.get("voucherTables")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0)
+                ),
+            );
         }
         "BASE" => {
             let bm = doc.get("baseMeta").cloned().unwrap_or(json!({}));
-            obj.insert("title".into(), json!(bm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)));
-            obj.insert("moduleCode".into(), json!(bm.get("metaCode").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("remark".into(), json!(bm.get("remark").and_then(|v| v.as_str()).unwrap_or("")));
-            obj.insert("fieldSetCount".into(), json!(doc.get("fieldSets").and_then(|v| v.as_object()).map(|o| o.len()).unwrap_or(0)));
+            obj.insert(
+                "title".into(),
+                json!(bm.get("metaName").and_then(|v| v.as_str()).unwrap_or(file)),
+            );
+            obj.insert(
+                "moduleCode".into(),
+                json!(bm.get("metaCode").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "remark".into(),
+                json!(bm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "fieldSetCount".into(),
+                json!(
+                    doc.get("fieldSets")
+                        .and_then(|v| v.as_object())
+                        .map(|o| o.len())
+                        .unwrap_or(0)
+                ),
+            );
         }
         _ => {
             obj.insert("title".into(), json!(file));
@@ -314,7 +416,8 @@ pub async fn list_definitions(
             };
             while let Some(m) = mods.next_entry().await.map_err(PortalError::Io)? {
                 let mname = m.file_name().to_string_lossy().to_string();
-                if mname.starts_with('.') || !m.file_type().await.map_err(PortalError::Io)?.is_dir() {
+                if mname.starts_with('.') || !m.file_type().await.map_err(PortalError::Io)?.is_dir()
+                {
                     continue;
                 }
                 if !want_module.is_empty() && want_module != mname {
@@ -325,8 +428,20 @@ pub async fn list_definitions(
         }
     }
     out.sort_by(|a, b| {
-        let ka = format!("{}/{}/{}/{}", a["domain"].as_str().unwrap_or(""), a["application"].as_str().unwrap_or(""), a["module"].as_str().unwrap_or(""), a["file"].as_str().unwrap_or(""));
-        let kb = format!("{}/{}/{}/{}", b["domain"].as_str().unwrap_or(""), b["application"].as_str().unwrap_or(""), b["module"].as_str().unwrap_or(""), b["file"].as_str().unwrap_or(""));
+        let ka = format!(
+            "{}/{}/{}/{}",
+            a["domain"].as_str().unwrap_or(""),
+            a["application"].as_str().unwrap_or(""),
+            a["module"].as_str().unwrap_or(""),
+            a["file"].as_str().unwrap_or("")
+        );
+        let kb = format!(
+            "{}/{}/{}/{}",
+            b["domain"].as_str().unwrap_or(""),
+            b["application"].as_str().unwrap_or(""),
+            b["module"].as_str().unwrap_or(""),
+            b["file"].as_str().unwrap_or("")
+        );
         ka.cmp(&kb)
     });
     Ok(out)
@@ -368,14 +483,20 @@ async fn push_files_in_dir(
 }
 
 /// 保存定义（补 updatedAt，原子写）。
-pub async fn save_definition(r: &DefRef, doc: &serde_json::Value) -> PortalResult<serde_json::Value> {
+pub async fn save_definition(
+    r: &DefRef,
+    doc: &serde_json::Value,
+) -> PortalResult<serde_json::Value> {
     if !doc.is_object() {
         return Err(PortalError::bad_request("请求体必须是对象"));
     }
     let rel = resolve_rel(r)?;
     let mut merged = doc.clone();
     if let Some(obj) = merged.as_object_mut() {
-        obj.insert("updatedAt".to_string(), json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+        obj.insert(
+            "updatedAt".to_string(),
+            json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+        );
     }
     let _guard = write_lock().lock().await;
     write_json_atomic(&abs_path(&rel), &merged, true).await?;
@@ -384,12 +505,21 @@ pub async fn save_definition(r: &DefRef, doc: &serde_json::Value) -> PortalResul
 
 /// 在文档的 moduleMeta（或 baseMeta）上写 isDefault 标记，返回是否有改动。
 fn set_doc_default_flag(doc: &mut serde_json::Value, value: bool) -> bool {
-    let key = if doc.get("baseMeta").is_some() && doc.get("moduleMeta").is_none() { "baseMeta" } else { "moduleMeta" };
+    let key = if doc.get("baseMeta").is_some() && doc.get("moduleMeta").is_none() {
+        "baseMeta"
+    } else {
+        "moduleMeta"
+    };
     let obj = doc.as_object_mut();
     let Some(obj) = obj else { return false };
     let meta = obj.entry(key).or_insert_with(|| json!({}));
-    let Some(meta) = meta.as_object_mut() else { return false };
-    let cur = meta.get("isDefault").and_then(|v| v.as_bool()).unwrap_or(false);
+    let Some(meta) = meta.as_object_mut() else {
+        return false;
+    };
+    let cur = meta
+        .get("isDefault")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if cur == value {
         return false;
     }
@@ -410,8 +540,14 @@ pub async fn set_default_version(r: &DefRef) -> PortalResult<serde_json::Value> 
 
     let _guard = write_lock().lock().await;
     // 目标文件必须存在。
-    if read_json::<serde_json::Value>(&abs_path(&rel)).await.is_err() {
-        return Err(PortalError::not_found(format!("定义文件不存在：{}", rel.join("/"))));
+    if read_json::<serde_json::Value>(&abs_path(&rel))
+        .await
+        .is_err()
+    {
+        return Err(PortalError::not_found(format!(
+            "定义文件不存在：{}",
+            rel.join("/")
+        )));
     }
     let now = json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let mut changed: Vec<String> = Vec::new();

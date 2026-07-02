@@ -31,11 +31,7 @@ pub struct AuditLoggerConfig {
 
 impl AuditLoggerConfig {
     /// 创建新的审计日志配置
-    pub fn new(
-        db_manager: Arc<DatabaseManager>,
-        default_db_id: String,
-        node_id: String,
-    ) -> Self {
+    pub fn new(db_manager: Arc<DatabaseManager>, default_db_id: String, node_id: String) -> Self {
         Self {
             db_manager,
             default_db_id,
@@ -93,9 +89,9 @@ impl AuditLogger {
     /// - `request_id` / `started_at` / `duration_ms` → 直接映射
     pub async fn log(&self, mut record: AuditRecord) -> PluginResult<()> {
         // 补全完成时间和耗时（与原实现一致）
-        let duration_ms = record.duration_ms.unwrap_or_else(|| {
-            (chrono::Utc::now() - record.started_at).num_milliseconds()
-        });
+        let duration_ms = record
+            .duration_ms
+            .unwrap_or_else(|| (chrono::Utc::now() - record.started_at).num_milliseconds());
         record.completed_at = Some(chrono::Utc::now());
         record.duration_ms = Some(duration_ms);
 

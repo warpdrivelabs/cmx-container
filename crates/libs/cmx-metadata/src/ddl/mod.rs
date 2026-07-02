@@ -21,11 +21,11 @@
 //! let ddl = dialect.generate_full_ddl(&table)?;
 //! ```
 
-pub mod postgres;
 pub mod diff;
+pub mod postgres;
 
-use cmx_core::model::cell::{ColumnDefine, TableDefine};
 use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, TableDefine};
 
 /// DDL 方言 trait
 ///
@@ -75,7 +75,10 @@ pub trait DdlDialect {
     /// # 返回值
     /// * 成功返回完整 DDL 字符串
     /// * 失败返回 `MetadataError`
-    fn generate_full_ddl_for_tables(&self, tables: &[TableDefine]) -> Result<String, MetadataError> {
+    fn generate_full_ddl_for_tables(
+        &self,
+        tables: &[TableDefine],
+    ) -> Result<String, MetadataError> {
         let mut all = Vec::new();
         for table in tables {
             all.push(self.generate_full_ddl(table)?);
@@ -84,13 +87,29 @@ pub trait DdlDialect {
     }
 
     /// 生成 ALTER TABLE ADD COLUMN 语句
-    fn generate_add_column(&self, table_name: &str, schema: Option<&str>, col: &ColumnDefine) -> Result<String, MetadataError>;
+    fn generate_add_column(
+        &self,
+        table_name: &str,
+        schema: Option<&str>,
+        col: &ColumnDefine,
+    ) -> Result<String, MetadataError>;
 
     /// 生成 ALTER TABLE DROP COLUMN 语句
-    fn generate_drop_column(&self, table_name: &str, schema: Option<&str>, col_name: &str) -> Result<String, MetadataError>;
+    fn generate_drop_column(
+        &self,
+        table_name: &str,
+        schema: Option<&str>,
+        col_name: &str,
+    ) -> Result<String, MetadataError>;
 
     /// 生成 ALTER TABLE ALTER COLUMN 语句（类型/nullable/default 变更）
-    fn generate_alter_column(&self, table_name: &str, schema: Option<&str>, old_col: &ColumnDefine, new_col: &ColumnDefine) -> Result<Vec<String>, MetadataError>;
+    fn generate_alter_column(
+        &self,
+        table_name: &str,
+        schema: Option<&str>,
+        old_col: &ColumnDefine,
+        new_col: &ColumnDefine,
+    ) -> Result<Vec<String>, MetadataError>;
 
     /// 生成 DROP TABLE IF EXISTS 语句
     fn generate_drop_table(&self, table: &TableDefine) -> Result<String, MetadataError>;
@@ -138,6 +157,8 @@ pub fn tables_to_pg_ddl(tables: &[TableDefine]) -> Result<String, MetadataError>
 /// * 成功返回 DDL 字符串
 /// * 失败返回 `MetadataError`
 pub fn table_to_pg_ddl_roundtrip(table: &TableDefine) -> Result<String, MetadataError> {
-    let dialect = postgres::PostgresDdlDialect { prefer_db_type: true };
+    let dialect = postgres::PostgresDdlDialect {
+        prefer_db_type: true,
+    };
     dialect.generate_full_ddl(table)
 }

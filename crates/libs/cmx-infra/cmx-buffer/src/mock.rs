@@ -100,10 +100,7 @@ impl MockRedisBackend {
             .collect();
 
         if args.is_empty() {
-            return Err(RedisError::from((
-                redis::ErrorKind::Extension,
-                "空命令",
-            )));
+            return Err(RedisError::from((redis::ErrorKind::Extension, "空命令")));
         }
 
         let command = String::from_utf8_lossy(&args[0]).to_uppercase();
@@ -126,10 +123,7 @@ impl MockRedisBackend {
     }
 
     /// 处理 SET 命令，支持 NX 和 EX 选项
-    fn handle_set(
-        data: &mut HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_set(data: &mut HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         if args.len() < 2 {
             return Err(RedisError::from((
                 redis::ErrorKind::Extension,
@@ -186,21 +180,12 @@ impl MockRedisBackend {
         }
 
         let expire_at = ex_secs.map(|s| Instant::now() + Duration::from_secs(s));
-        data.insert(
-            key,
-            MockEntry {
-                value,
-                expire_at,
-            },
-        );
+        data.insert(key, MockEntry { value, expire_at });
         Ok(Value::SimpleString("OK".to_string()))
     }
 
     /// 处理 GET 命令
-    fn handle_get(
-        data: &HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_get(data: &HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         if args.is_empty() {
             return Err(RedisError::from((
                 redis::ErrorKind::Extension,
@@ -214,10 +199,7 @@ impl MockRedisBackend {
     }
 
     /// 处理 DEL 命令，返回删除的 key 数量
-    fn handle_del(
-        data: &mut HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_del(data: &mut HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         let mut count = 0i64;
         for key in args {
             if data.remove(key).is_some() {
@@ -228,10 +210,7 @@ impl MockRedisBackend {
     }
 
     /// 处理 EXISTS 命令，返回存在的 key 数量
-    fn handle_exists(
-        data: &HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_exists(data: &HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         let mut count = 0i64;
         for key in args {
             if data.contains_key(key) {
@@ -242,10 +221,7 @@ impl MockRedisBackend {
     }
 
     /// 处理 TTL 命令，返回剩余秒数；不存在返回 -2，无过期返回 -1
-    fn handle_ttl(
-        data: &HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_ttl(data: &HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         if args.is_empty() {
             return Err(RedisError::from((
                 redis::ErrorKind::Extension,
@@ -302,10 +278,7 @@ impl MockRedisBackend {
     /// 已知脚本：
     /// 1. unlock: `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`
     /// 2. extend: `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("expire", KEYS[1], ARGV[2]) else return 0 end`
-    fn handle_eval(
-        data: &mut HashMap<Vec<u8>, MockEntry>,
-        args: &[Vec<u8>],
-    ) -> RedisResult<Value> {
+    fn handle_eval(data: &mut HashMap<Vec<u8>, MockEntry>, args: &[Vec<u8>]) -> RedisResult<Value> {
         // args[0] = script, args[1] = numkeys, args[2..] = keys + argv
         if args.len() < 2 {
             return Err(RedisError::from((
@@ -392,10 +365,7 @@ impl MockRedisBackend {
 pub struct MockConnection(pub Arc<MockRedisBackend>);
 
 impl redis::aio::ConnectionLike for MockConnection {
-    fn req_packed_command<'a>(
-        &'a mut self,
-        cmd: &'a Cmd,
-    ) -> redis::RedisFuture<'a, Value> {
+    fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> redis::RedisFuture<'a, Value> {
         let backend = self.0.clone();
         Box::pin(async move { backend.execute(cmd).await })
     }

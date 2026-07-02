@@ -3,9 +3,9 @@
 //! 为 Row 和 DataSet 提供数据质量校验能力，在框架层面确保数据与 Schema 一致。
 
 use crate::model::cell::{DataValue, FieldType};
+use crate::model::data::dataset::Schema;
 use crate::model::data::dataset::error::DataSetError;
 use crate::model::data::dataset::rds::Row;
-use crate::model::data::dataset::Schema;
 
 /// 数据校验 trait，用于需要外部 Schema 上下文的校验场景
 ///
@@ -57,13 +57,14 @@ fn validate_row(row: &Row, schema: &Schema, row_index: Option<usize>) -> Result<
 
     for (i, value) in row.values.iter().enumerate() {
         if let Some(field) = schema.fields.get(i)
-            && !check_type_compatible(value, &field.field_type) {
-                return Err(DataSetError::TypeMismatch {
-                    field_name: field.name.clone(),
-                    expected: field.field_type.clone(),
-                    actual: format!("{:?}", value),
-                });
-            }
+            && !check_type_compatible(value, &field.field_type)
+        {
+            return Err(DataSetError::TypeMismatch {
+                field_name: field.name.clone(),
+                expected: field.field_type.clone(),
+                actual: format!("{:?}", value),
+            });
+        }
     }
 
     Ok(())
@@ -93,7 +94,11 @@ impl Row {
     /// # 参数
     /// - `schema`: Schema 定义
     /// - `row_index`: 行在数据集中的索引位置
-    pub fn validate_with_index(&self, schema: &Schema, row_index: usize) -> Result<(), DataSetError> {
+    pub fn validate_with_index(
+        &self,
+        schema: &Schema,
+        row_index: usize,
+    ) -> Result<(), DataSetError> {
         validate_row(self, schema, Some(row_index))
     }
 }

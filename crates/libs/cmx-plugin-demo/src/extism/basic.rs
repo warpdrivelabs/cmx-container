@@ -2,7 +2,6 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
-
 /// 问候函数
 ///
 /// 简单入参出参示例，不依赖任何宿主函数。

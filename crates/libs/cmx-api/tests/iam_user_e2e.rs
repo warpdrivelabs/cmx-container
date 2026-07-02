@@ -54,15 +54,17 @@ async fn test_user_crud() {
     )
     .await
     .assert_success();
-    assert_eq!(
-        get_str(&updated, "nickname").as_deref(),
-        Some(new_nickname)
-    );
+    assert_eq!(get_str(&updated, "nickname").as_deref(), Some(new_nickname));
 
     // delete
-    post_json(&client, "/api/iam/users/delete", &json!({ "ids": [id] }), None)
-        .await
-        .assert_success();
+    post_json(
+        &client,
+        "/api/iam/users/delete",
+        &json!({ "ids": [id] }),
+        None,
+    )
+    .await
+    .assert_success();
 
     // delete 后 get 应失败
     let after = get(
@@ -146,7 +148,9 @@ async fn test_assign_and_get_roles() {
     .await
     .assert_success();
     let arr = roles.as_array().expect("用户角色非数组");
-    let found = arr.iter().any(|r| get_str(r, "id").as_deref() == Some(role_id.as_str()));
+    let found = arr
+        .iter()
+        .any(|r| get_str(r, "id").as_deref() == Some(role_id.as_str()));
     assert!(found, "用户角色反查未包含已分配角色 {role_id}");
 
     // 清理用户与角色
@@ -159,7 +163,19 @@ async fn test_assign_and_get_roles() {
     .await
     .assert_success();
     if let Some(uid) = flex_get(&user, "id").and_then(|v| v.as_str().map(|s| s.to_string())) {
-        let _ = post_json(&client, "/api/iam/users/delete", &json!({ "ids": [uid] }), None).await;
+        let _ = post_json(
+            &client,
+            "/api/iam/users/delete",
+            &json!({ "ids": [uid] }),
+            None,
+        )
+        .await;
     }
-    let _ = post_json(&client, "/api/iam/roles/delete", &json!({ "ids": [role_id] }), None).await;
+    let _ = post_json(
+        &client,
+        "/api/iam/roles/delete",
+        &json!({ "ids": [role_id] }),
+        None,
+    )
+    .await;
 }

@@ -34,7 +34,9 @@ impl PermissionServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params, "perm_scope_ids")
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询作用域权限失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询作用域权限失败: {e}")))
+            })?;
 
         let schema = dataset.schema.as_ref();
         let mut map: HashMap<String, String> = HashMap::new();
@@ -71,9 +73,17 @@ impl PermissionServiceImpl {
             .collect();
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), &sql, params, "perm_affected_roles")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                &sql,
+                params,
+                "perm_affected_roles",
+            )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}")))
+            })?;
 
         let schema = dataset.schema.as_ref();
         let role_ids: Vec<String> = dataset
@@ -121,7 +131,13 @@ impl PermissionServiceImpl {
         ];
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params, "descendants_by_path")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                sql,
+                params,
+                "descendants_by_path",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询子权限失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
@@ -162,7 +178,9 @@ impl PermissionServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, Some(txn_id), &sql, params, "check_perm_usage")
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询权限使用情况失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询权限使用情况失败: {e}")))
+            })?;
         let schema = dataset.schema.as_ref();
         let mut map: HashMap<String, BlockedPermissionInfo> = HashMap::new();
         for row in dataset.iter() {
@@ -170,20 +188,30 @@ impl PermissionServiceImpl {
                 Some(v) => v,
                 None => continue,
             };
-            let pcode = row.get_by_name_as::<String>(schema, "pcode").unwrap_or_default();
-            let pname = row.get_by_name_as::<String>(schema, "pname").unwrap_or_default();
+            let pcode = row
+                .get_by_name_as::<String>(schema, "pcode")
+                .unwrap_or_default();
+            let pname = row
+                .get_by_name_as::<String>(schema, "pname")
+                .unwrap_or_default();
             let rid = match row.get_by_name_as::<String>(schema, "rid") {
                 Some(v) => v,
                 None => continue,
             };
-            let rcode = row.get_by_name_as::<String>(schema, "rcode").unwrap_or_default();
-            let rname = row.get_by_name_as::<String>(schema, "rname").unwrap_or_default();
-            let entry = map.entry(pid.clone()).or_insert_with(|| BlockedPermissionInfo {
-                permission_id: pid,
-                permission_code: pcode,
-                permission_name: pname,
-                roles: vec![],
-            });
+            let rcode = row
+                .get_by_name_as::<String>(schema, "rcode")
+                .unwrap_or_default();
+            let rname = row
+                .get_by_name_as::<String>(schema, "rname")
+                .unwrap_or_default();
+            let entry = map
+                .entry(pid.clone())
+                .or_insert_with(|| BlockedPermissionInfo {
+                    permission_id: pid,
+                    permission_code: pcode,
+                    permission_name: pname,
+                    roles: vec![],
+                });
             entry.roles.push(BlockedRoleInfo {
                 role_id: rid,
                 role_code: rcode,

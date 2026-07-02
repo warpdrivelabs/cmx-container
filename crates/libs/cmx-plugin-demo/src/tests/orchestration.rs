@@ -6,8 +6,7 @@ use cmx_plugin_sdk::{CacheResponse, DbResponse};
 #[test]
 fn test_check_order_amount_high_value() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
+    mock.expect_log_info().returning(|_| Ok(()));
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!({
         "customer_name": "Alice",
@@ -23,8 +22,7 @@ fn test_check_order_amount_high_value() {
 #[test]
 fn test_check_order_amount_normal() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
+    mock.expect_log_info().returning(|_| Ok(()));
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!({
         "customer_name": "Bob",
@@ -40,18 +38,16 @@ fn test_check_order_amount_normal() {
 #[test]
 fn test_tx_create_order() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
+    mock.expect_log_info().returning(|_| Ok(()));
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     // 模拟编排场景：switch 节点后 current_output 自动恢复为初始输入
     let input = make_input(serde_json::json!({
@@ -69,18 +65,16 @@ fn test_tx_create_order() {
 #[test]
 fn test_tx_update_stock() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
+    mock.expect_log_info().returning(|_| Ok(()));
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     // 模拟编排场景：input 是 tx_create_order 的输出（不含库存字段），initial_input 是原始业务参数
     let input = make_input_with_initial(
@@ -101,18 +95,16 @@ fn test_tx_update_stock() {
 #[test]
 fn test_tx_record_approval() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
+    mock.expect_log_info().returning(|_| Ok(()));
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     // 模拟编排场景：input 是 tx_update_stock 的输出，initial_input 含客户名称，step_outputs 含 order_id
     let input = make_input_with_steps(
@@ -132,24 +124,31 @@ fn test_tx_record_approval() {
 #[test]
 fn test_final_process() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
-    mock.expect_cache_set()
-        .returning(|_, _, _| {
-            Ok(CacheResponse {
-                success: true,
-                value: None,
-                exists: None,
-                error: None,
-            })
-        });
+    mock.expect_log_info().returning(|_| Ok(()));
+    mock.expect_cache_set().returning(|_, _, _| {
+        Ok(CacheResponse {
+            success: true,
+            value: None,
+            exists: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     let input = make_input_with_steps(
         serde_json::json!("test_data"),
         vec![
-            ("tx_create_order_hv", serde_json::json!({"operation": "tx_create_order", "order_id": "order-123"})),
-            ("tx_update_stock_hv", serde_json::json!({"operation": "tx_update_stock"})),
-            ("tx_record_approval", serde_json::json!({"operation": "tx_record_approval", "approval_id": "approval-456"})),
+            (
+                "tx_create_order_hv",
+                serde_json::json!({"operation": "tx_create_order", "order_id": "order-123"}),
+            ),
+            (
+                "tx_update_stock_hv",
+                serde_json::json!({"operation": "tx_update_stock"}),
+            ),
+            (
+                "tx_record_approval",
+                serde_json::json!({"operation": "tx_record_approval", "approval_id": "approval-456"}),
+            ),
         ],
     );
     let result = core.final_process(&input).unwrap();

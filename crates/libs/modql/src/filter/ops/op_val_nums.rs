@@ -78,20 +78,20 @@ impl From<&$nt> for OpVal {
 }
 
 impl_op_val!(
-	(OpValsInt64, OpValInt64, i64, OpVal::Int64),
-	(OpValsInt32, OpValInt32, i32, OpVal::Int32),
-	(OpValsFloat64, OpValFloat64, f64, OpVal::Float64)
+    (OpValsInt64, OpValInt64, i64, OpVal::Int64),
+    (OpValsInt32, OpValInt32, i32, OpVal::Int32),
+    (OpValsFloat64, OpValFloat64, f64, OpVal::Float64)
 );
 
 mod json {
-	use super::*;
-	use crate::filter::json::OpValueToOpValType;
-	use crate::{Error, Result};
-	use serde_json::{Number, Value};
+    use super::*;
+    use crate::filter::json::OpValueToOpValType;
+    use crate::{Error, Result};
+    use serde_json::{Number, Value};
 
-	// - `ov` e.g., `OpValInt64`
-	// - `asfn` e.g., `as_i64`
-	macro_rules! from_json_to_opval_num{
+    // - `ov` e.g., `OpValInt64`
+    // - `asfn` e.g., `as_i64`
+    macro_rules! from_json_to_opval_num{
 	($(($ov:ident, $asfn:expr)),+) => {
 		$(
 
@@ -141,51 +141,59 @@ impl OpValueToOpValType for $ov {
 	};
 }
 
-	from_json_to_opval_num!((OpValInt64, as_i64), (OpValInt32, as_i32), (OpValFloat64, as_f64));
+    from_json_to_opval_num!(
+        (OpValInt64, as_i64),
+        (OpValInt32, as_i32),
+        (OpValFloat64, as_f64)
+    );
 
-	fn as_i64(num: Number) -> Result<i64> {
-		num.as_i64().ok_or(Error::JsonValNotOfType("i64"))
-	}
+    fn as_i64(num: Number) -> Result<i64> {
+        num.as_i64().ok_or(Error::JsonValNotOfType("i64"))
+    }
 
-	fn as_i32(num: Number) -> Result<i32> {
-		num.as_i64().map(|n| n as i32).ok_or(Error::JsonValNotOfType("i32"))
-	}
+    fn as_i32(num: Number) -> Result<i32> {
+        num.as_i64()
+            .map(|n| n as i32)
+            .ok_or(Error::JsonValNotOfType("i32"))
+    }
 
-	fn as_f64(num: Number) -> Result<f64> {
-		num.as_f64().ok_or(Error::JsonValNotOfType("f64"))
-	}
+    fn as_f64(num: Number) -> Result<f64> {
+        num.as_f64().ok_or(Error::JsonValNotOfType("f64"))
+    }
 
-	fn into_numbers(value: Value) -> Result<Vec<Number>> {
-		let mut values = Vec::new();
+    fn into_numbers(value: Value) -> Result<Vec<Number>> {
+        let mut values = Vec::new();
 
-		let Value::Array(array) = value else {
-			return Err(Error::JsonValArrayWrongType { actual_value: value });
-		};
+        let Value::Array(array) = value else {
+            return Err(Error::JsonValArrayWrongType {
+                actual_value: value,
+            });
+        };
 
-		for item in array.into_iter() {
-			if let Value::Number(item) = item {
-				values.push(item);
-			} else {
-				return Err(Error::JsonValArrayItemNotOfType {
-					expected_type: "Number",
-					actual_value: item,
-				});
-			}
-		}
+        for item in array.into_iter() {
+            if let Value::Number(item) = item {
+                values.push(item);
+            } else {
+                return Err(Error::JsonValArrayItemNotOfType {
+                    expected_type: "Number",
+                    actual_value: item,
+                });
+            }
+        }
 
-		Ok(values)
-	}
+        Ok(values)
+    }
 }
 
 // region:    --- with-sea-query
 #[cfg(feature = "with-sea-query")]
 mod with_sea_query {
-	use super::*;
-	use crate::filter::{FilterNodeOptions, SeaResult, sea_is_col_value_null};
-	use crate::into_node_value_expr;
-	use sea_query::{BinOper, ColumnRef, Condition, ExprTrait as _, SimpleExpr};
+    use super::*;
+    use crate::filter::{sea_is_col_value_null, FilterNodeOptions, SeaResult};
+    use crate::into_node_value_expr;
+    use sea_query::{BinOper, ColumnRef, Condition, ExprTrait as _, SimpleExpr};
 
-	macro_rules! impl_into_sea_op_val {
+    macro_rules! impl_into_sea_op_val {
 		($($ov:ident),+) => {
 			$(
 	impl $ov {
@@ -219,6 +227,6 @@ mod with_sea_query {
 		};
 	}
 
-	impl_into_sea_op_val!(OpValInt64, OpValInt32, OpValFloat64);
+    impl_into_sea_op_val!(OpValInt64, OpValInt32, OpValFloat64);
 }
 // endregion: --- with-sea-query

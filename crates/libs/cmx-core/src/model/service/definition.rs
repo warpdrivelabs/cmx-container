@@ -46,5 +46,3 @@ pub struct ServiceDefinition {
     /// 服务api 联查获取）
     pub api_doc: Option<String>,
 }
-
-

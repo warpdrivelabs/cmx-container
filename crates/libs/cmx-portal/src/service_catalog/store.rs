@@ -1,6 +1,6 @@
 //! service-catalog store 实现：mini `.bru` 解析器 + 目录遍历 + DAM 分类。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::data_path;
 use crate::error::PortalResult;
@@ -32,7 +32,11 @@ fn split_bru_blocks(text: &str) -> Vec<BruBlock> {
         while i < n && s[i] != '{' && !s[i].is_whitespace() {
             i += 1;
         }
-        let name: String = s[name_start..i].iter().collect::<String>().trim().to_string();
+        let name: String = s[name_start..i]
+            .iter()
+            .collect::<String>()
+            .trim()
+            .to_string();
         while i < n && s[i] != '{' {
             i += 1;
         }
@@ -92,7 +96,10 @@ fn kv_to_object(kv: &[(String, String)]) -> serde_json::Map<String, Value> {
 }
 
 fn kv_get(kv: &[(String, String)], key: &str) -> String {
-    kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default()
+    kv.iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default()
 }
 
 /// 原始文本块（body:json / docs）：去首尾空行 + 去公共前导缩进。
@@ -110,7 +117,13 @@ fn dedent_raw_block(body: &str) -> String {
     if min == usize::MAX || min == 0 {
         return lines.join("\n").trim().to_string();
     }
-    lines.iter().map(|l| if l.len() >= min { &l[min..] } else { *l }).collect::<Vec<_>>().join("\n").trim().to_string()
+    lines
+        .iter()
+        .map(|l| if l.len() >= min { &l[min..] } else { *l })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 /// 解析单个 .bru 中间结构。
@@ -147,7 +160,11 @@ fn parse_bru(text: &str) -> Bru {
             res.method = name.to_uppercase();
             res.url = kv_get(&kv, "url");
             let bm = kv_get(&kv, "body");
-            res.body_mode = if bm.is_empty() { "none".to_string() } else { bm };
+            res.body_mode = if bm.is_empty() {
+                "none".to_string()
+            } else {
+                bm
+            };
         } else if name == "ws" || name == "websocket" {
             let kv = parse_kv_block(&b.body);
             res.ws_url = kv_get(&kv, "url");
@@ -179,18 +196,30 @@ fn expand_vars(s: &str, vars: &serde_json::Map<String, Value>) -> String {
     let re = regex::Regex::new(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}").unwrap();
     re.replace_all(s, |c: &regex::Captures| {
         let name = &c[1];
-        vars.get(name).and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| c[0].to_string())
+        vars.get(name)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| c[0].to_string())
     })
     .to_string()
 }
 
 /// 推导服务类型：websocket / jsonrpc / rest。
 fn derive_service_type(bru: &Bru) -> &'static str {
-    let t = bru.meta.get("type").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+    let t = bru
+        .meta
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_lowercase();
     if t == "ws" || t == "websocket" || !bru.ws_url.is_empty() {
         return "websocket";
     }
-    if bru.body_mode == "json" && regex::Regex::new(r#""jsonrpc"\s*:"#).unwrap().is_match(&bru.body_json) {
+    if bru.body_mode == "json"
+        && regex::Regex::new(r#""jsonrpc"\s*:"#)
+            .unwrap()
+            .is_match(&bru.body_json)
+    {
         return "jsonrpc";
     }
     "rest"
@@ -198,7 +227,10 @@ fn derive_service_type(bru: &Bru) -> &'static str {
 
 /// 由相对路径段推 domain/app/module/page。
 fn derive_dam(rel_parts: &[String], file_name: &str) -> (String, String, String, String) {
-    let page = file_name.strip_suffix(".bru").unwrap_or(file_name).to_string();
+    let page = file_name
+        .strip_suffix(".bru")
+        .unwrap_or(file_name)
+        .to_string();
     let domain = rel_parts.first().cloned().unwrap_or_default();
     let app = rel_parts.get(1).cloned().unwrap_or_default();
     let module = if rel_parts.len() > 3 {
@@ -210,7 +242,9 @@ fn derive_dam(rel_parts: &[String], file_name: &str) -> (String, String, String,
 }
 
 /// 递归收集 .bru 文件（跳过根 environments/、folder.bru、隐藏文件）。
-async fn collect_bru_files(root: &std::path::Path) -> PortalResult<Vec<(Vec<String>, String, std::path::PathBuf)>> {
+async fn collect_bru_files(
+    root: &std::path::Path,
+) -> PortalResult<Vec<(Vec<String>, String, std::path::PathBuf)>> {
     let mut out = Vec::new();
     let mut stack: Vec<(std::path::PathBuf, Vec<String>)> = vec![(root.to_path_buf(), Vec::new())];
     while let Some((dir, parts)) = stack.pop() {
@@ -218,7 +252,11 @@ async fn collect_bru_files(root: &std::path::Path) -> PortalResult<Vec<(Vec<Stri
             Ok(rd) => rd,
             Err(_) => continue,
         };
-        while let Some(entry) = rd.next_entry().await.map_err(crate::error::PortalError::Io)? {
+        while let Some(entry) = rd
+            .next_entry()
+            .await
+            .map_err(crate::error::PortalError::Io)?
+        {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.starts_with('.') {
                 continue;
@@ -226,7 +264,10 @@ async fn collect_bru_files(root: &std::path::Path) -> PortalResult<Vec<(Vec<Stri
             if parts.is_empty() && name == "environments" {
                 continue;
             }
-            let ft = entry.file_type().await.map_err(crate::error::PortalError::Io)?;
+            let ft = entry
+                .file_type()
+                .await
+                .map_err(crate::error::PortalError::Io)?;
             if ft.is_dir() {
                 let mut next = parts.clone();
                 next.push(name);
@@ -273,7 +314,11 @@ async fn load_all() -> PortalResult<Vec<Value>> {
         let bru = parse_bru(&text);
         let (domain, app, module, page) = derive_dam(&rel_parts, &file_name);
         let stype = derive_service_type(&bru);
-        let url = if stype == "websocket" { bru.ws_url.clone() } else { bru.url.clone() };
+        let url = if stype == "websocket" {
+            bru.ws_url.clone()
+        } else {
+            bru.url.clone()
+        };
         // id：domain.app.module.page 点分（合法段），缺级跳过；冲突加 #k
         let id_parts: Vec<&str> = [&domain, &app, &module, &page]
             .into_iter()
@@ -293,7 +338,11 @@ async fn load_all() -> PortalResult<Vec<Value>> {
         }
         taken.insert(id.clone());
 
-        let params: Vec<Value> = bru.query.iter().map(|(k, v)| json!({ "key": k, "value": v })).collect();
+        let params: Vec<Value> = bru
+            .query
+            .iter()
+            .map(|(k, v)| json!({ "key": k, "value": v }))
+            .collect();
         out.push(json!({
             "id": id,
             "domain": domain,
@@ -315,7 +364,11 @@ async fn load_all() -> PortalResult<Vec<Value>> {
 }
 
 /// 列出服务（按 domain/app/module 过滤）。
-pub async fn list_services(domain: Option<&str>, app: Option<&str>, module: Option<&str>) -> PortalResult<Vec<Value>> {
+pub async fn list_services(
+    domain: Option<&str>,
+    app: Option<&str>,
+    module: Option<&str>,
+) -> PortalResult<Vec<Value>> {
     let all = load_all().await?;
     let d = domain.unwrap_or("").trim();
     let a = app.unwrap_or("").trim();
@@ -333,5 +386,7 @@ pub async fn list_services(domain: Option<&str>, app: Option<&str>, module: Opti
 /// 按 id 取单个服务（不存在返回 None）。
 pub async fn get_service_by_id(id: &str) -> PortalResult<Option<Value>> {
     let all = load_all().await?;
-    Ok(all.into_iter().find(|s| s.get("id").and_then(|v| v.as_str()) == Some(id)))
+    Ok(all
+        .into_iter()
+        .find(|s| s.get("id").and_then(|v| v.as_str()) == Some(id)))
 }

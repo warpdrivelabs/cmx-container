@@ -148,7 +148,10 @@ port = 6379
     assert_eq!(db_config.get_int("port").unwrap(), 5432);
 
     let cache_config = config.sub_config("cache").unwrap();
-    assert_eq!(cache_config.get_string("host").unwrap(), "redis.example.com");
+    assert_eq!(
+        cache_config.get_string("host").unwrap(),
+        "redis.example.com"
+    );
     assert_eq!(cache_config.get_int("port").unwrap(), 6379);
 }
 
@@ -238,9 +241,18 @@ fn test_command_line_source() {
     let source = CommandLineSource::from_args(args.into_iter());
     let map = source.collect().unwrap();
 
-    assert_eq!(map.get("host").unwrap().clone().into_string().unwrap(), "localhost");
-    assert_eq!(map.get("port").unwrap().clone().into_string().unwrap(), "8080");
-    assert_eq!(map.get("debug").unwrap().clone().into_string().unwrap(), "true");
+    assert_eq!(
+        map.get("host").unwrap().clone().into_string().unwrap(),
+        "localhost"
+    );
+    assert_eq!(
+        map.get("port").unwrap().clone().into_string().unwrap(),
+        "8080"
+    );
+    assert_eq!(
+        map.get("debug").unwrap().clone().into_string().unwrap(),
+        "true"
+    );
 }
 
 /// 测试 get_optional 和 get_as_or

@@ -15,9 +15,9 @@
 //! - `host.rs` — 抽象接口，定义宿主能力 trait
 //! - `extism/` — Extism 适配层，将 HostCaller 委托为 HostFunctions 实现
 
-pub mod models;
-pub mod host;
 pub mod handlers;
+pub mod host;
+pub mod models;
 
 #[cfg(test)]
 pub mod tests;

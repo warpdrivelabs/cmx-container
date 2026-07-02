@@ -10,7 +10,7 @@ pub mod service;
 pub use bmc::{ExclusionRuleBmc, ExclusionRuleItemBmc};
 pub use enforcer::{RuleEnforcer, RuleEnforcerImpl};
 pub use entity::{
-    CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, RuleViolationDetail,
-    SubjectType, UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
+    CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, RuleViolationDetail, SubjectType,
+    UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
 };
 pub use service::{ExclusionRuleService, ExclusionRuleServiceImpl};

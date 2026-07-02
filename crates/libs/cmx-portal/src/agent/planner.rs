@@ -3,7 +3,7 @@
 //! 把用户消息转成 decision：analysis（只读工具组合）或 approval（写文件/跑命令）。
 //! LlmPlanner（CMX_AGENT_PLANNER=llm）暂不实现，默认走本地规则。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::error::PortalResult;
 
@@ -21,14 +21,23 @@ fn value_to_string(v: &Value) -> String {
 }
 
 fn default_plan() -> Value {
-    json!(["理解请求与当前工作区上下文", "选择只读工具收集证据", "汇总下一步建议或定位结果"])
+    json!([
+        "理解请求与当前工作区上下文",
+        "选择只读工具收集证据",
+        "汇总下一步建议或定位结果"
+    ])
 }
 
 /// 取最近一条 user 消息文本。
 pub fn latest_user_text(messages: &[Value]) -> String {
     for m in messages.iter().rev() {
         if m.get("role").and_then(|v| v.as_str()) == Some("user") {
-            return m.get("content").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            return m
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
         }
     }
     String::new()
@@ -41,12 +50,17 @@ fn guess_search_query(text: &str) -> String {
     if let Some(c) = quoted.captures(text) {
         return c[1].trim().to_string();
     }
-    let path_like = regex::Regex::new(&format!(r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))")).unwrap();
+    let path_like = regex::Regex::new(&format!(
+        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
+    ))
+    .unwrap();
     if let Some(c) = path_like.captures(text) {
         return c[1].trim().to_string();
     }
     let stop = regex::Regex::new(r"^(请|帮我|如何|怎么|一下|实现|方案|这个|那个)$").unwrap();
-    let cleaned = regex::Regex::new(r"[，。！？；：、]").unwrap().replace_all(text, " ");
+    let cleaned = regex::Regex::new(r"[，。！？；：、]")
+        .unwrap()
+        .replace_all(text, " ");
     let tokens: Vec<&str> = cleaned
         .split_whitespace()
         .map(|s| s.trim())
@@ -55,7 +69,14 @@ fn guess_search_query(text: &str) -> String {
     if tokens.is_empty() {
         text.chars().take(80).collect()
     } else {
-        tokens.iter().rev().take(4).rev().cloned().collect::<Vec<_>>().join(" ")
+        tokens
+            .iter()
+            .rev()
+            .take(4)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -78,7 +99,10 @@ fn parse_loose_value(raw: &str) -> Value {
     if lower == "null" {
         return Value::Null;
     }
-    if regex::Regex::new(r"^-?\d+(\.\d+)?$").unwrap().is_match(text) {
+    if regex::Regex::new(r"^-?\d+(\.\d+)?$")
+        .unwrap()
+        .is_match(text)
+    {
         if let Ok(n) = text.parse::<f64>() {
             return json!(n);
         }
@@ -92,16 +116,31 @@ fn strip_portal_prefix(s: &str) -> String {
 
 /// 抽取 JSON 补丁请求（file + pointer + value）。
 fn extract_json_patch_request(text: &str) -> Option<Value> {
-    let file = regex::Regex::new(r"([a-zA-Z0-9_.@/-]+\.json)").unwrap()
-        .captures(text).map(|c| strip_portal_prefix(&c[1]))?;
-    let pointer = regex::Regex::new(r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)").unwrap()
-        .captures(text).map(|c| c[1].to_string())
-        .or_else(|| regex::Regex::new(r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*").unwrap()
-            .captures(text).map(|c| c[1].to_string()))?;
-    let value_str = regex::Regex::new(r"(?i)(?:值|value)\s*[:：]\s*([\s\S]+)$").unwrap()
-        .captures(text).map(|c| c[1].to_string())
-        .or_else(|| regex::Regex::new(r"(?i)(?:改为|设置为|set\s+to)\s*([\s\S]+)$").unwrap()
-            .captures(text).map(|c| c[1].to_string()))?;
+    let file = regex::Regex::new(r"([a-zA-Z0-9_.@/-]+\.json)")
+        .unwrap()
+        .captures(text)
+        .map(|c| strip_portal_prefix(&c[1]))?;
+    let pointer =
+        regex::Regex::new(r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)")
+            .unwrap()
+            .captures(text)
+            .map(|c| c[1].to_string())
+            .or_else(|| {
+                regex::Regex::new(r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*")
+                    .unwrap()
+                    .captures(text)
+                    .map(|c| c[1].to_string())
+            })?;
+    let value_str = regex::Regex::new(r"(?i)(?:值|value)\s*[:：]\s*([\s\S]+)$")
+        .unwrap()
+        .captures(text)
+        .map(|c| c[1].to_string())
+        .or_else(|| {
+            regex::Regex::new(r"(?i)(?:改为|设置为|set\s+to)\s*([\s\S]+)$")
+                .unwrap()
+                .captures(text)
+                .map(|c| c[1].to_string())
+        })?;
     Some(json!({ "path": file, "pointer": pointer, "value": parse_loose_value(&value_str) }))
 }
 
@@ -131,33 +170,58 @@ fn extract_quoted_parts(text: &str) -> Vec<String> {
 
 /// 抽取文本替换请求。
 fn extract_text_replace_request(text: &str) -> Option<Value> {
-    if !regex::Regex::new(r"(?i)(替换|replace|改成|改为)").unwrap().is_match(text) {
+    if !regex::Regex::new(r"(?i)(替换|replace|改成|改为)")
+        .unwrap()
+        .is_match(text)
+    {
         return None;
     }
-    let file = regex::Regex::new(&format!(r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))")).unwrap()
-        .captures(text).map(|c| strip_portal_prefix(&c[1]))?;
-    let all = regex::Regex::new(r"(?iu)全部|所有|all|global").unwrap().is_match(text);
+    let file = regex::Regex::new(&format!(
+        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
+    ))
+    .unwrap()
+    .captures(text)
+    .map(|c| strip_portal_prefix(&c[1]))?;
+    let all = regex::Regex::new(r"(?iu)全部|所有|all|global")
+        .unwrap()
+        .is_match(text);
     let occurrence = if all { "all" } else { "first" };
     let quoted = extract_quoted_parts(text);
     if quoted.len() >= 2 {
-        return Some(json!({ "path": file, "oldText": quoted[0], "newText": quoted[1], "occurrence": occurrence }));
+        return Some(
+            json!({ "path": file, "oldText": quoted[0], "newText": quoted[1], "occurrence": occurrence }),
+        );
     }
-    let m = regex::Regex::new(r"把\s+([\s\S]+?)\s*(?:替换为|替换成|改成|改为)\s*([\s\S]+)$").unwrap().captures(text)?;
-    let new_text = regex::Regex::new(&format!(r"(?i)\s*(?:在|到)\s*[a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN})\s*$")).unwrap()
-        .replace(m[2].trim(), "").to_string();
-    Some(json!({ "path": file, "oldText": m[1].trim(), "newText": new_text.trim(), "occurrence": occurrence }))
+    let m = regex::Regex::new(r"把\s+([\s\S]+?)\s*(?:替换为|替换成|改成|改为)\s*([\s\S]+)$")
+        .unwrap()
+        .captures(text)?;
+    let new_text = regex::Regex::new(&format!(
+        r"(?i)\s*(?:在|到)\s*[a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN})\s*$"
+    ))
+    .unwrap()
+    .replace(m[2].trim(), "")
+    .to_string();
+    Some(
+        json!({ "path": file, "oldText": m[1].trim(), "newText": new_text.trim(), "occurrence": occurrence }),
+    )
 }
 
 /// 推断命令审批（lint / build）。
 fn infer_command_approval(text: &str) -> Option<Value> {
-    if regex::Regex::new(r"(?i)lint|eslint|代码检查|静态检查").unwrap().is_match(text) {
+    if regex::Regex::new(r"(?i)lint|eslint|代码检查|静态检查")
+        .unwrap()
+        .is_match(text)
+    {
         return Some(json!({
             "title": "运行 CMXPortalManager lint",
             "risk": "只读检查命令，会读取源码并输出诊断，不写业务文件。",
             "args": { "command": "npm", "args": ["run", "lint", "-w", "cmx-portal-manager"] }
         }));
     }
-    if regex::Regex::new(r"(?i)build|构建|打包").unwrap().is_match(text) {
+    if regex::Regex::new(r"(?i)build|构建|打包")
+        .unwrap()
+        .is_match(text)
+    {
         return Some(json!({
             "title": "构建 CMXPortalManager",
             "risk": "构建命令可能写入 dist 等构建产物，耗时也更长。",
@@ -168,15 +232,26 @@ fn infer_command_approval(text: &str) -> Option<Value> {
 }
 
 fn wants_html_page_context(text: &str) -> bool {
-    regex::Regex::new(r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产").unwrap().is_match(text)
+    regex::Regex::new(r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产")
+        .unwrap()
+        .is_match(text)
 }
 
 fn extract_html_page_id(text: &str) -> String {
-    if let Some(c) = regex::Regex::new(r"(?i)(?:页面\s*ID|html\s*page\s*id|pageId|id)\s*[:：=]\s*([a-zA-Z0-9._-]{1,128})").unwrap().captures(text) {
+    if let Some(c) = regex::Regex::new(
+        r"(?i)(?:页面\s*ID|html\s*page\s*id|pageId|id)\s*[:：=]\s*([a-zA-Z0-9._-]{1,128})",
+    )
+    .unwrap()
+    .captures(text)
+    {
         return c[1].to_string();
     }
-    let stop = regex::Regex::new(r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$").unwrap();
-    for c in regex::Regex::new(r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b").unwrap().captures_iter(text) {
+    let stop =
+        regex::Regex::new(r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$").unwrap();
+    for c in regex::Regex::new(r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b")
+        .unwrap()
+        .captures_iter(text)
+    {
         let s = c[1].to_string();
         if stop.is_match(&s) {
             continue;
@@ -190,7 +265,9 @@ fn extract_html_page_id(text: &str) -> String {
 
 /// 计划 decision：CMX_AGENT_PLANNER=llm 时走 LLM 规划（失败回退本地规则），否则纯本地规则。
 pub async fn plan(messages: &[Value], root: &std::path::Path) -> Value {
-    if std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm") && crate::ai::is_configured() {
+    if std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm")
+        && crate::ai::is_configured()
+    {
         match llm_plan(messages).await {
             Ok(decision) => return decision,
             Err(e) => {
@@ -237,7 +314,11 @@ pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
 
     // 只读分析：抽取可读路径（存在才用）
     let readable_path = extract_readable_path(&text, root).await;
-    let html_id = if wants_html_page_context(&text) { extract_html_page_id(&text) } else { String::new() };
+    let html_id = if wants_html_page_context(&text) {
+        extract_html_page_id(&text)
+    } else {
+        String::new()
+    };
     let wants_html = wants_html_page_context(&text);
     json!({
         "kind": "analysis",
@@ -254,7 +335,10 @@ pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
 }
 
 async fn extract_readable_path(text: &str, root: &std::path::Path) -> String {
-    let re = regex::Regex::new(&format!(r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))")).unwrap();
+    let re = regex::Regex::new(&format!(
+        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
+    ))
+    .unwrap();
     let Some(c) = re.captures(text) else {
         return String::new();
     };
@@ -269,9 +353,18 @@ async fn extract_readable_path(text: &str, root: &std::path::Path) -> String {
 
 /// 本地总结（无 LLM 时）。
 pub fn build_local_summary(events: &[Value], context: &Value) -> String {
-    let results: Vec<&Value> = events.iter().filter(|e| e.get("type").and_then(|v| v.as_str()) == Some("tool_result")).collect();
-    let failed: Vec<&&Value> = results.iter().filter(|e| e.get("status").and_then(|v| v.as_str()) == Some("error")).collect();
-    let ok: Vec<&&Value> = results.iter().filter(|e| e.get("status").and_then(|v| v.as_str()) != Some("error")).collect();
+    let results: Vec<&Value> = events
+        .iter()
+        .filter(|e| e.get("type").and_then(|v| v.as_str()) == Some("tool_result"))
+        .collect();
+    let failed: Vec<&&Value> = results
+        .iter()
+        .filter(|e| e.get("status").and_then(|v| v.as_str()) == Some("error"))
+        .collect();
+    let ok: Vec<&&Value> = results
+        .iter()
+        .filter(|e| e.get("status").and_then(|v| v.as_str()) != Some("error"))
+        .collect();
     let ctx_title = context
         .get("workspaceTitle")
         .and_then(|v| v.as_str())
@@ -279,10 +372,26 @@ pub fn build_local_summary(events: &[Value], context: &Value) -> String {
         .map(|t| format!("当前工作区：{t}。\n"))
         .unwrap_or_default();
     if !failed.is_empty() && ok.is_empty() {
-        let msgs: Vec<String> = failed.iter().map(|e| e.get("summary").and_then(|v| v.as_str()).unwrap_or("").to_string()).collect();
+        let msgs: Vec<String> = failed
+            .iter()
+            .map(|e| {
+                e.get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect();
         return format!("{ctx_title}工具调用失败：{}。", msgs.join("；"));
     }
-    let lines: Vec<String> = ok.iter().map(|e| format!("- {}", e.get("summary").and_then(|v| v.as_str()).unwrap_or(""))).collect();
+    let lines: Vec<String> = ok
+        .iter()
+        .map(|e| {
+            format!(
+                "- {}",
+                e.get("summary").and_then(|v| v.as_str()).unwrap_or("")
+            )
+        })
+        .collect();
     format!(
         "{ctx_title}已完成这轮只读分析：\n{}\n\n目前这个 Agent Gateway 已具备对话协议、计划、工具调用和结果展示；写文件、运行命令、审批流可以在这个协议上继续扩展。",
         lines.join("\n")
@@ -358,14 +467,28 @@ fn parse_planner_json(content: &str) -> Option<Value> {
 fn string_or(v: Option<&Value>, fallback: &str) -> String {
     let s = v.map(value_to_string).unwrap_or_default();
     let s = s.trim();
-    if s.is_empty() { fallback.to_string() } else { s.to_string() }
+    if s.is_empty() {
+        fallback.to_string()
+    } else {
+        s.to_string()
+    }
 }
 
 fn string_array_or(v: Option<&Value>, fallback: Value) -> Value {
     match v.and_then(|x| x.as_array()) {
         Some(arr) => {
-            let items: Vec<Value> = arr.iter().filter_map(|x| x.as_str().map(|s| s.trim())).filter(|s| !s.is_empty()).take(8).map(|s| json!(s)).collect();
-            if items.is_empty() { fallback } else { Value::Array(items) }
+            let items: Vec<Value> = arr
+                .iter()
+                .filter_map(|x| x.as_str().map(|s| s.trim()))
+                .filter(|s| !s.is_empty())
+                .take(8)
+                .map(|s| json!(s))
+                .collect();
+            if items.is_empty() {
+                fallback
+            } else {
+                Value::Array(items)
+            }
         }
         None => fallback,
     }
@@ -373,9 +496,15 @@ fn string_array_or(v: Option<&Value>, fallback: Value) -> Value {
 
 /// 可选对象：required 键须为非空字符串，否则 null。
 fn normalize_optional_object(v: Option<&Value>, required: &[&str]) -> Value {
-    let Some(obj) = v.filter(|x| x.is_object()) else { return Value::Null };
+    let Some(obj) = v.filter(|x| x.is_object()) else {
+        return Value::Null;
+    };
     for key in required {
-        let ok = obj.get(*key).map(value_to_string).map(|s| !s.trim().is_empty()).unwrap_or(false);
+        let ok = obj
+            .get(*key)
+            .map(value_to_string)
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
         if !ok {
             return Value::Null;
         }
@@ -395,12 +524,21 @@ fn passthrough_object(args: &Value, allowed_keys: &[&str]) -> Value {
 
 /// 校验审批 args（命令白名单 / patch 必填字段）；非法时 Err。
 fn normalize_approval_args(action: &str, args: Option<&Value>) -> Result<Value, String> {
-    let args = args.filter(|v| v.is_object()).ok_or_else(|| "approval args must be an object".to_string())?;
+    let args = args
+        .filter(|v| v.is_object())
+        .ok_or_else(|| "approval args must be an object".to_string())?;
     match action {
         "run_command" => {
             let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            let argv: Vec<String> = args.get("args").and_then(|v| v.as_array()).map(|a| a.iter().map(value_to_string).collect()).unwrap_or_default();
-            let joined = std::iter::once(command.to_string()).chain(argv.clone()).collect::<Vec<_>>().join(" ");
+            let argv: Vec<String> = args
+                .get("args")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().map(value_to_string).collect())
+                .unwrap_or_default();
+            let joined = std::iter::once(command.to_string())
+                .chain(argv.clone())
+                .collect::<Vec<_>>()
+                .join(" ");
             if joined == "npm run lint -w cmx-portal-manager" {
                 Ok(json!({ "command": command, "args": argv }))
             } else if joined == "npm run build -w cmx-portal-manager" {
@@ -417,38 +555,81 @@ fn normalize_approval_args(action: &str, args: Option<&Value>) -> Result<Value, 
                     | "cargo clippy -- -D warnings"
                     | "git status --short"
             ) {
-                Ok(json!({ "command": command, "args": argv, "timeoutMs": args.get("timeoutMs").cloned().unwrap_or(Value::Null) }))
+                Ok(
+                    json!({ "command": command, "args": argv, "timeoutMs": args.get("timeoutMs").cloned().unwrap_or(Value::Null) }),
+                )
             } else {
                 Err(format!("command is not allowed: {joined}"))
             }
         }
         "apply_json_patch" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let pointer = args.get("pointer").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let pointer = args
+                .get("pointer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if path.is_empty() || !pointer.starts_with('/') {
                 return Err("invalid json patch args".to_string());
             }
-            Ok(json!({ "path": path, "pointer": pointer, "value": args.get("value").cloned().unwrap_or(Value::Null) }))
+            Ok(
+                json!({ "path": path, "pointer": pointer, "value": args.get("value").cloned().unwrap_or(Value::Null) }),
+            )
         }
         "apply_text_replace" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let old_text = args.get("oldText").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let new_text = args.get("newText").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let old_text = args
+                .get("oldText")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let new_text = args
+                .get("newText")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if path.is_empty() || old_text.is_empty() {
                 return Err("invalid text replace args".to_string());
             }
-            let occ = if args.get("occurrence").and_then(|v| v.as_str()) == Some("all") { "all" } else { "first" };
+            let occ = if args.get("occurrence").and_then(|v| v.as_str()) == Some("all") {
+                "all"
+            } else {
+                "first"
+            };
             Ok(json!({ "path": path, "oldText": old_text, "newText": new_text, "occurrence": occ }))
         }
-        "cargo_check" | "cargo_build" | "cargo_test" | "cargo_clippy" => Ok(passthrough_object(args, &["package", "test", "timeoutMs"])),
-        "npm_test" | "npm_build_workspace" => Ok(passthrough_object(args, &["workspace", "script", "timeoutMs"])),
+        "cargo_check" | "cargo_build" | "cargo_test" | "cargo_clippy" => {
+            Ok(passthrough_object(args, &["package", "test", "timeoutMs"]))
+        }
+        "npm_test" | "npm_build_workspace" => Ok(passthrough_object(
+            args,
+            &["workspace", "script", "timeoutMs"],
+        )),
         "run_playwright" => Ok(passthrough_object(args, &["project", "grep", "timeoutMs"])),
         "capture_page_screenshot" | "inspect_dom" => {
-            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if url.is_empty() || !(url.starts_with("http://") || url.starts_with("https://")) {
                 return Err("browser tool requires http(s) url".to_string());
             }
-            Ok(passthrough_object(args, &["url", "output", "selector", "timeoutMs"]))
+            Ok(passthrough_object(
+                args,
+                &["url", "output", "selector", "timeoutMs"],
+            ))
         }
         "check_accessibility" => Ok(passthrough_object(args, &["url", "timeoutMs"])),
         "apply_file_patch" => {
@@ -459,21 +640,33 @@ fn normalize_approval_args(action: &str, args: Option<&Value>) -> Result<Value, 
             Ok(json!({ "patch": patch }))
         }
         "format_file" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if path.is_empty() {
                 return Err("format_file requires path".to_string());
             }
             Ok(passthrough_object(args, &["path", "timeoutMs"]))
         }
         "create_file" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if path.is_empty() {
                 return Err("create_file requires path".to_string());
             }
             Ok(passthrough_object(args, &["path", "content", "overwrite"]))
         }
         "rename_file" => {
-            let from = args.get("from").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let from = args
+                .get("from")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let to = args.get("to").and_then(|v| v.as_str()).unwrap_or("").trim();
             if from.is_empty() || to.is_empty() {
                 return Err("rename_file requires from/to".to_string());
@@ -481,19 +674,37 @@ fn normalize_approval_args(action: &str, args: Option<&Value>) -> Result<Value, 
             Ok(passthrough_object(args, &["from", "to"]))
         }
         "call_plugin_function" => {
-            let plugin_id = args.get("pluginId").and_then(|v| v.as_str()).unwrap_or("").trim();
-            let function_name = args.get("functionName").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let plugin_id = args
+                .get("pluginId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            let function_name = args
+                .get("functionName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if plugin_id.is_empty() || function_name.is_empty() {
                 return Err("call_plugin_function requires pluginId/functionName".to_string());
             }
-            Ok(passthrough_object(args, &["serviceName", "pluginId", "functionName", "input"]))
+            Ok(passthrough_object(
+                args,
+                &["serviceName", "pluginId", "functionName", "input"],
+            ))
         }
         "call_service_flow" => {
-            let service_key = args.get("serviceKey").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let service_key = args
+                .get("serviceKey")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if service_key.is_empty() {
                 return Err("call_service_flow requires serviceKey".to_string());
             }
-            Ok(passthrough_object(args, &["serviceName", "serviceKey", "input", "timeoutMs"]))
+            Ok(passthrough_object(
+                args,
+                &["serviceName", "serviceKey", "input", "timeoutMs"],
+            ))
         }
         other => Err(format!("unsupported action: {other}")),
     }
@@ -567,24 +778,33 @@ async fn llm_plan(messages: &[Value]) -> PortalResult<Value> {
         .rev()
         .map(|m| json!({ "role": m.get("role").and_then(|v| v.as_str()).unwrap_or("user"), "content": m.get("content").and_then(|v| v.as_str()).unwrap_or("").chars().take(2000).collect::<String>() }))
         .collect();
-    let user_prompt = serde_json::to_string_pretty(&json!({ "messages": safe_messages })).unwrap_or_default();
+    let user_prompt =
+        serde_json::to_string_pretty(&json!({ "messages": safe_messages })).unwrap_or_default();
     let req_messages = json!([
         { "role": "system", "content": planner_system_prompt() },
         { "role": "user", "content": user_prompt },
     ]);
     let content = crate::ai::raw_chat_completion(req_messages, true, 0.1).await?;
-    let raw = parse_planner_json(&content).ok_or_else(|| crate::error::PortalError::business("LLM planner 未返回 JSON"))?;
+    let raw = parse_planner_json(&content)
+        .ok_or_else(|| crate::error::PortalError::business("LLM planner 未返回 JSON"))?;
     normalize_decision(&raw).map_err(crate::error::PortalError::business)
 }
 
 /// LLM 总结：基于工具事件用 DeepSeek 出简洁中文总结（失败回退本地总结）。
 ///
 /// `on_delta` 在每个 token 增量到达时被调用，用于逐字流式输出（emit `assistant_delta`）。
-pub async fn build_summary<F>(events: &[Value], context: &Value, messages: &[Value], on_delta: F) -> String
+pub async fn build_summary<F>(
+    events: &[Value],
+    context: &Value,
+    messages: &[Value],
+    on_delta: F,
+) -> String
 where
     F: FnMut(&str),
 {
-    if std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm") && crate::ai::is_configured() {
+    if std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm")
+        && crate::ai::is_configured()
+    {
         match llm_summary(events, context, messages, on_delta).await {
             Ok(s) => return s,
             Err(e) => tracing::warn!("[agentPlanner] LLM 总结失败，回退本地：{e}"),
@@ -593,7 +813,12 @@ where
     build_local_summary(events, context)
 }
 
-async fn llm_summary<F>(events: &[Value], context: &Value, messages: &[Value], on_delta: F) -> PortalResult<String>
+async fn llm_summary<F>(
+    events: &[Value],
+    context: &Value,
+    messages: &[Value],
+    on_delta: F,
+) -> PortalResult<String>
 where
     F: FnMut(&str),
 {
@@ -614,7 +839,10 @@ where
         })
         .collect();
     let recent: Vec<Value> = messages.iter().rev().take(8).rev().map(|m| json!({ "role": m.get("role"), "content": m.get("content").and_then(|v| v.as_str()).unwrap_or("").chars().take(2000).collect::<String>() })).collect();
-    let user = serde_json::to_string_pretty(&json!({ "context": context, "messages": recent, "toolEvents": tool_events })).unwrap_or_default();
+    let user = serde_json::to_string_pretty(
+        &json!({ "context": context, "messages": recent, "toolEvents": tool_events }),
+    )
+    .unwrap_or_default();
     let req = json!([
         { "role": "system", "content": "你是 CMXPortalManager 网页 Agent。请基于工具结果用简洁中文总结，指出关键文件/发现/下一步。不要编造工具结果，不要要求用户复制文件。" },
         { "role": "user", "content": user },

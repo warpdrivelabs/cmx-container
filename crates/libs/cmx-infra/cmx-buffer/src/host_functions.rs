@@ -3,9 +3,9 @@
 //! 为 WASM 插件提供 Redis 缓存操作能力的宿主函数。
 //! 所有缓存键自动附加插件ID前缀，实现插件间缓存隔离。
 
+use cmx_core::{CacheGetRequest, CacheResponse, CacheSetRequest};
 use cmx_traits::error::HostFuncError;
-use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef};
-use cmx_core::{CacheGetRequest, CacheSetRequest, CacheResponse};
+use cmx_traits::runtime::{HostFunctionDef, HostFunctionProvider};
 
 use crate::cache::GlobalCacheManager;
 
@@ -24,7 +24,7 @@ impl BufferHostFunctions {
     /// 构建带插件隔离前缀的缓存键
     ///
     /// 格式：`plugin:{plugin_id}:{key}`
-    fn build_key( key: &str) -> String {
+    fn build_key(key: &str) -> String {
         key.to_string()
     }
 
@@ -36,18 +36,17 @@ impl BufferHostFunctions {
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key( &req.key);
+        let full_key = Self::build_key(&req.key);
 
         let result = {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                cache.ops().get(&full_key).await
-            })
+            rt.block_on(async { cache.ops().get(&full_key).await })
         };
 
         match result {
             Ok(Some(value)) => {
-                let json_value: serde_json::Value = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
+                let json_value: serde_json::Value =
+                    serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
                 Ok(Self::ok_response(Some(json_value), Some(true)))
             }
             Ok(None) => Ok(Self::ok_response(None, Some(false))),
@@ -63,7 +62,7 @@ impl BufferHostFunctions {
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key( &req.key);
+        let full_key = Self::build_key(&req.key);
         let ttl = req.ttl_seconds;
         let value_str = req.value.to_string();
 
@@ -71,7 +70,14 @@ impl BufferHostFunctions {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Some(ttl_secs) = ttl {
-                    cache.ops().set_ex(&full_key, &value_str, std::time::Duration::from_secs(ttl_secs)).await
+                    cache
+                        .ops()
+                        .set_ex(
+                            &full_key,
+                            &value_str,
+                            std::time::Duration::from_secs(ttl_secs),
+                        )
+                        .await
                 } else {
                     cache.ops().set(&full_key, &value_str).await
                 }
@@ -92,13 +98,11 @@ impl BufferHostFunctions {
         };
 
         let cache = GlobalCacheManager::get();
-        let full_key = Self::build_key( &req.key);
+        let full_key = Self::build_key(&req.key);
 
         let result = {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                cache.ops().del(&full_key).await
-            })
+            rt.block_on(async { cache.ops().del(&full_key).await })
         };
 
         match result {

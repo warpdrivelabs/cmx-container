@@ -152,10 +152,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_by_id(
-        &self,
-        user_id: &str,
-    ) -> Result<Option<UserAuthData>, TraitError>;
+    async fn get_user_by_id(&self, user_id: &str) -> Result<Option<UserAuthData>, TraitError>;
 
     /// 获取用户角色编码列表。
     ///
@@ -170,10 +167,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_role_codes(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, TraitError>;
+    async fn get_user_role_codes(&self, user_id: &str) -> Result<Vec<String>, TraitError>;
 
     /// 获取用户权限编码列表。
     ///
@@ -188,10 +182,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_permissions(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, TraitError>;
+    async fn get_user_permissions(&self, user_id: &str) -> Result<Vec<String>, TraitError>;
 
     /// 更新用户密码哈希（修改密码场景）。
     ///
@@ -203,11 +194,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 更新失败时返回 [`TraitError`]。
-    async fn update_password_hash(
-        &self,
-        user_id: &str,
-        new_hash: &str,
-    ) -> Result<(), TraitError>;
+    async fn update_password_hash(&self, user_id: &str, new_hash: &str) -> Result<(), TraitError>;
 
     /// 更新最后登录信息（由 cmx-auth 登录流程调用）。
     ///
@@ -219,11 +206,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 更新失败时返回 [`TraitError`]。
-    async fn update_last_login(
-        &self,
-        user_id: &str,
-        ip: &str,
-    ) -> Result<(), TraitError>;
+    async fn update_last_login(&self, user_id: &str, ip: &str) -> Result<(), TraitError>;
 
     /// 创建超管账号（含角色关联）。
     ///
@@ -258,10 +241,7 @@ pub trait UserAuthQuery: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_by_email(
-        &self,
-        email: &str,
-    ) -> Result<Option<UserAuthData>, TraitError>;
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<UserAuthData>, TraitError>;
 
     /// 从第三方 OAuth2 信息自动注册用户（当 `auto_register=true` 时调用）。
     ///

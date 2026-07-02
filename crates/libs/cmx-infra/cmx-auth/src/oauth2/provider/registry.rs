@@ -10,7 +10,8 @@ use cmx_traits::auth::AuthError;
 use super::OAuth2Provider;
 
 /// 全局 OAuth2 Provider 注册表（`cmx-auth` 内部使用）。
-static GLOBAL_PROVIDER_REGISTRY: std::sync::OnceLock<OAuth2ProviderRegistry> = std::sync::OnceLock::new();
+static GLOBAL_PROVIDER_REGISTRY: std::sync::OnceLock<OAuth2ProviderRegistry> =
+    std::sync::OnceLock::new();
 
 /// Provider 注册表。
 ///
@@ -53,9 +54,10 @@ impl OAuth2ProviderRegistry {
     ///
     /// 存在时返回 `Ok(Arc<dyn OAuth2Provider>)`，否则返回 `AuthError::OAuth2ProviderNotFound`。
     pub fn get_provider(&self, name: &str) -> Result<Arc<dyn OAuth2Provider>, AuthError> {
-        self.providers.get(name).cloned().ok_or_else(|| {
-            AuthError::OAuth2ProviderNotFound(name.to_string())
-        })
+        self.providers
+            .get(name)
+            .cloned()
+            .ok_or_else(|| AuthError::OAuth2ProviderNotFound(name.to_string()))
     }
 
     /// 列出所有已注册的 Provider 信息。
@@ -64,13 +66,16 @@ impl OAuth2ProviderRegistry {
     ///
     /// 返回所有 Provider 的 `ProviderInfo` 列表（含名称、显示名、scope、图标、品牌色）。
     pub fn list_providers(&self) -> Vec<cmx_traits::auth::ProviderInfo> {
-        self.providers.values().map(|p| cmx_traits::auth::ProviderInfo {
-            name: p.name().to_string(),
-            display_name: p.display_name().to_string(),
-            scopes: p.default_scopes(),
-            icon_url: p.icon_url().map(String::from),
-            brand_color: p.brand_color().map(String::from),
-        }).collect()
+        self.providers
+            .values()
+            .map(|p| cmx_traits::auth::ProviderInfo {
+                name: p.name().to_string(),
+                display_name: p.display_name().to_string(),
+                scopes: p.default_scopes(),
+                icon_url: p.icon_url().map(String::from),
+                brand_color: p.brand_color().map(String::from),
+            })
+            .collect()
     }
 }
 
@@ -239,10 +244,16 @@ mod tests {
         assert!(names.contains(&"github".to_string()), "应包含 github");
 
         // 验证 ProviderInfo 字段映射
-        let google = list.iter().find(|p| p.name == "google").expect("应找到 google");
+        let google = list
+            .iter()
+            .find(|p| p.name == "google")
+            .expect("应找到 google");
         assert_eq!(google.display_name, "Google");
         assert_eq!(google.scopes, vec!["openid"]);
-        assert_eq!(google.icon_url.as_deref(), Some("https://example.com/icon.png"));
+        assert_eq!(
+            google.icon_url.as_deref(),
+            Some("https://example.com/icon.png")
+        );
         assert_eq!(google.brand_color.as_deref(), Some("#FF0000"));
     }
 

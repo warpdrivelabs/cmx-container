@@ -5,12 +5,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
 use crate::core::registry::PluginRegistry;
 use crate::domain::dependency::{DependencyCheckResult, DependencyConflict, MissingDependency};
 use crate::domain::plugin::{PluginInfo, PluginSource, PluginStatus};
 use crate::error::PluginResult;
 use crate::infrastructure::database::repository::PluginRepository;
+use tokio::sync::RwLock;
 
 /// 依赖检查工具依赖
 ///
@@ -88,16 +88,23 @@ impl DependencyUtils {
             }
 
             if let Some(ref constraint_str) = dep.version_constraint
-                && let Ok(constraint) = crate::domain::version::VersionConstraint::parse(constraint_str)
-                    && let Some(plugin_info) = get_plugin_info(&dep.plugin_id, self.deps.registry.clone(), self.deps.repository.clone()).await?
-                        && let Ok(installed_version) =
-                            crate::domain::version::SemanticVersion::parse(&plugin_info.version)
-                            && !constraint.satisfies(&installed_version) {
-                                result.add_conflict(DependencyConflict {
-                                    plugin_id: dep.plugin_id.clone(),
-                                    constraints: vec![(plugin_def.id.clone(), constraint)],
-                                });
-                            }
+                && let Ok(constraint) =
+                    crate::domain::version::VersionConstraint::parse(constraint_str)
+                && let Some(plugin_info) = get_plugin_info(
+                    &dep.plugin_id,
+                    self.deps.registry.clone(),
+                    self.deps.repository.clone(),
+                )
+                .await?
+                && let Ok(installed_version) =
+                    crate::domain::version::SemanticVersion::parse(&plugin_info.version)
+                && !constraint.satisfies(&installed_version)
+            {
+                result.add_conflict(DependencyConflict {
+                    plugin_id: dep.plugin_id.clone(),
+                    constraints: vec![(plugin_def.id.clone(), constraint)],
+                });
+            }
         }
 
         Ok(result)

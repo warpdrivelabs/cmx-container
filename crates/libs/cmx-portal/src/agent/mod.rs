@@ -19,7 +19,9 @@ pub fn root_dir() -> std::path::PathBuf {
         .ok()
         .filter(|s| !s.trim().is_empty())
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+        .unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        })
         .canonicalize()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
 }

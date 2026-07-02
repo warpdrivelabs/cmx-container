@@ -4,8 +4,6 @@ use super::entity::DomainEntity;
 pub struct DomainEntityManager;
 
 impl DomainEntityManager {
-
-
     // 序列化实体
     pub fn serialize_entity(entity: &DomainEntity) -> Result<String, serde_json::Error> {
         serde_json::to_string(entity)

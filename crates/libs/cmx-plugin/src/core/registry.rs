@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::domain::plugin::{PluginInfo, PluginStatus, PluginFilter};
+use crate::domain::plugin::{PluginFilter, PluginInfo, PluginStatus};
 
 /// 插件注册表
 ///
@@ -66,7 +66,8 @@ impl PluginRegistry {
     ///
     /// 返回指定状态的插件列表。
     pub fn filter_by_status(&self, status: PluginStatus) -> Vec<&PluginInfo> {
-        self.plugins.values()
+        self.plugins
+            .values()
             .filter(|p| p.status == status)
             .collect()
     }
@@ -75,7 +76,8 @@ impl PluginRegistry {
     ///
     /// 返回名称包含指定字符串的插件列表。
     pub fn search_by_name(&self, name: &str) -> Vec<&PluginInfo> {
-        self.plugins.values()
+        self.plugins
+            .values()
             .filter(|p| p.name.to_lowercase().contains(&name.to_lowercase()))
             .collect()
     }
@@ -93,7 +95,8 @@ impl PluginRegistry {
     ///
     /// 根据筛选条件返回匹配的插件列表。
     pub fn filter(&self, filter: &PluginFilter) -> Vec<&PluginInfo> {
-        self.plugins.values()
+        self.plugins
+            .values()
             .filter(|p| {
                 let mut matches = true;
 
@@ -125,9 +128,7 @@ impl PluginRegistry {
     ///
     /// 返回指定状态的插件数量。
     pub fn count_by_status(&self, status: PluginStatus) -> usize {
-        self.plugins.values()
-            .filter(|p| p.status == status)
-            .count()
+        self.plugins.values().filter(|p| p.status == status).count()
     }
 
     /// 清空注册表

@@ -31,12 +31,17 @@ struct JwksCache {
 
 impl JwksCache {
     fn new() -> Self {
-        Self { keys: None, expires_at: None }
+        Self {
+            keys: None,
+            expires_at: None,
+        }
     }
 
     fn is_valid(&self) -> bool {
         self.keys.is_some()
-            && self.expires_at.is_some_and(|t| std::time::Instant::now() < t)
+            && self
+                .expires_at
+                .is_some_and(|t| std::time::Instant::now() < t)
     }
 
     fn set(&mut self, keys: serde_json::Value, ttl: std::time::Duration) {
@@ -73,13 +78,16 @@ impl GoogleProvider {
             }
         }
         tracing::info!("获取 Google JWKS 公钥（缓存过期或首次获取）");
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .get(Self::JWKS_URL)
             .send()
             .await
             .map_err(|e| AuthError::OAuth2ProviderUnavailable(e.to_string()))?;
 
-        let jwks: serde_json::Value = resp.json().await
+        let jwks: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| AuthError::OAuth2ProviderUnavailable(e.to_string()))?;
 
         let mut cache = self.jwks.write().await;
@@ -99,24 +107,29 @@ impl GoogleProvider {
 
     /// 验证 ID Token 签名并解析 claims
     async fn verify_id_token(&self, id_token: &str) -> Result<GoogleIdTokenClaims, AuthError> {
-        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
         use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
         let parts: Vec<&str> = id_token.split('.').collect();
         if parts.len() != 3 {
-            return Err(AuthError::OAuth2ProviderTokenError("ID Token 格式无效".into()));
+            return Err(AuthError::OAuth2ProviderTokenError(
+                "ID Token 格式无效".into(),
+            ));
         }
 
-        let header_json = URL_SAFE_NO_PAD.decode(parts[0])
+        let header_json = URL_SAFE_NO_PAD
+            .decode(parts[0])
             .map_err(|e| AuthError::OAuth2ProviderTokenError(format!("Header 解码失败: {}", e)))?;
         let header: serde_json::Value = serde_json::from_slice(&header_json)
             .map_err(|e| AuthError::OAuth2ProviderTokenError(format!("Header 解析失败: {}", e)))?;
 
-        let kid = header["kid"].as_str()
+        let kid = header["kid"]
+            .as_str()
             .ok_or_else(|| AuthError::OAuth2ProviderTokenError("ID Token 缺少 kid".into()))?;
 
         let jwks = self.fetch_jwks().await?;
-        let key = jwks["keys"].as_array()
+        let key = jwks["keys"]
+            .as_array()
             .and_then(|keys| keys.iter().find(|k| k["kid"].as_str() == Some(kid)));
 
         let key = match key {
@@ -124,15 +137,24 @@ impl GoogleProvider {
             None => {
                 tracing::warn!(kid = %kid, "JWKS 中未找到匹配的 kid，强制刷新 JWKS");
                 let refreshed_jwks = self.force_refresh_jwks().await?;
-                refreshed_jwks["keys"].as_array()
+                refreshed_jwks["keys"]
+                    .as_array()
                     .and_then(|keys| keys.iter().find(|k| k["kid"].as_str() == Some(kid)))
                     .cloned()
-                    .ok_or_else(|| AuthError::OAuth2ProviderTokenError("JWKS 中未找到匹配的公钥（刷新后仍无）".into()))?
+                    .ok_or_else(|| {
+                        AuthError::OAuth2ProviderTokenError(
+                            "JWKS 中未找到匹配的公钥（刷新后仍无）".into(),
+                        )
+                    })?
             }
         };
 
-        let n = key["n"].as_str().ok_or_else(|| AuthError::OAuth2ProviderTokenError("JWKS 公钥缺少 n".into()))?;
-        let e = key["e"].as_str().ok_or_else(|| AuthError::OAuth2ProviderTokenError("JWKS 公钥缺少 e".into()))?;
+        let n = key["n"]
+            .as_str()
+            .ok_or_else(|| AuthError::OAuth2ProviderTokenError("JWKS 公钥缺少 n".into()))?;
+        let e = key["e"]
+            .as_str()
+            .ok_or_else(|| AuthError::OAuth2ProviderTokenError("JWKS 公钥缺少 e".into()))?;
 
         let decoding_key = jsonwebtoken::DecodingKey::from_rsa_components(n, e)
             .map_err(|e| AuthError::OAuth2ProviderTokenError(format!("公钥构建失败: {}", e)))?;
@@ -141,12 +163,13 @@ impl GoogleProvider {
         validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
         validation.set_audience(&[&self.config.client_id]);
 
-        let claims: GoogleIdTokenClaims = jsonwebtoken::decode(id_token, &decoding_key, &validation)
-            .map_err(|e| {
-                tracing::warn!(error = %e, "Google ID Token 验证失败");
-                AuthError::OAuth2ProviderTokenError(format!("ID Token 验证失败: {}", e))
-            })?
-            .claims;
+        let claims: GoogleIdTokenClaims =
+            jsonwebtoken::decode(id_token, &decoding_key, &validation)
+                .map_err(|e| {
+                    tracing::warn!(error = %e, "Google ID Token 验证失败");
+                    AuthError::OAuth2ProviderTokenError(format!("ID Token 验证失败: {}", e))
+                })?
+                .claims;
 
         Ok(claims)
     }
@@ -164,10 +187,18 @@ struct GoogleIdTokenClaims {
 
 #[async_trait]
 impl OAuth2Provider for GoogleProvider {
-    fn name(&self) -> &str { "google" }
-    fn display_name(&self) -> &str { "Google" }
-    fn icon_url(&self) -> Option<&str> { Some("https://www.gstatic.com/firebasejs/ui/identity/google.svg") }
-    fn brand_color(&self) -> Option<&str> { Some("#4285F4") }
+    fn name(&self) -> &str {
+        "google"
+    }
+    fn display_name(&self) -> &str {
+        "Google"
+    }
+    fn icon_url(&self) -> Option<&str> {
+        Some("https://www.gstatic.com/firebasejs/ui/identity/google.svg")
+    }
+    fn brand_color(&self) -> Option<&str> {
+        Some("#4285F4")
+    }
 
     fn build_authorize_url(&self, state: &str, redirect_uri: &str, scopes: &[String]) -> String {
         let scopes_str = if scopes.is_empty() {
@@ -184,10 +215,15 @@ impl OAuth2Provider for GoogleProvider {
         )
     }
 
-    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<ProviderTokenResponse, AuthError> {
+    async fn exchange_code(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<ProviderTokenResponse, AuthError> {
         tracing::info!(provider = "google", "向 Google 交换 Token");
 
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post("https://oauth2.googleapis.com/token")
             .form(&[
                 ("grant_type", "authorization_code"),
@@ -207,15 +243,20 @@ impl OAuth2Provider for GoogleProvider {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             return Err(AuthError::OAuth2ProviderTokenError(format!(
-                "HTTP {}: {}", status, body
+                "HTTP {}: {}",
+                status, body
             )));
         }
 
-        resp.json::<ProviderTokenResponse>().await
+        resp.json::<ProviderTokenResponse>()
+            .await
             .map_err(|e| AuthError::OAuth2ProviderTokenError(e.to_string()))
     }
 
-    async fn get_user_info(&self, token_response: &ProviderTokenResponse) -> Result<ProviderUserInfo, AuthError> {
+    async fn get_user_info(
+        &self,
+        token_response: &ProviderTokenResponse,
+    ) -> Result<ProviderUserInfo, AuthError> {
         if let Some(id_token) = &token_response.id_token {
             match self.verify_id_token(id_token).await {
                 Ok(claims) => {
@@ -235,7 +276,8 @@ impl OAuth2Provider for GoogleProvider {
             }
         }
 
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .get("https://www.googleapis.com/oauth2/v3/userinfo")
             .bearer_auth(&token_response.access_token)
             .send()
@@ -243,12 +285,15 @@ impl OAuth2Provider for GoogleProvider {
             .map_err(|e| AuthError::OAuth2ProviderUnavailable(e.to_string()))?;
 
         if !resp.status().is_success() {
-            return Err(AuthError::OAuth2ProviderUserInfoError(
-                format!("HTTP {}", resp.status())
-            ));
+            return Err(AuthError::OAuth2ProviderUserInfoError(format!(
+                "HTTP {}",
+                resp.status()
+            )));
         }
 
-        let json: serde_json::Value = resp.json().await
+        let json: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| AuthError::OAuth2ProviderUserInfoError(e.to_string()))?;
 
         Ok(ProviderUserInfo {

@@ -47,7 +47,10 @@ impl<'a> FlowNavigator<'a> {
     /// 找到返回开始节点引用，否则返回 None（Flow 配置错误）
     pub fn find_start_node(&self) -> Option<&ServiceNode> {
         // 按节点类型查找：skylake-start 是约定的开始节点类型
-        self.flow.nodes.iter().find(|n| n.node_type == "skylake-start")
+        self.flow
+            .nodes
+            .iter()
+            .find(|n| n.node_type == "skylake-start")
     }
 
     /// 查找从指定节点出发、匹配源端口的下一条边
@@ -65,9 +68,10 @@ impl<'a> FlowNavigator<'a> {
     /// 找到返回边引用，否则返回 None（流程结束或配置错误）
     pub fn find_next_edge(&self, source_node_id: &str, source_port: &str) -> Option<&ServiceEdge> {
         // 边匹配条件：源节点ID + 源端口ID 同时匹配
-        self.flow.edges.iter().find(|e| {
-            e.source_node_id == source_node_id && e.source_port_id == source_port
-        })
+        self.flow
+            .edges
+            .iter()
+            .find(|e| e.source_node_id == source_node_id && e.source_port_id == source_port)
     }
 
     /// 解析事务框节点的数据库ID
@@ -87,22 +91,33 @@ impl<'a> FlowNavigator<'a> {
     /// 2. 默认数据库ID（default_db_id）
     pub fn resolve_transaction_db_id(&self, txn_node_id: &str, default_db_id: &str) -> String {
         // 查找事务框节点：ID 匹配 + 类型为 skylake-transaction
-        if let Some(txn_node) = self.flow.nodes.iter().find(|n| {
-            n.id == txn_node_id && n.node_type == "skylake-transaction"
-        }) {
+        if let Some(txn_node) = self
+            .flow
+            .nodes
+            .iter()
+            .find(|n| n.id == txn_node_id && n.node_type == "skylake-transaction")
+        {
             // 从节点元数据中提取 database_id
             // 链式调用：data -> node_meta -> database_id
-            txn_node.data.as_ref()
+            txn_node
+                .data
+                .as_ref()
                 .and_then(|d| d.node_meta.as_ref())
                 .and_then(|m| m.database_id.clone())
                 .unwrap_or_else(|| {
                     // 未指定 database_id，使用默认值并记录日志
-                    debug!("事务框节点未指定 database_id，使用默认值: txn_node_id={}, default={}", txn_node_id, default_db_id);
+                    debug!(
+                        "事务框节点未指定 database_id，使用默认值: txn_node_id={}, default={}",
+                        txn_node_id, default_db_id
+                    );
                     default_db_id.to_string()
                 })
         } else {
             // 未找到事务框节点（配置错误），使用默认值
-            debug!("未找到事务框节点，使用默认数据库ID: txn_node_id={}, default={}", txn_node_id, default_db_id);
+            debug!(
+                "未找到事务框节点，使用默认数据库ID: txn_node_id={}, default={}",
+                txn_node_id, default_db_id
+            );
             default_db_id.to_string()
         }
     }
@@ -124,7 +139,10 @@ mod tests {
     fn make_meta() -> NodeMeta {
         NodeMeta {
             z_index: 1,
-            size: NodeSize { width: 100, height: 50 },
+            size: NodeSize {
+                width: 100,
+                height: 50,
+            },
             position: NodePosition { x: 0.0, y: 0.0 },
         }
     }
@@ -282,10 +300,7 @@ mod tests {
     fn find_start_node_多个开始节点时返回第一个() {
         // 异常配置：存在多个 start 节点，应返回第一个
         let flow = ServiceFlow {
-            nodes: vec![
-                make_start_node("start_2"),
-                make_start_node("start_1"),
-            ],
+            nodes: vec![make_start_node("start_2"), make_start_node("start_1")],
             edges: vec![],
         };
         let navigator = FlowNavigator::new(&flow);

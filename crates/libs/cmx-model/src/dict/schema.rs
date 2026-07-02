@@ -82,12 +82,18 @@ pub async fn get_schema(dict_id: &str) -> PortalResult<DictSchema> {
 
 /// 取单个 schema（不存在返回 None）。
 pub async fn try_get_schema(dict_id: &str) -> PortalResult<Option<DictSchema>> {
-    Ok(load_schemas().await?.into_iter().find(|s| s.dict_id == dict_id))
+    Ok(load_schemas()
+        .await?
+        .into_iter()
+        .find(|s| s.dict_id == dict_id))
 }
 
 /// 注册 / 更新 schema。
 pub async fn register_schema(body: &serde_json::Value) -> PortalResult<serde_json::Value> {
-    let dict_id = body.get("dictId").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+    let dict_id = body
+        .get("dictId")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
     let Some(dict_id) = dict_id else {
         return Err(PortalError::bad_request("schema.dictId 不能为空"));
     };

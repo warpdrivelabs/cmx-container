@@ -4,7 +4,7 @@
 //! 所有日志消息自动附加插件ID前缀，便于追踪来源。
 
 use cmx_traits::error::HostFuncError;
-use cmx_traits::runtime::{HostFunctionProvider, HostFunctionDef, ValType};
+use cmx_traits::runtime::{HostFunctionDef, HostFunctionProvider, ValType};
 
 /// 日志宿主函数提供者
 ///

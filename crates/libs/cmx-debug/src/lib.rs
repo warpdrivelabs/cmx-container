@@ -4,8 +4,8 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -24,9 +24,11 @@ fn start_cleanup_thread() {
         return;
     }
 
-    thread::spawn(|| loop {
-        thread::sleep(Duration::from_millis(500));
-        cleanup_dead_sessions();
+    thread::spawn(|| {
+        loop {
+            thread::sleep(Duration::from_millis(500));
+            cleanup_dead_sessions();
+        }
     });
 }
 
@@ -222,10 +224,11 @@ pub fn get_code_server_url() -> String {
 
 pub async fn get_code_server_url_async() -> String {
     if let Ok(url) = std::env::var("CODE_SERVER_URL")
-        && !url.is_empty() {
-            tracing::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
-            return url;
-        }
+        && !url.is_empty()
+    {
+        tracing::info!("[cmx-debug] Using CODE_SERVER_URL from env: {}", url);
+        return url;
+    }
 
     let plugin_port = std::env::var("PLUGIN_PORT").unwrap_or_else(|_| "9000".to_string());
     let url = format!("http://localhost:{}/config", plugin_port);
@@ -238,15 +241,15 @@ pub async fn get_code_server_url_async() -> String {
 
     if let Ok(client) = client
         && let Ok(resp) = client.get(&url).send().await
-            && let Ok(json) = resp.json::<serde_json::Value>().await
-                && let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
-                {
-                    tracing::info!(
-                        "[cmx-debug] Got code_server_url from config: {}",
-                        code_server_url
-                    );
-                    return code_server_url.to_string();
-                }
+        && let Ok(json) = resp.json::<serde_json::Value>().await
+        && let Some(code_server_url) = json.get("code_server_url").and_then(|v| v.as_str())
+    {
+        tracing::info!(
+            "[cmx-debug] Got code_server_url from config: {}",
+            code_server_url
+        );
+        return code_server_url.to_string();
+    }
 
     tracing::warn!("[cmx-debug] Failed to get code_server_url, using default");
     "https://dev.cloudmatrix.one:18080".to_string()
@@ -397,5 +400,3 @@ pub async fn start_debug_session_async(
         session_id: Some(session_id),
     }
 }
-
-

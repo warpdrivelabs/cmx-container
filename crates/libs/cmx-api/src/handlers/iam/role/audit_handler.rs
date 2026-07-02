@@ -2,8 +2,8 @@
 //!
 //! 提供角色权限差异比较 API。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use serde::Deserialize;
 use tracing::debug;
 
@@ -16,8 +16,7 @@ use crate::{ApiResp, Error, Result};
 /// 权限差异查询参数。
 ///
 /// 用于比较两个角色之间权限集合的差异，常用于角色合并/迁移审计。
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct PermissionDiffQuery {
     /// 角色 1 ID。
     pub role_id_1: String,

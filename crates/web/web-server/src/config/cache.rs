@@ -19,10 +19,12 @@ pub use crate::Error;
 /// * `Err(Error::ServerSetup)` - Redis 配置或连接失败
 pub async fn init_cache() -> crate::Result<()> {
     let config = ConfigManager::global();
-    let _url_value = config.get("redis.url")
+    let _url_value = config
+        .get("redis.url")
         .ok_or_else(|| Error::ServerSetup("无法从配置管理器获取 redis.url".into()))?;
 
-    let redis_config = config.get_as::<RedisConfig>("redis")
+    let redis_config = config
+        .get_as::<RedisConfig>("redis")
         .map_err(|e| Error::ServerSetup(format!("Redis 配置解析失败: {}", e)))?;
 
     let client = RedisClient::new(redis_config)

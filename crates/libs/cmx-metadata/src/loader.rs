@@ -10,10 +10,10 @@
 
 use std::path::Path;
 
+use crate::MetadataError;
+use cmx_core::model::cell::TableDefine;
 use serde::Deserialize;
 use serde_json::Value;
-use cmx_core::model::cell::TableDefine;
-use crate::MetadataError;
 
 /// 支持"多表"的 JSON 根结构（可选）
 ///
@@ -85,7 +85,6 @@ pub fn table_defines_from_str(s: &str) -> Result<Vec<TableDefine>, MetadataError
         .get("tables")
         .ok_or_else(|| MetadataError::ConfigNotFound("缺少 tables 字段".to_string())) // 转为 Result
         .and_then(|v| serde_json::from_value(v.clone()).map_err(MetadataError::from)) // 执行转换
-
 }
 
 /// 从 JSON 文件路径读取多个表定义

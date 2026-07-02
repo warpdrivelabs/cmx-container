@@ -8,8 +8,8 @@ use cmx_core::model::data::dataset::{DataSet, Row, Schema};
 use cmx_database::DatabaseManager;
 use std::sync::Arc;
 
-use super::model::{PluginCreateParams, PluginRecord, PluginUpdateParams};
 use super::super::schema::SchemaManager;
+use super::model::{PluginCreateParams, PluginRecord, PluginUpdateParams};
 use crate::domain::plugin::PluginFilter;
 use crate::error::{PluginError, PluginResult};
 
@@ -379,40 +379,38 @@ impl PluginRepository {
                 record.update_name.clone().into(),
             ]);
 
-        let on_conflict = sea_query::OnConflict::columns(vec![
-            Alias::new("app_id"),
-            Alias::new("plugin_id"),
-        ])
-            .update_columns(vec![
-                Alias::new("name"),
-                Alias::new("description"),
-                Alias::new("version"),
-                Alias::new("wasm_path"),
-                Alias::new("install_path"),
-                Alias::new("db_id"),
-                Alias::new("status"),
-                Alias::new("is_system"),
-                Alias::new("is_locked"),
-                Alias::new("domain_code"),
-                Alias::new("application_code"),
-                Alias::new("module_code"),
-                Alias::new("vendor_name"),
-                Alias::new("vendor_url"),
-                Alias::new("vendor_contact"),
-                Alias::new("signature_algorithm"),
-                Alias::new("signer_key_id"),
-                Alias::new("zip_source_url"),
-                Alias::new("zip_source_type"),
-                Alias::new("plugin_type"),
-                Alias::new("source_path"),
-                Alias::new("marketplace_source_id"),
-                Alias::new("storage_key"),
-                Alias::new("storage_checksum"),
-                Alias::new("update_time"),
-                Alias::new("update_by"),
-                Alias::new("update_name"),
-            ])
-            .to_owned();
+        let on_conflict =
+            sea_query::OnConflict::columns(vec![Alias::new("app_id"), Alias::new("plugin_id")])
+                .update_columns(vec![
+                    Alias::new("name"),
+                    Alias::new("description"),
+                    Alias::new("version"),
+                    Alias::new("wasm_path"),
+                    Alias::new("install_path"),
+                    Alias::new("db_id"),
+                    Alias::new("status"),
+                    Alias::new("is_system"),
+                    Alias::new("is_locked"),
+                    Alias::new("domain_code"),
+                    Alias::new("application_code"),
+                    Alias::new("module_code"),
+                    Alias::new("vendor_name"),
+                    Alias::new("vendor_url"),
+                    Alias::new("vendor_contact"),
+                    Alias::new("signature_algorithm"),
+                    Alias::new("signer_key_id"),
+                    Alias::new("zip_source_url"),
+                    Alias::new("zip_source_type"),
+                    Alias::new("plugin_type"),
+                    Alias::new("source_path"),
+                    Alias::new("marketplace_source_id"),
+                    Alias::new("storage_key"),
+                    Alias::new("storage_checksum"),
+                    Alias::new("update_time"),
+                    Alias::new("update_by"),
+                    Alias::new("update_name"),
+                ])
+                .to_owned();
 
         query.on_conflict(on_conflict);
 
@@ -421,14 +419,21 @@ impl PluginRepository {
 
         let result = self
             .db_manager
-            .query_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values, "upsert_plugin")
+            .query_sql_with_sqlxvalues(
+                &self.default_db_id,
+                txn_id,
+                &sql,
+                sql_values,
+                "upsert_plugin",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("upsert插件记录失败: {}", e)))?;
 
         if let Some(row) = result.iter().next()
-            && let Some(DataValue::Bool(is_inserted)) = row.get(0) {
-                return Ok(*is_inserted);
-            }
+            && let Some(DataValue::Bool(is_inserted)) = row.get(0)
+        {
+            return Ok(*is_inserted);
+        }
 
         Ok(false)
     }
@@ -438,7 +443,11 @@ impl PluginRepository {
     /// # 参数
     /// * `plugin_id` - 插件ID
     /// * `app_id` - 应用ID，用于多租户隔离
-    pub async fn find_plugin(&self, plugin_id: &str, app_id: &str) -> PluginResult<Option<PluginRecord>> {
+    pub async fn find_plugin(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+    ) -> PluginResult<Option<PluginRecord>> {
         let sql = r#"
             SELECT p.*,
                    d.name AS domain_name,

@@ -34,8 +34,8 @@ struct Settings {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_serialize_simple_struct() {
@@ -76,7 +76,6 @@ mod tests {
         //
         // let value = serde_json::to_value(&config).unwrap();
 
-
         // // 获取 "profile" 字段，如果不存在则返回 null
         // let profile_value = &value["profile"];
         //
@@ -87,20 +86,23 @@ mod tests {
         let json_str = serde_json::to_string(&user).unwrap();
         println!("[test_roundtrip_serialization] JSON: {}", json_str);
         let deserialized: User = serde_json::from_str(&json_str).unwrap();
-        println!("[test_roundtrip_serialization] Deserialized: {:?}", deserialized);
+        println!(
+            "[test_roundtrip_serialization] Deserialized: {:?}",
+            deserialized
+        );
 
         assert_eq!(user, deserialized);
 
         let result = serde_json::json!({
-        "final": true,
-        "merge_output": 1,
-        "tx_insert_output": 1,
-        "tx_update_output": 1,
-        "tx_query_output": 1,
-        "tx_delete_output": 1,
-        "txn_id": 1,
-        "message": "服务编排执行完成",
-    });
+            "final": true,
+            "merge_output": 1,
+            "tx_insert_output": 1,
+            "tx_update_output": 1,
+            "tx_query_output": 1,
+            "tx_delete_output": 1,
+            "txn_id": 1,
+            "message": "服务编排执行完成",
+        });
 
         println!("{:?}", result)
     }
@@ -404,18 +406,16 @@ mod tests {
     }
 
     #[test]
-    fn test_yqs (){
+    fn test_yqs() {
         let value: Value = serde_json::Value::String("1".to_string());
-        assert_eq!(value.to_string(),"\"1\"");
+        assert_eq!(value.to_string(), "\"1\"");
 
         let value: Value = serde_json::from_str("\"1\"").unwrap();
-        assert_eq!(value.to_string(),"\"1\"");
+        assert_eq!(value.to_string(), "\"1\"");
 
         let value_number: Value = json!(12.5);
         assert_eq!(value_number.to_string(), "12.5");
-        let value: Value = serde_json::from_str( "12.5").unwrap();
+        let value: Value = serde_json::from_str("12.5").unwrap();
         assert_eq!(value_number, value);
-
-
     }
 }

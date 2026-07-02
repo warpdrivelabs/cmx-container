@@ -9,7 +9,9 @@ use cmx_database::crud::{DbBmc, GenericCrudService};
 use cmx_utils::snowflake_id_str;
 use modql::field::{HasSeaFields, SeaField, SeaFields};
 use modql::filter::{FilterGroups, ListOptions};
-use sea_query::{Asterisk, Condition, Expr, ExprTrait, PostgresQueryBuilder, Query, SelectStatement};
+use sea_query::{
+    Asterisk, Condition, Expr, ExprTrait, PostgresQueryBuilder, Query, SelectStatement,
+};
 use sea_query_sqlx::SqlxBinder;
 use serde_json::Value;
 use tracing::{debug, info, warn};
@@ -58,7 +60,10 @@ impl TableMetadataService {
         version_fields.push(SeaField::new("module_code", data.module_code.clone()));
         version_fields.push(SeaField::new("metadata", data.metadata.clone()));
         version_fields.push(SeaField::new("archived", archived));
-        version_fields.push(SeaField::new("app_id", data.app_id.clone().unwrap_or_else(|| "default".to_string())));
+        version_fields.push(SeaField::new(
+            "app_id",
+            data.app_id.clone().unwrap_or_else(|| "default".to_string()),
+        ));
         version_fields.push(SeaField::new("create_time", now));
         version_fields.push(SeaField::new("update_time", now));
 
@@ -98,7 +103,10 @@ impl TableMetadataService {
         main_fields.push(SeaField::new("module_code", data.module_code.clone()));
         main_fields.push(SeaField::new("archived", archived));
         main_fields.push(SeaField::new("ddl_status", "pending".to_string()));
-        main_fields.push(SeaField::new("app_id", data.app_id.clone().unwrap_or_else(|| "default".to_string())));
+        main_fields.push(SeaField::new(
+            "app_id",
+            data.app_id.clone().unwrap_or_else(|| "default".to_string()),
+        ));
         main_fields.push(SeaField::new("create_time", now));
         main_fields.push(SeaField::new("update_time", now));
 
@@ -266,7 +274,6 @@ impl TableMetadataService {
             select.and_where(Expr::col(("cmx_meta_table_define", "db_id")).eq(target_db_id));
         }
 
-
         let (sql, sql_values) = select.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "SERVICE", sql);
 
@@ -297,9 +304,9 @@ impl TableMetadataService {
 
         if let Some(filters) = filters {
             let filter_groups: FilterGroups = Vec::into(filters);
-            let cond: Condition = filter_groups.try_into().map_err(|e| {
-                PluginError::Database(format!("过滤条件错误: {}", e))
-            })?;
+            let cond: Condition = filter_groups
+                .try_into()
+                .map_err(|e| PluginError::Database(format!("过滤条件错误: {}", e)))?;
             select.cond_where(cond);
         }
 
@@ -338,9 +345,9 @@ impl TableMetadataService {
 
         if let Some(filters) = filters.clone() {
             let filter_groups: FilterGroups = Vec::into(filters);
-            let cond: Condition = filter_groups.try_into().map_err(|e| {
-                PluginError::Database(format!("过滤条件错误: {}", e))
-            })?;
+            let cond: Condition = filter_groups
+                .try_into()
+                .map_err(|e| PluginError::Database(format!("过滤条件错误: {}", e)))?;
             select.cond_where(cond);
         }
 
@@ -421,59 +428,68 @@ impl TableMetadataService {
             );
         }
 
-        select.expr_as(
-            Expr::col(("cmx_domain", "name")),
-            "domain_name",
-        );
-        select.expr_as(
-            Expr::col(("cmx_application", "name")),
-            "application_name",
-        );
-        select.expr_as(
-            Expr::col(("cmx_module", "name")),
-            "module_name",
-        );
-        select.expr_as(
-            Expr::col(("cmx_plugin", "name")),
-            "plugin_name",
-        );
+        select.expr_as(Expr::col(("cmx_domain", "name")), "domain_name");
+        select.expr_as(Expr::col(("cmx_application", "name")), "application_name");
+        select.expr_as(Expr::col(("cmx_module", "name")), "module_name");
+        select.expr_as(Expr::col(("cmx_plugin", "name")), "plugin_name");
 
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_meta_table_define_version",
             Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "table_name")).equals(("cmx_meta_table_define_version", "table_name")))
-                .add(Expr::col(("cmx_meta_table_define", "version")).equals(("cmx_meta_table_define_version", "version")))
-                .add(Expr::col(("cmx_meta_table_define", "db_id")).equals(("cmx_meta_table_define_version", "db_id")))
-                .add(Expr::col(("cmx_meta_table_define", "app_id")).equals(("cmx_meta_table_define_version", "app_id"))),
+                .add(
+                    Expr::col(("cmx_meta_table_define", "table_name"))
+                        .equals(("cmx_meta_table_define_version", "table_name")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "version"))
+                        .equals(("cmx_meta_table_define_version", "version")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "db_id"))
+                        .equals(("cmx_meta_table_define_version", "db_id")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "app_id"))
+                        .equals(("cmx_meta_table_define_version", "app_id")),
+                ),
         );
 
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_domain",
-            Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "domain_code")).equals(("cmx_domain", "code"))),
+            Condition::all().add(
+                Expr::col(("cmx_meta_table_define", "domain_code")).equals(("cmx_domain", "code")),
+            ),
         );
 
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_application",
-            Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "application_code")).equals(("cmx_application", "code"))),
+            Condition::all().add(
+                Expr::col(("cmx_meta_table_define", "application_code"))
+                    .equals(("cmx_application", "code")),
+            ),
         );
 
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_module",
-            Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "module_code")).equals(("cmx_module", "code"))),
+            Condition::all().add(
+                Expr::col(("cmx_meta_table_define", "module_code")).equals(("cmx_module", "code")),
+            ),
         );
         select.join(
             sea_query::JoinType::LeftJoin,
             "cmx_plugin",
             Condition::all()
-                .add(Expr::col(("cmx_meta_table_define", "plugin_id")).equals(("cmx_plugin", "plugin_id")))
-                .add(Expr::col(("cmx_meta_table_define", "app_id")).equals(("cmx_plugin", "app_id"))),
+                .add(
+                    Expr::col(("cmx_meta_table_define", "plugin_id"))
+                        .equals(("cmx_plugin", "plugin_id")),
+                )
+                .add(
+                    Expr::col(("cmx_meta_table_define", "app_id")).equals(("cmx_plugin", "app_id")),
+                ),
         );
 
         select
@@ -491,9 +507,9 @@ impl TableMetadataService {
 
         if let Some(filters) = filters {
             let filter_groups: FilterGroups = Vec::into(filters);
-            let cond: Condition = filter_groups.try_into().map_err(|e| {
-                PluginError::Database(format!("过滤条件错误: {}", e))
-            })?;
+            let cond: Condition = filter_groups
+                .try_into()
+                .map_err(|e| PluginError::Database(format!("过滤条件错误: {}", e)))?;
             query.cond_where(cond);
         }
 
@@ -547,7 +563,10 @@ impl TableMetadataService {
             let table_name = record.table_name.clone();
             let display_name = record.display_name.clone();
             let target_db_id = record.db_id.clone();
-            let app_id = record.app_id.clone().unwrap_or_else(|| "default".to_string());
+            let app_id = record
+                .app_id
+                .clone()
+                .unwrap_or_else(|| "default".to_string());
             let now = Utc::now();
             let mut main_fields = data.clone().not_none_sea_fields();
             main_fields.push(SeaField::new("update_time", now));
@@ -601,7 +620,8 @@ impl TableMetadataService {
                     )))
                     .and_where(Expr::col("db_id").eq(&target_db_id));
 
-                let (version_sql, version_sql_values) = version_query.build_sqlx(PostgresQueryBuilder);
+                let (version_sql, version_sql_values) =
+                    version_query.build_sqlx(PostgresQueryBuilder);
                 debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
 
                 mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
@@ -631,11 +651,10 @@ impl TableMetadataService {
                     .into_table(TableMetadataVersionBmc::table_ref())
                     .columns(version_columns)
                     .values(version_values)
-                    .map_err(|e| {
-                        PluginError::Database(format!("构建版本表插入语句失败: {}", e))
-                    })?;
+                    .map_err(|e| PluginError::Database(format!("构建版本表插入语句失败: {}", e)))?;
 
-                let (version_sql, version_sql_values) = version_insert.build_sqlx(PostgresQueryBuilder);
+                let (version_sql, version_sql_values) =
+                    version_insert.build_sqlx(PostgresQueryBuilder);
                 debug!("{:<12} - SQL: {}", "SERVICE", version_sql);
 
                 mm.execute_sql_with_sqlxvalues(db_id, txn_id, &version_sql, version_sql_values)
@@ -698,10 +717,7 @@ impl TableMetadataService {
                     "{:<12} - 根据 plugin_id 更新主表 version 失败: {}",
                     "SERVICE", e
                 );
-                PluginError::Database(format!(
-                    "根据 plugin_id 更新主表 version 失败: {}",
-                    e
-                ))
+                PluginError::Database(format!("根据 plugin_id 更新主表 version 失败: {}", e))
             })?;
         Ok(1)
     }
@@ -747,10 +763,7 @@ impl TableMetadataService {
                     "{:<12} - 根据 plugin_id 删除版本表记录失败: {}",
                     "SERVICE", e
                 );
-                PluginError::Database(format!(
-                    "根据 plugin_id 删除版本表记录失败: {}",
-                    e
-                ))
+                PluginError::Database(format!("根据 plugin_id 删除版本表记录失败: {}", e))
             })?;
 
         // 再删除主表 cmx_meta_table_define 中对应 plugin_id 和 app_id 的记录
@@ -766,14 +779,8 @@ impl TableMetadataService {
         mm.execute_sql_with_sqlxvalues(db_id, txn_id, &main_sql, main_sql_values)
             .await
             .map_err(|e| {
-                warn!(
-                    "{:<12} - 根据 plugin_id 删除主表记录失败: {}",
-                    "SERVICE", e
-                );
-                PluginError::Database(format!(
-                    "根据 plugin_id 删除主表记录失败: {}",
-                    e
-                ))
+                warn!("{:<12} - 根据 plugin_id 删除主表记录失败: {}", "SERVICE", e);
+                PluginError::Database(format!("根据 plugin_id 删除主表记录失败: {}", e))
             })?;
 
         info!(
@@ -858,7 +865,8 @@ impl TableMetadataService {
             }
         }
 
-        let result = GenericCrudService::<TableMetadataBmc>::delete(mm, db_id, None, ids.clone()).await;
+        let result =
+            GenericCrudService::<TableMetadataBmc>::delete(mm, db_id, None, ids.clone()).await;
         match result {
             Ok(_) => {
                 total_affected = ids.len() as u64;
@@ -920,7 +928,9 @@ impl TableMetadataService {
         app_id: &str,
     ) -> PluginResult<bool> {
         let mut select = Query::select();
-        select.from(TableMetadataVersionBmc::table_ref()).expr(Expr::col("id").count());
+        select
+            .from(TableMetadataVersionBmc::table_ref())
+            .expr(Expr::col("id").count());
         select.and_where(Expr::col("table_name").eq(table_name));
         select.and_where(Expr::col("version").eq(version));
         select.and_where(Expr::col("db_id").eq(target_db_id));
@@ -936,9 +946,10 @@ impl TableMetadataService {
 
         if let Some(row) = result.iter().next()
             && let Some(count_val) = row.get(0)
-                && let cmx_core::model::cell::DataValue::Int(count) = count_val {
-                    return Ok(*count > 0);
-                }
+            && let cmx_core::model::cell::DataValue::Int(count) = count_val
+        {
+            return Ok(*count > 0);
+        }
         Ok(false)
     }
 
@@ -950,7 +961,9 @@ impl TableMetadataService {
             let record = TableMetadataDetail {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 table_name: row.get_by_name_as(schema, "table_name").unwrap_or_default(),
-                display_name: row.get_by_name_as(schema, "display_name").unwrap_or_default(),
+                display_name: row
+                    .get_by_name_as(schema, "display_name")
+                    .unwrap_or_default(),
                 db_id: row.get_by_name_as(schema, "db_id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),

@@ -7,16 +7,16 @@
 //!
 //! API 路由前缀：`/api/marketplace`
 
-use axum::extract::{Multipart, Query, State};
 use axum::Json;
+use axum::extract::{Multipart, Query, State};
 use cmx_database::get_default_db_manager;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::ApiResp;
 use crate::app_state::CmxAppState;
-use crate::{Error, Result};
 use crate::middleware::CmxSvrContext;
+use crate::{Error, Result};
 
 use super::request::*;
 use super::response::*;
@@ -100,7 +100,9 @@ fn convert_plugin_to_response(plugin: cmx_plugin::MarketplacePlugin) -> Marketpl
 /// # Returns
 ///
 /// API 响应结构。
-fn convert_version_to_response(version: cmx_plugin::MarketplacePluginVersion) -> MarketplaceVersionResponse {
+fn convert_version_to_response(
+    version: cmx_plugin::MarketplacePluginVersion,
+) -> MarketplaceVersionResponse {
     MarketplaceVersionResponse {
         id: version.id,
         plugin_id: version.plugin_id,
@@ -178,7 +180,9 @@ pub async fn marketplace_plugin_page(
         .map(convert_plugin_to_response)
         .collect();
 
-    Ok(Json(ApiResp::ok_with_pagination(responses, page, page_size, total)))
+    Ok(Json(ApiResp::ok_with_pagination(
+        responses, page, page_size, total,
+    )))
 }
 
 /// 详情查询 Handler
@@ -242,7 +246,10 @@ pub async fn marketplace_plugin_get_by_id(
     let detail = MarketplacePluginDetailResponse {
         plugin: convert_plugin_to_response(plugin),
         latest_version: latest_version.map(convert_version_to_response),
-        versions: versions.into_iter().map(convert_version_to_response).collect(),
+        versions: versions
+            .into_iter()
+            .map(convert_version_to_response)
+            .collect(),
     };
 
     Ok(Json(ApiResp::ok(detail)))
@@ -296,33 +303,30 @@ pub async fn marketplace_plugin_publish(
         let field_name = field.name().unwrap_or("").to_string();
         match field_name.as_str() {
             "plugin_info" => {
-                let text = field.text().await.map_err(|e| {
-                    Error::bad_request(format!("读取 plugin_info 字段失败: {}", e))
-                })?;
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|e| Error::bad_request(format!("读取 plugin_info 字段失败: {}", e)))?;
                 plugin_info_str = Some(text);
             }
             "file" => {
-                file_name = field
-                    .file_name()
-                    .unwrap_or("plugin.zip")
-                    .to_string();
+                file_name = field.file_name().unwrap_or("plugin.zip").to_string();
                 file_content_type = field.content_type().map(String::from);
-                file_data = Some(field.bytes().await.map_err(|e| {
-                    Error::bad_request(format!("读取 file 字段失败: {}", e))
-                })?);
+                file_data = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|e| Error::bad_request(format!("读取 file 字段失败: {}", e)))?,
+                );
             }
             _ => {}
         }
     }
 
-    let info_str =
-        plugin_info_str.ok_or_else(|| Error::bad_request("缺少 plugin_info 字段"))?;
-    let req: PublishPluginRequest =
-        serde_json::from_str(&info_str).map_err(|e| {
-            Error::bad_request(format!("解析 plugin_info JSON 失败: {}", e))
-        })?;
-    let file_bytes =
-        file_data.ok_or_else(|| Error::bad_request("缺少 file 字段"))?;
+    let info_str = plugin_info_str.ok_or_else(|| Error::bad_request("缺少 plugin_info 字段"))?;
+    let req: PublishPluginRequest = serde_json::from_str(&info_str)
+        .map_err(|e| Error::bad_request(format!("解析 plugin_info JSON 失败: {}", e)))?;
+    let file_bytes = file_data.ok_or_else(|| Error::bad_request("缺少 file 字段"))?;
 
     info!(
         "发布插件到市场: plugin_id={}, version={}, file={} ({} bytes)",
@@ -343,9 +347,10 @@ pub async fn marketplace_plugin_publish(
         user_metadata: None,
         acl: None,
     };
-    let file_info = storage_service.upload(upload_request).await.map_err(|e| {
-        Error::internal_error(format!("上传插件包到存储失败: {}", e))
-    })?;
+    let file_info = storage_service
+        .upload(upload_request)
+        .await
+        .map_err(|e| Error::internal_error(format!("上传插件包到存储失败: {}", e)))?;
 
     info!(
         "插件包已上传到 cmx-storage: file_id={}, url={}, size={}",
@@ -558,8 +563,10 @@ pub async fn marketplace_plugin_version_list(
         .await
         .map_err(|e| Error::internal_error(format!("查询版本列表失败: {}", e)))?;
 
-    let responses: Vec<MarketplaceVersionResponse> =
-        versions.into_iter().map(convert_version_to_response).collect();
+    let responses: Vec<MarketplaceVersionResponse> = versions
+        .into_iter()
+        .map(convert_version_to_response)
+        .collect();
 
     Ok(Json(ApiResp::ok(responses)))
 }
@@ -599,7 +606,9 @@ pub async fn marketplace_plugin_version_get_by_id(
 ) -> Result<Json<ApiResp<MarketplaceVersionResponse>>> {
     debug!("查询版本详情: {:?}", params);
 
-    let id = params.id.ok_or_else(|| Error::bad_request("请提供 id 参数"))?;
+    let id = params
+        .id
+        .ok_or_else(|| Error::bad_request("请提供 id 参数"))?;
 
     let service = get_marketplace_service().await;
     let version = service
@@ -648,7 +657,10 @@ pub async fn marketplace_plugin_install(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<MarketInstallRequest>,
 ) -> Result<Json<ApiResp<MarketInstallResponse>>> {
-    info!("从市场安装插件: plugin_id={}, version={:?}", req.plugin_id, req.version);
+    info!(
+        "从市场安装插件: plugin_id={}, version={:?}",
+        req.plugin_id, req.version
+    );
 
     let service = get_marketplace_service().await;
 
@@ -705,7 +717,10 @@ pub async fn marketplace_plugin_rate(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<RatePluginRequest>,
 ) -> Result<Json<crate::UnitResp>> {
-    info!("插件评分: plugin_id={}, rating={}", req.plugin_id, req.rating);
+    info!(
+        "插件评分: plugin_id={}, rating={}",
+        req.plugin_id, req.rating
+    );
 
     let rate_req = MarketplaceRatingForCreate {
         plugin_id: req.plugin_id,
@@ -861,7 +876,10 @@ pub async fn marketplace_trending_list(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(filter): Json<TrendingFilter>,
 ) -> Result<Json<ApiResp<Vec<MarketplacePluginResponse>>>> {
-    debug!("查询热门插件: days={:?}, limit={:?}", filter.days, filter.limit);
+    debug!(
+        "查询热门插件: days={:?}, limit={:?}",
+        filter.days, filter.limit
+    );
 
     let days = filter.days.unwrap_or(7);
     let limit = filter.limit.unwrap_or(10);
@@ -909,7 +927,10 @@ pub async fn marketplace_plugin_upgrade(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<MarketUpgradeRequest>,
 ) -> Result<Json<ApiResp<MarketUpgradeResponse>>> {
-    info!("从市场升级插件: plugin_id={}, target_version={:?}", req.plugin_id, req.target_version);
+    info!(
+        "从市场升级插件: plugin_id={}, target_version={:?}",
+        req.plugin_id, req.target_version
+    );
 
     let service = get_marketplace_service().await;
 
@@ -1041,7 +1062,10 @@ pub async fn marketplace_plugin_download(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Query(params): Query<MarketDownloadParams>,
 ) -> Result<axum::response::Response> {
-    info!("下载插件包: plugin_id={}, version={:?}", params.plugin_id, params.version);
+    info!(
+        "下载插件包: plugin_id={}, version={:?}",
+        params.plugin_id, params.version
+    );
 
     let service = get_marketplace_service().await;
     let version_info = if let Some(ref version) = params.version {
@@ -1049,7 +1073,7 @@ pub async fn marketplace_plugin_download(
     } else {
         service.get_latest_stable_version(&params.plugin_id).await
     }
-        .map_err(|e| Error::internal_error(format!("查询版本信息失败: {}", e)))?;
+    .map_err(|e| Error::internal_error(format!("查询版本信息失败: {}", e)))?;
 
     let version_info = version_info.ok_or_else(|| Error::not_found("版本不存在"))?;
 

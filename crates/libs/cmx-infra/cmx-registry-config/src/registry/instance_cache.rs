@@ -3,10 +3,7 @@
 //! 提供注册中心无关的内存级缓存与变更订阅机制。
 //! 不依赖任何具体注册中心 SDK，可被 `NacosRegistry`、`MockRegistry` 等共享使用。
 
-use std::{
-    collections::HashMap,
-    sync::RwLock,
-};
+use std::{collections::HashMap, sync::RwLock};
 
 use tracing::{debug, info};
 

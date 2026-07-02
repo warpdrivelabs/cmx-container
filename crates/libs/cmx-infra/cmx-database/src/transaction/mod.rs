@@ -1,3 +1,4 @@
+pub mod api;
 /// 事务管理模块，负责数据库事务的创建、提交和回滚
 ///
 /// 该模块提供了完整的事务管理功能，包括：
@@ -10,23 +11,30 @@
 pub mod core;
 pub mod metadata;
 pub mod registry;
-pub mod api;
 pub mod txcontext;
 
 // 导出核心类型和函数
-pub use core::{Dbx, DbTransaction, TxnHolder, Propagation};
+pub use core::{DbTransaction, Dbx, Propagation, TxnHolder};
 
 // 导出元数据相关类型和函数
-pub use metadata::{TransactionStatus, TransactionMetadata, register_txn, update_txn_status, get_txn_metadata, get_active_transactions, cleanup_completed_transactions, check_long_running_transactions};
+pub use metadata::{
+    TransactionMetadata, TransactionStatus, check_long_running_transactions,
+    cleanup_completed_transactions, get_active_transactions, get_txn_metadata, register_txn,
+    update_txn_status,
+};
 
 // 导出注册表相关函数
-pub use registry::{get_txn_holder_by_id};
+pub use registry::get_txn_holder_by_id;
 
 // 导出上下文相关类型和函数
-pub use txcontext::{TransactionFrame, TransactionContextStack, SuspendedTransaction};
+pub use txcontext::{SuspendedTransaction, TransactionContextStack, TransactionFrame};
 
 // 导出API相关函数
-pub use api::{commit_txn_by_id, rollback_txn_by_id, get_dbx_by_db_id, with_transaction_by_id, execute_sql, execute_sql_with_params, query_sql, query_sql_with_params, SqlParams, TransactionGuard, begin_transaction_guard_by_db_id};
+pub use api::{
+    SqlParams, TransactionGuard, begin_transaction_guard_by_db_id, commit_txn_by_id, execute_sql,
+    execute_sql_with_params, get_dbx_by_db_id, query_sql, query_sql_with_params,
+    rollback_txn_by_id, with_transaction_by_id,
+};
 
 // 声明式事务管理宏
 ///
@@ -46,7 +54,7 @@ macro_rules! transaction {
                     // 提交事务
                     $dbx.commit_txn().await?;
                     Ok(value)
-                },
+                }
                 Err(err) => {
                     // 回滚事务
                     $dbx.rollback_txn().await.ok();
@@ -69,7 +77,7 @@ macro_rules! transaction {
                     // 提交事务
                     $dbx.commit_txn().await?;
                     Ok(value)
-                },
+                }
                 Err(err) => {
                     // 回滚事务
                     $dbx.rollback_txn().await.ok();

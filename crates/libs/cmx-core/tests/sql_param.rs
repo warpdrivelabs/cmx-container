@@ -1,8 +1,8 @@
 //! SqlParam 枚举单元测试
 
+use chrono::{DateTime, NaiveDate, Utc};
 use cmx_core::model::cell::{DataValue, SqlParam, SqlTypeMarker};
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc, NaiveDate};
 use uuid::Uuid;
 
 #[test]
@@ -118,11 +118,7 @@ fn sql_param_roundtrip_date() {
 
 #[test]
 fn sql_param_roundtrip_array() {
-    let original = SqlParam::Array(vec![
-        SqlParam::Int(1),
-        SqlParam::Int(2),
-        SqlParam::Int(3),
-    ]);
+    let original = SqlParam::Array(vec![SqlParam::Int(1), SqlParam::Int(2), SqlParam::Int(3)]);
     let json = serde_json::to_string(&original).unwrap();
     let decoded: SqlParam = serde_json::from_str(&json).unwrap();
     assert_eq!(original, decoded);

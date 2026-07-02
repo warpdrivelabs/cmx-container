@@ -2,11 +2,11 @@
 //!
 //! 实现 cmx_traits::service::ServiceQuery trait。
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::service::{ServiceDefinition, ServiceOrchestration};
-use cmx_traits::service::{ServiceQuery, ServicePageFilter, ServicePageResult};
 use cmx_traits::error::TraitError;
+use cmx_traits::service::{ServicePageFilter, ServicePageResult, ServiceQuery};
+use std::sync::Arc;
 
 use crate::registry::ServiceRegistry;
 use crate::repository::ServiceRepository;
@@ -33,8 +33,16 @@ impl ServiceQueryImpl {
     /// * `repository` - 服务仓储
     /// * `registry` - 服务注册中心
     /// * `app_id` - 应用隔离标识
-    pub fn new(repository: Arc<ServiceRepository>, registry: Arc<ServiceRegistry>, app_id: String) -> Self {
-        Self { repository, registry, app_id }
+    pub fn new(
+        repository: Arc<ServiceRepository>,
+        registry: Arc<ServiceRegistry>,
+        app_id: String,
+    ) -> Self {
+        Self {
+            repository,
+            registry,
+            app_id,
+        }
     }
 }
 
@@ -49,20 +57,27 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回服务信息，如果不存在则返回 None
-    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, TraitError> {
+    async fn get_service(
+        &self,
+        service_key: &str,
+    ) -> Result<Option<ServiceDefinition>, TraitError> {
         if let Some(service) = self.registry.get(service_key).await {
             return Ok(Some(service));
         }
 
-        let service_def = self.repository.get_service(service_key, &self.app_id).await
+        let service_def = self
+            .repository
+            .get_service(service_key, &self.app_id)
+            .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         if let Some(def) = &service_def {
-            let orchestration = serde_json::from_str::<serde_json::Value>(
-                def.config.as_ref().unwrap()
-            )
-                .map_err(|e| TraitError::Internal(e.to_string()))?;
-            self.registry.register(def.clone(), Some(orchestration)).await;
+            let orchestration =
+                serde_json::from_str::<serde_json::Value>(def.config.as_ref().unwrap())
+                    .map_err(|e| TraitError::Internal(e.to_string()))?;
+            self.registry
+                .register(def.clone(), Some(orchestration))
+                .await;
         }
 
         Ok(service_def)
@@ -77,21 +92,28 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回该插件下所有服务信息列表
-    async fn get_services_by_plugin(&self, plugin_id: &str) -> Result<Vec<ServiceDefinition>, TraitError> {
+    async fn get_services_by_plugin(
+        &self,
+        plugin_id: &str,
+    ) -> Result<Vec<ServiceDefinition>, TraitError> {
         let cached_services = self.registry.get_by_plugin(plugin_id).await;
         if !cached_services.is_empty() {
             return Ok(cached_services);
         }
 
-        let service_defs = self.repository.get_services_by_plugin(plugin_id, &self.app_id).await
+        let service_defs = self
+            .repository
+            .get_services_by_plugin(plugin_id, &self.app_id)
+            .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         for def in &service_defs {
-            let orchestration = serde_json::from_str::<serde_json::Value>(
-                def.config.as_ref().unwrap()
-            )
-                .map_err(|e| TraitError::Internal(e.to_string()))?;
-            self.registry.register(def.clone(), Some(orchestration)).await;
+            let orchestration =
+                serde_json::from_str::<serde_json::Value>(def.config.as_ref().unwrap())
+                    .map_err(|e| TraitError::Internal(e.to_string()))?;
+            self.registry
+                .register(def.clone(), Some(orchestration))
+                .await;
         }
 
         Ok(service_defs)
@@ -107,17 +129,21 @@ impl ServiceQuery for ServiceQueryImpl {
         let all_keys = self.registry.get_all_keys().await;
 
         if all_keys.is_empty() {
-            let all_services = self.repository.list_services(&self.app_id).await
+            let all_services = self
+                .repository
+                .list_services(&self.app_id)
+                .await
                 .map_err(|e| TraitError::Internal(e.to_string()))?;
 
             let mut active = Vec::new();
             for def in all_services {
                 if def.status == 1 {
-                    let orchestration = serde_json::from_str::<serde_json::Value>(
-                        def.config.as_ref().unwrap()
-                    )
-                        .map_err(|e| TraitError::Internal(e.to_string()))?;
-                    self.registry.register(def.clone(), Some(orchestration)).await;
+                    let orchestration =
+                        serde_json::from_str::<serde_json::Value>(def.config.as_ref().unwrap())
+                            .map_err(|e| TraitError::Internal(e.to_string()))?;
+                    self.registry
+                        .register(def.clone(), Some(orchestration))
+                        .await;
 
                     active.push(def);
                 }
@@ -129,9 +155,10 @@ impl ServiceQuery for ServiceQueryImpl {
         let mut active = Vec::new();
         for key in all_keys {
             if let Some(service) = self.registry.get(&key).await
-                && service.status == 1 {
-                    active.push(service);
-                }
+                && service.status == 1
+            {
+                active.push(service);
+            }
         }
 
         Ok(active)
@@ -146,7 +173,10 @@ impl ServiceQuery for ServiceQueryImpl {
     ///
     /// # 返回值
     /// 返回服务编排定义，如果不存在则返回 None
-    async fn get_orchestration(&self, service_key: &str) -> Result<Option<ServiceOrchestration>, TraitError> {
+    async fn get_orchestration(
+        &self,
+        service_key: &str,
+    ) -> Result<Option<ServiceOrchestration>, TraitError> {
         if let Some(orch_value) = self.registry.get_orchestration(service_key).await {
             match serde_json::from_value::<ServiceOrchestration>(orch_value) {
                 Ok(orch) => return Ok(Some(orch)),
@@ -156,21 +186,31 @@ impl ServiceQuery for ServiceQueryImpl {
             }
         }
 
-        let service = self.repository.get_service(service_key, &self.app_id).await
+        let service = self
+            .repository
+            .get_service(service_key, &self.app_id)
+            .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
         match service {
             Some(svc) => {
-                let versions = self.repository.get_service_versions(&svc.service_key, &self.app_id).await
+                let versions = self
+                    .repository
+                    .get_service_versions(&svc.service_key, &self.app_id)
+                    .await
                     .map_err(|e| TraitError::Internal(e.to_string()))?;
 
                 if let Some((version, _)) = versions.first()
-                    && let Some(config) = self.repository.get_service_config(&svc.service_key, version, &self.app_id).await
-                        .map_err(|e| TraitError::Internal(e.to_string()))? {
-                        let orch: ServiceOrchestration = serde_json::from_str(&config)
-                            .map_err(|e| TraitError::Internal(e.to_string()))?;
-                        return Ok(Some(orch));
-                    }
+                    && let Some(config) = self
+                        .repository
+                        .get_service_config(&svc.service_key, version, &self.app_id)
+                        .await
+                        .map_err(|e| TraitError::Internal(e.to_string()))?
+                {
+                    let orch: ServiceOrchestration = serde_json::from_str(&config)
+                        .map_err(|e| TraitError::Internal(e.to_string()))?;
+                    return Ok(Some(orch));
+                }
                 Ok(None)
             }
             None => Ok(None),
@@ -198,12 +238,12 @@ impl ServiceQuery for ServiceQueryImpl {
         if filter.app_id.is_none() {
             filter.app_id = Some(self.app_id.clone());
         }
-        let (items, total) = self.repository.page_services(&filter, page, size).await
+        let (items, total) = self
+            .repository
+            .page_services(&filter, page, size)
+            .await
             .map_err(|e| TraitError::Internal(e.to_string()))?;
 
-        Ok(ServicePageResult {
-            items,
-            total,
-        })
+        Ok(ServicePageResult { items, total })
     }
 }

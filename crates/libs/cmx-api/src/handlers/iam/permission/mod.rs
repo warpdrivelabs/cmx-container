@@ -6,8 +6,8 @@ pub mod import_handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// 权限模块路由
 pub struct PermissionModule;

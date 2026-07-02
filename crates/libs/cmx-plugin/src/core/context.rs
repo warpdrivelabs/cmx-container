@@ -2,9 +2,9 @@
 //!
 //! 管理插件运行时状态
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 
 use crate::domain::plugin::PluginStatus;
 
@@ -54,7 +54,10 @@ impl PluginContext {
     }
 
     /// 从插件定义创建上下文
-    pub fn from_definition(def: &cmx_core::model::meta::plugin::PluginDefinition, install_path: &Path) -> Self {
+    pub fn from_definition(
+        def: &cmx_core::model::meta::plugin::PluginDefinition,
+        install_path: &Path,
+    ) -> Self {
         Self {
             plugin_id: def.id.clone(),
             app_id: "default".to_string(),

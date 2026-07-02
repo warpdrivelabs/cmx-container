@@ -3,14 +3,14 @@
 //! 定义应用程序的共享状态。
 //! 包含 PluginQuery 和 RuntimeInvoker trait 对象，支持跨模块解耦调用。
 
-use std::sync::Arc;
+use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, UserService};
+use cmx_storage::service::StorageService;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
 use cmx_traits::iam::PermissionChecker;
 use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
-use cmx_storage::service::StorageService;
-use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, UserService};
+use std::sync::Arc;
 
 /// IAM 服务状态
 ///
@@ -37,9 +37,9 @@ pub struct IamState {
 impl IamState {
     /// 获取 IamChecker 引用（用于 finalize_iam_state 注入到 UserServiceImpl）
     pub fn permission_checker_clone(&self) -> Arc<cmx_iam::IamChecker> {
-        self.iam_checker.clone().expect(
-            "IamChecker 未初始化：请在 finalize_iam_state 中完成注入后再调用本方法",
-        )
+        self.iam_checker
+            .clone()
+            .expect("IamChecker 未初始化：请在 finalize_iam_state 中完成注入后再调用本方法")
     }
 }
 

@@ -43,9 +43,7 @@ impl SortedSetOps {
             cmd.arg(score).arg(member);
         }
 
-        let added: u64 = cmd.query_async(&mut conn)
-            .await
-            .map_err(Error::from)?;
+        let added: u64 = cmd.query_async(&mut conn).await.map_err(Error::from)?;
 
         timer.complete();
         Ok(added)
@@ -209,7 +207,12 @@ impl SortedSetOps {
     ///
     /// # 返回值
     /// * `Result<Vec<(String, f64)>>` - 成员及其分数的列表
-    pub async fn zrange_with_scores(&self, key: &str, start: i64, stop: i64) -> Result<Vec<(String, f64)>> {
+    pub async fn zrange_with_scores(
+        &self,
+        key: &str,
+        start: i64,
+        stop: i64,
+    ) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
         let mut conn = self.client.get_connection();
@@ -258,7 +261,12 @@ impl SortedSetOps {
     ///
     /// # 返回值
     /// * `Result<Vec<(String, f64)>>` - 成员及其分数的列表
-    pub async fn zrevrange_with_scores(&self, key: &str, start: i64, stop: i64) -> Result<Vec<(String, f64)>> {
+    pub async fn zrevrange_with_scores(
+        &self,
+        key: &str,
+        start: i64,
+        stop: i64,
+    ) -> Result<Vec<(String, f64)>> {
         let full_key = self.client.build_key(key);
 
         let mut conn = self.client.get_connection();
@@ -309,7 +317,14 @@ impl SortedSetOps {
     ///
     /// # 返回值
     /// * `Result<Vec<String>>` - 成员列表
-    pub async fn zrangebyscore_limit(&self, key: &str, min: f64, max: f64, offset: i64, count: i64) -> Result<Vec<String>> {
+    pub async fn zrangebyscore_limit(
+        &self,
+        key: &str,
+        min: f64,
+        max: f64,
+        offset: i64,
+        count: i64,
+    ) -> Result<Vec<String>> {
         let full_key = self.client.build_key(key);
 
         let mut conn = self.client.get_connection();

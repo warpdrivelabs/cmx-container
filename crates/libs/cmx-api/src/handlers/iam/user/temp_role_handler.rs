@@ -2,8 +2,8 @@
 //!
 //! 提供临时角色分配/撤销/批量撤销/延长有效期/查询列表等 API。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -89,8 +89,7 @@ pub struct ExtendTempRoleRequest {
 /// 临时授权查询参数。
 ///
 /// 至少需要 `user_id` 或 `role_id` 之一。`status` 默认 all，支持按生命周期状态过滤。
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct TempAssignmentQuery {
     /// 按用户 ID 过滤（可选）。
     pub user_id: Option<String>,
@@ -104,8 +103,7 @@ pub struct TempAssignmentQuery {
 /// 批量撤销操作的响应载荷。
 ///
 /// 返回实际受影响的记录数，便于前端展示。
-#[derive(Debug, Serialize)]
-#[derive(utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct RevokeBatchResponse {
     /// 受影响的记录数。
     pub affected: u64,

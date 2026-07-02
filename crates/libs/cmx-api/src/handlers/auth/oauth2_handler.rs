@@ -2,15 +2,15 @@
 //!
 //! 提供 authorize / login / token 三个 OAuth2 Authorization Code Flow API。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use cmx_traits::auth::Credentials;
 use tracing::{debug, info};
 
-use crate::middleware::GlobalAuthService;
-use crate::{ApiResp, Error, Result};
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
+use crate::middleware::GlobalAuthService;
+use crate::{ApiResp, Error, Result};
 
 use super::oauth2_request::*;
 use super::oauth2_response::*;
@@ -32,15 +32,17 @@ pub async fn oauth2_authorize(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Query(req): Query<OAuth2AuthorizeRequest>,
 ) -> Result<Json<ApiResp<OAuth2AuthorizeResponse>>> {
-    debug!("{:<12} - handler::oauth2_authorize - client_id: {}", "HANDLER", req.client_id);
+    debug!(
+        "{:<12} - handler::oauth2_authorize - client_id: {}",
+        "HANDLER", req.client_id
+    );
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
-    let oauth2_policy = GlobalAuthService::get_oauth2().ok_or_else(|| {
-        Error::InternalError("OAuth2 服务未初始化".to_string())
-    })?;
+    let oauth2_policy = GlobalAuthService::get_oauth2()
+        .ok_or_else(|| Error::InternalError("OAuth2 服务未初始化".to_string()))?;
 
     // 从数据库查询 OAuth2 客户端
     let oauth2_client_data = auth_service
@@ -56,7 +58,8 @@ pub async fn oauth2_authorize(
 
     let client = cmx_auth::oauth2::store::OAuth2Client::from(oauth2_client_data);
 
-    let scope: Vec<String> = req.scope
+    let scope: Vec<String> = req
+        .scope
         .as_deref()
         .map(|s| s.split_whitespace().map(String::from).collect())
         .unwrap_or_default();
@@ -99,12 +102,15 @@ pub async fn oauth2_login(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<OAuth2LoginRequest>,
 ) -> Result<Json<ApiResp<OAuth2LoginResponse>>> {
-    debug!("{:<12} - handler::oauth2_login - client_id: {}", "HANDLER", req.client_id);
+    debug!(
+        "{:<12} - handler::oauth2_login - client_id: {}",
+        "HANDLER", req.client_id
+    );
 
     // 1. 验证用户名密码，仅获取 user_id（2.4 修复：不再签发又撤销 Token）
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     let user_id = auth_service
         .verify_credentials(&req.username, &req.password)
@@ -120,11 +126,11 @@ pub async fn oauth2_login(
         })?;
 
     // 2. 用 OAuth2 策略签发授权码
-    let oauth2_policy = GlobalAuthService::get_oauth2().ok_or_else(|| {
-        Error::InternalError("OAuth2 服务未初始化".to_string())
-    })?;
+    let oauth2_policy = GlobalAuthService::get_oauth2()
+        .ok_or_else(|| Error::InternalError("OAuth2 服务未初始化".to_string()))?;
 
-    let scope: Vec<String> = req.scope
+    let scope: Vec<String> = req
+        .scope
         .as_deref()
         .map(|s| s.split_whitespace().map(String::from).collect())
         .unwrap_or_default();
@@ -170,11 +176,14 @@ pub async fn oauth2_token(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Json(req): Json<OAuth2TokenRequest>,
 ) -> Result<Json<ApiResp<OAuth2TokenResponse>>> {
-    debug!("{:<12} - handler::oauth2_token - client_id: {}", "HANDLER", req.client_id);
+    debug!(
+        "{:<12} - handler::oauth2_token - client_id: {}",
+        "HANDLER", req.client_id
+    );
 
-    let auth_service = cmx_state.auth_service().ok_or_else(|| {
-        Error::InternalError("认证服务未初始化".to_string())
-    })?;
+    let auth_service = cmx_state
+        .auth_service()
+        .ok_or_else(|| Error::InternalError("认证服务未初始化".to_string()))?;
 
     // 使用 AuthorizationCode 凭证签发 Token
     let code_verifier = req.code_verifier.unwrap_or_default();
@@ -194,12 +203,8 @@ pub async fn oauth2_token(
             cmx_traits::auth::AuthError::PkceVerificationFailed => {
                 Error::BadRequest("PKCE 校验失败".to_string())
             }
-            cmx_traits::auth::AuthError::OAuth2(msg) => {
-                Error::BadRequest(msg)
-            }
-            cmx_traits::auth::AuthError::InvalidToken(msg) => {
-                Error::Unauthorized(msg)
-            }
+            cmx_traits::auth::AuthError::OAuth2(msg) => Error::BadRequest(msg),
+            cmx_traits::auth::AuthError::InvalidToken(msg) => Error::Unauthorized(msg),
             other => Error::InternalError(other.to_string()),
         })?;
 

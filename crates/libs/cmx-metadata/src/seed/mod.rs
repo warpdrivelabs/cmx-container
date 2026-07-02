@@ -14,5 +14,5 @@ mod dml;
 mod executor;
 mod loader;
 
-pub use config::{SeedDataConfig, SeedDataTableResult, SeedDataFailure, SeedDataSummary};
+pub use config::{SeedDataConfig, SeedDataFailure, SeedDataSummary, SeedDataTableResult};
 pub use executor::PgSeedDataExecutor;

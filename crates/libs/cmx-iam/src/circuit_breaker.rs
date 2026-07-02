@@ -4,8 +4,8 @@
 //! 当连续失败次数达到阈值时打开熔断器，拒绝后续请求；
 //! 经过 `reset_duration` 后自动进入半开状态，允许请求通过。
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 /// 熔断器。

@@ -188,11 +188,11 @@ pub struct BizFunctionInvoker {
 
 impl BizFunctionInvoker {
     /// 创建新的 `BizFunctionInvoker`。
-    pub fn new(
-        runtime: Arc<dyn RuntimeInvoker>,
-        plugin_query: Arc<dyn PluginQuery>,
-    ) -> Self {
-        Self { runtime, plugin_query }
+    pub fn new(runtime: Arc<dyn RuntimeInvoker>, plugin_query: Arc<dyn PluginQuery>) -> Self {
+        Self {
+            runtime,
+            plugin_query,
+        }
     }
 }
 

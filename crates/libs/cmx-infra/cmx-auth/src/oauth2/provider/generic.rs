@@ -31,16 +31,27 @@ impl GenericOAuth2Provider {
         } else {
             reqwest::Client::new()
         };
-        Self { config, http_client }
+        Self {
+            config,
+            http_client,
+        }
     }
 }
 
 #[async_trait]
 impl OAuth2Provider for GenericOAuth2Provider {
-    fn name(&self) -> &str { &self.config.name }
-    fn display_name(&self) -> &str { &self.config.display_name }
-    fn icon_url(&self) -> Option<&str> { self.config.icon_url.as_deref() }
-    fn brand_color(&self) -> Option<&str> { self.config.brand_color.as_deref() }
+    fn name(&self) -> &str {
+        &self.config.name
+    }
+    fn display_name(&self) -> &str {
+        &self.config.display_name
+    }
+    fn icon_url(&self) -> Option<&str> {
+        self.config.icon_url.as_deref()
+    }
+    fn brand_color(&self) -> Option<&str> {
+        self.config.brand_color.as_deref()
+    }
 
     fn build_authorize_url(&self, state: &str, redirect_uri: &str, scopes: &[String]) -> String {
         let scopes_str = if scopes.is_empty() {
@@ -68,7 +79,8 @@ impl OAuth2Provider for GenericOAuth2Provider {
             params.push((k.clone(), v.clone()));
         }
 
-        let query = params.iter()
+        let query = params
+            .iter()
             .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
             .collect::<Vec<_>>()
             .join("&");
@@ -83,50 +95,45 @@ impl OAuth2Provider for GenericOAuth2Provider {
     ) -> Result<ProviderTokenResponse, AuthError> {
         tracing::info!(provider = %self.name(), "向第三方 Provider 交换 Token");
 
-        let mut req = self.http_client
-            .post(&self.config.token_url);
+        let mut req = self.http_client.post(&self.config.token_url);
 
         req = match self.config.token_endpoint_auth_method.as_str() {
-            "client_secret_basic" => {
-                req.basic_auth(&self.config.client_id, Some(&self.config.client_secret))
-                    .form(&[
-                        ("grant_type", "authorization_code"),
-                        ("code", code),
-                        ("redirect_uri", redirect_uri),
-                    ])
-            }
-            _ => {
-                req.form(&[
+            "client_secret_basic" => req
+                .basic_auth(&self.config.client_id, Some(&self.config.client_secret))
+                .form(&[
                     ("grant_type", "authorization_code"),
                     ("code", code),
-                    ("client_id", &self.config.client_id),
-                    ("client_secret", &self.config.client_secret),
                     ("redirect_uri", redirect_uri),
-                ])
-            }
+                ]),
+            _ => req.form(&[
+                ("grant_type", "authorization_code"),
+                ("code", code),
+                ("client_id", &self.config.client_id),
+                ("client_secret", &self.config.client_secret),
+                ("redirect_uri", redirect_uri),
+            ]),
         };
 
-        let resp = req.send().await
-            .map_err(|e| {
-                tracing::warn!(provider = %self.name(), error = %e, "Provider 服务不可达");
-                AuthError::OAuth2ProviderUnavailable(e.to_string())
-            })?;
+        let resp = req.send().await.map_err(|e| {
+            tracing::warn!(provider = %self.name(), error = %e, "Provider 服务不可达");
+            AuthError::OAuth2ProviderUnavailable(e.to_string())
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(provider = %self.name(), status = %status, body = %body, "Token 交换失败");
             return Err(AuthError::OAuth2ProviderTokenError(format!(
-                "HTTP {}: {}", status, body
+                "HTTP {}: {}",
+                status, body
             )));
         }
 
         // 先解析为 JSON Value，支持嵌套路径导航与字段映射
-        let json: serde_json::Value = resp.json().await
-            .map_err(|e| {
-                tracing::warn!(provider = %self.name(), error = %e, "Token 响应解析失败");
-                AuthError::OAuth2ProviderTokenError(e.to_string())
-            })?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| {
+            tracing::warn!(provider = %self.name(), error = %e, "Token 响应解析失败");
+            AuthError::OAuth2ProviderTokenError(e.to_string())
+        })?;
 
         tracing::info!(provider = %self.name(), response = %json, "Token 端点原始响应");
 
@@ -138,13 +145,18 @@ impl OAuth2Provider for GenericOAuth2Provider {
         if access_token.is_empty() {
             tracing::warn!(provider = %self.name(), "Token 响应中缺少 access_token 字段");
             return Err(AuthError::OAuth2ProviderTokenError(
-                "Token 响应中缺少 access_token 字段".to_string()
+                "Token 响应中缺少 access_token 字段".to_string(),
             ));
         }
 
         Ok(ProviderTokenResponse {
             access_token,
-            token_type: Self::extract_string_or_default(token_json, mapping, "token_type", "bearer"),
+            token_type: Self::extract_string_or_default(
+                token_json,
+                mapping,
+                "token_type",
+                "bearer",
+            ),
             expires_in: Self::extract_u64_opt(token_json, mapping, "expires_in"),
             refresh_token: Self::extract_string_opt(token_json, mapping, "refresh_token"),
             scope: Self::extract_string_opt(token_json, mapping, "scope"),
@@ -169,7 +181,9 @@ impl OAuth2Provider for GenericOAuth2Provider {
 
         // 2. 追加额外参数（始终作为 query，GET/POST 均同，与 Java 实现一致）
         if !self.config.userinfo_extra_params.is_empty() {
-            let params: Vec<(&str, &str)> = self.config.userinfo_extra_params
+            let params: Vec<(&str, &str)> = self
+                .config
+                .userinfo_extra_params
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
@@ -180,9 +194,7 @@ impl OAuth2Provider for GenericOAuth2Provider {
         let token_param = self.config.userinfo_token_param.as_str();
         req = match token_param {
             "query" => req.query(&[("access_token", &token_response.access_token)]),
-            "form" if !method_is_get => {
-                req.form(&[("access_token", &token_response.access_token)])
-            }
+            "form" if !method_is_get => req.form(&[("access_token", &token_response.access_token)]),
             "form" if method_is_get => {
                 tracing::warn!(provider = %self.name(), "GET 方法不支持 form 传参，降级为 query");
                 req.query(&[("access_token", &token_response.access_token)])
@@ -191,23 +203,25 @@ impl OAuth2Provider for GenericOAuth2Provider {
         };
 
         // 4. 发送请求
-        let resp = req.send().await
-            .map_err(|e| {
-                tracing::warn!(provider = %self.name(), error = %e, "用户信息请求失败");
-                AuthError::OAuth2ProviderUnavailable(e.to_string())
-            })?;
+        let resp = req.send().await.map_err(|e| {
+            tracing::warn!(provider = %self.name(), error = %e, "用户信息请求失败");
+            AuthError::OAuth2ProviderUnavailable(e.to_string())
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(provider = %self.name(), status = %status, body = %body, "用户信息请求失败");
-            return Err(AuthError::OAuth2ProviderUserInfoError(
-                format!("HTTP {}: {}", status, body)
-            ));
+            return Err(AuthError::OAuth2ProviderUserInfoError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         // 5. 解析响应
-        let json: serde_json::Value = resp.json().await
+        let json: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| AuthError::OAuth2ProviderUserInfoError(e.to_string()))?;
 
         tracing::info!(provider = %self.name(), response = %json, "用户信息端点原始响应");
@@ -221,7 +235,7 @@ impl OAuth2Provider for GenericOAuth2Provider {
         if provider_user_id.is_empty() {
             tracing::warn!(provider = %self.name(), "用户信息响应中缺少 provider_user_id 字段");
             return Err(AuthError::OAuth2ProviderUserInfoError(
-                "用户信息响应中缺少 provider_user_id 字段".to_string()
+                "用户信息响应中缺少 provider_user_id 字段".to_string(),
             ));
         }
 
@@ -260,7 +274,11 @@ impl GenericOAuth2Provider {
     }
 
     /// 从 JSON 中提取字符串字段，支持 number→string 自动转换
-    fn extract_string(json: &serde_json::Value, mapping: &std::collections::HashMap<String, String>, field: &str) -> String {
+    fn extract_string(
+        json: &serde_json::Value,
+        mapping: &std::collections::HashMap<String, String>,
+        field: &str,
+    ) -> String {
         let json_key = mapping.get(field).map(|s| s.as_str()).unwrap_or(field);
         match json.get(json_key) {
             Some(v) => match v {
@@ -273,7 +291,11 @@ impl GenericOAuth2Provider {
     }
 
     /// 从 JSON 中提取可选字符串字段
-    fn extract_string_opt(json: &serde_json::Value, mapping: &std::collections::HashMap<String, String>, field: &str) -> Option<String> {
+    fn extract_string_opt(
+        json: &serde_json::Value,
+        mapping: &std::collections::HashMap<String, String>,
+        field: &str,
+    ) -> Option<String> {
         let json_key = mapping.get(field).map(|s| s.as_str()).unwrap_or(field);
         json.get(json_key).and_then(|v| match v {
             serde_json::Value::String(s) => Some(s.clone()),
@@ -283,40 +305,49 @@ impl GenericOAuth2Provider {
     }
 
     /// 提取字符串字段，缺失时返回默认值
-    fn extract_string_or_default(json: &serde_json::Value, mapping: &std::collections::HashMap<String, String>, field: &str, default: &str) -> String {
+    fn extract_string_or_default(
+        json: &serde_json::Value,
+        mapping: &std::collections::HashMap<String, String>,
+        field: &str,
+        default: &str,
+    ) -> String {
         Self::extract_string_opt(json, mapping, field).unwrap_or_else(|| default.to_string())
     }
 
     /// 从 JSON 中提取可选布尔字段，兼容 boolean / 字符串 / 数字
     ///
     /// 部分厂商 `email_verified` 返回 `"true"` 字符串或 `1` 数字。
-    fn extract_bool_opt(json: &serde_json::Value, mapping: &std::collections::HashMap<String, String>, field: &str) -> Option<bool> {
+    fn extract_bool_opt(
+        json: &serde_json::Value,
+        mapping: &std::collections::HashMap<String, String>,
+        field: &str,
+    ) -> Option<bool> {
         let json_key = mapping.get(field).map(|s| s.as_str()).unwrap_or(field);
-        json.get(json_key).and_then(|v| {
-            match v {
-                serde_json::Value::Bool(b) => Some(*b),
-                serde_json::Value::String(s) => match s.to_lowercase().as_str() {
-                    "true" | "1" | "yes" => Some(true),
-                    "false" | "0" | "no" => Some(false),
-                    _ => None,
-                },
-                serde_json::Value::Number(n) => n.as_i64().map(|i| i != 0),
+        json.get(json_key).and_then(|v| match v {
+            serde_json::Value::Bool(b) => Some(*b),
+            serde_json::Value::String(s) => match s.to_lowercase().as_str() {
+                "true" | "1" | "yes" => Some(true),
+                "false" | "0" | "no" => Some(false),
                 _ => None,
-            }
+            },
+            serde_json::Value::Number(n) => n.as_i64().map(|i| i != 0),
+            _ => None,
         })
     }
 
     /// 从 JSON 中提取可选 u64 字段，兼容数字和字符串数字
     ///
     /// 部分厂商 `expires_in` 返回 `"3600"` 字符串而非数字。
-    fn extract_u64_opt(json: &serde_json::Value, mapping: &std::collections::HashMap<String, String>, field: &str) -> Option<u64> {
+    fn extract_u64_opt(
+        json: &serde_json::Value,
+        mapping: &std::collections::HashMap<String, String>,
+        field: &str,
+    ) -> Option<u64> {
         let json_key = mapping.get(field).map(|s| s.as_str()).unwrap_or(field);
-        json.get(json_key).and_then(|v| {
-            match v {
-                serde_json::Value::Number(n) => n.as_u64(),
-                serde_json::Value::String(s) => s.parse::<u64>().ok(),
-                _ => None,
-            }
+        json.get(json_key).and_then(|v| match v {
+            serde_json::Value::Number(n) => n.as_u64(),
+            serde_json::Value::String(s) => s.parse::<u64>().ok(),
+            _ => None,
         })
     }
 }
@@ -398,16 +429,8 @@ mod tests {
 
         // scope 应被空格分隔（OAuth2 标准）
         // 注意：调用方传入 scopes 时直接 join(' ')
-        assert!(
-            url.contains("scope=openid"),
-            "应包含 scope=openid: {}",
-            url
-        );
-        assert!(
-            url.contains("profile"),
-            "应包含 profile scope: {}",
-            url
-        );
+        assert!(url.contains("scope=openid"), "应包含 scope=openid: {}", url);
+        assert!(url.contains("profile"), "应包含 profile scope: {}", url);
     }
 
     #[test]
@@ -473,11 +496,7 @@ mod tests {
         );
 
         // state 应被 URL 编码（空格 → %20，& → %26，= → %3D）
-        assert!(
-            url.contains("state="),
-            "应包含 state 参数: {}",
-            url
-        );
+        assert!(url.contains("state="), "应包含 state 参数: {}", url);
         assert!(
             !url.contains("state with spaces&special"),
             "原始 state 不应出现（应被编码）: {}",

@@ -34,14 +34,15 @@ where
 {
     // 添加 owner_id
     if MC::has_owner_id()
-        && let Some(uid) = user_id {
-            let field: SeaField = (
-                "owner_id",
-                SimpleExpr::Value(sea_query::Value::String(Some(uid.to_string()))),
-            )
-                .into();
-            fields.push(field);
-        }
+        && let Some(uid) = user_id
+    {
+        let field: SeaField = (
+            "owner_id",
+            SimpleExpr::Value(sea_query::Value::String(Some(uid.to_string()))),
+        )
+            .into();
+        fields.push(field);
+    }
     if MC::has_timestamps() {
         add_timestamps_for_create(fields, user_id);
     }
@@ -157,19 +158,19 @@ where
 
         // 尝试提取字段值中的字符串
         if let Some(sea_val) = field.sea_value()
-            && let Some(str_val) = extract_string_from_sea_value(sea_val) {
-                match crypto.encrypt(&str_val) {
-                    Ok(encrypted) => {
-                        // 将字段值替换为加密后的字符串
-                        field.value = sea_query::SimpleExpr::Value(
-                            sea_query::Value::String(Some(encrypted)),
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!("字段 {} 加密失败: {}", field_name, e);
-                    }
+            && let Some(str_val) = extract_string_from_sea_value(sea_val)
+        {
+            match crypto.encrypt(&str_val) {
+                Ok(encrypted) => {
+                    // 将字段值替换为加密后的字符串
+                    field.value =
+                        sea_query::SimpleExpr::Value(sea_query::Value::String(Some(encrypted)));
+                }
+                Err(e) => {
+                    tracing::warn!("字段 {} 加密失败: {}", field_name, e);
                 }
             }
+        }
     }
 
     SeaFields::new(vec)
@@ -213,10 +214,7 @@ pub fn decrypt_dataset_fields(dataset: &mut DataSet, fields: &[&str]) {
 
     // 从 schema 中查找加密字段对应的列索引位置
     let schema = &dataset.schema;
-    let col_indices: Vec<usize> = fields
-        .iter()
-        .filter_map(|f| schema.get_index(f))
-        .collect();
+    let col_indices: Vec<usize> = fields.iter().filter_map(|f| schema.get_index(f)).collect();
 
     // 没有匹配到任何列索引，直接返回
     if col_indices.is_empty() {
@@ -232,9 +230,10 @@ pub fn decrypt_dataset_fields(dataset: &mut DataSet, fields: &[&str]) {
                 _ => None,
             };
             if let Some(new_val) = decrypted
-                && let Some(value) = row.get_mut(col_idx) {
-                    *value = new_val;
-                }
+                && let Some(value) = row.get_mut(col_idx)
+            {
+                *value = new_val;
+            }
         }
     }
 }

@@ -3,12 +3,12 @@
 //! 负责将插件安装目录下的各数据子目录并行打包并发送到对应的外部基础服务中心，
 //! 或在卸载时并行通知各中心清理数据，最终汇总所有中心的调用结果。
 
-use std::sync::Arc;
-use futures::future::join_all;
-use super::packer::{pack_directory_to_zip, has_files};
+use super::packer::{has_files, pack_directory_to_zip};
 use super::sender::ServiceCenterSender;
 use super::types::*;
 use crate::error::{PluginError, PluginResult};
+use futures::future::join_all;
+use std::sync::Arc;
 
 /// 服务中心数据分发调度器。
 ///

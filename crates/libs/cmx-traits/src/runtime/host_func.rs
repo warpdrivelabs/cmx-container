@@ -16,8 +16,7 @@ use crate::error::HostFuncError;
 /// 参数类型枚举。
 ///
 /// 描述宿主函数的参数类型，与 Extism 的 `ValType` 对应。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ValType {
     /// 32 位整数。
     I32,
@@ -50,7 +49,6 @@ impl ValType {
         }
     }
 }
-
 
 /// 宿主函数定义。
 ///
@@ -105,7 +103,11 @@ impl HostFunctionDef {
     /// # Returns
     ///
     /// 返回新的 [`HostFunctionDef`]，`input_types` 为空切片。
-    pub fn no_input(name: &'static str, namespace: &'static str, output_types: &'static [ValType]) -> Self {
+    pub fn no_input(
+        name: &'static str,
+        namespace: &'static str,
+        output_types: &'static [ValType],
+    ) -> Self {
         Self {
             name,
             input_types: &[],
@@ -125,7 +127,11 @@ impl HostFunctionDef {
     /// # Returns
     ///
     /// 返回新的 [`HostFunctionDef`]，`output_types` 为空切片。
-    pub fn no_output(name: &'static str, namespace: &'static str, input_types: &'static [ValType]) -> Self {
+    pub fn no_output(
+        name: &'static str,
+        namespace: &'static str,
+        input_types: &'static [ValType],
+    ) -> Self {
         Self {
             name,
             input_types,
@@ -164,7 +170,11 @@ impl HostFunctionDef {
     /// # Returns
     ///
     /// 返回新的 [`HostFunctionDef`]，`output_types` 为空切片。
-    pub fn void_fn(name: &'static str, namespace: &'static str, input_types: &'static [ValType]) -> Self {
+    pub fn void_fn(
+        name: &'static str,
+        namespace: &'static str,
+        input_types: &'static [ValType],
+    ) -> Self {
         Self {
             name,
             input_types,

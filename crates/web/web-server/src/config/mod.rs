@@ -2,8 +2,8 @@
 //!
 //! 提供应用程序初始化所需的各项配置功能。
 
-pub mod auth;
 pub mod audit;
+pub mod auth;
 pub mod cache;
 pub mod datasource;
 pub mod iam;
@@ -18,18 +18,18 @@ pub mod storage;
 
 pub use datasource::init_datasources;
 
-pub use auth::init_auth_service;
 pub use audit::build_audit_logger;
+pub use auth::init_auth_service;
 pub use cache::init_cache;
-pub use iam::{init_iam_services, finalize_iam_state};
+pub use iam::{finalize_iam_state, init_iam_services};
 pub use infra_init::{init_infra, shutdown_infra};
 pub use migration::init_database_migrations;
 // pub use nacos::{init_global_config_with_nacos, shutdown_nacos};
 pub use plugins::init_plugins;
-pub use runtime::init_runtime;
 pub use rpc::init_rpc;
-pub use services::init_services;
+pub use runtime::init_runtime;
 pub use services::init_service_invoker;
+pub use services::init_services;
 pub use storage::init_storage;
 
 use cmx_utils::{ConfigError, ConfigManager, ConfigResult};
@@ -63,9 +63,11 @@ pub fn init_web_config() -> ConfigResult<()> {
 ///
 /// 配置未初始化时返回 `ConfigError`。
 pub fn web_config() -> ConfigResult<&'static WebConfig> {
-    WEB_CONFIG_INSTANCE.get().ok_or_else(|| ConfigError::BuildError {
-        message: "WebConfig 尚未初始化，请先调用 init_web_config()".to_string(),
-    })
+    WEB_CONFIG_INSTANCE
+        .get()
+        .ok_or_else(|| ConfigError::BuildError {
+            message: "WebConfig 尚未初始化，请先调用 init_web_config()".to_string(),
+        })
 }
 
 /// Web 服务器配置结构。

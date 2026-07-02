@@ -61,7 +61,8 @@ async fn test_full_integration() {
     let has_perm = role_perms
         .as_array()
         .map(|arr| {
-            arr.iter().any(|p| get_str(p, "id").as_deref() == Some(perm_id.as_str()))
+            arr.iter()
+                .any(|p| get_str(p, "id").as_deref() == Some(perm_id.as_str()))
         })
         .unwrap_or(false);
     assert!(has_perm, "角色权限反查未包含 P");
@@ -103,7 +104,8 @@ async fn test_full_integration() {
     let has_role = user_roles
         .as_array()
         .map(|arr| {
-            arr.iter().any(|r| get_str(r, "id").as_deref() == Some(role_id.as_str()))
+            arr.iter()
+                .any(|r| get_str(r, "id").as_deref() == Some(role_id.as_str()))
         })
         .unwrap_or(false);
     assert!(has_role, "用户角色反查未包含 R");
@@ -118,9 +120,21 @@ async fn test_full_integration() {
     .await
     .assert_success();
     if let Some(uid) = flex_get(&user, "id").and_then(|v| v.as_str().map(|s| s.to_string())) {
-        let _ = post_json(&client, "/api/iam/users/delete", &json!({ "ids": [uid] }), None).await;
+        let _ = post_json(
+            &client,
+            "/api/iam/users/delete",
+            &json!({ "ids": [uid] }),
+            None,
+        )
+        .await;
     }
-    let _ = post_json(&client, "/api/iam/roles/delete", &json!({ "ids": [role_id] }), None).await;
+    let _ = post_json(
+        &client,
+        "/api/iam/roles/delete",
+        &json!({ "ids": [role_id] }),
+        None,
+    )
+    .await;
     let _ = post_json(
         &client,
         "/api/iam/permissions/delete",

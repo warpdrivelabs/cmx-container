@@ -6,7 +6,7 @@
 use serde_json::json;
 
 use crate::config::data_path;
-use crate::dam::store::{list_applications, list_domains, list_modules, DamApplication};
+use crate::dam::store::{DamApplication, list_applications, list_domains, list_modules};
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::read_json;
 use crate::util::is_safe_id;
@@ -26,7 +26,10 @@ fn active_only(status: &str) -> bool {
 }
 
 /// 把一组应用合成活动栏条目（每个 app 一项，sideNav 走 `dam:<domain>/<app>` 模块菜单）。
-fn build_applications(apps: &[DamApplication], all_modules: &[crate::dam::store::DamModule]) -> Vec<serde_json::Value> {
+fn build_applications(
+    apps: &[DamApplication],
+    all_modules: &[crate::dam::store::DamModule],
+) -> Vec<serde_json::Value> {
     apps.iter()
         .map(|app| {
             let first_module = all_modules.iter().find(|m| m.domain == app.domain && m.application == app.id);
@@ -57,27 +60,51 @@ async fn dam_activities_doc(name: &str) -> PortalResult<Option<serde_json::Value
 
     if domain.is_empty() {
         // 门户级：聚合所有启用域的应用。
-        let domains: Vec<_> = list_domains().await?.into_iter().filter(|d| active_only(&d.status)).collect();
+        let domains: Vec<_> = list_domains()
+            .await?
+            .into_iter()
+            .filter(|d| active_only(&d.status))
+            .collect();
         let mut apps: Vec<DamApplication> = Vec::new();
         for d in &domains {
-            let mut da: Vec<DamApplication> = list_applications(Some(&d.id)).await?.into_iter().filter(|a| active_only(&a.status)).collect();
+            let mut da: Vec<DamApplication> = list_applications(Some(&d.id))
+                .await?
+                .into_iter()
+                .filter(|a| active_only(&a.status))
+                .collect();
             apps.append(&mut da);
         }
         if apps.is_empty() {
             return Ok(None);
         }
-        let all_modules: Vec<_> = list_modules(None, None).await?.into_iter().filter(|m| active_only(&m.status)).collect();
+        let all_modules: Vec<_> = list_modules(None, None)
+            .await?
+            .into_iter()
+            .filter(|m| active_only(&m.status))
+            .collect();
         let applications = build_applications(&apps, &all_modules);
-        return Ok(Some(json!({ "version": 1, "source": "dam", "applications": applications })));
+        return Ok(Some(
+            json!({ "version": 1, "source": "dam", "applications": applications }),
+        ));
     }
 
-    let apps: Vec<DamApplication> = list_applications(Some(&domain)).await?.into_iter().filter(|a| active_only(&a.status)).collect();
+    let apps: Vec<DamApplication> = list_applications(Some(&domain))
+        .await?
+        .into_iter()
+        .filter(|a| active_only(&a.status))
+        .collect();
     if apps.is_empty() {
         return Ok(None);
     }
-    let all_modules: Vec<_> = list_modules(Some(&domain), None).await?.into_iter().filter(|m| active_only(&m.status)).collect();
+    let all_modules: Vec<_> = list_modules(Some(&domain), None)
+        .await?
+        .into_iter()
+        .filter(|m| active_only(&m.status))
+        .collect();
     let applications = build_applications(&apps, &all_modules);
-    Ok(Some(json!({ "version": 1, "source": "dam", "domain": domain, "applications": applications })))
+    Ok(Some(
+        json!({ "version": 1, "source": "dam", "domain": domain, "applications": applications }),
+    ))
 }
 
 /// 读取活动栏（域应用清单）文档。
@@ -87,7 +114,9 @@ pub async fn get_activities_doc(name: &str) -> PortalResult<serde_json::Value> {
         return Err(PortalError::bad_request("缺少必填查询参数 name"));
     }
     if !is_safe_id(n) {
-        return Err(PortalError::bad_request("name 仅允许字母、数字、._-，长度 1–128"));
+        return Err(PortalError::bad_request(
+            "name 仅允许字母、数字、._-，长度 1–128",
+        ));
     }
     if let Some(doc) = dam_activities_doc(n).await? {
         return Ok(doc);
@@ -95,7 +124,9 @@ pub async fn get_activities_doc(name: &str) -> PortalResult<serde_json::Value> {
     let path = data_path(["activities", &format!("{n}.json")]);
     match read_json::<serde_json::Value>(&path).await {
         Ok(v) => Ok(v),
-        Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!("活动栏定义不存在：{n}"))),
+        Err(PortalError::NotFound(_)) => {
+            Err(PortalError::not_found(format!("活动栏定义不存在：{n}")))
+        }
         Err(e) => Err(e),
     }
 }

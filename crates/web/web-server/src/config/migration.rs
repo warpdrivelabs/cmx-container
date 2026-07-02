@@ -48,7 +48,9 @@ pub async fn init_database_migrations() -> crate::Result<()> {
         .unwrap_or(true);
     let runner = runner.with_validate_checksum(validate_checksum);
 
-    let summary = runner.run_pending_migrations().await
+    let summary = runner
+        .run_pending_migrations()
+        .await
         .map_err(|e| Error::Migration(format!("数据库迁移执行失败: {}", e)))?;
 
     info!(

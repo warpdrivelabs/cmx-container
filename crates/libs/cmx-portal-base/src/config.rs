@@ -21,12 +21,13 @@ const DEFAULT_DATA_ROOT: &str = "./data";
 pub fn data_root() -> PathBuf {
     // 1) 配置项 portal.data_root（用 try_global 避免配置未初始化时 panic）
     if let Some(cfg) = ConfigManager::try_global()
-        && let Ok(p) = cfg.get_string("portal.data_root") {
-            let p = p.trim();
-            if !p.is_empty() {
-                return PathBuf::from(p);
-            }
+        && let Ok(p) = cfg.get_string("portal.data_root")
+    {
+        let p = p.trim();
+        if !p.is_empty() {
+            return PathBuf::from(p);
         }
+    }
     // 2) 环境变量
     if let Ok(p) = std::env::var("CMX_PORTAL_DATA_ROOT") {
         let p = p.trim().to_string();

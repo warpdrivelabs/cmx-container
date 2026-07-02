@@ -27,19 +27,20 @@ impl PermissionServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
-        let (dataset, total) =
-            GenericCrudService::<PermissionBmc, PermissionFilter>::page(
-                &self.mm,
-                &self.db_id,
-                None,
-                filters,
-                list_options,
-            )
-            .await
-            .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let (dataset, total) = GenericCrudService::<PermissionBmc, PermissionFilter>::page(
+            &self.mm,
+            &self.db_id,
+            None,
+            filters,
+            list_options,
+        )
+        .await
+        .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         let permissions = Self::extract_permissions(dataset);
         Ok((permissions, total))
@@ -57,7 +58,9 @@ impl PermissionServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
         let dataset = GenericCrudService::<PermissionBmc, PermissionFilter>::list(
@@ -129,7 +132,10 @@ impl PermissionServiceImpl {
     pub(super) async fn get_permission_usage_stat(
         &self,
     ) -> Result<Vec<crate::service_traits::PermissionUsageStat>, TraitError> {
-        debug!("{:<12} - PermissionServiceImpl::get_permission_usage_stat", "IAM");
+        debug!(
+            "{:<12} - PermissionServiceImpl::get_permission_usage_stat",
+            "IAM"
+        );
 
         let sql = r#"
             SELECT p.id, p.code, p.name,
@@ -160,14 +166,12 @@ impl PermissionServiceImpl {
                     permission_id: row.get_by_name_as(schema, "id")?,
                     permission_code: row.get_by_name_as(schema, "code")?,
                     permission_name: row.get_by_name_as(schema, "name")?,
-                    role_count: row
-                        .get_by_name_as::<i64>(schema, "role_count")
-                        .unwrap_or(0) as u32,
-                    user_count: row
-                        .get_by_name_as::<i64>(schema, "user_count")
-                        .unwrap_or(0) as u32,
-                    last_assigned_at: row
-                        .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "last_assigned_at"),
+                    role_count: row.get_by_name_as::<i64>(schema, "role_count").unwrap_or(0) as u32,
+                    user_count: row.get_by_name_as::<i64>(schema, "user_count").unwrap_or(0) as u32,
+                    last_assigned_at: row.get_by_name_as::<chrono::DateTime<chrono::Utc>>(
+                        schema,
+                        "last_assigned_at",
+                    ),
                 })
             })
             .collect();

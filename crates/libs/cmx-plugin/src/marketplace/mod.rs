@@ -4,12 +4,11 @@ pub mod service;
 pub mod stats;
 
 pub use model::{
-    MarketplacePlugin, MarketplacePluginForCreate, MarketplacePluginForUpdate,
-    MarketplacePluginVersion, MarketplacePluginVersionForCreate,
-    MarketplaceDownloadStats, MarketplaceRating, MarketplaceRatingForCreate,
-    MarketplacePluginFilter, MarketplacePluginVersionFilter, MarketplaceRatingFilter,
-    MarketplacePluginBmc, MarketplacePluginVersionBmc, MarketplaceRatingBmc,
-    CategoryInfo,
+    CategoryInfo, MarketplaceDownloadStats, MarketplacePlugin, MarketplacePluginBmc,
+    MarketplacePluginFilter, MarketplacePluginForCreate, MarketplacePluginForUpdate,
+    MarketplacePluginVersion, MarketplacePluginVersionBmc, MarketplacePluginVersionFilter,
+    MarketplacePluginVersionForCreate, MarketplaceRating, MarketplaceRatingBmc,
+    MarketplaceRatingFilter, MarketplaceRatingForCreate,
 };
 pub use repository::MarketplaceRepository;
 pub use service::MarketplaceService;

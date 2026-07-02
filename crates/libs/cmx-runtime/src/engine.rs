@@ -144,13 +144,12 @@ impl ExtismEngine {
         let start = std::time::Instant::now();
 
         // 第1层 + 第2层: 深度限制 + 循环检测
-        let _guard = InvokeContext::enter(plugin_id, function_name, options.max_depth).map_err(
-            |e| {
+        let _guard =
+            InvokeContext::enter(plugin_id, function_name, options.max_depth).map_err(|e| {
                 tracing::warn!("{}", e);
                 metrics.record_failure(start.elapsed().as_micros() as u64);
                 TraitError::WasmInvokeFailed(e.to_string())
-            },
-        )?;
+            })?;
 
         tracing::debug!(
             "WASM 调用开始: plugin={}, function={}, depth={}",
@@ -247,7 +246,12 @@ impl RuntimeInvoker for ExtismEngine {
 
         tokio::task::spawn_blocking(move || {
             Self::invoke_plugin_sync(
-                &pool, &plugin_id, &function_name, &input, &options, &metrics,
+                &pool,
+                &plugin_id,
+                &function_name,
+                &input,
+                &options,
+                &metrics,
             )
         })
         .await
@@ -318,10 +322,7 @@ impl RuntimeInvoker for ExtismEngine {
         {
             let mut pools = self.plugin_pools.write().unwrap();
             if pools.contains_key(plugin_id) {
-                tracing::debug!(
-                    "插件 {} 的 WASM 模块已被其他线程加载，跳过",
-                    plugin_id
-                );
+                tracing::debug!("插件 {} 的 WASM 模块已被其他线程加载，跳过", plugin_id);
                 return Ok(());
             }
             pools.insert(plugin_id.to_string(), pool);

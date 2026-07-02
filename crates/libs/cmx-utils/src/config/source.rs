@@ -45,12 +45,13 @@ impl CommandLineSource {
                     let value = arg_content[eq_pos + 1..].to_string();
                     config_args.insert(key, value);
                 } else if let Some(next_arg) = iter.peek()
-                    && !next_arg.starts_with("--") {
-                        let key = arg_content.to_string();
-                        let value = next_arg.clone();
-                        config_args.insert(key, value);
-                        iter.next();
-                    }
+                    && !next_arg.starts_with("--")
+                {
+                    let key = arg_content.to_string();
+                    let value = next_arg.clone();
+                    config_args.insert(key, value);
+                    iter.next();
+                }
             }
         }
 
@@ -147,9 +148,18 @@ mod tests {
         let source = CommandLineSource::from_args(args.into_iter());
         let map = source.collect().unwrap();
 
-        assert_eq!(map.get("host").unwrap().clone().into_string().unwrap(), "localhost");
-        assert_eq!(map.get("port").unwrap().clone().into_string().unwrap(), "8080");
-        assert_eq!(map.get("debug").unwrap().clone().into_string().unwrap(), "true");
+        assert_eq!(
+            map.get("host").unwrap().clone().into_string().unwrap(),
+            "localhost"
+        );
+        assert_eq!(
+            map.get("port").unwrap().clone().into_string().unwrap(),
+            "8080"
+        );
+        assert_eq!(
+            map.get("debug").unwrap().clone().into_string().unwrap(),
+            "true"
+        );
     }
 
     #[test]
@@ -161,7 +171,13 @@ mod tests {
         let source = CommandLineSource::from_map(map);
         let result = source.collect().unwrap();
 
-        assert_eq!(result.get("key1").unwrap().clone().into_string().unwrap(), "value1");
-        assert_eq!(result.get("key2").unwrap().clone().into_string().unwrap(), "value2");
+        assert_eq!(
+            result.get("key1").unwrap().clone().into_string().unwrap(),
+            "value1"
+        );
+        assert_eq!(
+            result.get("key2").unwrap().clone().into_string().unwrap(),
+            "value2"
+        );
     }
 }

@@ -5,8 +5,8 @@
 //! 具体实现位于 `crate::user::service::UserServiceImpl`。
 
 use async_trait::async_trait;
-use cmx_core::model::iam::{Role, User};
 use cmx_core::SVRContext;
+use cmx_core::model::iam::{Role, User};
 use cmx_traits::error::TraitError;
 use modql::filter::ListOptions;
 
@@ -161,7 +161,11 @@ pub trait UserService: Send + Sync {
     /// # Errors
     ///
     /// 当事务开启/提交失败或 SQL 执行失败时返回错误。
-    async fn delete_user(&self, svr_ctx: &SVRContext, user_ids: &[String]) -> Result<(), TraitError>;
+    async fn delete_user(
+        &self,
+        svr_ctx: &SVRContext,
+        user_ids: &[String],
+    ) -> Result<(), TraitError>;
 
     /// 分页查询用户。
     ///

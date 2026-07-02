@@ -205,14 +205,26 @@ impl From<MarketplacePluginFilterDoc> for cmx_plugin::MarketplacePluginFilter {
     fn from(doc: MarketplacePluginFilterDoc) -> Self {
         use modql::filter::{OpValString, OpValsString};
         Self {
-            plugin_id: doc.plugin_id.map(|v| OpValsString(vec![OpValString::Eq(v)])),
-            name: doc.name.map(|v| OpValsString(vec![OpValString::Contains(v)])),
+            plugin_id: doc
+                .plugin_id
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            name: doc
+                .name
+                .map(|v| OpValsString(vec![OpValString::Contains(v)])),
             category: doc.category.map(|v| OpValsString(vec![OpValString::Eq(v)])),
             status: doc.status.map(|v| OpValsString(vec![OpValString::Eq(v)])),
-            domain_code: doc.domain_code.map(|v| OpValsString(vec![OpValString::Eq(v)])),
-            application_code: doc.application_code.map(|v| OpValsString(vec![OpValString::Eq(v)])),
-            module_code: doc.module_code.map(|v| OpValsString(vec![OpValString::Eq(v)])),
-            plugin_type: doc.plugin_type.map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            domain_code: doc
+                .domain_code
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            application_code: doc
+                .application_code
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            module_code: doc
+                .module_code
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            plugin_type: doc
+                .plugin_type
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
             archived: None,
         }
     }
@@ -244,7 +256,9 @@ impl From<MarketplaceRatingFilterDoc> for cmx_plugin::MarketplaceRatingFilter {
     fn from(doc: MarketplaceRatingFilterDoc) -> Self {
         use modql::filter::{OpValString, OpValsString};
         Self {
-            plugin_id: doc.plugin_id.map(|v| OpValsString(vec![OpValString::Eq(v)])),
+            plugin_id: doc
+                .plugin_id
+                .map(|v| OpValsString(vec![OpValString::Eq(v)])),
             user_id: doc.user_id.map(|v| OpValsString(vec![OpValString::Eq(v)])),
             status: doc.status.map(|v| OpValsString(vec![OpValString::Eq(v)])),
             archived: None,

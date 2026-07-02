@@ -4,14 +4,12 @@
 //! 使用 extism-pdk 的 `#[host_fn]` 宏声明宿主函数签名。
 //! 数据类函数使用 MsgPack (Vec<u8>) 编码，日志类函数使用 String 传递。
 
-use extism_pdk::*;
-use cmx_core::{
-    DbRequest, DbResponse,
-    CacheGetRequest, CacheSetRequest, CacheResponse,
-    PluginFunRequest, PluginFunCallResponse, CallServiceRequest, CallServiceResponse,
-    IamRequest, IamResponse,
-};
 use crate::error::PluginError;
+use cmx_core::{
+    CacheGetRequest, CacheResponse, CacheSetRequest, CallServiceRequest, CallServiceResponse,
+    DbRequest, DbResponse, IamRequest, IamResponse, PluginFunCallResponse, PluginFunRequest,
+};
+use extism_pdk::*;
 
 // 声明日志宿主函数（纯文本，保持 String 类型）
 #[host_fn("cmx:log")]
@@ -49,7 +47,6 @@ extern "ExtismHost" {
 // 声明插件间调用宿主函数（MsgPack 编码）
 #[host_fn("cmx:plugin")]
 extern "ExtismHost" {
-
 
     /// 调用指定插件的指定函数
     ///
@@ -169,7 +166,11 @@ impl HostCaller {
     /// - `key`: 缓存键
     /// - `value`: 缓存值（任意 JSON 可序列化的值）
     /// - `ttl_seconds`: 可选的过期时间（秒）
-    pub fn cache_set(key: &str, value: serde_json::Value, ttl_seconds: Option<u64>) -> Result<CacheResponse, Error> {
+    pub fn cache_set(
+        key: &str,
+        value: serde_json::Value,
+        ttl_seconds: Option<u64>,
+    ) -> Result<CacheResponse, Error> {
         let request = CacheSetRequest {
             key: key.to_string(),
             value,
@@ -200,8 +201,6 @@ impl HostCaller {
         Ok(response)
     }
 
-
-
     /// 调用指定插件的指定函数
     ///
     /// 类似于 API `/api/service/call`，在 WASM 插件上下文中调用另一个插件的函数。
@@ -213,15 +212,20 @@ impl HostCaller {
     /// - `Ok(serde_json::Value)`: 函数执行结果
     /// - `Err(Error)`: 调用失败，包含错误信息
     pub fn call_plugin(request: PluginFunRequest) -> Result<PluginFunCallResponse, PluginError> {
-        let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        let bytes = rmp_serde::to_vec(&request)
+            .map_err(|e| PluginError::SerializationError(e.to_string()))?;
         // SAFETY: 调用 extism-pdk `#[host_fn("cmx:plugin")]` 宏生成的 extern "ExtismHost" 函数 call_plugin。
         // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
         // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
         // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `map_err` 转换为 `PluginError` 传播。
-        let result = unsafe { call_plugin(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
-        let response: PluginFunCallResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
+        let result = unsafe { call_plugin(bytes) }
+            .map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
+        let response: PluginFunCallResponse = rmp_serde::from_slice(&result)
+            .map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {
-            return Err(PluginError::HostCallFailed(response.error.unwrap_or_default()));
+            return Err(PluginError::HostCallFailed(
+                response.error.unwrap_or_default(),
+            ));
         }
         Ok(response)
     }
@@ -236,16 +240,23 @@ impl HostCaller {
     /// # 返回值说明
     /// - `Ok(serde_json::Value)`: 服务执行的最终输出
     /// - `Err(Error)`: 执行失败，包含错误信息
-    pub fn call_service_by_key(request: CallServiceRequest) -> Result<CallServiceResponse, PluginError> {
-        let bytes = rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+    pub fn call_service_by_key(
+        request: CallServiceRequest,
+    ) -> Result<CallServiceResponse, PluginError> {
+        let bytes = rmp_serde::to_vec(&request)
+            .map_err(|e| PluginError::SerializationError(e.to_string()))?;
         // SAFETY: 调用 extism-pdk `#[host_fn("cmx:plugin")]` 宏生成的 extern "ExtismHost" 函数 call_service_by_key。
         // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
         // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
         // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `map_err` 转换为 `PluginError` 传播。
-        let result = unsafe { call_service_by_key(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
-        let response: CallServiceResponse = rmp_serde::from_slice(&result).map_err(|e| PluginError::DeserializationError(e.to_string()))?;
+        let result = unsafe { call_service_by_key(bytes) }
+            .map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
+        let response: CallServiceResponse = rmp_serde::from_slice(&result)
+            .map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {
-            return Err(PluginError::HostCallFailed(response.error.map(|e| e.message).unwrap_or_default()));
+            return Err(PluginError::HostCallFailed(
+                response.error.map(|e| e.message).unwrap_or_default(),
+            ));
         }
         Ok(response)
     }
@@ -258,7 +269,10 @@ impl HostCaller {
     /// # 参数
     /// - `server_name`: 目标服务名称（注册中心中的服务标识）
     /// - `request`: 插件函数调用请求（会自动覆盖 server_name）
-    pub fn call_remote_plugin(server_name: &str, mut request: PluginFunRequest) -> Result<PluginFunCallResponse, PluginError> {
+    pub fn call_remote_plugin(
+        server_name: &str,
+        mut request: PluginFunRequest,
+    ) -> Result<PluginFunCallResponse, PluginError> {
         request.server_name = Some(server_name.to_string());
         Self::call_plugin(request)
     }
@@ -271,7 +285,10 @@ impl HostCaller {
     /// # 参数
     /// - `server_name`: 目标服务名称（注册中心中的服务标识）
     /// - `request`: 服务调用请求（会自动覆盖 server_name）
-    pub fn call_remote_service(server_name: &str, mut request: CallServiceRequest) -> Result<CallServiceResponse, PluginError> {
+    pub fn call_remote_service(
+        server_name: &str,
+        mut request: CallServiceRequest,
+    ) -> Result<CallServiceResponse, PluginError> {
         request.server_name = Some(server_name.to_string());
         Self::call_service_by_key(request)
     }
@@ -282,14 +299,14 @@ impl HostCaller {
     ///
     /// 失败时（success=false）返回 `PluginError::HostCallFailed`。
     fn iam_query_call(request: IamRequest) -> Result<IamResponse, PluginError> {
-        let bytes =
-            rmp_serde::to_vec(&request).map_err(|e| PluginError::SerializationError(e.to_string()))?;
+        let bytes = rmp_serde::to_vec(&request)
+            .map_err(|e| PluginError::SerializationError(e.to_string()))?;
         // SAFETY: 调用 extism-pdk `#[host_fn("cmx:iam")]` 宏生成的 extern "ExtismHost" 函数 iam_query。
         // 宏负责生成符合 ExtismHost ABI 的绑定，参数 `bytes` 是有效的 Vec<u8> 所有权值（MsgPack 编码），
         // 由 pdk 编码后传递给宿主；宿主运行时实现了对应的 import 函数并遵循该 ABI 契约；
         // 返回值为 Vec<u8>，由 pdk 解码为有效的 Rust 类型，宿主侧错误通过 `map_err` 转换为 `PluginError` 传播。
-        let result = unsafe { iam_query(bytes) }
-            .map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
+        let result =
+            unsafe { iam_query(bytes) }.map_err(|e| PluginError::HostCallFailed(e.to_string()))?;
         let response: IamResponse = rmp_serde::from_slice(&result)
             .map_err(|e| PluginError::DeserializationError(e.to_string()))?;
         if !response.success {

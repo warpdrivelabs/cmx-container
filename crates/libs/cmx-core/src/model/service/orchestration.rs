@@ -2,8 +2,8 @@
 //!
 //! 包含服务编排结构，从 JSON 解析而来。
 
-use serde::{Deserialize, Serialize};
 use super::flow::ServiceFlow;
+use serde::{Deserialize, Serialize};
 
 /// 服务编排定义 — 从 服务.json 解析
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +16,7 @@ pub struct ServiceOrchestration {
     pub description: String,
     /// 流程定义
     pub flow: ServiceFlow,
-   
+
     /// 原始json字符 非文件中的
     #[serde(skip)]
     pub source_str: String,

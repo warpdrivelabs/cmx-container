@@ -11,8 +11,8 @@ use modql::filter::ListOptions;
 use tracing::debug;
 
 use crate::error::IamError;
-use crate::user::service::UserServiceImpl;
 use crate::service_traits::{TempAssignmentStatusFilter, UserRoleAssignment};
+use crate::user::service::UserServiceImpl;
 use crate::user::{UserBmc, UserFilter};
 
 impl UserServiceImpl {
@@ -28,19 +28,20 @@ impl UserServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
-        let (dataset, total) =
-            GenericCrudService::<UserBmc, UserFilter>::page(
-                &self.mm,
-                &self.db_id,
-                None,
-                filters,
-                list_options,
-            )
-            .await
-            .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let (dataset, total) = GenericCrudService::<UserBmc, UserFilter>::page(
+            &self.mm,
+            &self.db_id,
+            None,
+            filters,
+            list_options,
+        )
+        .await
+        .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         let users = Self::extract_users(dataset);
         Ok((users, total))
@@ -58,7 +59,9 @@ impl UserServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
         let dataset = GenericCrudService::<UserBmc, UserFilter>::list(
@@ -115,13 +118,13 @@ impl UserServiceImpl {
             "IAM", user_id, status_filter
         );
 
-        let mut where_clause = String::from(
-            "a.user_id = $1 AND a.archived = 0 AND r.archived = 0",
-        );
+        let mut where_clause = String::from("a.user_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {
-                where_clause.push_str(" AND a.status = 1 AND NOW() BETWEEN a.effective_from AND a.effective_until");
+                where_clause.push_str(
+                    " AND a.status = 1 AND NOW() BETWEEN a.effective_from AND a.effective_until",
+                );
             }
             TempAssignmentStatusFilter::Expired => {
                 where_clause.push_str(" AND a.status = 1 AND a.effective_until < NOW()");
@@ -166,13 +169,13 @@ impl UserServiceImpl {
             "IAM", role_id, status_filter
         );
 
-        let mut where_clause = String::from(
-            "a.role_id = $1 AND a.archived = 0 AND r.archived = 0",
-        );
+        let mut where_clause = String::from("a.role_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {
-                where_clause.push_str(" AND a.status = 1 AND NOW() BETWEEN a.effective_from AND a.effective_until");
+                where_clause.push_str(
+                    " AND a.status = 1 AND NOW() BETWEEN a.effective_from AND a.effective_until",
+                );
             }
             TempAssignmentStatusFilter::Expired => {
                 where_clause.push_str(" AND a.status = 1 AND a.effective_until < NOW()");

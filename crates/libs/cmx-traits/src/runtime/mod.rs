@@ -9,14 +9,14 @@
 //! - [`invoke_context`] — 调用上下文与深度/循环检测（InvokeContext）。
 //! - [`global`] — 全局运行时存储器（GlobalRuntime）。
 
-pub mod invoker;
+pub mod global;
 pub mod host_func;
 pub mod invoke_context;
-pub mod global;
+pub mod invoker;
 
-pub use invoker::{RuntimeInvoker, WasmInvokeResult};
-pub use host_func::{HostFunctionProvider, HostFunctionDef, ValType};
-pub use invoke_context::{
-    InvokeOptions, InvokeContext, InvokeGuard, InvokeGuardError, DEFAULT_TIMEOUT, DEFAULT_MAX_DEPTH,
-};
 pub use global::GlobalRuntime;
+pub use host_func::{HostFunctionDef, HostFunctionProvider, ValType};
+pub use invoke_context::{
+    DEFAULT_MAX_DEPTH, DEFAULT_TIMEOUT, InvokeContext, InvokeGuard, InvokeGuardError, InvokeOptions,
+};
+pub use invoker::{RuntimeInvoker, WasmInvokeResult};

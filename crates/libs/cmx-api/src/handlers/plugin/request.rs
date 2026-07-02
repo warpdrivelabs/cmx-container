@@ -81,8 +81,6 @@ pub struct PluginListQuery {
     pub status: Option<String>,
 }
 
-
-
 /// 插件部署请求参数
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PluginDeployRequest {
@@ -98,7 +96,6 @@ pub struct PluginDeployRequest {
 
     pub publish_to_marketplace: Option<bool>,
 }
-
 
 /// API 层插件过滤条件
 ///
@@ -123,9 +120,10 @@ pub struct ApiPluginFilter {
 impl From<ApiPluginFilter> for cmx_plugin::domain::plugin::PluginFilter {
     fn from(api_filter: ApiPluginFilter) -> Self {
         Self {
-            status: api_filter.status.as_ref().and_then(|s| {
-                s.parse::<cmx_plugin::domain::plugin::PluginStatus>().ok()
-            }),
+            status: api_filter
+                .status
+                .as_ref()
+                .and_then(|s| s.parse::<cmx_plugin::domain::plugin::PluginStatus>().ok()),
             name: api_filter.name,
             domain_code: api_filter.domain_code,
             application_code: api_filter.application_code,

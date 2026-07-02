@@ -40,7 +40,6 @@ pub async fn init_plugins() -> crate::Result<()> {
     //0702 更换统一的appid获取方式
     let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
-
     let reconciliation_interval_secs = ConfigManager::global()
         .get_as::<u64>("plugin.reconciliation_interval_secs")
         .unwrap_or(60);

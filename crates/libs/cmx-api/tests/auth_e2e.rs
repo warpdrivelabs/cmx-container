@@ -16,8 +16,10 @@ async fn test_health() {
         .await
         .assert_success();
     // data 含 redis / jwt_keys / status
-    assert!(res.get("redis").is_some() || res.get("status").is_some(),
-        "health 响应缺少 redis/status 字段: {res}");
+    assert!(
+        res.get("redis").is_some() || res.get("status").is_some(),
+        "health 响应缺少 redis/status 字段: {res}"
+    );
 }
 
 #[tokio::test]
@@ -79,7 +81,9 @@ async fn test_validate_token() {
         "validate 返回用户名不匹配"
     );
     assert!(
-        flex_get(&data, "roles").map(|v| v.is_array()).unwrap_or(false),
+        flex_get(&data, "roles")
+            .map(|v| v.is_array())
+            .unwrap_or(false),
         "validate 缺少 roles 数组"
     );
 }
@@ -109,9 +113,14 @@ async fn test_heartbeat() {
     wait_for_server().await;
     let user = bootstrap_user().await;
     let client = client();
-    post_json(&client, "/api/auth/heartbeat", &json!({}), Some(&user.access_token))
-        .await
-        .assert_success();
+    post_json(
+        &client,
+        "/api/auth/heartbeat",
+        &json!({}),
+        Some(&user.access_token),
+    )
+    .await
+    .assert_success();
 }
 
 #[tokio::test]

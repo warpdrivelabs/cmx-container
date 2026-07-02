@@ -116,9 +116,9 @@ impl ConfigReloader {
         builder = builder.add_env();
 
         // 3. 构建并验证新配置。
-        let new_config = builder.build().map_err(|e| {
-            ConfigCenterError::ParseFailed(format!("配置重载构建失败: {}", e))
-        })?;
+        let new_config = builder
+            .build()
+            .map_err(|e| ConfigCenterError::ParseFailed(format!("配置重载构建失败: {}", e)))?;
 
         // 4. 计算变更 key 列表（对称差 + 值变化的交集）。
         let new_keys: HashSet<String> = new_config.keys().collect();

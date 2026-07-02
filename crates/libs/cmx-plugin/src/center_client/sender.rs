@@ -1,7 +1,7 @@
 //! 服务中心数据发送器 trait 定义。
 
+use super::types::{CenterCleanupRequest, CenterResponse, CenterSendRequest};
 use async_trait::async_trait;
-use super::types::{CenterCleanupRequest, CenterSendRequest, CenterResponse};
 
 /// 服务中心调用错误类型。
 #[derive(Debug, thiserror::Error)]
@@ -46,5 +46,8 @@ pub trait ServiceCenterSender: Send + Sync {
     /// # Errors
     ///
     /// 当网络错误、中心不可用或响应超时时返回 `CenterError`。
-    async fn cleanup_data(&self, request: CenterCleanupRequest) -> Result<CenterResponse, CenterError>;
+    async fn cleanup_data(
+        &self,
+        request: CenterCleanupRequest,
+    ) -> Result<CenterResponse, CenterError>;
 }

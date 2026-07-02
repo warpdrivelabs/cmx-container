@@ -3,12 +3,12 @@
 //! 跟踪编排执行过程中的事务状态，负责事务的开启、提交和回滚。
 //! 核心职责：根据节点的 parent 属性自动管理事务生命周期。
 
-use cmx_core::model::service::{ServiceNode, SVRContext};
-use cmx_database::transaction::{begin_transaction_guard_by_db_id, TransactionGuard};
+use cmx_core::model::service::{SVRContext, ServiceNode};
+use cmx_database::transaction::{TransactionGuard, begin_transaction_guard_by_db_id};
 use tracing::{debug, warn};
 
-use crate::error::ServiceError;
 use super::flow_navigator::FlowNavigator;
+use crate::error::ServiceError;
 
 /// 事务状态管理器
 ///
@@ -82,13 +82,17 @@ impl TransactionManager {
             // 情况2: 无活跃事务 + 节点在事务框中 → 开启新事务
             // 场景：首次进入事务框，需要开启数据库事务
             (None, Some(parent_id)) => {
-                self.begin_transaction(parent_id, navigator, svr_context).await?;
+                self.begin_transaction(parent_id, navigator, svr_context)
+                    .await?;
             }
 
             // 情况3: 有活跃事务 + 节点在同一个事务框中 → 继续在事务中执行
             // 场景：事务框内的连续节点，共享同一个事务
             (Some(_), Some(parent_id)) if self.active_parent_id.as_ref() == Some(parent_id) => {
-                debug!("节点在同一个事务框中，继续在事务中执行: node_id={}, parent_id={}", node.id, parent_id);
+                debug!(
+                    "节点在同一个事务框中，继续在事务中执行: node_id={}, parent_id={}",
+                    node.id, parent_id
+                );
             }
 
             // 情况4: 有活跃事务 + 节点不在事务框或在不同事务框中 → 提交当前事务
@@ -99,7 +103,8 @@ impl TransactionManager {
 
                 // 如果节点在新的事务框中，开启新事务
                 if let Some(ref new_parent_id) = node_parent_id {
-                    self.begin_transaction(new_parent_id, navigator, svr_context).await?;
+                    self.begin_transaction(new_parent_id, navigator, svr_context)
+                        .await?;
                 }
             }
         }
@@ -116,11 +121,16 @@ impl TransactionManager {
     ///
     /// # 注意
     /// 提交后 active_guard 和 active_parent_id 都会被清空
-    pub async fn commit_active(&mut self, svr_context: &mut SVRContext) -> Result<(), ServiceError> {
+    pub async fn commit_active(
+        &mut self,
+        svr_context: &mut SVRContext,
+    ) -> Result<(), ServiceError> {
         // take() 会取出值并将 active_guard 设为 None
         if let Some(txn_guard) = self.active_guard.take() {
             // 调用数据库层提交事务
-            txn_guard.commit().await
+            txn_guard
+                .commit()
+                .await
                 .map_err(|e| ServiceError::InternalError(format!("提交事务失败: {}", e)))?;
             debug!("事务已提交: parent_id={:?}", self.active_parent_id);
 
@@ -217,7 +227,10 @@ mod tests {
     fn make_meta() -> NodeMeta {
         NodeMeta {
             z_index: 1,
-            size: NodeSize { width: 100, height: 50 },
+            size: NodeSize {
+                width: 100,
+                height: 50,
+            },
             position: NodePosition { x: 0.0, y: 0.0 },
         }
     }
@@ -249,8 +262,8 @@ mod tests {
 
     /// 构造测试用 SVRContext
     fn make_svr_context() -> SVRContext {
-        use std::collections::HashMap;
         use chrono::Utc;
+        use std::collections::HashMap;
         SVRContext::new(
             serde_json::Value::Null,
             HashMap::new(),
@@ -312,7 +325,9 @@ mod tests {
         let mut ctx = make_svr_context();
         let node = make_node_no_parent("func_1");
 
-        let result = manager.ensure_transaction(&node, &navigator, &mut ctx).await;
+        let result = manager
+            .ensure_transaction(&node, &navigator, &mut ctx)
+            .await;
         assert!(result.is_ok(), "无事务+无parent 应返回 Ok");
         assert!(!manager.has_active(), "不应开启事务");
         assert!(ctx.txn_id.is_none(), "上下文中不应有事务ID");
@@ -329,19 +344,25 @@ mod tests {
 
         // 处理第一个节点
         let node1 = make_node_no_parent("func_1");
-        let result1 = manager.ensure_transaction(&node1, &navigator, &mut ctx).await;
+        let result1 = manager
+            .ensure_transaction(&node1, &navigator, &mut ctx)
+            .await;
         assert!(result1.is_ok());
         assert!(!manager.has_active());
 
         // 处理第二个节点
         let node2 = make_node_no_parent("func_2");
-        let result2 = manager.ensure_transaction(&node2, &navigator, &mut ctx).await;
+        let result2 = manager
+            .ensure_transaction(&node2, &navigator, &mut ctx)
+            .await;
         assert!(result2.is_ok());
         assert!(!manager.has_active());
 
         // 处理第三个节点
         let node3 = make_node_no_parent("func_3");
-        let result3 = manager.ensure_transaction(&node3, &navigator, &mut ctx).await;
+        let result3 = manager
+            .ensure_transaction(&node3, &navigator, &mut ctx)
+            .await;
         assert!(result3.is_ok());
         assert!(!manager.has_active());
 

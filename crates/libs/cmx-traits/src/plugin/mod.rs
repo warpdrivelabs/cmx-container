@@ -9,12 +9,14 @@
 //! - [`data_importer`] — 插件数据导入 trait（PluginDataImporter）。
 
 pub mod data_importer;
-pub mod query;
 pub mod lifecycle;
+pub mod query;
 
 pub use data_importer::{
     PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult,
     PluginDataImporter,
 };
-pub use query::{PluginQuery, PluginSnapshot, PluginFilter};
-pub use lifecycle::{PluginLifecycleListener, PluginLifecyclePayload, LifecycleEvent, plugin_events};
+pub use lifecycle::{
+    LifecycleEvent, PluginLifecycleListener, PluginLifecyclePayload, plugin_events,
+};
+pub use query::{PluginFilter, PluginQuery, PluginSnapshot};
