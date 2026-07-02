@@ -20,6 +20,19 @@ application_code = "FI"
 # 所属模块编码（必需，默认 default）
 module_code = "GL"
 
+# ============================================
+# 门户/设计器业务数据根（迁移自 CMXPortalManager/CMXHTMLDesigner 的 Node 后端）
+# cmx-portal 的 JSON 文件存储根目录；缺省时回退环境变量 CMX_PORTAL_DATA_ROOT 或 ./data
+# ============================================
+[portal]
+data_root = "./data"
+# 同源托管两个迁移前端的生产构建（npm run build 产物）。留空=不托管（开发走 vite dev）。
+# 访问：http://<host>:8080/portal/  与  /html/
+web_portal_dist = "../CMXPortalManager/dist"
+web_html_dist = "../CMXHTMLDesigner/dist"
+# 共享 UI5/Tabler 运行时（cmx-ui5-runtime 构建产物）。前端用 import("/shared/assets/...") 动态加载。
+# 缺它会导致 /shared/assets/install-*.js 404 → UI5 加载失败 → 白屏。
+web_shared_dist = "../packages/cmx-ui5-runtime/dist"
 
 # ============================================
 # 数据源配置数组
