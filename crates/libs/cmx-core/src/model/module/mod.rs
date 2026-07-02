@@ -4,4 +4,4 @@
 
 pub mod manifest;
 
-pub use manifest::{ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources};
+pub use manifest::{ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources, ModuleStats};

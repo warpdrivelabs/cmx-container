@@ -9,6 +9,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 use chrono::DateTime;
 use tracing::{debug, info};
+use cmx_database::get_default_db_manager;
 use cmx_utils::ConfigManager;
 use crate::ApiResp;
 use crate::app_state::CmxAppState;
@@ -67,9 +68,14 @@ pub async fn plugin_install(
     let manager = cmx_plugin::GlobalPluginManager::get();
 
     let app_id = manager.app_id().to_string();
+
+    let mut target_db_id = req.target_db_id;
+    if target_db_id.is_none() {
+        target_db_id = Some(get_default_db_manager().get_biz_db_id().await);
+    }
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: convert_source(&req.source),
-        db_id: req.target_db_id,
+        db_id: target_db_id,
         version_constraint: None,
         build_type: None,
         marketplace_source_id: None,
@@ -360,6 +366,10 @@ pub async fn plugin_deploy(
     let manager = cmx_plugin::GlobalPluginManager::get();
 
     let app_id = manager.app_id().to_string();
+    if target_db_id.is_none() {
+        target_db_id = Some(get_default_db_manager().get_biz_db_id().await);
+    }
+
     let deploy_req = cmx_plugin::DeployRequest {
         source,
         db_id: target_db_id,

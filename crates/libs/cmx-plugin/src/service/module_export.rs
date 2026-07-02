@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::module::manifest::{
-    ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources,
+    ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources, ModuleStats,
 };
 use cmx_database::DatabaseManager;
 use cmx_utils::zip::ZipCompressor;
@@ -74,9 +74,9 @@ impl ModuleExportService {
         }
 
         // 3. 导出元数据 → metadata/tables/{table_name}.json
-        let has_metadata =
-            Self::export_metadata(mm, db_id, module_code, &export_dir).await?;
-        if has_metadata {
+        let table_count =
+            Self::export_metadata(mm, db_id, application_code, module_code, &export_dir).await?;
+        if table_count > 0 {
             resources.metadata.push("metadata/tables/".to_string());
         }
 
@@ -92,7 +92,7 @@ impl ModuleExportService {
 
         // 5. 导出插件子包 → plugins/{plugin_id}.zip
         let plugin_entries =
-            Self::export_plugins(mm, db_id, module_code, &export_dir, &self.plugin_root).await?;
+            Self::export_plugins(mm, db_id, application_code, module_code, &export_dir, &self.plugin_root).await?;
 
         // 6. 组装 module.json + module.manifest.json
         let module_info = ModuleInfo {
@@ -113,7 +113,14 @@ impl ModuleExportService {
             module: module_info,
             package_version: package_version.clone(),
             resources,
-            plugins: plugin_entries,
+            plugins: plugin_entries.clone(),
+            stats: ModuleStats {
+                form_count,
+                menu_count,
+                permission_count: perm_count,
+                table_count,
+                plugin_count: plugin_entries.len(),
+            },
             checksum: None,
             signature_algorithm: None,
             signature: None,
@@ -236,22 +243,29 @@ impl ModuleExportService {
     async fn export_metadata(
         mm: &DatabaseManager,
         db_id: &str,
+        application_code: &str,
         module_code: &str,
         export_dir: &Path,
-    ) -> PluginResult<bool> {
+    ) -> PluginResult<usize> {
         let tables_dir = export_dir.join("metadata").join("tables");
         // 连查:主表取最新版本的 table_name+version,关联 version 表取完整 metadata
+        // 带 app_id 过滤(多应用隔离)
         let sql = "SELECT v.table_name, v.metadata \
                    FROM cmx_meta_table_define d \
                    INNER JOIN cmx_meta_table_define_version v \
                      ON d.table_name = v.table_name AND d.version = v.version \
-                   WHERE d.module_code = $1 AND d.archived = 0 AND v.archived = 0";
+
+                     AND d.app_id = v.app_id  \
+                   WHERE d.module_code = $1 AND d.application_code = $2 AND d.archived = 0 AND v.archived = 0";
         let ds = mm
             .query_sql_with_datavalues(
                 db_id,
                 None,
                 sql,
-                vec![DataValue::String(module_code.to_string())],
+                vec![
+                    DataValue::String(module_code.to_string()),
+                    DataValue::String(application_code.to_string()),
+                ],
                 "export_metadata",
             )
             .await
@@ -259,10 +273,10 @@ impl ModuleExportService {
         let json = serde_json::to_value(&ds)?;
         let rows = json.get("rows").and_then(|r| r.as_array());
         let Some(rows) = rows else {
-            return Ok(false);
+            return Ok(0);
         };
         if rows.is_empty() {
-            return Ok(false);
+            return Ok(0);
         }
 
         let mut all_tables = Vec::new();
@@ -287,14 +301,14 @@ impl ModuleExportService {
         }
 
         if all_tables.is_empty() {
-            return Ok(false);
+            return Ok(0);
         }
 
         tokio::fs::create_dir_all(&tables_dir).await.ok();
         // 写入一个 tables.json(包含所有表定义,对称于导入的 { "tables": [...] })
         let tables_doc = serde_json::json!({ "tables": all_tables });
         Self::write_json(&tables_dir.join("module_tables.json"), &tables_doc)?;
-        Ok(true)
+        Ok(all_tables.len())
     }
 
     /// 导出权限:从 cmx_permission 查询,组装 PermissionFile 结构
@@ -407,23 +421,28 @@ impl ModuleExportService {
         Ok(perm_defs.len())
     }
 
-    /// 导出插件子包:从 cmx_plugin 查询安装目录,打包 manifest+servicedata+wasm+wit+api+seeddata
+    /// 导出插件子包:从 cmx_plugin 查询当前版本安装目录,打包 manifest+servicedata+wasm+wit+api+seeddata
     async fn export_plugins(
         mm: &DatabaseManager,
         db_id: &str,
+        app_id: &str,
         module_code: &str,
         export_dir: &Path,
         plugin_root: &Path,
     ) -> PluginResult<Vec<ModulePluginEntry>> {
         let plugins_dir = export_dir.join("plugins");
+        // cmx_plugin 主表唯一约束(app_id, plugin_id)保证每个插件一行(version 为当前版本)
         let sql = "SELECT plugin_id, version, app_id FROM cmx_plugin \
-                   WHERE module_code = $1 AND archived = 0";
+                   WHERE module_code = $1 AND app_id = $2 AND archived = 0";
         let ds = mm
             .query_sql_with_datavalues(
                 db_id,
                 None,
                 sql,
-                vec![DataValue::String(module_code.to_string())],
+                vec![
+                    DataValue::String(module_code.to_string()),
+                    DataValue::String(app_id.to_string()),
+                ],
                 "export_plugins",
             )
             .await

@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-
+use cmx_database::get_default_db_manager;
 use crate::common::{DefinitionUtils, PackageUtils, PackageUtilsDeps};
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
@@ -136,6 +136,10 @@ impl DeployService {
     ///    - 新版本 = 旧版本 && !force_reinstall → 返回 AlreadyInstalled
     ///    - 新版本 < 旧版本 → 返回错误
     pub async fn deploy(&self, mut request: DeployRequest) -> PluginResult<DeployResponse> {
+        if request.db_id.is_none() {
+            request.db_id = Some(get_default_db_manager().get_biz_db_id().await);
+        }
+
         // 步骤1: 获取插件包
         let package_path = self
             .package_utils

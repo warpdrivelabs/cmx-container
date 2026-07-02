@@ -21,6 +21,9 @@ pub struct ModuleManifest {
     /// 模块包含的插件子包列表
     #[serde(default)]
     pub plugins: Vec<ModulePluginEntry>,
+    /// 资源统计信息
+    #[serde(default)]
+    pub stats: ModuleStats,
     /// 校验和（sha256）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checksum: Option<String>,
@@ -80,6 +83,27 @@ pub struct ModulePluginEntry {
     pub version: String,
     /// 子包在模块包内的相对路径
     pub package: String,
+}
+
+/// 模块资源统计信息(导出时自动填充)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ModuleStats {
+    /// 表单数量
+    #[serde(default)]
+    pub form_count: usize,
+    /// 菜单数量
+    #[serde(default)]
+    pub menu_count: usize,
+    /// 权限条数
+    #[serde(default)]
+    pub permission_count: usize,
+    /// 元数据表个数
+    #[serde(default)]
+    pub table_count: usize,
+    /// 插件个数
+    #[serde(default)]
+    pub plugin_count: usize,
 }
 
 impl ModuleManifest {

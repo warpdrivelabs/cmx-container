@@ -20,10 +20,14 @@ use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 use crate::rest::header_parse::get_db_id_from_header;
 
-/// 导入查询参数
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct ImportQuery {
-    /// 是否强制降级覆盖新版本
+/// 模块迁移包导入请求参数
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct ModulePackageImportRequest {
+    /// 模块 zip 包文件（必填）
+    #[schema(content_media_type = "application/octet-stream")]
+    pub file: Vec<u8>,
+
+    /// 是否强制降级覆盖新版本（可选，默认 false）
     pub force: Option<bool>,
 }
 
@@ -48,33 +52,51 @@ pub struct ModuleImportResponse {
 }
 
 /// 导入模块迁移包(multipart 上传 zip)
+///
+/// 通过 multipart/form-data 上传模块 zip 文件。
+///
+/// 请求字段：
+/// - `file`: 模块 zip 包文件（必填）
+/// - `force`: 是否强制降级覆盖新版本（可选，默认 false）
 #[utoipa::path(
     post,
     path = "/api/module/package/import",
-    params(ImportQuery),
-    responses((status = 200, description = "导入成功", body = ApiResp<ModuleImportResponse>)),
+    request_body(content = ModulePackageImportRequest, description = "导入参数", content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "导入成功", body = ApiResp<ModuleImportResponse>),
+        (status = 400, description = "请求参数错误"),
+        (status = 500, description = "导入失败")
+    ),
     tag = "Module"
 )]
 pub async fn module_package_import(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Query(q): Query<ImportQuery>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<ModuleImportResponse>>> {
     debug!("{:<12} - handler::module_package_import", "HANDLER");
 
     // 1. 接收 multipart zip
     let mut file_bytes: Option<Vec<u8>> = None;
+    let mut force: bool = false;
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         crate::Error::BadRequest(format!("解析 multipart 请求失败: {e}"))
     })? {
         let name = field.name().unwrap_or_default().to_string();
-        if name == "file" {
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {e}")))?;
-            file_bytes = Some(data.to_vec());
+        match name.as_str() {
+            "file" => {
+                let data = field
+                    .bytes()
+                    .await
+                    .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {e}")))?;
+                file_bytes = Some(data.to_vec());
+            }
+            "force" => {
+                let val = field.text().await
+                    .map_err(|e| crate::Error::BadRequest(format!("读取 force 失败: {e}")))?;
+                force = val == "true" || val == "1";
+            }
+            _ => {}
         }
     }
     let file_bytes = file_bytes.ok_or_else(|| {
@@ -97,7 +119,7 @@ pub async fn module_package_import(
     let result = module_install_svc
         .install_module_package(
             ModulePackageSource::Bytes(file_bytes),
-            q.force.unwrap_or(false),
+            force,
             None,
         )
         .await

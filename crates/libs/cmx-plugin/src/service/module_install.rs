@@ -14,8 +14,7 @@ use cmx_core::model::module::manifest::ModuleManifest;
 use cmx_database::get_default_db_manager;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use tracing::{info, warn};
-
+use tracing::{error, info, warn};
 use crate::common::package::PackageUtils;
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
@@ -82,6 +81,16 @@ impl ModuleInstallService {
         // 2. 解析 module.manifest.json
         let manifest = self.parse_manifest(&module_dir)?;
 
+        let res_app_id = &manifest.module.code;
+        //对比模块id 和当前服务appid是否同一个，不是的拒绝
+        let current_service_app_id = cmx_utils::ConfigManager::global().get_app_id();
+        if res_app_id != &current_service_app_id {
+            return Err(PluginError::CenterData(format!(
+                "导入的模块资源不属于当前模块: 模块包 app_id={}, 当前服务 app_id={}",
+                res_app_id, current_service_app_id
+            )));
+        }
+
         info!(
             module_code = %manifest.module.code,
             package_version = %manifest.package_version,
@@ -123,12 +132,12 @@ impl ModuleInstallService {
 
         // 5. 版本登记(current_version upsert + version_history insert)
         if let Err(e) = self.record_version(mm, &default_db_id, &manifest, &operator).await {
-            warn!(error = %e, "版本登记失败,继续安装插件");
+            error!(error = %e, "版本登记失败,继续安装插件");
         }
 
         // 6. 遍历插件子包,逐个复用 DeployService::deploy(自动判断升级/安装/跳过)
         //    source 用 Local{path},deploy 内部会统一上传 OSS 后转为 Storage
-        let app = &manifest.module.application_code;
+
         let mut plugin_count = 0usize;
         for entry in &manifest.plugins {
             let plugin_zip = module_dir.join(&entry.package);
@@ -140,11 +149,12 @@ impl ModuleInstallService {
                 source: PluginSource::Local {
                     path: plugin_zip.clone(),
                 },
-                db_id: None,
-                force_reinstall: false,
-                build_type: None,
+                db_id: Some(biz_db_id.clone()),
+                force_reinstall: true,
+                //fixme 写死 0702
+                build_type: Some("release".to_string()),
                 publish_to_marketplace: false,
-                app_id: Some(app.clone()),
+                app_id: Some(res_app_id.clone()),
                 marketplace_source_id: None,
                 marketplace_publish_info: None,
             };

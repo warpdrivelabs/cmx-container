@@ -94,7 +94,7 @@ impl ModuleVersionService {
         let upsert_sql = "INSERT INTO cmx_module_current_version \
                           (id, module_id, domain_code, application_code, module_code, \
                            package_version, checksum, manifest_snapshot, imported_at, imported_by, source, archived) \
-                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, $9, $10, 0) \
+                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, CURRENT_TIMESTAMP, $9, $10, 0) \
                           ON CONFLICT (module_code) DO UPDATE SET \
                           package_version = EXCLUDED.package_version, \
                           checksum = EXCLUDED.checksum, \
@@ -129,7 +129,7 @@ impl ModuleVersionService {
         let history_sql = "INSERT INTO cmx_module_version_history \
                            (id, module_id, domain_code, application_code, module_code, \
                             package_version, checksum, manifest_snapshot, imported_at, imported_by, source, archived) \
-                           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, $9, $10, 0) \
+                           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, CURRENT_TIMESTAMP, $9, $10, 0) \
                            ON CONFLICT (module_code, package_version) DO NOTHING";
         mm.execute_sql_with_datavalues(
             db_id,
