@@ -5,6 +5,9 @@ ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS domain_code VARCHAR(64);
 ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS application_code VARCHAR(64);
 ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS module_code VARCHAR(64);
 ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS source_type VARCHAR(20);
+-- 数据源表新增 db_name 字段（数据源显示名称，便于运维识别）
+ALTER TABLE cmx_sys_datasource ADD COLUMN IF NOT EXISTS db_name VARCHAR(128);
+
 
 -- 回填默认值（向后兼容：现有数据无域归属，统一回填 default）
 -- UPDATE cmx_sys_datasource SET domain_code = 'default' WHERE domain_code IS NULL;
@@ -16,6 +19,7 @@ COMMENT ON COLUMN cmx_sys_datasource.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_sys_datasource.application_code IS '所属应用编码';
 COMMENT ON COLUMN cmx_sys_datasource.module_code IS '所属模块编码';
 COMMENT ON COLUMN cmx_sys_datasource.source_type IS '数据源类型：default-默认库，biz-业务库，other-其他';
+COMMENT ON COLUMN cmx_sys_datasource.db_name IS '数据源名称（便于识别的显示名称）';
 
 -- 去除 db_id 唯一索引（db_id 在不同域下可重复，唯一性由配置文件层保证）
 DROP INDEX IF EXISTS uk_cmx_datasource_db_id;

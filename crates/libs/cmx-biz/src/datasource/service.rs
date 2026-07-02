@@ -176,6 +176,7 @@ impl SysDatasourceService {
         let filter = SysDatasourceFilter {
             id: None,
             db_id: Some(OpValsString(vec![OpValString::Eq(target_db_id.to_string())])),
+            db_name: None,
             db_type: None,
             default_flag: None,
             source: None,
@@ -218,6 +219,7 @@ impl SysDatasourceService {
             db_url: data.db_url.clone(),
             db_id: data.db_id.clone(),
             db_schema: data.db_schema.clone(),
+            db_name: data.db_name.clone(),
             default: data.default_flag.unwrap_or(0) == 1,
             domain_code: data.domain_code.clone(),
             application_code: data.application_code.clone(),
@@ -296,12 +298,15 @@ impl SysDatasourceService {
             .and_then(|v| String::try_from(v.clone()).ok());
         let source_type = row.get_by_name(schema, "source_type")
             .and_then(|v| String::try_from(v.clone()).ok());
+        let db_name = row.get_by_name(schema, "db_name")
+            .and_then(|v| String::try_from(v.clone()).ok());
 
         Some(DbConfig {
             db_type,
             db_url,
             db_id,
             db_schema,
+            db_name,
             default: default_flag == 1,
             domain_code,
             application_code,

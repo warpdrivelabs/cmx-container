@@ -50,6 +50,8 @@ db_type = "postgres"
 # 数据库连接 URL（必需）
 # 格式: <driver>://<user>:<password>@<host>:<port>/<database>
 db_url = "postgresql://postgres:postgres@localhost:5432/cmx"
+## 数据源名称（可选，默认从 db_url 解析数据库名作为显示名称，便于运维识别）
+# db_name = "cmx"
 # 是否为默认数据库，默认为 false
 # 多个数据源时只有一个应为 true
 default = true
@@ -89,6 +91,7 @@ health_check_timeout = 5
 # db_type = "postgres"
 # db_url = "postgresql://user:password@192.168.1.100:5432/cmx"
 # default = false
+## db_name = "cmx-biz"
 ## source_type = "biz"
 # [databases.pool_config]
 # max_connections = 10

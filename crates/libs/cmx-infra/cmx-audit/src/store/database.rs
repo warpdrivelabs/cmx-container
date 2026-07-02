@@ -490,6 +490,7 @@ mod tests {
             db_url: url,
             db_id: TEST_DB_ID.to_string(),
             db_schema: Some("public".to_string()),
+            db_name: None,
             pool_config,
             health_check_interval: 60,
             health_check_timeout: 5,
