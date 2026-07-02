@@ -317,7 +317,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info());
+            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -353,7 +353,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info());
+            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -389,7 +389,7 @@ impl ResultConverter {
 
         for column in first_row.columns().iter() {
             let column_name = column.name().to_string();
-            let field_type = Self::map_sql_type_to_field_type(column.type_info());
+            let field_type = Self::map_sql_type_to_field_type(column.type_info(), &column_name);
             fields.push(Field {
                 name: column_name,
                 field_type,
@@ -713,7 +713,7 @@ impl ResultConverter {
     }
 
     /// 将 SQL 类型映射为 FieldType
-    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo) -> FieldType {
+    pub(crate) fn map_sql_type_to_field_type(type_info: &impl sqlx::TypeInfo, column_name: &str) -> FieldType {
         let type_name = format!("{}", type_info);
         let type_name_lower = type_name.to_lowercase();
 
@@ -721,6 +721,7 @@ impl ResultConverter {
             || type_name_lower.contains("text")
             || type_name_lower.contains("string")
             || type_name_lower.contains("char")
+            || type_name_lower.contains("name")
         {
             FieldType::String
         } else if type_name_lower.contains("int")
@@ -755,7 +756,7 @@ impl ResultConverter {
         } else if type_name_lower.contains("array") {
             FieldType::Array
         } else {
-            tracing::warn!("未处理的数据库字段类型: {}", type_name);
+            tracing::warn!("未处理的数据库字段类型: column={}, type={}", column_name, type_name);
             FieldType::Unknown
         }
     }
