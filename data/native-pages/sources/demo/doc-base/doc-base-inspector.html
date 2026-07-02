@@ -1,0 +1,90 @@
+<div class="docbx-insp" style="display:flex;flex-direction:column;height:100%;font:13px/1.45 -apple-system,'Segoe UI','PingFang SC',sans-serif;color:var(--sapTextColor,#1d2d3e);background:var(--sapBackgroundColor,#fff);box-sizing:border-box">
+  <div style="padding:9px 12px;border-bottom:1px solid var(--sapGroup_TitleBorderColor,#d9d9d9);font-weight:700;flex:0 0 auto">字段检查器</div>
+  <div id="form" style="flex:1 1 auto;overflow:auto;padding:10px"></div>
+
+  <style>
+    .docbx-insp .dx-form{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px 10px;align-items:center}
+    .docbx-insp .dx-form label{color:var(--sapContent_LabelColor,#6a6d70)}
+    .docbx-insp input,.docbx-insp select,.docbx-insp textarea{width:100%;box-sizing:border-box;border:1px solid var(--sapField_BorderColor,#89919a);border-radius:4px;padding:5px 7px;background:var(--sapField_Background,#fff);color:inherit;font:inherit}
+    .docbx-insp textarea{min-height:48px;resize:vertical}
+    .docbx-insp .dx-empty{padding:12px;color:var(--sapContent_LabelColor,#6a6d70)}
+  </style>
+
+  <script>
+    /* 业务单据定义 · 检查器（property 区）：编辑当前选中字段完整属性（含单据特有 dimType/agg）。
+       读写同一 workspace.context（docDoc + docSelectedTable + docSelectedFieldIndex），与 manager 联动。 */
+    var root = host.renderRoot;
+    var ctx = workspace && workspace.context;
+    var DATA_TYPES = ['VARCHAR', 'BIGINT', 'INT', 'TINYINT', 'DECIMAL', 'DATE', 'DATETIME', 'TEXT'];
+    var DIM_TYPES = ['', 'dimension', 'measure', 'attribute', 'relation'];
+    var AGGS = ['', 'sum', 'count', 'avg', 'max', 'min'];
+    var EDIT_MODES = ['', 'cmx-text-input', 'cmx-number-input', 'cmx-date-input', 'cmx-datetime-input', 'cmx-dict-select', 'select', 'checkbox'];
+    var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+    function get (k) { return ctx ? ctx.get(k) : null; }
+    function set (k, v) { if (ctx) ctx.set(k, v); }
+    function optionHtml (items, value) { return items.map(function (it) { return '<option value="' + esc(it) + '"' + (String(value || '') === it ? ' selected' : '') + '>' + esc(it || '无') + '</option>'; }).join(''); }
+
+    function curTableObj () { var doc = get('docDoc'); var tn = get('docSelectedTable'); return (doc && Array.isArray(doc.voucherTables)) ? doc.voucherTables.find(function (t) { return t.tableName === tn; }) : null; }
+    function curField () { var t = curTableObj(); if (!t || !Array.isArray(t.fields)) return null; return t.fields[get('docSelectedFieldIndex')] || null; }
+
+    function setPath (obj, path, value, type) {
+      var segs = path.split('.'); var leaf = segs.pop(); var node = obj;
+      segs.forEach(function (s) { if (!node[s] || typeof node[s] !== 'object') node[s] = {}; node = node[s]; });
+      if (type === 'boolean') node[leaf] = !!value;
+      else if (type === 'number') { if (value === '') delete node[leaf]; else { var n = Number(value); node[leaf] = Number.isFinite(n) ? n : value; } }
+      else if (value === '') delete node[leaf]; else node[leaf] = value;
+    }
+
+    function render () {
+      var box = root.querySelector('#form');
+      var t = curTableObj();
+      var f = curField();
+      if (!t) { box.innerHTML = '<div class="dx-empty">请选择单据 / 表</div>'; return; }
+      var rows = '<label>所属表</label><input value="' + esc((t.tableAlias || t.tableName) + ' (' + (t.level || '') + ')') + '" readonly>';
+      if (f) {
+        rows += '<label>字段ID</label><input data-p="id" value="' + esc(f.id || '') + '">'
+          + '<label>字段名称</label><input data-p="name" value="' + esc(f.name || '') + '">'
+          + '<label>标题</label><input data-p="caption.zh_CN" value="' + esc(f.caption && f.caption.zh_CN || '') + '">'
+          + '<label>数据类型</label><select data-p="dataType">' + optionHtml(DATA_TYPES, f.dataType) + '</select>'
+          + '<label>长度</label><input data-p="fieldLength" data-t="number" type="number" value="' + esc(f.fieldLength == null ? '' : f.fieldLength) + '">'
+          + '<label>整数位</label><input data-p="intDigits" data-t="number" type="number" value="' + esc(f.intDigits == null ? '' : f.intDigits) + '">'
+          + '<label>小数位</label><input data-p="decimalDigits" data-t="number" type="number" value="' + esc(f.decimalDigits == null ? '' : f.decimalDigits) + '">'
+          + '<label>维度类型</label><select data-p="dimType">' + optionHtml(DIM_TYPES, f.dimType) + '</select>'
+          + '<label>聚合方式</label><select data-p="agg">' + optionHtml(AGGS, f.agg) + '</select>'
+          + '<label>允许为空</label><input data-p="nullable" data-t="boolean" type="checkbox"' + (f.nullable !== false ? ' checked' : '') + '>'
+          + '<label>参照字典</label><input data-p="refDict" value="' + esc(f.refDict || '') + '">'
+          + '<label>参照字段</label><input data-p="refField" value="' + esc(f.refField || '') + '">'
+          + '<label>显示字段</label><input data-p="displayField" value="' + esc(f.displayField || '') + '">'
+          + '<label>录入控件</label><select data-p="edit.mode">' + optionHtml(EDIT_MODES, f.edit && f.edit.mode) + '</select>';
+      } else {
+        rows += '<label>当前字段</label><div>无（在设计页选择一行）</div>';
+      }
+      rows += '<label>保存状态</label><div>' + (get('docDirty') ? '未保存' : '已保存') + '</div>';
+      box.innerHTML = '<div class="dx-form">' + rows + '</div>';
+      bind(box);
+    }
+
+    function bind (box) {
+      box.querySelectorAll('[data-p]').forEach(function (el) {
+        var evt = el.type === 'checkbox' ? 'change' : 'input';
+        el.addEventListener(evt, function () {
+          var f = curField(); if (!f) return;
+          var p = el.getAttribute('data-p');
+          setPath(f, p, el.type === 'checkbox' ? el.checked : el.value, el.getAttribute('data-t') || '');
+          if (p === 'id' && !f.name) f.name = el.value;
+          if (p === 'name' && !f.id) f.id = el.value;
+          set('docDirty', true); set('docDoc', get('docDoc')); set('docFieldTick', Date.now());
+        });
+      });
+    }
+
+    if (ctx) {
+      var onChange = function (ev) { if (['docDoc', 'docSelectedTable', 'docSelectedFieldIndex', 'docDirty', 'docFieldTick'].indexOf(ev.key) >= 0) render(); };
+      ctx.on('change', onChange);
+      host.onDispose = function () { try { ctx.off('change', onChange); } catch (e) {} };
+      render();
+    } else {
+      root.querySelector('#form').innerHTML = '<div class="dx-empty">workspace.context 不可用</div>';
+    }
+  </script>
+</div>

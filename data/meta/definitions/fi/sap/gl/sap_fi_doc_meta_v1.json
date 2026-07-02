@@ -1,0 +1,1028 @@
+{
+  "moduleMeta": {
+    "moduleCode": "FI",
+    "moduleName": "财务会计(SAP)",
+    "metaKind": "DOC",
+    "metaName": "SAP FI 会计凭证单据元数据",
+    "version": 1,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "SAP ERP(ECC/S4) FI 会计凭证单据结构：L1 凭证头 BKPF → L2 行项目 BSEG。真实凭证主键为 BUKRS(公司代码)+BELNR(凭证号)+GJAHR(会计年度) 三段复合键，BELNR 由凭证类型的 FI number range 生成。S/4HANA 行项目对应 Universal Journal 通用日记账 ACDOCA(更宽、含并行分类账/多币种，非同一物理表)，本模型以经典 BSEG 建模并把分类账 RLDNR 下沉到行层。字段含 physicalField(SAP 真实技术字段名 BUKRS/HKONT/DMBTR…)便于集成对接；按 dimType 区分维度/属性/度量；借贷由金额+借贷标志 SHKZG 表达(不另存借贷分栏)；凭证头借贷合计为派生缓存(真实 BKPF 无此列)。含 held/parked/posted/reversed 状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",
+    "organizationDict": "company_code",
+    "keyDicts": "gl_account",
+    "documentTypeDict": "document_type"
+  },
+  "baseDocMetaRef": {
+    "file": "base_doc_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "documentIdentityFields",
+      "documentSourceFields",
+      "documentLifecycleFields",
+      "documentTechnicalFields",
+      "documentCommonFields"
+    ],
+    "remark": "复用 base_doc_meta_v1.json 通用单据 fieldSet；voucherTables.documentFieldSets 引用该文件。"
+  },
+  "voucherCommonFieldSet": "documentTechnicalFields",
+  "voucherDocumentMapping": {
+    "remark": "SAP 凭证对通用单据字段的语义映射:界面显示时 document_* 映射为凭证日期/凭证类型/凭证号/凭证状态。",
+    "fieldAliases": {
+      "document_date": "posting_date",
+      "document_type_id": "doc_type_id",
+      "document_no": "voucher_no",
+      "document_status": "voucher_status"
+    },
+    "typeDict": "document_type",
+    "stateField": "document_status"
+  },
+  "voucherSchema": {
+    "remark": "凭证主从两层：L1 [sap_fi_document_header] → L2 [sap_fi_document_item]。行项目金额(amount_local)按借贷标志(SHKZG)上卷至凭证头借贷合计；凭证需在公司代码内借贷平衡。",
+    "schema": [
+      [
+        {
+          "id": "sap_fi_document_header",
+          "kind": "list",
+          "level": "L1",
+          "levelName": "凭证头"
+        }
+      ],
+      [
+        {
+          "id": "sap_fi_document_item",
+          "kind": "list",
+          "level": "L2",
+          "levelName": "行项目"
+        }
+      ]
+    ],
+    "relations": [
+      {
+        "parent": "sap_fi_document_header",
+        "child": "items",
+        "parentKey": "id",
+        "childKey": "header_id"
+      }
+    ],
+    "aggregations": [
+      {
+        "from": "sap_fi_document_header.items",
+        "to": "sap_fi_document_header",
+        "field": "amount_local",
+        "toField": "total_debit",
+        "agg": "sum",
+        "where": "debit_credit=='S'",
+        "remark": "借方(SHKZG=S)行金额上卷到凭证头借方合计"
+      },
+      {
+        "from": "sap_fi_document_header.items",
+        "to": "sap_fi_document_header",
+        "field": "amount_local",
+        "toField": "total_credit",
+        "agg": "sum",
+        "where": "debit_credit=='H'",
+        "remark": "贷方(SHKZG=H)行金额上卷到凭证头贷方合计"
+      }
+    ]
+  },
+  "voucherTables": [
+    {
+      "level": "L1",
+      "tableName": "sap_fi_document_header",
+      "tableAlias": "会计凭证头(BKPF)",
+      "remark": "SAP 会计凭证抬头 BKPF：一张凭证一行。真实主键 = 公司代码(BUKRS) + 凭证号(BELNR) + 会计年度(GJAHR) 三段复合键；BELNR 由凭证类型的 FI number range 编号范围生成。承载公司代码/年度/期间/凭证类型等维度与过账日期/参考号/冲销等属性；借贷合计(total_debit/total_credit)为派生缓存，真实 BKPF 无此列。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "company_code",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "id": "company_code_id",
+          "name": "company_code_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false,
+          "dimType": "dimension",
+          "physicalField": "GJAHR",
+          "id": "fiscal_year",
+          "name": "fiscal_year",
+          "caption": {
+            "zh_CN": "会计年度(GJAHR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "BELNR",
+          "id": "document_no",
+          "name": "document_no",
+          "caption": {
+            "zh_CN": "凭证号(BELNR)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "dimension",
+          "physicalField": "MONAT",
+          "id": "posting_period",
+          "name": "posting_period",
+          "caption": {
+            "zh_CN": "记账期间(MONAT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 5,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "WAERS",
+          "id": "doc_currency",
+          "name": "doc_currency",
+          "caption": {
+            "zh_CN": "凭证货币(WAERS)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "BUDAT",
+          "id": "posting_date",
+          "name": "posting_date",
+          "caption": {
+            "zh_CN": "过账日期(BUDAT)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "BLDAT",
+          "id": "document_date_in",
+          "name": "document_date_in",
+          "caption": {
+            "zh_CN": "凭证日期(BLDAT)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "CPUDT",
+          "id": "entry_date",
+          "name": "entry_date",
+          "caption": {
+            "zh_CN": "录入日期(CPUDT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "XBLNR",
+          "id": "reference",
+          "name": "reference",
+          "caption": {
+            "zh_CN": "参考/发票号(XBLNR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 50,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "BKTXT",
+          "id": "header_text",
+          "name": "header_text",
+          "caption": {
+            "zh_CN": "抬头文本(BKTXT)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 12,
+          "intDigits": 7,
+          "decimalDigits": 5,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "KURSF",
+          "id": "exchange_rate",
+          "name": "exchange_rate",
+          "caption": {
+            "zh_CN": "汇率(KURSF)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "exchange_rate_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KURST",
+          "id": "exchange_rate_type",
+          "name": "exchange_rate_type",
+          "caption": {
+            "zh_CN": "汇率类型(KURST)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "TCODE",
+          "id": "source_tcode",
+          "name": "source_tcode",
+          "caption": {
+            "zh_CN": "来源事务码(TCODE)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 5,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "AWTYP",
+          "id": "ref_proc_type",
+          "name": "ref_proc_type",
+          "caption": {
+            "zh_CN": "参考交易类型(AWTYP)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "AWKEY",
+          "id": "ref_proc_key",
+          "name": "ref_proc_key",
+          "caption": {
+            "zh_CN": "参考对象键(AWKEY)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "USNAM",
+          "id": "entered_by",
+          "name": "entered_by",
+          "caption": {
+            "zh_CN": "录入人(USNAM)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "STBLG",
+          "id": "reversal_doc_no",
+          "name": "reversal_doc_no",
+          "caption": {
+            "zh_CN": "冲销凭证号(STBLG)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "STJAH",
+          "id": "reversal_year",
+          "name": "reversal_year",
+          "caption": {
+            "zh_CN": "冲销年度(STJAH)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "physicalField": "XREVERSAL",
+          "id": "reversal_flag",
+          "name": "reversal_flag",
+          "caption": {
+            "zh_CN": "是否冲销(XREVERSAL)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "BSTAT",
+          "id": "doc_record_status",
+          "name": "doc_record_status",
+          "caption": {
+            "zh_CN": "凭证记录状态(BSTAT)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "derived": true,
+          "id": "total_debit",
+          "name": "total_debit",
+          "caption": {
+            "zh_CN": "借方合计(本位币·派生)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "derived": true,
+          "id": "total_credit",
+          "name": "total_credit",
+          "caption": {
+            "zh_CN": "贷方合计(本位币·派生)"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentIdentityFields",
+        "documentSourceFields",
+        "documentLifecycleFields",
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {
+        "document_type_id": "document_type",
+        "entity_id": "company_code"
+      }
+    },
+    {
+      "level": "L2",
+      "tableName": "sap_fi_document_item",
+      "tableAlias": "会计凭证行项目(BSEG)",
+      "remark": "SAP 会计凭证行项目 BSEG(经典 FI 行项目表)。S/4HANA 对应 Universal Journal 通用日记账 ACDOCA(并非同一张物理表，ACDOCA 行更宽、含并行分类账/多币种)，本模型以经典 BSEG 行项目建模，分类账(RLDNR)下沉到行层贴合 S/4 语义。分析主战场：科目/利润中心/成本中心/段/业务范围/功能范围/订单/WBS/客商等维度 + 多币种金额、税额、数量度量；借贷由金额(WRBTR/DMBTR)+借贷标志(SHKZG)表达，不另存借/贷分栏。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "relation",
+          "id": "header_id",
+          "name": "header_id",
+          "caption": {
+            "zh_CN": "所属凭证头ID"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "BUZEI",
+          "id": "line_no",
+          "name": "line_no",
+          "caption": {
+            "zh_CN": "行项目号(BUZEI)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 2,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "RLDNR",
+          "id": "ledger_id",
+          "name": "ledger_id",
+          "caption": {
+            "zh_CN": "分类账(RLDNR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "gl_account",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "HKONT",
+          "id": "gl_account_id",
+          "name": "gl_account_id",
+          "caption": {
+            "zh_CN": "总账科目(HKONT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "account_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOART",
+          "id": "account_type",
+          "name": "account_type",
+          "caption": {
+            "zh_CN": "账户类型(KOART)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 2,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "posting_key",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BSCHL",
+          "id": "posting_key",
+          "name": "posting_key",
+          "caption": {
+            "zh_CN": "记账码(BSCHL)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "debit_credit_ind",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "SHKZG",
+          "id": "debit_credit",
+          "name": "debit_credit",
+          "caption": {
+            "zh_CN": "借贷标志(SHKZG)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "profit_center",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PRCTR",
+          "id": "profit_center_id",
+          "name": "profit_center_id",
+          "caption": {
+            "zh_CN": "利润中心(PRCTR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "cost_center",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOSTL",
+          "id": "cost_center_id",
+          "name": "cost_center_id",
+          "caption": {
+            "zh_CN": "成本中心(KOSTL)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "segment",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "SEGMENT",
+          "id": "segment_id",
+          "name": "segment_id",
+          "caption": {
+            "zh_CN": "段(SEGMENT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "business_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "GSBER",
+          "id": "business_area_id",
+          "name": "business_area_id",
+          "caption": {
+            "zh_CN": "业务范围(GSBER)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "functional_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "FKBER",
+          "id": "functional_area_id",
+          "name": "functional_area_id",
+          "caption": {
+            "zh_CN": "功能范围(FKBER)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 6,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "company",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "VBUND",
+          "id": "trading_partner",
+          "name": "trading_partner",
+          "caption": {
+            "zh_CN": "贸易伙伴(VBUND)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 12,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "internal_order",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "AUFNR",
+          "id": "internal_order_id",
+          "name": "internal_order_id",
+          "caption": {
+            "zh_CN": "内部订单(AUFNR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 24,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "wbs_element",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PROJK",
+          "id": "wbs_element_id",
+          "name": "wbs_element_id",
+          "caption": {
+            "zh_CN": "WBS元素(PROJK)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "business_partner",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KUNNR/LIFNR",
+          "id": "partner_id",
+          "name": "partner_id",
+          "caption": {
+            "zh_CN": "客户/供应商(KUNNR/LIFNR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 50,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "SGTXT",
+          "id": "item_text",
+          "name": "item_text",
+          "caption": {
+            "zh_CN": "行项目文本(SGTXT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 18,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "ZUONR",
+          "id": "assignment",
+          "name": "assignment",
+          "caption": {
+            "zh_CN": "分配号(ZUONR)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "special_gl_ind",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "UMSKZ",
+          "id": "special_gl_ind",
+          "name": "special_gl_ind",
+          "caption": {
+            "zh_CN": "特别总账标识(UMSKZ)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 2,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "tax_code",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "MWSKZ",
+          "id": "tax_code",
+          "name": "tax_code",
+          "caption": {
+            "zh_CN": "税码(MWSKZ)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "payment_terms",
+          "physicalField": "ZTERM",
+          "id": "payment_terms_id",
+          "name": "payment_terms_id",
+          "caption": {
+            "zh_CN": "付款条件(ZTERM)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "payment_method",
+          "physicalField": "ZLSCH",
+          "id": "payment_method",
+          "name": "payment_method",
+          "caption": {
+            "zh_CN": "付款方式(ZLSCH)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "ZLSPR",
+          "id": "payment_block",
+          "name": "payment_block",
+          "caption": {
+            "zh_CN": "付款冻结(ZLSPR)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "ZFBDT",
+          "id": "baseline_date",
+          "name": "baseline_date",
+          "caption": {
+            "zh_CN": "基准日期(ZFBDT)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "physicalField": "XOPVW",
+          "id": "open_item_flag",
+          "name": "open_item_flag",
+          "caption": {
+            "zh_CN": "未清项管理(XOPVW)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "AUGBL",
+          "id": "clearing_doc_no",
+          "name": "clearing_doc_no",
+          "caption": {
+            "zh_CN": "清账凭证号(AUGBL)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "AUGDT",
+          "id": "clearing_date",
+          "name": "clearing_date",
+          "caption": {
+            "zh_CN": "清账日期(AUGDT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 3,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "BEWAR",
+          "id": "cons_trans_type",
+          "name": "cons_trans_type",
+          "caption": {
+            "zh_CN": "合并业务交易类型(BEWAR)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "WRBTR",
+          "id": "amount_doc",
+          "name": "amount_doc",
+          "caption": {
+            "zh_CN": "凭证货币金额(WRBTR)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBTR",
+          "id": "amount_local",
+          "name": "amount_local",
+          "caption": {
+            "zh_CN": "本位币金额(DMBTR/HSL)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBE2",
+          "id": "amount_group",
+          "name": "amount_group",
+          "caption": {
+            "zh_CN": "集团货币金额(DMBE2/KSL)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "HWBAS",
+          "id": "tax_base_amount",
+          "name": "tax_base_amount",
+          "caption": {
+            "zh_CN": "税基(HWBAS)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "WMWST",
+          "id": "tax_amount",
+          "name": "tax_amount",
+          "caption": {
+            "zh_CN": "税额(WMWST/MWSTS)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "SKFBT",
+          "id": "cash_discount_base",
+          "name": "cash_discount_base",
+          "caption": {
+            "zh_CN": "现金折扣基数(SKFBT)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "WSKTO",
+          "id": "cash_discount_amount",
+          "name": "cash_discount_amount",
+          "caption": {
+            "zh_CN": "现金折扣额(WSKTO)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 20,
+          "decimalDigits": 3,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "MENGE",
+          "id": "quantity",
+          "name": "quantity",
+          "caption": {
+            "zh_CN": "数量(MENGE)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 3,
+          "nullable": true,
+          "dimType": "dimension",
+          "physicalField": "MEINS",
+          "id": "base_unit",
+          "name": "base_unit",
+          "caption": {
+            "zh_CN": "计量单位(MEINS)"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {}
+    }
+  ],
+  "voucherStatusFlow": {
+    "stateField": "document_status",
+    "physicalField": "BSTAT",
+    "remark": "SAP 会计凭证生命周期：暂存(held)/预制(parked)→已过账(posted)→(冲销 reversed)。真实凭证记录状态在 BKPF.BSTAT(空=正常已过账, V=预制, S=统计, ...)；本状态机为业务语义抽象。posted 不可改,只能冲销。",
+    "states": [
+      {
+        "code": "held",
+        "name": "暂存",
+        "editable": true,
+        "remark": "Held Document,临时暂存,未编号未生成余额"
+      },
+      {
+        "code": "parked",
+        "name": "预制/草稿",
+        "editable": true,
+        "physical": "BSTAT=V",
+        "remark": "Parked Document,可改可删,尚未生成余额"
+      },
+      {
+        "code": "posted",
+        "name": "已过账",
+        "editable": false,
+        "physical": "BSTAT=(空)",
+        "remark": "Posted,记入总账生成余额,不可逆"
+      },
+      {
+        "code": "reversed",
+        "name": "已冲销",
+        "editable": false,
+        "remark": "通过红冲凭证冲销,终态"
+      }
+    ],
+    "transitions": [
+      {
+        "action": "park",
+        "name": "预制",
+        "from": "held",
+        "to": "parked",
+        "guard": []
+      },
+      {
+        "action": "post",
+        "name": "过账",
+        "from": "parked",
+        "to": "posted",
+        "guard": [
+          "balance_check",
+          "period_open_check"
+        ]
+      },
+      {
+        "action": "post_direct",
+        "name": "直接过账",
+        "from": "held",
+        "to": "posted",
+        "guard": [
+          "balance_check",
+          "period_open_check"
+        ]
+      },
+      {
+        "action": "reverse",
+        "name": "冲销",
+        "from": "posted",
+        "to": "reversed",
+        "guard": [
+          "period_open_check"
+        ]
+      }
+    ]
+  },
+  "validationRules": [
+    {
+      "code": "debit_credit_balance",
+      "level": "error",
+      "expr": "total_debit == total_credit",
+      "message": "凭证必须在公司代码内借贷平衡(借方合计=贷方合计)"
+    },
+    {
+      "code": "min_two_lines",
+      "level": "error",
+      "expr": "item_count >= 2",
+      "message": "会计凭证至少需要两条行项目(一借一贷)"
+    },
+    {
+      "code": "period_open",
+      "level": "error",
+      "expr": "posting_allowed == 1",
+      "message": "记账期间必须处于开放状态(记账期间变式校验)"
+    },
+    {
+      "code": "tax_code_required_on_tax_account",
+      "level": "warning",
+      "expr": "is_tax_relevant == 1 => tax_code != null",
+      "message": "税务相关科目建议填写税码"
+    }
+  ],
+  "updatedAt": "2026-06-16T00:00:00.000Z"
+}

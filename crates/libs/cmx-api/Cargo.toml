@@ -33,6 +33,8 @@ cmx-buffer = { workspace = true }
 cmx-auth = { workspace = true }
 # 内部依赖 - IAM 权限角色管理
 cmx-iam = { workspace = true, features = ["openapi"] }
+# 内部依赖 - 门户/设计器业务（迁移自 Node 后端）
+cmx-portal = { workspace = true }
 # 内部依赖 - RPC 通信
 cmx-rpc = { workspace = true }
 # 内部依赖 - 服务
@@ -85,6 +87,8 @@ percent-encoding = { workspace = true }
 bytes = { workspace = true }
 # 正则表达式（白名单通配符匹配）
 regex = { workspace = true }
+# 异步流（agent SSE 流式响应）
+futures = { workspace = true }
 
 [dev-dependencies]
 # HTTP 客户端

@@ -1,0 +1,28 @@
+[
+  {
+    "id": "CNPC_PL",
+    "code": "CNPC_PL",
+    "name": "中国石油主账本",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "accounting_calendar": "CAL_CN",
+    "currency": "CNY",
+    "accounting_method": "应计制",
+    "ledger_category": "主账本",
+    "sortKey": "000001",
+    "fullText": "CNPC_PL 中国石油主账本"
+  },
+  {
+    "id": "CNPC_OVS",
+    "code": "CNPC_OVS",
+    "name": "海外账本",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "accounting_calendar": "CAL_CN",
+    "currency": "USD",
+    "accounting_method": "应计制",
+    "ledger_category": "从账本",
+    "sortKey": "000002",
+    "fullText": "CNPC_OVS 海外账本"
+  }
+]

@@ -8,6 +8,34 @@ host = "0.0.0.0"
 port = 8080
 
 # ============================================
+# 应用标识配置
+# ============================================
+# 当前实例所属的域/应用/模块，用于数据源过滤（load_active_datasources 仅加载归属本实例域的数据源）。
+# 支持环境变量覆盖：APP__DOMAIN_CODE / APP__APPLICATION_CODE / APP__MODULE_CODE
+[app]
+# 所属域编码（必需，默认 default）
+domain_code = "FIN"
+# 所属应用编码（必需，默认 default）
+application_code = "FI"
+# 所属模块编码（必需，默认 default）
+module_code = "GL"
+
+
+# ============================================
+# 门户/设计器业务数据根（迁移自 CMXPortalManager/CMXHTMLDesigner 的 Node 后端）
+# cmx-portal 的 JSON 文件存储根目录；缺省时回退环境变量 CMX_PORTAL_DATA_ROOT 或 ./data
+# ============================================
+[portal]
+data_root = "./data"
+# 同源托管两个迁移前端的生产构建（npm run build 产物）。留空=不托管（开发走 vite dev）。
+# 访问：http://<host>:8080/portal/  与  /html/
+web_portal_dist = "../CMXPortalManager/dist"
+web_html_dist = "../CMXHTMLDesigner/dist"
+# 共享 UI5/Tabler 运行时（cmx-ui5-runtime 构建产物）。前端用 import("/shared/assets/...") 动态加载。
+# 缺它会导致 /shared/assets/install-*.js 404 → UI5 加载失败 → 白屏。
+web_shared_dist = "../packages/cmx-ui5-runtime/dist"
+
+# ============================================
 # 数据源配置数组
 # ============================================
 # databases 是一个数组，可以配置多个数据源
@@ -23,26 +51,31 @@ db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = true
-
 # 连接池配置（可选，使用默认值时可省略）
-[databases.pool_config]
-# 最大连接数（可选，默认 10，测试环境为 1）
-max_connections = 20
-# 最小空闲连接数（可选，默认 2）
-min_connections = 5
-# 连接超时时间（秒，可选，默认 30）
-connect_timeout = 30
-# 空闲连接超时时间（秒，可选，默认 600）
-idle_timeout = 600
-# 连接最大生命周期（秒，可选，默认 1800）
-max_lifetime = 1800
-
+pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
 # 健康检查配置（可选）
 # 健康检查间隔（秒，可选，默认 60）
 health_check_interval = 60
 # 健康检查超时时间（秒，可选，默认 5）
 health_check_timeout = 5
 
+[[databases]]
+# 数据源唯一标识符（必需）
+db_id = "second"
+# 数据库类型：postgres | mysql | sqlite（必需）
+db_type = "postgres"
+# 数据库连接 URL（必需）
+db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
+#db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
+# 是否为默认数据库（可选，默认 false）
+default = false
+# 连接池配置（可选，使用默认值时可省略）
+pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
+# 健康检查配置（可选）
+# 健康检查间隔（秒，可选，默认 60）
+health_check_interval = 60
+# 健康检查超时时间（秒，可选，默认 5）
+health_check_timeout = 5
 
 [redis]
 # url = "redis://192.168.137.95:32496/12"
@@ -204,11 +237,46 @@ retry_count = 0
 # 认证配置
 # ============================================
 
+# 认证白名单（无需登录即可访问的路径前缀）
+# 迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端原本无鉴权；这些前端在「设计器/未登录」
+# 场景下不带 token，落到全局 auth 中间件会得到 401（表现为「找不到页面 / DAM」）。此处放行
+# 门户/设计器的**共享元数据/页面资源**端点，恢复其无鉴权读取行为，让两个前端开箱即用。
+# 规则为前缀匹配（如 /api/html-pages 同时匹配 /api/html-pages/{id}、/batch 等子路径）。
+#
+# ⚠️ 重要：只放行「与具体登录用户无关」的共享资源。**不要**放行需要当前用户身份的端点
+# （如 /api/notifications/*、/api/agent/*、/api/ai/*）——这些 handler 会从 AuthContext 取
+# user_id，一旦被白名单跳过 token 校验就拿不到用户、handler 自身返回 401，前端拦截器据此
+# 误判「登录失效」→ clearTokens 跳登录页 → 登录后又被弹回，形成登录死循环。
+# 这类端点交给正常登录链路（浏览器已会带 Bearer token）。
+#
+# 注意：① 仅供本地开发，切勿用于生产（生产应走正常登录拿 token）；
+#      ② 白名单在启动时一次性注入，改动后需重启 web-server 才生效。
+[auth]
+whitelist = [
+    "/api/html-pages",
+    "/api/form-pages",
+    "/api/native-pages",
+    "/api/workspace-nodes",
+    "/api/registry",
+    "/api/service-catalog",
+    "/api/definitions",
+    "/api/context-profile",
+    "/api/subdivision",
+    "/api/launcher",
+    "/api/domains",
+    "/api/menu-pages",
+    "/api/activities",
+    "/api/modules",
+    "/api/module-resources",
+    "/api/dam-registry",
+    "/api/dict",
+    "/api/fact",
+    "/api/help",
+]
+
 # 默认 API Key（开发环境使用，生产环境请删除并改为环境变量注入）
 # 使用方法：将 key 值作为 X-API-Key 请求头
 [[auth.static_api_keys]]
 key = "cmx_sk_dev_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"
 service_name = "dev-internal"
 description = "开发环境默认 API Key"
-#[auth]
-#whitelist = ["/api/**"]

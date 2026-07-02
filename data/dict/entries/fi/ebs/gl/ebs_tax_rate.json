@@ -1,0 +1,62 @@
+[
+  {
+    "id": "J1",
+    "code": "J1",
+    "name": "销项税13%",
+    "status": 1,
+    "tax_regime": "CN-VAT",
+    "tax_type": "销项",
+    "tax_rate_percent": 13.0,
+    "tax_account_ccid": "21-500-2221-MARKETING",
+    "sortKey": "000001",
+    "fullText": "J1 销项税13%"
+  },
+  {
+    "id": "J2",
+    "code": "J2",
+    "name": "销项税9%",
+    "status": 1,
+    "tax_regime": "CN-VAT",
+    "tax_type": "销项",
+    "tax_rate_percent": 9.0,
+    "tax_account_ccid": "21-500-2221-MARKETING",
+    "sortKey": "000002",
+    "fullText": "J2 销项税9%"
+  },
+  {
+    "id": "V1",
+    "code": "V1",
+    "name": "进项税13%",
+    "status": 1,
+    "tax_regime": "CN-VAT",
+    "tax_type": "进项",
+    "tax_rate_percent": 13.0,
+    "tax_account_ccid": "21-500-2221-MARKETING",
+    "sortKey": "000003",
+    "fullText": "V1 进项税13%"
+  },
+  {
+    "id": "V2",
+    "code": "V2",
+    "name": "进项税9%",
+    "status": 1,
+    "tax_regime": "CN-VAT",
+    "tax_type": "进项",
+    "tax_rate_percent": 9.0,
+    "tax_account_ccid": "21-500-2221-MARKETING",
+    "sortKey": "000004",
+    "fullText": "V2 进项税9%"
+  },
+  {
+    "id": "J0",
+    "code": "J0",
+    "name": "免税",
+    "status": 1,
+    "tax_regime": "CN-VAT",
+    "tax_type": "销项",
+    "tax_rate_percent": 0.0,
+    "tax_account_ccid": "21-500-2221-MARKETING",
+    "sortKey": "000005",
+    "fullText": "J0 免税"
+  }
+]

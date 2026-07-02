@@ -1,0 +1,50 @@
+[
+  {
+    "id": "Manual",
+    "code": "Manual",
+    "name": "手工",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "Manual 手工"
+  },
+  {
+    "id": "Receivables",
+    "code": "Receivables",
+    "name": "应收",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "Receivables 应收"
+  },
+  {
+    "id": "Payables",
+    "code": "Payables",
+    "name": "应付",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "Payables 应付"
+  },
+  {
+    "id": "Assets",
+    "code": "Assets",
+    "name": "资产",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "Assets 资产"
+  },
+  {
+    "id": "Inventory",
+    "code": "Inventory",
+    "name": "存货",
+    "status": 1,
+    "sortKey": "000005",
+    "fullText": "Inventory 存货"
+  },
+  {
+    "id": "Payroll",
+    "code": "Payroll",
+    "name": "薪资",
+    "status": 1,
+    "sortKey": "000006",
+    "fullText": "Payroll 薪资"
+  }
+]

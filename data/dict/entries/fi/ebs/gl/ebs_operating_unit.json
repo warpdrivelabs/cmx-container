@@ -1,0 +1,42 @@
+[
+  {
+    "id": "OU-JSSALE",
+    "code": "OU-JSSALE",
+    "name": "江苏销售OU",
+    "status": 1,
+    "ledger_id": "CNPC_PL",
+    "legal_entity_id": "LE-PCL",
+    "sortKey": "000001",
+    "fullText": "OU-JSSALE 江苏销售OU"
+  },
+  {
+    "id": "OU-DAQING",
+    "code": "OU-DAQING",
+    "name": "大庆油田OU",
+    "status": 1,
+    "ledger_id": "CNPC_PL",
+    "legal_entity_id": "LE-PCL",
+    "sortKey": "000002",
+    "fullText": "OU-DAQING 大庆油田OU"
+  },
+  {
+    "id": "OU-DLPC",
+    "code": "OU-DLPC",
+    "name": "大连石化OU",
+    "status": 1,
+    "ledger_id": "CNPC_PL",
+    "legal_entity_id": "LE-PCL",
+    "sortKey": "000003",
+    "fullText": "OU-DLPC 大连石化OU"
+  },
+  {
+    "id": "OU-OVS",
+    "code": "OU-OVS",
+    "name": "海外OU",
+    "status": 1,
+    "ledger_id": "CNPC_OVS",
+    "legal_entity_id": "LE-PKZ",
+    "sortKey": "000004",
+    "fullText": "OU-OVS 海外OU"
+  }
+]

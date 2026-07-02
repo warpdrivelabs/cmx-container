@@ -1,0 +1,26 @@
+[
+  {
+    "id": "Entered",
+    "code": "Entered",
+    "name": "输入币",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "Entered 输入币"
+  },
+  {
+    "id": "Functional",
+    "code": "Functional",
+    "name": "功能币",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "Functional 功能币"
+  },
+  {
+    "id": "STAT",
+    "code": "STAT",
+    "name": "统计",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "STAT 统计"
+  }
+]

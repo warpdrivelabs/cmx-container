@@ -1,0 +1,104 @@
+{
+  "_remark": "用友 示例凭证：江苏销售确认成品油收入。分录(L2)+辅助核算明细子表(L3,1:N)。应收/收入行挂 部门+客户 两个辅助项。",
+  "header": {
+    "id": "YYV-2026-06-0001",
+    "account_book_id": "AB-CNPC",
+    "accounting_org_id": "JSSALE",
+    "voucher_category_id": "ji",
+    "accounting_period_id": "2026-06",
+    "voucher_source_id": "AR",
+    "voucher_word_no": "记-0001",
+    "voucher_date": "2026-06-15",
+    "fiscal_year": "2026",
+    "period_no": 6,
+    "entry_count": 3,
+    "preparer_id": "zhangsan",
+    "auditor_id": "lisi",
+    "audit_flag": 1,
+    "post_flag": 1,
+    "document_status": "posted",
+    "total_debit": 1130000.0,
+    "total_credit": 1130000.0
+  },
+  "entries": [
+    {
+      "id": "YYE-1",
+      "header_id": "YYV-2026-06-0001",
+      "entry_no": 1,
+      "summary": "销售成品油-收款",
+      "account_subject_id": "1122",
+      "account_code": "1122",
+      "account_name": "应收账款",
+      "direction": "D",
+      "aux_summary": "部门:江苏南京销售机关 客户:中石化华东分销",
+      "cashflow_item_id": "XJ01",
+      "currency_code": "CNY",
+      "debit_amount": 1130000.0,
+      "credit_amount": 0
+    },
+    {
+      "id": "YYE-2",
+      "header_id": "YYV-2026-06-0001",
+      "entry_no": 2,
+      "summary": "销售成品油-收入",
+      "account_subject_id": "6001",
+      "account_code": "6001",
+      "account_name": "主营业务收入",
+      "direction": "C",
+      "aux_summary": "部门:江苏南京销售机关 客户:中石化华东分销",
+      "currency_code": "CNY",
+      "debit_amount": 0,
+      "credit_amount": 1000000.0,
+      "quantity": 1428.57,
+      "measure_unit": "吨"
+    },
+    {
+      "id": "YYE-3",
+      "header_id": "YYV-2026-06-0001",
+      "entry_no": 3,
+      "summary": "销项税额13%",
+      "account_subject_id": "2221",
+      "account_code": "2221",
+      "account_name": "应交税费",
+      "direction": "C",
+      "currency_code": "CNY",
+      "debit_amount": 0,
+      "credit_amount": 130000.0,
+      "tax_rate_id": "VAT13"
+    }
+  ],
+  "auxitems": [
+    {
+      "id": "YYA-1",
+      "entry_id": "YYE-1",
+      "aux_type": "dept",
+      "aux_value_id": "CC-JS-NJ",
+      "aux_value_code": "CC-JS-NJ",
+      "aux_value_name": "江苏南京销售-机关"
+    },
+    {
+      "id": "YYA-2",
+      "entry_id": "YYE-1",
+      "aux_type": "customer",
+      "aux_value_id": "C-SINOPEC",
+      "aux_value_code": "C-SINOPEC",
+      "aux_value_name": "中石化华东分销"
+    },
+    {
+      "id": "YYA-3",
+      "entry_id": "YYE-2",
+      "aux_type": "dept",
+      "aux_value_id": "CC-JS-NJ",
+      "aux_value_code": "CC-JS-NJ",
+      "aux_value_name": "江苏南京销售-机关"
+    },
+    {
+      "id": "YYA-4",
+      "entry_id": "YYE-2",
+      "aux_type": "customer",
+      "aux_value_id": "C-SINOPEC",
+      "aux_value_code": "C-SINOPEC",
+      "aux_value_name": "中石化华东分销"
+    }
+  ]
+}

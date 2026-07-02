@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "code": "draft",
+    "name": "草稿",
+    "category": "order",
+    "sortKey": "1",
+    "fullText": "draft 草稿"
+  },
+  {
+    "id": 2,
+    "code": "pending",
+    "name": "待审核",
+    "category": "order",
+    "sortKey": "2",
+    "fullText": "pending 待审核"
+  },
+  {
+    "id": 3,
+    "code": "approved",
+    "name": "已审核",
+    "category": "order",
+    "sortKey": "3",
+    "fullText": "approved 已审核"
+  },
+  {
+    "id": 4,
+    "code": "rejected",
+    "name": "已拒绝",
+    "category": "order",
+    "sortKey": "4",
+    "fullText": "rejected 已拒绝"
+  },
+  {
+    "id": 5,
+    "code": "submitted",
+    "name": "已提交",
+    "category": "order",
+    "sortKey": "5",
+    "fullText": "submitted 已提交"
+  },
+  {
+    "id": 6,
+    "code": "closed",
+    "name": "已关闭",
+    "category": "order",
+    "sortKey": "6",
+    "fullText": "closed 已关闭"
+  }
+]

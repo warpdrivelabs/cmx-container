@@ -1,0 +1,88 @@
+[
+ {
+  "code": "SA",
+  "name": "总账凭证",
+  "status": 1,
+  "number_range_code": "01",
+  "sortKey": "000001",
+  "fullText": "SA 总账凭证",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "KR",
+  "name": "供应商发票",
+  "status": 1,
+  "number_range_code": "19",
+  "reverse_doc_type_code": "KA",
+  "sortKey": "000002",
+  "fullText": "KR 供应商发票",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "DR",
+  "name": "客户发票",
+  "status": 1,
+  "number_range_code": "18",
+  "reverse_doc_type_code": "DA",
+  "sortKey": "000003",
+  "fullText": "DR 客户发票",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "AB",
+  "name": "一般凭证",
+  "status": 1,
+  "number_range_code": "01",
+  "sortKey": "000004",
+  "fullText": "AB 一般凭证",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "KZ",
+  "name": "供应商付款",
+  "status": 1,
+  "number_range_code": "15",
+  "sortKey": "000005",
+  "fullText": "KZ 供应商付款",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "DZ",
+  "name": "客户收款",
+  "status": 1,
+  "number_range_code": "14",
+  "sortKey": "000006",
+  "fullText": "DZ 客户收款",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "code": "AA",
+  "name": "资产凭证",
+  "status": 1,
+  "number_range_code": "01",
+  "sortKey": "000007",
+  "fullText": "AA 资产凭证",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

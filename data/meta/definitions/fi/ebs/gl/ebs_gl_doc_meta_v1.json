@@ -1,0 +1,1039 @@
+{
+  "moduleMeta": {
+    "moduleCode": "GL",
+    "moduleName": "总账(Oracle EBS)",
+    "metaKind": "DOC",
+    "metaName": "Oracle EBS GL 会计凭证单据元数据",
+    "version": 1,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "Oracle EBS GL 会计凭证三层单据结构:L1 凭证批 GL_JE_BATCHES → L2 凭证头 GL_JE_HEADERS → L3 凭证行 GL_JE_LINES(batch→header→line 一对多)。字段含 physicalField(EBS 真实列名 LEDGER_ID/CODE_COMBINATION_ID/ACCOUNTED_DR…)便于集成。核心维度为代码组合 CCID(弹性域各段在 GL_CODE_COMBINATIONS,非凭证行物理列,段数由 Accounting Flexfield 配置)。凭证多来自 Journal Import / 子分类账 Subledger Accounting(SLA:XLA_AE_HEADERS/LINES、GL_IMPORT_REFERENCES),行上 GL_SL_LINK_ID/TABLE 为关联键。批/头借贷合计(running_total)为 Oracle 系统维护字段。STATUS 为单字符码(U/P/I/E/S),批动作历史记于 GL_JE_ACTION_LOG。含审批-过账(处理中/错误)-冲销状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",
+    "organizationDict": "ledger",
+    "keyDicts": "code_combination",
+    "documentTypeDict": "journal_category"
+  },
+  "baseDocMetaRef": {
+    "file": "base_doc_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "documentIdentityFields",
+      "documentSourceFields",
+      "documentLifecycleFields",
+      "documentTechnicalFields",
+      "documentCommonFields"
+    ],
+    "remark": "复用 base_doc_meta_v1.json 通用单据 fieldSet;voucherTables.documentFieldSets 引用该文件。"
+  },
+  "voucherCommonFieldSet": "documentTechnicalFields",
+  "voucherDocumentMapping": {
+    "remark": "EBS 凭证对通用单据字段的语义映射:document_* 显示为凭证日期/凭证类别/凭证号/过账状态。",
+    "fieldAliases": {
+      "document_date": "accounting_date",
+      "document_type_id": "journal_category_id",
+      "document_no": "document_no_seq",
+      "document_status": "posting_status"
+    },
+    "typeDict": "journal_category",
+    "stateField": "document_status"
+  },
+  "voucherSchema": {
+    "remark": "EBS 凭证三层：L1 [ebs_gl_je_batch] → L2 [ebs_gl_je_header] → L3 [ebs_gl_je_line]。行借贷上卷到头借贷合计,头再汇总到批;凭证需借贷平衡。",
+    "schema": [
+      [
+        {
+          "id": "ebs_gl_je_batch",
+          "kind": "list",
+          "level": "L1",
+          "levelName": "凭证批"
+        }
+      ],
+      [
+        {
+          "id": "ebs_gl_je_header",
+          "kind": "list",
+          "level": "L2",
+          "levelName": "凭证头"
+        }
+      ],
+      [
+        {
+          "id": "ebs_gl_je_line",
+          "kind": "list",
+          "level": "L3",
+          "levelName": "凭证行"
+        }
+      ]
+    ],
+    "relations": [
+      {
+        "parent": "ebs_gl_je_batch",
+        "child": "headers",
+        "parentKey": "id",
+        "childKey": "batch_id"
+      },
+      {
+        "parent": "headers",
+        "child": "lines",
+        "parentKey": "id",
+        "childKey": "header_id"
+      }
+    ],
+    "aggregations": [
+      {
+        "from": "ebs_gl_je_batch.headers.lines",
+        "to": "ebs_gl_je_batch.headers",
+        "field": "accounted_dr",
+        "toField": "running_total_accounted_dr",
+        "agg": "sum",
+        "remark": "行本币借方(ACCOUNTED_DR)上卷到凭证头借方合计"
+      },
+      {
+        "from": "ebs_gl_je_batch.headers.lines",
+        "to": "ebs_gl_je_batch.headers",
+        "field": "accounted_cr",
+        "toField": "running_total_accounted_cr",
+        "agg": "sum",
+        "remark": "行本币贷方(ACCOUNTED_CR)上卷到凭证头贷方合计"
+      },
+      {
+        "from": "ebs_gl_je_batch.headers",
+        "to": "ebs_gl_je_batch",
+        "field": "running_total_accounted_dr",
+        "toField": "running_total_dr",
+        "agg": "sum",
+        "remark": "凭证头借方合计上卷到批"
+      },
+      {
+        "from": "ebs_gl_je_batch.headers",
+        "to": "ebs_gl_je_batch",
+        "field": "running_total_accounted_cr",
+        "toField": "running_total_cr",
+        "agg": "sum",
+        "remark": "凭证头贷方合计上卷到批"
+      }
+    ]
+  },
+  "voucherTables": [
+    {
+      "level": "L1",
+      "tableName": "ebs_gl_je_batch",
+      "tableAlias": "凭证批(GL_JE_BATCHES)",
+      "remark": "EBS 凭证批 GL_JE_BATCHES：一批可含多张凭证头，统一过账;承载账本/期间/来源/余额类型与批控制合计。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LEDGER_ID",
+          "id": "ledger_id",
+          "name": "ledger_id",
+          "caption": {
+            "zh_CN": "账本"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "gl_period",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "DEFAULT_PERIOD_NAME",
+          "id": "period_name",
+          "name": "period_name",
+          "caption": {
+            "zh_CN": "会计期间"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 25,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "journal_source",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "JE_SOURCE",
+          "id": "journal_source_id",
+          "name": "journal_source_id",
+          "caption": {
+            "zh_CN": "凭证来源"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "balance_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ACTUAL_FLAG",
+          "id": "balance_type",
+          "name": "balance_type",
+          "caption": {
+            "zh_CN": "余额类型(A实际/B预算/E承诺)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 100,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "NAME",
+          "id": "batch_name",
+          "name": "batch_name",
+          "caption": {
+            "zh_CN": "凭证批名称"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "DEFAULT_EFFECTIVE_DATE",
+          "id": "posting_date",
+          "name": "posting_date",
+          "caption": {
+            "zh_CN": "过账日期"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "STATUS",
+          "id": "batch_status",
+          "name": "batch_status",
+          "caption": {
+            "zh_CN": "批状态(U未过/P已过/I处理中/E错误/S选中)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "APPROVAL_STATUS_CODE",
+          "id": "approval_status",
+          "name": "approval_status",
+          "caption": {
+            "zh_CN": "审批状态"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "POSTED_DATE",
+          "id": "posted_date",
+          "name": "posted_date",
+          "caption": {
+            "zh_CN": "过账完成日期"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 240,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "DESCRIPTION",
+          "id": "description",
+          "name": "description",
+          "caption": {
+            "zh_CN": "批说明"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "CONTROL_TOTAL",
+          "id": "control_total",
+          "name": "control_total",
+          "caption": {
+            "zh_CN": "控制总额"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_DR",
+          "systemMaintained": true,
+          "id": "running_total_dr",
+          "name": "running_total_dr",
+          "caption": {
+            "zh_CN": "批借方合计(系统维护)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_CR",
+          "systemMaintained": true,
+          "id": "running_total_cr",
+          "name": "running_total_cr",
+          "caption": {
+            "zh_CN": "批贷方合计(系统维护)"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentLifecycleFields",
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {}
+    },
+    {
+      "level": "L2",
+      "tableName": "ebs_gl_je_header",
+      "tableAlias": "凭证头(GL_JE_HEADERS)",
+      "remark": "EBS 凭证头 GL_JE_HEADERS：一张凭证;承载类别/币种/汇率/会计日期/过账状态与借贷合计(由行上卷)。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "relation",
+          "physicalField": "JE_BATCH_ID",
+          "id": "batch_id",
+          "name": "batch_id",
+          "caption": {
+            "zh_CN": "所属凭证批ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LEDGER_ID",
+          "id": "ledger_id",
+          "name": "ledger_id",
+          "caption": {
+            "zh_CN": "账本"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "legal_entity",
+          "refField": "code",
+          "displayField": "name",
+          "derived": true,
+          "id": "legal_entity_id",
+          "name": "legal_entity_id",
+          "caption": {
+            "zh_CN": "法律实体(注:来自SLA/子模块上下文,非GL头核心列)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "gl_period",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PERIOD_NAME",
+          "id": "period_name",
+          "name": "period_name",
+          "caption": {
+            "zh_CN": "会计期间"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 25,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "journal_category",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "JE_CATEGORY",
+          "id": "journal_category_id",
+          "name": "journal_category_id",
+          "caption": {
+            "zh_CN": "凭证类别"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 25,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "journal_source",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "JE_SOURCE",
+          "id": "journal_source_id",
+          "name": "journal_source_id",
+          "caption": {
+            "zh_CN": "凭证来源"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "CURRENCY_CODE",
+          "id": "currency_code",
+          "name": "currency_code",
+          "caption": {
+            "zh_CN": "凭证币种"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "currency_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency_type",
+          "name": "currency_type",
+          "caption": {
+            "zh_CN": "币种类别"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "conversion_rate_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "CURRENCY_CONVERSION_TYPE",
+          "id": "conversion_rate_type",
+          "name": "conversion_rate_type",
+          "caption": {
+            "zh_CN": "汇率类型"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "balance_type",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ACTUAL_FLAG",
+          "id": "balance_type",
+          "name": "balance_type",
+          "caption": {
+            "zh_CN": "余额类型"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 100,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "NAME",
+          "id": "journal_name",
+          "name": "journal_name",
+          "caption": {
+            "zh_CN": "凭证名称"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "DEFAULT_EFFECTIVE_DATE",
+          "id": "accounting_date",
+          "name": "accounting_date",
+          "caption": {
+            "zh_CN": "会计日期(GL_DATE)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 12,
+          "decimalDigits": 8,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "CURRENCY_CONVERSION_RATE",
+          "id": "conversion_rate",
+          "name": "conversion_rate",
+          "caption": {
+            "zh_CN": "汇率"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "CURRENCY_CONVERSION_DATE",
+          "id": "conversion_date",
+          "name": "conversion_date",
+          "caption": {
+            "zh_CN": "汇率日期"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "STATUS",
+          "id": "posting_status",
+          "name": "posting_status",
+          "caption": {
+            "zh_CN": "过账状态(U未过/P已过/I处理中/E错误/S选中)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "DOC_SEQUENCE_VALUE",
+          "id": "document_no_seq",
+          "name": "document_no_seq",
+          "caption": {
+            "zh_CN": "凭证编号(文档序列)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "physicalField": "REVERSED_JE_HEADER_ID",
+          "id": "reversal_flag",
+          "name": "reversal_flag",
+          "caption": {
+            "zh_CN": "是否冲销凭证"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 15,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "ACCRUAL_REV_PERIOD_NAME",
+          "id": "reversal_period",
+          "name": "reversal_period",
+          "caption": {
+            "zh_CN": "冲销期间"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "physicalField": "ACCRUAL_REV_FLAG",
+          "id": "accrual_rev_flag",
+          "name": "accrual_rev_flag",
+          "caption": {
+            "zh_CN": "应计冲回"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 240,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "DESCRIPTION",
+          "id": "description",
+          "name": "description",
+          "caption": {
+            "zh_CN": "凭证说明"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_ACCOUNTED_DR",
+          "systemMaintained": true,
+          "id": "running_total_accounted_dr",
+          "name": "running_total_accounted_dr",
+          "caption": {
+            "zh_CN": "本币借方合计(系统维护)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_ACCOUNTED_CR",
+          "systemMaintained": true,
+          "id": "running_total_accounted_cr",
+          "name": "running_total_accounted_cr",
+          "caption": {
+            "zh_CN": "本币贷方合计(系统维护)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_DR",
+          "systemMaintained": true,
+          "id": "running_total_dr",
+          "name": "running_total_dr",
+          "caption": {
+            "zh_CN": "输入币借方合计(系统维护)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "RUNNING_TOTAL_CR",
+          "systemMaintained": true,
+          "id": "running_total_cr",
+          "name": "running_total_cr",
+          "caption": {
+            "zh_CN": "输入币贷方合计(系统维护)"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentIdentityFields",
+        "documentSourceFields",
+        "documentLifecycleFields",
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {
+        "document_type_id": "journal_category",
+        "entity_id": "ledger"
+      }
+    },
+    {
+      "level": "L3",
+      "tableName": "ebs_gl_je_line",
+      "tableAlias": "凭证行(GL_JE_LINES)",
+      "remark": "EBS 凭证行 GL_JE_LINES：分析主战场;核心维度 CODE_COMBINATION_ID(CCID,弹性域段值组合)。真实行只存 CCID,弹性域各段(SEGMENT1..30)在 GL_CODE_COMBINATIONS,段数与含义由 Accounting Flexfield 配置决定,按段分析需 JOIN code_combination 字典(不在行上冗余展开)。凭证多来自 Journal Import / 子分类账 SLA(GL_SL_LINK_ID/TABLE 关联 XLA_AE_LINES)。度量为输入币(ENTERED_DR/CR)与本币(ACCOUNTED_DR/CR)借贷分列。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "relation",
+          "physicalField": "JE_HEADER_ID",
+          "id": "header_id",
+          "name": "header_id",
+          "caption": {
+            "zh_CN": "所属凭证头ID"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 9,
+          "intDigits": 9,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "physicalField": "JE_LINE_NUM",
+          "id": "line_num",
+          "name": "line_num",
+          "caption": {
+            "zh_CN": "行号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 120,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "code_combination",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "CODE_COMBINATION_ID",
+          "id": "code_combination_id",
+          "name": "code_combination_id",
+          "caption": {
+            "zh_CN": "会计科目代码组合(CCID,各段需JOIN code_combination)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "natural_account_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_type",
+          "name": "account_type",
+          "caption": {
+            "zh_CN": "自然账户类型"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "supplier",
+          "refField": "code",
+          "displayField": "name",
+          "id": "supplier_id",
+          "name": "supplier_id",
+          "caption": {
+            "zh_CN": "供应商"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "customer",
+          "refField": "code",
+          "displayField": "name",
+          "id": "customer_id",
+          "name": "customer_id",
+          "caption": {
+            "zh_CN": "客户"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "tax_rate",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "TAX_CODE",
+          "id": "tax_rate_id",
+          "name": "tax_rate_id",
+          "caption": {
+            "zh_CN": "税率代码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 240,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "DESCRIPTION",
+          "id": "line_description",
+          "name": "line_description",
+          "caption": {
+            "zh_CN": "行说明"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 100,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "REFERENCE_1",
+          "id": "reference_1",
+          "name": "reference_1",
+          "caption": {
+            "zh_CN": "参考1(来源单据)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 100,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "REFERENCE_2",
+          "id": "reference_2",
+          "name": "reference_2",
+          "caption": {
+            "zh_CN": "参考2"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "STAT_AMOUNT",
+          "id": "stat_amount",
+          "name": "stat_amount",
+          "caption": {
+            "zh_CN": "统计金额(STAT)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 60,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "GL_SL_LINK_ID",
+          "id": "gl_sl_link_id",
+          "name": "gl_sl_link_id",
+          "caption": {
+            "zh_CN": "子分类账关联ID(SLA)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "physicalField": "GL_SL_LINK_TABLE",
+          "id": "gl_sl_link_table",
+          "name": "gl_sl_link_table",
+          "caption": {
+            "zh_CN": "子分类账关联表"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "ENTERED_DR",
+          "id": "entered_dr",
+          "name": "entered_dr",
+          "caption": {
+            "zh_CN": "输入币借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "ENTERED_CR",
+          "id": "entered_cr",
+          "name": "entered_cr",
+          "caption": {
+            "zh_CN": "输入币贷方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "ACCOUNTED_DR",
+          "id": "accounted_dr",
+          "name": "accounted_dr",
+          "caption": {
+            "zh_CN": "本币借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "ACCOUNTED_CR",
+          "id": "accounted_cr",
+          "name": "accounted_cr",
+          "caption": {
+            "zh_CN": "本币贷方"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {}
+    }
+  ],
+  "voucherStatusFlow": {
+    "stateField": "document_status",
+    "physicalField": "STATUS",
+    "remark": "EBS 凭证生命周期：未过账(U)→已过账(P)，过账中可能处于处理中(I)或错误(E)。真实 GL_JE_BATCHES/GL_JE_HEADERS.STATUS 为单字符码(U未过账/P已过账/I处理中/E错误/S选中)，非单纯业务态；Posting Program 校验借贷平衡与期间开放；批动作历史另记于 GL_JE_ACTION_LOG。",
+    "states": [
+      {
+        "code": "unposted",
+        "name": "未过账",
+        "editable": true,
+        "physical": "STATUS=U",
+        "remark": "Unposted,可改;需经审批(若启用)"
+      },
+      {
+        "code": "approved",
+        "name": "已审批",
+        "editable": false,
+        "remark": "审批通过,等待过账"
+      },
+      {
+        "code": "processing",
+        "name": "过账中",
+        "editable": false,
+        "physical": "STATUS=I",
+        "remark": "Posting Program 处理中"
+      },
+      {
+        "code": "error",
+        "name": "过账错误",
+        "editable": true,
+        "physical": "STATUS=E",
+        "remark": "过账失败(不平衡/期间关闭/CCID无效等),可改后重过"
+      },
+      {
+        "code": "posted",
+        "name": "已过账",
+        "editable": false,
+        "physical": "STATUS=P",
+        "remark": "Posted,更新余额 GL_BALANCES"
+      },
+      {
+        "code": "reversed",
+        "name": "已冲销",
+        "editable": false,
+        "remark": "生成冲销凭证,终态"
+      }
+    ],
+    "transitions": [
+      {
+        "action": "approve",
+        "name": "审批",
+        "from": "unposted",
+        "to": "approved",
+        "guard": [
+          "balance_check"
+        ]
+      },
+      {
+        "action": "post",
+        "name": "过账",
+        "from": "approved",
+        "to": "processing",
+        "guard": [
+          "balance_check",
+          "period_open_check"
+        ]
+      },
+      {
+        "action": "post_done",
+        "name": "过账完成",
+        "from": "processing",
+        "to": "posted",
+        "guard": []
+      },
+      {
+        "action": "post_fail",
+        "name": "过账失败",
+        "from": "processing",
+        "to": "error",
+        "guard": []
+      },
+      {
+        "action": "fix_repost",
+        "name": "纠错重过",
+        "from": "error",
+        "to": "processing",
+        "guard": [
+          "balance_check",
+          "period_open_check"
+        ]
+      },
+      {
+        "action": "reverse",
+        "name": "冲销",
+        "from": "posted",
+        "to": "reversed",
+        "guard": [
+          "period_open_check"
+        ]
+      }
+    ]
+  },
+  "validationRules": [
+    {
+      "code": "journal_balance",
+      "level": "error",
+      "expr": "running_total_accounted_dr == running_total_accounted_cr",
+      "message": "凭证必须借贷平衡(本币借方合计=贷方合计);非平衡账本除外"
+    },
+    {
+      "code": "batch_control_total",
+      "level": "warning",
+      "expr": "control_total == 0 || control_total == running_total_dr",
+      "message": "若填写控制总额,需与批实际借方合计一致"
+    },
+    {
+      "code": "period_open",
+      "level": "error",
+      "expr": "period_status == 'O' || period_status == 'F'",
+      "message": "会计期间必须为开放(O)或未来可输入(F)状态"
+    },
+    {
+      "code": "ccid_postable",
+      "level": "error",
+      "expr": "allow_posting == 1",
+      "message": "代码组合(CCID)必须启用且允许过账(非汇总值)"
+    }
+  ],
+  "updatedAt": "2026-06-16T00:00:00.000Z"
+}

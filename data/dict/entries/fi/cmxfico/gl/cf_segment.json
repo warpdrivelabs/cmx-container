@@ -1,0 +1,74 @@
+[
+ {
+  "id": 1500001,
+  "code": "UPSTREAM",
+  "name": "上游-勘探开发",
+  "status": 1,
+  "sortKey": "000001",
+  "fullText": "UPSTREAM 上游-勘探开发",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1500002,
+  "code": "REFINING",
+  "name": "炼油化工",
+  "status": 1,
+  "sortKey": "000002",
+  "fullText": "REFINING 炼油化工",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1500003,
+  "code": "MARKETING",
+  "name": "销售",
+  "status": 1,
+  "sortKey": "000003",
+  "fullText": "MARKETING 销售",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1500004,
+  "code": "PIPELINE",
+  "name": "管道天然气",
+  "status": 1,
+  "sortKey": "000004",
+  "fullText": "PIPELINE 管道天然气",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1500005,
+  "code": "OILSVC",
+  "name": "油田服务",
+  "status": 1,
+  "sortKey": "000005",
+  "fullText": "OILSVC 油田服务",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ },
+ {
+  "id": 1500006,
+  "code": "OVERSEAS",
+  "name": "海外油气",
+  "status": 1,
+  "sortKey": "000006",
+  "fullText": "OVERSEAS 海外油气",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

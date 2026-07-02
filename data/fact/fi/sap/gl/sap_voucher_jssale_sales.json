@@ -1,0 +1,98 @@
+{
+  "_meta": {
+    "system": "fico",
+    "app": "sap",
+    "docMeta": {
+      "domain": "fi",
+      "module": "fico",
+      "file": "sap_fi_doc_meta_v1.json"
+    },
+    "levels": [
+      "header",
+      "items"
+    ],
+    "title": "SAP FI 凭证(CNPC)",
+    "biz": "江苏销售分公司确认成品油批发收入(含13%销项税)"
+  },
+  "voucher": {
+    "header": {
+      "id": "SAPDOC-1000000001",
+      "company_code_id": "JSSALE",
+      "fiscal_year": "2026",
+      "document_no": "1000000001",
+      "posting_period": 6,
+      "doc_currency": "CNY",
+      "posting_date": "2026-06-15",
+      "document_date_in": "2026-06-15",
+      "document_type_id": "DR",
+      "header_text": "江苏销售-6月成品油批发收入",
+      "reference": "FP2026060001",
+      "exchange_rate": 1.0,
+      "entered_by": "zhangsan",
+      "doc_record_status": "",
+      "document_status": "posted",
+      "total_debit": 1130000.0,
+      "total_credit": 1130000.0
+    },
+    "items": [
+      {
+        "id": "L1",
+        "header_id": "SAPDOC-1000000001",
+        "line_no": 1,
+        "ledger_id": "0L",
+        "gl_account_id": "1122",
+        "account_type": "D",
+        "posting_key": "01",
+        "debit_credit": "S",
+        "profit_center_id": "PC-JSSALE",
+        "cost_center_id": "CC-JS-NJ",
+        "segment_id": "MARKETING",
+        "business_area_id": "BA-EAST",
+        "functional_area_id": "0500",
+        "partner_id": "",
+        "item_text": "应收成品油款",
+        "amount_doc": 1130000.0,
+        "amount_local": 1130000.0
+      },
+      {
+        "id": "L2",
+        "header_id": "SAPDOC-1000000001",
+        "line_no": 2,
+        "ledger_id": "0L",
+        "gl_account_id": "6001",
+        "account_type": "S",
+        "posting_key": "50",
+        "debit_credit": "H",
+        "profit_center_id": "PC-JSSALE",
+        "cost_center_id": "CC-JS-NJ",
+        "segment_id": "MARKETING",
+        "business_area_id": "BA-EAST",
+        "functional_area_id": "0500",
+        "item_text": "成品油销售收入",
+        "amount_doc": 1000000.0,
+        "amount_local": 1000000.0,
+        "quantity": 1428.57,
+        "base_unit": "吨"
+      },
+      {
+        "id": "L3",
+        "header_id": "SAPDOC-1000000001",
+        "line_no": 3,
+        "ledger_id": "0L",
+        "gl_account_id": "2221",
+        "account_type": "S",
+        "posting_key": "50",
+        "debit_credit": "H",
+        "profit_center_id": "PC-JSSALE",
+        "segment_id": "MARKETING",
+        "business_area_id": "BA-EAST",
+        "tax_code": "J1",
+        "item_text": "销项税额13%",
+        "amount_doc": 130000.0,
+        "amount_local": 130000.0,
+        "tax_base_amount": 1000000.0,
+        "tax_amount": 130000.0
+      }
+    ]
+  }
+}

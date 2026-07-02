@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>会计凭证对比：SAP FI vs Oracle EBS GL</title>
+<style>
+  :root{
+    --sap:#0a6ed1; --ora:#c74634; --bg:#f5f6f7; --card:#fff; --line:#dfe3e8;
+    --txt:#1d2d3e; --muted:#6a7888; --common:#107e3e; --commonbg:#eafaf1;
+    --sapbg:#eaf3fc; --orabg:#fdecea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:24px}
+  .wrap{max-width:1240px;margin:0 auto}
+  header.h{margin-bottom:18px}
+  h1{font-size:24px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:13px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 22px;font-size:12.5px}
+  .legend span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;background:var(--card);border:1px solid var(--line)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .d-common{background:var(--common)} .d-sap{background:var(--sap)} .d-ora{background:var(--ora)}
+  section{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+  .sec-head{padding:12px 18px;font-weight:800;font-size:15px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#fafbfc,#fff);display:flex;align-items:center;gap:8px}
+  .sec-head .ico{width:6px;height:18px;border-radius:3px;background:var(--sap)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  thead th{position:sticky;top:0;background:#f0f3f6;font-weight:700;font-size:12.5px;color:var(--muted);z-index:1}
+  th.dim{width:17%} th.sapcol{width:30%} th.oracol{width:30%}
+  th.sapcol{color:var(--sap)} th.oracol{color:var(--ora)}
+  tbody tr:hover{background:#fafcfe}
+  td.dim{font-weight:700}
+  td.sapc{background:var(--sapbg)} td.orac{background:var(--orabg)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;margin-bottom:4px}
+  .t-common{background:var(--commonbg);color:var(--common)}
+  .t-sap{background:var(--sapbg);color:var(--sap)} .t-ora{background:var(--orabg);color:var(--ora)}
+  code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#324]}
+  code{color:#2b3a4b}
+  .note{color:var(--muted);font-size:12px}
+  .common-row td{background:var(--commonbg)}
+  .common-row td.dim{color:var(--common)}
+  .verdict{padding:14px 18px;font-size:13px;color:var(--muted);background:#fafbfc}
+  .kpi{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 22px}
+  .kpi .c{flex:1 1 200px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .kpi .c b{font-size:22px;display:block} .kpi .c.sapk b{color:var(--sap)} .kpi .c.orak b{color:var(--ora)}
+  .kpi .c span{color:var(--muted);font-size:12px}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="h">
+  <h1>会计凭证实现模式对比：SAP FI &nbsp;vs&nbsp; Oracle EBS GL</h1>
+  <div class="sub">基于本项目两套凭证元模型(<code>fi/fico/sap_fi_*_v1</code> · <code>fi/ebs/ebs_gl_*_v1</code>)的真实结构。左为业务共性，右分列两套各自实现。数据截至 2026-06。</div>
+</header>
+
+<div class="legend">
+  <span><i class="dot d-common"></i> 业务共性（两套都要解决的会计本质）</span>
+  <span><i class="dot d-sap"></i> SAP FI 特性实现</span>
+  <span><i class="dot d-ora"></i> Oracle EBS 特性实现</span>
+</div>
+
+<div class="kpi">
+  <div class="c sapk"><b>2 层</b><span>SAP 凭证结构：凭证头 BKPF → 行项目 BSEG（S/4=ACDOCA）</span></div>
+  <div class="c orak"><b>3 层</b><span>Oracle 凭证结构：批 BATCHES → 头 HEADERS → 行 LINES</span></div>
+  <div class="c sapk"><b>31</b><span>SAP 配置/主数据字典数</span></div>
+  <div class="c orak"><b>24</b><span>Oracle 配置/主数据字典数</span></div>
+</div>
+
+<!-- 一、共性 + 结构 -->
+<section>
+  <div class="sec-head"><i class="ico"></i>一、凭证结构与记账主体</div>
+  <table>
+    <thead><tr><th class="dim">维度</th><th class="sapcol">SAP FI</th><th class="oracol">Oracle EBS GL</th></tr></thead>
+    <tbody>
+      <tr class="common-row"><td class="dim">共性：复式记账</td><td colspan="2"><span class="tag t-common">业务共性</span> 借贷必相等；凭证 = 头(单据级信息) + 多条分录/行(科目+金额+方向)；过账后更新科目余额、不可改只能冲销。</td></tr>
+      <tr>
+        <td class="dim">凭证层级</td>
+        <td class="sapc"><span class="tag t-sap">2 层</span>凭证头 <code>BKPF</code> → 行项目 <code>BSEG</code>。S/4HANA 行项目并入通用日记账 <code>ACDOCA</code>(更宽，含并行分类账)。</td>
+        <td class="orac"><span class="tag t-ora">3 层</span>凭证批 <code>GL_JE_BATCHES</code> → 凭证头 <code>GL_JE_HEADERS</code> → 凭证行 <code>GL_JE_LINES</code>。批级统一过账、按来源冻结。</td>
+      </tr>
+      <tr>
+        <td class="dim">记账主体</td>
+        <td class="sapc">公司代码 <code>BUKRS</code>(独立出表法律主体)，挂在 Company(合并)下。</td>
+        <td class="orac">账本 Ledger(4C：科目表/日历/币种/会计方法) + 经营单位 OU(MOAC 事务边界)。</td>
+      </tr>
+      <tr>
+        <td class="dim">凭证主键</td>
+        <td class="sapc">复合键 <code>BUKRS + BELNR + GJAHR</code>(公司代码+凭证号+会计年度)，BELNR 来自凭证类型的 FI number range。</td>
+        <td class="orac"><code>JE_HEADER_ID</code> + 行 <code>JE_LINE_NUM</code>；凭证号来自文档序列 Document Sequence。</td>
+      </tr>
+      <tr>
+        <td class="dim">凭证分类</td>
+        <td class="sapc">凭证类型 Document Type <code>BLART</code>(SA/KR/DR/AB…)，控制编号范围与允许账户类型。</td>
+        <td class="orac">双重：来源 Source(Manual/Receivables/Payables…) + 类别 Category(Sales/Adjustment…)。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 二、科目与多维核算（核心差异） -->
+<section>
+  <div class="sec-head"><i class="ico" style="background:var(--ora)"></i>二、科目与多维核算 ★ 核心差异</div>
+  <table>
+    <thead><tr><th class="dim">维度</th><th class="sapcol">SAP FI</th><th class="oracol">Oracle EBS GL</th></tr></thead>
+    <tbody>
+      <tr class="common-row"><td class="dim">共性：多维分析</td><td colspan="2"><span class="tag t-common">业务共性</span> 一笔账要能按科目、组织、产品/项目等多个维度分析。两套用截然不同的机制实现。</td></tr>
+      <tr>
+        <td class="dim">科目维度</td>
+        <td class="sapc"><span class="tag t-sap">单一科目 + 专列维度</span>行项目用总账科目 <code>HKONT</code>；利润中心 <code>PRCTR</code>、段 <code>SEGMENT</code>、业务范围 <code>GSBER</code>、功能范围 <code>FKBER</code> 各占<b>独立专用字段</b>。</td>
+        <td class="orac"><span class="tag t-ora">会计弹性域 + CCID</span>科目本身是<b>多段组合</b>(公司-成本中心-自然账户-产品…)，凭证行只存代码组合 <code>CODE_COMBINATION_ID</code>，段在 <code>GL_CODE_COMBINATIONS</code>。</td>
+      </tr>
+      <tr>
+        <td class="dim">维度扩展性</td>
+        <td class="sapc">维度写死为列，加全新分析维度需扩展数据结构(不灵活，但语义最明确、独立可查)。</td>
+        <td class="orac">段数与含义由 Accounting Flexfield <b>配置决定</b>，加维度=加一个段，不改表结构(最灵活，但分析需 JOIN CCID 解析)。</td>
+      </tr>
+      <tr>
+        <td class="dim">行项目维度数</td>
+        <td class="sapc">16 个专列维度(科目/记账码/利润中心/成本中心/段/业务范围/功能范围/订单/WBS/客商/税码…)。</td>
+        <td class="orac">CCID 1 个(内含 N 段) + 客商/税率等少量直列；多维"长在科目里"。</td>
+      </tr>
+      <tr>
+        <td class="dim">借贷表达</td>
+        <td class="sapc"><span class="tag t-sap">金额+方向</span>金额列 <code>WRBTR</code>/<code>DMBTR</code> + 借贷标志 <code>SHKZG</code>(S借/H贷)，不分借贷两栏。</td>
+        <td class="orac"><span class="tag t-ora">借贷分列</span>输入币 <code>ENTERED_DR/CR</code> + 本币 <code>ACCOUNTED_DR/CR</code>，借方贷方各一列。</td>
+      </tr>
+      <tr>
+        <td class="dim">记账码</td>
+        <td class="sapc"><span class="tag t-sap">有</span>Posting Key <code>BSCHL</code>(40/50/01/31…)决定借贷方向+账户类型+字段状态。</td>
+        <td class="orac"><span class="tag t-ora">无</span>由 CCID 的自然账户类型 + 借贷列直接体现，无记账码概念。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 三、并行会计与多币种 -->
+<section>
+  <div class="sec-head"><i class="ico"></i>三、并行会计与多币种</div>
+  <table>
+    <thead><tr><th class="dim">维度</th><th class="sapcol">SAP FI</th><th class="oracol">Oracle EBS GL</th></tr></thead>
+    <tbody>
+      <tr class="common-row"><td class="dim">共性：多准则/多币种</td><td colspan="2"><span class="tag t-common">业务共性</span> 跨国/集团需按多准则(IFRS/本国/税务)并行出表，按多币种(交易币/本位币/集团币)并行记账。</td></tr>
+      <tr>
+        <td class="dim">并行会计</td>
+        <td class="sapc"><span class="tag t-sap">分类账</span>Ledger <code>0L</code>(主/IFRS)+ 扩展分类账 <code>L1</code>(CAS)/<code>L2</code>(税务)，S/4 在 ACDOCA 行层并行。</td>
+        <td class="orac"><span class="tag t-ora">从账本</span>主账本 + 报告/从账本(Reporting/Secondary Ledger)，通过 SLA 复制。</td>
+      </tr>
+      <tr>
+        <td class="dim">多币种金额</td>
+        <td class="sapc">行项目 7 个多币种度量：凭证币 <code>WRBTR</code>、本位币 <code>DMBTR</code>、集团币 <code>DMBE2</code>、第二三本位币等。</td>
+        <td class="orac">输入币/本币各借贷分列 <code>ENTERED_*</code>/<code>ACCOUNTED_*</code> + 汇率类型(Corporate/Spot/User)。</td>
+      </tr>
+      <tr>
+        <td class="dim">凭证拆分</td>
+        <td class="sapc"><span class="tag t-sap">有</span>Document Splitting 可按利润中心/段强制平衡，自动补内部往来行。</td>
+        <td class="orac">无原生凭证拆分；靠 CCID 平衡段(Balancing Segment)与公司间(Intercompany)规则。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 四、单据生命周期 -->
+<section>
+  <div class="sec-head"><i class="ico" style="background:var(--ora)"></i>四、单据生命周期（状态机）</div>
+  <table>
+    <thead><tr><th class="dim">维度</th><th class="sapcol">SAP FI</th><th class="oracol">Oracle EBS GL</th></tr></thead>
+    <tbody>
+      <tr class="common-row"><td class="dim">共性：草稿→过账→冲销</td><td colspan="2"><span class="tag t-common">业务共性</span> 凭证经暂存/审批→过账(更新余额)→只能红冲；过账前校验借贷平衡+期间开放。</td></tr>
+      <tr>
+        <td class="dim">状态</td>
+        <td class="sapc"><code>held</code> 暂存 → <code>parked</code> 预制 → <code>posted</code> 已过账 → <code>reversed</code> 冲销。真实状态在 <code>BSTAT</code>。</td>
+        <td class="orac"><code>unposted(U)</code> → <code>approved</code> → <code>processing(I)</code>/<code>error(E)</code> → <code>posted(P)</code> → <code>reversed</code>。<code>STATUS</code> 单字符码。</td>
+      </tr>
+      <tr>
+        <td class="dim">过账校验</td>
+        <td class="sapc">借贷平衡(公司代码内，启用拆分则按段)、期间开放(记账期间变式)、字段状态组必填。</td>
+        <td class="orac">借贷平衡(账本，非平衡账本除外)、期间开放(O/F)、CCID 启用且允许过账。</td>
+      </tr>
+      <tr>
+        <td class="dim">来源与日志</td>
+        <td class="sapc">来源事务码 <code>TCODE</code> + 参考对象 <code>AWTYP/AWKEY</code> 关联 MM/SD 等。</td>
+        <td class="orac">大量来自 Journal Import + 子分类账 SLA(<code>XLA_AE_HEADERS/LINES</code>)，行 <code>GL_SL_LINK_ID</code> 关联；批动作历史 <code>GL_JE_ACTION_LOG</code>。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 五、控制与配置 -->
+<section>
+  <div class="sec-head"><i class="ico"></i>五、控制与配置机制</div>
+  <table>
+    <thead><tr><th class="dim">维度</th><th class="sapcol">SAP FI</th><th class="oracol">Oracle EBS GL</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="dim">字段控制</td>
+        <td class="sapc">字段状态组 Field Status Group(必填/可选/隐藏) + 记账码字段状态，叠加取严。</td>
+        <td class="orac">弹性域段的校验类型(独立/从属/表校验) + 值集(Value Set)控制取值。</td>
+      </tr>
+      <tr>
+        <td class="dim">期间控制</td>
+        <td class="sapc">会计年度变式(K4，12+4特别期) + 记账期间变式(OB52 开关账)。</td>
+        <td class="orac">会计日历(GL_PERIOD_SETS) + 期间状态 GL_PERIOD_STATUSES(开/关/未来可输)。</td>
+      </tr>
+      <tr>
+        <td class="dim">税务</td>
+        <td class="sapc">税码 Tax Code <code>MWSKZ</code> + 税务过程。</td>
+        <td class="orac">E-Business Tax 税率 <code>ZX_RATES_B</code>(税务体系 Regime 驱动)。</td>
+      </tr>
+      <tr>
+        <td class="dim">往来主数据</td>
+        <td class="sapc">业务伙伴 BP(S/4 统一客商；经典 KNA1 客户/LFA1 供应商)。</td>
+        <td class="orac">供应商 AP_SUPPLIERS + 客户 TCA(HZ_PARTIES/CUST_ACCOUNTS)。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 总评 -->
+<section>
+  <div class="sec-head"><i class="ico"></i>总评</div>
+  <div class="verdict">
+    <b style="color:var(--sap)">SAP FI</b>：维度专列、并行会计(分类账+多币种)、凭证拆分能力最强，语义最明确；代价是维度写死不灵活、配置最重。适合<b>跨国集团多准则并行出表 + 强分析</b>。<br>
+    <b style="color:var(--ora)">Oracle EBS</b>：弹性域(CCID)扩展性最优雅、三层批结构利于大批量自动化、子分类账(SLA)链路完整；代价是多维"长在科目里"、分析需解析 CCID、弹性域实施门槛高。适合<b>大型集团灵活扩维 + 大批量自动化</b>。<br>
+    <span class="note">一句话：同一笔账，SAP 用"一个科目 + 一排专用维度列 + 借贷标志"，Oracle 用"一个代码组合 CCID(多段) + 借贷分列"——这是两套凭证模型一切差异的根源。</span>
+  </div>
+</section>
+
+<footer>本表由本项目 SAP/Oracle 凭证元模型实测结构生成 · 仅留 SAP 与 Oracle 两套对比（用友/金蝶模式已弃用）</footer>
+</div>
+</body>
+</html>

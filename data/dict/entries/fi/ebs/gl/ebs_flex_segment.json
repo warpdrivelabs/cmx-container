@@ -1,0 +1,54 @@
+[
+  {
+    "id": "SEG1-COMPANY",
+    "code": "SEG1-COMPANY",
+    "name": "公司段",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "segment_num": 1,
+    "column_name": "SEGMENT1",
+    "value_set_id": "VS_COMPANY",
+    "qualifier": "平衡段",
+    "sortKey": "000001",
+    "fullText": "SEG1-COMPANY 公司段"
+  },
+  {
+    "id": "SEG2-CC",
+    "code": "SEG2-CC",
+    "name": "成本中心段",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "segment_num": 2,
+    "column_name": "SEGMENT2",
+    "value_set_id": "VS_CC",
+    "qualifier": "成本中心",
+    "sortKey": "000002",
+    "fullText": "SEG2-CC 成本中心段"
+  },
+  {
+    "id": "SEG3-ACCT",
+    "code": "SEG3-ACCT",
+    "name": "自然账户段",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "segment_num": 3,
+    "column_name": "SEGMENT3",
+    "value_set_id": "VS_ACCOUNT",
+    "qualifier": "自然账户",
+    "sortKey": "000003",
+    "fullText": "SEG3-ACCT 自然账户段"
+  },
+  {
+    "id": "SEG4-SEG",
+    "code": "SEG4-SEG",
+    "name": "板块段",
+    "status": 1,
+    "coa_structure_id": "CNPC_COA",
+    "segment_num": 4,
+    "column_name": "SEGMENT4",
+    "value_set_id": "VS_SEGMENT",
+    "qualifier": "次要段",
+    "sortKey": "000004",
+    "fullText": "SEG4-SEG 板块段"
+  }
+]

@@ -1,0 +1,17 @@
+[
+ {
+  "id": 1100001,
+  "code": "CNPC",
+  "name": "中国石油天然气集团",
+  "status": 1,
+  "country_code": "CN",
+  "currency_code": "CNY",
+  "cons_method": "完全合并",
+  "sortKey": "000001",
+  "fullText": "CNPC 中国石油天然气集团",
+  "valid_from": "2000-01-01",
+  "valid_to": null,
+  "predecessor_code": null,
+  "successor_code": null
+ }
+]

@@ -1,0 +1,1684 @@
+{
+  "moduleMeta": {
+    "moduleCode": "GL",
+    "moduleName": "总账(用友 ERP)",
+    "metaKind": "DCT",
+    "metaName": "用友 ERP GL 会计凭证数据字典元数据",
+    "version": 1,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "用友 ERP(NC/U8) 总账会计凭证所引用的全部基础档案与配置字典:组织账簿(集团/会计主体/账簿)、科目体系(科目表/会计科目/科目类别/余额方向)、辅助核算(辅助核算类型/部门/人员/客户/供应商/往来分类/项目/存货/自定义项)、凭证控制(凭证类别/来源/结算方式/现金流量项目)、币种期间(币种/汇率类型/会计日历/会计期间)、税与银行(税率/银行账户/操作员)。通用列引用 base_dct_meta_v1.json。用友精髓:科目挂多个辅助核算,凭证分录据此录入辅助核算明细。"
+  },
+  "baseDctMetaRef": {
+    "file": "base_dct_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "dictionaryCommonFields",
+      "dictionaryCommonNoIDFields",
+      "dictionaryHierarchyFields",
+      "dictionaryAuditFields",
+      "dictionaryScopeFields",
+      "dictionaryEffectiveFields",
+      "dictionaryDisableFields",
+      "dictionarySystemFields",
+      "relationCommonFields"
+    ],
+    "remark": "复用 base_dct_meta_v1.json 中的基础 fieldSet;各字典表的 *FieldSet 字段均引用该文件。"
+  },
+  "dictionaryTableConventions": {
+    "remark": "用友架构核心:会计科目可设置多个辅助核算项(部门/个人/客户/供应商/项目/存货/自定义),凭证分录按科目所挂辅助核算录入对应辅助明细。dictCode 为引用编码;通用列走 *FieldSet,fields 仅用友业务扩展列。"
+  },
+  "dictionaryTables": [
+    {
+      "dictMeta": {
+        "dictCode": "group_org",
+        "dictName": "集团",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_group_org",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友 NC 集团：多组织最高层,统管会计平台与基础档案"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "accounting_org",
+        "dictName": "会计主体(核算单位)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_accounting_org",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友会计主体/核算单位(NC 业务单元、U8 单位):独立建账与出表主体;凭证归属"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "group_org",
+          "refField": "code",
+          "displayField": "name",
+          "id": "group_id",
+          "name": "group_id",
+          "caption": {
+            "zh_CN": "所属集团"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "account_book",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_book_id",
+          "name": "account_book_id",
+          "caption": {
+            "zh_CN": "默认账簿"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "legal_person",
+          "name": "legal_person",
+          "caption": {
+            "zh_CN": "是否法人"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_no",
+          "name": "tax_no",
+          "caption": {
+            "zh_CN": "纳税人识别号"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "account_book",
+        "dictName": "账簿(账套)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_account_book",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友账簿(NC 账簿,U8 账套):绑定科目表/会计期间/本位币/记账规则,凭证记入账簿"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "chart_of_accounts",
+          "refField": "code",
+          "displayField": "name",
+          "id": "chart_of_accounts_id",
+          "name": "chart_of_accounts_id",
+          "caption": {
+            "zh_CN": "科目表方案"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "local_currency",
+          "name": "local_currency",
+          "caption": {
+            "zh_CN": "本位币"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "fiscal_calendar",
+          "refField": "code",
+          "displayField": "name",
+          "id": "fiscal_calendar_id",
+          "name": "fiscal_calendar_id",
+          "caption": {
+            "zh_CN": "会计日历/期间方案"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "account_standard",
+          "name": "account_standard",
+          "caption": {
+            "zh_CN": "会计准则"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "enable_year",
+          "name": "enable_year",
+          "caption": {
+            "zh_CN": "启用年度"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "chart_of_accounts",
+        "dictName": "科目表方案",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_chart_of_accounts",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友科目表方案:一套科目编码体系,多账簿可共享"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "code_rule",
+          "name": "code_rule",
+          "caption": {
+            "zh_CN": "科目编码级次(如4-2-2-2)"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "account_subject",
+        "dictName": "会计科目",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_account_subject",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友会计科目:分级科目,末级科目方可记账;可设置多个辅助核算(部门/个人/客户/供应商/项目等)、外币核算、数量核算"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "chart_of_accounts",
+          "refField": "code",
+          "displayField": "name",
+          "id": "chart_of_accounts_id",
+          "name": "chart_of_accounts_id",
+          "caption": {
+            "zh_CN": "所属科目表"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "account_category",
+          "refField": "code",
+          "displayField": "name",
+          "id": "account_category",
+          "name": "account_category",
+          "caption": {
+            "zh_CN": "科目类别(资产/负债/共同/权益/成本/损益)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "balance_direction",
+          "refField": "code",
+          "displayField": "name",
+          "id": "balance_direction",
+          "name": "balance_direction",
+          "caption": {
+            "zh_CN": "余额方向(借/贷)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 200,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "aux_accounting_items",
+          "name": "aux_accounting_items",
+          "caption": {
+            "zh_CN": "辅助核算项(逗号分隔:部门,个人,客户...)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "foreign_currency_acc",
+          "name": "foreign_currency_acc",
+          "caption": {
+            "zh_CN": "是否外币核算"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "quantity_acc",
+          "name": "quantity_acc",
+          "caption": {
+            "zh_CN": "是否数量核算"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "measure_unit",
+          "name": "measure_unit",
+          "caption": {
+            "zh_CN": "计量单位"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "cashflow_related",
+          "name": "cashflow_related",
+          "caption": {
+            "zh_CN": "是否现金流量科目"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "control_account",
+          "name": "control_account",
+          "caption": {
+            "zh_CN": "是否受控科目"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "end_flag",
+          "name": "end_flag",
+          "caption": {
+            "zh_CN": "是否末级"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "account_category",
+        "dictName": "科目类别",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_account_category",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友科目类别:资产/负债/共同/所有者权益/成本/损益"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,8}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "balance_direction",
+        "dictName": "余额方向",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_balance_direction",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友余额方向:借/贷"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[借贷DC]$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "aux_acc_type",
+        "dictName": "辅助核算类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_aux_acc_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友辅助核算类型注册:部门/个人/客户/供应商/项目/自定义项;科目按需挂载,凭证分录据此录辅助核算"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "ref_dict_code",
+          "name": "ref_dict_code",
+          "caption": {
+            "zh_CN": "对应基础档案字典"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "is_preset",
+          "name": "is_preset",
+          "caption": {
+            "zh_CN": "是否系统预置"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "department",
+        "dictName": "部门",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_department",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友部门档案(辅助核算):自分级"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "accounting_org",
+          "refField": "code",
+          "displayField": "name",
+          "id": "accounting_org_id",
+          "name": "accounting_org_id",
+          "caption": {
+            "zh_CN": "所属核算单位"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "manager",
+          "name": "manager",
+          "caption": {
+            "zh_CN": "负责人"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "person",
+        "dictName": "人员(个人)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_person",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友人员档案(辅助核算,个人往来/报销)"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "department",
+          "refField": "code",
+          "displayField": "name",
+          "id": "department_id",
+          "name": "department_id",
+          "caption": {
+            "zh_CN": "所属部门"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "id_card",
+          "name": "id_card",
+          "caption": {
+            "zh_CN": "证件号"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "customer",
+        "dictName": "客户",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_customer",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友客户档案(辅助核算,应收往来),自分级"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "partner_category",
+          "refField": "code",
+          "displayField": "name",
+          "id": "customer_category",
+          "name": "customer_category",
+          "caption": {
+            "zh_CN": "客户分类"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_no",
+          "name": "tax_no",
+          "caption": {
+            "zh_CN": "税号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "settlement_method",
+          "refField": "code",
+          "displayField": "name",
+          "id": "settlement_method_id",
+          "name": "settlement_method_id",
+          "caption": {
+            "zh_CN": "默认结算方式"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "credit_amount",
+          "name": "credit_amount",
+          "caption": {
+            "zh_CN": "信用额度"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "supplier",
+        "dictName": "供应商",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_supplier",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友供应商档案(辅助核算,应付往来),自分级"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "partner_category",
+          "refField": "code",
+          "displayField": "name",
+          "id": "supplier_category",
+          "name": "supplier_category",
+          "caption": {
+            "zh_CN": "供应商分类"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 32,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_no",
+          "name": "tax_no",
+          "caption": {
+            "zh_CN": "税号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bank_account",
+          "name": "bank_account",
+          "caption": {
+            "zh_CN": "银行账号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "settlement_method",
+          "refField": "code",
+          "displayField": "name",
+          "id": "settlement_method_id",
+          "name": "settlement_method_id",
+          "caption": {
+            "zh_CN": "默认结算方式"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "partner_category",
+        "dictName": "往来单位分类",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": true,
+        "tableName": "yy_partner_category",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友客户/供应商分类档案,自分级"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "project",
+        "dictName": "项目",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_project",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友项目档案(辅助核算),自分级;可按项目大类管理"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "project_class",
+          "name": "project_class",
+          "caption": {
+            "zh_CN": "项目大类"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "manager",
+          "name": "manager",
+          "caption": {
+            "zh_CN": "项目负责人"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "start_date",
+          "name": "start_date",
+          "caption": {
+            "zh_CN": "开始日期"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "end_date",
+          "name": "end_date",
+          "caption": {
+            "zh_CN": "结束日期"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_-]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "inventory",
+        "dictName": "存货",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_inventory",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友存货档案(辅助核算,存货核算科目),自分级"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "inventory_class",
+          "name": "inventory_class",
+          "caption": {
+            "zh_CN": "存货分类"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "measure_unit",
+          "name": "measure_unit",
+          "caption": {
+            "zh_CN": "主计量单位"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_-]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "custom_aux_item",
+        "dictName": "自定义辅助核算项",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_custom_aux_item",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友自定义档案/自定义辅助核算项:业务自定义维度(如区域/渠道/资金计划),自分级"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "aux_acc_type",
+          "refField": "code",
+          "displayField": "name",
+          "id": "aux_type_id",
+          "name": "aux_type_id",
+          "caption": {
+            "zh_CN": "所属辅助核算类型"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "voucher_category",
+        "dictName": "凭证类别",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_voucher_category",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友凭证类别:记账凭证/收款凭证/付款凭证/转账凭证;含限制类型与限制科目"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "category_abbr",
+          "name": "category_abbr",
+          "caption": {
+            "zh_CN": "类别字(记/收/付/转)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "restrict_type",
+          "name": "restrict_type",
+          "caption": {
+            "zh_CN": "限制类型(借方必有/贷方必有/凭证必有/无)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 200,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "restrict_accounts",
+          "name": "restrict_accounts",
+          "caption": {
+            "zh_CN": "限制科目"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,8}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "voucher_source",
+        "dictName": "凭证来源",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_voucher_source",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友凭证来源:手工/应收/应付/出纳/固定资产/存货核算/总账自动转账等"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "settlement_method",
+        "dictName": "结算方式",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_settlement_method",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友结算方式:现金/转账支票/电汇/承兑汇票等,出纳/往来凭证引用"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,8}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "cashflow_item",
+        "dictName": "现金流量项目",
+        "dictKind": "GROUP",
+        "selfHierarchy": true,
+        "tableName": "yy_cashflow_item",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友现金流量项目:经营/投资/筹资活动→明细项,自分级;现金类科目分录需指定"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "flow_category",
+          "name": "flow_category",
+          "caption": {
+            "zh_CN": "流量大类(经营/投资/筹资)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "direction",
+          "name": "direction",
+          "caption": {
+            "zh_CN": "流入/流出"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "currency",
+        "dictName": "币种",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_currency",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友币种档案:本位币与外币,凭证外币核算用"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 3,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "iso_code",
+          "name": "iso_code",
+          "caption": {
+            "zh_CN": "ISO代码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "symbol",
+          "name": "symbol",
+          "caption": {
+            "zh_CN": "符号"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "decimals",
+          "name": "decimals",
+          "caption": {
+            "zh_CN": "小数位"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,8}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "exchange_rate_type",
+        "dictName": "汇率类型",
+        "dictKind": "CLASSIFY",
+        "selfHierarchy": false,
+        "tableName": "yy_exchange_rate_type",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友汇率类型:记账汇率/期末调汇汇率/自定义"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,16}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "fiscal_calendar",
+        "dictName": "会计日历(期间方案)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_fiscal_calendar",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友会计期间方案:定义会计年度的期间划分,账簿引用"
+      },
+      "fields": [
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "periods_per_year",
+          "name": "periods_per_year",
+          "caption": {
+            "zh_CN": "每年期间数"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,16}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "accounting_period",
+        "dictName": "会计期间",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_accounting_period",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友会计期间:会计年度→会计月(期),自分级;凭证按期间登记,期末结账逐期关闭"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "fiscal_calendar",
+          "refField": "code",
+          "displayField": "name",
+          "id": "fiscal_calendar_id",
+          "name": "fiscal_calendar_id",
+          "caption": {
+            "zh_CN": "所属期间方案"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": false,
+          "dimType": "dimension",
+          "id": "fiscal_year",
+          "name": "fiscal_year",
+          "caption": {
+            "zh_CN": "会计年度"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 2,
+          "intDigits": 2,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "period_no",
+          "name": "period_no",
+          "caption": {
+            "zh_CN": "会计期(月)"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "start_date",
+          "name": "start_date",
+          "caption": {
+            "zh_CN": "期间起始日"
+          }
+        },
+        {
+          "dataType": "DATE",
+          "fieldLength": 10,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "end_date",
+          "name": "end_date",
+          "caption": {
+            "zh_CN": "期间截止日"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "period_status",
+          "name": "period_status",
+          "caption": {
+            "zh_CN": "期间状态(未结账/已结账)"
+          }
+        },
+        {
+          "dataType": "TINYINT",
+          "fieldLength": 1,
+          "intDigits": 1,
+          "decimalDigits": 0,
+          "nullable": true,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "checkbox"
+          },
+          "id": "closed_flag",
+          "name": "closed_flag",
+          "caption": {
+            "zh_CN": "是否已结账"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[0-9]{4}(-[0-9]{2})?$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "tax_rate",
+        "dictName": "税率",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_tax_rate",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友税率档案:进项/销项税率,发票与凭证税额计算"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 16,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_type",
+          "name": "tax_type",
+          "caption": {
+            "zh_CN": "税种(增值税进项/销项/附加)"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 7,
+          "intDigits": 5,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "tax_rate_percent",
+          "name": "tax_rate_percent",
+          "caption": {
+            "zh_CN": "税率(%)"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,16}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "bank_account",
+        "dictName": "银行账户",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": true,
+        "tableName": "yy_bank_account",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "parentField": "parent_id",
+        "remark": "用友银行账户档案:出纳/银行存款科目辅助,自分级(银行→账户)"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "bank_name",
+          "name": "bank_name",
+          "caption": {
+            "zh_CN": "开户银行"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "account_no",
+          "name": "account_no",
+          "caption": {
+            "zh_CN": "银行账号"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 8,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "refField": "code",
+          "displayField": "name",
+          "id": "currency",
+          "name": "currency",
+          "caption": {
+            "zh_CN": "账户币种"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "account_subject",
+          "refField": "code",
+          "displayField": "name",
+          "id": "gl_account_id",
+          "name": "gl_account_id",
+          "caption": {
+            "zh_CN": "对应总账科目"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,30}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "operator",
+        "dictName": "操作员(人员)",
+        "dictKind": "BUSINESS",
+        "selfHierarchy": false,
+        "tableName": "yy_operator",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "remark": "用友操作员/人员:制单/审核/记账/出纳"
+      },
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 30,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "role",
+          "name": "role",
+          "caption": {
+            "zh_CN": "财务角色(制单/审核/记账/出纳)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "department",
+          "refField": "code",
+          "displayField": "name",
+          "id": "department_id",
+          "name": "department_id",
+          "caption": {
+            "zh_CN": "所属部门"
+          }
+        }
+      ],
+      "baseFieldSet": "dictionaryCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "systemFieldSet": "dictionarySystemFields",
+      "permissionScope": "global",
+      "codeRule": {
+        "mode": "manual",
+        "field": "code",
+        "pattern": "^[A-Za-z0-9_]{1,20}$",
+        "uniqueCheck": true
+      },
+      "uniqueKeys": [
+        [
+          "code"
+        ]
+      ]
+    }
+  ],
+  "updatedAt": "2026-06-30T06:25:47.883Z"
+}

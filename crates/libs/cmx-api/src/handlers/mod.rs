@@ -20,6 +20,7 @@ pub mod marketplace;
 pub mod menu;
 pub mod module;
 pub mod plugin;
+pub mod portal;
 pub mod service;
 pub mod storage;
 pub mod sys_datasource;

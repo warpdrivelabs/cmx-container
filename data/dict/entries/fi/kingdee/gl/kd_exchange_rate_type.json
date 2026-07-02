@@ -1,0 +1,26 @@
+[
+  {
+    "id": "BOOK",
+    "code": "BOOK",
+    "name": "记账汇率",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "BOOK 记账汇率"
+  },
+  {
+    "id": "MONTHEND",
+    "code": "MONTHEND",
+    "name": "期末汇率",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "MONTHEND 期末汇率"
+  },
+  {
+    "id": "USER",
+    "code": "USER",
+    "name": "自定义",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "USER 自定义"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "VS_COMPANY",
+    "code": "VS_COMPANY",
+    "name": "公司值集",
+    "status": 1,
+    "validation_type": "独立",
+    "sortKey": "000001",
+    "fullText": "VS_COMPANY 公司值集"
+  },
+  {
+    "id": "VS_CC",
+    "code": "VS_CC",
+    "name": "成本中心值集",
+    "status": 1,
+    "validation_type": "独立",
+    "sortKey": "000002",
+    "fullText": "VS_CC 成本中心值集"
+  },
+  {
+    "id": "VS_ACCOUNT",
+    "code": "VS_ACCOUNT",
+    "name": "科目值集",
+    "status": 1,
+    "validation_type": "独立",
+    "sortKey": "000003",
+    "fullText": "VS_ACCOUNT 科目值集"
+  },
+  {
+    "id": "VS_SEGMENT",
+    "code": "VS_SEGMENT",
+    "name": "板块值集",
+    "status": 1,
+    "validation_type": "独立",
+    "sortKey": "000004",
+    "fullText": "VS_SEGMENT 板块值集"
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "PS-CN",
+    "code": "PS-CN",
+    "name": "标准会计期间",
+    "status": 1,
+    "periods_per_year": 12,
+    "sortKey": "000001",
+    "fullText": "PS-CN 标准会计期间"
+  }
+]

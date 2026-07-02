@@ -1,0 +1,317 @@
+[
+  {
+    "id": 1,
+    "code": "1000",
+    "name": "流动资产",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "1",
+    "level": 1,
+    "path": [
+      "1000"
+    ],
+    "pathStr": "1000",
+    "fullText": "1000 流动资产"
+  },
+  {
+    "id": 2,
+    "code": "1001",
+    "name": "货币资金",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "2",
+    "level": 2,
+    "path": [
+      "1000",
+      "1001"
+    ],
+    "pathStr": "1000/1001",
+    "fullText": "1001 货币资金"
+  },
+  {
+    "id": 3,
+    "code": "1002",
+    "name": "交易性金融资产",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "3",
+    "level": 2,
+    "path": [
+      "1000",
+      "1002"
+    ],
+    "pathStr": "1000/1002",
+    "fullText": "1002 交易性金融资产"
+  },
+  {
+    "id": 4,
+    "code": "100201",
+    "name": "股票",
+    "parentCode": "1002",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "4",
+    "level": 3,
+    "path": [
+      "1000",
+      "1002",
+      "100201"
+    ],
+    "pathStr": "1000/1002/100201",
+    "fullText": "100201 股票"
+  },
+  {
+    "id": 5,
+    "code": "100202",
+    "name": "债券",
+    "parentCode": "1002",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "5",
+    "level": 3,
+    "path": [
+      "1000",
+      "1002",
+      "100202"
+    ],
+    "pathStr": "1000/1002/100202",
+    "fullText": "100202 债券"
+  },
+  {
+    "id": 6,
+    "code": "1012",
+    "name": "应收账款",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "6",
+    "level": 2,
+    "path": [
+      "1000",
+      "1012"
+    ],
+    "pathStr": "1000/1012",
+    "fullText": "1012 应收账款"
+  },
+  {
+    "id": 7,
+    "code": "1015",
+    "name": "预付账款",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "7",
+    "level": 2,
+    "path": [
+      "1000",
+      "1015"
+    ],
+    "pathStr": "1000/1015",
+    "fullText": "1015 预付账款"
+  },
+  {
+    "id": 8,
+    "code": "1403",
+    "name": "在途物资",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "8",
+    "level": 2,
+    "path": [
+      "1000",
+      "1403"
+    ],
+    "pathStr": "1000/1403",
+    "fullText": "1403 在途物资"
+  },
+  {
+    "id": 9,
+    "code": "1405",
+    "name": "原材料",
+    "parentCode": "1000",
+    "orgCode": "HQ",
+    "type": "asset",
+    "sortKey": "9",
+    "level": 2,
+    "path": [
+      "1000",
+      "1405"
+    ],
+    "pathStr": "1000/1405",
+    "fullText": "1405 原材料"
+  },
+  {
+    "id": 10,
+    "code": "2000",
+    "name": "流动负债",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "liability",
+    "sortKey": "10",
+    "level": 1,
+    "path": [
+      "2000"
+    ],
+    "pathStr": "2000",
+    "fullText": "2000 流动负债"
+  },
+  {
+    "id": 11,
+    "code": "2001",
+    "name": "短期借款",
+    "parentCode": "2000",
+    "orgCode": "HQ",
+    "type": "liability",
+    "sortKey": "11",
+    "level": 2,
+    "path": [
+      "2000",
+      "2001"
+    ],
+    "pathStr": "2000/2001",
+    "fullText": "2001 短期借款"
+  },
+  {
+    "id": 12,
+    "code": "2202",
+    "name": "应付账款",
+    "parentCode": "2000",
+    "orgCode": "HQ",
+    "type": "liability",
+    "sortKey": "12",
+    "level": 2,
+    "path": [
+      "2000",
+      "2202"
+    ],
+    "pathStr": "2000/2202",
+    "fullText": "2202 应付账款"
+  },
+  {
+    "id": 13,
+    "code": "2203",
+    "name": "预收账款",
+    "parentCode": "2000",
+    "orgCode": "HQ",
+    "type": "liability",
+    "sortKey": "13",
+    "level": 2,
+    "path": [
+      "2000",
+      "2203"
+    ],
+    "pathStr": "2000/2203",
+    "fullText": "2203 预收账款"
+  },
+  {
+    "id": 14,
+    "code": "3000",
+    "name": "所有者权益",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "equity",
+    "sortKey": "14",
+    "level": 1,
+    "path": [
+      "3000"
+    ],
+    "pathStr": "3000",
+    "fullText": "3000 所有者权益"
+  },
+  {
+    "id": 15,
+    "code": "3001",
+    "name": "实收资本",
+    "parentCode": "3000",
+    "orgCode": "HQ",
+    "type": "equity",
+    "sortKey": "15",
+    "level": 2,
+    "path": [
+      "3000",
+      "3001"
+    ],
+    "pathStr": "3000/3001",
+    "fullText": "3001 实收资本"
+  },
+  {
+    "id": 16,
+    "code": "3002",
+    "name": "资本公积",
+    "parentCode": "3000",
+    "orgCode": "HQ",
+    "type": "equity",
+    "sortKey": "16",
+    "level": 2,
+    "path": [
+      "3000",
+      "3002"
+    ],
+    "pathStr": "3000/3002",
+    "fullText": "3002 资本公积"
+  },
+  {
+    "id": 17,
+    "code": "5001",
+    "name": "主营业务收入",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "income",
+    "sortKey": "17",
+    "level": 1,
+    "path": [
+      "5001"
+    ],
+    "pathStr": "5001",
+    "fullText": "5001 主营业务收入"
+  },
+  {
+    "id": 18,
+    "code": "5101",
+    "name": "主营业务成本",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "cost",
+    "sortKey": "18",
+    "level": 1,
+    "path": [
+      "5101"
+    ],
+    "pathStr": "5101",
+    "fullText": "5101 主营业务成本"
+  },
+  {
+    "id": 19,
+    "code": "6001",
+    "name": "研发费用",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "expense",
+    "sortKey": "19",
+    "level": 1,
+    "path": [
+      "6001"
+    ],
+    "pathStr": "6001",
+    "fullText": "6001 研发费用"
+  },
+  {
+    "id": 20,
+    "code": "6002",
+    "name": "管理费用",
+    "parentCode": null,
+    "orgCode": "HQ",
+    "type": "expense",
+    "sortKey": "20",
+    "level": 1,
+    "path": [
+      "6002"
+    ],
+    "pathStr": "6002",
+    "fullText": "6002 管理费用"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "YPCA",
+    "code": "YPCA",
+    "name": "中国石油运营科目表",
+    "status": 1,
+    "coa_type": "运营",
+    "maint_language": "ZH",
+    "sortKey": "000001",
+    "fullText": "YPCA 中国石油运营科目表"
+  },
+  {
+    "id": "GRP",
+    "code": "GRP",
+    "name": "集团合并科目表",
+    "status": 1,
+    "coa_type": "集团",
+    "maint_language": "ZH",
+    "sortKey": "000002",
+    "fullText": "GRP 集团合并科目表"
+  }
+]

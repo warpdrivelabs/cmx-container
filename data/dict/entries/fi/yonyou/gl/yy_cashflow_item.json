@@ -1,0 +1,74 @@
+[
+  {
+    "id": "XJ01",
+    "code": "XJ01",
+    "name": "销售商品收到的现金",
+    "status": 1,
+    "flow_category": "经营",
+    "sortKey": "000001",
+    "fullText": "XJ01 销售商品收到的现金"
+  },
+  {
+    "id": "XJ02",
+    "code": "XJ02",
+    "name": "购买商品支付的现金",
+    "status": 1,
+    "flow_category": "经营",
+    "sortKey": "000002",
+    "fullText": "XJ02 购买商品支付的现金"
+  },
+  {
+    "id": "XJ03",
+    "code": "XJ03",
+    "name": "支付给职工的现金",
+    "status": 1,
+    "flow_category": "经营",
+    "sortKey": "000003",
+    "fullText": "XJ03 支付给职工的现金"
+  },
+  {
+    "id": "XJ04",
+    "code": "XJ04",
+    "name": "支付的各项税费",
+    "status": 1,
+    "flow_category": "经营",
+    "sortKey": "000004",
+    "fullText": "XJ04 支付的各项税费"
+  },
+  {
+    "id": "XJ21",
+    "code": "XJ21",
+    "name": "购建固定资产支付",
+    "status": 1,
+    "flow_category": "投资",
+    "sortKey": "000005",
+    "fullText": "XJ21 购建固定资产支付"
+  },
+  {
+    "id": "XJ22",
+    "code": "XJ22",
+    "name": "勘探投资支付",
+    "status": 1,
+    "flow_category": "投资",
+    "sortKey": "000006",
+    "fullText": "XJ22 勘探投资支付"
+  },
+  {
+    "id": "XJ31",
+    "code": "XJ31",
+    "name": "取得借款收到的现金",
+    "status": 1,
+    "flow_category": "筹资",
+    "sortKey": "000007",
+    "fullText": "XJ31 取得借款收到的现金"
+  },
+  {
+    "id": "XJ32",
+    "code": "XJ32",
+    "name": "偿还债务支付的现金",
+    "status": 1,
+    "flow_category": "筹资",
+    "sortKey": "000008",
+    "fullText": "XJ32 偿还债务支付的现金"
+  }
+]

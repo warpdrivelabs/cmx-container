@@ -1,0 +1,11 @@
+[
+  {
+    "id": "CAL-CN",
+    "code": "CAL-CN",
+    "name": "标准会计期间",
+    "status": 1,
+    "periods_per_year": 12,
+    "sortKey": "000001",
+    "fullText": "CAL-CN 标准会计期间"
+  }
+]

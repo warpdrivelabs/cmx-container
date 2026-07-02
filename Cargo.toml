@@ -26,6 +26,10 @@ members = [
 #    "crates/libs/cmx-wasmdemo",
     "crates/libs/cmx-plugin-demo",
     "crates/libs/cmx-debug",
+    "crates/libs/cmx-portal",
+    "crates/libs/cmx-portal-base",
+    "crates/libs/cmx-form",
+    "crates/libs/cmx-model",
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
     "sdk/cmx-cli",
@@ -87,6 +91,14 @@ cmx-audit = { path = "crates/libs/cmx-infra/cmx-audit", version = "0.1.12", regi
 cmx-auth = { path = "crates/libs/cmx-infra/cmx-auth", version = "0.1.12", registry = "nora" }
 # 内部依赖 - IAM 用户权限角色管理
 cmx-iam = { path = "crates/libs/cmx-iam", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）
+cmx-portal = { path = "crates/libs/cmx-portal", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 门户系列共享基础设施（config / error / fsutil / util）
+cmx-portal-base = { path = "crates/libs/cmx-portal-base", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 表单中心（html_pages 相关：form / html / native 页面）
+cmx-form = { path = "crates/libs/cmx-form", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 模型中心（meta 相关：definitions / context_profile / dict 元数据建模）
+cmx-model = { path = "crates/libs/cmx-model", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 过程宏
 cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
@@ -106,7 +118,9 @@ tokio = { version = "1.41", features = ["full"] }
 # 序列化框架
 serde = { version = "1.0", features = ["derive"] }
 # JSON 序列化/反序列化
-serde_json = "1.0"
+# JSON 序列化/反序列化（preserve_order：保持对象键插入顺序，与 Node JSON.stringify 一致，
+# 使 JSON 文件读写/补丁/对拍不因键重排产生噪声 diff）
+serde_json = { version = "1.0", features = ["preserve_order"] }
 # YAML 序列化/反序列化
 serde_yaml = "0.9.33"
 # serde 辅助宏
@@ -182,7 +196,7 @@ aes-gcm = "0.10"
 # URL 解析库
 url = "2.5"
 # HTTP 客户端
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
 # 异步与并发
 futures = "0.3"
@@ -196,7 +210,7 @@ http-date = "0.3"
 # API 文档生成 - 生成 OpenAPI 规范文档
 utoipa = { version = "5", features = ["axum_extras", "chrono", "decimal", "uuid"] }
 # Swagger UI 支持
-utoipa-swagger-ui = { version = "9", features = ["axum"] }
+utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 # gRPC 框架
 volo-grpc = "0.12"
 # RPC 框架

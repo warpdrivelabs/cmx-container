@@ -1,0 +1,32 @@
+[
+  {
+    "id": "A",
+    "code": "A",
+    "name": "预付款",
+    "status": 1,
+    "special_gl_type": "预付",
+    "recon_account": "1123",
+    "sortKey": "000001",
+    "fullText": "A 预付款"
+  },
+  {
+    "id": "F",
+    "code": "F",
+    "name": "预收款",
+    "status": 1,
+    "special_gl_type": "预收",
+    "recon_account": "2203",
+    "sortKey": "000002",
+    "fullText": "F 预收款"
+  },
+  {
+    "id": "W",
+    "code": "W",
+    "name": "应收票据",
+    "status": 1,
+    "special_gl_type": "票据",
+    "recon_account": "1121",
+    "sortKey": "000003",
+    "fullText": "W 应收票据"
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "Sales Invoices",
+    "code": "Sales Invoices",
+    "name": "销售发票",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "Sales Invoices 销售发票"
+  },
+  {
+    "id": "Purchase Invoices",
+    "code": "Purchase Invoices",
+    "name": "采购发票",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "Purchase Invoices 采购发票"
+  },
+  {
+    "id": "Payments",
+    "code": "Payments",
+    "name": "付款",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "Payments 付款"
+  },
+  {
+    "id": "Receipts",
+    "code": "Receipts",
+    "name": "收款",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "Receipts 收款"
+  },
+  {
+    "id": "Adjustment",
+    "code": "Adjustment",
+    "name": "调整",
+    "status": 1,
+    "sortKey": "000005",
+    "fullText": "Adjustment 调整"
+  },
+  {
+    "id": "Accrual",
+    "code": "Accrual",
+    "name": "应计",
+    "status": 1,
+    "sortKey": "000006",
+    "fullText": "Accrual 应计"
+  }
+]

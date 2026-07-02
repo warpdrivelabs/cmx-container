@@ -1,0 +1,58 @@
+[
+  {
+    "id": "manual",
+    "code": "manual",
+    "name": "手工",
+    "status": 1,
+    "sortKey": "000001",
+    "fullText": "manual 手工"
+  },
+  {
+    "id": "ar",
+    "code": "ar",
+    "name": "应收",
+    "status": 1,
+    "sortKey": "000002",
+    "fullText": "ar 应收"
+  },
+  {
+    "id": "ap",
+    "code": "ap",
+    "name": "应付",
+    "status": 1,
+    "sortKey": "000003",
+    "fullText": "ap 应付"
+  },
+  {
+    "id": "cash",
+    "code": "cash",
+    "name": "出纳",
+    "status": 1,
+    "sortKey": "000004",
+    "fullText": "cash 出纳"
+  },
+  {
+    "id": "fa",
+    "code": "fa",
+    "name": "资产",
+    "status": 1,
+    "sortKey": "000005",
+    "fullText": "fa 资产"
+  },
+  {
+    "id": "inv",
+    "code": "inv",
+    "name": "存货",
+    "status": 1,
+    "sortKey": "000006",
+    "fullText": "inv 存货"
+  },
+  {
+    "id": "carry",
+    "code": "carry",
+    "name": "结转",
+    "status": 1,
+    "sortKey": "000007",
+    "fullText": "carry 结转"
+  }
+]

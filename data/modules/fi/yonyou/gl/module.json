@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "domain": "fi",
+  "application": "yonyou",
+  "module": "gl",
+  "title": "用友总账样例",
+  "status": "active",
+  "resources": {
+    "metaDefinitions": [
+      {
+        "path": "meta/definitions/fi/yonyou/gl"
+      }
+    ],
+    "dictEntries": [
+      {
+        "path": "dict/entries/fi/yonyou/gl"
+      }
+    ],
+    "facts": [
+      {
+        "path": "fact/fi/yonyou/gl"
+      }
+    ]
+  }
+}

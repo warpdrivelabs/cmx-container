@@ -1,0 +1,68 @@
+[
+  {
+    "id": "C-SINOPEC",
+    "code": "C-SINOPEC",
+    "name": "中石化华东分销",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-SINOPEC",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000001",
+    "fullText": "C-SINOPEC 中石化华东分销"
+  },
+  {
+    "id": "C-CNOOC",
+    "code": "C-CNOOC",
+    "name": "中海油贸易",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-CNOOC",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000002",
+    "fullText": "C-CNOOC 中海油贸易"
+  },
+  {
+    "id": "C-SHELL",
+    "code": "C-SHELL",
+    "name": "壳牌(中国)",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-SHELL",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000003",
+    "fullText": "C-SHELL 壳牌(中国)"
+  },
+  {
+    "id": "C-LOCAL01",
+    "code": "C-LOCAL01",
+    "name": "南京加油站客户",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-LOCAL01",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000004",
+    "fullText": "C-LOCAL01 南京加油站客户"
+  },
+  {
+    "id": "C-AVIA",
+    "code": "C-AVIA",
+    "name": "东方航空(航煤)",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-AVIA",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000005",
+    "fullText": "C-AVIA 东方航空(航煤)"
+  },
+  {
+    "id": "C-POWER",
+    "code": "C-POWER",
+    "name": "华能电力(燃料油)",
+    "status": 1,
+    "customer_category": "WS",
+    "tax_no": "9100C-POWER",
+    "settlement_method_id": "TRANSFER",
+    "sortKey": "000006",
+    "fullText": "C-POWER 华能电力(燃料油)"
+  }
+]

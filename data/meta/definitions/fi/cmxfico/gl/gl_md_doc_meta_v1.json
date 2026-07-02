@@ -1,0 +1,967 @@
+{
+  "moduleMeta": {
+    "moduleCode": "GL",
+    "moduleName": "总账",
+    "metaKind": "DOC",
+    "metaName": "总账业务单据元数据",
+    "version": 1,
+    "designStyle": "separate-dictionary-tables",
+    "remark": "总账模块业务单据元数据：凭证头/分录/明细结构引用 base_doc_meta_v1.json 中的通用单据 fieldSet；本文件仅包含凭证单据结构、字段、状态流和校验规则。",
+    "organizationDict": "acct_entity",
+    "keyDicts": "gl_account",
+    "documentTypeDict": "voucher_type"
+  },
+  "baseDocMetaRef": {
+    "file": "base_doc_meta_v1.json",
+    "version": 1,
+    "fieldSets": [
+      "documentIdentityFields",
+      "documentSourceFields",
+      "documentLifecycleFields",
+      "documentTechnicalFields",
+      "documentCommonFields"
+    ],
+    "remark": "本模块业务单据复用 base_doc_meta_v1.json 中的基础 fieldSet；voucherCommonFieldSet 与 voucherTables.documentFieldSets 均引用该文件。"
+  },
+  "_comment_part2": "========== 二、会计凭证元数据（三层：头/分录/明细） ==========",
+  "voucherCommonFieldSet": "documentTechnicalFields",
+  "voucherDocumentMapping": {
+    "remark": "总账凭证对基础单据字段的语义映射。物理字段可采用 document_* 通用命名；界面显示时映射为凭证日期/凭证类型/凭证号/凭证状态。",
+    "fieldAliases": {
+      "document_date": "voucher_date",
+      "document_type_id": "voucher_type_id",
+      "document_no": "voucher_no",
+      "document_status": "voucher_status"
+    },
+    "typeDict": "voucher_type",
+    "stateField": "document_status"
+  },
+  "voucherSchema": {
+    "remark": "凭证主从三层，每层为表数组（可定义多张表）：L1 [voucher_header] → L2 [voucher_entry] → L3 [voucher_detail]。借贷合计由分录上卷至头；分录金额由明细上卷至分录。",
+    "schema": [
+      [
+        {
+          "id": "voucher_header",
+          "kind": "list",
+          "level": "L1",
+          "levelName": "凭证头"
+        }
+      ],
+      [
+        {
+          "id": "voucher_entry",
+          "kind": "list",
+          "level": "L2",
+          "levelName": "分录"
+        }
+      ],
+      [
+        {
+          "id": "voucher_detail",
+          "kind": "list",
+          "level": "L3",
+          "levelName": "明细"
+        }
+      ]
+    ],
+    "relations": [
+      {
+        "parent": "voucher_header",
+        "child": "entries",
+        "parentKey": "id",
+        "childKey": "header_id"
+      },
+      {
+        "parent": "entries",
+        "child": "details",
+        "parentKey": "id",
+        "childKey": "entry_id"
+      }
+    ],
+    "aggregations": [
+      {
+        "from": "voucher_header.entries.details",
+        "to": "voucher_header.entries",
+        "field": "amount",
+        "toField": "line_amount",
+        "agg": "sum",
+        "remark": "明细金额合计到分录"
+      },
+      {
+        "from": "voucher_header.entries",
+        "to": "voucher_header",
+        "field": "debit_amount",
+        "toField": "total_debit",
+        "agg": "sum",
+        "remark": "分录借方合计到头"
+      },
+      {
+        "from": "voucher_header.entries",
+        "to": "voucher_header",
+        "field": "credit_amount",
+        "toField": "total_credit",
+        "agg": "sum",
+        "remark": "分录贷方合计到头"
+      }
+    ]
+  },
+  "voucherTables": [
+    {
+      "level": "L1",
+      "tableName": "voucher_header",
+      "tableAlias": "凭证头",
+      "remark": "凭证单据头。通用单据日期/类型/编号/状态/来源引用/附件备注等来自 documentFieldSets；本表 fields 仅保留总账凭证特有字段。",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "fiscal_period",
+          "refField": "code",
+          "displayField": "name",
+          "id": "fiscal_period_id",
+          "name": "fiscal_period_id",
+          "caption": {
+            "zh_CN": "会计期间"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "total_debit",
+          "name": "total_debit",
+          "caption": {
+            "zh_CN": "凭证借方金额合计"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "total_credit",
+          "name": "total_credit",
+          "caption": {
+            "zh_CN": "凭证贷方金额合计"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "attribute",
+          "refDict": "employee",
+          "id": "preparer_id",
+          "name": "preparer_id",
+          "caption": {
+            "zh_CN": "制证人"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "employee",
+          "refField": "id",
+          "displayField": "name",
+          "edit": {
+            "mode": "select"
+          },
+          "id": "auditor_id",
+          "name": "auditor_id",
+          "caption": {
+            "zh_CN": "审核人"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "employee",
+          "id": "accountant_id",
+          "name": "accountant_id",
+          "caption": {
+            "zh_CN": "会计"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "attribute",
+          "refDict": "employee",
+          "id": "cashier_id",
+          "name": "cashier_id",
+          "caption": {
+            "zh_CN": "出纳"
+          }
+        }
+      ],
+      "documentFieldSets": [
+        "documentIdentityFields",
+        "documentSourceFields",
+        "documentLifecycleFields",
+        "documentTechnicalFields"
+      ],
+      "fieldRefDicts": {
+        "document_type_id": "voucher_type",
+        "entity_id": "acct_entity"
+      }
+    },
+    {
+      "level": "L2",
+      "tableName": "voucher_entry",
+      "tableAlias": "凭证分录",
+      "remark": "按科目的借贷分录行。科目编码/名称 + 借方/贷方 + 备注；金额可由下层明细上卷。",
+      "fields": [
+        {
+          "dataType": "INT",
+          "nullable": false,
+          "dimType": "relation",
+          "id": "header_id",
+          "name": "header_id",
+          "caption": {
+            "zh_CN": "所属凭证头ID"
+          }
+        },
+        {
+          "dataType": "INT",
+          "fieldLength": 6,
+          "intDigits": 6,
+          "decimalDigits": 0,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "line_no",
+          "name": "line_no",
+          "caption": {
+            "zh_CN": "分录行号"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "dimension",
+          "refDict": "gl_account",
+          "refField": "id",
+          "displayField": "name",
+          "id": "account_id",
+          "name": "account_id",
+          "caption": {
+            "zh_CN": "科目ID"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": false,
+          "dimType": "attribute",
+          "edit": {
+            "mode": "dict-select"
+          },
+          "id": "account_code",
+          "name": "account_code",
+          "caption": {
+            "zh_CN": "科目编码"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 128,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "account_name",
+          "name": "account_name",
+          "caption": {
+            "zh_CN": "科目名称"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "debit_amount",
+          "name": "debit_amount",
+          "caption": {
+            "zh_CN": "借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "credit_amount",
+          "name": "credit_amount",
+          "caption": {
+            "zh_CN": "贷方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "line_amount",
+          "name": "line_amount",
+          "caption": {
+            "zh_CN": "明细金额合计(上卷)"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "备注"
+          }
+        }
+      ]
+    },
+    {
+      "level": "L3",
+      "tableName": "voucher_detail",
+      "tableAlias": "凭证明细",
+      "remark": "分录的多维明细分解：每行携带辅助核算各维度 + 金额。固定维度 + N 个可扩展维度槽位(ext_dim1..N，由 gl_ext_dimension 注册绑定)。",
+      "fields": [
+        {
+          "dataType": "BIGINT",
+          "nullable": false,
+          "dimType": "relation",
+          "id": "entry_id",
+          "name": "entry_id",
+          "caption": {
+            "zh_CN": "所属分录ID"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": false,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "amount",
+          "name": "amount",
+          "caption": {
+            "zh_CN": "明细金额"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": false,
+          "dimType": "attribute",
+          "id": "direction",
+          "name": "direction",
+          "caption": {
+            "zh_CN": "方向(D借/C贷，承袭分录)"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "profit_center",
+          "id": "profit_center_id",
+          "name": "profit_center_id",
+          "caption": {
+            "zh_CN": "利润中心"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "cost_center",
+          "id": "cost_center_id",
+          "name": "cost_center_id",
+          "caption": {
+            "zh_CN": "成本中心"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "project",
+          "id": "project_id",
+          "name": "project_id",
+          "caption": {
+            "zh_CN": "项目"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "partner",
+          "id": "partner_id",
+          "name": "partner_id",
+          "caption": {
+            "zh_CN": "合作伙伴(客户/供应商)"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "contract",
+          "id": "contract_id",
+          "name": "contract_id",
+          "caption": {
+            "zh_CN": "合同"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "bank",
+          "id": "bank_id",
+          "name": "bank_id",
+          "caption": {
+            "zh_CN": "银行/账户"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "cashflow_item",
+          "id": "cashflow_item_id",
+          "name": "cashflow_item_id",
+          "caption": {
+            "zh_CN": "现金流量项目"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 64,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "currency",
+          "id": "currency_id",
+          "name": "currency_id",
+          "caption": {
+            "zh_CN": "币种"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 18,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "orig_amount",
+          "name": "orig_amount",
+          "caption": {
+            "zh_CN": "原币金额"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 16,
+          "intDigits": 8,
+          "decimalDigits": 6,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "exchange_rate",
+          "name": "exchange_rate",
+          "caption": {
+            "zh_CN": "汇率"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 20,
+          "intDigits": 14,
+          "decimalDigits": 4,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "id": "quantity",
+          "name": "quantity",
+          "caption": {
+            "zh_CN": "数量(数量金额核算)"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "ext_dim1",
+          "name": "ext_dim1",
+          "caption": {
+            "zh_CN": "扩展维度槽位1(由gl_ext_dimension绑定)"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "ext_dim2",
+          "name": "ext_dim2",
+          "caption": {
+            "zh_CN": "扩展维度槽位2"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "ext_dim3",
+          "name": "ext_dim3",
+          "caption": {
+            "zh_CN": "扩展维度槽位3"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "ext_dim4",
+          "name": "ext_dim4",
+          "caption": {
+            "zh_CN": "扩展维度槽位4"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "nullable": true,
+          "dimType": "dimension",
+          "id": "ext_dim5",
+          "name": "ext_dim5",
+          "caption": {
+            "zh_CN": "扩展维度槽位5"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 512,
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "remark",
+          "name": "remark",
+          "caption": {
+            "zh_CN": "明细备注"
+          }
+        }
+      ],
+      "summaries": [
+        {
+          "id": "voucher_detail_sum_table",
+          "name": "voucher_detail_sum_table",
+          "caption": {
+            "zh_CN": "凭证辅助核算汇总表"
+          },
+          "fields": [
+            {
+              "dataType": "BIGINT",
+              "nullable": false,
+              "dimType": "relation",
+              "id": "entry_id",
+              "name": "entry_id",
+              "caption": {
+                "zh_CN": "所属分录ID"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 20,
+              "intDigits": 18,
+              "decimalDigits": 2,
+              "nullable": false,
+              "dimType": "measure",
+              "agg": "sum",
+              "id": "amount",
+              "name": "amount",
+              "caption": {
+                "zh_CN": "明细金额"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 1,
+              "nullable": false,
+              "dimType": "attribute",
+              "id": "direction",
+              "name": "direction",
+              "caption": {
+                "zh_CN": "方向(D借/C贷，承袭分录)"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "profit_center",
+              "id": "profit_center_id",
+              "name": "profit_center_id",
+              "caption": {
+                "zh_CN": "利润中心"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "cost_center",
+              "id": "cost_center_id",
+              "name": "cost_center_id",
+              "caption": {
+                "zh_CN": "成本中心"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "project",
+              "id": "project_id",
+              "name": "project_id",
+              "caption": {
+                "zh_CN": "项目"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "partner",
+              "id": "partner_id",
+              "name": "partner_id",
+              "caption": {
+                "zh_CN": "合作伙伴(客户/供应商)"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "contract",
+              "id": "contract_id",
+              "name": "contract_id",
+              "caption": {
+                "zh_CN": "合同"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bank",
+              "id": "bank_id",
+              "name": "bank_id",
+              "caption": {
+                "zh_CN": "银行/账户"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "cashflow_item",
+              "id": "cashflow_item_id",
+              "name": "cashflow_item_id",
+              "caption": {
+                "zh_CN": "现金流量项目"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 64,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "currency",
+              "id": "currency_id",
+              "name": "currency_id",
+              "caption": {
+                "zh_CN": "币种"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 20,
+              "intDigits": 18,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "id": "orig_amount",
+              "name": "orig_amount",
+              "caption": {
+                "zh_CN": "原币金额"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 16,
+              "intDigits": 8,
+              "decimalDigits": 6,
+              "nullable": true,
+              "dimType": "attribute",
+              "id": "exchange_rate",
+              "name": "exchange_rate",
+              "caption": {
+                "zh_CN": "汇率"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 20,
+              "intDigits": 14,
+              "decimalDigits": 4,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "id": "quantity",
+              "name": "quantity",
+              "caption": {
+                "zh_CN": "数量(数量金额核算)"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "id": "ext_dim1",
+              "name": "ext_dim1",
+              "caption": {
+                "zh_CN": "扩展维度槽位1(由gl_ext_dimension绑定)"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "id": "ext_dim2",
+              "name": "ext_dim2",
+              "caption": {
+                "zh_CN": "扩展维度槽位2"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "id": "ext_dim3",
+              "name": "ext_dim3",
+              "caption": {
+                "zh_CN": "扩展维度槽位3"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "id": "ext_dim4",
+              "name": "ext_dim4",
+              "caption": {
+                "zh_CN": "扩展维度槽位4"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "nullable": true,
+              "dimType": "dimension",
+              "id": "ext_dim5",
+              "name": "ext_dim5",
+              "caption": {
+                "zh_CN": "扩展维度槽位5"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 512,
+              "nullable": true,
+              "dimType": "attribute",
+              "id": "remark",
+              "name": "remark",
+              "caption": {
+                "zh_CN": "明细备注"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "_comment_part3": "========== 三、凭证状态流转 ==========",
+  "voucherStatusFlow": {
+    "stateField": "document_status",
+    "remark": "凭证生命周期状态机。transitions 定义允许的状态迁移及触发动作；guard 为迁移前置校验规则集。",
+    "states": [
+      {
+        "code": "draft",
+        "name": "草稿",
+        "editable": true,
+        "remark": "可自由编辑/删除"
+      },
+      {
+        "code": "audited",
+        "name": "已审核",
+        "editable": false,
+        "remark": "审核通过，锁定编辑，等待过账"
+      },
+      {
+        "code": "posted",
+        "name": "已过账",
+        "editable": false,
+        "remark": "已记入总账，生成余额，不可逆(只能红冲)"
+      },
+      {
+        "code": "void",
+        "name": "作废",
+        "editable": false,
+        "remark": "作废终态"
+      }
+    ],
+    "transitions": [
+      {
+        "action": "submit",
+        "name": "提交审核",
+        "from": "draft",
+        "to": "audited",
+        "operatorField": "auditor_id",
+        "guard": [
+          "balanced",
+          "period_open",
+          "non_empty_entries",
+          "leaf_account_only",
+          "required_dims"
+        ]
+      },
+      {
+        "action": "withdraw",
+        "name": "撤销审核",
+        "from": "audited",
+        "to": "draft",
+        "operatorField": "auditor_id",
+        "guard": []
+      },
+      {
+        "action": "post",
+        "name": "过账",
+        "from": "audited",
+        "to": "posted",
+        "operatorField": "accountant_id",
+        "guard": [
+          "balanced",
+          "period_open"
+        ]
+      },
+      {
+        "action": "unpost",
+        "name": "反过账",
+        "from": "posted",
+        "to": "audited",
+        "operatorField": "accountant_id",
+        "guard": [
+          "period_open"
+        ]
+      },
+      {
+        "action": "void",
+        "name": "作废",
+        "from": "draft",
+        "to": "void",
+        "operatorField": "preparer_id",
+        "guard": []
+      }
+    ]
+  },
+  "_comment_part4": "========== 四、记账校验规则 ==========",
+  "validationRules": {
+    "remark": "凭证保存/状态迁移时的校验规则。level=error 阻断，warning 提示。",
+    "rules": [
+      {
+        "code": "balanced",
+        "level": "error",
+        "scope": "header",
+        "name": "借贷平衡",
+        "expr": "total_debit == total_credit",
+        "message": "借方合计与贷方合计必须相等"
+      },
+      {
+        "code": "non_empty_entries",
+        "level": "error",
+        "scope": "header",
+        "name": "分录非空",
+        "expr": "entries.length >= 2",
+        "message": "凭证至少应有两条分录"
+      },
+      {
+        "code": "entry_one_side",
+        "level": "error",
+        "scope": "entry",
+        "name": "单边记账",
+        "expr": "(debit_amount > 0) XOR (credit_amount > 0)",
+        "message": "每条分录借方、贷方只能填一方且大于0"
+      },
+      {
+        "code": "leaf_account_only",
+        "level": "error",
+        "scope": "entry",
+        "name": "末级科目记账",
+        "expr": "account.is_leaf == 1",
+        "message": "只能使用末级科目记账"
+      },
+      {
+        "code": "period_open",
+        "level": "error",
+        "scope": "header",
+        "name": "期间已开启",
+        "expr": "fiscal_period.period_status == 'open'",
+        "message": "会计期间已关闭，不能记账"
+      },
+      {
+        "code": "detail_sum_match",
+        "level": "error",
+        "scope": "entry",
+        "name": "明细金额勾稽",
+        "expr": "details.sum(amount) == (debit_amount + credit_amount)",
+        "message": "分录下明细金额合计应等于该分录金额"
+      },
+      {
+        "code": "required_dims",
+        "level": "error",
+        "scope": "detail",
+        "name": "必填辅助核算",
+        "expr": "account.aux_dims 中标记必填的维度在明细上不为空",
+        "message": "该科目启用的辅助核算维度为必填"
+      },
+      {
+        "code": "cashflow_required",
+        "level": "warning",
+        "scope": "detail",
+        "name": "现金流量项目",
+        "expr": "account.cashflow_related == 1 => cashflow_item_id != null",
+        "message": "涉及现金类科目建议填写现金流量项目"
+      }
+    ]
+  },
+  "updatedAt": "2026-06-14T13:01:08.168Z"
+}
