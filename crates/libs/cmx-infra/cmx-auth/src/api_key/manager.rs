@@ -41,7 +41,10 @@ impl ApiKeyManager {
     ///
     /// 返回构造完成的 `ApiKeyManager` 实例。
     pub fn new(cache: CacheManager, auth_storage: std::sync::Arc<dyn AuthStorageQuery>) -> Self {
-        Self { cache, auth_storage }
+        Self {
+            cache,
+            auth_storage,
+        }
     }
 
     /// 验证 API Key 并返回关联实体。
@@ -72,16 +75,17 @@ impl ApiKeyManager {
         // 2. 查 Redis 缓存
         let cache_key = format!("auth:api_key:{}", key_prefix);
         if let Ok(Some(cached)) = self.cache.ops().get(&cache_key).await
-            && let Ok(entity) = serde_json::from_str::<ApiKeyEntity>(&cached) {
-                // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
-                let input_hash = sha256_hex(api_key);
-                if input_hash == entity.key_hash {
-                    debug!(key_prefix = %key_prefix, "API Key 缓存命中，跳过 DB 查询");
-                    return Ok(entity);
-                }
-                // hash 不匹配：可能是无效 key 撞了 prefix，返回错误
-                return Err(AuthError::InvalidApiKey);
+            && let Ok(entity) = serde_json::from_str::<ApiKeyEntity>(&cached)
+        {
+            // 缓存命中：仍需校验明文 key 的 SHA256（防止缓存被篡改后绕过校验）
+            let input_hash = sha256_hex(api_key);
+            if input_hash == entity.key_hash {
+                debug!(key_prefix = %key_prefix, "API Key 缓存命中，跳过 DB 查询");
+                return Ok(entity);
             }
+            // hash 不匹配：可能是无效 key 撞了 prefix，返回错误
+            return Err(AuthError::InvalidApiKey);
+        }
 
         // 3. 缓存未命中，查 DB
         let api_key_data = self
@@ -117,7 +121,11 @@ impl ApiKeyManager {
             let _ = self
                 .cache
                 .ttl()
-                .set_with_ttl(&cache_key, &json, Duration::from_secs(API_KEY_CACHE_TTL_SECS))
+                .set_with_ttl(
+                    &cache_key,
+                    &json,
+                    Duration::from_secs(API_KEY_CACHE_TTL_SECS),
+                )
                 .await;
         }
 
@@ -230,8 +238,7 @@ mod tests {
         // 已知向量："hello" 的 SHA256
         let hash = sha256_hex("hello");
         assert_eq!(
-            hash,
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
             "SHA256('hello') 应与已知摘要一致"
         );
     }
@@ -241,8 +248,7 @@ mod tests {
         // 空字符串的 SHA256 已知值
         let hash = sha256_hex("");
         assert_eq!(
-            hash,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "SHA256('') 应与已知摘要一致"
         );
     }

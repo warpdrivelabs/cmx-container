@@ -14,7 +14,7 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct Domain {
-    pub  id: String,
+    pub id: String,
     /// 唯一标识码
     pub code: String,
     /// 名称
@@ -24,7 +24,7 @@ pub struct Domain {
     pub description: Option<String>,
     /// 类型
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 标签（JSON 格式）
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,7 +73,7 @@ pub struct DomainForCreate {
     pub description: Option<String>,
     /// 类型
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 标签（JSON 格式）
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,7 +97,7 @@ pub struct DomainForUpdate {
     pub description: Option<String>,
     /// 类型
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 标签（JSON 格式）
     #[serde(skip_serializing_if = "Option::is_none")]

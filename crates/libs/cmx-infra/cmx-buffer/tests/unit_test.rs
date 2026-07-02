@@ -12,9 +12,8 @@ mod tests {
 
     #[test]
     fn test_redis_config_builder() {
-        let config = RedisConfig::new("redis://localhost:6379")
-            .with_key_prefix("app:");
-        
+        let config = RedisConfig::new("redis://localhost:6379").with_key_prefix("app:");
+
         assert_eq!(config.url, "redis://localhost:6379");
         assert_eq!(config.key_prefix, "app:");
     }
@@ -28,10 +27,8 @@ mod tests {
 
     #[test]
     fn test_lock_config_builder() {
-        let config = LockConfig::new()
-            .with_expire(60)
-            .with_retry_interval(500);
-        
+        let config = LockConfig::new().with_expire(60).with_retry_interval(500);
+
         assert_eq!(config.expire_seconds, 60);
         assert_eq!(config.retry_interval_ms, 500);
     }
@@ -45,9 +42,8 @@ mod tests {
 
     #[test]
     fn test_cache_config_builder() {
-        let config = CacheConfig::new()
-            .with_default_ttl(3600);
-        
+        let config = CacheConfig::new().with_default_ttl(3600);
+
         assert_eq!(config.default_ttl, 3600);
     }
 

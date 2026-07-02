@@ -15,18 +15,28 @@ use crate::types::*;
 
 impl DefaultStorageService {
     /// 复制文件（[`crate::service::StorageService::copy_file`] 的实现，支持跨平台）。
-    pub(super) async fn copy_file(&self, file_id: &str, target_platform: Option<&str>) -> Result<FileInfo> {
+    pub(super) async fn copy_file(
+        &self,
+        file_id: &str,
+        target_platform: Option<&str>,
+    ) -> Result<FileInfo> {
         let detail = self.find_file_detail(file_id).await?;
 
-        let src_path = detail.path.as_deref()
+        let src_path = detail
+            .path
+            .as_deref()
             .ok_or_else(|| Error::CopyError(format!("源文件 {} 无存储路径", file_id)))?;
 
         let src_platform = detail.platform.as_deref().unwrap_or("");
         let src_backend = self.manager.get_backend(Some(src_platform))?;
 
         let target_backend = self.manager.get_backend(target_platform)?;
-        let target_config = self.manager.get_config(target_backend.platform())
-            .ok_or_else(|| Error::ConfigError(format!("找不到目标平台配置: {}", target_backend.platform())))?;
+        let target_config = self
+            .manager
+            .get_config(target_backend.platform())
+            .ok_or_else(|| {
+                Error::ConfigError(format!("找不到目标平台配置: {}", target_backend.platform()))
+            })?;
 
         let ext = detail.ext.as_deref().unwrap_or("");
         let (target_path, filename) = generate_storage_path(

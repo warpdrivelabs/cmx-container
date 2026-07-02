@@ -12,11 +12,7 @@ fn dv_empty() {
 fn dv_string_and_option() {
     let name: Option<String> = Some("alice".into());
     let desc: Option<String> = None;
-    let v = cmx_core::dv![
-        "id123".to_string(),
-        name,
-        desc,
-    ];
+    let v = cmx_core::dv!["id123".to_string(), name, desc,];
     assert_eq!(v.len(), 3);
     assert_eq!(v[0], DataValue::String("id123".into()));
     assert_eq!(v[1], DataValue::String("alice".into()));
@@ -46,12 +42,7 @@ fn dv_option_bool_null_typed() {
 
 #[test]
 fn dv_mixed_types() {
-    let v: Vec<DataValue> = cmx_core::dv![
-        "str".to_string(),
-        42_i64,
-        true,
-        3.5_f64,
-    ];
+    let v: Vec<DataValue> = cmx_core::dv!["str".to_string(), 42_i64, true, 3.5_f64,];
     assert_eq!(v.len(), 4);
     assert_eq!(v[0], DataValue::String("str".into()));
     assert_eq!(v[1], DataValue::Int(42));
@@ -73,11 +64,7 @@ fn dv_null_marker_int() {
 
 #[test]
 fn dv_null_marker_inside_vec() {
-    let v: Vec<DataValue> = cmx_core::dv![
-        "id".to_string(),
-        cmx_core::dv!(null Uuid),
-        100_i64,
-    ];
+    let v: Vec<DataValue> = cmx_core::dv!["id".to_string(), cmx_core::dv!(null Uuid), 100_i64,];
     assert_eq!(v.len(), 3);
     assert_eq!(v[0], DataValue::String("id".into()));
     assert_eq!(v[1], DataValue::NullTyped(SqlTypeMarker::Uuid));
@@ -86,9 +73,6 @@ fn dv_null_marker_inside_vec() {
 
 #[test]
 fn dv_trailing_comma() {
-    let v: Vec<DataValue> = cmx_core::dv![
-        "a".to_string(),
-        "b".to_string(),
-    ];
+    let v: Vec<DataValue> = cmx_core::dv!["a".to_string(), "b".to_string(),];
     assert_eq!(v.len(), 2);
 }

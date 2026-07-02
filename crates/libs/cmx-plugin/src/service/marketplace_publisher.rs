@@ -49,10 +49,15 @@ impl From<PublishFromDeployResult> for MarketplacePublishInfo {
 pub struct MarketplacePublisher;
 
 impl MarketplacePublisher {
-    pub async fn publish_from_deploy(req: &PublishFromDeployRequest) -> PluginResult<PublishFromDeployResult> {
+    pub async fn publish_from_deploy(
+        req: &PublishFromDeployRequest,
+    ) -> PluginResult<PublishFromDeployResult> {
         let existing = {
             let service = crate::marketplace::service::get_marketplace_service().await;
-            service.repo().get_plugin_by_plugin_id(&req.plugin_id).await?
+            service
+                .repo()
+                .get_plugin_by_plugin_id(&req.plugin_id)
+                .await?
         };
         let is_new_plugin = existing.is_none();
 

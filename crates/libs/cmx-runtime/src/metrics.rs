@@ -51,7 +51,8 @@ impl EngineMetrics {
     /// 递增总调用计数和累计耗时
     pub fn record_success(&self, elapsed_us: u64) {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_elapsed_us.fetch_add(elapsed_us, Ordering::Relaxed);
+        self.total_elapsed_us
+            .fetch_add(elapsed_us, Ordering::Relaxed);
     }
 
     /// 记录一次失败调用
@@ -60,7 +61,8 @@ impl EngineMetrics {
     pub fn record_failure(&self, elapsed_us: u64) {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
         self.failed_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_elapsed_us.fetch_add(elapsed_us, Ordering::Relaxed);
+        self.total_elapsed_us
+            .fetch_add(elapsed_us, Ordering::Relaxed);
     }
 
     /// 记录一次超时调用
@@ -69,6 +71,7 @@ impl EngineMetrics {
     pub fn record_timeout(&self, elapsed_us: u64) {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
         self.timeout_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_elapsed_us.fetch_add(elapsed_us, Ordering::Relaxed);
+        self.total_elapsed_us
+            .fetch_add(elapsed_us, Ordering::Relaxed);
     }
 }

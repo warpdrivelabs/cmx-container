@@ -2,7 +2,6 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
-
 /// 缓存订单状态
 ///
 /// 将订单状态写入缓存，演示 cache_set 的使用方式。

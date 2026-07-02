@@ -2,17 +2,19 @@
 //!
 //! 实现数据源的 CRUD 操作，并动态管理数据库连接池
 
+use super::{
+    SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate,
+};
 use crate::{BizError, Result};
 use cmx_core::model::data::dataset::DataSet;
-use cmx_database::{DatabaseManager, DbConfig, PoolConfig};
 use cmx_database::config::DbType;
+use cmx_database::crud::GenericCrudService;
+use cmx_database::{DatabaseManager, DbConfig, PoolConfig};
 use modql::filter::{OpValString, OpValsString};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use tracing::{debug, info, warn};
-use cmx_database::crud::GenericCrudService;
-use super::{SysDatasourceBmc, SysDatasourceFilter, SysDatasourceForCreate, SysDatasourceForUpdate};
 
 /// SysDatasource 自定义服务
 ///
@@ -44,10 +46,19 @@ impl SysDatasourceService {
             )));
         }
 
-        let tx = mm.get_transaction_context().begin_with_guard(db_id).await
+        let tx = mm
+            .get_transaction_context()
+            .begin_with_guard(db_id)
+            .await
             .map_err(|e| BizError::internal(format!("开启事务失败: {}", e)))?;
 
-        let result = GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, Some(tx.txn_id()), data.clone()).await?;
+        let result = GenericCrudService::<SysDatasourceBmc>::create(
+            mm,
+            db_id,
+            Some(tx.txn_id()),
+            data.clone(),
+        )
+        .await?;
 
         let db_config = Self::to_db_config(&data);
         if data.status == 1 {
@@ -55,20 +66,20 @@ impl SysDatasourceService {
                 Ok(_) => info!("数据源注册成功: {}", data.db_id),
                 Err(e) => {
                     warn!("数据源注册失败: {}, 错误: {}", data.db_id, e);
-                    tx.rollback().await
+                    tx.rollback()
+                        .await
                         .map_err(|e| BizError::internal(format!("回滚事务失败: {}", e)))?;
                     return Err(BizError::business(format!("数据源注册失败: {}", e)));
                 }
             }
         }
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| BizError::business(format!("提交事务失败: {}", e)))?;
 
         Ok(result)
     }
-
-
 
     /// 更新数据源
     ///
@@ -92,10 +103,19 @@ impl SysDatasourceService {
             "SERVICE", id
         );
 
-        let tx = mm.get_transaction_context().begin_with_guard(db_id).await
+        let tx = mm
+            .get_transaction_context()
+            .begin_with_guard(db_id)
+            .await
             .map_err(|e| BizError::business(format!("开启事务失败: {}", e)))?;
 
-        let old_data = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, Some(tx.txn_id()), Value::String(id.to_string())).await?;
+        let old_data = GenericCrudService::<SysDatasourceBmc>::get(
+            mm,
+            db_id,
+            Some(tx.txn_id()),
+            Value::String(id.to_string()),
+        )
+        .await?;
 
         let result = GenericCrudService::<SysDatasourceBmc>::update(
             mm,
@@ -103,7 +123,8 @@ impl SysDatasourceService {
             Some(tx.txn_id()),
             Value::String(id.to_string()),
             data,
-        ).await?;
+        )
+        .await?;
 
         let new_status = Self::get_int_field_from_dataset(&result, "status").unwrap_or(1);
         if new_status == 1 {
@@ -119,7 +140,8 @@ impl SysDatasourceService {
                     Ok(_) => info!("数据源重新注册成功"),
                     Err(e) => {
                         warn!("数据源重新注册失败: {}", e);
-                        tx.rollback().await
+                        tx.rollback()
+                            .await
                             .map_err(|e| BizError::business(format!("回滚事务失败: {}", e)))?;
                         return Err(BizError::business(format!("数据源更新失败: {}", e)));
                     }
@@ -129,13 +151,12 @@ impl SysDatasourceService {
             info!("数据源 status={}，跳过注册", new_status);
         }
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| BizError::business(format!("提交事务失败: {}", e)))?;
 
         Ok(result)
     }
-
-
 
     /// 删除数据源
     pub async fn delete(mm: &DatabaseManager, db_id: &str, ids: Vec<String>) -> Result<DataSet> {
@@ -146,7 +167,13 @@ impl SysDatasourceService {
         );
 
         for id in &ids {
-            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(mm, db_id, None, Value::String(id.clone())).await
+            if let Ok(dataset) = GenericCrudService::<SysDatasourceBmc>::get(
+                mm,
+                db_id,
+                None,
+                Value::String(id.clone()),
+            )
+            .await
                 && let Some(ds_db_id) = Self::get_field_from_dataset(&dataset, "db_id")
             {
                 match mm.unregister_data_source(&ds_db_id).await {
@@ -175,7 +202,9 @@ impl SysDatasourceService {
 
         let filter = SysDatasourceFilter {
             id: None,
-            db_id: Some(OpValsString(vec![OpValString::Eq(target_db_id.to_string())])),
+            db_id: Some(OpValsString(vec![OpValString::Eq(
+                target_db_id.to_string(),
+            )])),
             db_type: None,
             default_flag: None,
             source: None,
@@ -187,9 +216,15 @@ impl SysDatasourceService {
             archived: None,
         };
 
-        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(mm, db_id, None, Some(vec![filter]), None)
-            .await
-            .map_err(BizError::from)
+        GenericCrudService::<SysDatasourceBmc, SysDatasourceFilter>::list(
+            mm,
+            db_id,
+            None,
+            Some(vec![filter]),
+            None,
+        )
+        .await
+        .map_err(BizError::from)
     }
 
     /// 测试数据源连接
@@ -199,9 +234,9 @@ impl SysDatasourceService {
             "SERVICE", db_id
         );
 
-        mm.health_check(db_id).await.map_err(|e| {
-            BizError::business(format!("数据源连接测试失败: {}", e))
-        })
+        mm.health_check(db_id)
+            .await
+            .map_err(|e| BizError::business(format!("数据源连接测试失败: {}", e)))
     }
 
     // /// 列出所有已注册的数据源
@@ -260,41 +295,54 @@ impl SysDatasourceService {
         let db_url = String::try_from(row.get_by_name(schema, "db_url")?.clone()).ok()?;
         let db_type = DbType::from_str(&db_type_str).ok()?;
 
-        let db_schema = row.get_by_name(schema, "db_schema")
+        let db_schema = row
+            .get_by_name(schema, "db_schema")
             .and_then(|v| String::try_from(v.clone()).ok());
-        let default_flag = row.get_by_name(schema, "default_flag")
+        let default_flag = row
+            .get_by_name(schema, "default_flag")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(0);
 
-        let max_connections = row.get_by_name(schema, "max_connections")
+        let max_connections = row
+            .get_by_name(schema, "max_connections")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(10) as usize;
-        let min_connections = row.get_by_name(schema, "min_connections")
+        let min_connections = row
+            .get_by_name(schema, "min_connections")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(2) as usize;
-        let connect_timeout = row.get_by_name(schema, "connect_timeout")
+        let connect_timeout = row
+            .get_by_name(schema, "connect_timeout")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(30) as u64;
-        let idle_timeout = row.get_by_name(schema, "idle_timeout")
+        let idle_timeout = row
+            .get_by_name(schema, "idle_timeout")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(600) as u64;
-        let max_lifetime = row.get_by_name(schema, "max_lifetime")
+        let max_lifetime = row
+            .get_by_name(schema, "max_lifetime")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(1800) as u64;
-        let health_check_interval = row.get_by_name(schema, "health_check_interval")
+        let health_check_interval = row
+            .get_by_name(schema, "health_check_interval")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(60) as u64;
-        let health_check_timeout = row.get_by_name(schema, "health_check_timeout")
+        let health_check_timeout = row
+            .get_by_name(schema, "health_check_timeout")
             .and_then(|v| i64::try_from(v.clone()).ok())
             .unwrap_or(5) as u64;
 
-        let domain_code = row.get_by_name(schema, "domain_code")
+        let domain_code = row
+            .get_by_name(schema, "domain_code")
             .and_then(|v| String::try_from(v.clone()).ok());
-        let application_code = row.get_by_name(schema, "application_code")
+        let application_code = row
+            .get_by_name(schema, "application_code")
             .and_then(|v| String::try_from(v.clone()).ok());
-        let module_code = row.get_by_name(schema, "module_code")
+        let module_code = row
+            .get_by_name(schema, "module_code")
             .and_then(|v| String::try_from(v.clone()).ok());
-        let source_type = row.get_by_name(schema, "source_type")
+        let source_type = row
+            .get_by_name(schema, "source_type")
             .and_then(|v| String::try_from(v.clone()).ok());
 
         Some(DbConfig {

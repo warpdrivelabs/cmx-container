@@ -52,7 +52,10 @@ impl StatsService {
         version: &str,
         source_type: &str,
     ) -> PluginResult<()> {
-        debug!("记录下载事件: plugin_id={}, version={}, source={}", plugin_id, version, source_type);
+        debug!(
+            "记录下载事件: plugin_id={}, version={}, source={}",
+            plugin_id, version, source_type
+        );
 
         let today = Local::now().date_naive();
         let today_str = today.format("%Y-%m-%d").to_string();

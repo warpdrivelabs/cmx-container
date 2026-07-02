@@ -4,8 +4,8 @@
 
 use axum::Json;
 use cmx_database::get_default_db_manager;
-use percent_encoding::percent_encode;
 use percent_encoding::NON_ALPHANUMERIC;
+use percent_encoding::percent_encode;
 use serde_json::json;
 use std::convert::TryFrom;
 use std::fs;
@@ -16,9 +16,9 @@ use zip::ZipArchive;
 
 use super::request::CreateProjectRequest;
 use super::response::{CreateProjectResponse, TemplateInfo};
-use crate::handlers::sys_datasource::SysDatasourceService;
 use crate::ApiResp;
 use crate::Result;
+use crate::handlers::sys_datasource::SysDatasourceService;
 use cmx_utils::ConfigManager;
 
 /// 获取模板列表 Handler
@@ -38,12 +38,10 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
 
     let config = ConfigManager::global();
 
-    let templates_path = config
-        .get_string("templates.path")
-        .map_err(|e| {
-            error!("[api] 读取模板路径配置失败: {}", e);
-            crate::Error::InternalError(format!("读取模板路径配置失败: {}", e))
-        })?;
+    let templates_path = config.get_string("templates.path").map_err(|e| {
+        error!("[api] 读取模板路径配置失败: {}", e);
+        crate::Error::InternalError(format!("读取模板路径配置失败: {}", e))
+    })?;
 
     let templates_dir = PathBuf::from(&templates_path);
 
@@ -57,11 +55,10 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
 
     let mut templates = Vec::new();
 
-    let entries = fs::read_dir(&templates_dir)
-        .map_err(|e| {
-            error!("[api] 读取模板目录失败: {}", e);
-            crate::Error::InternalError(format!("读取模板目录失败: {}", e))
-        })?;
+    let entries = fs::read_dir(&templates_dir).map_err(|e| {
+        error!("[api] 读取模板目录失败: {}", e);
+        crate::Error::InternalError(format!("读取模板目录失败: {}", e))
+    })?;
 
     for entry in entries {
         let entry = entry.map_err(|e| {
@@ -94,7 +91,10 @@ pub async fn list_templates() -> Result<Json<ApiResp<Vec<TemplateInfo>>>> {
         }
     }
 
-    info!("[api] list_templates success: found {} templates", templates.len());
+    info!(
+        "[api] list_templates success: found {} templates",
+        templates.len()
+    );
     Ok(Json(ApiResp::ok(templates)))
 }
 
@@ -142,12 +142,10 @@ pub async fn create_project(
 
     // 步骤 2: 获取模板
     let config = ConfigManager::global();
-    let templates_path = config
-        .get_string("templates.path")
-        .map_err(|e| {
-            error!("[api] 读取模板路径配置失败: {}", e);
-            crate::Error::InternalError(format!("读取模板路径配置失败: {}", e))
-        })?;
+    let templates_path = config.get_string("templates.path").map_err(|e| {
+        error!("[api] 读取模板路径配置失败: {}", e);
+        crate::Error::InternalError(format!("读取模板路径配置失败: {}", e))
+    })?;
 
     let template_zip_path = PathBuf::from(&templates_path).join(format!("{}.zip", req.template));
 
@@ -162,32 +160,28 @@ pub async fn create_project(
 
     // 步骤 3: 创建临时目录
     let temp_dir = std::env::temp_dir().join(format!("cmx_template_{}", uuid::Uuid::new_v4()));
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| {
-            error!("[api] 创建临时目录失败: {}", e);
-            crate::Error::InternalError(format!("创建临时目录失败: {}", e))
-        })?;
+    fs::create_dir_all(&temp_dir).map_err(|e| {
+        error!("[api] 创建临时目录失败: {}", e);
+        crate::Error::InternalError(format!("创建临时目录失败: {}", e))
+    })?;
 
     // 步骤 4: 解压模板
-    let template_zip_data = fs::read(&template_zip_path)
-        .map_err(|e| {
-            error!("[api] 读取模板文件失败: {}", e);
-            crate::Error::InternalError(format!("读取模板文件失败: {}", e))
-        })?;
+    let template_zip_data = fs::read(&template_zip_path).map_err(|e| {
+        error!("[api] 读取模板文件失败: {}", e);
+        crate::Error::InternalError(format!("读取模板文件失败: {}", e))
+    })?;
 
     let reader = std::io::Cursor::new(template_zip_data);
-    let mut archive = ZipArchive::new(reader)
-        .map_err(|e| {
-            error!("[api] 解析ZIP文件失败: {}", e);
-            crate::Error::InternalError(format!("解析ZIP文件失败: {}", e))
-        })?;
+    let mut archive = ZipArchive::new(reader).map_err(|e| {
+        error!("[api] 解析ZIP文件失败: {}", e);
+        crate::Error::InternalError(format!("解析ZIP文件失败: {}", e))
+    })?;
 
     let extract_dir = temp_dir.join("template");
-    fs::create_dir_all(&extract_dir)
-        .map_err(|e| {
-            error!("[api] 创建解压目录失败: {}", e);
-            crate::Error::InternalError(format!("创建解压目录失败: {}", e))
-        })?;
+    fs::create_dir_all(&extract_dir).map_err(|e| {
+        error!("[api] 创建解压目录失败: {}", e);
+        crate::Error::InternalError(format!("创建解压目录失败: {}", e))
+    })?;
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| {
@@ -207,30 +201,42 @@ pub async fn create_project(
             })?;
         } else {
             if let Some(p) = outpath.parent()
-                && !p.exists() {
-                    fs::create_dir_all(p).map_err(|e| {
-                        error!("[api] 创建父目录失败: {}, 目录: {}", e, p.display());
-                        crate::Error::InternalError(format!("创建父目录失败: {}, 目录: {}", e, p.display()))
-                    })?;
-                }
+                && !p.exists()
+            {
+                fs::create_dir_all(p).map_err(|e| {
+                    error!("[api] 创建父目录失败: {}, 目录: {}", e, p.display());
+                    crate::Error::InternalError(format!(
+                        "创建父目录失败: {}, 目录: {}",
+                        e,
+                        p.display()
+                    ))
+                })?;
+            }
             let mut outfile = fs::File::create(&outpath).map_err(|e| {
                 error!("[api] 创建文件失败: {}, 文件: {}", e, outpath.display());
-                crate::Error::InternalError(format!("创建文件失败: {}, 文件: {}", e, outpath.display()))
+                crate::Error::InternalError(format!(
+                    "创建文件失败: {}, 文件: {}",
+                    e,
+                    outpath.display()
+                ))
             })?;
             std::io::copy(&mut file, &mut outfile).map_err(|e| {
                 error!("[api] 文件损坏: {}, 错误: {}", outpath.display(), e);
-                crate::Error::InternalError(format!("写入文件失败: {}, 文件: {}", e, outpath.display()))
+                crate::Error::InternalError(format!(
+                    "写入文件失败: {}, 文件: {}",
+                    e,
+                    outpath.display()
+                ))
             })?;
         }
     }
 
     // 步骤 5: 创建项目目录
     let target_dir = PathBuf::from(&req.path).join(&req.id);
-    fs::create_dir_all(&target_dir)
-        .map_err(|e| {
-            error!("[api] 创建项目目录失败: {}", e);
-            crate::Error::InternalError(format!("创建项目目录失败: {}", e))
-        })?;
+    fs::create_dir_all(&target_dir).map_err(|e| {
+        error!("[api] 创建项目目录失败: {}", e);
+        crate::Error::InternalError(format!("创建项目目录失败: {}", e))
+    })?;
 
     // 步骤 6: 渲染模板文件
     fn process_template_dir(
@@ -238,12 +244,10 @@ pub async fn create_project(
         target_dir: &Path,
         req: &CreateProjectRequest,
     ) -> Result<()> {
-        for entry in fs::read_dir(src_dir)
-            .map_err(|e| {
-                error!("[api] 读取目录失败: {}", e);
-                crate::Error::InternalError(format!("读取目录失败: {}", e))
-            })?
-        {
+        for entry in fs::read_dir(src_dir).map_err(|e| {
+            error!("[api] 读取目录失败: {}", e);
+            crate::Error::InternalError(format!("读取目录失败: {}", e))
+        })? {
             let entry = entry.map_err(|e| {
                 error!("[api] 读取目录项失败: {}", e);
                 crate::Error::InternalError(format!("读取目录项失败: {}", e))
@@ -286,9 +290,15 @@ pub async fn create_project(
                         .replace("{{project_path}}", &target_dir.to_string_lossy())
                         .replace("{{description}}", req.description.as_deref().unwrap_or(""))
                         .replace("{{domain_code}}", req.domain_code.as_deref().unwrap_or(""))
-                        .replace("{{application_code}}", req.application_code.as_deref().unwrap_or(""))
+                        .replace(
+                            "{{application_code}}",
+                            req.application_code.as_deref().unwrap_or(""),
+                        )
                         .replace("{{module_code}}", req.module_code.as_deref().unwrap_or(""))
-                        .replace("{{datasource_id}}", req.datasource_id.as_deref().unwrap_or(""));
+                        .replace(
+                            "{{datasource_id}}",
+                            req.datasource_id.as_deref().unwrap_or(""),
+                        );
 
                     let mut file = fs::File::create(&target_file).map_err(|e| {
                         error!("[api] 创建文件失败: {}", e);
@@ -312,9 +322,10 @@ pub async fn create_project(
     process_template_dir(&extract_dir, &target_dir, &req)?;
 
     if let Some(datasource_id) = &req.datasource_id
-        && !datasource_id.is_empty() {
-            create_vscode_settings(&target_dir, datasource_id).await?;
-        }
+        && !datasource_id.is_empty()
+    {
+        create_vscode_settings(&target_dir, datasource_id).await?;
+    }
 
     // 清理临时目录
     let _ = fs::remove_dir_all(&temp_dir);
@@ -338,22 +349,28 @@ pub async fn create_project(
 }
 
 async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Result<()> {
-    info!("[api] create_vscode_settings called for datasource_id: {}", datasource_id);
+    info!(
+        "[api] create_vscode_settings called for datasource_id: {}",
+        datasource_id
+    );
 
     let db_manager = get_default_db_manager();
     let default_db_id = db_manager.get_default_db_id().await;
 
-    let dataset = SysDatasourceService::get_by_db_id(db_manager, &default_db_id, datasource_id).await?;
+    let dataset =
+        SysDatasourceService::get_by_db_id(db_manager, &default_db_id, datasource_id).await?;
 
     if let Some(row) = dataset.iter().next() {
-        let db_url = row.get_by_name(&dataset.schema, "db_url")
+        let db_url = row
+            .get_by_name(&dataset.schema, "db_url")
             .and_then(|v| String::try_from(v.clone()).ok())
             .ok_or_else(|| {
                 error!("[api] 无法获取 db_url");
                 crate::Error::InternalError("无法获取 db_url".to_string())
             })?;
 
-        let db_type = row.get_by_name(&dataset.schema, "db_type")
+        let db_type = row
+            .get_by_name(&dataset.schema, "db_type")
             .and_then(|v| String::try_from(v.clone()).ok())
             .ok_or_else(|| {
                 error!("[api] 无法获取 db_type");
@@ -375,20 +392,18 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
         });
 
         let vscode_dir = target_dir.join(".vscode");
-        fs::create_dir_all(&vscode_dir)
-            .map_err(|e| {
-                error!("[api] 创建 .vscode 目录失败: {}", e);
-                crate::Error::InternalError(format!("创建 .vscode 目录失败: {}", e))
-            })?;
+        fs::create_dir_all(&vscode_dir).map_err(|e| {
+            error!("[api] 创建 .vscode 目录失败: {}", e);
+            crate::Error::InternalError(format!("创建 .vscode 目录失败: {}", e))
+        })?;
 
         let settings_path = vscode_dir.join("settings.json");
 
         let mut settings_content: serde_json::Value = if settings_path.exists() {
-            let existing_content = fs::read_to_string(&settings_path)
-                .map_err(|e| {
-                    error!("[api] 读取现有 settings.json 失败: {}", e);
-                    crate::Error::InternalError(format!("读取现有 settings.json 失败: {}", e))
-                })?;
+            let existing_content = fs::read_to_string(&settings_path).map_err(|e| {
+                error!("[api] 读取现有 settings.json 失败: {}", e);
+                crate::Error::InternalError(format!("读取现有 settings.json 失败: {}", e))
+            })?;
 
             serde_json::from_str::<serde_json::Value>(&existing_content)
                 .unwrap_or_else(|_| json!({}))
@@ -399,7 +414,8 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
         let connections_key = "sqltools.connections";
         let connections = settings_content
             .get(connections_key)
-            .and_then(|v| v.as_array()).cloned()
+            .and_then(|v| v.as_array())
+            .cloned()
             .unwrap_or_default();
 
         let connection_exists = connections.iter().any(|conn| {
@@ -411,20 +427,21 @@ async fn create_vscode_settings(target_dir: &Path, datasource_id: &str) -> Resul
             new_connections.push(new_connection);
             settings_content[connections_key] = json!(new_connections);
         } else {
-            info!("[api] 数据源 {} 已存在于 settings.json 中，跳过", datasource_id);
+            info!(
+                "[api] 数据源 {} 已存在于 settings.json 中，跳过",
+                datasource_id
+            );
         }
 
-        let final_content = serde_json::to_string_pretty(&settings_content)
-            .map_err(|e| {
-                error!("[api] 序列化 settings.json 失败: {}", e);
-                crate::Error::InternalError(format!("序列化 settings.json 失败: {}", e))
-            })?;
+        let final_content = serde_json::to_string_pretty(&settings_content).map_err(|e| {
+            error!("[api] 序列化 settings.json 失败: {}", e);
+            crate::Error::InternalError(format!("序列化 settings.json 失败: {}", e))
+        })?;
 
-        fs::write(&settings_path, final_content)
-            .map_err(|e| {
-                error!("[api] 写入 settings.json 失败: {}", e);
-                crate::Error::InternalError(format!("写入 settings.json 失败: {}", e))
-            })?;
+        fs::write(&settings_path, final_content).map_err(|e| {
+            error!("[api] 写入 settings.json 失败: {}", e);
+            crate::Error::InternalError(format!("写入 settings.json 失败: {}", e))
+        })?;
 
         info!("[api] 创建/更新 .vscode/settings.json 成功");
     } else {

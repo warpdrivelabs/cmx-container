@@ -15,7 +15,7 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct Module {
-    pub  id: String,
+    pub id: String,
 
     /// 模块编码，全局唯一，如: GL, AR, AP
     pub code: String,
@@ -30,7 +30,7 @@ pub struct Module {
     pub description: Option<String>,
     /// 类型: business(业务模块), extension(扩展点), integration(集成点)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,7 +85,7 @@ pub struct ModuleForCreate {
     pub description: Option<String>,
     /// 类型: business(业务模块), extension(扩展点), integration(集成点)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,7 +115,7 @@ pub struct ModuleForUpdate {
     pub description: Option<String>,
     /// 类型: business(业务模块), extension(扩展点), integration(集成点)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]

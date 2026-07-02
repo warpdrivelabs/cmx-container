@@ -102,19 +102,30 @@ impl SessionManager {
         let json = serde_json::to_string(session)?;
 
         // HSET auth:{user_id}:session device_type session_json
-        self.cache.hash().hset(&key, &session.device_type, &json).await?;
+        self.cache
+            .hash()
+            .hset(&key, &session.device_type, &json)
+            .await?;
 
         // SADD auth:online:users user_id
-        let is_new_user = self.cache.set().sadd_one("auth:online:users", &session.user_id).await?;
+        let is_new_user = self
+            .cache
+            .set()
+            .sadd_one("auth:online:users", &session.user_id)
+            .await?;
 
         // 创建 session_detail key（独立 TTL，自动过期）
         let detail_key = format!("auth:{}:session_detail", session.session_id);
         let detail_json = serde_json::to_string(session)?;
         let idle_timeout = Duration::from_secs(self.config.session.idle_timeout_secs);
-        self.cache.ttl().set_with_ttl(&detail_key, &detail_json, idle_timeout).await?;
+        self.cache
+            .ttl()
+            .set_with_ttl(&detail_key, &detail_json, idle_timeout)
+            .await?;
 
         // 创建会话后使本地缓存失效
-        self.invalidate_local(&session.user_id, &session.device_type).await;
+        self.invalidate_local(&session.user_id, &session.device_type)
+            .await;
 
         // 2.1 修复：更新 Prometheus 指标
         crate::metrics::inc_active_sessions();

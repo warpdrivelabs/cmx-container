@@ -89,7 +89,13 @@ pub trait ServiceStorage: Send + Sync {
     /// # Errors
     ///
     /// 删除失败时返回 [`TraitError`]。
-    async fn delete_service(&self, service_key: &str, app_id: &str, txn_id: Option<&str>, version: Option<&str>) -> Result<(), TraitError>;
+    async fn delete_service(
+        &self,
+        service_key: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+        version: Option<&str>,
+    ) -> Result<(), TraitError>;
 
     /// 根据插件 ID 删除所有服务。
     ///
@@ -106,7 +112,12 @@ pub trait ServiceStorage: Send + Sync {
     /// # Errors
     ///
     /// 删除失败时返回 [`TraitError`]。
-    async fn delete_services_by_plugin(&self, plugin_id: &str, app_id: &str, txn_id: Option<&str>) -> Result<(), TraitError>;
+    async fn delete_services_by_plugin(
+        &self,
+        plugin_id: &str,
+        app_id: &str,
+        txn_id: Option<&str>,
+    ) -> Result<(), TraitError>;
 
     /// 获取服务编排配置。
     ///
@@ -124,5 +135,10 @@ pub trait ServiceStorage: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_service_config(&self, service_key: &str, version: &str, app_id: &str) -> Result<Option<String>, TraitError>;
+    async fn get_service_config(
+        &self,
+        service_key: &str,
+        version: &str,
+        app_id: &str,
+    ) -> Result<Option<String>, TraitError>;
 }

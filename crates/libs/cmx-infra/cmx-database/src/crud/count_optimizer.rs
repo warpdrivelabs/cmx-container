@@ -7,8 +7,8 @@
 //! - 如果 WHERE 条件中使用了 LEFT JOIN 的表，则必须保留该 JOIN
 
 use sqlparser::ast::{
-    Expr, Join, JoinOperator, Query, Select, SelectItem, SetExpr, Statement, TableFactor,
-    BinaryOperator,
+    BinaryOperator, Expr, Join, JoinOperator, Query, Select, SelectItem, SetExpr, Statement,
+    TableFactor,
 };
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
@@ -68,8 +68,8 @@ fn try_generate_optimized_count_sql(
 ) -> Result<String, String> {
     let dialect = PostgreSqlDialect {};
 
-    let statements = Parser::parse_sql(&dialect, original_sql)
-        .map_err(|e| format!("SQL 解析失败: {}", e))?;
+    let statements =
+        Parser::parse_sql(&dialect, original_sql).map_err(|e| format!("SQL 解析失败: {}", e))?;
 
     if statements.len() != 1 {
         return Err("只支持单条 SQL 语句".to_string());
@@ -141,17 +141,18 @@ fn append_where_condition(select: &mut Select, additional_where: &str) {
 
     if let Ok(statements) = Parser::parse_sql(&dialect, &expr_str)
         && let Some(Statement::Query(query)) = statements.into_iter().next()
-            && let SetExpr::Select(inner_select) = *query.body
-                && let Some(selection) = inner_select.selection {
-                    select.selection = Some(match &select.selection {
-                        Some(existing) => Expr::BinaryOp {
-                            left: Box::new(existing.clone()),
-                            op: BinaryOperator::And,
-                            right: Box::new(selection),
-                        },
-                        None => selection,
-                    });
-                }
+        && let SetExpr::Select(inner_select) = *query.body
+        && let Some(selection) = inner_select.selection
+    {
+        select.selection = Some(match &select.selection {
+            Some(existing) => Expr::BinaryOp {
+                left: Box::new(existing.clone()),
+                op: BinaryOperator::And,
+                right: Box::new(selection),
+            },
+            None => selection,
+        });
+    }
 }
 
 /// 优化 JOIN 子句（移除未使用的 LEFT JOIN）
@@ -237,7 +238,11 @@ mod tests {
     #[test]
     fn test_with_additional_where() {
         let sql = "SELECT u.id, u.name FROM user u WHERE u.age > 18";
-        let count_sql = generate_count_sql(sql, Some("u.status = 'active'"), &CountOptimizerConfig::default());
+        let count_sql = generate_count_sql(
+            sql,
+            Some("u.status = 'active'"),
+            &CountOptimizerConfig::default(),
+        );
         assert!(count_sql.contains("COUNT(*)"));
         assert!(count_sql.contains("u.age > 18"));
         assert!(count_sql.contains("u.status = 'active'"));

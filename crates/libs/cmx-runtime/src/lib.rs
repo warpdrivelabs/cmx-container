@@ -34,7 +34,7 @@ pub mod logging_host_functions;
 pub mod metrics;
 
 pub use config::ExtismEngineConfig;
-pub use engine::{ExtismEngine};
+pub use engine::ExtismEngine;
 pub use error::ExtismError;
 pub use global::GlobalExtismEngine;
 pub use lifecycle_listener::RuntimeLifecycleListener;

@@ -9,10 +9,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cmx_core::model::service::SVRContext;
 use cmx_core::{CallServiceResponse, OrchestrationError};
+use cmx_traits::error::TraitError;
 use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::RuntimeInvoker;
-use cmx_traits::service::{ServiceInvoker, ServiceInvokeOptions, ServiceQuery};
-use cmx_traits::error::TraitError;
+use cmx_traits::service::{ServiceInvokeOptions, ServiceInvoker, ServiceQuery};
 
 use crate::orchestrator::ExecuteOptions;
 use crate::orchestrator::Orchestrator;
@@ -60,8 +60,11 @@ impl ServiceInvoker for ServiceInvokerImpl {
             uuid::Uuid::new_v4().to_string(),
         );
 
-        let exec_options = ExecuteOptions::new(options.include_steps)
-            .with_debug(options.debug, options.debug_node_id, options.debug_params);
+        let exec_options = ExecuteOptions::new(options.include_steps).with_debug(
+            options.debug,
+            options.debug_node_id,
+            options.debug_params,
+        );
 
         let orchestrator = Orchestrator::new(
             self.runtime.clone(),
@@ -80,7 +83,9 @@ impl ServiceInvoker for ServiceInvokerImpl {
             output: result.output,
             steps: result.steps,
             total_elapsed_us: Some(result.total_elapsed_us),
-            error: result.error.map(|e| OrchestrationError { message: e.message }),
+            error: result
+                .error
+                .map(|e| OrchestrationError { message: e.message }),
         })
     }
 }

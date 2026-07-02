@@ -21,7 +21,7 @@
 #![recursion_limit = "256"]
 
 // 基础设施从 base 再导出：保持 crate::config / crate::PortalError / cmx_portal::data_root 等旧路径。
-pub use cmx_portal_base::{config, data_root, error, fsutil, util, PortalError, PortalResult};
+pub use cmx_portal_base::{PortalError, PortalResult, config, data_root, error, fsutil, util};
 
 // 拆出的子中心再导出：保持 cmx_portal::pages / ::definitions / ::context_profile / ::dict
 // 以及 agent 内部 crate::pages 等引用有效。

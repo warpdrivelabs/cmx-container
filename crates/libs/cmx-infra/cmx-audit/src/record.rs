@@ -83,14 +83,22 @@ impl AuditRecord {
     }
 
     /// 设置操作者信息
-    pub fn with_actor(mut self, actor_id: impl Into<String>, actor_name: impl Into<String>) -> Self {
+    pub fn with_actor(
+        mut self,
+        actor_id: impl Into<String>,
+        actor_name: impl Into<String>,
+    ) -> Self {
         self.actor_id = Some(actor_id.into());
         self.actor_name = Some(actor_name.into());
         self
     }
 
     /// 设置目标资源信息
-    pub fn with_target(mut self, target_type: impl Into<String>, target_id: impl Into<String>) -> Self {
+    pub fn with_target(
+        mut self,
+        target_type: impl Into<String>,
+        target_id: impl Into<String>,
+    ) -> Self {
         self.target_type = Some(target_type.into());
         self.target_id = Some(target_id.into());
         self

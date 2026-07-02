@@ -74,11 +74,31 @@ pub async fn list_workspace_nodes() -> PortalResult<serde_json::Value> {
         .map(|m| {
             m.values()
                 .map(|row| WorkspaceNodeSummary {
-                    id: row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    icon: row.get("icon").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    details: row.get("details").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    updated_at: row.get("updatedAt").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    id: row
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    name: row
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    icon: row
+                        .get("icon")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    details: row
+                        .get("details")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    updated_at: row
+                        .get("updatedAt")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 })
                 .collect()
         })
@@ -93,9 +113,10 @@ pub async fn list_workspace_nodes() -> PortalResult<serde_json::Value> {
 pub async fn get_workspace_node_by_id(id: &str) -> PortalResult<WorkspaceNodeRecord> {
     let key = validate_id(id, "id")?;
     let doc = read_doc().await?;
-    let row = doc["nodes"].get(&key).cloned().ok_or_else(|| {
-        PortalError::not_found(format!("workspace-node 不存在：{key}"))
-    })?;
+    let row = doc["nodes"]
+        .get(&key)
+        .cloned()
+        .ok_or_else(|| PortalError::not_found(format!("workspace-node 不存在：{key}")))?;
     let record: WorkspaceNodeRecord = serde_json::from_value(row)?;
     Ok(record)
 }

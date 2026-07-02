@@ -2,8 +2,8 @@
 //!
 //! 实现 RFC 7636 PKCE 扩展，防止授权码拦截攻击。
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
 /// PKCE 验证器。

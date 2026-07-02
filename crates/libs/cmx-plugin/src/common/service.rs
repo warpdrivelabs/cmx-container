@@ -112,7 +112,8 @@ impl ServiceUtils {
             serde_json::from_str(&content)
                 .map_err(|e| PluginError::Activate(format!("解析插件定义失败: {}", e)))?;
 
-        self.register_services_from_definition(plugin_id, &plugin_def).await
+        self.register_services_from_definition(plugin_id, &plugin_def)
+            .await
     }
 
     /// 从插件定义注册服务
@@ -223,7 +224,10 @@ impl ServiceUtils {
     /// # }
     /// ```
     pub async fn unregister_plugin_services(&self, plugin_id: &str) -> PluginResult<()> {
-        self.deps.service_registry.unregister_plugin_services(plugin_id).await;
+        self.deps
+            .service_registry
+            .unregister_plugin_services(plugin_id)
+            .await;
         tracing::info!("已注销插件 {} 的所有服务", plugin_id);
         Ok(())
     }

@@ -36,7 +36,12 @@ pub trait HostFunctions {
     fn cache_get(&self, key: &str) -> Result<CacheResponse, String>;
 
     /// 设置缓存值。
-    fn cache_set(&self, key: &str, value: serde_json::Value, ttl_seconds: Option<u64>) -> Result<CacheResponse, String>;
+    fn cache_set(
+        &self,
+        key: &str,
+        value: serde_json::Value,
+        ttl_seconds: Option<u64>,
+    ) -> Result<CacheResponse, String>;
 
     /// 删除缓存值。
     fn cache_delete(&self, key: &str) -> Result<CacheResponse, String>;
@@ -47,15 +52,26 @@ pub trait HostFunctions {
     fn call_plugin(&self, request: PluginFunRequest) -> Result<PluginFunCallResponse, String>;
 
     /// 调用远程插件。
-    fn call_remote_plugin(&self, server_name: &str, request: PluginFunRequest) -> Result<PluginFunCallResponse, String>;
+    fn call_remote_plugin(
+        &self,
+        server_name: &str,
+        request: PluginFunRequest,
+    ) -> Result<PluginFunCallResponse, String>;
 
     // ── 服务编排 ──────────────────────────────────
 
     /// 通过服务键调用本地服务编排。
-    fn call_service_by_key(&self, request: CallServiceRequest) -> Result<CallServiceResponse, String>;
+    fn call_service_by_key(
+        &self,
+        request: CallServiceRequest,
+    ) -> Result<CallServiceResponse, String>;
 
     /// 调用远程服务编排。
-    fn call_remote_service(&self, server_name: &str, request: CallServiceRequest) -> Result<CallServiceResponse, String>;
+    fn call_remote_service(
+        &self,
+        server_name: &str,
+        request: CallServiceRequest,
+    ) -> Result<CallServiceResponse, String>;
 
     // ── IAM 用户/权限查询 ──────────────────────────
 
@@ -85,9 +101,5 @@ pub trait HostFunctions {
     ) -> Result<Vec<WasmCheckResult>, String>;
 
     /// 批量角色判断：用户对多个角色码的拥有情况。
-    fn has_roles(
-        &self,
-        user_id: &str,
-        codes: &[String],
-    ) -> Result<Vec<WasmCheckResult>, String>;
+    fn has_roles(&self, user_id: &str, codes: &[String]) -> Result<Vec<WasmCheckResult>, String>;
 }

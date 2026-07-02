@@ -1,7 +1,7 @@
 //! 事务元数据模块，用于管理事务的元数据和状态
 
-use std::sync::{Arc, OnceLock};
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 
 /// 事务状态
@@ -22,7 +22,8 @@ pub struct TransactionMetadata {
 }
 
 /// 全局事务注册表
-pub static GLOBAL_TXN_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, TransactionMetadata>>>> = OnceLock::new();
+pub static GLOBAL_TXN_REGISTRY: OnceLock<Arc<RwLock<HashMap<String, TransactionMetadata>>>> =
+    OnceLock::new();
 
 /// 获取全局事务注册表
 pub fn get_txn_registry() -> &'static Arc<RwLock<HashMap<String, TransactionMetadata>>> {
@@ -70,7 +71,9 @@ pub async fn cleanup_completed_transactions() {
 }
 
 /// 检查长时间运行的事务
-pub async fn check_long_running_transactions(timeout: std::time::Duration) -> Vec<TransactionMetadata> {
+pub async fn check_long_running_transactions(
+    timeout: std::time::Duration,
+) -> Vec<TransactionMetadata> {
     get_txn_registry()
         .read()
         .await

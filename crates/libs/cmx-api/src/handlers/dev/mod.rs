@@ -6,8 +6,8 @@ pub mod handler;
 pub mod request;
 pub mod response;
 
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;

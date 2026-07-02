@@ -2,8 +2,8 @@
 //!
 //! 提供用户有效权限查询 API。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use serde::Deserialize;
 use tracing::debug;
 
@@ -16,8 +16,7 @@ use crate::{ApiResp, Error, Result};
 /// 用户有效权限查询参数。
 ///
 /// 用于查询用户合并后的有效权限集合。
-#[derive(Debug, Deserialize)]
-#[derive(utoipa::IntoParams)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct EffectivePermissionsQuery {
     /// 用户 ID。
     pub user_id: String,

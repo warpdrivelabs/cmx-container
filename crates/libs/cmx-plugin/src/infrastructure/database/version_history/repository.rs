@@ -36,7 +36,7 @@ impl VersionHistoryRepository {
     }
 
     /// 插入版本历史记录
-     async fn insert_version(
+    async fn insert_version(
         &self,
         record: &VersionCreateParams,
         txn_id: Option<&str>,
@@ -45,14 +45,26 @@ impl VersionHistoryRepository {
         query
             .into_table("cmx_plugin_versions")
             .columns(vec![
-                "id", "plugin_id", "version",
-                "install_path", "wasm_path", "is_current",
-                "installed_at", "uninstalled_at",
-                "zip_source_url", "zip_source_type",
-                "plugin_type", "source_path",
+                "id",
+                "plugin_id",
+                "version",
+                "install_path",
+                "wasm_path",
+                "is_current",
+                "installed_at",
+                "uninstalled_at",
+                "zip_source_url",
+                "zip_source_type",
+                "plugin_type",
+                "source_path",
                 "marketplace_source_id",
-                "create_time", "update_time",
-                "archived", "create_by", "create_name", "update_by", "update_name"
+                "create_time",
+                "update_time",
+                "archived",
+                "create_by",
+                "create_name",
+                "update_by",
+                "update_name",
             ])
             .values(vec![
                 record.id.clone().into(),
@@ -185,14 +197,21 @@ impl VersionHistoryRepository {
 
         let result = self
             .db_manager
-            .query_sql_with_sqlxvalues(&self.default_db_id, txn_id, &sql, sql_values, "upsert_version")
+            .query_sql_with_sqlxvalues(
+                &self.default_db_id,
+                txn_id,
+                &sql,
+                sql_values,
+                "upsert_version",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("upsert版本历史失败: {}", e)))?;
 
         if let Some(row) = result.iter().next()
-            && let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0) {
-                return Ok(*is_inserted);
-            }
+            && let Some(cmx_core::model::cell::DataValue::Bool(is_inserted)) = row.get(0)
+        {
+            return Ok(*is_inserted);
+        }
 
         Ok(false)
     }
@@ -290,12 +309,19 @@ impl VersionHistoryRepository {
 
     /// 查询插件的版本历史
     pub async fn list_versions(&self, plugin_id: &str) -> PluginResult<Vec<VersionRecord>> {
-        let sql = "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 ORDER BY installed_at DESC";
+        let sql =
+            "SELECT * FROM cmx_plugin_versions WHERE plugin_id = $1 ORDER BY installed_at DESC";
         let params = serde_json::json!([plugin_id]);
 
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "version_history_list")
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "version_history_list",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("查询版本历史失败: {}", e)))?;
 
@@ -384,7 +410,9 @@ impl VersionHistoryRepository {
         self.mark_all_not_current(plugin_id, app_id, txn_id).await?;
 
         // dbg!(plugin_id,version);
-        let existing = self.find_version(plugin_id, app_id, version, txn_id).await?;
+        let existing = self
+            .find_version(plugin_id, app_id, version, txn_id)
+            .await?;
         // dbg!(&existing);
 
         if let Some(ref record) = existing {
@@ -399,7 +427,8 @@ impl VersionHistoryRepository {
                 update_by: None,
                 update_name: None,
             };
-            self.update_version(&record.id, app_id, &update_fields, txn_id).await?;
+            self.update_version(&record.id, app_id, &update_fields, txn_id)
+                .await?;
         } else {
             let record = VersionCreateParams {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -447,7 +476,9 @@ impl VersionHistoryRepository {
                 id: row.get_by_name_as(schema, "id").unwrap_or_default(),
                 plugin_id: row.get_by_name_as(schema, "plugin_id").unwrap_or_default(),
                 version: row.get_by_name_as(schema, "version").unwrap_or_default(),
-                install_path: row.get_by_name_as(schema, "install_path").unwrap_or_default(),
+                install_path: row
+                    .get_by_name_as(schema, "install_path")
+                    .unwrap_or_default(),
                 wasm_path: row.get_by_name_as(schema, "wasm_path").unwrap_or_default(),
                 is_current: row.get_by_name_as(schema, "is_current").unwrap_or(false),
                 installed_at: get_datetime_default("installed_at", Utc::now),

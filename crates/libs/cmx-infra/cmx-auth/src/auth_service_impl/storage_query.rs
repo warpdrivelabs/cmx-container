@@ -58,10 +58,16 @@ impl AuthServiceImpl {
             DataValue::String(id),
             DataValue::String(key_prefix.to_string()),
             DataValue::String(key_hash.to_string()),
-            user_id.map(|u| DataValue::String(u.to_string())).unwrap_or(DataValue::Null),
-            service_name.map(|s| DataValue::String(s.to_string())).unwrap_or(DataValue::Null),
+            user_id
+                .map(|u| DataValue::String(u.to_string()))
+                .unwrap_or(DataValue::Null),
+            service_name
+                .map(|s| DataValue::String(s.to_string()))
+                .unwrap_or(DataValue::Null),
             DataValue::String(scopes_json),
-            description.map(|d| DataValue::String(d.to_string())).unwrap_or(DataValue::Null),
+            description
+                .map(|d| DataValue::String(d.to_string()))
+                .unwrap_or(DataValue::Null),
         ];
 
         let db_manager = cmx_database::get_default_db_manager();
@@ -222,17 +228,22 @@ impl AuthServiceImpl {
         };
 
         // 解析 JSON 字段为 Vec<String>
-        let redirect_uris_str: String =
-            row.get_by_name_as(schema, "redirect_uris").unwrap_or_default();
-        let redirect_uris: Vec<String> = serde_json::from_str(&redirect_uris_str).unwrap_or_default();
+        let redirect_uris_str: String = row
+            .get_by_name_as(schema, "redirect_uris")
+            .unwrap_or_default();
+        let redirect_uris: Vec<String> =
+            serde_json::from_str(&redirect_uris_str).unwrap_or_default();
 
-        let grant_types_str: String =
-            row.get_by_name_as(schema, "grant_types").unwrap_or_default();
+        let grant_types_str: String = row
+            .get_by_name_as(schema, "grant_types")
+            .unwrap_or_default();
         let grant_types: Vec<String> = serde_json::from_str(&grant_types_str).unwrap_or_default();
 
-        let allowed_scopes_str: String =
-            row.get_by_name_as(schema, "allowed_scopes").unwrap_or_default();
-        let allowed_scopes: Vec<String> = serde_json::from_str(&allowed_scopes_str).unwrap_or_default();
+        let allowed_scopes_str: String = row
+            .get_by_name_as(schema, "allowed_scopes")
+            .unwrap_or_default();
+        let allowed_scopes: Vec<String> =
+            serde_json::from_str(&allowed_scopes_str).unwrap_or_default();
 
         let pkce_required: bool = row
             .get_by_name_as::<i64>(schema, "pkce_required")
@@ -241,7 +252,9 @@ impl AuthServiceImpl {
 
         Ok(Some(OAuth2ClientData {
             client_id: row.get_by_name_as(schema, "client_id").unwrap_or_default(),
-            client_name: row.get_by_name_as(schema, "client_name").unwrap_or_default(),
+            client_name: row
+                .get_by_name_as(schema, "client_name")
+                .unwrap_or_default(),
             client_secret: row.get_by_name_as(schema, "client_secret"),
             redirect_uris,
             grant_types,

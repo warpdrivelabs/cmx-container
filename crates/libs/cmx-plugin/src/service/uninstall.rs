@@ -44,7 +44,10 @@ impl UninstallService {
     }
 
     /// 卸载插件
-    pub async fn uninstall(&self, request: UninstallRequest) -> crate::error::PluginResult<UninstallResponse> {
+    pub async fn uninstall(
+        &self,
+        request: UninstallRequest,
+    ) -> crate::error::PluginResult<UninstallResponse> {
         self.executor.execute_uninstall(request).await
     }
 }

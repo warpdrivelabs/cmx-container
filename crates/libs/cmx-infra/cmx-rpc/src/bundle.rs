@@ -45,9 +45,7 @@ impl ServerRegistration {
     where
         F: FnOnce(volo_grpc::server::Server) -> volo_grpc::server::Server + Send + 'static,
     {
-        Self {
-            inner: Box::new(f),
-        }
+        Self { inner: Box::new(f) }
     }
 
     /// 把服务加到 server 上。

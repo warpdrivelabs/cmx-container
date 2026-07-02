@@ -2,8 +2,8 @@
 //!
 //! 薄层 handler，调用 cmx-iam RoleGroupService 处理业务逻辑。
 
-use axum::extract::{Query, State};
 use axum::Json;
+use axum::extract::{Query, State};
 use cmx_core::model::iam::{RoleGroup, RoleGroupTreeNode};
 use tracing::debug;
 
@@ -28,11 +28,14 @@ pub async fn create_role_group(
     CmxSvrContext(svr_ctx): CmxSvrContext,
     Json(data): Json<RoleGroupForCreate>,
 ) -> Result<Json<ApiResp<RoleGroup>>> {
-    debug!("{:<12} - handler::create_role_group - name: {}", "HANDLER", data.name);
+    debug!(
+        "{:<12} - handler::create_role_group - name: {}",
+        "HANDLER", data.name
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let role_group = iam
         .role_group_service
@@ -61,11 +64,14 @@ pub async fn get_role_group(
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Query(params): Query<cmx_core::GetParams>,
 ) -> Result<Json<ApiResp<RoleGroup>>> {
-    debug!("{:<12} - handler::get_role_group - id: {}", "HANDLER", params.id);
+    debug!(
+        "{:<12} - handler::get_role_group - id: {}",
+        "HANDLER", params.id
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let role_group = iam
         .role_group_service
@@ -98,11 +104,14 @@ pub async fn update_role_group(
         .ok_or_else(|| Error::business_error("无效的角色组ID".to_string()))?
         .to_string();
 
-    debug!("{:<12} - handler::update_role_group - id: {}", "HANDLER", role_group_id);
+    debug!(
+        "{:<12} - handler::update_role_group - id: {}",
+        "HANDLER", role_group_id
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let role_group = iam
         .role_group_service
@@ -135,11 +144,15 @@ pub async fn delete_role_group(
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
 
-    debug!("{:<12} - handler::delete_role_group - count: {}", "HANDLER", role_group_ids.len());
+    debug!(
+        "{:<12} - handler::delete_role_group - count: {}",
+        "HANDLER",
+        role_group_ids.len()
+    );
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     iam.role_group_service
         .delete_role_group(&svr_ctx, &role_group_ids)
@@ -166,9 +179,9 @@ pub async fn page_role_groups(
 ) -> Result<Json<ApiResp<Vec<RoleGroup>>>> {
     debug!("{:<12} - handler::page_role_groups", "HANDLER");
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let page_number = params.get_page() as u64;
     let page_size = params.get_size() as u64;
@@ -181,7 +194,12 @@ pub async fn page_role_groups(
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok_with_pagination(role_groups, page_number, page_size, total as u64)))
+    Ok(Json(ApiResp::ok_with_pagination(
+        role_groups,
+        page_number,
+        page_size,
+        total as u64,
+    )))
 }
 
 /// 列表查询角色组
@@ -201,9 +219,9 @@ pub async fn list_role_groups(
 ) -> Result<Json<ApiResp<Vec<RoleGroup>>>> {
     debug!("{:<12} - handler::list_role_groups", "HANDLER");
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let list_options = params.to_list_options();
     let filters = params.filters.clone().filter(|v| !v.is_empty());
@@ -232,9 +250,9 @@ pub async fn get_role_group_tree(
 ) -> Result<Json<ApiResp<Vec<RoleGroupTreeNode>>>> {
     debug!("{:<12} - handler::get_role_group_tree", "HANDLER");
 
-    let iam = cmx_state.iam().ok_or_else(|| {
-        Error::business_error("IAM 服务未初始化".to_string())
-    })?;
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
 
     let tree = iam
         .role_group_service

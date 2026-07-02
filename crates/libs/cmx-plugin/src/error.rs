@@ -22,7 +22,6 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum PluginError {
     // ==================== 基础错误 ====================
-
     /// IO 错误：文件读写、网络通信等
     #[error("IO 错误: {0}")]
     Io(#[from] std::io::Error),
@@ -44,7 +43,6 @@ pub enum PluginError {
     Zip(String),
 
     // ==================== 插件核心错误 ====================
-
     /// 插件通用错误
     #[error("插件错误: {0}")]
     Plugin(String),
@@ -66,7 +64,6 @@ pub enum PluginError {
     },
 
     // ==================== 生命周期操作错误 ====================
-
     /// 插件获取错误（从本地/远程/注册表获取插件包时）
     #[error("获取错误: {0}")]
     Fetcher(String),
@@ -104,7 +101,6 @@ pub enum PluginError {
     Deploy(String),
 
     // ==================== 依赖和版本错误 ====================
-
     /// 依赖错误：缺少依赖、依赖冲突等
     #[error("依赖错误: {0}")]
     Dependency(String),
@@ -137,7 +133,6 @@ pub enum PluginError {
     },
 
     // ==================== 部署和集群错误 ====================
-
     /// 部署错误：多节点部署失败等
     #[error("部署错误: {0}")]
     Deployment(String),
@@ -151,7 +146,6 @@ pub enum PluginError {
     Node(String),
 
     // ==================== 安全和权限错误 ====================
-
     /// 权限错误：权限检查失败、权限不足等
     #[error("权限错误: {0}")]
     Permission(String),
@@ -172,7 +166,6 @@ pub enum PluginError {
     Security(String),
 
     // ==================== 资源错误 ====================
-
     /// 资源不足错误：内存、磁盘空间等
     #[error("资源不足: {0}")]
     InsufficientResource(String),
@@ -182,7 +175,6 @@ pub enum PluginError {
     Timeout(String),
 
     // ==================== 数据存储错误 ====================
-
     /// 数据库错误：数据库操作失败、连接错误等
     #[error("数据库错误: {0}")]
     Database(String),
@@ -196,7 +188,6 @@ pub enum PluginError {
     Storage(String),
 
     // ==================== 配置和元数据错误 ====================
-
     /// 元数据错误：插件元数据格式错误、缺少必需字段等
     #[error("元数据错误: {0}")]
     Metadata(String),
@@ -210,19 +201,16 @@ pub enum PluginError {
     Init(String),
 
     // ==================== 网络错误 ====================
-
     /// 网络错误：网络连接失败、超时等
     #[error("网络错误: {0}")]
     Network(String),
 
     // ==================== 事务错误 ====================
-
     /// 事务错误：事务失败、回滚失败等
     #[error("事务错误: {0}")]
     Transaction(String),
 
     // ==================== 运行时错误 ====================
-
     /// WASM 运行时错误
     #[error("WASM 运行时错误: {0}")]
     WasmRuntime(String),
@@ -236,7 +224,6 @@ pub enum PluginError {
     Feature(String),
 
     // ==================== 服务中心错误 ====================
-
     /// 服务中心数据分发错误
     #[error("服务中心错误: {0}")]
     CenterData(String),
@@ -425,7 +412,11 @@ mod tests {
     fn test_invalid_state_helper_fields() {
         let err = PluginError::invalid_state("pid", "Installed", "activate");
         match err {
-            PluginError::InvalidState { plugin_id, current, operation } => {
+            PluginError::InvalidState {
+                plugin_id,
+                current,
+                operation,
+            } => {
                 assert_eq!(plugin_id, "pid");
                 assert_eq!(current, "Installed");
                 assert_eq!(operation, "activate");
@@ -438,7 +429,10 @@ mod tests {
     fn test_missing_dependency_helper_fields() {
         let err = PluginError::missing_dependency("p1", "p2");
         match err {
-            PluginError::MissingDependency { plugin_id, dependency } => {
+            PluginError::MissingDependency {
+                plugin_id,
+                dependency,
+            } => {
                 assert_eq!(plugin_id, "p1");
                 assert_eq!(dependency, "p2");
             }
@@ -450,7 +444,11 @@ mod tests {
     fn test_dependency_conflict_helper_fields() {
         let err = PluginError::dependency_conflict("p1", "p2", "version mismatch");
         match err {
-            PluginError::DependencyConflict { plugin_id, conflicting_plugin, details } => {
+            PluginError::DependencyConflict {
+                plugin_id,
+                conflicting_plugin,
+                details,
+            } => {
                 assert_eq!(plugin_id, "p1");
                 assert_eq!(conflicting_plugin, "p2");
                 assert_eq!(details, "version mismatch");
@@ -463,7 +461,11 @@ mod tests {
     fn test_version_incompatible_helper_fields() {
         let err = PluginError::version_incompatible("pid", "1.0.0", "2.0.0");
         match err {
-            PluginError::VersionIncompatible { plugin_id, installed, required } => {
+            PluginError::VersionIncompatible {
+                plugin_id,
+                installed,
+                required,
+            } => {
                 assert_eq!(plugin_id, "pid");
                 assert_eq!(installed, "1.0.0");
                 assert_eq!(required, "2.0.0");
@@ -476,7 +478,10 @@ mod tests {
     fn test_permission_denied_helper_fields() {
         let err = PluginError::permission_denied("pid", "fs.write");
         match err {
-            PluginError::PermissionDenied { plugin_id, permission } => {
+            PluginError::PermissionDenied {
+                plugin_id,
+                permission,
+            } => {
                 assert_eq!(plugin_id, "pid");
                 assert_eq!(permission, "fs.write");
             }
@@ -582,27 +587,42 @@ mod tests {
 
     #[test]
     fn test_error_code_for_install() {
-        assert_eq!(PluginError::Install("x".to_string()).error_code(), "INSTALL_ERROR");
+        assert_eq!(
+            PluginError::Install("x".to_string()).error_code(),
+            "INSTALL_ERROR"
+        );
     }
 
     #[test]
     fn test_error_code_for_uninstall() {
-        assert_eq!(PluginError::Uninstall("x".to_string()).error_code(), "UNINSTALL_ERROR");
+        assert_eq!(
+            PluginError::Uninstall("x".to_string()).error_code(),
+            "UNINSTALL_ERROR"
+        );
     }
 
     #[test]
     fn test_error_code_for_upgrade() {
-        assert_eq!(PluginError::Upgrade("x".to_string()).error_code(), "UPGRADE_ERROR");
+        assert_eq!(
+            PluginError::Upgrade("x".to_string()).error_code(),
+            "UPGRADE_ERROR"
+        );
     }
 
     #[test]
     fn test_error_code_for_downgrade() {
-        assert_eq!(PluginError::Downgrade("x".to_string()).error_code(), "DOWNGRADE_ERROR");
+        assert_eq!(
+            PluginError::Downgrade("x".to_string()).error_code(),
+            "DOWNGRADE_ERROR"
+        );
     }
 
     #[test]
     fn test_error_code_for_security() {
-        assert_eq!(PluginError::Security("x".to_string()).error_code(), "SECURITY_ERROR");
+        assert_eq!(
+            PluginError::Security("x".to_string()).error_code(),
+            "SECURITY_ERROR"
+        );
     }
 
     #[test]
@@ -623,7 +643,10 @@ mod tests {
 
     #[test]
     fn test_error_code_for_node_unavailable() {
-        assert_eq!(PluginError::node_unavailable("n").error_code(), "NODE_UNAVAILABLE");
+        assert_eq!(
+            PluginError::node_unavailable("n").error_code(),
+            "NODE_UNAVAILABLE"
+        );
     }
 
     #[test]

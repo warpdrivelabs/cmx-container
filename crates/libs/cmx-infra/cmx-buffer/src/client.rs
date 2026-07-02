@@ -254,9 +254,8 @@ impl RedisClient {
     /// 检查连接是否有效
     pub async fn is_connected(&self) -> bool {
         let mut conn = self.get_connection();
-        let result: std::result::Result<String, redis::RedisError> = redis::cmd("PING")
-            .query_async(&mut conn)
-            .await;
+        let result: std::result::Result<String, redis::RedisError> =
+            redis::cmd("PING").query_async(&mut conn).await;
         result.is_ok()
     }
 
@@ -300,8 +299,15 @@ impl RedisClient {
                         "集群模式需要至少一个节点地址 (cluster_urls)".to_string(),
                     ));
                 }
-                info!("创建 Pub/Sub 订阅连接（集群 - ClusterConnection + 内置 SubscriptionTracker）");
-                let urls: Vec<&str> = self.config.cluster_urls.iter().map(|s| s.as_str()).collect();
+                info!(
+                    "创建 Pub/Sub 订阅连接（集群 - ClusterConnection + 内置 SubscriptionTracker）"
+                );
+                let urls: Vec<&str> = self
+                    .config
+                    .cluster_urls
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
                 let cluster_client = redis::cluster::ClusterClientBuilder::new(urls)
                     .use_protocol(redis::ProtocolVersion::RESP3)
                     .push_sender(tx)
@@ -366,11 +372,15 @@ pub async fn create_shared_client(config: RedisConfig) -> Result<SharedRedisClie
 }
 
 /// 从共享客户端获取引用
-pub async fn get_client(client: &SharedRedisClient) -> tokio::sync::RwLockReadGuard<'_, RedisClient> {
+pub async fn get_client(
+    client: &SharedRedisClient,
+) -> tokio::sync::RwLockReadGuard<'_, RedisClient> {
     client.read().await
 }
 
 /// 从共享客户端获取可变引用
-pub async fn get_client_mut(client: &SharedRedisClient) -> tokio::sync::RwLockWriteGuard<'_, RedisClient> {
+pub async fn get_client_mut(
+    client: &SharedRedisClient,
+) -> tokio::sync::RwLockWriteGuard<'_, RedisClient> {
     client.write().await
 }

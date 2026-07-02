@@ -12,17 +12,16 @@
 use std::sync::Arc;
 
 use cmx_core::model::data::dataset::DataSet;
-use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use modql::filter::ListOptions;
 use tracing::{debug, info};
 
 use super::model::{
     CategoryInfo, MarketplacePlugin, MarketplacePluginBmc, MarketplacePluginFilter,
     MarketplacePluginForCreate, MarketplacePluginForUpdate, MarketplacePluginVersion,
-    MarketplacePluginVersionBmc,
-    MarketplacePluginVersionForCreate, MarketplaceRating, MarketplaceRatingBmc,
-    MarketplaceRatingFilter, MarketplaceRatingForCreate,
+    MarketplacePluginVersionBmc, MarketplacePluginVersionForCreate, MarketplaceRating,
+    MarketplaceRatingBmc, MarketplaceRatingFilter, MarketplaceRatingForCreate,
 };
 use super::repository::MarketplaceRepository;
 use super::stats::StatsService;
@@ -114,7 +113,10 @@ impl MarketplaceService {
             )));
         }
 
-        let existing = self.repo.get_plugin_by_plugin_id(&plugin_req.plugin_id).await?;
+        let existing = self
+            .repo
+            .get_plugin_by_plugin_id(&plugin_req.plugin_id)
+            .await?;
 
         if existing.is_some() {
             let update_data = MarketplacePluginForUpdate {
@@ -139,8 +141,13 @@ impl MarketplaceService {
                 module_code: plugin_req.module_code,
                 plugin_type: plugin_req.plugin_type,
             };
-            self.repo.update_plugin_by_plugin_id(&plugin_req.plugin_id, &update_data).await?;
-            let updated = self.repo.get_plugin_by_plugin_id(&plugin_req.plugin_id).await?;
+            self.repo
+                .update_plugin_by_plugin_id(&plugin_req.plugin_id, &update_data)
+                .await?;
+            let updated = self
+                .repo
+                .get_plugin_by_plugin_id(&plugin_req.plugin_id)
+                .await?;
             let plugin = updated.unwrap();
             self.upsert_version(&version_req).await?;
             return Ok(plugin);
@@ -157,10 +164,7 @@ impl MarketplaceService {
 
         self.upsert_version(&version_req).await?;
 
-        let plugin = self
-            .repo
-            .get_plugin_by_plugin_id(&saved_plugin_id)
-            .await?;
+        let plugin = self.repo.get_plugin_by_plugin_id(&saved_plugin_id).await?;
         let plugin = plugin.unwrap();
         Ok(plugin)
     }
@@ -176,11 +180,11 @@ impl MarketplaceService {
     /// # Errors
     ///
     /// 当数据库操作失败时返回错误。
-    pub async fn create_version(
-        &self,
-        req: MarketplacePluginVersionForCreate,
-    ) -> PluginResult<()> {
-        debug!("创建版本: plugin_id={}, version={}", req.plugin_id, req.version);
+    pub async fn create_version(&self, req: MarketplacePluginVersionForCreate) -> PluginResult<()> {
+        debug!(
+            "创建版本: plugin_id={}, version={}",
+            req.plugin_id, req.version
+        );
         GenericCrudService::<MarketplacePluginVersionBmc>::create(
             &self.db_manager,
             &self.db_id,
@@ -317,15 +321,16 @@ impl MarketplaceService {
             None => Some(vec![default_filter]),
         };
 
-        let (dataset, total) = GenericCrudService::<MarketplacePluginBmc, MarketplacePluginFilter>::page(
-            &self.db_manager,
-            &self.db_id,
-            None,
-            final_filters,
-            list_options,
-        )
-        .await
-        .map_err(|e| PluginError::Database(format!("分页查询插件失败: {}", e)))?;
+        let (dataset, total) =
+            GenericCrudService::<MarketplacePluginBmc, MarketplacePluginFilter>::page(
+                &self.db_manager,
+                &self.db_id,
+                None,
+                final_filters,
+                list_options,
+            )
+            .await
+            .map_err(|e| PluginError::Database(format!("分页查询插件失败: {}", e)))?;
 
         let plugins = self.datasets_to_plugins(&dataset);
         Ok((plugins, total as u64))
@@ -654,8 +659,8 @@ impl MarketplaceService {
         &self,
         req: &super::model::MarketInstallRequest,
     ) -> PluginResult<crate::service::install::InstallResponse> {
-        use crate::domain::plugin::PluginSource;
         use crate::GlobalPluginManager;
+        use crate::domain::plugin::PluginSource;
 
         let version_info = if let Some(ref version) = req.version {
             self.get_version(&req.plugin_id, version).await?
@@ -739,8 +744,8 @@ impl MarketplaceService {
         target_version: Option<&str>,
         force: bool,
     ) -> PluginResult<crate::service::upgrade::UpgradeResponse> {
-        use crate::domain::plugin::PluginSource;
         use crate::GlobalPluginManager;
+        use crate::domain::plugin::PluginSource;
 
         let version_info = if let Some(version) = target_version {
             self.get_version(plugin_id, version).await?
@@ -815,8 +820,10 @@ impl MarketplaceService {
     ) -> PluginResult<Vec<super::model::PluginUpdateInfo>> {
         use crate::domain::version::SemanticVersion;
 
-        let plugin_ids: Vec<String> =
-            installed_plugins.iter().map(|p| p.plugin_id.clone()).collect();
+        let plugin_ids: Vec<String> = installed_plugins
+            .iter()
+            .map(|p| p.plugin_id.clone())
+            .collect();
         let latest_versions = self.repo.get_latest_versions_batch(&plugin_ids).await?;
 
         let mut updates = Vec::new();
@@ -868,7 +875,10 @@ impl MarketplaceService {
     /// 将 DataSet 多行转换为 Vec<MarketplacePlugin>。
     fn datasets_to_plugins(&self, dataset: &DataSet) -> Vec<MarketplacePlugin> {
         let schema = dataset.schema.as_ref();
-        dataset.iter().map(|row| Self::row_to_plugin(row, schema)).collect()
+        dataset
+            .iter()
+            .map(|row| Self::row_to_plugin(row, schema))
+            .collect()
     }
 
     /// 将数据库行映射为 MarketplacePlugin 实体。
@@ -907,8 +917,12 @@ impl MarketplaceService {
             documentation_url: row.get_by_name_as(schema, "documentation_url"),
             repository_url: row.get_by_name_as(schema, "repository_url"),
             status: row.get_by_name_as(schema, "status"),
-            is_featured: row.get_by_name_as::<i32>(schema, "is_featured").map(|v| v as i16),
-            is_official: row.get_by_name_as::<i32>(schema, "is_official").map(|v| v as i16),
+            is_featured: row
+                .get_by_name_as::<i32>(schema, "is_featured")
+                .map(|v| v as i16),
+            is_official: row
+                .get_by_name_as::<i32>(schema, "is_official")
+                .map(|v| v as i16),
             avg_rating: row.get_by_name_as(schema, "avg_rating"),
             rating_count: row.get_by_name_as(schema, "rating_count"),
             download_count: row.get_by_name_as(schema, "download_count"),

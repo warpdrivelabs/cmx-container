@@ -1,11 +1,11 @@
 //! 节点管理模块
-//! 
+//!
 //! 管理集群节点
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// 节点状态
@@ -58,13 +58,13 @@ impl NodeInfo {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// 检查节点是否健康
     pub fn is_healthy(&self, timeout_seconds: i64) -> bool {
         if self.status != NodeStatus::Online {
             return false;
         }
-        
+
         let elapsed = (Utc::now() - self.last_heartbeat).num_seconds();
         elapsed < timeout_seconds
     }
@@ -113,7 +113,7 @@ impl NodeManager {
             lock_manager: None,
         }
     }
-    
+
     /// 使用配置创建节点管理器
     pub fn with_config(current_node_id: String, config: NodeManagerConfig) -> Self {
         Self {
@@ -123,60 +123,62 @@ impl NodeManager {
             lock_manager: None,
         }
     }
-    
+
     /// 设置分布式锁管理器
     pub fn with_lock_manager(mut self, lock_manager: Arc<cmx_buffer::LockManager>) -> Self {
         self.lock_manager = Some(lock_manager);
         self
     }
-    
+
     /// 获取当前节点ID
     pub fn current_node_id(&self) -> &str {
         &self.current_node_id
     }
-    
+
     /// 注册节点
     pub async fn register_node(&self, node: NodeInfo) {
         let mut nodes = self.nodes.write().await;
         nodes.insert(node.id.clone(), node);
     }
-    
+
     /// 注销节点
     pub async fn unregister_node(&self, node_id: &str) -> Option<NodeInfo> {
         let mut nodes = self.nodes.write().await;
         nodes.remove(node_id)
     }
-    
+
     /// 获取节点
     pub async fn get_node(&self, node_id: &str) -> Option<NodeInfo> {
         let nodes = self.nodes.read().await;
         nodes.get(node_id).cloned()
     }
-    
+
     /// 获取所有节点
     pub async fn get_all_nodes(&self) -> Vec<NodeInfo> {
         let nodes = self.nodes.read().await;
         nodes.values().cloned().collect()
     }
-    
+
     /// 获取在线节点
     pub async fn get_online_nodes(&self) -> Vec<NodeInfo> {
         let nodes = self.nodes.read().await;
-        nodes.values()
+        nodes
+            .values()
             .filter(|n| n.status == NodeStatus::Online)
             .cloned()
             .collect()
     }
-    
+
     /// 获取健康节点
     pub async fn get_healthy_nodes(&self) -> Vec<NodeInfo> {
         let nodes = self.nodes.read().await;
-        nodes.values()
+        nodes
+            .values()
             .filter(|n| n.is_healthy(self.config.heartbeat_timeout_seconds))
             .cloned()
             .collect()
     }
-    
+
     /// 更新节点状态
     pub async fn update_node_status(&self, node_id: &str, status: NodeStatus) {
         let mut nodes = self.nodes.write().await;
@@ -185,7 +187,7 @@ impl NodeManager {
             node.last_heartbeat = Utc::now();
         }
     }
-    
+
     /// 更新心跳
     pub async fn update_heartbeat(&self, node_id: &str) {
         let mut nodes = self.nodes.write().await;
@@ -193,99 +195,107 @@ impl NodeManager {
             node.last_heartbeat = Utc::now();
         }
     }
-    
+
     /// 检查节点健康状态并更新
     pub async fn check_and_update_health(&self) -> Vec<String> {
         let mut nodes = self.nodes.write().await;
         let mut unhealthy = Vec::new();
-        
+
         for (id, node) in nodes.iter_mut() {
-            if node.status == NodeStatus::Online && !node.is_healthy(self.config.heartbeat_timeout_seconds) {
+            if node.status == NodeStatus::Online
+                && !node.is_healthy(self.config.heartbeat_timeout_seconds)
+            {
                 node.status = NodeStatus::Offline;
                 unhealthy.push(id.clone());
             }
         }
-        
+
         unhealthy
     }
-    
+
     /// 获取节点数量
     pub async fn node_count(&self) -> usize {
         let nodes = self.nodes.read().await;
         nodes.len()
     }
-    
+
     /// 获取在线节点数量
     pub async fn online_count(&self) -> usize {
         let nodes = self.nodes.read().await;
-        nodes.values().filter(|n| n.status == NodeStatus::Online).count()
+        nodes
+            .values()
+            .filter(|n| n.status == NodeStatus::Online)
+            .count()
     }
-    
+
     /// 获取健康节点数量
     pub async fn healthy_count(&self) -> usize {
         let nodes = self.nodes.read().await;
-        nodes.values()
+        nodes
+            .values()
             .filter(|n| n.is_healthy(self.config.heartbeat_timeout_seconds))
             .count()
     }
-    
+
     /// 选择最优节点（负载最低）
-    /// 
+    ///
     /// 基于负载选择最优节点：
     /// 1. 优先选择活跃插件数量最少的节点
     /// 2. 如果插件数量相同，选择最近心跳时间最近的节点
     pub async fn select_best_node(&self) -> Option<NodeInfo> {
         let nodes = self.get_healthy_nodes().await;
-        
+
         // 按负载排序（活跃插件数量升序，心跳时间降序）
-        nodes.into_iter()
-            .min_by(|a, b| {
-                let a_load = a.metadata.get("active_plugins")
-                    .and_then(|v| v.parse::<u32>().ok())
-                    .unwrap_or(0);
-                let b_load = b.metadata.get("active_plugins")
-                    .and_then(|v| v.parse::<u32>().ok())
-                    .unwrap_or(0);
-                
-                // 先比较负载
-                match a_load.cmp(&b_load) {
-                    std::cmp::Ordering::Equal => {
-                        // 负载相同，选择心跳时间最近的
-                        b.last_heartbeat.cmp(&a.last_heartbeat)
-                    }
-                    other => other,
+        nodes.into_iter().min_by(|a, b| {
+            let a_load = a
+                .metadata
+                .get("active_plugins")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0);
+            let b_load = b
+                .metadata
+                .get("active_plugins")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0);
+
+            // 先比较负载
+            match a_load.cmp(&b_load) {
+                std::cmp::Ordering::Equal => {
+                    // 负载相同，选择心跳时间最近的
+                    b.last_heartbeat.cmp(&a.last_heartbeat)
                 }
-            })
+                other => other,
+            }
+        })
     }
-    
+
     /// 选择指定数量的节点
     pub async fn select_nodes(&self, count: usize) -> Vec<NodeInfo> {
         let nodes = self.get_healthy_nodes().await;
         nodes.into_iter().take(count).collect()
     }
-    
+
     /// 选择主节点
-    /// 
+    ///
     /// 使用一致性哈希算法选择主节点。
     pub async fn select_master_node(&self) -> Option<NodeInfo> {
         let nodes = self.get_healthy_nodes().await;
-        
+
         if nodes.is_empty() {
             return None;
         }
-        
+
         // 使用节点ID的最小哈希值作为主节点
-        nodes.into_iter()
-            .min_by_key(|n| {
-                // 简单哈希：使用节点ID的哈希值
-                let mut hash: u64 = 0;
-                for c in n.id.chars() {
-                    hash = hash.wrapping_mul(31).wrapping_add(c as u64);
-                }
-                hash
-            })
+        nodes.into_iter().min_by_key(|n| {
+            // 简单哈希：使用节点ID的哈希值
+            let mut hash: u64 = 0;
+            for c in n.id.chars() {
+                hash = hash.wrapping_mul(31).wrapping_add(c as u64);
+            }
+            hash
+        })
     }
-    
+
     /// 检查当前节点是否为主节点
     pub async fn is_master(&self) -> bool {
         if let Some(master) = self.select_master_node().await {
@@ -294,35 +304,39 @@ impl NodeManager {
             false
         }
     }
-    
+
     /// 更新节点负载信息
-    /// 
+    ///
     /// 更新节点的活跃插件数量等负载信息。
     pub async fn update_node_load(&self, node_id: &str, active_plugins: u32) {
         let mut nodes = self.nodes.write().await;
         if let Some(node) = nodes.get_mut(node_id) {
-            node.metadata.insert("active_plugins".to_string(), active_plugins.to_string());
+            node.metadata
+                .insert("active_plugins".to_string(), active_plugins.to_string());
             node.last_heartbeat = Utc::now();
         }
     }
-    
+
     /// 获取节点负载信息
     pub async fn get_node_load(&self, node_id: &str) -> Option<u32> {
         let nodes = self.nodes.read().await;
-        nodes.get(node_id)
+        nodes
+            .get(node_id)
             .and_then(|n| n.metadata.get("active_plugins"))
             .and_then(|v| v.parse::<u32>().ok())
     }
-    
+
     /// 使用分布式锁执行操作
     pub async fn with_lock<F, T>(&self, lock_key: &str, f: F) -> crate::error::PluginResult<T>
     where
         F: std::future::Future<Output = crate::error::PluginResult<T>>,
     {
         if let Some(ref lock_manager) = self.lock_manager {
-            let _guard = lock_manager.lock(lock_key).await
+            let _guard = lock_manager
+                .lock(lock_key)
+                .await
                 .map_err(|e| crate::error::PluginError::Node(format!("获取分布式锁失败: {}", e)))?;
-            
+
             f.await
         } else {
             f.await

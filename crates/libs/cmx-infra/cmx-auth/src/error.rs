@@ -43,8 +43,12 @@ impl From<AuthInfraError> for cmx_traits::auth::AuthError {
             AuthInfraError::Redis(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
             AuthInfraError::Jwt(err) => cmx_traits::auth::AuthError::InvalidToken(err.to_string()),
             AuthInfraError::Database(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
-            AuthInfraError::SerdeJson(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
-            AuthInfraError::Prometheus(err) => cmx_traits::auth::AuthError::Internal(err.to_string()),
+            AuthInfraError::SerdeJson(err) => {
+                cmx_traits::auth::AuthError::Internal(err.to_string())
+            }
+            AuthInfraError::Prometheus(err) => {
+                cmx_traits::auth::AuthError::Internal(err.to_string())
+            }
         }
     }
 }

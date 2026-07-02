@@ -21,7 +21,9 @@ impl DefaultStorageService {
         let hash_info = serde_json::json!({"md5": md5_hash}).to_string();
 
         // 确定目标存储平台：请求指定 > 默认平台
-        let platform = request.platform.clone()
+        let platform = request
+            .platform
+            .clone()
             .or_else(|| self.manager.get_default_platform().map(|s| s.to_string()))
             .unwrap_or_default();
 
@@ -33,12 +35,17 @@ impl DefaultStorageService {
             file_info.original_filename = request.original_filename.clone();
             file_info.object_id = request.object_id.clone();
             file_info.object_type = request.object_type.clone();
-            return self.create_file_record(&file_info, &request, &md5_hash).await.map(|d| d.to_file_info());
+            return self
+                .create_file_record(&file_info, &request, &md5_hash)
+                .await
+                .map(|d| d.to_file_info());
         }
 
         // ── 第三步：获取存储后端和配置 ──
         let backend = self.manager.get_backend(Some(&platform))?;
-        let config = self.manager.get_config(backend.platform())
+        let config = self
+            .manager
+            .get_config(backend.platform())
             .ok_or_else(|| Error::ConfigError(format!("找不到平台配置: {}", backend.platform())))?;
 
         // ── 第四步：检测 MIME 类型和扩展名 ──
@@ -48,7 +55,8 @@ impl DefaultStorageService {
             request.content_type.as_deref(),
         );
 
-        let ext = request.original_filename
+        let ext = request
+            .original_filename
             .as_deref()
             .map(extract_extension)
             .unwrap_or_default();
@@ -70,7 +78,9 @@ impl DefaultStorageService {
             acl: request.acl.clone(),
         };
 
-        backend.write(&storage_path, request.data.clone(), write_opts).await?;
+        backend
+            .write(&storage_path, request.data.clone(), write_opts)
+            .await?;
 
         let access_url = config.get_access_url(&storage_path);
         let file_id = uuid::Uuid::new_v4().to_string();
@@ -84,7 +94,14 @@ impl DefaultStorageService {
 
         if let Some(thumbnail) = Self::generate_thumbnail(&request.data, &content_type) {
             let th_name = format!("{}.min.jpg", filename);
-            let th_storage_path = format!("{}/{}", storage_path.rfind('/').map(|i| &storage_path[..i]).unwrap_or(""), th_name);
+            let th_storage_path = format!(
+                "{}/{}",
+                storage_path
+                    .rfind('/')
+                    .map(|i| &storage_path[..i])
+                    .unwrap_or(""),
+                th_name
+            );
             let th_storage_path = th_storage_path.trim_start_matches('/');
 
             let th_write_opts = WriteOptions {
@@ -95,7 +112,10 @@ impl DefaultStorageService {
                 acl: None,
             };
 
-            match backend.write(th_storage_path, thumbnail.data.clone(), th_write_opts).await {
+            match backend
+                .write(th_storage_path, thumbnail.data.clone(), th_write_opts)
+                .await
+            {
                 Ok(_) => {
                     info!("缩略图上传成功，大小: {} bytes", thumbnail.data.len());
                     th_url = Some(config.get_access_url(th_storage_path));
@@ -119,7 +139,11 @@ impl DefaultStorageService {
             original_filename: request.original_filename.clone(),
             base_path: Some(config.base_path.clone()),
             path: Some(storage_path.clone()),
-            ext: Some(if ext.starts_with('.') { ext.clone() } else { format!(".{}", ext) }),
+            ext: Some(if ext.starts_with('.') {
+                ext.clone()
+            } else {
+                format!(".{}", ext)
+            }),
             content_type: Some(content_type),
             platform: backend.platform().to_string(),
             th_url,
@@ -128,16 +152,18 @@ impl DefaultStorageService {
             th_content_type,
             object_id: request.object_id.clone(),
             object_type: request.object_type.clone(),
-            user_metadata: request.user_metadata.as_ref().map(|m| {
-                serde_json::to_string(m).unwrap_or_default()
-            }),
+            user_metadata: request
+                .user_metadata
+                .as_ref()
+                .map(|m| serde_json::to_string(m).unwrap_or_default()),
             hash_info: Some(hash_info),
             upload_id: None,
             upload_status: Some(0),
             create_time: Some(chrono::Local::now().naive_utc()),
         };
 
-        self.create_file_record(&file_info, &request, &md5_hash).await?;
+        self.create_file_record(&file_info, &request, &md5_hash)
+            .await?;
 
         info!(file_id = %file_info.id, platform = %file_info.platform, size = file_info.size, "文件上传成功");
 

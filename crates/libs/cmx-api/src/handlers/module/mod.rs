@@ -12,8 +12,8 @@ pub use handler::module_custom_page;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::post;
 use axum::Router;
+use axum::routing::post;
 
 /// Module 模块路由
 pub struct ModuleHandler;

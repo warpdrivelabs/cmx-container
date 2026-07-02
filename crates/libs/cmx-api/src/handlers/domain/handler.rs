@@ -2,24 +2,19 @@
 //!
 //! 展示如何创建自定义的 HTTP Handler
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::Json;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
-use cmx_biz::domain::{DomainService, DomainTreeNodeData};
-use crate::Result;
-use crate::middleware::CmxSvrContext;
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
-use crate::rest::header_parse::get_db_id_from_header;
+use crate::Result;
 use crate::TreeNode;
-
-
-
-
-
+use crate::app_state::CmxAppState;
+use crate::middleware::CmxSvrContext;
+use crate::rest::header_parse::get_db_id_from_header;
+use cmx_biz::domain::{DomainService, DomainTreeNodeData};
 
 /// 查询域-应用-模块树形结构 Handler
 ///
@@ -47,4 +42,3 @@ pub async fn get_tree(
 
     Ok(Json(ApiResp::ok(tree)))
 }
-

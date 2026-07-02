@@ -14,11 +14,11 @@ port = 8080
 # 支持环境变量覆盖：APP__DOMAIN_CODE / APP__APPLICATION_CODE / APP__MODULE_CODE
 [app]
 # 所属域编码（必需，默认 default）
-domain_code = "FIN"
+domain_code = "fi"
 # 所属应用编码（必需，默认 default）
-application_code = "FI"
+application_code = "cmxfico"
 # 所属模块编码（必需，默认 default）
-module_code = "GL"
+module_code = "gl"
 
 
 # ============================================
@@ -44,6 +44,7 @@ web_shared_dist = "../packages/cmx-ui5-runtime/dist"
 [[databases]]
 # 数据源唯一标识符（必需）
 db_id = "primary"
+db_name = "主控数据库"
 # 数据库类型：postgres | mysql | sqlite（必需）
 db_type = "postgres"
 # 数据库连接 URL（必需）
@@ -61,11 +62,12 @@ health_check_timeout = 5
 
 [[databases]]
 # 数据源唯一标识符（必需）
-db_id = "second"
+db_id = "fico-db"
+db_name = "总账数据库"
 # 数据库类型：postgres | mysql | sqlite（必需）
 db_type = "postgres"
 # 数据库连接 URL（必需）
-db_url = "postgresql://postgres:postgres@127.0.0.1:5432/cmx"
+db_url = "postgresql://postgres:postgres@127.0.0.1:5432/fico"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = false

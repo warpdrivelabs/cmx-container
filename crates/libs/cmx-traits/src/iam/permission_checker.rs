@@ -47,11 +47,7 @@ pub trait PermissionChecker: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn has_role(
-        &self,
-        user_id: &str,
-        role_code: &str,
-    ) -> Result<bool, TraitError>;
+    async fn has_role(&self, user_id: &str, role_code: &str) -> Result<bool, TraitError>;
 
     /// 获取用户的所有权限码列表（聚合所有角色的权限）。
     ///
@@ -66,10 +62,7 @@ pub trait PermissionChecker: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_permissions(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, TraitError>;
+    async fn get_user_permissions(&self, user_id: &str) -> Result<Vec<String>, TraitError>;
 
     /// 获取用户的所有角色码列表。
     ///
@@ -84,10 +77,7 @@ pub trait PermissionChecker: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_user_role_codes(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, TraitError>;
+    async fn get_user_role_codes(&self, user_id: &str) -> Result<Vec<String>, TraitError>;
 
     /// 获取用户的数据权限范围。
     ///
@@ -104,10 +94,7 @@ pub trait PermissionChecker: Send + Sync {
     /// # Errors
     ///
     /// 查询失败时返回 [`TraitError`]。
-    async fn get_data_scope(
-        &self,
-        _user_id: &str,
-    ) -> Result<DataScope, TraitError> {
+    async fn get_data_scope(&self, _user_id: &str) -> Result<DataScope, TraitError> {
         Ok(DataScope::All)
     }
 }

@@ -36,7 +36,9 @@ fn resolve_rel(r: &CpRef) -> PortalResult<Vec<String>> {
             return Err(PortalError::bad_request(format!("缺少必填参数 {k}")));
         }
         if !is_safe_segment(v) {
-            return Err(PortalError::bad_request(format!("参数 {k} 非法（仅允许字母、数字、_-）：\"{v}\"")));
+            return Err(PortalError::bad_request(format!(
+                "参数 {k} 非法（仅允许字母、数字、_-）：\"{v}\""
+            )));
         }
         out.push(v.to_string());
     }
@@ -92,7 +94,11 @@ pub async fn get_context_profile(r: &CpRef) -> PortalResult<serde_json::Value> {
 }
 
 /// 扫描已保存档案，按 domain/app/module 逐级过滤，返回摘要列表。
-pub async fn list_context_profiles(domain: Option<&str>, app: Option<&str>, module: Option<&str>) -> PortalResult<Vec<serde_json::Value>> {
+pub async fn list_context_profiles(
+    domain: Option<&str>,
+    app: Option<&str>,
+    module: Option<&str>,
+) -> PortalResult<Vec<serde_json::Value>> {
     let root = data_path(["meta", "context-profile"]);
     let wd = domain.unwrap_or("").trim().to_string();
     let wa = app.unwrap_or("").trim().to_string();
@@ -152,26 +158,47 @@ pub async fn list_context_profiles(domain: Option<&str>, app: Option<&str>, modu
         }
     }
     out.sort_by(|a, b| {
-        let ka = format!("{}/{}/{}/{}", a["domain"].as_str().unwrap_or(""), a["app"].as_str().unwrap_or(""), a["module"].as_str().unwrap_or(""), a["scenario"].as_str().unwrap_or(""));
-        let kb = format!("{}/{}/{}/{}", b["domain"].as_str().unwrap_or(""), b["app"].as_str().unwrap_or(""), b["module"].as_str().unwrap_or(""), b["scenario"].as_str().unwrap_or(""));
+        let ka = format!(
+            "{}/{}/{}/{}",
+            a["domain"].as_str().unwrap_or(""),
+            a["app"].as_str().unwrap_or(""),
+            a["module"].as_str().unwrap_or(""),
+            a["scenario"].as_str().unwrap_or("")
+        );
+        let kb = format!(
+            "{}/{}/{}/{}",
+            b["domain"].as_str().unwrap_or(""),
+            b["app"].as_str().unwrap_or(""),
+            b["module"].as_str().unwrap_or(""),
+            b["scenario"].as_str().unwrap_or("")
+        );
         ka.cmp(&kb)
     });
     Ok(out)
 }
 
 /// 保存档案（规范化外壳 + updatedAt，原子写）。
-pub async fn save_context_profile(r: &CpRef, doc: &serde_json::Value) -> PortalResult<serde_json::Value> {
+pub async fn save_context_profile(
+    r: &CpRef,
+    doc: &serde_json::Value,
+) -> PortalResult<serde_json::Value> {
     if !doc.is_object() {
         return Err(PortalError::bad_request("请求体必须是对象"));
     }
-    if !doc.get("dimensions").map(|v| v.is_object()).unwrap_or(false) {
+    if !doc
+        .get("dimensions")
+        .map(|v| v.is_object())
+        .unwrap_or(false)
+    {
         return Err(PortalError::bad_request("缺少 dimensions"));
     }
     if !doc.get("rules").map(|v| v.is_array()).unwrap_or(false) {
         return Err(PortalError::bad_request("缺少 rules 数组"));
     }
     let rel = resolve_rel(r)?;
-    let title = doc.get("title").and_then(|v| v.as_str())
+    let title = doc
+        .get("title")
+        .and_then(|v| v.as_str())
         .or_else(|| doc.get("name").and_then(|v| v.as_str()))
         .or_else(|| doc.get("caption").and_then(|v| v.as_str()))
         .unwrap_or("");
@@ -194,10 +221,16 @@ pub async fn save_context_profile(r: &CpRef, doc: &serde_json::Value) -> PortalR
     });
     // 可选字段 columnModel / docRef（存在才带）
     if let Some(cm) = doc.get("columnModel").filter(|v| v.is_object()) {
-        merged.as_object_mut().unwrap().insert("columnModel".to_string(), cm.clone());
+        merged
+            .as_object_mut()
+            .unwrap()
+            .insert("columnModel".to_string(), cm.clone());
     }
     if let Some(dr) = doc.get("docRef").filter(|v| v.is_object()) {
-        merged.as_object_mut().unwrap().insert("docRef".to_string(), dr.clone());
+        merged
+            .as_object_mut()
+            .unwrap()
+            .insert("docRef".to_string(), dr.clone());
     }
     let _guard = write_lock().lock().await;
     write_json_atomic(&abs_path(&rel), &merged, true).await?;
@@ -215,8 +248,14 @@ pub async fn set_default_version(r: &CpRef) -> PortalResult<serde_json::Value> {
 
     let _guard = write_lock().lock().await;
     // 目标文件必须存在。
-    if read_json::<serde_json::Value>(&abs_path(&rel)).await.is_err() {
-        return Err(PortalError::not_found(format!("上下文档案不存在：{}", rel.join("/"))));
+    if read_json::<serde_json::Value>(&abs_path(&rel))
+        .await
+        .is_err()
+    {
+        return Err(PortalError::not_found(format!(
+            "上下文档案不存在：{}",
+            rel.join("/")
+        )));
     }
     let now = json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let mut changed: Vec<String> = Vec::new();
@@ -239,7 +278,10 @@ pub async fn set_default_version(r: &CpRef) -> PortalResult<serde_json::Value> {
             Ok(d) => d,
             Err(_) => continue, // 损坏文件跳过，不阻断
         };
-        let cur = doc.get("isDefault").and_then(|v| v.as_bool()).unwrap_or(false);
+        let cur = doc
+            .get("isDefault")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if cur != want {
             if let Some(obj) = doc.as_object_mut() {
                 obj.insert("isDefault".to_string(), json!(want));

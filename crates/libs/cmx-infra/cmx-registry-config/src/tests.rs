@@ -2,8 +2,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::config_model::RegistryConfig;
 use crate::config_center::{ConfigCenter, MockConfigCenter};
+use crate::config_model::RegistryConfig;
 use crate::notifier::{ChangeNotifier, ConfigChangeEvent};
 use crate::registry::{MockRegistry, ServiceInstance, ServiceInstanceCache, ServiceRegistry};
 
@@ -130,8 +130,7 @@ async fn mock_registry_get_service_list() {
 async fn mock_config_center_set_get() {
     let center = MockConfigCenter::new();
 
-    center
-        .set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090");
+    center.set_config("app.toml", "DEFAULT_GROUP", "server.port = 9090");
 
     let content = center
         .get_config("app.toml", "DEFAULT_GROUP")
@@ -165,8 +164,7 @@ async fn mock_config_center_listen_and_simulate_change() {
         .unwrap();
 
     // 模拟变更
-    center
-        .simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 7070");
+    center.simulate_change("app.toml", "DEFAULT_GROUP", "server.port = 7070");
 
     // 验证回调被触发
     assert_eq!(*received.lock().unwrap(), "server.port = 7070");
@@ -289,7 +287,9 @@ fn change_notifier_listener_panic_isolation() {
     // 第一个监听器会 panic
     struct PanicListener;
     impl crate::notifier::ConfigChangeListener for PanicListener {
-        fn name(&self) -> &str { "panic-listener" }
+        fn name(&self) -> &str {
+            "panic-listener"
+        }
         fn on_change(&self, _event: &ConfigChangeEvent) {
             panic!("listener panic");
         }
@@ -300,14 +300,18 @@ fn change_notifier_listener_panic_isolation() {
         received: Arc<Mutex<String>>,
     }
     impl crate::notifier::ConfigChangeListener for NormalListener {
-        fn name(&self) -> &str { "normal-listener" }
+        fn name(&self) -> &str {
+            "normal-listener"
+        }
         fn on_change(&self, event: &ConfigChangeEvent) {
             *self.received.lock().unwrap() = event.raw_content.clone();
         }
     }
 
     notifier.add_listener(Arc::new(PanicListener));
-    notifier.add_listener(Arc::new(NormalListener { received: received_clone }));
+    notifier.add_listener(Arc::new(NormalListener {
+        received: received_clone,
+    }));
 
     // notify_listeners 不应 panic，第二个监听器应正常执行
     let event = ConfigChangeEvent {

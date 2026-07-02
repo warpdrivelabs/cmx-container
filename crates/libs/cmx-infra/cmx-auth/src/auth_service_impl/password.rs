@@ -21,7 +21,10 @@ impl AuthServiceImpl {
     /// # Errors
     ///
     /// 当 Argon2 哈希失败时返回 `AuthError::PasswordHashError`。
-    pub(super) async fn hash_password(&self, plain: &str) -> std::result::Result<String, AuthError> {
+    pub(super) async fn hash_password(
+        &self,
+        plain: &str,
+    ) -> std::result::Result<String, AuthError> {
         self.password_hasher
             .hash(plain)
             .map_err(|e| AuthError::PasswordHashError(e.to_string()))
@@ -135,10 +138,24 @@ impl AuthServiceImpl {
         // 5.3: 修改密码后强制下线用户所有旧会话
         self.revoke_all_tokens(user_id).await?;
 
-        self.audit_token_event("password_changed", user_id, "", "password_changed_all_sessions_revoked").await;
+        self.audit_token_event(
+            "password_changed",
+            user_id,
+            "",
+            "password_changed_all_sessions_revoked",
+        )
+        .await;
         info!(user_id = user_id, "密码修改成功，已强制下线所有旧会话");
         // 4.5: 审计日志
-        self.audit_log("change_password", cmx_audit::OperationResult::Success, user_id, Some("user"), Some(user_id), None).await;
+        self.audit_log(
+            "change_password",
+            cmx_audit::OperationResult::Success,
+            user_id,
+            Some("user"),
+            Some(user_id),
+            None,
+        )
+        .await;
         Ok(())
     }
 }

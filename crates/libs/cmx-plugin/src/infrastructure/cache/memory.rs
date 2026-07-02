@@ -1,5 +1,5 @@
 //! 内存缓存模块
-//! 
+//!
 //! 提供基于内存的缓存实现
 
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ impl<T> CacheEntry<T> {
             expires_at: ttl.map(|t| Instant::now() + t),
         }
     }
-    
+
     fn is_expired(&self) -> bool {
         self.expires_at.map(|t| Instant::now() > t).unwrap_or(false)
     }
@@ -46,13 +46,13 @@ impl<T: Clone> MemoryCache<T> {
             default_ttl: None,
         }
     }
-    
+
     /// 设置默认TTL
     pub fn with_default_ttl(mut self, ttl: Duration) -> Self {
         self.default_ttl = Some(ttl);
         self
     }
-    
+
     /// 获取缓存
     pub async fn get(&self, key: &str) -> Option<T> {
         let data = self.data.read().await;
@@ -64,42 +64,42 @@ impl<T: Clone> MemoryCache<T> {
             }
         })
     }
-    
+
     /// 设置缓存
     pub async fn set(&self, key: &str, value: T) {
         self.set_with_ttl(key, value, self.default_ttl).await;
     }
-    
+
     /// 设置缓存（带TTL）
     pub async fn set_with_ttl(&self, key: &str, value: T, ttl: Option<Duration>) {
         let mut data = self.data.write().await;
         data.insert(key.to_string(), CacheEntry::new(value, ttl));
     }
-    
+
     /// 删除缓存
     pub async fn remove(&self, key: &str) -> Option<T> {
         let mut data = self.data.write().await;
         data.remove(key).map(|entry| entry.value)
     }
-    
+
     /// 清空缓存
     pub async fn clear(&self) {
         let mut data = self.data.write().await;
         data.clear();
     }
-    
+
     /// 清理过期缓存
     pub async fn cleanup_expired(&self) {
         let mut data = self.data.write().await;
         data.retain(|_, entry| !entry.is_expired());
     }
-    
+
     /// 获取缓存数量
     pub async fn len(&self) -> usize {
         let data = self.data.read().await;
         data.len()
     }
-    
+
     /// 检查缓存是否为空
     pub async fn is_empty(&self) -> bool {
         self.len().await == 0

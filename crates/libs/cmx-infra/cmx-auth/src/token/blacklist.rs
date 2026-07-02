@@ -46,9 +46,7 @@ impl Blacklist {
                 .max_capacity(config.local_cache_max_entries)
                 .build()
         } else {
-            Cache::builder()
-                .max_capacity(0)
-                .build()
+            Cache::builder().max_capacity(0).build()
         };
 
         Self { cache, local_cache }
@@ -109,9 +107,7 @@ impl Blacklist {
             .await?;
 
         // 写入本地缓存（无论 true/false 都缓存，moka time_to_live 保证过期）
-        self.local_cache
-            .insert(jti.to_string(), exists)
-            .await;
+        self.local_cache.insert(jti.to_string(), exists).await;
 
         Ok(exists)
     }
@@ -193,10 +189,7 @@ mod tests {
         blacklist.invalidate_local(jti).await;
 
         // 1. 初始状态：不在黑名单
-        let in_bl = blacklist
-            .is_blacklisted(jti)
-            .await
-            .expect("查询黑名单失败");
+        let in_bl = blacklist.is_blacklisted(jti).await.expect("查询黑名单失败");
         assert!(!in_bl, "未加入黑名单的 jti 应返回 false");
 
         // 2. 加入黑名单（剩余 TTL 60 秒）
@@ -206,10 +199,7 @@ mod tests {
             .expect("加入黑名单失败");
 
         // 3. 加入后查询：应在黑名单中
-        let in_bl = blacklist
-            .is_blacklisted(jti)
-            .await
-            .expect("查询黑名单失败");
+        let in_bl = blacklist.is_blacklisted(jti).await.expect("查询黑名单失败");
         assert!(in_bl, "已加入黑名单的 jti 应返回 true");
 
         // 4. 本地缓存生效后再次查询（应命中本地缓存）
@@ -240,10 +230,7 @@ mod tests {
         blacklist.invalidate_local(jti).await;
 
         // 不存在的 jti 应返回 false（并缓存 false 结果）
-        let in_bl = blacklist
-            .is_blacklisted(jti)
-            .await
-            .expect("查询黑名单失败");
+        let in_bl = blacklist.is_blacklisted(jti).await.expect("查询黑名单失败");
         assert!(!in_bl, "从未加入黑名单的 jti 应返回 false");
 
         // 再次查询（应命中本地缓存的 false 值，而非误判为 true）
@@ -283,10 +270,7 @@ mod tests {
             .expect("加入黑名单失败");
 
         // 2. 查询使本地缓存写入 true
-        let in_bl = blacklist
-            .is_blacklisted(jti)
-            .await
-            .expect("查询黑名单失败");
+        let in_bl = blacklist.is_blacklisted(jti).await.expect("查询黑名单失败");
         assert!(in_bl);
 
         // 3. 失效本地缓存 + 删除 Redis key
@@ -294,10 +278,7 @@ mod tests {
         let _ = cache.ops().del(&format!("auth:{}:blacklist", jti)).await;
 
         // 4. 再次查询应返回 false（Redis 已删除，本地缓存已失效）
-        let in_bl = blacklist
-            .is_blacklisted(jti)
-            .await
-            .expect("查询黑名单失败");
+        let in_bl = blacklist.is_blacklisted(jti).await.expect("查询黑名单失败");
         assert!(!in_bl, "失效本地缓存并删除 Redis 后应返回 false");
 
         // 清理

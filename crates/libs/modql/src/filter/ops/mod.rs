@@ -9,15 +9,15 @@ pub mod op_val_value;
 // region:    --- OpVal
 #[derive(Debug, Clone)]
 pub enum OpVal {
-	String(OpValString),
+    String(OpValString),
 
-	Int64(OpValInt64),
-	Int32(OpValInt32),
+    Int64(OpValInt64),
+    Int32(OpValInt32),
 
-	Float64(OpValFloat64),
+    Float64(OpValFloat64),
 
-	Bool(OpValBool),
-	Value(OpValValue),
+    Bool(OpValBool),
+    Value(OpValValue),
 }
 
 // endregion: --- OpVal
@@ -46,23 +46,23 @@ macro_rules! impl_from_for_opvals {
 
 // For all opvals (must specified the pair as macro rules are hygienic)
 impl_from_for_opvals!(
-	// String
-	OpValString,
-	OpValsString,
-	// Ints
-	OpValInt64,
-	OpValsInt64,
-	OpValInt32,
-	OpValsInt32,
-	// Floats
-	OpValFloat64,
-	OpValsFloat64,
-	// Bool
-	OpValBool,
-	OpValsBool,
-	// OpValJson
-	OpValValue,
-	OpValsValue
+    // String
+    OpValString,
+    OpValsString,
+    // Ints
+    OpValInt64,
+    OpValsInt64,
+    OpValInt32,
+    OpValsInt32,
+    // Floats
+    OpValFloat64,
+    OpValsFloat64,
+    // Bool
+    OpValBool,
+    OpValsBool,
+    // OpValJson
+    OpValValue,
+    OpValsValue
 );
 
 // endregion: --- From [Type]OpVal & Vec<[Type]OpVal> to [Type]OpVals
@@ -72,13 +72,13 @@ pub use self::with_sea_query::*;
 
 #[cfg(feature = "with-sea-query")]
 mod with_sea_query {
-	use sea_query::{ColumnRef, Condition, Expr, ExprTrait as _};
+    use sea_query::{ColumnRef, Condition, Expr, ExprTrait as _};
 
-	pub fn sea_is_col_value_null(col: ColumnRef, null: bool) -> Condition {
-		if null {
-			Expr::col(col).is_null().into()
-		} else {
-			Expr::col(col).is_not_null().into()
-		}
-	}
+    pub fn sea_is_col_value_null(col: ColumnRef, null: bool) -> Condition {
+        if null {
+            Expr::col(col).is_null().into()
+        } else {
+            Expr::col(col).is_not_null().into()
+        }
+    }
 }

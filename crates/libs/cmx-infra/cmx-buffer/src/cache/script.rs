@@ -32,12 +32,7 @@ impl ScriptOps {
     ///
     /// # 返回
     /// 脚本返回值（以 redis::Value 形式）
-    pub async fn eval(
-        &self,
-        script: &str,
-        keys: &[&str],
-        args: &[&str],
-    ) -> Result<redis::Value> {
+    pub async fn eval(&self, script: &str, keys: &[&str], args: &[&str]) -> Result<redis::Value> {
         let timer = OperationTimer::new("EVAL", "lua_script");
 
         // 构建 key 列表（带前缀）
@@ -68,12 +63,7 @@ impl ScriptOps {
     /// - `sha1`: 脚本的 SHA1 校验和
     /// - `keys`: Redis Key 列表
     /// - `args`: 参数列表
-    pub async fn evalsha(
-        &self,
-        sha1: &str,
-        keys: &[&str],
-        args: &[&str],
-    ) -> Result<redis::Value> {
+    pub async fn evalsha(&self, sha1: &str, keys: &[&str], args: &[&str]) -> Result<redis::Value> {
         let timer = OperationTimer::new("EVALSHA", sha1);
 
         // 构建 key 列表（带前缀）

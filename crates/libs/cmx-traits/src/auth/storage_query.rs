@@ -4,8 +4,8 @@
 
 use async_trait::async_trait;
 
-use crate::error::TraitError;
 use super::user_query::{ApiKeyData, OAuth2ClientData};
+use crate::error::TraitError;
 
 /// Auth 表存储查询 — 由 cmx-auth 自行实现。
 ///

@@ -102,7 +102,9 @@ impl OAuth2FlowService {
 
         // 2. 验证 redirect_uri（规范化比较）
         let normalized_redirect = normalize_redirect_uri(&params.redirect_uri);
-        let registered_uris: Vec<String> = client.redirect_uris.iter()
+        let registered_uris: Vec<String> = client
+            .redirect_uris
+            .iter()
             .map(|u| normalize_redirect_uri(u))
             .collect();
         if !registered_uris.contains(&normalized_redirect) {
@@ -260,10 +262,7 @@ impl OAuth2FlowService {
 
         // 5. PKCE 校验
         if let Some(ref challenge) = auth_code.code_challenge {
-            let method = auth_code
-                .code_challenge_method
-                .as_deref()
-                .unwrap_or("S256");
+            let method = auth_code.code_challenge_method.as_deref().unwrap_or("S256");
 
             match &params.code_verifier {
                 Some(verifier) => {

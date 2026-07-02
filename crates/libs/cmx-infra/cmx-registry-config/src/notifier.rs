@@ -148,10 +148,11 @@ impl ChangeNotifier {
         for listener in &listeners_snapshot {
             let interested = listener.interested_keys();
             let should_notify = interested.is_empty()
-                || event
-                    .changed_keys
-                    .iter()
-                    .any(|k| interested.iter().any(|prefix| k.starts_with(prefix.as_str())));
+                || event.changed_keys.iter().any(|k| {
+                    interested
+                        .iter()
+                        .any(|prefix| k.starts_with(prefix.as_str()))
+                });
 
             if should_notify {
                 debug!("调用配置变更监听器: {}", listener.name());

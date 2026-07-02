@@ -2,21 +2,21 @@
 //!
 //! 提供应用实体的自定义分页查询功能
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::Json;
-use cmx_core::model::data::dataset::DataSet;
 use cmx_core::PageParams;
+use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
 
-use cmx_biz::application::ApplicationFilter;
 use crate::ApiResp;
-use crate::app_state::CmxAppState;
 use crate::Result;
+use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
+use cmx_biz::application::ApplicationFilter;
 
 /// Application 自定义分页查询 Handler
 ///
@@ -76,15 +76,12 @@ pub async fn application_custom_page(
         "cmx-application",
     )
     .await
-        .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
-
+    .map_err(|e| crate::Error::InternalError(format!("自定义分页查询失败: {}", e)))?;
 
     Ok(Json(ApiResp::ok_with_pagination(
         dataset,
-        page_number ,
-        page_size ,
+        page_number,
+        page_size,
         total as u64,
     )))
-
-
 }

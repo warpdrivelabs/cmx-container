@@ -13,10 +13,10 @@
 use std::sync::Arc;
 
 use cmx_registry_config::{
-    create_config_center, create_registry_with_cache, ConfigCenterFullConfig,
-    ConfigChangeEvent, ConfigChangeCallback, ConfigReloader, GlobalChangeNotifier,
-    GlobalConfigCenter, GlobalServiceRegistry, GlobalServiceInstanceCache, RegistryConfig,
-    RemoteConfigSource, ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
+    ConfigCenterFullConfig, ConfigChangeCallback, ConfigChangeEvent, ConfigReloader,
+    GlobalChangeNotifier, GlobalConfigCenter, GlobalServiceInstanceCache, GlobalServiceRegistry,
+    RegistryConfig, RemoteConfigSource, ServiceInstanceCache, ServiceListSyncer, ServiceRegistry,
+    create_config_center, create_registry_with_cache,
 };
 use cmx_utils::{ConfigBuilder, ConfigManager};
 use tokio::sync::watch;
@@ -49,9 +49,9 @@ pub async fn init_infra() -> crate::Result<()> {
     let cc_config = ConfigCenterFullConfig::from_env();
 
     // 通过工厂函数创建注册中心（带缓存）和配置中心实例。
-    let (registry, cache) = create_registry_with_cache(&registry_config).await.map_err(|e| {
-        Error::ConfigError(format!("创建注册中心失败: {}", e))
-    })?;
+    let (registry, cache) = create_registry_with_cache(&registry_config)
+        .await
+        .map_err(|e| Error::ConfigError(format!("创建注册中心失败: {}", e)))?;
     GlobalServiceInstanceCache::set(cache)
         .map_err(|e| Error::ConfigError(format!("设置全局服务实例缓存失败: {}", e)))?;
 
@@ -73,7 +73,10 @@ pub async fn init_infra() -> crate::Result<()> {
         && let Some(listener) = cc_config.listeners.first()
     {
         // 配置中心启用时，尝试拉取首个 listener 的远程配置作为初始配置源。
-        match config_center.get_config(&listener.data_id, &listener.group).await {
+        match config_center
+            .get_config(&listener.data_id, &listener.group)
+            .await
+        {
             Ok(content) => {
                 info!(
                     "成功从配置中心拉取远程配置: {}/{}",
@@ -103,12 +106,10 @@ pub async fn init_infra() -> crate::Result<()> {
         .map_err(|e| Error::ConfigError(format!("配置管理器初始化失败: {}", e)))?;
 
     // 存储到全局单例（其他 crate 可通过 `GlobalServiceRegistry::get()` / `GlobalConfigCenter::get()` 访问）。
-    GlobalServiceRegistry::set(registry).map_err(|_| {
-        Error::ConfigError("注册中心全局单例已设置".to_string())
-    })?;
-    GlobalConfigCenter::set(config_center).map_err(|_| {
-        Error::ConfigError("配置中心全局单例已设置".to_string())
-    })?;
+    GlobalServiceRegistry::set(registry)
+        .map_err(|_| Error::ConfigError("注册中心全局单例已设置".to_string()))?;
+    GlobalConfigCenter::set(config_center)
+        .map_err(|_| Error::ConfigError("配置中心全局单例已设置".to_string()))?;
 
     info!("配置初始化完成");
 
@@ -213,7 +214,9 @@ async fn start_service_list_syncer() {
 /// 合并到 `registry_config.metadata` 中（RPC 自动注入的 key 优先级更高）。
 fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
     // 从配置文件加载用户自定义 metadata
-    if let Ok(custom_meta) = ConfigManager::global().get_as::<std::collections::HashMap<String, String>>("registry.metadata") {
+    if let Ok(custom_meta) = ConfigManager::global()
+        .get_as::<std::collections::HashMap<String, String>>("registry.metadata")
+    {
         for (k, v) in custom_meta {
             registry_config.metadata.entry(k).or_insert(v);
         }
@@ -221,11 +224,12 @@ fn inject_rpc_metadata(registry_config: &mut RegistryConfig) {
 
     // RPC 自动注入的 metadata 优先级高于配置文件中的值
     if let Some(rpc) = super::rpc::load_rpc_config()
-        && rpc.enabled {
-            registry_config
-                .metadata
-                .insert("grpc_port".to_string(), rpc.grpc.port.to_string());
-        }
+        && rpc.enabled
+    {
+        registry_config
+            .metadata
+            .insert("grpc_port".to_string(), rpc.grpc.port.to_string());
+    }
 }
 
 /// 构造配置变更处理器。
@@ -315,19 +319,27 @@ fn resolve_register_port() -> u16 {
     // 优先读取 SERVICE_REGISTRY_PORT。
     if let Ok(raw) = std::env::var("SERVICE_REGISTRY_PORT") {
         if let Ok(port) = raw.trim().parse::<u16>()
-            && port > 0 {
-                return port;
-            }
-        warn!("SERVICE_REGISTRY_PORT={} 不是有效的端口号，将回退到其他来源", raw);
+            && port > 0
+        {
+            return port;
+        }
+        warn!(
+            "SERVICE_REGISTRY_PORT={} 不是有效的端口号，将回退到其他来源",
+            raw
+        );
     }
 
     // 兼容旧 NACOS_REGISTER_SERVER_PORT。
     if let Ok(raw) = std::env::var("NACOS_REGISTER_SERVER_PORT") {
         if let Ok(port) = raw.trim().parse::<u16>()
-            && port > 0 {
-                return port;
-            }
-        warn!("NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源", raw);
+            && port > 0
+        {
+            return port;
+        }
+        warn!(
+            "NACOS_REGISTER_SERVER_PORT={} 不是有效的端口号，将回退到其他来源",
+            raw
+        );
     }
 
     // 从全局配置中读取 server.port。

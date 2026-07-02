@@ -13,9 +13,9 @@ use cmx_core::model::service::ServiceNode;
 use cmx_traits::plugin::PluginQuery;
 use tracing::debug;
 
-use crate::error::ServiceError;
-use crate::ExecuteOptions;
 use super::types::DebugPrepareResult;
+use crate::ExecuteOptions;
+use crate::error::ServiceError;
 
 /// 调试准备器
 ///
@@ -56,15 +56,13 @@ impl<'a> DebugPrepare<'a> {
         initial_input: serde_json::Value,
         execute_option: ExecuteOptions,
     ) -> Result<DebugPrepareResult, ServiceError> {
-        let node_data = node.data.as_ref()
-            .ok_or_else(|| ServiceError::InternalError(
-                format!("调试节点 {} 缺少 data", node.id)
-            ))?;
+        let node_data = node.data.as_ref().ok_or_else(|| {
+            ServiceError::InternalError(format!("调试节点 {} 缺少 data", node.id))
+        })?;
 
-        let node_meta = node_data.node_meta.as_ref()
-            .ok_or_else(|| ServiceError::InternalError(
-                format!("调试节点 {} 缺少 nodeMeta", node.id)
-            ))?;
+        let node_meta = node_data.node_meta.as_ref().ok_or_else(|| {
+            ServiceError::InternalError(format!("调试节点 {} 缺少 nodeMeta", node.id))
+        })?;
 
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
@@ -74,11 +72,12 @@ impl<'a> DebugPrepare<'a> {
             node.id, plugin_id, function_name
         );
 
-        let plugin_snapshot = self.plugin_query.get_plugin(plugin_id).await
+        let plugin_snapshot = self
+            .plugin_query
+            .get_plugin(plugin_id)
+            .await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
-            .ok_or_else(|| ServiceError::InternalError(
-                format!("插件 {} 未找到", plugin_id)
-            ))?;
+            .ok_or_else(|| ServiceError::InternalError(format!("插件 {} 未找到", plugin_id)))?;
 
         let code_server_url = cmx_debug::get_code_server_url_async().await;
 
@@ -100,35 +99,42 @@ impl<'a> DebugPrepare<'a> {
             Vec::new(),
             previous_output.clone(),
             initial_input.clone(),
-        ).await;
+        )
+        .await;
 
         if let Some(ref debug_params) = execute_option.debug_options.debug_params
-            && debug_params.get("isDebugSelfPlugin").map(|v| v == "1").unwrap_or(false) {
-                debug!("[debug-prepare] isDebugSelfPlugin is true, calling /debug interface");
+            && debug_params
+                .get("isDebugSelfPlugin")
+                .map(|v| v == "1")
+                .unwrap_or(false)
+        {
+            debug!("[debug-prepare] isDebugSelfPlugin is true, calling /debug interface");
 
-                if let Some(session) = cmx_debug::get_active_session() {
-                    let url = cmx_utils::ConfigManager::global()
-                        .get_string("code_server_extension_server.url")
-                        .unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
+            if let Some(session) = cmx_debug::get_active_session() {
+                let url = cmx_utils::ConfigManager::global()
+                    .get_string("code_server_extension_server.url")
+                    .unwrap_or_else(|_| "http://127.0.0.1:9000".to_string());
 
-                    let final_url = format!("{}/debug", url.trim_end_matches('/'));
+                let final_url = format!("{}/debug", url.trim_end_matches('/'));
 
-                    let payload = serde_json::json!({
-                        "cmx_pid": session.cmx_pid,
-                        "wasm_path": wasm_path,
-                        "debug_function": function_name.clone(),
-                    });
+                let payload = serde_json::json!({
+                    "cmx_pid": session.cmx_pid,
+                    "wasm_path": wasm_path,
+                    "debug_function": function_name.clone(),
+                });
 
-                    if let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
-                        if let Err(e) = client.post(&final_url).json(&payload).send().await {
-                            debug!("[debug-prepare] /debug interface call failed: {}", e);
-                        } else {
-                            debug!("[debug-prepare] /debug interface called successfully");
-                        }
+                if let Ok(client) = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()
+                {
+                    if let Err(e) = client.post(&final_url).json(&payload).send().await {
+                        debug!("[debug-prepare] /debug interface call failed: {}", e);
+                    } else {
+                        debug!("[debug-prepare] /debug interface called successfully");
                     }
                 }
             }
-
+        }
 
         Ok(DebugPrepareResult {
             code_server_url,

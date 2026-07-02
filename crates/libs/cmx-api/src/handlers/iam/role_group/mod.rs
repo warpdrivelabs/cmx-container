@@ -4,8 +4,8 @@ pub mod handler;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// 角色组模块路由
 pub struct RoleGroupModule;

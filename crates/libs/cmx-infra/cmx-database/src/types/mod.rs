@@ -132,14 +132,24 @@ impl ConditionExpr {
     pub fn to_sql_string(&self, start_index: usize) -> String {
         match self {
             ConditionExpr::Compare { left, op, .. } => {
-                format!("{} {} ${}", left.to_sql_string(), op.to_sql_string(), start_index + 1)
-            },
+                format!(
+                    "{} {} ${}",
+                    left.to_sql_string(),
+                    op.to_sql_string(),
+                    start_index + 1
+                )
+            }
             ConditionExpr::Logical { left, op, right } => {
-                format!("({} {} {})", left.to_sql_string(start_index), op.to_sql_string(), right.to_sql_string(start_index))
-            },
+                format!(
+                    "({} {} {})",
+                    left.to_sql_string(start_index),
+                    op.to_sql_string(),
+                    right.to_sql_string(start_index)
+                )
+            }
             ConditionExpr::Nested(inner) => {
                 format!("({})", inner.to_sql_string(start_index))
-            },
+            }
         }
     }
 
@@ -361,12 +371,14 @@ impl QueryBuilder {
     }
 
     pub fn asc(&mut self, column: &str) -> &mut Self {
-        self.order_by.push((column.to_string(), OrderDirection::Asc));
+        self.order_by
+            .push((column.to_string(), OrderDirection::Asc));
         self
     }
 
     pub fn desc(&mut self, column: &str) -> &mut Self {
-        self.order_by.push((column.to_string(), OrderDirection::Desc));
+        self.order_by
+            .push((column.to_string(), OrderDirection::Desc));
         self
     }
 
@@ -417,11 +429,11 @@ impl QueryBuilder {
                 }
                 sql.push_str(" FROM ");
                 sql.push_str(&self.table_name);
-            },
+            }
             QueryType::Delete => {
                 sql.push_str("DELETE FROM ");
                 sql.push_str(&self.table_name);
-            },
+            }
             QueryType::Insert(values) => {
                 sql.push_str("INSERT INTO ");
                 sql.push_str(&self.table_name);
@@ -445,13 +457,13 @@ impl QueryBuilder {
                             first = false;
                         }
                         sql.push(')');
-                    },
+                    }
                     InsertValues::Select(s) => {
                         sql.push(' ');
                         sql.push_str(s);
-                    },
+                    }
                 }
-            },
+            }
             QueryType::Update(sets) => {
                 sql.push_str("UPDATE ");
                 sql.push_str(&self.table_name);
@@ -465,7 +477,7 @@ impl QueryBuilder {
                     sql.push_str(" = ?");
                     first = false;
                 }
-            },
+            }
         }
 
         for join in &self.join_clauses {

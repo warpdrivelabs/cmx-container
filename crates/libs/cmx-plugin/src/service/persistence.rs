@@ -25,17 +25,17 @@ use std::path::{Path, PathBuf};
 use cmx_database::get_default_db_manager;
 
 use crate::common::{
-    DependencyUtils, DependencyUtilsDeps, DefinitionUtils, PackageUtils, PackageUtilsDeps,
+    DefinitionUtils, DependencyUtils, DependencyUtilsDeps, PackageUtils, PackageUtilsDeps,
     extract_source_info,
 };
 use crate::error::{PluginError, PluginResult};
 use crate::infrastructure::storage::TempDirCleanup;
 use crate::service::data_parser::ServiceParseParams;
-use crate::service::install::InstallRequest;
-use crate::service::upgrade::UpgradeRequest;
-use crate::service::downgrade::DowngradeRequest;
-use crate::service::uninstall::UninstallRequest;
 use crate::service::deploy::DeployRequest;
+use crate::service::downgrade::DowngradeRequest;
+use crate::service::install::InstallRequest;
+use crate::service::uninstall::UninstallRequest;
+use crate::service::upgrade::UpgradeRequest;
 
 /// 持久化操作的统一结果。
 ///
@@ -115,7 +115,10 @@ impl PluginPersistence {
     /// 创建安装目录 → DDL → 事务写入数据库 → 解析服务定义 → 提交事务。
     pub async fn install_persist(&self, request: InstallRequest) -> PluginResult<PersistResult> {
         let build_type = request.build_type.unwrap_or("release".to_string());
-        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let app_id = request
+            .app_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
 
         // 1. 获取插件包
         let package_path = self
@@ -158,7 +161,12 @@ impl PluginPersistence {
             .unwrap_or_else(|| "1.0.0".to_string());
 
         // 5. 检查已安装状态（数据库层面）
-        if let Some(existing) = self.deps.repository.find_plugin(&plugin_id, &app_id).await? {
+        if let Some(existing) = self
+            .deps
+            .repository
+            .find_plugin(&plugin_id, &app_id)
+            .await?
+        {
             if existing.version == install_version {
                 return Ok(PersistResult {
                     plugin_id,
@@ -201,7 +209,12 @@ impl PluginPersistence {
         }
 
         // 7. 创建安装目录
-        let install_path = self.deps.plugin_root.join(&app_id).join(&plugin_id).join(&install_version);
+        let install_path = self
+            .deps
+            .plugin_root
+            .join(&app_id)
+            .join(&plugin_id)
+            .join(&install_version);
         if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
@@ -363,7 +376,10 @@ impl PluginPersistence {
     /// 解析服务定义 → 提交事务。
     pub async fn upgrade_persist(&self, request: UpgradeRequest) -> PluginResult<PersistResult> {
         let build_type = request.build_type.unwrap_or("release".to_string());
-        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let app_id = request
+            .app_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
 
         // 1. 检查插件存在
         let plugin = self
@@ -447,7 +463,12 @@ impl PluginPersistence {
         }
 
         // 8. 创建新版本目录
-        let install_path = self.deps.plugin_root.join(&app_id).join(&plugin_id).join(&new_version);
+        let install_path = self
+            .deps
+            .plugin_root
+            .join(&app_id)
+            .join(&plugin_id)
+            .join(&new_version);
         if install_path.exists() {
             self.deps.storage.remove_dir(&install_path)?;
         }
@@ -588,8 +609,14 @@ impl PluginPersistence {
     /// 事务更新版本和主表 → 处理服务定义 → 提交事务。
     ///
     /// 降级只是切换版本目录，不涉及文件拷贝。
-    pub async fn downgrade_persist(&self, request: DowngradeRequest) -> PluginResult<PersistResult> {
-        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+    pub async fn downgrade_persist(
+        &self,
+        request: DowngradeRequest,
+    ) -> PluginResult<PersistResult> {
+        let app_id = request
+            .app_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
 
         // 1. 检查插件存在
         let plugin = self
@@ -673,17 +700,20 @@ impl PluginPersistence {
                 application_code: plugin.application_code.clone().unwrap_or_default(),
                 module_code: plugin.module_code.clone().unwrap_or_default(),
             };
-            let old_version_services = crate::service::service_parser::parse_services_from_plugin_dir(
-                &install_path,
-                &parse_params,
-            )?;
+            let old_version_services =
+                crate::service::service_parser::parse_services_from_plugin_dir(
+                    &install_path,
+                    &parse_params,
+                )?;
             let old_service_keys: HashSet<String> = old_version_services
                 .iter()
                 .map(|s| s.service_key.clone())
                 .collect();
 
             // 7a. 查询数据库中该插件的所有服务
-            let db_services = self.deps.service_query
+            let db_services = self
+                .deps
+                .service_query
                 .get_services_by_plugin(&plugin_id)
                 .await
                 .map_err(|e| PluginError::Database(format!("查询服务定义失败: {}", e)))?;
@@ -695,7 +725,12 @@ impl PluginPersistence {
                 if !old_service_keys.contains(&service.service_key) {
                     self.deps
                         .service_storage
-                        .delete_service(&service.service_key, &app_id, Some(txn_guard.txn_id()), None)
+                        .delete_service(
+                            &service.service_key,
+                            &app_id,
+                            Some(txn_guard.txn_id()),
+                            None,
+                        )
                         .await
                         .map_err(|e| {
                             PluginError::Database(format!(
@@ -711,7 +746,9 @@ impl PluginPersistence {
                         .service_storage
                         .save_service(&updated_service, Some(txn_guard.txn_id()))
                         .await
-                        .map_err(|e| PluginError::Database(format!("更新服务定义版本失败: {}", e)))?;
+                        .map_err(|e| {
+                            PluginError::Database(format!("更新服务定义版本失败: {}", e))
+                        })?;
                     updated_count += 1;
                 }
             }
@@ -757,8 +794,14 @@ impl PluginPersistence {
     /// 所有数据库操作（删除版本历史、主表记录、表元数据、服务定义）包裹在同一个事务中，
     /// 保证原子性。物理删除安装目录在事务提交**之后**执行，避免事务回滚后文件已删除
     /// 导致数据不一致。
-    pub async fn uninstall_persist(&self, request: UninstallRequest) -> PluginResult<PersistResult> {
-        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+    pub async fn uninstall_persist(
+        &self,
+        request: UninstallRequest,
+    ) -> PluginResult<PersistResult> {
+        let app_id = request
+            .app_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
 
         // 1. 检查插件存在
         let plugin = self
@@ -826,10 +869,9 @@ impl PluginPersistence {
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
         // 8. 物理删除安装目录（事务提交后执行，使用异步文件操作）
-        if let Some(parent_path) =
-            Path::new(&install_path)
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
+        if let Some(parent_path) = Path::new(&install_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
         {
             match tokio::fs::remove_dir_all(&parent_path).await {
                 Ok(()) => tracing::info!("删除插件安装目录成功: {}", parent_path),
@@ -874,7 +916,10 @@ impl PluginPersistence {
         plugin_id: &str,
         old_version: &str,
     ) -> PluginResult<PersistResult> {
-        let app_id = request.app_id.clone().unwrap_or_else(|| "default".to_string());
+        let app_id = request
+            .app_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
 
         // 1. 先卸载（⚠️ 非原子操作：卸载与安装是独立事务，中间状态不可回滚）
         let uninstall_req = UninstallRequest {

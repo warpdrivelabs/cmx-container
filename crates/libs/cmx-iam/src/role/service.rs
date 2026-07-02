@@ -2,23 +2,23 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use cmx_core::model::iam::{Permission, Role};
-use cmx_core::SVRContext;
-use cmx_database::crud::GenericCrudService;
-use cmx_database::DatabaseManager;
-use cmx_traits::error::TraitError;
-use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
-use cmx_core::model::cell::DataValue;
-use serde_json::Value;
-use tracing::{debug, info};
-use cmx_utils::snowflake_id_str;
 use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
 use crate::role::{RoleBmc, RoleFilter, RoleForCreate, RoleForUpdate};
 use crate::rule::RuleEnforcer;
 use crate::service_traits::RoleService;
+use async_trait::async_trait;
+use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
+use cmx_core::model::iam::{Permission, Role};
+use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
+use cmx_traits::error::TraitError;
+use cmx_utils::snowflake_id_str;
+use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
+use serde_json::Value;
+use tracing::{debug, info};
 
 /// 角色服务实现。
 pub struct RoleServiceImpl {
@@ -161,16 +161,25 @@ impl RoleService for RoleServiceImpl {
         let check_params = vec![DataValue::String(data.code.clone())];
         let existing = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, check_sql, check_params, "check_role_code")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                check_sql,
+                check_params,
+                "check_role_code",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询角色编码失败: {e}"))))?;
         if existing.iter().next().is_some() {
-            return Err(TraitError::from(IamError::RoleCodeExists(data.code.clone())));
+            return Err(TraitError::from(IamError::RoleCodeExists(
+                data.code.clone(),
+            )));
         }
 
-        let dataset = GenericCrudService::<RoleBmc>::create(&self.mm, &self.db_id, None, data.clone())
-            .await
-            .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let dataset =
+            GenericCrudService::<RoleBmc>::create(&self.mm, &self.db_id, None, data.clone())
+                .await
+                .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         let role = Self::extract_role(dataset).map_err(TraitError::from)?;
 
@@ -201,10 +210,7 @@ impl RoleService for RoleServiceImpl {
     /// * `IamError::RoleNotFound` - 角色不存在。
     /// * `IamError::Crud` - 数据库查询失败。
     async fn get_role(&self, role_id: &str) -> Result<Role, TraitError> {
-        debug!(
-            "{:<12} - RoleServiceImpl::get_role - {}",
-            "IAM", role_id
-        );
+        debug!("{:<12} - RoleServiceImpl::get_role - {}", "IAM", role_id);
 
         let dataset = GenericCrudService::<RoleBmc>::get(
             &self.mm,
@@ -216,7 +222,9 @@ impl RoleService for RoleServiceImpl {
         .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         if dataset.iter().next().is_none() {
-            return Err(TraitError::from(IamError::RoleNotFound(role_id.to_string())));
+            return Err(TraitError::from(IamError::RoleNotFound(
+                role_id.to_string(),
+            )));
         }
 
         Self::extract_role(dataset).map_err(TraitError::from)
@@ -243,10 +251,7 @@ impl RoleService for RoleServiceImpl {
         role_id: &str,
         data: RoleForUpdate,
     ) -> Result<Role, TraitError> {
-        debug!(
-            "{:<12} - RoleServiceImpl::update_role - {}",
-            "IAM", role_id
-        );
+        debug!("{:<12} - RoleServiceImpl::update_role - {}", "IAM", role_id);
 
         let dataset = GenericCrudService::<RoleBmc>::update(
             &self.mm,
@@ -303,18 +308,31 @@ impl RoleService for RoleServiceImpl {
         // 1. 批量查询角色信息（内置角色保护检查，消除 N+1 查询）
         let select_sql = "SELECT id, code FROM cmx_role WHERE id = ANY($1)";
         let select_params = vec![DataValue::Array(
-            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
         )];
         let dataset = self
             .mm
-            .query_sql_with_datavalues(&self.db_id, None, select_sql, select_params, "roles_for_delete")
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                select_sql,
+                select_params,
+                "roles_for_delete",
+            )
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("批量查询角色失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
         let mut found_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
         for row in dataset.iter() {
-            let id: String = row.get_by_name_as::<String>(schema, "id").unwrap_or_default();
-            let code: String = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
+            let id: String = row
+                .get_by_name_as::<String>(schema, "id")
+                .unwrap_or_default();
+            let code: String = row
+                .get_by_name_as::<String>(schema, "code")
+                .unwrap_or_default();
             if !id.is_empty() {
                 found_ids.insert(id);
             }
@@ -341,7 +359,10 @@ impl RoleService for RoleServiceImpl {
         // 2. 批量软删除 cmx_role（单条 SQL 替代循环 N 次往返）
         let update_sql = "UPDATE cmx_role SET archived = 1, update_time = NOW() WHERE id = ANY($1)";
         let update_params = vec![DataValue::Array(
-            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
         )];
         self.mm
             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), update_sql, update_params)
@@ -351,12 +372,17 @@ impl RoleService for RoleServiceImpl {
         // 3. 批量物理删除 cmx_role_permission 关联（单条 SQL 替代循环 N 次往返）
         let delete_sql = "DELETE FROM cmx_role_permission WHERE role_id = ANY($1)";
         let delete_params = vec![DataValue::Array(
-            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
         )];
         self.mm
             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}")))
+            })?;
 
         // 提交事务
         guard
@@ -402,19 +428,20 @@ impl RoleService for RoleServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
-        let (dataset, total) =
-            GenericCrudService::<RoleBmc, RoleFilter>::page(
-                &self.mm,
-                &self.db_id,
-                None,
-                filters,
-                list_options,
-            )
-            .await
-            .map_err(|e| TraitError::from(IamError::Crud(e)))?;
+        let (dataset, total) = GenericCrudService::<RoleBmc, RoleFilter>::page(
+            &self.mm,
+            &self.db_id,
+            None,
+            filters,
+            list_options,
+        )
+        .await
+        .map_err(|e| TraitError::from(IamError::Crud(e)))?;
 
         let roles = Self::extract_roles(dataset);
         Ok((roles, total))
@@ -444,7 +471,9 @@ impl RoleService for RoleServiceImpl {
 
         // 对每个 filter 组注入默认 archived = 0
         let filters = filters.map(|fs| {
-            fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>()
+            fs.into_iter()
+                .map(Self::with_default_archived)
+                .collect::<Vec<_>>()
         });
 
         let dataset = GenericCrudService::<RoleBmc, RoleFilter>::list(
@@ -479,7 +508,9 @@ impl RoleService for RoleServiceImpl {
     ) -> Result<(), TraitError> {
         debug!(
             "{:<12} - RoleServiceImpl::assign_permissions - role: {}, perm_count: {}",
-            "IAM", role_id, permission_ids.len()
+            "IAM",
+            role_id,
+            permission_ids.len()
         );
 
         // 开启事务
@@ -504,7 +535,9 @@ impl RoleService for RoleServiceImpl {
         self.mm
             .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_sql, delete_params)
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("删除旧权限关联失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除旧权限关联失败: {e}")))
+            })?;
 
         // 2. 批量插入新关联
         for perm_id in permission_ids {
@@ -519,7 +552,9 @@ impl RoleService for RoleServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("插入角色权限关联失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("插入角色权限关联失败: {e}")))
+                })?;
         }
 
         // 3. 提交事务
@@ -533,15 +568,25 @@ impl RoleService for RoleServiceImpl {
             "role_id": role_id,
             "permission_ids": permission_ids,
         });
-        self.audit_write(svr_ctx, "assign_permissions", "role", role_id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "assign_permissions",
+            "role",
+            role_id,
+            &audit_detail,
+        )
+        .await;
 
         // 5. 失效缓存（角色权限变更后，关联用户的权限缓存需失效）
         if let Some(checker) = &self.permission_checker {
             checker.invalidate_role_cache(role_id).await;
         }
 
-        info!(role_id = role_id, perm_count = permission_ids.len(), "角色权限分配成功");
+        info!(
+            role_id = role_id,
+            perm_count = permission_ids.len(),
+            "角色权限分配成功"
+        );
         Ok(())
     }
 
@@ -557,7 +602,9 @@ impl RoleService for RoleServiceImpl {
     ) -> Result<(), TraitError> {
         debug!(
             "{:<12} - RoleServiceImpl::assign_role_users - role: {}, user_count: {}",
-            "IAM", role_id, user_ids.len()
+            "IAM",
+            role_id,
+            user_ids.len()
         );
 
         const ROLE_USERS_INSERT_BATCH: usize = 500;
@@ -594,7 +641,9 @@ impl RoleService for RoleServiceImpl {
                 "old_role_users",
             )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询原用户集合失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询原用户集合失败: {e}")))
+            })?;
         let schema = ds.schema.as_ref();
         let mut old_user_ids: Vec<String> = Vec::new();
         for row in ds.iter() {
@@ -613,7 +662,9 @@ impl RoleService for RoleServiceImpl {
                 vec![DataValue::String(role_id.to_string())],
             )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("删除旧用户关联失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除旧用户关联失败: {e}")))
+            })?;
 
         // 分块批量插入新关联（ON CONFLICT 兜底）
         for chunk in user_ids.chunks(ROLE_USERS_INSERT_BATCH) {
@@ -671,7 +722,11 @@ impl RoleService for RoleServiceImpl {
             }
         }
 
-        info!(role_id = role_id, user_count = user_ids.len(), "角色用户分配成功");
+        info!(
+            role_id = role_id,
+            user_count = user_ids.len(),
+            "角色用户分配成功"
+        );
         Ok(())
     }
 
@@ -747,9 +802,21 @@ impl RoleService for RoleServiceImpl {
             description: p.description.clone(),
         };
 
-        let only_in_role_1: Vec<_> = perms1.iter().filter(|p| !set2.contains(&p.id)).map(to_summary).collect();
-        let only_in_role_2: Vec<_> = perms2.iter().filter(|p| !set1.contains(&p.id)).map(to_summary).collect();
-        let common: Vec<_> = perms1.iter().filter(|p| set2.contains(&p.id)).map(to_summary).collect();
+        let only_in_role_1: Vec<_> = perms1
+            .iter()
+            .filter(|p| !set2.contains(&p.id))
+            .map(to_summary)
+            .collect();
+        let only_in_role_2: Vec<_> = perms2
+            .iter()
+            .filter(|p| !set1.contains(&p.id))
+            .map(to_summary)
+            .collect();
+        let common: Vec<_> = perms1
+            .iter()
+            .filter(|p| set2.contains(&p.id))
+            .map(to_summary)
+            .collect();
 
         Ok(crate::service_traits::PermissionDiffResponse {
             role_1: crate::service_traits::RoleSummary {
@@ -770,4 +837,3 @@ impl RoleService for RoleServiceImpl {
         })
     }
 }
-

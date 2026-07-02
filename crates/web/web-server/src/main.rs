@@ -13,30 +13,27 @@ use config::web_config;
 /// 启动字符画 Logo（编译期嵌入二进制，无运行时文件路径依赖）
 const BANNER: &str = include_str!("banner.txt");
 
-use axum::{middleware, Router};
-use axum::extract::DefaultBodyLimit;
 use crate::config::{
-    build_audit_logger, init_auth_service, init_cache, init_datasources, finalize_iam_state, init_iam_services, init_infra, init_plugins, init_rpc,
-    init_runtime, init_services, init_service_invoker, init_storage, init_web_config, shutdown_infra,
+    build_audit_logger, finalize_iam_state, init_auth_service, init_cache, init_datasources,
+    init_iam_services, init_infra, init_plugins, init_rpc, init_runtime, init_service_invoker,
+    init_services, init_storage, init_web_config, shutdown_infra,
 };
-use std::sync::Arc;
-use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
+use axum::extract::DefaultBodyLimit;
+use axum::{Router, middleware};
 use cmx_api::CmxAppState;
+use cmx_api::middleware::{cors_layer, mw_auth, mw_context_resolver, mw_permission, trace_layer};
 use cmx_service::{GlobalServiceQuery, GlobalServiceStorage};
 use cmx_utils::ConfigManager;
+use format::CompactFormatter;
+use std::future::IntoFuture;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tower_http::limit::RequestBodyLimitLayer;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use format::CompactFormatter;
-use tracing_subscriber::{
-    fmt,
-    layer::SubscriberExt,
-    registry,
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, registry, util::SubscriberInitExt};
 
 /// 应用程序主函数
 ///
@@ -67,7 +64,7 @@ async fn main() -> Result<()> {
 
     let log_dir = "logs";
     let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, "cmx-server.log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     // 文件日志层：JSON 格式，不带 ANSI 颜色码，便于日志收集系统解析
     let file_layer = fmt::layer()
@@ -99,7 +96,6 @@ async fn main() -> Result<()> {
     //     .with_thread_ids(true)
     //     .compact();
 
-
     // 环境过滤层，读取 RUST_LOG 环境变量，默认 info 级别
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
@@ -109,9 +105,7 @@ async fn main() -> Result<()> {
         .with(file_layer)
         .init();
 
-    // 保持 guard 活跃直至程序结束，确保日志写入完成
-    // 注意：使用 forget 而非 drop，因为 shutdown 后仍需要 flush 日志缓冲区
-    std::mem::forget(guard);
+    // 保持 guard 活跃直至 main 结束，确保日志后台线程正常 flush。
 
     init_infra().await?;
     cmx_utils::crypto::CryptoService::init_from_env();
@@ -121,10 +115,9 @@ async fn main() -> Result<()> {
     init_datasources().await?;
     init_storage().await?;
 
-    init_web_config()
-        .map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
-    let web_config = web_config()
-        .map_err(|e| Error::ConfigError(format!("获取 Web 配置失败: {}", e)))?;
+    init_web_config().map_err(|e| Error::ConfigError(format!("加载 Web 配置失败: {}", e)))?;
+    let web_config =
+        web_config().map_err(|e| Error::ConfigError(format!("获取 Web 配置失败: {}", e)))?;
 
     cmx_debug::init();
     info!("调试会话管理器初始化完成");
@@ -151,7 +144,8 @@ async fn main() -> Result<()> {
     let auth_service = init_auth_service(user_auth_query, audit_logger.clone()).await?;
 
     // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
-    let iam_state = finalize_iam_state(&iam_state, auth_service.clone(), iam_config, audit_logger).await?;
+    let iam_state =
+        finalize_iam_state(&iam_state, auth_service.clone(), iam_config, audit_logger).await?;
 
     // 权限一致性校验 + 权限列表日志(不写 DB,仅校验代码声明权限与 DB 是否一致)
     {
@@ -171,17 +165,17 @@ async fn main() -> Result<()> {
     // 将 PluginDataImporter 透传给 gRPC 服务端，启用 CmxPluginDataService。
     // 组装层构造 cmx-biz 的 BizFunctionInvoker（封装 RuntimeInvoker + PluginQuery）注入 cmx-rpc，
     // 使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
-    let function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker> = Arc::new(
-        cmx_biz::function_invoker::BizFunctionInvoker::new(
+    let function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker> =
+        Arc::new(cmx_biz::function_invoker::BizFunctionInvoker::new(
             cmx_runtime::GlobalExtismEngine::get_as_invoker(),
             cmx_plugin::GlobalPluginManager::get_as_plugin_query(),
-        ),
-    );
+        ));
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
         function_invoker,
         plugin_data_importer.clone(),
-    ).await?;
+    )
+    .await?;
 
     // 构建完整的 AppState，注入各子系统的 trait 实例
     let app_state = CmxAppState::new()
@@ -189,7 +183,11 @@ async fn main() -> Result<()> {
         .with_runtime_invoker(cmx_runtime::GlobalExtismEngine::get_as_invoker())
         .with_service_query(GlobalServiceQuery::get().clone())
         .with_service_storage(GlobalServiceStorage::get().clone())
-        .with_storage_service(cmx_storage::global::GlobalStorageService::get().service().clone())
+        .with_storage_service(
+            cmx_storage::global::GlobalStorageService::get()
+                .service()
+                .clone(),
+        )
         .with_auth_service(auth_service)
         .with_iam(iam_state);
 
@@ -230,7 +228,9 @@ async fn main() -> Result<()> {
     // 注册本地存储的静态文件访问路由（path_patterns → storage_path）
     let routes_all = {
         let mut router = routes_all;
-        for (pattern, storage_path) in cmx_storage::global::GlobalStorageService::local_access_configs() {
+        for (pattern, storage_path) in
+            cmx_storage::global::GlobalStorageService::local_access_configs()
+        {
             // 从 pattern（如 "/file/**"）提取路由前缀（如 "/file"）
             let prefix = pattern.split_once('*').map(|(p, _)| p).unwrap_or(pattern);
             let prefix = prefix.trim_end_matches('/');
@@ -238,10 +238,9 @@ async fn main() -> Result<()> {
                 continue;
             }
             info!("挂载本地存储静态文件路由: {} -> {}", prefix, storage_path);
-            let serve_dir: axum::Router<()> = axum::Router::new()
-                .fallback_service(axum::routing::get_service(
-                    tower_http::services::ServeDir::new(storage_path),
-                ));
+            let serve_dir: axum::Router<()> = axum::Router::new().fallback_service(
+                axum::routing::get_service(tower_http::services::ServeDir::new(storage_path)),
+            );
             router = router.nest(prefix, serve_dir);
         }
         router
@@ -321,10 +320,30 @@ async fn main() -> Result<()> {
     // 仿照 Redis 启动时的 ASCII 艺术字效果）。放在所有启动日志之后，作为最后输出。
     print_banner();
 
-    axum::serve(listener, routes_all.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| Error::ServerSetup(format!("服务器运行失败: {}", e)))?;
+    let graceful_shutdown_timeout = graceful_shutdown_timeout();
+    let (shutdown_started_tx, shutdown_started_rx) = tokio::sync::oneshot::channel();
+    let server =
+        axum::serve(listener, routes_all.into_make_service()).with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            let _ = shutdown_started_tx.send(());
+        });
+    let server = server.into_future();
+
+    tokio::pin!(server);
+    tokio::select! {
+        result = &mut server => {
+            result.map_err(|e| Error::ServerSetup(format!("服务器运行失败: {}", e)))?;
+        }
+        _ = async {
+            let _ = shutdown_started_rx.await;
+            tokio::time::sleep(graceful_shutdown_timeout).await;
+        } => {
+            warn!(
+                "HTTP 优雅关闭等待超过 {} 秒，仍有活动连接，继续执行退出清理",
+                graceful_shutdown_timeout.as_secs()
+            );
+        }
+    }
 
     info!("开始优雅关闭...");
     shutdown_infra().await;
@@ -353,10 +372,10 @@ fn print_banner() {
 
     // 渐变停靠点（RGB）：青 → 蓝 → 紫 → 品红
     const STOPS: [(u8, u8, u8); 4] = [
-        (0, 229, 255),   // 青
-        (41, 121, 255),  // 蓝
-        (124, 77, 255),  // 紫
-        (255, 64, 200),  // 品红
+        (0, 229, 255),  // 青
+        (41, 121, 255), // 蓝
+        (124, 77, 255), // 紫
+        (255, 64, 200), // 品红
     ];
 
     let lines: Vec<&str> = BANNER.lines().collect();
@@ -395,6 +414,29 @@ fn gradient_color(stops: &[(u8, u8, u8)], t: f32) -> (u8, u8, u8) {
     let (r1, g1, b1) = stops[i + 1];
     let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * local).round() as u8;
     (lerp(r0, r1), lerp(g0, g1), lerp(b0, b1))
+}
+
+/// HTTP 优雅关闭最长等待时间。
+///
+/// Axum 会等待所有活动连接结束；SSE、长轮询或调试页保持的连接可能让等待无限持续。
+/// 可通过 `CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS` 或 `server.graceful_shutdown_timeout_secs`
+/// 调整，默认 10 秒。
+fn graceful_shutdown_timeout() -> Duration {
+    const DEFAULT_SECS: u64 = 10;
+
+    let secs = std::env::var("CMX_GRACEFUL_SHUTDOWN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .or_else(|| {
+            ConfigManager::global()
+                .get_int("server.graceful_shutdown_timeout_secs")
+                .ok()
+                .and_then(|value| u64::try_from(value).ok())
+        })
+        .filter(|secs| *secs > 0)
+        .unwrap_or(DEFAULT_SECS);
+
+    Duration::from_secs(secs)
 }
 
 /// 监听优雅关闭信号

@@ -4,8 +4,8 @@
 //! 业务错误经 `From<PortalError> for cmx_api_types::Error` 自动 `?` 传播为 HTTP 错误。
 //! 路径/查询/请求体与 Node 后端保持一致，响应统一 ApiResp 信封（前端 apiFetch 拆 data）。
 
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 use tracing::debug;
 
@@ -161,7 +161,9 @@ pub async fn get_domains(
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     debug!("{:<12} - handler::get_domains", "HANDLER");
-    Ok(Json(ApiResp::ok(cmx_portal::meta::domains::get_domains_doc().await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::meta::domains::get_domains_doc().await?,
+    )))
 }
 
 /// `GET /api/menu-pages?menu=…` —— 菜单 JSON。
@@ -170,7 +172,9 @@ pub async fn get_menu_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<MenuQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::meta::menu_pages::get_menu_page_json(&q.menu).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::meta::menu_pages::get_menu_page_json(&q.menu).await?,
+    )))
 }
 
 /// `GET /api/activities?name=…` —— 域应用清单。
@@ -179,7 +183,9 @@ pub async fn get_activities(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<ActivitiesQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::meta::activities::get_activities_doc(&q.name).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::meta::activities::get_activities_doc(&q.name).await?,
+    )))
 }
 
 // ───────────────────────── 工作区节点 ─────────────────────────
@@ -189,7 +195,9 @@ pub async fn list_workspace_nodes(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::meta::workspace_nodes::list_workspace_nodes().await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::meta::workspace_nodes::list_workspace_nodes().await?,
+    )))
 }
 
 /// `GET /api/workspace-nodes/:id` —— 完整定义。
@@ -199,7 +207,9 @@ pub async fn get_workspace_node(
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let rec = cmx_portal::meta::workspace_nodes::get_workspace_node_by_id(&id).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(rec).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(rec).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `POST /api/workspace-nodes` —— upsert。
@@ -209,7 +219,9 @@ pub async fn save_workspace_node(
     Json(input): Json<cmx_portal::meta::workspace_nodes::WorkspaceNodeInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let rec = cmx_portal::meta::workspace_nodes::save_workspace_node(input).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(rec).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(rec).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `DELETE /api/workspace-nodes/:id` —— 删除。
@@ -218,7 +230,9 @@ pub async fn delete_workspace_node(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::meta::workspace_nodes::delete_workspace_node(&id).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::meta::workspace_nodes::delete_workspace_node(&id).await?,
+    )))
 }
 
 // ───────────────────────── 表单页 ─────────────────────────
@@ -229,7 +243,9 @@ pub async fn list_form_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::form::list_form_pages_paged(q.page, q.page_size).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::form::list_form_pages_paged(q.page, q.page_size).await?,
+    )))
 }
 
 /// `POST /api/form-pages` —— 保存。
@@ -238,7 +254,9 @@ pub async fn save_form_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::form::FormPageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::form::save_form_page(input).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::form::save_form_page(input).await?,
+    )))
 }
 
 /// `GET /api/form-pages/:id` —— 单条。
@@ -247,7 +265,9 @@ pub async fn get_form_page(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::form::get_form_page_by_id(&id).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::form::get_form_page_by_id(&id).await?,
+    )))
 }
 
 // ───────────────────────── 原生页面 ─────────────────────────
@@ -258,7 +278,9 @@ pub async fn list_native_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<PageQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::native::list_native_pages_paged(q.page, q.page_size).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::native::list_native_pages_paged(q.page, q.page_size).await?,
+    )))
 }
 
 /// `POST /api/native-pages` —— 保存。
@@ -267,7 +289,9 @@ pub async fn save_native_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::native::NativePageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::native::save_native_page(input).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::native::save_native_page(input).await?,
+    )))
 }
 
 /// `POST /api/native-pages/batch` —— 批量取源码。
@@ -276,7 +300,9 @@ pub async fn batch_native_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::native::get_native_pages_by_ids(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::native::get_native_pages_by_ids(&body).await?,
+    )))
 }
 
 /// `GET /api/native-pages/:id` —— 单条（含源码）。
@@ -286,7 +312,9 @@ pub async fn get_native_page(
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let full = cmx_portal::pages::native::get_native_page_by_id(&id).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(full).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(full).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 // ───────────────────────── 事实数据 ─────────────────────────
@@ -306,7 +334,9 @@ pub async fn get_fact_post(
     CmxSvrContext(_c): CmxSvrContext,
     Json(r): Json<cmx_portal::fact::store::FactRef>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::fact::store::get_fact(&r).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::fact::store::get_fact(&r).await?,
+    )))
 }
 
 /// `GET /api/fact/:domain/:app/:module/:file` —— 读取事实文件（路径参数）。
@@ -321,7 +351,9 @@ pub async fn get_fact_path(
         module: p.module,
         file: p.file,
     };
-    Ok(Json(ApiResp::ok(cmx_portal::fact::store::get_fact(&r).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::fact::store::get_fact(&r).await?,
+    )))
 }
 
 // ───────────────────────── 帮助中心 ─────────────────────────
@@ -342,7 +374,9 @@ pub async fn help_get_post(
     Json(r): Json<cmx_portal::help::store::HelpRef>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let doc = cmx_portal::help::store::get_doc(&r).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(doc).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(doc).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `GET /api/help/doc/:domain/:app/:module/:file` —— 读取完整帮助文档（路径参数）。
@@ -358,7 +392,9 @@ pub async fn help_get_path(
         file: p.file,
     };
     let doc = cmx_portal::help::store::get_doc(&r).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(doc).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(doc).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `POST /api/help/doc` —— 保存帮助文档（upsert）。
@@ -418,7 +454,9 @@ pub async fn notify_counts(
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let uid = notify_user_id(&c)?;
     let counts = cmx_portal::notify::store::counts(&uid).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(counts).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(counts).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `GET /api/notifications?center=task|message|log` —— 当前用户通知列表（缺 center 则全部）。
@@ -430,8 +468,9 @@ pub async fn notify_list(
     let uid = notify_user_id(&c)?;
     let center = match q.center.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(
-            cmx_portal::notify::store::NotifyCenter::parse(s)
-                .ok_or_else(|| cmx_api_types::Error::bad_request("center 仅支持 task/message/log"))?,
+            cmx_portal::notify::store::NotifyCenter::parse(s).ok_or_else(|| {
+                cmx_api_types::Error::bad_request("center 仅支持 task/message/log")
+            })?,
         ),
         None => None,
     };
@@ -446,11 +485,19 @@ pub async fn notify_publish(
     CmxSvrContext(c): CmxSvrContext,
     Json(mut input): Json<cmx_portal::notify::store::NotifyInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    if input.user_id.as_deref().map(str::trim).unwrap_or("").is_empty() {
+    if input
+        .user_id
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .is_empty()
+    {
         input.user_id = Some(notify_user_id(&c)?);
     }
     let saved = cmx_portal::notify::store::publish(input).await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(saved).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(saved).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -471,10 +518,16 @@ pub async fn notify_mark_read(
     Json(input): Json<NotifyMarkInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let uid = notify_user_id(&c)?;
-    let center = match input.center.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let center = match input
+        .center
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(s) => Some(
-            cmx_portal::notify::store::NotifyCenter::parse(s)
-                .ok_or_else(|| cmx_api_types::Error::bad_request("center 仅支持 task/message/log"))?,
+            cmx_portal::notify::store::NotifyCenter::parse(s).ok_or_else(|| {
+                cmx_api_types::Error::bad_request("center 仅支持 task/message/log")
+            })?,
         ),
         None => None,
     };
@@ -483,7 +536,11 @@ pub async fn notify_mark_read(
         return Ok(Json(ApiResp::ok(serde_json::json!({ "marked": n }))));
     }
     let center = center.ok_or_else(|| cmx_api_types::Error::bad_request("标单条需提供 center"))?;
-    let id = input.id.as_deref().map(str::trim).filter(|s| !s.is_empty())
+    let id = input
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
         .ok_or_else(|| cmx_api_types::Error::bad_request("标单条需提供 id"))?;
     let changed = cmx_portal::notify::store::mark_read(&uid, center, id).await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "changed": changed }))))
@@ -539,8 +596,13 @@ pub async fn notify_stream(
         }
     });
 
-    let stream = futures::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) });
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 // ───────────────────────── 功能启动器（自然语言打开功能）─────────────────────────
@@ -559,7 +621,9 @@ pub async fn launcher_resolve(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::launcher::ResolveInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::launcher::resolve(input).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::launcher::resolve(input).await?,
+    )))
 }
 
 // ───────────────────────── HTML 页面 ─────────────────────────
@@ -586,7 +650,9 @@ pub async fn save_html_page(
     CmxSvrContext(_c): CmxSvrContext,
     Json(input): Json<cmx_portal::pages::html::HtmlPageInput>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::html::save_html_page(input).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::html::save_html_page(input).await?,
+    )))
 }
 
 /// `POST /api/html-pages/batch` —— 批量取完整页面。
@@ -595,7 +661,9 @@ pub async fn batch_html_pages(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::html::get_html_pages_by_ids(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::html::get_html_pages_by_ids(&body).await?,
+    )))
 }
 
 /// `GET /api/html-pages/:id` —— 单页（含 html）。
@@ -604,7 +672,9 @@ pub async fn get_html_page(
     CmxSvrContext(_c): CmxSvrContext,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::pages::html::get_html_page_by_id(&id).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::pages::html::get_html_page_by_id(&id).await?,
+    )))
 }
 
 // ───────────────────────── DAM 注册表（读写 CRUD）─────────────────────────
@@ -615,7 +685,9 @@ pub async fn dam_registry(
     CmxSvrContext(_c): CmxSvrContext,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let reg = cmx_portal::dam::store::get_dam_registry().await?;
-    Ok(Json(ApiResp::ok(serde_json::to_value(reg).map_err(cmx_portal::PortalError::from)?)))
+    Ok(Json(ApiResp::ok(
+        serde_json::to_value(reg).map_err(cmx_portal::PortalError::from)?,
+    )))
 }
 
 /// `GET /api/dam-registry/domains` —— 域列表。
@@ -643,7 +715,9 @@ pub async fn dam_delete_domain(
     CmxSvrContext(_c): CmxSvrContext,
     Path(domain): Path<String>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dam::store::delete_domain(&domain).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dam::store::delete_domain(&domain).await?,
+    )))
 }
 
 /// `GET /api/dam-registry/applications?domain=` —— 应用列表。
@@ -653,7 +727,9 @@ pub async fn dam_list_applications(
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let apps = cmx_portal::dam::store::list_applications(q.domain.as_deref()).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "applications": apps }))))
+    Ok(Json(ApiResp::ok(
+        serde_json::json!({ "applications": apps }),
+    )))
 }
 
 /// `POST /api/dam-registry/applications` —— upsert 应用。
@@ -672,7 +748,9 @@ pub async fn dam_delete_application(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<AppDelPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dam::store::delete_application(&p.domain, &p.application).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dam::store::delete_application(&p.domain, &p.application).await?,
+    )))
 }
 
 /// `GET /api/dam-registry/modules?domain=&app=` —— 模块列表。
@@ -701,7 +779,9 @@ pub async fn dam_delete_module(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<ModulePath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dam::store::delete_module(&p.domain, &p.application, &p.module).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dam::store::delete_module(&p.domain, &p.application, &p.module).await?,
+    )))
 }
 
 // ───────────────────────── 注册表只读派生（/registry/*）─────────────────────────
@@ -757,7 +837,9 @@ pub async fn list_modules(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let items = cmx_portal::meta::modules::list_module_manifests(q.domain.as_deref(), q.app.as_deref()).await?;
+    let items =
+        cmx_portal::meta::modules::list_module_manifests(q.domain.as_deref(), q.app.as_deref())
+            .await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
 }
 
@@ -767,7 +849,8 @@ pub async fn get_module_manifest(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<ModulePath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let m = cmx_portal::meta::modules::load_module_manifest(&p.domain, &p.application, &p.module).await?;
+    let m = cmx_portal::meta::modules::load_module_manifest(&p.domain, &p.application, &p.module)
+        .await?;
     Ok(Json(ApiResp::ok(m)))
 }
 
@@ -777,7 +860,13 @@ pub async fn get_module_resource(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<ModuleResourcePath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let out = cmx_portal::meta::modules::resolve_module_resource(&p.domain, &p.application, &p.module, &p.res_type).await?;
+    let out = cmx_portal::meta::modules::resolve_module_resource(
+        &p.domain,
+        &p.application,
+        &p.module,
+        &p.res_type,
+    )
+    .await?;
     Ok(Json(ApiResp::ok(out)))
 }
 
@@ -821,7 +910,9 @@ pub async fn definitions_get(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::definitions::store::get_definition(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::definitions::store::get_definition(&q.to_ref()).await?,
+    )))
 }
 
 /// `POST /api/definitions/config?domain=&...&file=` —— 保存定义（body 为文档）。
@@ -832,7 +923,9 @@ pub async fn definitions_save(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let saved = cmx_portal::definitions::store::save_definition(&q.to_ref(), &body).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "ok": true, "saved": saved }))))
+    Ok(Json(ApiResp::ok(
+        serde_json::json!({ "ok": true, "saved": saved }),
+    )))
 }
 
 /// `POST /api/definitions/batch` —— 批量读 + base 字段集。
@@ -841,7 +934,9 @@ pub async fn definitions_batch(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::definitions::store::get_definitions_batch(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::definitions::store::get_definitions_batch(&body).await?,
+    )))
 }
 
 /// `DELETE /api/definitions/config?domain=&...&file=` —— 删除定义。
@@ -850,7 +945,9 @@ pub async fn definitions_delete(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::definitions::store::delete_definition(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::definitions::store::delete_definition(&q.to_ref()).await?,
+    )))
 }
 
 /// `POST /api/definitions/default?domain=&...&file=` —— 设为默认版本（同 stem 互斥）。
@@ -859,7 +956,9 @@ pub async fn definitions_set_default(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DefQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::definitions::store::set_default_version(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::definitions::store::set_default_version(&q.to_ref()).await?,
+    )))
 }
 
 // ───────────────────────── 字典检索引擎 ─────────────────────────
@@ -903,7 +1002,9 @@ pub async fn dict_register_schema(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::schema::register_schema(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::schema::register_schema(&body).await?,
+    )))
 }
 
 /// `POST /api/dict/multi-search` —— 多字典联查。
@@ -912,7 +1013,9 @@ pub async fn dict_multi_search(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::multi::execute(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::multi::execute(&body).await?,
+    )))
 }
 
 /// `POST /api/dict/batch-data` —— 多字典内容批量加载。
@@ -921,7 +1024,9 @@ pub async fn dict_batch_data(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::api::batch_data_endpoint(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::api::batch_data_endpoint(&body).await?,
+    )))
 }
 
 /// `POST /api/dict/:dictId/search` —— 单字典检索。
@@ -931,7 +1036,9 @@ pub async fn dict_search(
     Path(p): Path<DictIdPath>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::api::search_endpoint(&p.dict_id, &body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::api::search_endpoint(&p.dict_id, &body).await?,
+    )))
 }
 
 /// `GET /api/dict/:dictId/suggest?q=` —— 自动补全。
@@ -941,7 +1048,9 @@ pub async fn dict_suggest(
     Path(p): Path<DictIdPath>,
     Query(q): Query<DictQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::api::suggest_endpoint(&p.dict_id, q.q.as_deref().unwrap_or("")).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::api::suggest_endpoint(&p.dict_id, q.q.as_deref().unwrap_or("")).await?,
+    )))
 }
 
 /// `POST /api/dict/:dictId/entries?rebuild=` —— 写入条目。
@@ -953,7 +1062,9 @@ pub async fn dict_upsert_entries(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let rebuild = q.rebuild.as_deref() == Some("true");
-    Ok(Json(ApiResp::ok(cmx_portal::dict::api::upsert_entries_endpoint(&p.dict_id, &body, rebuild).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::api::upsert_entries_endpoint(&p.dict_id, &body, rebuild).await?,
+    )))
 }
 
 /// `DELETE /api/dict/:dictId/entries/:id` —— 删除单条目。
@@ -962,7 +1073,9 @@ pub async fn dict_delete_entry(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<DictEntryPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::repo::delete_entry(&p.dict_id, &p.id).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::repo::delete_entry(&p.dict_id, &p.id).await?,
+    )))
 }
 
 /// `DELETE /api/dict/:dictId/entries` —— 清空条目。
@@ -971,7 +1084,9 @@ pub async fn dict_clear_entries(
     CmxSvrContext(_c): CmxSvrContext,
     Path(p): Path<DictIdPath>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::dict::repo::clear_entries(&p.dict_id).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::repo::clear_entries(&p.dict_id).await?,
+    )))
 }
 
 /// `POST /api/dict/:dictId/deactivate` —— 停用一个码。
@@ -984,7 +1099,9 @@ pub async fn dict_deactivate(
     let code = body.get("code").and_then(|v| v.as_str()).unwrap_or("");
     let valid_to = body.get("validTo").and_then(|v| v.as_str());
     let successor = body.get("successorCode").and_then(|v| v.as_str());
-    Ok(Json(ApiResp::ok(cmx_portal::dict::write::deactivate(&p.dict_id, code, valid_to, successor).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::write::deactivate(&p.dict_id, code, valid_to, successor).await?,
+    )))
 }
 
 /// `POST /api/dict/:dictId/supersede` —— 停旧启新。
@@ -998,7 +1115,10 @@ pub async fn dict_supersede(
     let new_code = body.get("newCode").and_then(|v| v.as_str()).unwrap_or("");
     let as_of = body.get("asOf").and_then(|v| v.as_str());
     let new_entry = body.get("newEntry");
-    Ok(Json(ApiResp::ok(cmx_portal::dict::write::supersede(&p.dict_id, old_code, new_code, as_of, new_entry).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::dict::write::supersede(&p.dict_id, old_code, new_code, as_of, new_entry)
+            .await?,
+    )))
 }
 
 // ───────────────────────── 上下文档案 ─────────────────────────
@@ -1030,7 +1150,10 @@ impl CpQuery {
     }
     /// 把锚点键收成 serde_json Map（仅 rest，不含 DAM 四段）。
     fn anchor_map(&self) -> serde_json::Map<String, serde_json::Value> {
-        self.rest.iter().map(|(k, v)| (k.clone(), serde_json::json!(v))).collect()
+        self.rest
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+            .collect()
     }
 }
 
@@ -1055,7 +1178,9 @@ pub async fn cp_get_config(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<CpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::store::get_context_profile(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::store::get_context_profile(&q.to_ref()).await?,
+    )))
 }
 
 /// `POST /api/context-profile/config` —— 保存档案（含 validate）。
@@ -1067,11 +1192,22 @@ pub async fn cp_save_config(
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     // 校验：无效 422（与 Node 一致用 fail code 422）
     let diagnostics = cmx_portal::context_profile::validator::validate_context_profile(&body);
-    if !diagnostics.get("valid").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return Ok(Json(ApiResp::fail_with_data(422, "校验未通过", serde_json::json!({ "ok": false, "diagnostics": diagnostics }))));
+    if !diagnostics
+        .get("valid")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Ok(Json(ApiResp::fail_with_data(
+            422,
+            "校验未通过",
+            serde_json::json!({ "ok": false, "diagnostics": diagnostics }),
+        )));
     }
-    let saved = cmx_portal::context_profile::store::save_context_profile(&q.to_ref(), &body).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "ok": true, "saved": saved }))))
+    let saved =
+        cmx_portal::context_profile::store::save_context_profile(&q.to_ref(), &body).await?;
+    Ok(Json(ApiResp::ok(
+        serde_json::json!({ "ok": true, "saved": saved }),
+    )))
 }
 
 /// `DELETE /api/context-profile/config` —— 删除档案。
@@ -1080,7 +1216,9 @@ pub async fn cp_delete_config(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<CpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::store::delete_context_profile(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::store::delete_context_profile(&q.to_ref()).await?,
+    )))
 }
 
 /// `POST /api/context-profile/default` —— 设为默认版本（同 scenario stem 互斥）。
@@ -1089,7 +1227,9 @@ pub async fn cp_set_default(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<CpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::store::set_default_version(&q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::store::set_default_version(&q.to_ref()).await?,
+    )))
 }
 
 /// `GET /api/context-profile/resolve` —— 按锚点解析合并规则 → fields/columnModel。
@@ -1098,7 +1238,9 @@ pub async fn cp_resolve(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<CpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::api::resolve(&q.to_ref(), &q.anchor_map()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
+    )))
 }
 
 /// `GET /api/context-profile/rule` —— 按锚点取规则 + 相关维度。
@@ -1107,7 +1249,9 @@ pub async fn cp_rule(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<CpQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::api::rule(&q.to_ref(), &q.anchor_map()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::api::rule(&q.to_ref(), &q.anchor_map()).await?,
+    )))
 }
 
 /// `POST /api/context-profile/validate` —— 校验。
@@ -1118,11 +1262,18 @@ pub async fn cp_validate(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let diagnostics = cmx_portal::context_profile::api::validate(&body, &q.to_ref()).await?;
-    let valid = diagnostics.get("valid").and_then(|v| v.as_bool()).unwrap_or(false);
+    let valid = diagnostics
+        .get("valid")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if valid {
         Ok(Json(ApiResp::ok(diagnostics)))
     } else {
-        Ok(Json(ApiResp::fail_with_data(422, "校验未通过", diagnostics)))
+        Ok(Json(ApiResp::fail_with_data(
+            422,
+            "校验未通过",
+            diagnostics,
+        )))
     }
 }
 
@@ -1133,7 +1284,9 @@ pub async fn cp_preview(
     Query(q): Query<CpQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::context_profile::api::preview(&body, &q.to_ref()).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::context_profile::api::preview(&body, &q.to_ref()).await?,
+    )))
 }
 
 // ───────────────────────── AI 对话中继 ─────────────────────────
@@ -1145,7 +1298,10 @@ pub async fn ai_chat(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     if !cmx_portal::ai::is_configured() {
-        return Ok(Json(ApiResp::fail(501, "AI 服务未配置：请设置 CMX_AI_API_KEY 或 DEEPSEEK_API_KEY")));
+        return Ok(Json(ApiResp::fail(
+            501,
+            "AI 服务未配置：请设置 CMX_AI_API_KEY 或 DEEPSEEK_API_KEY",
+        )));
     }
     Ok(Json(ApiResp::ok(cmx_portal::ai::chat(&body).await?)))
 }
@@ -1166,7 +1322,9 @@ pub async fn agent_message(
     CmxSvrContext(_c): CmxSvrContext,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(cmx_portal::agent::flow::message(&body).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::agent::flow::message(&body).await?,
+    )))
 }
 
 /// `POST /api/agent/message/stream` —— SSE 真流式事件。
@@ -1182,8 +1340,14 @@ pub async fn agent_message_stream(
     use axum::response::sse::{Event, KeepAlive};
     use axum::response::{IntoResponse, Sse};
 
-    let messages = cmx_portal::agent::flow::normalize_messages(body.get("messages").unwrap_or(&serde_json::Value::Null));
-    let context = body.get("context").filter(|v| v.is_object()).cloned().unwrap_or(serde_json::json!({}));
+    let messages = cmx_portal::agent::flow::normalize_messages(
+        body.get("messages").unwrap_or(&serde_json::Value::Null),
+    );
+    let context = body
+        .get("context")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let conv_id = body
         .get("conversationId")
         .and_then(|v| v.as_str())
@@ -1204,7 +1368,10 @@ pub async fn agent_message_stream(
     tokio::spawn(async move {
         let tx_emit = tx.clone();
         let result = cmx_portal::agent::flow::run_agent_flow(&messages, &context, move |ev| {
-            let _ = tx_emit.send(Ok(Event::default().event("agent_event").json_data(&ev).unwrap_or_default()));
+            let _ = tx_emit.send(Ok(Event::default()
+                .event("agent_event")
+                .json_data(&ev)
+                .unwrap_or_default()));
         })
         .await;
         match result {
@@ -1224,8 +1391,13 @@ pub async fn agent_message_stream(
     });
 
     // 通道 → SSE 流：逐条读取，客户端实时收到。
-    let stream = futures::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) });
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 /// `POST /api/agent/approvals/:id` —— 审批决定。
@@ -1236,7 +1408,9 @@ pub async fn agent_approval(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     let decision = body.get("decision").and_then(|v| v.as_str()).unwrap_or("");
-    Ok(Json(ApiResp::ok(cmx_portal::agent::flow::handle_approval(&id, decision).await?)))
+    Ok(Json(ApiResp::ok(
+        cmx_portal::agent::flow::handle_approval(&id, decision).await?,
+    )))
 }
 
 // ───────────────────────── 服务目录（Bruno collection）─────────────────────────
@@ -1247,8 +1421,15 @@ pub async fn service_catalog_list(
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<SvcCatalogQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let services = cmx_portal::service_catalog::store::list_services(q.domain.as_deref(), q.app.as_deref(), q.module.as_deref()).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "services": services }))))
+    let services = cmx_portal::service_catalog::store::list_services(
+        q.domain.as_deref(),
+        q.app.as_deref(),
+        q.module.as_deref(),
+    )
+    .await?;
+    Ok(Json(ApiResp::ok(
+        serde_json::json!({ "services": services }),
+    )))
 }
 
 /// `GET /api/service-catalog/:id` —— 单个服务（不存在 404）。
@@ -1261,4 +1442,296 @@ pub async fn service_catalog_get(
         Some(svc) => Ok(Json(ApiResp::ok(svc))),
         None => Ok(Json(ApiResp::fail(404, "服务不存在"))),
     }
+}
+
+// ───────────────────────── 模型中心（数据库初始化 + 模块部署，真实落库） ─────────────────────────
+
+/// 从认证上下文取 (user_id, user_name)；缺省用占位，避免未登录环境（如本地）阻塞演示。
+fn model_operator(c: &cmx_core::model::service::context::SVRContext) -> (String, String) {
+    match c.auth_context.as_ref() {
+        Some(a) => (
+            if a.user_id.trim().is_empty() {
+                "system".to_string()
+            } else {
+                a.user_id.clone()
+            },
+            if a.username.trim().is_empty() {
+                "系统".to_string()
+            } else {
+                a.username.clone()
+            },
+        ),
+        None => ("system".to_string(), "系统".to_string()),
+    }
+}
+
+/// 模型中心查询参数（db_id 定位目标库）。
+#[derive(Debug, Deserialize)]
+pub struct ModelQuery {
+    pub db_id: String,
+}
+
+/// `GET /api/model/db-state?db_id=` —— 库门闸 + 每模块每 kind scenario。
+pub async fn model_db_state(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<ModelQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    Ok(Json(ApiResp::ok(
+        super::model_center::db_state(&q.db_id).await?,
+    )))
+}
+
+/// `POST /api/model/init` —— 初始化目标库（建台账系统表 + 写 meta + 历史）。
+pub async fn model_init(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    let db_id = body
+        .get("db_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 db_id"))?;
+    let (uid, uname) = model_operator(&c);
+    Ok(Json(ApiResp::ok(
+        super::model_center::init_db(db_id, &uid, &uname).await?,
+    )))
+}
+
+/// `POST /api/model/deploy` —— 部署一批定义（create/upgrade）到目标库。
+/// body: { db_id, items:[{ kind, domain, application, module, file }] }
+pub async fn model_deploy(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    let db_id = body
+        .get("db_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 db_id"))?;
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if items.is_empty() {
+        return Err(cmx_api_types::Error::bad_request("items 为空"));
+    }
+    let (uid, uname) = model_operator(&c);
+    Ok(Json(ApiResp::ok(
+        super::model_center::deploy(db_id, &items, &uid, &uname).await?,
+    )))
+}
+
+/// `POST /api/model/deploy-plan-stream` —— SSE 流式生成部署执行计划（只读预览，不落库）。
+/// body: { db_id, items:[{ kind, domain, application, module, file }] }。
+pub async fn model_deploy_plan_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> axum::response::Response {
+    use axum::response::sse::{Event, KeepAlive};
+    use axum::response::{IntoResponse, Sse};
+
+    let db_id = match body.get("db_id").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.to_string(),
+        _ => return cmx_api_types::Error::bad_request("缺少 db_id").into_response(),
+    };
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if items.is_empty() {
+        return cmx_api_types::Error::bad_request("items 为空").into_response();
+    }
+
+    type SseItem = std::result::Result<Event, std::convert::Infallible>;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<SseItem>();
+
+    tokio::spawn(async move {
+        let (etx, mut erx) =
+            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+        let sse_tx = tx.clone();
+        let forward = tokio::spawn(async move {
+            while let Some(e) = erx.recv().await {
+                let evt = Event::default()
+                    .event(&e.kind)
+                    .json_data(&e.data)
+                    .unwrap_or_default();
+                if sse_tx.send(Ok(evt)).is_err() {
+                    break;
+                }
+            }
+        });
+        super::model_center::deploy_plan_stream(&db_id, &items, &etx).await;
+        drop(etx);
+        let _ = forward.await;
+        let _ = tx.send(Ok(Event::default().event("end").data("{}")));
+    });
+
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
+
+/// `POST /api/model/deploy-stream` —— SSE 流式部署模块（编译/DDL/台账/历史/完成）。
+/// body: { db_id, items:[{ kind, domain, application, module, file }] }。
+pub async fn model_deploy_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> axum::response::Response {
+    use axum::response::sse::{Event, KeepAlive};
+    use axum::response::{IntoResponse, Sse};
+
+    let db_id = match body.get("db_id").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.to_string(),
+        _ => return cmx_api_types::Error::bad_request("缺少 db_id").into_response(),
+    };
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if items.is_empty() {
+        return cmx_api_types::Error::bad_request("items 为空").into_response();
+    }
+    let (uid, uname) = model_operator(&c);
+
+    type SseItem = std::result::Result<Event, std::convert::Infallible>;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<SseItem>();
+
+    tokio::spawn(async move {
+        let (etx, mut erx) =
+            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+        let sse_tx = tx.clone();
+        let forward = tokio::spawn(async move {
+            while let Some(e) = erx.recv().await {
+                let evt = Event::default()
+                    .event(&e.kind)
+                    .json_data(&e.data)
+                    .unwrap_or_default();
+                if sse_tx.send(Ok(evt)).is_err() {
+                    break;
+                }
+            }
+        });
+        super::model_center::deploy_stream(&db_id, &items, &uid, &uname, &etx).await;
+        drop(etx);
+        let _ = forward.await;
+        let _ = tx.send(Ok(Event::default().event("end").data("{}")));
+    });
+
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
+
+/// `POST /api/model/init-plan-stream` —— SSE 流式生成初始化/系统表升级计划（只读预览，不落库）。
+/// body: { db_id }。
+pub async fn model_init_plan_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> axum::response::Response {
+    use axum::response::sse::{Event, KeepAlive};
+    use axum::response::{IntoResponse, Sse};
+
+    let db_id = match body.get("db_id").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.to_string(),
+        _ => return cmx_api_types::Error::bad_request("缺少 db_id").into_response(),
+    };
+
+    type SseItem = std::result::Result<Event, std::convert::Infallible>;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<SseItem>();
+
+    tokio::spawn(async move {
+        let (etx, mut erx) =
+            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+        let sse_tx = tx.clone();
+        let forward = tokio::spawn(async move {
+            while let Some(e) = erx.recv().await {
+                let evt = Event::default()
+                    .event(&e.kind)
+                    .json_data(&e.data)
+                    .unwrap_or_default();
+                if sse_tx.send(Ok(evt)).is_err() {
+                    break;
+                }
+            }
+        });
+        super::model_center::init_plan_stream(&db_id, &etx).await;
+        drop(etx);
+        let _ = forward.await;
+        let _ = tx.send(Ok(Event::default().event("end").data("{}")));
+    });
+
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
+
+/// `POST /api/model/init-stream` —— SSE 流式初始化（连接/建表/写台账/完成，实时推进度）。
+/// body: { db_id }。EventSource 不能带鉴权头，前端用 fetch 流式读取（同通知中心）。
+pub async fn model_init_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(c): CmxSvrContext,
+    Json(body): Json<serde_json::Value>,
+) -> axum::response::Response {
+    use axum::response::sse::{Event, KeepAlive};
+    use axum::response::{IntoResponse, Sse};
+
+    let db_id = match body.get("db_id").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.to_string(),
+        _ => return cmx_api_types::Error::bad_request("缺少 db_id").into_response(),
+    };
+    let (uid, uname) = model_operator(&c);
+
+    type SseItem = std::result::Result<Event, std::convert::Infallible>;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<SseItem>();
+
+    // 后台跑初始化，把领域事件转成 SSE Event（named event + json data）推给客户端。
+    tokio::spawn(async move {
+        let (etx, mut erx) =
+            tokio::sync::mpsc::unbounded_channel::<super::model_center::InitEvent>();
+        // 转发 task：领域事件 → SSE。
+        let sse_tx = tx.clone();
+        let forward = tokio::spawn(async move {
+            while let Some(e) = erx.recv().await {
+                let evt = Event::default()
+                    .event(&e.kind)
+                    .json_data(&e.data)
+                    .unwrap_or_default();
+                if sse_tx.send(Ok(evt)).is_err() {
+                    break; // 客户端断开
+                }
+            }
+        });
+        super::model_center::init_db_stream(&db_id, &uid, &uname, &etx).await;
+        drop(etx); // 关闭领域通道 → forward 结束
+        let _ = forward.await;
+        // 补一个终止事件，前端据此关闭流。
+        let _ = tx.send(Ok(Event::default().event("end").data("{}")));
+    });
+
+    let stream = futures::stream::unfold(
+        rx,
+        |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) },
+    );
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }

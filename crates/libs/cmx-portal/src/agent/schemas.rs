@@ -1,6 +1,6 @@
 //! agent 工具 schema（与 Node `agentTools.js` 一致）。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Agent 工具公开 schema（capabilities 返回）。
 pub fn public_tool_schemas() -> Value {

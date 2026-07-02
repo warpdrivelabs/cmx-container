@@ -6,12 +6,14 @@
 use anyhow::Result;
 use chrono::Utc;
 
-use crate::ast_parser::{TypeRegistry, ResolvedField, is_primitive_type, is_container_type, extract_container_element};
+use crate::ast_parser::{
+    ResolvedField, TypeRegistry, extract_container_element, is_container_type, is_primitive_type,
+};
 use crate::models::{
     Example, FieldSpec, FunctionDoc, InputSpec, OutputSpec, PluginDocument, PluginInfo,
     SourceLocation,
 };
-use crate::parser::{ParsedFunction, ParsedDoc};
+use crate::parser::{ParsedDoc, ParsedFunction};
 
 /// AST 扫描结果。
 ///
@@ -51,11 +53,23 @@ pub struct AstScanResult {
 /// # Errors
 ///
 /// 当 JSON 序列化失败时返回错误。
-pub fn generate_ast_document(result: &AstScanResult, pretty: bool, expand_depth: usize) -> Result<String> {
+pub fn generate_ast_document(
+    result: &AstScanResult,
+    pretty: bool,
+    expand_depth: usize,
+) -> Result<String> {
     let functions: Vec<FunctionDoc> = result
         .functions
         .iter()
-        .map(|(func, doc)| build_ast_function_doc(func, doc, &result.file_path, &result.type_registry, expand_depth))
+        .map(|(func, doc)| {
+            build_ast_function_doc(
+                func,
+                doc,
+                &result.file_path,
+                &result.type_registry,
+                expand_depth,
+            )
+        })
         .collect();
 
     let document = PluginDocument {
@@ -199,11 +213,7 @@ fn resolve_field_to_spec(
 ) -> FieldSpec {
     if !field.sub_fields.is_empty() {
         // 字段已有来自文档注释的子字段，直接作为 object 类型处理
-        let sub_fields: Vec<FieldSpec> = field
-            .sub_fields
-            .iter()
-            .map(table_field_to_spec)
-            .collect();
+        let sub_fields: Vec<FieldSpec> = field.sub_fields.iter().map(table_field_to_spec).collect();
         return FieldSpec {
             name: field.name.clone(),
             type_name: "object".to_string(),
@@ -224,10 +234,12 @@ fn resolve_field_to_spec(
     };
 
     if JSON_SCHEMA_TYPES.contains(&type_name.as_str()) {
-        let clean_desc = trim_description(field.description.replace(
-            &format!("`{}`", type_name),
-            "",
-        ).trim());
+        let clean_desc = trim_description(
+            field
+                .description
+                .replace(&format!("`{}`", type_name), "")
+                .trim(),
+        );
         return FieldSpec {
             name: field.name.clone(),
             type_name: type_name.clone(),
@@ -257,9 +269,7 @@ fn resolve_field_to_spec(
 /// # Returns
 ///
 /// 找到已注册类型时返回 `Some(type_name)`，否则返回第一个候选或 `None`。
-const JSON_SCHEMA_TYPES: &[&str] = &[
-    "string", "integer", "number", "boolean", "array", "object",
-];
+const JSON_SCHEMA_TYPES: &[&str] = &["string", "integer", "number", "boolean", "array", "object"];
 
 fn extract_type_from_description(desc: &str, registry: &TypeRegistry) -> Option<String> {
     let desc = desc.trim();
@@ -306,7 +316,9 @@ fn extract_type_from_description(desc: &str, registry: &TypeRegistry) -> Option<
 fn table_field_to_spec(field: &crate::parser::FieldInfo) -> FieldSpec {
     let type_name = match field.type_name.as_str() {
         "string" | "str" | "String" => "string".to_string(),
-        "integer" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" => "integer".to_string(),
+        "integer" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" => {
+            "integer".to_string()
+        }
         "number" | "f32" | "f64" => "number".to_string(),
         "boolean" | "bool" => "boolean".to_string(),
         "array" => "array".to_string(),
@@ -403,8 +415,8 @@ fn resolved_field_to_spec(resolved: &ResolvedField) -> FieldSpec {
 /// 对应的 JSON Schema 类型名（`integer`、`number`、`boolean`、`string`、`null`、`object`）。
 fn map_primitive_to_json_type(rust_type: &str) -> String {
     match rust_type {
-        "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
-        | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => "integer".to_string(),
+        "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8" | "u16" | "u32" | "u64" | "u128"
+        | "usize" => "integer".to_string(),
 
         "f32" | "f64" => "number".to_string(),
 

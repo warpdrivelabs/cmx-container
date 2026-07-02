@@ -75,22 +75,25 @@ pub fn sanitize_body(body: &[u8]) -> String {
     }
 
     if let Ok(s) = std::str::from_utf8(body)
-        && s.contains('=') && !s.contains('{') && !s.contains('[') {
-            let params: Vec<_> = s
-                .split('&')
-                .filter_map(|pair| {
-                    let mut parts = pair.splitn(2, '=');
-                    let key = parts.next()?;
-                    let val = parts.next().unwrap_or("");
-                    Some(format!("{}={}", key, sanitize_field_value(key, val)))
-                })
-                .take(20)
-                .collect();
-            if params.len() < 20 {
-                return params.join("&");
-            }
-            return format!("{}... (truncated)", params.join("&"));
+        && s.contains('=')
+        && !s.contains('{')
+        && !s.contains('[')
+    {
+        let params: Vec<_> = s
+            .split('&')
+            .filter_map(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                let key = parts.next()?;
+                let val = parts.next().unwrap_or("");
+                Some(format!("{}={}", key, sanitize_field_value(key, val)))
+            })
+            .take(20)
+            .collect();
+        if params.len() < 20 {
+            return params.join("&");
         }
+        return format!("{}... (truncated)", params.join("&"));
+    }
 
     if body.iter().take(100).any(|&b| b == 0 || b > 127) {
         return format!("<binary data: {} bytes>", body.len());

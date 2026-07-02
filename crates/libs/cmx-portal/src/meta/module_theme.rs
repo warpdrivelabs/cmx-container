@@ -2,7 +2,7 @@
 //!
 //! 用于 DAM 派生菜单时给每个模块组生成稳定的配色 `theme.{light,dark}`。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// SAP / Fiori 友好预设：亮色 accent + 暗色更亮 accent。
 const MODULE_PALETTE: &[(&str, &str)] = &[
@@ -42,11 +42,7 @@ fn clean_theme_color(value: &str) -> String {
         || lower.starts_with("hsl(")
         || lower.starts_with("hsla(")
         || lower.starts_with("color-mix(in srgb,");
-    if ok {
-        s.to_string()
-    } else {
-        String::new()
-    }
+    if ok { s.to_string() } else { String::new() }
 }
 
 fn light_side(accent: &str) -> Value {
@@ -77,7 +73,11 @@ fn stable_module_theme(key: &str, index: usize) -> Value {
     json!({ "light": light_side(light), "dark": dark_side(light, Some(dark)) })
 }
 
-fn normalize_side(side: Option<&Value>, fallback: &Value, regen_accent: impl Fn(&str) -> Value) -> Value {
+fn normalize_side(
+    side: Option<&Value>,
+    fallback: &Value,
+    regen_accent: impl Fn(&str) -> Value,
+) -> Value {
     let o = match side {
         Some(v) if v.is_object() => v,
         _ => return fallback.clone(),
@@ -95,7 +95,11 @@ fn normalize_side(side: Option<&Value>, fallback: &Value, regen_accent: impl Fn(
     };
     let accent = {
         let a = get(&["accent", "color"]);
-        if a.is_empty() { fallback["accent"].as_str().unwrap_or("").to_string() } else { a }
+        if a.is_empty() {
+            fallback["accent"].as_str().unwrap_or("").to_string()
+        } else {
+            a
+        }
     };
     let generated = regen_accent(&accent);
     let pick = |keys: &[&str], gen_key: &str| -> String {
@@ -116,8 +120,17 @@ fn normalize_side(side: Option<&Value>, fallback: &Value, regen_accent: impl Fn(
 }
 
 /// 解析模块主题：themeColor 优先 → 显式 raw theme → 稳定回退。
-pub fn resolve_module_theme(module_key: &str, raw_theme: Option<&Value>, index: usize, theme_color_raw: &str) -> Value {
-    let key = if module_key.is_empty() { "module" } else { module_key };
+pub fn resolve_module_theme(
+    module_key: &str,
+    raw_theme: Option<&Value>,
+    index: usize,
+    theme_color_raw: &str,
+) -> Value {
+    let key = if module_key.is_empty() {
+        "module"
+    } else {
+        module_key
+    };
     let fallback = stable_module_theme(key, index);
     let theme_color = clean_theme_color(theme_color_raw);
     if !theme_color.is_empty() {

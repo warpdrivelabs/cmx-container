@@ -2,8 +2,8 @@ use crate::client::RedisClient;
 use crate::config::LockConfig;
 use crate::error::{Error, Result};
 use crate::logging::LockLog;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use uuid::Uuid;
 

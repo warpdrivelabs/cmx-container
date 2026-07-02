@@ -2,9 +2,9 @@
 //!
 //! 封装 `argon2` crate 的哈希与校验逻辑，支持自定义内存/时间/并行度参数。
 
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 use crate::config::Argon2Config;
 use crate::error::{AuthInfraError, Result};
@@ -39,9 +39,12 @@ impl Argon2Hasher {
             config.parallelism,
             None,
         )
-        .map_err(|e| AuthInfraError::Auth(cmx_traits::auth::AuthError::PasswordHashError(
-            format!("Argon2 参数无效: {}", e),
-        )))?;
+        .map_err(|e| {
+            AuthInfraError::Auth(cmx_traits::auth::AuthError::PasswordHashError(format!(
+                "Argon2 参数无效: {}",
+                e
+            )))
+        })?;
 
         let argon2 = Argon2::from(params);
 
@@ -225,9 +228,6 @@ mod tests {
             parallelism: 0,
         };
         let result = Argon2Hasher::new(&config);
-        assert!(
-            result.is_err(),
-            "无效 Argon2 参数应导致构造失败"
-        );
+        assert!(result.is_err(), "无效 Argon2 参数应导致构造失败");
     }
 }

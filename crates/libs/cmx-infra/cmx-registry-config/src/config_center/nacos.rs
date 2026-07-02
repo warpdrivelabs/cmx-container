@@ -75,9 +75,7 @@ impl NacosConfigCenter {
         let config_service = ConfigServiceBuilder::new(client_props)
             .build()
             .await
-            .map_err(|e| {
-                ConfigCenterError::InitFailed(format!("配置中心初始化失败: {}", e))
-            })?;
+            .map_err(|e| ConfigCenterError::InitFailed(format!("配置中心初始化失败: {}", e)))?;
 
         info!("Nacos 配置中心初始化成功");
 

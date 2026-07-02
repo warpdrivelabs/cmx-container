@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use cmx_registry_config::GlobalServiceInstanceCache;
 use cmx_rpc::bundle::ServerDeps;
-use cmx_rpc::{init_rpc_clients, start_grpc_server};
 use cmx_rpc::config::RpcConfig;
+use cmx_rpc::{init_rpc_clients, start_grpc_server};
 use cmx_traits::function_invoker::FunctionInvoker;
 use cmx_traits::plugin::PluginDataImporter;
 use cmx_traits::service::ServiceInvoker;
@@ -48,7 +48,10 @@ pub async fn init_rpc(
     let rpc = match rpc_config {
         Some(cfg) if cfg.enabled && cfg.protocol == "grpc" => cfg,
         Some(cfg) if cfg.enabled => {
-            warn!("RPC 已启用但协议 '{}' 暂不支持，跳过 RPC 初始化", cfg.protocol);
+            warn!(
+                "RPC 已启用但协议 '{}' 暂不支持，跳过 RPC 初始化",
+                cfg.protocol
+            );
             return Ok(None);
         }
         _ => {
@@ -104,7 +107,10 @@ pub async fn init_rpc(
     //    使用 subscribe_instances 替代手动 query+update，让注册中心层管理缓存。
     if !rpc.warmup_services.is_empty() {
         for service_name in &rpc.warmup_services {
-            match registry.subscribe_instances(service_name, Arc::new(|_, _| {})).await {
+            match registry
+                .subscribe_instances(service_name, Arc::new(|_, _| {}))
+                .await
+            {
                 Ok(()) => {
                     info!(service_name = %service_name, "服务预热完成");
                 }
@@ -124,7 +130,5 @@ pub async fn init_rpc(
 ///
 /// 使用 `Option` 包裹，因为旧配置文件可能没有 `[rpc]` 段。
 pub(crate) fn load_rpc_config() -> Option<RpcConfig> {
-    ConfigManager::global()
-        .get_as::<RpcConfig>("rpc")
-        .ok()
+    ConfigManager::global().get_as::<RpcConfig>("rpc").ok()
 }

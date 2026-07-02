@@ -12,12 +12,12 @@ use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::ServiceQuery;
 use tracing::{debug, info, warn};
 
-use crate::error::ServiceError;
 use super::debug_prepare::DebugPrepare;
 use super::flow_navigator::FlowNavigator;
 use super::node_handler::NodeHandler;
 use super::transaction_manager::TransactionManager;
 use super::types::*;
+use crate::error::ServiceError;
 
 /// 编排执行器
 ///
@@ -133,12 +133,19 @@ impl Orchestrator {
         // 通过 service_key 查询服务编排定义（从数据库或缓存）
         // ServiceOrchestration 包含：name, code, flow(nodes + edges)
 
-        self.service_query.get_service(service_key).await
+        self.service_query
+            .get_service(service_key)
+            .await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
             .ok_or_else(|| ServiceError::InternalError(format!("服务未找到: {}", service_key)))?;
-        let orchestration = self.service_query.get_orchestration(service_key).await
+        let orchestration = self
+            .service_query
+            .get_orchestration(service_key)
+            .await
             .map_err(|e| ServiceError::InternalError(e.to_string()))?
-            .ok_or_else(|| ServiceError::InternalError(format!("服务编排配置未找到: {}", service_key)))?;
+            .ok_or_else(|| {
+                ServiceError::InternalError(format!("服务编排配置未找到: {}", service_key))
+            })?;
 
         // ==================== 阶段3: 初始化执行上下文 ====================
         // SVRContext 是服务调用上下文，由外部（middleware/handler）创建并传入
@@ -149,7 +156,8 @@ impl Orchestrator {
         let navigator = FlowNavigator::new(flow);
 
         // 查找开始节点：每个 Flow JSON 必须有且仅有一个 skylake-start 节点
-        let start_node = navigator.find_start_node()
+        let start_node = navigator
+            .find_start_node()
             .ok_or_else(|| ServiceError::InternalError("未找到开始节点".to_string()))?;
 
         // 初始化执行上下文
@@ -184,15 +192,22 @@ impl Orchestrator {
                     orch_error = Some(OrchestrationError {
                         message: format!("节点未找到: {}", current_node_id),
                     });
-                    result = Err(ServiceError::InternalError(format!("节点未找到: {}", current_node_id)));
+                    result = Err(ServiceError::InternalError(format!(
+                        "节点未找到: {}",
+                        current_node_id
+                    )));
                     break;
                 }
             };
 
             debug!(
                 ">>> 进入节点: node_id={}, node_type={}, node_name={}",
-                node.id, node.node_type,
-                node.data.as_ref().map(|d| d.name.as_str()).unwrap_or("unknown")
+                node.id,
+                node.node_type,
+                node.data
+                    .as_ref()
+                    .map(|d| d.name.as_str())
+                    .unwrap_or("unknown")
             );
 
             // 步骤4.2: 事务状态管理
@@ -200,7 +215,10 @@ impl Orchestrator {
             // - 无活跃事务 + 节点在事务框中 → 开启新事务
             // - 有活跃事务 + 节点离开事务框 → 提交当前事务
             // - 有活跃事务 + 节点在同一事务框中 → 继续执行
-            if let Err(e) = txn_manager.ensure_transaction(node, &navigator, &mut exec_context.svr_context).await {
+            if let Err(e) = txn_manager
+                .ensure_transaction(node, &navigator, &mut exec_context.svr_context)
+                .await
+            {
                 orch_error = Some(OrchestrationError {
                     message: format!("事务管理失败: {}", e),
                 });
@@ -217,7 +235,10 @@ impl Orchestrator {
                     debug!("执行开始节点: node_id={}", node.id);
                     // 查找从开始节点出发的边（固定使用 "out" 端口）
                     if let Some(next_edge) = navigator.find_next_edge(&current_node_id, "out") {
-                        debug!("开始节点跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
+                        debug!(
+                            "开始节点跳转: from={} -> to={}",
+                            current_node_id, next_edge.target_node_id
+                        );
                         // 更新当前节点ID，继续循环执行下一个节点
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
@@ -234,7 +255,9 @@ impl Orchestrator {
                     debug!("执行结束节点: node_id={}", node.id);
                     // 提交当前活跃的事务
                     // 注意：事务可能在事务框内已经提交，这里处理的是事务框外的事务
-                    txn_manager.commit_active(&mut exec_context.svr_context).await?;
+                    txn_manager
+                        .commit_active(&mut exec_context.svr_context)
+                        .await?;
                     break; // 退出循环，流程正常结束
                 }
 
@@ -249,12 +272,14 @@ impl Orchestrator {
                         debug!("调试模式拦截: node_id={}", node.id);
                         let previous_output = exec_context.current_output.clone();
                         let debug_prepare = DebugPrepare::new(&self.plugin_query);
-                        let prepare_result = debug_prepare.prepare(
-                            node,
-                            previous_output.clone(),
-                            exec_context.svr_context.initial_input.clone(),
-                            options.clone(),
-                        ).await?;
+                        let prepare_result = debug_prepare
+                            .prepare(
+                                node,
+                                previous_output.clone(),
+                                exec_context.svr_context.initial_input.clone(),
+                                options.clone(),
+                            )
+                            .await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致
                         if txn_manager.has_active() {
@@ -264,7 +289,11 @@ impl Orchestrator {
                         // 记录 DebugPaused 步骤，便于前端展示执行进度
                         steps.push(ExecutionStep {
                             node_id: node.id.clone(),
-                            node_name: node.data.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+                            node_name: node
+                                .data
+                                .as_ref()
+                                .map(|d| d.name.clone())
+                                .unwrap_or_default(),
                             node_type: node.node_type.clone(),
                             status: StepStatus::DebugPaused,
                             output: None,
@@ -292,13 +321,15 @@ impl Orchestrator {
                     }
 
                     let previous_output = exec_context.current_output.clone();
-                    result = node_handler.execute_node(
-                        node, &mut exec_context, &mut steps, options.include_steps
-                    ).await;
+                    result = node_handler
+                        .execute_node(node, &mut exec_context, &mut steps, options.include_steps)
+                        .await;
 
                     if let Err(ref err) = result {
                         debug!("函数节点执行失败: node_id={}, error={:?}", node.id, err);
-                        let node_name = node.data.as_ref()
+                        let node_name = node
+                            .data
+                            .as_ref()
                             .map(|d| d.name.as_str())
                             .unwrap_or("unknown");
                         steps.push(ExecutionStep {
@@ -320,7 +351,10 @@ impl Orchestrator {
                     // 查找下一个节点（固定使用 "out" 端口）
                     // func 节点只有一条出边，连接到下一个节点
                     if let Some(next_edge) = navigator.find_next_edge(&current_node_id, "out") {
-                        debug!("函数节点执行完成跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
+                        debug!(
+                            "函数节点执行完成跳转: from={} -> to={}",
+                            current_node_id, next_edge.target_node_id
+                        );
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
@@ -340,12 +374,14 @@ impl Orchestrator {
                         debug!("调试模式拦截(多分支): node_id={}", node.id);
                         let previous_output = exec_context.current_output.clone();
                         let debug_prepare = DebugPrepare::new(&self.plugin_query);
-                        let prepare_result = debug_prepare.prepare(
-                            node,
-                            previous_output.clone(),
-                            exec_context.svr_context.initial_input.clone(),
-                            options.clone(),
-                        ).await?;
+                        let prepare_result = debug_prepare
+                            .prepare(
+                                node,
+                                previous_output.clone(),
+                                exec_context.svr_context.initial_input.clone(),
+                                options.clone(),
+                            )
+                            .await?;
 
                         // 调试暂停时回滚活跃事务，避免数据库状态不一致
                         if txn_manager.has_active() {
@@ -355,7 +391,11 @@ impl Orchestrator {
                         // 记录 DebugPaused 步骤，便于前端展示执行进度
                         steps.push(ExecutionStep {
                             node_id: node.id.clone(),
-                            node_name: node.data.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+                            node_name: node
+                                .data
+                                .as_ref()
+                                .map(|d| d.name.clone())
+                                .unwrap_or_default(),
                             node_type: node.node_type.clone(),
                             status: StepStatus::DebugPaused,
                             output: None,
@@ -383,13 +423,15 @@ impl Orchestrator {
                     }
 
                     let previous_output = exec_context.current_output.clone();
-                    result = node_handler.execute_node(
-                        node, &mut exec_context, &mut steps, options.include_steps
-                    ).await;
+                    result = node_handler
+                        .execute_node(node, &mut exec_context, &mut steps, options.include_steps)
+                        .await;
 
                     if let Err(ref err) = result {
                         debug!("多分支节点执行失败: node_id={}, error={:?}", node.id, err);
-                        let node_name = node.data.as_ref()
+                        let node_name = node
+                            .data
+                            .as_ref()
                             .map(|d| d.name.as_str())
                             .unwrap_or("unknown");
                         steps.push(ExecutionStep {
@@ -411,22 +453,33 @@ impl Orchestrator {
                     // 根据函数返回值构建端口ID
                     // 例如：返回 "1" → 端口 "out_1"，返回 "2" → 端口 "out_2"
                     // current_output 必须是 serde_json::Value::String 类型，否则报错
-                    let branch_name = exec_context.current_output.as_str()
-                        .ok_or_else(|| ServiceError::orchestration_failed(
+                    let branch_name = exec_context.current_output.as_str().ok_or_else(|| {
+                        ServiceError::orchestration_failed(
                             &node.id,
-                            &format!("多分支节点返回值不是字符串类型，无法确定分支端口。当前值: {}", exec_context.current_output)
-                        ))?;
+                            &format!(
+                                "多分支节点返回值不是字符串类型，无法确定分支端口。当前值: {}",
+                                exec_context.current_output
+                            ),
+                        )
+                    })?;
                     let source_port_id = format!("out_{}", branch_name);
-                    debug!("多分支节点执行完成，选择分支: node_id={}, output={}, port={}",
-                        node.id, exec_context.current_output, source_port_id);
+                    debug!(
+                        "多分支节点执行完成，选择分支: node_id={}, output={}, port={}",
+                        node.id, exec_context.current_output, source_port_id
+                    );
 
                     // 恢复 current_output 为分支节点执行前的输入数据
                     // 分支节点的返回值仅用于路由判断，不应作为下一个节点的输入
                     exec_context.current_output = previous_output;
 
                     // 查找匹配的边（根据端口ID）
-                    if let Some(next_edge) = navigator.find_next_edge(&current_node_id, &source_port_id) {
-                        debug!("多分支节点跳转: from={} -> to={}", current_node_id, next_edge.target_node_id);
+                    if let Some(next_edge) =
+                        navigator.find_next_edge(&current_node_id, &source_port_id)
+                    {
+                        debug!(
+                            "多分支节点跳转: from={} -> to={}",
+                            current_node_id, next_edge.target_node_id
+                        );
                         current_node_id = next_edge.target_node_id.clone();
                         continue;
                     }
@@ -470,11 +523,17 @@ impl Orchestrator {
                 // ==================== 未知节点类型 ====================
                 // 遇到不支持的节点类型，记录错误并退出
                 _ => {
-                    debug!("遇到未知节点类型: node_id={}, node_type={}", node.id, node.node_type);
+                    debug!(
+                        "遇到未知节点类型: node_id={}, node_type={}",
+                        node.id, node.node_type
+                    );
                     orch_error = Some(OrchestrationError {
                         message: format!("未知节点类型: {}", node.node_type),
                     });
-                    result = Err(ServiceError::InternalError(format!("未知节点类型: {}", node.node_type)));
+                    result = Err(ServiceError::InternalError(format!(
+                        "未知节点类型: {}",
+                        node.node_type
+                    )));
                     break;
                 }
             }
@@ -494,7 +553,9 @@ impl Orchestrator {
                 // 正常退出，提交剩余事务
                 // 这种情况发生在：事务框节点后还有节点，但事务未提交
                 debug!("循环正常退出，提交剩余事务");
-                txn_manager.commit_active(&mut exec_context.svr_context).await?;
+                txn_manager
+                    .commit_active(&mut exec_context.svr_context)
+                    .await?;
             }
         }
 
@@ -504,7 +565,10 @@ impl Orchestrator {
 
         // 最终输出：成功时返回最后一个节点的输出，失败时返回 None
         let final_output = if is_success {
-            info!("执行成功，返回最终结果:  output={:?}", exec_context.current_output);
+            info!(
+                "执行成功，返回最终结果:  output={:?}",
+                exec_context.current_output
+            );
             Some(exec_context.current_output.clone())
         } else {
             None
@@ -514,9 +578,9 @@ impl Orchestrator {
         // - 失败时始终返回 steps（便于排错）
         // - 成功时根据 include_steps 决定是否返回
         let final_steps = if is_success && !options.include_steps {
-            Vec::new()  // 成功且不需要步骤数据，返回空数组
+            Vec::new() // 成功且不需要步骤数据，返回空数组
         } else {
-            steps       // 失败或需要步骤数据，返回完整步骤列表
+            steps // 失败或需要步骤数据，返回完整步骤列表
         };
 
         // 构建并返回编排结果
@@ -639,5 +703,4 @@ impl Orchestrator {
     //
     //     Ok(())
     // }
-
 }

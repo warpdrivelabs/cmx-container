@@ -4,15 +4,15 @@ mod crud_fns;
 mod custom_query;
 mod error;
 // mod macro_utils;
-mod utils;
 mod count_optimizer;
+mod utils;
 
 // -- 展平用户代码的层级结构。
+pub use count_optimizer::{CountOptimizerConfig, generate_count_sql};
 pub use crud_fns::*;
 pub use custom_query::*;
-pub use utils::*;
 pub use error::*;
-pub use count_optimizer::{CountOptimizerConfig, generate_count_sql};
+pub use utils::*;
 
 use modql::SIden;
 use sea_query::{IntoIden, TableRef};

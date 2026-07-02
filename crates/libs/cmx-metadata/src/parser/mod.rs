@@ -18,8 +18,8 @@
 
 pub mod postgres;
 
-use cmx_core::model::cell::TableDefine;
 use crate::MetadataError;
+use cmx_core::model::cell::TableDefine;
 
 /// DDL 解析 trait
 ///

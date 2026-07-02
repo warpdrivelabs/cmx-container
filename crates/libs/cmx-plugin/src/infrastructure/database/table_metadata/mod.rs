@@ -12,6 +12,8 @@ pub mod filter;
 pub mod service;
 
 pub use bmc::{TableMetadataBmc, TableMetadataVersionBmc};
-pub use entity::{TableMetadataDetail, TableMetadataForCreate, TableMetadataForUpdate, TableMetadataVersion};
+pub use entity::{
+    TableMetadataDetail, TableMetadataForCreate, TableMetadataForUpdate, TableMetadataVersion,
+};
 pub use filter::{TableMetadataFilter, TableMetadataVersionFilter};
 pub use service::TableMetadataService;

@@ -286,7 +286,10 @@ impl OAuth2Store {
     /// # Errors
     ///
     /// 当 Lua 脚本执行或反序列化失败时返回 `AuthInfraError`。
-    pub async fn consume_authorization_code(&self, code: &str) -> Result<Option<AuthorizationCode>> {
+    pub async fn consume_authorization_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<AuthorizationCode>> {
         let key = format!("auth:oauth2:authcode:{}", code);
         let used_key = format!("auth:oauth2:authcode:{}:used", code);
         let ttl_secs = self.auth_code_ttl().as_secs();
@@ -306,10 +309,11 @@ impl OAuth2Store {
             redis::Value::Int(0) => Ok(None),
             // 授权码数据
             redis::Value::BulkString(bytes) => {
-                let json_str = String::from_utf8(bytes)
-                    .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
-                    ))?;
+                let json_str = String::from_utf8(bytes).map_err(|e| {
+                    crate::error::AuthInfraError::Auth(cmx_traits::auth::AuthError::Internal(
+                        format!("UTF-8 解码失败: {}", e),
+                    ))
+                })?;
                 let auth_code: AuthorizationCode = serde_json::from_str(&json_str)?;
                 Ok(Some(auth_code))
             }
@@ -365,15 +369,18 @@ impl OAuth2Store {
     pub async fn consume_provider_state(&self, state: &str) -> Result<Option<String>> {
         let key = format!("auth:oauth2:provider:state:{}", state);
         let keys = &[key.as_str()];
-        let result = self.cache.script()
+        let result = self
+            .cache
+            .script()
             .eval_with_fallback(CONSUME_PROVIDER_STATE_LUA_SCRIPT, keys, &[])
             .await?;
         match result {
             redis::Value::BulkString(bytes) => {
-                let provider = String::from_utf8(bytes)
-                    .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
-                    ))?;
+                let provider = String::from_utf8(bytes).map_err(|e| {
+                    crate::error::AuthInfraError::Auth(cmx_traits::auth::AuthError::Internal(
+                        format!("UTF-8 解码失败: {}", e),
+                    ))
+                })?;
                 Ok(Some(provider))
             }
             _ => Ok(None),
@@ -393,7 +400,10 @@ impl OAuth2Store {
     pub async fn store_callback_code(&self, code: &str, token_pair_json: &str) -> Result<()> {
         let key = format!("auth:oauth2:provider:callback:{}", code);
         let ttl = self.callback_code_ttl();
-        self.cache.ttl().set_with_ttl(&key, token_pair_json, ttl).await?;
+        self.cache
+            .ttl()
+            .set_with_ttl(&key, token_pair_json, ttl)
+            .await?;
         Ok(())
     }
 
@@ -415,15 +425,18 @@ impl OAuth2Store {
     pub async fn consume_callback_code(&self, code: &str) -> Result<Option<String>> {
         let key = format!("auth:oauth2:provider:callback:{}", code);
         let keys = &[key.as_str()];
-        let result = self.cache.script()
+        let result = self
+            .cache
+            .script()
             .eval_with_fallback(CONSUME_CALLBACK_CODE_LUA_SCRIPT, keys, &[])
             .await?;
         match result {
             redis::Value::BulkString(bytes) => {
-                let json = String::from_utf8(bytes)
-                    .map_err(|e| crate::error::AuthInfraError::Auth(
-                        cmx_traits::auth::AuthError::Internal(format!("UTF-8 解码失败: {}", e))
-                    ))?;
+                let json = String::from_utf8(bytes).map_err(|e| {
+                    crate::error::AuthInfraError::Auth(cmx_traits::auth::AuthError::Internal(
+                        format!("UTF-8 解码失败: {}", e),
+                    ))
+                })?;
                 Ok(Some(json))
             }
             _ => Ok(None),

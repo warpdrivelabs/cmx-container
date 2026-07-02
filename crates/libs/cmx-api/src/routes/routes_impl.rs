@@ -86,7 +86,6 @@ pub fn api_routes() -> Router<CmxAppState> {
     let router = router.merge(portal::PortalModule.routes());
 
     // 注册开发工具路由（使用 ModuleRoutes）
-    
 
     let mut router = router.merge(dev::DevModule.routes());
 

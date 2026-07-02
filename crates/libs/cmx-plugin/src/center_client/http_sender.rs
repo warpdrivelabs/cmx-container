@@ -12,12 +12,12 @@ use async_trait::async_trait;
 use rand::seq::SliceRandom;
 use tracing::{info, warn};
 
-use cmx_registry_config::registry::ServiceInstance;
 use cmx_registry_config::GlobalServiceInstanceCache;
+use cmx_registry_config::registry::ServiceInstance;
 
 use super::config::CenterClientConfig;
 use super::sender::{CenterError, ServiceCenterSender};
-use super::types::{CenterCleanupRequest, CenterSendRequest, CenterResponse, DataCategory};
+use super::types::{CenterCleanupRequest, CenterResponse, CenterSendRequest, DataCategory};
 
 /// HTTP 服务中心 Sender。
 pub struct HttpServiceCenterSender {
@@ -43,7 +43,10 @@ impl HttpServiceCenterSender {
                 );
                 reqwest::Client::new()
             });
-        Self { http_client, config }
+        Self {
+            http_client,
+            config,
+        }
     }
 
     /// 解析导入端点 URL。
@@ -56,9 +59,13 @@ impl HttpServiceCenterSender {
                 })
             }
             "http_discovery" => {
-                let service_name = self.config.discovery.get_service_name(category).ok_or_else(|| {
-                    CenterError::Config(format!("{} 服务名未配置", category.center_name()))
-                })?;
+                let service_name = self
+                    .config
+                    .discovery
+                    .get_service_name(category)
+                    .ok_or_else(|| {
+                        CenterError::Config(format!("{} 服务名未配置", category.center_name()))
+                    })?;
                 self.resolve_url_from_discovery(service_name, category, false)
             }
             other => Err(CenterError::Config(format!(
@@ -91,9 +98,13 @@ impl HttpServiceCenterSender {
                 }
             }
             "http_discovery" => {
-                let service_name = self.config.discovery.get_service_name(category).ok_or_else(|| {
-                    CenterError::Config(format!("{} 服务名未配置", category.center_name()))
-                })?;
+                let service_name = self
+                    .config
+                    .discovery
+                    .get_service_name(category)
+                    .ok_or_else(|| {
+                        CenterError::Config(format!("{} 服务名未配置", category.center_name()))
+                    })?;
                 self.resolve_url_from_discovery(service_name, category, true)
             }
             other => Err(CenterError::Config(format!(
@@ -111,12 +122,13 @@ impl HttpServiceCenterSender {
         is_cleanup: bool,
     ) -> Result<String, CenterError> {
         let cache = GlobalServiceInstanceCache::get();
-        let instances = cache.get(service_name).filter(|v| !v.is_empty()).ok_or_else(|| {
-            CenterError::Unavailable {
+        let instances = cache
+            .get(service_name)
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| CenterError::Unavailable {
                 center: category.center_name().to_string(),
                 url: service_name.to_string(),
-            }
-        })?;
+            })?;
 
         // 过滤健康实例
         let healthy: Vec<&ServiceInstance> = instances.iter().filter(|i| i.healthy).collect();
@@ -131,12 +143,12 @@ impl HttpServiceCenterSender {
         };
 
         // 随机选择一个实例（pool 非空已由前面检查保证）
-        let instance = pool
-            .choose(&mut rand::thread_rng())
-            .ok_or_else(|| CenterError::Unavailable {
-                center: category.center_name().to_string(),
-                url: service_name.to_string(),
-            })?;
+        let instance =
+            pool.choose(&mut rand::thread_rng())
+                .ok_or_else(|| CenterError::Unavailable {
+                    center: category.center_name().to_string(),
+                    url: service_name.to_string(),
+                })?;
 
         // 优先 metadata["http_port"]，回退 instance.port
         let port = instance
@@ -154,7 +166,10 @@ impl HttpServiceCenterSender {
 ///
 /// 当前仅支持 Perm（权限中心），其他 category 返回错误。
 /// 后续实现其他中心时在此扩展。
-fn category_to_http_path(category: DataCategory, is_cleanup: bool) -> Result<&'static str, CenterError> {
+fn category_to_http_path(
+    category: DataCategory,
+    is_cleanup: bool,
+) -> Result<&'static str, CenterError> {
     match (category, is_cleanup) {
         (DataCategory::Perm, false) => Ok("/api/iam/permissions/import"),
         (DataCategory::Perm, true) => Ok("/api/iam/permissions/cleanup"),
@@ -168,10 +183,7 @@ fn category_to_http_path(category: DataCategory, is_cleanup: bool) -> Result<&'s
 
 #[async_trait]
 impl ServiceCenterSender for HttpServiceCenterSender {
-    async fn send_data(
-        &self,
-        request: CenterSendRequest,
-    ) -> Result<CenterResponse, CenterError> {
+    async fn send_data(&self, request: CenterSendRequest) -> Result<CenterResponse, CenterError> {
         let url = self.resolve_import_url(request.category).await?;
         let category = request.category;
 
@@ -221,9 +233,8 @@ impl ServiceCenterSender for HttpServiceCenterSender {
         }
 
         // 解析响应 JSON
-        let api_resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            CenterError::Network(format!("响应 JSON 解析失败: {e}, body: {body}"))
-        })?;
+        let api_resp: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| CenterError::Network(format!("响应 JSON 解析失败: {e}, body: {body}")))?;
 
         let success = api_resp
             .get("code")
@@ -296,9 +307,8 @@ impl ServiceCenterSender for HttpServiceCenterSender {
             });
         }
 
-        let api_resp: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            CenterError::Network(format!("响应 JSON 解析失败: {e}, body: {body}"))
-        })?;
+        let api_resp: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| CenterError::Network(format!("响应 JSON 解析失败: {e}, body: {body}")))?;
 
         let success = api_resp
             .get("code")

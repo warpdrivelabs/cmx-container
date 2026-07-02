@@ -2,13 +2,13 @@
 //!
 //! 监听插件生命周期事件，同步服务缓存。
 
-use std::sync::Arc;
-use cmx_traits::event_bus::{GlobalEventBus, EventHandler};
-use cmx_traits::plugin::{plugin_events, PluginLifecyclePayload};
-use cmx_traits::service::ServiceQuery;
 use crate::registry::ServiceRegistry;
 use crate::repository::ServiceRepository;
-use tracing::{info, error};
+use cmx_traits::event_bus::{EventHandler, GlobalEventBus};
+use cmx_traits::plugin::{PluginLifecyclePayload, plugin_events};
+use cmx_traits::service::ServiceQuery;
+use std::sync::Arc;
+use tracing::{error, info};
 
 /// 服务生命周期监听器
 ///
@@ -63,7 +63,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的安装事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -73,7 +74,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::INSTALLED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::INSTALLED, handler)
+            .await;
 
         // 订阅升级事件
         let repository = self.repository.clone();
@@ -88,7 +91,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的升级事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -98,7 +102,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UPGRADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UPGRADED, handler)
+            .await;
 
         // 订阅卸载事件
         let registry = self.service_registry.clone();
@@ -111,7 +117,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -121,7 +128,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UNINSTALLED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UNINSTALLED, handler)
+            .await;
 
         // 订阅降级事件
         let repository = self.repository.clone();
@@ -136,7 +145,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的降级事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -146,7 +156,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::DOWNGRADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::DOWNGRADED, handler)
+            .await;
 
         // 订阅覆盖安装事件
         let repository = self.repository.clone();
@@ -161,7 +173,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的覆盖安装事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -171,7 +184,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::REINSTALLED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::REINSTALLED, handler)
+            .await;
 
         // 订阅运行时加载事件
         let query = self.service_query.clone();
@@ -186,7 +201,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的加载事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -196,7 +212,9 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::LOADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::LOADED, handler)
+            .await;
 
         // 订阅运行时卸载事件
         let registry = self.service_registry.clone();
@@ -209,7 +227,8 @@ impl ServiceLifecycleListener {
                     if event.app_id != app_id {
                         tracing::debug!(
                             "忽略不同应用的卸载事件: app_id={} (当前应用: {})",
-                            event.app_id, app_id
+                            event.app_id,
+                            app_id
                         );
                         return;
                     }
@@ -219,9 +238,14 @@ impl ServiceLifecycleListener {
                 }
             });
         });
-        GlobalEventBus::get().subscribe(plugin_events::UNLOADED, handler).await;
+        GlobalEventBus::get()
+            .subscribe(plugin_events::UNLOADED, handler)
+            .await;
 
-        info!("服务生命周期监听器已注册 (app_id={}, 订阅: 安装/升级/卸载/降级/覆盖安装/加载/卸载)", self.app_id);
+        info!(
+            "服务生命周期监听器已注册 (app_id={}, 订阅: 安装/升级/卸载/降级/覆盖安装/加载/卸载)",
+            self.app_id
+        );
     }
 
     /// 处理安装事件：从数据库加载服务定义到缓存
@@ -243,13 +267,16 @@ impl ServiceLifecycleListener {
                 for service in &services {
                     if let Some(ref config) = service.config
                         && !config.is_empty()
-                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
-                            orchestrations.insert(service.service_key.clone(), orch);
-                        }
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config)
+                    {
+                        orchestrations.insert(service.service_key.clone(), orch);
+                    }
                 }
 
                 let service_count = services.len();
-                registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
+                registry
+                    .sync_plugin_services(&event.plugin_id, services, orchestrations)
+                    .await;
                 info!(
                     "插件 {} 服务定义已加载到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -284,7 +311,9 @@ impl ServiceLifecycleListener {
         let existing_services = registry.get_by_plugin(&event.plugin_id).await;
         let removed_count = existing_services.len();
         for service in &existing_services {
-            registry.unregister(&service.service_key, &event.plugin_id).await;
+            registry
+                .unregister(&service.service_key, &event.plugin_id)
+                .await;
         }
         if removed_count > 0 {
             info!(
@@ -294,7 +323,10 @@ impl ServiceLifecycleListener {
         }
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
-        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
+        match repository
+            .get_services_by_plugin(&event.plugin_id, &event.app_id)
+            .await
+        {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 let service_defs: Vec<_> = service_defs
@@ -302,15 +334,18 @@ impl ServiceLifecycleListener {
                     .map(|def| {
                         if let Some(ref config) = def.config
                             && !config.is_empty()
-                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
-                                    orchestrations.insert(def.service_key.clone(), orch);
-                                }
+                            && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config)
+                        {
+                            orchestrations.insert(def.service_key.clone(), orch);
+                        }
                         def
                     })
                     .collect();
 
                 let service_count = service_defs.len();
-                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
+                registry
+                    .sync_plugin_services(&event.plugin_id, service_defs, orchestrations)
+                    .await;
                 info!(
                     "插件 {} 升级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -346,7 +381,9 @@ impl ServiceLifecycleListener {
         } else {
             let count = services.len();
             for service in &services {
-                registry.unregister(&service.service_key, &event.plugin_id).await;
+                registry
+                    .unregister(&service.service_key, &event.plugin_id)
+                    .await;
             }
             info!(
                 "插件 {} 服务定义已从缓存清理，共清理 {} 个服务 (app_id={})",
@@ -376,7 +413,9 @@ impl ServiceLifecycleListener {
         let existing_services = registry.get_by_plugin(&event.plugin_id).await;
         let removed_count = existing_services.len();
         for service in &existing_services {
-            registry.unregister(&service.service_key, &event.plugin_id).await;
+            registry
+                .unregister(&service.service_key, &event.plugin_id)
+                .await;
         }
         if removed_count > 0 {
             info!(
@@ -386,7 +425,10 @@ impl ServiceLifecycleListener {
         }
 
         // 强制从数据库加载最新服务定义（使用 repository 绕过缓存）
-        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
+        match repository
+            .get_services_by_plugin(&event.plugin_id, &event.app_id)
+            .await
+        {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 let service_defs: Vec<_> = service_defs
@@ -394,15 +436,18 @@ impl ServiceLifecycleListener {
                     .map(|def| {
                         if let Some(ref config) = def.config
                             && !config.is_empty()
-                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
-                                    orchestrations.insert(def.service_key.clone(), orch);
-                                }
+                            && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config)
+                        {
+                            orchestrations.insert(def.service_key.clone(), orch);
+                        }
                         def
                     })
                     .collect();
 
                 let service_count = service_defs.len();
-                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
+                registry
+                    .sync_plugin_services(&event.plugin_id, service_defs, orchestrations)
+                    .await;
                 info!(
                     "插件 {} 降级后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -437,7 +482,9 @@ impl ServiceLifecycleListener {
         let existing_services = registry.get_by_plugin(&event.plugin_id).await;
         let removed_count = existing_services.len();
         for service in &existing_services {
-            registry.unregister(&service.service_key, &event.plugin_id).await;
+            registry
+                .unregister(&service.service_key, &event.plugin_id)
+                .await;
         }
         if removed_count > 0 {
             info!(
@@ -447,7 +494,10 @@ impl ServiceLifecycleListener {
         }
 
         // 强制从数据库加载最新服务定义
-        match repository.get_services_by_plugin(&event.plugin_id, &event.app_id).await {
+        match repository
+            .get_services_by_plugin(&event.plugin_id, &event.app_id)
+            .await
+        {
             Ok(service_defs) => {
                 let mut orchestrations = std::collections::HashMap::new();
                 let service_defs: Vec<_> = service_defs
@@ -455,15 +505,18 @@ impl ServiceLifecycleListener {
                     .map(|def| {
                         if let Some(ref config) = def.config
                             && !config.is_empty()
-                                && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
-                                    orchestrations.insert(def.service_key.clone(), orch);
-                                }
+                            && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config)
+                        {
+                            orchestrations.insert(def.service_key.clone(), orch);
+                        }
                         def
                     })
                     .collect();
 
                 let service_count = service_defs.len();
-                registry.sync_plugin_services(&event.plugin_id, service_defs, orchestrations).await;
+                registry
+                    .sync_plugin_services(&event.plugin_id, service_defs, orchestrations)
+                    .await;
                 info!(
                     "插件 {} 覆盖安装后服务定义已更新到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -497,13 +550,16 @@ impl ServiceLifecycleListener {
                 for service in &services {
                     if let Some(ref config) = service.config
                         && !config.is_empty()
-                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config) {
-                            orchestrations.insert(service.service_key.clone(), orch);
-                        }
+                        && let Ok(orch) = serde_json::from_str::<serde_json::Value>(config)
+                    {
+                        orchestrations.insert(service.service_key.clone(), orch);
+                    }
                 }
 
                 let service_count = services.len();
-                registry.sync_plugin_services(&event.plugin_id, services, orchestrations).await;
+                registry
+                    .sync_plugin_services(&event.plugin_id, services, orchestrations)
+                    .await;
                 info!(
                     "插件 {} 服务定义已加载到缓存，共 {} 个服务 (app_id={})",
                     event.plugin_id, service_count, event.app_id
@@ -537,7 +593,9 @@ impl ServiceLifecycleListener {
         } else {
             let count = services.len();
             for service in &services {
-                registry.unregister(&service.service_key, &event.plugin_id).await;
+                registry
+                    .unregister(&service.service_key, &event.plugin_id)
+                    .await;
             }
             info!(
                 "插件 {} 服务定义已从缓存清理，共清理 {} 个服务 (app_id={})",

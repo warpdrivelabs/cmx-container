@@ -9,7 +9,9 @@
 //! - `token_revoked`: Token 撤销数（含 `type` 标签）
 //! - `api_key_validations_total`: API Key 验证总数
 
-use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry};
+use prometheus::{
+    HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
+};
 
 use crate::error::Result;
 

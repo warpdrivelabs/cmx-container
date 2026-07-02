@@ -848,7 +848,13 @@ impl MarketplaceRepository {
         let params = json![plugin_ids];
         let result = self
             .db_manager
-            .query_sql_with_json(&self.default_db_id, None, sql, params, "get_latest_versions_batch")
+            .query_sql_with_json(
+                &self.default_db_id,
+                None,
+                sql,
+                params,
+                "get_latest_versions_batch",
+            )
             .await
             .map_err(|e| PluginError::Database(format!("批量查询最新版本失败: {}", e)))?;
         let schema = result.schema.as_ref();
@@ -900,8 +906,12 @@ impl MarketplaceRepository {
             documentation_url: row.get_by_name_as(schema, "documentation_url"),
             repository_url: row.get_by_name_as(schema, "repository_url"),
             status: row.get_by_name_as(schema, "status"),
-            is_featured: row.get_by_name_as::<i32>(schema, "is_featured").map(|v| v as i16),
-            is_official: row.get_by_name_as::<i32>(schema, "is_official").map(|v| v as i16),
+            is_featured: row
+                .get_by_name_as::<i32>(schema, "is_featured")
+                .map(|v| v as i16),
+            is_official: row
+                .get_by_name_as::<i32>(schema, "is_official")
+                .map(|v| v as i16),
             avg_rating: row.get_by_name_as(schema, "avg_rating"),
             rating_count: row.get_by_name_as(schema, "rating_count"),
             download_count: row.get_by_name_as(schema, "download_count"),
@@ -957,8 +967,12 @@ impl MarketplaceRepository {
             dependencies,
             compatibility,
             status: row.get_by_name_as(schema, "status"),
-            is_latest: row.get_by_name_as::<i64>(schema, "is_latest").map(|v| v as i16),
-            is_stable: row.get_by_name_as::<i64>(schema, "is_stable").map(|v| v as i16),
+            is_latest: row
+                .get_by_name_as::<i64>(schema, "is_latest")
+                .map(|v| v as i16),
+            is_stable: row
+                .get_by_name_as::<i64>(schema, "is_stable")
+                .map(|v| v as i16),
             download_count: row.get_by_name_as(schema, "download_count"),
             published_at: row.get_by_name_as(schema, "published_at"),
             archived: row.get_by_name_as(schema, "archived"),

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::data_path;
 use crate::error::PortalResult;
-use crate::fsutil::{read_json_opt, read_json};
+use crate::fsutil::{read_json, read_json_opt};
 
 /// 单个域条目（对前端输出形状，与 Node 完全一致）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,29 +58,38 @@ pub async fn get_domains_doc() -> PortalResult<serde_json::Value> {
     // 1) DAM 注册表派生
     let dam_path = data_path(["dam-registry", "registry.json"]);
     if let Some(value) = read_json_opt(&dam_path).await?
-        && let Ok(reg) = serde_json::from_value::<DamRegistryRaw>(value) {
-            let domains: Vec<DomainItem> = reg
-                .domains
-                .into_iter()
-                .filter(|d| d.status.as_deref().unwrap_or("active") != "disabled")
-                .map(|d| {
-                    let label = d.name.clone().or_else(|| d.title.clone()).unwrap_or_else(|| d.id.clone());
-                    DomainItem {
-                        application: d.id.clone(),
-                        activitie: d.id.clone(),
-                        icon: d.icon.unwrap_or_else(|| "folder".to_string()),
-                        label,
-                        title: d.title.unwrap_or_default(),
-                        description: d.description.unwrap_or_default(),
-                        id: d.id,
-                    }
-                })
-                .collect();
-            if !domains.is_empty() {
-                let doc = DomainsDoc { version: 1, source: "dam".to_string(), domains };
-                return Ok(serde_json::to_value(doc)?);
-            }
+        && let Ok(reg) = serde_json::from_value::<DamRegistryRaw>(value)
+    {
+        let domains: Vec<DomainItem> = reg
+            .domains
+            .into_iter()
+            .filter(|d| d.status.as_deref().unwrap_or("active") != "disabled")
+            .map(|d| {
+                let label = d
+                    .name
+                    .clone()
+                    .or_else(|| d.title.clone())
+                    .unwrap_or_else(|| d.id.clone());
+                DomainItem {
+                    application: d.id.clone(),
+                    activitie: d.id.clone(),
+                    icon: d.icon.unwrap_or_else(|| "folder".to_string()),
+                    label,
+                    title: d.title.unwrap_or_default(),
+                    description: d.description.unwrap_or_default(),
+                    id: d.id,
+                }
+            })
+            .collect();
+        if !domains.is_empty() {
+            let doc = DomainsDoc {
+                version: 1,
+                source: "dam".to_string(),
+                domains,
+            };
+            return Ok(serde_json::to_value(doc)?);
         }
+    }
 
     // 2) 回退：activities/domains.json 原样返回
     let file = data_path(["activities", "domains.json"]);
@@ -113,7 +122,15 @@ mod tests {
 
         // 校验首个域字段完整 + application==activitie==id（与 Node 映射一致）
         let first = &domains[0];
-        for key in ["id", "icon", "label", "title", "description", "application", "activitie"] {
+        for key in [
+            "id",
+            "icon",
+            "label",
+            "title",
+            "description",
+            "application",
+            "activitie",
+        ] {
             assert!(first.get(key).is_some(), "域缺少字段: {key}");
         }
         assert_eq!(first["application"], first["id"]);
@@ -125,4 +142,3 @@ mod tests {
         }
     }
 }
-

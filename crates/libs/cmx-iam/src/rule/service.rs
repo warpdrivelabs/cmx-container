@@ -6,12 +6,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_core::SVRContext;
 use cmx_core::ParamsBuilder;
+use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
-use cmx_core::model::cell::DataValue;
 use tracing::{debug, info};
 
 use crate::audit_helper::AuditHelper;
@@ -198,7 +198,10 @@ pub trait ExclusionRuleService: Send + Sync {
     /// # Errors
     ///
     /// 当 SQL 查询失败时返回错误。
-    async fn validate_rule(&self, req: ValidateRuleRequest) -> Result<ValidateRuleResponse, TraitError>;
+    async fn validate_rule(
+        &self,
+        req: ValidateRuleRequest,
+    ) -> Result<ValidateRuleResponse, TraitError>;
 }
 
 /// 互斥规则 Service 实现。
@@ -381,7 +384,7 @@ impl ExclusionRuleServiceImpl {
             _ => {
                 return Err(IamError::Business(format!(
                     "无效的对象类型: {subject_type}（应为 permission 或 role）"
-                )))
+                )));
             }
         };
         let sql = format!(
@@ -405,9 +408,7 @@ impl ExclusionRuleServiceImpl {
 
         for id in ids {
             if !found.contains(id) {
-                return Err(IamError::Business(format!(
-                    "{table} 中对象不存在: {id}"
-                )));
+                return Err(IamError::Business(format!("{table} 中对象不存在: {id}")));
             }
         }
         Ok(())
@@ -530,7 +531,9 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), insert_item_sql, params)
                 .await
-                .map_err(|e| TraitError::from(IamError::Business(format!("创建规则项失败: {e}"))))?;
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("创建规则项失败: {e}")))
+                })?;
         }
 
         // 提交事务
@@ -548,8 +551,14 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             "primary_subject_id": req.primary_subject_id,
             "excluded_count": excluded.len(),
         });
-        self.audit_write(svr_ctx, "create_rule", "exclusion_rule", &rule_id, &audit_detail)
-            .await;
+        self.audit_write(
+            svr_ctx,
+            "create_rule",
+            "exclusion_rule",
+            &rule_id,
+            &audit_detail,
+        )
+        .await;
 
         let rule = self.query_rule(&rule_id).await.map_err(TraitError::from)?;
         info!(
@@ -679,7 +688,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         );
 
         let rule = self.query_rule(rule_id).await.map_err(TraitError::from)?;
-        let items = self.query_rule_items(rule_id).await.map_err(TraitError::from)?;
+        let items = self
+            .query_rule_items(rule_id)
+            .await
+            .map_err(TraitError::from)?;
         Ok((rule, items))
     }
 
@@ -708,9 +720,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, None, count_sql, params, "rule_count")
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("查询规则总数失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询规则总数失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
         let total: i64 = dataset
             .iter()
@@ -728,17 +738,12 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             ORDER BY priority DESC, create_time DESC
             LIMIT $1 OFFSET $2
         "#;
-        let params = vec![
-            DataValue::Int(size as i64),
-            DataValue::Int(offset),
-        ];
+        let params = vec![DataValue::Int(size as i64), DataValue::Int(offset)];
         let dataset = self
             .mm
             .query_sql_with_datavalues(&self.db_id, None, page_sql, params, "rule_page")
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("分页查询规则失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("分页查询规则失败: {e}"))))?;
 
         let rules: Vec<ExclusionRule> = Self::extract_rules_from_dataset(dataset);
         Ok((rules, total))
@@ -764,9 +769,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             .mm
             .execute_sql_with_datavalues(&self.db_id, None, sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("切换规则状态失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("切换规则状态失败: {e}"))))?;
 
         if affected == 0 {
             return Err(TraitError::from(IamError::Business(format!(
@@ -794,7 +797,9 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
     ) -> Result<u64, TraitError> {
         debug!(
             "{:<12} - ExclusionRuleServiceImpl::add_rule_items - rule_id: {}, count: {}",
-            "IAM-RULE", rule_id, subject_ids.len()
+            "IAM-RULE",
+            rule_id,
+            subject_ids.len()
         );
 
         // 查询规则的 primary_subject_id 和 subject_type
@@ -859,21 +864,26 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
     ) -> Result<u64, TraitError> {
         debug!(
             "{:<12} - ExclusionRuleServiceImpl::remove_rule_items - rule_id: {}, count: {}",
-            "IAM-RULE", rule_id, item_ids.len()
+            "IAM-RULE",
+            rule_id,
+            item_ids.len()
         );
 
         let sql = "DELETE FROM cmx_exclusion_rule_item WHERE id = ANY($1) AND rule_id = $2";
         let params = vec![
-            DataValue::Array(item_ids.iter().map(|i| DataValue::String(i.clone())).collect()),
+            DataValue::Array(
+                item_ids
+                    .iter()
+                    .map(|i| DataValue::String(i.clone()))
+                    .collect(),
+            ),
             DataValue::String(rule_id.to_string()),
         ];
         let affected = self
             .mm
             .execute_sql_with_datavalues(&self.db_id, None, sql, params)
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("移除规则项失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("移除规则项失败: {e}"))))?;
 
         let total = affected as u64;
         self.audit_write(
@@ -925,7 +935,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             let params = vec![DataValue::String(uid.clone())];
             let dataset = self
                 .mm
-                .query_sql_with_datavalues(&self.db_id, None, user_perm_sql, params, "validate_user_perms")
+                .query_sql_with_datavalues(
+                    &self.db_id,
+                    None,
+                    user_perm_sql,
+                    params,
+                    "validate_user_perms",
+                )
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("查询用户权限失败: {e}")))
@@ -951,7 +967,13 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             let params = vec![DataValue::String(uid.clone())];
             let dataset = self
                 .mm
-                .query_sql_with_datavalues(&self.db_id, None, user_role_sql, params, "validate_user_roles")
+                .query_sql_with_datavalues(
+                    &self.db_id,
+                    None,
+                    user_role_sql,
+                    params,
+                    "validate_user_roles",
+                )
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("查询用户角色失败: {e}")))
@@ -978,9 +1000,7 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
             .mm
             .query_sql_with_datavalues(&self.db_id, None, load_sql, params, "validate_load_rules")
             .await
-            .map_err(|e| {
-                TraitError::from(IamError::Business(format!("加载规则失败: {e}")))
-            })?;
+            .map_err(|e| TraitError::from(IamError::Business(format!("加载规则失败: {e}"))))?;
 
         let schema = dataset.schema.as_ref();
         // 按规则聚合：rule_id -> (code, name, subject_type, primary_subject_id, violation_message, Vec<subject_id>)
@@ -995,8 +1015,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                 (
                     row.get_by_name_as(schema, "code").unwrap_or_default(),
                     row.get_by_name_as(schema, "name").unwrap_or_default(),
-                    row.get_by_name_as(schema, "subject_type").unwrap_or_default(),
-                    row.get_by_name_as(schema, "primary_subject_id").unwrap_or_default(),
+                    row.get_by_name_as(schema, "subject_type")
+                        .unwrap_or_default(),
+                    row.get_by_name_as(schema, "primary_subject_id")
+                        .unwrap_or_default(),
                     row.get_by_name_as(schema, "violation_message"),
                     Vec::new(),
                 )
@@ -1008,8 +1030,10 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
 
         // 4. 按 subject_type 分别校验（收集所有 violations，不快速失败）
         let mut violations = Vec::new();
-        for (rule_id, (code, name, subject_type, primary_subject_id, violation_message, excluded_ids)) in
-            &rules_map
+        for (
+            rule_id,
+            (code, name, subject_type, primary_subject_id, violation_message, excluded_ids),
+        ) in &rules_map
         {
             let target_set = match subject_type.as_str() {
                 "permission" => &perm_set,
@@ -1026,9 +1050,9 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
                             rule_code: code.clone(),
                             rule_name: name.clone(),
                             subject_type: subject_type.clone(),
-                            violation_message: violation_message.clone().unwrap_or_else(|| {
-                                format!("对象组合违反互斥规则 [{}]", code)
-                            }),
+                            violation_message: violation_message
+                                .clone()
+                                .unwrap_or_else(|| format!("对象组合违反互斥规则 [{}]", code)),
                             primary_subject_id: primary_subject_id.clone(),
                             conflicting_subject_id: excluded_id.clone(),
                         });

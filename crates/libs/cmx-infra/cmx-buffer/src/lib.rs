@@ -16,19 +16,18 @@ pub mod logging;
 pub mod mock;
 
 pub use cache::{
-    CacheManager, CacheOps, ChannelHandler, FnChannelHandler, GlobalCacheManager,
-    GlobalSubscriber, GlobalSubscriberManager, HashOps, PubSubOps, ScriptOps, SetOps,
-    SortedSetOps, TtlOps,
+    CacheManager, CacheOps, ChannelHandler, FnChannelHandler, GlobalCacheManager, GlobalSubscriber,
+    GlobalSubscriberManager, HashOps, PubSubOps, ScriptOps, SetOps, SortedSetOps, TtlOps,
 };
 pub use client::{
-    create_shared_client, get_client, get_client_mut, GlobalRedisClient, RedisClient,
-    RedisConnectionRef, SharedRedisClient, SubscriberConnection,
+    GlobalRedisClient, RedisClient, RedisConnectionRef, SharedRedisClient, SubscriberConnection,
+    create_shared_client, get_client, get_client_mut,
 };
 pub use config::{CacheConfig, LockConfig, RedisConfig, RedisMode};
 pub use error::{Error, Result};
 pub use lock::{
-    create_lock_manager, create_lock_manager_with_config, GlobalLockManager, LockGuard,
-    LockManager, LockOptions,
+    GlobalLockManager, LockGuard, LockManager, LockOptions, create_lock_manager,
+    create_lock_manager_with_config,
 };
 
 pub use host_functions::BufferHostFunctions;

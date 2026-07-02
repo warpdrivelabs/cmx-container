@@ -8,8 +8,8 @@
 //! - HostFunctionProvider 注册逻辑
 //! - GlobalExtismEngine 初始化状态检查
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use cmx_runtime::EngineMetrics;
 use cmx_runtime::ExtismEngine;
@@ -17,8 +17,8 @@ use cmx_runtime::ExtismEngineConfig;
 use cmx_runtime::ExtismError;
 use cmx_traits::error::{HostFuncError, TraitError};
 use cmx_traits::runtime::{
-    HostFunctionDef, HostFunctionProvider, InvokeContext, InvokeOptions, ValType,
-    DEFAULT_MAX_DEPTH, DEFAULT_TIMEOUT,
+    DEFAULT_MAX_DEPTH, DEFAULT_TIMEOUT, HostFunctionDef, HostFunctionProvider, InvokeContext,
+    InvokeOptions, ValType,
 };
 
 // ============================================================
@@ -374,8 +374,7 @@ fn test_host_function_def_constructors() {
     assert_eq!(no_input_fn.input_types.len(), 0);
     assert_eq!(no_input_fn.output_types.len(), 1);
 
-    let no_output_fn =
-        HostFunctionDef::no_output("no_output_fn", "cmx:test", &[ValType::Ptr]);
+    let no_output_fn = HostFunctionDef::no_output("no_output_fn", "cmx:test", &[ValType::Ptr]);
     assert_eq!(no_output_fn.input_types.len(), 1);
     assert_eq!(no_output_fn.output_types.len(), 0);
 
@@ -536,7 +535,11 @@ fn test_host_func_error_helpers() {
     // 验证：HostFuncError 工厂方法
     let reg_err = HostFuncError::registration_failed("ns", "fn", "原因");
     match &reg_err {
-        HostFuncError::RegistrationFailed { namespace, name, reason } => {
+        HostFuncError::RegistrationFailed {
+            namespace,
+            name,
+            reason,
+        } => {
             assert_eq!(namespace, "ns");
             assert_eq!(name, "fn");
             assert_eq!(reason, "原因");
@@ -548,7 +551,11 @@ fn test_host_func_error_helpers() {
 
     let exec_err = HostFuncError::execution_failed("ns", "fn", "执行错误");
     match &exec_err {
-        HostFuncError::ExecutionFailed { namespace, name, reason } => {
+        HostFuncError::ExecutionFailed {
+            namespace,
+            name,
+            reason,
+        } => {
             assert_eq!(namespace, "ns");
             assert_eq!(name, "fn");
             assert_eq!(reason, "执行错误");

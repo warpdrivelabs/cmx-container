@@ -107,10 +107,8 @@ impl GrpcInfrastructure {
         }
 
         // 创建 Discover 并启动监听（不涉及网络 IO，可在锁外完成）
-        let discover = RegistryAwareDiscover::new(
-            self.cache.clone(),
-            self.config.discover_channel_capacity,
-        );
+        let discover =
+            RegistryAwareDiscover::new(self.cache.clone(), self.config.discover_channel_capacity);
         discover.start_watch(service_name);
 
         // 写锁：仅保护 HashMap insert，double-check 防止并发重复创建

@@ -6,9 +6,12 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::crud::error::{Result, ServiceError};
+use crate::crud::{
+    DbBmc, decrypt_dataset_fields, encrypt_sea_fields, prep_fields_for_create,
+    prep_fields_for_update,
+};
 use crate::{DatabaseManager, Error};
-use crate::crud::error::{ServiceError, Result};
-use crate::crud::{DbBmc, prep_fields_for_create, prep_fields_for_update, encrypt_sea_fields, decrypt_dataset_fields};
 use cmx_core::UpdatePayload;
 use cmx_core::model::data::dataset::{DataSet, Schema};
 use modql::SIden;
@@ -40,12 +43,8 @@ fn json_value_to_sea_query(value: Value) -> sea_query::SimpleExpr {
             }
         }
         Value::String(s) => sea_query::Value::String(Some(s)),
-        Value::Array(arr) => {
-            sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap()))
-        }
-        Value::Object(obj) => {
-            sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap()))
-        }
+        Value::Array(arr) => sea_query::Value::String(Some(serde_json::to_string(&arr).unwrap())),
+        Value::Object(obj) => sea_query::Value::String(Some(serde_json::to_string(&obj).unwrap())),
     };
     sea_query::SimpleExpr::Value(sea_value)
 }
@@ -76,7 +75,12 @@ where
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, data: E) -> Result<DataSet>
+    pub async fn create<E>(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        data: E,
+    ) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -108,12 +112,12 @@ where
             .execute_sql_with_sqlxvalues(db_id, txn_id, &sql, sql_values)
             .await
             .map_err(|ref e| {
-             if let Error::Sqlx(err) = e
-                 && let sqlx::Error::Database( e) = err
-                     && e.code() == Some("23505".into())
-                 {
-                     return ServiceError::business_error("数据已存在");
-                 }
+                if let Error::Sqlx(err) = e
+                    && let sqlx::Error::Database(e) = err
+                    && e.code() == Some("23505".into())
+                {
+                    return ServiceError::business_error("数据已存在");
+                }
 
                 error!("{:<12} - 创建失败: {}, table: {}", "CRUD", e, MC::TABLE);
                 ServiceError::internal_error(format!("创建失败 [{}]: {}", MC::TABLE, e))
@@ -133,7 +137,12 @@ where
     ///
     /// # 返回值
     /// 返回包含创建结果的 DataSet
-    pub async fn create_many<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, data: Vec<E>) -> Result<DataSet>
+    pub async fn create_many<E>(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        data: Vec<E>,
+    ) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -190,7 +199,12 @@ where
     ///
     /// # 返回值
     /// 返回包含查询结果的 DataSet
-    pub async fn get(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, id: Value) -> Result<DataSet> {
+    pub async fn get(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        id: Value,
+    ) -> Result<DataSet> {
         debug!(
             "{:<12} - GenericCrudService::get - table: {}, db_id: {}, id: {:?}",
             "CRUD",
@@ -242,7 +256,13 @@ where
     ///
     /// # 返回值
     /// 返回包含更新后结果的 DataSet
-    pub async fn update<E>(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, id: Value, data: E) -> Result<DataSet>
+    pub async fn update<E>(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        id: Value,
+        data: E,
+    ) -> Result<DataSet>
     where
         E: HasSeaFields,
     {
@@ -372,7 +392,12 @@ where
     ///
     /// # 返回值
     /// 返回包含删除信息的 DataSet
-    pub async fn delete(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>, ids: Vec<Value>) -> Result<DataSet> {
+    pub async fn delete(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        ids: Vec<Value>,
+    ) -> Result<DataSet> {
         info!(
             "{:<12} - GenericCrudService::delete - table: {}, db_id: {}, count: {}",
             "CRUD",
@@ -414,7 +439,7 @@ where
 impl<MC, F> GenericCrudService<MC, F>
 where
     MC: DbBmc,
-    F: Into<FilterGroups> +Clone + IntoFilterNodes,
+    F: Into<FilterGroups> + Clone + IntoFilterNodes,
 {
     /// 列表查询（带过滤和排序）
     ///
@@ -551,7 +576,12 @@ where
     ///
     /// # 返回值
     /// 返回记录总数
-    pub async fn count(mm: &DatabaseManager, db_id: &str, txn_id: Option<&str>,filters: Option<Vec<F>>) -> Result<i64> {
+    pub async fn count(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        filters: Option<Vec<F>>,
+    ) -> Result<i64> {
         debug!(
             "{:<12} - GenericCrudService::count - table: {}, db_id: {}",
             "CRUD",
@@ -596,7 +626,6 @@ where
         Ok(count)
     }
 
-
     /// 自定义分页查询（便捷方法）
     ///
     /// 这是 CustomQueryService::page_custom 的便捷包装
@@ -620,6 +649,15 @@ where
         list_options: ListOptions,
         sql: &str,
     ) -> Result<(DataSet, i64)> {
-        crate::crud::CustomQueryService::page_custom(mm, db_id, txn_id, filters, list_options, sql, MC::TABLE).await
+        crate::crud::CustomQueryService::page_custom(
+            mm,
+            db_id,
+            txn_id,
+            filters,
+            list_options,
+            sql,
+            MC::TABLE,
+        )
+        .await
     }
 }

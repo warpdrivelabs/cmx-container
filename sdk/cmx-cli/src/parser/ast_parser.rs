@@ -4,8 +4,8 @@
 
 use anyhow::{Context, Result};
 use syn::{
-    parse_file, Attribute, FnArg, Item, ItemFn, PathArguments, ReturnType, Type, TypePath,
-    File as SynFile,
+    Attribute, File as SynFile, FnArg, Item, ItemFn, PathArguments, ReturnType, Type, TypePath,
+    parse_file,
 };
 
 /// 解析后的函数信息
@@ -38,9 +38,10 @@ pub fn parse_rust_file(content: &str) -> Result<Vec<ParsedFunction>> {
     for item in &file.items {
         if let Item::Fn(fn_item) = item
             && has_plugin_fn_attribute(&fn_item.attrs)
-                && let Some(parsed) = parse_plugin_function(fn_item)? {
-                    functions.push(parsed);
-                }
+            && let Some(parsed) = parse_plugin_function(fn_item)?
+        {
+            functions.push(parsed);
+        }
     }
 
     Ok(functions)
@@ -71,12 +72,7 @@ fn parse_plugin_function(fn_item: &ItemFn) -> Result<Option<ParsedFunction>> {
     let (output_type, output_encoding) = parse_output_type(&fn_item.sig.output)?;
 
     // 获取行号
-    let line = fn_item
-        .sig
-        .fn_token
-        .span
-        .start()
-        .line;
+    let line = fn_item.sig.fn_token.span.start().line;
 
     Ok(Some(ParsedFunction {
         name,
@@ -99,9 +95,10 @@ fn extract_doc_comments(attrs: &[Attribute]) -> Vec<String> {
                 let meta = &attr.meta;
                 if let syn::Meta::NameValue(nv) = meta
                     && let syn::Expr::Lit(lit) = &nv.value
-                        && let syn::Lit::Str(lit_str) = &lit.lit {
-                            return Some(lit_str.value());
-                        }
+                    && let syn::Lit::Str(lit_str) = &lit.lit
+                {
+                    return Some(lit_str.value());
+                }
             }
             None
         })
@@ -113,17 +110,20 @@ fn extract_doc_type(attrs: &[Attribute]) -> String {
     for attr in attrs {
         if attr.path().is_ident("doc_type")
             && let syn::Meta::NameValue(nv) = &attr.meta
-                && let syn::Expr::Lit(lit) = &nv.value
-                    && let syn::Lit::Str(lit_str) = &lit.lit {
-                        return lit_str.value();
-                    }
+            && let syn::Expr::Lit(lit) = &nv.value
+            && let syn::Lit::Str(lit_str) = &lit.lit
+        {
+            return lit_str.value();
+        }
     }
     // 默认类型为 "func"
     "func".to_string()
 }
 
 /// 解析输入类型
-fn parse_input_type(inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>) -> Result<(String, String)> {
+fn parse_input_type(
+    inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>,
+) -> Result<(String, String)> {
     for input in inputs {
         if let FnArg::Typed(pat_type) = input {
             let type_str = type_to_string(&pat_type.ty);

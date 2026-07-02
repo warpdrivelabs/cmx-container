@@ -2,8 +2,8 @@
 //!
 //! 维护结构体定义注册表，解析和展开嵌套类型。
 
-use std::collections::HashMap;
 use crate::ast_parser::struct_parser::StructDefinition;
+use std::collections::HashMap;
 
 /// 类型注册表
 #[derive(Debug, Clone, Default)]
@@ -167,7 +167,11 @@ fn clean_type_name(type_name: &str) -> String {
     // 处理 `crate::` 前缀，简化类型名
     if let Some(after_crate) = cleaned.strip_prefix("crate::") {
         // 取最后一部分作为类型名
-        after_crate.split("::").last().unwrap_or(after_crate).to_string()
+        after_crate
+            .split("::")
+            .last()
+            .unwrap_or(after_crate)
+            .to_string()
     } else if cleaned.contains("::") {
         // 只取最后的类型名
         cleaned.split("::").last().unwrap_or(cleaned).to_string()
@@ -180,12 +184,23 @@ fn clean_type_name(type_name: &str) -> String {
 pub fn is_primitive_type(type_name: &str) -> bool {
     matches!(
         clean_type_name(type_name).as_str(),
-        "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
-            | "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
-            | "f32" | "f64"
+        "i8" | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "isize"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "f32"
+            | "f64"
             | "bool"
             | "char"
-            | "String" | "str"
+            | "String"
+            | "str"
             | "()"
     )
 }
@@ -221,7 +236,8 @@ pub fn extract_container_element(type_name: &str) -> Option<String> {
 
     // Vec<T>, Option<T>, Box<T>, Result<T> 等
     if let Some(start) = cleaned.find('<')
-        && let Some(end) = cleaned.rfind('>') && end > start
+        && let Some(end) = cleaned.rfind('>')
+        && end > start
     {
         return Some(cleaned[start + 1..end].to_string());
     }
@@ -253,8 +269,17 @@ mod tests {
 
     #[test]
     fn test_extract_container_element() {
-        assert_eq!(extract_container_element("Vec<String>"), Some("String".to_string()));
-        assert_eq!(extract_container_element("Option<i32>"), Some("i32".to_string()));
-        assert_eq!(extract_container_element("HashMap<String, i32>"), Some("i32".to_string()));
+        assert_eq!(
+            extract_container_element("Vec<String>"),
+            Some("String".to_string())
+        );
+        assert_eq!(
+            extract_container_element("Option<i32>"),
+            Some("i32".to_string())
+        );
+        assert_eq!(
+            extract_container_element("HashMap<String, i32>"),
+            Some("i32".to_string())
+        );
     }
 }

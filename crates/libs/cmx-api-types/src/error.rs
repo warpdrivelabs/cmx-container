@@ -280,7 +280,11 @@ impl Error {
     ///
     /// `Error::RateLimitExceeded` 变体。
     pub fn rate_limit_exceeded(retry_after: u64, limit: u64, window: u64) -> Self {
-        Self::RateLimitExceeded { retry_after, limit, window }
+        Self::RateLimitExceeded {
+            retry_after,
+            limit,
+            window,
+        }
     }
 
     /// 获取错误对应的 HTTP 状态码。
@@ -328,13 +332,21 @@ impl From<validator::ValidationErrors> for Error {
             .field_errors()
             .into_iter()
             .map(|(field, errs)| {
-                let msgs: Vec<String> = errs.iter()
-                    .map(|err| err.message.as_ref().map(|s| s.to_string()).unwrap_or_default())
+                let msgs: Vec<String> = errs
+                    .iter()
+                    .map(|err| {
+                        err.message
+                            .as_ref()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default()
+                    })
                     .collect();
                 format!("{}: {}", field, msgs.join(", "))
             })
             .collect();
-        Self::ValidationError { errors: error_messages }
+        Self::ValidationError {
+            errors: error_messages,
+        }
     }
 }
 
@@ -371,10 +383,9 @@ impl Error {
     pub fn into_rate_limit_response(self) -> Response {
         if let Self::RateLimitExceeded { retry_after, .. } = self {
             let mut response = self.into_response();
-            response.headers_mut().insert(
-                "retry-after",
-                retry_after.to_string().parse().unwrap(),
-            );
+            response
+                .headers_mut()
+                .insert("retry-after", retry_after.to_string().parse().unwrap());
             response
         } else {
             self.into_response()

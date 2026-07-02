@@ -10,16 +10,14 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::Utc;
 use cmx_core::model::service::{
-    FunctionOutput, NodeData, NodeMeta, NodeNodeMeta, NodePosition, NodeSize,
-    ServiceDefinition, ServiceEdge, ServiceFlow, ServiceNode, ServiceOrchestration, SVRContext,
+    FunctionOutput, NodeData, NodeMeta, NodeNodeMeta, NodePosition, NodeSize, SVRContext,
+    ServiceDefinition, ServiceEdge, ServiceFlow, ServiceNode, ServiceOrchestration,
 };
 use cmx_service::Orchestrator;
 use cmx_traits::error::TraitError;
 use cmx_traits::plugin::{PluginFilter, PluginQuery, PluginSnapshot};
 use cmx_traits::runtime::{InvokeOptions, RuntimeInvoker, WasmInvokeResult};
-use cmx_traits::service::{
-    ServicePageFilter, ServicePageResult, ServiceQuery,
-};
+use cmx_traits::service::{ServicePageFilter, ServicePageResult, ServiceQuery};
 use serde_json::json;
 
 // ============================================================================
@@ -53,17 +51,33 @@ impl MockRuntimeInvoker {
     }
 
     /// 配置某函数的成功返回值
-    pub fn with_success(mut self, plugin_id: &str, function_name: &str, result: serde_json::Value) -> Self {
+    pub fn with_success(
+        mut self,
+        plugin_id: &str,
+        function_name: &str,
+        result: serde_json::Value,
+    ) -> Self {
         let key = format!("{}:{}", plugin_id, function_name);
-        self.outputs.get_mut().unwrap().insert(key, FunctionOutput::new(result));
+        self.outputs
+            .get_mut()
+            .unwrap()
+            .insert(key, FunctionOutput::new(result));
         self
     }
 
     /// 配置某函数的失败错误
     #[allow(dead_code)]
-    pub fn with_error(mut self, plugin_id: &str, function_name: &str, error_message: impl Into<String>) -> Self {
+    pub fn with_error(
+        mut self,
+        plugin_id: &str,
+        function_name: &str,
+        error_message: impl Into<String>,
+    ) -> Self {
         let key = format!("{}:{}", plugin_id, function_name);
-        self.errors.get_mut().unwrap().insert(key, error_message.into());
+        self.errors
+            .get_mut()
+            .unwrap()
+            .insert(key, error_message.into());
         self
     }
 
@@ -97,7 +111,10 @@ impl RuntimeInvoker for MockRuntimeInvoker {
         }
 
         // 查找成功输出
-        let output = self.outputs.lock().unwrap()
+        let output = self
+            .outputs
+            .lock()
+            .unwrap()
             .get(&key)
             .cloned()
             .unwrap_or_else(|| FunctionOutput::new(json!(null)));
@@ -184,7 +201,10 @@ impl PluginQuery for MockPluginQuery {
         Ok(self.install_path.join(plugin_id).join("mock.wasm"))
     }
 
-    async fn list_plugins(&self, _filter: &PluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
+    async fn list_plugins(
+        &self,
+        _filter: &PluginFilter,
+    ) -> Result<Vec<PluginSnapshot>, TraitError> {
         Ok(vec![])
     }
 }
@@ -211,7 +231,10 @@ impl MockServiceQuery {
     /// 注册一个服务编排
     pub fn with_orchestration(mut self, orchestration: ServiceOrchestration) -> Self {
         let key = orchestration.code.clone();
-        self.orchestrations.get_mut().unwrap().insert(key, orchestration);
+        self.orchestrations
+            .get_mut()
+            .unwrap()
+            .insert(key, orchestration);
         self
     }
 }
@@ -224,7 +247,10 @@ impl Default for MockServiceQuery {
 
 #[async_trait]
 impl ServiceQuery for MockServiceQuery {
-    async fn get_service(&self, service_key: &str) -> Result<Option<ServiceDefinition>, TraitError> {
+    async fn get_service(
+        &self,
+        service_key: &str,
+    ) -> Result<Option<ServiceDefinition>, TraitError> {
         // 返回一个最小化的 ServiceDefinition
         Ok(Some(ServiceDefinition {
             id: format!("id_{}", service_key),
@@ -247,7 +273,10 @@ impl ServiceQuery for MockServiceQuery {
         }))
     }
 
-    async fn get_services_by_plugin(&self, _plugin_id: &str) -> Result<Vec<ServiceDefinition>, TraitError> {
+    async fn get_services_by_plugin(
+        &self,
+        _plugin_id: &str,
+    ) -> Result<Vec<ServiceDefinition>, TraitError> {
         Ok(vec![])
     }
 
@@ -255,8 +284,16 @@ impl ServiceQuery for MockServiceQuery {
         Ok(vec![])
     }
 
-    async fn get_orchestration(&self, service_key: &str) -> Result<Option<ServiceOrchestration>, TraitError> {
-        Ok(self.orchestrations.lock().unwrap().get(service_key).cloned())
+    async fn get_orchestration(
+        &self,
+        service_key: &str,
+    ) -> Result<Option<ServiceOrchestration>, TraitError> {
+        Ok(self
+            .orchestrations
+            .lock()
+            .unwrap()
+            .get(service_key)
+            .cloned())
     }
 
     async fn page_services(
@@ -265,7 +302,10 @@ impl ServiceQuery for MockServiceQuery {
         _page: u64,
         _size: u64,
     ) -> Result<ServicePageResult, TraitError> {
-        Ok(ServicePageResult { items: vec![], total: 0 })
+        Ok(ServicePageResult {
+            items: vec![],
+            total: 0,
+        })
     }
 }
 
@@ -277,7 +317,10 @@ impl ServiceQuery for MockServiceQuery {
 pub fn make_meta() -> NodeMeta {
     NodeMeta {
         z_index: 1,
-        size: NodeSize { width: 100, height: 50 },
+        size: NodeSize {
+            width: 100,
+            height: 50,
+        },
         position: NodePosition { x: 0.0, y: 0.0 },
     }
 }
@@ -416,5 +459,10 @@ pub fn create_orchestrator(
     let runtime: Arc<dyn RuntimeInvoker> = Arc::new(runtime);
     let plugin_query: Arc<dyn PluginQuery> = Arc::new(MockPluginQuery::new());
     let service_query: Arc<dyn ServiceQuery> = Arc::new(service_query);
-    Orchestrator::new(runtime, plugin_query, service_query, "db_default".to_string())
+    Orchestrator::new(
+        runtime,
+        plugin_query,
+        service_query,
+        "db_default".to_string(),
+    )
 }

@@ -2,7 +2,6 @@ use crate::extism::ExtismHost;
 use crate::handlers::PluginCore;
 use cmx_plugin_sdk::*;
 
-
 /// 金额路由判断函数
 ///
 /// 根据订单金额判断走大额审批流程还是普通流程。
@@ -108,9 +107,7 @@ pub fn tx_record_approval(
 ///
 /// * `input` - 前序节点的输出，各步骤输出从上下文 step_outputs 获取。
 #[plugin_fn]
-pub fn final_process(
-    Msgpack(input): Msgpack<FunctionInput>,
-) -> FnResult<Msgpack<FunctionOutput>> {
+pub fn final_process(Msgpack(input): Msgpack<FunctionInput>) -> FnResult<Msgpack<FunctionOutput>> {
     let core = PluginCore::new(ExtismHost);
     let output = core.final_process(&input).map_err(Error::msg)?;
     Ok(Msgpack(output))

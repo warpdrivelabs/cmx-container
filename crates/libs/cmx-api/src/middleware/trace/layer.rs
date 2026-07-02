@@ -3,11 +3,7 @@
 //! 提供双模式请求追踪：INFO 模式零开销记录摘要，DEBUG 模式记录完整请求/响应详情。
 
 use axum::{
-    body::Body,
-    body::HttpBody,
-    extract::Request,
-    http::Method,
-    middleware::Next,
+    body::Body, body::HttpBody, extract::Request, http::Method, middleware::Next,
     response::Response,
 };
 use std::sync::OnceLock;

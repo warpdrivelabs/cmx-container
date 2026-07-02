@@ -63,7 +63,10 @@ async fn persist_pages(pages: &[serde_json::Value]) -> PortalResult<()> {
 }
 
 /// 分页列出表单页。返回 `{ items, total, page, pageSize }`。
-pub async fn list_form_pages_paged(page: Option<i64>, page_size: Option<i64>) -> PortalResult<serde_json::Value> {
+pub async fn list_form_pages_paged(
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> PortalResult<serde_json::Value> {
     let p = page.unwrap_or(1).max(1);
     let size = page_size.unwrap_or(20).clamp(1, 200);
     let pages = load_pages().await?;
@@ -74,9 +77,21 @@ pub async fn list_form_pages_paged(page: Option<i64>, page_size: Option<i64>) ->
         .skip(start)
         .take(size as usize)
         .map(|row| FormPageSummary {
-            id: row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            details: row.get("details").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            id: row
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            name: row
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            details: row
+                .get("details")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
         })
         .collect();
     Ok(json!({ "items": items, "total": total, "page": p, "pageSize": size }))
@@ -97,7 +112,10 @@ pub async fn save_form_page(input: FormPageInput) -> PortalResult<serde_json::Va
 
     let mut pages = load_pages().await?;
     let row = json!({ "id": id, "name": name, "details": details, "latestFormFile": fname });
-    if let Some(existing) = pages.iter_mut().find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str())) {
+    if let Some(existing) = pages
+        .iter_mut()
+        .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
+    {
         *existing = row.clone();
     } else {
         pages.push(row.clone());

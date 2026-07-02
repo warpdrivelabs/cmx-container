@@ -1,10 +1,10 @@
 //! 配置设置模块
-//! 
+//!
 //! 定义配置结构
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 
 fn default_app_id() -> String {
     "default".to_string()
@@ -139,12 +139,12 @@ impl PluginSettings {
             permissions: Vec::new(),
         }
     }
-    
+
     /// 设置配置项
     pub fn set(&mut self, key: String, value: serde_json::Value) {
         self.settings.insert(key, value);
     }
-    
+
     /// 获取配置项
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
         self.settings.get(key)

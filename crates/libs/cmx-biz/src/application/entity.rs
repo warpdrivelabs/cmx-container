@@ -15,11 +15,11 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize, Deserialize, Fields, FromRow)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct Application {
-    pub  id: String,
+    pub id: String,
 
     /// 应用编码，全局唯一，如: FI, CO, MM
     pub code: String,
-    #[field(rel = "cmx_application",prop_name="name")]  //
+    #[field(rel = "cmx_application", prop_name = "name")] //
     pub domain_name: String,
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
@@ -30,7 +30,7 @@ pub struct Application {
     pub description: Option<String>,
     /// 类型: product(产品应用), platform(平台应用), integration(集成应用)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["财务核心","SAP_FI"]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -77,7 +77,6 @@ pub struct ApplicationForCreate {
     /// 应用名称，如: 财务会计, 管理会计
     pub name: String,
 
-
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
     /// 应用描述
@@ -85,7 +84,7 @@ pub struct ApplicationForCreate {
     pub description: Option<String>,
     /// 类型: product(产品应用), platform(平台应用), integration(集成应用)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["财务核心","SAP_FI"]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,7 +111,7 @@ pub struct ApplicationForUpdate {
     pub description: Option<String>,
     /// 类型: product(产品应用), platform(平台应用), integration(集成应用)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[field(name="type")]
+    #[field(name = "type")]
     pub r#type: Option<String>,
     /// 多标签，JSON数组字符串，如 ["财务核心","SAP_FI"]
     #[serde(skip_serializing_if = "Option::is_none")]

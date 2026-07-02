@@ -6,9 +6,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-
 use crate::config::{DbConfig, DbType};
-use crate::executor::{ResultConverter, bind_data_value_mysql, bind_data_value_postgres, bind_data_value_sqlite};
+use crate::executor::{
+    ResultConverter, bind_data_value_mysql, bind_data_value_postgres, bind_data_value_sqlite,
+};
 use crate::transaction::Dbx;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
@@ -79,15 +80,21 @@ impl DbPool {
     pub async fn query(&self, sql: &str, dataset_id: &str) -> crate::Result<DataSet> {
         match self {
             DbPool::Postgres(pool) => {
-                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+                    .fetch_all(pool)
+                    .await?;
                 Ok(ResultConverter::convert_postgres_rows(rows, dataset_id))
             }
             DbPool::MySql(pool) => {
-                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+                    .fetch_all(pool)
+                    .await?;
                 Ok(ResultConverter::convert_mysql_rows(rows, dataset_id))
             }
             DbPool::Sqlite(pool) => {
-                let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
+                let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+                    .fetch_all(pool)
+                    .await?;
                 Ok(ResultConverter::convert_sqlite_rows(rows, dataset_id))
             }
         }
@@ -307,13 +314,15 @@ impl DatabasePoolImpl {
 
     /// 获取 Dbx（增加活跃计数）
     pub fn acquire(&self) -> Dbx {
-        self.active_connections.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.active_connections
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.dbx.clone()
     }
 
     /// 释放 Dbx（减少活跃计数）
     pub fn release(&self) {
-        self.active_connections.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.active_connections
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// 检查是否正在关闭
@@ -323,12 +332,14 @@ impl DatabasePoolImpl {
 
     /// 标记为正在关闭
     pub fn mark_closing(&self) {
-        self.is_closing.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.is_closing
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// 获取活跃连接数
     pub fn active_count(&self) -> usize {
-        self.active_connections.load(std::sync::atomic::Ordering::SeqCst)
+        self.active_connections
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// 等待所有活跃连接关闭
@@ -394,7 +405,10 @@ impl DbRegistry {
             if let Some(pool) = pools.get(&key) {
                 let timeout = std::time::Duration::from_secs(30);
                 if !pool.wait_for_idle(timeout).await {
-                    tracing::warn!("等待旧连接池关闭超时，仍有 {} 个活跃连接", pool.active_count());
+                    tracing::warn!(
+                        "等待旧连接池关闭超时，仍有 {} 个活跃连接",
+                        pool.active_count()
+                    );
                 }
             }
         }
@@ -430,7 +444,9 @@ impl DbRegistry {
     /// 获取数据库连接池
     pub async fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
         let pools = self.pools.read().await;
-        pools.get(key).map(|pool| (pool.get_dbx(), pool.get_config()))
+        pools
+            .get(key)
+            .map(|pool| (pool.get_dbx(), pool.get_config()))
     }
 
     /// 获取数据库访问对象
@@ -482,7 +498,6 @@ pub(crate) fn get_global_registry() -> &'static Arc<DbRegistry> {
 //     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
 // }
 
-
 /// 创建数据库访问对象
 async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
     let db_pool = new_db_pool(config).await?;
@@ -497,7 +512,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
 ///
 /// # 返回值
 /// * `sqlx::Result<DbPool>` - 成功返回数据库连接池，失败返回错误
- async fn new_db_pool(config: &DbConfig) -> sqlx::Result<DbPool> {
+async fn new_db_pool(config: &DbConfig) -> sqlx::Result<DbPool> {
     let pool_config = &config.pool_config;
 
     match config.db_type {
@@ -515,19 +530,19 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
                     let schema = db_schema.clone();
                     Box::pin(async move {
                         // 每次新建连接时设置 schema
-                        sqlx::query(sqlx::AssertSqlSafe(format!("SET search_path TO {}, public", schema
-                            .unwrap_or("public".to_string()))))
-                            .execute(conn)
-                            .await?;
+                        sqlx::query(sqlx::AssertSqlSafe(format!(
+                            "SET search_path TO {}, public",
+                            schema.unwrap_or("public".to_string())
+                        )))
+                        .execute(conn)
+                        .await?;
                         Ok(())
                     })
                 })
-
                 .connect(&db_url)
-
                 .await?;
             Ok(DbPool::Postgres(pool))
-        },
+        }
         DbType::MySql => {
             info!("创建 MySQL 连接池，连接池配置：{:?}", pool_config);
             let db_url = config.db_url.clone();
@@ -540,7 +555,7 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
                 .connect(&db_url)
                 .await?;
             Ok(DbPool::MySql(pool))
-        },
+        }
         DbType::Sqlite => {
             info!("创建 SQLite 连接池，连接池配置：{:?}", pool_config);
             let db_url = config.db_url.clone();
@@ -550,7 +565,6 @@ async fn create_dbx(config: &DbConfig) -> crate::Result<Dbx> {
                 .connect(&db_url)
                 .await?;
             Ok(DbPool::Sqlite(pool))
-        },
+        }
     }
 }
-

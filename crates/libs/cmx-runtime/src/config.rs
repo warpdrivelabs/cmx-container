@@ -82,7 +82,9 @@ impl Default for ExtismEngineConfig {
 /// - `Some(u32)`: 读取成功，返回配置值
 /// - `None`: ConfigManager 未初始化或配置无效，使用默认值
 fn read_memory_max() -> Option<u32> {
-    let s = ConfigManager::try_global()?.get_string("runtime.memory_max").ok()?;
+    let s = ConfigManager::try_global()?
+        .get_string("runtime.memory_max")
+        .ok()?;
 
     match s.parse::<u32>() {
         Ok(n) if n > 0 => Some(n),
@@ -107,7 +109,9 @@ fn read_memory_max() -> Option<u32> {
 /// - `Some(Duration)`: 读取成功，返回 Duration
 /// - `None`: ConfigManager 未初始化或配置无效，使用默认值
 fn read_timeout() -> Option<Duration> {
-    let s = ConfigManager::try_global()?.get_string("runtime.timeout").ok()?;
+    let s = ConfigManager::try_global()?
+        .get_string("runtime.timeout")
+        .ok()?;
 
     match s.parse::<u64>() {
         Ok(n) if n > 0 => {
@@ -153,10 +157,7 @@ fn read_pool_max_instances() -> Option<usize> {
             None
         }
         Err(_) => {
-            tracing::warn!(
-                "runtime.pool_max_instances='{}' 解析失败，使用默认值",
-                s
-            );
+            tracing::warn!("runtime.pool_max_instances='{}' 解析失败，使用默认值", s);
             None
         }
     }
@@ -183,10 +184,7 @@ fn read_fuel_limit() -> Option<u64> {
             Some(n)
         }
         Err(_) => {
-            tracing::warn!(
-                "Fuel 限制配置无效: '{}', 使用默认值(不限制)",
-                fuel_str
-            );
+            tracing::warn!("Fuel 限制配置无效: '{}', 使用默认值(不限制)", fuel_str);
             None
         }
     }
@@ -207,7 +205,9 @@ fn read_fuel_limit() -> Option<u64> {
 /// # 返回值
 ///
 /// 成功返回最终生效的 `ExtismEngineConfig`
-pub fn load_runtime_config(mut base: ExtismEngineConfig) -> Result<ExtismEngineConfig, ExtismError> {
+pub fn load_runtime_config(
+    mut base: ExtismEngineConfig,
+) -> Result<ExtismEngineConfig, ExtismError> {
     if let Some(v) = read_memory_max() {
         base.memory_max = v;
     }

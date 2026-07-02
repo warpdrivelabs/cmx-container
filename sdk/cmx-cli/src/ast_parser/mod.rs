@@ -10,5 +10,7 @@
 pub mod struct_parser;
 pub mod type_resolver;
 
-pub use struct_parser::{parse_structs, StructDefinition, FieldDefinition};
-pub use type_resolver::{TypeRegistry, ResolvedField, is_primitive_type, is_container_type, extract_container_element};
+pub use struct_parser::{FieldDefinition, StructDefinition, parse_structs};
+pub use type_resolver::{
+    ResolvedField, TypeRegistry, extract_container_element, is_container_type, is_primitive_type,
+};

@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_traits::plugin::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot};
 use cmx_traits::error::TraitError;
+use cmx_traits::plugin::{PluginFilter as TraitsPluginFilter, PluginQuery, PluginSnapshot};
 
 use crate::core::manager::PluginManager;
 use crate::domain::plugin::{PluginFilter as DomainPluginFilter, PluginInfo};
@@ -77,7 +77,8 @@ impl PluginQuery for PluginManager {
     /// 根据插件ID查询插件快照
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginSnapshot>, TraitError> {
         // 先从数据库查询完整记录（包含 wasm_path）
-        let record = self.repository()
+        let record = self
+            .repository()
             .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
@@ -86,7 +87,9 @@ impl PluginQuery for PluginManager {
             Some(r) => Ok(Some(PluginSnapshot::from(r))),
             None => {
                 // 回退到内存注册表
-                let info = self.get_plugin(plugin_id).await
+                let info = self
+                    .get_plugin(plugin_id)
+                    .await
                     .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
                 Ok(info.map(PluginSnapshot::from))
             }
@@ -106,7 +109,9 @@ impl PluginQuery for PluginManager {
         // }
 
         // 回退到内存注册表检查
-        let info = self.get_plugin(plugin_id).await
+        let info = self
+            .get_plugin(plugin_id)
+            .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
 
         Ok(info.is_some())
@@ -120,7 +125,8 @@ impl PluginQuery for PluginManager {
     /// 获取插件的 WASM 文件绝对路径
     async fn get_wasm_path(&self, plugin_id: &str) -> Result<PathBuf, TraitError> {
         // 从数据库获取完整记录
-        let record = self.repository()
+        let record = self
+            .repository()
             .find_plugin(plugin_id, self.app_id())
             .await
             .map_err(|e| TraitError::Internal(format!("查询插件失败: {}", e)))?;
@@ -166,9 +172,14 @@ impl PluginQuery for PluginManager {
     // }
 
     /// 根据筛选条件查询插件列表
-    async fn list_plugins(&self, filter: &TraitsPluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
+    async fn list_plugins(
+        &self,
+        filter: &TraitsPluginFilter,
+    ) -> Result<Vec<PluginSnapshot>, TraitError> {
         let domain_filter = DomainPluginFilter::from(filter.clone());
-        let infos = self.list_plugins(&domain_filter).await
+        let infos = self
+            .list_plugins(&domain_filter)
+            .await
             .map_err(|e| TraitError::Internal(format!("查询插件列表失败: {}", e)))?;
 
         // 转换结果，补充 wasm_path
@@ -240,7 +251,10 @@ impl PluginQuery for RepositoryPluginQuery {
         }
     }
 
-    async fn list_plugins(&self, _filter: &TraitsPluginFilter) -> Result<Vec<PluginSnapshot>, TraitError> {
+    async fn list_plugins(
+        &self,
+        _filter: &TraitsPluginFilter,
+    ) -> Result<Vec<PluginSnapshot>, TraitError> {
         // 此适配器仅用于构建阶段，list_plugins 暂不实现
         Ok(vec![])
     }

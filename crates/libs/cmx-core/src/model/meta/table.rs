@@ -10,10 +10,10 @@
 //!
 //! 这些类型用于描述数据库表的静态结构定义，与运行时数据值 [`DataValue`](super::cell::DataValue) 是不同的概念。
 
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 
 // ==========================================
 // 字段类型系统
@@ -149,7 +149,6 @@ pub enum IndexKind {
     #[default]
     Normal,
 }
-
 
 /// 单条表索引定义
 #[derive(Debug, Clone, Serialize, Deserialize)]

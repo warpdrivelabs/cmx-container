@@ -17,7 +17,7 @@ pub struct PluginInfoResponse {
     /// 插件名称
     pub name: String,
     /// 插件描述
-    pub  description: Option<String>,
+    pub description: Option<String>,
     /// 版本
     pub version: String,
     /// WASM 文件路径
@@ -173,7 +173,7 @@ pub struct PluginFunctionsResponse {
     /// 是否成功获取插件函数
     pub success: bool,
     /// 插件名称
-    pub plugin_name:String,
+    pub plugin_name: String,
     /// 插件版本
     pub plugin_version: String,
     /// 插件函数列表（JSON 格式的 api.json 内容）

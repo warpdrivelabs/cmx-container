@@ -12,5 +12,4 @@ impl SchemaManager {
             // include_str!("../../../sql/plugin_lifecycle_schema.sql"),
         ]
     }
-
 }

@@ -10,8 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cmx_database::DatabaseManager;
 use cmx_core::model::cell::DataValue;
+use cmx_database::DatabaseManager;
 use tracing::debug;
 
 use crate::config::IamConfig;
@@ -34,10 +34,7 @@ pub trait RuleEnforcer: Send + Sync {
     /// # Errors
     ///
     /// 当权限组合违反互斥规则时返回 `IamError::RuleViolation`。
-    async fn check_role_permissions(
-        &self,
-        permission_ids: &[String],
-    ) -> Result<(), IamError>;
+    async fn check_role_permissions(&self, permission_ids: &[String]) -> Result<(), IamError>;
 
     /// 校验用户角色组合是否违反互斥规则（合并现有权限/角色 + 待分配角色权限）。
     ///
@@ -51,11 +48,7 @@ pub trait RuleEnforcer: Send + Sync {
     /// # Errors
     ///
     /// 当合并后的权限或角色组合违反互斥规则时返回 `IamError::RuleViolation`。
-    async fn check_user_roles(
-        &self,
-        user_id: &str,
-        role_ids: &[String],
-    ) -> Result<(), IamError>;
+    async fn check_user_roles(&self, user_id: &str, role_ids: &[String]) -> Result<(), IamError>;
 }
 
 /// 规则校验引擎实现。
@@ -123,33 +116,24 @@ impl RuleEnforcerImpl {
         let mut rules_map: HashMap<String, LoadedRule> = HashMap::new();
 
         for row in dataset.iter() {
-            let rule_id: String = row
-                .get_by_name_as(schema, "id")
-                .unwrap_or_default();
-            let rule_entry = rules_map.entry(rule_id.clone()).or_insert_with(|| {
-                LoadedRule {
+            let rule_id: String = row.get_by_name_as(schema, "id").unwrap_or_default();
+            let rule_entry = rules_map
+                .entry(rule_id.clone())
+                .or_insert_with(|| LoadedRule {
                     id: rule_id.clone(),
-                    code: row
-                        .get_by_name_as(schema, "code")
-                        .unwrap_or_default(),
-                    name: row
-                        .get_by_name_as(schema, "name")
-                        .unwrap_or_default(),
+                    code: row.get_by_name_as(schema, "code").unwrap_or_default(),
+                    name: row.get_by_name_as(schema, "name").unwrap_or_default(),
                     subject_type: row
                         .get_by_name_as(schema, "subject_type")
                         .unwrap_or_default(),
                     primary_subject_id: row
                         .get_by_name_as(schema, "primary_subject_id")
                         .unwrap_or_default(),
-                    violation_message: row
-                        .get_by_name_as(schema, "violation_message"),
+                    violation_message: row.get_by_name_as(schema, "violation_message"),
                     excluded_ids: HashSet::new(),
-                }
-            });
+                });
 
-            let subject_id: String = row
-                .get_by_name_as(schema, "subject_id")
-                .unwrap_or_default();
+            let subject_id: String = row.get_by_name_as(schema, "subject_id").unwrap_or_default();
             rule_entry.excluded_ids.insert(subject_id);
         }
 
@@ -192,7 +176,10 @@ impl RuleEnforcerImpl {
     }
 
     /// 查询多个角色关联的权限ID集合
-    async fn get_role_permission_ids(&self, role_ids: &[String]) -> Result<HashSet<String>, IamError> {
+    async fn get_role_permission_ids(
+        &self,
+        role_ids: &[String],
+    ) -> Result<HashSet<String>, IamError> {
         if role_ids.is_empty() {
             return Ok(HashSet::new());
         }
@@ -202,7 +189,10 @@ impl RuleEnforcerImpl {
             WHERE role_id = ANY($1) AND archived = 0
         "#;
         let role_id_array = DataValue::Array(
-            role_ids.iter().map(|id| DataValue::String(id.clone())).collect(),
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
         );
         let params = vec![role_id_array];
         let dataset = self
@@ -264,14 +254,12 @@ impl RuleEnforcerImpl {
                 continue;
             }
             // 同时包含任一互斥对象即违反
-            let violated = rule
-                .excluded_ids
-                .iter()
-                .any(|id| subject_set.contains(id));
+            let violated = rule.excluded_ids.iter().any(|id| subject_set.contains(id));
             if violated {
-                let message = rule.violation_message.clone().unwrap_or_else(|| {
-                    format!("互斥规则违反 [{}]", rule.code)
-                });
+                let message = rule
+                    .violation_message
+                    .clone()
+                    .unwrap_or_else(|| format!("互斥规则违反 [{}]", rule.code));
                 return Err(IamError::RuleViolation {
                     rule_code: rule.code.clone(),
                     message,
@@ -300,10 +288,7 @@ struct LoadedRule {
 
 #[async_trait]
 impl RuleEnforcer for RuleEnforcerImpl {
-    async fn check_role_permissions(
-        &self,
-        permission_ids: &[String],
-    ) -> Result<(), IamError> {
+    async fn check_role_permissions(&self, permission_ids: &[String]) -> Result<(), IamError> {
         if !self.config.enable_sod_check {
             return Ok(());
         }
@@ -321,11 +306,7 @@ impl RuleEnforcer for RuleEnforcerImpl {
         Self::check_exclusion(&rules, &perm_set)
     }
 
-    async fn check_user_roles(
-        &self,
-        user_id: &str,
-        role_ids: &[String],
-    ) -> Result<(), IamError> {
+    async fn check_user_roles(&self, user_id: &str, role_ids: &[String]) -> Result<(), IamError> {
         if !self.config.enable_sod_check {
             return Ok(());
         }
@@ -445,7 +426,12 @@ mod tests {
     /// 自定义违规消息被使用
     #[test]
     fn test_custom_violation_message_used() {
-        let rules = vec![make_rule("R1", "p1", &["p2"], Some("不能同时持有付款和审批权限"))];
+        let rules = vec![make_rule(
+            "R1",
+            "p1",
+            &["p2"],
+            Some("不能同时持有付款和审批权限"),
+        )];
         let set: HashSet<String> = ["p1".to_string(), "p2".to_string()].into_iter().collect();
         let err = RuleEnforcerImpl::check_exclusion(&rules, &set).unwrap_err();
         match err {

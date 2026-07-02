@@ -9,7 +9,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tracing::info;
 
-use crate::backend::{create_backend, StorageBackend};
+use crate::backend::{StorageBackend, create_backend};
 use crate::config::{StorageInstanceConfig, StorageManagerConfig};
 use crate::error::{Error, Result};
 
@@ -138,7 +138,10 @@ impl StorageManager {
     ///
     /// 返回所有已初始化存储后端的平台标识列表。
     pub fn get_platforms(&self) -> Vec<String> {
-        self.backends.iter().map(|entry| entry.key().clone()).collect()
+        self.backends
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// 检查指定平台是否已注册

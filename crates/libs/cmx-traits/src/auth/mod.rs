@@ -19,10 +19,10 @@ pub mod user_query;
 pub use error::AuthError;
 pub use policy::AuthPolicy;
 pub use service::{
-    AuthService, Credentials, TokenPair, DeviceInfo, OAuth2CallbackResult, OAuth2CallbackExchangeResult,
-    UserInfo,
+    AuthService, Credentials, DeviceInfo, OAuth2CallbackExchangeResult, OAuth2CallbackResult,
+    TokenPair, UserInfo,
 };
 pub use storage_query::AuthStorageQuery;
 pub use user_query::{
-    UserAuthQuery, UserAuthData, ApiKeyData, OAuth2ClientData, OAuth2UserInfo, ProviderInfo,
+    ApiKeyData, OAuth2ClientData, OAuth2UserInfo, ProviderInfo, UserAuthData, UserAuthQuery,
 };

@@ -96,12 +96,11 @@ async fn test_load_module_nonexistent_file() {
     let engine = make_engine();
     let nonexistent_path = PathBuf::from("/nonexistent/path/to/plugin.wasm");
 
-    let result = engine.load_module("missing_plugin", &nonexistent_path).await;
+    let result = engine
+        .load_module("missing_plugin", &nonexistent_path)
+        .await;
 
-    assert!(
-        result.is_err(),
-        "加载不存在的文件应返回错误"
-    );
+    assert!(result.is_err(), "加载不存在的文件应返回错误");
     match result.unwrap_err() {
         TraitError::WasmLoadFailed(msg) => {
             assert!(
@@ -142,10 +141,7 @@ async fn test_load_module_invalid_wasm() {
     let invoke_result = engine
         .invoke("invalid_plugin", "any_function", b"input")
         .await;
-    assert!(
-        invoke_result.is_err(),
-        "调用无效 wasm 应返回错误"
-    );
+    assert!(invoke_result.is_err(), "调用无效 wasm 应返回错误");
 
     // 清理临时文件
     let _ = std::fs::remove_file(&invalid_path);
@@ -218,10 +214,7 @@ async fn test_unload_module() {
         .expect("加载失败");
     assert!(engine.is_loaded("to_unload").await);
 
-    engine
-        .unload_module("to_unload")
-        .await
-        .expect("卸载失败");
+    engine.unload_module("to_unload").await.expect("卸载失败");
 
     assert!(!engine.is_loaded("to_unload").await);
     assert_eq!(engine.get_pool_count("to_unload"), None);
@@ -259,10 +252,7 @@ async fn test_invoke_function_success() {
         .expect("调用 count_vowels 失败");
 
     // 验证返回值非空
-    assert!(
-        !result.output.is_empty(),
-        "函数输出不应为空"
-    );
+    assert!(!result.output.is_empty(), "函数输出不应为空");
 
     // 验证返回的 JSON 包含 count 字段
     let output_str = String::from_utf8_lossy(&result.output);
@@ -304,17 +294,11 @@ async fn test_invoke_nonexistent_function() {
         .invoke("missing_fn_plugin", "nonexistent_function", b"input")
         .await;
 
-    assert!(
-        result.is_err(),
-        "调用不存在的函数应返回错误"
-    );
+    assert!(result.is_err(), "调用不存在的函数应返回错误");
     match result.unwrap_err() {
         TraitError::WasmInvokeFailed(msg) => {
             // 错误消息应包含函数名或调用失败信息
-            assert!(
-                !msg.is_empty(),
-                "错误消息不应为空"
-            );
+            assert!(!msg.is_empty(), "错误消息不应为空");
         }
         other => panic!("期望 WasmInvokeFailed 错误，实际: {:?}", other),
     }
@@ -332,10 +316,7 @@ async fn test_invoke_unloaded_plugin() {
     assert!(result.is_err(), "调用未加载插件应返回错误");
     match result.unwrap_err() {
         TraitError::WasmNotLoaded(plugin_id) => {
-            assert_eq!(
-                plugin_id, "never_loaded_plugin",
-                "错误消息应包含 plugin_id"
-            );
+            assert_eq!(plugin_id, "never_loaded_plugin", "错误消息应包含 plugin_id");
         }
         other => panic!("期望 WasmNotLoaded 错误，实际: {:?}", other),
     }
@@ -473,9 +454,7 @@ async fn test_double_checked_locking_no_duplicate_load() {
 
     // 所有加载都应成功
     for handle in handles {
-        let result = handle
-            .await
-            .expect("tokio task join 失败");
+        let result = handle.await.expect("tokio task join 失败");
         assert!(result.is_ok(), "并发加载应全部成功: {:?}", result);
     }
 
@@ -543,9 +522,5 @@ fn test_embedded_wasm_bytes_valid() {
         "嵌入的 wasm 字节过小: {} bytes",
         COUNT_VOWELS_WASM.len()
     );
-    assert_eq!(
-        &COUNT_VOWELS_WASM[0..4],
-        b"\x00asm",
-        "wasm 魔数不正确"
-    );
+    assert_eq!(&COUNT_VOWELS_WASM[0..4], b"\x00asm", "wasm 魔数不正确");
 }

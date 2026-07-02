@@ -13,12 +13,12 @@
 //! - `flow_navigator` - 流程导航器（节点和边的查找）
 //! - `transaction_manager` - 事务管理器（事务状态跟踪和生命周期管理）
 
-mod types;
-mod executor;
-mod node_handler;
-mod flow_navigator;
-mod transaction_manager;
 mod debug_prepare;
+mod executor;
+mod flow_navigator;
+mod node_handler;
+mod transaction_manager;
+mod types;
 
-pub use types::*;
 pub use executor::Orchestrator;
+pub use types::*;

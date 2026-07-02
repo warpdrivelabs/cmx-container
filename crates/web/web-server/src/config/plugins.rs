@@ -41,7 +41,6 @@ pub async fn init_plugins() -> crate::Result<()> {
     //     .unwrap_or("default".to_string());
     let app_id = std::env::var("NACOS_NAMING_SERVICE_NAME").unwrap_or("default".to_string());
 
-
     let reconciliation_interval_secs = ConfigManager::global()
         .get_as::<u64>("plugin.reconciliation_interval_secs")
         .unwrap_or(60);

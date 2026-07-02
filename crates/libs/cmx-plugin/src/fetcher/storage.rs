@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::{PluginError, PluginResult};
 use super::source::PluginSource;
+use crate::error::{PluginError, PluginResult};
 
 /// cmx-storage 存储获取器
 ///
@@ -45,12 +45,13 @@ impl StorageFetcher {
         match source {
             PluginSource::Storage { file_id, checksum } => {
                 let service = cmx_storage::global::GlobalStorageService::get().service();
-                let download = service.download(file_id).await
-                    .map_err(|e| PluginError::Fetcher(
-                        format!("从 cmx-storage 下载文件失败: {}", e)
-                    ))?;
+                let download = service.download(file_id).await.map_err(|e| {
+                    PluginError::Fetcher(format!("从 cmx-storage 下载文件失败: {}", e))
+                })?;
 
-                let filename = download.file_info.original_filename
+                let filename = download
+                    .file_info
+                    .original_filename
                     .unwrap_or_else(|| format!("{}.zip", file_id));
                 let target_path = self.temp_dir.join(&filename);
 

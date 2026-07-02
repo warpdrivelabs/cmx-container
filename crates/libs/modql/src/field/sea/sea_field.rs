@@ -1,102 +1,106 @@
-use crate::SIden;
 use crate::field::{Error, Result};
 use crate::sea_utils::StringIden;
+use crate::SIden;
 use sea_query::{ColumnName, ColumnRef, DynIden, ExprTrait as _, IntoColumnRef, SimpleExpr, Value};
 use sea_query::{IntoIden, ValueType};
 
 #[derive(Debug, Clone)]
 pub struct SeaField {
-	pub iden: DynIden,
-	pub column_ref: ColumnRef,
-	pub value: SimpleExpr,
+    pub iden: DynIden,
+    pub column_ref: ColumnRef,
+    pub value: SimpleExpr,
 }
 
 impl SeaField {
-	pub fn sea_value(&self) -> Option<&Value> {
-		if let SimpleExpr::Value(value) = &self.value {
-			Some(value)
-		} else {
-			None
-		}
-	}
+    pub fn sea_value(&self) -> Option<&Value> {
+        if let SimpleExpr::Value(value) = &self.value {
+            Some(value)
+        } else {
+            None
+        }
+    }
 
-	pub fn value_into<T>(self) -> Result<T>
-	where
-		T: ValueType,
-	{
-		let SimpleExpr::Value(value) = self.value else {
-			return Err(Error::FieldValueNotSeaValue);
-		};
+    pub fn value_into<T>(self) -> Result<T>
+    where
+        T: ValueType,
+    {
+        let SimpleExpr::Value(value) = self.value else {
+            return Err(Error::FieldValueNotSeaValue);
+        };
 
-		T::try_from(value).map_err(|_| Error::FieldValueIntoTypeError {
-			field_name: self.iden.to_string(),
-		})
-	}
+        T::try_from(value).map_err(|_| Error::FieldValueIntoTypeError {
+            field_name: self.iden.to_string(),
+        })
+    }
 }
 
 #[derive(Default, Debug)]
 pub struct SeaFieldOptions {
-	pub cast_as: Option<String>,
-	// NOTE: write_placeholder was removed in sea-query 1.0.0-rc.23
-	//       If needed, handle at the SqliteField level instead.
+    pub cast_as: Option<String>,
+    // NOTE: write_placeholder was removed in sea-query 1.0.0-rc.23
+    //       If needed, handle at the SqliteField level instead.
 }
 
 impl SeaField {
-	/// Create a new SeaField from an `IntoIden` and `Into<SimpleExpr>` for the value
-	pub fn new(iden: impl IntoIden, value: impl Into<SimpleExpr>) -> Self {
-		Self::new_concrete(iden.into_iden(), value.into())
-	}
+    /// Create a new SeaField from an `IntoIden` and `Into<SimpleExpr>` for the value
+    pub fn new(iden: impl IntoIden, value: impl Into<SimpleExpr>) -> Self {
+        Self::new_concrete(iden.into_iden(), value.into())
+    }
 
-	/// The concrete version of the new.
-	pub fn new_concrete(iden: DynIden, value: SimpleExpr) -> Self {
-		let column_ref = ColumnRef::Column(ColumnName(None, iden.clone()));
-		SeaField {
-			iden,
-			column_ref,
-			value,
-		}
-	}
+    /// The concrete version of the new.
+    pub fn new_concrete(iden: DynIden, value: SimpleExpr) -> Self {
+        let column_ref = ColumnRef::Column(ColumnName(None, iden.clone()));
+        SeaField {
+            iden,
+            column_ref,
+            value,
+        }
+    }
 
-	/// Create a new SeaField for a static column name and a `Into<SimpleExpr>` for the value
-	pub fn siden(iden: &'static str, value: impl Into<SimpleExpr>) -> Self {
-		let iden = SIden(iden).into_iden();
-		let column_ref = iden.clone().into_column_ref();
-		SeaField {
-			iden,
-			column_ref,
-			value: value.into(),
-		}
-	}
+    /// Create a new SeaField for a static column name and a `Into<SimpleExpr>` for the value
+    pub fn siden(iden: &'static str, value: impl Into<SimpleExpr>) -> Self {
+        let iden = SIden(iden).into_iden();
+        let column_ref = iden.clone().into_column_ref();
+        SeaField {
+            iden,
+            column_ref,
+            value: value.into(),
+        }
+    }
 
-	pub fn new_with_options(iden: impl IntoIden, value: SimpleExpr, options: SeaFieldOptions) -> Self {
-		let iden = iden.into_iden();
-		let column_ref = iden.clone().into();
-		let mut value = value;
-		if let Some(cast_as) = options.cast_as {
-			value = value.cast_as(StringIden(cast_as))
-		}
+    pub fn new_with_options(
+        iden: impl IntoIden,
+        value: SimpleExpr,
+        options: SeaFieldOptions,
+    ) -> Self {
+        let iden = iden.into_iden();
+        let column_ref = iden.clone().into();
+        let mut value = value;
+        if let Some(cast_as) = options.cast_as {
+            value = value.cast_as(StringIden(cast_as))
+        }
 
-		SeaField {
-			iden,
-			column_ref,
-			value,
-		}
-	}
+        SeaField {
+            iden,
+            column_ref,
+            value,
+        }
+    }
 }
 
 // region:    --- Froms
 
 // From (DynIden, SimpleExpr)
 impl From<(DynIden, SimpleExpr)> for SeaField {
-	fn from(val: (DynIden, SimpleExpr)) -> Self {
-		SeaField::new(val.0, val.1)
-	}
+    fn from(val: (DynIden, SimpleExpr)) -> Self {
+        SeaField::new(val.0, val.1)
+    }
 }
 
 impl From<(&'static str, SimpleExpr)> for SeaField {
-	fn from(val: (&'static str, SimpleExpr)) -> Self {
-		SeaField::new(SIden(val.0), val.1)
-	}
+    fn from(val: (&'static str, SimpleExpr)) -> Self {
+        SeaField::new(SIden(val.0), val.1)
+    }
 }
 
 // endregion: --- Froms

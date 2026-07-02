@@ -6,16 +6,15 @@ use cmx_plugin_sdk::DbResponse;
 #[test]
 fn test_query_orders() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_db_query()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: None,
-                txn_id: None,
-                error: None,
-            })
-        });
+    mock.expect_db_query().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: None,
+            txn_id: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!({"customer_name": "Alice"}));
     let result = core.query_orders(&input).unwrap();
@@ -26,18 +25,16 @@ fn test_query_orders() {
 #[test]
 fn test_create_order() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
+    mock.expect_log_info().returning(|_| Ok(()));
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!({
         "customer_name": "Alice",
@@ -54,16 +51,15 @@ fn test_create_order() {
 #[test]
 fn test_update_order() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!({
         "order_id": "ORD-001",
@@ -77,18 +73,16 @@ fn test_update_order() {
 #[test]
 fn test_delete_order() {
     let mut mock = MockHostFunctions::new();
-    mock.expect_db_execute()
-        .returning(|_| {
-            Ok(DbResponse {
-                success: true,
-                dataset: None,
-                affected_rows: Some(1),
-                txn_id: None,
-                error: None,
-            })
-        });
-    mock.expect_log_info()
-        .returning(|_| Ok(()));
+    mock.expect_db_execute().returning(|_| {
+        Ok(DbResponse {
+            success: true,
+            dataset: None,
+            affected_rows: Some(1),
+            txn_id: None,
+            error: None,
+        })
+    });
+    mock.expect_log_info().returning(|_| Ok(()));
     let core = PluginCore::new(mock);
     let input = make_input(serde_json::json!("ORD-001"));
     let result = core.delete_order(&input).unwrap();

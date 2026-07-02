@@ -29,10 +29,7 @@ use crate::service::runtime_ops::RuntimeOps;
 #[derive(Debug, Clone)]
 pub enum PluginOperation {
     /// 需要安装
-    Install {
-        plugin_id: String,
-        version: String,
-    },
+    Install { plugin_id: String, version: String },
     /// 需要升级
     Upgrade {
         plugin_id: String,
@@ -46,10 +43,7 @@ pub enum PluginOperation {
         to_version: String,
     },
     /// 需要卸载（清理本地文件）
-    Uninstall {
-        plugin_id: String,
-        version: String,
-    },
+    Uninstall { plugin_id: String, version: String },
     /// 无需操作
     None,
 }
@@ -243,7 +237,11 @@ impl PluginInitializer {
         let records = self.repository.list_plugins(&filter).await?;
 
         for record in &records {
-            if let Err(e) = self.runtime.sync_and_register(&record.plugin_id, &record.version).await {
+            if let Err(e) = self
+                .runtime
+                .sync_and_register(&record.plugin_id, &record.version)
+                .await
+            {
                 error!(
                     plugin_id = %record.plugin_id,
                     version = %record.version,

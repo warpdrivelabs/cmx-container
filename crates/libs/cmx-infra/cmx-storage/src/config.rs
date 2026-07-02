@@ -129,10 +129,7 @@ impl StorageManagerConfig {
     ///
     /// 返回配置中 `enable_storage` 为 `true` 的所有存储实例引用。
     pub fn enabled_instances(&self) -> Vec<&StorageInstanceConfig> {
-        self.instances
-            .iter()
-            .filter(|s| s.enable_storage)
-            .collect()
+        self.instances.iter().filter(|s| s.enable_storage).collect()
     }
 
     /// 获取默认存储平台标识
@@ -144,7 +141,9 @@ impl StorageManagerConfig {
         if let Some(ref platform) = self.default_platform {
             Some(platform.as_str())
         } else {
-            self.enabled_instances().first().map(|s| s.platform.as_str())
+            self.enabled_instances()
+                .first()
+                .map(|s| s.platform.as_str())
         }
     }
 }
@@ -170,14 +169,17 @@ impl StorageInstanceConfig {
             StorageType::Local => {
                 // Local 类型：直接拼接 domain + path
                 if let Some(domain) = domain {
-                    let domain = if domain.ends_with('/') { domain } else { &format!("{}/", domain) };
+                    let domain = if domain.ends_with('/') {
+                        domain
+                    } else {
+                        &format!("{}/", domain)
+                    };
                     format!("{}{}", domain, path)
                 } else {
                     path.to_string()
                 }
             }
             StorageType::S3 => {
-
                 // S3 bucket 有两种 URL 风格：
                 // 1. 路径风格：http://endpoint/bucket/path  （如 MinIO 自建服务）
                 // 2. 虚拟主机风格：http://bucket.endpoint/path （如 AWS S3,需要有域名才行）
@@ -206,9 +208,10 @@ impl StorageInstanceConfig {
     /// `S3` 类型返回 `base_path`。
     pub fn get_root_path(&self) -> String {
         match self.storage_type {
-            StorageType::Local => {
-                self.storage_path.clone().unwrap_or_else(|| self.base_path.clone())
-            }
+            StorageType::Local => self
+                .storage_path
+                .clone()
+                .unwrap_or_else(|| self.base_path.clone()),
             StorageType::S3 => self.base_path.clone(),
         }
     }

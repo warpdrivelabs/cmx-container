@@ -121,7 +121,10 @@ pub struct HelpDocInput {
 /// 校验 DAM 三段，返回规范化后的 [domain, app, module]。
 fn validate_dam(domain: &str, app: &str, module: &str) -> PortalResult<[String; 3]> {
     let mut out: [String; 3] = Default::default();
-    for (i, (k, v)) in [("domain", domain), ("app", app), ("module", module)].iter().enumerate() {
+    for (i, (k, v)) in [("domain", domain), ("app", app), ("module", module)]
+        .iter()
+        .enumerate()
+    {
         let t = v.trim();
         if t.is_empty() {
             return Err(PortalError::bad_request(format!("缺少必填参数 {k}")));
@@ -231,7 +234,11 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
                 // 读取文件投影轻量目录项；单个文件损坏不影响其余目录项。
                 if let Ok(doc) = read_json::<serde_json::Value>(&entry.path()).await {
                     let id = id_from_file(&name);
-                    let title = doc.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let title = doc
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     out.push(HelpCatalogItem {
                         domain: parts[0].clone(),
                         app: parts[1].clone(),
@@ -239,12 +246,24 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
                         file: name,
                         title: if title.is_empty() { id.clone() } else { title },
                         id,
-                        path: doc.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        summary: doc.get("summary").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        path: doc
+                            .get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        summary: doc
+                            .get("summary")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         keywords: doc
                             .get("keywords")
                             .and_then(|v| v.as_array())
-                            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                    .collect()
+                            })
                             .unwrap_or_default(),
                         order: doc.get("order").and_then(|v| v.as_i64()).unwrap_or(0),
                         has_examples: doc
@@ -259,8 +278,22 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
     }
     // 排序：domain/app/module → order → path → id，便于 explorer 稳定建树。
     out.sort_by(|a, b| {
-        (a.domain.as_str(), a.app.as_str(), a.module.as_str(), a.order, a.path.as_str(), a.id.as_str())
-            .cmp(&(b.domain.as_str(), b.app.as_str(), b.module.as_str(), b.order, b.path.as_str(), b.id.as_str()))
+        (
+            a.domain.as_str(),
+            a.app.as_str(),
+            a.module.as_str(),
+            a.order,
+            a.path.as_str(),
+            a.id.as_str(),
+        )
+            .cmp(&(
+                b.domain.as_str(),
+                b.app.as_str(),
+                b.module.as_str(),
+                b.order,
+                b.path.as_str(),
+                b.id.as_str(),
+            ))
     });
     Ok(out)
 }
@@ -270,7 +303,12 @@ pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
     let [d, a, m] = validate_dam(&input.domain, &input.app, &input.module)?;
     // file 优先取 input.file，否则由 id 推导 `<id>.json`。
     let id_hint = input.id.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let file = match input.file.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let file = match input
+        .file
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(f) => f.to_string(),
         None => {
             let id = id_hint.ok_or_else(|| PortalError::bad_request("缺少 file 或 id"))?;
@@ -286,7 +324,12 @@ pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
         module: m.clone(),
         file: file.clone(),
         id,
-        path: input.path.unwrap_or_default().trim().trim_matches('/').to_string(),
+        path: input
+            .path
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('/')
+            .to_string(),
         title: input.title.unwrap_or_default(),
         summary: input.summary.unwrap_or_default(),
         keywords: input.keywords.unwrap_or_default(),
@@ -357,7 +400,9 @@ mod tests {
             keywords: Some(vec!["凭证".into(), "录入".into()]),
             order: Some(2),
             content: Some("# 标题\n正文".into()),
-            examples: Some(vec![serde_json::json!({"title":"e1","lang":"json","code":"{}"})]),
+            examples: Some(vec![
+                serde_json::json!({"title":"e1","lang":"json","code":"{}"}),
+            ]),
             actions: Some(serde_json::json!({"open": {"id": "n1", "workspace": {"content": {}}}})),
         })
         .await
@@ -368,10 +413,17 @@ mod tests {
         assert!(saved.updated_at > 0, "updatedAt 应被写入");
 
         // 2) catalog 应投影出该项，且 hasExamples=true、不含正文。
-        let items = list_catalog(&HelpQuery::default()).await.expect("catalog 应成功");
+        let items = list_catalog(&HelpQuery::default())
+            .await
+            .expect("catalog 应成功");
         let it = items
             .iter()
-            .find(|x| x.domain == "fi" && x.app == "cmxfico" && x.module == "gl" && x.id == "voucher-entry")
+            .find(|x| {
+                x.domain == "fi"
+                    && x.app == "cmxfico"
+                    && x.module == "gl"
+                    && x.id == "voucher-entry"
+            })
             .expect("catalog 应含已保存项");
         assert_eq!(it.title, "录入凭证");
         assert!(it.has_examples, "应标记含示例");
@@ -384,7 +436,10 @@ mod tests {
         })
         .await
         .unwrap();
-        assert!(!none.iter().any(|x| x.id == "voucher-entry"), "domain 过滤应生效");
+        assert!(
+            !none.iter().any(|x| x.id == "voucher-entry"),
+            "domain 过滤应生效"
+        );
 
         // 4) get 完整文档应含正文与示例。
         let got = get_doc(&HelpRef {
@@ -400,22 +455,26 @@ mod tests {
         assert_eq!(got.actions["open"]["id"], "n1", "actions 应原样回读");
 
         // 5) 路径穿越/非法段应被拒绝。
-        assert!(get_doc(&HelpRef {
-            domain: "..".into(),
-            app: "cmxfico".into(),
-            module: "gl".into(),
-            file: "voucher-entry.json".into(),
-        })
-        .await
-        .is_err());
-        assert!(get_doc(&HelpRef {
-            domain: "fi".into(),
-            app: "cmxfico".into(),
-            module: "gl".into(),
-            file: "evil".into(), // 非 .json
-        })
-        .await
-        .is_err());
+        assert!(
+            get_doc(&HelpRef {
+                domain: "..".into(),
+                app: "cmxfico".into(),
+                module: "gl".into(),
+                file: "voucher-entry.json".into(),
+            })
+            .await
+            .is_err()
+        );
+        assert!(
+            get_doc(&HelpRef {
+                domain: "fi".into(),
+                app: "cmxfico".into(),
+                module: "gl".into(),
+                file: "evil".into(), // 非 .json
+            })
+            .await
+            .is_err()
+        );
 
         // 6) 删除后 get 应 NotFound。
         delete_doc(&HelpRef {
@@ -441,4 +500,3 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&data_root).await;
     }
 }
-

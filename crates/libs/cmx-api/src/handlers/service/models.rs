@@ -2,8 +2,8 @@
 //!
 //! 包含服务相关 API 的请求和响应数据结构。
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use utoipa::{IntoParams, ToSchema};
 
 // ==================== 函数直接调用请求/响应结构体 ====================
@@ -33,7 +33,7 @@ pub struct FunctionCallRequest {
     pub initial_input: Option<serde_json::Value>,
     /// 是否调试模式
     #[serde(default)]
-    pub debug:bool,
+    pub debug: bool,
     /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_name: Option<String>,
@@ -98,7 +98,6 @@ pub struct ServiceExecuteRequest {
     /// 目标服务名称（跨服务调用时指定，不指定则本地调用）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_name: Option<String>,
-
 }
 
 /// 服务执行响应
@@ -262,8 +261,6 @@ pub struct ServiceExistsQuery {
     pub service_key: String,
 }
 
-
-
 // ==================== 服务删除请求结构体 ====================
 
 /// 服务删除请求
@@ -295,7 +292,7 @@ pub struct ServiceDetailResponse {
     /// 当前版本
     pub version: String,
     //服务编排 配置
-    pub  config: String,
+    pub config: String,
     /// 所属域代码
     pub domain_code: String,
     /// 所属应用代码

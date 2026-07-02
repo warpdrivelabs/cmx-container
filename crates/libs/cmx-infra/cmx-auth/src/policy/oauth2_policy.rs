@@ -67,9 +67,9 @@ impl OAuth2Policy {
 
         let auth_code = self.flow_service.exchange_code(params).await?;
 
-        let user_id = auth_code.user_id.ok_or_else(|| {
-            AuthError::OAuth2("授权码未关联用户".to_string())
-        })?;
+        let user_id = auth_code
+            .user_id
+            .ok_or_else(|| AuthError::OAuth2("授权码未关联用户".to_string()))?;
 
         Ok((user_id, auth_code.scope))
     }

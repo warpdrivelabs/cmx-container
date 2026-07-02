@@ -16,9 +16,7 @@ use std::sync::Arc;
 
 use crate::audit::logger::{AuditLogger, AuditLoggerConfig};
 use crate::cluster::node::NodeManager;
-use crate::common::{
-    DependencyUtils, DependencyUtilsDeps, ServiceUtils, ServiceUtilsDeps,
-};
+use crate::common::{DependencyUtils, DependencyUtilsDeps, ServiceUtils, ServiceUtilsDeps};
 use crate::config::settings::PluginManagerSettings;
 use crate::core::context::PluginContext;
 use crate::core::registry::PluginRegistry;
@@ -202,7 +200,12 @@ impl PluginManager {
         let pubsub_for_notifier = builder.pubsub.clone();
         let instance_id = uuid::Uuid::new_v4().to_string();
         let plugin_notifier: Option<Arc<crate::cluster::notification::PluginNotifier>> =
-            pubsub_for_notifier.map(|ps| Arc::new(crate::cluster::notification::PluginNotifier::new(ps, instance_id.clone())));
+            pubsub_for_notifier.map(|ps| {
+                Arc::new(crate::cluster::notification::PluginNotifier::new(
+                    ps,
+                    instance_id.clone(),
+                ))
+            });
 
         let db_manager = builder
             .db_manager
@@ -231,16 +234,20 @@ impl PluginManager {
         let audit_logger_config = AuditLoggerConfig::new(
             db_manager.clone(),
             settings.default_database_id.clone(),
-            settings.node_id.clone().unwrap_or_else(|| "default".to_string()),
+            settings
+                .node_id
+                .clone()
+                .unwrap_or_else(|| "default".to_string()),
         );
         let audit_logger = Arc::new(AuditLogger::new(audit_logger_config));
 
         let registry = Arc::new(RwLock::new(PluginRegistry::new()));
         let contexts = Arc::new(RwLock::new(HashMap::new()));
 
-        let node_manager = settings.cluster.as_ref().map(|cluster_settings| {
-            Arc::new(NodeManager::new(cluster_settings.node_id.clone()))
-        });
+        let node_manager = settings
+            .cluster
+            .as_ref()
+            .map(|cluster_settings| Arc::new(NodeManager::new(cluster_settings.node_id.clone())));
 
         let dependency_utils = DependencyUtils::new(DependencyUtilsDeps {
             repository: repository.clone(),
@@ -258,19 +265,16 @@ impl PluginManager {
         let center_sender: std::sync::Arc<dyn crate::center_client::ServiceCenterSender> =
             match center_config.mode.as_str() {
                 "http_url" | "http_discovery" => {
-                    tracing::info!(
-                        "center_client 使用 HTTP 模式: mode={}",
-                        center_config.mode
-                    );
-                    std::sync::Arc::new(
-                        crate::center_client::HttpServiceCenterSender::new(center_config.clone()),
-                    )
+                    tracing::info!("center_client 使用 HTTP 模式: mode={}", center_config.mode);
+                    std::sync::Arc::new(crate::center_client::HttpServiceCenterSender::new(
+                        center_config.clone(),
+                    ))
                 }
                 "grpc" => {
                     tracing::info!("center_client 使用 gRPC 模式");
-                    std::sync::Arc::new(
-                        crate::center_client::GrpcServiceCenterSender::new(center_config.clone()),
-                    )
+                    std::sync::Arc::new(crate::center_client::GrpcServiceCenterSender::new(
+                        center_config.clone(),
+                    ))
                 }
                 _ => {
                     tracing::info!("center_client 使用 Mock 模式: mode={}", center_config.mode);
@@ -282,32 +286,30 @@ impl PluginManager {
         );
         tracing::info!("center_client 初始化完成: mode={}", center_config.mode);
 
-        let persistence = PluginPersistence::new(
-            crate::service::install::InstallServiceDeps {
-                repository: repository.clone(),
-                version_history_repository: version_history_repository.clone(),
-                cache: cache.clone(),
-                storage: storage.clone(),
-                backup_manager: backup_manager.clone(),
-                security_validator: security_validator.clone(),
-                audit_logger: audit_logger.clone(),
-                registry: registry.clone(),
-                contexts: contexts.clone(),
-                plugin_root: settings.plugin_root.clone(),
-                temp_root: settings.temp_root.clone(),
-                default_database_id: settings.default_database_id.clone(),
-                node_name: settings.node_name.clone(),
-                node_type: settings.node_type.clone(),
-                service_storage: GlobalServiceStorage::get().clone(),
-                service_query: GlobalServiceQuery::get().clone(),
-                plugin_query: Arc::new(crate::traits_impl::RepositoryPluginQuery::new(
-                    repository.clone(),
-                    settings.app_id.clone(),
-                )),
-                plugin_notifier: plugin_notifier.clone(),
-                lock_manager: builder.lock_manager.clone(),
-            },
-        );
+        let persistence = PluginPersistence::new(crate::service::install::InstallServiceDeps {
+            repository: repository.clone(),
+            version_history_repository: version_history_repository.clone(),
+            cache: cache.clone(),
+            storage: storage.clone(),
+            backup_manager: backup_manager.clone(),
+            security_validator: security_validator.clone(),
+            audit_logger: audit_logger.clone(),
+            registry: registry.clone(),
+            contexts: contexts.clone(),
+            plugin_root: settings.plugin_root.clone(),
+            temp_root: settings.temp_root.clone(),
+            default_database_id: settings.default_database_id.clone(),
+            node_name: settings.node_name.clone(),
+            node_type: settings.node_type.clone(),
+            service_storage: GlobalServiceStorage::get().clone(),
+            service_query: GlobalServiceQuery::get().clone(),
+            plugin_query: Arc::new(crate::traits_impl::RepositoryPluginQuery::new(
+                repository.clone(),
+                settings.app_id.clone(),
+            )),
+            plugin_notifier: plugin_notifier.clone(),
+            lock_manager: builder.lock_manager.clone(),
+        });
 
         let runtime_ops = Arc::new(RuntimeOps::new(RuntimeOpsDeps {
             repository: repository.clone(),
@@ -372,7 +374,7 @@ impl PluginManager {
                 event_publisher: event_publisher.clone(),
                 plugin_root: settings.plugin_root.clone(),
                 app_id: settings.app_id.clone(),
-            }
+            },
         );
 
         let app_id = settings.app_id.clone();
@@ -447,21 +449,26 @@ impl PluginManager {
             }
 
             let subscriber = cmx_buffer::GlobalSubscriberManager::get();
-            subscriber.register_channel_fn(&full_channel, move |channel, payload| {
-                tracing::debug!(channel = %channel, "收到 Redis Pub/Sub 消息");
-                let handler = handler.clone();
-                let payload = payload.to_string();
-                tokio::spawn(async move {
-                    match serde_json::from_str::<crate::cluster::notification::PluginChangeNotification>(&payload) {
-                        Ok(notification) => {
-                            handler.handle(&notification).await;
+            subscriber
+                .register_channel_fn(&full_channel, move |channel, payload| {
+                    tracing::debug!(channel = %channel, "收到 Redis Pub/Sub 消息");
+                    let handler = handler.clone();
+                    let payload = payload.to_string();
+                    tokio::spawn(async move {
+                        match serde_json::from_str::<
+                            crate::cluster::notification::PluginChangeNotification,
+                        >(&payload)
+                        {
+                            Ok(notification) => {
+                                handler.handle(&notification).await;
+                            }
+                            Err(e) => {
+                                tracing::debug!("解析插件变更通知失败: {}", e);
+                            }
                         }
-                        Err(e) => {
-                            tracing::debug!("解析插件变更通知失败: {}", e);
-                        }
-                    }
-                });
-            }).await?;
+                    });
+                })
+                .await?;
 
             tracing::info!("已启动插件变更通知订阅（GlobalSubscriber + 自动重连）");
         }

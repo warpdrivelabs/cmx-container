@@ -1,23 +1,18 @@
-pub mod response;
-pub mod request;
 pub mod dataset;
+pub mod request;
+pub mod response;
 
-
-
-
-use std::collections::HashMap;
 use crate::model::cell::CellValue;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-
-#[derive(Debug, Serialize, Deserialize,Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KeyValue {
     // 使用动态类型存储属性
-    attributes  : HashMap<String, CellValue>,
+    attributes: HashMap<String, CellValue>,
     // 使用动态类型存储定义(可以为空)
-    definitions : Option<HashMap<String, CellValue>>,
+    definitions: Option<HashMap<String, CellValue>>,
 }
-
 
 impl Default for KeyValue {
     fn default() -> Self {
@@ -59,7 +54,3 @@ impl KeyValue {
         self.attributes.contains_key(key)
     }
 }
-
-
-
-

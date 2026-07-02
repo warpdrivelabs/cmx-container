@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use cmx_core::model::cell::DataValue;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
 use cmx_traits::iam::{DataScope, PermissionChecker};
-use cmx_core::model::cell::DataValue;
 use tracing::{debug, warn};
 
 use crate::circuit_breaker::CircuitBreaker;
@@ -82,7 +82,12 @@ impl IamChecker {
     }
 
     /// 执行 EXISTS 查询，返回布尔值
-    async fn exists_check(&self, sql: &str, params: Vec<DataValue>, label: &str) -> Result<bool, TraitError> {
+    async fn exists_check(
+        &self,
+        sql: &str,
+        params: Vec<DataValue>,
+        label: &str,
+    ) -> Result<bool, TraitError> {
         let dataset = self
             .mm
             .query_sql_with_datavalues(&self.db_id, None, sql, params, label)
@@ -246,18 +251,29 @@ impl IamChecker {
                     let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
                     let ops = cache.ops();
                     let _ = ops.del_batch(&key_refs).await;
-                    debug!("已失效角色 {} 关联的 {} 个用户缓存", role_id, keys.len() / 2);
+                    debug!(
+                        "已失效角色 {} 关联的 {} 个用户缓存",
+                        role_id,
+                        keys.len() / 2
+                    );
                 }
             }
         }
     }
 
     /// 熔断器降级处理
-    async fn handle_circuit_open(&self, user_id: &str, permission_code: &str) -> Result<bool, TraitError> {
+    async fn handle_circuit_open(
+        &self,
+        user_id: &str,
+        permission_code: &str,
+    ) -> Result<bool, TraitError> {
         match self.config.failure_mode {
             FailureMode::FailOpen => {
                 // 故障开放：仅放行 system:all 用户（直接查 DB 单条权限）
-                warn!("熔断器打开，FailOpen 模式：尝试直查 DB 验证 system:all, user={}", user_id);
+                warn!(
+                    "熔断器打开，FailOpen 模式：尝试直查 DB 验证 system:all, user={}",
+                    user_id
+                );
                 let system_all_sql = r#"
                     SELECT EXISTS(
                       SELECT 1 FROM cmx_permission p
@@ -280,7 +296,10 @@ impl IamChecker {
                 "#;
                 let params = vec![DataValue::String(user_id.to_string())];
                 // 直查 DB，失败时返回 Err（DB 也故障的实际效果）
-                match self.exists_check(system_all_sql, params, "failopen_system_all").await {
+                match self
+                    .exists_check(system_all_sql, params, "failopen_system_all")
+                    .await
+                {
                     Ok(has_all) => Ok(has_all),
                     Err(e) => {
                         warn!("FailOpen 直查 DB 也失败: {}", e);
@@ -290,7 +309,10 @@ impl IamChecker {
             }
             FailureMode::FailClose => {
                 // 故障封闭：全部拒绝（不查 DB，保护系统）
-                warn!("熔断器打开，FailClose 模式：拒绝权限请求 user={}, code={}", user_id, permission_code);
+                warn!(
+                    "熔断器打开，FailClose 模式：拒绝权限请求 user={}, code={}",
+                    user_id, permission_code
+                );
                 Ok(false)
             }
         }
@@ -317,7 +339,9 @@ impl PermissionChecker for IamChecker {
         // 1. 尝试从缓存读取用户完整权限列表
         if let Some(cached_perms) = self.get_user_permissions_cached(user_id).await {
             self.circuit_breaker.record_success();
-            return Ok(cached_perms.iter().any(|p| p == "system:all" || p == permission_code));
+            return Ok(cached_perms
+                .iter()
+                .any(|p| p == "system:all" || p == permission_code));
         }
 
         // 2. 缓存未命中，查询 DB 获取用户完整权限列表（合并永久+临时授权）
@@ -326,7 +350,9 @@ impl PermissionChecker for IamChecker {
                 self.circuit_breaker.record_success();
                 // 回填缓存（完整权限列表，空结果用短 TTL 防穿透）
                 self.set_user_permissions_cache(user_id, &perms).await;
-                Ok(perms.iter().any(|p| p == "system:all" || p == permission_code))
+                Ok(perms
+                    .iter()
+                    .any(|p| p == "system:all" || p == permission_code))
             }
             Err(e) => {
                 self.circuit_breaker.record_failure();
@@ -347,7 +373,10 @@ impl PermissionChecker for IamChecker {
             return match self.config.failure_mode {
                 FailureMode::FailClose => Ok(false),
                 FailureMode::FailOpen => {
-                    warn!("熔断器打开，FailOpen 模式：has_role 直查 DB, user={}", user_id);
+                    warn!(
+                        "熔断器打开，FailOpen 模式：has_role 直查 DB, user={}",
+                        user_id
+                    );
                     let roles = self.get_user_role_codes(user_id).await?;
                     Ok(roles.iter().any(|r| r == role_code))
                 }

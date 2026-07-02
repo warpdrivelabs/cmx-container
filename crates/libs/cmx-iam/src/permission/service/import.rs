@@ -8,8 +8,8 @@
 use std::collections::HashSet;
 use std::io::Read;
 
-use cmx_core::model::cell::DataValue;
 use cmx_core::SVRContext;
+use cmx_core::model::cell::DataValue;
 use cmx_traits::error::TraitError;
 use cmx_traits::plugin::PluginDataImportResult;
 use serde::{Deserialize, Serialize};
@@ -120,9 +120,8 @@ impl PermissionServiceImpl {
             file.read_to_string(&mut content)
                 .map_err(|e| TraitError::Business(format!("读取文件 {name} 失败: {e}")))?;
 
-            let perm_file: PermissionFile = serde_json::from_str(&content).map_err(|e| {
-                TraitError::Business(format!("文件 {name} JSON 解析失败: {e}"))
-            })?;
+            let perm_file: PermissionFile = serde_json::from_str(&content)
+                .map_err(|e| TraitError::Business(format!("文件 {name} JSON 解析失败: {e}")))?;
 
             for def in perm_file.permissions {
                 // 校验：code 非空且含 ":" 分隔符
@@ -205,10 +204,14 @@ impl PermissionServiceImpl {
         let db_codes: HashSet<String> = db_map.keys().cloned().collect();
 
         // 2.2 比对
-        let to_create: Vec<&PermissionDefinition> =
-            definitions.iter().filter(|d| !db_codes.contains(&d.code)).collect();
-        let to_update: Vec<&PermissionDefinition> =
-            definitions.iter().filter(|d| db_codes.contains(&d.code)).collect();
+        let to_create: Vec<&PermissionDefinition> = definitions
+            .iter()
+            .filter(|d| !db_codes.contains(&d.code))
+            .collect();
+        let to_update: Vec<&PermissionDefinition> = definitions
+            .iter()
+            .filter(|d| db_codes.contains(&d.code))
+            .collect();
         // let to_delete: Vec<String> = db_codes.difference(&file_codes).cloned().collect();
 
         // 3. 第一阶段：INSERT/UPDATE（parent_id 暂置 NULL）
@@ -227,7 +230,11 @@ impl PermissionServiceImpl {
                 DataValue::String(id.clone()),
                 DataValue::String(def.code.clone()),
                 DataValue::String(def.name.clone()),
-                DataValue::String(def.resource_type.clone().unwrap_or_else(|| "api".to_string())),
+                DataValue::String(
+                    def.resource_type
+                        .clone()
+                        .unwrap_or_else(|| "api".to_string()),
+                ),
                 DataValue::Int(def.sort_order.unwrap_or(0)),
                 def.description.clone().into(),
                 DataValue::String(domain_code.to_string()),
@@ -252,9 +259,9 @@ impl PermissionServiceImpl {
 
         let mut updated_count = 0u32;
         for def in &to_update {
-            let id = db_map
-                .get(&def.code)
-                .ok_or_else(|| TraitError::Business(format!("更新权限时找不到 id: {}", def.code)))?;
+            let id = db_map.get(&def.code).ok_or_else(|| {
+                TraitError::Business(format!("更新权限时找不到 id: {}", def.code))
+            })?;
             // UPDATE 按 id 定位，parent_id 暂置 NULL；路径字段重置为根节点（第二阶段回填覆盖）
             let sql = "UPDATE cmx_permission SET name = $1, resource_type = $2, parent_id = NULL, \
                        parent_code = NULL, full_code_path = '/' || code, level = 1, is_leaf = 1, \
@@ -262,14 +269,19 @@ impl PermissionServiceImpl {
                        WHERE id = $7";
             let params = vec![
                 DataValue::String(def.name.clone()),
-                DataValue::String(def.resource_type.clone().unwrap_or_else(|| "api".to_string())),
+                DataValue::String(
+                    def.resource_type
+                        .clone()
+                        .unwrap_or_else(|| "api".to_string()),
+                ),
                 DataValue::Int(def.sort_order.unwrap_or(0)),
                 def.description.clone().into(),
                 def.extension.clone().into(),
                 DataValue::Int(def.status.unwrap_or(1)),
                 DataValue::String(id.clone()),
             ];
-            let rows = self.mm
+            let rows = self
+                .mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| {
@@ -332,11 +344,11 @@ impl PermissionServiceImpl {
             .filter_map(|d| db_map.get(&d.code).cloned())
             .collect();
         // let mut affected_ids = to_delete_ids.clone();
-        let  affected_ids = to_update_ids.clone();
+        let affected_ids = to_update_ids.clone();
         // affected_ids.extend(to_update_ids);
         let affected_roles = self.query_affected_roles_txn(txn_id, &affected_ids).await?;
 
-        let  deleted_count = 0u32;
+        let deleted_count = 0u32;
 
         // 5.1 物理删除权限 + 物理删除角色关联（按 id 定位）
         // let mut deleted_count = 0u32;
@@ -419,7 +431,7 @@ impl PermissionServiceImpl {
 
         // 8. 精准缓存失效（删除或更新都会影响权限树，需失效受影响角色）
         // if (deleted_count > 0 || updated_count > 0)
-        if  updated_count > 0
+        if updated_count > 0
             && !affected_roles.is_empty()
             && let Some(ref checker) = self.iam_checker
         {
@@ -438,10 +450,7 @@ impl PermissionServiceImpl {
 
         Ok(PluginDataImportResult {
             success: true,
-            message: format!(
-                "导入完成: 新增 {} / 更新 {} ",
-                created_count, updated_count
-            ),
+            message: format!("导入完成: 新增 {} / 更新 {} ", created_count, updated_count),
             created_count,
             updated_count,
             deleted_count,
@@ -473,8 +482,7 @@ impl PermissionServiceImpl {
         let txn_id = guard.txn_id();
 
         // 1.1 查询受影响角色（用子查询避免依赖额外参数）
-        let affected_roles_sql =
-            "SELECT DISTINCT role_id FROM cmx_role_permission \
+        let affected_roles_sql = "SELECT DISTINCT role_id FROM cmx_role_permission \
              WHERE permission_id IN (SELECT id FROM cmx_permission \
              WHERE domain_code = $1 AND app_code = $2 AND module_code = $3)";
         let affected_roles_params = vec![
@@ -492,7 +500,9 @@ impl PermissionServiceImpl {
                 "cleanup_affected_roles",
             )
             .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}"))))?;
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询受影响角色失败: {e}")))
+            })?;
         let schema = dataset.schema.as_ref();
         let affected_roles: Vec<String> = dataset
             .iter()
@@ -500,8 +510,7 @@ impl PermissionServiceImpl {
             .collect();
 
         // 1.2 物理删除角色关联（子查询避免 IN 列表过长）
-        let del_rp_sql =
-            "DELETE FROM cmx_role_permission WHERE permission_id IN (\
+        let del_rp_sql = "DELETE FROM cmx_role_permission WHERE permission_id IN (\
              SELECT id FROM cmx_permission \
              WHERE domain_code = $1 AND app_code = $2 AND module_code = $3)";
         let scope_params = vec![
@@ -510,15 +519,19 @@ impl PermissionServiceImpl {
             DataValue::String(module_code.to_string()),
         ];
         self.mm
-            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), del_rp_sql, scope_params.clone())
+            .execute_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                del_rp_sql,
+                scope_params.clone(),
+            )
             .await
             .map_err(|e| {
                 TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}")))
             })?;
 
         // 1.3 物理删除权限
-        let del_perm_sql =
-            "DELETE FROM cmx_permission \
+        let del_perm_sql = "DELETE FROM cmx_permission \
              WHERE domain_code = $1 AND app_code = $2 AND module_code = $3";
         let deleted = self
             .mm

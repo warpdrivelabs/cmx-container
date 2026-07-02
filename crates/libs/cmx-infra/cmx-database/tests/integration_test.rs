@@ -29,7 +29,7 @@ async fn setup_db_manager() -> DatabaseManager {
         domain_code: None,
         application_code: None,
         module_code: None,
-        default:true,
+        default: true,
         source_type: None,
     };
 
@@ -71,21 +71,40 @@ async fn test_transaction_commit() -> cmx_database::Result<()> {
 
     let table_name = generate_test_table_name();
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!(
+                "CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))",
+                table_name
+            ),
+        )
+        .await?;
 
     let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
 
     let insert_sql = format!("INSERT INTO {} (name) VALUES ('test')", table_name);
-    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
+    manager
+        .execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql)
+        .await?;
 
     manager.commit_transaction(&txn_id).await?;
 
     let query_sql = format!("SELECT * FROM {} WHERE name = 'test'", table_name);
-    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_commit").await?;
+    let dataset: DataSet = manager
+        .query_sql(TEST_DB_KEY, None, &query_sql, "test_commit")
+        .await?;
 
     assert_eq!(dataset.rows.len(), 1, "事务提交后应该能查询到插入的数据");
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!("DROP TABLE {} CASCADE", table_name),
+        )
+        .await?;
 
     manager.shutdown().await?;
     Ok(())
@@ -97,21 +116,46 @@ async fn test_transaction_rollback() -> cmx_database::Result<()> {
 
     let table_name = generate_test_table_name();
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!(
+                "CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))",
+                table_name
+            ),
+        )
+        .await?;
 
     let txn_id = manager.get_transaction_context().begin(TEST_DB_KEY).await?;
 
-    let insert_sql = format!("INSERT INTO {} (name) VALUES ('should_be_rolled_back')", table_name);
-    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
+    let insert_sql = format!(
+        "INSERT INTO {} (name) VALUES ('should_be_rolled_back')",
+        table_name
+    );
+    manager
+        .execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql)
+        .await?;
 
     manager.rollback_transaction(&txn_id).await?;
 
-    let query_sql = format!("SELECT * FROM {} WHERE name = 'should_be_rolled_back'", table_name);
-    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_rollback").await?;
+    let query_sql = format!(
+        "SELECT * FROM {} WHERE name = 'should_be_rolled_back'",
+        table_name
+    );
+    let dataset: DataSet = manager
+        .query_sql(TEST_DB_KEY, None, &query_sql, "test_rollback")
+        .await?;
 
     assert_eq!(dataset.rows.len(), 0, "事务回滚后应该查询不到插入的数据");
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!("DROP TABLE {} CASCADE", table_name),
+        )
+        .await?;
 
     manager.shutdown().await?;
     Ok(())
@@ -123,15 +167,41 @@ async fn test_query_sql() -> cmx_database::Result<()> {
 
     let table_name = generate_test_table_name();
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))", table_name)).await?;
-    manager.execute_sql(TEST_DB_KEY, None, &format!("INSERT INTO {} (name) VALUES ('test1'), ('test2')", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!(
+                "CREATE TABLE {} (id SERIAL PRIMARY KEY, name VARCHAR(100))",
+                table_name
+            ),
+        )
+        .await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!(
+                "INSERT INTO {} (name) VALUES ('test1'), ('test2')",
+                table_name
+            ),
+        )
+        .await?;
 
     let query_sql = format!("SELECT * FROM {} ORDER BY id", table_name);
-    let dataset: DataSet = manager.query_sql(TEST_DB_KEY, None, &query_sql, "test_query").await?;
+    let dataset: DataSet = manager
+        .query_sql(TEST_DB_KEY, None, &query_sql, "test_query")
+        .await?;
 
     assert_eq!(dataset.rows.len(), 2);
 
-    manager.execute_sql(TEST_DB_KEY, None, &format!("DROP TABLE {} CASCADE", table_name)).await?;
+    manager
+        .execute_sql(
+            TEST_DB_KEY,
+            None,
+            &format!("DROP TABLE {} CASCADE", table_name),
+        )
+        .await?;
 
     manager.shutdown().await?;
     Ok(())
@@ -145,11 +215,18 @@ async fn test_transaction_with_propagation() -> cmx_database::Result<()> {
 
     let table_name = generate_test_table_name();
 
-    let create_sql = format!("CREATE TABLE {} (id SERIAL PRIMARY KEY, value INTEGER)", table_name);
-    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &create_sql).await?;
+    let create_sql = format!(
+        "CREATE TABLE {} (id SERIAL PRIMARY KEY, value INTEGER)",
+        table_name
+    );
+    manager
+        .execute_sql(TEST_DB_KEY, Some(&txn_id), &create_sql)
+        .await?;
 
     let insert_sql = format!("INSERT INTO {} (value) VALUES (100)", table_name);
-    manager.execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql).await?;
+    manager
+        .execute_sql(TEST_DB_KEY, Some(&txn_id), &insert_sql)
+        .await?;
 
     manager.commit_transaction(&txn_id).await?;
 

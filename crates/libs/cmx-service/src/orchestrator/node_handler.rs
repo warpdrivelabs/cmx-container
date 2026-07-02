@@ -12,8 +12,8 @@ use cmx_traits::plugin::PluginQuery;
 use cmx_traits::runtime::RuntimeInvoker;
 use tracing::debug;
 
-use crate::error::ServiceError;
 use super::types::{ExecutionContext, ExecutionStep, StepStatus};
+use crate::error::ServiceError;
 
 /// 节点执行器
 ///
@@ -41,7 +41,10 @@ impl<'a> NodeHandler<'a> {
         runtime: &'a Arc<dyn RuntimeInvoker>,
         plugin_query: &'a Arc<dyn PluginQuery>,
     ) -> Self {
-        Self { runtime, plugin_query }
+        Self {
+            runtime,
+            plugin_query,
+        }
     }
 
     /// 执行节点（统一入口）
@@ -74,19 +77,28 @@ impl<'a> NodeHandler<'a> {
         let tag = &node.node_type;
 
         // 解析节点数据（包含函数名、插件ID等元信息）
-        let node_data = node.data.as_ref()
+        let node_data = node
+            .data
+            .as_ref()
             .ok_or_else(|| ServiceError::InternalError(format!("{} 节点缺少 data", tag)))?;
 
-        debug!("[{}] 开始执行: node_id={}, node_name={}, txn_id={:?}",
-            tag, node.id, node_data.name, exec_context.svr_context.txn_id);
+        debug!(
+            "[{}] 开始执行: node_id={}, node_name={}, txn_id={:?}",
+            tag, node.id, node_data.name, exec_context.svr_context.txn_id
+        );
 
         // 解析节点元信息（插件ID、函数名）
-        let node_meta = node_data.node_meta.as_ref()
+        let node_meta = node_data
+            .node_meta
+            .as_ref()
             .ok_or_else(|| ServiceError::InternalError(format!("{} 节点缺少 nodeMeta", tag)))?;
 
         let plugin_id = &node_meta.plugin_id;
         let function_name = &node_meta.function_name;
-        debug!("[{}] 调用函数: plugin_id={}, function={}", tag, plugin_id, function_name);
+        debug!(
+            "[{}] 调用函数: plugin_id={}, function={}",
+            tag, plugin_id, function_name
+        );
 
         // 步骤1: 确保 WASM 模块已加载（懒加载机制）
         self.ensure_module_loaded(plugin_id, tag).await?;
@@ -94,24 +106,26 @@ impl<'a> NodeHandler<'a> {
         // 步骤2: 构建函数输入
         // FunctionInput 包含：input（当前步骤输入）、context（服务上下文）、binary_data（二进制数据）
         let func_input = FunctionInput {
-            input: exec_context.current_output.clone(),  // 上一步的输出作为当前步骤的输入
-            context: exec_context.svr_context.clone(),   // 上下文在整个编排过程中传递
-            binary_data: HashMap::new(),                  // 二进制数据暂未使用
+            input: exec_context.current_output.clone(), // 上一步的输出作为当前步骤的输入
+            context: exec_context.svr_context.clone(),  // 上下文在整个编排过程中传递
+            binary_data: HashMap::new(),                // 二进制数据暂未使用
         };
-        debug!("[{}] 函数输入: input={}, txn_id={:?}",
-            tag, func_input.input, func_input.context.txn_id);
+        debug!(
+            "[{}] 函数输入: input={}, txn_id={:?}",
+            tag, func_input.input, func_input.context.txn_id
+        );
 
         // 序列化输入为 JSON 字节
         // let input_bytes = serde_json::to_vec(&func_input)
         //     .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
         // 序列化输入为 MessagePack字节
-        let input_bytes = rmp_serde::to_vec(&func_input).map_err(|e| ServiceError::InputParseError(e.to_string()))?;
-
-
+        let input_bytes = rmp_serde::to_vec(&func_input)
+            .map_err(|e| ServiceError::InputParseError(e.to_string()))?;
 
         // 步骤3: 调用 WASM 函数
         let step_start = Instant::now();
-        let invoke_result = self.runtime
+        let invoke_result = self
+            .runtime
             .invoke(plugin_id, function_name, &input_bytes)
             .await
             .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
@@ -123,17 +137,19 @@ impl<'a> NodeHandler<'a> {
         let output: FunctionOutput = rmp_serde::from_slice(&invoke_result.output)
             .map_err(|e| ServiceError::OutputSerializeError(e.to_string()))?;
 
-
-
         let elapsed_us = step_start.elapsed().as_micros() as u64;
-        debug!("[{}] 函数执行完成: node_id={}, node_name={}, output={}, elapsed_us={}",
-            tag, node.id, node_data.name, output.result, elapsed_us);
+        debug!(
+            "[{}] 函数执行完成: node_id={}, node_name={}, output={}, elapsed_us={}",
+            tag, node.id, node_data.name, output.result, elapsed_us
+        );
 
         // 步骤5: 更新执行上下文
         // current_output 作为下一个节点的输入
         exec_context.current_output = output.result.clone();
         // 将输出保存到 step_outputs，供后续节点通过 context.step_outputs[node_id] 访问
-        exec_context.svr_context.add_step_output(node.id.clone(), output.result.clone());
+        exec_context
+            .svr_context
+            .add_step_output(node.id.clone(), output.result.clone());
 
         // 步骤6: 记录执行步骤（仅当 include_steps=true 时）
         if include_steps {
@@ -170,12 +186,22 @@ impl<'a> NodeHandler<'a> {
         // 检查模块是否已加载
         if !self.runtime.is_loaded(plugin_id).await {
             // 获取 WASM 模块路径
-            let wasm_path = self.plugin_query.get_wasm_path(plugin_id).await
+            let wasm_path = self
+                .plugin_query
+                .get_wasm_path(plugin_id)
+                .await
                 .map_err(|e| ServiceError::InternalError(e.to_string()))?;
-            debug!("[{}] 加载 WASM 模块: plugin_id={}, path={}", tag, plugin_id, wasm_path.display());
+            debug!(
+                "[{}] 加载 WASM 模块: plugin_id={}, path={}",
+                tag,
+                plugin_id,
+                wasm_path.display()
+            );
 
             // 加载模块到运行时
-            self.runtime.load_module(plugin_id, &wasm_path).await
+            self.runtime
+                .load_module(plugin_id, &wasm_path)
+                .await
                 .map_err(|e| ServiceError::InvokeFailed(e.to_string()))?;
         }
         Ok(())

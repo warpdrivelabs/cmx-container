@@ -32,7 +32,10 @@ impl LocalFetcher {
                 };
 
                 if !full_path.exists() {
-                    return Err(PluginError::Fetcher(format!("插件文件不存在: {:?}", full_path)));
+                    return Err(PluginError::Fetcher(format!(
+                        "插件文件不存在: {:?}",
+                        full_path
+                    )));
                 }
 
                 Ok(full_path)
@@ -74,7 +77,10 @@ impl LocalFetcher {
         };
 
         if !source_path.exists() {
-            return Err(PluginError::Fetcher(format!("源文件不存在: {:?}", source_path)));
+            return Err(PluginError::Fetcher(format!(
+                "源文件不存在: {:?}",
+                source_path
+            )));
         }
 
         std::fs::create_dir_all(target.parent().unwrap())

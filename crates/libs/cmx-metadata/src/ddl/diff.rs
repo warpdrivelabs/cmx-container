@@ -19,11 +19,11 @@
 //! let ddl_statements = DdlDiff::diff_to_ddl(&dialect, &old_tables, &new_tables)?;
 //! ```
 
+use super::DdlDialect;
+use crate::MetadataError;
+use cmx_core::model::cell::{ColumnDefine, IndexDefine, TableDefine};
 use std::collections::HashMap;
 use tracing::info;
-use cmx_core::model::cell::{ColumnDefine, IndexDefine, TableDefine};
-use crate::MetadataError;
-use super::DdlDialect;
 
 /// 列变更类型
 ///
@@ -38,7 +38,10 @@ pub enum ColumnChange {
     /// 删除列
     DropColumn(String),
     /// 修改列（包含旧列和新列定义）
-    AlterColumn { old: ColumnDefine, new: Box<ColumnDefine> },
+    AlterColumn {
+        old: ColumnDefine,
+        new: Box<ColumnDefine>,
+    },
 }
 
 /// 索引变更类型
@@ -104,8 +107,10 @@ impl DdlDiff {
     /// * `Vec<TableChange>` - 变更列表
     pub fn diff(old: &[TableDefine], new: &[TableDefine]) -> Vec<TableChange> {
         // 构建按表名索引的 HashMap，加速查找
-        let old_map: HashMap<&str, &TableDefine> = old.iter().map(|t| (t.table_name.as_str(), t)).collect();
-        let new_map: HashMap<&str, &TableDefine> = new.iter().map(|t| (t.table_name.as_str(), t)).collect();
+        let old_map: HashMap<&str, &TableDefine> =
+            old.iter().map(|t| (t.table_name.as_str(), t)).collect();
+        let new_map: HashMap<&str, &TableDefine> =
+            new.iter().map(|t| (t.table_name.as_str(), t)).collect();
 
         let mut changes = Vec::new();
 
@@ -144,7 +149,10 @@ impl DdlDiff {
                 };
 
                 // 只有当有实质变更时才记录
-                if !column_changes.is_empty() || !index_changes.is_empty() || comment_change.is_some() {
+                if !column_changes.is_empty()
+                    || !index_changes.is_empty()
+                    || comment_change.is_some()
+                {
                     changes.push(TableChange::AlterTable {
                         table_name: new_table.table_name.clone(),
                         schema: new_table.schema.clone(),
@@ -171,8 +179,10 @@ impl DdlDiff {
     /// # 返回值
     /// * `Vec<ColumnChange>` - 列变更列表
     fn diff_columns(old_cols: &[ColumnDefine], new_cols: &[ColumnDefine]) -> Vec<ColumnChange> {
-        let old_map: HashMap<&str, &ColumnDefine> = old_cols.iter().map(|c| (c.name.as_str(), c)).collect();
-        let new_map: HashMap<&str, &ColumnDefine> = new_cols.iter().map(|c| (c.name.as_str(), c)).collect();
+        let old_map: HashMap<&str, &ColumnDefine> =
+            old_cols.iter().map(|c| (c.name.as_str(), c)).collect();
+        let new_map: HashMap<&str, &ColumnDefine> =
+            new_cols.iter().map(|c| (c.name.as_str(), c)).collect();
 
         let mut changes = Vec::new();
 
@@ -242,8 +252,10 @@ impl DdlDiff {
     /// # 返回值
     /// * `Vec<IndexChange>` - 索引变更列表
     fn diff_indexes(old_idxs: &[IndexDefine], new_idxs: &[IndexDefine]) -> Vec<IndexChange> {
-        let old_map: HashMap<&str, &IndexDefine> = old_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
-        let new_map: HashMap<&str, &IndexDefine> = new_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
+        let old_map: HashMap<&str, &IndexDefine> =
+            old_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
+        let new_map: HashMap<&str, &IndexDefine> =
+            new_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
 
         let mut changes = Vec::new();
 
@@ -354,7 +366,9 @@ impl DdlDiff {
                                     Some(s) => format!("\"{}\".\"{}\"", s, table_name),
                                     None => format!("\"{}\"", table_name),
                                 };
-                                let cols = idx.columns.iter()
+                                let cols = idx
+                                    .columns
+                                    .iter()
                                     .map(|c| format!("\"{}\"", c))
                                     .collect::<Vec<_>>()
                                     .join(", ");
@@ -417,7 +431,11 @@ mod tests {
     use crate::ddl::postgres::PostgresDdlDialect;
     use cmx_core::model::cell::{FieldType, IndexDefine, IndexKind};
 
-    fn make_simple_table(name: &str, cols: Vec<ColumnDefine>, indexes: Vec<IndexDefine>) -> TableDefine {
+    fn make_simple_table(
+        name: &str,
+        cols: Vec<ColumnDefine>,
+        indexes: Vec<IndexDefine>,
+    ) -> TableDefine {
         TableDefine {
             table_name: name.to_string(),
             display_name: name.to_string(),
@@ -425,9 +443,12 @@ mod tests {
             primary_keys: vec![],
             indexes,
             version: 1,
-            create_time: None, update_time: None,
+            create_time: None,
+            update_time: None,
             i18n: false,
-            comment: None, schema: None, tablespace: None,
+            comment: None,
+            schema: None,
+            tablespace: None,
             is_partitioned: false,
             partition_type: None,
             partition_columns: vec![],
@@ -444,11 +465,16 @@ mod tests {
             is_nullable: nullable,
             default_value: None,
             i18n: false,
-            length: None, precision: None, scale: None,
-            db_type: None, ordinal: None,
-            create_time: None, update_time: None,
+            length: None,
+            precision: None,
+            scale: None,
+            db_type: None,
+            ordinal: None,
+            create_time: None,
+            update_time: None,
             is_foreign_key: false,
-            foreign_key_table: None, foreign_key_column: None,
+            foreign_key_table: None,
+            foreign_key_column: None,
             extensions: HashMap::new(),
         }
     }
@@ -473,13 +499,19 @@ mod tests {
 
     #[test]
     fn test_diff_add_column() {
-        let old = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-        ], vec![])];
-        let new = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-            make_col("name", FieldType::String, true),
-        ], vec![])];
+        let old = vec![make_simple_table(
+            "t",
+            vec![make_col("id", FieldType::Int, false)],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("id", FieldType::Int, false),
+                make_col("name", FieldType::String, true),
+            ],
+            vec![],
+        )];
 
         let changes = DdlDiff::diff(&old, &new);
         assert_eq!(changes.len(), 1);
@@ -493,18 +525,28 @@ mod tests {
 
     #[test]
     fn test_diff_drop_column() {
-        let old = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-            make_col("old_col", FieldType::String, true),
-        ], vec![])];
-        let new = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-        ], vec![])];
+        let old = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("id", FieldType::Int, false),
+                make_col("old_col", FieldType::String, true),
+            ],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![make_col("id", FieldType::Int, false)],
+            vec![],
+        )];
 
         let changes = DdlDiff::diff(&old, &new);
         assert_eq!(changes.len(), 1);
         if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
-            assert!(column_changes.iter().any(|c| matches!(c, ColumnChange::DropColumn(n) if n == "old_col")));
+            assert!(
+                column_changes
+                    .iter()
+                    .any(|c| matches!(c, ColumnChange::DropColumn(n) if n == "old_col"))
+            );
         } else {
             panic!("Expected AlterTable");
         }
@@ -512,17 +554,25 @@ mod tests {
 
     #[test]
     fn test_diff_alter_column_type() {
-        let old = vec![make_simple_table("t", vec![
-            make_col("name", FieldType::String, true),
-        ], vec![])];
-        let new = vec![make_simple_table("t", vec![
-            make_col("name", FieldType::Text, true),
-        ], vec![])];
+        let old = vec![make_simple_table(
+            "t",
+            vec![make_col("name", FieldType::String, true)],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![make_col("name", FieldType::Text, true)],
+            vec![],
+        )];
 
         let changes = DdlDiff::diff(&old, &new);
         assert_eq!(changes.len(), 1);
         if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
-            assert!(column_changes.iter().any(|c| matches!(c, ColumnChange::AlterColumn { .. })));
+            assert!(
+                column_changes
+                    .iter()
+                    .any(|c| matches!(c, ColumnChange::AlterColumn { .. }))
+            );
         } else {
             panic!("Expected AlterTable");
         }
@@ -531,13 +581,15 @@ mod tests {
     #[test]
     fn test_diff_add_index() {
         let old = vec![make_simple_table("t", vec![], vec![])];
-        let new = vec![make_simple_table("t", vec![], vec![
-            IndexDefine {
+        let new = vec![make_simple_table(
+            "t",
+            vec![],
+            vec![IndexDefine {
                 name: "idx_new".to_string(),
                 columns: vec!["col1".to_string()],
                 kind: IndexKind::Normal,
-            },
-        ])];
+            }],
+        )];
 
         let changes = DdlDiff::diff(&old, &new);
         assert_eq!(changes.len(), 1);
@@ -551,13 +603,19 @@ mod tests {
     #[test]
     fn test_diff_to_ddl() {
         let dialect = PostgresDdlDialect::default();
-        let old = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-        ], vec![])];
-        let new = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-            make_col("name", FieldType::String, true),
-        ], vec![])];
+        let old = vec![make_simple_table(
+            "t",
+            vec![make_col("id", FieldType::Int, false)],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("id", FieldType::Int, false),
+                make_col("name", FieldType::String, true),
+            ],
+            vec![],
+        )];
 
         let stmts = DdlDiff::diff_to_ddl(&dialect, &old, &new).unwrap();
         assert!(!stmts.is_empty());
@@ -566,9 +624,11 @@ mod tests {
 
     #[test]
     fn test_no_changes() {
-        let tables = vec![make_simple_table("t", vec![
-            make_col("id", FieldType::Int, false),
-        ], vec![])];
+        let tables = vec![make_simple_table(
+            "t",
+            vec![make_col("id", FieldType::Int, false)],
+            vec![],
+        )];
         let changes = DdlDiff::diff(&tables, &tables);
         assert!(changes.is_empty());
     }

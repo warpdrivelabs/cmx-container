@@ -49,7 +49,10 @@ impl AuthServiceImpl {
             Ok(None) => {
                 // P1-6.7 时序攻击防护：用户不存在时也执行 Argon2 dummy verify
                 // 消除响应时间差异，防止攻击者通过时间判断用户是否存在
-                let _ = self.password_hasher.verify(password, "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash");
+                let _ = self.password_hasher.verify(
+                    password,
+                    "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash",
+                );
                 return Err(AuthError::InvalidCredentials);
             }
             Err(e) => return Err(AuthError::Internal(e.to_string())),
@@ -73,7 +76,15 @@ impl AuthServiceImpl {
             // 记录失败次数
             self.record_login_failure(username).await;
             // 4.5: 审计日志
-            self.audit_log("login", cmx_audit::OperationResult::Failure, username, Some("user"), Some(username), Some(serde_json::json!({"reason": "invalid_credentials"}))).await;
+            self.audit_log(
+                "login",
+                cmx_audit::OperationResult::Failure,
+                username,
+                Some("user"),
+                Some(username),
+                Some(serde_json::json!({"reason": "invalid_credentials"})),
+            )
+            .await;
             return Err(AuthError::InvalidCredentials);
         }
 
@@ -122,7 +133,10 @@ impl AuthServiceImpl {
             if let Err(e) = self
                 .cache
                 .ttl()
-                .expire(&fail_key, Duration::from_secs(self.config.cache.lock_duration_secs))
+                .expire(
+                    &fail_key,
+                    Duration::from_secs(self.config.cache.lock_duration_secs),
+                )
                 .await
             {
                 warn!(key = %fail_key, error = %e, "设置登录失败计数 TTL 失败，key 可能变为永久 key");
@@ -189,8 +203,7 @@ impl AuthServiceImpl {
     ) -> std::result::Result<TokenPair, AuthError> {
         match credentials {
             Credentials::Password { username, password } => {
-                let span =
-                    tracing::span!(tracing::Level::INFO, "auth_login", username = %username);
+                let span = tracing::span!(tracing::Level::INFO, "auth_login", username = %username);
                 let _enter = span.enter();
                 info!(username = %username, "用户认证开始");
                 let result = self
@@ -203,18 +216,14 @@ impl AuthServiceImpl {
                 }
                 result
             }
-            Credentials::RefreshToken { refresh_token } => {
-                self.refresh_token(&refresh_token).await
-            }
+            Credentials::RefreshToken { refresh_token } => self.refresh_token(&refresh_token).await,
             Credentials::ApiKey { key } => {
                 // 注意：此路径会创建完整会话，不推荐用于中间件高频认证场景。
                 // 中间件场景请使用 validate_api_key()（无状态，不创建会话）。
                 let api_key_entity = self.validate_api_key_entity(&key).await?;
 
                 // 查询关联用户信息
-                let user_id = api_key_entity
-                    .user_id
-                    .ok_or(AuthError::InvalidApiKey)?;
+                let user_id = api_key_entity.user_id.ok_or(AuthError::InvalidApiKey)?;
 
                 let user = self
                     .user_query
@@ -307,11 +316,16 @@ impl AuthServiceImpl {
                 }
                 result
             }
-            Credentials::ThirdPartyOAuth2 { provider, provider_user_id, user_id } => {
+            Credentials::ThirdPartyOAuth2 {
+                provider,
+                provider_user_id,
+                user_id,
+            } => {
                 let span = tracing::span!(tracing::Level::INFO, "auth_third_party_oauth2", provider = %provider);
                 let _enter = span.enter();
                 info!(provider = %provider, user_id = %user_id, "第三方 OAuth2 登录");
-                self.authenticate_third_party(&user_id, &provider, &provider_user_id, device_info).await
+                self.authenticate_third_party(&user_id, &provider, &provider_user_id, device_info)
+                    .await
             }
         }
     }
@@ -368,7 +382,10 @@ impl AuthServiceImpl {
             Ok(Some(u)) => u,
             Ok(None) => {
                 // 时序攻击防护
-                let _ = self.password_hasher.verify(password, "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash");
+                let _ = self.password_hasher.verify(
+                    password,
+                    "$argon2id$v=19$m=65536,t=3,p=4$dummynoncesalt$dummyhash",
+                );
                 return Err(AuthError::InvalidCredentials);
             }
             Err(e) => return Err(AuthError::Internal(e.to_string())),
@@ -390,7 +407,15 @@ impl AuthServiceImpl {
             .map_err(|_| AuthError::PasswordVerifyFailed)?;
         if !valid {
             self.record_login_failure(username).await;
-            self.audit_log("login", cmx_audit::OperationResult::Failure, username, Some("user"), Some(username), Some(serde_json::json!({"reason": "invalid_credentials"}))).await;
+            self.audit_log(
+                "login",
+                cmx_audit::OperationResult::Failure,
+                username,
+                Some("user"),
+                Some(username),
+                Some(serde_json::json!({"reason": "invalid_credentials"})),
+            )
+            .await;
             return Err(AuthError::InvalidCredentials);
         }
 
@@ -399,7 +424,15 @@ impl AuthServiceImpl {
 
         // 2.3 修复：记录登录成功 metrics 和审计日志
         metrics::record_login_success("oauth2_verify");
-        self.audit_log("verify_credentials", cmx_audit::OperationResult::Success, &user.user_id, Some("user"), Some(username), None).await;
+        self.audit_log(
+            "verify_credentials",
+            cmx_audit::OperationResult::Success,
+            &user.user_id,
+            Some("user"),
+            Some(username),
+            None,
+        )
+        .await;
 
         Ok(user.user_id)
     }

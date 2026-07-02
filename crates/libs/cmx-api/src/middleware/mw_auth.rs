@@ -41,7 +41,8 @@ static GLOBAL_AUTH_SERVICE: OnceLock<Arc<dyn AuthService>> = OnceLock::new();
 static GLOBAL_OAUTH2_POLICY: OnceLock<Arc<cmx_auth::policy::OAuth2Policy>> = OnceLock::new();
 
 /// 全局第三方 OAuth2 Provider 注册表
-static GLOBAL_OAUTH2_PROVIDER_REGISTRY: OnceLock<cmx_auth::oauth2::OAuth2ProviderRegistry> = OnceLock::new();
+static GLOBAL_OAUTH2_PROVIDER_REGISTRY: OnceLock<cmx_auth::oauth2::OAuth2ProviderRegistry> =
+    OnceLock::new();
 
 /// 已编译的白名单规则
 ///
@@ -222,7 +223,9 @@ impl GlobalAuthService {
     }
 
     /// 初始化第三方 OAuth2 Provider 注册表
-    pub fn initialize_provider_registry(registry: cmx_auth::oauth2::OAuth2ProviderRegistry) -> Result<(), String> {
+    pub fn initialize_provider_registry(
+        registry: cmx_auth::oauth2::OAuth2ProviderRegistry,
+    ) -> Result<(), String> {
         // 同步到 cmx-auth 内部的全局注册表，使 AuthServiceImpl 可访问
         cmx_auth::oauth2::OAuth2ProviderRegistry::initialize_global(registry.clone())?;
         GLOBAL_OAUTH2_PROVIDER_REGISTRY

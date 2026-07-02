@@ -37,10 +37,14 @@ impl DefaultStorageService {
             th_content_type: None,
         };
         GenericCrudService::<FileDetailBmc>::update(
-            mm, &db_id, None, Value::String(file_id.to_string()), update_data,
+            mm,
+            &db_id,
+            None,
+            Value::String(file_id.to_string()),
+            update_data,
         )
-            .await
-            .map_err(Error::from)?;
+        .await
+        .map_err(Error::from)?;
 
         info!(file_id = file_id, "文件已删除（归档）");
         Ok(())

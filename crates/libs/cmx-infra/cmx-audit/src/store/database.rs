@@ -118,10 +118,7 @@ impl DatabaseAuditStore {
                 "delete_hard requires ids / time range / actor_id / target_id / request_id".into(),
             ));
         }
-        let effective_app_id = filter
-            .app_id
-            .clone()
-            .unwrap_or_else(|| self.app_id.clone());
+        let effective_app_id = filter.app_id.clone().unwrap_or_else(|| self.app_id.clone());
 
         let mut q = Query::delete();
         q.from_table(TABLE)
@@ -216,9 +213,9 @@ impl DatabaseAuditStore {
 
             let get_opt_datetime = |col: &str| -> Option<DateTime<Utc>> {
                 row.get_by_name(schema, col).and_then(|v| match v {
-                    DataValue::String(s) => {
-                        DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                    }
+                    DataValue::String(s) => DateTime::parse_from_rfc3339(s)
+                        .ok()
+                        .map(|dt| dt.with_timezone(&Utc)),
                     DataValue::DateTime(dt) => Some(*dt),
                     _ => None,
                 })
@@ -333,23 +330,22 @@ impl AuditStore for DatabaseAuditStore {
         const BATCH_CHUNK: usize = 1000;
         for chunk in records.chunks(BATCH_CHUNK) {
             let mut q = Query::insert();
-            q.into_table(TABLE)
-                .columns([
-                    Column::Id,
-                    Column::AppId,
-                    Column::Domain,
-                    Column::Operation,
-                    Column::ResultCol,
-                    Column::ActorId,
-                    Column::ActorName,
-                    Column::TargetType,
-                    Column::TargetId,
-                    Column::Details,
-                    Column::RequestId,
-                    Column::IpAddress,
-                    Column::StartedAt,
-                    Column::DurationMs,
-                ]);
+            q.into_table(TABLE).columns([
+                Column::Id,
+                Column::AppId,
+                Column::Domain,
+                Column::Operation,
+                Column::ResultCol,
+                Column::ActorId,
+                Column::ActorName,
+                Column::TargetType,
+                Column::TargetId,
+                Column::Details,
+                Column::RequestId,
+                Column::IpAddress,
+                Column::StartedAt,
+                Column::DurationMs,
+            ]);
             for r in chunk {
                 let details_str: Option<String> = match r.details.as_ref() {
                     Some(v) => Some(serde_json::to_string(v).map_err(AuditError::from)?),
@@ -382,7 +378,12 @@ impl AuditStore for DatabaseAuditStore {
         Ok(())
     }
 
-    async fn query(&self, filter: &AuditFilter, limit: u64, offset: u64) -> Result<Vec<AuditRecord>> {
+    async fn query(
+        &self,
+        filter: &AuditFilter,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<AuditRecord>> {
         let mut q = Query::select();
         q.from(TABLE)
             .columns([
@@ -403,12 +404,10 @@ impl AuditStore for DatabaseAuditStore {
             ])
             .and_where(Expr::col(Column::Archived).eq(0))
             // 默认按 self.app_id 过滤（多租户隔离），调用方可显式覆盖
-            .and_where(Expr::col(Column::AppId).eq(
-                filter
-                    .app_id
-                    .clone()
-                    .unwrap_or_else(|| self.app_id.clone()),
-            ))
+            .and_where(
+                Expr::col(Column::AppId)
+                    .eq(filter.app_id.clone().unwrap_or_else(|| self.app_id.clone())),
+            )
             .order_by(Column::StartedAt, Order::Desc)
             .limit(limit)
             .offset(offset);
@@ -506,7 +505,8 @@ mod tests {
             .expect("register test data source");
 
         // ensure schema（幂等，无参数 DDL）
-        let ddl = include_str!("../../../../../../docs/sql/migrations/20260624_008_cmx_audit_log.up.sql");
+        let ddl =
+            include_str!("../../../../../../docs/sql/migrations/20260624_008_cmx_audit_log.up.sql");
         mm.execute_sql(TEST_DB_ID, None, ddl)
             .await
             .expect("ensure cmx_audit_log schema");
@@ -779,4 +779,3 @@ mod tests {
         Ok(())
     }
 }
-

@@ -10,8 +10,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::sync::RwLock;
@@ -83,11 +83,7 @@ impl ReconciliationTask {
             loop {
                 interval.tick().await;
                 if let Err(e) = self.reconcile().await {
-                    tracing::error!(
-                        "插件一致性校验失败 (app_id={}): {}",
-                        self.app_id,
-                        e
-                    );
+                    tracing::error!("插件一致性校验失败 (app_id={}): {}", self.app_id, e);
                 }
             }
         });
@@ -124,7 +120,11 @@ impl ReconciliationTask {
                 app_id: Some(self.app_id.clone()),
                 ..Default::default()
             };
-            registry.filter(&filter).iter().map(|p| p.id.clone()).collect()
+            registry
+                .filter(&filter)
+                .iter()
+                .map(|p| p.id.clone())
+                .collect()
         };
 
         // 3. 补偿 Registry 中缺失的插件
@@ -150,11 +150,7 @@ impl ReconciliationTask {
                         result.loaded.push(plugin_id.clone());
                     }
                     Err(e) => {
-                        tracing::error!(
-                            "插件一致性校验: 加载插件 {} 失败: {}",
-                            plugin_id,
-                            e
-                        );
+                        tracing::error!("插件一致性校验: 加载插件 {} 失败: {}", plugin_id, e);
                         result.failed.push((plugin_id.clone(), e.to_string()));
                     }
                 }
@@ -176,11 +172,7 @@ impl ReconciliationTask {
                         result.synced.push(plugin_id.clone());
                     }
                     Err(e) => {
-                        tracing::error!(
-                            "插件一致性校验: 同步插件 {} 文件失败: {}",
-                            plugin_id,
-                            e
-                        );
+                        tracing::error!("插件一致性校验: 同步插件 {} 文件失败: {}", plugin_id, e);
                         result.failed.push((plugin_id.clone(), e.to_string()));
                     }
                 }
@@ -200,18 +192,18 @@ impl ReconciliationTask {
                         result.unloaded.push(plugin_id.clone());
                     }
                     Err(e) => {
-                        tracing::error!(
-                            "一致性校验: 卸载插件 {} 失败: {}",
-                            plugin_id,
-                            e
-                        );
+                        tracing::error!("一致性校验: 卸载插件 {} 失败: {}", plugin_id, e);
                         result.failed.push((plugin_id.clone(), e.to_string()));
                     }
                 }
             }
         }
 
-        if !result.loaded.is_empty() || !result.unloaded.is_empty() || !result.failed.is_empty() || !result.synced.is_empty() {
+        if !result.loaded.is_empty()
+            || !result.unloaded.is_empty()
+            || !result.failed.is_empty()
+            || !result.synced.is_empty()
+        {
             tracing::info!(
                 "插件一致性校验完成 (app_id={}): 加载={}, 同步={}, 卸载={}, 失败={}",
                 self.app_id,

@@ -3,11 +3,11 @@
 //! 定义跨模块的 WASM 调用接口，cmx-runtime 的 WasmEngine 将实现此 trait，
 //! cmx-service 等模块通过此 trait 调用 WASM 执行而无需直接依赖 cmx-runtime。
 
-use std::path::Path;
 use async_trait::async_trait;
+use std::path::Path;
 
-use crate::error::TraitError;
 use super::invoke_context::InvokeOptions;
+use crate::error::TraitError;
 
 /// WASM 调用结果。
 ///
@@ -51,7 +51,8 @@ pub trait RuntimeInvoker: Send + Sync {
         function_name: &str,
         input: &[u8],
     ) -> Result<WasmInvokeResult, TraitError> {
-        self.invoke_with_options(plugin_id, function_name, input, &InvokeOptions::default()).await
+        self.invoke_with_options(plugin_id, function_name, input, &InvokeOptions::default())
+            .await
     }
 
     /// 带选项的 WASM 调用。

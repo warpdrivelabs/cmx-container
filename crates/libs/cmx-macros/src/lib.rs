@@ -12,8 +12,8 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    parse::Parser, parse_macro_input, punctuated::Punctuated, Expr, Ident, ItemFn, LitStr, Pat,
-    Token,
+    Expr, Ident, ItemFn, LitStr, Pat, Token, parse::Parser, parse_macro_input,
+    punctuated::Punctuated,
 };
 
 // =========================================================================
@@ -30,12 +30,13 @@ fn find_svr_ctx_binding(item_fn: &ItemFn) -> syn::Result<Ident> {
             if let Pat::TupleStruct(tuple_struct) = &*pat_type.pat {
                 // 检查路径末段是否为 "CmxSvrContext"
                 if let Some(last_seg) = tuple_struct.path.segments.last()
-                    && last_seg.ident == "CmxSvrContext" {
-                        // 提取内部 binding
-                        if let Some(Pat::Ident(pat_ident)) = tuple_struct.elems.first() {
-                            return Ok(pat_ident.ident.clone());
-                        }
+                    && last_seg.ident == "CmxSvrContext"
+                {
+                    // 提取内部 binding
+                    if let Some(Pat::Ident(pat_ident)) = tuple_struct.elems.first() {
+                        return Ok(pat_ident.ident.clone());
                     }
+                }
             }
         }
     }
@@ -229,9 +230,15 @@ pub fn has_permissions(args: TokenStream, input: TokenStream) -> TokenStream {
     let handler_name = item_fn.sig.ident.to_string();
     let route_handler_reg = gen_route_handler_registration(&handler_name, false);
 
-    let keys_arr: Vec<Expr> = keys.iter().map(|k| {
-        Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Str(k.clone()) })
-    }).collect();
+    let keys_arr: Vec<Expr> = keys
+        .iter()
+        .map(|k| {
+            Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(k.clone()),
+            })
+        })
+        .collect();
 
     let perm_check = quote! {
         #binding.require_all_permissions(&[#(#keys_arr),*])
@@ -298,9 +305,15 @@ pub fn has_any_permission(args: TokenStream, input: TokenStream) -> TokenStream 
     let handler_name = item_fn.sig.ident.to_string();
     let route_handler_reg = gen_route_handler_registration(&handler_name, false);
 
-    let keys_arr: Vec<Expr> = keys.iter().map(|k| {
-        Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Str(k.clone()) })
-    }).collect();
+    let keys_arr: Vec<Expr> = keys
+        .iter()
+        .map(|k| {
+            Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(k.clone()),
+            })
+        })
+        .collect();
 
     let perm_check = quote! {
         #binding.require_any_permission(&[#(#keys_arr),*])
@@ -428,9 +441,15 @@ pub fn has_roles(args: TokenStream, input: TokenStream) -> TokenStream {
     let handler_name = item_fn.sig.ident.to_string();
     let route_handler_reg = gen_route_handler_registration(&handler_name, false);
 
-    let roles_arr: Vec<Expr> = roles.iter().map(|k| {
-        Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Str(k.clone()) })
-    }).collect();
+    let roles_arr: Vec<Expr> = roles
+        .iter()
+        .map(|k| {
+            Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(k.clone()),
+            })
+        })
+        .collect();
 
     let perm_check = quote! {
         #binding.require_all_roles(&[#(#roles_arr),*])
@@ -497,9 +516,15 @@ pub fn has_any_role(args: TokenStream, input: TokenStream) -> TokenStream {
     let handler_name = item_fn.sig.ident.to_string();
     let route_handler_reg = gen_route_handler_registration(&handler_name, false);
 
-    let roles_arr: Vec<Expr> = roles.iter().map(|k| {
-        Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Str(k.clone()) })
-    }).collect();
+    let roles_arr: Vec<Expr> = roles
+        .iter()
+        .map(|k| {
+            Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(k.clone()),
+            })
+        })
+        .collect();
 
     let perm_check = quote! {
         #binding.require_any_role(&[#(#roles_arr),*])

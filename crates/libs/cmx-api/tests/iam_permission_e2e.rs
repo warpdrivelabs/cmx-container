@@ -47,10 +47,7 @@ async fn test_permission_crud() {
     )
     .await
     .assert_success();
-    assert_eq!(
-        get_str(&updated, "name").as_deref(),
-        Some(new_name)
-    );
+    assert_eq!(get_str(&updated, "name").as_deref(), Some(new_name));
 
     // delete（软删除：archived 置 1）
     post_json(
@@ -72,7 +69,11 @@ async fn test_permission_crud() {
     .await
     .assert_success();
     let archived = after.get("archived").and_then(|v| v.as_i64());
-    assert_eq!(archived, Some(1), "软删除后 archived 应为 1，实际 {archived:?}");
+    assert_eq!(
+        archived,
+        Some(1),
+        "软删除后 archived 应为 1，实际 {archived:?}"
+    );
 }
 
 #[tokio::test]

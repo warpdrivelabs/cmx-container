@@ -1,7 +1,7 @@
 //! CORS 中间件配置
 
 use axum::http::HeaderName;
-use tower_http::cors::{CorsLayer, ExposeHeaders, AllowOrigin};
+use tower_http::cors::{AllowOrigin, CorsLayer, ExposeHeaders};
 
 /// CORS 配置
 #[derive(Debug, Clone)]
@@ -35,12 +35,9 @@ impl Default for CorsConfig {
                 axum::http::header::ACCEPT,
                 // 添加自定义请求头
                 HeaderName::from_static("x-api-key"),
-
             ],
             //允许客户端访问的响应头
-            expose_headers: vec![
-                axum::http::header::CONTENT_LENGTH,
-            ],
+            expose_headers: vec![axum::http::header::CONTENT_LENGTH],
             allow_credentials: true,
             max_age: 3600,
         }

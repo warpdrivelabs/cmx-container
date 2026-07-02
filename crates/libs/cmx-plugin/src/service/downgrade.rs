@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use crate::domain::plugin::PluginSource;
+use serde::{Deserialize, Serialize};
 
 /// 降级请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,9 +53,10 @@ impl DowngradeService {
     }
 
     /// 降级插件
-    pub async fn downgrade(&self, request: DowngradeRequest) -> crate::error::PluginResult<DowngradeResponse> {
+    pub async fn downgrade(
+        &self,
+        request: DowngradeRequest,
+    ) -> crate::error::PluginResult<DowngradeResponse> {
         self.executor.execute_downgrade(request).await
     }
 }
-
-
