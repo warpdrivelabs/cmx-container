@@ -34,15 +34,7 @@ pub async fn init_services() -> crate::Result<()> {
     let db_manager = get_default_db_manager();
     let default_db_id = get_default_db_manager().get_default_db_id().await;
 
-    //fixme yqs 不使用nacos的时候要修改
-    let app_id = cmx_utils::ConfigManager::global()
-        .get_string("app.id")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("APP_ID").ok())
-        .or_else(|| std::env::var("SERVICE_REGISTRY_NAME").ok())
-        .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
-        .unwrap_or_else(|| "default".to_string());
+    let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
     let repository = Arc::new(ServiceRepository::new(db_manager.clone(), default_db_id.clone()));
     let registry = Arc::new(ServiceRegistry::new());

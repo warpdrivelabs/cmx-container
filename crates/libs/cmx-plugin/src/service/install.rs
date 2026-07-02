@@ -30,8 +30,6 @@ pub struct InstallRequest {
     pub source: PluginSource,
     /// 目标数据库ID（可选）
     pub db_id: Option<String>,
-    /// 是否自动激活
-    pub auto_activate: bool,
     /// 版本约束（仅对注册表来源有效，如 "^1.0.0", ">=2.0.0"）
     #[serde(default)]
     pub version_constraint: Option<String>,

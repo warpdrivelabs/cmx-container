@@ -35,14 +35,7 @@ use crate::error::Result;
 pub async fn build_audit_logger() -> Result<Arc<dyn AuditLogger>> {
     // 1. 解析 app_id
 
-    let app_id = cmx_utils::ConfigManager::global()
-        .get_string("app.id")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("APP_ID").ok())
-        .or_else(|| std::env::var("SERVICE_REGISTRY_NAME").ok())
-        .or_else(|| std::env::var("NACOS_NAMING_SERVICE_NAME").ok())
-        .unwrap_or_else(|| "default".to_string());
+    let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
     // 2. 获取 DatabaseManager 与默认 db_id
     let mm = get_default_db_manager();

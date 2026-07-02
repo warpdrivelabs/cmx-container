@@ -85,6 +85,7 @@ async fn setup_db() -> anyhow::Result<DatabaseManager> {
         db_type: DbType::Postgres,
         db_url: DB_URL.to_string(),
         db_id: DB_KEY.to_string(),
+        db_name: None,
         db_schema: Some("public".to_string()),
         pool_config,
         health_check_interval: 60,

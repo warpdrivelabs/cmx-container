@@ -70,7 +70,6 @@ pub async fn plugin_install(
     let install_req = cmx_plugin::service::install::InstallRequest {
         source: convert_source(&req.source),
         db_id: req.target_db_id,
-        auto_activate: false,
         version_constraint: None,
         build_type: None,
         marketplace_source_id: None,
@@ -322,10 +321,14 @@ pub async fn plugin_deploy(
         .await
         .map_err(|e| crate::Error::InternalError(format!("获取文件绝对路径失败: {}", e)))?;
 
-    // 如果需要发布到市场，先解析插件定义并发布
+    // source 统一用 Local(deploy 内部会自动上传 OSS 并转为 Storage,确保集群同步)
+    let source = cmx_plugin::domain::plugin::PluginSource::Local {
+        path: abs_path.clone(),
+    };
+
+    // publish_to_marketplace 仅控制是否额外发布到市场(展示 + 版本记录)
     let marketplace_source_id: Option<String>;
     let marketplace_publish_info: Option<cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo>;
-    let source: cmx_plugin::domain::plugin::PluginSource;
 
     if publish_to_marketplace.unwrap_or(true) {
         let plugin_def = tokio::task::spawn_blocking({
@@ -347,26 +350,11 @@ pub async fn plugin_deploy(
             .await
             .map_err(|e| crate::Error::InternalError(format!("发布到插件市场失败: {}", e)))?;
 
-        // 先取需要的数据，再消费 result
-        let file_url = result.file_url.clone();
-        let marketplace_version_id = result.marketplace_version_id.clone();
-
-        marketplace_source_id = Some(marketplace_version_id);
+        marketplace_source_id = Some(result.marketplace_version_id.clone());
         marketplace_publish_info = Some(result.into());
-
-        // 发布后使用 Remote source
-        source = cmx_plugin::domain::plugin::PluginSource::Remote {
-            url: file_url,
-            checksum: None,
-        };
     } else {
         marketplace_source_id = None;
         marketplace_publish_info = None;
-
-        // 未发布则使用 Local source
-        source = cmx_plugin::domain::plugin::PluginSource::Local {
-            path: abs_path,
-        };
     }
 
     let manager = cmx_plugin::GlobalPluginManager::get();

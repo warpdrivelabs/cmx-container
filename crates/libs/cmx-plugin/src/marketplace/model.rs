@@ -529,8 +529,6 @@ pub struct MarketInstallRequest {
     pub version: Option<String>,
     /// 目标数据库 ID，为 `None` 时使用默认数据库。
     pub db_id: Option<String>,
-    /// 安装后是否自动激活。
-    pub auto_activate: Option<bool>,
 }
 
 // ============================================================================

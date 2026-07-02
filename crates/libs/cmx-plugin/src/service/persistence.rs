@@ -913,7 +913,6 @@ impl PluginPersistence {
         let install_req = InstallRequest {
             source: request.source.clone(),
             db_id: request.db_id.clone(),
-            auto_activate: false,
             version_constraint: None,
             build_type: request.build_type.clone(),
             marketplace_source_id: request.marketplace_source_id.clone(),

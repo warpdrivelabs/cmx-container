@@ -623,7 +623,7 @@ pub async fn marketplace_plugin_version_get_by_id(
 ///
 /// * `_cmx_state` - 应用状态（框架注入）
 /// * `_svr_ctx` - 服务器上下文（框架注入）
-/// * `req` - 安装请求，包含 plugin_id、version（可选）、db_id（可选）、auto_activate
+/// * `req` - 安装请求，包含 plugin_id、version（可选）、db_id（可选）
 ///
 /// # Returns
 ///
@@ -656,7 +656,6 @@ pub async fn marketplace_plugin_install(
         plugin_id: req.plugin_id,
         version: req.version,
         db_id: req.db_id,
-        auto_activate: Some(req.auto_activate),
     };
 
     let result = service

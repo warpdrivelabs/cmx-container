@@ -176,6 +176,37 @@ impl DeployService {
             request.db_id = plugin_def.datasource_id.clone();
         }
 
+        // 步骤4.5: 若 source 是 Local，上传到 cmx-storage 后转为 Storage(集群同步必需)
+        // 所有调用 deploy 的入口(API deploy/模块安装/市场安装)统一在此上传 OSS，
+        // 确保其他节点能通过 zip_source_url 从 OSS 拉取插件包。
+        if let crate::domain::plugin::PluginSource::Local { ref path } = request.source {
+            let zip_path = if package_path.is_file() {
+                package_path.clone()
+            } else {
+                path.clone()
+            };
+            match Self::upload_to_storage(&zip_path, &plugin_id, &new_version).await {
+                Ok((file_id, _file_url)) => {
+                    tracing::info!(
+                        plugin_id = %plugin_id,
+                        file_id = %file_id,
+                        "插件包已上传到 cmx-storage(deploy 内部统一上传)"
+                    );
+                    request.source = crate::domain::plugin::PluginSource::Storage {
+                        file_id,
+                        checksum: None,
+                    };
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        plugin_id = %plugin_id,
+                        error = %e,
+                        "上传 cmx-storage 失败，保留 Local source(单节点环境可正常工作)"
+                    );
+                }
+            }
+        }
+
         let existing_plugin = self.deps.repository.find_plugin(&plugin_id, request.app_id.as_deref().unwrap_or(&self.deps.app_id)).await?;
 
         match existing_plugin {
@@ -249,7 +280,6 @@ impl DeployService {
         let install_req = super::install::InstallRequest {
             source: request.source.clone(),
             db_id: request.db_id.clone(),
-            auto_activate: false,
             version_constraint: None,
             build_type: request.build_type.clone(),
             marketplace_source_id: marketplace_source_id.map(|s| s.to_string()),
@@ -319,5 +349,39 @@ impl DeployService {
             .executor
             .execute_reinstall(request.clone(), plugin_id, old_version)
             .await
+    }
+
+    /// 上传插件 zip 到 cmx-storage，返回 (file_id, file_url)。
+    ///
+    /// 复用 GlobalStorageService 全局单例，无需通过 DeployServiceDeps 注入。
+    /// 失败时返回错误(由调用方决定是否降级)。
+    async fn upload_to_storage(
+        zip_path: &std::path::Path,
+        plugin_id: &str,
+        version: &str,
+    ) -> PluginResult<(String, String)> {
+        let zip_bytes = tokio::fs::read(zip_path)
+            .await
+            .map_err(|e| PluginError::Plugin(format!("读取插件 zip 失败: {e}")))?;
+        let file_name = zip_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("plugin-{plugin_id}-{version}.zip"));
+        let storage_service = cmx_storage::global::GlobalStorageService::get().service();
+        let upload_request = cmx_storage::types::UploadRequest {
+            data: zip_bytes.into(),
+            original_filename: Some(file_name),
+            content_type: Some("application/zip".to_string()),
+            object_type: Some("deployed_plugin".to_string()),
+            object_id: Some(plugin_id.to_string()),
+            platform: None,
+            user_metadata: None,
+            acl: None,
+        };
+        let file_info = storage_service
+            .upload(upload_request)
+            .await
+            .map_err(|e| PluginError::Plugin(format!("上传插件包到存储失败: {e}")))?;
+        Ok((file_info.id, file_info.url))
     }
 }

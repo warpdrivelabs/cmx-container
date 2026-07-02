@@ -124,9 +124,6 @@ pub struct MarketInstallRequest {
     pub version: Option<String>,
     /// 安装到的目标数据库 ID（不填则使用默认数据库）。
     pub db_id: Option<String>,
-    /// 安装后是否自动激活（默认为 true）。
-    #[serde(default = "default_true")]
-    pub auto_activate: bool,
 }
 
 /// 对插件评分的请求。
@@ -274,6 +271,7 @@ pub struct MarketplaceVersionGetParams {
 }
 
 /// 返回 true 的默认值（用于 serde default）。
+#[allow(dead_code)]
 fn default_true() -> bool {
     true
 }

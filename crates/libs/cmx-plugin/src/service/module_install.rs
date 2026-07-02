@@ -19,7 +19,7 @@ use tracing::{info, warn};
 use crate::common::package::PackageUtils;
 use crate::domain::plugin::PluginSource;
 use crate::error::{PluginError, PluginResult};
-use crate::service::install::{InstallRequest, InstallService};
+use crate::service::deploy::{DeployRequest, DeployService};
 
 /// 模块包来源
 #[derive(Debug, Clone)]
@@ -54,15 +54,15 @@ enum ImportAction {
 /// 模块包安装服务
 pub struct ModuleInstallService {
     package_utils: PackageUtils,
-    install_service: std::sync::Arc<InstallService>,
+    deploy_service: std::sync::Arc<DeployService>,
 }
 
 impl ModuleInstallService {
     /// 创建模块安装服务
-    pub fn new(package_utils: PackageUtils, install_service: std::sync::Arc<InstallService>) -> Self {
+    pub fn new(package_utils: PackageUtils, deploy_service: std::sync::Arc<DeployService>) -> Self {
         Self {
             package_utils,
-            install_service,
+            deploy_service,
         }
     }
 
@@ -90,9 +90,10 @@ impl ModuleInstallService {
 
         // 3. 版本校验
         let mm = get_default_db_manager();
-        let db_id =mm.get_default_db_id().await;
+        let default_db_id = mm.get_default_db_id().await;
+        let biz_db_id = mm.get_biz_db_id().await;
         let action =
-            Self::validate_import(mm, &db_id, &manifest, force).await?;
+            Self::validate_import(mm, &default_db_id, &manifest, force).await?;
         match action {
             ImportAction::SkipSame => {
                 return Ok(ModuleInstallResult {
@@ -112,21 +113,22 @@ impl ModuleInstallService {
             | ImportAction::AllowSameSecondPatch => {}
         }
 
-        // 4. 安装模块级资源(metadata 建表 / forms / menus / permissions)
-        //    对称契约见 install_module_resources 文档
-        if let Err(e) = self.install_module_resources(&module_dir, &manifest).await {
+        // 4. 安装模块级资源(metadata 建表用 biz_db_id,其余用 default_db_id)
+        if let Err(e) = self
+            .install_module_resources(mm, &default_db_id, &biz_db_id, &module_dir, &manifest)
+            .await
+        {
             warn!(error = %e, "模块级资源安装失败(继续后续步骤)");
         }
 
         // 5. 版本登记(current_version upsert + version_history insert)
-        if let Err(e) = self.record_version(mm, &db_id, &manifest, &operator).await {
+        if let Err(e) = self.record_version(mm, &default_db_id, &manifest, &operator).await {
             warn!(error = %e, "版本登记失败,继续安装插件");
         }
 
-        // 6. 遍历插件子包,逐个复用 InstallService::install
-        let domain = &manifest.module.domain_code;
+        // 6. 遍历插件子包,逐个复用 DeployService::deploy(自动判断升级/安装/跳过)
+        //    source 用 Local{path},deploy 内部会统一上传 OSS 后转为 Storage
         let app = &manifest.module.application_code;
-        let module = &manifest.module.code;
         let mut plugin_count = 0usize;
         for entry in &manifest.plugins {
             let plugin_zip = module_dir.join(&entry.package);
@@ -134,30 +136,33 @@ impl ModuleInstallService {
                 warn!(package = %entry.package, "插件子包不存在,跳过");
                 continue;
             }
-            let install_req = InstallRequest {
+            let deploy_req = DeployRequest {
                 source: PluginSource::Local {
                     path: plugin_zip.clone(),
                 },
                 db_id: None,
-                auto_activate: true,
-                version_constraint: None,
+                force_reinstall: false,
                 build_type: None,
-                marketplace_source_id: None,
+                publish_to_marketplace: false,
                 app_id: Some(app.clone()),
+                marketplace_source_id: None,
+                marketplace_publish_info: None,
             };
-            // 复用现有插件安装(建表/分发已注释,不会重复)
-            match self.install_service.install(install_req).await {
+            // deploy 自动判断 Install/Upgrade/AlreadyInstalled,不会因已安装而报错
+            // deploy 内部统一上传 OSS,确保其他节点能拉取插件包
+            match self.deploy_service.deploy(deploy_req).await {
                 Ok(resp) => {
-                    info!(plugin_id = %resp.plugin_id, "插件子包安装成功");
+                    info!(
+                        plugin_id = %resp.plugin_id,
+                        action = ?resp.action,
+                        "插件子包部署成功"
+                    );
                     plugin_count += 1;
                 }
                 Err(e) => {
                     warn!(package = %entry.package, error = %e, "插件子包安装失败");
                 }
             }
-            // NOTE: 插件归属(domain_code/application_code/module_code)通过 manifest 注入,
-            // 实际需 InstallService 支持外部传入归属字段,此处先记录 module 维度。
-            let _ = (domain, module);
         }
 
         Ok(ModuleInstallResult {
@@ -251,34 +256,35 @@ impl ModuleInstallService {
     ///
     /// 对称性契约(与 export_module 严格对称):
     /// - forms/*.json:整体 JSON 透传存入 cmx_form.definition,code = 文件名(去扩展名)
-    /// - menus/*.json:整体 JSON 透传存入 cmx_menu.extension(根菜单,树形字段自动计算)
+    /// - menus/*.json:整体 JSON 透传存入 cmx_menu.definition(根菜单,树形字段自动计算)
     /// - metadata/tables/*.json:用 PgTableDefineExecutor 建表/升级
     /// - permissions/*.json:解析 PermissionDefinition,SQL upsert 到 cmx_permission
     async fn install_module_resources(
         &self,
+        mm: &cmx_database::DatabaseManager,
+        default_db_id: &str,
+        biz_db_id: &str,
         module_dir: &Path,
         manifest: &ModuleManifest,
     ) -> PluginResult<()> {
-        let mm = get_default_db_manager();
-        let db_id = "default".to_string();
         let domain = manifest.module.domain_code.as_str();
         let app = manifest.module.application_code.as_str();
         let module = manifest.module.code.as_str();
 
-        // 1. 表单:forms/*.json 整体透传存入 cmx_form
-        self.install_forms(mm, &db_id, module_dir, domain, app, module)
+        // 1. 表单:forms/*.json 整体透传存入 cmx_form(存 default 库)
+        self.install_forms(mm, default_db_id, module_dir, domain, app, module)
             .await;
 
-        // 2. 菜单:menus/*.json 整体透传存入 cmx_menu.extension(根菜单)
-        self.install_menus(mm, &db_id, module_dir, domain, app, module)
+        // 2. 菜单:menus/*.json 整体透传存入 cmx_menu.definition(存 default 库)
+        self.install_menus(mm, default_db_id, module_dir, domain, app, module)
             .await;
 
-        // 3. 元数据:metadata/tables/*.json 建表
-        self.install_metadata(mm, &db_id, module_dir, domain, app, module)
+        // 3. 元数据:metadata/tables/*.json 建表(建到 biz 库,元数据登记存 default 库)
+        self.install_metadata(mm, default_db_id, biz_db_id, module_dir, domain, app, module)
             .await;
 
-        // 4. 权限:permissions/*.json upsert cmx_permission
-        self.install_permissions(mm, &db_id, module_dir, domain, app, module)
+        // 4. 权限:permissions/*.json upsert cmx_permission(存 default 库)
+        self.install_permissions(mm, default_db_id, module_dir, domain, app, module)
             .await;
 
         Ok(())
@@ -353,10 +359,10 @@ impl ModuleInstallService {
         }
     }
 
-    /// 安装菜单:读取 menus/*.json,整体 JSON 透传存入 cmx_menu.extension(根菜单)
+    /// 安装菜单:读取 menus/*.json,整体 JSON 透传存入 cmx_menu.definition(根菜单)
     ///
     /// 每个 menus 文件创建一个根菜单,code = `{module}:{file_stem}`,
-    /// 完整 JSON 内容存入 extension 字段,前端从 extension 解析 items/children 树。
+    /// 完整 JSON 内容存入 definition 字段,前端从 definition 解析 items/children 树。
     async fn install_menus(
         &self,
         mm: &cmx_database::DatabaseManager,
@@ -427,14 +433,16 @@ impl ModuleInstallService {
         }
     }
 
-    /// 安装元数据:读取 metadata/tables/*.json 表定义,用 PgTableDefineExecutor 建表
+    /// 安装元数据:读取 metadata/tables/*.json 表定义,用 PgTableDefineExecutor 建表到业务库
+    #[allow(clippy::too_many_arguments)]
     ///
     /// 表定义文件格式:`{ "tables": [TableDefine, ...] }`(对齐 cmx-metadata TableDefine)。
     /// 建表幂等(create_or_upgrade_table 会判断表是否存在)。
     async fn install_metadata(
         &self,
         mm: &cmx_database::DatabaseManager,
-        db_id: &str,
+        default_db_id: &str,
+        biz_db_id: &str,
         module_dir: &Path,
         domain: &str,
         app: &str,
@@ -493,16 +501,16 @@ impl ModuleInstallService {
             return;
         }
 
-        // 用 PgTableDefineExecutor 建表(无需分布式锁,模块安装是低频操作)
+        // 用 PgTableDefineExecutor 建表到业务库(无需分布式锁,模块安装是低频操作)
         use cmx_metadata::TableDefineDbExecutor;
-        let executor = cmx_metadata::executor::PgTableDefineExecutor::new(db_id, None);
+        let executor = cmx_metadata::executor::PgTableDefineExecutor::new(biz_db_id, None);
         for table_def in &all_tables {
             match executor.create_or_upgrade_table(table_def).await {
-                Ok(_) => info!(table = %table_def.table_name, "建表/升级成功"),
+                Ok(_) => info!(table = %table_def.table_name, "建表/升级成功(业务库)"),
                 Err(e) => warn!(table = %table_def.table_name, error = %e, "建表失败"),
             }
-            // 记录表元数据到 cmx_meta_table_define(便于导出时查询)
-            let _ = Self::save_table_metadata(mm, db_id, table_def, domain, app, module).await;
+            // 记录表元数据到 cmx_meta_table_define(登记存 default 库,记录 db_id 标记 biz 库)
+            let _ = Self::save_table_metadata(mm, default_db_id, biz_db_id, table_def, domain, app, module).await;
         }
     }
 
@@ -716,10 +724,12 @@ impl ModuleInstallService {
 
     /// 保存表元数据到 cmx_meta_table_define + cmx_meta_table_define_version
     ///
-    /// 主表记录归属,version 表存完整 TableDefine JSON(供导出查询,保持对称)。
+    /// SQL 执行库用 default_db_id(元数据表在默认库),
+    /// 记录的 db_id 列登记 biz_db_id(标记业务表所在库)。
     async fn save_table_metadata(
         mm: &cmx_database::DatabaseManager,
-        db_id: &str,
+        default_db_id: &str,
+        biz_db_id: &str,
         table_def: &cmx_core::model::meta::table::TableDefine,
         domain: &str,
         app: &str,
@@ -728,49 +738,87 @@ impl ModuleInstallService {
         use cmx_core::model::cell::DataValue;
         let metadata_json = serde_json::to_string(table_def)
             .map_err(|e| crate::error::PluginError::Config(format!("序列化表定义失败: {e}")))?;
-        let id = uuid::Uuid::new_v4().to_string();
-        // 主表 upsert(ON CONFLICT table_name)
-        let sql = "INSERT INTO cmx_meta_table_define \
-                   (id, table_name, display_name, db_id, plugin_id, version, app_id, ddl_status, \
-                    domain_code, application_code, module_code, archived) \
-                   VALUES ($1, $2, $3, 'default', NULL, 1, 'default', 'completed', $4, $5, $6, 0) \
-                   ON CONFLICT (table_name) DO UPDATE SET \
-                   display_name = EXCLUDED.display_name, \
-                   domain_code = EXCLUDED.domain_code, \
-                   application_code = EXCLUDED.application_code, \
-                   module_code = EXCLUDED.module_code, \
-                   update_time = CURRENT_TIMESTAMP";
-        let _ = mm
-            .execute_sql_with_datavalues(
-                db_id,
+
+        // 主表:先查 table_name 是否存在(cmx_meta_table_define 无 table_name 唯一约束)
+        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1";
+        let check_ds = mm
+            .query_sql_with_datavalues(
+                default_db_id,
                 None,
-                sql,
-                vec![
-                    DataValue::String(id.clone()),
-                    DataValue::String(table_def.table_name.clone()),
-                    DataValue::String(table_def.display_name.clone()),
-                    DataValue::String(domain.to_string()),
-                    DataValue::String(app.to_string()),
-                    DataValue::String(module.to_string()),
-                ],
+                check_sql,
+                vec![DataValue::String(table_def.table_name.clone())],
+                "save_meta_check",
             )
             .await;
+        let existing_id = check_ds
+            .ok()
+            .and_then(|ds| serde_json::to_value(&ds).ok())
+            .and_then(|j| j.get("rows").and_then(|r| r.as_array()).and_then(|rows| rows.first()).cloned())
+            .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
+
+        if let Some(eid) = existing_id {
+            // 已存在 → UPDATE
+            let upd_sql = "UPDATE cmx_meta_table_define SET \
+                           display_name = $1, domain_code = $2, application_code = $3, \
+                           module_code = $4, db_id = $5, version = '1', ddl_status = 'completed', \
+                           update_time = CURRENT_TIMESTAMP WHERE id = $6";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    upd_sql,
+                    vec![
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(domain.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(eid),
+                    ],
+                )
+                .await;
+        } else {
+            // 不存在 → INSERT(db_id 列登记 biz_db_id，标记业务表所在库)
+            let id = uuid::Uuid::new_v4().to_string();
+            let ins_sql = "INSERT INTO cmx_meta_table_define \
+                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
+                            ddl_status, domain_code, application_code, module_code, archived) \
+                           VALUES ($1, $2, $3, $4, NULL, '1', 'default', 'completed', \
+                                   $5, $6, $7, 0)";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    ins_sql,
+                    vec![
+                        DataValue::String(id),
+                        DataValue::String(table_def.table_name.clone()),
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(domain.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                    ],
+                )
+                .await;
+        }
 
         // version 表存完整 TableDefine JSON(供导出对称读取)
         let vid = uuid::Uuid::new_v4().to_string();
         let version_sql = "INSERT INTO cmx_meta_table_define_version \
                            (id, table_name, display_name, db_id, plugin_id, version, app_id, \
                             domain_code, application_code, module_code, metadata, archived) \
-                           VALUES ($1, $2, $3, 'default', NULL, 1, 'default', $4, $5, $6, $7::jsonb, 0)";
+                           VALUES ($1, $2, $3, $4, NULL, '1', 'default', $5, $6, $7, $8::jsonb, 0)";
         let _ = mm
             .execute_sql_with_datavalues(
-                db_id,
+                default_db_id,
                 None,
                 version_sql,
                 vec![
                     DataValue::String(vid),
                     DataValue::String(table_def.table_name.clone()),
                     DataValue::String(table_def.display_name.clone()),
+                    DataValue::String(biz_db_id.to_string()),
                     DataValue::String(domain.to_string()),
                     DataValue::String(app.to_string()),
                     DataValue::String(module.to_string()),

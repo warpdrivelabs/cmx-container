@@ -239,7 +239,6 @@ impl AutoInstallService {
                 let request = InstallRequest {
                     source,
                     db_id: config.db_id.clone(),
-                    auto_activate: true,
                     version_constraint: None,
                     build_type: None,
                     marketplace_source_id: None,

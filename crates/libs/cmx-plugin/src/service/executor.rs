@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use crate::audit::logger::AuditLogger;
 use crate::center_client::dispatcher::CenterDataDispatcher;
-use crate::center_client::types::DispatchContext;
+//use crate::center_client::types::DispatchContext;
 use crate::error::PluginResult;
 use crate::service::event_publisher::EventPublisher;
 use crate::service::persistence::PluginPersistence;
@@ -516,7 +516,6 @@ impl PluginOperationExecutor {
         let install_req = crate::service::install::InstallRequest {
             source: request.source,
             db_id: request.db_id,
-            auto_activate: false,
             version_constraint: None,
             build_type: request.build_type,
             marketplace_source_id: None,

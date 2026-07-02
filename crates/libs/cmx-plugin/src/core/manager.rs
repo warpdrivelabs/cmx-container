@@ -607,6 +607,11 @@ impl PluginManager {
         &self.install_service
     }
 
+    /// 获取部署服务(供 ModuleInstallService 复用，自动判断升级/安装/跳过)
+    pub fn deploy_service(&self) -> &crate::service::deploy::DeployService {
+        &self.deploy_service
+    }
+
     /// 获取缓存管理器
     pub fn cache(&self) -> &Arc<LayeredCacheManager> {
         &self.cache

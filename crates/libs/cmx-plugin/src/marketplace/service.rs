@@ -639,7 +639,7 @@ impl MarketplaceService {
     ///
     /// # Arguments
     ///
-    /// * `req` - 市场安装请求，包含 `plugin_id`、`version`、`db_id`、`auto_activate`。
+    /// * `req` - 市场安装请求，包含 `plugin_id`、`version`、`db_id`、
     ///
     /// # Returns
     ///
@@ -691,7 +691,6 @@ impl MarketplaceService {
         let install_req = crate::service::install::InstallRequest {
             source,
             db_id: req.db_id.clone(),
-            auto_activate: req.auto_activate.unwrap_or(false),
             version_constraint: None,
             build_type: None,
             marketplace_source_id: Some(version_info.id.clone()),

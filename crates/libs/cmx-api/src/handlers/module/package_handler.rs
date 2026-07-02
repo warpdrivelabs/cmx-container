@@ -89,9 +89,9 @@ pub async fn module_package_import(
         temp_root: std::path::PathBuf::from("./temp"),
         storage: None,
     });
-    // 通过 install_service 共享 executor(模块包内插件子包复用)
-    let install_svc = std::sync::Arc::new(manager.install_service().clone());
-    let module_install_svc = ModuleInstallService::new(package_utils, install_svc);
+    // 通过 deploy_service 共享(模块包内插件子包复用 deploy 自动判断升级/安装)
+    let deploy_svc = std::sync::Arc::new(manager.deploy_service().clone());
+    let module_install_svc = ModuleInstallService::new(package_utils, deploy_svc);
 
     // 3. 执行导入(含版本校验)
     let result = module_install_svc

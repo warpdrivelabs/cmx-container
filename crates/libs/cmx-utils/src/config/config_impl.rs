@@ -348,6 +348,35 @@ impl Config {
             .map_err(|_| ConfigError::KeyNotFound { key: key.to_string() })
     }
 
+    /// 获取应用隔离标识(app_id)，统一入口。
+    ///
+    /// 查找顺序：
+    /// 1. 配置项 `app.module_code`
+    /// 2. 环境变量 `APP_ID`
+    /// 3. 环境变量 `SERVICE_REGISTRY_NAME`(nacos 场景)
+    /// 4. 环境变量 `NACOS_NAMING_SERVICE_NAME`(nacos 场景)
+    /// 5. 兜底 `"default"`
+    ///
+    /// 全项目应通过此方法获取 app_id，避免散落的 `get_string("app.id")` 调用。
+    pub fn get_app_id(&self) -> String {
+        // 1. 配置项
+        if let Ok(v) = self.get_string("app.module_code")
+            && !v.is_empty()
+        {
+            return v;
+        }
+        // 2-4. 环境变量
+        for key in ["APP_ID", "SERVICE_REGISTRY_NAME", "NACOS_NAMING_SERVICE_NAME"] {
+            if let Ok(v) = std::env::var(key)
+                && !v.is_empty()
+            {
+                return v;
+            }
+        }
+        // 5. 兜底
+        "default".to_string()
+    }
+
     /// 获取整数配置值
     ///
     /// # 参数

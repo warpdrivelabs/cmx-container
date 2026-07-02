@@ -227,10 +227,12 @@ impl ModuleExportService {
         Ok(count)
     }
 
-    /// 导出元数据:从 cmx_meta_table_define_version 读取完整 TableDefine JSON
+    /// 导出元数据:连查主表(最新版本) + version 表(完整定义 JSON)
     ///
     /// 对称:导入时 metadata/tables/*.json 被解析建表,完整 JSON 存入 version 表;
-    /// 导出时从 version 表取出 metadata JSON,重新组装 `{ "tables": [...] }`。
+    /// 导出时通过主表 cmx_meta_table_define 定位每个表的当前版本,
+    /// 再从 version 表取对应的 metadata JSON,组装 `{ "tables": [...] }`。
+    /// metadata 列是 JSONB,可能以 text 字符串返回,需解析为 JSON 对象后写入文件。
     async fn export_metadata(
         mm: &DatabaseManager,
         db_id: &str,
@@ -238,9 +240,12 @@ impl ModuleExportService {
         export_dir: &Path,
     ) -> PluginResult<bool> {
         let tables_dir = export_dir.join("metadata").join("tables");
-        // 从 version 表读取完整 TableDefine JSON(导入时对称存入)
-        let sql = "SELECT table_name, metadata FROM cmx_meta_table_define_version \
-                   WHERE module_code = $1 AND archived = 0";
+        // 连查:主表取最新版本的 table_name+version,关联 version 表取完整 metadata
+        let sql = "SELECT v.table_name, v.metadata \
+                   FROM cmx_meta_table_define d \
+                   INNER JOIN cmx_meta_table_define_version v \
+                     ON d.table_name = v.table_name AND d.version = v.version \
+                   WHERE d.module_code = $1 AND d.archived = 0 AND v.archived = 0";
         let ds = mm
             .query_sql_with_datavalues(
                 db_id,
@@ -262,11 +267,22 @@ impl ModuleExportService {
 
         let mut all_tables = Vec::new();
         for row in rows {
-            // metadata 字段是完整 TableDefine JSON
+            // metadata 是 JSONB 列,DB 可能以 text 字符串或 JSON 对象返回
+            // 统一解析为 JSON 对象,确保写入文件时是格式化的 JSON 而非转义字符串
             if let Some(metadata) = row.get("metadata")
                 && !metadata.is_null()
             {
-                all_tables.push(metadata.clone());
+                let table_def = if metadata.is_string() {
+                    // text 形式:解析字符串为 JSON 对象
+                    serde_json::from_str::<serde_json::Value>(
+                        metadata.as_str().unwrap_or("{}"),
+                    )
+                    .unwrap_or_default()
+                } else {
+                    // 已是 JSON 对象
+                    metadata.clone()
+                };
+                all_tables.push(table_def);
             }
         }
 
