@@ -38,7 +38,7 @@
       "env": {
         "RUST_LOG": "debug",
         "RUST_BACKTRACE": "1",
-        "CONFIG_FILE": "config.toml"
+        "CONFIG_FILE": "dev-local.toml"
       },
       "sourceLanguages": [
         "rust"
