@@ -50,6 +50,10 @@ pub async fn init_datasources() -> crate::Result<()> {
         if c.source_type.is_none() {
             c.source_type = Some(if c.default { "default".to_string() } else { "other".to_string() });
         }
+        // db_name 未显式配置时，从 db_url 解析数据库名作为默认显示名称
+        if c.db_name.is_none() {
+            c.db_name = c.parse_db_name();
+        }
     }
 
     let db_manager = get_default_db_manager();
@@ -318,6 +322,7 @@ fn dbconfig_to_entity(config: &DbConfig) -> SysDatasourceForCreate {
     SysDatasourceForCreate {
         db_id: config.db_id.clone(),
         description: None,
+        db_name: config.db_name.clone(),
         db_type: format!("{:?}", config.db_type).to_lowercase(),
         db_url: config.db_url.clone(),
         db_schema: config.db_schema.clone(),
@@ -349,6 +354,7 @@ fn dbconfig_to_entity_for_update(config: &DbConfig) -> SysDatasourceForUpdate {
     SysDatasourceForUpdate {
         db_id: Some(config.db_id.clone()),
         description: None,
+        db_name: config.db_name.clone(),
         db_type: Some(format!("{:?}", config.db_type).to_lowercase()),
         db_url: Some(config.db_url.clone()),
         db_schema: config.db_schema.clone(),
@@ -404,6 +410,7 @@ fn build_dbconfig_from_row(
     let application_code = get_string_field(row, schema, "application_code");
     let module_code = get_string_field(row, schema, "module_code");
     let source_type = get_string_field(row, schema, "source_type");
+    let db_name = get_string_field(row, schema, "db_name");
 
     let max_connections = get_int_field(row, schema, "max_connections").unwrap_or(10) as usize;
     let min_connections = get_int_field(row, schema, "min_connections").unwrap_or(2) as usize;
@@ -420,6 +427,7 @@ fn build_dbconfig_from_row(
         db_url,
         db_id,
         db_schema,
+        db_name,
         default: default_flag == 1,
         pool_config: cmx_database::PoolConfig {
             max_connections,
