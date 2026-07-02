@@ -51,7 +51,9 @@ db_url = "postgresql://postgres:postgres@192.168.137.80:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 # 是否为默认数据库（可选，默认 false）
 default = true
-
+## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+## 取值：default-默认库，biz-业务库，other-其他
+# source_type = "default"
 # 连接池配置（可选，使用默认值时可省略）
 [databases.pool_config]
 # 最大连接数（可选，默认 10，测试环境为 1）
@@ -72,13 +74,16 @@ health_check_interval = 60
 health_check_timeout = 5
 
 
-## 第二个数据源 - Postgres
+### 第二个数据源 - Postgres
 #[[databases]]
 #db_id = "postgres2"
 #db_type = "postgres"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 ##db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
 #default = false
+### 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
+### 取值：default-默认库，biz-业务库，other-其他
+#source_type = "biz"
 #health_check_interval = 30
 #health_check_timeout = 3
 #pool_config = { max_connections = 15, min_connections = 3, connect_timeout = 20, idle_timeout = 300, max_lifetime = 900 }
