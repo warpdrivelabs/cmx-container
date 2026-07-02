@@ -95,6 +95,9 @@ pub struct DbConfig {
     pub db_url: String,
     /// db id
     pub db_id: String,
+    /// 数据源名称（便于识别的显示名称，可选；未配置时由程序按规则推导，如从 db_url 解析数据库名）
+    #[serde(default)]
+    pub db_name: Option<String>,
     /// 数据库 schema pg库默认public
     pub db_schema: Option<String>,
     /// 是否是默认数据库
