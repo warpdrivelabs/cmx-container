@@ -65,6 +65,67 @@ impl FormService {
         Ok(())
     }
 
+    /// 按模块编码查询表单定义列表(供模块导出复用,返回结构化 FormDefinition)。
+    ///
+    /// 封装原 module_export 的内联 SQL,消除导出与导入的不对称。
+    ///
+    /// # Errors
+    /// 数据库查询失败时返回错误
+    pub async fn list_by_module(
+        mm: &DatabaseManager,
+        db_id: &str,
+        module_code: &str,
+    ) -> Result<Vec<cmx_core::model::module::FormDefinition>> {
+        use cmx_core::model::cell::DataValue;
+        let sql = "SELECT code, name, description, definition, domain_code, application_code, module_code \
+                   FROM cmx_form WHERE module_code = $1 AND archived = 0";
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                None,
+                sql,
+                vec![DataValue::String(module_code.to_string())],
+                "form_list_by_module",
+            )
+            .await
+            .map_err(|e| crate::error::BizError::internal(format!("按模块查询表单失败: {e}")))?;
+        let schema = ds.schema.as_ref();
+        let mut result = Vec::new();
+        for row in ds.iter() {
+            let code = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
+            let name = row.get_by_name_as::<String>(schema, "name").unwrap_or_default();
+            let description = row.get_by_name_as::<String>(schema, "description");
+            // definition 是 JSONB,可能以 Value 或 String 形式返回,统一归一化
+            let definition = row
+                .get_by_name_as::<serde_json::Value>(schema, "definition")
+                .or_else(|| {
+                    row.get_by_name_as::<String>(schema, "definition")
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                })
+                .map(cmx_utils::json::coerce_to_object)
+                .unwrap_or_default();
+            let domain_code = row
+                .get_by_name_as::<String>(schema, "domain_code")
+                .unwrap_or_default();
+            let application_code = row
+                .get_by_name_as::<String>(schema, "application_code")
+                .unwrap_or_default();
+            let module_code = row
+                .get_by_name_as::<String>(schema, "module_code")
+                .unwrap_or_default();
+            result.push(cmx_core::model::module::FormDefinition {
+                code,
+                name,
+                description,
+                definition,
+                domain_code,
+                application_code,
+                module_code,
+            });
+        }
+        Ok(result)
+    }
+
     /// 列表查询
     ///
     /// - `filters`：多组过滤器，组与组之间 OR，组内字段 AND

@@ -259,12 +259,17 @@ storage_path = "./storage"
 # 插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
 # 之间的数据交互配置
 [center_client]
-# 访问模式：mock（默认）| http_url（URL 直连）| http_discovery（服务发现）| grpc（gRPC 调用）
-# - mock：所有接口调用返回 Mock 成功结果，适用于开发和测试环境
-# - http_url：通过 HTTP multipart form-data 将 ZIP 发送到指定 URL（需配置 [center_client.urls]）
-# - http_discovery：通过 Nacos 服务发现获取中心实例地址后走 HTTP（需配置 [center_client.discovery]）
-# - grpc：通过 gRPC 调用 CmxPluginDataService（需启用 [rpc] 并配置服务发现）
-mode = "mock"
+# 模块资源(表单/菜单/元数据/权限)导入导出的部署模式。
+# - local(默认,或任意非远程值):本地模式,定义导入器直调本地
+#   Service(FormService/MenuService/TableMetadataService/PermissionServiceImpl),
+#   无网络开销,适用于单体部署。
+# - grpc:远程模式,经 gRPC 调用专门中心(CmxPluginDataService),
+#   需启用 [rpc] 并配置 [center_client.discovery] 的各中心服务名。
+# - http_url:远程模式,经 HTTP multipart form-data POST 到 [center_client.urls] 配置的各中心 URL。
+# - http_discovery:远程模式,经服务发现解析实例地址后走 HTTP,
+#   需配置 [center_client.discovery] 的各中心服务名。
+# 远程模式下本节点仍可作为接收端(PluginDataImporterImpl 已注入 form/menu 本地导入器)。
+mode = "local"
 # 请求超时时间（毫秒，可选，默认 30000）
 # 各基础服务中心 HTTP 请求的超时时间（仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000

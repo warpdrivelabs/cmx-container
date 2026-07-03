@@ -213,6 +213,65 @@ impl MenuService {
         Ok(())
     }
 
+    /// 按模块编码查询根菜单定义列表(供模块导出复用,返回结构化 MenuDefinition)。
+    ///
+    /// 只查询根菜单(parent_id IS NULL),其 definition 含完整菜单树。
+    /// 封装原 module_export 的内联 SQL,消除导出与导入的不对称。
+    ///
+    /// # Errors
+    /// 数据库查询失败时返回错误
+    pub async fn list_by_module(
+        mm: &DatabaseManager,
+        db_id: &str,
+        module_code: &str,
+    ) -> Result<Vec<cmx_core::model::module::MenuDefinition>> {
+        let sql = "SELECT code, name, definition, domain_code, application_code, module_code \
+                   FROM cmx_menu WHERE module_code = $1 AND parent_id IS NULL AND archived = 0";
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                None,
+                sql,
+                vec![DataValue::String(module_code.to_string())],
+                "menu_list_by_module",
+            )
+            .await
+            .map_err(|e| BizError::internal(format!("按模块查询根菜单失败: {e}")))?;
+        let schema = ds.schema.as_ref();
+        let mut result = Vec::new();
+        for row in ds.iter() {
+            let code = row.get_by_name_as::<String>(schema, "code").unwrap_or_default();
+            let name = row.get_by_name_as::<String>(schema, "name").unwrap_or_default();
+            // definition 是 JSONB,统一归一化
+            let definition = row
+                .get_by_name_as::<serde_json::Value>(schema, "definition")
+                .or_else(|| {
+                    row.get_by_name_as::<String>(schema, "definition")
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                })
+                .map(cmx_utils::json::coerce_to_object)
+                .unwrap_or_default();
+            let domain_code = row
+                .get_by_name_as::<String>(schema, "domain_code")
+                .unwrap_or_default();
+            let application_code = row
+                .get_by_name_as::<String>(schema, "application_code")
+                .unwrap_or_default();
+            let module_code = row
+                .get_by_name_as::<String>(schema, "module_code")
+                .unwrap_or_default();
+            result.push(cmx_core::model::module::MenuDefinition {
+                code,
+                name,
+                definition,
+                domain_code,
+                application_code,
+                module_code,
+            });
+        }
+        Ok(result)
+    }
+
     /// 列表查询
     pub async fn list(
         mm: &DatabaseManager,

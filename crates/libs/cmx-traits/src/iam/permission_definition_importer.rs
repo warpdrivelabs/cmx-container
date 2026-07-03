@@ -36,4 +36,20 @@ pub trait PermissionDefinitionImporter: Send + Sync {
         module_code: &str,
         definitions: &[PermissionDefinition],
     ) -> Result<usize, TraitError>;
+
+    /// 导出指定模块的所有权限定义(对称契约)。
+    ///
+    /// 实现方负责查询 `cmx_permission` 并重建 `parent_code`(DB 存 parent_id),
+    /// 返回结构化的 `PermissionDefinition` 列表,供模块导出复用。
+    ///
+    /// # Arguments
+    /// * `domain_code` - 域编码
+    /// * `app_code` - 应用编码
+    /// * `module_code` - 模块编码
+    async fn list_permission_definitions(
+        &self,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> Result<Vec<PermissionDefinition>, TraitError>;
 }

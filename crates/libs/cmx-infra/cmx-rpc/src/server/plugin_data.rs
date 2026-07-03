@@ -66,7 +66,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             };
 
-            // 校验必填字段（与 HTTP 端点保持一致）
+            // 校验必填字段(domain_code/application_code/module_code 所有类别都需要)
             if req.domain_code.is_empty()
                 || req.application_code.is_empty()
                 || req.module_code.is_empty()
@@ -80,20 +80,14 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 };
                 return Ok(volo_grpc::Response::new(response));
             }
-            if req.plugin_id.is_empty() || req.app_id.is_empty() {
+            // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
+            // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
+            if matches!(category, PluginDataCategory::Perm)
+                && (req.plugin_id.is_empty() || req.app_id.is_empty() || req.version.is_empty())
+            {
                 let response = plugin_data_proto::ImportPluginDataResponse {
                     success: false,
-                    message: "plugin_id/app_id 不能为空".into(),
-                    created_count: 0,
-                    updated_count: 0,
-                    deleted_count: 0,
-                };
-                return Ok(volo_grpc::Response::new(response));
-            }
-            if req.version.is_empty() {
-                let response = plugin_data_proto::ImportPluginDataResponse {
-                    success: false,
-                    message: "version 不能为空".into(),
+                    message: "Perm 类别导入需要 plugin_id/app_id/version 非空".into(),
                     created_count: 0,
                     updated_count: 0,
                     deleted_count: 0,
@@ -220,6 +214,86 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                         created_count: 0,
                         updated_count: 0,
                         deleted_count: 0,
+                    };
+                    Ok(volo_grpc::Response::new(response))
+                }
+            }
+        }
+    }
+
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_list_plugin_data")]
+    fn list_plugin_data(
+        &self,
+        req: volo_grpc::Request<plugin_data_proto::ListPluginDataRequest>,
+    ) -> impl std::future::Future<
+        Output = Result<
+            volo_grpc::Response<plugin_data_proto::ListPluginDataResponse>,
+            volo_grpc::Status,
+        >,
+    > + Send {
+        let data_importer = self.data_importer.clone();
+        async move {
+            let req = req.into_inner();
+
+            let Some(importer) = data_importer else {
+                let response = plugin_data_proto::ListPluginDataResponse {
+                    success: false,
+                    message: "data_importer 未配置".into(),
+                    json_data: Vec::new().into(),
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
+                let response = plugin_data_proto::ListPluginDataResponse {
+                    success: false,
+                    message: format!("无效的数据类别: {}", req.category).into(),
+                    json_data: Vec::new().into(),
+                };
+                return Ok(volo_grpc::Response::new(response));
+            };
+
+            if req.module_code.is_empty() {
+                let response = plugin_data_proto::ListPluginDataResponse {
+                    success: false,
+                    message: "module_code 不能为空".into(),
+                    json_data: Vec::new().into(),
+                };
+                return Ok(volo_grpc::Response::new(response));
+            }
+
+            let request = PluginDataImportRequest {
+                category,
+                domain_code: req.domain_code.to_string(),
+                application_code: req.application_code.to_string(),
+                module_code: req.module_code.to_string(),
+                plugin_id: String::new(),
+                app_id: String::new(),
+                version: String::new(),
+                zip_data: Vec::new(),
+            };
+
+            match importer.list_data(request).await {
+                Ok(result) => {
+                    let response = plugin_data_proto::ListPluginDataResponse {
+                        success: result.success,
+                        message: result.message.into(),
+                        json_data: result.json_data.into(),
+                    };
+                    Ok(volo_grpc::Response::new(response))
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "cmx_rpc",
+                        error = %e,
+                        category = %req.category,
+                        module = %req.module_code,
+                        "插件数据查询失败"
+                    );
+                    let response = plugin_data_proto::ListPluginDataResponse {
+                        success: false,
+                        message: e.to_string().into(),
+                        json_data: Vec::new().into(),
                     };
                     Ok(volo_grpc::Response::new(response))
                 }

@@ -28,6 +28,7 @@ pub mod error;
 pub mod event_bus;
 pub mod function_invoker;
 pub mod iam;
+pub mod module;
 pub mod plugin;
 pub mod rpc;
 pub mod runtime;

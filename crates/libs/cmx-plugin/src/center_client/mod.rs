@@ -1,36 +1,19 @@
-//! 基础服务中心客户端模块。
+//! 基础服务中心客户端模块(精简版)。
 //!
-//! 提供插件生命周期与外部基础服务中心（门户中心、权限中心、表单中心、流程中心）
-//! 之间的数据交互能力。
+//! 原先的 sender/dispatcher/http_sender/grpc_sender/mock_sender 已被上层的
+//! Remote 定义导入器(`service::remote_importers`)取代 —— 后者直接复用
+//! `cmx_rpc::plugin_data_client()` 经 gRPC 传输,不再需要 sender 中间层。
 //!
-//! # 职责
+//! 本模块保留仍在使用的部分:
+//! - [`config`]: `CenterClientConfig`(加载 `[center_client]` 配置,解析各 category 服务名)
+//! - [`packer`]: ZIP 打包工具(`pack_definitions_to_zip` / `pack_payload_to_zip`,供 Remote 导入器复用)
+//! - [`types`]: `DataCategory` 枚举(Menu/Perm/Form/Flow,供服务名路由)
 //!
-//! - 在插件安装/升级/降级时，将业务数据目录打包为 ZIP 并发送到对应中心。
-//! - 在插件卸载时，通知各中心清理关联数据。
-//! - 支持并行调用各中心接口，汇总成功/失败结果。
-//!
-//! # 架构
-//!
-//! - `ServiceCenterSender` trait 定义统一的发送/清理接口。
-//! - `CenterDataDispatcher` 调度器负责并行分发和结果汇总。
-//! - `MockServiceCenterSender` 提供 Mock 实现（默认）。
-//! - `HttpServiceCenterSender` 提供 HTTP form-data 实现（`http_url`/`http_discovery` 模式）。
-//! - `GrpcServiceCenterSender` 提供 gRPC 实现（`grpc` 模式）。
-//! - `CenterClientConfig` 从 `dev.toml` 加载配置。
+//! 详见方案文档:`20260703_cmx-plugin_模块资源导入导出统一抽象方案.md`
 
 pub mod config;
-pub mod dispatcher;
-pub mod grpc_sender;
-pub mod http_sender;
-pub mod mock_sender;
 pub mod packer;
-pub mod sender;
 pub mod types;
 
 pub use config::CenterClientConfig;
-pub use dispatcher::CenterDataDispatcher;
-pub use grpc_sender::GrpcServiceCenterSender;
-pub use http_sender::HttpServiceCenterSender;
-pub use mock_sender::MockServiceCenterSender;
-pub use sender::{CenterError, ServiceCenterSender};
-pub use types::{DataCategory, DispatchContext, DispatchResult};
+pub use types::DataCategory;

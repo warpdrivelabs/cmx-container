@@ -4,9 +4,11 @@
 
 pub mod entity;
 pub mod bmc;
+pub mod definition_importer;
 pub mod filter;
 pub mod service;
 
+pub use definition_importer::LocalMenuDefinitionImporter;
 pub use entity::{Menu, MenuForCreate, MenuForUpdate, MenuTreeNodeData};
 pub use bmc::MenuBmc;
 pub use filter::MenuFilter;

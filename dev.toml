@@ -204,7 +204,7 @@ base_path = "cmx-server/"
 # 基础服务中心配置
 # ============================================
 [center_client]
-# 模式：mock（默认）| http_url（URL 直连）| http_discovery（服务发现）| grpc（gRPC 调用）
+# 模式：local（默认）| grpc（gRPC 调用）| http_url（HTTP 直连）| http_discovery（HTTP 服务发现）
 mode = "grpc"
 # 请求超时（毫秒，仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000

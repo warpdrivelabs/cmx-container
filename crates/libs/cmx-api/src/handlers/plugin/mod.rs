@@ -9,6 +9,7 @@
 //!
 //! 提供插件安装、卸载、升级、降级、列表查询等 HTTP API
 
+pub mod data_handler;
 pub mod handler;
 pub mod request;
 pub mod response;
@@ -38,6 +39,9 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/exists", get(plugin_exists))
         .route("/functions", post(plugin_functions))
         .route("/{plugin_id}", get(plugin_get))
+        // 通用插件数据导入/导出(供远程模式 http_url/http_discovery 调用)
+        .route("/data/import", post(data_handler::import_plugin_data))
+        .route("/data/list", get(data_handler::list_plugin_data))
 }
 
 /// 创建插件管理路由

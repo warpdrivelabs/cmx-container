@@ -54,9 +54,9 @@ enum ImportAction {
 pub struct ModuleInstallService {
     package_utils: PackageUtils,
     deploy_service: std::sync::Arc<DeployService>,
-    /// 权限定义导入器(由 cmx-iam 注入,复用两阶段 upsert 逻辑)。
-    /// 为 None 时跳过权限安装(向后兼容,如测试场景)。
-    permission_importer: Option<std::sync::Arc<dyn cmx_traits::iam::PermissionDefinitionImporter>>,
+    /// 模块资源定义导入器集合(表单/菜单/元数据/权限,本地或远程实现)。
+    /// 为 None 时跳过资源安装(向后兼容,如测试场景)。
+    importers: Option<std::sync::Arc<cmx_traits::module::DefinitionImporterBundle>>,
 }
 
 impl ModuleInstallService {
@@ -65,19 +65,19 @@ impl ModuleInstallService {
         Self {
             package_utils,
             deploy_service,
-            permission_importer: None,
+            importers: None,
         }
     }
 
-    /// 注入权限定义导入器(Builder 模式)。
+    /// 注入模块资源定义导入器集合(Builder 模式)。
     ///
-    /// 注入后,模块导入时的权限安装会委托给 cmx-iam 的统一实现,
-    /// 消除本文件内重复的两阶段 upsert SQL。
-    pub fn with_permission_importer(
+    /// 注入后,模块导入时的表单/菜单/元数据/权限安装统一委托给 bundle 中的 importer,
+    /// 无论本地(Local)还是远程(Remote)实现,调用代码一致。
+    pub fn with_definition_importers(
         mut self,
-        importer: std::sync::Arc<dyn cmx_traits::iam::PermissionDefinitionImporter>,
+        importers: std::sync::Arc<cmx_traits::module::DefinitionImporterBundle>,
     ) -> Self {
-        self.permission_importer = Some(importer);
+        self.importers = Some(importers);
         self
     }
 
@@ -140,9 +140,9 @@ impl ModuleInstallService {
             | ImportAction::AllowSameSecondPatch => {}
         }
 
-        // 4. 安装模块级资源(metadata 建表用 biz_db_id,其余用 default_db_id)
+        // 4. 安装模块级资源(委托 DefinitionImporterBundle:forms/menus/metadata/permissions)
         if let Err(e) = self
-            .install_module_resources(mm, &default_db_id, &biz_db_id, &module_dir, &manifest)
+            .install_module_resources(&biz_db_id, &module_dir, &manifest)
             .await
         {
             warn!(error = %e, "模块级资源安装失败(继续后续步骤)");
@@ -280,130 +280,228 @@ impl ModuleInstallService {
         }
     }
 
-    /// 安装模块级资源:metadata(建表)/forms/menus/permissions
+    /// 安装模块级资源:forms/menus/metadata/permissions
     ///
-    /// 对称性契约(与 export_module 严格对称):
-    /// - forms/*.json:整体 JSON 透传存入 cmx_form.definition,code = 文件名(去扩展名)
-    /// - menus/*.json:整体 JSON 透传存入 cmx_menu.definition(根菜单,树形字段自动计算)
-    /// - metadata/tables/*.json:用 PgTableDefineExecutor 建表/升级
-    /// - permissions/*.json:解析 PermissionDefinition,SQL upsert 到 cmx_permission
+    /// 统一委托注入的 DefinitionImporterBundle(本地或远程实现,调用代码一致):
+    /// - forms/*.json → bundle.form.apply_form_definitions
+    /// - menus/*.json → bundle.menu.apply_menu_definitions
+    /// - metadata/tables/*.json → bundle.table.apply_table_definitions(建表+元数据登记)
+    /// - permissions/*.json → bundle.permission.apply_permission_definitions
     async fn install_module_resources(
         &self,
-        mm: &cmx_database::DatabaseManager,
-        default_db_id: &str,
         biz_db_id: &str,
         module_dir: &Path,
         manifest: &ModuleManifest,
     ) -> PluginResult<()> {
+        let Some(bundle) = &self.importers else {
+            warn!("未注入 DefinitionImporterBundle,跳过模块级资源安装");
+            return Ok(());
+        };
+
         let domain = manifest.module.domain_code.as_str();
         let app = manifest.module.application_code.as_str();
         let module = manifest.module.code.as_str();
-        // app_id 取配置值(当前设计下 app_id ≡ module_code,与导入守卫校验一致)
         let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
-        // 1. 表单:forms/*.json 整体透传存入 cmx_form(存 default 库)
-        self.install_forms(mm, default_db_id, module_dir, domain, app, module)
-            .await;
+        // 1. 表单:forms/*.json 解析为 FormDefinition,委托 importer
+        let form_defs = Self::read_form_definitions(module_dir, domain, app, module);
+        if !form_defs.is_empty() {
+            match bundle
+                .form
+                .apply_form_definitions(domain, app, module, &form_defs)
+                .await
+            {
+                Ok(n) => info!(count = n, "表单安装完成"),
+                Err(e) => warn!(error = %e, "表单安装失败"),
+            }
+        }
 
-        // 2. 菜单:menus/*.json 整体透传存入 cmx_menu.definition(存 default 库)
-        self.install_menus(mm, default_db_id, module_dir, domain, app, module)
-            .await;
+        // 2. 菜单:menus/*.json 解析为 MenuDefinition,委托 importer
+        let menu_defs = Self::read_menu_definitions(module_dir, domain, app, module);
+        if !menu_defs.is_empty() {
+            match bundle
+                .menu
+                .apply_menu_definitions(domain, app, module, &menu_defs)
+                .await
+            {
+                Ok(n) => info!(count = n, "菜单安装完成"),
+                Err(e) => warn!(error = %e, "菜单安装失败"),
+            }
+        }
 
-        // 3. 元数据:metadata/tables/*.json 建表(建到 biz 库,元数据登记存 default 库)
-        self.install_metadata(mm, default_db_id, biz_db_id, module_dir, domain, app, module, &app_id)
-            .await;
+        // 3. 元数据:metadata/tables/*.json 解析为 TableDefine,委托 importer(建表+登记)
+        let table_defs = Self::read_table_definitions(module_dir);
+        if !table_defs.is_empty() {
+            match bundle
+                .table
+                .apply_table_definitions(domain, app, module, &app_id, &table_defs, biz_db_id)
+                .await
+            {
+                Ok(n) => info!(count = n, "表结构安装完成"),
+                Err(e) => warn!(error = %e, "表结构安装失败"),
+            }
+        }
 
-        // 4. 权限:permissions/*.json 委托注入的 importer upsert cmx_permission
-        self.install_permissions(module_dir, domain, app, module)
-            .await;
+        // 4. 权限:permissions/*.json 解析为 PermissionDefinition,委托 importer
+        let perm_defs = Self::read_permission_definitions(module_dir);
+        if !perm_defs.is_empty() {
+            match bundle
+                .permission
+                .apply_permission_definitions(domain, app, module, &perm_defs)
+                .await
+            {
+                Ok(n) => info!(count = n, "权限安装完成"),
+                Err(e) => warn!(error = %e, "权限安装失败"),
+            }
+        }
 
         Ok(())
     }
 
-    /// 安装表单:读取 forms/*.json,整体 JSON 透传存入 cmx_form.definition
+    /// 读取 forms/*.json,组装 FormDefinition 列表。
     ///
-    /// code 规则:`{module_code}:{file_stem}`,幂等(先删后建,基于 code 唯一约束)
-    async fn install_forms(
-        &self,
-        mm: &cmx_database::DatabaseManager,
-        db_id: &str,
+    /// code = `{module}:{file_stem}`,definition 为整体 JSON,name 取 JSON.name fallback 到 stem。
+    fn read_form_definitions(
         module_dir: &Path,
         domain: &str,
         app: &str,
         module: &str,
-    ) {
-        for (code, name, definition) in Self::read_definition_files(module_dir, "forms", module) {
-            let dto = cmx_biz::form::FormForCreate {
-                code: code.clone(),
+    ) -> Vec<cmx_core::model::module::FormDefinition> {
+        Self::read_definition_files(module_dir, "forms")
+            .into_iter()
+            .map(|(stem, name, definition)| cmx_core::model::module::FormDefinition {
+                code: format!("{module}:{stem}"),
                 name,
                 description: None,
-                definition: Some(definition),
+                definition,
                 domain_code: domain.to_string(),
                 application_code: app.to_string(),
                 module_code: module.to_string(),
-            };
-            // 幂等:先删同 code 记录,再创建
-            let _ = cmx_biz::form::FormService::delete_by_code(mm, db_id, &code).await;
-            if let Err(e) = cmx_biz::form::FormService::create(mm, db_id, dto).await {
-                warn!(form = %code, error = %e, "表单安装失败");
-            } else {
-                info!(form = %code, "表单安装成功");
-            }
-        }
+            })
+            .collect()
     }
 
-    /// 安装菜单:读取 menus/*.json,整体 JSON 透传存入 cmx_menu.definition(根菜单)
-    ///
-    /// 每个 menus 文件创建一个根菜单,code = `{module}:{file_stem}`,
-    /// 完整 JSON 内容存入 definition 字段,前端从 definition 解析 items/children 树。
-    async fn install_menus(
-        &self,
-        mm: &cmx_database::DatabaseManager,
-        db_id: &str,
+    /// 读取 menus/*.json,组装 MenuDefinition 列表(根菜单)。
+    fn read_menu_definitions(
         module_dir: &Path,
         domain: &str,
         app: &str,
         module: &str,
-    ) {
-        for (code, name, menu_json) in Self::read_definition_files(module_dir, "menus", module) {
-            // 幂等:先删同 code 根菜单,再建
-            let _ = cmx_biz::menu::MenuService::delete_by_code(mm, db_id, &code).await;
-            let dto = cmx_biz::menu::MenuForCreate {
-                code: code.clone(),
+    ) -> Vec<cmx_core::model::module::MenuDefinition> {
+        Self::read_definition_files(module_dir, "menus")
+            .into_iter()
+            .map(|(stem, name, definition)| cmx_core::model::module::MenuDefinition {
+                code: format!("{module}:{stem}"),
                 name,
-                parent_id: None,
-                path: menu_json.get("path").and_then(|v| v.as_str()).map(String::from),
-                icon: None,
-                component: None,
-                sort_order: 0,
-                visible: 1,
-                definition: Some(menu_json.clone()), // 整体透传
-                ext_attributes: None,
+                definition,
                 domain_code: domain.to_string(),
                 application_code: app.to_string(),
                 module_code: module.to_string(),
+            })
+            .collect()
+    }
+
+    /// 读取 metadata/tables/*.json,解析为 TableDefine 列表。
+    ///
+    /// 文件格式:`{ "tables": [TableDefine, ...] }`,合并所有文件的表定义。
+    fn read_table_definitions(
+        module_dir: &Path,
+    ) -> Vec<cmx_core::model::meta::table::TableDefine> {
+        let tables_dir = module_dir.join("metadata").join("tables");
+        if !tables_dir.exists() {
+            return Vec::new();
+        }
+        let mut all_tables = Vec::new();
+        let entries = match std::fs::read_dir(&tables_dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!(error = %e, "读取 metadata/tables 目录失败");
+                return Vec::new();
+            }
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!(file = ?path.file_name(), error = %e, "读取表定义文件失败,跳过");
+                    continue;
+                }
             };
-            if let Err(e) = cmx_biz::menu::MenuService::create(mm, db_id, dto).await {
-                warn!(menu = %code, error = %e, "菜单安装失败");
-            } else {
-                info!(menu = %code, "菜单安装成功");
+            let parsed: serde_json::Value = match serde_json::from_str(&content) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(file = ?path.file_name(), error = %e, "解析表定义失败,跳过");
+                    continue;
+                }
+            };
+            let Some(tables_arr) = parsed.get("tables").and_then(|t| t.as_array()) else {
+                warn!(file = ?path.file_name(), "表定义文件缺少 tables 数组,跳过");
+                continue;
+            };
+            for table_val in tables_arr {
+                match serde_json::from_value::<cmx_core::model::meta::table::TableDefine>(
+                    table_val.clone(),
+                ) {
+                    Ok(td) => all_tables.push(td),
+                    Err(e) => {
+                        warn!(error = %e, "解析单个表定义失败,跳过该项");
+                    }
+                }
             }
         }
+        all_tables
+    }
+
+    /// 读取 permissions/*.json,解析为 PermissionDefinition 列表(使用 cmx-core 统一契约)。
+    fn read_permission_definitions(
+        module_dir: &Path,
+    ) -> Vec<cmx_core::model::iam::PermissionDefinition> {
+        use cmx_core::model::iam::PermissionFile;
+        let perms_dir = module_dir.join("permissions");
+        if !perms_dir.exists() {
+            return Vec::new();
+        }
+        let mut all_defs = Vec::new();
+        let entries = match std::fs::read_dir(&perms_dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!(error = %e, "读取 permissions 目录失败");
+                return Vec::new();
+            }
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!(file = ?path.file_name(), error = %e, "读取权限文件失败,跳过");
+                    continue;
+                }
+            };
+            let file: PermissionFile = serde_json::from_str(&content).unwrap_or(PermissionFile {
+                name: String::new(),
+                version: String::new(),
+                description: String::new(),
+                permissions: vec![],
+            });
+            all_defs.extend(file.permissions);
+        }
+        all_defs
     }
 
     /// 读取定义文件目录的通用 helper(forms/menus 共用)。
     ///
-    /// 遍历 `module_dir/{subdir}/*.json`,解析每个文件为 JSON,
-    /// 返回 `(code, name, definition)` 三元组列表:
-    /// - `code` = `{module}:{file_stem}`
-    /// - `name` 取 JSON 的 name 字段,fallback 到 file_stem
-    /// - `definition` 为完整 JSON 内容(整体透传)
-    ///
-    /// 目录不存在或读取失败时返回空 Vec(不阻断安装)。
+    /// 遍历 `module_dir/{subdir}/*.json`,返回 `(code, name, definition)` 三元组列表。
     fn read_definition_files(
         module_dir: &Path,
         subdir: &str,
-        module: &str,
     ) -> Vec<(String, String, serde_json::Value)> {
         let dir = module_dir.join(subdir);
         if !dir.exists() {
@@ -441,270 +539,10 @@ impl ModuleInstallService {
                 .and_then(|v| v.as_str())
                 .unwrap_or(&stem)
                 .to_string();
-            let code = format!("{module}:{stem}");
+            let code = stem; // read_form_definitions/read_menu_definitions 会拼接 module 前缀
             result.push((code, name, definition));
         }
         result
-    }
-
-    /// 安装元数据:读取 metadata/tables/*.json 表定义,用 PgTableDefineExecutor 建表到业务库
-    #[allow(clippy::too_many_arguments)]
-    ///
-    /// 表定义文件格式:`{ "tables": [TableDefine, ...] }`(对齐 cmx-metadata TableDefine)。
-    /// 建表幂等(create_or_upgrade_table 会判断表是否存在)。
-    async fn install_metadata(
-        &self,
-        mm: &cmx_database::DatabaseManager,
-        default_db_id: &str,
-        biz_db_id: &str,
-        module_dir: &Path,
-        domain: &str,
-        app: &str,
-        module: &str,
-        app_id: &str,
-    ) {
-        let tables_dir = module_dir.join("metadata").join("tables");
-        if !tables_dir.exists() {
-            return;
-        }
-        // 收集所有表定义
-        let mut all_tables: Vec<cmx_core::model::meta::table::TableDefine> = Vec::new();
-        let entries = match std::fs::read_dir(&tables_dir) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!(error = %e, "读取 metadata/tables 目录失败");
-                return;
-            }
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let content = match std::fs::read_to_string(&path) {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!(file = ?path.file_name(), error = %e, "读取表定义文件失败,跳过");
-                    continue;
-                }
-            };
-            // 解析 { "tables": [...] } 结构(用 serde_json::Value 提取数组)
-            let parsed: serde_json::Value = match serde_json::from_str(&content) {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!(file = ?path.file_name(), error = %e, "解析表定义失败,跳过");
-                    continue;
-                }
-            };
-            let Some(tables_arr) = parsed.get("tables").and_then(|t| t.as_array()) else {
-                warn!(file = ?path.file_name(), "表定义文件缺少 tables 数组,跳过");
-                continue;
-            };
-            for table_val in tables_arr {
-                match serde_json::from_value::<cmx_core::model::meta::table::TableDefine>(
-                    table_val.clone(),
-                ) {
-                    Ok(td) => all_tables.push(td),
-                    Err(e) => {
-                        warn!(error = %e, "解析单个表定义失败,跳过该项");
-                    }
-                }
-            }
-        }
-
-        if all_tables.is_empty() {
-            return;
-        }
-
-        // 用 PgTableDefineExecutor 建表到业务库(无需分布式锁,模块安装是低频操作)
-        use cmx_metadata::TableDefineDbExecutor;
-        let executor = cmx_metadata::executor::PgTableDefineExecutor::new(biz_db_id, None);
-        for table_def in &all_tables {
-            match executor.create_or_upgrade_table(table_def).await {
-                Ok(_) => info!(table = %table_def.table_name, "建表/升级成功(业务库)"),
-                Err(e) => warn!(table = %table_def.table_name, error = %e, "建表失败"),
-            }
-            // 记录表元数据到 cmx_meta_table_define(登记存 default 库,记录 db_id 标记 biz 库)
-            let _ = Self::save_table_metadata(mm, default_db_id, biz_db_id, table_def, domain, app, module, app_id).await;
-        }
-    }
-
-    /// 安装权限:读取 permissions/*.json,委托注入的 PermissionDefinitionImporter 执行两阶段 upsert
-    ///
-    /// 对称契约:JSON 格式为 PermissionFile(name/version/description + permissions[]),
-    /// 权限条目字段对齐 cmx-core 的 PermissionDefinition。
-    /// 两阶段 upsert 逻辑统一收敛到 cmx-iam(经 cmx-traits trait 注入),消除本文件内的重复 SQL。
-    async fn install_permissions(
-        &self,
-        module_dir: &Path,
-        domain: &str,
-        app: &str,
-        module: &str,
-    ) {
-        let Some(importer) = &self.permission_importer else {
-            warn!("未注入 PermissionDefinitionImporter,跳过权限安装");
-            return;
-        };
-
-        let perms_dir = module_dir.join("permissions");
-        if !perms_dir.exists() {
-            return;
-        }
-
-        // 解析所有 permissions/*.json,收集 PermissionDefinition(使用 cmx-core 统一契约)
-        use cmx_core::model::iam::{PermissionDefinition, PermissionFile};
-        let mut all_defs: Vec<PermissionDefinition> = Vec::new();
-        let entries = match std::fs::read_dir(&perms_dir) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!(error = %e, "读取 permissions 目录失败");
-                return;
-            }
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let content = match std::fs::read_to_string(&path) {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!(file = ?path.file_name(), error = %e, "读取权限文件失败,跳过");
-                    continue;
-                }
-            };
-            let file: PermissionFile = serde_json::from_str(&content).unwrap_or(PermissionFile {
-                name: String::new(),
-                version: String::new(),
-                description: String::new(),
-                permissions: vec![],
-            });
-            all_defs.extend(file.permissions);
-        }
-
-        if all_defs.is_empty() {
-            return;
-        }
-
-        // 委托 cmx-iam 的统一实现(两阶段 upsert + parent 回填 + is_leaf 重算)
-        match importer
-            .apply_permission_definitions(domain, app, module, &all_defs)
-            .await
-        {
-            Ok(n) => info!(count = n, "权限安装完成(委托 importer)"),
-            Err(e) => warn!(error = %e, "权限安装失败(委托 importer)"),
-        }
-    }
-
-    /// 保存表元数据到 cmx_meta_table_define + cmx_meta_table_define_version
-    ///
-    /// SQL 执行库用 default_db_id(元数据表在默认库),
-    /// 记录的 db_id 列登记 biz_db_id(标记业务表所在库)。
-    #[allow(clippy::too_many_arguments)]
-    async fn save_table_metadata(
-        mm: &cmx_database::DatabaseManager,
-        default_db_id: &str,
-        biz_db_id: &str,
-        table_def: &cmx_core::model::meta::table::TableDefine,
-        domain: &str,
-        app: &str,
-        module: &str,
-        app_id: &str,
-    ) -> PluginResult<()> {
-        use cmx_core::model::cell::DataValue;
-        let metadata_json = serde_json::to_string(table_def)
-            .map_err(|e| crate::error::PluginError::Config(format!("序列化表定义失败: {e}")))?;
-
-        // 主表:先查 table_name 是否存在(cmx_meta_table_define 无 table_name 唯一约束)
-        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1";
-        let check_ds = mm
-            .query_sql_with_datavalues(
-                default_db_id,
-                None,
-                check_sql,
-                vec![DataValue::String(table_def.table_name.clone())],
-                "save_meta_check",
-            )
-            .await;
-        let existing_id = check_ds
-            .ok()
-            .and_then(|ds| serde_json::to_value(&ds).ok())
-            .and_then(|j| j.get("rows").and_then(|r| r.as_array()).and_then(|rows| rows.first()).cloned())
-            .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
-
-        if let Some(eid) = existing_id {
-            // 已存在 → UPDATE
-            let upd_sql = "UPDATE cmx_meta_table_define SET \
-                           display_name = $1, domain_code = $2, application_code = $3, \
-                           module_code = $4, db_id = $5, version = '1', ddl_status = 'completed', \
-                           update_time = CURRENT_TIMESTAMP WHERE id = $6";
-            let _ = mm
-                .execute_sql_with_datavalues(
-                    default_db_id,
-                    None,
-                    upd_sql,
-                    vec![
-                        DataValue::String(table_def.display_name.clone()),
-                        DataValue::String(domain.to_string()),
-                        DataValue::String(app.to_string()),
-                        DataValue::String(module.to_string()),
-                        DataValue::String(biz_db_id.to_string()),
-                        DataValue::String(eid),
-                    ],
-                )
-                .await;
-        } else {
-            // 不存在 → INSERT(db_id 列登记 biz_db_id，标记业务表所在库)
-            let id = uuid::Uuid::new_v4().to_string();
-            let ins_sql = "INSERT INTO cmx_meta_table_define \
-                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
-                            ddl_status, domain_code, application_code, module_code, archived) \
-                           VALUES ($1, $2, $3, $4, NULL, '1', $5, 'completed', \
-                                   $6, $7, $8, 0)";
-            let _ = mm
-                .execute_sql_with_datavalues(
-                    default_db_id,
-                    None,
-                    ins_sql,
-                    vec![
-                        DataValue::String(id),
-                        DataValue::String(table_def.table_name.clone()),
-                        DataValue::String(table_def.display_name.clone()),
-                        DataValue::String(biz_db_id.to_string()),
-                        DataValue::String(app_id.to_string()),
-                        DataValue::String(domain.to_string()),
-                        DataValue::String(app.to_string()),
-                        DataValue::String(module.to_string()),
-                    ],
-                )
-                .await;
-        }
-
-        // version 表存完整 TableDefine JSON(供导出对称读取)
-        let vid = uuid::Uuid::new_v4().to_string();
-        let version_sql = "INSERT INTO cmx_meta_table_define_version \
-                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
-                            domain_code, application_code, module_code, metadata, archived) \
-                           VALUES ($1, $2, $3, $4, NULL, '1', $5, $6, $7, $8, $9::jsonb, 0)";
-        let _ = mm
-            .execute_sql_with_datavalues(
-                default_db_id,
-                None,
-                version_sql,
-                vec![
-                    DataValue::String(vid),
-                    DataValue::String(table_def.table_name.clone()),
-                    DataValue::String(table_def.display_name.clone()),
-                    DataValue::String(biz_db_id.to_string()),
-                    DataValue::String(app_id.to_string()),
-                    DataValue::String(domain.to_string()),
-                    DataValue::String(app.to_string()),
-                    DataValue::String(module.to_string()),
-                    DataValue::String(metadata_json),
-                ],
-            )
-            .await;
-        Ok(())
     }
 
     /// 版本登记(委托 ModuleVersionService)

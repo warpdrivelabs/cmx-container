@@ -966,6 +966,7 @@ dependencies = [
  "cmx-database",
  "cmx-service",
  "cmx-traits",
+ "cmx-utils",
  "modql",
  "rmp-serde",
  "sea-query",

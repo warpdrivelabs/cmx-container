@@ -13,7 +13,7 @@ use std::collections::HashMap;
 /// 对应 `dev.toml` 中 `[center_client]` 配置节。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CenterClientConfig {
-    /// 访问模式：`"mock"` | `"http_url"` | `"http_discovery"` | `"grpc"`。
+    /// 访问模式：`"local"`（默认）| `"grpc"` | `"http_url"` | `"http_discovery"`。
     #[serde(default = "default_mode")]
     pub mode: String,
 
@@ -85,7 +85,7 @@ impl CenterDiscoveryConfig {
 }
 
 fn default_mode() -> String {
-    "mock".to_string()
+    "local".to_string()
 }
 
 fn default_timeout() -> u64 {

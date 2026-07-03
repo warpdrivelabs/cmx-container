@@ -998,4 +998,179 @@ impl TableMetadataService {
 
         Ok(records)
     }
+
+    /// 按 table_name upsert 表元数据(主表 + version 表)。
+    ///
+    /// 收敛原 `module_install::save_table_metadata` 的私有 SQL,供 LocalTableDefinitionImporter 复用。
+    /// SQL 执行库用 default_db_id(元数据表所在库),记录的 db_id 列登记 biz_db_id(业务表所在库)。
+    ///
+    /// # Arguments
+    /// * `default_db_id` - 元数据表所在库(执行库)
+    /// * `biz_db_id` - 业务表所在库(登记到 db_id 列)
+    /// * `table_def` - 表结构定义
+    /// * `domain_code` / `app` / `module` / `app_id` - 作用域
+    #[allow(clippy::too_many_arguments)]
+    pub async fn upsert_by_table_name(
+        mm: &DatabaseManager,
+        default_db_id: &str,
+        biz_db_id: &str,
+        table_def: &cmx_core::model::meta::table::TableDefine,
+        domain_code: &str,
+        app: &str,
+        module: &str,
+        app_id: &str,
+    ) -> PluginResult<()> {
+        use cmx_core::model::cell::DataValue;
+        let metadata_json = serde_json::to_string(table_def)
+            .map_err(|e| PluginError::Config(format!("序列化表定义失败: {e}")))?;
+
+        // 主表:先查 table_name 是否存在(cmx_meta_table_define 无 table_name 唯一约束)
+        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1";
+        let check_ds = mm
+            .query_sql_with_datavalues(
+                default_db_id,
+                None,
+                check_sql,
+                vec![DataValue::String(table_def.table_name.clone())],
+                "save_meta_check",
+            )
+            .await;
+        let existing_id = check_ds
+            .ok()
+            .and_then(|ds| serde_json::to_value(&ds).ok())
+            .and_then(|j| {
+                j.get("rows")
+                    .and_then(|r| r.as_array())
+                    .and_then(|rows| rows.first())
+                    .cloned()
+            })
+            .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
+
+        if let Some(eid) = existing_id {
+            // 已存在 → UPDATE
+            let upd_sql = "UPDATE cmx_meta_table_define SET \
+                           display_name = $1, domain_code = $2, application_code = $3, \
+                           module_code = $4, db_id = $5, version = '1', ddl_status = 'completed', \
+                           update_time = CURRENT_TIMESTAMP WHERE id = $6";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    upd_sql,
+                    vec![
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(domain_code.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(eid),
+                    ],
+                )
+                .await;
+        } else {
+            // 不存在 → INSERT(db_id 列登记 biz_db_id)
+            let id = snowflake_id_str();
+            let ins_sql = "INSERT INTO cmx_meta_table_define \
+                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
+                            ddl_status, domain_code, application_code, module_code, archived) \
+                           VALUES ($1, $2, $3, $4, NULL, '1', $5, 'completed', \
+                                   $6, $7, $8, 0)";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    ins_sql,
+                    vec![
+                        DataValue::String(id),
+                        DataValue::String(table_def.table_name.clone()),
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(app_id.to_string()),
+                        DataValue::String(domain_code.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                    ],
+                )
+                .await;
+        }
+
+        // version 表存完整 TableDefine JSON(供导出对称读取)
+        let vid = snowflake_id_str();
+        let version_sql = "INSERT INTO cmx_meta_table_define_version \
+                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
+                            domain_code, application_code, module_code, metadata, archived) \
+                           VALUES ($1, $2, $3, $4, NULL, '1', $5, $6, $7, $8, $9::jsonb, 0)";
+        let _ = mm
+            .execute_sql_with_datavalues(
+                default_db_id,
+                None,
+                version_sql,
+                vec![
+                    DataValue::String(vid),
+                    DataValue::String(table_def.table_name.clone()),
+                    DataValue::String(table_def.display_name.clone()),
+                    DataValue::String(biz_db_id.to_string()),
+                    DataValue::String(app_id.to_string()),
+                    DataValue::String(domain_code.to_string()),
+                    DataValue::String(app.to_string()),
+                    DataValue::String(module.to_string()),
+                    DataValue::String(metadata_json),
+                ],
+            )
+            .await;
+        Ok(())
+    }
+
+    /// 按模块查询表结构定义列表(连查主表 + version 表,供模块导出复用)。
+    ///
+    /// 收敛原 `module_export::export_metadata` 的内联 JOIN SQL,返回结构化 TableDefine 列表。
+    ///
+    /// # Arguments
+    /// * `db_id` - 元数据表所在库
+    /// * `app_code` / `module_code` - 作用域过滤
+    pub async fn list_by_module(
+        mm: &DatabaseManager,
+        db_id: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> PluginResult<Vec<cmx_core::model::meta::table::TableDefine>> {
+        use cmx_core::model::cell::DataValue;
+        let sql = "SELECT v.table_name, v.metadata \
+                   FROM cmx_meta_table_define d \
+                   INNER JOIN cmx_meta_table_define_version v \
+                     ON d.table_name = v.table_name AND d.version = v.version \
+                     AND d.app_id = v.app_id  \
+                   WHERE d.module_code = $1 AND d.application_code = $2 AND d.archived = 0 AND v.archived = 0";
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                None,
+                sql,
+                vec![
+                    DataValue::String(module_code.to_string()),
+                    DataValue::String(app_code.to_string()),
+                ],
+                "table_meta_list_by_module",
+            )
+            .await
+            .map_err(|e| PluginError::Database(format!("查询模块表元数据失败: {e}")))?;
+        let schema = ds.schema.as_ref();
+        let mut result = Vec::new();
+        for row in ds.iter() {
+            if let Some(metadata) = row.get_by_name_as::<serde_json::Value>(schema, "metadata") {
+                if matches!(metadata, serde_json::Value::Null) {
+                    continue;
+                }
+                let table_def = cmx_utils::json::coerce_to_object(metadata);
+                if let Ok(td) =
+                    serde_json::from_value::<cmx_core::model::meta::table::TableDefine>(table_def)
+                {
+                    result.push(td);
+                } else {
+                    warn!("解析表结构定义失败,跳过该项");
+                }
+            }
+        }
+        Ok(result)
+    }
 }

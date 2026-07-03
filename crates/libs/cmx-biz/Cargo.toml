@@ -16,6 +16,8 @@ cmx-core = { workspace = true }
 cmx-api-types = { workspace = true }
 # 内部依赖 - 特征定义
 cmx-traits = { workspace = true }
+# 内部依赖 - 工具库(JSONB 归一化等)
+cmx-utils = { workspace = true }
 # 内部依赖 - 数据库
 cmx-database = { workspace = true }
 # 内部依赖 - 服务编排

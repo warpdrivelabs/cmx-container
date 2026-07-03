@@ -20,3 +20,5 @@ pub mod runtime_ops;
 pub mod executor;
 pub mod module_install;
 pub mod module_export;
+pub mod remote_importers;
+pub mod table_definition_importer;

@@ -14,7 +14,7 @@ pub mod query;
 
 pub use data_importer::{
     PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult,
-    PluginDataImporter,
+    PluginDataImporter, PluginDataListResult,
 };
 pub use lifecycle::{
     LifecycleEvent, PluginLifecycleListener, PluginLifecyclePayload, plugin_events,

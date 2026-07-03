@@ -176,4 +176,104 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
         info!(count = definitions.len(), "权限定义 upsert 完成");
         Ok(definitions.len())
     }
+
+    /// 导出指定模块的所有权限定义(重建 parent_code)。
+    ///
+    /// 收敛原 `module_export::export_permissions` 的查询逻辑:
+    /// 查 cmx_permission → 构建 id→code 映射 → 从 parent_id 重建 parent_code → 组装 PermissionDefinition。
+    async fn list_permission_definitions(
+        &self,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> Result<Vec<PermissionDefinition>, TraitError> {
+        // 1. 查询模块下所有权限
+        let sql = "SELECT code, name, resource_type, parent_id, sort_order, description, \
+                   extension, status FROM cmx_permission \
+                   WHERE domain_code = $1 AND app_code = $2 AND module_code = $3 AND archived = 0";
+        let ds = self
+            .mm
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                sql,
+                vec![
+                    DataValue::String(domain_code.to_string()),
+                    DataValue::String(app_code.to_string()),
+                    DataValue::String(module_code.to_string()),
+                ],
+                "list_perm_defs",
+            )
+            .await
+            .map_err(|e| TraitError::Business(format!("查询权限定义失败: {e}")))?;
+        let json = serde_json::to_value(&ds).unwrap_or_default();
+        let Some(rows) = json.get("rows").and_then(|r| r.as_array()) else {
+            return Ok(Vec::new());
+        };
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 2. 构建 parent_id → code 映射(用于重建 parent_code)
+        let id_code_sql = "SELECT id, code FROM cmx_permission \
+                           WHERE domain_code = $1 AND app_code = $2 AND module_code = $3";
+        let id_ds = self
+            .mm
+            .query_sql_with_datavalues(
+                &self.db_id,
+                None,
+                id_code_sql,
+                vec![
+                    DataValue::String(domain_code.to_string()),
+                    DataValue::String(app_code.to_string()),
+                    DataValue::String(module_code.to_string()),
+                ],
+                "list_perm_id_code",
+            )
+            .await
+            .map_err(|e| TraitError::Business(format!("查询权限 id→code 失败: {e}")))?;
+        let id_json = serde_json::to_value(&id_ds).unwrap_or_default();
+        let mut id_to_code: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        if let Some(id_rows) = id_json.get("rows").and_then(|r| r.as_array()) {
+            for row in id_rows {
+                let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let code = row.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if !id.is_empty() {
+                    id_to_code.insert(id, code);
+                }
+            }
+        }
+
+        // 3. 组装 PermissionDefinition(从 parent_id 重建 parent_code)
+        let mut defs = Vec::with_capacity(rows.len());
+        for row in rows {
+            let parent_code = row
+                .get("parent_id")
+                .and_then(|v| v.as_str())
+                .and_then(|pid| id_to_code.get(pid))
+                .cloned();
+            let extension = row
+                .get("extension")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            defs.push(PermissionDefinition {
+                code: row.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                resource_type: row
+                    .get("resource_type")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                parent_code,
+                sort_order: row.get("sort_order").and_then(|v| v.as_i64()),
+                description: row
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                extension,
+                status: row.get("status").and_then(|v| v.as_i64()),
+            });
+        }
+        Ok(defs)
+    }
 }

@@ -110,6 +110,17 @@ pub struct PluginDataImportResult {
     pub deleted_count: u32,
 }
 
+/// 插件数据查询（导出）结果。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginDataListResult {
+    /// 是否成功。
+    pub success: bool,
+    /// 结果消息。
+    pub message: String,
+    /// JSON 序列化的定义列表字节（如 `Vec<FormDefinition>` 序列化后的 JSON 数组）。
+    pub json_data: Vec<u8>,
+}
+
 /// 插件数据导入器 trait。
 ///
 /// 定义将插件数据导入到基础服务中心的统一接口。
@@ -128,4 +139,13 @@ pub trait PluginDataImporter: Send + Sync {
         &self,
         request: PluginDataCleanupRequest,
     ) -> Result<PluginDataImportResult, TraitError>;
+
+    /// 查询（导出）插件数据，返回 JSON 序列化的定义列表。
+    ///
+    /// 按 `request.category` 路由到对应资源的 `list_*` 方法，
+    /// 返回序列化后的 JSON 字节（供远程导出场景复用）。
+    async fn list_data(
+        &self,
+        request: PluginDataImportRequest,
+    ) -> Result<PluginDataListResult, TraitError>;
 }

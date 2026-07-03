@@ -114,9 +114,9 @@ pub async fn module_package_import(
     // 通过 deploy_service 共享(模块包内插件子包复用 deploy 自动判断升级/安装)
     let deploy_svc = std::sync::Arc::new(manager.deploy_service().clone());
     let module_install_svc = ModuleInstallService::new(package_utils, deploy_svc);
-    // 注入权限定义导入器(复用 cmx-iam 两阶段权限 upsert,消除重复 SQL)
-    let module_install_svc = if let Some(importer) = cmx_state.permission_definition_importer() {
-        module_install_svc.with_permission_importer(importer.clone())
+    // 注入模块资源定义导入器集合(表单/菜单/元数据/权限统一委托,消除重复 SQL)
+    let module_install_svc = if let Some(importers) = cmx_state.definition_importers() {
+        module_install_svc.with_definition_importers(importers.clone())
     } else {
         module_install_svc
     };
@@ -155,7 +155,7 @@ pub async fn module_package_import(
     tag = "Module"
 )]
 pub async fn module_package_export(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
     Query(q): Query<ExportQuery>,
@@ -164,7 +164,11 @@ pub async fn module_package_export(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
     let plugin_root = manager.settings().plugin_root.clone();
-    let export_svc = ModuleExportService::new(plugin_root);
+    let mut export_svc = ModuleExportService::new(plugin_root);
+    // 注入模块资源定义导入器集合(导出时用 list_* 方法,消除内联 SQL)
+    if let Some(importers) = cmx_state.definition_importers() {
+        export_svc = export_svc.with_definition_importers(importers.clone());
+    }
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;

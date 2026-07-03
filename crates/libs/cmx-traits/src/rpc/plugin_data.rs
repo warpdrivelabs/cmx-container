@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 
-use crate::plugin::{PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult};
+use crate::plugin::{PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult, PluginDataListResult};
 use crate::rpc::error::RpcError;
 
 /// 插件数据管理 RPC 客户端接口（策略模式 — 策略接口）。
@@ -48,4 +48,18 @@ pub trait PluginDataClient: Send + Sync {
         service_name: &str,
         request: PluginDataCleanupRequest,
     ) -> Result<PluginDataImportResult, RpcError>;
+
+    /// 查询（导出）远程服务中的插件数据。
+    ///
+    /// 通过 gRPC 调用远程实例的 `ListPluginData` 方法，返回 JSON 序列化的定义列表。
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - 目标服务在注册中心的服务名。
+    /// * `request` - 查询请求（category + domain/app/module 作用域）。
+    async fn list_plugin_data(
+        &self,
+        service_name: &str,
+        request: PluginDataImportRequest,
+    ) -> Result<PluginDataListResult, RpcError>;
 }

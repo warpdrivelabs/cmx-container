@@ -20,7 +20,7 @@ use std::sync::{Arc, OnceLock};
 use async_trait::async_trait;
 use cmx_rpc_gen::cmx::cmx_plugin_data_service::cmx_plugin_data_service::cmx as plugin_data_proto;
 use cmx_traits::plugin::{
-    PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult,
+    PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult, PluginDataListResult,
 };
 use cmx_traits::rpc::{PluginDataClient, RpcError};
 use tokio::sync::RwLock;
@@ -199,6 +199,52 @@ impl PluginDataClient for PluginDataGrpcClient {
                     success = false,
                     error = %e,
                     "RPC cleanup_plugin_data 失败"
+                );
+                Err(RpcError::RpcCallFailed(e.to_string()))
+            }
+        }
+    }
+
+    #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
+    async fn list_plugin_data(
+        &self,
+        service_name: &str,
+        request: PluginDataImportRequest,
+    ) -> Result<PluginDataListResult, RpcError> {
+        let client = self.get_client(service_name).await?;
+
+        let category_str = request.category.as_str();
+        let proto_req = plugin_data_proto::ListPluginDataRequest {
+            category: category_str.into(),
+            domain_code: request.domain_code.clone().into(),
+            application_code: request.application_code.clone().into(),
+            module_code: request.module_code.clone().into(),
+        };
+
+        match client.list_plugin_data(proto_req).await {
+            Ok(resp) => {
+                let resp = resp.into_inner();
+                tracing::info!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    success = resp.success,
+                    json_len = resp.json_data.len(),
+                    "RPC list_plugin_data 完成"
+                );
+                Ok(PluginDataListResult {
+                    success: resp.success,
+                    message: resp.message.to_string(),
+                    json_data: resp.json_data.to_vec(),
+                })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "cmx_rpc",
+                    service_name = %service_name,
+                    category = category_str,
+                    error = %e,
+                    "RPC list_plugin_data 失败"
                 );
                 Err(RpcError::RpcCallFailed(e.to_string()))
             }

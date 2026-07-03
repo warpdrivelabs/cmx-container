@@ -152,19 +152,24 @@ pub async fn import_permissions(
         ));
     }
 
-    if plugin_id.is_empty() || app_id.is_empty() {
-        return Err(Error::bad_request("plugin_id/app_id 不能为空".to_string()));
-    }
+    // 解析 category(默认 Perm,与旧版兼容)
+    let parsed_category = match category.as_deref() {
+        Some(s) => parse_category(s)?,
+        None => PluginDataCategory::Perm,
+    };
 
-    if version.is_empty() {
-        return Err(Error::bad_request("version 不能为空".to_string()));
+    // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
+    // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
+    if matches!(parsed_category, PluginDataCategory::Perm)
+        && (plugin_id.is_empty() || app_id.is_empty() || version.is_empty())
+    {
+        return Err(Error::bad_request(
+            "Perm 类别导入需要 plugin_id/app_id/version 非空".to_string(),
+        ));
     }
 
     let request = PluginDataImportRequest {
-        category: match category.as_deref() {
-            Some(s) => parse_category(s)?,
-            None => PluginDataCategory::Perm,
-        },
+        category: parsed_category,
         domain_code,
         application_code,
         module_code,

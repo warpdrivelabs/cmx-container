@@ -639,12 +639,14 @@ is_critical = true
 
 - **类型**: String (enum)
 - **必需**: 否
-- **默认值**: `"mock"`
-- **说明**: 基础服务中心访问模式
+- **默认值**: `"local"`
+- **说明**: 模块资源（表单/菜单/元数据/权限）导入导出的部署模式
 - **可选值**:
-    - `mock` - Mock 模式，所有接口调用返回成功结果（当前阶段）
-    - `url` - URL 直连模式，通过显式配置的服务地址访问各中心
-    - `discovery` - 服务发现模式，通过 Nacos 服务发现获取各中心地址
+    - `local`（默认，或任意非远程值）- **本地模式**，定义导入器直调本地 Service（FormService/MenuService/TableMetadataService/PermissionServiceImpl），无网络开销，适用于单体部署
+    - `grpc` - **远程模式（gRPC）**，经 gRPC 调用专门中心（CmxPluginDataService），需启用 `[rpc]` 并配置 `[center_client.discovery]` 的各中心服务名
+    - `http_url` - **远程模式（HTTP 直连）**，经 HTTP multipart form-data POST 到 `[center_client.urls]` 配置的各中心 URL
+    - `http_discovery` - **远程模式（HTTP 服务发现）**，经服务发现解析实例地址后走 HTTP，需配置 `[center_client.discovery]` 的各中心服务名
+    - 远程模式下本节点仍可作为接收端（PluginDataImporterImpl 已注入 form/menu 本地导入器）
 
 #### `timeout_ms`
 
