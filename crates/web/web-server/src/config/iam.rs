@@ -11,7 +11,7 @@ use cmx_api::middleware::GlobalPermissionConfig;
 use cmx_database::get_default_db_manager;
 use cmx_iam::config::IamConfig;
 use cmx_iam::iam_checker::IamChecker;
-use cmx_iam::permission::{PermissionServiceImpl, PluginDataImporterImpl};
+use cmx_iam::permission::PermissionServiceImpl;
 use cmx_iam::role::RoleServiceImpl;
 use cmx_iam::role_group::RoleGroupServiceImpl;
 use cmx_iam::rule::{ExclusionRuleServiceImpl, RuleEnforcerImpl};
@@ -103,8 +103,10 @@ pub async fn init_iam_services(
     let default_db_id = mm.get_default_db_id().await;
 
     // 构造插件数据导入器（HTTP 端点和 gRPC 服务端共用）。
-    // 注入 form/menu 本地导入器,使本节点可作为远程中心接收 Form/Menu 类别数据。
-    // 无论 center_client.mode 是本地还是远程,本节点都可能作为接收端,故始终注入本地实现。
+    // PluginDataImporterImpl 现位于 cmx-biz(多类别路由器),通过 trait 对象持有权限服务,
+    // 无需依赖 cmx-iam 的具体类型。PermissionServiceImpl 同时实现:
+    //   - PermissionZipImporter (Perm 类别的 ZIP permdata 导入/清理)
+    //   - PermissionDefinitionImporter (Perm 类别的结构化 apply/list)
     let receiver_form_importer: Arc<dyn cmx_traits::module::FormDefinitionImporter> = Arc::new(
         cmx_biz::form::LocalFormDefinitionImporter::new(mm.clone(), default_db_id.clone()),
     );
@@ -112,9 +114,12 @@ pub async fn init_iam_services(
         cmx_biz::menu::LocalMenuDefinitionImporter::new(mm.clone(), default_db_id.clone()),
     );
     let plugin_data_importer: Arc<dyn PluginDataImporter> = Arc::new(
-        PluginDataImporterImpl::new(permission_service_impl.clone())
-            .with_form_importer(receiver_form_importer.clone())
-            .with_menu_importer(receiver_menu_importer.clone()),
+        cmx_biz::plugin_data_importer::PluginDataImporterImpl::new(
+            permission_service_impl.clone(),
+            permission_service_impl.clone(),
+        )
+        .with_form_importer(receiver_form_importer.clone())
+        .with_menu_importer(receiver_menu_importer.clone()),
     );
 
     // 根据 center_client.mode 选择 DefinitionImporterBundle 的实现(发送端):

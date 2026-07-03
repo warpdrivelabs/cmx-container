@@ -48,6 +48,8 @@ sea-query = { workspace = true }
 sea-query-sqlx = { workspace = true }
 # SQL 异步查询
 sqlx = { workspace = true }
+# ZIP 解压(PluginDataImporterImpl 接收端解压远程 ZIP)
+zip = { workspace = true }
 # OpenAPI 文档生成（可选）
 utoipa = { workspace = true, optional = true }
 

@@ -3,86 +3,75 @@
 //! 实现 `cmx_traits::plugin::PluginDataImporter` trait，按 `PluginDataCategory`
 //! 路由到对应的定义导入器。支持 Perm(权限)/Form(表单)/Menu(菜单) 类别。
 //!
+//! # 归属说明
+//!
+//! 本类型是**多类别路由器**，不属于任何单一业务域，放在 cmx-biz（平台基础业务层）
+//! 是因为 Form/Menu 的 Local 实现在此 crate。Perm 类别通过 `PermissionZipImporter`
+//! trait 对象注入（由 cmx-iam 的 PermissionServiceImpl 实现），无需依赖 cmx-iam。
+//!
 //! HTTP 端点和 gRPC 服务端均通过此 trait 调用，统一路径与缓存失效逻辑。
-//! Form/Menu 类别经注入的 `FormDefinitionImporter` / `MenuDefinitionImporter` 处理,
-//! 接收端解压 ZIP → 解析 JSON → 调用 Local 实现(与单体共用同一套 Local 代码)。
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::Utc;
-use cmx_core::SVRContext;
 use cmx_core::model::module::{FormDefinition, MenuDefinition};
 use cmx_traits::error::TraitError;
+use cmx_traits::iam::{PermissionDefinitionImporter, PermissionZipImporter};
 use cmx_traits::module::{FormDefinitionImporter, MenuDefinitionImporter};
-use cmx_traits::iam::PermissionDefinitionImporter;
 use cmx_traits::plugin::{
     PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult,
     PluginDataImporter, PluginDataListResult,
 };
 
-use super::service::PermissionServiceImpl;
-
-/// 插件数据导入器实现。
+/// 插件数据导入器实现（多类别路由器）。
 ///
-/// 持有 `PermissionServiceImpl` 的具体类型引用（非 trait 对象），
-/// 以便调用其固有方法 `import_permissions` / `cleanup_permissions`。
-/// 另持有可选的 Form/Menu 定义导入器(支持跨服务的表单/菜单远程导入)。
+/// 持有三类 trait 对象:
+/// - `perm_zip_importer`: Perm 类别的 ZIP 格式导入/清理(由 cmx-iam 实现)
+/// - `perm_def_importer`: Perm 类别的结构化定义导入/导出(由 cmx-iam 实现)
+/// - `form_importer` / `menu_importer`: Form/Menu 类别的结构化定义(由 cmx-biz 本地实现)
 pub struct PluginDataImporterImpl {
-    /// 权限服务实现（具体类型）。
-    permission_service: Arc<PermissionServiceImpl>,
-    /// 表单定义导入器(可选,支持 Form 类别远程导入)
+    /// 权限 ZIP 导入器(Perm 类别的 ZIP permdata 格式,含 diff/审计/缓存)
+    perm_zip_importer: Arc<dyn PermissionZipImporter>,
+    /// 权限定义导入器(Perm 类别的结构化 apply/list)
+    perm_def_importer: Arc<dyn PermissionDefinitionImporter>,
+    /// 表单定义导入器(可选,支持 Form 类别)
     form_importer: Option<Arc<dyn FormDefinitionImporter>>,
-    /// 菜单定义导入器(可选,支持 Menu 类别远程导入)
+    /// 菜单定义导入器(可选,支持 Menu 类别)
     menu_importer: Option<Arc<dyn MenuDefinitionImporter>>,
 }
 
 impl PluginDataImporterImpl {
-    /// 构造函数。
+    /// 创建新的插件数据导入器。
     ///
     /// # Arguments
     ///
-    /// * `permission_service` - 权限服务实现的具体类型实例。
-    pub fn new(permission_service: Arc<PermissionServiceImpl>) -> Self {
+    /// * `perm_zip_importer` - 权限 ZIP 导入器(通常为 PermissionServiceImpl)
+    /// * `perm_def_importer` - 权限定义导入器(通常为同一 PermissionServiceImpl 实例)
+    pub fn new(
+        perm_zip_importer: Arc<dyn PermissionZipImporter>,
+        perm_def_importer: Arc<dyn PermissionDefinitionImporter>,
+    ) -> Self {
         Self {
-            permission_service,
+            perm_zip_importer,
+            perm_def_importer,
             form_importer: None,
             menu_importer: None,
         }
     }
 
     /// 注入表单定义导入器(Builder 模式)。
-    pub fn with_form_importer(
-        mut self,
-        importer: Arc<dyn FormDefinitionImporter>,
-    ) -> Self {
+    pub fn with_form_importer(mut self, importer: Arc<dyn FormDefinitionImporter>) -> Self {
         self.form_importer = Some(importer);
         self
     }
 
     /// 注入菜单定义导入器(Builder 模式)。
-    pub fn with_menu_importer(
-        mut self,
-        importer: Arc<dyn MenuDefinitionImporter>,
-    ) -> Self {
+    pub fn with_menu_importer(mut self, importer: Arc<dyn MenuDefinitionImporter>) -> Self {
         self.menu_importer = Some(importer);
         self
     }
 
-    /// 构造 `SVRContext`（系统调用上下文，无 HTTP 请求头信息）。
-    fn build_svr_ctx() -> SVRContext {
-        SVRContext::new(
-            serde_json::Value::Null,
-            HashMap::new(),
-            Utc::now(),
-            cmx_utils::id::snowflake_id_str(),
-        )
-    }
-
     /// 从 ZIP 字节中提取所有 JSON 文件内容(文件名 → 内容)。
-    ///
-    /// 供 Form/Menu 远程导入接收端复用:解压 ZIP → 读取每个 .json 文件内容。
     fn extract_json_files_from_zip(zip_data: &[u8]) -> Result<Vec<(String, Vec<u8>)>, TraitError> {
         let cursor = std::io::Cursor::new(zip_data);
         let mut archive = zip::ZipArchive::new(cursor)
@@ -107,23 +96,15 @@ impl PluginDataImporterImpl {
 
 #[async_trait]
 impl PluginDataImporter for PluginDataImporterImpl {
-    /// 导入插件数据。
-    ///
-    /// 按 `PluginDataCategory` 路由：
-    /// - `Perm` → 调用 `PermissionServiceImpl::import_permissions`(ZIP permdata 格式)
-    /// - `Form` → 解压 ZIP → 解析 FormDefinition 列表 → `form_importer.apply_form_definitions`
-    /// - `Menu` → 解压 ZIP → 解析 MenuDefinition 列表 → `menu_importer.apply_menu_definitions`
-    /// - 其他 → 返回不支持错误
+    /// 导入插件数据。按 `PluginDataCategory` 路由。
     async fn import_data(
         &self,
         request: PluginDataImportRequest,
     ) -> Result<PluginDataImportResult, TraitError> {
         match request.category {
             PluginDataCategory::Perm => {
-                let svr_ctx = Self::build_svr_ctx();
-                self.permission_service
-                    .import_permissions(
-                        &svr_ctx,
+                self.perm_zip_importer
+                    .import_permissions_zip(
                         &request.domain_code,
                         &request.application_code,
                         &request.module_code,
@@ -137,13 +118,11 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         "未注入 FormDefinitionImporter,不支持远程表单导入".to_string(),
                     ));
                 };
-                // 解压 ZIP → 解析每个 form_*.json 为 FormDefinition
                 let files = Self::extract_json_files_from_zip(&request.zip_data)?;
                 let mut defs = Vec::new();
                 for (_name, content) in files {
-                    let def: FormDefinition = serde_json::from_slice(&content).map_err(|e| {
-                        TraitError::Business(format!("解析表单定义 JSON 失败: {e}"))
-                    })?;
+                    let def: FormDefinition = serde_json::from_slice(&content)
+                        .map_err(|e| TraitError::Business(format!("解析表单定义 JSON 失败: {e}")))?;
                     defs.push(def);
                 }
                 let count = importer
@@ -168,13 +147,11 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         "未注入 MenuDefinitionImporter,不支持远程菜单导入".to_string(),
                     ));
                 };
-                // 解压 ZIP → 解析每个 menu_*.json 为 MenuDefinition
                 let files = Self::extract_json_files_from_zip(&request.zip_data)?;
                 let mut defs = Vec::new();
                 for (_name, content) in files {
-                    let def: MenuDefinition = serde_json::from_slice(&content).map_err(|e| {
-                        TraitError::Business(format!("解析菜单定义 JSON 失败: {e}"))
-                    })?;
+                    let def: MenuDefinition = serde_json::from_slice(&content)
+                        .map_err(|e| TraitError::Business(format!("解析菜单定义 JSON 失败: {e}")))?;
                     defs.push(def);
                 }
                 let count = importer
@@ -200,21 +177,15 @@ impl PluginDataImporter for PluginDataImporterImpl {
         }
     }
 
-    /// 清理插件数据。
-    ///
-    /// 按 `PluginDataCategory` 路由：
-    /// - `Perm` → 调用 `PermissionServiceImpl::cleanup_permissions`
-    /// - 其他类别 → 返回不支持错误
+    /// 清理插件数据。仅支持 Perm。
     async fn cleanup_data(
         &self,
         request: PluginDataCleanupRequest,
     ) -> Result<PluginDataImportResult, TraitError> {
         match request.category {
             PluginDataCategory::Perm => {
-                let svr_ctx = Self::build_svr_ctx();
-                self.permission_service
-                    .cleanup_permissions(
-                        &svr_ctx,
+                self.perm_zip_importer
+                    .cleanup_permissions_zip(
                         &request.domain_code,
                         &request.application_code,
                         &request.module_code,
@@ -229,11 +200,6 @@ impl PluginDataImporter for PluginDataImporterImpl {
     }
 
     /// 查询（导出）插件数据，返回 JSON 序列化的定义列表。
-    ///
-    /// 按 `request.category` 路由:
-    /// - `Form` → `form_importer.list_form_definitions` → JSON
-    /// - `Menu` → `menu_importer.list_menu_definitions` → JSON
-    /// - `Perm` → `permission_service.list_permission_definitions` → JSON
     async fn list_data(
         &self,
         request: PluginDataImportRequest,
@@ -245,9 +211,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         "未注入 FormDefinitionImporter,不支持远程表单导出".to_string(),
                     ));
                 };
-                let defs = importer
-                    .list_form_definitions(&request.module_code)
-                    .await?;
+                let defs = importer.list_form_definitions(&request.module_code).await?;
                 let json_data = serde_json::to_vec(&defs)
                     .map_err(|e| TraitError::Business(format!("序列化表单定义失败: {e}")))?;
                 Ok(PluginDataListResult {
@@ -262,9 +226,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         "未注入 MenuDefinitionImporter,不支持远程菜单导出".to_string(),
                     ));
                 };
-                let defs = importer
-                    .list_menu_definitions(&request.module_code)
-                    .await?;
+                let defs = importer.list_menu_definitions(&request.module_code).await?;
                 let json_data = serde_json::to_vec(&defs)
                     .map_err(|e| TraitError::Business(format!("序列化菜单定义失败: {e}")))?;
                 Ok(PluginDataListResult {
@@ -275,7 +237,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
             }
             PluginDataCategory::Perm => {
                 let defs = self
-                    .permission_service
+                    .perm_def_importer
                     .list_permission_definitions(
                         &request.domain_code,
                         &request.application_code,

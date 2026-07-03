@@ -1,6 +1,8 @@
 # 模块导入导出流程图
 
 > 用 Mermaid 流程图描述 cmx-container 模块导入/导出的完整代码路径，便于快速理解架构。
+>
+> **更新日期**：2026-07-03（`PluginDataImporterImpl` 从 cmx-iam 迁移至 cmx-biz，新增 `PermissionZipImporter` trait 解耦）
 
 ---
 
@@ -57,11 +59,11 @@ graph TB
     CTX -->|mode=http_url| HTTP["HTTP multipart<br/>POST config.urls.*"]
     CTX -->|mode=http_discovery| HTTPD["HTTP multipart<br/>POST 服务发现实例"]
 
-    GRPC --> PDI["PluginDataImporterImpl.import_data<br/>（按 category 路由）"]
+    GRPC --> PDI["PluginDataImporterImpl.import_data<br/>（cmx-biz，按 category 路由）"]
     HTTP --> PDI
     HTTPD --> PDI
 
-    PDI -->|Perm| LP
+    PDI -->|Perm| PZI["PermissionZipImporter trait<br/>→ PermissionServiceImpl (cmx-iam)"]
     PDI -->|Form| LF
     PDI -->|Menu| LM
 
@@ -155,10 +157,10 @@ flowchart LR
     HTTP_SEND --> RECV
     HTTP_D_SEND --> RECV
 
-    subgraph 接收端["接收端（中心服务）"]
-        RECV{"PluginDataImporterImpl<br/>.import_data(request)<br/>按 category 路由"}
+    subgraph 接收端["接收端（cmx-biz PluginDataImporterImpl）"]
+        RECV{"PluginDataImporterImpl<br/>(cmx-biz/src/plugin_data_importer.rs)<br/>.import_data(request)<br/>按 category 路由"}
 
-        RECV -->|Perm| PERM["permission_service<br/>.import_permissions<br/>（ZIP permdata 格式）"]
+        RECV -->|Perm| PERM["perm_zip_importer<br/>(PermissionZipImporter trait)<br/>→ PermissionServiceImpl (cmx-iam)<br/>解压ZIP → diff → 事务upsert → 审计"]
         RECV -->|Form| FORM["extract_json_files_from_zip<br/>→ Vec&lt;FormDefinition&gt;<br/>→ form_importer.apply_form_definitions"]
         RECV -->|Menu| MENU["extract_json_files_from_zip<br/>→ Vec&lt;MenuDefinition&gt;<br/>→ menu_importer.apply_menu_definitions"]
     end
@@ -181,7 +183,7 @@ flowchart TD
 
     MM --> RECV["始终构造接收端 Local 导入器<br/>receiver_form_importer (cmx-biz)<br/>receiver_menu_importer (cmx-biz)"]
 
-    RECV --> PDI["PluginDataImporterImpl::new(perm_svc)<br/>.with_form_importer(receiver_form)<br/>.with_menu_importer(receiver_menu)<br/>（本节点可作为远程接收端）"]
+    RECV --> PDI["PluginDataImporterImpl::new(perm_svc, perm_svc)<br/>(cmx-biz, 不依赖 cmx-iam 具体类型)<br/>  ↑ 第1参数: Arc&lt;dyn PermissionZipImporter&gt;<br/>  ↑ 第2参数: Arc&lt;dyn PermissionDefinitionImporter&gt;<br/>.with_form_importer(receiver_form)<br/>.with_menu_importer(receiver_menu)<br/>（本节点可作为远程接收端）"]
 
     PDI --> MODE["CenterClientConfig::load()<br/>读取 center_client.mode"]
 
@@ -238,7 +240,7 @@ graph LR
         LFI["LocalFormDefinitionImporter<br/>(cmx-biz)"]
         LMI["LocalMenuDefinitionImporter<br/>(cmx-biz)"]
         LTI["LocalTableDefinitionImporter<br/>(cmx-plugin)"]
-        LPI["PermissionServiceImpl<br/>(cmx-iam)"]
+        LPI["PermissionServiceImpl<br/>(cmx-iam)<br/>实现 PermissionDefinitionImporter<br/>+ PermissionZipImporter"]
     end
 
     subgraph 远程实现["Remote 实现"]
@@ -316,13 +318,15 @@ graph LR
 | **契约结构体** | `cmx-core/src/model/module/definitions.rs` + `iam/permission.rs` | FormDefinition / MenuDefinition / PermissionDefinition |
 | **Local Form/Menu** | `cmx-biz/src/{form,menu}/definition_importer.rs` | 直调 FormService/MenuService |
 | **Local Table** | `cmx-plugin/service/table_definition_importer.rs` | 建表 + 元数据登记 |
-| **Local Permission** | `cmx-iam/src/permission/service/definition_importer.rs` | 两阶段 upsert |
 | **Remote 四件套** | `cmx-plugin/service/remote_importers/{mod,form,menu,table,permission}.rs` | ZIP 打包 → ctx.send → gRPC/HTTP |
 | **传输分发** | `cmx-plugin/service/remote_importers/mod.rs` | RemoteImporterContext.send → grpc/http |
 | **ZIP 工具** | `cmx-plugin/src/center_client/packer.rs` | pack_definitions_to_zip / pack_payload_to_zip |
 | **配置** | `cmx-plugin/src/center_client/{config,types}.rs` | CenterClientConfig + DataCategory |
 | **gRPC 服务端** | `cmx-rpc/src/server/plugin_data.rs` | CmxPluginDataServerImpl → PluginDataImporter |
 | **HTTP 接收端** | `cmx-api/src/handlers/iam/permission/import_handler.rs` | multipart 解析 → PluginDataImporter |
-| **接收端路由** | `cmx-iam/src/permission/import_handler.rs` | PluginDataImporterImpl 按 category 路由 |
+| **接收端路由** | `cmx-biz/src/plugin_data_importer.rs` | PluginDataImporterImpl 按 category 路由（从 cmx-iam 迁入） |
+| **Perm ZIP 导入 trait** | `cmx-traits/src/iam/permission_definition_importer.rs` | PermissionZipImporter trait（Perm 的 ZIP 导入/清理） |
+| **Perm ZIP trait 实现** | `cmx-iam/src/permission/zip_importer.rs` | PermissionServiceImpl 实现 PermissionZipImporter |
+| **Perm 结构化导入** | `cmx-iam/src/permission/service/definition_importer.rs` | 两阶段 upsert（已实现 PermissionDefinitionImporter） |
 | **装配** | `web-server/src/config/iam.rs` | 按 mode 选 Local/Remote bundle + 注入接收端 |
 | **状态注入** | `cmx-api/src/app_state.rs` | CmxAppState.definition_importers |

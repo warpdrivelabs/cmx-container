@@ -1,18 +1,15 @@
-//! 权限定义导入器 trait。
+//! 权限定义导入器 trait + ZIP 格式权限导入/清理 trait。
 //!
-//! 定义将 `PermissionDefinition` 列表 upsert 到 `cmx_permission` 的统一接口,
-//! 供 cmx-iam 实现、cmx-plugin(模块导入)消费,消除两阶段 upsert 逻辑的三处重复。
-//!
-//! 与 `PluginDataImporter` 的区别:本 trait 接收**已解析的结构体列表**,
-//! 不含 ZIP 解压/校验/审计/缓存失效;适用于模块导入这种「磁盘 JSON → 直接 upsert」场景。
-//! `PluginDataImporter` 接收 ZIP 字节流,面向插件数据中心的完整导入流程。
+//! - [`PermissionDefinitionImporter`]:结构化定义列表的 apply/list(模块导入/导出用)
+//! - [`PermissionZipImporter`]:ZIP 格式权限数据的导入/清理(插件数据中心远程接收用)
 
 use async_trait::async_trait;
 use cmx_core::model::iam::PermissionDefinition;
 
 use crate::error::TraitError;
+use crate::plugin::{PluginDataImportResult};
 
-/// 权限定义导入器 trait。
+/// 权限定义导入器(本地/远程统一接口)。
 ///
 /// 实现方负责两阶段 upsert:
 /// 1. 第一阶段:按 code upsert(parent_id 暂置 NULL,full_code_path = '/' + code)
@@ -20,15 +17,6 @@ use crate::error::TraitError;
 #[async_trait]
 pub trait PermissionDefinitionImporter: Send + Sync {
     /// 将权限定义列表 upsert 到指定作用域。
-    ///
-    /// # Arguments
-    /// * `domain_code` - 域编码
-    /// * `app_code` - 应用编码(cmx_permission.app_code 列)
-    /// * `module_code` - 模块编码
-    /// * `definitions` - 权限定义列表(已解析,无需再次解压/校验)
-    ///
-    /// # Returns
-    /// 成功处理的权限数量;空列表时返回 0(不视为错误)。
     async fn apply_permission_definitions(
         &self,
         domain_code: &str,
@@ -37,19 +25,39 @@ pub trait PermissionDefinitionImporter: Send + Sync {
         definitions: &[PermissionDefinition],
     ) -> Result<usize, TraitError>;
 
-    /// 导出指定模块的所有权限定义(对称契约)。
-    ///
-    /// 实现方负责查询 `cmx_permission` 并重建 `parent_code`(DB 存 parent_id),
-    /// 返回结构化的 `PermissionDefinition` 列表,供模块导出复用。
-    ///
-    /// # Arguments
-    /// * `domain_code` - 域编码
-    /// * `app_code` - 应用编码
-    /// * `module_code` - 模块编码
+    /// 导出指定模块的所有权限定义(重建 parent_code)。
     async fn list_permission_definitions(
         &self,
         domain_code: &str,
         app_code: &str,
         module_code: &str,
     ) -> Result<Vec<PermissionDefinition>, TraitError>;
+}
+
+/// ZIP 格式权限导入/清理(插件数据中心远程接收端用)。
+///
+/// 封装 `PermissionServiceImpl` 的固有方法 `import_permissions` / `cleanup_permissions`,
+/// 使 `PluginDataImporterImpl`(cmx-biz)可通过 trait 对象持有,无需依赖 cmx-iam。
+///
+/// 与 [`PermissionDefinitionImporter`] 的区别:
+/// - 本 trait 面向 **ZIP permdata 格式**(插件包 `permdata/*.zip`),含 diff/审计/缓存失效
+/// - `PermissionDefinitionImporter` 面向 **结构化 `&[PermissionDefinition]`**(模块包 JSON)
+#[async_trait]
+pub trait PermissionZipImporter: Send + Sync {
+    /// 从 ZIP 数据导入权限(解压→解析→diff→事务 upsert→审计→缓存失效)。
+    async fn import_permissions_zip(
+        &self,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+        zip_data: &[u8],
+    ) -> Result<PluginDataImportResult, TraitError>;
+
+    /// 清理指定作用域下的所有权限及其角色关联(物理删除)。
+    async fn cleanup_permissions_zip(
+        &self,
+        domain_code: &str,
+        app_code: &str,
+        module_code: &str,
+    ) -> Result<PluginDataImportResult, TraitError>;
 }
