@@ -49,6 +49,7 @@ pub mod b64;
 pub mod config;
 pub mod crypto;
 pub mod id;
+pub mod json;
 pub mod sync_utils;
 pub mod time;
 pub mod zip;

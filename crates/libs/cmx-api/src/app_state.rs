@@ -6,7 +6,7 @@
 use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, UserService};
 use cmx_storage::service::StorageService;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
-use cmx_traits::iam::PermissionChecker;
+use cmx_traits::iam::{PermissionChecker, PermissionDefinitionImporter};
 use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
@@ -76,6 +76,8 @@ pub struct CmxAppState {
     iam: Option<Arc<IamState>>,
     /// 插件数据导入器（trait 对象，用于 HTTP/gRPC 接收端统一调用）
     plugin_data_importer: Option<Arc<dyn PluginDataImporter>>,
+    /// 权限定义导入器（trait 对象，模块导入时复用 cmx-iam 的两阶段 upsert）
+    permission_definition_importer: Option<Arc<dyn PermissionDefinitionImporter>>,
 }
 
 impl Default for CmxAppState {
@@ -99,6 +101,7 @@ impl CmxAppState {
             auth_service: None,
             iam: None,
             plugin_data_importer: None,
+            permission_definition_importer: None,
         }
     }
 
@@ -165,6 +168,15 @@ impl CmxAppState {
         self
     }
 
+    /// 设置权限定义导入器（模块导入时复用 cmx-iam 的两阶段 upsert）
+    pub fn with_permission_definition_importer(
+        mut self,
+        importer: Arc<dyn PermissionDefinitionImporter>,
+    ) -> Self {
+        self.permission_definition_importer = Some(importer);
+        self
+    }
+
     /// 获取插件查询器
     ///
     /// # 返回值
@@ -220,6 +232,11 @@ impl CmxAppState {
         self.plugin_data_importer.as_ref()
     }
 
+    /// 获取权限定义导入器
+    pub fn permission_definition_importer(&self) -> Option<&Arc<dyn PermissionDefinitionImporter>> {
+        self.permission_definition_importer.as_ref()
+    }
+
     /// 获取应用隔离标识
     ///
     /// 返回 app_id 字符串的副本。
@@ -247,6 +264,7 @@ impl Clone for CmxAppState {
             auth_service: self.auth_service.clone(),
             iam: self.iam.clone(),
             plugin_data_importer: self.plugin_data_importer.clone(),
+            permission_definition_importer: self.permission_definition_importer.clone(),
         }
     }
 }

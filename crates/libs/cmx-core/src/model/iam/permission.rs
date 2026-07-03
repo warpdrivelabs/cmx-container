@@ -100,3 +100,59 @@ pub struct Permission {
     #[serde(default)]
     pub update_name: Option<String>,
 }
+
+// ===== 权限导入/导出契约（PermissionFile / PermissionDefinition）=====
+//
+// 这两个结构是模块包 permissions/*.json 的序列化契约,
+// 同时被 cmx-iam(插件权限导入) 和 cmx-plugin(模块导入/导出) 使用。
+// 定义在 cmx-core 中避免三处副本(导出 ad-hoc json!、导入私有 inline struct、cmx-iam 规范)漂移。
+
+/// 权限定义（对应权限文件中的单条条目，导入/导出契约）。
+///
+/// 用于从 `permdata/*.json` / 模块包 `permissions/*.json` 反序列化,
+/// 与入库的 `Permission` 实体解耦。`parent_code` 在第二阶段被解析为 `parent_id`。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct PermissionDefinition {
+    /// 权限编码（必须含 `:` 分隔符，如 `user:list`）。
+    pub code: String,
+    /// 权限名称。
+    pub name: String,
+    /// 资源类型（`api`/`menu`/`button`，未指定默认 `api`）。
+    #[serde(default)]
+    pub resource_type: Option<String>,
+    /// 父权限编码（用 code 引用，接收端解析为 parent_id）。
+    #[serde(default)]
+    pub parent_code: Option<String>,
+    /// 排序序号（默认 0）。
+    #[serde(default)]
+    pub sort_order: Option<i64>,
+    /// 权限描述。
+    #[serde(default)]
+    pub description: Option<String>,
+    /// 扩展配置（JSON 字符串）。
+    #[serde(default)]
+    pub extension: Option<String>,
+    /// 状态（1-启用，0-禁用，默认 1）。
+    #[serde(default)]
+    pub status: Option<i64>,
+}
+
+/// 权限文件（对应 `permdata/` 目录下的单个 JSON 文件）。
+///
+/// `name`/`version`/`description` 为元数据，不入库；
+/// `permissions` 为实际权限定义列表，合并后统一处理。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionFile {
+    /// 文件描述名称（元数据，不入库）。
+    #[serde(default)]
+    pub name: String,
+    /// 文件版本（元数据，不入库）。
+    #[serde(default)]
+    pub version: String,
+    /// 文件描述（元数据，不入库）。
+    #[serde(default)]
+    pub description: String,
+    /// 权限定义列表。
+    pub permissions: Vec<PermissionDefinition>,
+}

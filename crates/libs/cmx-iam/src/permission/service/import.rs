@@ -12,64 +12,15 @@ use cmx_core::SVRContext;
 use cmx_core::model::cell::DataValue;
 use cmx_traits::error::TraitError;
 use cmx_traits::plugin::PluginDataImportResult;
-use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 
 use crate::audit_helper::AuditHelper;
 use crate::error::IamError;
 use crate::permission::service::PermissionServiceImpl;
 
-/// 权限定义（对应 JSON 文件中的单条权限条目）。
-///
-/// 用于从插件 `permdata/*.json` 文件反序列化，与入库的 `Permission` 实体解耦。
-/// `parent_code` 在第二阶段被解析为 `parent_id`。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionDefinition {
-    /// 权限编码（必须含 `:` 分隔符，如 `user:list`）。
-    pub code: String,
-    /// 权限名称。
-    pub name: String,
-    /// 资源类型（`api`/`menu`/`button`，未指定默认 `api`）。
-    #[serde(default)]
-    pub resource_type: Option<String>,
-    /// 父权限编码（用 code 引用，接收端解析为 parent_id）。
-    #[serde(default)]
-    pub parent_code: Option<String>,
-    /// 排序序号（默认 0）。
-    #[serde(default)]
-    pub sort_order: Option<i64>,
-    /// 权限描述。
-    #[serde(default)]
-    pub description: Option<String>,
-    /// 扩展配置（JSON 字符串）。
-    #[serde(default)]
-    pub extension: Option<String>,
-    /// 状态（1-启用，0-禁用，默认 1）。
-    #[serde(default)]
-    pub status: Option<i64>,
-}
-
-/// 权限文件（对应 `permdata/` 目录下的单个 JSON 文件）。
-///
-/// `name`/`version`/`description` 为元数据，不入库；
-/// `permissions` 为实际权限定义列表，合并后统一处理。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionFile {
-    /// 文件描述名称（元数据，不入库）。
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub name: String,
-    /// 文件版本（元数据，不入库）。
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub version: String,
-    /// 文件描述（元数据，不入库）。
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub description: String,
-    /// 权限定义列表。
-    pub permissions: Vec<PermissionDefinition>,
-}
+// 权限定义/文件契约结构体统一定义在 cmx_core::model::iam,
+// 此处从父模块(super,已 re-export cmx_core)引入,保持本文件内引用不变。
+use super::{PermissionDefinition, PermissionFile};
 
 impl PermissionServiceImpl {
     /// 解压 ZIP 并解析、校验所有 JSON 文件，合并返回权限定义列表。

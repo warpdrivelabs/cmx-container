@@ -25,12 +25,14 @@ use crate::error::Result;
 
 /// 创建 IAM 服务（含 UserAuthQueryImpl）
 ///
-/// 返回 `(IamState, Arc<dyn UserAuthQuery>, IamConfig, Option<Arc<dyn PluginDataImporter>>)`，
+/// 返回 `(IamState, Arc<dyn UserAuthQuery>, IamConfig, Option<Arc<dyn PluginDataImporter>>, Option<Arc<dyn PermissionDefinitionImporter>>)`，
 /// 其中：
 /// - `UserAuthQuery` 供 AuthServiceImpl 共享使用；
 /// - `IamConfig` 供 finalize_iam_state 使用，避免重复解析配置；
 /// - `PluginDataImporter` 供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑，
 ///   仅当 `PermissionServiceImpl` 成功创建时返回 `Some`。
+/// - `PermissionDefinitionImporter` 供模块导入(CmxAppState → ModuleInstallService)复用
+///   cmx-iam 的两阶段权限 upsert,同样仅当 `PermissionServiceImpl` 成功创建时返回 `Some`。
 ///
 /// # 参数
 /// * `audit_logger` - 审计日志器，注入到各 IAM Service（RuleEnforcer、ExclusionRuleService、
@@ -42,6 +44,7 @@ pub async fn init_iam_services(
     Arc<dyn UserAuthQuery>,
     IamConfig,
     Option<Arc<dyn PluginDataImporter>>,
+    Option<Arc<dyn cmx_traits::iam::PermissionDefinitionImporter>>,
 )> {
     // 1. 加载 IAM 配置
     let iam_config = load_iam_config();
@@ -99,7 +102,10 @@ pub async fn init_iam_services(
 
     // 构造插件数据导入器（HTTP 端点和 gRPC 服务端共用）
     let plugin_data_importer: Arc<dyn PluginDataImporter> =
-        Arc::new(PluginDataImporterImpl::new(permission_service_impl));
+        Arc::new(PluginDataImporterImpl::new(permission_service_impl.clone()));
+    // 构造权限定义导入器（模块导入复用 cmx-iam 两阶段 upsert;PermissionServiceImpl 已实现该 trait）
+    let permission_definition_importer: Arc<dyn cmx_traits::iam::PermissionDefinitionImporter> =
+        permission_service_impl;
 
     let role_group_service: Arc<dyn cmx_iam::service_traits::RoleGroupService> = Arc::new(
         RoleGroupServiceImpl::new(mm.clone(), iam_config.clone())
@@ -137,6 +143,7 @@ pub async fn init_iam_services(
         user_auth_query,
         iam_config,
         Some(plugin_data_importer),
+        Some(permission_definition_importer),
     ))
 }
 

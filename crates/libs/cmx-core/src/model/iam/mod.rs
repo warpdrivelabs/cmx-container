@@ -13,7 +13,7 @@ pub mod role_group_tree_node;
 pub mod user;
 
 pub use error::{PermissionDeniedError, RoleRequirement};
-pub use permission::Permission;
+pub use permission::{Permission, PermissionDefinition, PermissionFile};
 pub use permission_tree_node::PermissionTreeNode;
 pub use registry::{
     PermissionInfo, PermissionRegistry, RegisteredPermission, RegisteredRouteHandler,

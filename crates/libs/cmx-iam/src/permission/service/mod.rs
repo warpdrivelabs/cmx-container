@@ -31,10 +31,11 @@ use crate::iam_checker::IamChecker;
 use crate::permission::{PermissionFilter, PermissionForCreate, PermissionForUpdate};
 use crate::service_traits::{PermissionService, PermissionUsageStat};
 
-// 插件权限文件解析结构体（供外部 re-export）
-pub use import::{PermissionDefinition, PermissionFile};
+// 权限导入/导出契约结构体现在统一定义在 cmx-core(供 cmx-plugin 模块导入/导出复用)
+pub use cmx_core::model::iam::{PermissionDefinition, PermissionFile};
 
 mod crud;
+mod definition_importer;
 mod helpers;
 mod import;
 mod query;

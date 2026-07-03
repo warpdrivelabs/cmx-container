@@ -91,8 +91,10 @@ impl ModuleExportService {
         }
 
         // 5. 导出插件子包 → plugins/{plugin_id}.zip
+        // app_id 取配置值(当前设计下 app_id ≡ module_code),避免把 application_code 误当 app_id
+        let app_id = cmx_utils::ConfigManager::global().get_app_id();
         let plugin_entries =
-            Self::export_plugins(mm, db_id, application_code, module_code, &export_dir, &self.plugin_root).await?;
+            Self::export_plugins(mm, db_id, &app_id, module_code, &export_dir, &self.plugin_root).await?;
 
         // 6. 组装 module.json + module.manifest.json
         let module_info = ModuleInfo {
@@ -174,14 +176,9 @@ impl ModuleExportService {
         if let Some(rows) = rows {
             tokio::fs::create_dir_all(&forms_dir).await.ok();
             for (i, row) in rows.iter().enumerate() {
-                // definition 是原始 JSON(整体透传);DB JSONB 可能以字符串返回,需解析
+                // definition 是原始 JSON(整体透传);DB JSONB 可能以字符串返回,统一归一化为对象
                 let definition = row.get("definition").cloned().unwrap_or_default();
-                let definition = if definition.is_string() {
-                    serde_json::from_str(definition.as_str().unwrap_or("{}"))
-                        .unwrap_or_default()
-                } else {
-                    definition
-                };
+                let definition = cmx_utils::json::coerce_to_object(definition);
                 let file_path = forms_dir.join(format!("form_{i}.json"));
                 Self::write_json(&file_path, &definition)?;
                 count += 1;
@@ -219,13 +216,9 @@ impl ModuleExportService {
         if let Some(rows) = rows {
             tokio::fs::create_dir_all(&menus_dir).await.ok();
             for (i, row) in rows.iter().enumerate() {
-                // definition 是 JSONB,DB 取出可能是字符串或对象
+                // definition 是 JSONB,DB 取出可能是字符串或对象,统一归一化
                 let definition = row.get("definition").cloned().unwrap_or_default();
-                let menu_json = if definition.is_string() {
-                    serde_json::from_str(definition.as_str().unwrap_or("{}")).unwrap_or_default()
-                } else {
-                    definition
-                };
+                let menu_json = cmx_utils::json::coerce_to_object(definition);
                 let file_path = menus_dir.join(format!("menu_{i}.json"));
                 Self::write_json(&file_path, &menu_json)?;
                 count += 1;
@@ -285,16 +278,7 @@ impl ModuleExportService {
             if let Some(metadata) = row.get("metadata")
                 && !metadata.is_null()
             {
-                let table_def = if metadata.is_string() {
-                    // text 形式:解析字符串为 JSON 对象
-                    serde_json::from_str::<serde_json::Value>(
-                        metadata.as_str().unwrap_or("{}"),
-                    )
-                    .unwrap_or_default()
-                } else {
-                    // 已是 JSON 对象
-                    metadata.clone()
-                };
+                let table_def = cmx_utils::json::coerce_to_object(metadata.clone());
                 all_tables.push(table_def);
             }
         }
@@ -379,8 +363,9 @@ impl ModuleExportService {
             }
         }
 
-        // 组装 PermissionFile 结构(对称于导入端的 PermissionDefinition)
-        let mut perm_defs = Vec::new();
+        // 组装 PermissionFile 结构(使用 cmx-core 统一契约,对称于导入端)
+        use cmx_core::model::iam::{PermissionDefinition, PermissionFile};
+        let mut perm_defs: Vec<PermissionDefinition> = Vec::new();
         for row in rows {
             let parent_code = row
                 .get("parent_id")
@@ -392,30 +377,34 @@ impl ModuleExportService {
                 .get("extension")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let def = serde_json::json!({
-                "code": row.get("code").and_then(|v| v.as_str()).unwrap_or(""),
-                "name": row.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                "resource_type": row.get("resource_type").and_then(|v| v.as_str()).unwrap_or("api"),
-                "parent_code": parent_code,
-                "sort_order": row.get("sort_order").and_then(|v| v.as_i64()).unwrap_or(0),
-                "description": row.get("description").and_then(|v| v.as_str()),
-                "extension": extension,
-                "status": row.get("status").and_then(|v| v.as_i64()).unwrap_or(1),
-            });
+            let def = PermissionDefinition {
+                code: row.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                name: row.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                resource_type: row
+                    .get("resource_type")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                parent_code,
+                sort_order: row.get("sort_order").and_then(|v| v.as_i64()),
+                description: row.get("description").and_then(|v| v.as_str()).map(String::from),
+                extension,
+                status: row.get("status").and_then(|v| v.as_i64()),
+            };
             perm_defs.push(def);
         }
 
-        let perm_file = serde_json::json!({
-            "name": format!("{}_permissions", module_code),
-            "version": "1.0.0",
-            "description": format!("模块 {} 权限定义", module_code),
-            "permissions": perm_defs,
-        });
+        let perm_file = PermissionFile {
+            name: format!("{}_permissions", module_code),
+            version: "1.0.0".to_string(),
+            description: format!("模块 {} 权限定义", module_code),
+            permissions: perm_defs.clone(),
+        };
+        let perm_file_json = serde_json::to_value(&perm_file)?;
 
         tokio::fs::create_dir_all(&perms_dir).await.ok();
         Self::write_json(
             &perms_dir.join(format!("{module_code}_permissions.json")),
-            &perm_file,
+            &perm_file_json,
         )?;
         Ok(perm_defs.len())
     }

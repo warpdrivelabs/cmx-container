@@ -70,7 +70,7 @@ pub struct ModuleImportResponse {
     tag = "Module"
 )]
 pub async fn module_package_import(
-    State(_cmx_state): State<CmxAppState>,
+    State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<ModuleImportResponse>>> {
@@ -114,6 +114,12 @@ pub async fn module_package_import(
     // 通过 deploy_service 共享(模块包内插件子包复用 deploy 自动判断升级/安装)
     let deploy_svc = std::sync::Arc::new(manager.deploy_service().clone());
     let module_install_svc = ModuleInstallService::new(package_utils, deploy_svc);
+    // 注入权限定义导入器(复用 cmx-iam 两阶段权限 upsert,消除重复 SQL)
+    let module_install_svc = if let Some(importer) = cmx_state.permission_definition_importer() {
+        module_install_svc.with_permission_importer(importer.clone())
+    } else {
+        module_install_svc
+    };
 
     // 3. 执行导入(含版本校验)
     let result = module_install_svc

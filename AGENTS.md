@@ -189,3 +189,23 @@ git push origin main
 
 - TOML 配置 → `config/config_template.toml` + `config/CONFIG_MANUAL.md`
 - 环境变量 → `config/.env.template` + `config/ENV_MANUAL.md`
+
+---
+
+## 六、app_id 与 module_code 关系约束
+
+### 6.1 当前约束：`app_id ≡ module_code`
+
+当前架构下，`app_id` 与 `module_code` **恒等**，二者指向同一逻辑实体。证据：
+
+1. **配置同源**：`ConfigManager::global().get_app_id()`（`cmx-utils/src/config/config_impl.rs`）的第一优先来源是配置键 `app.module_code`，即 `app_id` 的值直接取自 `module_code` 配置项。
+2. **导入强制相等**：`ModuleInstallService::install_module_package`（`cmx-plugin/src/service/module_install.rs`）在导入时校验 `manifest.module.code == get_app_id()`，不一致则拒绝导入。
+3. **导出/查询冗余**：`cmx_plugin`、`cmx_meta_table_define` 等表同时带 `app_id` 和 `module_code` 列，但二者值相同，SQL 中 `WHERE module_code = $1 AND app_id = $2` 的双过滤是冗余的。
+
+### 6.2 AI 开发规则
+
+1. **禁止硬编码 `"default"` 作为 app_id 兜底**。必须使用 `cmx_utils::ConfigManager::global().get_app_id()` 取配置值，确保与 `deploy.rs`、`persistence.rs` 行为一致。
+2. **不要把 `application_code` 当作 `app_id` 传参**。`application_code`（应用编码）与 `app_id`（隔离标识）是不同概念，尽管当前值可能相同。
+3. **携带 `module_code` 的表**（`cmx_plugin`、`cmx_meta_table_define`、`cmx_meta_table_define_version`、`cmx_service_define`）：`app_id` 列功能冗余，但**保留**（为未来多租户演进预留），查询时优先用 `module_code` 过滤。
+4. **不带 `module_code` 的表**（`cmx_plugin_versions`、`cmx_audit_log`、`cmx_model_*`）：`app_id` 是唯一隔离键，**必须**带上过滤。
+5. `cmx_permission` 表使用 `app_code` 列（命名与全局 `app_id`/`application_code` 不一致），注意区分。

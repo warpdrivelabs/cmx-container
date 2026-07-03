@@ -3,19 +3,14 @@
 //! 统一编排持久化 → 运行时 → 事件发布的完整流程，
 //! 替代当前散布在各服务中的重复编排逻辑。
 //!
-//! # 两种操作模式
+//! # 操作模式
 //!
 //! - **本地操作**（`execute_install` 等）：当前节点接收 API 请求后执行，
 //!   发布完整的 GlobalEventBus 事件 + Redis 跨实例通知。
-//! - **管控操作**（`execute_control_install` 等）：管控模式下执行，
-//!   仅发布进程内事件 + RuntimeLoad/RuntimeUnload 通知，
-//!   不发送 Redis 变更通知（避免其他节点重复操作数据库）。
 
 use std::sync::Arc;
 
 use crate::audit::logger::AuditLogger;
-use crate::center_client::dispatcher::CenterDataDispatcher;
-//use crate::center_client::types::DispatchContext;
 use crate::error::PluginResult;
 use crate::service::event_publisher::EventPublisher;
 use crate::service::persistence::PluginPersistence;
@@ -43,7 +38,6 @@ pub struct PluginOperationExecutor {
     runtime: Arc<RuntimeOps>,
     event_publisher: EventPublisher,
     audit_logger: Arc<AuditLogger>,
-    center_dispatcher: Arc<CenterDataDispatcher>,
 }
 
 impl PluginOperationExecutor {
@@ -60,14 +54,12 @@ impl PluginOperationExecutor {
         runtime: Arc<RuntimeOps>,
         event_publisher: EventPublisher,
         audit_logger: Arc<AuditLogger>,
-        center_dispatcher: Arc<CenterDataDispatcher>,
     ) -> Self {
         Self {
             persistence,
             runtime,
             event_publisher,
             audit_logger,
-            center_dispatcher,
         }
     }
 
@@ -90,48 +82,6 @@ impl PluginOperationExecutor {
 
         // 1. 持久化：数据库写入 + 文件安装
         let persist_result = self.persistence.install_persist(request).await?;
-
-        // 1.5 中心数据分发：并行推送到各基础服务中心
-        // TODO(module): 菜单/权限/表单/流程的分发到外部中心已迁移到模块安装流程(ModuleInstallService)，
-        // 单独安装插件时不再推送。dispatch_install 在插件包瘦身(无 formdata/menudata/permdata)后
-        // 天然为空，此处分发块整体注释保留，待模块中心分发补全后由模块流程统一触发。
-        // let ctx = DispatchContext {
-        //     install_path: persist_result.install_path.clone(),
-        //     plugin_id: persist_result.plugin_id.clone(),
-        //     app_id: persist_result.app_id.clone(),
-        //     version: persist_result.version.clone(),
-        //     domain_code: persist_result.domain_code.clone(),
-        //     application_code: persist_result.application_code.clone(),
-        //     module_code: persist_result.module_code.clone(),
-        // };
-        // let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
-        // if !dispatch_result.is_all_success() {
-        //     let failures: Vec<String> = dispatch_result
-        //         .failed_categories()
-        //         .iter()
-        //         .map(|r| {
-        //             format!(
-        //                 "{}: {}",
-        //                 r.category.center_name(),
-        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-        //             )
-        //         })
-        //         .collect();
-        //     let error_msg = format!("中心数据推送失败: {}", failures.join(", "));
-        //     tracing::error!("{}", error_msg);
-        //     tracing::error!("开始补偿卸载: {}", persist_result.plugin_id);
-        //     let uninstall_req = crate::service::uninstall::UninstallRequest {
-        //         plugin_id: persist_result.plugin_id.clone(),
-        //         force: true,
-        //         operator: "system-compensate".to_string(),
-        //         app_id: Some(persist_result.app_id.clone()),
-        //     };
-        //     let _ = self.persistence.uninstall_persist(uninstall_req).await.map_err(|rollback_err| {
-        //         tracing::error!("补偿卸载也失败，需人工介入: {}", rollback_err);
-        //         rollback_err
-        //     });
-        //     return Err(crate::error::PluginError::CenterData(error_msg));
-        // }
 
         // 2. 运行时注册：写入 Registry + Contexts + Cache
         self.runtime.register_plugin(&persist_result).await?;
@@ -182,36 +132,6 @@ impl PluginOperationExecutor {
         // 1. 持久化
         let persist_result = self.persistence.upgrade_persist(request).await?;
 
-        // 1.5 中心数据分发
-        // TODO(module): 升级时分发到外部中心已迁移到模块安装流程，单独升级插件不再推送。
-        // let ctx = DispatchContext {
-        //     install_path: persist_result.install_path.clone(),
-        //     plugin_id: persist_result.plugin_id.clone(),
-        //     app_id: persist_result.app_id.clone(),
-        //     version: persist_result.version.clone(),
-        //     domain_code: persist_result.domain_code.clone(),
-        //     application_code: persist_result.application_code.clone(),
-        //     module_code: persist_result.module_code.clone(),
-        // };
-        // let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
-        // if !dispatch_result.is_all_success() {
-        //     let failures: Vec<String> = dispatch_result
-        //         .failed_categories()
-        //         .iter()
-        //         .map(|r| {
-        //             format!(
-        //                 "{}: {}",
-        //                 r.category.center_name(),
-        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-        //             )
-        //         })
-        //         .collect();
-        //     return Err(crate::error::PluginError::CenterData(format!(
-        //         "升级时中心数据推送失败: {}",
-        //         failures.join(", ")
-        //     )));
-        // }
-
         // 2. 运行时更新：更新 Registry + Contexts + Cache 中的版本信息
         self.runtime.update_plugin(&persist_result).await?;
 
@@ -261,36 +181,6 @@ impl PluginOperationExecutor {
         // 1. 持久化
         let persist_result = self.persistence.downgrade_persist(request).await?;
 
-        // 1.5 中心数据分发
-        // TODO(module): 降级时分发到外部中心已迁移到模块安装流程，单独降级插件不再推送。
-        // let ctx = DispatchContext {
-        //     install_path: persist_result.install_path.clone(),
-        //     plugin_id: persist_result.plugin_id.clone(),
-        //     app_id: persist_result.app_id.clone(),
-        //     version: persist_result.version.clone(),
-        //     domain_code: persist_result.domain_code.clone(),
-        //     application_code: persist_result.application_code.clone(),
-        //     module_code: persist_result.module_code.clone(),
-        // };
-        // let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
-        // if !dispatch_result.is_all_success() {
-        //     let failures: Vec<String> = dispatch_result
-        //         .failed_categories()
-        //         .iter()
-        //         .map(|r| {
-        //             format!(
-        //                 "{}: {}",
-        //                 r.category.center_name(),
-        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-        //             )
-        //         })
-        //         .collect();
-        //     return Err(crate::error::PluginError::CenterData(format!(
-        //         "降级时中心数据推送失败: {}",
-        //         failures.join(", ")
-        //     )));
-        // }
-
         // 2. 运行时更新
         self.runtime.update_plugin(&persist_result).await?;
 
@@ -339,35 +229,6 @@ impl PluginOperationExecutor {
 
         // 1. 持久化：事务内删除数据库记录，提交后删除物理文件
         let persist_result = self.persistence.uninstall_persist(request).await?;
-
-        // 1.5 中心数据清理：并行通知各中心清理关联数据 fixme yqs 暂时不允许清理数据库数据
-        // let ctx = DispatchContext {
-        //     install_path: persist_result.install_path.clone(),
-        //     plugin_id: persist_result.plugin_id.clone(),
-        //     app_id: persist_result.app_id.clone(),
-        //     version: persist_result.version.clone(),
-        //     domain_code: persist_result.domain_code.clone(),
-        //     application_code: persist_result.application_code.clone(),
-        //     module_code: persist_result.module_code.clone(),
-        // };
-        // let dispatch_result = self.center_dispatcher.dispatch_cleanup(&ctx).await?;
-        // if !dispatch_result.is_all_success() {
-        //     let failures: Vec<String> = dispatch_result
-        //         .failed_categories()
-        //         .iter()
-        //         .map(|r| {
-        //             format!(
-        //                 "{}: {}",
-        //                 r.category.center_name(),
-        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-        //             )
-        //         })
-        //         .collect();
-        //     return Err(crate::error::PluginError::CenterData(format!(
-        //         "中心数据清理失败（DB 已清理但中心数据残留）: {}",
-        //         failures.join(", ")
-        //     )));
-        // }
 
         // 2. 运行时注销：从 Registry + Contexts + Cache 中移除
         self.runtime.unregister_plugin(&persist_result.plugin_id).await?;
@@ -427,36 +288,6 @@ impl PluginOperationExecutor {
             .reinstall_persist(request, plugin_id, old_version)
             .await?;
 
-        // 1.5 中心数据分发（覆盖安装时重新推送数据）
-        // TODO(module): 覆盖安装时分发到外部中心已迁移到模块安装流程，单独覆盖安装插件不再推送。
-        // let ctx = DispatchContext {
-        //     install_path: persist_result.install_path.clone(),
-        //     plugin_id: persist_result.plugin_id.clone(),
-        //     app_id: persist_result.app_id.clone(),
-        //     version: persist_result.version.clone(),
-        //     domain_code: persist_result.domain_code.clone(),
-        //     application_code: persist_result.application_code.clone(),
-        //     module_code: persist_result.module_code.clone(),
-        // };
-        // let dispatch_result = self.center_dispatcher.dispatch_install(&ctx).await?;
-        // if !dispatch_result.is_all_success() {
-        //     let failures: Vec<String> = dispatch_result
-        //         .failed_categories()
-        //         .iter()
-        //         .map(|r| {
-        //             format!(
-        //                 "{}: {}",
-        //                 r.category.center_name(),
-        //                 match &r.result { Ok(resp) if !resp.success => format!("被拒绝: {}", resp.message), Ok(_) => "成功".to_string(), Err(e) => e.to_string() }
-        //             )
-        //         })
-        //         .collect();
-        //     return Err(crate::error::PluginError::CenterData(format!(
-        //         "覆盖安装时中心数据推送失败: {}",
-        //         failures.join(", ")
-        //     )));
-        // }
-
         // 2. 运行时更新：更新 Registry + Contexts + Cache
         self.runtime.update_plugin(&persist_result).await?;
 
@@ -492,292 +323,4 @@ impl PluginOperationExecutor {
             marketplace_publish: None,
         })
     }
-
-    // ===== 管控操作 =====
-    // [已禁用] 管控模式已被禁用，相关代码保留在此注释块中
-    /*
-    /// 管控安装（持久化 + 本地运行时 + 审计 + 进程内事件 + RuntimeLoad 通知）。
-    ///
-    /// 管控模式与本地操作的区别：
-    /// - 不发送 Redis 变更通知（Installed/Upgraded 等），避免其他节点重复操作数据库
-    /// - 改为发送 RuntimeLoad 通知，让其他节点仅做运行时同步（下载文件 + 内存注册）
-    /// - 审计日志中标记 `"mode": "control"` 区分操作来源
-    ///
-    /// # Errors
-    ///
-    /// 当持久化失败、运行时注册失败时返回错误。
-    pub async fn execute_control_install(
-        &self,
-        request: crate::service::control::ControlInstallRequest,
-    ) -> PluginResult<crate::service::control::ControlDeployResponse> {
-        let start_time = std::time::Instant::now();
-
-        // 1. 持久化：send_event=false 阻止 persistence 内部发送事件
-        let install_req = crate::service::install::InstallRequest {
-            source: request.source,
-            db_id: request.db_id,
-            version_constraint: None,
-            build_type: request.build_type,
-            marketplace_source_id: None,
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-        let persist_result = self.persistence.install_persist(install_req).await?;
-
-        // 2. 运行时注册
-        self.runtime.register_plugin(&persist_result).await?;
-
-        // 3. 审计日志（标记管控模式）
-        let duration_ms = start_time.elapsed().as_millis() as i64;
-        let audit_record = crate::audit::record::AuditRecord::success(
-            persist_result.plugin_id.clone(),
-            crate::audit::record::OperationType::Install,
-        )
-        .with_details(serde_json::json!({
-            "mode": "control",
-            "version": persist_result.version,
-        }))
-        .with_new_value(persist_result.install_path.to_string_lossy().to_string())
-        .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
-            .map_err(|e| { tracing::warn!("审计日志写入失败: {}", e); e })
-            .ok();
-
-        // 4. 进程内事件（仅通知本进程内的订阅者）
-        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
-            &persist_result.app_id,
-            &persist_result.plugin_id,
-            &persist_result.version,
-        )
-        .with_install_path(persist_result.install_path.clone());
-        self.event_publisher
-            .publish_local_event(cmx_traits::plugin::plugin_events::INSTALLED, payload)
-            .await;
-
-        // 5. 跨实例运行时加载通知（其他节点仅做运行时同步，不操作数据库）
-        self.event_publisher
-            .notify_runtime_load(
-                &persist_result.plugin_id,
-                &persist_result.version,
-                &persist_result.app_id,
-            )
-            .await;
-
-        Ok(crate::service::control::ControlDeployResponse {
-            plugin_id: persist_result.plugin_id,
-            version: persist_result.version,
-            action: "installed".to_string(),
-            app_id: persist_result.app_id,
-        })
-    }
-
-    /// 管控升级（持久化 + 本地运行时 + 审计 + 进程内事件 + RuntimeLoad 通知）。
-    ///
-    /// 与 `execute_control_install` 的事件发布策略一致。
-    ///
-    /// # Errors
-    ///
-    /// 当持久化失败、运行时更新失败时返回错误。
-    pub async fn execute_control_upgrade(
-        &self,
-        request: crate::service::control::ControlUpgradeRequest,
-    ) -> PluginResult<crate::service::control::ControlDeployResponse> {
-        let start_time = std::time::Instant::now();
-
-        // 1. 持久化
-        let upgrade_req = crate::service::upgrade::UpgradeRequest {
-            plugin_id: request.plugin_id.clone(),
-            source: request.source,
-            version_constraint: None,
-            force: false,
-            operator: None,
-            build_type: request.build_type,
-            marketplace_source_id: None,
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-        let persist_result = self.persistence.upgrade_persist(upgrade_req).await?;
-
-        // 2. 运行时更新
-        self.runtime.update_plugin(&persist_result).await?;
-
-        // 3. 审计日志（标记管控模式）
-        let duration_ms = start_time.elapsed().as_millis() as i64;
-        let audit_record = crate::audit::record::AuditRecord::success(
-            persist_result.plugin_id.clone(),
-            crate::audit::record::OperationType::Upgrade,
-        )
-        .with_details(serde_json::json!({
-            "mode": "control",
-            "old_version": persist_result.old_version.as_deref().unwrap_or("unknown"),
-            "new_version": persist_result.version,
-        }))
-        .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
-            .map_err(|e| { tracing::warn!("审计日志写入失败: {}", e); e })
-            .ok();
-
-        // 4. 进程内事件
-        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
-            &persist_result.app_id,
-            &persist_result.plugin_id,
-            &persist_result.version,
-        )
-        .with_old_version(persist_result.old_version.as_deref().unwrap_or("unknown"));
-        self.event_publisher
-            .publish_local_event(cmx_traits::plugin::plugin_events::UPGRADED, payload)
-            .await;
-
-        // 5. 跨实例运行时加载通知
-        self.event_publisher
-            .notify_runtime_load(
-                &persist_result.plugin_id,
-                &persist_result.version,
-                &persist_result.app_id,
-            )
-            .await;
-
-        Ok(crate::service::control::ControlDeployResponse {
-            plugin_id: persist_result.plugin_id,
-            version: persist_result.version,
-            action: "upgraded".to_string(),
-            app_id: persist_result.app_id,
-        })
-    }
-
-    /// 管控降级（持久化 + 本地运行时 + 审计 + 进程内事件 + RuntimeLoad 通知）。
-    ///
-    /// 与 `execute_control_install` 的事件发布策略一致。
-    ///
-    /// # Errors
-    ///
-    /// 当持久化失败、运行时更新失败时返回错误。
-    pub async fn execute_control_downgrade(
-        &self,
-        request: crate::service::control::ControlDowngradeRequest,
-    ) -> PluginResult<crate::service::control::ControlDeployResponse> {
-        let start_time = std::time::Instant::now();
-
-        // 1. 持久化
-        let downgrade_req = crate::service::downgrade::DowngradeRequest {
-            plugin_id: request.plugin_id.clone(),
-            target_version: request.target_version,
-            source: None,
-            operator: None,
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-        let persist_result = self.persistence.downgrade_persist(downgrade_req).await?;
-
-        // 2. 运行时更新
-        self.runtime.update_plugin(&persist_result).await?;
-
-        // 3. 审计日志（标记管控模式）
-        let duration_ms = start_time.elapsed().as_millis() as i64;
-        let audit_record = crate::audit::record::AuditRecord::success(
-            persist_result.plugin_id.clone(),
-            crate::audit::record::OperationType::Downgrade,
-        )
-        .with_details(serde_json::json!({
-            "mode": "control",
-            "old_version": persist_result.old_version.as_deref().unwrap_or("unknown"),
-            "new_version": persist_result.version,
-        }))
-        .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
-            .map_err(|e| { tracing::warn!("审计日志写入失败: {}", e); e })
-            .ok();
-
-        // 4. 进程内事件
-        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
-            &persist_result.app_id,
-            &persist_result.plugin_id,
-            &persist_result.version,
-        )
-        .with_old_version(persist_result.old_version.as_deref().unwrap_or("unknown"));
-        self.event_publisher
-            .publish_local_event(cmx_traits::plugin::plugin_events::DOWNGRADED, payload)
-            .await;
-
-        // 5. 跨实例运行时加载通知
-        self.event_publisher
-            .notify_runtime_load(
-                &persist_result.plugin_id,
-                &persist_result.version,
-                &persist_result.app_id,
-            )
-            .await;
-
-        Ok(crate::service::control::ControlDeployResponse {
-            plugin_id: persist_result.plugin_id,
-            version: persist_result.version,
-            action: "downgraded".to_string(),
-            app_id: persist_result.app_id,
-        })
-    }
-
-    /// 管控卸载（持久化 + 本地运行时 + 审计 + 进程内事件 + RuntimeUnload 通知）。
-    ///
-    /// 与其他管控操作不同，卸载发送 RuntimeUnload 通知（而非 RuntimeLoad），
-    /// 让其他节点从内存中注销插件并清理本地文件。
-    ///
-    /// # Errors
-    ///
-    /// 当持久化失败、运行时注销失败时返回错误。
-    pub async fn execute_control_uninstall(
-        &self,
-        request: crate::service::control::ControlUninstallRequest,
-    ) -> PluginResult<()> {
-        let start_time = std::time::Instant::now();
-
-        // 1. 持久化
-        let uninstall_req = crate::service::uninstall::UninstallRequest {
-            plugin_id: request.plugin_id.clone(),
-            force: false,
-            operator: "control-service".to_string(),
-            app_id: request.app_id.clone(),
-            send_event: false,
-        };
-        let persist_result = self.persistence.uninstall_persist(uninstall_req).await?;
-
-        // 2. 运行时注销
-        self.runtime.unregister_plugin(&persist_result.plugin_id).await?;
-
-        // 3. 审计日志（标记管控模式）
-        let duration_ms = start_time.elapsed().as_millis() as i64;
-        let audit_record = crate::audit::record::AuditRecord::success(
-            persist_result.plugin_id.clone(),
-            crate::audit::record::OperationType::Uninstall,
-        )
-        .with_details(serde_json::json!({
-            "mode": "control",
-            "version": persist_result.version,
-        }))
-        .with_completed(duration_ms);
-        let _ = self.audit_logger.log(audit_record).await
-            .map_err(|e| { tracing::warn!("审计日志写入失败: {}", e); e })
-            .ok();
-
-        // 4. 进程内事件
-        let payload = cmx_traits::plugin::PluginLifecyclePayload::new(
-            &persist_result.app_id,
-            &persist_result.plugin_id,
-            &persist_result.version,
-        );
-        self.event_publisher
-            .publish_local_event(cmx_traits::plugin::plugin_events::UNINSTALLED, payload)
-            .await;
-
-        // 5. 跨实例运行时卸载通知（其他节点注销内存 + 清理本地文件）
-        self.event_publisher
-            .notify_runtime_unload(
-                &persist_result.plugin_id,
-                &persist_result.version,
-                &persist_result.app_id,
-            )
-            .await;
-
-        Ok(())
-    }
-    */
 }

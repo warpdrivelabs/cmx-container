@@ -9,7 +9,7 @@
 //! - ✅ 检查已安装状态
 //! - ✅ 检查依赖
 //! - ✅ 创建安装目录 + 复制文件
-//! - ✅ DDL（使用 `execute_ddl_with_lock`，分布式锁保护）
+//! - ✅ 种子数据初始化（`execute_seed_data`，建表 DDL 已迁移到模块安装流程）
 //! - ✅ 事务：`upsert_plugin` + `upsert_version` + `set_current_version`
 //! - ✅ 解析并存储服务定义
 //! - ✅ 提交事务
@@ -115,10 +115,11 @@ impl PluginPersistence {
     /// 创建安装目录 → DDL → 事务写入数据库 → 解析服务定义 → 提交事务。
     pub async fn install_persist(&self, request: InstallRequest) -> PluginResult<PersistResult> {
         let build_type = request.build_type.unwrap_or("release".to_string());
+        // app_id 兜底统一走配置(app.module_code),与 deploy.rs 一致,避免硬编码 "default"
         let app_id = request
             .app_id
             .clone()
-            .unwrap_or_else(|| "default".to_string());
+            .unwrap_or_else(|| cmx_utils::ConfigManager::global().get_app_id());
 
         // 1. 获取插件包
         let package_path = self
@@ -230,57 +231,7 @@ impl PluginPersistence {
             .clone()
             .unwrap_or_else(|| self.deps.default_database_id.clone());
 
-        let default_db_id = self.deps.default_database_id.clone();
-
-        // 10. 开启事务
-        let txn_guard = get_default_db_manager()
-            .get_transaction_context()
-            .begin_with_guard(default_db_id.clone().as_str())
-            .await
-            .map_err(|e| PluginError::Database(e.to_string()))?;
-
-        // 11. 种子数据初始化(建表 DDL 已迁移到模块安装流程,但 seeddata 保留在插件包内)
-        // TODO(module): 建表 execute_ddl_with_lock 已迁移到模块安装流程(ModuleInstallService),
-        // 单独安装插件时不再自动建表。但种子数据初始化仍随插件执行(seeddata 在插件包内)。
-        // crate::service::utils::execute_ddl_with_lock(
-        //     &self.deps.lock_manager,
-        //     &target_db_id,
-        //     &plugin_id,
-        //     &app_id,
-        //     &install_version,
-        //     &install_path,
-        //     &plugin_def,
-        //     Some(txn_guard.txn_id()),
-        // )
-        // .await?;
-        if let Err(e) = crate::service::utils::execute_seed_data(
-            &target_db_id,
-            &plugin_id,
-            &install_path,
-            &plugin_def,
-        )
-        .await
-        {
-            tracing::warn!("插件 {} 种子数据初始化失败(不阻断安装): {}", plugin_id, e);
-        }
-
-        // 12. 构建数据库记录
-        let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
-        let source_info = super::record_builder::PluginSourceInfo::new(
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
-            request.marketplace_source_id.as_deref(),
-        );
-        let db_record = super::record_builder::build_plugin_create_params(
-            &plugin_def,
-            &install_version,
-            &install_path,
-            &target_db_id,
-            &source_info,
-            &app_id,
-        );
-
-        // 13. 检查基线版本
+        // 10. 检查基线版本(在事务前执行,避免无谓的事务开销)
         let baseline_version = self
             .deps
             .repository
@@ -295,53 +246,139 @@ impl PluginPersistence {
             )));
         }
 
-        // 14. Upsert 插件记录
+        // 11. 事务提交(种子数据 → upsert → 版本历史 → 标记当前 → 服务定义 → 提交)
+        self.commit_plugin_version(
+            &target_db_id,
+            &plugin_id,
+            &app_id,
+            &install_version,
+            &install_path,
+            &plugin_def,
+            &request.source,
+            request.marketplace_source_id.as_deref(),
+            build_type.as_str(),
+            None,
+            "安装",
+        )
+        .await
+    }
+
+    /// 安装/升级共享的事务提交逻辑(原步骤 10-18)。
+    ///
+    /// install_persist 与 upgrade_persist 在「文件已就位 + 元数据已解析」之后,
+    /// 事务内的写入流程完全一致,提取本方法消除重复:
+    /// 开启事务 → 种子数据 → 构建 DB 记录 → upsert 插件 → 版本历史 → 标记当前版本 →
+    /// 解析服务定义 → 提交事务 → 构建 PersistResult。
+    ///
+    /// # Arguments
+    /// * `target_db_id` - 目标业务库 ID
+    /// * `plugin_id` / `app_id` / `version` - 插件标识与目标版本
+    /// * `install_path` - 已就位的安装目录
+    /// * `plugin_def` - 解析后的插件定义
+    /// * `source` - 插件来源(用于提取 zip_source_type/url)
+    /// * `marketplace_source_id` - 市场来源 ID(install 取 request,upgrade 取 effective)
+    /// * `build_type` - 构建类型
+    /// * `old_version` - 旧版本(install 传 None,upgrade 传 Some)
+    /// * `action_label` - 操作标签(用于日志:"安装"/"升级")
+    #[allow(clippy::too_many_arguments)]
+    async fn commit_plugin_version(
+        &self,
+        target_db_id: &str,
+        plugin_id: &str,
+        app_id: &str,
+        version: &str,
+        install_path: &Path,
+        plugin_def: &cmx_core::model::meta::plugin::PluginDefinition,
+        source: &crate::domain::plugin::PluginSource,
+        marketplace_source_id: Option<&str>,
+        build_type: &str,
+        old_version: Option<String>,
+        action_label: &str,
+    ) -> PluginResult<PersistResult> {
+        let default_db_id = self.deps.default_database_id.clone();
+
+        // 1. 开启事务
+        let txn_guard = get_default_db_manager()
+            .get_transaction_context()
+            .begin_with_guard(default_db_id.as_str())
+            .await
+            .map_err(|e| PluginError::Database(e.to_string()))?;
+
+        // 2. 种子数据初始化(建表 DDL 已迁移到模块安装流程,但 seeddata 保留在插件包内)
+        if let Err(e) = crate::service::utils::execute_seed_data(
+            target_db_id,
+            plugin_id,
+            install_path,
+            plugin_def,
+        )
+        .await
+        {
+            tracing::warn!("插件 {} 种子数据初始化失败(不阻断{}): {}", plugin_id, action_label, e);
+        }
+
+        // 3. 构建数据库记录
+        let (zip_source_type, zip_source_url) = extract_source_info(source);
+        let source_info = super::record_builder::PluginSourceInfo::new(
+            zip_source_url.as_deref(),
+            zip_source_type.as_deref(),
+            marketplace_source_id,
+        );
+        let db_record = super::record_builder::build_plugin_create_params(
+            plugin_def,
+            version,
+            install_path,
+            target_db_id,
+            &source_info,
+            app_id,
+        );
+
+        // 4. Upsert 插件记录
         self.deps
             .repository
             .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
             .await?;
 
-        // 15. 插入版本历史记录
-        let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
+        // 5. 插入版本历史记录
+        let wasm_path = super::record_builder::build_wasm_path(install_path, plugin_def);
         let version_record = super::record_builder::build_version_create_params(
-            &plugin_id,
-            &app_id,
-            &install_version,
+            plugin_id,
+            app_id,
+            version,
             &install_path.to_string_lossy(),
             &wasm_path,
             &source_info,
-            Some(&plugin_def),
-            build_type.as_str(),
+            Some(plugin_def),
+            build_type,
         );
         self.deps
             .version_history_repository
             .upsert_version(&version_record, Some(txn_guard.txn_id()))
             .await?;
 
-        // 16. 标记当前版本
+        // 6. 标记当前版本
         self.deps
             .version_history_repository
             .set_current_version(
-                &plugin_id,
-                &app_id,
-                &install_version,
+                plugin_id,
+                app_id,
+                version,
                 install_path.to_string_lossy().to_string().as_str(),
                 wasm_path.as_str(),
                 Some(txn_guard.txn_id()),
             )
             .await?;
 
-        // 17. 解析并存储服务定义
+        // 7. 解析并存储服务定义
         let parse_params = ServiceParseParams {
-            plugin_id: plugin_id.clone(),
-            plugin_version: install_version.clone(),
-            app_id: app_id.clone(),
+            plugin_id: plugin_id.to_string(),
+            plugin_version: version.to_string(),
+            app_id: app_id.to_string(),
             domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
         };
         let parsed_services = crate::service::service_parser::parse_and_save_services(
-            &install_path,
+            install_path,
             &parse_params,
             &self.deps.service_storage,
             &self.deps.plugin_root,
@@ -352,46 +389,47 @@ impl PluginPersistence {
 
         if !parsed_services.is_empty() {
             tracing::info!(
-                "插件 {} 安装时解析到 {} 个服务定义",
+                "插件 {} {}时解析到 {} 个服务定义",
                 plugin_id,
+                action_label,
                 parsed_services.len()
             );
         }
 
-        // 18. 提交事务
+        // 8. 提交事务
         txn_guard
             .commit()
             .await
             .map_err(|e| PluginError::Database(e.to_string()))?;
 
         Ok(PersistResult {
-            plugin_id,
-            app_id,
-            version: install_version,
-            old_version: None,
-            install_path,
+            plugin_id: plugin_id.to_string(),
+            app_id: app_id.to_string(),
+            version: version.to_string(),
+            old_version,
+            install_path: install_path.to_path_buf(),
             wasm_path,
-            plugin_name: Some(plugin_def.name),
-            description: plugin_def.description,
-            domain_code: plugin_def.domain_code.unwrap_or_default(),
+            plugin_name: Some(plugin_def.name.clone()),
+            description: plugin_def.description.clone(),
+            domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
             application_code: plugin_def.application_code.clone().unwrap_or_default(),
             module_code: plugin_def.module_code.clone().unwrap_or_default(),
-            plugin_type: Some(plugin_def.r#type),
-            source_path: plugin_def.source_path,
+            plugin_type: Some(plugin_def.r#type.clone()),
+            source_path: plugin_def.source_path.clone(),
         })
     }
 
-    /// 升级持久化
     ///
     /// 从升级请求中提取持久化逻辑：检查插件存在 → 获取新版本包 → 解压验证 →
     /// 版本检查 → 检查依赖 → 创建安装目录 → DDL → 事务写入数据库 →
     /// 解析服务定义 → 提交事务。
     pub async fn upgrade_persist(&self, request: UpgradeRequest) -> PluginResult<PersistResult> {
         let build_type = request.build_type.unwrap_or("release".to_string());
+        // app_id 兜底统一走配置(app.module_code),与 deploy.rs 一致,避免硬编码 "default"
         let app_id = request
             .app_id
             .clone()
-            .unwrap_or_else(|| "default".to_string());
+            .unwrap_or_else(|| cmx_utils::ConfigManager::global().get_app_id());
 
         // 1. 检查插件存在
         let plugin = self
@@ -491,140 +529,22 @@ impl PluginPersistence {
             .copy_plugin_files(&extract_path, &install_path, "升级")?;
 
         let target_db_id = plugin.db_id.clone();
-        let default_db_id = self.deps.default_database_id.clone();
 
-        // 10. 开启事务
-        let txn_guard = get_default_db_manager()
-            .get_transaction_context()
-            .begin_with_guard(default_db_id.clone().as_str())
-            .await
-            .map_err(|e| PluginError::Database(e.to_string()))?;
-
-        // 11. 种子数据初始化(建表 DDL 已迁移到模块安装流程,但 seeddata 保留在插件包内)
-        // TODO(module): 建表 execute_ddl_with_lock 已迁移到模块安装流程,升级插件时不再自动建表。
-        // 但种子数据初始化仍随插件执行(seeddata 在插件包内)。
-        // crate::service::utils::execute_ddl_with_lock(
-        //     &self.deps.lock_manager,
-        //     &target_db_id,
-        //     &plugin_id,
-        //     &app_id,
-        //     &new_version,
-        //     &install_path,
-        //     &plugin_def,
-        //     Some(txn_guard.txn_id()),
-        // )
-        // .await?;
-        if let Err(e) = crate::service::utils::execute_seed_data(
+        // 10. 事务提交(种子数据 → upsert → 版本历史 → 标记当前 → 服务定义 → 提交)
+        self.commit_plugin_version(
             &target_db_id,
             &plugin_id,
+            &app_id,
+            &new_version,
             &install_path,
             &plugin_def,
+            &request.source,
+            effective_marketplace_source_id.as_deref(),
+            build_type.as_str(),
+            Some(old_version),
+            "升级",
         )
         .await
-        {
-            tracing::warn!("插件 {} 种子数据初始化失败(不阻断升级): {}", plugin_id, e);
-        }
-
-        // 12. 构建数据库记录
-        let (zip_source_type, zip_source_url) = extract_source_info(&request.source);
-        let source_info = super::record_builder::PluginSourceInfo::new(
-            zip_source_url.as_deref(),
-            zip_source_type.as_deref(),
-            effective_marketplace_source_id.as_deref(),
-        );
-        let db_record = super::record_builder::build_plugin_create_params(
-            &plugin_def,
-            &new_version,
-            &install_path,
-            &target_db_id,
-            &source_info,
-            &app_id,
-        );
-
-        // 13. Upsert 插件记录
-        self.deps
-            .repository
-            .upsert_plugin(&db_record, Some(txn_guard.txn_id()))
-            .await?;
-
-        // 14. 插入版本历史记录
-        let wasm_path = super::record_builder::build_wasm_path(&install_path, &plugin_def);
-        let version_record = super::record_builder::build_version_create_params(
-            &plugin_id,
-            &app_id,
-            &new_version,
-            &install_path.to_string_lossy(),
-            &wasm_path,
-            &source_info,
-            Some(&plugin_def),
-            build_type.as_str(),
-        );
-        self.deps
-            .version_history_repository
-            .upsert_version(&version_record, Some(txn_guard.txn_id()))
-            .await?;
-
-        // 15. 标记当前版本
-        self.deps
-            .version_history_repository
-            .set_current_version(
-                &plugin_id,
-                &app_id,
-                new_version.as_str(),
-                install_path.to_string_lossy().to_string().as_str(),
-                wasm_path.as_str(),
-                Some(txn_guard.txn_id()),
-            )
-            .await?;
-
-        // 16. 解析并存储服务定义
-        let parse_params = ServiceParseParams {
-            plugin_id: plugin_id.clone(),
-            plugin_version: new_version.clone(),
-            app_id: app_id.clone(),
-            domain_code: plugin_def.domain_code.clone().unwrap_or_default(),
-            application_code: plugin_def.application_code.clone().unwrap_or_default(),
-            module_code: plugin_def.module_code.clone().unwrap_or_default(),
-        };
-        let parsed_services = crate::service::service_parser::parse_and_save_services(
-            &install_path,
-            &parse_params,
-            &self.deps.service_storage,
-            &self.deps.plugin_root,
-            &self.deps.plugin_query,
-            Some(txn_guard.txn_id()),
-        )
-        .await?;
-
-        if !parsed_services.is_empty() {
-            tracing::info!(
-                "插件 {} 升级时解析到 {} 个服务定义",
-                plugin_id,
-                parsed_services.len()
-            );
-        }
-
-        // 17. 提交事务
-        txn_guard
-            .commit()
-            .await
-            .map_err(|e| PluginError::Database(e.to_string()))?;
-
-        Ok(PersistResult {
-            plugin_id,
-            app_id,
-            version: new_version,
-            old_version: Some(old_version),
-            install_path,
-            wasm_path,
-            plugin_name: Some(plugin_def.name),
-            description: plugin_def.description,
-            domain_code: plugin_def.domain_code.unwrap_or_default(),
-            application_code: plugin_def.application_code.clone().unwrap_or_default(),
-            module_code: plugin_def.module_code.clone().unwrap_or_default(),
-            plugin_type: Some(plugin_def.r#type),
-            source_path: plugin_def.source_path,
-        })
     }
 
     /// 降级持久化

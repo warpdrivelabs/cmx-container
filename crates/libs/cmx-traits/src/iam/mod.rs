@@ -4,6 +4,8 @@
 
 pub mod data_scope;
 pub mod permission_checker;
+pub mod permission_definition_importer;
 
 pub use data_scope::DataScope;
 pub use permission_checker::PermissionChecker;
+pub use permission_definition_importer::PermissionDefinitionImporter;

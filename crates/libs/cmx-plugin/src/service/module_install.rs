@@ -54,6 +54,9 @@ enum ImportAction {
 pub struct ModuleInstallService {
     package_utils: PackageUtils,
     deploy_service: std::sync::Arc<DeployService>,
+    /// 权限定义导入器(由 cmx-iam 注入,复用两阶段 upsert 逻辑)。
+    /// 为 None 时跳过权限安装(向后兼容,如测试场景)。
+    permission_importer: Option<std::sync::Arc<dyn cmx_traits::iam::PermissionDefinitionImporter>>,
 }
 
 impl ModuleInstallService {
@@ -62,7 +65,20 @@ impl ModuleInstallService {
         Self {
             package_utils,
             deploy_service,
+            permission_importer: None,
         }
+    }
+
+    /// 注入权限定义导入器(Builder 模式)。
+    ///
+    /// 注入后,模块导入时的权限安装会委托给 cmx-iam 的统一实现,
+    /// 消除本文件内重复的两阶段 upsert SQL。
+    pub fn with_permission_importer(
+        mut self,
+        importer: std::sync::Arc<dyn cmx_traits::iam::PermissionDefinitionImporter>,
+    ) -> Self {
+        self.permission_importer = Some(importer);
+        self
     }
 
     /// 安装/导入模块包
@@ -81,13 +97,15 @@ impl ModuleInstallService {
         // 2. 解析 module.manifest.json
         let manifest = self.parse_manifest(&module_dir)?;
 
-        let res_app_id = &manifest.module.code;
-        //对比模块id 和当前服务appid是否同一个，不是的拒绝
+        // 导入守卫:模块包的 module.code 必须与当前服务 app_id 一致。
+        // 当前设计下 app_id 由配置 app.module_code 决定(get_app_id),即 app_id ≡ module_code,
+        // 因此这里用模块 code 比对服务 app_id;二者不一致说明模块包不属于本服务,拒绝导入。
+        let module_code = &manifest.module.code;
         let current_service_app_id = cmx_utils::ConfigManager::global().get_app_id();
-        if res_app_id != &current_service_app_id {
+        if module_code != &current_service_app_id {
             return Err(PluginError::CenterData(format!(
-                "导入的模块资源不属于当前模块: 模块包 app_id={}, 当前服务 app_id={}",
-                res_app_id, current_service_app_id
+                "导入的模块资源不属于当前模块: 模块包 module_code={}, 当前服务 app_id={}",
+                module_code, current_service_app_id
             )));
         }
 
@@ -154,7 +172,7 @@ impl ModuleInstallService {
                 //fixme 写死 0702
                 build_type: Some("release".to_string()),
                 publish_to_marketplace: false,
-                app_id: Some(res_app_id.clone()),
+                app_id: Some(module_code.clone()),
                 marketplace_source_id: None,
                 marketplace_publish_info: None,
             };
@@ -280,6 +298,8 @@ impl ModuleInstallService {
         let domain = manifest.module.domain_code.as_str();
         let app = manifest.module.application_code.as_str();
         let module = manifest.module.code.as_str();
+        // app_id 取配置值(当前设计下 app_id ≡ module_code,与导入守卫校验一致)
+        let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
         // 1. 表单:forms/*.json 整体透传存入 cmx_form(存 default 库)
         self.install_forms(mm, default_db_id, module_dir, domain, app, module)
@@ -290,11 +310,11 @@ impl ModuleInstallService {
             .await;
 
         // 3. 元数据:metadata/tables/*.json 建表(建到 biz 库,元数据登记存 default 库)
-        self.install_metadata(mm, default_db_id, biz_db_id, module_dir, domain, app, module)
+        self.install_metadata(mm, default_db_id, biz_db_id, module_dir, domain, app, module, &app_id)
             .await;
 
-        // 4. 权限:permissions/*.json upsert cmx_permission(存 default 库)
-        self.install_permissions(mm, default_db_id, module_dir, domain, app, module)
+        // 4. 权限:permissions/*.json 委托注入的 importer upsert cmx_permission
+        self.install_permissions(module_dir, domain, app, module)
             .await;
 
         Ok(())
@@ -302,7 +322,7 @@ impl ModuleInstallService {
 
     /// 安装表单:读取 forms/*.json,整体 JSON 透传存入 cmx_form.definition
     ///
-    /// code 规则:`{module_code}:{file_stem}`,幂等(基于 code 唯一约束 upsert)
+    /// code 规则:`{module_code}:{file_stem}`,幂等(先删后建,基于 code 唯一约束)
     async fn install_forms(
         &self,
         mm: &cmx_database::DatabaseManager,
@@ -312,44 +332,7 @@ impl ModuleInstallService {
         app: &str,
         module: &str,
     ) {
-        let forms_dir = module_dir.join("forms");
-        if !forms_dir.exists() {
-            return;
-        }
-        let entries = match std::fs::read_dir(&forms_dir) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!(error = %e, "读取 forms 目录失败");
-                return;
-            }
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let stem = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let content = match std::fs::read_to_string(&path) {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!(form = %stem, error = %e, "读取表单文件失败,跳过");
-                    continue;
-                }
-            };
-            let definition: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
-            // name 取 JSON 的 name 字段,fallback 到文件名
-            let name = definition
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&stem)
-                .to_string();
-            let code = format!("{module}:{stem}");
-
-            // 幂等 upsert:先删后建(基于 code 唯一)
+        for (code, name, definition) in Self::read_definition_files(module_dir, "forms", module) {
             let dto = cmx_biz::form::FormForCreate {
                 code: code.clone(),
                 name,
@@ -359,7 +342,7 @@ impl ModuleInstallService {
                 application_code: app.to_string(),
                 module_code: module.to_string(),
             };
-            // 先尝试删除已有同 code 记录,再创建(幂等)
+            // 幂等:先删同 code 记录,再创建
             let _ = cmx_biz::form::FormService::delete_by_code(mm, db_id, &code).await;
             if let Err(e) = cmx_biz::form::FormService::create(mm, db_id, dto).await {
                 warn!(form = %code, error = %e, "表单安装失败");
@@ -382,42 +365,7 @@ impl ModuleInstallService {
         app: &str,
         module: &str,
     ) {
-        let menus_dir = module_dir.join("menus");
-        if !menus_dir.exists() {
-            return;
-        }
-        let entries = match std::fs::read_dir(&menus_dir) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!(error = %e, "读取 menus 目录失败");
-                return;
-            }
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let stem = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let content = match std::fs::read_to_string(&path) {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!(menu = %stem, error = %e, "读取菜单文件失败,跳过");
-                    continue;
-                }
-            };
-            let menu_json: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
-            let name = menu_json
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&stem)
-                .to_string();
-            let code = format!("{module}:{stem}");
-
+        for (code, name, menu_json) in Self::read_definition_files(module_dir, "menus", module) {
             // 幂等:先删同 code 根菜单,再建
             let _ = cmx_biz::menu::MenuService::delete_by_code(mm, db_id, &code).await;
             let dto = cmx_biz::menu::MenuForCreate {
@@ -443,6 +391,62 @@ impl ModuleInstallService {
         }
     }
 
+    /// 读取定义文件目录的通用 helper(forms/menus 共用)。
+    ///
+    /// 遍历 `module_dir/{subdir}/*.json`,解析每个文件为 JSON,
+    /// 返回 `(code, name, definition)` 三元组列表:
+    /// - `code` = `{module}:{file_stem}`
+    /// - `name` 取 JSON 的 name 字段,fallback 到 file_stem
+    /// - `definition` 为完整 JSON 内容(整体透传)
+    ///
+    /// 目录不存在或读取失败时返回空 Vec(不阻断安装)。
+    fn read_definition_files(
+        module_dir: &Path,
+        subdir: &str,
+        module: &str,
+    ) -> Vec<(String, String, serde_json::Value)> {
+        let dir = module_dir.join(subdir);
+        if !dir.exists() {
+            return Vec::new();
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!(subdir = %subdir, error = %e, "读取定义文件目录失败");
+                return Vec::new();
+            }
+        };
+        let mut result = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!(file = %stem, error = %e, "读取定义文件失败,跳过");
+                    continue;
+                }
+            };
+            let definition: serde_json::Value =
+                serde_json::from_str(&content).unwrap_or_default();
+            let name = definition
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&stem)
+                .to_string();
+            let code = format!("{module}:{stem}");
+            result.push((code, name, definition));
+        }
+        result
+    }
+
     /// 安装元数据:读取 metadata/tables/*.json 表定义,用 PgTableDefineExecutor 建表到业务库
     #[allow(clippy::too_many_arguments)]
     ///
@@ -457,6 +461,7 @@ impl ModuleInstallService {
         domain: &str,
         app: &str,
         module: &str,
+        app_id: &str,
     ) {
         let tables_dir = module_dir.join("metadata").join("tables");
         if !tables_dir.exists() {
@@ -520,55 +525,35 @@ impl ModuleInstallService {
                 Err(e) => warn!(table = %table_def.table_name, error = %e, "建表失败"),
             }
             // 记录表元数据到 cmx_meta_table_define(登记存 default 库,记录 db_id 标记 biz 库)
-            let _ = Self::save_table_metadata(mm, default_db_id, biz_db_id, table_def, domain, app, module).await;
+            let _ = Self::save_table_metadata(mm, default_db_id, biz_db_id, table_def, domain, app, module, app_id).await;
         }
     }
 
-    /// 安装权限:读取 permissions/*.json,解析 PermissionDefinition,SQL upsert cmx_permission
+    /// 安装权限:读取 permissions/*.json,委托注入的 PermissionDefinitionImporter 执行两阶段 upsert
     ///
-    /// 对称契约:JSON 格式与 cmx-iam PermissionFile 一致,
-    /// 字段:code/name/resource_type/parent_code/sort_order/description/extension/status。
-    /// 由于 cmx-iam import_permissions 需注入式 Service + zip,这里直接 SQL upsert(同语义)。
+    /// 对称契约:JSON 格式为 PermissionFile(name/version/description + permissions[]),
+    /// 权限条目字段对齐 cmx-core 的 PermissionDefinition。
+    /// 两阶段 upsert 逻辑统一收敛到 cmx-iam(经 cmx-traits trait 注入),消除本文件内的重复 SQL。
     async fn install_permissions(
         &self,
-        mm: &cmx_database::DatabaseManager,
-        db_id: &str,
         module_dir: &Path,
         domain: &str,
         app: &str,
         module: &str,
     ) {
+        let Some(importer) = &self.permission_importer else {
+            warn!("未注入 PermissionDefinitionImporter,跳过权限安装");
+            return;
+        };
+
         let perms_dir = module_dir.join("permissions");
         if !perms_dir.exists() {
             return;
         }
 
-        // 1. 解析所有 permissions/*.json,收集 PermissionDefinition
-        #[derive(serde::Deserialize)]
-        struct PermFile {
-            #[serde(default)]
-            permissions: Vec<PermDef>,
-        }
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "snake_case")]
-        struct PermDef {
-            code: String,
-            name: String,
-            #[serde(default)]
-            resource_type: Option<String>,
-            #[serde(default)]
-            parent_code: Option<String>,
-            #[serde(default)]
-            sort_order: Option<i64>,
-            #[serde(default)]
-            description: Option<String>,
-            #[serde(default)]
-            extension: Option<String>,
-            #[serde(default)]
-            status: Option<i64>,
-        }
-
-        let mut all_defs: Vec<PermDef> = Vec::new();
+        // 解析所有 permissions/*.json,收集 PermissionDefinition(使用 cmx-core 统一契约)
+        use cmx_core::model::iam::{PermissionDefinition, PermissionFile};
+        let mut all_defs: Vec<PermissionDefinition> = Vec::new();
         let entries = match std::fs::read_dir(&perms_dir) {
             Ok(e) => e,
             Err(e) => {
@@ -588,7 +573,10 @@ impl ModuleInstallService {
                     continue;
                 }
             };
-            let file: PermFile = serde_json::from_str(&content).unwrap_or(PermFile {
+            let file: PermissionFile = serde_json::from_str(&content).unwrap_or(PermissionFile {
+                name: String::new(),
+                version: String::new(),
+                description: String::new(),
                 permissions: vec![],
             });
             all_defs.extend(file.permissions);
@@ -598,144 +586,21 @@ impl ModuleInstallService {
             return;
         }
 
-        // 2. 第一阶段:upsert 所有权限(parent_id 暂置 NULL,full_code_path='/'+code)
-        use cmx_core::model::cell::DataValue;
-        let mut code_to_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-        for def in &all_defs {
-            let id = uuid::Uuid::new_v4().to_string();
-            let resource_type = def.resource_type.clone().unwrap_or_else(|| "api".to_string());
-            let full_path = format!("/{}", def.code);
-            let status = def.status.unwrap_or(1);
-
-            // upsert:ON CONFLICT (code) DO UPDATE
-            let sql = "INSERT INTO cmx_permission \
-                       (id, code, name, resource_type, parent_id, sort_order, description, \
-                        domain_code, app_code, module_code, extension, status, archived, \
-                        parent_code, full_code_path, is_leaf, level) \
-                       VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9, $10, $11, 0, NULL, $12, 1, 1) \
-                       ON CONFLICT (code) DO UPDATE SET \
-                       name = EXCLUDED.name, resource_type = EXCLUDED.resource_type, \
-                       sort_order = EXCLUDED.sort_order, description = EXCLUDED.description, \
-                       extension = EXCLUDED.extension, status = EXCLUDED.status, \
-                       domain_code = EXCLUDED.domain_code, app_code = EXCLUDED.app_code, \
-                       module_code = EXCLUDED.module_code, \
-                       full_code_path = EXCLUDED.full_code_path, \
-                       update_time = CURRENT_TIMESTAMP \
-                       RETURNING id";
-            let params: Vec<DataValue> = vec![
-                DataValue::String(id.clone()),
-                DataValue::String(def.code.clone()),
-                DataValue::String(def.name.clone()),
-                DataValue::String(resource_type),
-                DataValue::Int(def.sort_order.unwrap_or(0)),
-                def.description.clone().into(),
-                DataValue::String(domain.to_string()),
-                DataValue::String(app.to_string()),
-                DataValue::String(module.to_string()),
-                def.extension.clone().into(),
-                DataValue::Int(status),
-                DataValue::String(full_path),
-            ];
-            match mm
-                .query_sql_with_datavalues(db_id, None, sql, params, "module_install_perm")
-                .await
-            {
-                Ok(ds) => {
-                    let json = serde_json::to_value(&ds).unwrap_or_default();
-                    let returned_id = json
-                        .get("rows")
-                        .and_then(|r| r.as_array())
-                        .and_then(|rows| rows.first())
-                        .and_then(|row| row.get("id"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(&id)
-                        .to_string();
-                    code_to_id.insert(def.code.clone(), returned_id);
-                }
-                Err(e) => {
-                    warn!(perm_code = %def.code, error = %e, "权限 upsert 失败");
-                }
-            }
+        // 委托 cmx-iam 的统一实现(两阶段 upsert + parent 回填 + is_leaf 重算)
+        match importer
+            .apply_permission_definitions(domain, app, module, &all_defs)
+            .await
+        {
+            Ok(n) => info!(count = n, "权限安装完成(委托 importer)"),
+            Err(e) => warn!(error = %e, "权限安装失败(委托 importer)"),
         }
-
-        // 3. 第二阶段:回填 parent_id / parent_code / full_code_path / level
-        for def in &all_defs {
-            let Some(parent_code) = &def.parent_code else {
-                continue;
-            };
-            let Some(parent_id) = code_to_id.get(parent_code) else {
-                warn!(perm_code = %def.code, parent_code = %parent_code, "父权限未找到,跳过回填");
-                continue;
-            };
-            let Some(child_id) = code_to_id.get(&def.code) else {
-                continue;
-            };
-            // 查父节点 full_path/level
-            let parent_sql = "SELECT full_code_path, level FROM cmx_permission WHERE id = $1";
-            let parent_ds = mm
-                .query_sql_with_datavalues(
-                    db_id,
-                    None,
-                    parent_sql,
-                    vec![DataValue::String(parent_id.clone())],
-                    "module_perm_parent",
-                )
-                .await;
-            if let Ok(pds) = parent_ds {
-                let pjson = serde_json::to_value(&pds).unwrap_or_default();
-                let p_path = pjson
-                    .get("rows")
-                    .and_then(|r| r.as_array())
-                    .and_then(|rows| rows.first())
-                    .and_then(|row| row.get("full_code_path"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let p_level = pjson
-                    .get("rows")
-                    .and_then(|r| r.as_array())
-                    .and_then(|rows| rows.first())
-                    .and_then(|row| row.get("level"))
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1);
-                let new_path = format!("{p_path}/{}", def.code);
-                let new_level = p_level + 1;
-                // 更新子节点的 parent 引用
-                let upd_sql = "UPDATE cmx_permission SET parent_id = $1, parent_code = $2, \
-                               full_code_path = $3, level = $4 WHERE id = $5";
-                let _ = mm
-                    .execute_sql_with_datavalues(
-                        db_id,
-                        None,
-                        upd_sql,
-                        vec![
-                            DataValue::String(parent_id.clone()),
-                            DataValue::String(parent_code.clone()),
-                            DataValue::String(new_path),
-                            DataValue::Int(new_level),
-                            DataValue::String(child_id.clone()),
-                        ],
-                    )
-                    .await;
-                // 父节点 is_leaf = 0
-                let leaf_sql = "UPDATE cmx_permission SET is_leaf = 0 WHERE id = $1";
-                let _ = mm
-                    .execute_sql_with_datavalues(
-                        db_id,
-                        None,
-                        leaf_sql,
-                        vec![DataValue::String(parent_id.clone())],
-                    )
-                    .await;
-            }
-        }
-        info!(count = all_defs.len(), "权限安装完成");
     }
 
     /// 保存表元数据到 cmx_meta_table_define + cmx_meta_table_define_version
     ///
     /// SQL 执行库用 default_db_id(元数据表在默认库),
     /// 记录的 db_id 列登记 biz_db_id(标记业务表所在库)。
+    #[allow(clippy::too_many_arguments)]
     async fn save_table_metadata(
         mm: &cmx_database::DatabaseManager,
         default_db_id: &str,
@@ -744,6 +609,7 @@ impl ModuleInstallService {
         domain: &str,
         app: &str,
         module: &str,
+        app_id: &str,
     ) -> PluginResult<()> {
         use cmx_core::model::cell::DataValue;
         let metadata_json = serde_json::to_string(table_def)
@@ -793,8 +659,8 @@ impl ModuleInstallService {
             let ins_sql = "INSERT INTO cmx_meta_table_define \
                            (id, table_name, display_name, db_id, plugin_id, version, app_id, \
                             ddl_status, domain_code, application_code, module_code, archived) \
-                           VALUES ($1, $2, $3, $4, NULL, '1', 'default', 'completed', \
-                                   $5, $6, $7, 0)";
+                           VALUES ($1, $2, $3, $4, NULL, '1', $5, 'completed', \
+                                   $6, $7, $8, 0)";
             let _ = mm
                 .execute_sql_with_datavalues(
                     default_db_id,
@@ -805,6 +671,7 @@ impl ModuleInstallService {
                         DataValue::String(table_def.table_name.clone()),
                         DataValue::String(table_def.display_name.clone()),
                         DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(app_id.to_string()),
                         DataValue::String(domain.to_string()),
                         DataValue::String(app.to_string()),
                         DataValue::String(module.to_string()),
@@ -818,7 +685,7 @@ impl ModuleInstallService {
         let version_sql = "INSERT INTO cmx_meta_table_define_version \
                            (id, table_name, display_name, db_id, plugin_id, version, app_id, \
                             domain_code, application_code, module_code, metadata, archived) \
-                           VALUES ($1, $2, $3, $4, NULL, '1', 'default', $5, $6, $7, $8::jsonb, 0)";
+                           VALUES ($1, $2, $3, $4, NULL, '1', $5, $6, $7, $8, $9::jsonb, 0)";
         let _ = mm
             .execute_sql_with_datavalues(
                 default_db_id,
@@ -829,6 +696,7 @@ impl ModuleInstallService {
                     DataValue::String(table_def.table_name.clone()),
                     DataValue::String(table_def.display_name.clone()),
                     DataValue::String(biz_db_id.to_string()),
+                    DataValue::String(app_id.to_string()),
                     DataValue::String(domain.to_string()),
                     DataValue::String(app.to_string()),
                     DataValue::String(module.to_string()),

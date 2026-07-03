@@ -136,8 +136,9 @@ async fn main() -> Result<()> {
     let audit_logger = build_audit_logger().await?;
 
     // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
-    // 同时产出 PluginDataImporter，供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑。
-    let (iam_state, user_auth_query, iam_config, plugin_data_importer) =
+    // 同时产出 PluginDataImporter 和 PermissionDefinitionImporter，
+    // 供 HTTP 端点/gRPC 服务端统一调用权限导入逻辑，以及模块导入复用两阶段 upsert。
+    let (iam_state, user_auth_query, iam_config, plugin_data_importer, permission_definition_importer) =
         init_iam_services(audit_logger.clone()).await?;
 
     // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
@@ -194,6 +195,13 @@ async fn main() -> Result<()> {
     // 注入 PluginDataImporter（HTTP 端点 /iam/permissions/import 和 /cleanup 使用）
     let app_state = if let Some(importer) = plugin_data_importer {
         app_state.with_plugin_data_importer(importer)
+    } else {
+        app_state
+    };
+
+    // 注入 PermissionDefinitionImporter（模块导入复用 cmx-iam 两阶段权限 upsert）
+    let app_state = if let Some(importer) = permission_definition_importer {
+        app_state.with_permission_definition_importer(importer)
     } else {
         app_state
     };
