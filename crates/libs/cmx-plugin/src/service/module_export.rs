@@ -254,7 +254,6 @@ impl ModuleExportService {
                    FROM cmx_meta_table_define d \
                    INNER JOIN cmx_meta_table_define_version v \
                      ON d.table_name = v.table_name AND d.version = v.version \
-
                      AND d.app_id = v.app_id  \
                    WHERE d.module_code = $1 AND d.application_code = $2 AND d.archived = 0 AND v.archived = 0";
         let ds = mm
