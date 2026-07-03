@@ -167,3 +167,25 @@ git push origin main
 **例外情况**：
 
 仅在用户明确表示「帮我提交」「请提交这次改动」等明确指令时，AI 才可以执行提交操作。
+
+---
+
+## 五、SQL 与配置维护规则
+
+### 5.1 新建表结构
+
+新建 PostgreSQL 表时，**推荐**使用 `pg-table-generator` 技能生成 DDL，确保表结构符合项目规范（标准审计字段、命名规则、注释规则等）。
+
+### 5.2 SQL 文件维护
+
+涉及 SQL 变更（新建表、新增/修改/删除字段、新增索引等）时，**必须**使用 `sql-guide` 技能同步维护：
+
+- `docs/sql/migrations/` 目录下创建增量迁移文件（`YYYYMMDD_XXX.up.sql` + `.down.sql`）
+- `docs/sql/init/init_ddl.sql` 同步更新为最新完整状态
+
+### 5.3 配置文档维护
+
+新增或修改 TOML 配置项、环境变量时，**必须**使用 `config-sync` 技能同步维护：
+
+- TOML 配置 → `config/config_template.toml` + `config/CONFIG_MANUAL.md`
+- 环境变量 → `config/.env.template` + `config/ENV_MANUAL.md`

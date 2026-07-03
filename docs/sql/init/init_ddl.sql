@@ -2162,3 +2162,275 @@ COMMENT ON COLUMN cmx_module_version_history.update_name IS '更新人姓名';
 CREATE UNIQUE INDEX uk_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
 CREATE INDEX idx_cmx_module_version_history_module ON cmx_module_version_history (module_id);
 CREATE INDEX idx_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
+
+-- =============================================
+-- 37. 模型中心台账自描述表 (cmx_model_meta)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_meta;
+CREATE TABLE cmx_model_meta
+(
+    id               VARCHAR(64)  NOT NULL,
+    db_id            VARCHAR(100),
+    meta_version     INT4         NOT NULL DEFAULT 1,
+    app_id           VARCHAR(64)  NOT NULL DEFAULT 'default',
+    engine_version   VARCHAR(50),
+    portal_version   VARCHAR(50),
+    status           VARCHAR(20)  NOT NULL DEFAULT 'ready',
+    initialized_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    initialized_by   VARCHAR(100),
+    initialized_name VARCHAR(100),
+    last_upgraded_at TIMESTAMP,
+    last_upgraded_by VARCHAR(100),
+    remark           VARCHAR(500),
+    create_time      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_model_meta_db_app ON cmx_model_meta (db_id, app_id);
+
+COMMENT ON TABLE  cmx_model_meta IS '模型中心台账自描述（每库单例）';
+COMMENT ON COLUMN cmx_model_meta.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_meta.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_meta.meta_version IS '台账 schema 版本，用于判定是否需要升级系统表';
+COMMENT ON COLUMN cmx_model_meta.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_meta.engine_version IS '引擎版本';
+COMMENT ON COLUMN cmx_model_meta.portal_version IS '门户版本';
+COMMENT ON COLUMN cmx_model_meta.status IS '台账状态: ready / upgrading / failed';
+COMMENT ON COLUMN cmx_model_meta.initialized_at IS '初始化时间';
+COMMENT ON COLUMN cmx_model_meta.initialized_by IS '初始化人ID';
+COMMENT ON COLUMN cmx_model_meta.initialized_name IS '初始化人姓名';
+COMMENT ON COLUMN cmx_model_meta.last_upgraded_at IS '最近升级时间';
+COMMENT ON COLUMN cmx_model_meta.last_upgraded_by IS '最近升级人';
+COMMENT ON COLUMN cmx_model_meta.remark IS '备注';
+COMMENT ON COLUMN cmx_model_meta.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_model_meta.update_time IS '更新时间';
+
+-- =============================================
+-- 38. 模型中心-模块部署当前态表 (cmx_model_module)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_module;
+CREATE TABLE cmx_model_module
+(
+    id                  VARCHAR(64) NOT NULL,
+    db_id               VARCHAR(100),
+    app_id              VARCHAR(64) NOT NULL DEFAULT 'default',
+    domain_code         VARCHAR(100),
+    application_code    VARCHAR(100),
+    module_code         VARCHAR(100),
+    module_name         VARCHAR(200),
+    dct_version         VARCHAR(50),
+    dct_status          VARCHAR(20) DEFAULT 'none',
+    doc_version         VARCHAR(50),
+    doc_status          VARCHAR(20) DEFAULT 'none',
+    seed_version        VARCHAR(50),
+    seed_status         VARCHAR(20) DEFAULT 'none',
+    overall_status      VARCHAR(20) DEFAULT 'active',
+    table_count         INT4        DEFAULT 0,
+    def_source          VARCHAR(300),
+    def_checksum        VARCHAR(64),
+    first_deployed_at   TIMESTAMP,
+    current_deployed_at TIMESTAMP,
+    deployed_by         VARCHAR(100),
+    deployed_name       VARCHAR(100),
+    archived            INT4        DEFAULT 0,
+    create_time         TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    update_time         TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_model_module_key ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code);
+
+COMMENT ON TABLE  cmx_model_module IS '模型中心-模块部署当前态（每模块一行）';
+COMMENT ON COLUMN cmx_model_module.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_module.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_module.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_module.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_model_module.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_model_module.module_code IS '模块编码';
+COMMENT ON COLUMN cmx_model_module.module_name IS '模块名称';
+COMMENT ON COLUMN cmx_model_module.dct_version IS '数据字典版本';
+COMMENT ON COLUMN cmx_model_module.dct_status IS '数据字典状态: none/current/failed/upgrading';
+COMMENT ON COLUMN cmx_model_module.doc_version IS '单据版本';
+COMMENT ON COLUMN cmx_model_module.doc_status IS '单据状态: none/current/failed/upgrading';
+COMMENT ON COLUMN cmx_model_module.seed_version IS '初始数据版本';
+COMMENT ON COLUMN cmx_model_module.seed_status IS '初始数据状态: none/current/failed/upgrading';
+COMMENT ON COLUMN cmx_model_module.overall_status IS '整体状态: active/failed';
+COMMENT ON COLUMN cmx_model_module.table_count IS '表数量';
+COMMENT ON COLUMN cmx_model_module.def_source IS '定义来源文件';
+COMMENT ON COLUMN cmx_model_module.def_checksum IS '定义文件校验和';
+COMMENT ON COLUMN cmx_model_module.first_deployed_at IS '首次部署时间';
+COMMENT ON COLUMN cmx_model_module.current_deployed_at IS '当前部署时间';
+COMMENT ON COLUMN cmx_model_module.deployed_by IS '部署人ID';
+COMMENT ON COLUMN cmx_model_module.deployed_name IS '部署人姓名';
+COMMENT ON COLUMN cmx_model_module.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_model_module.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_model_module.update_time IS '更新时间';
+
+-- =============================================
+-- 39. 模型中心-部署/升级历史表 (cmx_model_deploy_history)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_deploy_history;
+CREATE TABLE cmx_model_deploy_history
+(
+    id               VARCHAR(64) NOT NULL,
+    batch_id         VARCHAR(64),
+    db_id            VARCHAR(100),
+    app_id           VARCHAR(64) NOT NULL DEFAULT 'default',
+    domain_code      VARCHAR(100),
+    application_code VARCHAR(100),
+    module_code      VARCHAR(100),
+    module_name      VARCHAR(200),
+    kind             VARCHAR(20),
+    action           VARCHAR(20),
+    from_version     VARCHAR(50),
+    to_version       VARCHAR(50),
+    status           VARCHAR(20),
+    ddl_summary      JSONB,
+    object_count     INT4       DEFAULT 0,
+    seed_rows        INT4       DEFAULT 0,
+    def_ref          VARCHAR(300),
+    def_version      VARCHAR(50),
+    engine_version   VARCHAR(50),
+    error_message    TEXT,
+    started_at       TIMESTAMP,
+    finished_at      TIMESTAMP,
+    duration_ms      INT8,
+    operator_id      VARCHAR(100),
+    operator_name    VARCHAR(100),
+    create_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_model_history_module ON cmx_model_deploy_history (db_id, domain_code, application_code, module_code);
+CREATE INDEX idx_model_history_batch  ON cmx_model_deploy_history (batch_id);
+CREATE INDEX idx_model_history_time   ON cmx_model_deploy_history (create_time);
+
+COMMENT ON TABLE  cmx_model_deploy_history IS '模型中心-部署/升级历史（追加式，永不改写）';
+COMMENT ON COLUMN cmx_model_deploy_history.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_deploy_history.batch_id IS '批次ID';
+COMMENT ON COLUMN cmx_model_deploy_history.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_deploy_history.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_deploy_history.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_model_deploy_history.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_model_deploy_history.module_code IS '模块编码';
+COMMENT ON COLUMN cmx_model_deploy_history.module_name IS '模块名称';
+COMMENT ON COLUMN cmx_model_deploy_history.kind IS '操作类别: INIT/META_UPGRADE/DCT/DOC/SEED';
+COMMENT ON COLUMN cmx_model_deploy_history.action IS '动作: deploy/upgrade/rollback';
+COMMENT ON COLUMN cmx_model_deploy_history.from_version IS '原版本';
+COMMENT ON COLUMN cmx_model_deploy_history.to_version IS '目标版本';
+COMMENT ON COLUMN cmx_model_deploy_history.status IS '状态机: pending→executing→success/failed/skipped';
+COMMENT ON COLUMN cmx_model_deploy_history.ddl_summary IS 'DDL 摘要 JSON';
+COMMENT ON COLUMN cmx_model_deploy_history.object_count IS '对象数量';
+COMMENT ON COLUMN cmx_model_deploy_history.seed_rows IS '初始数据行数';
+COMMENT ON COLUMN cmx_model_deploy_history.def_ref IS '定义引用';
+COMMENT ON COLUMN cmx_model_deploy_history.def_version IS '定义版本';
+COMMENT ON COLUMN cmx_model_deploy_history.engine_version IS '引擎版本';
+COMMENT ON COLUMN cmx_model_deploy_history.error_message IS '错误信息';
+COMMENT ON COLUMN cmx_model_deploy_history.started_at IS '开始时间';
+COMMENT ON COLUMN cmx_model_deploy_history.finished_at IS '完成时间';
+COMMENT ON COLUMN cmx_model_deploy_history.duration_ms IS '耗时(毫秒)';
+COMMENT ON COLUMN cmx_model_deploy_history.operator_id IS '操作人ID';
+COMMENT ON COLUMN cmx_model_deploy_history.operator_name IS '操作人姓名';
+COMMENT ON COLUMN cmx_model_deploy_history.create_time IS '创建时间';
+
+-- =============================================
+-- 40. 模型中心-源定义/初始数据留档表 (cmx_model_source)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_source;
+CREATE TABLE cmx_model_source
+(
+    id               VARCHAR(64) NOT NULL,
+    db_id            VARCHAR(100),
+    app_id           VARCHAR(64) NOT NULL DEFAULT 'default',
+    domain_code      VARCHAR(100),
+    application_code VARCHAR(100),
+    module_code      VARCHAR(100),
+    module_name      VARCHAR(200),
+    kind             VARCHAR(20),
+    version          VARCHAR(50),
+    source_file      VARCHAR(300),
+    source_json      JSONB,
+    compiled_json    JSONB,
+    checksum         VARCHAR(64),
+    table_count      INT4       DEFAULT 0,
+    seed_row_count   INT4       DEFAULT 0,
+    is_current       INT4       DEFAULT 1,
+    engine_version   VARCHAR(50),
+    imported_at      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    imported_by      VARCHAR(100),
+    imported_name    VARCHAR(100),
+    remark           VARCHAR(500),
+    create_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_model_source_ver ON cmx_model_source (db_id, app_id, domain_code, application_code, module_code, kind, version);
+CREATE INDEX idx_model_source_current   ON cmx_model_source (db_id, domain_code, application_code, module_code, kind, is_current);
+
+COMMENT ON TABLE  cmx_model_source IS '模型中心-源定义/初始数据 JSON 完整留档';
+COMMENT ON COLUMN cmx_model_source.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_source.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_source.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_source.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_model_source.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_model_source.module_code IS '模块编码';
+COMMENT ON COLUMN cmx_model_source.module_name IS '模块名称';
+COMMENT ON COLUMN cmx_model_source.kind IS '类别: DCT/DOC/SEED';
+COMMENT ON COLUMN cmx_model_source.version IS '版本';
+COMMENT ON COLUMN cmx_model_source.source_file IS '源文件路径';
+COMMENT ON COLUMN cmx_model_source.source_json IS '源定义或初始数据 JSON 原文（完整保存，可复现/审计）';
+COMMENT ON COLUMN cmx_model_source.compiled_json IS '编译后 JSON';
+COMMENT ON COLUMN cmx_model_source.checksum IS '校验和';
+COMMENT ON COLUMN cmx_model_source.table_count IS '表数量';
+COMMENT ON COLUMN cmx_model_source.seed_row_count IS '初始数据行数';
+COMMENT ON COLUMN cmx_model_source.is_current IS '是否当前版本：1-是，0-否';
+COMMENT ON COLUMN cmx_model_source.engine_version IS '引擎版本';
+COMMENT ON COLUMN cmx_model_source.imported_at IS '导入时间';
+COMMENT ON COLUMN cmx_model_source.imported_by IS '导入人ID';
+COMMENT ON COLUMN cmx_model_source.imported_name IS '导入人姓名';
+COMMENT ON COLUMN cmx_model_source.remark IS '备注';
+COMMENT ON COLUMN cmx_model_source.create_time IS '创建时间';
+
+-- =============================================
+-- 41. 模型中心-主控库跨库总览表 (cmx_model_registry)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_registry;
+CREATE TABLE cmx_model_registry
+(
+    id               VARCHAR(64) NOT NULL,
+    db_id            VARCHAR(100) NOT NULL,
+    db_name          VARCHAR(200),
+    db_type          VARCHAR(30),
+    app_id           VARCHAR(64) NOT NULL DEFAULT 'default',
+    initialized      INT4        DEFAULT 0,
+    meta_version     INT4,
+    module_count     INT4        DEFAULT 0,
+    table_count      INT4        DEFAULT 0,
+    modules_summary  JSONB,
+    last_deploy_at   TIMESTAMP,
+    last_sync_at     TIMESTAMP,
+    health           VARCHAR(20) DEFAULT 'unknown',
+    create_time      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_model_registry_db ON cmx_model_registry (db_id, app_id);
+
+COMMENT ON TABLE  cmx_model_registry IS '主控库-各目标数据库模型部署总览（区分不同数据库）';
+COMMENT ON COLUMN cmx_model_registry.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_registry.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_registry.db_name IS '数据库名称';
+COMMENT ON COLUMN cmx_model_registry.db_type IS '数据库类型';
+COMMENT ON COLUMN cmx_model_registry.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_registry.initialized IS '是否已初始化：0-否，1-是';
+COMMENT ON COLUMN cmx_model_registry.meta_version IS '台账 schema 版本';
+COMMENT ON COLUMN cmx_model_registry.module_count IS '模块数量';
+COMMENT ON COLUMN cmx_model_registry.table_count IS '表数量';
+COMMENT ON COLUMN cmx_model_registry.modules_summary IS '各模块×kind 版本与状态摘要（供总览页免逐库查）';
+COMMENT ON COLUMN cmx_model_registry.last_deploy_at IS '最近部署时间';
+COMMENT ON COLUMN cmx_model_registry.last_sync_at IS '最近同步时间';
+COMMENT ON COLUMN cmx_model_registry.health IS '健康状态: unknown/healthy/warning/error';
+COMMENT ON COLUMN cmx_model_registry.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_model_registry.update_time IS '更新时间';
