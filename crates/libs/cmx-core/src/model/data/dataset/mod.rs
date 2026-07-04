@@ -1,4 +1,5 @@
 pub mod builder;
+pub mod columnar;
 pub mod error;
 pub mod rds;
 pub mod validate;
@@ -97,6 +98,7 @@ impl<'de> Deserialize<'de> for Schema {
 // ==========================================
 
 pub use rds::{DataSet, Row};
+pub use columnar::ColumnarCodec;
 
 use crate::model::cell::Field;
 

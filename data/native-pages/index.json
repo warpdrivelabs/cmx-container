@@ -126,6 +126,13 @@
       "details": "native_pages 新模式 · content 区 Schema tab，只读展开多层表+主从关系+聚合",
       "sourceType": "html",
       "relPath": "demo/doc-base/doc-base-schema.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-native",
+      "name": "会计凭证（native_pages）",
+      "details": "cmx-fico 总账凭证四层主从（凭证批→凭证头→科目行→辅助行），基于 /api/doc/* + fico-db 装载/回存",
+      "sourceType": "js",
+      "relPath": "fi/cmxfico/voucher-native.js"
     }
   ]
 }

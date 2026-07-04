@@ -5,6 +5,7 @@
 
 pub mod application;
 pub mod datasource;
+pub mod doc;
 pub mod domain;
 pub mod module;
 

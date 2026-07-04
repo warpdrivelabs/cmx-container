@@ -18,6 +18,10 @@ cmx-api-types = { workspace = true }
 cmx-traits = { workspace = true }
 # 内部依赖 - 数据库
 cmx-database = { workspace = true }
+# 内部依赖 - 工具（雪花 id）
+cmx-utils = { workspace = true }
+# 数值精度（Decimal 列绑定）
+rust_decimal = { workspace = true }
 # 内部依赖 - 服务编排
 cmx-service = { workspace = true }
 # 序列化框架
