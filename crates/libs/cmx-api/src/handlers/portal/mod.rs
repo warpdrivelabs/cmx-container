@@ -149,6 +149,8 @@ impl ModuleRoutes for PortalModule {
             .route("/doc/data/sqlx-zmc-msgpack", get(doc::doc_data_sqlx_zmc_msgpack))
             // ⑤ tokio-postgres + ZmcDataSet(零拷贝) + 纯 JSON 出口
             .route("/doc/data/tokio-zmc-json", get(doc::doc_data_tokio_zmc_json))
+            // ⑥ sqlx + ZmcDataSet(零拷贝) + 纯 JSON 出口（补齐驱动×内存×传输最后一种组合）
+            .route("/doc/data/sqlx-zmc-json", get(doc::doc_data_sqlx_zmc_json))
             // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
             .route("/doc/meta", get(doc::doc_meta))
             .route("/doc/save", post(doc::doc_save))

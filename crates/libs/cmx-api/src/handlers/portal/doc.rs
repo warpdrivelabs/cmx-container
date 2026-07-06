@@ -4,11 +4,12 @@
 //!   - 驱动：`sqlx`（PG/MySQL/SQLite）| `tokio`（tokio-postgres）
 //!   - 内存模式：`dataset`（老 DataSet，全拷贝）| `zmc`（ZmcDataSet，持原始行零拷贝）
 //!   - 传输：`json`（ApiResp JSON 信封）| `msgpack`（列式二进制信封）
-//!   四个端点：
+//!   驱动 sqlx|tokio × 内存 dataset|zmc × 传输 json|msgpack 的组合端点：
 //!     · `sqlx-dataset-json`   sqlx + DataSet + JSON（老链路）
 //!     · `tokio-zmc-msgpack`   tokio + ZmcDataSet + msgpack 二进制
 //!     · `sqlx-zmc-msgpack`    sqlx + ZmcDataSet + msgpack 二进制
 //!     · `tokio-zmc-json`      tokio + ZmcDataSet + 纯 JSON
+//!     · `sqlx-zmc-json`       sqlx + ZmcDataSet + 纯 JSON
 //! - `POST /api/doc/save` → DocSaver 双模式回存（Phase 5 接入）
 //!
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
@@ -231,6 +232,50 @@ pub async fn doc_data_tokio_zmc_json(
 
     // 装载(tokio 零拷贝)→ 纯 JSON 列式包
     let zmc = ZmcDocLoader::load(mm, &db_id, &meta, &opts).await?;
+    let pkg = zmc.encode_columnar_json();
+
+    Ok(Json(ApiResp::ok(pkg)))
+}
+
+/// `GET /api/doc/data/sqlx-zmc-json` —— sqlx + ZmcDataSet(零拷贝装载) + **纯 JSON 列式包**
+/// (走普通 ApiResp 信封,`Content-Type: application/json`),前端**无需 msgpack 解码**,
+/// 直接 `CmxDataSet.fromJSON`。
+///
+/// 补齐驱动×内存×传输的最后一种组合:与 [`doc_data_tokio_zmc_json`] 同为「ZmcDataSet 零拷贝 +
+/// JSON 出口」,唯一差异是驱动——本 handler 走 sqlx(`ZmcDocLoaderSqlx`),而 tokio 版走
+/// tokio-postgres(`ZmcDocLoader`)。与 [`doc_data_sqlx_zmc_msgpack`] 同一 sqlx 零拷贝装载器,
+/// 仅把出口 `encode_columnar_binary` 换成 `encode_columnar_json`。
+pub async fn doc_data_sqlx_zmc_json(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResp<Value>>> {
+    use cmx_biz::doc::ZmcDocLoaderSqlx;
+
+    debug!(
+        "{:<12} - doc_data_sqlx_zmc_json {}/{}",
+        "HANDLER", q.module, q.file
+    );
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+
+    let mut opts = LoadOptions {
+        root_limit: q.limit,
+        depth: q.depth,
+        ..Default::default()
+    };
+    if let Some(f) = &q.filter {
+        if let Some((col, val)) = f.split_once(':') {
+            opts.root_filter
+                .push((col.to_string(), DataValue::String(val.to_string())));
+        }
+    }
+
+    // 装载(sqlx 零拷贝)→ 纯 JSON 列式包
+    let zmc = ZmcDocLoaderSqlx::load(mm, &db_id, &meta, &opts).await?;
     let pkg = zmc.encode_columnar_json();
 
     Ok(Json(ApiResp::ok(pkg)))
