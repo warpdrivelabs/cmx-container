@@ -139,13 +139,16 @@ impl ModuleRoutes for PortalModule {
             )
             .route("/definitions/batch", post(handler::definitions_batch))
             // 业务单据数据装载/回存（方案 Phase 4/5）
-            .route("/doc/data", get(doc::doc_data))
-            // 业务单据数据装载：列式二进制(msgpack,零拷贝新链路)
-            .route("/doc/data.bin", get(doc::doc_data_bin))
-            // 业务单据数据装载：列式二进制(msgpack) —— sqlx 驱动版(第三套实现)
-            .route("/doc/data.sqlx.bin", get(doc::doc_data_bin_sqlx))
-            // 业务单据数据装载：ZmcDataSet 零拷贝装载 + 纯 JSON 出口(第五套实现)
-            .route("/doc/data.zmc.json", get(doc::doc_data_zmc_json))
+            // 端点命名：/doc/data/<驱动>-<内存模式>-<传输> —— 一眼可辨驱动/内存/传输三维度。
+            //   驱动 sqlx|tokio · 内存 dataset(全拷贝)|zmc(零拷贝) · 传输 json|msgpack
+            // ① sqlx + 老 DataSet(全拷贝) + JSON（老链路）
+            .route("/doc/data/sqlx-dataset-json", get(doc::doc_data_sqlx_dataset_json))
+            // ④ tokio-postgres + ZmcDataSet(零拷贝) + msgpack 二进制
+            .route("/doc/data/tokio-zmc-msgpack", get(doc::doc_data_tokio_zmc_msgpack))
+            // ③ sqlx + ZmcDataSet(零拷贝) + msgpack 二进制
+            .route("/doc/data/sqlx-zmc-msgpack", get(doc::doc_data_sqlx_zmc_msgpack))
+            // ⑤ tokio-postgres + ZmcDataSet(零拷贝) + 纯 JSON 出口
+            .route("/doc/data/tokio-zmc-json", get(doc::doc_data_tokio_zmc_json))
             // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
             .route("/doc/meta", get(doc::doc_meta))
             .route("/doc/save", post(doc::doc_save))

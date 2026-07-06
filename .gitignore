@@ -15,7 +15,7 @@
 /plugin1.0.2.zip
 /crates/libs/cmx-service/src/sample-flow.json
 /test_complex_flow.json
-/crates/tests/
+#/crates/tests/
 /Cargo.lock
 /cache/
 #crates/libs/cmx-dev/templates/wasm-plugin-template1.zip

@@ -1,6 +1,14 @@
 //! 业务单据装载/回存 HTTP handler（方案 Phase 4/5）
 //!
-//! - `GET  /api/doc/data` → DocLoader 装载嵌套 DataSet → ColumnarCodec 列式包 → ApiResp
+//! 装载端点命名 `/api/doc/data/<驱动>-<内存模式>-<传输>`，三段一眼可辨：
+//!   - 驱动：`sqlx`（PG/MySQL/SQLite）| `tokio`（tokio-postgres）
+//!   - 内存模式：`dataset`（老 DataSet，全拷贝）| `zmc`（ZmcDataSet，持原始行零拷贝）
+//!   - 传输：`json`（ApiResp JSON 信封）| `msgpack`（列式二进制信封）
+//!   四个端点：
+//!     · `sqlx-dataset-json`   sqlx + DataSet + JSON（老链路）
+//!     · `tokio-zmc-msgpack`   tokio + ZmcDataSet + msgpack 二进制
+//!     · `sqlx-zmc-msgpack`    sqlx + ZmcDataSet + msgpack 二进制
+//!     · `tokio-zmc-json`      tokio + ZmcDataSet + 纯 JSON
 //! - `POST /api/doc/save` → DocSaver 双模式回存（Phase 5 接入）
 //!
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
@@ -44,14 +52,14 @@ pub struct DocDataQuery {
     pub depth: Option<usize>,
 }
 
-/// `GET /api/doc/data` —— 装载单据数据为列式包。
-pub async fn doc_data(
+/// `GET /api/doc/data/sqlx-dataset-json` —— 装载单据数据为列式包（sqlx + 老 DataSet + JSON，老链路）。
+pub async fn doc_data_sqlx_dataset_json(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<DocDataQuery>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
-    debug!("{:<12} - doc_data {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - doc_data_sqlx_dataset_json {}/{}", "HANDLER", q.module, q.file);
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
