@@ -14,68 +14,71 @@ use std::sync::Arc;
 use cmx_core::model::cell::DataValue;
 use cmx_database_pg::{DatabaseManager as PgManager, ZmcChildGroup, ZmcColType, ZmcDataSet, ZmcRowSource, ZmcSchema};
 
-use super::loader::LoadOptions;
 use super::meta::{DocMetaView, LayerView};
+use super::query::DocQuery;
+use super::sql_builder::build_layer_select;
 use crate::{BizError, Result};
 
-/// 零拷贝单据装载器。
+/// 零拷贝单据装载器（tokio-postgres + ZmcDataSet）。SQL 全部由 `build_layer_select` 元数据驱动。
 pub struct ZmcDocLoader;
 
 impl ZmcDocLoader {
-    /// 按定义装载整棵单据树,返回根层 [`ZmcDataSet`](cmx_database_pg::ZmcDataSet)(含子集分组)。
+    /// 按定义 + 查询指令装载整棵单据树,返回根层 [`ZmcDataSet`](cmx_database_pg::ZmcDataSet)。
     pub async fn load(
         mm: &PgManager,
         db_id: &str,
         meta: &DocMetaView,
-        opts: &LoadOptions,
+        query: &DocQuery,
     ) -> Result<ZmcDataSet> {
         let root = meta
             .root_layer()
             .ok_or_else(|| BizError::business("单据定义无根层"))?;
 
-        // 1. 根层查询
-        let mut root_ds = Self::query_root(mm, db_id, root, opts).await?;
+        let mut root_ds = Self::query_root(mm, db_id, root, query).await?;
 
-        // 2. 逐层下钻
-        let max_depth = opts.depth.unwrap_or(usize::MAX);
-        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth).await?;
+        let max_depth = query.depth.unwrap_or(usize::MAX);
+        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query).await?;
 
         Ok(root_ds)
     }
 
-    /// 根层:SELECT 列 FROM 表 [WHERE filter] [ORDER BY id] [LIMIT n]。
+    /// 懒下钻：以 `layer_id` 为根，装载它在 `parent_ids`（JSON，按 childKey 列类型化）下的子树。
+    ///
+    /// 通用（元数据驱动）：childKey 由 `child_key_for_child` 推导；该层查询取自 `query.layer(layer_id)`；
+    /// depth 从该层起算（`query.depth`）。返回以该层为根的 ZmcDataSet（含 childRows）。
+    pub async fn load_subtree(
+        mm: &PgManager,
+        db_id: &str,
+        meta: &DocMetaView,
+        layer_id: &str,
+        parent_ids_json: &[serde_json::Value],
+        query: &DocQuery,
+    ) -> Result<ZmcDataSet> {
+        let layer = meta
+            .layer(layer_id)
+            .ok_or_else(|| BizError::business(format!("层 {layer_id} 不在定义中")))?;
+        let child_key = meta
+            .child_key_for_child(layer_id)
+            .ok_or_else(|| BizError::business(format!("层 {layer_id} 是根层，无父，不能懒下钻")))?;
+        let parent_ids = typecast_ids(layer, &child_key, parent_ids_json)?;
+
+        let mut ds = Self::query_children_by_key(mm, db_id, layer, &child_key, &parent_ids, query).await?;
+        let max_depth = query.depth.unwrap_or(usize::MAX);
+        if max_depth > 0 {
+            Self::descend(mm, db_id, meta, layer, &mut ds, 1, max_depth, query).await?;
+        }
+        Ok(ds)
+    }
+
+    /// 根层:`build_layer_select`(该层 filter/orderBy/limit/offset/cursor)。
     async fn query_root(
         mm: &PgManager,
         db_id: &str,
         layer: &LayerView,
-        opts: &LoadOptions,
+        query: &DocQuery,
     ) -> Result<ZmcDataSet> {
-        let cols = column_list(layer);
-        let mut sql = format!("SELECT {cols} FROM {}", layer.table_name);
-        let mut params: Vec<DataValue> = Vec::new();
-
-        if !opts.root_filter.is_empty() {
-            let mut conds = Vec::new();
-            for (i, (col, val)) in opts.root_filter.iter().enumerate() {
-                if layer.schema.get_index(col).is_none() {
-                    return Err(BizError::business(format!(
-                        "过滤列 {col} 不在层 {} 中",
-                        layer.table_name
-                    )));
-                }
-                conds.push(format!("{col} = ${}", i + 1));
-                params.push(val.clone());
-            }
-            sql.push_str(" WHERE ");
-            sql.push_str(&conds.join(" AND "));
-        }
-        if layer.schema.get_index("id").is_some() {
-            sql.push_str(" ORDER BY id");
-        }
-        if let Some(n) = opts.root_limit {
-            sql.push_str(&format!(" LIMIT {n}"));
-        }
-
+        let lq = query.layer(&layer.id);
+        let (sql, params) = build_layer_select(layer, &lq, None)?;
         let ds = mm
             .query_sql_zmc_with_datavalues(db_id, &sql, params, &layer.table_name)
             .await
@@ -92,6 +95,7 @@ impl ZmcDocLoader {
         parent_ds: &mut ZmcDataSet,
         cur_depth: usize,
         max_depth: usize,
+        query: &DocQuery,
     ) -> Result<()> {
         if cur_depth >= max_depth {
             return Ok(());
@@ -102,13 +106,20 @@ impl ZmcDocLoader {
         }
 
         let child_key = meta.child_key_for(&parent_layer.id);
+        let child_layers: Vec<&LayerView> = if query.include_siblings {
+            meta.child_layers(&parent_layer.id)
+        } else {
+            meta.child_layers(&parent_layer.id)
+                .into_iter()
+                .filter(|l| meta.is_primary_in_group(&l.id))
+                .collect()
+        };
 
-        // 同父兄弟:下一层组全部子表,各查一次、各挂一个 ZmcChildGroup
-        for child_layer in meta.child_layers(&parent_layer.id) {
+        // 同父兄弟:下一层组全部子表,各查一次、各挂一个 ZmcChildGroup(各吃自己的 LayerQuery)
+        for child_layer in child_layers {
             let is_primary = meta.is_primary_in_group(&child_layer.id);
-            // 兄弟表容错:非主表装载失败(元数据定义了但物理表未部署)→ 跳过 + 警告,不中断整单装载。
             let mut child_ds =
-                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids)
+                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query)
                     .await
                 {
                     Ok(ds) => ds,
@@ -122,7 +133,6 @@ impl ZmcDocLoader {
                     Err(e) => return Err(e),
                 };
 
-            // 孙层:仅从该组主表继续下钻
             if is_primary {
                 Box::pin(Self::descend(
                     mm,
@@ -132,38 +142,28 @@ impl ZmcDocLoader {
                     &mut child_ds,
                     cur_depth + 1,
                     max_depth,
+                    query,
                 ))
                 .await?;
             }
 
-            // 计算每个子行的父 id 字符串(childKey 列),组成 ZmcChildGroup 挂到父层
             let group = build_child_group(child_ds, &child_key, &child_layer.id)?;
             parent_ds.add_child_group(group);
         }
         Ok(())
     }
 
-    /// 子层:SELECT 列 FROM 子表 WHERE childKey = ANY($1) ORDER BY childKey[, line_no]。
+    /// 子层:`build_layer_select`(parent_scope = childKey ANY + 该层 filter/orderBy/分页)。
     async fn query_children_by_key(
         mm: &PgManager,
         db_id: &str,
         layer: &LayerView,
         child_key: &str,
         parent_ids: &[DataValue],
+        query: &DocQuery,
     ) -> Result<ZmcDataSet> {
-        let cols = column_list(layer);
-        let mut sql = format!(
-            "SELECT {cols} FROM {} WHERE {} = ANY($1)",
-            layer.table_name, child_key
-        );
-        let has_line_no = layer.schema.get_index("line_no").is_some();
-        if has_line_no {
-            sql.push_str(&format!(" ORDER BY {}, line_no", child_key));
-        } else {
-            sql.push_str(&format!(" ORDER BY {}", child_key));
-        }
-
-        let params = vec![DataValue::Array(parent_ids.to_vec())];
+        let lq = query.layer(&layer.id);
+        let (sql, params) = build_layer_select(layer, &lq, Some((child_key, parent_ids)))?;
         let ds = mm
             .query_sql_zmc_with_datavalues(db_id, &sql, params, &layer.table_name)
             .await
@@ -174,16 +174,6 @@ impl ZmcDocLoader {
 
 // ─────────────────────── 组装辅助 ───────────────────────
 
-/// 逗号分隔列名(按定义 schema 顺序)。
-fn column_list(layer: &LayerView) -> String {
-    layer
-        .schema
-        .fields
-        .iter()
-        .map(|f| f.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 
 /// 空表兜底:查询推断的 schema 若列数不足(空结果集 → 0 列),用定义 schema 的列名 + 推断
 /// PG 类型覆盖,保证前端拿到正确表头。
@@ -221,6 +211,20 @@ fn field_type_to_zmc(ft: &cmx_core::model::cell::FieldType) -> ZmcColType {
         // String/Text/Array/Unknown 一律当文本(空表无实际值,仅占位表头)
         _ => ZmcColType::Text,
     }
+}
+
+/// 把父 id JSON 值按 childKey 列类型化成 DataValue（懒下钻 parent_ids 用）。
+fn typecast_ids(
+    layer: &LayerView,
+    child_key: &str,
+    ids: &[serde_json::Value],
+) -> Result<Vec<DataValue>> {
+    let col = layer
+        .column(child_key)
+        .ok_or_else(|| BizError::business(format!("子键 {child_key} 不在层 {}", layer.table_name)))?;
+    ids.iter()
+        .map(|v| super::query::json_to_datavalue(col, v))
+        .collect()
 }
 
 /// 从根/父 ZmcDataSet 收集 "id" 列值(作为子层 ANY 参数)。

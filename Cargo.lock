@@ -962,6 +962,7 @@ name = "cmx-biz"
 version = "0.1.12"
 dependencies = [
  "async-trait",
+ "base64",
  "chrono",
  "cmx-api-types",
  "cmx-core",
