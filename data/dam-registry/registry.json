@@ -2,14 +2,6 @@
   "version": 1,
   "domains": [
     {
-      "id": "portal",
-      "name": "门户平台",
-      "title": "Portal",
-      "icon": "home",
-      "status": "active",
-      "description": "门户平台自身的使用帮助与平台级资源。"
-    },
-    {
       "id": "fi",
       "name": "财务资源管理",
       "title": "Finance",

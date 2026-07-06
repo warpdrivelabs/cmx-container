@@ -1128,14 +1128,15 @@
      }
     },
     {
-     "id": "fi-cmxfico-voucher-docpages",
-     "name": "voucher-docpages",
-     "caption": "会计凭证单据（两套实现）",
+     "id": "fi-cmxfico-voucher-doc-json",
+     "name": "voucher-doc-json",
+     "caption": "会计凭证①(html·DataSet)",
+     "type": "workspace-node",
      "icon": "tabler-outline/receipt",
      "permissionId": null,
      "workspace": {
       "content": {
-       "caption": "会计凭证业务单据",
+       "caption": "会计凭证业务单据（html_pages · sqlx DataSet + JSON）",
        "icon": "document",
        "views": [
         {
@@ -1143,14 +1144,122 @@
          "icon": "table-view",
          "type": "html_pages",
          "html_page": "fi.cmxfico.gl.voucher-doc"
-        },
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-cmxfico-voucher-native-json",
+     "name": "voucher-native-json",
+     "caption": "会计凭证②(native·DataSet)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/receipt",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "会计凭证业务单据（通用页 · sqlx DataSet + JSON）",
+       "icon": "document",
+       "views": [
         {
-         "tabLabel": "凭证(native_pages)",
+         "tabLabel": "凭证(通用页·DataSet)",
          "icon": "table-view",
          "type": "native_pages",
-         "native_page": "fi.cmxfico.gl.voucher-native",
+         "native_page": "portal.doc.doc-loader",
          "view": "content",
-         "props": {}
+         "props": {
+          "domain": "fi",
+          "application": "cmxfico",
+          "module": "gl",
+          "file": "cmxfico_doc_meta_v1.json",
+          "dbId": "fico-db",
+          "apiPath": "/api/doc/data"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-cmxfico-voucher-doc-sqlxbin",
+     "name": "voucher-doc-sqlxbin",
+     "caption": "会计凭证③(html·Sqlx二进制)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/receipt",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "会计凭证业务单据（html_pages · sqlx ZmcDataSet + 二进制）",
+       "icon": "document",
+       "views": [
+        {
+         "tabLabel": "凭证(html·Sqlx二进制)",
+         "icon": "table-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.voucher-doc-sqlxbin"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-cmxfico-voucher-native-bin",
+     "name": "voucher-native-bin",
+     "caption": "会计凭证④(native·tokio二进制)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/receipt",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "会计凭证业务单据（通用页 · tokio ZmcDataSet + 二进制）",
+       "icon": "document",
+       "views": [
+        {
+         "tabLabel": "凭证(通用页·tokio二进制)",
+         "icon": "table-view",
+         "type": "native_pages",
+         "native_page": "portal.doc.doc-loader",
+         "view": "content",
+         "props": {
+          "domain": "fi",
+          "application": "cmxfico",
+          "module": "gl",
+          "file": "cmxfico_doc_meta_v1.json",
+          "dbId": "fico-db",
+          "apiPath": "/api/doc/data.bin",
+          "binary": true
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-cmxfico-voucher-native-zmcjson",
+     "name": "voucher-native-zmcjson",
+     "caption": "会计凭证⑤(native·Zmc→JSON)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/receipt",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "会计凭证业务单据（通用页 · ZmcDataSet 零拷贝装载 + 纯 JSON 出口）",
+       "icon": "document",
+       "views": [
+        {
+         "tabLabel": "凭证(通用页·Zmc→JSON)",
+         "icon": "table-view",
+         "type": "native_pages",
+         "native_page": "portal.doc.doc-loader",
+         "view": "content",
+         "props": {
+          "domain": "fi",
+          "application": "cmxfico",
+          "module": "gl",
+          "file": "cmxfico_doc_meta_v1.json",
+          "dbId": "fico-db",
+          "apiPath": "/api/doc/data.zmc.json"
+         }
         }
        ]
       }
@@ -1221,33 +1330,33 @@
    "expanded": true,
    "children": [
     {
-     "id": "context-profile-manager",
-     "name": "context-profile-manager",
-     "caption": "上下文档案管理",
+     "id": "flexible-combination-manager",
+     "name": "flexible-combination-manager",
+     "caption": "弹性组合管理",
      "type": "workspace-node",
      "permissionId": null,
      "icon": "tabler-outline/adjustments-cog",
      "workspace": {
       "content": {
-       "caption": "上下文档案管理",
+       "caption": "弹性组合管理",
        "icon": "settings",
        "views": [
         {
          "tabLabel": "设计",
          "icon": "settings",
-         "type": "context-profile-manager",
+         "type": "flexible-combination-manager",
          "data": {}
         },
         {
          "tabLabel": "源码",
          "icon": "source-code",
-         "type": "context-profile-source",
+         "type": "flexible-combination-source",
          "data": {}
         },
         {
          "tabLabel": "Schema",
          "icon": "database",
-         "type": "context-profile-schema",
+         "type": "flexible-combination-schema",
          "data": {}
         }
        ]
@@ -1259,7 +1368,7 @@
         {
          "tabLabel": "档案",
          "icon": "list",
-         "type": "context-profile-list",
+         "type": "flexible-combination-list",
          "data": {}
         }
        ]
@@ -1271,13 +1380,13 @@
         {
          "tabLabel": "检查器",
          "icon": "detail-view",
-         "type": "context-profile-inspector",
+         "type": "flexible-combination-inspector",
          "data": {}
         },
         {
          "tabLabel": "校验/预览",
          "icon": "validate",
-         "type": "context-profile-verify",
+         "type": "flexible-combination-verify",
          "data": {}
         }
        ]
@@ -1623,13 +1732,13 @@
     {
      "id": "fi-gl-account-def",
      "name": "account-def",
-     "caption": "科目上下文档案",
+     "caption": "科目弹性组合",
      "type": "workspace-node",
      "permissionId": null,
      "icon": "tabler-outline/book",
      "workspace": {
       "content": {
-       "caption": "科目上下文档案",
+       "caption": "科目弹性组合",
        "icon": "settings",
        "views": [
         {
@@ -1645,13 +1754,13 @@
     {
      "id": "fi-gl-trade-def",
      "name": "trade-def",
-     "caption": "交易上下文档案",
+     "caption": "交易弹性组合",
      "type": "workspace-node",
      "permissionId": null,
      "icon": "tabler-outline/shopping-cart-cog",
      "workspace": {
       "content": {
-       "caption": "交易上下文档案",
+       "caption": "交易弹性组合",
        "icon": "settings",
        "views": [
         {

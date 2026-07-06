@@ -113,42 +113,42 @@ pub fn public_tool_schemas() -> Value {
             }, "required": ["id"] }
         },
         {
-            "name": "context_profile_list", "description": "列出上下文档案", "requiresApproval": false,
+            "name": "flexible_combination_list", "description": "列出弹性组合", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
                 "limit": { "type": "number" }
             } }
         },
         {
-            "name": "context_profile_get", "description": "读取指定上下文档案", "requiresApproval": false,
+            "name": "flexible_combination_get", "description": "读取指定弹性组合", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
                 "scenario": { "type": "string" }
             }, "required": ["domain", "app", "module"] }
         },
         {
-            "name": "context_profile_validate", "description": "校验上下文档案配置", "requiresApproval": false,
+            "name": "flexible_combination_validate", "description": "校验弹性组合配置", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
-                "scenario": { "type": "string" }, "profile": { "type": "object" }
+                "scenario": { "type": "string" }, "combination": { "type": "object" }
             } }
         },
         {
-            "name": "context_profile_preview", "description": "预览上下文档案解析结果", "requiresApproval": false,
+            "name": "flexible_combination_preview", "description": "预览弹性组合解析结果", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
-                "scenario": { "type": "string" }, "profile": { "type": "object" }, "anchor": { "type": "object" }
+                "scenario": { "type": "string" }, "combination": { "type": "object" }, "anchor": { "type": "object" }
             } }
         },
         {
-            "name": "context_profile_resolve", "description": "按锚点解析上下文档案字段/列模型", "requiresApproval": false,
+            "name": "flexible_combination_resolve", "description": "按锚点解析弹性组合字段/列模型", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
                 "scenario": { "type": "string" }, "anchor": { "type": "object" }
             }, "required": ["domain", "app", "module"] }
         },
         {
-            "name": "context_profile_rule", "description": "按锚点获取命中的上下文规则", "requiresApproval": false,
+            "name": "flexible_combination_rule", "description": "按锚点获取命中的上下文规则", "requiresApproval": false,
             "inputSchema": { "type": "object", "properties": {
                 "domain": { "type": "string" }, "app": { "type": "string" }, "module": { "type": "string" },
                 "scenario": { "type": "string" }, "anchor": { "type": "object" }

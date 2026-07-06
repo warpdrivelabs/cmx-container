@@ -140,6 +140,14 @@ impl ModuleRoutes for PortalModule {
             .route("/definitions/batch", post(handler::definitions_batch))
             // 业务单据数据装载/回存（方案 Phase 4/5）
             .route("/doc/data", get(doc::doc_data))
+            // 业务单据数据装载：列式二进制(msgpack,零拷贝新链路)
+            .route("/doc/data.bin", get(doc::doc_data_bin))
+            // 业务单据数据装载：列式二进制(msgpack) —— sqlx 驱动版(第三套实现)
+            .route("/doc/data.sqlx.bin", get(doc::doc_data_bin_sqlx))
+            // 业务单据数据装载：ZmcDataSet 零拷贝装载 + 纯 JSON 出口(第五套实现)
+            .route("/doc/data.zmc.json", get(doc::doc_data_zmc_json))
+            // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
+            .route("/doc/meta", get(doc::doc_meta))
             .route("/doc/save", post(doc::doc_save))
             // 业务单据版本化（方案 §6A / Phase 8）
             .route("/doc/revisions", get(doc::doc_revisions))
@@ -180,32 +188,19 @@ impl ModuleRoutes for PortalModule {
             )
             .route("/dict/{dictId}/deactivate", post(handler::dict_deactivate))
             .route("/dict/{dictId}/supersede", post(handler::dict_supersede))
-            // 上下文档案（含废弃别名 /subdivision/*）
-            .route("/context-profile/list", get(handler::cp_list))
+            // 弹性组合
+            .route("/flexible-combination/list", get(handler::fc_list))
             .route(
-                "/context-profile/config",
-                get(handler::cp_get_config)
-                    .post(handler::cp_save_config)
-                    .delete(handler::cp_delete_config),
+                "/flexible-combination/config",
+                get(handler::fc_get_config)
+                    .post(handler::fc_save_config)
+                    .delete(handler::fc_delete_config),
             )
-            .route("/context-profile/resolve", get(handler::cp_resolve))
-            .route("/context-profile/rule", get(handler::cp_rule))
-            .route("/context-profile/validate", post(handler::cp_validate))
-            .route("/context-profile/preview", post(handler::cp_preview))
-            .route("/context-profile/default", post(handler::cp_set_default))
-            // 废弃别名：/subdivision/* → 同一处理器
-            .route("/subdivision/list", get(handler::cp_list))
-            .route(
-                "/subdivision/config",
-                get(handler::cp_get_config)
-                    .post(handler::cp_save_config)
-                    .delete(handler::cp_delete_config),
-            )
-            .route("/subdivision/resolve", get(handler::cp_resolve))
-            .route("/subdivision/rule", get(handler::cp_rule))
-            .route("/subdivision/validate", post(handler::cp_validate))
-            .route("/subdivision/preview", post(handler::cp_preview))
-            .route("/subdivision/default", post(handler::cp_set_default))
+            .route("/flexible-combination/resolve", get(handler::fc_resolve))
+            .route("/flexible-combination/rule", get(handler::fc_rule))
+            .route("/flexible-combination/validate", post(handler::fc_validate))
+            .route("/flexible-combination/preview", post(handler::fc_preview))
+            .route("/flexible-combination/default", post(handler::fc_set_default))
     }
 
     fn prefix() -> &'static str {

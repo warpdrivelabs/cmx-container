@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 # 承接 CMXPortalManager / CMXHTMLDesigner 两个 Node.js 后端迁移而来的门户/设计器业务：
-# 菜单、活动、域、页面(html/form/native)、字典检索引擎、上下文档案规则引擎、定义中心、
+# 菜单、活动、域、页面(html/form/native)、字典检索引擎、弹性组合规则引擎、定义中心、
 # 事实数据、工作区节点、DAM 注册表、AI 代理等。全部为 JSON 文件存储（tokio::fs），不落库。
 
 [dependencies]

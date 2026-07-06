@@ -17,6 +17,7 @@ use cmx_database::get_default_db_manager;
 use cmx_metadata::{PgTableDefineExecutor, TableDefineDbExecutor};
 use cmx_utils::snowflake_id_str;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 use crate::Result;
 use cmx_api_types::Error;
@@ -89,6 +90,23 @@ fn field_caption(f: &Value) -> String {
     }
 }
 
+/// 表/汇总表标题（caption.zh_CN / caption 字符串 / tableAlias / name）。
+fn table_caption(t: &Value, fallback: &str) -> String {
+    t.get("tableAlias")
+        .and_then(|v| v.as_str())
+        .or_else(|| match t.get("caption") {
+            Some(Value::Object(o)) => o
+                .get("zh_CN")
+                .or_else(|| o.get("en"))
+                .and_then(|v| v.as_str()),
+            Some(Value::String(s)) => Some(s.as_str()),
+            _ => None,
+        })
+        .or_else(|| t.get("name").and_then(|v| v.as_str()))
+        .unwrap_or(fallback)
+        .to_string()
+}
+
 /// 单个字段对象 → ColumnDefine。id_field 命中则标记主键。
 fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefine> {
     let name = f.get("name").and_then(|v| v.as_str())?.to_string();
@@ -138,6 +156,29 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
         foreign_key_column: None,
         extensions: Default::default(),
     })
+}
+
+/// uniqueKeys = [[col,...], ...] → 唯一索引定义。
+fn unique_indexes(t: &Value, table_name: &str) -> Vec<IndexDefine> {
+    let mut indexes = Vec::new();
+    if let Some(uks) = t.get("uniqueKeys").and_then(|v| v.as_array()) {
+        for (i, uk) in uks.iter().enumerate() {
+            if let Some(cols) = uk.as_array() {
+                let cnames: Vec<String> = cols
+                    .iter()
+                    .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                    .collect();
+                if !cnames.is_empty() {
+                    indexes.push(IndexDefine {
+                        name: format!("uk_{}_{}", table_name, i + 1),
+                        columns: cnames,
+                        kind: IndexKind::Unique,
+                    });
+                }
+            }
+        }
+    }
+    indexes
 }
 
 /// 从 base fieldSets 对象里取某字段集的 fields 数组。
@@ -211,32 +252,12 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
             .map(|c| c.name.clone())
             .collect();
 
-        // 唯一键：uniqueKeys = [[col,...], ...]
-        let mut indexes = Vec::new();
-        if let Some(uks) = t.get("uniqueKeys").and_then(|v| v.as_array()) {
-            for (i, uk) in uks.iter().enumerate() {
-                if let Some(cols) = uk.as_array() {
-                    let cnames: Vec<String> = cols
-                        .iter()
-                        .filter_map(|c| c.as_str().map(|s| s.to_string()))
-                        .collect();
-                    if !cnames.is_empty() {
-                        indexes.push(IndexDefine {
-                            name: format!("uk_{}_{}", table_name, i + 1),
-                            columns: cnames,
-                            kind: IndexKind::Unique,
-                        });
-                    }
-                }
-            }
-        }
-
         out.push(TableDefine {
+            indexes: unique_indexes(t, &table_name),
             table_name,
             display_name: display,
             columns,
             primary_keys,
-            indexes,
             version: 1,
             create_time: None,
             update_time: None,
@@ -253,90 +274,109 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
     out
 }
 
-/// DOC 定义 doc → Vec<TableDefine>（每个 voucherTable 一张表）。
-/// DOC 列 = 本表 fields + documentFieldSets 引用的 base 字段集。
-fn compile_doc(doc: &Value, base: &Value) -> Vec<TableDefine> {
-    let tables = match doc.get("voucherTables").and_then(|v| v.as_array()) {
-        Some(t) => t,
-        None => return vec![],
-    };
-    let mut out = Vec::new();
-    for t in tables {
-        let table_name = t
-            .get("tableName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if table_name.is_empty() {
-            continue;
-        }
-        let display = t
-            .get("tableAlias")
-            .and_then(|v| v.as_str())
-            .unwrap_or(&table_name)
-            .to_string();
-        let comment = t
-            .get("remark")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+fn compile_doc_table(t: &Value, base: &Value) -> Option<TableDefine> {
+    let table_name = t
+        .get("tableName")
+        .or_else(|| t.get("name"))
+        .or_else(|| t.get("id"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+    if table_name.is_empty() {
+        return None;
+    }
+    let display = table_caption(t, &table_name);
+    let comment = t
+        .get("remark")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
-        let mut columns: Vec<ColumnDefine> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut ord: u32 = 0;
-        // DOC 主键约定：id（若存在）
-        let id_field = "id";
-        if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
-            for f in own {
-                ord += 1;
-                if let Some(c) = field_to_column(f, id_field, ord) {
-                    if seen.insert(c.name.clone()) {
-                        columns.push(c);
-                    }
+    let mut columns: Vec<ColumnDefine> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut ord: u32 = 0;
+    // DOC 主键约定：id（若存在）。sum/summaries 表也沿用该约定。
+    let id_field = "id";
+    if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
+        for f in own {
+            ord += 1;
+            if let Some(c) = field_to_column(f, id_field, ord) {
+                if seen.insert(c.name.clone()) {
+                    columns.push(c);
                 }
             }
         }
-        // documentFieldSets: [ "voucherCommonFields", ... ] 引用 base
-        if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
-            for s in sets {
-                if let Some(set_name) = s.as_str() {
-                    if let Some(fields) = base_fieldset(base, set_name) {
-                        for f in fields {
-                            ord += 1;
-                            if let Some(c) = field_to_column(f, id_field, ord) {
-                                if seen.insert(c.name.clone()) {
-                                    columns.push(c);
-                                }
+    }
+    // documentFieldSets: [ "voucherCommonFields", ... ] 引用 base。汇总表通常不配，
+    // 但保留同样展开能力，便于后续把通用审计字段抽到 base。
+    if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
+        for s in sets {
+            if let Some(set_name) = s.as_str() {
+                if let Some(fields) = base_fieldset(base, set_name) {
+                    for f in fields {
+                        ord += 1;
+                        if let Some(c) = field_to_column(f, id_field, ord) {
+                            if seen.insert(c.name.clone()) {
+                                columns.push(c);
                             }
                         }
                     }
                 }
             }
         }
+    }
 
-        let primary_keys: Vec<String> = columns
-            .iter()
-            .filter(|c| c.is_primary_key)
-            .map(|c| c.name.clone())
-            .collect();
+    let primary_keys: Vec<String> = columns
+        .iter()
+        .filter(|c| c.is_primary_key)
+        .map(|c| c.name.clone())
+        .collect();
 
-        out.push(TableDefine {
-            table_name,
-            display_name: display,
-            columns,
-            primary_keys,
-            indexes: vec![],
-            version: 1,
-            create_time: None,
-            update_time: None,
-            i18n: false,
-            comment,
-            schema: None,
-            tablespace: None,
-            is_partitioned: false,
-            partition_type: None,
-            partition_columns: vec![],
-            extensions: Default::default(),
-        });
+    Some(TableDefine {
+        table_name: table_name.clone(),
+        display_name: display,
+        columns,
+        primary_keys,
+        indexes: unique_indexes(t, &table_name),
+        version: 1,
+        create_time: None,
+        update_time: None,
+        i18n: false,
+        comment,
+        schema: None,
+        tablespace: None,
+        is_partitioned: false,
+        partition_type: None,
+        partition_columns: vec![],
+        extensions: Default::default(),
+    })
+}
+
+/// DOC 定义 doc → Vec<TableDefine>（每个 voucherTable 一张表）。
+/// DOC 列 = 本表 fields + documentFieldSets 引用的 base 字段集；每层表下的
+/// summaries/sum 汇总表也按同一 TableDefine 链路编译，以复用创建与升级执行器。
+fn compile_doc(doc: &Value, base: &Value) -> Vec<TableDefine> {
+    let tables = match doc.get("voucherTables").and_then(|v| v.as_array()) {
+        Some(t) => t,
+        None => return vec![],
+    };
+    let mut out = Vec::new();
+    let mut seen_tables: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for t in tables {
+        if let Some(def) = compile_doc_table(t, base) {
+            if seen_tables.insert(def.table_name.clone()) {
+                out.push(def);
+            }
+        }
+        for key in ["summaries", "sum"] {
+            if let Some(summaries) = t.get(key).and_then(|v| v.as_array()) {
+                for summary in summaries {
+                    if let Some(def) = compile_doc_table(summary, base) {
+                        if seen_tables.insert(def.table_name.clone()) {
+                            out.push(def);
+                        }
+                    }
+                }
+            }
+        }
     }
     out
 }
@@ -442,6 +482,211 @@ async fn table_exists(db_id: &str, table: &str) -> Result<bool> {
         })
         .unwrap_or(0);
     Ok(n > 0)
+}
+
+#[derive(Debug, Clone)]
+struct DbColumnSnapshot {
+    data_type: String,
+    length: Option<i64>,
+    precision: Option<i64>,
+    scale: Option<i64>,
+    nullable: bool,
+    default_value: Option<String>,
+}
+
+fn data_value_i64(v: &DataValue) -> Option<i64> {
+    match v {
+        DataValue::Int(i) => Some(*i),
+        DataValue::Float(f) => Some(*f as i64),
+        DataValue::Decimal(d) => d.to_string().parse::<i64>().ok(),
+        DataValue::String(s) => s.trim().parse::<i64>().ok(),
+        DataValue::ShortStr(s) => s.trim().parse::<i64>().ok(),
+        DataValue::LongStr(s) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
+fn desired_type_name(c: &ColumnDefine) -> &'static str {
+    match c.field_type {
+        FieldType::String => "character varying",
+        FieldType::Text => "text",
+        FieldType::Int => "integer",
+        FieldType::Decimal => "numeric",
+        FieldType::Float => "double precision",
+        FieldType::Date => "date",
+        FieldType::DateTime => "timestamp without time zone",
+        FieldType::Bool => "boolean",
+        FieldType::Json => "jsonb",
+        FieldType::Uuid => "uuid",
+        FieldType::Binary => "bytea",
+        _ => "character varying",
+    }
+}
+
+fn desired_column_snapshot(c: &ColumnDefine) -> DbColumnSnapshot {
+    DbColumnSnapshot {
+        data_type: desired_type_name(c).to_string(),
+        length: c.length.map(|n| n as i64),
+        precision: c.precision.map(|n| n as i64),
+        scale: c.scale.map(|n| n as i64),
+        nullable: c.is_nullable,
+        default_value: c.default_value.clone(),
+    }
+}
+
+fn column_shape_changes(before: &DbColumnSnapshot, desired: &DbColumnSnapshot) -> Vec<Value> {
+    let mut diffs = Vec::new();
+    let mut push = |field: &str, from: String, to: String| {
+        if from != to {
+            diffs.push(json!({ "field": field, "from": from, "to": to }));
+        }
+    };
+    push("dataType", before.data_type.clone(), desired.data_type.clone());
+    push(
+        "length",
+        before.length.map(|n| n.to_string()).unwrap_or_default(),
+        desired.length.map(|n| n.to_string()).unwrap_or_default(),
+    );
+    push(
+        "precision",
+        before.precision.map(|n| n.to_string()).unwrap_or_default(),
+        desired.precision.map(|n| n.to_string()).unwrap_or_default(),
+    );
+    push(
+        "scale",
+        before.scale.map(|n| n.to_string()).unwrap_or_default(),
+        desired.scale.map(|n| n.to_string()).unwrap_or_default(),
+    );
+    push("nullable", before.nullable.to_string(), desired.nullable.to_string());
+    push(
+        "default",
+        before.default_value.clone().unwrap_or_default(),
+        desired.default_value.clone().unwrap_or_default(),
+    );
+    diffs
+}
+
+fn table_action_label(change: &Value) -> &'static str {
+    match change.get("action").and_then(|v| v.as_str()) {
+        Some("create_table") => "创建表",
+        Some("upgrade_table") => "升级表",
+        Some("no_change") => "校验表",
+        _ => "处理表",
+    }
+}
+
+async fn table_columns(db_id: &str, table: &str) -> Result<HashMap<String, DbColumnSnapshot>> {
+    let mm = get_default_db_manager();
+    let sql = "SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default \
+               FROM information_schema.columns \
+               WHERE table_schema = current_schema() AND table_name = $1 \
+               ORDER BY ordinal_position";
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            None,
+            sql,
+            vec![DataValue::String(table.to_string())],
+            "mc_columns",
+        )
+        .await
+        .map_err(db_err("查询表列信息失败"))?;
+    let mut out = HashMap::new();
+    for row in ds.iter() {
+        let name = row
+            .get(0)
+            .and_then(data_value_string)
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let data_type = row
+            .get(1)
+            .and_then(data_value_string)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let is_nullable = row
+            .get(5)
+            .and_then(data_value_string)
+            .map(|s| s.eq_ignore_ascii_case("YES"))
+            .unwrap_or(true);
+        out.insert(
+            name.clone(),
+            DbColumnSnapshot {
+                data_type,
+                length: row.get(2).and_then(data_value_i64),
+                precision: row.get(3).and_then(data_value_i64),
+                scale: row.get(4).and_then(data_value_i64),
+                nullable: is_nullable,
+                default_value: row.get(6).and_then(data_value_string),
+            },
+        );
+    }
+    Ok(out)
+}
+
+async fn table_change_plan(db_id: &str, def: &TableDefine) -> Result<Value> {
+    let exists = table_exists(db_id, &def.table_name).await?;
+    if !exists {
+        return Ok(json!({
+            "table": def.table_name,
+            "displayName": def.display_name,
+            "action": "create_table",
+            "created": true,
+            "addedColumns": def.columns.iter().map(|c| json!({
+                "name": c.name,
+                "label": c.label,
+                "dataType": desired_type_name(c),
+                "nullable": c.is_nullable,
+            })).collect::<Vec<Value>>(),
+            "modifiedColumns": [],
+            "unchangedColumns": [],
+            "columnCount": def.columns.len(),
+        }));
+    }
+
+    let before = table_columns(db_id, &def.table_name).await?;
+    let mut added = Vec::new();
+    let mut modified = Vec::new();
+    let mut unchanged = Vec::new();
+    for c in &def.columns {
+        let desired = desired_column_snapshot(c);
+        match before.get(&c.name) {
+            None => added.push(json!({
+                "name": c.name,
+                "label": c.label,
+                "dataType": desired.data_type,
+                "nullable": c.is_nullable,
+            })),
+            Some(old) => {
+                let diffs = column_shape_changes(old, &desired);
+                if diffs.is_empty() {
+                    unchanged.push(c.name.clone());
+                } else {
+                    modified.push(json!({
+                        "name": c.name,
+                        "label": c.label,
+                        "changes": diffs,
+                    }));
+                }
+            }
+        }
+    }
+    let action = if added.is_empty() && modified.is_empty() {
+        "no_change"
+    } else {
+        "upgrade_table"
+    };
+    Ok(json!({
+        "table": def.table_name,
+        "displayName": def.display_name,
+        "action": action,
+        "created": false,
+        "addedColumns": added,
+        "modifiedColumns": modified,
+        "unchangedColumns": unchanged,
+        "columnCount": def.columns.len(),
+    }))
 }
 
 /// 读 cmx_model_meta 单行（未初始化返回 None）。
@@ -1301,6 +1546,26 @@ pub async fn deploy_plan_stream(
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
         total_tables += defs.len();
+        let mut changes = Vec::new();
+        let mut inspect_error: Option<String> = None;
+        for def in &defs {
+            match table_change_plan(db_id, def).await {
+                Ok(ch) => changes.push(ch),
+                Err(e) => {
+                    let msg = e.to_string();
+                    send(
+                        "error",
+                        json!({ "stage": "inspect", "module": module, "kind": kind, "table": def.table_name, "message": msg }),
+                    );
+                    inspect_error = Some(msg);
+                    break;
+                }
+            }
+        }
+        if let Some(e) = inspect_error {
+            results.push(json!({ "module": module, "kind": kind, "status": "failed", "error": e }));
+            continue;
+        }
         send(
             "progress",
             json!({
@@ -1309,6 +1574,7 @@ pub async fn deploy_plan_stream(
                 "kind": kind,
                 "version": version,
                 "tables": defs.len(),
+                "changes": changes,
             }),
         );
         results.push(json!({
@@ -1318,6 +1584,7 @@ pub async fn deploy_plan_stream(
             "version": version,
             "tables": defs.len(),
             "table_names": defs.iter().map(|d| d.table_name.clone()).collect::<Vec<String>>(),
+            "changes": changes,
         }));
     }
 
@@ -1466,23 +1733,33 @@ async fn deploy_with_events(
         // 建表（DDL 自动提交，txn_id=None；内省 diff，additive-only）
         let executor = PgTableDefineExecutor::new(db_id.to_string(), None);
         let mut created = 0i64;
+        let mut changes = Vec::new();
         let mut ddl_err: Option<String> = None;
         for (table_idx, def) in defs.iter().enumerate() {
+            let change = match table_change_plan(db_id, def).await {
+                Ok(ch) => ch,
+                Err(e) => {
+                    ddl_err = Some(format!("内省表 {} 失败: {e}", def.table_name));
+                    break;
+                }
+            };
             send(
                 "progress",
                 json!({
-                    "message": format!("[{}/{}] 建表/升级 {}", table_idx + 1, defs.len(), def.table_name),
+                    "message": format!("[{}/{}] {} {}", table_idx + 1, defs.len(), table_action_label(&change), def.table_name),
                     "module": module,
                     "kind": kind,
                     "table": def.table_name,
                     "index": table_idx + 1,
                     "total": defs.len(),
+                    "change": change,
                 }),
             );
             if let Err(e) = executor.create_or_upgrade_table(def).await {
                 ddl_err = Some(format!("建表 {} 失败: {e}", def.table_name));
                 break;
             }
+            changes.push(change);
             created += 1;
         }
         if let Some(e) = ddl_err {
@@ -1491,7 +1768,7 @@ async fn deploy_with_events(
                 "error",
                 json!({ "stage": "ddl", "module": module, "kind": kind, "message": e }),
             );
-            results.push(json!({ "module": module, "kind": kind, "status": "failed", "error": e }));
+            results.push(json!({ "module": module, "kind": kind, "status": "failed", "error": e, "changes": changes }));
             continue;
         }
 
@@ -1560,8 +1837,14 @@ async fn deploy_with_events(
 
             // 4-d 历史 → success
             mm.execute_sql_with_datavalues(db_id, Some(&txn),
-                "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, finished_at=CURRENT_TIMESTAMP, duration_ms=$4 WHERE id=$1",
-                vec![DataValue::String(hist_id.clone()), DataValue::String(version.to_string()), DataValue::Int(created), DataValue::Int(started.elapsed().as_millis() as i64)]
+                "UPDATE cmx_model_deploy_history SET status='success', to_version=$2, object_count=$3, ddl_summary=$4::jsonb, finished_at=CURRENT_TIMESTAMP, duration_ms=$5 WHERE id=$1",
+                vec![
+                    DataValue::String(hist_id.clone()),
+                    DataValue::String(version.to_string()),
+                    DataValue::Int(created),
+                    DataValue::Json(serde_json::to_string(&changes).unwrap_or_else(|_| "[]".to_string())),
+                    DataValue::Int(started.elapsed().as_millis() as i64),
+                ]
             ).await.map_err(db_err("更新历史失败"))?;
             Ok(())
         }.await;
@@ -1582,9 +1865,9 @@ async fn deploy_with_events(
         guard.commit().await.map_err(db_err("提交部署事务失败"))?;
         send(
             "progress",
-            json!({ "message": format!("{module} · {kind} 部署成功：v{version}，{} 张表", created), "module": module, "kind": kind, "status": "success", "version": version, "tables": created }),
+            json!({ "message": format!("{module} · {kind} 部署成功：v{version}，{} 张表", created), "module": module, "kind": kind, "status": "success", "version": version, "tables": created, "changes": changes }),
         );
-        results.push(json!({ "module": module, "kind": kind, "status": "success", "version": version, "tables": created }));
+        results.push(json!({ "module": module, "kind": kind, "status": "success", "version": version, "tables": created, "changes": changes }));
     }
 
     Ok(
@@ -1690,5 +1973,32 @@ mod tests {
         for d in &vdefs {
             assert!(!d.columns.is_empty(), "DOC 表 {} 应有列", d.table_name);
         }
+    }
+
+    #[test]
+    fn compile_doc_includes_summary_tables() {
+        let doc = load("fi/cmxfico/gl/cmxfico_doc_meta_v1.json");
+        let base = load("base/base_doc_meta_v1.json");
+        let defs = compile_doc(&doc, &base);
+        let main_count = doc
+            .get("voucherTables")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        assert!(
+            defs.len() > main_count,
+            "DOC 编译应包含 voucherTables 下的 summaries 汇总表"
+        );
+        let sum = defs
+            .iter()
+            .find(|d| d.table_name == "cv_aux_line_sum")
+            .expect("应编译出凭证辅助核算汇总表 cv_aux_line_sum");
+        let cols: Vec<&str> = sum.columns.iter().map(|c| c.name.as_str()).collect();
+        assert!(cols.contains(&"id"), "汇总表应包含主键 id");
+        assert!(cols.contains(&"upper_id"), "汇总表应包含上级主键 upper_id");
+        assert!(
+            sum.primary_keys == vec!["id".to_string()],
+            "汇总表 id 应作为主键"
+        );
     }
 }

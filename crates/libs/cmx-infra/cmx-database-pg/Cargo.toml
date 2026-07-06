@@ -1,0 +1,74 @@
+[package]
+name = "cmx-database-pg"
+version.workspace = true
+edition.workspace = true
+
+# 基于 tokio-postgres 的 PG-only 数据库层，与 cmx-database（sqlx）并行。
+# 独立门面（get_default_pg_db_manager），不接入现有消费方。
+
+[dependencies]
+# 内部依赖 - 缓存
+cmx-buffer = { workspace = true }
+# 内部依赖 - 核心库（DataValue/DataSet/Schema/Row/SqlParam，无 sqlx 依赖）
+cmx-core = { workspace = true }
+# 内部依赖 - 工具库
+cmx-utils = { workspace = true }
+# 内部依赖 - 特征定义
+cmx-traits = { workspace = true }
+# 内部依赖 - 驱动无关行来源抽象 + 零拷贝列式编码器
+cmx-rowsource = { workspace = true }
+
+# 数据库 - tokio-postgres 原生驱动
+tokio-postgres = { workspace = true }
+# 数据库 - tokio-postgres 连接池
+deadpool-postgres = { workspace = true }
+# 数据库 - postgres 类型系统（ToSql/FromSql + Type OID 常量）
+postgres-types = { workspace = true }
+# 数据库 - SQL 查询构建器（原生 build，产 sea_query::Values）
+# 注意：不得额外启用 with-rust_decimal / postgres-array —— 那会因 feature 统一
+# 给 sea-query 加变体，破坏旧 crate 依赖的 sea-query-sqlx 的穷尽 match。保持与旧
+# crate 相同的 workspace 默认 feature 集（with-chrono/with-time/with-json/with-uuid）。
+sea-query = { workspace = true }
+# modql 支持
+modql = { workspace = true, features = ["with-sea-query"] }
+
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# MessagePack 序列化/反序列化
+rmp-serde = { workspace = true }
+# MessagePack 裸写(ZMCDataSet 零拷贝列式二进制编码,把借来的 &str/&[u8] 直写输出)
+rmp = { workspace = true }
+# 派生宏
+derive_more = { workspace = true }
+# serde 辅助宏
+serde_with = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# 错误处理
+thiserror = { workspace = true }
+# 异步运行时
+tokio = { workspace = true }
+# 唯一标识符
+uuid = { workspace = true, features = ["v4"] }
+# 随机数生成
+rand = { workspace = true }
+# Futures
+futures = { workspace = true }
+# 十进制数处理（db-tokio-postgres：为 NUMERIC 列提供 ToSql/FromSql）
+rust_decimal = { workspace = true, features = ["db-tokio-postgres"] }
+# 时间处理
+chrono = { workspace = true }
+# 字节缓冲（PgInt 的 ToSql 手写实现需要 BytesMut）
+bytes = { workspace = true }
+# Base64 编码/解码
+base64 = { workspace = true }
+# SQL 解析器
+sqlparser = { workspace = true }
+# 正则表达式
+regex = { workspace = true }
+# URL 解析
+url = { workspace = true }
+# SHA256 校验和计算
+sha2 = { workspace = true }

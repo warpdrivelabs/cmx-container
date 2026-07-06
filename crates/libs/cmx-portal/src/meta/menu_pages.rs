@@ -21,7 +21,7 @@ fn resource_caption(t: &str) -> &str {
         "htmlPages" => "HTML 页面",
         "htmlPageIndex" => "页面索引",
         "metaDefinitions" => "元数据定义",
-        "contextProfiles" => "上下文配置",
+        "flexibleCombinations" => "弹性组合",
         "dictRegistry" => "字典注册",
         "dictEntries" => "字典条目",
         "dictSeeds" => "字典种子",

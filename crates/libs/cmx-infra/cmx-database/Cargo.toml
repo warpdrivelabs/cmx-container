@@ -8,6 +8,8 @@ edition.workspace = true
 cmx-buffer = { workspace = true }
 # 内部依赖 - 核心库
 cmx-core = { workspace = true }
+# 内部依赖 - 驱动无关行来源抽象 + 零拷贝列式编码器(sqlx 侧 ZmcDataSet)
+cmx-rowsource = { workspace = true }
 # 内部依赖 - 工具库
 cmx-utils = { workspace = true }
 # 内部依赖 - 特征定义

@@ -92,12 +92,13 @@ impl DocLoader {
             .map_err(|e| BizError::internal(format!("装载根层 {} 失败: {e}", layer.table_name)))
     }
 
-    /// 递归下钻：按 layer_order 顺序推导父子层，查子层并挂载。
+    /// 递归下钻：按 layer_groups 推导父子层，**同父兄弟**并列装载所有子表。
     ///
     /// 注意：定义里 relations 的 parent/child 用「逻辑名」(headers/account_lines)，
     /// 而 schema 节点与表用「物理名」(cv_header/cv_acc_line)，两者不一致。
-    /// 故这里**不按 relations 的名字匹配层**，而是按 layer_order 相邻层推导父子，
-    /// childKey 优先取 relations（按顺序对齐），无则默认 "upper_id"。
+    /// 故这里**不按 relations 名字匹配层**，而是 `meta.child_layers(parent.id)` 取下一层组
+    /// 全部兄弟表（parentTable 声明则精确匹配，否则整组回退）；childKey 由 `child_key_for` 给。
+    /// 孙层只从每组**主表**（`is_primary_in_group`）继续下钻。汇总表不装载（不遍历 summaries）。
     async fn descend(
         mm: &DatabaseManager,
         db_id: &str,
@@ -115,34 +116,39 @@ impl DocLoader {
             return Ok(());
         }
 
-        // 父层在 layer_order 里的位置 → 子层 = 下一层
-        let pos = meta.layer_order.iter().position(|id| id == &parent_layer.id);
-        let child_id = match pos.and_then(|i| meta.layer_order.get(i + 1)) {
-            Some(id) => id.clone(),
-            None => return Ok(()), // 已是最深层
-        };
-        let child_layer = match meta.layer(&child_id) {
-            Some(l) => l,
-            None => return Ok(()),
-        };
-        // childKey：优先取第 pos 个 relation 的 child_key（按 layer 顺序对齐），默认 upper_id
-        let child_key = pos
-            .and_then(|i| meta.relations.get(i))
-            .map(|r| r.child_key.clone())
-            .unwrap_or_else(|| "upper_id".to_string());
+        let child_key = meta.child_key_for(&parent_layer.id);
 
-        // 查子层（WHERE childKey = ANY($parent_ids)）
-        let mut child_ds =
-            Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids).await?;
+        // 同父兄弟：下一层组全部子表，各查一次、各挂一次
+        for child_layer in meta.child_layers(&parent_layer.id) {
+            let is_primary = meta.is_primary_in_group(&child_layer.id);
+            // 兄弟表容错：非主表（并列兄弟）装载失败（如元数据定义了但物理表未部署）→ 跳过 + 警告，
+            // 不中断整个单据装载。主表（主链路）失败仍上抛（保持原行为）。
+            let mut child_ds =
+                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids)
+                    .await
+                {
+                    Ok(ds) => ds,
+                    Err(e) if !is_primary => {
+                        tracing::warn!(
+                            "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
+                            child_layer.table_name
+                        );
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                };
 
-        // 递归挂孙层
-        Box::pin(Self::descend(
-            mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth,
-        ))
-        .await?;
+            // 孙层：仅从该组主表继续下钻（兄弟非主表不再深挖，规则通用）
+            if is_primary {
+                Box::pin(Self::descend(
+                    mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth,
+                ))
+                .await?;
+            }
 
-        // 按 childKey 分桶挂到父行；childId 用物理层 id（前端 schema 路径对应）
-        attach_children(parent_ds, child_ds, &child_key, &child_id);
+            // 按 childKey 分桶挂到父行；child_id 用物理表 id（前端 schema 路径对应）
+            attach_children(parent_ds, child_ds, &child_key, &child_layer.id);
+        }
         Ok(())
     }
 
@@ -324,5 +330,44 @@ mod tests {
         ds.add_row(Row::new(vec![DataValue::Int(2)]));
         let ids = collect_ids(&ds);
         assert_eq!(ids.len(), 2);
+    }
+
+    // 同父兄弟：两张子表各自 attach 到同一父，父行下两个子键都在
+    #[test]
+    fn attach_multiple_sibling_children() {
+        let ps = schema("cv_acc_line", &[("id", FieldType::Int)]);
+        let mut parent = DataSet::empty("cv_acc_line", ps);
+        parent.add_row(Row::new(vec![DataValue::Int(1)]));
+        parent.add_row(Row::new(vec![DataValue::Int(2)]));
+
+        // 兄弟表 A：cv_aux_line
+        let cs_a = schema(
+            "cv_aux_line",
+            &[("id", FieldType::Int), ("upper_id", FieldType::Int)],
+        );
+        let mut aux = DataSet::empty("cv_aux_line", cs_a);
+        aux.add_row(Row::new(vec![DataValue::Int(101), DataValue::Int(1)]));
+        aux.add_row(Row::new(vec![DataValue::Int(102), DataValue::Int(2)]));
+
+        // 兄弟表 B：cv_cyzb_line
+        let cs_b = schema(
+            "cv_cyzb_line",
+            &[("id", FieldType::Int), ("upper_id", FieldType::Int)],
+        );
+        let mut cyzb = DataSet::empty("cv_cyzb_line", cs_b);
+        cyzb.add_row(Row::new(vec![DataValue::Int(201), DataValue::Int(1)]));
+
+        // 各自 attach 到同一父（模拟 descend 里的兄弟循环）
+        attach_children(&mut parent, aux, "upper_id", "cv_aux_line");
+        attach_children(&mut parent, cyzb, "upper_id", "cv_cyzb_line");
+
+        // 父行1 下同时有两个兄弟子键
+        let p1 = &parent.rows[0];
+        assert_eq!(p1.get_child("cv_aux_line").unwrap().row_count(), 1);
+        assert_eq!(p1.get_child("cv_cyzb_line").unwrap().row_count(), 1);
+        // 父行2 只有 cv_aux_line 有数据（cyzb 无 upper_id=2 的行）
+        let p2 = &parent.rows[1];
+        assert_eq!(p2.get_child("cv_aux_line").unwrap().row_count(), 1);
+        assert!(p2.get_child("cv_cyzb_line").is_none());
     }
 }

@@ -5,9 +5,9 @@ edition.workspace = true
 authors.workspace = true
 
 # 模型中心：meta 相关元数据建模服务，从 cmx-portal 拆出。
-# 五项元数据（BASE-DCT/BASE-DOC/DCT/DOC/CP）= definitions（定义中心）
-# + context_profile（上下文档案规则引擎）+ dict（字典检索引擎，被 context_profile 依赖）。
-# 数据为 JSON 文件存储（data/meta/{definitions,context-profile,subdivision}、data/dict/**），不落库。
+# 五项元数据（BASE-DCT/BASE-DOC/DCT/DOC/FC）= definitions（定义中心）
+# + flexible_combination（弹性组合规则引擎）+ dict（字典检索引擎，被 flexible_combination 依赖）。
+# 数据为 JSON 文件存储（data/meta/{definitions,flexible-combination}、data/dict/**），不落库。
 
 [dependencies]
 # 内部依赖 - 共享基础设施（config / error / fsutil / util，再导出）

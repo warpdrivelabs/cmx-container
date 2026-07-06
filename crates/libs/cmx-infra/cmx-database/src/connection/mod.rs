@@ -100,13 +100,100 @@ impl DbPool {
         }
     }
 
-    /// 在连接池上执行带 DataValue 参数的 SQL 语句并返回受影响的行数。
+    /// 无参查询 → 零拷贝 [`ZmcDataSet`](crate::zmc::ZmcDataSet)（仅 Postgres；持有原始 PgRow，
+    /// 惰性列式二进制编码,不产 DataValue/DataSet）。非 PG 返回 `UnsupportedDbType`。
+    pub async fn query_zmc(
+        &self,
+        sql: &str,
+        dataset_id: &str,
+    ) -> crate::Result<crate::zmc::ZmcDataSet> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let rows: Vec<crate::zmc::SqlxPgRowSource> = sqlx::query(sqlx::AssertSqlSafe(sql))
+                    .fetch_all(pool)
+                    .await?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                Ok(crate::zmc::ZmcDataSet::new(dataset_id.to_string(), rows))
+            }
+            _ => Err(crate::Error::UnsupportedDbType),
+        }
+    }
+
+    /// 带 `DataValue` 参数查询 → 零拷贝 [`ZmcDataSet`](crate::zmc::ZmcDataSet)（仅 Postgres）。
     ///
-    /// 根据数据库类型选择对应的参数绑定函数，将 DataValue 参数安全地绑定到 SQL 语句中。
+    /// 与 [`query_zmc`](Self::query_zmc) 一致但支持占位符参数（`$1` 绑定 DataValue，
+    /// 含 `DataValue::Array` → PG 数组，供子层 `WHERE childKey = ANY($1)` 批量装载）。
+    /// 非 PG 返回 `UnsupportedDbType`。
+    pub async fn query_zmc_with_datavalues(
+        &self,
+        sql: &str,
+        params: &[DataValue],
+        dataset_id: &str,
+    ) -> crate::Result<crate::zmc::ZmcDataSet> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
+                for param in params {
+                    query = bind_data_value_postgres(query, param);
+                }
+                let rows: Vec<crate::zmc::SqlxPgRowSource> = query
+                    .fetch_all(pool)
+                    .await?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                Ok(crate::zmc::ZmcDataSet::new(dataset_id.to_string(), rows))
+            }
+            _ => Err(crate::Error::UnsupportedDbType),
+        }
+    }
+
+    /// 无参查询,**流式**编码成列式二进制包写入 `out`,返回行数(仅 Postgres)。
     ///
-    /// # Arguments
-    ///
-    /// * `sql` - 待执行的 SQL 语句，包含 `?` 占位符。
+    /// 峰值内存 O(单行 + 输出),不囤全部 PgRow —— 大结果集的零内存路径。
+    pub async fn query_zmc_streaming(
+        &self,
+        sql: &str,
+        dataset_id: &str,
+        out: &mut Vec<u8>,
+    ) -> crate::Result<u64> {
+        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+        use crate::zmc::SqlxPgRowSource;
+        use futures::TryStreamExt;
+
+        match self {
+            DbPool::Postgres(pool) => {
+                let mut stream = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch(pool);
+
+                let first = stream.try_next().await?.map(SqlxPgRowSource::from);
+                let schema = match &first {
+                    Some(r) => ZmcSchema::from_row(r),
+                    None => ZmcSchema::from_parts(vec![], vec![]),
+                };
+
+                let mut rows_body: Vec<u8> = Vec::new();
+                let mut count: u64 = 0;
+                if let Some(r) = &first {
+                    encode_row_into(&mut rows_body, r, &schema);
+                    count += 1;
+                }
+                drop(first);
+                while let Some(r) = stream.try_next().await? {
+                    let r = SqlxPgRowSource::from(r);
+                    encode_row_into(&mut rows_body, &r, &schema);
+                    count += 1;
+                }
+
+                encode_stream_header(out, dataset_id, &schema);
+                encode_stream_footer(out, count as u32, &rows_body);
+                Ok(count)
+            }
+            _ => Err(crate::Error::UnsupportedDbType),
+        }
+    }
+
     /// * `params` - DataValue 数组，每个元素按顺序绑定到 SQL 中的占位符。
     ///
     /// # Returns

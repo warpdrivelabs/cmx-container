@@ -383,7 +383,7 @@ async function loadResources (root, force = false) {
   }
   state.resources = { moduleKey, loading: true, html: '<div class="dam-empty"><ui5-icon name="synchronize"></ui5-icon><span>加载资源清单...</span></div>' }
   renderResourcesInto(root)
-  const types = ['menus', 'htmlPages', 'metaDefinitions', 'contextProfiles', 'dictEntries', 'dictSeeds', 'facts', 'serviceCatalog']
+  const types = ['menus', 'htmlPages', 'metaDefinitions', 'flexibleCombinations', 'dictEntries', 'dictSeeds', 'facts', 'serviceCatalog']
   const rows = []
   for (const type of types) {
     try {

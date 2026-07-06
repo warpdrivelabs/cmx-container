@@ -21,6 +21,8 @@ cmx-utils = { workspace = true }
 cmx-core = { workspace = true, features = ["openapi"] }
 # 内部依赖 - 数据库
 cmx-database = { workspace = true }
+# 内部依赖 - 数据库(tokio-postgres 零拷贝新链路,二进制单据出口用)
+cmx-database-pg = { workspace = true }
 # 内部依赖 - 元数据
 cmx-metadata = { workspace = true }
 # 内部依赖 - 插件
@@ -79,6 +81,8 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 # MsgPack 编码
 rmp-serde = { workspace = true }
+# MessagePack 裸写(二进制单据出口的信封封装)
+rmp = { workspace = true }
 # ZIP 压缩
 zip = { workspace = true }
 # URL 编码

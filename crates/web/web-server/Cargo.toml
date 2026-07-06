@@ -9,6 +9,8 @@ authors.workspace = true
 cmx-utils = { workspace = true }
 # 内部依赖 - 数据库
 cmx-database = { workspace = true }
+# 内部依赖 - 数据库(tokio-postgres 零拷贝新链路,并行注册数据源用)
+cmx-database-pg = { workspace = true }
 # 内部依赖 - API
 cmx-api = { workspace = true }
 # 内部依赖 - 审计日志

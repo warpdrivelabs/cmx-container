@@ -234,6 +234,28 @@ fn def_file_stem(file: &str) -> String {
     base.to_string()
 }
 
+fn doc_table_count(doc: &serde_json::Value) -> usize {
+    doc.get("voucherTables")
+        .and_then(|v| v.as_array())
+        .map(|tables| {
+            tables
+                .iter()
+                .map(|t| {
+                    1 + t
+                        .get("summaries")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0)
+                        + t.get("sum")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.len())
+                            .unwrap_or(0)
+                })
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 /// 由已解析文档抽取列表摘要。
 fn summarize(
     domain: &str,
@@ -322,15 +344,7 @@ fn summarize(
                 "remark".into(),
                 json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
             );
-            obj.insert(
-                "tableCount".into(),
-                json!(
-                    doc.get("voucherTables")
-                        .and_then(|v| v.as_array())
-                        .map(|a| a.len())
-                        .unwrap_or(0)
-                ),
-            );
+            obj.insert("tableCount".into(), json!(doc_table_count(doc)));
         }
         "BASE" => {
             let bm = doc.get("baseMeta").cloned().unwrap_or(json!({}));

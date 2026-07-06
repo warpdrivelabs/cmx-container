@@ -1,0 +1,29 @@
+[package]
+name = "cmx-rowsource"
+version.workspace = true
+edition.workspace = true
+
+# 驱动无关的行来源抽象 + 零拷贝列式二进制(msgpack)编码器。
+# 定义 ZmcRowSource trait + 中立列类型 ZmcColType + 泛型 ZmcDataSet<R> + 编码器。
+# cmx-database(sqlx)与 cmx-database-pg(tokio-postgres)各自 impl 该 trait。
+# 不依赖任何具体驱动、不依赖任何 cmx-* crate —— 保持轻量、近叶子、wasm 安全。
+
+[dependencies]
+# MessagePack 裸写(零拷贝把借来的 &str/&[u8] 直写输出)
+rmp = { workspace = true }
+# base64(BYTEA → "B64:" 前缀,对齐老契约)
+base64 = { workspace = true }
+# 时间类型
+chrono = { workspace = true }
+# 十进制(NUMERIC)
+rust_decimal = { workspace = true }
+# UUID
+uuid = { workspace = true }
+# JSON(JSONB 解码取值 + 编码为字符串)
+serde_json = { workspace = true }
+# 日志(未知类型兜底告警)
+tracing = { workspace = true }
+
+[dev-dependencies]
+# 测试里把编码出的 msgpack 解回 serde_json::Value 做结构断言
+rmp-serde = { workspace = true }

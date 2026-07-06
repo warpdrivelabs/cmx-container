@@ -331,7 +331,7 @@
     },
     {
       "app": "cmxfico",
-      "details": "ContextProfile 驱动：按行懒加载 /api/context-profile/rule，页面缓存 host.__profileCache",
+      "details": "FlexibleCombination 驱动：按行懒加载 /api/flexible-combination/rule，页面缓存 host.__flexibleCombinationCache",
       "domain": "fi",
       "id": "fi.cmxfico.gl.voucher",
       "latestHtmlFile": "voucher.html",
@@ -375,7 +375,7 @@
     },
     {
       "app": "cmxfico",
-      "details": "ContextProfile 多维锚点 [txType,productType]，按行懒加载 /api/context-profile/rule + 缓存",
+      "details": "FlexibleCombination 多维锚点 [txType,productType]，按行懒加载 /api/flexible-combination/rule + 缓存",
       "domain": "fi",
       "id": "fi.cmxfico.gl.trade",
       "latestHtmlFile": "trade.html",
@@ -386,7 +386,7 @@
     },
     {
       "app": "cmxfico",
-      "details": "与原交易单据同布局；琥珀/青绿科技风、合计 KPI、销售采购环、行金额火花图；combo + ContextProfile 保留",
+      "details": "与原交易单据同布局；琥珀/青绿科技风、合计 KPI、销售采购环、行金额火花图；combo + FlexibleCombination 保留",
       "domain": "fi",
       "id": "fi.cmxfico.gl.trade-neo",
       "latestHtmlFile": "trade-neo.html",
@@ -397,7 +397,7 @@
     },
     {
       "app": "cmxfico",
-      "details": "差旅报销单：火车/汽车/飞机/轮渡/自驾/住宿/餐饮/会计/市内交通；一人/多人；ContextProfile 动态明细",
+      "details": "差旅报销单：火车/汽车/飞机/轮渡/自驾/住宿/餐饮/会计/市内交通；一人/多人；FlexibleCombination 动态明细",
       "domain": "fi",
       "id": "fi.cmxfico.gl.travel-expense-neo",
       "latestHtmlFile": "travel-expense-neo.html",
@@ -408,12 +408,12 @@
     },
     {
       "app": "cmxfico",
-      "details": "科目上下文档案配置（ContextProfile，DAM=fi/cmxfico/gl, scenario=account）：维度/规则/字段三栅格，POST /api/context-profile/config 保存",
+      "details": "科目弹性组合配置（FlexibleCombination，DAM=fi/cmxfico/gl, scenario=account）：维度/规则/字段三栅格，POST /api/flexible-combination/config 保存",
       "domain": "fi",
       "id": "fi.cmxfico.gl.account-def",
       "latestHtmlFile": "account-def.html",
       "module": "gl",
-      "name": "科目上下文档案",
+      "name": "科目弹性组合",
       "page": "account-def",
       "relPath": "fi/cmxfico/gl/account-def.html"
     },
@@ -452,18 +452,18 @@
     },
     {
       "app": "cmxfico",
-      "details": "交易上下文档案配置（scenario=trade）：多维锚点 [txType,productType] 规则维护，保存至后端 DAM 存储",
+      "details": "交易弹性组合配置（scenario=trade）：多维锚点 [txType,productType] 规则维护，保存至后端 DAM 存储",
       "domain": "fi",
       "id": "fi.cmxfico.gl.trade-def",
       "latestHtmlFile": "trade-def.html",
       "module": "gl",
-      "name": "交易上下文档案",
+      "name": "交易弹性组合",
       "page": "trade-def",
       "relPath": "fi/cmxfico/gl/trade-def.html"
     },
     {
       "app": "cmxfico",
-      "details": "与 trade 同模型/同 ContextProfile；底部明细改为 cmx-ui5-form 单行编辑 + 首/上/下/末导航；表单根据 CmxColumnModel 动态生成（含多级分组）",
+      "details": "与 trade 同模型/同 FlexibleCombination；底部明细改为 cmx-ui5-form 单行编辑 + 首/上/下/末导航；表单根据 CmxColumnModel 动态生成（含多级分组）",
       "domain": "fi",
       "id": "fi.cmxfico.gl.trade-form",
       "latestHtmlFile": "trade-form.html",
@@ -540,7 +540,7 @@
     },
     {
       "app": "cmxfico",
-      "details": "测试上下文档案字段全部属性编译进 CmxColumn/Group/Model：grid 的 select/date 原生编辑器、分组合计(求和/平均)、display badge/icon/link/千分位、form 提交校验(required/requiredWhen/validate)",
+      "details": "测试弹性组合字段全部属性编译进 CmxColumn/Group/Model：grid 的 select/date 原生编辑器、分组合计(求和/平均)、display badge/icon/link/千分位、form 提交校验(required/requiredWhen/validate)",
       "domain": "fi",
       "id": "fi.cmxfico.gl.ccm-attrs-test",
       "latestHtmlFile": "ccm-attrs-test.html",
@@ -794,8 +794,8 @@
     },
     {
       "id": "fi.gl.fi_gl_base_data.account-def",
-      "name": "科目上下文档案",
-      "details": "科目上下文档案配置（ContextProfile，DAM=fi/gl/fi_gl_base_data, scenario=account）：维度/规则/字段三栅格，POST /api/context-profile/config 保存",
+      "name": "科目弹性组合",
+      "details": "科目弹性组合配置（FlexibleCombination，DAM=fi/gl/fi_gl_base_data, scenario=account）：维度/规则/字段三栅格，POST /api/flexible-combination/config 保存",
       "domain": "fi",
       "app": "gl",
       "module": "fi_gl_base_data",
@@ -806,7 +806,7 @@
     {
       "id": "fi.gl.fi_gl_base_data.trade",
       "name": "交易单据",
-      "details": "ContextProfile 模型驱动 [txType,productType]，detailModel 自动响应换列",
+      "details": "FlexibleCombination 模型驱动 [txType,productType]，detailModel 自动响应换列",
       "domain": "fi",
       "app": "gl",
       "module": "fi_gl_base_data",
@@ -816,8 +816,8 @@
     },
     {
       "id": "fi.gl.fi_gl_base_data.trade-def",
-      "name": "交易上下文档案",
-      "details": "交易上下文档案配置（scenario=trade）：多维锚点 [txType,productType] 规则维护，保存至后端 DAM 存储",
+      "name": "交易弹性组合",
+      "details": "交易弹性组合配置（scenario=trade）：多维锚点 [txType,productType] 规则维护，保存至后端 DAM 存储",
       "domain": "fi",
       "app": "gl",
       "module": "fi_gl_base_data",
@@ -828,7 +828,7 @@
     {
       "id": "fi.gl.fi_gl_base_data.voucher",
       "name": "财务会计凭证",
-      "details": "ContextProfile 模型驱动：detailCtxProfile.loadByAnchor 写入 detailModel，grid 经 columns-changed 自动重渲",
+      "details": "FlexibleCombination 模型驱动：detailFlexibleCombination.loadByAnchor 写入 detailModel，grid 经 columns-changed 自动重渲",
       "domain": "fi",
       "app": "gl",
       "module": "fi_gl_base_data",
@@ -868,6 +868,17 @@
       "page": "voucher-doc",
       "relPath": "fi/cmxfico/voucher-doc.html",
       "latestHtmlFile": "voucher-doc.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-doc-sqlxbin",
+      "name": "会计凭证（html_pages · Sqlx 二进制）",
+      "details": "第三套实现：cmx-fico 总账凭证四层主从，装载走 /api/doc/data.sqlx.bin（sqlx + ZmcDataSet → 列式二进制 msgpack），基于 fico-db",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-doc-sqlxbin",
+      "relPath": "fi/cmxfico/voucher-doc-sqlxbin.html",
+      "latestHtmlFile": "voucher-doc-sqlxbin.html"
     }
   ]
 }

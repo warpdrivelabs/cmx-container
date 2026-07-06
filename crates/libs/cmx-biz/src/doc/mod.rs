@@ -12,10 +12,14 @@ pub mod meta;
 pub mod revision;
 pub mod rule;
 pub mod saver;
+pub mod zmc_loader;
+pub mod zmc_loader_sqlx;
 
 pub use formula::{eval_bool, eval_formula, scope_from_json, FValue, Scope};
 pub use loader::{DocLoader, LoadOptions};
-pub use meta::{ColumnView, DocMetaView, LayerView, RelationView};
+pub use meta::{ColumnView, DocMetaView, LayerView, LevelGroup, RelationView, SummaryView};
 pub use revision::DocRevision;
 pub use rule::{validate, ValidateResult, Violation};
 pub use saver::{DocSaver, SaveMode, SaveResult};
+pub use zmc_loader::ZmcDocLoader;
+pub use zmc_loader_sqlx::ZmcDocLoaderSqlx;

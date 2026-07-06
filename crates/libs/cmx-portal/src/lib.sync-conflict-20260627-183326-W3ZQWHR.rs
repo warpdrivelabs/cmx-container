@@ -7,13 +7,13 @@
 //! - [`meta`]   —— menu/activities/domains/registry/dam_registry/modules/service_catalog/workspace_nodes
 //! - `pages`    —— html/form/native（后续阶段）
 //! - `dict`     —— 字典检索引擎（后续阶段）
-//! - `context_profile` —— 上下文档案规则引擎（后续阶段）
+//! - `flexible_combination` —— 弹性组合规则引擎（后续阶段）
 //! - `definitions` / `fact` / `agent` / `ai`（后续阶段）
 
 pub mod agent;
 pub mod ai;
 pub mod config;
-pub mod context_profile;
+pub mod flexible_combination;
 pub mod dam;
 pub mod definitions;
 pub mod dict;

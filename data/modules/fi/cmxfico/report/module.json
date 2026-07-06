@@ -45,9 +45,9 @@
         "path": "meta/definitions/fi/cmxfico/gl"
       }
     ],
-    "contextProfiles": [
+    "flexibleCombinations": [
       {
-        "path": "meta/context-profile/fi/cmxfico/gl"
+        "path": "meta/flexible-combination/fi/cmxfico/gl"
       }
     ],
     "dictRegistry": [
