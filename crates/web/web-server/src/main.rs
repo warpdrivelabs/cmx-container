@@ -30,6 +30,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
+use tower_http::compression::CompressionLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::{info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -226,7 +227,9 @@ async fn main() -> Result<()> {
         .layer(middleware::from_fn(trace_layer))
         .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .layer(cors_layer());
+        .layer(cors_layer())
+        // 响应压缩（gzip/br）：对列式 JSON 单据包压缩比高（方案 §8 四级小包）
+        .layer(CompressionLayer::new());
 
     // 添加静态文件服务作为 fallback
     let routes_all = routes_all.fallback_service(axum::routing::get_service(

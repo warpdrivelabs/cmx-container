@@ -4,10 +4,12 @@
 //! Entity/BMC/Filter/Service 定义，以及 function_invoker/service_executor 共享逻辑。
 //! 另含 PluginDataImporterImpl（多类别数据导入路由器，Form/Menu/Perm 统一接收端）。
 
-pub mod domain;
 pub mod application;
-pub mod module;
 pub mod datasource;
+pub mod doc;
+pub mod domain;
+pub mod module;
+
 pub mod form;
 pub mod menu;
 

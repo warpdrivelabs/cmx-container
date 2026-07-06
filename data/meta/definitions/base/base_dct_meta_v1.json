@@ -20,7 +20,8 @@
           "caption": {
             "zh_CN": "字典项主键"
           },
-          "dimType": "attribute"
+          "dimType": "attribute",
+          "isPrimaryKey": 1
         },
         {
           "dataType": "VARCHAR",
@@ -94,7 +95,8 @@
           },
           "edit": {
             "mode": "input"
-          }
+          },
+          "isPrimaryKey": 1
         },
         {
           "dataType": "VARCHAR",

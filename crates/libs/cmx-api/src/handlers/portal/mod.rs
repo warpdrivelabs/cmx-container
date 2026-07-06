@@ -3,6 +3,7 @@
 //! 路由路径与 Node 后端保持一致（挂在 `/api` 下），响应统一用 [`crate::ApiResp`] 信封。
 //! 阶段 1：域/菜单/活动、工作区节点、表单页、原生页面、事实数据等简单文件 CRUD。
 
+pub mod doc;
 pub mod handler;
 pub mod model_center;
 
@@ -137,6 +138,13 @@ impl ModuleRoutes for PortalModule {
                     .delete(handler::definitions_delete),
             )
             .route("/definitions/batch", post(handler::definitions_batch))
+            // 业务单据数据装载/回存（方案 Phase 4/5）
+            .route("/doc/data", get(doc::doc_data))
+            .route("/doc/save", post(doc::doc_save))
+            // 业务单据版本化（方案 §6A / Phase 8）
+            .route("/doc/revisions", get(doc::doc_revisions))
+            .route("/doc/revision", get(doc::doc_revision))
+            .route("/doc/restore", post(doc::doc_restore))
             .route(
                 "/definitions/default",
                 post(handler::definitions_set_default),

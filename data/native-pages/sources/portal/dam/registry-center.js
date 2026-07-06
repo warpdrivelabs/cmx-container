@@ -9,7 +9,7 @@ const state = {
   loading: null,
   filter: { domain: '', application: '' },
   resources: { moduleKey: '', loading: false, html: '<div class="dam-empty">选择模块后查看资源清单</div>' },
-  split: { explorerY: 48, contentX: 48, appY: 52, moduleY: 52 },
+  split: { explorerY: 62, contentX: 48, appY: 62, moduleY: 62 },
   scrollTop: { domain: 0, application: 0, module: 0 },
   hosts: new Set(),
 }
@@ -428,50 +428,150 @@ function renderList (kind, title, items, options = {}) {
   </section>`
 }
 
-function input (label, field, value, extra = '', kind = '') {
-  return `<label>${esc(label)}</label><input data-field="${esc(field)}" ${kind ? `data-field-kind="${esc(kind)}"` : ''} value="${esc(value || '')}" ${extra}>`
+const DAM_KIND_META = {
+  domain: { label: 'Domain', icon: 'dimension', hue: 'domain' },
+  application: { label: 'Application', icon: 'application', hue: 'app' },
+  module: { label: 'Module', icon: 'tree', hue: 'module' },
 }
 
-function textarea (label, field, value, kind = '') {
-  return `<label>${esc(label)}</label><textarea data-field="${esc(field)}" ${kind ? `data-field-kind="${esc(kind)}"` : ''}>${esc(value || '')}</textarea>`
+function draftKeyText (kind, d) {
+  if (!d) return 'NEW'
+  if (kind === 'domain') return d.id || 'NEW_DOMAIN'
+  if (kind === 'application') return `${d.domain || 'domain'}/${d.id || 'NEW_APP'}`
+  return `${d.domain || 'domain'}/${d.application || d.app || 'app'}/${d.id || d.module || 'NEW_MODULE'}`
+}
+
+function draftTitleText (kind, d) {
+  if (!d) return '新建实体'
+  return d.title || d.name || d.id || d.module || `新建 ${DAM_KIND_META[kind]?.label || kind}`
+}
+
+function draftScore (kind, d) {
+  const fields = kind === 'module'
+    ? ['domain', 'application', 'id', 'name', 'title', 'icon', 'status', 'resourceRoot', 'manifestPath']
+    : kind === 'application'
+      ? ['domain', 'id', 'name', 'title', 'icon', 'status']
+      : ['id', 'name', 'title', 'icon', 'status']
+  const filled = fields.filter((f) => {
+    const v = f === 'application' ? (d.application || d.app) : (kind === 'module' && f === 'id' ? (d.id || d.module) : d[f])
+    return v != null && String(v).trim() !== ''
+  }).length
+  return Math.round((filled / fields.length) * 100)
+}
+
+function fieldHtml (kind, cfg, d) {
+  const field = cfg.field
+  const value = field === 'application'
+    ? (d.application || d.app || '')
+    : (kind === 'module' && field === 'id')
+      ? (d.id || d.module || '')
+    : field === 'aliases'
+      ? (Array.isArray(d.aliases) ? d.aliases.join(', ') : (d.aliases || ''))
+      : (d[field] || '')
+  const readonly = !!cfg.readonly
+  const wide = cfg.wide ? ' wide' : ''
+  const tone = cfg.tone ? ` data-tone="${esc(cfg.tone)}"` : ''
+  const lock = readonly ? '<span class="dam-field-lock">LOCKED</span>' : ''
+  const common = `data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'readonly' : ''} placeholder="${esc(cfg.placeholder || '')}"`
+  const control = cfg.type === 'textarea'
+    ? `<textarea ${common}>${esc(value)}</textarea>`
+    : `<input ${common} value="${esc(value)}">`
+  const chips = field === 'aliases' && value
+    ? `<div class="dam-alias-row">${String(value).split(',').map((x) => x.trim()).filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>`
+    : ''
+  return `<label class="dam-smart-field${wide}${readonly ? ' readonly' : ''}"${tone}>
+    <span class="dam-field-top">
+      <span class="dam-field-label"><ui5-icon name="${esc(cfg.icon || 'edit')}"></ui5-icon>${esc(cfg.label)}</span>
+      ${lock}
+    </span>
+    ${control}
+    ${chips}
+  </label>`
+}
+
+function formGroups (kind, d) {
+  if (kind === 'domain') {
+    return [
+      { title: '基础信息', icon: 'key', fields: [
+        { label: 'Domain ID', field: 'id', icon: 'key' },
+        { label: '名称', field: 'name', icon: 'text' },
+        { label: '标题', field: 'title', icon: 'header' },
+        { label: '图标', field: 'icon', icon: 'palette' },
+        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+      ] },
+      { title: '说明', icon: 'hint', fields: [
+        { label: '说明', field: 'description', icon: 'notes', type: 'textarea', wide: true },
+      ] },
+    ]
+  }
+  if (kind === 'application') {
+    return [
+      { title: '基础信息', icon: 'application', fields: [
+        { label: 'Domain', field: 'domain', icon: 'dimension', readonly: true },
+        { label: 'Application ID', field: 'id', icon: 'key' },
+        { label: '名称', field: 'name', icon: 'text' },
+        { label: '标题', field: 'title', icon: 'header' },
+        { label: '图标', field: 'icon', icon: 'palette' },
+        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+      ] },
+      { title: '说明', icon: 'hint', fields: [
+        { label: '说明', field: 'description', icon: 'notes', type: 'textarea', wide: true },
+      ] },
+    ]
+  }
+  return [
+    { title: '基础信息', icon: 'tree', fields: [
+      { label: 'Domain', field: 'domain', icon: 'dimension', readonly: true },
+      { label: 'Application', field: 'application', icon: 'application', readonly: true },
+      { label: 'Module ID', field: 'id', icon: 'key' },
+      { label: '名称', field: 'name', icon: 'text' },
+      { label: '标题', field: 'title', icon: 'header' },
+      { label: '图标', field: 'icon', icon: 'palette' },
+      { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+    ] },
+    { title: '运行挂载', icon: 'chain-link', fields: [
+      { label: '资源根', field: 'resourceRoot', icon: 'folder', wide: true },
+      { label: 'Manifest', field: 'manifestPath', icon: 'document-text', wide: true },
+      { label: '别名', field: 'aliases', icon: 'tags', wide: true },
+    ] },
+    { title: '说明', icon: 'hint', fields: [
+      { label: '说明', field: 'description', icon: 'notes', type: 'textarea', wide: true },
+    ] },
+  ]
 }
 
 function formHtml (kind) {
   const d = getDraftForKind(kind)
-  if (kind === 'domain') {
-    return `${input('Domain ID', 'id', d.id, '', kind)}
-      ${input('名称', 'name', d.name, '', kind)}
-      ${input('标题', 'title', d.title, '', kind)}
-      ${input('图标', 'icon', d.icon, '', kind)}
-      ${input('状态', 'status', d.status, '', kind)}
-      ${textarea('说明', 'description', d.description, kind)}`
-  }
-  if (kind === 'application') {
-    return `${input('Domain', 'domain', d.domain, 'readonly', kind)}
-      ${input('Application ID', 'id', d.id, '', kind)}
-      ${input('名称', 'name', d.name, '', kind)}
-      ${input('标题', 'title', d.title, '', kind)}
-      ${input('图标', 'icon', d.icon, '', kind)}
-      ${input('状态', 'status', d.status, '', kind)}
-      ${textarea('说明', 'description', d.description, kind)}`
-  }
-  return `${input('Domain', 'domain', d.domain, 'readonly', kind)}
-    ${input('Application', 'application', d.application || d.app, 'readonly', kind)}
-    ${input('Module ID', 'id', d.id || d.module, '', kind)}
-    ${input('名称', 'name', d.name, '', kind)}
-    ${input('标题', 'title', d.title, '', kind)}
-    ${input('图标', 'icon', d.icon, '', kind)}
-    ${input('状态', 'status', d.status, '', kind)}
-    ${input('资源根', 'resourceRoot', d.resourceRoot, '', kind)}
-    ${input('Manifest', 'manifestPath', d.manifestPath, '', kind)}
-    ${input('别名', 'aliases', Array.isArray(d.aliases) ? d.aliases.join(', ') : '', '', kind)}
-    ${textarea('说明', 'description', d.description, kind)}`
+  return `<div class="dam-smart-form">
+    ${formGroups(kind, d).map((g) => `<section class="dam-field-cluster">
+      <div class="dam-field-cluster-head"><ui5-icon name="${esc(g.icon)}"></ui5-icon><span>${esc(g.title)}</span></div>
+      <div class="dam-field-grid">${g.fields.map((f) => fieldHtml(kind, f, d)).join('')}</div>
+    </section>`).join('')}
+  </div>`
 }
 
 function editorHtml (kind, title) {
-  const hue = kind === 'domain' ? 'domain' : kind === 'application' ? 'app' : 'module'
+  const meta = DAM_KIND_META[kind] || DAM_KIND_META.module
+  const d = getDraftForKind(kind)
+  const score = draftScore(kind, d)
+  const icon = d.icon || meta.icon
+  const status = d.status || 'draft'
+  const heading = title || `${meta.label} 属性`
   return `<section class="dam-card dam-editor-card dam-neo-panel" data-kind-panel="${kind}">
-    <div class="dam-card-head dam-neo-head" data-hue="${hue}"><span class="dam-neo-head-main"><ui5-icon class="dam-neo-head-icon" name="edit"></ui5-icon><span>${esc(title)}</span></span><span class="dam-card-actions"><button class="dam-icon-btn primary" type="button" title="保存" aria-label="保存" data-save-kind="${kind}"><ui5-icon name="save"></ui5-icon></button><button class="dam-icon-btn danger" type="button" title="删除" aria-label="删除" data-delete-selected-kind="${kind}"><ui5-icon name="delete"></ui5-icon></button></span></div>
+    <div class="dam-card-head dam-neo-head" data-hue="${meta.hue}"><span class="dam-neo-head-main"><ui5-icon class="dam-neo-head-icon" name="${esc(meta.icon)}"></ui5-icon><span>${esc(heading)}</span></span><span class="dam-card-actions"><button class="dam-icon-btn primary" type="button" title="保存" aria-label="保存" data-save-kind="${kind}"><ui5-icon name="save"></ui5-icon></button><button class="dam-icon-btn danger" type="button" title="删除" aria-label="删除" data-delete-selected-kind="${kind}"><ui5-icon name="delete"></ui5-icon></button></span></div>
+    <div class="dam-editor-context" data-hue="${meta.hue}">
+      <div class="dam-editor-orbit"><ui5-icon name="${esc(icon)}"></ui5-icon></div>
+      <div class="dam-editor-id">
+        <div class="dam-editor-title">${esc(draftTitleText(kind, d))}</div>
+        <div class="dam-editor-key">${esc(draftKeyText(kind, d))}</div>
+      </div>
+      <div class="dam-editor-meta">
+        <div class="dam-editor-score" style="--dam-score:${score}%">
+          <span>${score}</span><small>%</small>
+        </div>
+        <span class="dam-status-pill">${esc(status)}</span>
+      </div>
+    </div>
     <div class="dam-form">${formHtml(kind)}</div>
   </section>`
 }
@@ -499,13 +599,13 @@ function pageHtml () {
       <div class="dam-stack" style="--dam-stack-top:${state.split.appY}%">
         ${renderList('application', 'Application', all.applications)}
         <div class="dam-splitter-y" data-split="appY" role="separator" tabindex="0" aria-label="调整区域大小"></div>
-        ${editorHtml('application', '属性')}
+        ${editorHtml('application')}
       </div>
       <div class="dam-splitter-x" data-split="contentX" role="separator" tabindex="0" aria-label="调整区域大小"></div>
       <div class="dam-stack" style="--dam-stack-top:${state.split.moduleY}%">
         ${renderList('module', 'Module', all.modules)}
         <div class="dam-splitter-y" data-split="moduleY" role="separator" tabindex="0" aria-label="调整区域大小"></div>
-        ${editorHtml('module', '属性')}
+        ${editorHtml('module')}
       </div>
     </div>
   </div>`
@@ -517,7 +617,7 @@ function explorerHtml () {
     <div class="dam-explorer-lists" style="--dam-explorer-top:${state.split.explorerY}%">
       ${renderList('domain', 'Domain', all.domains, { refresh: true })}
       <div class="dam-splitter-y" data-split="explorerY" role="separator" tabindex="0" aria-label="调整区域大小"></div>
-      ${editorHtml('domain', '属性')}
+      ${editorHtml('domain')}
     </div>
   </div>`
 }
@@ -529,12 +629,15 @@ function propertyHtml () {
   return `<div class="dam-wrap dam-property-wrap dam-neo" data-dam-region="property">
     <div class="dam-neo-banner dam-neo-banner-compact">
       <div class="dam-neo-banner-main">
-        <ui5-icon class="dam-neo-banner-icon" name="documents"></ui5-icon>
-        <div><div class="dam-neo-banner-title">${esc(modTitle)} · ${esc(modKey)} · 模块资源清单与挂载状态</div></div>
+        <ui5-icon class="dam-neo-banner-icon" name="ai"></ui5-icon>
+        <div><div class="dam-neo-banner-title">${esc(modTitle)} · ${esc(modKey)} · 资源态势</div></div>
       </div>
       <span class="dam-neo-chip">${mod ? 'LIVE' : 'IDLE'}</span>
     </div>
-    <div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>
+    ${mod ? `<section class="dam-property-resources dam-neo-panel">
+      <div class="dam-neo-head" data-hue="module"><span class="dam-neo-head-main"><ui5-icon class="dam-neo-head-icon" name="activity-items"></ui5-icon><span>资源态势</span></span><span class="dam-neo-badge">mount</span></div>
+      <div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>
+    </section>` : `<div class="dam-resources" data-resources><div class="dam-empty"><ui5-icon name="detail-view"></ui5-icon><span>选择模块后查看资源清单</span></div></div>`}
   </div>`
 }
 
@@ -647,7 +750,7 @@ function styleHtml () {
       --dam-panel-border:color-mix(in srgb,var(--neo-cyan) 22%,var(--sapGroup_TitleBorderColor,#d9d9d9));
       --cmx-splitter-grip:color-mix(in srgb,var(--sapInformationColor,#0a6ed1) 38%,var(--sapContent_LabelColor,#6a6d70));
       --cmx-splitter-grip-width:30px;
-      --dam-region-head-h:40px;
+      --dam-region-head-h:32px;
     }
     .dam-wrap{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%;height:100%;font:13px/1.45 var(--sapFontFamily,Arial,sans-serif);color:var(--sapTextColor,#1d2d3e);background:var(--sapBackgroundColor,#f5f6f7);position:relative;overflow:hidden;box-sizing:border-box}
     .dam-neo::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;background:
@@ -675,8 +778,8 @@ function styleHtml () {
     .dam-neo-kpi-lbl{display:block;font-size:9px;color:var(--sapContent_LabelColor,#6a6d70);letter-spacing:.04em;text-transform:uppercase;margin-top:1px;line-height:1}
     .dam-neo-chip{font-size:10px;font-weight:700;letter-spacing:.08em;padding:2px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--neo-mint) 35%,transparent);color:var(--neo-mint);background:color-mix(in srgb,var(--neo-mint) 10%,transparent);box-shadow:0 0 12px color-mix(in srgb,var(--neo-mint) 18%,transparent);flex-shrink:0;line-height:1.2}
     .dam-content-grid{display:grid;grid-template-columns:minmax(220px,var(--dam-content-left,48%)) 3px minmax(260px,1fr);gap:0;flex:1 1 auto;min-height:0;padding:0;box-sizing:border-box}
-    .dam-stack{display:grid;grid-template-rows:minmax(120px,var(--dam-stack-top,52%)) 3px minmax(160px,1fr);gap:0;min-height:0}
-    .dam-explorer-wrap{overflow:hidden}.dam-explorer-lists{display:grid;grid-template-rows:minmax(120px,var(--dam-explorer-top,48%)) 3px minmax(160px,1fr);gap:0;min-height:0;padding:0;box-sizing:border-box;flex:1 1 auto}
+    .dam-stack{display:grid;grid-template-rows:minmax(120px,var(--dam-stack-top,62%)) 3px minmax(132px,1fr);gap:0;min-height:0}
+    .dam-explorer-wrap{overflow:hidden}.dam-explorer-lists{display:grid;grid-template-rows:minmax(120px,var(--dam-explorer-top,62%)) 3px minmax(132px,1fr);gap:0;min-height:0;padding:0;box-sizing:border-box;flex:1 1 auto}
     .dam-splitter-y,.dam-splitter-x{position:relative;touch-action:none;user-select:none;background:transparent;min-height:3px;min-width:3px;margin:0}
     .dam-splitter-y{cursor:row-resize}.dam-splitter-x{cursor:col-resize}
     .dam-splitter-y::after,.dam-splitter-x::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:2px;background:var(--cmx-splitter-grip);opacity:.72;transition:opacity .15s ease}
@@ -712,17 +815,52 @@ function styleHtml () {
     .dam-list-delete ui5-icon{width:14px;height:14px}.dam-list-item:hover .dam-list-delete,.dam-list-item:focus-within .dam-list-delete,.dam-list-delete:focus{opacity:1;pointer-events:auto}
     .dam-list-delete:hover{border-color:color-mix(in srgb,var(--sapNegativeElementColor,#b00) 35%,transparent);background:color-mix(in srgb,var(--sapNegativeElementColor,#b00) 10%,transparent)}
     .dam-card-actions{display:flex;gap:4px;align-items:center}
-    .dam-icon-btn{width:28px;height:28px;border:1px solid color-mix(in srgb,var(--neo-cyan) 12%,transparent);border-radius:6px;background:color-mix(in srgb,var(--sapList_Background,#fff) 90%,var(--neo-cyan) 10%);color:var(--neo-cyan);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}
-    .dam-icon-btn ui5-icon{width:16px;height:16px}
+    .dam-icon-btn{width:24px;height:24px;border:1px solid color-mix(in srgb,var(--neo-cyan) 12%,transparent);border-radius:5px;background:color-mix(in srgb,var(--sapList_Background,#fff) 90%,var(--neo-cyan) 10%);color:var(--neo-cyan);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+    .dam-icon-btn ui5-icon{width:14px;height:14px}
     .dam-icon-btn:hover{background:color-mix(in srgb,var(--neo-cyan) 14%,var(--sapList_Background,#fff));border-color:color-mix(in srgb,var(--neo-cyan) 35%,transparent);box-shadow:0 0 10px color-mix(in srgb,var(--neo-cyan) 18%,transparent)}
     .dam-icon-btn.primary{color:#fff;background:linear-gradient(135deg,var(--neo-cyan),color-mix(in srgb,var(--neo-violet) 40%,var(--neo-cyan)));border-color:transparent}
     .dam-icon-btn.danger{color:var(--sapNegativeTextColor,#b00);background:color-mix(in srgb,var(--sapNegativeElementColor,#b00) 8%,var(--sapList_Background,#fff));border-color:color-mix(in srgb,var(--sapNegativeElementColor,#b00) 22%,transparent)}
-    .dam-editor-card{min-height:0}.dam-form{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px 10px;padding:10px 12px;align-items:center;overflow:auto;min-height:0;flex:1 1 auto}
-    .dam-form label{color:var(--sapContent_LabelColor,#6a6d70);font-size:11px;letter-spacing:.02em}
-    .dam-form input,.dam-form textarea{width:100%;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--neo-cyan) 14%,var(--sapField_BorderColor,#89919a));border-radius:6px;padding:6px 8px;background:color-mix(in srgb,var(--sapField_Background,#fff) 96%,var(--neo-cyan) 4%);color:inherit;font:inherit;transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
-    .dam-form input:focus,.dam-form textarea:focus{outline:none;border-color:color-mix(in srgb,var(--neo-cyan) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--neo-cyan) 16%,transparent);background:var(--sapField_Background,#fff)}
-    .dam-form textarea{min-height:58px;resize:vertical}
+    .dam-editor-card{min-height:0}
+    .dam-editor-context{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:7px;align-items:center;min-height:36px;padding:4px 8px;border-bottom:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapGroup_TitleBorderColor,#d9d9d9));background:
+      linear-gradient(120deg,color-mix(in srgb,var(--neo-cyan) 10%,var(--dam-body-bg)),color-mix(in srgb,var(--neo-violet) 5%,var(--dam-body-bg))),
+      linear-gradient(90deg,color-mix(in srgb,var(--neo-cyan) 7%,transparent) 1px,transparent 1px);
+      background-size:auto,22px 22px;overflow:hidden}
+    .dam-editor-context[data-hue="domain"]{background:linear-gradient(120deg,color-mix(in srgb,var(--dam-hue-domain) 10%,var(--dam-body-bg)),var(--dam-body-bg))}
+    .dam-editor-context[data-hue="app"]{background:linear-gradient(120deg,color-mix(in srgb,var(--dam-hue-app) 10%,var(--dam-body-bg)),var(--dam-body-bg))}
+    .dam-editor-context[data-hue="module"]{background:linear-gradient(120deg,color-mix(in srgb,var(--dam-hue-module) 10%,var(--dam-body-bg)),var(--dam-body-bg))}
+    .dam-editor-orbit{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,var(--neo-cyan),color-mix(in srgb,var(--neo-violet) 42%,var(--neo-cyan)));box-shadow:0 0 10px color-mix(in srgb,var(--neo-cyan) 14%,transparent),inset 0 0 0 1px rgba(255,255,255,.22)}
+    .dam-editor-orbit ui5-icon{width:.85rem;height:.85rem}
+    .dam-editor-id{min-width:0}
+    .dam-editor-title{font-size:12px;font-weight:750;line-height:1.12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sapTextColor,#1d2d3e)}
+    .dam-editor-key{margin-top:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;color:var(--sapContent_LabelColor,#6a6d70);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .dam-editor-meta{display:flex;align-items:center;justify-content:flex-end;gap:5px;min-width:76px;max-width:118px;white-space:nowrap}
+    .dam-editor-score{position:relative;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:conic-gradient(var(--neo-mint) var(--dam-score,0%),color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 18%,transparent) 0);color:var(--sapTextColor,#1d2d3e)}
+    .dam-editor-score::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--dam-body-bg)}
+    .dam-editor-score span,.dam-editor-score small{position:relative;z-index:1;font-weight:800}
+    .dam-editor-score span{font-size:8px}.dam-editor-score small{display:none}
+    .dam-status-pill{display:inline-flex;align-items:center;justify-content:center;min-width:40px;max-width:82px;height:17px;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px;font-weight:800;letter-spacing:0;text-transform:uppercase;padding:0 6px;border-radius:999px;color:var(--neo-mint);background:color-mix(in srgb,var(--neo-mint) 12%,transparent);border:1px solid color-mix(in srgb,var(--neo-mint) 28%,transparent)}
+    .dam-form{display:block;padding:0;overflow:auto;min-height:0;flex:1 1 auto;background:linear-gradient(180deg,color-mix(in srgb,var(--dam-body-bg) 96%,var(--neo-cyan) 4%),var(--dam-body-bg))}
+    .dam-smart-form{display:flex;flex-direction:column;gap:7px;padding:8px}
+    .dam-field-cluster{border:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapGroup_TitleBorderColor,#d9d9d9));border-radius:8px;background:color-mix(in srgb,var(--sapTile_Background,var(--dam-body-bg)) 96%,var(--neo-cyan) 4%);overflow:hidden;box-shadow:none}
+    .dam-field-cluster-head{height:24px;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:10px;font-weight:750;letter-spacing:.04em;color:var(--sapContent_LabelColor,#6a6d70);background:color-mix(in srgb,var(--neo-cyan) 7%,var(--sapList_HeaderBackground,#eef2f6));border-bottom:1px solid color-mix(in srgb,var(--neo-cyan) 10%,var(--sapGroup_TitleBorderColor,#d9d9d9))}
+    .dam-field-cluster-head ui5-icon{width:.75rem;height:.75rem;color:var(--neo-cyan)}
+    .dam-field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:6px;padding:7px}
+    .dam-smart-field{min-width:0;display:flex;flex-direction:column;gap:3px;padding:6px 7px;border:1px solid color-mix(in srgb,var(--neo-cyan) 8%,transparent);border-radius:7px;background:color-mix(in srgb,var(--sapField_Background,#fff) 94%,var(--neo-cyan) 6%);transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
+    .dam-smart-field.wide{grid-column:1/-1}
+    .dam-smart-field:focus-within{border-color:color-mix(in srgb,var(--neo-cyan) 48%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--neo-cyan) 14%,transparent),0 0 18px color-mix(in srgb,var(--neo-cyan) 10%,transparent)}
+    .dam-field-top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+    .dam-field-label{display:inline-flex;align-items:center;gap:4px;min-width:0;color:var(--sapContent_LabelColor,#6a6d70);font-size:10px;font-weight:700;letter-spacing:.02em}
+    .dam-field-label ui5-icon{width:.72rem;height:.72rem;color:var(--neo-cyan);flex:0 0 auto}
+    .dam-smart-field[data-tone="ok"] .dam-field-label ui5-icon{color:var(--neo-mint)}
+    .dam-field-lock{flex:0 0 auto;font-size:8px;font-weight:800;letter-spacing:.08em;color:var(--sapContent_LabelColor,#6a6d70);background:color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 10%,transparent);border-radius:999px;padding:1px 5px}
+    .dam-smart-field input,.dam-smart-field textarea{width:100%;box-sizing:border-box;border:0;border-radius:0;padding:0;background:transparent;color:var(--sapField_TextColor,var(--sapTextColor,#1d2d3e));font:inherit;font-size:12px;font-weight:600;line-height:1.28;outline:none}
+    .dam-smart-field input[readonly]{color:var(--sapContent_LabelColor,#6a6d70);cursor:not-allowed}
+    .dam-smart-field textarea{min-height:48px;resize:vertical;font-weight:500}
+    .dam-smart-field input::placeholder,.dam-smart-field textarea::placeholder{color:var(--sapField_PlaceholderTextColor,var(--sapContent_LabelColor,#6a6d70))}
+    .dam-alias-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+    .dam-alias-row span{font-size:10px;font-weight:700;color:var(--neo-violet);background:color-mix(in srgb,var(--neo-violet) 10%,transparent);border:1px solid color-mix(in srgb,var(--neo-violet) 25%,transparent);border-radius:999px;padding:1px 7px}
     .dam-property-wrap{overflow:hidden;position:relative;display:flex;flex-direction:column}
+    .dam-property-resources{min-height:0;flex:1 1 auto}
     .dam-resources{overflow:auto;min-height:0;flex:1 1 auto;padding:0;margin:0}
     .dam-res-table-wrap{border:none;border-radius:0;overflow:hidden;background:var(--dam-body-bg);box-shadow:none;margin:0}
     .dam-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--dam-body-bg)}

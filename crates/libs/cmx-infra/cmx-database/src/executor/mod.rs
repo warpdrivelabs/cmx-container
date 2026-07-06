@@ -444,6 +444,12 @@ impl ResultConverter {
                 .map(DataValue::Bool)
                 .unwrap_or(DataValue::Null)
         } else if type_name.contains("decimal") || type_name.contains("numeric") {
+            // PG NUMERIC/DECIMAL 必须解码成 rust_decimal::Decimal（不能当 String 读，
+            // 否则 try_get::<String> 失败 → 一律 Null，导致数值列全部丢失）。
+            if let Ok(d) = row.try_get::<rust_decimal::Decimal, _>(index) {
+                return DataValue::Decimal(d);
+            }
+            // 兜底：个别驱动可能以字符串返回
             row.try_get::<String, _>(index)
                 .ok()
                 .and_then(|s| s.parse::<rust_decimal::Decimal>().ok())

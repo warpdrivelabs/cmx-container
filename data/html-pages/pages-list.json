@@ -602,7 +602,8 @@
       "name": "cmx-fico三区·凭证头+科目行+辅助行(content)",
       "page": "fico-ws-content",
       "pageId": "fi.cmxfico.gl.fico-ws-content",
-      "relPath": "fi/cmxfico/gl/fico-ws-content.html"
+      "relPath": "fi/cmxfico/gl/fico-ws-content.html",
+      "details": ""
     },
     {
       "app": "cmxfico",
@@ -856,6 +857,17 @@
       "page": "ignite-list-demo",
       "relPath": "_legacy/ignite-list-demo.html",
       "latestHtmlFile": "ignite-list-demo.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-doc",
+      "name": "会计凭证（html_pages）",
+      "details": "cmx-fico 总账凭证四层主从，__designer_meta__ 声明式驱动，基于 /api/doc/* + fico-db",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-doc",
+      "relPath": "fi/cmxfico/voucher-doc.html",
+      "latestHtmlFile": "voucher-doc.html"
     }
   ]
 }

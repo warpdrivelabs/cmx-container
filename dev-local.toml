@@ -272,6 +272,7 @@ whitelist = [
     "/api/module-resources",
     "/api/dam-registry",
     "/api/dict",
+    "/api/doc",
     "/api/fact",
     "/api/help",
 ]

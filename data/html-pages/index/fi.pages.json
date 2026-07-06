@@ -234,6 +234,7 @@
     {
       "id": "fi.cmxfico.gl.fico-ws-content",
       "name": "cmx-fico三区·凭证头+科目行+辅助行(content)",
+      "details": "",
       "domain": "fi",
       "app": "cmxfico",
       "module": "gl",
@@ -454,6 +455,17 @@
       "page": "voucher",
       "relPath": "fi/gl/fi_gl_base_data/voucher.html",
       "latestHtmlFile": "voucher.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.voucher-doc",
+      "name": "会计凭证（html_pages）",
+      "details": "cmx-fico 总账凭证四层主从，__designer_meta__ 声明式驱动，基于 /api/doc/* + fico-db",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "voucher-doc",
+      "relPath": "fi/cmxfico/voucher-doc.html",
+      "latestHtmlFile": "voucher-doc.html"
     }
   ]
 }

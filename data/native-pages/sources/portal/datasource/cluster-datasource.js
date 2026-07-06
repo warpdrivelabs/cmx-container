@@ -1971,6 +1971,139 @@ function styleHtml () {
     .mc-drawer .cds-bd-btn.ghost:hover{background:rgba(255,255,255,.26)}
     .mc-drawer .cds-bd-btn.primary{background:#fff;color:#0a6ed1}
     .mc-drawer .cds-bd-btn.primary:hover{background:#eaf2fc}
+    /* 运维总览 / 初始化面板：统一使用 UI5 主题变量，避免暗色主题出现白底浅字。 */
+    .cds-neo{
+      --cds-mc-surface:var(--sapTile_Background,var(--sapList_Background,#fff));
+      --cds-mc-surface-soft:var(--sapList_HeaderBackground,var(--sapGroup_ContentBackground,#f7f9fc));
+      --cds-mc-field:var(--sapField_Background,var(--sapTile_Background,#fff));
+      --cds-mc-border:var(--sapGroup_TitleBorderColor,var(--sapField_BorderColor,#d9d9d9));
+      --cds-mc-hover:var(--sapList_Hover_Background,color-mix(in srgb,var(--sapHighlightColor,#0a6ed1) 8%,var(--sapTile_Background,#fff)));
+      --cds-mc-blue-bg:var(--sapInformationBackground,color-mix(in srgb,var(--sapInformationColor,#0a6ed1) 14%,var(--sapTile_Background,#fff)));
+      --cds-mc-green-bg:var(--sapSuccessBackground,color-mix(in srgb,var(--sapPositiveColor,#107e3e) 14%,var(--sapTile_Background,#fff)));
+      --cds-mc-amber-bg:var(--sapWarningBackground,color-mix(in srgb,var(--sapCriticalColor,#e9730c) 14%,var(--sapTile_Background,#fff)));
+      --cds-mc-red-bg:var(--sapErrorBackground,color-mix(in srgb,var(--sapNegativeColor,#bb0000) 12%,var(--sapTile_Background,#fff)));
+      --cds-mc-gray-bg:color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 12%,var(--sapTile_Background,#fff));
+      --cds-mc-blue:var(--sapInformationColor,var(--sapHighlightColor,#0a6ed1));
+      --cds-mc-green:var(--sapPositiveColor,#107e3e);
+      --cds-mc-amber:var(--sapCriticalColor,#e9730c);
+      --cds-mc-red:var(--sapNegativeColor,#bb0000);
+    }
+    .cds-neo .cds-bd-target{
+      border-color:color-mix(in srgb,var(--cds-mc-blue) 35%,var(--cds-mc-border));
+      background:linear-gradient(120deg,var(--cds-mc-blue-bg),var(--cds-mc-surface));
+    }
+    .cds-neo .cds-bd-search,
+    .cds-neo .mc-ver-select{
+      background:var(--cds-mc-field);
+      color:var(--sapField_TextColor,var(--sapTextColor,#32363a));
+      border-color:var(--sapField_BorderColor,var(--cds-mc-border));
+    }
+    .cds-neo .cds-bd-search::placeholder{color:var(--sapField_PlaceholderTextColor,var(--sapContent_LabelColor,#6a6d70))}
+    .cds-neo .cds-bd-btn.ghost,
+    .cds-neo .mc-collapse-btn,
+    .cds-neo .mc-mini-btn{
+      background:var(--sapButton_Background,var(--cds-mc-surface));
+      color:var(--sapButton_TextColor,var(--cds-mc-blue));
+      border-color:var(--sapButton_BorderColor,var(--cds-mc-border));
+    }
+    .cds-neo .cds-bd-btn.ghost:hover,
+    .cds-neo .mc-collapse-btn:hover,
+    .cds-neo .mc-mini-btn:hover,
+    .cds-neo .cds-bd-link:hover{
+      background:var(--sapButton_Hover_Background,var(--cds-mc-hover));
+      border-color:var(--sapButton_Hover_BorderColor,var(--cds-mc-blue));
+    }
+    .cds-neo .cds-bd-plan,
+    .cds-neo .mc-review,
+    .cds-neo .mc-panel,
+    .cds-neo .mc-initlog,
+    .cds-neo .mc-status-cell{
+      background:var(--cds-mc-surface);
+      border-color:var(--cds-mc-border);
+    }
+    .cds-neo .cds-bd-plan-h,
+    .cds-neo .mc-review-head,
+    .cds-neo .mc-panel-h,
+    .cds-neo .mc-il-head,
+    .cds-neo .mc-review-actions,
+    .cds-neo .cds-bd-plan-foot,
+    .cds-neo .mc-matrix-head,
+    .cds-neo .mc-installed-head{
+      background:var(--cds-mc-surface-soft);
+      border-color:var(--cds-mc-border);
+    }
+    .cds-neo .cds-bd-plan-h{background:linear-gradient(120deg,var(--cds-mc-green-bg),var(--cds-mc-surface-soft))}
+    .cds-neo .mc-review-head{background:linear-gradient(120deg,var(--cds-mc-blue-bg),var(--cds-mc-surface-soft))}
+    .cds-neo .mc-review-head b,
+    .cds-neo .mc-panel-h b{
+      color:var(--cds-mc-blue);
+      background:var(--cds-mc-blue-bg);
+    }
+    .cds-neo .cds-bd-plan-err,
+    .cds-neo .mc-il-foot.err{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
+    .cds-neo .cds-bd-kbadge.dct,
+    .cds-neo .mc-badge.t-blue.active,
+    .cds-neo .mc-cell.t-blue{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
+    .cds-neo .cds-bd-kbadge.doc,
+    .cds-neo .mc-badge.t-green.active,
+    .cds-neo .mc-cell.t-green{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
+    .cds-neo .cds-bd-kbadge.seed,
+    .cds-neo .mc-badge.t-amber.active,
+    .cds-neo .mc-cell.t-amber{background:var(--cds-mc-amber-bg);color:var(--cds-mc-amber)}
+    .cds-neo .mc-badge.t-red.active,
+    .cds-neo .mc-cell.t-red{background:var(--cds-mc-red-bg);color:var(--cds-mc-red)}
+    .cds-neo .mc-cell.t-gray{background:var(--cds-mc-gray-bg);color:var(--sapContent_LabelColor,#7a828c)}
+    .cds-neo .mc-badge{
+      background:var(--sapButton_Background,var(--cds-mc-surface));
+      color:var(--sapTextColor,#32363a);
+      border-color:var(--sapButton_BorderColor,var(--cds-mc-border));
+    }
+    .cds-neo .mc-badge:hover{background:var(--sapButton_Hover_Background,var(--cds-mc-hover));border-color:var(--sapButton_Hover_BorderColor,var(--cds-mc-blue))}
+    .cds-neo .mc-badge.t-all.active{background:var(--cds-mc-blue-bg);border-color:var(--cds-mc-blue);color:var(--cds-mc-blue)}
+    .cds-neo .mc-gate-blue{background:linear-gradient(120deg,var(--cds-mc-blue-bg),var(--cds-mc-surface));border-color:color-mix(in srgb,var(--cds-mc-blue) 35%,var(--cds-mc-border))}
+    .cds-neo .mc-gate-amber{background:linear-gradient(120deg,var(--cds-mc-amber-bg),var(--cds-mc-surface));border-color:color-mix(in srgb,var(--cds-mc-amber) 35%,var(--cds-mc-border))}
+    .cds-neo .mc-gate-red{background:linear-gradient(120deg,var(--cds-mc-red-bg),var(--cds-mc-surface));border-color:color-mix(in srgb,var(--cds-mc-red) 35%,var(--cds-mc-border))}
+    .cds-neo .mc-gate-blue .mc-gate-ic{color:var(--cds-mc-blue)}
+    .cds-neo .mc-gate-amber .mc-gate-ic{color:var(--cds-mc-amber)}
+    .cds-neo .mc-gate-red .mc-gate-ic{color:var(--cds-mc-red)}
+    .cds-neo .mc-st-ok{background:var(--cds-mc-green-bg);border-color:color-mix(in srgb,var(--cds-mc-green) 35%,var(--cds-mc-border))}
+    .cds-neo .mc-st-warn{background:var(--cds-mc-amber-bg);border-color:color-mix(in srgb,var(--cds-mc-amber) 35%,var(--cds-mc-border))}
+    .cds-neo .mc-st-ok ui5-icon{color:var(--cds-mc-green)}
+    .cds-neo .mc-st-warn ui5-icon{color:var(--cds-mc-amber)}
+    .cds-neo .mc-installed-row,
+    .cds-neo .mc-mrow,
+    .cds-neo .cds-bd-plan-grp{border-color:var(--cds-mc-border)}
+    .cds-neo .mc-installed-row:hover,
+    .cds-neo .mc-mrow:hover{background:var(--cds-mc-hover)}
+    .cds-neo .mc-kind-detail{
+      background:var(--cds-mc-surface-soft);
+      border-color:var(--cds-mc-border);
+    }
+    .cds-neo .mc-action-summary,
+    .cds-neo .mc-action-btn{
+      background:var(--sapButton_Background,var(--cds-mc-surface));
+    }
+    .cds-neo .mc-action-summary.t-amber,
+    .cds-neo .mc-action-btn.t-amber{color:var(--cds-mc-amber);background:var(--cds-mc-amber-bg)}
+    .cds-neo .mc-action-btn.t-red{color:var(--cds-mc-red);background:var(--cds-mc-red-bg)}
+    .cds-neo .mc-action-options{
+      background:var(--sapPopover_Background,var(--cds-mc-surface));
+      border-color:var(--cds-mc-border);
+      box-shadow:var(--sapContent_Shadow2,0 4px 14px rgba(0,0,0,.22));
+    }
+    .cds-neo .mc-action-options button:hover,
+    .cds-neo .mc-action-options button.active{
+      background:var(--cds-mc-amber-bg);
+      color:var(--cds-mc-amber);
+    }
+    .cds-neo .mc-action-options b{color:var(--cds-mc-amber);background:var(--cds-mc-amber-bg)}
+    .cds-neo .mc-review .mc-phase-plan{background:var(--cds-mc-blue-bg);border-left-color:var(--cds-mc-blue)}
+    .cds-neo .mc-review .mc-phase-execute{background:var(--cds-mc-green-bg);border-left-color:var(--cds-mc-green)}
+    .cds-neo .mc-review .mc-phase-plan::before{background:var(--cds-mc-blue-bg);color:var(--cds-mc-blue)}
+    .cds-neo .mc-review .mc-phase-execute::before{background:var(--cds-mc-green-bg);color:var(--cds-mc-green)}
+    .cds-neo .mc-cell{border-color:color-mix(in srgb,currentColor 22%,transparent)}
+    .cds-neo .mc-cell.pickable:hover{filter:none;background:color-mix(in srgb,currentColor 16%,var(--cds-mc-surface))}
+    .cds-neo .mc-ver-select{background:color-mix(in srgb,var(--cds-mc-field) 86%,currentColor 14%)}
   </style>`
 }
 

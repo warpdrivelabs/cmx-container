@@ -969,6 +969,7 @@ dependencies = [
  "cmx-utils",
  "modql",
  "rmp-serde",
+ "rust_decimal",
  "sea-query",
  "sea-query-sqlx",
  "serde",
