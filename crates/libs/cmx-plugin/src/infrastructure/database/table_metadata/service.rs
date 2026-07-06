@@ -1025,7 +1025,7 @@ impl TableMetadataService {
             .map_err(|e| PluginError::Config(format!("序列化表定义失败: {e}")))?;
 
         // 主表:先查 table_name 是否存在(cmx_meta_table_define 无 table_name 唯一约束)
-        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1";
+        let check_sql = "SELECT id FROM cmx_meta_table_define WHERE table_name = $1 AND archived = 0";
         let check_ds = mm
             .query_sql_with_datavalues(
                 default_db_id,
@@ -1094,30 +1094,83 @@ impl TableMetadataService {
                 .await;
         }
 
-        // version 表存完整 TableDefine JSON(供导出对称读取)
-        let vid = snowflake_id_str();
-        let version_sql = "INSERT INTO cmx_meta_table_define_version \
-                           (id, table_name, display_name, db_id, plugin_id, version, app_id, \
-                            domain_code, application_code, module_code, metadata, archived) \
-                           VALUES ($1, $2, $3, $4, NULL, '1', $5, $6, $7, $8, $9::jsonb, 0)";
-        let _ = mm
-            .execute_sql_with_datavalues(
+        // version 表:先查 (table_name, version, app_id) 是否存在,存在则 UPDATE 否则 INSERT
+        // (避免重复导入产生大量重复 version 记录)
+        let version_check_sql = "SELECT id FROM cmx_meta_table_define_version \
+                                 WHERE table_name = $1 AND version = $2 AND app_id = $3 AND archived = 0";
+        let version_check_ds = mm
+            .query_sql_with_datavalues(
                 default_db_id,
                 None,
-                version_sql,
+                version_check_sql,
                 vec![
-                    DataValue::String(vid),
                     DataValue::String(table_def.table_name.clone()),
-                    DataValue::String(table_def.display_name.clone()),
-                    DataValue::String(biz_db_id.to_string()),
+                    DataValue::String("1".to_string()),
                     DataValue::String(app_id.to_string()),
-                    DataValue::String(domain_code.to_string()),
-                    DataValue::String(app.to_string()),
-                    DataValue::String(module.to_string()),
-                    DataValue::String(metadata_json),
                 ],
+                "save_meta_version_check",
             )
             .await;
+        let existing_version_id = version_check_ds
+            .ok()
+            .and_then(|ds| serde_json::to_value(&ds).ok())
+            .and_then(|j| {
+                j.get("rows")
+                    .and_then(|r| r.as_array())
+                    .and_then(|rows| rows.first())
+                    .cloned()
+            })
+            .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
+
+        if let Some(vid) = existing_version_id {
+            // 已存在 → UPDATE metadata + 基础字段
+            let version_upd_sql = "UPDATE cmx_meta_table_define_version SET \
+                                   display_name = $1, db_id = $2, \
+                                   domain_code = $3, application_code = $4, module_code = $5, \
+                                   metadata = $6::jsonb, update_time = CURRENT_TIMESTAMP \
+                                   WHERE id = $7";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    version_upd_sql,
+                    vec![
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(domain_code.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                        DataValue::String(metadata_json),
+                        DataValue::String(vid),
+                    ],
+                )
+                .await;
+        } else {
+            // 不存在 → INSERT 完整记录
+            let vid = snowflake_id_str();
+            let version_ins_sql = "INSERT INTO cmx_meta_table_define_version \
+                                   (id, table_name, display_name, db_id, plugin_id, version, app_id, \
+                                    domain_code, application_code, module_code, metadata, archived) \
+                                   VALUES ($1, $2, $3, $4, NULL, '1', $5, $6, $7, $8, $9::jsonb, 0)";
+            let _ = mm
+                .execute_sql_with_datavalues(
+                    default_db_id,
+                    None,
+                    version_ins_sql,
+                    vec![
+                        DataValue::String(vid),
+                        DataValue::String(table_def.table_name.clone()),
+                        DataValue::String(table_def.display_name.clone()),
+                        DataValue::String(biz_db_id.to_string()),
+                        DataValue::String(app_id.to_string()),
+                        DataValue::String(domain_code.to_string()),
+                        DataValue::String(app.to_string()),
+                        DataValue::String(module.to_string()),
+                        DataValue::String(metadata_json),
+                    ],
+                )
+                .await;
+        }
         Ok(())
     }
 
