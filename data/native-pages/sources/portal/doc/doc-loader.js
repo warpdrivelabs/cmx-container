@@ -23,6 +23,7 @@ const state = {
   def: null, meta: null, ms: null, collector: null, paths: [], loading: false,
   // 每层 UI 查询状态：layerId → { conds:[{col,op,value}], sorts:[{col,desc}], limit, offset, cursor, nextCursor }
   layerState: {},
+  grids: {},
   pageSize: 50,
 }
 
@@ -147,6 +148,7 @@ function setupGrids (root, meta) {
     grid.setColumnModel(C.buildColumnModel(C, p.path, p.columns))
     grid.setOptions({ selectionMode: 'single', fillHeight: true, showRowIndex: true, editable: true, stretch: false })
     ms.bindTable(p.path, grid)
+    state.grids[p.path] = grid   // 存引用，reload 后强制刷新用
 
     wirePaneControls(root, pane, p)
   }
@@ -324,8 +326,13 @@ async function reload (root) {
   try {
     const r = await loadData(def)
     if (!r.dsMap || !Object.keys(r.dsMap).length) throw new Error('返回数据为空')
-    state.ms.setDataSet(r.dsMap)
     const C = cmx()
+    state.ms.setDataSet(r.dsMap)
+    // 强制各 grid 从当前 source 重渲染（防某些时序下 revo 未刷新）。协调器已把新 ds
+    // 推给各 grid（_ds/_rows 已更新），refreshLayout→revo.refresh('all') 保证界面重画。
+    for (const g of Object.values(state.grids)) {
+      try { g.refreshLayout && g.refreshLayout() } catch (_) {}
+    }
     state.collector = C.ChangeSetCollector ? new C.ChangeSetCollector(state.ms).attach() : null
     const rootPath = state.paths[0] && state.paths[0].path
     const rootDs = rootPath ? state.ms.getRootDataSet(rootPath) : null
@@ -344,6 +351,9 @@ async function loadVoucher (root) {
 
   const ms = setupGrids(root, meta)   // 动态建 N grid + 筛选/分页 UI（幂等）
   if (!ms) return
+  // 等一帧让动态建的 cmx-revo-grid 完成挂载（connectedCallback + 内部 revo 实例就绪），
+  // 再装数据，确保首次 setDataSet 能真正渲染（否则 _revo 未就绪、后续刷新时序易错乱）。
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
   await reload(root)
 }
 
@@ -402,6 +412,7 @@ export default {
       // 每次进入重置实例状态
       state.def = null; state.meta = null; state.ms = null; state.collector = null; state.paths = []
       state.layerState = {}
+      state.grids = {}
 
       const def = readDef(ctx)
       if (!def) {
