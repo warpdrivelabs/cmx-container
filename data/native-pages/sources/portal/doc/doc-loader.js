@@ -19,7 +19,12 @@
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 
 /* 每个页面实例一份状态（同一模块可能被多区域复用，state 在 content(ctx) 里重置）。 */
-const state = { def: null, meta: null, ms: null, collector: null, paths: [], loading: false }
+const state = {
+  def: null, meta: null, ms: null, collector: null, paths: [], loading: false,
+  // 每层 UI 查询状态：layerId → { conds:[{col,op,value}], sorts:[{col,desc}], limit, offset, cursor, nextCursor }
+  layerState: {},
+  pageSize: 50,
+}
 
 /* ── 响应归一（兼容门户已拆信封 / 原始信封两种形态） ─────────────────────── */
 function unwrap (res, body) {
@@ -62,9 +67,18 @@ function styleHtml () {
 .dl-bar{flex:0 0 auto}
 .dl-title{font-weight:600}
 .dl-msg{margin-left:12px;color:#0854a0;font-size:12px}
-.dl-grids{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0;overflow:hidden}
-.dl-pane{flex:1 1 0;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
-.dl-grid{display:block;width:100%;flex:1;min-height:0;min-width:0}
+.dl-grids{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0;overflow:auto}
+.dl-pane{flex:1 1 0;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;border:1px solid #e5e5e5;border-radius:4px}
+.dl-pane-head{display:flex;align-items:center;gap:8px;padding:2px 6px;background:#f7f7f7;flex-wrap:wrap;font-size:12px}
+.dl-pane-title{font-weight:600}
+.dl-grid{display:block;width:100%;flex:1;min-height:120px;min-width:0}
+.dl-filter{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:2px 6px;background:#fcfcfc;border-top:1px dashed #eee;font-size:12px}
+.dl-cond{display:flex;gap:2px;align-items:center;background:#eef4ff;border-radius:3px;padding:1px 3px}
+.dl-cond select,.dl-cond input{font-size:12px;padding:1px 3px;max-width:130px}
+.dl-btn{font-size:12px;padding:1px 8px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff}
+.dl-btn:hover{background:#f0f0f0}
+.dl-pg{display:flex;gap:4px;align-items:center;margin-left:auto}
+.dl-sort{cursor:pointer;color:#0854a0;text-decoration:underline;font-size:11px}
 </style>`
 }
 
@@ -86,16 +100,30 @@ function setMsg (root, text) {
   if (el) el.textContent = text || ''
 }
 
-/* ── 元数据 → 动态建 N 层 grid + schema + 列模型 ───────────────────────── */
+/* ── 元数据 → 动态建 N 层 grid + schema + 列模型 + 每层筛选/排序/分页 UI ─── */
 
 /** 取元数据（层序/各层列/关系）。 */
 async function loadMeta (def) {
   return apiGet(`/api/doc/meta?${qs(def)}`, def.dbId)
 }
 
+/** 该层 UI 状态（懒建）。 */
+function layerSt (layerId) {
+  if (!state.layerState[layerId]) {
+    state.layerState[layerId] = { conds: [], sorts: [], limit: state.pageSize, offset: 0, cursor: null, nextCursor: null }
+  }
+  return state.layerState[layerId]
+}
+
+/** 层 id → 该层列元数据（来自 meta.layers）。 */
+function layerColumns (layerId) {
+  const L = (state.meta.layers || []).find((l) => l.id === layerId)
+  return (L && L.columns) || []
+}
+
 /**
- * 依据元数据动态渲染 N 个 pane+grid，建协调器 + 列模型 + 绑定。幂等（已建则复用）。
- * 全程无任何具体单据假设——层数/列/关系都来自 meta。
+ * 依据元数据动态渲染 N 个 pane（筛选条 + grid + 分页），建协调器 + 列模型 + 绑定。
+ * 全程无任何具体单据假设——层数/列/关系/算子都来自 meta。
  */
 function setupGrids (root, meta) {
   const C = cmx()
@@ -107,45 +135,205 @@ function setupGrids (root, meta) {
   state.paths = paths
   const ms = new C.CmxMasterSlave({ schema })
 
-  // 动态生成 N 个 pane+grid（标题=levelName）
   const box = root.querySelector('#dlGrids')
   box.innerHTML = ''
   for (const p of paths) {
     const pane = document.createElement('div')
     pane.className = 'dl-pane'
-    const title = document.createElement('ui5-title')
-    title.setAttribute('level', 'H5'); title.setAttribute('size', 'H5')
-    title.textContent = `${p.level ? p.level + ' ' : ''}${p.levelName}`
-    const grid = document.createElement('cmx-revo-grid')
-    grid.className = 'dl-grid'
-    grid.id = `grid__${p.path.replace(/\./g, '__')}`
-    pane.appendChild(title); pane.appendChild(grid)
+    pane.innerHTML = paneHtml(p)
     box.appendChild(pane)
 
-    // 列模型（列头 caption/类型/宽度来自元数据）+ grid 选项
+    const grid = pane.querySelector('cmx-revo-grid')
     grid.setColumnModel(C.buildColumnModel(C, p.path, p.columns))
     grid.setOptions({ selectionMode: 'single', fillHeight: true, showRowIndex: true, editable: true, stretch: false })
     ms.bindTable(p.path, grid)
+
+    wirePaneControls(root, pane, p)
   }
 
   state.ms = ms
   return ms
 }
 
-/* ── 数据装载（props 决定通道：JSON / msgpack 二进制） ──────────────────── */
+/** 一层 pane 的 HTML（标题 + 筛选条 + grid + 分页）。列/算子下拉由元数据生成。 */
+function paneHtml (p) {
+  return `
+  <div class="dl-pane-head">
+    <span class="dl-pane-title">${p.level ? p.level + ' ' : ''}${p.levelName}</span>
+    <button class="dl-btn" data-act="add-cond">+ 条件</button>
+    <button class="dl-btn" data-act="apply">应用筛选</button>
+    <button class="dl-btn" data-act="clear">清空</button>
+    <span class="dl-pg">
+      <button class="dl-btn" data-act="prev">上一页</button>
+      <button class="dl-btn" data-act="next">下一页 ▶</button>
+    </span>
+  </div>
+  <div class="dl-filter" data-role="filter"></div>
+  <cmx-revo-grid class="dl-grid" id="grid__${p.path.replace(/\./g, '__')}"></cmx-revo-grid>`
+}
+
+/** 一行条件的 HTML（列下拉 + 算子下拉 + 值输入 + 删除）。 */
+function condRowHtml (columns, ops) {
+  const colOpts = columns.map((c) => `<option value="${c.name}">${c.caption || c.name}</option>`).join('')
+  const opOpts = ops.map((o) => `<option value="${o.op}">${o.label}</option>`).join('')
+  return `<span class="dl-cond">
+    <select data-f="col">${colOpts}</select>
+    <select data-f="op">${opOpts}</select>
+    <input data-f="value" placeholder="值(多值逗号分隔)" />
+    <button class="dl-btn" data-act="del-cond">×</button>
+  </span>`
+}
+
+/** 给一层 pane 的按钮/表头绑事件（筛选/排序/分页）。 */
+function wirePaneControls (root, pane, p) {
+  const C = cmx()
+  const layerId = p.layerId
+  const cols = p.columns
+  const filterBox = pane.querySelector('[data-role="filter"]')
+
+  const addCond = () => {
+    const span = document.createElement('template')
+    // 算子随首列类型；这里给全算子，apply 时按列类型交给后端校验
+    span.innerHTML = condRowHtml(cols, C.OPERATORS || [])
+    filterBox.appendChild(span.content.firstElementChild)
+  }
+
+  pane.querySelector('[data-act="add-cond"]')?.addEventListener('click', addCond)
+  pane.querySelector('[data-act="clear"]')?.addEventListener('click', () => {
+    filterBox.innerHTML = ''
+    layerSt(layerId).conds = []
+    layerSt(layerId).offset = 0; layerSt(layerId).cursor = null
+    reload(root)
+  })
+  pane.querySelector('[data-act="apply"]')?.addEventListener('click', () => {
+    layerSt(layerId).conds = readConds(filterBox)
+    layerSt(layerId).offset = 0; layerSt(layerId).cursor = null
+    reload(root)
+  })
+  pane.querySelector('[data-act="next"]')?.addEventListener('click', () => {
+    const st = layerSt(layerId)
+    if (st.nextCursor) { st.cursor = st.nextCursor } else { st.offset = (st.offset || 0) + (st.limit || state.pageSize) }
+    reload(root)
+  })
+  pane.querySelector('[data-act="prev"]')?.addEventListener('click', () => {
+    const st = layerSt(layerId)
+    st.cursor = null
+    st.offset = Math.max(0, (st.offset || 0) - (st.limit || state.pageSize))
+    reload(root)
+  })
+  filterBox.addEventListener('click', (ev) => {
+    if (ev.target && ev.target.dataset && ev.target.dataset.act === 'del-cond') {
+      ev.target.closest('.dl-cond')?.remove()
+    }
+  })
+
+  // 表头点击排序：grid 抛的选中列事件不统一，这里提供一个简单"排序"入口——
+  // 用 grid 的 header 事件若无，则在 pane 头加一个"排序:列"快捷（保持通用，不依赖具体列）。
+  const grid = pane.querySelector('cmx-revo-grid')
+  grid?.addEventListener?.('header-click', (ev) => {
+    const col = ev.detail && ev.detail.prop
+    if (!col) return
+    toggleSort(layerId, col)
+    reload(root)
+  })
+  // 展开某父行 → 懒下钻该行子树（若 grid 支持展开事件）
+  grid?.addEventListener?.('row-expand', (ev) => {
+    const rowId = ev.detail && ev.detail.id
+    if (rowId != null) lazyExpand(root, p, rowId)
+  })
+}
+
+/** 读筛选条里的条件行。 */
+function readConds (filterBox) {
+  const out = []
+  filterBox.querySelectorAll('.dl-cond').forEach((el) => {
+    const col = el.querySelector('[data-f="col"]').value
+    const op = el.querySelector('[data-f="op"]').value
+    const value = el.querySelector('[data-f="value"]').value
+    if (col && op) out.push({ col, op, value })
+  })
+  return out
+}
+
+/** 切换某层某列排序：无→asc→desc→无。 */
+function toggleSort (layerId, col) {
+  const st = layerSt(layerId)
+  const i = st.sorts.findIndex((s) => s.col === col)
+  if (i < 0) st.sorts = [{ col, desc: false }]
+  else if (!st.sorts[i].desc) st.sorts[i].desc = true
+  else st.sorts = st.sorts.filter((s) => s.col !== col)
+  st.offset = 0; st.cursor = null
+}
+
+/* ── 数据装载（用 buildDocQuery 组每层查询，POST 富查询） ─────────────────── */
+
+/** 用各层 UI 状态组 DocQuery（元数据驱动）。 */
+function buildQuery () {
+  const C = cmx()
+  const perLayer = {}
+  for (const p of state.paths) {
+    const st = layerSt(p.layerId)
+    perLayer[p.layerId] = {
+      conds: st.conds, columns: p.columns, sorts: st.sorts,
+      limit: st.limit, offset: st.cursor ? undefined : st.offset, cursor: st.cursor || undefined,
+    }
+  }
+  return C.buildDocQuery ? C.buildDocQuery(perLayer, {}) : {}
+}
 
 async function loadData (def) {
   const C = cmx()
-  // 统一用共享 loadDocData：apiPath/binary 由 props 决定，内部信封容错 + msgpack 解码
+  const query = buildQuery()
   const r = await C.loadDocData(null, {
     domain: def.domain, application: def.application, module: def.module, file: def.file,
-    dbId: def.dbId, apiPath: def.apiPath, binary: def.binary === true, limit: def.limit || 50,
+    dbId: def.dbId, apiPath: def.apiPath, binary: def.binary === true,
+    query: (query && query.layers) ? query : undefined,
   })
-  return r.dsMap
+  return r
+}
+
+/** 懒下钻：展开父行时只拉该层在该父下的子树，回填协调器。 */
+async function lazyExpand (root, p, parentId) {
+  const C = cmx()
+  if (typeof C.loadChildren !== 'function') return
+  // 找 p 的下一层（子层）——用 paths 里紧跟 p 且 path 以 p.path 为前缀的层
+  const child = state.paths.find((x) => x.path.startsWith(p.path + '.') && x.path.split('.').length === p.path.split('.').length + 1)
+  if (!child) return
+  try {
+    const st = layerSt(child.layerId)
+    const filter = C.buildLayerFilter ? C.buildLayerFilter(st.conds, child.columns) : undefined
+    const q = {}
+    if (filter) q.filter = filter
+    if (st.sorts && st.sorts.length) q.orderBy = C.buildOrderBy(st.sorts)
+    const { pkg } = await C.loadChildren(null, state.def, {
+      layer: child.layerId, parentIds: [parentId], query: Object.keys(q).length ? q : undefined,
+      exit: (state.def.apiPath || '').includes('sqlx') ? 'sqlx-zmc-json' : undefined,
+    })
+    // 回填：把子树挂到协调器对应父行（若 ms 支持 setChildDataSet；否则整体 reload）
+    if (state.ms && typeof state.ms.setChildData === 'function') {
+      state.ms.setChildData(child.path, parentId, C.CmxDataSet.fromJSON(pkg))
+    }
+    setMsg(root, `已按需装载 ${child.levelName} 子树（父 ${parentId}）：${(pkg.rows || []).length} 行`)
+  } catch (e) { setMsg(root, `懒下钻失败：${e.message}`) }
+}
+
+/** 重新装载（筛选/排序/分页变化后调用）。 */
+async function reload (root) {
+  const def = state.def
+  setMsg(root, '装载中…')
+  try {
+    const r = await loadData(def)
+    if (!r.dsMap || !Object.keys(r.dsMap).length) throw new Error('返回数据为空')
+    state.ms.setDataSet(r.dsMap)
+    const C = cmx()
+    state.collector = C.ChangeSetCollector ? new C.ChangeSetCollector(state.ms).attach() : null
+    const rootPath = state.paths[0] && state.paths[0].path
+    const rootDs = rootPath ? state.ms.getRootDataSet(rootPath) : null
+    setMsg(root, `已装载 · 根层 ${rootDs ? rootDs.length : 0} 行`)
+  } catch (e) { setMsg(root, `装载失败：${e.message}`) }
 }
 
 async function loadVoucher (root) {
-  const C = cmx()
   const def = state.def
   setMsg(root, '装载元数据…')
   let meta = state.meta
@@ -154,22 +342,9 @@ async function loadVoucher (root) {
   } catch (e) { setMsg(root, `元数据装载失败：${e.message}`); return }
   if (!meta || !Array.isArray(meta.layers) || !meta.layers.length) { setMsg(root, '元数据无层定义'); return }
 
-  const ms = setupGrids(root, meta)   // 动态建 N grid + schema（幂等）
+  const ms = setupGrids(root, meta)   // 动态建 N grid + 筛选/分页 UI（幂等）
   if (!ms) return
-
-  setMsg(root, `装载数据…（${def.apiPath || '/api/doc/data/sqlx-dataset-json'}${def.binary ? ' · 二进制' : ''}）`)
-  let dsMap
-  try {
-    dsMap = await loadData(def)
-    if (!dsMap || !Object.keys(dsMap).length) throw new Error('返回数据为空')
-  } catch (e) { setMsg(root, `数据装载失败：${e.message}`); return }
-
-  ms.setDataSet(dsMap)
-  state.collector = C.ChangeSetCollector ? new C.ChangeSetCollector(ms).attach() : null
-
-  const rootPath = state.paths[0] && state.paths[0].path
-  const rootDs = rootPath ? ms.getRootDataSet(rootPath) : null
-  setMsg(root, `已装载 ${meta.layers.length} 层 · 根层 ${rootDs ? rootDs.length : 0} 行`)
+  await reload(root)
 }
 
 async function saveVoucher (root) {
@@ -226,6 +401,7 @@ export default {
       const host = ctx && ctx.host
       // 每次进入重置实例状态
       state.def = null; state.meta = null; state.ms = null; state.collector = null; state.paths = []
+      state.layerState = {}
 
       const def = readDef(ctx)
       if (!def) {
