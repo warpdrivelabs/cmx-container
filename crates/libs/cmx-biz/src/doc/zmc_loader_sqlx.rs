@@ -8,7 +8,7 @@
 //!   由 ZmcDataSet 的列式二进制编码器在编码时按父 id 分桶(不复制行)。
 //!
 //! 老 DocLoader / 老 DataSet、以及 tokio 版 ZmcDocLoader 完全不动;本装载器供 sqlx 二进制新链路
-//! (`/api/doc/data.sqlx.bin`)。辅助函数本就泛型于 `ZmcDataSet<R>`,此处 `R = SqlxPgRowSource`。
+//! (`/api/doc/data/sqlx-zmc-msgpack`)。辅助函数本就泛型于 `ZmcDataSet<R>`,此处 `R = SqlxPgRowSource`。
 
 use std::sync::Arc;
 

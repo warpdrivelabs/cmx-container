@@ -1173,7 +1173,7 @@
           "module": "gl",
           "file": "cmxfico_doc_meta_v1.json",
           "dbId": "fico-db",
-          "apiPath": "/api/doc/data"
+          "apiPath": "/api/doc/data/sqlx-dataset-json"
          }
         }
        ]
@@ -1226,7 +1226,7 @@
           "module": "gl",
           "file": "cmxfico_doc_meta_v1.json",
           "dbId": "fico-db",
-          "apiPath": "/api/doc/data.bin",
+          "apiPath": "/api/doc/data/tokio-zmc-msgpack",
           "binary": true
          }
         }
@@ -1258,7 +1258,7 @@
           "module": "gl",
           "file": "cmxfico_doc_meta_v1.json",
           "dbId": "fico-db",
-          "apiPath": "/api/doc/data.zmc.json"
+          "apiPath": "/api/doc/data/tokio-zmc-json"
          }
         }
        ]

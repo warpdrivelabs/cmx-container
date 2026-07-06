@@ -7,9 +7,9 @@
  *
  * 数据通道由 props 决定（一套页面覆盖全部出口）：
  *   props = { domain, application, module, file, dbId?, apiPath?, binary? }
- *     - apiPath 缺省 /api/doc/data（老 DataSet+JSON）
- *     - binary:true → 走 msgpack 二进制通道（/api/doc/data.bin 等），页面用 arrayBuffer+decode
- *     - 其它 apiPath（/api/doc/data.sqlx.bin, /api/doc/data.zmc.json ...）按需
+ *     - apiPath 缺省 /api/doc/data/sqlx-dataset-json（老 DataSet+JSON）
+ *     - binary:true → 走 msgpack 二进制通道（/api/doc/data/tokio-zmc-msgpack 等），页面用 arrayBuffer+decode
+ *     - 其它 apiPath（/api/doc/data/sqlx-zmc-msgpack, /api/doc/data/tokio-zmc-json ...）按需
  *
  * 契约：export default { defaultView:'content', views:{ content(ctx) } }；ctx.props 来自菜单。
  * CMX 类 + 通用助手（buildMasterSlaveSchema/layerPaths/buildColumnModel/loadDocData）经
@@ -157,7 +157,7 @@ async function loadVoucher (root) {
   const ms = setupGrids(root, meta)   // 动态建 N grid + schema（幂等）
   if (!ms) return
 
-  setMsg(root, `装载数据…（${def.apiPath || '/api/doc/data'}${def.binary ? ' · 二进制' : ''}）`)
+  setMsg(root, `装载数据…（${def.apiPath || '/api/doc/data/sqlx-dataset-json'}${def.binary ? ' · 二进制' : ''}）`)
   let dsMap
   try {
     dsMap = await loadData(def)

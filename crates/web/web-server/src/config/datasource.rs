@@ -70,7 +70,7 @@ pub async fn init_datasources() -> crate::Result<()> {
         )));
     }
 
-    // 并行注册 PG 数据源到 tokio-postgres 管理器(供零拷贝二进制新链路 /api/doc/data.bin 用)。
+    // 并行注册 PG 数据源到 tokio-postgres 管理器(供零拷贝新链路 /api/doc/data/tokio-zmc-* 用)。
     // 仅注册 Postgres 类型;失败不阻断启动(新链路是可选增量,老 sqlx 链路已注册成功)。
     register_pg_datasources(configs.clone()).await;
 

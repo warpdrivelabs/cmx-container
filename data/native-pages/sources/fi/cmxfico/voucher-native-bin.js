@@ -4,8 +4,8 @@
  * 第四套实现。与 voucher-native.js（第二套）同一四层主从凭证表
  * （cv_batch → cv_header → cv_acc_line → cv_aux_line），呈现方式完全一致，
  * **唯一差异在装载通道**：
- *   - 第二套：GET /api/doc/data（sqlx + 老 DataSet → JSON）
- *   - 本套  ：GET /api/doc/data.bin（tokio-postgres + ZmcDataSet → 列式二进制 msgpack，零拷贝）
+ *   - 第二套：GET /api/doc/data/sqlx-dataset-json（sqlx + 老 DataSet → JSON）
+ *   - 本套  ：GET /api/doc/data/tokio-zmc-msgpack（tokio-postgres + ZmcDataSet → 列式二进制 msgpack，零拷贝）
  * 经共享助手 C.loadDocData(host, { binary:true }) 走二进制通道；解码后结构与 JSON 版逐字段
  * 同构，CmxDataSet.fromJSON 与四层 grid 零改动复用。回存（POST /api/doc/save）四套共用，未改。
  * db_id 头固定 fico-db。
@@ -200,7 +200,7 @@ async function loadVoucher (root) {
 
   let dsMap
   try {
-    // binary:true → GET /api/doc/data.bin（tokio + ZmcDataSet → msgpack），解码后与 JSON 版同构
+    // binary:true → GET /api/doc/data/tokio-zmc-msgpack（tokio + ZmcDataSet → msgpack），解码后与 JSON 版同构
     const r = await C.loadDocData(null, { ...DEF, dbId: DB_ID, binary: true, limit: 50 })
     dsMap = r.dsMap
     if (!dsMap || !Object.keys(dsMap).length) throw new Error('返回数据为空')

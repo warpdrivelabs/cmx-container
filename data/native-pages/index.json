@@ -137,14 +137,14 @@
     {
       "id": "fi.cmxfico.gl.voucher-native-bin",
       "name": "会计凭证（native_pages · tokio 二进制）",
-      "details": "第四套实现：同四层主从凭证表，装载走 /api/doc/data.bin（tokio-postgres + ZmcDataSet → 列式二进制 msgpack，零拷贝）",
+      "details": "第四套实现：同四层主从凭证表，装载走 /api/doc/data/tokio-zmc-msgpack（tokio-postgres + ZmcDataSet → 列式二进制 msgpack，零拷贝）",
       "sourceType": "js",
       "relPath": "fi/cmxfico/voucher-native-bin.js"
     },
     {
       "id": "fi.cmxfico.gl.voucher-native-zmcjson",
       "name": "会计凭证（native_pages · Zmc零拷贝→JSON）",
-      "details": "第五套实现：同四层主从凭证表，ZmcDataSet 零拷贝装载但纯 JSON 出口，装载走 /api/doc/data.zmc.json（tokio + ZmcDataSet → JSON，前端无需 msgpack 解码）",
+      "details": "第五套实现：同四层主从凭证表，ZmcDataSet 零拷贝装载但纯 JSON 出口，装载走 /api/doc/data/tokio-zmc-json（tokio + ZmcDataSet → JSON，前端无需 msgpack 解码）",
       "sourceType": "js",
       "relPath": "fi/cmxfico/voucher-native-zmcjson.js"
     },

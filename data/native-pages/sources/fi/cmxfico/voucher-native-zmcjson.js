@@ -6,9 +6,9 @@
  * 路（第②套）在前端完全一致——同一 CmxDataSet.fromJSON、同一组件、同一 unwrap。
  *
  * 装载通道对比：
- *   - ② native·DataSet ：GET /api/doc/data          （sqlx + 老 DataSet → JSON）
- *   - ④ native·二进制   ：GET /api/doc/data.bin       （tokio + ZmcDataSet → msgpack）
- *   - ⑤ 本套           ：GET /api/doc/data.zmc.json  （tokio + ZmcDataSet → 纯 JSON）
+ *   - ② native·DataSet ：GET /api/doc/data/sqlx-dataset-json          （sqlx + 老 DataSet → JSON）
+ *   - ④ native·二进制   ：GET /api/doc/data/tokio-zmc-msgpack       （tokio + ZmcDataSet → msgpack）
+ *   - ⑤ 本套           ：GET /api/doc/data/tokio-zmc-json  （tokio + ZmcDataSet → 纯 JSON）
  * ⑤ 与 ④ 同一 tokio 零拷贝装载器，只是出口 JSON vs 二进制——用于直观对比「零拷贝装载的
  * JSON 出口」和「msgpack 二进制出口」在前端的差异（前端拿到的结构逐字段同构）。
  * db_id 头固定 fico-db。回存（POST /api/doc/save）五套共用，未改。
@@ -21,12 +21,12 @@ const DEF = { domain: 'fi', application: 'cmxfico', module: 'gl', file: 'cmxfico
 const DB_ID = 'fico-db'
 const ROOT_TABLE = 'cv_batch'
 // 第五套专用端点：ZmcDataSet 装载 + 纯 JSON 出口
-const API_PATH = '/api/doc/data.zmc.json'
+const API_PATH = '/api/doc/data/tokio-zmc-json'
 
 const cmx = () => (typeof globalThis !== 'undefined' && globalThis.__cmxDataComp) || {}
 
 /* ── 后端 API ─────────────────────────────────────────────────────────── */
-/* 装载走本页 apiGet + unwrap（GET /api/doc/data.zmc.json，纯 JSON），再 CmxDataSet.fromJSON；
+/* 装载走本页 apiGet + unwrap（GET /api/doc/data/tokio-zmc-json，纯 JSON），再 CmxDataSet.fromJSON；
    save 走 apiPost。unwrap 同时兼容「门户 api-client 已拆信封的裸 data」与「原始 {code,msg,data}」
    两种形态——这正是不用 C.loadDocData 的原因：其 JSON 路仍按 {code,data} 硬校验，
    遇到门户拦截器拆过信封的裸 data 会误报失败（数据到了前端却不进 grid）。 */

@@ -872,7 +872,7 @@
     {
       "id": "fi.cmxfico.gl.voucher-doc-sqlxbin",
       "name": "会计凭证（html_pages · Sqlx 二进制）",
-      "details": "第三套实现：cmx-fico 总账凭证四层主从，装载走 /api/doc/data.sqlx.bin（sqlx + ZmcDataSet → 列式二进制 msgpack），基于 fico-db",
+      "details": "第三套实现：cmx-fico 总账凭证四层主从，装载走 /api/doc/data/sqlx-zmc-msgpack（sqlx + ZmcDataSet → 列式二进制 msgpack），基于 fico-db",
       "domain": "fi",
       "app": "cmxfico",
       "module": "gl",

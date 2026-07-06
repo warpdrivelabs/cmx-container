@@ -33,7 +33,7 @@ use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
 use crate::{ApiResp, Result};
 
-/// GET /api/doc/data 查询参数。
+/// `/api/doc/data/*` 装载端点共用查询参数。
 #[derive(Debug, Deserialize)]
 pub struct DocDataQuery {
     pub domain: String,
@@ -86,13 +86,13 @@ pub async fn doc_data_sqlx_dataset_json(
     Ok(Json(ApiResp::ok(pkg)))
 }
 
-/// `GET /api/doc/data.bin` —— 装载单据数据为**列式二进制包**(msgpack,零拷贝新链路)。
+/// `GET /api/doc/data/tokio-zmc-msgpack` —— tokio-postgres + ZmcDataSet(零拷贝) + **msgpack 二进制**。
 ///
-/// 与 [`doc_data`] 同参数、同 columnar 结构,但:
+/// 与 [`doc_data_sqlx_dataset_json`] 同参数、同 columnar 结构,但:
 /// - 走 tokio-postgres + `ZmcDocLoader`(持有原始 Row,零拷贝);
 /// - 出口是 msgpack 二进制信封 `{code, msg, data:<列式包>}`,`Content-Type: application/x-msgpack`;
 /// - 前端 `msgpack.decode` 后结构与 JSON 版逐字段同构,`CmxDataSet.fromJSON` 无改动复用。
-pub async fn doc_data_bin(
+pub async fn doc_data_tokio_zmc_msgpack(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<DocDataQuery>,
@@ -102,7 +102,7 @@ pub async fn doc_data_bin(
     use cmx_biz::doc::ZmcDocLoader;
     use cmx_database_pg::get_default_pg_db_manager;
 
-    debug!("{:<12} - doc_data_bin {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - doc_data_tokio_zmc_msgpack {}/{}", "HANDLER", q.module, q.file);
     let mm = get_default_pg_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
@@ -136,16 +136,15 @@ pub async fn doc_data_bin(
         .into_response())
 }
 
-/// `GET /api/doc/data.sqlx.bin` —— 装载单据数据为**列式二进制包**(msgpack),但走 **sqlx** 驱动。
+/// `GET /api/doc/data/sqlx-zmc-msgpack` —— sqlx + ZmcDataSet(零拷贝) + **msgpack 二进制**。
 ///
-/// 与 [`doc_data_bin`] 逐字节同构的出口(同 columnar 结构、同 msgpack 信封、同
-/// `Content-Type: application/x-msgpack`),唯一差异是数据通道:
+/// 与 [`doc_data_tokio_zmc_msgpack`] 逐字节同构的出口(同 columnar 结构、同 msgpack 信封、同
+/// `Content-Type: application/x-msgpack`),唯一差异是数据通道(驱动):
 /// - 走 sqlx(`cmx-database`) + [`ZmcDocLoaderSqlx`],持有原始 sqlx PgRow 零拷贝编码;
-/// - 而 [`doc_data_bin`] 走 tokio-postgres(`cmx-database-pg`) + `ZmcDocLoader`。
+/// - 而 [`doc_data_tokio_zmc_msgpack`] 走 tokio-postgres(`cmx-database-pg`) + `ZmcDocLoader`。
 ///
-/// 供「Sqlx + ZmcDataSet + 二进制」的第三套实现使用。前端 `msgpack.decode` 后与 JSON 版同构,
-/// `CmxDataSet.fromJSON` 无改动复用。
-pub async fn doc_data_bin_sqlx(
+/// 前端 `msgpack.decode` 后与 JSON 版同构,`CmxDataSet.fromJSON` 无改动复用。
+pub async fn doc_data_sqlx_zmc_msgpack(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<DocDataQuery>,
@@ -155,7 +154,7 @@ pub async fn doc_data_bin_sqlx(
     use cmx_biz::doc::ZmcDocLoaderSqlx;
 
     debug!(
-        "{:<12} - doc_data_bin_sqlx {}/{}",
+        "{:<12} - doc_data_sqlx_zmc_msgpack {}/{}",
         "HANDLER", q.module, q.file
     );
     let mm = get_default_db_manager();
@@ -189,18 +188,18 @@ pub async fn doc_data_bin_sqlx(
         .into_response())
 }
 
-/// `GET /api/doc/data.zmc.json` —— 用 **ZmcDataSet(零拷贝)** 装载,但出口是**纯 JSON 列式包**
+/// `GET /api/doc/data/tokio-zmc-json` —— tokio-postgres + ZmcDataSet(零拷贝装载) + **纯 JSON 列式包**
 /// (走普通 ApiResp 信封,`Content-Type: application/json`),前端**无需 msgpack 解码**,
-/// 直接 `CmxDataSet.fromJSON`。第五套实现。
+/// 直接 `CmxDataSet.fromJSON`。
 ///
 /// 与各路对比:
-/// - [`doc_data`]        : sqlx + 老 `DataSet` → `ColumnarCodec` JSON(老链路)
-/// - [`doc_data_bin`]    : tokio + `ZmcDataSet` → msgpack 二进制
-/// - **本 handler**      : tokio + `ZmcDataSet` → **JSON**(零拷贝装载,JSON 出口)
+/// - [`doc_data_sqlx_dataset_json`] : sqlx + 老 `DataSet` → `ColumnarCodec` JSON(老链路)
+/// - [`doc_data_tokio_zmc_msgpack`] : tokio + `ZmcDataSet` → msgpack 二进制
+/// - **本 handler**                 : tokio + `ZmcDataSet` → **JSON**(零拷贝装载,JSON 出口)
 ///
-/// 即与 [`doc_data_bin`] 同一 tokio 零拷贝装载器,仅把出口 `encode_columnar_binary`
-/// 换成 `encode_columnar_json`。产出与老 `doc_data` 逐字段同构,前端组件零改动复用。
-pub async fn doc_data_zmc_json(
+/// 即与 [`doc_data_tokio_zmc_msgpack`] 同一 tokio 零拷贝装载器,仅把出口 `encode_columnar_binary`
+/// 换成 `encode_columnar_json`。产出与 `doc_data_sqlx_dataset_json` 逐字段同构,前端组件零改动复用。
+pub async fn doc_data_tokio_zmc_json(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<DocDataQuery>,
@@ -210,7 +209,7 @@ pub async fn doc_data_zmc_json(
     use cmx_database_pg::get_default_pg_db_manager;
 
     debug!(
-        "{:<12} - doc_data_zmc_json {}/{}",
+        "{:<12} - doc_data_tokio_zmc_json {}/{}",
         "HANDLER", q.module, q.file
     );
     let mm = get_default_pg_db_manager();
