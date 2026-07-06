@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use cmx_core::model::module::FormDefinition;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::FormDefinitionImporter;
+use cmx_traits::resource::FormDefinitionImporter;
 use std::sync::Arc;
 use tracing::{info, warn};
 

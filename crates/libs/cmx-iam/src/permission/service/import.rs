@@ -11,7 +11,7 @@ use std::io::Read;
 use cmx_core::SVRContext;
 use cmx_core::model::cell::DataValue;
 use cmx_traits::error::TraitError;
-use cmx_traits::plugin::PluginDataImportResult;
+use cmx_traits::resource::ResourceDataImportResult;
 use tracing::{info, instrument, warn};
 
 use crate::audit_helper::AuditHelper;
@@ -126,7 +126,7 @@ impl PermissionServiceImpl {
         app_code: &str,
         module_code: &str,
         zip_data: &[u8],
-    ) -> Result<PluginDataImportResult, TraitError> {
+    ) -> Result<ResourceDataImportResult, TraitError> {
         // 1. 解压 + 解析 + 校验 JSON
         let definitions = Self::parse_and_validate_permission_zip(zip_data)?;
 
@@ -399,7 +399,7 @@ impl PermissionServiceImpl {
             "权限导入完成"
         );
 
-        Ok(PluginDataImportResult {
+        Ok(ResourceDataImportResult {
             success: true,
             message: format!("导入完成: 新增 {} / 更新 {} ", created_count, updated_count),
             created_count,
@@ -423,7 +423,7 @@ impl PermissionServiceImpl {
         domain_code: &str,
         app_code: &str,
         module_code: &str,
-    ) -> Result<PluginDataImportResult, TraitError> {
+    ) -> Result<ResourceDataImportResult, TraitError> {
         // 1. 开启事务
         let txn_ctx = self.mm.get_transaction_context();
         let guard = txn_ctx
@@ -530,7 +530,7 @@ impl PermissionServiceImpl {
             "权限清理完成"
         );
 
-        Ok(PluginDataImportResult {
+        Ok(ResourceDataImportResult {
             success: true,
             message: format!("清理完成: 删除 {} 条权限", deleted_count),
             created_count: 0,

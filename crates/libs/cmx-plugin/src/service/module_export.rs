@@ -18,7 +18,7 @@ use cmx_core::model::module::manifest::{
     ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources, ModuleStats,
 };
 use cmx_database::DatabaseManager;
-use cmx_traits::module::DefinitionImporterBundle;
+use cmx_traits::resource::DefinitionImporterBundle;
 use cmx_utils::zip::ZipCompressor;
 use tracing::{info, warn};
 

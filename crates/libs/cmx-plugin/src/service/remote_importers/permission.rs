@@ -1,13 +1,13 @@
 //! `RemotePermissionDefinitionImporter` — 权限定义的远程(gRPC)实现。
 //!
 //! 权限的远程导入走 cmx-iam 既有的 `PermissionFile` ZIP 格式(permdata/*.json),
-//! 与 PluginDataImporterImpl 的 Perm 类别处理对齐。
+//! 与 ResourceDataImporterImpl 的 Perm 类别处理对齐。
 
 use async_trait::async_trait;
 use cmx_core::model::iam::{PermissionDefinition, PermissionFile};
 use cmx_traits::error::TraitError;
-use cmx_traits::iam::PermissionDefinitionImporter;
-use cmx_traits::plugin::{PluginDataCategory, PluginDataImportRequest};
+use cmx_traits::resource::PermissionDefinitionImporter;
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use tracing::info;
 
 use super::RemoteImporterContext;
@@ -49,8 +49,8 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
         )
         .map_err(|e| TraitError::Business(format!("打包权限定义失败: {e}")))?;
 
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Perm,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Perm,
             domain_code: domain_code.to_string(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),
@@ -79,8 +79,8 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
         app_code: &str,
         module_code: &str,
     ) -> Result<Vec<PermissionDefinition>, TraitError> {
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Perm,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Perm,
             domain_code: domain_code.to_string(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),

@@ -1,6 +1,6 @@
-//! 插件数据导入器实现 — `PluginDataImporterImpl`。
+//! 插件数据导入器实现 — `ResourceDataImporterImpl`。
 //!
-//! 实现 `cmx_traits::plugin::PluginDataImporter` trait，按 `PluginDataCategory`
+//! 实现 `cmx_traits::resource::ResourceDataImporter` trait，按 `ResourceDataCategory`
 //! 路由到对应的定义导入器。支持 Perm(权限)/Form(表单)/Menu(菜单) 类别。
 //!
 //! # 归属说明
@@ -16,11 +16,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use cmx_core::model::module::{FormDefinition, MenuDefinition};
 use cmx_traits::error::TraitError;
-use cmx_traits::iam::{PermissionDefinitionImporter, PermissionZipImporter};
-use cmx_traits::module::{FormDefinitionImporter, MenuDefinitionImporter};
-use cmx_traits::plugin::{
-    PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult,
-    PluginDataImporter, PluginDataListResult,
+use cmx_traits::resource::{
+    FormDefinitionImporter, MenuDefinitionImporter, PermissionDefinitionImporter,
+    PermissionZipImporter,
+};
+use cmx_traits::resource::{
+    ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest,
+    ResourceDataImportResult, ResourceDataImporter, ResourceDataListResult,
 };
 
 /// 插件数据导入器实现（多类别路由器）。
@@ -29,7 +31,7 @@ use cmx_traits::plugin::{
 /// - `perm_zip_importer`: Perm 类别的 ZIP 格式导入/清理(由 cmx-iam 实现)
 /// - `perm_def_importer`: Perm 类别的结构化定义导入/导出(由 cmx-iam 实现)
 /// - `form_importer` / `menu_importer`: Form/Menu 类别的结构化定义(由 cmx-biz 本地实现)
-pub struct PluginDataImporterImpl {
+pub struct ResourceDataImporterImpl {
     /// 权限 ZIP 导入器(Perm 类别的 ZIP permdata 格式,含 diff/审计/缓存)
     perm_zip_importer: Arc<dyn PermissionZipImporter>,
     /// 权限定义导入器(Perm 类别的结构化 apply/list)
@@ -40,7 +42,7 @@ pub struct PluginDataImporterImpl {
     menu_importer: Option<Arc<dyn MenuDefinitionImporter>>,
 }
 
-impl PluginDataImporterImpl {
+impl ResourceDataImporterImpl {
     /// 创建新的插件数据导入器。
     ///
     /// # Arguments
@@ -95,14 +97,14 @@ impl PluginDataImporterImpl {
 }
 
 #[async_trait]
-impl PluginDataImporter for PluginDataImporterImpl {
-    /// 导入插件数据。按 `PluginDataCategory` 路由。
+impl ResourceDataImporter for ResourceDataImporterImpl {
+    /// 导入插件数据。按 `ResourceDataCategory` 路由。
     async fn import_data(
         &self,
-        request: PluginDataImportRequest,
-    ) -> Result<PluginDataImportResult, TraitError> {
+        request: ResourceDataImportRequest,
+    ) -> Result<ResourceDataImportResult, TraitError> {
         match request.category {
-            PluginDataCategory::Perm => {
+            ResourceDataCategory::Perm => {
                 self.perm_zip_importer
                     .import_permissions_zip(
                         &request.domain_code,
@@ -112,7 +114,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                     )
                     .await
             }
-            PluginDataCategory::Form => {
+            ResourceDataCategory::Form => {
                 let Some(importer) = &self.form_importer else {
                     return Err(TraitError::Business(
                         "未注入 FormDefinitionImporter,不支持远程表单导入".to_string(),
@@ -133,7 +135,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         &defs,
                     )
                     .await?;
-                Ok(PluginDataImportResult {
+                Ok(ResourceDataImportResult {
                     success: true,
                     message: format!("远程表单导入完成: {count} 条"),
                     created_count: count as u32,
@@ -141,7 +143,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                     deleted_count: 0,
                 })
             }
-            PluginDataCategory::Menu => {
+            ResourceDataCategory::Menu => {
                 let Some(importer) = &self.menu_importer else {
                     return Err(TraitError::Business(
                         "未注入 MenuDefinitionImporter,不支持远程菜单导入".to_string(),
@@ -162,7 +164,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                         &defs,
                     )
                     .await?;
-                Ok(PluginDataImportResult {
+                Ok(ResourceDataImportResult {
                     success: true,
                     message: format!("远程菜单导入完成: {count} 条"),
                     created_count: count as u32,
@@ -180,10 +182,10 @@ impl PluginDataImporter for PluginDataImporterImpl {
     /// 清理插件数据。仅支持 Perm。
     async fn cleanup_data(
         &self,
-        request: PluginDataCleanupRequest,
-    ) -> Result<PluginDataImportResult, TraitError> {
+        request: ResourceDataCleanupRequest,
+    ) -> Result<ResourceDataImportResult, TraitError> {
         match request.category {
-            PluginDataCategory::Perm => {
+            ResourceDataCategory::Perm => {
                 self.perm_zip_importer
                     .cleanup_permissions_zip(
                         &request.domain_code,
@@ -202,10 +204,10 @@ impl PluginDataImporter for PluginDataImporterImpl {
     /// 查询（导出）插件数据，返回 JSON 序列化的定义列表。
     async fn list_data(
         &self,
-        request: PluginDataImportRequest,
-    ) -> Result<PluginDataListResult, TraitError> {
+        request: ResourceDataImportRequest,
+    ) -> Result<ResourceDataListResult, TraitError> {
         match request.category {
-            PluginDataCategory::Form => {
+            ResourceDataCategory::Form => {
                 let Some(importer) = &self.form_importer else {
                     return Err(TraitError::Business(
                         "未注入 FormDefinitionImporter,不支持远程表单导出".to_string(),
@@ -214,13 +216,13 @@ impl PluginDataImporter for PluginDataImporterImpl {
                 let defs = importer.list_form_definitions(&request.module_code).await?;
                 let json_data = serde_json::to_vec(&defs)
                     .map_err(|e| TraitError::Business(format!("序列化表单定义失败: {e}")))?;
-                Ok(PluginDataListResult {
+                Ok(ResourceDataListResult {
                     success: true,
                     message: format!("查询到 {} 条表单定义", defs.len()),
                     json_data,
                 })
             }
-            PluginDataCategory::Menu => {
+            ResourceDataCategory::Menu => {
                 let Some(importer) = &self.menu_importer else {
                     return Err(TraitError::Business(
                         "未注入 MenuDefinitionImporter,不支持远程菜单导出".to_string(),
@@ -229,13 +231,13 @@ impl PluginDataImporter for PluginDataImporterImpl {
                 let defs = importer.list_menu_definitions(&request.module_code).await?;
                 let json_data = serde_json::to_vec(&defs)
                     .map_err(|e| TraitError::Business(format!("序列化菜单定义失败: {e}")))?;
-                Ok(PluginDataListResult {
+                Ok(ResourceDataListResult {
                     success: true,
                     message: format!("查询到 {} 条菜单定义", defs.len()),
                     json_data,
                 })
             }
-            PluginDataCategory::Perm => {
+            ResourceDataCategory::Perm => {
                 let defs = self
                     .perm_def_importer
                     .list_permission_definitions(
@@ -246,7 +248,7 @@ impl PluginDataImporter for PluginDataImporterImpl {
                     .await?;
                 let json_data = serde_json::to_vec(&defs)
                     .map_err(|e| TraitError::Business(format!("序列化权限定义失败: {e}")))?;
-                Ok(PluginDataListResult {
+                Ok(ResourceDataListResult {
                     success: true,
                     message: format!("查询到 {} 条权限定义", defs.len()),
                     json_data,

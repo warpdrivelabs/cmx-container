@@ -137,9 +137,9 @@ async fn main() -> Result<()> {
     let audit_logger = build_audit_logger().await?;
 
     // 初始化 IAM 基础服务（创建 UserAuthQueryImpl 供 AuthService 共享）
-    // 同时产出 PluginDataImporter 和 DefinitionImporterBundle，
+    // 同时产出 ResourceDataImporter 和 DefinitionImporterBundle，
     // 供 HTTP 端点/gRPC 服务端统一调用权限导入逻辑，以及模块导入/导出复用统一导入器。
-    let (iam_state, user_auth_query, iam_config, plugin_data_importer, definition_importers) =
+    let (iam_state, user_auth_query, iam_config, resource_data_importer, definition_importers) =
         init_iam_services(audit_logger.clone()).await?;
 
     // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
@@ -164,7 +164,7 @@ async fn main() -> Result<()> {
     }
 
     // 初始化 RPC 子系统（默认关闭，需配置 [rpc] enabled = true 启用）。
-    // 将 PluginDataImporter 透传给 gRPC 服务端，启用 CmxPluginDataService。
+    // 将 ResourceDataImporter 透传给 gRPC 服务端，启用 CmxResourceDataService。
     // 组装层构造 cmx-biz 的 BizFunctionInvoker（封装 RuntimeInvoker + PluginQuery）注入 cmx-rpc，
     // 使基础设施层 cmx-rpc 无需直接依赖业务层 cmx-biz。
     let function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker> =
@@ -175,7 +175,7 @@ async fn main() -> Result<()> {
     let grpc_port = init_rpc(
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
         function_invoker,
-        plugin_data_importer.clone(),
+        resource_data_importer.clone(),
     )
     .await?;
 
@@ -193,9 +193,9 @@ async fn main() -> Result<()> {
         .with_auth_service(auth_service)
         .with_iam(iam_state);
 
-    // 注入 PluginDataImporter（HTTP 端点 /iam/permissions/import 和 /cleanup 使用）
-    let app_state = if let Some(importer) = plugin_data_importer {
-        app_state.with_plugin_data_importer(importer)
+    // 注入 ResourceDataImporter（HTTP 端点 /iam/permissions/import 和 /cleanup 使用）
+    let app_state = if let Some(importer) = resource_data_importer {
+        app_state.with_resource_data_importer(importer)
     } else {
         app_state
     };

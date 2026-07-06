@@ -9,7 +9,7 @@ use cmx_rpc::bundle::ServerDeps;
 use cmx_rpc::config::RpcConfig;
 use cmx_rpc::{init_rpc_clients, start_grpc_server};
 use cmx_traits::function_invoker::FunctionInvoker;
-use cmx_traits::plugin::PluginDataImporter;
+use cmx_traits::resource::ResourceDataImporter;
 use cmx_traits::service::ServiceInvoker;
 use cmx_utils::ConfigManager;
 use tracing::{info, warn};
@@ -32,7 +32,7 @@ pub use crate::Error;
 ///   由调用方在组装层构造 cmx-biz 的 `BizFunctionInvoker` 实现后注入，使 cmx-rpc
 ///   无需直接依赖 cmx-biz）。
 /// * `data_importer` - 插件数据导入器（可选）。注入后 gRPC 服务端可处理
-///   `CmxPluginDataService` 的 import/cleanup 请求。
+///   `CmxResourceDataService` 的 import/cleanup 请求。
 ///
 /// # Returns
 ///
@@ -41,7 +41,7 @@ pub use crate::Error;
 pub async fn init_rpc(
     service_invoker: Arc<dyn ServiceInvoker>,
     function_invoker: Arc<dyn FunctionInvoker>,
-    data_importer: Option<Arc<dyn PluginDataImporter>>,
+    data_importer: Option<Arc<dyn ResourceDataImporter>>,
 ) -> crate::Result<Option<u16>> {
     let rpc_config = load_rpc_config();
 

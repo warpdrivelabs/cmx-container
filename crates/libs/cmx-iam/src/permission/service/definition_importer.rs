@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::iam::PermissionDefinition;
 use cmx_traits::error::TraitError;
-use cmx_traits::iam::PermissionDefinitionImporter;
+use cmx_traits::resource::PermissionDefinitionImporter;
 use tracing::{info, warn};
 
 use crate::permission::service::PermissionServiceImpl;

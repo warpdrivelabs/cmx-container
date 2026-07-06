@@ -4,7 +4,7 @@
 //!
 //! # 传输方式(由 `center_client.mode` 决定)
 //!
-//! - `grpc`:经 gRPC(`PluginDataClient` → `CmxPluginDataService`)传输
+//! - `grpc`:经 gRPC(`ResourceDataClient` → `CmxResourceDataService`)传输
 //! - `http_url` / `http_discovery`:经 HTTP multipart form-data 传输(POST 到各中心 `/import` 端点)
 //!
 //! 两种传输对 importer 透明:`RemoteImporterContext::send` 内部按 mode 分发,
@@ -32,7 +32,7 @@ use rand::seq::SliceRandom;
 use crate::center_client::config::CenterClientConfig;
 use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
-use cmx_traits::plugin::{PluginDataImportRequest, PluginDataImportResult, PluginDataListResult};
+use cmx_traits::resource::{ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult};
 
 /// 远程导入器共享上下文(传输方式 + 服务名/URL 解析配置)。
 #[derive(Clone)]
@@ -83,13 +83,13 @@ impl RemoteImporterContext {
 
     /// 统一发送入口:按 `config.mode` 分发到 gRPC 或 HTTP 传输。
     ///
-    /// 各 Remote importer 把结构体打包为 ZIP 后构造 `PluginDataImportRequest`,
+    /// 各 Remote importer 把结构体打包为 ZIP 后构造 `ResourceDataImportRequest`,
     /// 调本方法发送,不感知传输细节。
     pub async fn send(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataImportResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataImportResult> {
         match self.config.mode.as_str() {
             "grpc" => self.send_via_grpc(category, request).await,
             "http_url" | "http_discovery" => self.send_via_http(category, request).await,
@@ -106,8 +106,8 @@ impl RemoteImporterContext {
     pub async fn send_list(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataListResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataListResult> {
         match self.config.mode.as_str() {
             "grpc" => self.list_via_grpc(category, request).await,
             "http_url" | "http_discovery" => self.list_via_http(category, request).await,
@@ -117,12 +117,12 @@ impl RemoteImporterContext {
         }
     }
 
-    /// gRPC 查询:经 `cmx_rpc::plugin_data_client()` 调用远程 `ListPluginData`。
+    /// gRPC 查询:经 `cmx_rpc::resource_data_client()` 调用远程 `ListResourceData`。
     async fn list_via_grpc(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataListResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataListResult> {
         if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
                 "RPC 未初始化,无法远程导出 {} (center_client.mode=grpc 需启用 [rpc])",
@@ -130,9 +130,9 @@ impl RemoteImporterContext {
             )));
         }
         let service_name = self.resolve_service_name(category)?;
-        let client = cmx_rpc::plugin_data_client();
+        let client = cmx_rpc::resource_data_client();
         client
-            .list_plugin_data(&service_name, request)
+            .list_resource_data(&service_name, request)
             .await
             .map_err(|e| {
                 PluginError::CenterData(format!("gRPC 远程 {} 导出失败: {e}", category.center_name()))
@@ -143,8 +143,8 @@ impl RemoteImporterContext {
     async fn list_via_http(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataListResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataListResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
             PluginError::CenterData("HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string())
         })?;
@@ -211,7 +211,7 @@ impl RemoteImporterContext {
         } else {
             serde_json::to_vec(&data).unwrap_or_default()
         };
-        Ok(PluginDataListResult {
+        Ok(ResourceDataListResult {
             success: true,
             message: format!("HTTP {} 导出完成", category.center_name()),
             json_data,
@@ -229,12 +229,12 @@ impl RemoteImporterContext {
         }
     }
 
-    /// gRPC 传输:经 `cmx_rpc::plugin_data_client()` 调用远程 `CmxPluginDataService`。
+    /// gRPC 传输:经 `cmx_rpc::resource_data_client()` 调用远程 `CmxResourceDataService`。
     async fn send_via_grpc(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataImportResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataImportResult> {
         if !cmx_rpc::global::GlobalRpcClient::is_initialized() {
             return Err(PluginError::CenterData(format!(
                 "RPC 未初始化,无法远程导入 {} (center_client.mode=grpc 需启用 [rpc])",
@@ -242,9 +242,9 @@ impl RemoteImporterContext {
             )));
         }
         let service_name = self.resolve_service_name(category)?;
-        let client = cmx_rpc::plugin_data_client();
+        let client = cmx_rpc::resource_data_client();
         client
-            .import_plugin_data(&service_name, request)
+            .import_resource_data(&service_name, request)
             .await
             .map_err(|e| {
                 PluginError::CenterData(format!("gRPC 远程 {} 导入失败: {e}", category.center_name()))
@@ -258,8 +258,8 @@ impl RemoteImporterContext {
     async fn send_via_http(
         &self,
         category: DataCategory,
-        request: PluginDataImportRequest,
-    ) -> PluginResult<PluginDataImportResult> {
+        request: ResourceDataImportRequest,
+    ) -> PluginResult<ResourceDataImportResult> {
         let http_client = self.http_client.as_ref().ok_or_else(|| {
             PluginError::CenterData("HTTP 客户端未初始化(mode 非 http_url/http_discovery)".to_string())
         })?;
@@ -374,7 +374,7 @@ impl RemoteImporterContext {
 }
 
 /// 解析 HTTP 接收端响应(ApiResp<ImportResultDto> JSON)。
-fn parse_http_response(body: &str, category: DataCategory) -> PluginResult<PluginDataImportResult> {
+fn parse_http_response(body: &str, category: DataCategory) -> PluginResult<ResourceDataImportResult> {
     let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
         PluginError::CenterData(format!(
             "解析 {} 中心响应 JSON 失败: {e} (body={body})",
@@ -393,7 +393,7 @@ fn parse_http_response(body: &str, category: DataCategory) -> PluginResult<Plugi
         )));
     }
     let data = json.get("data").cloned().unwrap_or_default();
-    Ok(PluginDataImportResult {
+    Ok(ResourceDataImportResult {
         success: data.get("success").and_then(|v| v.as_bool()).unwrap_or(true),
         message: data
             .get("message")

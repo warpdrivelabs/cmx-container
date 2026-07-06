@@ -40,8 +40,8 @@ fn inner_routes() -> Router<CmxAppState> {
         .route("/functions", post(plugin_functions))
         .route("/{plugin_id}", get(plugin_get))
         // 通用插件数据导入/导出(供远程模式 http_url/http_discovery 调用)
-        .route("/data/import", post(data_handler::import_plugin_data))
-        .route("/data/list", get(data_handler::list_plugin_data))
+        .route("/data/import", post(data_handler::import_resource_data))
+        .route("/data/list", get(data_handler::list_resource_data))
 }
 
 /// 创建插件管理路由

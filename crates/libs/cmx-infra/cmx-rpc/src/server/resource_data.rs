@@ -1,38 +1,39 @@
-//! 插件数据管理 gRPC 服务端实现。
+//! 资源数据管理 gRPC 服务端实现。
 //!
-//! 实现 [`CmxPluginDataService`] trait，桥接 gRPC 请求到 [`PluginDataImporter`]。
+//! 实现 [`CmxResourceDataService`] trait，桥接 gRPC 请求到 [`ResourceDataImporter`]。
 //! `data_importer` 为可选依赖，未配置时 import/cleanup 返回失败响应。
 
 use std::sync::Arc;
 
-use cmx_rpc_gen::cmx::cmx_plugin_data_service::cmx_plugin_data_service::cmx as plugin_data_proto;
-use cmx_traits::plugin::{
-    PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImporter,
+use cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx as resource_data_proto;
+use cmx_traits::resource::{
+    ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest,
+    ResourceDataImporter,
 };
 use tracing::instrument;
 
-/// [`plugin_data_proto::CmxPluginDataService`] 的 gRPC 服务端实现。
+/// [`resource_data_proto::CmxResourceDataService`] 的 gRPC 服务端实现。
 #[derive(Clone)]
-pub struct CmxPluginDataServerImpl {
-    /// 插件数据导入器（可选，未配置时 import/cleanup 返回错误）
-    data_importer: Option<Arc<dyn PluginDataImporter>>,
+pub struct CmxResourceDataServerImpl {
+    /// 资源数据导入器（可选，未配置时 import/cleanup 返回错误）
+    data_importer: Option<Arc<dyn ResourceDataImporter>>,
 }
 
-impl CmxPluginDataServerImpl {
-    /// 创建新的插件数据管理 gRPC 服务端。
-    pub fn new(data_importer: Option<Arc<dyn PluginDataImporter>>) -> Self {
+impl CmxResourceDataServerImpl {
+    /// 创建新的资源数据管理 gRPC 服务端。
+    pub fn new(data_importer: Option<Arc<dyn ResourceDataImporter>>) -> Self {
         Self { data_importer }
     }
 }
 
-impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
-    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_import_plugin_data")]
-    fn import_plugin_data(
+impl resource_data_proto::CmxResourceDataService for CmxResourceDataServerImpl {
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_import_resource_data")]
+    fn import_resource_data(
         &self,
-        req: volo_grpc::Request<plugin_data_proto::ImportPluginDataRequest>,
+        req: volo_grpc::Request<resource_data_proto::ImportResourceDataRequest>,
     ) -> impl std::future::Future<
         Output = Result<
-            volo_grpc::Response<plugin_data_proto::ImportPluginDataResponse>,
+            volo_grpc::Response<resource_data_proto::ImportResourceDataResponse>,
             volo_grpc::Status,
         >,
     > + Send {
@@ -41,7 +42,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
             let req = req.into_inner();
 
             let Some(importer) = data_importer else {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: "data_importer 未配置".into(),
                     created_count: 0,
@@ -51,8 +52,8 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             };
 
-            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+            let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: format!(
                         "无效的数据类别: {}（有效值: menu/perm/form/flow）",
@@ -71,7 +72,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 || req.application_code.is_empty()
                 || req.module_code.is_empty()
             {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: "domain_code/application_code/module_code 不能为空".into(),
                     created_count: 0,
@@ -82,10 +83,10 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
             }
             // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
             // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
-            if matches!(category, PluginDataCategory::Perm)
+            if matches!(category, ResourceDataCategory::Perm)
                 && (req.plugin_id.is_empty() || req.app_id.is_empty() || req.version.is_empty())
             {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: "Perm 类别导入需要 plugin_id/app_id/version 非空".into(),
                     created_count: 0,
@@ -95,7 +96,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             }
 
-            let request = PluginDataImportRequest {
+            let request = ResourceDataImportRequest {
                 category,
                 domain_code: req.domain_code.to_string(),
                 application_code: req.application_code.to_string(),
@@ -108,7 +109,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
 
             match importer.import_data(request).await {
                 Ok(result) => {
-                    let response = plugin_data_proto::ImportPluginDataResponse {
+                    let response = resource_data_proto::ImportResourceDataResponse {
                         success: result.success,
                         message: result.message.into(),
                         created_count: result.created_count,
@@ -126,9 +127,9 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                         app = %req.application_code,
                         module = %req.module_code,
                         plugin_id = %req.plugin_id,
-                        "插件数据导入失败"
+                        "资源数据导入失败"
                     );
-                    let response = plugin_data_proto::ImportPluginDataResponse {
+                    let response = resource_data_proto::ImportResourceDataResponse {
                         success: false,
                         message: e.to_string().into(),
                         created_count: 0,
@@ -141,13 +142,13 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
         }
     }
 
-    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_cleanup_plugin_data")]
-    fn cleanup_plugin_data(
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_cleanup_resource_data")]
+    fn cleanup_resource_data(
         &self,
-        req: volo_grpc::Request<plugin_data_proto::CleanupPluginDataRequest>,
+        req: volo_grpc::Request<resource_data_proto::CleanupResourceDataRequest>,
     ) -> impl std::future::Future<
         Output = Result<
-            volo_grpc::Response<plugin_data_proto::ImportPluginDataResponse>,
+            volo_grpc::Response<resource_data_proto::ImportResourceDataResponse>,
             volo_grpc::Status,
         >,
     > + Send {
@@ -156,7 +157,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
             let req = req.into_inner();
 
             let Some(importer) = data_importer else {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: "data_importer 未配置".into(),
                     created_count: 0,
@@ -166,8 +167,8 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             };
 
-            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
-                let response = plugin_data_proto::ImportPluginDataResponse {
+            let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                let response = resource_data_proto::ImportResourceDataResponse {
                     success: false,
                     message: format!("无效的数据类别: {}", req.category).into(),
                     created_count: 0,
@@ -177,7 +178,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             };
 
-            let request = PluginDataCleanupRequest {
+            let request = ResourceDataCleanupRequest {
                 category,
                 domain_code: req.domain_code.to_string(),
                 application_code: req.application_code.to_string(),
@@ -188,7 +189,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
 
             match importer.cleanup_data(request).await {
                 Ok(result) => {
-                    let response = plugin_data_proto::ImportPluginDataResponse {
+                    let response = resource_data_proto::ImportResourceDataResponse {
                         success: result.success,
                         message: result.message.into(),
                         created_count: result.created_count,
@@ -206,9 +207,9 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                         app = %req.application_code,
                         module = %req.module_code,
                         plugin_id = %req.plugin_id,
-                        "插件数据清理失败"
+                        "资源数据清理失败"
                     );
-                    let response = plugin_data_proto::ImportPluginDataResponse {
+                    let response = resource_data_proto::ImportResourceDataResponse {
                         success: false,
                         message: e.to_string().into(),
                         created_count: 0,
@@ -221,13 +222,13 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
         }
     }
 
-    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_list_plugin_data")]
-    fn list_plugin_data(
+    #[instrument(target = "cmx_rpc", skip(self, req), name = "grpc_list_resource_data")]
+    fn list_resource_data(
         &self,
-        req: volo_grpc::Request<plugin_data_proto::ListPluginDataRequest>,
+        req: volo_grpc::Request<resource_data_proto::ListResourceDataRequest>,
     ) -> impl std::future::Future<
         Output = Result<
-            volo_grpc::Response<plugin_data_proto::ListPluginDataResponse>,
+            volo_grpc::Response<resource_data_proto::ListResourceDataResponse>,
             volo_grpc::Status,
         >,
     > + Send {
@@ -236,7 +237,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
             let req = req.into_inner();
 
             let Some(importer) = data_importer else {
-                let response = plugin_data_proto::ListPluginDataResponse {
+                let response = resource_data_proto::ListResourceDataResponse {
                     success: false,
                     message: "data_importer 未配置".into(),
                     json_data: Vec::new().into(),
@@ -244,8 +245,8 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             };
 
-            let Some(category) = PluginDataCategory::parse_from_str(&req.category) else {
-                let response = plugin_data_proto::ListPluginDataResponse {
+            let Some(category) = ResourceDataCategory::parse_from_str(&req.category) else {
+                let response = resource_data_proto::ListResourceDataResponse {
                     success: false,
                     message: format!("无效的数据类别: {}", req.category).into(),
                     json_data: Vec::new().into(),
@@ -254,7 +255,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
             };
 
             if req.module_code.is_empty() {
-                let response = plugin_data_proto::ListPluginDataResponse {
+                let response = resource_data_proto::ListResourceDataResponse {
                     success: false,
                     message: "module_code 不能为空".into(),
                     json_data: Vec::new().into(),
@@ -262,7 +263,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                 return Ok(volo_grpc::Response::new(response));
             }
 
-            let request = PluginDataImportRequest {
+            let request = ResourceDataImportRequest {
                 category,
                 domain_code: req.domain_code.to_string(),
                 application_code: req.application_code.to_string(),
@@ -275,7 +276,7 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
 
             match importer.list_data(request).await {
                 Ok(result) => {
-                    let response = plugin_data_proto::ListPluginDataResponse {
+                    let response = resource_data_proto::ListResourceDataResponse {
                         success: result.success,
                         message: result.message.into(),
                         json_data: result.json_data.into(),
@@ -288,9 +289,9 @@ impl plugin_data_proto::CmxPluginDataService for CmxPluginDataServerImpl {
                         error = %e,
                         category = %req.category,
                         module = %req.module_code,
-                        "插件数据查询失败"
+                        "资源数据查询失败"
                     );
-                    let response = plugin_data_proto::ListPluginDataResponse {
+                    let response = resource_data_proto::ListResourceDataResponse {
                         success: false,
                         message: e.to_string().into(),
                         json_data: Vec::new().into(),

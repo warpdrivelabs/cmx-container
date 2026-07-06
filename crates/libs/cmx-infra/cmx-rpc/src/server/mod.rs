@@ -2,10 +2,10 @@
 //!
 //! 按领域拆分为：
 //! - [`orchestrator`]：服务编排服务端（实现 `CmxServiceOrchestrator`）。
-//! - [`plugin_data`]：插件数据管理服务端（实现 `CmxPluginDataService`）。
+//! - [`resource_data`]：资源数据管理服务端（实现 `CmxResourceDataService`）。
 
 pub mod orchestrator;
-pub mod plugin_data;
+pub mod resource_data;
 
 pub use orchestrator::CmxOrchestratorServerImpl;
-pub use plugin_data::CmxPluginDataServerImpl;
+pub use resource_data::CmxResourceDataServerImpl;

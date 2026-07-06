@@ -1,7 +1,7 @@
 //! 全局 RPC 初始化状态守卫。
 //!
 //! 领域客户端各自维护 [`OnceLock`] 全局单例（见 [`crate::client::orchestrator`]
-//! 和 [`crate::client::plugin_data`]）。[`GlobalRpcClient`] 仅跟踪整体初始化状态，
+//! 和 [`crate::client::resource_data`]）。[`GlobalRpcClient`] 仅跟踪整体初始化状态，
 //! 提供 [`GlobalRpcClient::is_initialized`] 守卫供调用方在调用前检查。
 
 use std::sync::OnceLock;

@@ -5,7 +5,7 @@ pub mod cmx {
         include!(concat!(env!("OUT_DIR"), "/cmx_service_orchestrator.rs"));
     }
 
-    pub mod cmx_plugin_data_service {
-        include!(concat!(env!("OUT_DIR"), "/cmx_plugin_data_service.rs"));
+    pub mod cmx_resource_data_service {
+        include!(concat!(env!("OUT_DIR"), "/cmx_resource_data_service.rs"));
     }
 }

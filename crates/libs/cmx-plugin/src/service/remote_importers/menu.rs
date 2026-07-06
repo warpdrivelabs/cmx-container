@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use cmx_core::model::module::MenuDefinition;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::MenuDefinitionImporter;
-use cmx_traits::plugin::{PluginDataCategory, PluginDataImportRequest};
+use cmx_traits::resource::MenuDefinitionImporter;
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use tracing::info;
 
 use super::RemoteImporterContext;
@@ -37,8 +37,8 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
         let zip_data = crate::center_client::packer::pack_definitions_to_zip(definitions, "menu")
             .map_err(|e| TraitError::Business(format!("打包菜单定义失败: {e}")))?;
 
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Menu,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Menu,
             domain_code: domain_code.to_string(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),
@@ -65,8 +65,8 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
         &self,
         module_code: &str,
     ) -> Result<Vec<MenuDefinition>, TraitError> {
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Menu,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Menu,
             domain_code: String::new(),
             application_code: String::new(),
             module_code: module_code.to_string(),

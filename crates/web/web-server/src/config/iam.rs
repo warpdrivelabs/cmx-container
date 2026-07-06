@@ -18,18 +18,18 @@ use cmx_iam::rule::{ExclusionRuleServiceImpl, RuleEnforcerImpl};
 use cmx_iam::user::UserServiceImpl;
 use cmx_iam::user_auth_query_impl::UserAuthQueryImpl;
 use cmx_traits::auth::UserAuthQuery;
-use cmx_traits::plugin::PluginDataImporter;
+use cmx_traits::resource::ResourceDataImporter;
 use tracing::{info, warn};
 
 use crate::error::Result;
 
 /// 创建 IAM 服务（含 UserAuthQueryImpl）
 ///
-/// 返回 `(IamState, Arc<dyn UserAuthQuery>, IamConfig, Option<Arc<dyn PluginDataImporter>>, Option<Arc<DefinitionImporterBundle>>)`，
+/// 返回 `(IamState, Arc<dyn UserAuthQuery>, IamConfig, Option<Arc<dyn ResourceDataImporter>>, Option<Arc<DefinitionImporterBundle>>)`，
 /// 其中：
 /// - `UserAuthQuery` 供 AuthServiceImpl 共享使用；
 /// - `IamConfig` 供 finalize_iam_state 使用，避免重复解析配置；
-/// - `PluginDataImporter` 供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑，
+/// - `ResourceDataImporter` 供 HTTP 端点和 gRPC 服务端统一调用权限导入/清理逻辑，
 ///   仅当 `PermissionServiceImpl` 成功创建时返回 `Some`。
 /// - `DefinitionImporterBundle` 供模块导入/导出(CmxAppState → ModuleInstallService/ExportService)
 ///   复用统一的表单/菜单/元数据/权限导入器,仅当 `PermissionServiceImpl` 成功创建时返回 `Some`。
@@ -43,8 +43,8 @@ pub async fn init_iam_services(
     Arc<IamState>,
     Arc<dyn UserAuthQuery>,
     IamConfig,
-    Option<Arc<dyn PluginDataImporter>>,
-    Option<Arc<cmx_traits::module::DefinitionImporterBundle>>,
+    Option<Arc<dyn ResourceDataImporter>>,
+    Option<Arc<cmx_traits::resource::DefinitionImporterBundle>>,
 )> {
     // 1. 加载 IAM 配置
     let iam_config = load_iam_config();
@@ -89,7 +89,7 @@ pub async fn init_iam_services(
     );
 
     // 创建 PermissionServiceImpl 时保留具体类型 Arc<PermissionServiceImpl>，
-    // 用于构造 PluginDataImporterImpl（固有方法 import_permissions/cleanup_permissions
+    // 用于构造 ResourceDataImporterImpl（固有方法 import_permissions/cleanup_permissions
     // 不在 trait 上，必须通过具体类型调用）。
     let permission_service_impl = Arc::new(
         PermissionServiceImpl::new(mm.clone(), iam_config.clone())
@@ -102,19 +102,19 @@ pub async fn init_iam_services(
 
     let default_db_id = mm.get_default_db_id().await;
 
-    // 构造插件数据导入器（HTTP 端点和 gRPC 服务端共用）。
-    // PluginDataImporterImpl 现位于 cmx-biz(多类别路由器),通过 trait 对象持有权限服务,
+    // 构造资源数据导入器（HTTP 端点和 gRPC 服务端共用）。
+    // ResourceDataImporterImpl 现位于 cmx-biz(多类别路由器),通过 trait 对象持有权限服务,
     // 无需依赖 cmx-iam 的具体类型。PermissionServiceImpl 同时实现:
     //   - PermissionZipImporter (Perm 类别的 ZIP permdata 导入/清理)
     //   - PermissionDefinitionImporter (Perm 类别的结构化 apply/list)
-    let receiver_form_importer: Arc<dyn cmx_traits::module::FormDefinitionImporter> = Arc::new(
+    let receiver_form_importer: Arc<dyn cmx_traits::resource::FormDefinitionImporter> = Arc::new(
         cmx_biz::form::LocalFormDefinitionImporter::new(mm.clone(), default_db_id.clone()),
     );
-    let receiver_menu_importer: Arc<dyn cmx_traits::module::MenuDefinitionImporter> = Arc::new(
+    let receiver_menu_importer: Arc<dyn cmx_traits::resource::MenuDefinitionImporter> = Arc::new(
         cmx_biz::menu::LocalMenuDefinitionImporter::new(mm.clone(), default_db_id.clone()),
     );
-    let plugin_data_importer: Arc<dyn PluginDataImporter> = Arc::new(
-        cmx_biz::plugin_data_importer::PluginDataImporterImpl::new(
+    let resource_data_importer: Arc<dyn ResourceDataImporter> = Arc::new(
+        cmx_biz::resource_importer::ResourceDataImporterImpl::new(
             permission_service_impl.clone(),
             permission_service_impl.clone(),
         )
@@ -130,12 +130,12 @@ pub async fn init_iam_services(
         center_config.mode.as_str(),
         "grpc" | "http_url" | "http_discovery"
     );
-    let definition_importers: Arc<cmx_traits::module::DefinitionImporterBundle> = if is_remote {
+    let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if is_remote {
         tracing::info!("模块资源导入器: 远程模式({})", center_config.mode);
         let remote_ctx = cmx_plugin::service::remote_importers::RemoteImporterContext::new(
             center_config,
         );
-        Arc::new(cmx_traits::module::DefinitionImporterBundle {
+        Arc::new(cmx_traits::resource::DefinitionImporterBundle {
             form: Arc::new(
                 cmx_plugin::service::remote_importers::RemoteFormDefinitionImporter::new(
                     remote_ctx.clone(),
@@ -160,7 +160,7 @@ pub async fn init_iam_services(
     } else {
         tracing::info!("模块资源导入器: 本地模式({})", center_config.mode);
         // 本地模式:发送端复用接收端的 form/menu Local 导入器(同一实例,直调 Service)
-        Arc::new(cmx_traits::module::DefinitionImporterBundle {
+        Arc::new(cmx_traits::resource::DefinitionImporterBundle {
             form: receiver_form_importer,
             menu: receiver_menu_importer,
             table: Arc::new(
@@ -208,7 +208,7 @@ pub async fn init_iam_services(
         }),
         user_auth_query,
         iam_config,
-        Some(plugin_data_importer),
+        Some(resource_data_importer),
         Some(definition_importers),
     ))
 }

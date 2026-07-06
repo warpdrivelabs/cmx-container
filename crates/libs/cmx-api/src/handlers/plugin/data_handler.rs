@@ -11,15 +11,15 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use cmx_traits::plugin::{PluginDataCategory, PluginDataImportRequest};
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::{ApiResp, Result};
 
 /// 解析 category 字符串,无效时返回错误。
-fn parse_category(s: &str) -> Result<PluginDataCategory> {
-    PluginDataCategory::parse_from_str(s).ok_or_else(|| {
+fn parse_category(s: &str) -> Result<ResourceDataCategory> {
+    ResourceDataCategory::parse_from_str(s).ok_or_else(|| {
         crate::Error::BadRequest(format!(
             "无效的 category: {s}（有效值: menu/perm/form/flow）"
         ))
@@ -58,18 +58,18 @@ pub struct ListQuery {
 
 /// 通用插件数据导入(POST multipart)
 ///
-/// 接收 ZIP 文件和元数据,通过 PluginDataImporter trait 处理。
+/// 接收 ZIP 文件和元数据,通过 ResourceDataImporter trait 处理。
 /// 按 `category` 字段路由到 Form/Menu/Perm 等类别。
-pub async fn import_plugin_data(
+pub async fn import_resource_data(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResp<ImportResultDto>>> {
-    debug!("{:<12} - handler::import_plugin_data", "HANDLER");
+    debug!("{:<12} - handler::import_resource_data", "HANDLER");
 
     let importer = cmx_state
-        .plugin_data_importer()
-        .ok_or_else(|| crate::Error::InternalError("PluginDataImporter 未初始化".to_string()))?;
+        .resource_data_importer()
+        .ok_or_else(|| crate::Error::InternalError("ResourceDataImporter 未初始化".to_string()))?;
 
     let mut file_data: Option<Vec<u8>> = None;
     let mut category: Option<String> = None;
@@ -113,11 +113,11 @@ pub async fn import_plugin_data(
     let parsed_category = match category.as_deref() {
         Some(s) => parse_category(s)
             .map_err(|e| crate::Error::BadRequest(format!("无效的 category: {e}")))?,
-        None => PluginDataCategory::Perm,
+        None => ResourceDataCategory::Perm,
     };
 
     // Perm 类别需要 plugin_id/app_id/version
-    if matches!(parsed_category, PluginDataCategory::Perm)
+    if matches!(parsed_category, ResourceDataCategory::Perm)
         && (plugin_id.is_empty() || app_id.is_empty() || version.is_empty())
     {
         return Err(crate::Error::BadRequest(
@@ -125,7 +125,7 @@ pub async fn import_plugin_data(
         ));
     }
 
-    let request = PluginDataImportRequest {
+    let request = ResourceDataImportRequest {
         category: parsed_category,
         domain_code,
         application_code,
@@ -153,21 +153,21 @@ pub async fn import_plugin_data(
 /// 通用插件数据查询/导出(GET)
 ///
 /// 按 `category` 查询指定模块的资源定义,返回 JSON 序列化的定义列表。
-pub async fn list_plugin_data(
+pub async fn list_resource_data(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ApiResp<ListResultDto>>> {
-    debug!("{:<12} - handler::list_plugin_data", "HANDLER");
+    debug!("{:<12} - handler::list_resource_data", "HANDLER");
 
     let importer = cmx_state
-        .plugin_data_importer()
-        .ok_or_else(|| crate::Error::InternalError("PluginDataImporter 未初始化".to_string()))?;
+        .resource_data_importer()
+        .ok_or_else(|| crate::Error::InternalError("ResourceDataImporter 未初始化".to_string()))?;
 
     let category = parse_category(&q.category)
         .map_err(|e| crate::Error::BadRequest(format!("无效的 category: {e}")))?;
 
-    let request = PluginDataImportRequest {
+    let request = ResourceDataImportRequest {
         category,
         domain_code: q.domain_code.unwrap_or_default(),
         application_code: q.application_code.unwrap_or_default(),

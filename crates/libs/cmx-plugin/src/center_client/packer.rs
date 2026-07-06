@@ -65,7 +65,7 @@ pub fn pack_directory_to_zip(dir: &Path) -> PluginResult<Vec<u8>> {
 ///
 /// 供 Remote 定义导入器复用:把 `&[FormDefinition]` / `&[MenuDefinition]` 等
 /// 序列化为 `{prefix}_0.json`、`{prefix}_1.json` ... 文件,再压缩为 ZIP,
-/// 经 gRPC(`PluginDataClient::import_plugin_data`)发送到远程中心。
+/// 经 gRPC(`ResourceDataClient::import_resource_data`)发送到远程中心。
 /// 远程接收端解压 ZIP → 解析 JSON → 调用 Local 实现入库。
 ///
 /// # Arguments

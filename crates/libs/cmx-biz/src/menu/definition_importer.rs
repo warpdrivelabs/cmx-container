@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use cmx_core::model::module::MenuDefinition;
 use cmx_database::DatabaseManager;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::MenuDefinitionImporter;
+use cmx_traits::resource::MenuDefinitionImporter;
 use std::sync::Arc;
 use tracing::{info, warn};
 

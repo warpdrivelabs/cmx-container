@@ -7,8 +7,9 @@ use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, 
 use cmx_storage::service::StorageService;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
 use cmx_traits::iam::PermissionChecker;
-use cmx_traits::module::DefinitionImporterBundle;
-use cmx_traits::plugin::{PluginDataImporter, PluginQuery};
+use cmx_traits::resource::DefinitionImporterBundle;
+use cmx_traits::plugin::PluginQuery;
+use cmx_traits::resource::ResourceDataImporter;
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};
 use std::sync::Arc;
@@ -75,8 +76,8 @@ pub struct CmxAppState {
     auth_service: Option<Arc<dyn AuthService>>,
     /// IAM 服务状态
     iam: Option<Arc<IamState>>,
-    /// 插件数据导入器（trait 对象，用于 HTTP/gRPC 接收端统一调用）
-    plugin_data_importer: Option<Arc<dyn PluginDataImporter>>,
+    /// 资源数据导入器（trait 对象，用于 HTTP/gRPC 接收端统一调用）
+    resource_data_importer: Option<Arc<dyn ResourceDataImporter>>,
     /// 模块资源定义导入器集合（表单/菜单/元数据/权限，本地或远程实现）
     definition_importers: Option<Arc<DefinitionImporterBundle>>,
 }
@@ -101,7 +102,7 @@ impl CmxAppState {
             storage_service: None,
             auth_service: None,
             iam: None,
-            plugin_data_importer: None,
+            resource_data_importer: None,
             definition_importers: None,
         }
     }
@@ -163,9 +164,9 @@ impl CmxAppState {
         self
     }
 
-    /// 设置插件数据导入器
-    pub fn with_plugin_data_importer(mut self, importer: Arc<dyn PluginDataImporter>) -> Self {
-        self.plugin_data_importer = Some(importer);
+    /// 设置资源数据导入器
+    pub fn with_resource_data_importer(mut self, importer: Arc<dyn ResourceDataImporter>) -> Self {
+        self.resource_data_importer = Some(importer);
         self
     }
 
@@ -225,9 +226,9 @@ impl CmxAppState {
         self.iam.as_ref()
     }
 
-    /// 获取插件数据导入器
-    pub fn plugin_data_importer(&self) -> Option<&Arc<dyn PluginDataImporter>> {
-        self.plugin_data_importer.as_ref()
+    /// 获取资源数据导入器
+    pub fn resource_data_importer(&self) -> Option<&Arc<dyn ResourceDataImporter>> {
+        self.resource_data_importer.as_ref()
     }
 
     /// 获取模块资源定义导入器集合
@@ -261,7 +262,7 @@ impl Clone for CmxAppState {
             storage_service: self.storage_service.clone(),
             auth_service: self.auth_service.clone(),
             iam: self.iam.clone(),
-            plugin_data_importer: self.plugin_data_importer.clone(),
+            resource_data_importer: self.resource_data_importer.clone(),
             definition_importers: self.definition_importers.clone(),
         }
     }

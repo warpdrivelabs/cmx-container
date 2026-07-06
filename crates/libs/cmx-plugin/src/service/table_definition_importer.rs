@@ -8,7 +8,7 @@ use cmx_core::model::meta::table::TableDefine;
 use cmx_database::DatabaseManager;
 use cmx_metadata::TableDefineDbExecutor;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::TableDefinitionImporter;
+use cmx_traits::resource::TableDefinitionImporter;
 use std::sync::Arc;
 use tracing::{info, warn};
 

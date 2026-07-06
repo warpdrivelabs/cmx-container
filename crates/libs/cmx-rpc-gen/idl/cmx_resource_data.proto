@@ -2,21 +2,21 @@ syntax = "proto3";
 
 package cmx;
 
-// 插件数据导入 gRPC 服务
-// 用于将插件数据（权限/菜单/表单/流程）导入到基础服务中心
-// 以及从基础服务中心查询（导出）模块资源定义
+// 资源数据导入 gRPC 服务
+// 用于将平台资源数据（权限/菜单/表单/流程）导入到基础服务中心
+// 以及从基础服务中心查询（导出）资源定义
 // 注意：gRPC 默认消息上限 4MB，大包建议使用 HTTP 模式
-service CmxPluginDataService {
-  // 导入插件数据（ZIP 包）
-  rpc ImportPluginData(ImportPluginDataRequest) returns (ImportPluginDataResponse);
-  // 清理插件数据
-  rpc CleanupPluginData(CleanupPluginDataRequest) returns (ImportPluginDataResponse);
-  // 查询（导出）插件数据，返回 JSON 字节
-  rpc ListPluginData(ListPluginDataRequest) returns (ListPluginDataResponse);
+service CmxResourceDataService {
+  // 导入资源数据（ZIP 包）
+  rpc ImportResourceData(ImportResourceDataRequest) returns (ImportResourceDataResponse);
+  // 清理资源数据
+  rpc CleanupResourceData(CleanupResourceDataRequest) returns (ImportResourceDataResponse);
+  // 查询（导出）资源数据，返回 JSON 字节
+  rpc ListResourceData(ListResourceDataRequest) returns (ListResourceDataResponse);
 }
 
-// 插件数据导入请求
-message ImportPluginDataRequest {
+// 资源数据导入请求
+message ImportResourceDataRequest {
   string category = 1;           // 数据类别: "perm", "menu", "form", "flow"
   string domain_code = 2;
   string application_code = 3;
@@ -27,8 +27,8 @@ message ImportPluginDataRequest {
   bytes zip_data = 8;            // ZIP 压缩数据（默认上限 4MB）
 }
 
-// 插件数据导入响应
-message ImportPluginDataResponse {
+// 资源数据导入响应
+message ImportResourceDataResponse {
   bool success = 1;
   string message = 2;
   uint32 created_count = 3;
@@ -36,8 +36,8 @@ message ImportPluginDataResponse {
   uint32 deleted_count = 5;
 }
 
-// 插件数据清理请求
-message CleanupPluginDataRequest {
+// 资源数据清理请求
+message CleanupResourceDataRequest {
   string category = 1;
   string domain_code = 2;
   string application_code = 3;
@@ -46,16 +46,16 @@ message CleanupPluginDataRequest {
   string app_id = 6;
 }
 
-// 插件数据查询（导出）请求
-message ListPluginDataRequest {
+// 资源数据查询（导出）请求
+message ListResourceDataRequest {
   string category = 1;           // 数据类别: "perm", "menu", "form", "flow"
   string domain_code = 2;        // Perm 类别需要,其他类别可空
   string application_code = 3;
   string module_code = 4;
 }
 
-// 插件数据查询（导出）响应
-message ListPluginDataResponse {
+// 资源数据查询（导出）响应
+message ListResourceDataResponse {
   bool success = 1;
   string message = 2;
   bytes json_data = 3;           // JSON 序列化的定义列表（如 Vec<FormDefinition> 序列化后的 JSON 数组）

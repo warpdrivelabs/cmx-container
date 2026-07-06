@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use cmx_core::model::module::FormDefinition;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::FormDefinitionImporter;
-use cmx_traits::plugin::{PluginDataCategory, PluginDataImportRequest};
+use cmx_traits::resource::FormDefinitionImporter;
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use tracing::info;
 
 use super::RemoteImporterContext;
@@ -37,8 +37,8 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
         let zip_data = crate::center_client::packer::pack_definitions_to_zip(definitions, "form")
             .map_err(|e| TraitError::Business(format!("打包表单定义失败: {e}")))?;
 
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Form,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Form,
             domain_code: domain_code.to_string(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),
@@ -66,8 +66,8 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
         &self,
         module_code: &str,
     ) -> Result<Vec<FormDefinition>, TraitError> {
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Form,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Form,
             domain_code: String::new(),
             application_code: String::new(),
             module_code: module_code.to_string(),

@@ -1,14 +1,14 @@
-//! 插件数据管理 gRPC 客户端 + Bundle + 领域全局访问器。
+//! 资源数据管理 gRPC 客户端 + Bundle + 领域全局访问器。
 //!
-//! 基于 volo-grpc 的 [`PluginDataClient`] trait 实现，通过注册中心缓存发现服务实例。
+//! 基于 volo-grpc 的 [`ResourceDataClient`] trait 实现，通过注册中心缓存发现服务实例。
 //!
 //! # 领域全局
 //!
-//! 访问：[`plugin_data_client()`] → `&'static Arc<dyn PluginDataClient>`
+//! 访问：[`resource_data_client()`] → `&'static Arc<dyn ResourceDataClient>`
 //!
 //! # 重试策略
 //!
-//! `import_plugin_data` / `cleanup_plugin_data` **不走 [`super::retry::with_retry`]**：
+//! `import_resource_data` / `cleanup_resource_data` **不走 [`super::retry::with_retry`]**：
 //! 传输 ZIP 二进制大包（默认上限 4MB），重试需保证下游导入幂等。当前服务端按 upsert
 //! 语义实现，理论上幂等，但：(1) 大包重试放大带宽与下游负载；(2) 4MB 上限下网络抖动
 //! 概率高，盲目重试易雪崩；(3) import 由插件安装流程驱动，失败可由上层重试整个安装任务。
@@ -18,11 +18,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
-use cmx_rpc_gen::cmx::cmx_plugin_data_service::cmx_plugin_data_service::cmx as plugin_data_proto;
-use cmx_traits::plugin::{
-    PluginDataCleanupRequest, PluginDataImportRequest, PluginDataImportResult, PluginDataListResult,
+use cmx_rpc_gen::cmx::cmx_resource_data_service::cmx_resource_data_service::cmx as resource_data_proto;
+use cmx_traits::resource::{
+    ResourceDataCleanupRequest, ResourceDataImportRequest, ResourceDataImportResult,
+    ResourceDataListResult,
 };
-use cmx_traits::rpc::{PluginDataClient, RpcError};
+use cmx_traits::rpc::{ResourceDataClient, RpcError};
 use tokio::sync::RwLock;
 use tracing::instrument;
 
@@ -31,35 +32,35 @@ use crate::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
 
 // ==================== 领域全局访问器 ====================
 
-static PLUGIN_DATA_CLIENT: OnceLock<Arc<dyn PluginDataClient>> = OnceLock::new();
+static RESOURCE_DATA_CLIENT: OnceLock<Arc<dyn ResourceDataClient>> = OnceLock::new();
 
-pub(crate) fn set_client(c: Arc<dyn PluginDataClient>) -> Result<(), ()> {
-    PLUGIN_DATA_CLIENT.set(c).map_err(|_| ())
+pub(crate) fn set_client(c: Arc<dyn ResourceDataClient>) -> Result<(), ()> {
+    RESOURCE_DATA_CLIENT.set(c).map_err(|_| ())
 }
 
-/// 获取插件数据管理 RPC 客户端（须先通过 [`crate::factory::init_rpc_clients`] 初始化）。
+/// 获取资源数据管理 RPC 客户端（须先通过 [`crate::factory::init_rpc_clients`] 初始化）。
 ///
 /// # Panics
 ///
 /// 未初始化时 panic。先用 [`crate::global::GlobalRpcClient::is_initialized`] 守卫。
-pub fn plugin_data_client() -> &'static Arc<dyn PluginDataClient> {
-    PLUGIN_DATA_CLIENT
+pub fn resource_data_client() -> &'static Arc<dyn ResourceDataClient> {
+    RESOURCE_DATA_CLIENT
         .get()
-        .expect("plugin_data client not initialized")
+        .expect("resource_data client not initialized")
 }
 
 // ==================== 客户端实现 ====================
 
-/// 插件数据管理 gRPC 客户端。
-pub struct PluginDataGrpcClient {
+/// 资源数据管理 gRPC 客户端。
+pub struct ResourceDataGrpcClient {
     /// 共享基础设施（服务发现、Discover 缓存、超时/重试配置）
     infra: Arc<GrpcInfrastructure>,
     /// gRPC 客户端缓存（service_name → client）
-    clients: RwLock<HashMap<String, plugin_data_proto::CmxPluginDataServiceClient>>,
+    clients: RwLock<HashMap<String, resource_data_proto::CmxResourceDataServiceClient>>,
 }
 
-impl PluginDataGrpcClient {
-    /// 创建新的插件数据管理 gRPC 客户端。
+impl ResourceDataGrpcClient {
+    /// 创建新的资源数据管理 gRPC 客户端。
     pub fn new(infra: Arc<GrpcInfrastructure>) -> Self {
         Self {
             infra,
@@ -72,7 +73,7 @@ impl PluginDataGrpcClient {
     async fn get_client(
         &self,
         service_name: &str,
-    ) -> Result<plugin_data_proto::CmxPluginDataServiceClient, RpcError> {
+    ) -> Result<resource_data_proto::CmxResourceDataServiceClient, RpcError> {
         // 快查：读锁检查缓存
         if let Some(c) = self.clients.read().await.get(service_name) {
             return Ok(c.clone());
@@ -80,7 +81,7 @@ impl PluginDataGrpcClient {
 
         // 慢路径：获取共享 discover + 构建 client
         let discover = self.infra.get_or_create_discover(service_name).await?;
-        let client = plugin_data_proto::CmxPluginDataServiceClientBuilder::new(service_name)
+        let client = resource_data_proto::CmxResourceDataServiceClientBuilder::new(service_name)
             .discover(discover)
             .rpc_timeout(Some(self.infra.rpc_timeout()))
             .connect_timeout(self.infra.connect_timeout())
@@ -98,17 +99,17 @@ impl PluginDataGrpcClient {
 }
 
 #[async_trait]
-impl PluginDataClient for PluginDataGrpcClient {
+impl ResourceDataClient for ResourceDataGrpcClient {
     #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
-    async fn import_plugin_data(
+    async fn import_resource_data(
         &self,
         service_name: &str,
-        request: PluginDataImportRequest,
-    ) -> Result<PluginDataImportResult, RpcError> {
+        request: ResourceDataImportRequest,
+    ) -> Result<ResourceDataImportResult, RpcError> {
         let client = self.get_client(service_name).await?;
 
         let category_str = request.category.as_str();
-        let proto_req = plugin_data_proto::ImportPluginDataRequest {
+        let proto_req = resource_data_proto::ImportResourceDataRequest {
             category: category_str.into(),
             domain_code: request.domain_code.clone().into(),
             application_code: request.application_code.clone().into(),
@@ -119,7 +120,7 @@ impl PluginDataClient for PluginDataGrpcClient {
             zip_data: request.zip_data.clone().into(),
         };
 
-        match client.import_plugin_data(proto_req).await {
+        match client.import_resource_data(proto_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -130,9 +131,9 @@ impl PluginDataClient for PluginDataGrpcClient {
                     created = resp.created_count,
                     updated = resp.updated_count,
                     deleted = resp.deleted_count,
-                    "RPC import_plugin_data 完成"
+                    "RPC import_resource_data 完成"
                 );
-                Ok(PluginDataImportResult {
+                Ok(ResourceDataImportResult {
                     success: resp.success,
                     message: resp.message.to_string(),
                     created_count: resp.created_count,
@@ -147,7 +148,7 @@ impl PluginDataClient for PluginDataGrpcClient {
                     category = category_str,
                     success = false,
                     error = %e,
-                    "RPC import_plugin_data 失败"
+                    "RPC import_resource_data 失败"
                 );
                 Err(RpcError::RpcCallFailed(e.to_string()))
             }
@@ -155,15 +156,15 @@ impl PluginDataClient for PluginDataGrpcClient {
     }
 
     #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
-    async fn cleanup_plugin_data(
+    async fn cleanup_resource_data(
         &self,
         service_name: &str,
-        request: PluginDataCleanupRequest,
-    ) -> Result<PluginDataImportResult, RpcError> {
+        request: ResourceDataCleanupRequest,
+    ) -> Result<ResourceDataImportResult, RpcError> {
         let client = self.get_client(service_name).await?;
 
         let category_str = request.category.as_str();
-        let proto_req = plugin_data_proto::CleanupPluginDataRequest {
+        let proto_req = resource_data_proto::CleanupResourceDataRequest {
             category: category_str.into(),
             domain_code: request.domain_code.clone().into(),
             application_code: request.application_code.clone().into(),
@@ -172,7 +173,7 @@ impl PluginDataClient for PluginDataGrpcClient {
             app_id: request.app_id.clone().into(),
         };
 
-        match client.cleanup_plugin_data(proto_req).await {
+        match client.cleanup_resource_data(proto_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -181,9 +182,9 @@ impl PluginDataClient for PluginDataGrpcClient {
                     category = category_str,
                     success = resp.success,
                     deleted = resp.deleted_count,
-                    "RPC cleanup_plugin_data 完成"
+                    "RPC cleanup_resource_data 完成"
                 );
-                Ok(PluginDataImportResult {
+                Ok(ResourceDataImportResult {
                     success: resp.success,
                     message: resp.message.to_string(),
                     created_count: resp.created_count,
@@ -198,7 +199,7 @@ impl PluginDataClient for PluginDataGrpcClient {
                     category = category_str,
                     success = false,
                     error = %e,
-                    "RPC cleanup_plugin_data 失败"
+                    "RPC cleanup_resource_data 失败"
                 );
                 Err(RpcError::RpcCallFailed(e.to_string()))
             }
@@ -206,22 +207,22 @@ impl PluginDataClient for PluginDataGrpcClient {
     }
 
     #[instrument(target = "cmx_rpc", skip(self, request), fields(service_name = %service_name, category = ?request.category))]
-    async fn list_plugin_data(
+    async fn list_resource_data(
         &self,
         service_name: &str,
-        request: PluginDataImportRequest,
-    ) -> Result<PluginDataListResult, RpcError> {
+        request: ResourceDataImportRequest,
+    ) -> Result<ResourceDataListResult, RpcError> {
         let client = self.get_client(service_name).await?;
 
         let category_str = request.category.as_str();
-        let proto_req = plugin_data_proto::ListPluginDataRequest {
+        let proto_req = resource_data_proto::ListResourceDataRequest {
             category: category_str.into(),
             domain_code: request.domain_code.clone().into(),
             application_code: request.application_code.clone().into(),
             module_code: request.module_code.clone().into(),
         };
 
-        match client.list_plugin_data(proto_req).await {
+        match client.list_resource_data(proto_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -230,9 +231,9 @@ impl PluginDataClient for PluginDataGrpcClient {
                     category = category_str,
                     success = resp.success,
                     json_len = resp.json_data.len(),
-                    "RPC list_plugin_data 完成"
+                    "RPC list_resource_data 完成"
                 );
-                Ok(PluginDataListResult {
+                Ok(ResourceDataListResult {
                     success: resp.success,
                     message: resp.message.to_string(),
                     json_data: resp.json_data.to_vec(),
@@ -244,7 +245,7 @@ impl PluginDataClient for PluginDataGrpcClient {
                     service_name = %service_name,
                     category = category_str,
                     error = %e,
-                    "RPC list_plugin_data 失败"
+                    "RPC list_resource_data 失败"
                 );
                 Err(RpcError::RpcCallFailed(e.to_string()))
             }
@@ -254,29 +255,29 @@ impl PluginDataClient for PluginDataGrpcClient {
 
 // ==================== Bundle ====================
 
-/// 插件数据管理领域 Bundle。
-pub struct PluginDataBundle;
+/// 资源数据管理领域 Bundle。
+pub struct ResourceDataBundle;
 
-impl RpcServiceBundle for PluginDataBundle {
+impl RpcServiceBundle for ResourceDataBundle {
     fn name(&self) -> &'static str {
-        "plugin_data"
+        "resource_data"
     }
 
     fn init_client(&self, infra: Arc<GrpcInfrastructure>) {
-        set_client(Arc::new(PluginDataGrpcClient::new(infra)))
-            .expect("plugin_data client already initialized");
+        set_client(Arc::new(ResourceDataGrpcClient::new(infra)))
+            .expect("resource_data client already initialized");
     }
 
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration {
         let data_importer = deps.data_importer.clone();
         ServerRegistration::new(move |server| {
-            let impl_ = crate::server::plugin_data::CmxPluginDataServerImpl::new(data_importer);
+            let impl_ = crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
             let svc = volo_grpc::server::ServiceBuilder::new(
-                plugin_data_proto::CmxPluginDataServiceServer::new(impl_),
+                resource_data_proto::CmxResourceDataServiceServer::new(impl_),
             )
             .build::<
-                plugin_data_proto::CmxPluginDataServiceRequestRecv,
-                plugin_data_proto::CmxPluginDataServiceResponseSend,
+                resource_data_proto::CmxResourceDataServiceRequestRecv,
+                resource_data_proto::CmxResourceDataServiceResponseSend,
             >();
             server.add_service(svc)
         })

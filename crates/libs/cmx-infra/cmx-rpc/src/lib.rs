@@ -5,7 +5,7 @@
 //! # 架构（Bundle 模式）
 //!
 //! - [`bundle`]：领域 Bundle trait + [`bundle::default_bundles`]，实现 OCP。
-//! - [`client`]：按领域拆分的 gRPC 客户端（[`orchestrator_client`] / [`plugin_data_client`]）。
+//! - [`client`]：按领域拆分的 gRPC 客户端（[`orchestrator_client`] / [`resource_data_client`]）。
 //! - [`server`]：按领域拆分的 gRPC 服务端实现。
 //! - [`factory`]：迭代 Bundle 初始化客户端。
 //! - [`server_runner`]：迭代 Bundle 注册服务端。
@@ -22,10 +22,10 @@ pub mod server_runner;
 
 // 领域客户端访问器（调用方入口）
 pub use client::orchestrator_client;
-pub use client::plugin_data_client;
+pub use client::resource_data_client;
 
 // 共享类型
-pub use cmx_traits::plugin::PluginDataImporter;
+pub use cmx_traits::resource::ResourceDataImporter;
 pub use config::{GrpcConfig, HttpRestConfig, RpcConfig};
 pub use discover::RegistryAwareDiscover;
 pub use error::RpcFrameworkError;

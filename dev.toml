@@ -205,7 +205,7 @@ base_path = "cmx-server/"
 # ============================================
 [center_client]
 # 模式：local（默认）| grpc（gRPC 调用）| http_url（HTTP 直连）| http_discovery（HTTP 服务发现）
-mode = "grpc"
+mode = "local"
 # 请求超时（毫秒，仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000
 

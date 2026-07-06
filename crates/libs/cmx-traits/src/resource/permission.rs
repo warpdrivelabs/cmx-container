@@ -1,13 +1,13 @@
 //! 权限定义导入器 trait + ZIP 格式权限导入/清理 trait。
 //!
 //! - [`PermissionDefinitionImporter`]:结构化定义列表的 apply/list(模块导入/导出用)
-//! - [`PermissionZipImporter`]:ZIP 格式权限数据的导入/清理(插件数据中心远程接收用)
+//! - [`PermissionZipImporter`]:ZIP 格式权限数据的导入/清理(资源数据中心远程接收用)
 
 use async_trait::async_trait;
 use cmx_core::model::iam::PermissionDefinition;
 
 use crate::error::TraitError;
-use crate::plugin::{PluginDataImportResult};
+use crate::resource::ResourceDataImportResult;
 
 /// 权限定义导入器(本地/远程统一接口)。
 ///
@@ -34,10 +34,10 @@ pub trait PermissionDefinitionImporter: Send + Sync {
     ) -> Result<Vec<PermissionDefinition>, TraitError>;
 }
 
-/// ZIP 格式权限导入/清理(插件数据中心远程接收端用)。
+/// ZIP 格式权限导入/清理(资源数据中心远程接收端用)。
 ///
 /// 封装 `PermissionServiceImpl` 的固有方法 `import_permissions` / `cleanup_permissions`,
-/// 使 `PluginDataImporterImpl`(cmx-biz)可通过 trait 对象持有,无需依赖 cmx-iam。
+/// 使 `ResourceDataImporterImpl`(cmx-biz)可通过 trait 对象持有,无需依赖 cmx-iam。
 ///
 /// 与 [`PermissionDefinitionImporter`] 的区别:
 /// - 本 trait 面向 **ZIP permdata 格式**(插件包 `permdata/*.zip`),含 diff/审计/缓存失效
@@ -51,7 +51,7 @@ pub trait PermissionZipImporter: Send + Sync {
         app_code: &str,
         module_code: &str,
         zip_data: &[u8],
-    ) -> Result<PluginDataImportResult, TraitError>;
+    ) -> Result<ResourceDataImportResult, TraitError>;
 
     /// 清理指定作用域下的所有权限及其角色关联(物理删除)。
     async fn cleanup_permissions_zip(
@@ -59,5 +59,5 @@ pub trait PermissionZipImporter: Send + Sync {
         domain_code: &str,
         app_code: &str,
         module_code: &str,
-    ) -> Result<PluginDataImportResult, TraitError>;
+    ) -> Result<ResourceDataImportResult, TraitError>;
 }

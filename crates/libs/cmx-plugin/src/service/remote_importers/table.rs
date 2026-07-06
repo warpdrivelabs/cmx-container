@@ -7,8 +7,8 @@
 use async_trait::async_trait;
 use cmx_core::model::meta::table::TableDefine;
 use cmx_traits::error::TraitError;
-use cmx_traits::module::TableDefinitionImporter;
-use cmx_traits::plugin::{PluginDataCategory, PluginDataImportRequest};
+use cmx_traits::resource::TableDefinitionImporter;
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use serde_json::json;
 use tracing::info;
 
@@ -48,8 +48,8 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
 
         // 表结构归类到 Form 中心传输(元数据登记与表单共用基础设施);
         // 实际目标服务由配置 discovery.form_service / urls.form 决定,可独立配置为元数据中心。
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Form,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Form,
             domain_code: domain_code.to_string(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),
@@ -77,8 +77,8 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
         app_code: &str,
         module_code: &str,
     ) -> Result<Vec<TableDefine>, TraitError> {
-        let req = PluginDataImportRequest {
-            category: PluginDataCategory::Form,
+        let req = ResourceDataImportRequest {
+            category: ResourceDataCategory::Form,
             domain_code: String::new(),
             application_code: app_code.to_string(),
             module_code: module_code.to_string(),

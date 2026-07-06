@@ -10,7 +10,7 @@
 //! # `ServerDeps` 耦合代价说明
 //!
 //! [`ServerDeps`] 含 3 个字段，每个 Bundle 都收到全量，但 `OrchestratorBundle` 忽略
-//! `data_importer`、`PluginDataBundle` 忽略前 2 个。这是为换取 OCP
+//! `data_importer`、`ResourceDataBundle` 忽略前 2 个。这是为换取 OCP
 //! （`factory`/`server_runner` 零改动）付出的合理耦合代价。当前仅 2 领域，引入
 //! `type Deps` 关联类型属过度设计，本期不做；若未来 Bundle 数量增长，可再考虑每 Bundle
 //! 自带关联类型。
@@ -26,8 +26,8 @@ pub struct ServerDeps {
     /// 插件函数调用器（orchestrator 领域使用；由组装层注入 cmx-biz 的实现，
     /// 封装 RuntimeInvoker + PluginQuery 完整调用链，使 cmx-rpc 不直接依赖 cmx-biz）。
     pub function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker>,
-    /// 插件数据导入器（plugin_data 领域使用，可选）。
-    pub data_importer: Option<Arc<dyn cmx_traits::plugin::PluginDataImporter>>,
+    /// 资源数据导入器（resource_data 领域使用，可选）。
+    pub data_importer: Option<Arc<dyn cmx_traits::resource::ResourceDataImporter>>,
 }
 
 /// "把 service 加到 server 上"的类型擦除闭包。
@@ -68,6 +68,6 @@ pub trait RpcServiceBundle: Send + Sync {
 pub fn default_bundles() -> Vec<Box<dyn RpcServiceBundle>> {
     vec![
         Box::new(crate::client::orchestrator::OrchestratorBundle),
-        Box::new(crate::client::plugin_data::PluginDataBundle),
+        Box::new(crate::client::resource_data::ResourceDataBundle),
     ]
 }

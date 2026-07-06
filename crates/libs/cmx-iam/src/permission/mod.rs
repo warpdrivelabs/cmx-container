@@ -20,4 +20,4 @@ pub use filter::PermissionFilter;
 pub use service::{PermissionDefinition, PermissionFile, PermissionServiceImpl};
 // zip_importer 模块为 PermissionServiceImpl 实现 PermissionZipImporter trait,
 // 无需 re-export 类型(trait impl 在 trait 处于 scope 时自动可用)
-// PluginDataImporterImpl 已迁移至 cmx-biz(多类别路由器不属于权限域)
+// ResourceDataImporterImpl 已迁移至 cmx-biz(多类别路由器不属于权限域)

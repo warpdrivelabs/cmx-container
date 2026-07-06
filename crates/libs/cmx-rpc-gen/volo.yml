@@ -8,12 +8,12 @@ entries:
           path: idl/cmx_service.proto
           includes:
             - idl
-  plugin_data:
-    filename: cmx_plugin_data_service.rs
+  resource_data:
+    filename: cmx_resource_data_service.rs
     protocol: protobuf
     services:
       - idl:
           source: local
-          path: idl/cmx_plugin_data.proto
+          path: idl/cmx_resource_data.proto
           includes:
             - idl

@@ -2,7 +2,7 @@
 //!
 //! 原先的 sender/dispatcher/http_sender/grpc_sender/mock_sender 已被上层的
 //! Remote 定义导入器(`service::remote_importers`)取代 —— 后者直接复用
-//! `cmx_rpc::plugin_data_client()` 经 gRPC 传输,不再需要 sender 中间层。
+//! `cmx_rpc::resource_data_client()` 经 gRPC 传输,不再需要 sender 中间层。
 //!
 //! 本模块保留仍在使用的部分:
 //! - [`config`]: `CenterClientConfig`(加载 `[center_client]` 配置,解析各 category 服务名)

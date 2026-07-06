@@ -34,7 +34,7 @@ pub use host_functions::IamHostFunctions;
 pub use config::IamConfig;
 pub use error::IamError;
 pub use iam_checker::IamChecker;
-// PluginDataImporterImpl 已迁移至 cmx-biz(多类别路由器不属于权限域)
+// ResourceDataImporterImpl 已迁移至 cmx-biz(多类别路由器不属于权限域)
 pub use role_group::RoleGroupServiceImpl;
 pub use rule::{ExclusionRuleServiceImpl, RuleEnforcer, RuleEnforcerImpl};
 pub use service_traits::{

@@ -56,7 +56,7 @@ pub struct ModuleInstallService {
     deploy_service: std::sync::Arc<DeployService>,
     /// 模块资源定义导入器集合(表单/菜单/元数据/权限,本地或远程实现)。
     /// 为 None 时跳过资源安装(向后兼容,如测试场景)。
-    importers: Option<std::sync::Arc<cmx_traits::module::DefinitionImporterBundle>>,
+    importers: Option<std::sync::Arc<cmx_traits::resource::DefinitionImporterBundle>>,
 }
 
 impl ModuleInstallService {
@@ -75,7 +75,7 @@ impl ModuleInstallService {
     /// 无论本地(Local)还是远程(Remote)实现,调用代码一致。
     pub fn with_definition_importers(
         mut self,
-        importers: std::sync::Arc<cmx_traits::module::DefinitionImporterBundle>,
+        importers: std::sync::Arc<cmx_traits::resource::DefinitionImporterBundle>,
     ) -> Self {
         self.importers = Some(importers);
         self

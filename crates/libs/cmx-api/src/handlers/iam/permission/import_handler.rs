@@ -1,6 +1,6 @@
 //! 插件数据导入 Handler
 //!
-//! 通过 multipart form-data 接收 ZIP 文件，委托给 PluginDataImporter trait 处理。
+//! 通过 multipart form-data 接收 ZIP 文件，委托给 ResourceDataImporter trait 处理。
 //! 与 gRPC 路径统一走同一个 trait，保证 category 路由和缓存失效逻辑一致。
 
 use axum::Json;
@@ -8,7 +8,7 @@ use axum::extract::{Multipart, State};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use cmx_traits::plugin::{PluginDataCategory, PluginDataCleanupRequest, PluginDataImportRequest};
+use cmx_traits::resource::{ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
@@ -30,8 +30,8 @@ pub struct ImportResultDto {
     pub deleted_count: u32,
 }
 
-impl From<cmx_traits::plugin::PluginDataImportResult> for ImportResultDto {
-    fn from(r: cmx_traits::plugin::PluginDataImportResult) -> Self {
+impl From<cmx_traits::resource::ResourceDataImportResult> for ImportResultDto {
+    fn from(r: cmx_traits::resource::ResourceDataImportResult) -> Self {
         Self {
             success: r.success,
             message: r.message,
@@ -63,8 +63,8 @@ pub struct CleanupRequest {
 /// 解析 category 字符串。
 ///
 /// 无效的 category 返回错误，而非静默降级为 Perm。
-fn parse_category(s: &str) -> Result<PluginDataCategory> {
-    PluginDataCategory::parse_from_str(s).ok_or_else(|| {
+fn parse_category(s: &str) -> Result<ResourceDataCategory> {
+    ResourceDataCategory::parse_from_str(s).ok_or_else(|| {
         Error::bad_request(format!(
             "无效的 category: {s}（有效值: menu/perm/form/flow）"
         ))
@@ -73,7 +73,7 @@ fn parse_category(s: &str) -> Result<PluginDataCategory> {
 
 /// 导入插件数据（multipart form-data）
 ///
-/// 接收 ZIP 文件和元数据，通过 PluginDataImporter trait 处理。
+/// 接收 ZIP 文件和元数据，通过 ResourceDataImporter trait 处理。
 /// gRPC 路径也走同一个 trait，保证逻辑一致。
 #[utoipa::path(
     post,
@@ -94,8 +94,8 @@ pub async fn import_permissions(
     debug!("{:<12} - handler::import_permissions", "HANDLER");
 
     let importer = cmx_state
-        .plugin_data_importer()
-        .ok_or_else(|| Error::business_error("PluginDataImporter 未初始化".to_string()))?;
+        .resource_data_importer()
+        .ok_or_else(|| Error::business_error("ResourceDataImporter 未初始化".to_string()))?;
 
     // 解析 multipart 字段
     let mut file_data: Option<Vec<u8>> = None;
@@ -155,12 +155,12 @@ pub async fn import_permissions(
     // 解析 category(默认 Perm,与旧版兼容)
     let parsed_category = match category.as_deref() {
         Some(s) => parse_category(s)?,
-        None => PluginDataCategory::Perm,
+        None => ResourceDataCategory::Perm,
     };
 
     // plugin_id/app_id/version 仅 Perm(插件权限导入)场景需要;
     // Form/Menu/Table(模块资源导入)无插件上下文,允许为空。
-    if matches!(parsed_category, PluginDataCategory::Perm)
+    if matches!(parsed_category, ResourceDataCategory::Perm)
         && (plugin_id.is_empty() || app_id.is_empty() || version.is_empty())
     {
         return Err(Error::bad_request(
@@ -168,7 +168,7 @@ pub async fn import_permissions(
         ));
     }
 
-    let request = PluginDataImportRequest {
+    let request = ResourceDataImportRequest {
         category: parsed_category,
         domain_code,
         application_code,
@@ -207,13 +207,13 @@ pub async fn cleanup_permissions(
     debug!("{:<12} - handler::cleanup_permissions", "HANDLER");
 
     let importer = cmx_state
-        .plugin_data_importer()
-        .ok_or_else(|| Error::business_error("PluginDataImporter 未初始化".to_string()))?;
+        .resource_data_importer()
+        .ok_or_else(|| Error::business_error("ResourceDataImporter 未初始化".to_string()))?;
 
-    let request = PluginDataCleanupRequest {
+    let request = ResourceDataCleanupRequest {
         category: match req.category.as_deref() {
             Some(s) => parse_category(s)?,
-            None => PluginDataCategory::Perm,
+            None => ResourceDataCategory::Perm,
         },
         domain_code: req.domain_code,
         application_code: req.application_code,

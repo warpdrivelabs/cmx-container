@@ -15,9 +15,10 @@
 //! - [`auth`] — 认证领域（AuthService、AuthPolicy、UserAuthQuery、AuthStorageQuery）。
 //! - [`iam`] — IAM 领域（PermissionChecker、DataScope）。
 //! - [`plugin`] — 插件领域（PluginQuery、PluginLifecycleListener）。
+//! - [`resource`] — 平台资源领域（ResourceDataImporter、DefinitionImporterBundle）。
 //! - [`runtime`] — WASM 运行时领域（RuntimeInvoker、HostFunctionProvider、InvokeContext）。
 //! - [`service`] — 服务领域（ServiceQuery、ServiceStorage、ServiceInvoker）。
-//! - [`rpc`] — RPC 领域（ServiceOrchestrationClient、PluginDataClient）。
+//! - [`rpc`] — RPC 领域（ServiceOrchestrationClient、ResourceDataClient）。
 //! - [`event_bus`] — 事件总线（EventBus、GlobalEventBus）。
 //! - [`function_invoker`] — 插件函数调用（FunctionInvoker、FunctionInvokeResult）。
 //! - [`step_status`] — StepStatus 字符串编解码（跨模块单一来源）。
@@ -28,8 +29,8 @@ pub mod error;
 pub mod event_bus;
 pub mod function_invoker;
 pub mod iam;
-pub mod module;
 pub mod plugin;
+pub mod resource;
 pub mod rpc;
 pub mod runtime;
 pub mod service;

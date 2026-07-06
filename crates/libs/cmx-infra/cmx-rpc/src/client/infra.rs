@@ -19,7 +19,7 @@ use crate::discover::RegistryAwareDiscover;
 /// gRPC 共享基础设施。
 ///
 /// 被 [`crate::client::orchestrator::OrchestratorGrpcClient`] 和
-/// [`crate::client::plugin_data::PluginDataGrpcClient`] 通过 `Arc` 共同持有。
+/// [`crate::client::resource_data::ResourceDataGrpcClient`] 通过 `Arc` 共同持有。
 ///
 /// 核心职责：按 `service_name` 缓存 [`RegistryAwareDiscover`]，避免重复订阅注册中心。
 ///

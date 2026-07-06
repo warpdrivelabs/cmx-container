@@ -1,14 +1,14 @@
 //! `PermissionZipImporter` trait 的实现。
 //!
 //! 桥接 `PermissionServiceImpl` 的固有方法 `import_permissions` / `cleanup_permissions`
-//! 到 trait 接口,使 `PluginDataImporterImpl`(cmx-biz)可通过 trait 对象持有权限服务,
+//! 到 trait 接口,使 `ResourceDataImporterImpl`(cmx-biz)可通过 trait 对象持有权限服务,
 //! 无需直接依赖 cmx-iam。
 
 use async_trait::async_trait;
 use cmx_core::SVRContext;
 use cmx_traits::error::TraitError;
-use cmx_traits::iam::PermissionZipImporter;
-use cmx_traits::plugin::PluginDataImportResult;
+use cmx_traits::resource::PermissionZipImporter;
+use cmx_traits::resource::ResourceDataImportResult;
 
 use crate::permission::service::PermissionServiceImpl;
 
@@ -20,7 +20,7 @@ impl PermissionZipImporter for PermissionServiceImpl {
         app_code: &str,
         module_code: &str,
         zip_data: &[u8],
-    ) -> Result<PluginDataImportResult, TraitError> {
+    ) -> Result<ResourceDataImportResult, TraitError> {
         let svr_ctx = SVRContext::new(
             serde_json::Value::Null,
             std::collections::HashMap::new(),
@@ -36,7 +36,7 @@ impl PermissionZipImporter for PermissionServiceImpl {
         domain_code: &str,
         app_code: &str,
         module_code: &str,
-    ) -> Result<PluginDataImportResult, TraitError> {
+    ) -> Result<ResourceDataImportResult, TraitError> {
         let svr_ctx = SVRContext::new(
             serde_json::Value::Null,
             std::collections::HashMap::new(),
