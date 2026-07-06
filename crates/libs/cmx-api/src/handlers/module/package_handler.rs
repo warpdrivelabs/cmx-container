@@ -188,13 +188,18 @@ pub async fn module_package_export(
             warn!("无效的 Content-Disposition, 使用默认值");
             axum::http::HeaderValue::from_static("attachment")
         });
+    let content_length = axum::http::HeaderValue::from_str(&zip_bytes.len().to_string())
+        .unwrap_or_else(|_| {
+            warn!("无效的 Content-Length, 省略该头");
+            axum::http::HeaderValue::from_static("0")
+        });
 
     Ok((
         axum::http::StatusCode::OK,
-        axum::response::AppendHeaders([(
-            axum::http::header::CONTENT_DISPOSITION,
-            content_disposition,
-        )]),
+        axum::response::AppendHeaders([
+            (axum::http::header::CONTENT_DISPOSITION, content_disposition),
+            (axum::http::header::CONTENT_LENGTH, content_length),
+        ]),
         axum::body::Body::from(zip_bytes),
     )
         .into_response())
