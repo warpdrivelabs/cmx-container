@@ -10,6 +10,8 @@ members = [
     "crates/libs/cmx-runtime",
     "crates/libs/cmx-service",
     "crates/libs/cmx-infra/cmx-database",
+    "crates/libs/cmx-infra/cmx-database-pg",
+    "crates/libs/cmx-infra/cmx-rowsource",
     "crates/libs/cmx-infra/cmx-buffer",
 #    "crates/libs/cmx-infra/cmx-nacos",
     "crates/libs/cmx-infra/cmx-registry-config",
@@ -33,6 +35,7 @@ members = [
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
     "sdk/cmx-cli",
+    "crates/tests/cmx-database-test",
 #    "crates/tests/cmx-serde-test",
 ]
 # 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
@@ -61,6 +64,10 @@ cmx-api-types = { path = "crates/libs/cmx-api-types", version = "0.1.12", regist
 cmx-biz = { path = "crates/libs/cmx-biz", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 数据库
 cmx-database = { path = "crates/libs/cmx-infra/cmx-database", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 数据库（tokio-postgres 并行实现，PG-only，独立门面）
+cmx-database-pg = { path = "crates/libs/cmx-infra/cmx-database-pg", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 驱动无关行来源抽象 + 零拷贝列式二进制编码器
+cmx-rowsource = { path = "crates/libs/cmx-infra/cmx-rowsource", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 缓存
 cmx-buffer = { path = "crates/libs/cmx-infra/cmx-buffer", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 元数据
@@ -97,7 +104,7 @@ cmx-portal = { path = "crates/libs/cmx-portal", version = "0.1.12", registry = "
 cmx-portal-base = { path = "crates/libs/cmx-portal-base", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 表单中心（html_pages 相关：form / html / native 页面）
 cmx-form = { path = "crates/libs/cmx-form", version = "0.1.12", registry = "nora" }
-# 内部依赖 - 模型中心（meta 相关：definitions / context_profile / dict 元数据建模）
+# 内部依赖 - 模型中心（meta 相关：definitions / flexible_combination / dict 元数据建模）
 cmx-model = { path = "crates/libs/cmx-model", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 过程宏
 cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.12", registry = "nora" }
@@ -160,6 +167,12 @@ clap = { version = "4", features = ["derive"] }
 
 # 数据库 - SQL 异步查询框架
 sqlx = { version = "0.9.0", features = ["macros", "runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "rust_decimal", "json"] }
+# 数据库 - tokio-postgres 原生驱动（cmx-database-pg 专用，PG-only）
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-uuid-1", "with-serde_json-1"] }
+# 数据库 - tokio-postgres 连接池
+deadpool-postgres = "0.14"
+# 数据库 - postgres 类型系统（ToSql/FromSql + Type OID 常量）
+postgres-types = "0.2"
 # 数据库 - SQL 查询构建器
 sea-query = { version = "1.0.0", features = ["with-chrono", "with-time", "with-json", "with-uuid"] }
 # 数据库 - SQL 参数绑定工具（原 sea-query-binder 已更名为 sea-query-sqlx）

@@ -81,8 +81,8 @@ fn limit_arg(args: &Value, default: usize, max: usize) -> usize {
         .clamp(1, max as u64) as usize
 }
 
-fn cp_ref_from_args(args: &Value) -> crate::context_profile::store::CpRef {
-    crate::context_profile::store::CpRef {
+fn fc_ref_from_args(args: &Value) -> crate::flexible_combination::store::FcRef {
+    crate::flexible_combination::store::FcRef {
         domain: opt_str(args, "domain").map(str::to_string),
         app: app_arg(args).map(str::to_string),
         module: opt_str(args, "module").map(str::to_string),
@@ -678,9 +678,9 @@ pub async fn service_catalog_get_tool(args: &Value) -> PortalResult<Value> {
     }
 }
 
-pub async fn context_profile_list_tool(args: &Value) -> PortalResult<Value> {
+pub async fn flexible_combination_list_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
-    let items = crate::context_profile::store::list_context_profiles(
+    let items = crate::flexible_combination::store::list_flexible_combinations(
         opt_str(args, "domain"),
         app_arg(args),
         opt_str(args, "module"),
@@ -689,17 +689,17 @@ pub async fn context_profile_list_tool(args: &Value) -> PortalResult<Value> {
     Ok(json!({ "items": items.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
-pub async fn context_profile_get_tool(args: &Value) -> PortalResult<Value> {
-    crate::context_profile::store::get_context_profile(&cp_ref_from_args(args)).await
+pub async fn flexible_combination_get_tool(args: &Value) -> PortalResult<Value> {
+    crate::flexible_combination::store::get_flexible_combination(&fc_ref_from_args(args)).await
 }
 
-pub async fn context_profile_validate_tool(args: &Value) -> PortalResult<Value> {
-    let body = args.get("profile").cloned().unwrap_or_else(|| json!({}));
-    crate::context_profile::api::validate(&body, &cp_ref_from_args(args)).await
+pub async fn flexible_combination_validate_tool(args: &Value) -> PortalResult<Value> {
+    let body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
+    crate::flexible_combination::api::validate(&body, &fc_ref_from_args(args)).await
 }
 
-pub async fn context_profile_preview_tool(args: &Value) -> PortalResult<Value> {
-    let mut body = args.get("profile").cloned().unwrap_or_else(|| json!({}));
+pub async fn flexible_combination_preview_tool(args: &Value) -> PortalResult<Value> {
+    let mut body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
     if let Some(anchor) = args.get("anchor").filter(|v| v.is_object()) {
         if !body.is_object() {
             body = json!({});
@@ -708,15 +708,15 @@ pub async fn context_profile_preview_tool(args: &Value) -> PortalResult<Value> {
             .unwrap()
             .insert("anchor".to_string(), anchor.clone());
     }
-    crate::context_profile::api::preview(&body, &cp_ref_from_args(args)).await
+    crate::flexible_combination::api::preview(&body, &fc_ref_from_args(args)).await
 }
 
-pub async fn context_profile_resolve_tool(args: &Value) -> PortalResult<Value> {
-    crate::context_profile::api::resolve(&cp_ref_from_args(args), &anchor_from_args(args)).await
+pub async fn flexible_combination_resolve_tool(args: &Value) -> PortalResult<Value> {
+    crate::flexible_combination::api::resolve(&fc_ref_from_args(args), &anchor_from_args(args)).await
 }
 
-pub async fn context_profile_rule_tool(args: &Value) -> PortalResult<Value> {
-    crate::context_profile::api::rule(&cp_ref_from_args(args), &anchor_from_args(args)).await
+pub async fn flexible_combination_rule_tool(args: &Value) -> PortalResult<Value> {
+    crate::flexible_combination::api::rule(&fc_ref_from_args(args), &anchor_from_args(args)).await
 }
 
 /// validate_metadata：递归校验 JSON 可解析性。
@@ -1616,12 +1616,12 @@ pub async fn run_tool(root: &Path, name: &str, args: &Value) -> PortalResult<Val
         "get_fact" => get_fact_tool(args).await,
         "service_catalog_list" => service_catalog_list_tool(args).await,
         "service_catalog_get" => service_catalog_get_tool(args).await,
-        "context_profile_list" => context_profile_list_tool(args).await,
-        "context_profile_get" => context_profile_get_tool(args).await,
-        "context_profile_validate" => context_profile_validate_tool(args).await,
-        "context_profile_preview" => context_profile_preview_tool(args).await,
-        "context_profile_resolve" => context_profile_resolve_tool(args).await,
-        "context_profile_rule" => context_profile_rule_tool(args).await,
+        "flexible_combination_list" => flexible_combination_list_tool(args).await,
+        "flexible_combination_get" => flexible_combination_get_tool(args).await,
+        "flexible_combination_validate" => flexible_combination_validate_tool(args).await,
+        "flexible_combination_preview" => flexible_combination_preview_tool(args).await,
+        "flexible_combination_resolve" => flexible_combination_resolve_tool(args).await,
+        "flexible_combination_rule" => flexible_combination_rule_tool(args).await,
         "git_status" => git_status_tool(root, args).await,
         "git_diff" => git_diff_tool(root, args).await,
         "git_log" => git_log_tool(root, args).await,

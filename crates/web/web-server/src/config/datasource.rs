@@ -70,6 +70,10 @@ pub async fn init_datasources() -> crate::Result<()> {
         )));
     }
 
+    // 并行注册 PG 数据源到 tokio-postgres 管理器(供零拷贝新链路 /api/doc/data/tokio-zmc-* 用)。
+    // 仅注册 Postgres 类型;失败不阻断启动(新链路是可选增量,老 sqlx 链路已注册成功)。
+    register_pg_datasources(configs.clone()).await;
+
     let default_db_id = db_manager.get_default_db_id().await;
 
     crate::config::init_database_migrations().await?;
@@ -301,7 +305,6 @@ async fn load_active_datasources(
 /// * `configs` - 待注册的数据源配置列表
 async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> crate::Result<()> {
     info!("开始注册数据源到内存...");
-
     let mut success_count = 0;
     let mut fail_count = 0;
 
@@ -333,6 +336,50 @@ async fn register_datasources(mm: &DatabaseManager, configs: Vec<DbConfig>) -> c
         )))
     } else {
         Ok(())
+    }
+}
+
+/// 把配置数据源并行注册到 tokio-postgres 管理器(零拷贝新链路用)。
+///
+/// 仅注册 Postgres 类型(pg 管理器 PG-only);逐个失败仅告警,不阻断启动 —— 新链路是
+/// 可选增量,老 sqlx 链路已在前面注册成功。`DbConfig` 两 crate 字段一致,逐字段映射。
+async fn register_pg_datasources(configs: Vec<DbConfig>) {
+    use cmx_database_pg::{
+        DbConfig as PgDbConfig, DbType as PgDbType, PoolConfig as PgPoolConfig,
+        get_default_pg_db_manager,
+    };
+
+    let pg_mm = get_default_pg_db_manager();
+    for c in configs {
+        if !matches!(c.db_type, cmx_database::DbType::Postgres) {
+            continue;
+        }
+        let pg_config = PgDbConfig {
+            db_type: PgDbType::Postgres,
+            db_url: c.db_url.clone(),
+            db_id: c.db_id.clone(),
+            db_name: c.db_name.clone(),
+            db_schema: c.db_schema.clone(),
+            default: c.default,
+            pool_config: PgPoolConfig {
+                max_connections: c.pool_config.max_connections,
+                min_connections: c.pool_config.min_connections,
+                connect_timeout: c.pool_config.connect_timeout,
+                acquire_timeout: c.pool_config.acquire_timeout,
+                idle_timeout: c.pool_config.idle_timeout,
+                max_lifetime: c.pool_config.max_lifetime,
+            },
+            health_check_interval: c.health_check_interval,
+            health_check_timeout: c.health_check_timeout,
+            domain_code: c.domain_code.clone(),
+            application_code: c.application_code.clone(),
+            module_code: c.module_code.clone(),
+            source_type: c.source_type.clone(),
+        };
+        match pg_mm.register_data_source(pg_config).await {
+            Ok(_) => info!("成功注册 PG 数据源(新链路): {}", c.db_id),
+            Err(e) => warn!("注册 PG 数据源(新链路) {} 失败(不阻断启动): {}", c.db_id, e),
+        }
     }
 }
 

@@ -52,6 +52,6 @@ lsof -tiTCP:3000 -sTCP:LISTEN | xargs -r kill      # 停 Node
 ## 验证基线
 
 - 后端：全量端点回归 10/10 通过（domains/menu(dam)/activities/dam-registry/definitions/dict/
-  context-profile/html-pages(77)/fact/agent）。
+  flexible-combination/html-pages(77)/fact/agent）。
 - 前端：Playwright 实测两前端 登录→token→主应用挂载→零失败 API。
 - 测试账号：`migtest / Test@1234`（经 `/api/iam/users/create` 创建）。

@@ -14,7 +14,7 @@ const DAM_TREE_ROOTS: &[&[&str]] = &[
     &["dict", "seeds"],
     &["fact"],
     &["meta", "definitions"],
-    &["meta", "context-profile"],
+    &["meta", "flexible-combination"],
     &["form-pages", "sources"],
     &["html-pages", "sources"],
     &["menu-pages"],

@@ -30,6 +30,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::compression::CompressionLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::{info, warn};
@@ -228,8 +229,16 @@ async fn main() -> Result<()> {
         .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(cors_layer())
-        // 响应压缩（gzip/br）：对列式 JSON 单据包压缩比高（方案 §8 四级小包）
-        .layer(CompressionLayer::new());
+        // 响应压缩（gzip/br）：对列式 JSON 单据包压缩比高（方案 §8 四级小包）。
+        // 例外 application/octet-stream：单据流式端点(/api/doc/data/tokio-zmc-stream)用
+        // chunked 分帧边算边发（O(单行)内存），压缩层会缓冲整流并可能截断 gzip 尾（丢 trailer
+        // → 浏览器 net::ERR_*），故排除二进制流，保持真流式。
+        .layer(
+            CompressionLayer::new()
+                .compress_when(DefaultPredicate::new().and(NotForContentType::const_new(
+                    "application/octet-stream",
+                ))),
+        );
 
     // 添加静态文件服务作为 fallback
     let routes_all = routes_all.fallback_service(axum::routing::get_service(

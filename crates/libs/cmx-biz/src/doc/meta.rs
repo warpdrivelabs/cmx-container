@@ -27,21 +27,76 @@ pub struct LayerView {
     pub id: String,
     /// 物理表名（= `voucherTables[i].tableName`）
     pub table_name: String,
-    /// 层级标签（L1/L2/...）
+    /// 层级标签（L1/L2/...；同层多表共享同一 level）
     pub level: String,
+    /// 层级显示名（voucherSchema.schema[i].levelName，如 "凭证批"；无则空）
+    pub level_name: String,
+    /// 父表 id（`voucherTables[i].parentTable`，明确指出父是上一层哪张表；空=未指定，
+    /// 装载时回退到「上一层默认表」= layer_order 主链路父）。
+    pub parent_table: String,
     /// 该层完整列名（本表 fields + documentFieldSets 展开，去重，有序）
     pub columns: Vec<ColumnView>,
+    /// 本表定义的汇总表（`voucherTables[i].summaries[]`；无则空）
+    pub summaries: Vec<SummaryView>,
+    /// 本表 measure 且 agg 非空的列名（便于前端识别可上卷列）
+    pub agg_fields: Vec<String>,
     /// 该层物理 Schema（Arc 共享，供装载零拷贝复用）
     pub schema: Arc<Schema>,
 }
 
-/// 一列的最小视图（只取建表/装载/回存必需的属性）。
+impl LayerView {
+    /// 按列名找 ColumnView（供过滤值类型化 / 列白名单）。
+    pub fn column(&self, name: &str) -> Option<&ColumnView> {
+        self.columns.iter().find(|c| c.name == name)
+    }
+    /// 该列是否存在（白名单校验）。
+    pub fn has_column(&self, name: &str) -> bool {
+        self.schema.get_index(name).is_some()
+    }
+}
+
+/// 一张汇总表（sum 表）的视图 —— 结构同「表」，挂在某张源表下。
+///
+/// 定义形如 `{ id, name, caption, fields:[<field>] }`；fields 是**已物化的完整列**
+/// （定义里内联，无需 documentFieldSets 合并）。度量列带 `agg:"sum"`、维度列带 `dimType`。
+#[derive(Debug, Clone)]
+pub struct SummaryView {
+    pub id: String,
+    pub name: String,
+    /// 显示标题（caption.zh_CN，回退 name）
+    pub caption: String,
+    /// 所属源表 table_name
+    pub source_table: String,
+    /// 汇总表列（复用 parse_column，含 caption/dataType/dimType/agg/isPrimaryKey）
+    pub columns: Vec<ColumnView>,
+    /// 汇总表物理 Schema
+    pub schema: Arc<Schema>,
+}
+
+/// 一个层级组（同 level 下的全部并列表）—— 用于「彻底解析」保真每层多表。
+#[derive(Debug, Clone)]
+pub struct LevelGroup {
+    /// 层级标签（L1/L2/...）
+    pub level: String,
+    /// 层级显示名
+    pub level_name: String,
+    /// 该层全部表 id（如 L4 = [cv_aux_line, cv_cyzb_line]；主链路取首个）
+    pub table_ids: Vec<String>,
+}
+
+/// 一列的最小视图（建表/装载/回存必需的属性 + 前端显示用 caption/dimType/agg）。
 #[derive(Debug, Clone)]
 pub struct ColumnView {
     pub name: String,
     pub data_type: String,
     pub nullable: bool,
     pub is_primary_key: bool,
+    /// 列显示标题（caption.zh_CN，无则回退为 name）—— 供前端通用单据页建列头。
+    pub caption: String,
+    /// 维度类型（attribute|dimension|measure，无则空）—— 前端可据此分组/排序。
+    pub dim_type: String,
+    /// 度量聚合方式（如 "sum"；无则空）—— 汇总表度量列 + 主表 measure 列携带。
+    pub agg: String,
 }
 
 /// 父子关系（来自 `voucherSchema.relations`）。
@@ -60,10 +115,13 @@ pub struct RelationView {
 pub struct DocMetaView {
     pub module_code: String,
     pub version: u64,
-    /// 层序（自顶向下，L1..Ln）：schema id 列表
+    /// 层序（自顶向下，L1..Ln）：schema id 列表。**主链路**——每 level-group 取首表，
+    /// 装载器（DocLoader/ZmcDocLoader）据此下钻。同层多表见 `layer_groups`。
     pub layer_order: Vec<String>,
-    /// 各层视图（与 layer_order 对齐，按 id 可查）
+    /// 各层视图（**含每层全部表**，不止主链路；按 id 可查）
     pub layers: Vec<LayerView>,
+    /// 层级组（同 level 下全部并列表）—— 「彻底解析」保真每层多表。
+    pub layer_groups: Vec<LevelGroup>,
     /// 父子关系
     pub relations: Vec<RelationView>,
     /// 校验规则（原始数组透传，§14.2）：[{ code, expr, message, severity, level }]
@@ -132,14 +190,20 @@ impl DocMetaView {
         // relations
         let relations = parse_relations(vs);
 
-        // voucherTables → 各层视图
+        // schema 节点的 id → levelName 映射（供各层显示名）
+        let level_names = parse_level_names(vs);
+
+        // 层级组：同 level 下全部并列表（彻底解析保真每层多表）
+        let layer_groups = parse_layer_groups(vs);
+
+        // voucherTables → 各层视图（含每层全部表 + 每表汇总表）
         let tables = doc
             .get("voucherTables")
             .and_then(|v| v.as_array())
             .ok_or_else(|| BizError::business("单据定义缺少 voucherTables"))?;
         let mut layers = Vec::with_capacity(tables.len());
         for t in tables {
-            layers.push(parse_layer(t, base)?);
+            layers.push(parse_layer(t, base, &level_names)?);
         }
 
         Ok(DocMetaView {
@@ -147,6 +211,7 @@ impl DocMetaView {
             version,
             layer_order,
             layers,
+            layer_groups,
             relations,
             validation_rules: doc
                 .get("validationRules")
@@ -177,6 +242,77 @@ impl DocMetaView {
             .filter(|r| r.parent == parent_id)
             .collect()
     }
+
+    /// 父层在 `layer_groups` 里的组下标（按组内任一表 id 命中）。
+    fn group_index_of(&self, table_id: &str) -> Option<usize> {
+        self.layer_groups
+            .iter()
+            .position(|g| g.table_ids.iter().any(|t| t == table_id))
+    }
+
+    /// 返回某父层的全部**直接子表**（同父兄弟）。
+    ///
+    /// 规则（同父兄弟 + parentTable 可选回退）：
+    /// - 定位父所在层组 `gi`，取**下一组** `layer_groups[gi+1]` 的全部表；
+    /// - 若下一组里**有任何**表声明了 `parent_table`，则只返回 `parent_table == parent_id` 的表
+    ///   （精确父子）；
+    /// - 若下一组**无任何**表声明 `parent_table`（老定义，如当前 cmxfico），则整组都算该父的子
+    ///   （回退：上一层默认表 = 主链路父，全组并列挂同一父）。
+    pub fn child_layers(&self, parent_id: &str) -> Vec<&LayerView> {
+        let Some(gi) = self.group_index_of(parent_id) else {
+            return Vec::new();
+        };
+        let Some(next) = self.layer_groups.get(gi + 1) else {
+            return Vec::new();
+        };
+        let group_layers: Vec<&LayerView> = next
+            .table_ids
+            .iter()
+            .filter_map(|id| self.layer(id))
+            .collect();
+        let any_declared = group_layers.iter().any(|l| !l.parent_table.is_empty());
+        if any_declared {
+            group_layers
+                .into_iter()
+                .filter(|l| l.parent_table == parent_id)
+                .collect()
+        } else {
+            group_layers
+        }
+    }
+
+    /// 某表是否为其所在层组的**主表**（= table_ids[0]，主链路那张，孙层只从主表下钻）。
+    pub fn is_primary_in_group(&self, table_id: &str) -> bool {
+        self.layer_groups
+            .iter()
+            .any(|g| g.table_ids.first().map(|t| t == table_id).unwrap_or(false))
+    }
+
+    /// 取父→子的 childKey：优先用父所在组下标对齐的 `relations[gi]`，默认 `upper_id`。
+    ///
+    /// 兄弟表共用同一 childKey（都用 upper_id 指父），故只按父的组下标取，不依赖具体子表。
+    pub fn child_key_for(&self, parent_id: &str) -> String {
+        self.group_index_of(parent_id)
+            .and_then(|gi| self.relations.get(gi))
+            .map(|r| r.child_key.clone())
+            .unwrap_or_else(|| "upper_id".to_string())
+    }
+
+    /// 取「当 `child_id` 作为子层被装载时」它匹配父的 childKey（懒下钻用）。
+    ///
+    /// child 在第 gi 组，其父在第 gi-1 组，childKey = `relations[gi-1]`（默认 upper_id）。
+    pub fn child_key_for_child(&self, child_id: &str) -> Option<String> {
+        let gi = self.group_index_of(child_id)?;
+        if gi == 0 {
+            return None; // 根层无父
+        }
+        Some(
+            self.relations
+                .get(gi - 1)
+                .map(|r| r.child_key.clone())
+                .unwrap_or_else(|| "upper_id".to_string()),
+        )
+    }
 }
 
 // ─────────────────────── 解析辅助 ───────────────────────
@@ -196,6 +332,66 @@ fn parse_layer_order(vs: &Value) -> Vec<String> {
         }
     }
     order
+}
+
+/// schema 节点 id → levelName 映射（voucherSchema.schema[i].levelName）。
+fn parse_level_names(vs: &Value) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Some(schema) = vs.get("schema").and_then(|v| v.as_array()) {
+        for level_group in schema {
+            // 同层多表：给该组内**每个** node id 都登记 levelName（首个非空 levelName 作组名）
+            let nodes: Vec<&Value> = match level_group.as_array() {
+                Some(a) => a.iter().collect(),
+                None => vec![level_group],
+            };
+            let group_name = nodes
+                .iter()
+                .find_map(|n| n.get("levelName").and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+                .unwrap_or("");
+            for n in nodes {
+                if let Some(id) = n.get("id").and_then(|v| v.as_str()) {
+                    map.insert(id.to_string(), group_name.to_string());
+                }
+            }
+        }
+    }
+    map
+}
+
+/// 层级组：每个 level-group 的 level + levelName + 全部表 id（同层多表保真）。
+fn parse_layer_groups(vs: &Value) -> Vec<LevelGroup> {
+    let mut out = Vec::new();
+    if let Some(schema) = vs.get("schema").and_then(|v| v.as_array()) {
+        for level_group in schema {
+            let nodes: Vec<&Value> = match level_group.as_array() {
+                Some(a) => a.iter().collect(),
+                None => vec![level_group],
+            };
+            if nodes.is_empty() {
+                continue;
+            }
+            let level = nodes[0]
+                .get("level")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let level_name = nodes
+                .iter()
+                .find_map(|n| n.get("levelName").and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+                .unwrap_or("")
+                .to_string();
+            let table_ids: Vec<String> = nodes
+                .iter()
+                .filter_map(|n| n.get("id").and_then(|v| v.as_str()).map(String::from))
+                .collect();
+            out.push(LevelGroup {
+                level,
+                level_name,
+                table_ids,
+            });
+        }
+    }
+    out
 }
 
 fn parse_relations(vs: &Value) -> Vec<RelationView> {
@@ -225,7 +421,11 @@ fn parse_relations(vs: &Value) -> Vec<RelationView> {
     out
 }
 
-fn parse_layer(t: &Value, base: &Value) -> Result<LayerView> {
+fn parse_layer(
+    t: &Value,
+    base: &Value,
+    level_names: &std::collections::HashMap<String, String>,
+) -> Result<LayerView> {
     let table_name = t
         .get("tableName")
         .and_then(|v| v.as_str())
@@ -238,6 +438,18 @@ fn parse_layer(t: &Value, base: &Value) -> Result<LayerView> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    // 显示名：优先 schema 节点 levelName，回退表上 levelName/tableAlias
+    let level_name = level_names
+        .get(&id)
+        .cloned()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            t.get("levelName")
+                .or_else(|| t.get("tableAlias"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        })
+        .unwrap_or_default();
 
     // 列 = 本表 fields + documentFieldSets 展开（去重）
     let mut columns: Vec<ColumnView> = Vec::new();
@@ -269,6 +481,41 @@ fn parse_layer(t: &Value, base: &Value) -> Result<LayerView> {
     }
 
     // 建 Schema（字段名 → FieldType）
+    let schema = build_schema(&id, &columns)
+        .map_err(|e| BizError::business(format!("层 {table_name} Schema 构建失败: {e}")))?;
+
+    // 本表 measure 且 agg 非空的列（可上卷列，供前端识别）
+    let agg_fields: Vec<String> = columns
+        .iter()
+        .filter(|c| !c.agg.is_empty())
+        .map(|c| c.name.clone())
+        .collect();
+
+    // 本表定义的汇总表（sum 表）
+    let summaries = parse_summaries(t, &table_name)?;
+
+    // 父表 id（parentTable；空=未指定，装载时回退到上一层默认表）
+    let parent_table = t
+        .get("parentTable")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(LayerView {
+        id,
+        table_name,
+        level,
+        level_name,
+        parent_table,
+        columns,
+        summaries,
+        agg_fields,
+        schema,
+    })
+}
+
+/// 用列视图建物理 Schema（层与汇总表共用）。
+fn build_schema(id: &str, columns: &[ColumnView]) -> std::result::Result<Arc<Schema>, String> {
     let fields: Vec<Field> = columns
         .iter()
         .map(|c| Field {
@@ -277,18 +524,63 @@ fn parse_layer(t: &Value, base: &Value) -> Result<LayerView> {
             label: String::new(),
         })
         .collect();
-    let schema = Arc::new(
-        Schema::new(id.clone(), fields)
-            .map_err(|e| BizError::business(format!("层 {table_name} Schema 构建失败: {e}")))?,
-    );
+    Schema::new(id.to_string(), fields).map(Arc::new).map_err(|e| e.to_string())
+}
 
-    Ok(LayerView {
-        id,
-        table_name,
-        level,
-        columns,
-        schema,
-    })
+/// 解析一张表的汇总表（`voucherTables[i].summaries[]`）。
+///
+/// 每张汇总表 `{id, name, caption, fields[]}`：fields 是**已物化的完整列**（定义内联，
+/// 不走 documentFieldSets 合并），直接用 `parse_column`。为每张汇总表建独立 Schema。
+fn parse_summaries(t: &Value, source_table: &str) -> Result<Vec<SummaryView>> {
+    let Some(arr) = t.get("summaries").and_then(|v| v.as_array()) else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, s) in arr.iter().enumerate() {
+        let id = s
+            .get("id")
+            .or_else(|| s.get("name"))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| format!("{source_table}_sum{}", i + 1));
+        let name = s
+            .get("name")
+            .or_else(|| s.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&id)
+            .to_string();
+        let caption = s
+            .get("caption")
+            .and_then(|c| c.get("zh_CN"))
+            .and_then(|v| v.as_str())
+            .filter(|x| !x.is_empty())
+            .unwrap_or(&name)
+            .to_string();
+
+        let mut columns: Vec<ColumnView> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        if let Some(fields) = s.get("fields").and_then(|v| v.as_array()) {
+            for f in fields {
+                if let Some(c) = parse_column(f) {
+                    if seen.insert(c.name.clone()) {
+                        columns.push(c);
+                    }
+                }
+            }
+        }
+        let schema = build_schema(&id, &columns)
+            .map_err(|e| BizError::business(format!("汇总表 {id} Schema 构建失败: {e}")))?;
+
+        out.push(SummaryView {
+            id,
+            name,
+            caption,
+            source_table: source_table.to_string(),
+            columns,
+            schema,
+        });
+    }
+    Ok(out)
 }
 
 fn parse_column(f: &Value) -> Option<ColumnView> {
@@ -309,11 +601,32 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         .map(|n| n == 1)
         .unwrap_or(false)
         || name == "id";
+    // 显示标题：caption.zh_CN，缺省回退列名（供前端通用页列头）
+    let caption = f
+        .get("caption")
+        .and_then(|c| c.get("zh_CN"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&name)
+        .to_string();
+    let dim_type = f
+        .get("dimType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let agg = f
+        .get("agg")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     Some(ColumnView {
         name,
         data_type,
         nullable,
         is_primary_key,
+        caption,
+        dim_type,
+        agg,
     })
 }
 
@@ -354,7 +667,9 @@ mod tests {
                 "schema": [
                     [ { "id": "cv_batch",  "level": "L1", "levelName": "凭证批" } ],
                     [ { "id": "cv_header", "level": "L2", "levelName": "凭证头" } ],
-                    [ { "id": "cv_line",   "level": "L3", "levelName": "科目行" } ]
+                    // L3 同层两张并列表（主链路取首个 cv_line）
+                    [ { "id": "cv_line",   "level": "L3", "levelName": "科目行" },
+                      { "id": "cv_aux",    "level": "L3" } ]
                 ],
                 "relations": [
                     { "parent": "cv_batch",  "child": "cv_header", "parentKey": "id", "childKey": "upper_id" },
@@ -363,13 +678,33 @@ mod tests {
             },
             "voucherTables": [
                 { "level": "L1", "tableName": "cv_batch",
-                  "fields": [ { "name": "doc_no", "dataType": "VARCHAR", "nullable": true } ],
+                  "fields": [ { "name": "doc_no", "dataType": "VARCHAR", "nullable": true,
+                               "dimType": "attribute", "caption": { "zh_CN": "凭证编号" } } ],
                   "documentFieldSets": [ "documentLevelFields" ] },
                 { "level": "L2", "tableName": "cv_header",
                   "fields": [ { "name": "total_dr", "dataType": "DECIMAL", "decimalDigits": 2 } ],
                   "documentFieldSets": [ "documentLevelFields" ] },
                 { "level": "L3", "tableName": "cv_line",
-                  "fields": [ { "name": "amount", "dataType": "DECIMAL" } ],
+                  "fields": [ { "name": "amount", "dataType": "DECIMAL", "dimType": "measure", "agg": "sum",
+                               "caption": { "zh_CN": "金额" } } ],
+                  "documentFieldSets": [ "documentLevelFields" ],
+                  "summaries": [
+                    { "id": "cv_line_sum", "name": "cv_line_sum", "caption": { "zh_CN": "科目行汇总" },
+                      "fields": [
+                        { "name": "id", "dataType": "BIGINT", "isPrimaryKey": 1, "caption": { "zh_CN": "主键" } },
+                        { "name": "gl_account_id", "dataType": "BIGINT", "dimType": "dimension", "caption": { "zh_CN": "科目" } },
+                        { "name": "amount", "dataType": "DECIMAL", "dimType": "measure", "agg": "sum", "caption": { "zh_CN": "金额合计" } }
+                      ] },
+                    { "id": "cv_line_sum_2", "name": "cv_line_sum_2", "caption": { "zh_CN": "科目行汇总2" },
+                      "fields": [
+                        { "name": "id", "dataType": "BIGINT", "isPrimaryKey": 1 },
+                        { "name": "amount", "dataType": "DECIMAL", "dimType": "measure", "agg": "sum" }
+                      ] }
+                  ] },
+                // L3 第二张并列表（无 summaries）
+                { "level": "L3", "tableName": "cv_aux",
+                  "fields": [ { "name": "profit_ctr_id", "dataType": "BIGINT", "dimType": "dimension",
+                               "caption": { "zh_CN": "利润中心" } } ],
                   "documentFieldSets": [ "documentLevelFields" ] }
             ]
         })
@@ -419,11 +754,110 @@ mod tests {
     }
 
     #[test]
+    fn parses_display_metadata_for_generic_loader() {
+        let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
+        let batch = v.layer("cv_batch").unwrap();
+        // 层显示名来自 voucherSchema.schema[i].levelName
+        assert_eq!(batch.level_name, "凭证批");
+        assert_eq!(v.layer("cv_header").unwrap().level_name, "凭证头");
+        // 列显示标题：有 caption 用 caption.zh_CN，无则回退列名
+        let doc_no = batch.columns.iter().find(|c| c.name == "doc_no").unwrap();
+        assert_eq!(doc_no.caption, "凭证编号");
+        assert_eq!(doc_no.dim_type, "attribute");
+        // 无 caption 的 base 列回退为列名
+        let id_col = batch.columns.iter().find(|c| c.name == "id").unwrap();
+        assert_eq!(id_col.caption, "id");
+    }
+
+    #[test]
     fn child_relations_lookup() {
         let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
         let ch = v.child_relations("cv_batch");
         assert_eq!(ch.len(), 1);
         assert_eq!(ch[0].child, "cv_header");
+    }
+
+    #[test]
+    fn parses_multi_table_levels_and_summaries() {
+        let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
+
+        // ── 同层多表：L3 有 cv_line + cv_aux 两张并列表 ──────────────────
+        // layer_order 仍是主链路（每层取首表）——回归：装载不受影响
+        assert_eq!(v.layer_order, vec!["cv_batch", "cv_header", "cv_line"]);
+        // layer_groups 完整保真每层全部表
+        assert_eq!(v.layer_groups.len(), 3);
+        let l3 = v.layer_groups.iter().find(|g| g.level == "L3").unwrap();
+        assert_eq!(l3.level_name, "科目行");
+        assert_eq!(l3.table_ids, vec!["cv_line", "cv_aux"]);
+        // 第二张并列表能取到、列解析正确
+        let aux = v.layer("cv_aux").expect("cv_aux 应被解析进 layers");
+        assert_eq!(aux.level, "L3");
+        assert_eq!(aux.level_name, "科目行"); // 同层多表共享 levelName
+        assert!(aux.columns.iter().any(|c| c.name == "profit_ctr_id" && c.caption == "利润中心"));
+        // layers 含全部 4 张表（cv_batch/cv_header/cv_line/cv_aux）
+        assert_eq!(v.layers.len(), 4);
+
+        // ── 汇总表：cv_line 有 2 张 summaries ───────────────────────────
+        let line = v.layer("cv_line").unwrap();
+        assert_eq!(line.summaries.len(), 2);
+        let sum = &line.summaries[0];
+        assert_eq!(sum.id, "cv_line_sum");
+        assert_eq!(sum.caption, "科目行汇总");
+        assert_eq!(sum.source_table, "cv_line");
+        // 汇总表列带 caption + agg（measure 列 agg=="sum"）
+        let amt = sum.columns.iter().find(|c| c.name == "amount").unwrap();
+        assert_eq!(amt.caption, "金额合计");
+        assert_eq!(amt.agg, "sum");
+        assert_eq!(amt.dim_type, "measure");
+        // 汇总表 Schema 建成
+        assert_eq!(sum.schema.field_count(), sum.columns.len());
+        // 第二张汇总表
+        assert_eq!(line.summaries[1].id, "cv_line_sum_2");
+
+        // ── 主表 measure 列的 agg + agg_fields ─────────────────────────
+        let amount = line.columns.iter().find(|c| c.name == "amount").unwrap();
+        assert_eq!(amount.agg, "sum");
+        assert!(line.agg_fields.contains(&"amount".to_string()));
+
+        // ── 无汇总表的表 summaries 为空 ─────────────────────────────────
+        assert!(aux.summaries.is_empty());
+    }
+
+    #[test]
+    fn child_layers_sibling_derivation() {
+        let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
+        // cv_header 的子 = L3 组全部表（回退：无 parent_table 声明 → 全组同父兄弟）
+        let kids = v.child_layers("cv_header");
+        let ids: Vec<&str> = kids.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, vec!["cv_line", "cv_aux"], "同父兄弟：下一组两张表都是子");
+        // 主表判定：cv_line 是 L3 组主表，cv_aux 不是
+        assert!(v.is_primary_in_group("cv_line"));
+        assert!(!v.is_primary_in_group("cv_aux"));
+        // childKey 取父组对齐的 relation（upper_id）
+        assert_eq!(v.child_key_for("cv_header"), "upper_id");
+        // 最深层无子
+        assert!(v.child_layers("cv_line").is_empty());
+    }
+
+    #[test]
+    fn child_layers_respects_parent_table_when_declared() {
+        // 给 L3 两张表都声明 parentTable：cv_line→cv_header，cv_aux→cv_header
+        // 再加一张“别的父”的表，验证精确过滤
+        let mut doc = sample_doc();
+        let tables = doc["voucherTables"].as_array_mut().unwrap();
+        for t in tables.iter_mut() {
+            let name = t["tableName"].as_str().unwrap().to_string();
+            if name == "cv_line" || name == "cv_aux" {
+                t["parentTable"] = json!("cv_header");
+            }
+        }
+        let v = DocMetaView::parse(&doc, &sample_base()).unwrap();
+        let kids = v.child_layers("cv_header");
+        let ids: Vec<&str> = kids.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, vec!["cv_line", "cv_aux"]); // 都精确指向 cv_header
+        assert_eq!(v.layer("cv_aux").unwrap().parent_table, "cv_header");
+        // 声明了 parent_table 后，非该父的父查不到这些子
+        assert!(v.child_layers("cv_batch").iter().all(|l| l.id != "cv_line"));
     }
 
     #[test]

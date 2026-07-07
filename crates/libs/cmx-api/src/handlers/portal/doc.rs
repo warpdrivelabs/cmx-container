@@ -1,6 +1,15 @@
 //! 业务单据装载/回存 HTTP handler（方案 Phase 4/5）
 //!
-//! - `GET  /api/doc/data` → DocLoader 装载嵌套 DataSet → ColumnarCodec 列式包 → ApiResp
+//! 装载端点命名 `/api/doc/data/<驱动>-<内存模式>-<传输>`，三段一眼可辨：
+//!   - 驱动：`sqlx`（PG/MySQL/SQLite）| `tokio`（tokio-postgres）
+//!   - 内存模式：`dataset`（老 DataSet，全拷贝）| `zmc`（ZmcDataSet，持原始行零拷贝）
+//!   - 传输：`json`（ApiResp JSON 信封）| `msgpack`（列式二进制信封）
+//!   驱动 sqlx|tokio × 内存 dataset|zmc × 传输 json|msgpack 的组合端点：
+//!     · `sqlx-dataset-json`   sqlx + DataSet + JSON（老链路）
+//!     · `tokio-zmc-msgpack`   tokio + ZmcDataSet + msgpack 二进制
+//!     · `sqlx-zmc-msgpack`    sqlx + ZmcDataSet + msgpack 二进制
+//!     · `tokio-zmc-json`      tokio + ZmcDataSet + 纯 JSON
+//!     · `sqlx-zmc-json`       sqlx + ZmcDataSet + 纯 JSON
 //! - `POST /api/doc/save` → DocSaver 双模式回存（Phase 5 接入）
 //!
 //! 分层：handler 层负责「读单据定义 + 解析 DocMetaView(带缓存)」，
@@ -8,15 +17,14 @@
 
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
-use axum::Json;
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
 
-use cmx_biz::doc::{cache, saver, DocLoader, DocMetaView, DocRevision, DocSaver, LoadOptions};
-use cmx_core::model::cell::DataValue;
+use cmx_biz::doc::{cache, saver, DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver};
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
 
@@ -25,7 +33,7 @@ use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
 use crate::{ApiResp, Result};
 
-/// GET /api/doc/data 查询参数。
+/// `/api/doc/data/*` 装载端点共用查询参数（GET 便捷路径：URL query）。
 #[derive(Debug, Deserialize)]
 pub struct DocDataQuery {
     pub domain: String,
@@ -33,10 +41,10 @@ pub struct DocDataQuery {
     pub module: String,
     /// 单据定义文件名（如 cmxfico_doc_meta_v1.json）
     pub file: String,
-    /// 可选：根层过滤 `col:value`（简单等值）
+    /// GET 便捷：根层过滤 `col:value`（简单等值）
     #[serde(default)]
     pub filter: Option<String>,
-    /// 可选：根层限制行数
+    /// GET 便捷：根层限制行数
     #[serde(default)]
     pub limit: Option<u64>,
     /// 可选：装载深度（懒下钻）
@@ -44,38 +52,470 @@ pub struct DocDataQuery {
     pub depth: Option<usize>,
 }
 
-/// `GET /api/doc/data` —— 装载单据数据为列式包。
-pub async fn doc_data(
+/// 数据库驱动（内存模式一律 zmc/dataset 由 transport 决定；此处只分驱动）。
+#[derive(Clone, Copy)]
+enum Driver {
+    Sqlx,
+    Tokio,
+}
+/// 内存模式 + 出口传输。
+#[derive(Clone, Copy)]
+enum Exit {
+    /// sqlx 老 DataSet + JSON
+    DatasetJson,
+    /// ZmcDataSet + msgpack 二进制
+    ZmcMsgpack,
+    /// ZmcDataSet + 纯 JSON
+    ZmcJson,
+}
+
+/// 从 GET query 构造简单 DocQuery（根层等值 + limit + depth）。
+fn simple_doc_query(meta: &DocMetaView, q: &DocDataQuery) -> DocQuery {
+    let root_id = meta.root_layer().map(|l| l.id.clone()).unwrap_or_default();
+    let mut dq = DocQuery::simple(&root_id, q.limit, q.depth);
+    if let Some(f) = &q.filter {
+        if let Some((col, val)) = f.split_once(':') {
+            // 简单等值 → 根层 filter JSON
+            let filter = serde_json::json!({ col: val });
+            let lq = dq.layers.entry(root_id.clone()).or_default();
+            lq.filter = cmx_biz::doc::Filter::from_json(&filter).ok().flatten();
+        }
+    }
+    dq
+}
+
+/// 统一装载核心：按驱动 + 出口跑对应装载器，产出响应。
+async fn run_doc_load(
+    driver: Driver,
+    exit: Exit,
+    meta: &DocMetaView,
+    db_id: &str,
+    dq: &DocQuery,
+) -> Result<axum::response::Response> {
+    use axum::response::IntoResponse;
+    use cmx_biz::doc::{ZmcDocLoader, ZmcDocLoaderSqlx};
+    use cmx_database_pg::get_default_pg_db_manager;
+
+    // 装载前校验列名（防注入 + 明确报错）
+    dq.validate(meta)?;
+
+    match (driver, exit) {
+        // sqlx + 老 DataSet + JSON
+        (Driver::Sqlx, Exit::DatasetJson) => {
+            let mm = get_default_db_manager();
+            let ds = DocLoader::load(mm, db_id, meta, dq).await?;
+            let pkg = ColumnarCodec::encode(&ds);
+            Ok(Json(ApiResp::ok(pkg)).into_response())
+        }
+        // tokio + Zmc + msgpack
+        (Driver::Tokio, Exit::ZmcMsgpack) => {
+            let mm = get_default_pg_db_manager();
+            let zmc = ZmcDocLoader::load(mm, db_id, meta, dq).await?;
+            let mut buf = Vec::new();
+            zmc.encode_columnar_binary(&mut buf);
+            Ok(msgpack_response(&buf))
+        }
+        // sqlx + Zmc + msgpack
+        (Driver::Sqlx, Exit::ZmcMsgpack) => {
+            let mm = get_default_db_manager();
+            let zmc = ZmcDocLoaderSqlx::load(mm, db_id, meta, dq).await?;
+            let mut buf = Vec::new();
+            zmc.encode_columnar_binary(&mut buf);
+            Ok(msgpack_response(&buf))
+        }
+        // tokio + Zmc + JSON
+        (Driver::Tokio, Exit::ZmcJson) => {
+            let mm = get_default_pg_db_manager();
+            let zmc = ZmcDocLoader::load(mm, db_id, meta, dq).await?;
+            Ok(Json(ApiResp::ok(zmc.encode_columnar_json())).into_response())
+        }
+        // sqlx + Zmc + JSON
+        (Driver::Sqlx, Exit::ZmcJson) => {
+            let mm = get_default_db_manager();
+            let zmc = ZmcDocLoaderSqlx::load(mm, db_id, meta, dq).await?;
+            Ok(Json(ApiResp::ok(zmc.encode_columnar_json())).into_response())
+        }
+        // 组合无意义（老 DataSet 只在 sqlx 侧）：tokio+DatasetJson 不存在
+        (Driver::Tokio, Exit::DatasetJson) => {
+            Err(cmx_biz::BizError::business("tokio 驱动无老 DataSet 通道").into())
+        }
+    }
+}
+
+fn msgpack_response(columnar: &[u8]) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let body = encode_envelope_ok(columnar);
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/x-msgpack")],
+        body,
+    )
+        .into_response()
+}
+
+/// GET 便捷 + POST 富查询共用的装载入口。
+/// - GET：URL query（简单等值/limit/depth）；
+/// - POST：body = 完整 [`DocQuery`] JSON（每层 filter/orderBy/分页/游标）。
+async fn doc_load_entry(
+    driver: Driver,
+    exit: Exit,
+    q: DocDataQuery,
+    headers: HeaderMap,
+    body: Option<Value>,
+) -> Result<axum::response::Response> {
+    let db_id = get_db_id_from_header(&headers).await;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let dq = match body {
+        Some(b) if !b.is_null() => DocQuery::from_json(&b)?,
+        _ => simple_doc_query(&meta, &q),
+    };
+    run_doc_load(driver, exit, &meta, &db_id, &dq).await
+}
+
+// ── 五个组合端点（GET + POST 共用 doc_load_entry） ──────────────────────────
+
+/// `GET|POST /api/doc/data/sqlx-dataset-json` —— sqlx + 老 DataSet + JSON。
+pub async fn doc_data_sqlx_dataset_json(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    debug!("{:<12} - sqlx-dataset-json {}/{}", "HANDLER", q.module, q.file);
+    doc_load_entry(Driver::Sqlx, Exit::DatasetJson, q, headers, body.map(|b| b.0)).await
+}
+
+/// `GET|POST /api/doc/data/tokio-zmc-msgpack` —— tokio + ZmcDataSet + msgpack 二进制。
+pub async fn doc_data_tokio_zmc_msgpack(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    debug!("{:<12} - tokio-zmc-msgpack {}/{}", "HANDLER", q.module, q.file);
+    doc_load_entry(Driver::Tokio, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
+}
+
+/// `GET|POST /api/doc/data/sqlx-zmc-msgpack` —— sqlx + ZmcDataSet + msgpack 二进制。
+pub async fn doc_data_sqlx_zmc_msgpack(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    debug!("{:<12} - sqlx-zmc-msgpack {}/{}", "HANDLER", q.module, q.file);
+    doc_load_entry(Driver::Sqlx, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
+}
+
+/// `GET|POST /api/doc/data/tokio-zmc-json` —— tokio + ZmcDataSet + 纯 JSON。
+pub async fn doc_data_tokio_zmc_json(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    debug!("{:<12} - tokio-zmc-json {}/{}", "HANDLER", q.module, q.file);
+    doc_load_entry(Driver::Tokio, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
+}
+
+/// `GET|POST /api/doc/data/sqlx-zmc-json` —— sqlx + ZmcDataSet + 纯 JSON。
+pub async fn doc_data_sqlx_zmc_json(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    debug!("{:<12} - sqlx-zmc-json {}/{}", "HANDLER", q.module, q.file);
+    doc_load_entry(Driver::Sqlx, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
+}
+
+// ── 懒下钻端点：只装某层在指定父下的子树 ─────────────────────────────────────
+
+/// `POST /api/doc/data/children` 请求体。
+#[derive(Debug, Deserialize)]
+pub struct DocChildrenReq {
+    pub domain: String,
+    pub application: String,
+    pub module: String,
+    pub file: String,
+    /// 要下钻装载的层 id。
+    pub layer: String,
+    /// 上层选中的父 id 列表（该层 childKey 匹配）。
+    #[serde(rename = "parentIds")]
+    pub parent_ids: Vec<Value>,
+    /// 该层查询（filter/orderBy/limit/offset/cursor）。
+    #[serde(default)]
+    pub query: Option<Value>,
+    /// 深度（从该层继续下钻几层；None=只装该层）。
+    #[serde(default)]
+    pub depth: Option<usize>,
+    /// 出口通道（缺省 tokio-zmc-json）。可选 "sqlx-zmc-json"。
+    #[serde(default)]
+    pub exit: Option<String>,
+}
+
+/// `POST /api/doc/data/children` —— 懒下钻：装载某层在给定父 id 下的子树（含可选孙层）。
+///
+/// 通用（元数据驱动）：`layer` 是任意层 id，childKey 由元数据推导，该层查询由 body.query
+/// 指定，全部经 `build_layer_select`。前端 grid 展开某父行时调用。出口纯 JSON 列式包
+/// （子树可直接 `CmxDataSet.fromJSON` 回填父行 `_children`）。
+pub async fn doc_children(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(req): Json<DocChildrenReq>,
+) -> Result<Json<ApiResp<Value>>> {
+    use cmx_biz::doc::{ZmcDocLoader, ZmcDocLoaderSqlx};
+    use cmx_database_pg::get_default_pg_db_manager;
+
+    debug!("{:<12} - doc_children {}/{}", "HANDLER", req.module, req.layer);
+    let db_id = get_db_id_from_header(&headers).await;
+    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, &req.file).await?;
+
+    // 组一个 DocQuery：把该层的查询塞进去 + depth。
+    let mut dq = DocQuery {
+        include_siblings: true,
+        depth: req.depth,
+        ..Default::default()
+    };
+    if let Some(v) = &req.query {
+        if !v.is_null() {
+            let lq_json = serde_json::json!({ "layers": { &req.layer: v } });
+            let parsed = DocQuery::from_json(&lq_json)?;
+            if let Some(lq) = parsed.layers.get(&req.layer) {
+                dq.layers.insert(req.layer.clone(), lq.clone());
+            }
+        }
+    }
+    dq.validate(&meta)?;
+
+    // 以该层为根、给定父 id 下钻装载子树（sqlx 可选，默认 tokio）。
+    let use_sqlx = req.exit.as_deref() == Some("sqlx-zmc-json");
+    let pkg = if use_sqlx {
+        let mm = get_default_db_manager();
+        let zmc = ZmcDocLoaderSqlx::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq)
+            .await?;
+        zmc.encode_columnar_json()
+    } else {
+        let mm = get_default_pg_db_manager();
+        let zmc = ZmcDocLoader::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq)
+            .await?;
+        zmc.encode_columnar_json()
+    };
+
+    Ok(Json(ApiResp::ok(pkg)))
+}
+
+// ── 真·流式端点：超大扁平结果零内存 chunked 传输 ──────────────────────────────
+
+/// `GET|POST /api/doc/data/tokio-zmc-stream` 请求参数（**单层扁平**大结果，不下钻）。
+///
+/// GET：URL query（domain/app/module/file + 便捷 filter/limit）；
+/// POST：body = `{ layer?, filter?, orderBy?, limit? }`（不指定 layer 则用根层）。
+/// 出口是**长度分帧**二进制流（`Content-Type: application/octet-stream`，
+/// `Transfer-Encoding: chunked`），服务端峰值内存 O(单行)。前端用 cmx-msgpack-stream 解码。
+pub async fn doc_data_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    use axum::response::IntoResponse;
+    use cmx_biz::doc::{build_layer_select, LayerQuery};
+    use cmx_database_pg::get_default_pg_db_manager;
+
+    debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file);
+    let db_id = get_db_id_from_header(&headers).await;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+
+    // 目标层：body.layer 指定，否则根层。流式**只装该单层**（扁平大结果，不嵌套）。
+    let body_val = body.map(|b| b.0).unwrap_or(Value::Null);
+    let layer_id = body_val
+        .get("layer")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| meta.root_layer().map(|l| l.id.clone()))
+        .ok_or_else(|| cmx_biz::BizError::business("单据无根层"))?;
+    let layer = meta
+        .layer(&layer_id)
+        .ok_or_else(|| cmx_biz::BizError::business(format!("层 {layer_id} 不在定义中")))?;
+
+    // 该层查询：body 有 filter/orderBy/limit 则用之，否则 GET 便捷 filter/limit。
+    let lq = if body_val.is_object() {
+        let dq = DocQuery::from_json(&serde_json::json!({ "layers": { &layer_id: body_val } }))?;
+        dq.layer(&layer_id)
+    } else {
+        let mut lq = LayerQuery::default();
+        lq.limit = q.limit;
+        if let Some(f) = &q.filter {
+            if let Some((col, val)) = f.split_once(':') {
+                lq.filter = cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?;
+            }
+        }
+        lq
+    };
+    lq.validate_against(layer)?;
+
+    // 生成参数化 SQL（无 parent_scope：单层根查询）
+    let (sql, params) = build_layer_select(layer, &lq, None)?;
+    let dataset_id = layer.id.clone();
+    // header 帧列名（与 SELECT 列顺序一致 = 定义 schema 字段顺序）——先于结果流发出，空结果也收尾。
+    let col_names: Vec<String> = layer.schema.fields.iter().map(|f| f.name.clone()).collect();
+
+    // 背压 channel：容量有限，producer 满则 await（受下游网络速度节流 → 内存平稳）。
+    let (tx, rx) = tokio::sync::mpsc::channel::<bytes::Bytes>(8);
+
+    // producer：独占一条连接跑流式查询，逐帧发到 channel。db_id/sql/params move 进 task。
+    tokio::spawn(async move {
+        let mm = get_default_pg_db_manager();
+        if let Err(e) = mm
+            .query_sql_zmc_stream_chunks(&db_id, &sql, params, &dataset_id, col_names, tx)
+            .await
+        {
+            tracing::warn!("流式装载失败 {}: {e}", dataset_id);
+        }
+    });
+
+    // Body::from_stream over receiver：axum 逐块 flush 给客户端（chunked）。
+    let stream = futures::stream::unfold(rx, |mut rx| async move {
+        rx.recv()
+            .await
+            .map(|chunk| (Ok::<bytes::Bytes, std::io::Error>(chunk), rx))
+    });
+    let response_body = axum::body::Body::from_stream(stream);
+
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/octet-stream"),
+            (axum::http::header::CACHE_CONTROL, "no-cache"),
+        ],
+        response_body,
+    )
+        .into_response())
+}
+
+/// `GET /api/doc/meta` —— 返回单据**显示元数据**(层序 L1..LN + 各层列 caption/类型 + 父子关系)。
+///
+/// 数据包(`/api/doc/data*`)只带列名,不带 caption/类型/宽度;通用单据前端页据此端点**动态**
+/// 构建 N 层主从 schema、各层 grid 与列头。复用已解析+缓存+合并 base 字段集的 `DocMetaView`
+/// (与装载器同一真相源),投影成前端友好 JSON。参数同 [`DocDataQuery`] 的 domain/app/module/file。
+pub async fn doc_meta(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_ctx): CmxSvrContext,
     Query(q): Query<DocDataQuery>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
-    debug!("{:<12} - doc_data {}/{}", "HANDLER", q.module, q.file);
-    let mm = get_default_db_manager();
-    let db_id = get_db_id_from_header(&headers).await;
+    let _ = &headers; // meta 与 db_id 无关(定义读取不走数据源);保留签名一致
+    debug!("{:<12} - doc_meta {}/{}", "HANDLER", q.module, q.file);
 
-    // 1. 取（或建）DocMetaView，带进程内缓存
     let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    Ok(Json(ApiResp::ok(project_doc_meta(&meta))))
+}
 
-    // 2. 组装装载选项
-    let mut opts = LoadOptions {
-        root_limit: q.limit,
-        depth: q.depth,
-        ..Default::default()
-    };
-    if let Some(f) = &q.filter {
-        if let Some((col, val)) = f.split_once(':') {
-            opts.root_filter
-                .push((col.to_string(), DataValue::String(val.to_string())));
-        }
-    }
+/// 把强类型 `DocMetaView` 投影成前端通用页要用的 JSON。
+///
+/// `layers` 输出**全部表**(含同层并列表,如 L4 的 cv_aux_line + cv_cyzb_line),每层带
+/// `id/tableName/level/levelName/columns/summaries/aggFields`;每列带
+/// `name/caption/dataType/dimType/agg/nullable/isPrimaryKey`;`summaries` 是本表汇总表(sum 表)。
+/// 附 `layerGroups`(同层全部表分组) + `relations`(父子键) + `layerOrder`(主链路)。
+fn project_doc_meta(meta: &DocMetaView) -> Value {
+    // layers：输出全部表(不止主链路)——前端据 layerGroups/level 自行归组
+    let layers: Vec<Value> = meta
+        .layers
+        .iter()
+        .map(|l| {
+            let cols: Vec<Value> = l.columns.iter().map(column_to_json).collect();
+            let summaries: Vec<Value> = l
+                .summaries
+                .iter()
+                .map(|s| {
+                    let scols: Vec<Value> = s.columns.iter().map(column_to_json).collect();
+                    serde_json::json!({
+                        "id": s.id,
+                        "name": s.name,
+                        "caption": s.caption,
+                        "sourceTable": s.source_table,
+                        "columns": scols,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "id": l.id,
+                "tableName": l.table_name,
+                "level": l.level,
+                "levelName": l.level_name,
+                "columns": cols,
+                "summaries": summaries,
+                "aggFields": l.agg_fields,
+            })
+        })
+        .collect();
 
-    // 3. 装载 → 列式包
-    let ds = DocLoader::load(mm, &db_id, &meta, &opts).await?;
-    let pkg = ColumnarCodec::encode(&ds);
+    let layer_groups: Vec<Value> = meta
+        .layer_groups
+        .iter()
+        .map(|g| {
+            serde_json::json!({
+                "level": g.level,
+                "levelName": g.level_name,
+                "tableIds": g.table_ids,
+            })
+        })
+        .collect();
 
-    Ok(Json(ApiResp::ok(pkg)))
+    let relations: Vec<Value> = meta
+        .relations
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "parent": r.parent,
+                "child": r.child,
+                "parentKey": r.parent_key,
+                "childKey": r.child_key,
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "moduleCode": meta.module_code,
+        "version": meta.version,
+        "layerOrder": meta.layer_order,
+        "layers": layers,
+        "layerGroups": layer_groups,
+        "relations": relations,
+    })
+}
+
+/// 单列 → 前端 JSON（层列与汇总表列共用）。
+fn column_to_json(c: &cmx_biz::doc::ColumnView) -> Value {
+    serde_json::json!({
+        "name": c.name,
+        "caption": c.caption,
+        "dataType": c.data_type,
+        "dimType": c.dim_type,
+        "agg": c.agg,
+        "nullable": c.nullable,
+        "isPrimaryKey": c.is_primary_key,
+    })
+}
+
+/// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
+fn encode_envelope_ok(data_msgpack: &[u8]) -> Vec<u8> {
+    use rmp::encode as mp;
+    let mut buf = Vec::with_capacity(data_msgpack.len() + 32);
+    mp::write_map_len(&mut buf, 3).unwrap();
+    mp::write_str(&mut buf, "code").unwrap();
+    mp::write_uint(&mut buf, 0).unwrap();
+    mp::write_str(&mut buf, "msg").unwrap();
+    mp::write_str(&mut buf, "success").unwrap();
+    mp::write_str(&mut buf, "data").unwrap();
+    buf.extend_from_slice(data_msgpack); // data 值 = 列式包(自包含 msgpack value)
+    buf
 }
 
 /// POST /api/doc/save 请求体。
@@ -274,7 +714,11 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
     let cols: Vec<String> = pkg
         .get("columns")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|c| c.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| c.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let empty = vec![];
     let rows = pkg.get("rows").and_then(|v| v.as_array()).unwrap_or(&empty);

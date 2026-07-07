@@ -3,7 +3,7 @@
  *
  * 基于 fico-db 已有的 cmx-fico 总账凭证表（cv_batch → cv_header → cv_acc_line → cv_aux_line，
  * 四层 id→upper_id 主从），通过后端 /api/doc/* 端点装载/回存：
- *   - 装载：GET  /api/doc/data?domain=fi&application=cmxfico&module=gl&file=cmxfico_doc_meta_v1.json
+ *   - 装载：GET  /api/doc/data/sqlx-dataset-json?domain=fi&application=cmxfico&module=gl&file=cmxfico_doc_meta_v1.json
  *   - 回存：POST /api/doc/save（merge 双模式 changeset）
  * db_id 头固定 fico-db。
  *
@@ -58,7 +58,7 @@ async function apiPost (url, payload) {
 
 const dataQuery = (extra = {}) => {
   const p = new URLSearchParams({ domain: DEF.domain, application: DEF.application, module: DEF.module, file: DEF.file, ...extra })
-  return `/api/doc/data?${p.toString()}`
+  return `/api/doc/data/sqlx-dataset-json?${p.toString()}`
 }
 const saveQuery = () => {
   const p = new URLSearchParams({ domain: DEF.domain, application: DEF.application, module: DEF.module, file: DEF.file })

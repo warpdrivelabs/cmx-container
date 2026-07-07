@@ -374,6 +374,36 @@ impl DatabaseManager {
         .await
     }
 
+    /// 只读查询 → 零拷贝 [`ZmcDataSet`](crate::zmc::ZmcDataSet)（持有原始 sqlx PgRow，惰性列式二进制编码）。
+    ///
+    /// 走连接池、不参与事务（业务单据装载是只读的），与 tokio 侧
+    /// [`cmx_database_pg::DatabaseManager::query_sql_zmc`] 对称。仅 Postgres。
+    pub async fn query_sql_zmc(
+        &self,
+        db_id: &str,
+        sql: &str,
+        dataset_id: &str,
+    ) -> Result<crate::zmc::ZmcDataSet> {
+        let dbx = self.get_dbx(db_id).await?;
+        dbx.db().query_zmc(sql, dataset_id).await
+    }
+
+    /// 带 `DataValue` 参数的只读查询，返回零拷贝 [`ZmcDataSet`](crate::zmc::ZmcDataSet)。
+    ///
+    /// 支持 `DataValue::Array` → PG 数组（子层 `WHERE childKey = ANY($1)` 批量装载）。仅 Postgres。
+    pub async fn query_sql_zmc_with_datavalues(
+        &self,
+        db_id: &str,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::DataValue>,
+        dataset_id: &str,
+    ) -> Result<crate::zmc::ZmcDataSet> {
+        let dbx = self.get_dbx(db_id).await?;
+        dbx.db()
+            .query_zmc_with_datavalues(sql, &params, dataset_id)
+            .await
+    }
+
     /// 查询带强类型 SqlParam 参数的 SQL 语句(支持带类型 NULL)。
     ///
     /// 与 [`query_sql_with_datavalues`] 区别:接收 `Vec<SqlParam>`,

@@ -1192,33 +1192,33 @@
       "expanded": true,
       "children": [
         {
-          "id": "context-profile-manager",
-          "name": "context-profile-manager",
-          "caption": "上下文档案管理",
+          "id": "flexible-combination-manager",
+          "name": "flexible-combination-manager",
+          "caption": "弹性组合管理",
           "type": "workspace-node",
           "permissionId": null,
           "icon": "tabler-outline/adjustments-cog",
           "workspace": {
             "content": {
-              "caption": "上下文档案管理",
+              "caption": "弹性组合管理",
               "icon": "settings",
               "views": [
                 {
                   "tabLabel": "设计",
                   "icon": "settings",
-                  "type": "context-profile-manager",
+                  "type": "flexible-combination-manager",
                   "data": {}
                 },
                 {
                   "tabLabel": "源码",
                   "icon": "source-code",
-                  "type": "context-profile-source",
+                  "type": "flexible-combination-source",
                   "data": {}
                 },
                 {
                   "tabLabel": "Schema",
                   "icon": "database",
-                  "type": "context-profile-schema",
+                  "type": "flexible-combination-schema",
                   "data": {}
                 }
               ]
@@ -1230,7 +1230,7 @@
                 {
                   "tabLabel": "档案",
                   "icon": "list",
-                  "type": "context-profile-list",
+                  "type": "flexible-combination-list",
                   "data": {}
                 }
               ]
@@ -1242,13 +1242,13 @@
                 {
                   "tabLabel": "检查器",
                   "icon": "detail-view",
-                  "type": "context-profile-inspector",
+                  "type": "flexible-combination-inspector",
                   "data": {}
                 },
                 {
                   "tabLabel": "校验/预览",
                   "icon": "validate",
-                  "type": "context-profile-verify",
+                  "type": "flexible-combination-verify",
                   "data": {}
                 }
               ]
@@ -1594,13 +1594,13 @@
         {
           "id": "fi-gl-account-def",
           "name": "account-def",
-          "caption": "科目上下文档案",
+          "caption": "科目弹性组合",
           "type": "workspace-node",
           "permissionId": null,
           "icon": "tabler-outline/book",
           "workspace": {
             "content": {
-              "caption": "科目上下文档案",
+              "caption": "科目弹性组合",
               "icon": "settings",
               "views": [
                 {
@@ -1616,13 +1616,13 @@
         {
           "id": "fi-gl-trade-def",
           "name": "trade-def",
-          "caption": "交易上下文档案",
+          "caption": "交易弹性组合",
           "type": "workspace-node",
           "permissionId": null,
           "icon": "tabler-outline/shopping-cart-cog",
           "workspace": {
             "content": {
-              "caption": "交易上下文档案",
+              "caption": "交易弹性组合",
               "icon": "settings",
               "views": [
                 {

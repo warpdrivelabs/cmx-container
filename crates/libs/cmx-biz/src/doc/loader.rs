@@ -1,14 +1,15 @@
-//! DocLoader — 业务单据数据装载（方案 §5.1）
+//! DocLoader — 业务单据数据装载（方案 §5.1，元数据驱动）
 //!
-//! 读单据定义（DocMetaView）→ 逐层查询 → 按 upper_id 组装嵌套 DataSet。
+//! 读单据定义（DocMetaView）→ 逐层查询 → 按 childKey 组装嵌套 DataSet。
 //!
 //! 算法（按层广度优先，父批量驱动子，避免 N+1）：
-//!   1. 根层：`SELECT <列> FROM <root表> [WHERE <filter>]` → DataSet，收集 rootIds
-//!   2. 逐层下钻：`SELECT <列> FROM <子表> WHERE <childKey> = ANY($parentIds)` 一条 SQL 取全部子行
-//!      → 按 childKey(upper_id) 分桶 → 挂到父行 _children[childKey]
+//!   1. 根层：`build_layer_select`（富条件/排序/分页）→ DataSet，收集 rootIds
+//!   2. 逐层下钻：子层 `childKey = ANY($parentIds)` **+ 该层富条件** 一条 SQL 取全部子行
+//!      → 按 childKey 分桶 → 挂到父行 _children[childId]
 //!   3. 返回根层 DataSet（完整嵌套主从树）
 //!
-//! 关键：一层一条 SQL、`ANY($ids)` 批量、参数化（DataValue 绑定，注入免疫）。
+//! **通用性铁律**：SQL 全部由 `sql_builder::build_layer_select` 按 `LayerView`/`LayerQuery`
+//! 元数据生成，本装载器不含任何单据专属列名/表名。每层查询指令来自 `DocQuery`（缺省默认）。
 
 use std::collections::HashMap;
 
@@ -17,87 +18,56 @@ use cmx_core::model::data::dataset::{DataSet, Row};
 use cmx_database::DatabaseManager;
 
 use super::meta::{DocMetaView, LayerView};
+use super::query::DocQuery;
+use super::sql_builder::build_layer_select;
 use crate::{BizError, Result};
-
-/// 装载选项。
-#[derive(Debug, Clone, Default)]
-pub struct LoadOptions {
-    /// 根层过滤：`(列名, 值)` 列表，AND 连接（简单等值；复杂条件后续扩展）。
-    pub root_filter: Vec<(String, DataValue)>,
-    /// 根层限制行数（分页第一步；None 不限）。
-    pub root_limit: Option<u64>,
-    /// 装载深度（None = 全部层；Some(n) = 只装前 n 层，懒下钻用）。
-    pub depth: Option<usize>,
-}
 
 pub struct DocLoader;
 
 impl DocLoader {
-    /// 按定义装载整棵单据树，返回根层嵌套 DataSet。
+    /// 按定义 + 查询指令装载整棵单据树，返回根层嵌套 DataSet。
     pub async fn load(
         mm: &DatabaseManager,
         db_id: &str,
         meta: &DocMetaView,
-        opts: &LoadOptions,
+        query: &DocQuery,
     ) -> Result<DataSet> {
         let root = meta
             .root_layer()
             .ok_or_else(|| BizError::business("单据定义无根层"))?;
 
         // 1. 根层查询
-        let mut root_ds = Self::query_root(mm, db_id, root, opts).await?;
+        let mut root_ds = Self::query_root(mm, db_id, root, query).await?;
 
-        // 2. 逐层下钻（沿 relations 递归挂子集）
-        let max_depth = opts.depth.unwrap_or(usize::MAX);
-        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth).await?;
+        // 2. 逐层下钻（沿 layer_groups 递归挂子集）
+        let max_depth = query.depth.unwrap_or(usize::MAX);
+        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query).await?;
 
         Ok(root_ds)
     }
 
-    /// 根层：SELECT 列 FROM 表 [WHERE filter] [LIMIT n]
+    /// 根层：`build_layer_select`（该层 filter/orderBy/limit/offset/cursor）。
     async fn query_root(
         mm: &DatabaseManager,
         db_id: &str,
         layer: &LayerView,
-        opts: &LoadOptions,
+        query: &DocQuery,
     ) -> Result<DataSet> {
-        let cols = column_list(layer);
-        let mut sql = format!("SELECT {cols} FROM {}", layer.table_name);
-        let mut params: Vec<DataValue> = Vec::new();
-
-        if !opts.root_filter.is_empty() {
-            let mut conds = Vec::new();
-            for (i, (col, val)) in opts.root_filter.iter().enumerate() {
-                // 仅允许定义里存在的列名，防注入
-                if layer.schema.get_index(col).is_none() {
-                    return Err(BizError::business(format!("过滤列 {col} 不在层 {} 中", layer.table_name)));
-                }
-                conds.push(format!("{col} = ${}", i + 1));
-                params.push(val.clone());
-            }
-            sql.push_str(" WHERE ");
-            sql.push_str(&conds.join(" AND "));
-        }
-        // 排序保证稳定
-        if layer.schema.get_index("id").is_some() {
-            sql.push_str(" ORDER BY id");
-        }
-        if let Some(n) = opts.root_limit {
-            sql.push_str(&format!(" LIMIT {n}"));
-        }
-
+        let lq = query.layer(&layer.id);
+        let (sql, params) = build_layer_select(layer, &lq, None)?;
         mm.query_sql_with_datavalues(db_id, None, &sql, params, &layer.table_name)
             .await
             .map(|ds| rebind_schema(ds, layer))
             .map_err(|e| BizError::internal(format!("装载根层 {} 失败: {e}", layer.table_name)))
     }
 
-    /// 递归下钻：按 layer_order 顺序推导父子层，查子层并挂载。
+    /// 递归下钻：按 layer_groups 推导父子层，**同父兄弟**并列装载所有子表。
     ///
     /// 注意：定义里 relations 的 parent/child 用「逻辑名」(headers/account_lines)，
     /// 而 schema 节点与表用「物理名」(cv_header/cv_acc_line)，两者不一致。
-    /// 故这里**不按 relations 的名字匹配层**，而是按 layer_order 相邻层推导父子，
-    /// childKey 优先取 relations（按顺序对齐），无则默认 "upper_id"。
+    /// 故这里**不按 relations 名字匹配层**，而是 `meta.child_layers(parent.id)` 取下一层组
+    /// 全部兄弟表（parentTable 声明则精确匹配，否则整组回退）；childKey 由 `child_key_for` 给。
+    /// 孙层只从每组**主表**（`is_primary_in_group`）继续下钻。汇总表不装载（不遍历 summaries）。
     async fn descend(
         mm: &DatabaseManager,
         db_id: &str,
@@ -106,6 +76,7 @@ impl DocLoader {
         parent_ds: &mut DataSet,
         cur_depth: usize,
         max_depth: usize,
+        query: &DocQuery,
     ) -> Result<()> {
         if cur_depth >= max_depth {
             return Ok(());
@@ -115,59 +86,60 @@ impl DocLoader {
             return Ok(());
         }
 
-        // 父层在 layer_order 里的位置 → 子层 = 下一层
-        let pos = meta.layer_order.iter().position(|id| id == &parent_layer.id);
-        let child_id = match pos.and_then(|i| meta.layer_order.get(i + 1)) {
-            Some(id) => id.clone(),
-            None => return Ok(()), // 已是最深层
+        let child_key = meta.child_key_for(&parent_layer.id);
+        let child_layers = if query.include_siblings {
+            meta.child_layers(&parent_layer.id)
+        } else {
+            // 不装兄弟：只取该组主表
+            meta.child_layers(&parent_layer.id)
+                .into_iter()
+                .filter(|l| meta.is_primary_in_group(&l.id))
+                .collect()
         };
-        let child_layer = match meta.layer(&child_id) {
-            Some(l) => l,
-            None => return Ok(()),
-        };
-        // childKey：优先取第 pos 个 relation 的 child_key（按 layer 顺序对齐），默认 upper_id
-        let child_key = pos
-            .and_then(|i| meta.relations.get(i))
-            .map(|r| r.child_key.clone())
-            .unwrap_or_else(|| "upper_id".to_string());
 
-        // 查子层（WHERE childKey = ANY($parent_ids)）
-        let mut child_ds =
-            Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids).await?;
+        // 同父兄弟：下一层组全部子表，各查一次、各挂一次（各吃自己的 LayerQuery）
+        for child_layer in child_layers {
+            let is_primary = meta.is_primary_in_group(&child_layer.id);
+            // 兄弟表容错：非主表装载失败（元数据定义了但物理表未部署）→ 跳过 + 警告，不中断整单。
+            let mut child_ds =
+                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query)
+                    .await
+                {
+                    Ok(ds) => ds,
+                    Err(e) if !is_primary => {
+                        tracing::warn!(
+                            "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
+                            child_layer.table_name
+                        );
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                };
 
-        // 递归挂孙层
-        Box::pin(Self::descend(
-            mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth,
-        ))
-        .await?;
+            // 孙层：仅从该组主表继续下钻
+            if is_primary {
+                Box::pin(Self::descend(
+                    mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth, query,
+                ))
+                .await?;
+            }
 
-        // 按 childKey 分桶挂到父行；childId 用物理层 id（前端 schema 路径对应）
-        attach_children(parent_ds, child_ds, &child_key, &child_id);
+            attach_children(parent_ds, child_ds, &child_key, &child_layer.id);
+        }
         Ok(())
     }
 
-    /// 子层：SELECT 列 FROM 子表 WHERE childKey = ANY($1) ORDER BY childKey, line_no
+    /// 子层：`build_layer_select`（parent_scope = childKey ANY + 该层 filter/orderBy/分页）。
     async fn query_children_by_key(
         mm: &DatabaseManager,
         db_id: &str,
         layer: &LayerView,
         child_key: &str,
         parent_ids: &[DataValue],
+        query: &DocQuery,
     ) -> Result<DataSet> {
-        let cols = column_list(layer);
-        let mut sql = format!(
-            "SELECT {cols} FROM {} WHERE {} = ANY($1)",
-            layer.table_name, child_key
-        );
-        // 有序返回：先按父键，再按行号
-        let has_line_no = layer.schema.get_index("line_no").is_some();
-        if has_line_no {
-            sql.push_str(&format!(" ORDER BY {}, line_no", child_key));
-        } else {
-            sql.push_str(&format!(" ORDER BY {}", child_key));
-        }
-
-        let params = vec![DataValue::Array(parent_ids.to_vec())];
+        let lq = query.layer(&layer.id);
+        let (sql, params) = build_layer_select(layer, &lq, Some((child_key, parent_ids)))?;
         mm.query_sql_with_datavalues(db_id, None, &sql, params, &layer.table_name)
             .await
             .map(|ds| rebind_schema(ds, layer))
@@ -176,17 +148,6 @@ impl DocLoader {
 }
 
 // ─────────────────────── 组装辅助 ───────────────────────
-
-/// 逗号分隔的列名列表（按 schema 顺序）。
-fn column_list(layer: &LayerView) -> String {
-    layer
-        .schema
-        .fields
-        .iter()
-        .map(|f| f.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 
 /// 用「定义 Schema」替换查询推断的 Schema。
 ///
@@ -324,5 +285,44 @@ mod tests {
         ds.add_row(Row::new(vec![DataValue::Int(2)]));
         let ids = collect_ids(&ds);
         assert_eq!(ids.len(), 2);
+    }
+
+    // 同父兄弟：两张子表各自 attach 到同一父，父行下两个子键都在
+    #[test]
+    fn attach_multiple_sibling_children() {
+        let ps = schema("cv_acc_line", &[("id", FieldType::Int)]);
+        let mut parent = DataSet::empty("cv_acc_line", ps);
+        parent.add_row(Row::new(vec![DataValue::Int(1)]));
+        parent.add_row(Row::new(vec![DataValue::Int(2)]));
+
+        // 兄弟表 A：cv_aux_line
+        let cs_a = schema(
+            "cv_aux_line",
+            &[("id", FieldType::Int), ("upper_id", FieldType::Int)],
+        );
+        let mut aux = DataSet::empty("cv_aux_line", cs_a);
+        aux.add_row(Row::new(vec![DataValue::Int(101), DataValue::Int(1)]));
+        aux.add_row(Row::new(vec![DataValue::Int(102), DataValue::Int(2)]));
+
+        // 兄弟表 B：cv_cyzb_line
+        let cs_b = schema(
+            "cv_cyzb_line",
+            &[("id", FieldType::Int), ("upper_id", FieldType::Int)],
+        );
+        let mut cyzb = DataSet::empty("cv_cyzb_line", cs_b);
+        cyzb.add_row(Row::new(vec![DataValue::Int(201), DataValue::Int(1)]));
+
+        // 各自 attach 到同一父（模拟 descend 里的兄弟循环）
+        attach_children(&mut parent, aux, "upper_id", "cv_aux_line");
+        attach_children(&mut parent, cyzb, "upper_id", "cv_cyzb_line");
+
+        // 父行1 下同时有两个兄弟子键
+        let p1 = &parent.rows[0];
+        assert_eq!(p1.get_child("cv_aux_line").unwrap().row_count(), 1);
+        assert_eq!(p1.get_child("cv_cyzb_line").unwrap().row_count(), 1);
+        // 父行2 只有 cv_aux_line 有数据（cyzb 无 upper_id=2 的行）
+        let p2 = &parent.rows[1];
+        assert_eq!(p2.get_child("cv_aux_line").unwrap().row_count(), 1);
+        assert!(p2.get_child("cv_cyzb_line").is_none());
     }
 }

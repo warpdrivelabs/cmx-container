@@ -61,7 +61,7 @@ mod json {
 
             let ov = match (op, value) {
                 ("$eq", v) => OpValValue::Eq(v),
-                ("$in", value) => OpValValue::NotIn(into_values(value)?),
+                ("$in", value) => OpValValue::In(into_values(value)?),
 
                 ("$not", v) => OpValValue::Not(v),
                 ("$notIn", value) => OpValValue::NotIn(into_values(value)?),

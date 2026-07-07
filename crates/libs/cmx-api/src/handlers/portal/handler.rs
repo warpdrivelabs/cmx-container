@@ -1121,11 +1121,11 @@ pub async fn dict_supersede(
     )))
 }
 
-// ───────────────────────── 上下文档案 ─────────────────────────
+// ───────────────────────── 弹性组合 ─────────────────────────
 
-/// context-profile DAM + scenario query（list 只用 domain/app/module；其余用全四段 + 任意锚点键）。
+/// flexible-combination DAM + scenario query（list 只用 domain/app/module；其余用全四段 + 任意锚点键）。
 #[derive(Debug, Deserialize)]
-pub struct CpQuery {
+pub struct FcQuery {
     #[serde(default)]
     pub domain: Option<String>,
     #[serde(default)]
@@ -1139,9 +1139,9 @@ pub struct CpQuery {
     pub rest: std::collections::HashMap<String, String>,
 }
 
-impl CpQuery {
-    fn to_ref(&self) -> cmx_portal::context_profile::store::CpRef {
-        cmx_portal::context_profile::store::CpRef {
+impl FcQuery {
+    fn to_ref(&self) -> cmx_portal::flexible_combination::store::FcRef {
+        cmx_portal::flexible_combination::store::FcRef {
             domain: self.domain.clone(),
             app: self.app.clone(),
             module: self.module.clone(),
@@ -1157,13 +1157,13 @@ impl CpQuery {
     }
 }
 
-/// `GET /api/context-profile/list` —— 列表。
-pub async fn cp_list(
+/// `GET /api/flexible-combination/list` —— 列表。
+pub async fn fc_list(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let items = cmx_portal::context_profile::store::list_context_profiles(
+    let items = cmx_portal::flexible_combination::store::list_flexible_combinations(
         q.domain.as_deref(),
         q.app.as_deref(),
         q.module.as_deref(),
@@ -1172,26 +1172,26 @@ pub async fn cp_list(
     Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
 }
 
-/// `GET /api/context-profile/config` —— 读单个档案。
-pub async fn cp_get_config(
+/// `GET /api/flexible-combination/config` —— 读单个档案。
+pub async fn fc_get_config(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::store::get_context_profile(&q.to_ref()).await?,
+        cmx_portal::flexible_combination::store::get_flexible_combination(&q.to_ref()).await?,
     )))
 }
 
-/// `POST /api/context-profile/config` —— 保存档案（含 validate）。
-pub async fn cp_save_config(
+/// `POST /api/flexible-combination/config` —— 保存档案（含 validate）。
+pub async fn fc_save_config(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     // 校验：无效 422（与 Node 一致用 fail code 422）
-    let diagnostics = cmx_portal::context_profile::validator::validate_context_profile(&body);
+    let diagnostics = cmx_portal::flexible_combination::validator::validate_flexible_combination(&body);
     if !diagnostics
         .get("valid")
         .and_then(|v| v.as_bool())
@@ -1204,64 +1204,64 @@ pub async fn cp_save_config(
         )));
     }
     let saved =
-        cmx_portal::context_profile::store::save_context_profile(&q.to_ref(), &body).await?;
+        cmx_portal::flexible_combination::store::save_flexible_combination(&q.to_ref(), &body).await?;
     Ok(Json(ApiResp::ok(
         serde_json::json!({ "ok": true, "saved": saved }),
     )))
 }
 
-/// `DELETE /api/context-profile/config` —— 删除档案。
-pub async fn cp_delete_config(
+/// `DELETE /api/flexible-combination/config` —— 删除档案。
+pub async fn fc_delete_config(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::store::delete_context_profile(&q.to_ref()).await?,
+        cmx_portal::flexible_combination::store::delete_flexible_combination(&q.to_ref()).await?,
     )))
 }
 
-/// `POST /api/context-profile/default` —— 设为默认版本（同 scenario stem 互斥）。
-pub async fn cp_set_default(
+/// `POST /api/flexible-combination/default` —— 设为默认版本（同 scenario stem 互斥）。
+pub async fn fc_set_default(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::store::set_default_version(&q.to_ref()).await?,
+        cmx_portal::flexible_combination::store::set_default_version(&q.to_ref()).await?,
     )))
 }
 
-/// `GET /api/context-profile/resolve` —— 按锚点解析合并规则 → fields/columnModel。
-pub async fn cp_resolve(
+/// `GET /api/flexible-combination/resolve` —— 按锚点解析合并规则 → fields/columnModel。
+pub async fn fc_resolve(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
+        cmx_portal::flexible_combination::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
     )))
 }
 
-/// `GET /api/context-profile/rule` —— 按锚点取规则 + 相关维度。
-pub async fn cp_rule(
+/// `GET /api/flexible-combination/rule` —— 按锚点取规则 + 相关维度。
+pub async fn fc_rule(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::api::rule(&q.to_ref(), &q.anchor_map()).await?,
+        cmx_portal::flexible_combination::api::rule(&q.to_ref(), &q.anchor_map()).await?,
     )))
 }
 
-/// `POST /api/context-profile/validate` —— 校验。
-pub async fn cp_validate(
+/// `POST /api/flexible-combination/validate` —— 校验。
+pub async fn fc_validate(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let diagnostics = cmx_portal::context_profile::api::validate(&body, &q.to_ref()).await?;
+    let diagnostics = cmx_portal::flexible_combination::api::validate(&body, &q.to_ref()).await?;
     let valid = diagnostics
         .get("valid")
         .and_then(|v| v.as_bool())
@@ -1277,15 +1277,15 @@ pub async fn cp_validate(
     }
 }
 
-/// `POST /api/context-profile/preview` —— 校验 + 解析预览。
-pub async fn cp_preview(
+/// `POST /api/flexible-combination/preview` —— 校验 + 解析预览。
+pub async fn fc_preview(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<CpQuery>,
+    Query(q): Query<FcQuery>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     Ok(Json(ApiResp::ok(
-        cmx_portal::context_profile::api::preview(&body, &q.to_ref()).await?,
+        cmx_portal::flexible_combination::api::preview(&body, &q.to_ref()).await?,
     )))
 }
 

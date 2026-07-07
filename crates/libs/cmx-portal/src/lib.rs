@@ -6,11 +6,11 @@
 //! 本 crate 已按业务边界拆分，物理代码分布在三个 crate，但对外 API 路径保持不变（re-export 门面）：
 //! - 基础设施下沉至 [`cmx_portal_base`]（config / error / fsutil / util）。
 //! - 表单中心拆至 [`cmx_form`]（`pages`：form / html / native）。
-//! - 模型中心拆至 [`cmx_model`]（`definitions` / `context_profile` / `dict`）。
+//! - 模型中心拆至 [`cmx_model`]（`definitions` / `flexible_combination` / `dict`）。
 //!
 //! 下列 `pub use` 把基础设施与两个子中心再导出回本 crate 命名空间，于是
 //! `cmx_portal::pages::*` / `cmx_portal::definitions::*` / `cmx_portal::PortalError` 等旧路径
-//! 以及 `agent` 内部的 `crate::pages` / `crate::context_profile` 引用均无需改动。
+//! 以及 `agent` 内部的 `crate::pages` / `crate::flexible_combination` 引用均无需改动。
 //!
 //! 仍属门户本体的资源域（保留在本 crate）：
 //! - [`meta`]   —— menu/activities/domains/registry/dam_registry/modules/workspace_nodes（门户导航元数据）。
@@ -23,10 +23,10 @@
 // 基础设施从 base 再导出：保持 crate::config / crate::PortalError / cmx_portal::data_root 等旧路径。
 pub use cmx_portal_base::{PortalError, PortalResult, config, data_root, error, fsutil, util};
 
-// 拆出的子中心再导出：保持 cmx_portal::pages / ::definitions / ::context_profile / ::dict
+// 拆出的子中心再导出：保持 cmx_portal::pages / ::definitions / ::flexible_combination / ::dict
 // 以及 agent 内部 crate::pages 等引用有效。
 pub use cmx_form::pages;
-pub use cmx_model::{context_profile, definitions, dict};
+pub use cmx_model::{flexible_combination, definitions, dict};
 
 // 仍属门户本体的资源域。
 pub mod agent;

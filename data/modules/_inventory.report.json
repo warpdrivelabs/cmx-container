@@ -97,16 +97,16 @@
             "meta/definitions/fi/cmxfico/gl/samples/cnpc/cmxfico_dict_data.json"
           ]
         },
-        "contextProfiles": {
+        "flexibleCombinations": {
           "roots": [
-            "meta/context-profile/fi/cmxfico/gl"
+            "meta/flexible-combination/fi/cmxfico/gl"
           ],
           "fileCount": 4,
           "sampleFiles": [
-            "meta/context-profile/fi/cmxfico/gl/account.json",
-            "meta/context-profile/fi/cmxfico/gl/new_profile.json",
-            "meta/context-profile/fi/cmxfico/gl/trade.json",
-            "meta/context-profile/fi/cmxfico/gl/travel-expense.json"
+            "meta/flexible-combination/fi/cmxfico/gl/account.json",
+            "meta/flexible-combination/fi/cmxfico/gl/new_profile.json",
+            "meta/flexible-combination/fi/cmxfico/gl/trade.json",
+            "meta/flexible-combination/fi/cmxfico/gl/travel-expense.json"
           ]
         },
         "dictRegistry": {

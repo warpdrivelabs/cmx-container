@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 # 门户/设计器业务（迁移自 CMXPortalManager / CMXHTMLDesigner 的 Node 后端）。
-# 已按业务边界拆分：表单中心(pages)→cmx-form、模型中心(definitions/context_profile/dict)→cmx-model、
+# 已按业务边界拆分：表单中心(pages)→cmx-form、模型中心(definitions/flexible_combination/dict)→cmx-model、
 # 基础设施(config/error/fsutil/util)→cmx-portal-base，三者经 lib.rs 再导出以保持对外 API 不变。
 # 本 crate 保留：菜单/活动/域/工作区节点等门户导航元数据(meta)、DAM 注册表、事实数据、帮助中心、
 # 功能启动器、通知中心、服务目录、AI 代理。全部为 JSON 文件存储（tokio::fs），不落库。
@@ -15,7 +15,7 @@ authors.workspace = true
 cmx-portal-base = { workspace = true }
 # 内部依赖 - 表单中心（pages：form / html / native，经 lib.rs 再导出为 cmx_portal::pages）
 cmx-form = { workspace = true }
-# 内部依赖 - 模型中心（definitions / context_profile / dict，经 lib.rs 再导出）
+# 内部依赖 - 模型中心（definitions / flexible_combination / dict，经 lib.rs 再导出）
 cmx-model = { workspace = true }
 
 # 异步运行时（tokio::fs 文件读写 + 并发锁）

@@ -57,6 +57,11 @@
           "kind": "list",
           "level": "L4",
           "levelName": "辅助行"
+        },
+        {
+          "id": "cv_cyzb_line",
+          "kind": "list",
+          "level": "L4"
         }
       ]
     ],
@@ -1328,7 +1333,1788 @@
         "pay_terms_code": "pay_terms",
         "pay_method_code": "pay_method",
         "house_bank_id": "house_bank"
-      }
+      },
+      "summaries": [
+        {
+          "id": "cv_aux_line_sum",
+          "name": "cv_aux_line_sum",
+          "caption": {
+            "zh_CN": "cv_aux_line_sum"
+          },
+          "fields": [
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": false,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "id",
+              "name": "id",
+              "caption": {
+                "zh_CN": "主键ID"
+              },
+              "isPrimaryKey": 1
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "upper_id",
+              "name": "upper_id",
+              "caption": {
+                "zh_CN": "上级单据主键"
+              },
+              "dimType": "attribute"
+            },
+            {
+              "dataType": "INT",
+              "fieldLength": 11,
+              "nullable": false,
+              "intDigits": 11,
+              "decimalDigits": 0,
+              "id": "line_no",
+              "name": "line_no",
+              "caption": {
+                "zh_CN": "行号"
+              },
+              "dimType": "attribute"
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": false,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "create_by",
+              "name": "create_by",
+              "caption": {
+                "zh_CN": "创建人ID"
+              }
+            },
+            {
+              "dataType": "DATETIME",
+              "fieldLength": 19,
+              "nullable": false,
+              "id": "create_time",
+              "name": "create_time",
+              "caption": {
+                "zh_CN": "创建时间"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "update_by",
+              "name": "update_by",
+              "caption": {
+                "zh_CN": "更新人ID"
+              }
+            },
+            {
+              "dataType": "DATETIME",
+              "fieldLength": 19,
+              "nullable": true,
+              "id": "update_time",
+              "name": "update_time",
+              "caption": {
+                "zh_CN": "更新时间"
+              }
+            },
+            {
+              "dataType": "TINYINT",
+              "fieldLength": 1,
+              "intDigits": 1,
+              "decimalDigits": 0,
+              "nullable": false,
+              "id": "delete_flag",
+              "name": "delete_flag",
+              "caption": {
+                "zh_CN": "逻辑删除标识(0正常1删除)"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "nullable": true,
+              "dimType": "attribute",
+              "id": "client_code",
+              "name": "client_code",
+              "caption": {
+                "zh_CN": "客户端"
+              },
+              "fieldLength": 3,
+              "refDict": "client",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "MANDT"
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "comp_unit",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "BUKRS",
+              "id": "comp_unit_id",
+              "name": "comp_unit_id",
+              "caption": {
+                "zh_CN": "公司代码"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 2,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ledger",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "RLDNR",
+              "id": "ledger_code",
+              "name": "ledger_code",
+              "caption": {
+                "zh_CN": "分类账"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ctrl_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOKRS",
+              "id": "ctrl_area_id",
+              "name": "ctrl_area_id",
+              "caption": {
+                "zh_CN": "成本控制范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "profit_ctr",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PRCTR",
+              "id": "profit_ctr_id",
+              "name": "profit_ctr_id",
+              "caption": {
+                "zh_CN": "利润中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "cost_center",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOSTL",
+              "id": "cost_center_id",
+              "name": "cost_center_id",
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "segment",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "SEGMENT",
+              "id": "segment_id",
+              "name": "segment_id",
+              "caption": {
+                "zh_CN": "段"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "GSBER",
+              "id": "bus_area_id",
+              "name": "bus_area_id",
+              "caption": {
+                "zh_CN": "业务范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "func_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "FKBER",
+              "id": "func_area_id",
+              "name": "func_area_id",
+              "caption": {
+                "zh_CN": "功能范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "company",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "VBUND",
+              "id": "trading_partner_id",
+              "name": "trading_partner_id",
+              "caption": {
+                "zh_CN": "贸易伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "int_order",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "AUFNR",
+              "id": "int_order_id",
+              "name": "int_order_id",
+              "caption": {
+                "zh_CN": "内部订单"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "wbs_element",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PROJK",
+              "id": "wbs_element_id",
+              "name": "wbs_element_id",
+              "caption": {
+                "zh_CN": "WBS元素"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PARTNER",
+              "id": "bus_partner_id",
+              "name": "bus_partner_id",
+              "caption": {
+                "zh_CN": "业务伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KUNNR",
+              "id": "customer_id",
+              "name": "customer_id",
+              "caption": {
+                "zh_CN": "客户"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "LIFNR",
+              "id": "supplier_id",
+              "name": "supplier_id",
+              "caption": {
+                "zh_CN": "供应商"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 4,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_terms",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZTERM",
+              "id": "pay_terms_code",
+              "name": "pay_terms_code",
+              "caption": {
+                "zh_CN": "付款条件"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 1,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_method",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZLSCH",
+              "id": "pay_method_code",
+              "name": "pay_method_code",
+              "caption": {
+                "zh_CN": "付款方式"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "house_bank",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "HBKID",
+              "id": "house_bank_id",
+              "name": "house_bank_id",
+              "caption": {
+                "zh_CN": "开户行/银行"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_DR",
+              "id": "entered_dr",
+              "name": "entered_dr",
+              "caption": {
+                "zh_CN": "输入币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_CR",
+              "id": "entered_cr",
+              "name": "entered_cr",
+              "caption": {
+                "zh_CN": "输入币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_DR",
+              "id": "local_dr",
+              "name": "local_dr",
+              "caption": {
+                "zh_CN": "公司代码本位币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_CR",
+              "id": "local_cr",
+              "name": "local_cr",
+              "caption": {
+                "zh_CN": "公司代码本位币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_DR",
+              "id": "group_dr",
+              "name": "group_dr",
+              "caption": {
+                "zh_CN": "集团币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_CR",
+              "id": "group_cr",
+              "name": "group_cr",
+              "caption": {
+                "zh_CN": "集团币贷方"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cv_aux_line_sum_2",
+          "name": "cv_aux_line_sum_2",
+          "caption": {
+            "zh_CN": "cv_aux_line_sum_2"
+          },
+          "fields": [
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": false,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "id",
+              "name": "id",
+              "caption": {
+                "zh_CN": "主键ID"
+              },
+              "isPrimaryKey": 1
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "upper_id",
+              "name": "upper_id",
+              "caption": {
+                "zh_CN": "上级单据主键"
+              },
+              "dimType": "attribute"
+            },
+            {
+              "dataType": "INT",
+              "fieldLength": 11,
+              "nullable": false,
+              "intDigits": 11,
+              "decimalDigits": 0,
+              "id": "line_no",
+              "name": "line_no",
+              "caption": {
+                "zh_CN": "行号"
+              },
+              "dimType": "attribute"
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": false,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "create_by",
+              "name": "create_by",
+              "caption": {
+                "zh_CN": "创建人ID"
+              }
+            },
+            {
+              "dataType": "DATETIME",
+              "fieldLength": 19,
+              "nullable": false,
+              "id": "create_time",
+              "name": "create_time",
+              "caption": {
+                "zh_CN": "创建时间"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "intDigits": 20,
+              "decimalDigits": 0,
+              "id": "update_by",
+              "name": "update_by",
+              "caption": {
+                "zh_CN": "更新人ID"
+              }
+            },
+            {
+              "dataType": "DATETIME",
+              "fieldLength": 19,
+              "nullable": true,
+              "id": "update_time",
+              "name": "update_time",
+              "caption": {
+                "zh_CN": "更新时间"
+              }
+            },
+            {
+              "dataType": "TINYINT",
+              "fieldLength": 1,
+              "intDigits": 1,
+              "decimalDigits": 0,
+              "nullable": false,
+              "id": "delete_flag",
+              "name": "delete_flag",
+              "caption": {
+                "zh_CN": "逻辑删除标识(0正常1删除)"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "nullable": true,
+              "dimType": "attribute",
+              "id": "client_code",
+              "name": "client_code",
+              "caption": {
+                "zh_CN": "客户端"
+              },
+              "fieldLength": 3,
+              "refDict": "client",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "MANDT"
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "comp_unit",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "BUKRS",
+              "id": "comp_unit_id",
+              "name": "comp_unit_id",
+              "caption": {
+                "zh_CN": "公司代码"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 2,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ledger",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "RLDNR",
+              "id": "ledger_code",
+              "name": "ledger_code",
+              "caption": {
+                "zh_CN": "分类账"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ctrl_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOKRS",
+              "id": "ctrl_area_id",
+              "name": "ctrl_area_id",
+              "caption": {
+                "zh_CN": "成本控制范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "profit_ctr",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PRCTR",
+              "id": "profit_ctr_id",
+              "name": "profit_ctr_id",
+              "caption": {
+                "zh_CN": "利润中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "cost_center",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOSTL",
+              "id": "cost_center_id",
+              "name": "cost_center_id",
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "segment",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "SEGMENT",
+              "id": "segment_id",
+              "name": "segment_id",
+              "caption": {
+                "zh_CN": "段"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "GSBER",
+              "id": "bus_area_id",
+              "name": "bus_area_id",
+              "caption": {
+                "zh_CN": "业务范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "func_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "FKBER",
+              "id": "func_area_id",
+              "name": "func_area_id",
+              "caption": {
+                "zh_CN": "功能范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "company",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "VBUND",
+              "id": "trading_partner_id",
+              "name": "trading_partner_id",
+              "caption": {
+                "zh_CN": "贸易伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "int_order",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "AUFNR",
+              "id": "int_order_id",
+              "name": "int_order_id",
+              "caption": {
+                "zh_CN": "内部订单"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "wbs_element",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PROJK",
+              "id": "wbs_element_id",
+              "name": "wbs_element_id",
+              "caption": {
+                "zh_CN": "WBS元素"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PARTNER",
+              "id": "bus_partner_id",
+              "name": "bus_partner_id",
+              "caption": {
+                "zh_CN": "业务伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KUNNR",
+              "id": "customer_id",
+              "name": "customer_id",
+              "caption": {
+                "zh_CN": "客户"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "LIFNR",
+              "id": "supplier_id",
+              "name": "supplier_id",
+              "caption": {
+                "zh_CN": "供应商"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 4,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_terms",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZTERM",
+              "id": "pay_terms_code",
+              "name": "pay_terms_code",
+              "caption": {
+                "zh_CN": "付款条件"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 1,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_method",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZLSCH",
+              "id": "pay_method_code",
+              "name": "pay_method_code",
+              "caption": {
+                "zh_CN": "付款方式"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "house_bank",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "HBKID",
+              "id": "house_bank_id",
+              "name": "house_bank_id",
+              "caption": {
+                "zh_CN": "开户行/银行"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_DR",
+              "id": "entered_dr",
+              "name": "entered_dr",
+              "caption": {
+                "zh_CN": "输入币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_CR",
+              "id": "entered_cr",
+              "name": "entered_cr",
+              "caption": {
+                "zh_CN": "输入币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_DR",
+              "id": "local_dr",
+              "name": "local_dr",
+              "caption": {
+                "zh_CN": "公司代码本位币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_CR",
+              "id": "local_cr",
+              "name": "local_cr",
+              "caption": {
+                "zh_CN": "公司代码本位币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_DR",
+              "id": "group_dr",
+              "name": "group_dr",
+              "caption": {
+                "zh_CN": "集团币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_CR",
+              "id": "group_cr",
+              "name": "group_cr",
+              "caption": {
+                "zh_CN": "集团币贷方"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "L4",
+      "tableName": "cv_cyzb_line",
+      "tableAlias": "作业成本表·",
+      "remark": "",
+      "fields": [
+        {
+          "dataType": "VARCHAR",
+          "nullable": true,
+          "dimType": "attribute",
+          "id": "client_code",
+          "name": "client_code",
+          "caption": {
+            "zh_CN": "客户端"
+          },
+          "fieldLength": 3,
+          "refDict": "client",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "MANDT"
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "comp_unit",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "BUKRS",
+          "id": "comp_unit_id",
+          "name": "comp_unit_id",
+          "caption": {
+            "zh_CN": "公司代码"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 2,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "ledger",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "RLDNR",
+          "id": "ledger_code",
+          "name": "ledger_code",
+          "caption": {
+            "zh_CN": "分类账"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "ctrl_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOKRS",
+          "id": "ctrl_area_id",
+          "name": "ctrl_area_id",
+          "caption": {
+            "zh_CN": "成本控制范围"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "profit_ctr",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PRCTR",
+          "id": "profit_ctr_id",
+          "name": "profit_ctr_id",
+          "caption": {
+            "zh_CN": "利润中心"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "cost_center",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KOSTL",
+          "id": "cost_center_id",
+          "name": "cost_center_id",
+          "caption": {
+            "zh_CN": "成本中心"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "segment",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "SEGMENT",
+          "id": "segment_id",
+          "name": "segment_id",
+          "caption": {
+            "zh_CN": "段"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "bus_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "GSBER",
+          "id": "bus_area_id",
+          "name": "bus_area_id",
+          "caption": {
+            "zh_CN": "业务范围"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "func_area",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "FKBER",
+          "id": "func_area_id",
+          "name": "func_area_id",
+          "caption": {
+            "zh_CN": "功能范围"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "company",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "VBUND",
+          "id": "trading_partner_id",
+          "name": "trading_partner_id",
+          "caption": {
+            "zh_CN": "贸易伙伴"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "int_order",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "AUFNR",
+          "id": "int_order_id",
+          "name": "int_order_id",
+          "caption": {
+            "zh_CN": "内部订单"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "wbs_element",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PROJK",
+          "id": "wbs_element_id",
+          "name": "wbs_element_id",
+          "caption": {
+            "zh_CN": "WBS元素"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "bus_partner",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "PARTNER",
+          "id": "bus_partner_id",
+          "name": "bus_partner_id",
+          "caption": {
+            "zh_CN": "业务伙伴"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "bus_partner",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "KUNNR",
+          "id": "customer_id",
+          "name": "customer_id",
+          "caption": {
+            "zh_CN": "客户"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "bus_partner",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "LIFNR",
+          "id": "supplier_id",
+          "name": "supplier_id",
+          "caption": {
+            "zh_CN": "供应商"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 4,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "pay_terms",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ZTERM",
+          "id": "pay_terms_code",
+          "name": "pay_terms_code",
+          "caption": {
+            "zh_CN": "付款条件"
+          }
+        },
+        {
+          "dataType": "VARCHAR",
+          "fieldLength": 1,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "pay_method",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "ZLSCH",
+          "id": "pay_method_code",
+          "name": "pay_method_code",
+          "caption": {
+            "zh_CN": "付款方式"
+          }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": true,
+          "dimType": "dimension",
+          "refDict": "house_bank",
+          "refField": "code",
+          "displayField": "name",
+          "physicalField": "HBKID",
+          "id": "house_bank_id",
+          "name": "house_bank_id",
+          "caption": {
+            "zh_CN": "开户行/银行"
+          },
+          "intDigits": 20,
+          "decimalDigits": 0
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "WRBTR_DR",
+          "id": "entered_dr",
+          "name": "entered_dr",
+          "caption": {
+            "zh_CN": "输入币借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "WRBTR_CR",
+          "id": "entered_cr",
+          "name": "entered_cr",
+          "caption": {
+            "zh_CN": "输入币贷方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBTR_DR",
+          "id": "local_dr",
+          "name": "local_dr",
+          "caption": {
+            "zh_CN": "公司代码本位币借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBTR_CR",
+          "id": "local_cr",
+          "name": "local_cr",
+          "caption": {
+            "zh_CN": "公司代码本位币贷方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBE2_DR",
+          "id": "group_dr",
+          "name": "group_dr",
+          "caption": {
+            "zh_CN": "集团币借方"
+          }
+        },
+        {
+          "dataType": "DECIMAL",
+          "fieldLength": 23,
+          "intDigits": 21,
+          "decimalDigits": 2,
+          "nullable": true,
+          "dimType": "measure",
+          "agg": "sum",
+          "physicalField": "DMBE2_CR",
+          "id": "group_cr",
+          "name": "group_cr",
+          "caption": {
+            "zh_CN": "集团币贷方"
+          }
+        }
+      ],
+      "summaries": [
+        {
+          "id": "cv_cyzb_line_sum",
+          "name": "cv_cyzb_line_sum",
+          "caption": {
+            "zh_CN": "cv_cyzb_line_sum"
+          },
+          "fields": [
+            {
+              "dataType": "VARCHAR",
+              "nullable": true,
+              "dimType": "attribute",
+              "id": "client_code",
+              "name": "client_code",
+              "caption": {
+                "zh_CN": "客户端"
+              },
+              "fieldLength": 3,
+              "refDict": "client",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "MANDT"
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "comp_unit",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "BUKRS",
+              "id": "comp_unit_id",
+              "name": "comp_unit_id",
+              "caption": {
+                "zh_CN": "公司代码"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 2,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ledger",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "RLDNR",
+              "id": "ledger_code",
+              "name": "ledger_code",
+              "caption": {
+                "zh_CN": "分类账"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "ctrl_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOKRS",
+              "id": "ctrl_area_id",
+              "name": "ctrl_area_id",
+              "caption": {
+                "zh_CN": "成本控制范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "profit_ctr",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PRCTR",
+              "id": "profit_ctr_id",
+              "name": "profit_ctr_id",
+              "caption": {
+                "zh_CN": "利润中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "cost_center",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KOSTL",
+              "id": "cost_center_id",
+              "name": "cost_center_id",
+              "caption": {
+                "zh_CN": "成本中心"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "segment",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "SEGMENT",
+              "id": "segment_id",
+              "name": "segment_id",
+              "caption": {
+                "zh_CN": "段"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "GSBER",
+              "id": "bus_area_id",
+              "name": "bus_area_id",
+              "caption": {
+                "zh_CN": "业务范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "func_area",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "FKBER",
+              "id": "func_area_id",
+              "name": "func_area_id",
+              "caption": {
+                "zh_CN": "功能范围"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "company",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "VBUND",
+              "id": "trading_partner_id",
+              "name": "trading_partner_id",
+              "caption": {
+                "zh_CN": "贸易伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "int_order",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "AUFNR",
+              "id": "int_order_id",
+              "name": "int_order_id",
+              "caption": {
+                "zh_CN": "内部订单"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "wbs_element",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PROJK",
+              "id": "wbs_element_id",
+              "name": "wbs_element_id",
+              "caption": {
+                "zh_CN": "WBS元素"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "PARTNER",
+              "id": "bus_partner_id",
+              "name": "bus_partner_id",
+              "caption": {
+                "zh_CN": "业务伙伴"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "KUNNR",
+              "id": "customer_id",
+              "name": "customer_id",
+              "caption": {
+                "zh_CN": "客户"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "bus_partner",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "LIFNR",
+              "id": "supplier_id",
+              "name": "supplier_id",
+              "caption": {
+                "zh_CN": "供应商"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 4,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_terms",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZTERM",
+              "id": "pay_terms_code",
+              "name": "pay_terms_code",
+              "caption": {
+                "zh_CN": "付款条件"
+              }
+            },
+            {
+              "dataType": "VARCHAR",
+              "fieldLength": 1,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "pay_method",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "ZLSCH",
+              "id": "pay_method_code",
+              "name": "pay_method_code",
+              "caption": {
+                "zh_CN": "付款方式"
+              }
+            },
+            {
+              "dataType": "BIGINT",
+              "fieldLength": 20,
+              "nullable": true,
+              "dimType": "dimension",
+              "refDict": "house_bank",
+              "refField": "code",
+              "displayField": "name",
+              "physicalField": "HBKID",
+              "id": "house_bank_id",
+              "name": "house_bank_id",
+              "caption": {
+                "zh_CN": "开户行/银行"
+              },
+              "intDigits": 20,
+              "decimalDigits": 0
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_DR",
+              "id": "entered_dr",
+              "name": "entered_dr",
+              "caption": {
+                "zh_CN": "输入币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "WRBTR_CR",
+              "id": "entered_cr",
+              "name": "entered_cr",
+              "caption": {
+                "zh_CN": "输入币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_DR",
+              "id": "local_dr",
+              "name": "local_dr",
+              "caption": {
+                "zh_CN": "公司代码本位币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBTR_CR",
+              "id": "local_cr",
+              "name": "local_cr",
+              "caption": {
+                "zh_CN": "公司代码本位币贷方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_DR",
+              "id": "group_dr",
+              "name": "group_dr",
+              "caption": {
+                "zh_CN": "集团币借方"
+              }
+            },
+            {
+              "dataType": "DECIMAL",
+              "fieldLength": 23,
+              "intDigits": 21,
+              "decimalDigits": 2,
+              "nullable": true,
+              "dimType": "measure",
+              "agg": "sum",
+              "physicalField": "DMBE2_CR",
+              "id": "group_cr",
+              "name": "group_cr",
+              "caption": {
+                "zh_CN": "集团币贷方"
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "voucherStatusFlow": {
@@ -1386,7 +3172,7 @@
       }
     ]
   },
-  "updatedAt": "2026-06-21T07:54:06.736Z",
+  "updatedAt": "2026-07-06T02:29:58.301Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

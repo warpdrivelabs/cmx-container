@@ -1,0 +1,53 @@
+[package]
+name = "cmx-database-test"
+version.workspace = true
+edition.workspace = true
+
+# sqlx vs tokio-postgres 的 PostgreSQL 性能对比基准。
+# 独立可执行程序（非 criterion 微基准）：跑完打印对比表格并写 RESULTS.md。
+# 用法：DATABASE_URL=postgres://... cargo run -p cmx-database-test --release
+
+[[bin]]
+name = "cmx-database-test"
+path = "src/main.rs"
+
+# 内存对标:sqlx/DataSet vs tokio-pg/ZmcDataSet 各阶段真实内存
+[[bin]]
+name = "mem-bench"
+path = "src/mem_bench.rs"
+
+# 端到端对比服务器:老 JSON 链路 vs sqlx/tokio Zmc 二进制链路(配 e2e_bench.mjs 前端侧)
+[[bin]]
+name = "e2e-server"
+path = "src/e2e_server.rs"
+
+[dependencies]
+# 两条被测驱动
+sqlx = { workspace = true }
+tokio-postgres = { workspace = true }
+deadpool-postgres = { workspace = true }
+postgres-types = { workspace = true }
+
+# 被测的两套高层数据结构(内存对比核心)
+cmx-database = { workspace = true }
+cmx-database-pg = { workspace = true }
+cmx-rowsource = { workspace = true }
+cmx-core = { workspace = true }
+
+# 运行时与工具
+tokio = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rust_decimal = { workspace = true, features = ["db-tokio-postgres"] }
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+bytes = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+# URL 解析（遮蔽密码）
+url = { workspace = true }
+# 端到端对比服务器(e2e-server)
+axum = { workspace = true }
+rmp = { workspace = true }
