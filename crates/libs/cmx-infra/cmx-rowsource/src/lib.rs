@@ -485,21 +485,98 @@ pub fn encode_cell_json<R: ZmcRowSource>(
 }
 
 /// 把单行按 schema 编成一个 msgpack 数组,追加到 `body`。
+///
+/// 性能:一个 `scratch` String 在行内 50 列间复用,数值/时间/uuid/bytea 用 `write!` 写进它、
+/// `write_str` 后 `clear()` —— 避免每格 `to_string()`/`to_rfc3339()`/`format!` 各分配一个临时
+/// String(10 万行 × 多列 = 上百万次分配)。文本列仍零拷贝借出、不经 scratch。
 pub fn encode_row_into<R: ZmcRowSource>(body: &mut Vec<u8>, row: &R, schema: &ZmcSchema) {
+    let mut scratch = String::with_capacity(48);
     mp::write_array_len(body, schema.col_count() as u32).unwrap();
     for col in 0..schema.col_count() {
-        encode_cell(body, row, col, schema.types[col]);
+        encode_cell(body, row, col, schema.types[col], &mut scratch);
     }
 }
 
+/// 手写 RFC3339(UTC)写入器 —— 输出与 `DateTime<Utc>::to_rfc3339()` 逐字节一致,
+/// 零分配、零格式机(strftime 解释器逐 Item 派发比直写慢)。常规范围(0..=9999 年、
+/// 无闰秒)走快路径;极端值回退 chrono 标准实现(分配一次,可忽略)。
+fn write_rfc3339_utc(out: &mut String, dt: &chrono::DateTime<chrono::Utc>) {
+    use chrono::{Datelike, Timelike};
+    let year = dt.year();
+    let nanos = dt.nanosecond();
+    if !(0..=9999).contains(&year) || nanos >= 1_000_000_000 {
+        out.push_str(&dt.to_rfc3339());
+        return;
+    }
+    #[inline]
+    fn push2(out: &mut String, v: u32) {
+        out.push((b'0' + (v / 10) as u8) as char);
+        out.push((b'0' + (v % 10) as u8) as char);
+    }
+    let y = year as u32;
+    push2(out, y / 100);
+    push2(out, y % 100);
+    out.push('-');
+    push2(out, dt.month());
+    out.push('-');
+    push2(out, dt.day());
+    out.push('T');
+    push2(out, dt.hour());
+    out.push(':');
+    push2(out, dt.minute());
+    out.push(':');
+    push2(out, dt.second());
+    // 小数秒对齐 to_rfc3339 的 AutoSi:0 → 省略;毫秒整 → 3 位;微秒整 → 6 位;否则 9 位
+    if nanos != 0 {
+        out.push('.');
+        if nanos % 1_000_000 == 0 {
+            let ms = nanos / 1_000_000;
+            out.push((b'0' + (ms / 100) as u8) as char);
+            push2(out, ms % 100);
+        } else if nanos % 1_000 == 0 {
+            let us = nanos / 1_000;
+            let mut div = 100_000;
+            for _ in 0..6 {
+                out.push((b'0' + (us / div % 10) as u8) as char);
+                div /= 10;
+            }
+        } else {
+            let mut div = 100_000_000;
+            for _ in 0..9 {
+                out.push((b'0' + (nanos / div % 10) as u8) as char);
+                div /= 10;
+            }
+        }
+    }
+    out.push_str("+00:00");
+}
+
 /// 编码单个单元格 —— 核心分派:按中立类型取值 + 写 msgpack,失败一律 `nil` 不 panic。
-pub fn encode_cell<R: ZmcRowSource>(buf: &mut Vec<u8>, row: &R, col: usize, ty: ZmcColType) {
+///
+/// `scratch`:调用方提供的复用 String(见 [`encode_row_into`]),字符串化的值写进它再
+/// `write_str`,行内复用免每格分配。
+pub fn encode_cell<R: ZmcRowSource>(
+    buf: &mut Vec<u8>,
+    row: &R,
+    col: usize,
+    ty: ZmcColType,
+    scratch: &mut String,
+) {
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+    use std::fmt::Write as _;
 
     macro_rules! nil {
         () => {{
             mp::write_nil(buf).unwrap();
             return;
+        }};
+    }
+    /// 把 Display 值经 scratch 写成 msgpack str(免临时 String 分配)。
+    macro_rules! str_via_scratch {
+        ($v:expr) => {{
+            scratch.clear();
+            let _ = write!(scratch, "{}", $v);
+            mp::write_str(buf, scratch).unwrap();
         }};
     }
 
@@ -534,9 +611,9 @@ pub fn encode_cell<R: ZmcRowSource>(buf: &mut Vec<u8>, row: &R, col: usize, ty: 
             Some(v) => mp::write_f64(buf, v).unwrap(),
             None => nil!(),
         },
-        // NUMERIC → Decimal → 字符串(保精度)
+        // NUMERIC → Decimal → 字符串(保精度;经 scratch 免临时分配)
         ZmcColType::Numeric => match row.get_decimal(col) {
-            Some(d) => mp::write_str(buf, &d.to_string()).unwrap(),
+            Some(d) => str_via_scratch!(d),
             None => nil!(),
         },
         // 文本/JSON:零拷贝借出 &str
@@ -544,37 +621,45 @@ pub fn encode_cell<R: ZmcRowSource>(buf: &mut Vec<u8>, row: &R, col: usize, ty: 
             Some(s) => mp::write_str(buf, s).unwrap(),
             None => nil!(),
         },
-        // JSONB:解码后序列化成字符串
+        // JSONB:解码后序列化成字符串(serde_json 序列化必然分配,经 scratch 统一)
         ZmcColType::Jsonb => match row.get_json_value(col) {
-            Some(j) => mp::write_str(buf, &j.to_string()).unwrap(),
+            Some(j) => str_via_scratch!(j),
             None => nil!(),
         },
         ZmcColType::Uuid => match row.get_uuid(col) {
-            Some(u) => mp::write_str(buf, &u.to_string()).unwrap(),
+            Some(u) => str_via_scratch!(u),
             None => nil!(),
         },
-        // BYTEA → "B64:"+base64
+        // BYTEA → "B64:"+base64(base64 直接编进 scratch,免 format! 拼接)
         ZmcColType::Bytea => match row.get_bytes(col) {
             Some(b) => {
-                let encoded = format!("B64:{}", BASE64.encode(b));
-                mp::write_str(buf, &encoded).unwrap();
+                scratch.clear();
+                scratch.push_str("B64:");
+                BASE64.encode_string(b, scratch);
+                mp::write_str(buf, scratch).unwrap();
             }
             None => nil!(),
         },
         ZmcColType::Date => match row.get_date(col) {
-            Some(d) => mp::write_str(buf, &d.to_string()).unwrap(),
+            Some(d) => str_via_scratch!(d),
             None => nil!(),
         },
         ZmcColType::Timestamp => match row.get_naive_datetime(col) {
             Some(ndt) => {
                 let dt =
                     chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc);
-                mp::write_str(buf, &dt.to_rfc3339()).unwrap();
+                scratch.clear();
+                write_rfc3339_utc(scratch, &dt);
+                mp::write_str(buf, scratch).unwrap();
             }
             None => nil!(),
         },
         ZmcColType::Timestamptz => match row.get_datetime_utc(col) {
-            Some(dt) => mp::write_str(buf, &dt.to_rfc3339()).unwrap(),
+            Some(dt) => {
+                scratch.clear();
+                write_rfc3339_utc(scratch, &dt);
+                mp::write_str(buf, scratch).unwrap();
+            }
             None => nil!(),
         },
         ZmcColType::Unknown => match row.get_str(col) {
@@ -843,3 +928,34 @@ mod tests {
     }
 }
 
+
+#[cfg(test)]
+mod rfc3339_tests {
+    use super::*;
+
+    /// 手写 writer 的输出必须与 to_rfc3339() 逐字节一致(前端契约依赖此格式)。
+    #[test]
+    fn rfc3339_items_equiv_to_rfc3339() {
+        use chrono::TimeZone;
+        let cases = [
+            chrono::Utc.with_ymd_and_hms(2026, 7, 5, 12, 0, 0).unwrap(),
+            chrono::Utc.timestamp_opt(1_751_700_000, 123_456_789).unwrap(), // 纳秒(9位)
+            chrono::Utc.timestamp_opt(1_751_700_000, 123_456_000).unwrap(), // 微秒整(6位)
+            chrono::Utc.timestamp_opt(1_751_700_000, 123_000_000).unwrap(), // 毫秒整(3位)
+            chrono::Utc.timestamp_opt(0, 0).unwrap(),                       // epoch
+            chrono::Utc.timestamp_opt(1_751_700_000, 500_000_000).unwrap(), // .5 秒
+            chrono::Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap(),        // 极小年份
+            chrono::Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap(),
+        ];
+        for dt in cases {
+            let mut s = String::new();
+            write_rfc3339_utc(&mut s, &dt);
+            assert_eq!(s, dt.to_rfc3339(), "格式不等价: {dt}");
+        }
+        // 回退路径:负年份走 chrono 标准实现,仍等价
+        let neg = chrono::Utc.with_ymd_and_hms(-1, 6, 1, 1, 2, 3).unwrap();
+        let mut s = String::new();
+        write_rfc3339_utc(&mut s, &neg);
+        assert_eq!(s, neg.to_rfc3339());
+    }
+}

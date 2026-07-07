@@ -65,6 +65,7 @@ impl DocSaver {
             .map_err(|e| BizError::internal(format!("开启事务失败: {e}")))?;
         let txn_id = guard.txn_id().to_string();
 
+        // 保存 + 对账，任一失败即回滚。
         let affected = match mode {
             SaveMode::Merge => Self::apply_merge(mm, db_id, &txn_id, meta, changes).await,
             SaveMode::Replace => Self::apply_replace(mm, db_id, &txn_id, meta, changes).await,
@@ -103,11 +104,19 @@ impl DocSaver {
         changes: &Value,
     ) -> Result<u64> {
         let mut affected: u64 = 0;
+        // 对账分两类：
+        //   write_expected/write_affected —— INSERT(UPSERT)+UPDATE，须严格相等（每行必落地 1 行）。
+        //   delete 允许幂等空删（前端可能删已不存在的行），不纳入严格对账，仅累加实际数。
+        let mut write_expected: u64 = 0;
+        let mut write_affected: u64 = 0;
         let changes = changes
             .as_object()
             .ok_or_else(|| BizError::business("changes 必须是对象"))?;
 
-        // 父先：按 layer_order 正序 UPSERT/UPDATE
+        // 静默零写防护（H1）：changes 里每个 key 都必须能对上某一层，否则报错而非静默丢弃。
+        Self::assert_all_keys_matched(changes, meta)?;
+
+        // 父先：按 layer_order 正序 批量 UPSERT / UPDATE
         for (idx, layer_id) in meta.layer_order.iter().enumerate() {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
@@ -117,21 +126,22 @@ impl DocSaver {
                 continue;
             };
 
-            // inserted → UPSERT
             if let Some(rows) = layer_changes.get("inserted").and_then(|v| v.as_array()) {
-                for row in rows {
-                    affected += Self::upsert_row(mm, db_id, txn_id, layer, row).await?;
+                if !rows.is_empty() {
+                    write_expected += rows.len() as u64;
+                    write_affected += Self::upsert_rows(mm, db_id, txn_id, layer, rows).await?;
                 }
             }
-            // updated → UPDATE 变更列
             if let Some(rows) = layer_changes.get("updated").and_then(|v| v.as_array()) {
-                for row in rows {
-                    affected += Self::update_row(mm, db_id, txn_id, layer, row).await?;
+                if !rows.is_empty() {
+                    write_expected += rows.len() as u64;
+                    write_affected += Self::update_rows(mm, db_id, txn_id, layer, rows).await?;
                 }
             }
         }
+        affected += write_affected;
 
-        // 子先：按 layer_order 逆序 DELETE
+        // 子先：按 layer_order 逆序 批量 DELETE（幂等，不纳入严格对账）
         for (idx, layer_id) in meta.layer_order.iter().enumerate().rev() {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
@@ -145,6 +155,14 @@ impl DocSaver {
                     affected += Self::delete_ids(mm, db_id, txn_id, layer, ids).await?;
                 }
             }
+        }
+
+        // 对账（H1/H2）：INSERT+UPDATE 每行必须精确落地。实际 < 期望 = 有行未写
+        // （UPDATE 命中 0 行：id 不存在/被并发删；UPSERT 本应恒等），报错回滚，杜绝「假成功」。
+        if write_affected < write_expected {
+            return Err(BizError::business(format!(
+                "回存对账失败：写入期望 {write_expected} 行，实际 {write_affected} 行（有行 id 不存在或被并发修改）"
+            )));
         }
 
         Ok(affected)
@@ -186,44 +204,18 @@ impl DocSaver {
             return Err(BizError::business("replace 模式必须提供根层 rows 以界定覆盖范围"));
         }
 
-        // 先删：子先父后，沿 upper_id 链圈定 rootId 子树
-        // 简化实现：各层按其父键 = ANY(上层被删id)，逐层下推收集，再逆序删。
-        // 此处按 rootId 直接删根层，子层按 upper_id 关联删（依赖各层 upper_id 指向直接父 id）。
-        // 为保证安全，仅删「属于本次 rootId 树」的行。
-        let mut layer_del_ids: std::collections::HashMap<String, Vec<Value>> =
-            std::collections::HashMap::new();
-        layer_del_ids.insert(root.id.clone(), root_ids.clone());
-        // 下推：对每层求其子层待删 id（SELECT id WHERE upper_id = ANY(parent_del_ids)）
-        for layer_id in &meta.layer_order {
-            let parent_ids = layer_del_ids.get(layer_id).cloned().unwrap_or_default();
-            if parent_ids.is_empty() {
-                continue;
-            }
-            for rel in meta.child_relations(layer_id) {
-                if let Some(child) = meta.layer(&rel.child) {
-                    let child_ids =
-                        Self::select_child_ids(mm, db_id, txn_id, child, &rel.child_key, &parent_ids)
-                            .await?;
-                    layer_del_ids
-                        .entry(child.id.clone())
-                        .or_default()
-                        .extend(child_ids);
-                }
-            }
-        }
-        // 逆序删
+        // 先删：子先父后，沿 upper_id 链圈定 rootId 子树（方案 E）。
+        // 旧实现逐层 SELECT id 收集再删（O(层×关系) 次往返）；
+        // 新实现用「子查询链」直接 DELETE —— 每层一条 DELETE，WHERE 用嵌套子查询上溯到根层，
+        // 零预 SELECT、无 id 物化（避免并发漂移），往返数 = 层数。
         for layer_id in meta.layer_order.iter().rev() {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
             };
-            if let Some(ids) = layer_del_ids.get(layer_id) {
-                if !ids.is_empty() {
-                    affected += Self::delete_ids(mm, db_id, txn_id, layer, ids).await?;
-                }
-            }
+            affected += Self::delete_subtree_layer(mm, db_id, txn_id, meta, layer, &root_ids).await?;
         }
 
-        // 再插：父先，按 snapshot 各层 rows 全量 INSERT
+        // 再插：父先，按 snapshot 各层 rows 批量 INSERT
         for layer_id in &meta.layer_order {
             let Some(layer) = meta.layer(layer_id) else {
                 continue;
@@ -236,107 +228,202 @@ impl DocSaver {
             else {
                 continue;
             };
-            for row in rows {
-                affected += Self::insert_row(mm, db_id, txn_id, layer, row).await?;
+            if !rows.is_empty() {
+                affected += Self::insert_rows(mm, db_id, txn_id, layer, rows).await?;
             }
         }
 
         Ok(affected)
     }
 
-    // ─────────────────── 单行 SQL ───────────────────
+    // ─────────────────── 批量 SQL（方案 A：消除逐行 N+1） ───────────────────
 
-    /// UPSERT：INSERT ... ON CONFLICT(id) DO UPDATE。row 形如 {id, upper_id, fields:{...}}。
-    async fn upsert_row(
+    /// sqlx/PG 单条语句参数上限 65535，留余量取 60000。按 列数 折算每批最大行数。
+    const MAX_PARAMS: usize = 60000;
+
+    /// 批量 UPSERT：同层多行合并为多值 INSERT ... ON CONFLICT(id) DO UPDATE。
+    /// 各行列集可能不同（fields 稀疏），按「列集合」分组，每组一条多值语句。
+    /// 走单值 DataValue 绑定（覆盖 Decimal/Date/Float 全类型；数组绑定不支持这些，故不用 UNNEST）。
+    async fn upsert_rows(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: &str,
         layer: &LayerView,
-        row: &Value,
+        rows: &[Value],
     ) -> Result<u64> {
-        let (cols, vals) = Self::row_cols_vals(layer, row)?;
-        if cols.is_empty() {
-            return Ok(0);
-        }
-        let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
-        let updates: Vec<String> = cols
-            .iter()
-            .filter(|c| c.as_str() != "id")
-            .map(|c| format!("{c} = EXCLUDED.{c}"))
-            .collect();
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {}",
-            layer.table_name,
-            cols.join(", "),
-            placeholders.join(", "),
-            updates.join(", ")
-        );
-        Self::exec(mm, db_id, txn_id, &sql, vals).await
+        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, true).await
     }
 
-    /// 纯 INSERT（replace 模式用；子树已先删）。
-    async fn insert_row(
+    /// 批量纯 INSERT（replace 模式；子树已先删）。
+    async fn insert_rows(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: &str,
         layer: &LayerView,
-        row: &Value,
+        rows: &[Value],
     ) -> Result<u64> {
-        let (cols, vals) = Self::row_cols_vals(layer, row)?;
-        if cols.is_empty() {
-            return Ok(0);
-        }
-        let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            layer.table_name,
-            cols.join(", "),
-            placeholders.join(", ")
-        );
-        Self::exec(mm, db_id, txn_id, &sql, vals).await
+        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, false).await
     }
 
-    /// UPDATE 变更列 WHERE id=$last。
-    async fn update_row(
+    /// 批量 INSERT 内核：按列集合分组 → 每组多值 INSERT（可选 ON CONFLICT UPSERT），按参数上限分批。
+    async fn batch_insert_grouped(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: &str,
         layer: &LayerView,
-        row: &Value,
+        rows: &[Value],
+        upsert: bool,
     ) -> Result<u64> {
-        let id = row
-            .get("id")
-            .ok_or_else(|| BizError::business("updated 行缺少 id"))?;
-        let fields = row
-            .get("fields")
-            .and_then(|v| v.as_object())
-            .cloned()
-            .unwrap_or_default();
-        if fields.is_empty() {
-            return Ok(0);
-        }
-        let mut sets = Vec::new();
-        let mut vals: Vec<DataValue> = Vec::new();
-        let mut ph = 0; // 占位符计数（跳过非法列时保持连续）
-        for (col, v) in fields.iter() {
-            if layer.schema.get_index(col).is_none() {
-                continue; // 只更定义里的列，防注入
+        use std::collections::BTreeMap;
+        // 按「列名序列」分组：同列集的行走同一条多值 INSERT
+        let mut groups: BTreeMap<Vec<String>, Vec<Vec<DataValue>>> = BTreeMap::new();
+        for row in rows {
+            let (cols, vals) = Self::row_cols_vals(layer, row)?;
+            if cols.is_empty() {
+                continue;
             }
-            ph += 1;
-            sets.push(format!("{col} = ${ph}"));
-            vals.push(dv_for_col(v, layer, col));
+            groups.entry(cols).or_default().push(vals);
         }
-        if sets.is_empty() {
+
+        let mut affected: u64 = 0;
+        for (cols, value_rows) in groups {
+            let ncol = cols.len();
+            if ncol == 0 {
+                continue;
+            }
+            let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
+            for chunk in value_rows.chunks(rows_per_batch) {
+                let sql = build_multi_insert_sql(&layer.table_name, &cols, chunk.len(), upsert);
+                let flat: Vec<DataValue> = chunk.iter().flatten().cloned().collect();
+                affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
+            }
+        }
+        Ok(affected)
+    }
+
+    /// 批量 UPDATE：按「变更列集合」分组，每组一条 `UPDATE ... SET c=v.c FROM (VALUES ...) AS v(id,cols) WHERE t.id=v.id`。
+    /// 各行变更列不同（updated.fields 稀疏），故先分组。
+    async fn update_rows(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        layer: &LayerView,
+        rows: &[Value],
+    ) -> Result<u64> {
+        use std::collections::BTreeMap;
+        // 分组键 = 排序后的变更列名；值 = 每行 (id_dv, [col_dv...])
+        let mut groups: BTreeMap<Vec<String>, Vec<(DataValue, Vec<DataValue>)>> = BTreeMap::new();
+        for row in rows {
+            let Some(id) = row.get("id") else {
+                return Err(BizError::business("updated 行缺少 id"));
+            };
+            let fields = row
+                .get("fields")
+                .and_then(|v| v.as_object())
+                .cloned()
+                .unwrap_or_default();
+            // 只取定义里的列（防注入），排序保证同列集分到一组
+            let mut cols: Vec<String> = fields
+                .keys()
+                .filter(|c| layer.schema.get_index(c).is_some())
+                .cloned()
+                .collect();
+            cols.sort();
+            if cols.is_empty() {
+                continue;
+            }
+            let id_dv = dv_for_col(id, layer, "id");
+            let col_vals: Vec<DataValue> = cols
+                .iter()
+                .map(|c| dv_for_col(&fields[c], layer, c))
+                .collect();
+            groups.entry(cols).or_default().push((id_dv, col_vals));
+        }
+
+        let mut affected: u64 = 0;
+        for (cols, id_rows) in groups {
+            let ncol = cols.len() + 1; // +1 for id
+            let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
+            for chunk in id_rows.chunks(rows_per_batch) {
+                let sql = build_multi_update_sql(&layer.table_name, &cols, chunk.len());
+                // 展平参数：每行 (id, col1, col2, ...)
+                let mut flat: Vec<DataValue> = Vec::with_capacity(chunk.len() * ncol);
+                for (id_dv, col_vals) in chunk {
+                    flat.push(id_dv.clone());
+                    flat.extend(col_vals.iter().cloned());
+                }
+                affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
+            }
+        }
+        Ok(affected)
+    }
+
+    // ─────────────────── 批量 DELETE / 子层圈定 ───────────────────
+
+    /// 删除某层「属于本次 rootId 子树」的行（方案 E：子查询链，零预 SELECT）。
+    ///
+    /// 对 layer_order 中第 i 层，构造 WHERE 子查询链上溯到根层（第 0 层）：
+    ///   根层：  `DELETE FROM L0 WHERE id = ANY($1)`
+    ///   第 i 层：`DELETE FROM Li WHERE {ck_i} IN (SELECT id FROM L(i-1) WHERE {ck_(i-1)} IN (... WHERE id = ANY($1)))`
+    /// 其中 ck_k = 第 k 层相对其父的 childKey（按 layer_order 相邻推导，独立于 relation 命名）。
+    async fn delete_subtree_layer(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        meta: &DocMetaView,
+        layer: &LayerView,
+        root_ids: &[Value],
+    ) -> Result<u64> {
+        let Some(depth) = meta.layer_order.iter().position(|id| id == &layer.id) else {
             return Ok(0);
-        }
-        ph += 1;
-        vals.push(dv_for_col(id, layer, "id"));
-        let sql = format!(
-            "UPDATE {} SET {} WHERE id = ${ph}",
-            layer.table_name,
-            sets.join(", "),
+        };
+        let root = meta
+            .root_layer()
+            .ok_or_else(|| BizError::business("单据无根层"))?;
+
+        // 自内向外构造子查询链：最内层是根层 `id = ANY($1)`
+        // sql_inner 初始 = 根层选择条件的表 + WHERE
+        let mut inner = format!(
+            "SELECT id FROM {} WHERE id = ANY($1)",
+            quote_ident(&root.table_name)
         );
-        Self::exec(mm, db_id, txn_id, &sql, vals).await
+        // 从第 1 层到第 depth 层，逐层包裹（第 depth 层是目标层，其 childKey 用于最外 WHERE）
+        // 目标层自身的 WHERE 由外层 DELETE 提供，故这里只需包到 depth-1 层的 SELECT。
+        for k in 1..depth {
+            let Some(mid) = meta.layer(&meta.layer_order[k]) else {
+                return Ok(0);
+            };
+            let ck = meta
+                .child_key_for_child(&mid.id)
+                .unwrap_or_else(|| "upper_id".to_string());
+            inner = format!(
+                "SELECT id FROM {} WHERE {} IN ({})",
+                quote_ident(&mid.table_name),
+                quote_ident(&ck),
+                inner
+            );
+        }
+
+        let sql = if depth == 0 {
+            // 根层：直接按 id 删
+            format!(
+                "DELETE FROM {} WHERE id = ANY($1)",
+                quote_ident(&root.table_name)
+            )
+        } else {
+            let ck = meta
+                .child_key_for_child(&layer.id)
+                .unwrap_or_else(|| "upper_id".to_string());
+            format!(
+                "DELETE FROM {} WHERE {} IN ({})",
+                quote_ident(&layer.table_name),
+                quote_ident(&ck),
+                inner
+            )
+        };
+
+        let dv_ids: Vec<DataValue> = root_ids.iter().map(|v| dv_for_col(v, root, "id")).collect();
+        Self::exec(mm, db_id, txn_id, &sql, vec![DataValue::Array(dv_ids)]).await
     }
 
     /// DELETE WHERE id = ANY($1)。
@@ -348,41 +435,8 @@ impl DocSaver {
         ids: &[Value],
     ) -> Result<u64> {
         let dv_ids: Vec<DataValue> = ids.iter().map(|v| dv_for_col(v, layer, "id")).collect();
-        let sql = format!("DELETE FROM {} WHERE id = ANY($1)", layer.table_name);
+        let sql = format!("DELETE FROM {} WHERE id = ANY($1)", quote_ident(&layer.table_name));
         Self::exec(mm, db_id, txn_id, &sql, vec![DataValue::Array(dv_ids)]).await
-    }
-
-    /// SELECT id FROM 子表 WHERE childKey = ANY($1)（replace 圈定子树用）。
-    async fn select_child_ids(
-        mm: &DatabaseManager,
-        db_id: &str,
-        txn_id: &str,
-        layer: &LayerView,
-        child_key: &str,
-        parent_ids: &[Value],
-    ) -> Result<Vec<Value>> {
-        let dv_ids: Vec<DataValue> = parent_ids.iter().map(|v| dv_for_col(v, layer, child_key)).collect();
-        let sql = format!(
-            "SELECT id FROM {} WHERE {} = ANY($1)",
-            layer.table_name, child_key
-        );
-        let ds = mm
-            .query_sql_with_datavalues(
-                db_id,
-                Some(txn_id),
-                &sql,
-                vec![DataValue::Array(dv_ids)],
-                &layer.table_name,
-            )
-            .await
-            .map_err(|e| BizError::internal(format!("查子层 id 失败: {e}")))?;
-        let id_idx = ds.schema.get_index("id");
-        Ok(ds
-            .rows
-            .iter()
-            .filter_map(|r| id_idx.and_then(|i| r.get(i)))
-            .map(|dv| serde_json::to_value(dv).unwrap_or(Value::Null))
-            .collect())
     }
 
     /// 从 row {id, upper_id, fields} 拼列名+值（只取定义里的列）。
@@ -421,6 +475,31 @@ impl DocSaver {
             .await
             .map_err(|e| BizError::internal(format!("执行回存 SQL 失败: {e} | {sql}")))
     }
+
+    /// 静默零写防护（H1）：changes 里每个 key 必须能对上某一层，否则报错。
+    /// 防前端 path 约定漂移（表名 vs 嵌套路径）导致「保存成功却一行没写」。
+    fn assert_all_keys_matched(
+        changes: &Map<String, Value>,
+        meta: &DocMetaView,
+    ) -> Result<()> {
+        // 构造所有合法 key：每层的 表名 / 层 id / 嵌套全路径
+        let mut valid: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (idx, layer_id) in meta.layer_order.iter().enumerate() {
+            if let Some(layer) = meta.layer(layer_id) {
+                valid.insert(layer.table_name.clone());
+                valid.insert(layer.id.clone());
+            }
+            valid.insert(meta.layer_order[..=idx].join("."));
+        }
+        for key in changes.keys() {
+            if !valid.contains(key) {
+                return Err(BizError::business(format!(
+                    "changeset 含未知层 key「{key}」，无法对应任何层（防静默零写）"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// 从 changes 里取某层的变更桶，兼容三种 key 形态：
@@ -443,6 +522,90 @@ fn layer_changes_for<'a>(
     // ② 嵌套全路径：layer_order[0..=layer_idx].join(".")
     let nested = meta.layer_order[..=layer_idx].join(".");
     changes.get(&nested)
+}
+
+/// PG 标识符双引号包裹（防列名/表名撞关键字，与 sql_builder.rs 的 SELECT 侧风格对齐）。
+/// 内部双引号转义为两个双引号。列名已过 schema 白名单，这里只防关键字冲突。
+fn quote_ident(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
+/// 构造多值 INSERT（方案 A）：`INSERT INTO t (c...) VALUES ($1..$k),($k+1..) [ON CONFLICT (id) DO ...]`。
+/// nrows 行 × cols.len() 列，占位符自 $1 连续编号。upsert=true 时加 ON CONFLICT 子句。
+/// 纯函数（无 IO），便于单测占位符/列数/冲突子句正确性。
+fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bool) -> String {
+    let ncol = cols.len();
+    let cols_sql = cols
+        .iter()
+        .map(|c| quote_ident(c))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut p = 0usize;
+    let value_groups: Vec<String> = (0..nrows)
+        .map(|_| {
+            let group: Vec<String> = (0..ncol)
+                .map(|_| {
+                    p += 1;
+                    format!("${p}")
+                })
+                .collect();
+            format!("({})", group.join(", "))
+        })
+        .collect();
+    let mut sql = format!(
+        "INSERT INTO {} ({}) VALUES {}",
+        quote_ident(table),
+        cols_sql,
+        value_groups.join(", ")
+    );
+    if upsert {
+        let updates: Vec<String> = cols
+            .iter()
+            .filter(|c| c.as_str() != "id")
+            .map(|c| format!("{q} = EXCLUDED.{q}", q = quote_ident(c)))
+            .collect();
+        if updates.is_empty() {
+            sql.push_str(" ON CONFLICT (id) DO NOTHING");
+        } else {
+            sql.push_str(&format!(" ON CONFLICT (id) DO UPDATE SET {}", updates.join(", ")));
+        }
+    }
+    sql
+}
+
+/// 构造多值 UPDATE（方案 A）：`UPDATE t SET c=v.c FROM (VALUES (id,c..),...) AS v(id,c..) WHERE t.id=v.id`。
+/// 每行参数序 = (id, col1, col2, ...)，占位符自 $1 连续。纯函数，便于单测。
+fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize) -> String {
+    let ncol = cols.len() + 1; // +id
+    let t = quote_ident(table);
+    let set_sql = cols
+        .iter()
+        .map(|c| format!("{q} = v.{q}", q = quote_ident(c)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let alias_cols = std::iter::once("id".to_string())
+        .chain(cols.iter().map(|c| quote_ident(c)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut p = 0usize;
+    let value_groups: Vec<String> = (0..nrows)
+        .map(|_| {
+            let group: Vec<String> = (0..ncol)
+                .map(|_| {
+                    p += 1;
+                    format!("${p}")
+                })
+                .collect();
+            format!("({})", group.join(", "))
+        })
+        .collect();
+    format!(
+        "UPDATE {t} SET {set} FROM (VALUES {vals}) AS v({alias}) WHERE {t}.id = v.id",
+        t = t,
+        set = set_sql,
+        vals = value_groups.join(", "),
+        alias = alias_cols,
+    )
 }
 
 /// JSON 值 → DataValue（回存参数绑定）。
@@ -504,9 +667,34 @@ fn dv_for_col(v: &Value, layer: &LayerView, col: &str) -> DataValue {
                 .map(DataValue::Decimal)
                 .unwrap_or_else(|_| json_to_dv(v))
         }
+        // 目标是日期时间列（TIMESTAMP/TIMESTAMPTZ→DateTime）的非空字符串 → DateTime。
+        // 兼容 RFC3339（"2026-07-07T09:00:00Z"）与无时区的 "2026-07-07T09:00:00" / "2026-07-07 09:00:00"（按 UTC）。
+        (Value::String(s), Some(FieldType::DateTime)) => parse_datetime(s.trim())
+            .map(DataValue::DateTime)
+            .unwrap_or_else(|| DataValue::String(s.clone())),
+        // 目标是 DATE 列的非空字符串 → Date
+        (Value::String(s), Some(FieldType::Date)) => s
+            .trim()
+            .parse::<chrono::NaiveDate>()
+            .map(DataValue::Date)
+            .unwrap_or_else(|_| DataValue::String(s.clone())),
         // 其余走通用转换
         _ => json_to_dv(v),
     }
+}
+
+/// 解析日期时间字符串为 UTC DateTime，兼容 RFC3339 与无时区两种常见格式。
+fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::{DateTime, NaiveDateTime, Utc};
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%.f"] {
+        if let Ok(ndt) = NaiveDateTime::parse_from_str(s, fmt) {
+            return Some(DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc));
+        }
+    }
+    None
 }
 
 /// 从请求 body 提取 saveMode / changes（handler 用）。
@@ -563,5 +751,67 @@ mod tests {
         assert!(matches!(json_to_dv(&json!("a")), DataValue::String(_)));
         assert!(matches!(json_to_dv(&json!(null)), DataValue::Null));
         assert!(matches!(json_to_dv(&json!(true)), DataValue::Bool(true)));
+    }
+
+    #[test]
+    fn quote_ident_wraps_and_escapes() {
+        assert_eq!(quote_ident("id"), "\"id\"");
+        assert_eq!(quote_ident("user"), "\"user\""); // 关键字也安全
+        assert_eq!(quote_ident("a\"b"), "\"a\"\"b\""); // 内部引号转义
+    }
+
+    #[test]
+    fn multi_insert_single_row_upsert() {
+        let cols = vec!["id".to_string(), "amount".to_string()];
+        let sql = build_multi_insert_sql("cv_acc_line", &cols, 1, true);
+        assert_eq!(
+            sql,
+            "INSERT INTO \"cv_acc_line\" (\"id\", \"amount\") VALUES ($1, $2) \
+             ON CONFLICT (id) DO UPDATE SET \"amount\" = EXCLUDED.\"amount\""
+        );
+    }
+
+    #[test]
+    fn multi_insert_three_rows_placeholders_continuous() {
+        let cols = vec!["id".to_string(), "a".to_string()];
+        let sql = build_multi_insert_sql("t", &cols, 3, false);
+        // 3 行 × 2 列 = $1..$6，连续编号
+        assert_eq!(
+            sql,
+            "INSERT INTO \"t\" (\"id\", \"a\") VALUES ($1, $2), ($3, $4), ($5, $6)"
+        );
+    }
+
+    #[test]
+    fn multi_insert_id_only_do_nothing() {
+        let cols = vec!["id".to_string()];
+        let sql = build_multi_insert_sql("t", &cols, 1, true);
+        // 只有 id 列时冲突不更新
+        assert!(sql.ends_with("ON CONFLICT (id) DO NOTHING"));
+    }
+
+    #[test]
+    fn multi_update_from_values() {
+        let cols = vec!["a".to_string(), "b".to_string()];
+        let sql = build_multi_update_sql("cv_header", &cols, 2);
+        // 每行 (id,a,b) = 3 参，2 行 = $1..$6
+        assert_eq!(
+            sql,
+            "UPDATE \"cv_header\" SET \"a\" = v.\"a\", \"b\" = v.\"b\" \
+             FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS v(id, \"a\", \"b\") \
+             WHERE \"cv_header\".id = v.id"
+        );
+    }
+
+    #[test]
+    fn param_count_matches_placeholders() {
+        // 批量插入的参数展平数应 == 占位符数（nrows × ncol）
+        let cols = vec!["id".to_string(), "x".to_string(), "y".to_string()];
+        let sql = build_multi_insert_sql("t", &cols, 4, false);
+        let max_ph = (1..=100)
+            .rev()
+            .find(|i| sql.contains(&format!("${i}")))
+            .unwrap();
+        assert_eq!(max_ph, 4 * 3); // 12 个占位符
     }
 }

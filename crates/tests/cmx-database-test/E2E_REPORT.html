@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三链路端到端性能实测报告 · DB → HTTP → 前端展示</title>
+<style>
+  :root{
+    --old:#e05252; --sqlx:#4a90d9; --tokio:#42a86b;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:44px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:26px 0 10px;color:var(--accent)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:#a9c7e8;
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px;text-transform:none}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#20272f}
+  .win{color:#42a86b;font-weight:600}
+  .lose{color:#e0857a;font-weight:600}
+  .num{font-variant-numeric:tabular-nums;font-family:"SF Mono",Menlo,monospace}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-old{background:rgba(224,82,82,.18);color:#f0938c}
+  .b-sqlx{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .b-tokio{background:rgba(66,168,107,.18);color:#7fd4a3}
+  /* bar chart */
+  .chart{background:var(--card);border-radius:10px;padding:22px 24px;margin:18px 0}
+  .bar-row{display:flex;align-items:center;margin:11px 0;gap:12px}
+  .bar-label{width:210px;flex-shrink:0;font-size:12.5px;color:var(--dim)}
+  .bar-track{flex:1;background:#0d1117;border-radius:6px;height:30px;position:relative;overflow:hidden}
+  .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;
+    padding-right:10px;font-size:12px;font-weight:600;color:#fff;min-width:44px;
+    transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .stack{display:flex;height:30px;border-radius:6px;overflow:hidden;flex:1;background:#0d1117}
+  .seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;font-weight:600;overflow:hidden;white-space:nowrap}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 2px;font-size:12px;color:var(--dim)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}.bar-label{width:130px}}
+  .callout{border-left:3px solid var(--accent);background:rgba(240,180,41,.07);
+    padding:12px 18px;margin:16px 0;border-radius:0 8px 8px 0}
+  .callout.warn{border-color:#e05252;background:rgba(224,82,82,.07)}
+  .callout.good{border-color:#42a86b;background:rgba(66,168,107,.07)}
+  .path{font-family:"SF Mono",Menlo,monospace;font-size:12px;background:#0d1117;border-radius:8px;
+    padding:14px 16px;margin:10px 0;line-height:2;overflow-x:auto;color:#a9c7e8}
+  .path .step{color:var(--txt)} .path .arrow{color:var(--accent);margin:0 4px}
+  .path .mem{color:#e0857a} .path .note{color:var(--dim)}
+  ul{padding-left:22px} li{margin:5px 0}
+  .foot{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}
+  @media(max-width:820px){.kpi{grid-template-columns:repeat(2,1fr)}}
+  .kpi-card{background:var(--card);border-radius:10px;padding:18px;text-align:center}
+  .kpi-val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+  .kpi-lbl{font-size:12px;color:var(--dim);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>三链路端到端性能实测报告</h1>
+<div class="sub">DB → HTTP → 前端展示模型 · 10 万行 × 50 列 · 真实 PostgreSQL + 真实前端模块</div>
+
+<div class="meta">
+  <b>测试对象</b>：从数据库取 10 万行(50 列宽表)经 HTTP 传到浏览器、构建成前端展示模型,三种链路对比。<br>
+  <b>表结构</b>：1 BIGINT 主键 + 15 整数 + 15 文本 + 8 NUMERIC + 5 时间戳 + 3 布尔 + 2 UUID + 1 JSONB。<br>
+  <b>方法</b>：服务端起真实 axum HTTP 服务器、用计数分配器逐环节测堆内存;前端侧用 Node(V8,与 Chrome 同引擎)驱动<b>真实前端模块</b>(<code>cmx-msgpack-decode.js</code> / <code>CmxDataSet.fromJSON</code>),V8 <code>heapUsed</code> 测各环节内存。5 轮取中位。<br>
+  <b>环境</b>：本机回环(127.0.0.1),真实 PG <code>127.0.0.1:5432/cmx</code>。<span style="color:var(--accent)">下载耗时不含真实网络 RTT/带宽</span>。
+</div>
+
+<div class="kpi">
+  <div class="kpi-card"><div class="kpi-val win">−66%</div><div class="kpi-lbl">服务端峰值内存<br>1318 → 453 MB</div></div>
+  <div class="kpi-card"><div class="kpi-val win">2.4×</div><div class="kpi-lbl">端到端总用时<br>4229 → 1719 ms</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--dim)">−8%</div><div class="kpi-lbl">传输体积<br>114 → 105 MB</div></div>
+  <div class="kpi-card"><div class="kpi-val lose">+32%</div><div class="kpi-lbl">前端解析用时<br>326 → 431 ms</div></div>
+</div>
+
+<!-- ============ 三条链路路径 ============ -->
+<h2>三条链路的完整路径</h2>
+
+<h3><span class="badge b-old">链路 A</span>老链路 · sqlx / DataSet → JSON</h3>
+<div class="path">
+<span class="step">PG</span><span class="arrow">→</span><span class="step">sqlx 流式取行</span><span class="note">(驱动逐行拉,但…)</span><span class="arrow">→</span><span class="step">DataSet 全量物化</span> <span class="mem">Vec&lt;PgRow&gt; + DataValue 枚举全量</span><span class="arrow">→</span><span class="step">ColumnarCodec 列式 JSON</span> <span class="mem">+ JSON 字节</span><span class="arrow">→</span><span class="step">HTTP</span><span class="arrow">→</span><span class="step">JSON.parse</span><span class="arrow">→</span><span class="step">CmxDataSet.fromJSON</span><span class="arrow">→</span><span class="step">dataset.rows</span>
+</div>
+<div class="callout warn">
+<b>关键:「流式」只到取行为止。</b>DataSet 与 ColumnarCodec 在结构上<b>必须先攒齐所有行才能编码</b>——这是老组件的固有限制,不是实现偷懒。于是服务端峰值 = <code>Vec&lt;PgRow&gt;</code> + <code>DataSet</code>(DataValue 副本) + <code>JSON 字节</code> <b>三份叠加</b>。
+</div>
+
+<h3><span class="badge b-sqlx">链路 B</span>sqlx / ZmcDataSet 流式 → msgpack</h3>
+<div class="path">
+<span class="step">PG</span><span class="arrow">→</span><span class="step">sqlx <code>fetch()</code> 流式</span><span class="arrow">→</span><span class="step">逐行 Zmc 编码<b>即弃</b></span> <span class="note">(每行编完立即 drop,不囤)</span><span class="arrow">→</span><span class="step">msgpack 列式包</span> <span class="mem">只剩「输出 + 单行」</span><span class="arrow">→</span><span class="step">HTTP</span><span class="arrow">→</span><span class="step">decodeMsgpack</span><span class="arrow">→</span><span class="step">CmxDataSet.fromJSON</span><span class="arrow">→</span><span class="step">dataset.rows</span>
+</div>
+
+<h3><span class="badge b-tokio">链路 C</span>tokio-postgres / ZmcDataSet 流式 → msgpack</h3>
+<div class="path">
+<span class="step">PG</span><span class="arrow">→</span><span class="step">tokio <code>query_raw</code> 流式</span><span class="arrow">→</span><span class="step">逐行 Zmc 编码<b>即弃</b></span><span class="arrow">→</span><span class="step">msgpack 列式包</span><span class="arrow">→</span><span class="step">HTTP</span><span class="arrow">→</span><span class="step">decodeMsgpack</span><span class="arrow">→</span><span class="step">CmxDataSet.fromJSON</span><span class="arrow">→</span><span class="step">dataset.rows</span>
+</div>
+<div class="callout good">
+链路 B/C 用<b>同一套驱动无关编码器</b>(<code>cmx-rowsource</code>);唯一差别是驱动取行方式。<b>零拷贝</b>:文本/二进制列直接借用行的底层 <code>Bytes</code>,不分配。
+</div>
+
+<!-- ============ 端到端总览 ============ -->
+<h2>① 端到端总用时(各环节堆叠)</h2>
+<div class="chart">
+  <div class="legend">
+    <span><i class="dot" style="background:#8a5cf6"></i>服务端·取数+物化</span>
+    <span><i class="dot" style="background:#c77dff"></i>服务端·编码</span>
+    <span><i class="dot" style="background:#f0b429"></i>前端·下载</span>
+    <span><i class="dot" style="background:#e0857a"></i>前端·解析</span>
+    <span><i class="dot" style="background:#42a86b"></i>前端·展示构建</span>
+  </div>
+  <!-- 老链路 4229 -->
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-old">A</span>老 DataSet→JSON</div>
+    <div class="stack">
+      <div class="seg" style="width:31.8%;background:#8a5cf6" title="取数+物化 1343ms">1343</div>
+      <div class="seg" style="width:8.0%;background:#c77dff" title="编码 337ms">337</div>
+      <div class="seg" style="width:42.5%;background:#f0b429" title="下载 1798ms">1798</div>
+      <div class="seg" style="width:7.7%;background:#e0857a" title="解析 326ms">326</div>
+      <div class="seg" style="width:9.7%;background:#42a86b" title="构建 412ms">412</div>
+    </div>
+    <div class="num" style="width:64px;text-align:right;font-weight:700">4229</div>
+  </div>
+  <!-- sqlx zmc 1737 -->
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-sqlx">B</span>sqlx/Zmc 流式</div>
+    <div class="stack" style="flex:0 0 41.1%">
+      <div class="seg" style="width:3.7%;background:#8a5cf6" title="取数 65ms">65</div>
+      <div class="seg" style="width:20.7%;background:#c77dff" title="编码 360ms">360</div>
+      <div class="seg" style="width:26.1%;background:#f0b429" title="下载 453ms">453</div>
+      <div class="seg" style="width:24.9%;background:#e0857a" title="解析 433ms">433</div>
+      <div class="seg" style="width:23.7%;background:#42a86b" title="构建 412ms">412</div>
+    </div>
+    <div class="num" style="width:64px;text-align:right;font-weight:700">1737</div>
+  </div>
+  <!-- tokio zmc 1719 -->
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-tokio">C</span>tokio/Zmc 流式</div>
+    <div class="stack" style="flex:0 0 40.6%">
+      <div class="seg" style="width:6.1%;background:#8a5cf6" title="取数 105ms">105</div>
+      <div class="seg" style="width:18.0%;background:#c77dff" title="编码 310ms">310</div>
+      <div class="seg" style="width:26.2%;background:#f0b429" title="下载 450ms">450</div>
+      <div class="seg" style="width:25.1%;background:#e0857a" title="解析 431ms">431</div>
+      <div class="seg" style="width:24.0%;background:#42a86b" title="构建 412ms">412</div>
+    </div>
+    <div class="num" style="width:64px;text-align:right;font-weight:700">1719</div>
+  </div>
+  <div class="sub" style="margin-top:14px">条宽按各自总用时等比;老链路条最长(4229ms)。Zmc 两链路总用时仅老链路的 41%。</div>
+</div>
+
+<table>
+<thead><tr><th>链路</th><th>传输体积</th><th>服·取数(ms)</th><th>服·编码(ms)</th><th>前·下载(ms)</th><th>前·解析(ms)</th><th>前·构建(ms)</th><th>端到端总(ms)</th></tr></thead>
+<tbody>
+<tr><td><span class="badge b-old">A</span>老 DataSet→JSON</td><td class="num">114.0 MB</td><td class="num">1343</td><td class="num">337</td><td class="num">1798</td><td class="num">326</td><td class="num">412</td><td class="num lose">4229</td></tr>
+<tr><td><span class="badge b-sqlx">B</span>sqlx/Zmc 流式</td><td class="num">105.0 MB</td><td class="num win">65</td><td class="num">360</td><td class="num win">453</td><td class="num">433</td><td class="num">412</td><td class="num win">1737</td></tr>
+<tr><td><span class="badge b-tokio">C</span>tokio/Zmc 流式</td><td class="num">105.0 MB</td><td class="num win">105</td><td class="num">310</td><td class="num win">450</td><td class="num">431</td><td class="num">412</td><td class="num win">1719</td></tr>
+</tbody>
+</table>
+
+<!-- ============ 服务端内存 ============ -->
+<h2>② 服务端峰值内存(五方对比)</h2>
+<div class="sub">除三条主链路外,附上「Zmc 全量模式」两方,揭示流式 vs 全量的差异。计数分配器测活跃堆内存(alloc−dealloc)。</div>
+<div class="chart">
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-old">A</span>sqlx/DataSet(老)</div>
+    <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--old)">1318 MB</div></div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label">sqlx/Zmc <b>全量</b></div>
+    <div class="bar-track"><div class="bar-fill" style="width:31.3%;background:#6b7f95">412 MB</div></div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label">tokio/Zmc <b>全量</b></div>
+    <div class="bar-track"><div class="bar-fill" style="width:33.8%;background:#6b7f95">446 MB</div></div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-sqlx">B</span>sqlx/Zmc <b>流式</b></div>
+    <div class="bar-track"><div class="bar-fill" style="width:34.4%;background:var(--sqlx)">453 MB</div></div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-tokio">C</span>tokio/Zmc <b>流式</b></div>
+    <div class="bar-track"><div class="bar-fill" style="width:34.4%;background:var(--tokio)">453 MB</div></div>
+  </div>
+</div>
+<div class="callout warn">
+<b>注意一个反直觉点:</b>「全量」模式(412/446 MB)反而比 e2e 服务器里的「流式」峰值(453 MB)略低。原因:e2e 服务器的流式路径要同时持有<b>完整输出 buffer</b>(105 MB)+ axum 响应封装,而独立 mem-bench 的全量测量在编码后即测。两者测法略不同,<b>都远低于老链路 1318 MB 才是重点</b>。真正的流式威力见下方 mem-bench 的纯流式数(243 MB)。
+</div>
+
+<h3>服务端各阶段活跃内存(独立 mem-bench,更纯净)</h3>
+<table>
+<thead><tr><th>阶段</th><th>sqlx/DataSet</th><th>sqlx/Zmc全量</th><th>sqlx/Zmc流式</th><th>tokio/Zmc全量</th><th>tokio/Zmc流式</th></tr></thead>
+<tbody>
+<tr><td>A 取数(原始行集)</td><td class="num">221 MB</td><td class="num">221 MB</td><td class="num">—</td><td class="num">254 MB</td><td class="num">—</td></tr>
+<tr><td>B 结构就绪</td><td class="num">230 MB</td><td class="num">221 MB</td><td class="num">—</td><td class="num">254 MB</td><td class="num">—</td></tr>
+<tr><td>C 结构+输出同时活跃</td><td class="num">486 MB</td><td class="num">349 MB</td><td class="num win">243 MB</td><td class="num">382 MB</td><td class="num win">243 MB</td></tr>
+<tr><td><b>峰值水位</b></td><td class="num lose">614 MB</td><td class="num">412 MB</td><td class="num win">243 MB</td><td class="num">446 MB</td><td class="num win">243 MB</td></tr>
+</tbody>
+</table>
+<div class="callout good">
+<b>纯流式峰值仅 243 MB</b>(相对老链路 614 MB 省 60%)—— 边取边编码、每行编完即弃,内存只剩「输出字节 + 单行」。这是老 DataSet(全量物化)<b>结构上做不到</b>的。e2e 端到端里因还要持完整响应体所以是 453 MB,但机理相同。
+</div>
+
+<!-- ============ 前端内存 ============ -->
+<h2>③ 前端内存分解</h2>
+<div class="sub">V8 <code>heapUsed</code>,GC 后差值。三链路<b>总量完全相同(484 MB)</b>——因都走同一个 <code>fromJSON</code>,产出同样的 <code>dataset.rows</code>。差异只在内存花在哪个环节。</div>
+<div class="chart">
+  <div class="legend">
+    <span><i class="dot" style="background:#f0b429"></i>下载(字节缓冲)</span>
+    <span><i class="dot" style="background:#e0857a"></i>解析(JS 对象)</span>
+    <span><i class="dot" style="background:#42a86b"></i>展示构建(CmxDataSet)</span>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-old">A</span>老 JSON</div>
+    <div class="stack">
+      <div class="seg" style="width:23.6%;background:#f0b429" title="下载 114MB">114</div>
+      <div class="seg" style="width:64.0%;background:#e0857a" title="解析 310MB">310</div>
+      <div class="seg" style="width:36.2%;background:#42a86b" title="构建 175MB">175</div>
+    </div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-sqlx">B</span>sqlx msgpack</div>
+    <div class="stack">
+      <div class="seg" style="width:21.7%;background:#f0b429" title="下载 105MB">105</div>
+      <div class="seg" style="width:35.7%;background:#e0857a" title="解析 173MB">173</div>
+      <div class="seg" style="width:64.3%;background:#42a86b" title="构建 311MB">311</div>
+    </div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span class="badge b-tokio">C</span>tokio msgpack</div>
+    <div class="stack">
+      <div class="seg" style="width:21.7%;background:#f0b429" title="下载 105MB">105</div>
+      <div class="seg" style="width:35.7%;background:#e0857a" title="解析 173MB">173</div>
+      <div class="seg" style="width:64.3%;background:#42a86b" title="构建 311MB">311</div>
+    </div>
+  </div>
+  <div class="sub" style="margin-top:12px">各条总长≈总堆增量(484MB);段长按各环节增量。老链路「解析」占大头(JSON.parse 直接建完整对象树),Zmc「解析」轻(msgpack 解成列式紧凑数组)、「构建」重(fromJSON 摊平成行对象)——<b>总量一样,只是位置不同</b>。</div>
+</div>
+
+<!-- ============ 差异对比 ============ -->
+<h2>④ 与老链路的差异</h2>
+<table>
+<thead><tr><th>指标</th><th>老链路</th><th>sqlx/Zmc流式</th><th>tokio/Zmc流式</th><th>结论</th></tr></thead>
+<tbody>
+<tr><td>传输体积</td><td class="num">114.0 MB</td><td class="num">105.0 MB</td><td class="num">105.0 MB</td><td class="num" style="color:var(--dim)">仅小 8%</td></tr>
+<tr><td>服务端峰值内存</td><td class="num">1318 MB</td><td class="num win">453 MB</td><td class="num win">453 MB</td><td class="win">省 66%</td></tr>
+<tr><td>端到端总用时</td><td class="num">4229 ms</td><td class="num win">1737 ms</td><td class="num win">1719 ms</td><td class="win">快 2.4×</td></tr>
+<tr><td>服务端取数+物化</td><td class="num">1343 ms</td><td class="num win">65 ms</td><td class="num win">105 ms</td><td class="win">流式不等全量</td></tr>
+<tr><td>前端解析</td><td class="num win">326 ms</td><td class="num lose">433 ms</td><td class="num lose">431 ms</td><td class="lose">msgpack 慢 32%</td></tr>
+<tr><td>前端展示构建</td><td class="num">412 ms</td><td class="num">412 ms</td><td class="num">412 ms</td><td style="color:var(--dim)">同一 fromJSON</td></tr>
+<tr><td>前端总堆增量</td><td class="num">484 MB</td><td class="num">484 MB</td><td class="num">484 MB</td><td style="color:var(--dim)">完全相同</td></tr>
+</tbody>
+</table>
+
+<!-- ============ 结论 ============ -->
+<h2>⑤ 结论(诚实版)</h2>
+
+<div class="callout good">
+<b>1. 服务端内存是最大赢面:省 66%(1318 → 453 MB)。</b>老链路要 <code>Vec&lt;PgRow&gt;</code> + <code>DataSet</code> + <code>JSON</code> 三份叠加;Zmc 流式边取边编码即弃。<b>并发几个 10 万行请求</b>,老链路就是 GB 级、Zmc 是几百 MB 级——这是生产事故线上的关键差异。
+</div>
+
+<div class="callout good">
+<b>2. 端到端快 2.4×,但主因不是「二进制」,是「服务端不物化」。</b>老链路服务端取数+物化 DataSet 就花 1343ms;Zmc 流式取数仅 65~105ms(边取边编码,不等全量)。二进制本身只省传输体积(8%)。
+</div>
+
+<div class="callout warn">
+<b>3. 传输体积只小 8%(114→105 MB)——低于预期,这是「路线 A」的代价。</b>为了前端 <code>fromJSON</code> 零改动,msgpack 里值仍字符串化(Decimal→<code>"1130000.5000"</code>、时间→RFC3339、bytea→<code>"B64:"</code>)。msgpack 只省了 JSON 的引号/括号,而列式包字段名本就只出现一次。要体积大降得走<b>路线 B(原生 int/bin/时间)</b>,但那要改前端。
+</div>
+
+<div class="callout warn">
+<b>4. 前端解析:msgpack(手写 JS)反而比 JSON.parse 慢 32%(431 vs 326ms)——如实说。</b><code>JSON.parse</code> 是 V8 原生 C++,极致优化;手写 JS msgpack 解码器跑在 JIT 层。<b>前端这一环二进制是净负</b>——体积优势(下载)在回环下看不出,解析劣势却真实存在。真实广域网下,下载省的时间才会盖过解析多花的。
+</div>
+
+<div class="callout">
+<b>5. 前端展示构建 + 内存三链路完全相同(412ms / 484MB)。</b>都走同一个 <code>CmxDataSet.fromJSON</code> → 同样的 <code>dataset.rows</code> 行对象树——<b>印证「组件零改动、前端成本与传输格式无关」</b>。
+</div>
+
+<div class="callout good">
+<b>6. sqlx 与 tokio-postgres 全链路几乎无差异</b>(总用时 1737 vs 1719ms、内存完全相同)。<b>红利来自 ZmcDataSet 的设计</b>(流式不物化 + 不产 DataValue 副本 + msgpack),<b>不来自换驱动</b>。tokio-postgres 的价值在别处(pipelining、低点查延迟),与本报告的内存/吞吐维度无关。
+</div>
+
+<div class="callout">
+<b>一句话总结:</b>这套方案的价值 <b>90% 在服务端</b>(内存省 66%、端到端快 2.4×,核心是「流式不物化」);<b>前端侧(路线 A)基本打平甚至解析略亏</b>。老代码<b>不必为内存红利换驱动</b>——留在 sqlx,把出口从「DataSet+JSON」换成「ZmcDataSet+msgpack(大结果集用流式)」即可拿到几乎全部收益。
+</div>
+
+<!-- ============ 第二轮优化实测 ============ -->
+<h2>⑥ 第二轮优化实测(在最优路径上继续挤水分)</h2>
+<div class="sub">①〜⑤ 为基线实测。针对「最优路径还有没有优化空间」,按 ROI 实测三项:两项落地、一项试完回退(如实记录)。全部改动均通过契约验证:RFC3339 逐字节等价单测、zmc 两侧集成测试、前端全套件 256 用例绿。</div>
+
+<table>
+<thead><tr><th>环节</th><th>改动</th><th>优化前</th><th>优化后</th><th>效果</th></tr></thead>
+<tbody>
+<tr><td>服务端编码</td><td>手写 RFC3339 writer(零分配、零格式机)+ 行内 scratch 复用</td><td class="num">tokio 310 / sqlx 360 ms</td><td class="num">279 / 327 ms</td><td class="win">−10%</td></tr>
+<tr><td>前端展示构建<br>(fromJSON)</td><td>批量装载:跳过逐行 ds-row-added 事件与 _trackColumns,保留 <code>{...obj}</code> fast-shape 重整</td><td class="num">412 ms</td><td class="num">~290 ms</td><td class="win">−30%(三链路同享)</td></tr>
+<tr><td>前端解析<br>(decodeMsgpack)</td><td>ASCII 短串 fromCharCode 快路径</td><td class="num">431 ms</td><td class="num lose">试了,回退</td><td class="lose">更慢 + 堆多 200MB</td></tr>
+</tbody>
+</table>
+
+<h3>优化后端到端(10 万行 × 50 列,5 轮中位)</h3>
+<table>
+<thead><tr><th>链路</th><th>基线总用时</th><th>优化后总用时</th><th>提升</th><th>vs 老链路</th></tr></thead>
+<tbody>
+<tr><td><span class="badge b-old">A</span>老 DataSet→JSON</td><td class="num">4229 ms</td><td class="num">3988 ms</td><td class="num">−6%(享 fromJSON 优化)</td><td class="num">—</td></tr>
+<tr><td><span class="badge b-sqlx">B</span>sqlx/Zmc 流式</td><td class="num">1737 ms</td><td class="num win">1602 ms</td><td class="num win">−8%</td><td class="win">快 2.5×</td></tr>
+<tr><td><span class="badge b-tokio">C</span>tokio/Zmc 流式</td><td class="num">1719 ms</td><td class="num win">1582 ms</td><td class="num win">−8%</td><td class="win">快 2.5×</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<b>教训 1:临时 String 分配不是编码瓶颈,格式机才是。</b>第一版只做 scratch 复用、时间列用 <code>dt.format("%Y-…")</code> —— 每格重新解析 strftime 格式串,<b>反而回退到 365~444ms</b>;换预解析 items 才追平基线;最终手写 RFC3339 writer(纯整数运算直写)才拿到 −10%。malloc 很便宜,Display/格式机的每格开销才贵。
+</div>
+<div class="callout warn">
+<b>教训 2:V8 对象形态(shape)比「少拷一次」重要得多。</b>fromJSON 批量化时顺手删掉了 <code>{...obj}</code> 展开(直觉:少一次拷贝更快)——结果在真实堆条件下 <b>3 倍慢</b>(908ms vs 283ms):逐键动态构建的对象是 dictionary mode,直接长期持有 10 万个慢形态对象;展开重整成 fast-shape 克隆后才真正快。进程内交替微基准还差点掩盖了这一点(GC/分配器状态互相污染),分进程 A/B 才看清。
+</div>
+<div class="callout">
+<b>教训 3:JSON.parse / TextDecoder 是 V8 原生 C++,手写 JS「快路径」打不过。</b>ASCII 短串 fromCharCode 拼接实测更慢且堆多 200MB(<code>+=</code> 产生 rope/cons 字符串,碎片化)。已回退并在代码里留注释防止后人再踩。前端解析要真正快,出路是换 <code>@msgpack/msgpack</code> 官方库(未做,需引依赖)或路线 B 原生类型。
+</div>
+<div class="callout good">
+<b>第二轮小结:</b>最优路径(tokio/Zmc)端到端 1719 → <b>1582ms</b>,老链路也顺带受益(fromJSON 是共享代码)。剩余最大空间仍在前端解析(448ms,需引官方 msgpack 库)与真实网络下的体积(需路线 B)——两者都有明确代价,按需取用。
+</div>
+
+<div class="foot">
+计数分配器统计 Rust 堆分配(含网络缓冲/驱动缓存);前端 V8 <code>heapUsed</code> 于 <code>--expose-gc</code> 强制 GC 后取值。单机回环,5 轮取中位,数值随机器/负载波动,重点看同指标的相对差。<br>
+测试代码:<code>crates/tests/cmx-database-test/src/e2e_server.rs</code>(服务端)、<code>e2e_bench.mjs</code>(前端侧)、<code>src/mem_bench.rs</code>(五方内存)。生成于 2026-07。
+</div>
+
+</div>
+</body>
+</html>

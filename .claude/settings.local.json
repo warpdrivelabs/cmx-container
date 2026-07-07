@@ -1,16 +1,21 @@
 {
   "permissions": {
     "allow": [
+      "Bash(./target/release/*)",
+      "Bash(2)",
+      "Bash(DATABASE_URL=*)",
       "Bash(cargo build -p cmx-database)",
-      "Bash(xargs grep:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo test:*)",
+      "Bash(curl -s -o /dev/null -D - http://127.0.0.1:*)",
+      "Bash(find /e/rustspace/cmx/cmx-container -name *.rs -type f -exec grep -l cmx.plugin {})",
+      "Bash(kill:*)",
       "Bash(mkdir -p e:/rustspace/cmx/cmx-container/crates/libs/cmx-metadata/src/ddl)",
       "Bash(mkdir -p e:/rustspace/cmx/cmx-container/crates/libs/cmx-metadata/src/parser)",
-      "Bash(cargo build:*)",
-      "Bash(cargo test:*)",
-      "Bash(cargo clippy:*)",
-      "Bash(find /e/rustspace/cmx/cmx-container -name *.rs -type f -exec grep -l cmx.plugin {})",
-      "Bash(2)",
-      "Bash(cargo check:*)"
+      "Bash(node --expose-gc:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
