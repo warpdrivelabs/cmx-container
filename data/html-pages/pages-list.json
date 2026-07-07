@@ -879,6 +879,17 @@
       "page": "voucher-doc-sqlxbin",
       "relPath": "fi/cmxfico/voucher-doc-sqlxbin.html",
       "latestHtmlFile": "voucher-doc-sqlxbin.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.doc-service-test",
+      "name": "业务单据加载服务·全能力自检（html_pages）",
+      "details": "诊断页：逐项调用后端全部能力（/meta、5 装载端点、POST 富查询、子层下推、keyset 游标、/children 懒下钻、tokio-zmc-stream 真流式），展示 PASS/FAIL 清单",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "doc-service-test",
+      "relPath": "fi/cmxfico/doc-service-test.html",
+      "latestHtmlFile": "doc-service-test.html"
     }
   ]
 }

@@ -1264,6 +1264,58 @@
        ]
       }
      }
+    },
+    {
+     "id": "fi-cmxfico-doc-service-test-native",
+     "name": "doc-service-test-native",
+     "caption": "加载服务自检(native)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/checklist",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "业务单据加载服务 · 全后端能力自检（native_pages）",
+       "icon": "sys-monitor",
+       "views": [
+        {
+         "tabLabel": "自检(native)",
+         "icon": "sys-monitor",
+         "type": "native_pages",
+         "native_page": "portal.doc.doc-service-test",
+         "view": "content",
+         "props": {
+          "domain": "fi",
+          "application": "cmxfico",
+          "module": "gl",
+          "file": "cmxfico_doc_meta_v1.json",
+          "dbId": "fico-db"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-cmxfico-doc-service-test-html",
+     "name": "doc-service-test-html",
+     "caption": "加载服务自检(html)",
+     "type": "workspace-node",
+     "icon": "tabler-outline/checklist",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "业务单据加载服务 · 全后端能力自检（html_pages）",
+       "icon": "sys-monitor",
+       "views": [
+        {
+         "tabLabel": "自检(html)",
+         "icon": "sys-monitor",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.doc-service-test"
+        }
+       ]
+      }
+     }
     }
    ]
   },

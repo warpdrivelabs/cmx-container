@@ -154,6 +154,13 @@
       "details": "纯通用：层数 N/各层列/主从关系全来自 /api/doc/meta，动态渲染 N 个 grid。会计凭证只是一组 props（domain/application/module/file + apiPath/binary 选数据通道）。零业务假设，换任何 L1..LN 单据定义即可用。",
       "sourceType": "js",
       "relPath": "portal/doc/doc-loader.js"
+    },
+    {
+      "id": "portal.doc.doc-service-test",
+      "name": "业务单据加载服务·全能力自检（native_pages）",
+      "details": "诊断页：逐项调用后端全部能力（/meta、5 装载端点、POST 富查询、子层下推、keyset 游标、/children 懒下钻、tokio-zmc-stream 真流式），展示 PASS/FAIL 清单。元数据驱动、零业务假设。",
+      "sourceType": "js",
+      "relPath": "portal/doc/doc-service-test.js"
     }
   ]
 }
