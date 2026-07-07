@@ -13,6 +13,7 @@
   - [服务注册地址解析优先级](#服务注册地址解析优先级)
   - [app_id 获取优先级](#app_id-获取优先级)
 - [基础服务中心环境变量覆盖](#基础服务中心环境变量覆盖)
+- [服务对外身份环境变量覆盖](#服务对外身份环境变量覆盖)
 - [认证配置环境变量覆盖](#认证配置环境变量覆盖)
 - [通用环境变量](#通用环境变量)
 - [配置优先级](#配置优先级)
@@ -102,6 +103,25 @@
 | `CENTER_CLIENT__URLS__PERM` | String | 权限中心 URL |
 | `CENTER_CLIENT__URLS__FORM` | String | 表单中心 URL |
 | `CENTER_CLIENT__URLS__FLOW` | String | 流程中心 URL |
+
+---
+
+## 服务对外身份环境变量覆盖
+
+对应 TOML 配置节 `[service_auth]`。本服务作为调用方时携带的服务级凭证，
+用于 gRPC / HTTP 跨服务调用的 M2M 鉴权。
+
+| 环境变量 | 类型 | 说明 |
+|---------|------|------|
+| `SERVICE_AUTH__OUTGOING_API_KEY` | String | 本服务对外服务级凭证（`cmx_sk_xxx`），须同时在 `[[auth.static_api_keys]]` 注册。留空表示不配置服务身份（仅单体无跨服务调用场景）。生产环境优先用此环境变量注入，避免明文写入 TOML。 |
+
+### 凭证与认证流程
+
+1. gRPC 出站：客户端自动携带 `X-API-Key: <cmx_sk_xxx>` + 委托用户 token（若有）+ 请求 ID。
+2. HTTP 出站（`RemoteImporterContext`）：携带同样三层 header。
+3. 接收端 `mw_auth` / gRPC `AuthVerifier` 按 `X-API-Key` header 识别为 API Key，走 `validate_api_key` 验证。
+
+详见 `docs/20260707_跨服务认证与认证上下文传播设计.md`。
 
 ---
 

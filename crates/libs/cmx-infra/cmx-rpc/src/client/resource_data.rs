@@ -119,8 +119,12 @@ impl ResourceDataClient for ResourceDataGrpcClient {
             version: request.version.clone().into(),
             zip_data: request.zip_data.clone().into(),
         };
+        let mut grpc_req = volo_grpc::Request::new(proto_req);
+        if let Some(key) = self.infra.outbound_service_key() {
+            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+        }
 
-        match client.import_resource_data(proto_req).await {
+        match client.import_resource_data(grpc_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -172,8 +176,12 @@ impl ResourceDataClient for ResourceDataGrpcClient {
             plugin_id: request.plugin_id.clone().into(),
             app_id: request.app_id.clone().into(),
         };
+        let mut grpc_req = volo_grpc::Request::new(proto_req);
+        if let Some(key) = self.infra.outbound_service_key() {
+            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+        }
 
-        match client.cleanup_resource_data(proto_req).await {
+        match client.cleanup_resource_data(grpc_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -221,8 +229,12 @@ impl ResourceDataClient for ResourceDataGrpcClient {
             application_code: request.application_code.clone().into(),
             module_code: request.module_code.clone().into(),
         };
+        let mut grpc_req = volo_grpc::Request::new(proto_req);
+        if let Some(key) = self.infra.outbound_service_key() {
+            super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+        }
 
-        match client.list_resource_data(proto_req).await {
+        match client.list_resource_data(grpc_req).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 tracing::info!(
@@ -270,8 +282,12 @@ impl RpcServiceBundle for ResourceDataBundle {
 
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration {
         let data_importer = deps.data_importer.clone();
+        let auth_verifier = deps.auth_verifier.clone();
         ServerRegistration::new(move |server| {
-            let impl_ = crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
+            let mut impl_ = crate::server::resource_data::CmxResourceDataServerImpl::new(data_importer);
+            if let Some(verifier) = auth_verifier.clone() {
+                impl_ = impl_.with_auth_verifier(verifier);
+            }
             let svc = volo_grpc::server::ServiceBuilder::new(
                 resource_data_proto::CmxResourceDataServiceServer::new(impl_),
             )

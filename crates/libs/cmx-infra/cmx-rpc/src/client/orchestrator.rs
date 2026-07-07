@@ -117,6 +117,7 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
             .collect();
 
         // 闭包只返回原始 Status，into_inner 在外做一次（使用约束见 retry.rs）
+        let outbound_key = self.infra.outbound_service_key().map(|s| s.to_string());
         match with_retry(timeout_ms, max_retries, || {
             let req = ExecuteServiceRequest {
                 service_key: service_key_fs.clone(),
@@ -126,8 +127,12 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
                 debug_node_id: debug_node_id.clone(),
                 debug_params: debug_params.clone(),
             };
+            let mut grpc_req = volo_grpc::Request::new(req);
+            if let Some(key) = outbound_key.as_deref() {
+                super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+            }
             let client = client.clone();
-            async move { client.execute_service(req).await }
+            async move { client.execute_service(grpc_req).await }
         })
         .await
         {
@@ -177,6 +182,7 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
         let plugin_id_fs: pilota::FastStr = plugin_id.to_string().into();
         let function_name_fs: pilota::FastStr = function_name.to_string().into();
         let input_fs: pilota::FastStr = input.to_string().into();
+        let outbound_key = self.infra.outbound_service_key().map(|s| s.to_string());
 
         match with_retry(timeout_ms, max_retries, || {
             let req = CallFunctionRequest {
@@ -186,8 +192,12 @@ impl ServiceOrchestrationClient for OrchestratorGrpcClient {
                 initial_input: None,
                 debug: false,
             };
+            let mut grpc_req = volo_grpc::Request::new(req);
+            if let Some(key) = outbound_key.as_deref() {
+                super::auth_outbound::apply_auth_metadata(&mut grpc_req, key);
+            }
             let client = client.clone();
-            async move { client.call_function(req).await }
+            async move { client.call_function(grpc_req).await }
         })
         .await
         {
@@ -248,11 +258,15 @@ impl RpcServiceBundle for OrchestratorBundle {
     fn build_server(&self, deps: &ServerDeps) -> ServerRegistration {
         let service_invoker = deps.service_invoker.clone();
         let function_invoker = deps.function_invoker.clone();
+        let auth_verifier = deps.auth_verifier.clone();
         ServerRegistration::new(move |server| {
-            let impl_ = crate::server::orchestrator::CmxOrchestratorServerImpl::new(
+            let mut impl_ = crate::server::orchestrator::CmxOrchestratorServerImpl::new(
                 service_invoker,
                 function_invoker,
             );
+            if let Some(verifier) = auth_verifier.clone() {
+                impl_ = impl_.with_auth_verifier(verifier);
+            }
             let svc = volo_grpc::server::ServiceBuilder::new(CmxServiceOrchestratorServer::new(
                 impl_,
             ))

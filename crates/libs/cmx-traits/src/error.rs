@@ -2,6 +2,13 @@
 //!
 //! 提供跨模块共享的统一错误类型，包括 trait 调用错误和宿主函数错误。
 
+/// 全局系统身份重复初始化错误。
+///
+/// 由 [`crate::auth::context_scope::init_system_auth`] 在重复调用时返回。
+#[derive(Debug, thiserror::Error)]
+#[error("全局系统身份已初始化，禁止重复设置")]
+pub struct SetSystemAuthError;
+
 /// cmx-traits 统一错误类型。
 ///
 /// 用于 trait 方法返回值的错误场景定义。

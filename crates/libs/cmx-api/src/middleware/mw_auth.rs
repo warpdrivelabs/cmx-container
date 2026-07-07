@@ -251,7 +251,22 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
     // 1. 白名单检查（支持通配符 * / ** 匹配）
     if GlobalAuthService::is_whitelisted(&path) {
         info!(path = %path, "认证白名单，跳过");
-        return Ok(next.run(req).await);
+        // 白名单路径也建立 task_local scope（auth_context=None），保证下游
+        // current_request_id() 等追踪字段可用、current_auth() 返回 None 而非 panic。
+        let request_id = req
+            .extensions()
+            .get::<CmxSvrContext>()
+            .map(|c| c.0.request_id.clone())
+            .unwrap_or_default();
+        let resp = cmx_traits::auth::context_scope::scope_full(
+            None,
+            None,
+            request_id,
+            None,
+            next.run(req),
+        )
+        .await;
+        return Ok(resp);
     }
 
     // 2. 获取认证服务
@@ -260,12 +275,28 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
         None => {
             // 认证服务未配置，允许通过（兼容无认证场景）
             debug!("认证服务未配置，跳过认证");
-            return Ok(next.run(req).await);
+            let request_id = req
+                .extensions()
+                .get::<CmxSvrContext>()
+                .map(|c| c.0.request_id.clone())
+                .unwrap_or_default();
+            let resp = cmx_traits::auth::context_scope::scope_full(
+                None,
+                None,
+                request_id,
+                None,
+                next.run(req),
+            )
+            .await;
+            return Ok(resp);
         }
     };
 
     // 3. 尝试提取认证信息（优先 X-API-Key，其次 Bearer Token）
-    let auth_ctx = if let Some(api_key) = extract_api_key(&req) {
+    //    - X-API-Key：服务级 API Key（cmx_sk_）或 API 客户端 key
+    //    - Authorization: Bearer <jwt>：终端用户 JWT（严格遵循 OAuth2 Bearer 语义，
+    //      不承载服务 key；服务 key 只走 X-API-Key）
+    let mut auth_ctx = if let Some(api_key) = extract_api_key(&req) {
         // 2.1 修复：直接验证 API Key 返回 AuthContext（无状态，不创建会话）
         debug!(path = %path, "检测到 X-API-Key 头，使用 API Key 认证");
         auth_service.validate_api_key(&api_key).await.map_err(|e| {
@@ -282,16 +313,57 @@ pub async fn mw_auth(mut req: Request<Body>, next: Next) -> Result<Response, Sta
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    // 4. 注入 AuthContext 到 CmxSvrContext
+    // 4. 可选：on-behalf-of 委托用户。若携带 X-Delegated-User-Token，验证之；
+    //    成功则用用户身份覆盖（标记 auth_method）；失败仅 warn 并回落服务身份（不阻断 M2M）。
+    let original_user_token = extract_delegated_user_token(&req);
+    if let Some(jwt) = original_user_token.as_deref() {
+        match auth_service.validate_token(jwt).await {
+            Ok(user_ctx) => {
+                auth_ctx = cmx_core::AuthContext {
+                    auth_method: Some("delegated_by_api_key".to_string()),
+                    ..user_ctx
+                };
+            }
+            Err(e) => {
+                warn!(method = %method, path = %path, error = %e, "委托用户 JWT 验证失败，回落服务身份");
+            }
+        }
+    }
+
+    // 5. 注入 AuthContext 到 CmxSvrContext（向后兼容：现有读 &SVRContext 的代码继续工作）
+    let request_id = req
+        .extensions()
+        .get::<CmxSvrContext>()
+        .map(|c| c.0.request_id.clone())
+        .unwrap_or_default();
+
     let svr_ctx = req
         .extensions_mut()
         .get_mut::<CmxSvrContext>()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    svr_ctx.0.auth_context = Some(auth_ctx);
+    svr_ctx.0.auth_context = Some(auth_ctx.clone());
 
-    // info!(path = %path, "认证通过");
-    Ok(next.run(req).await)
+    // 6. 建立 task_local scope，使请求内任意 await 点可通过 current_auth() 无参获取
+    let resp = cmx_traits::auth::context_scope::scope_full(
+        Some(auth_ctx),
+        original_user_token,
+        request_id,
+        None,
+        next.run(req),
+    )
+    .await;
+
+    Ok(resp)
+}
+
+/// 从 X-Delegated-User-Token 头提取委托用户 JWT（on-behalf-of）。
+fn extract_delegated_user_token(req: &Request<Body>) -> Option<String> {
+    let header = req.headers().get("x-delegated-user-token")?.to_str().ok()?;
+    header
+        .strip_prefix("Bearer ")
+        .or_else(|| header.strip_prefix("bearer "))
+        .map(|s| s.to_string())
 }
 
 /// 从 Authorization 头提取 Bearer Token
