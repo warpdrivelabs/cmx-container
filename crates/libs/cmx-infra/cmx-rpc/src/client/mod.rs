@@ -1,11 +1,13 @@
 //! gRPC 领域客户端模块。
 //!
 //! 按领域拆分为：
+//! - [`auth_outbound`]：出站鉴权 header 注入（`apply_auth_metadata`）。
 //! - [`orchestrator`]：服务编排（`call_service` / `call_function`）。
 //! - [`resource_data`]：资源数据管理（`import_resource_data` / `cleanup_resource_data`）。
 //!
 //! 共享基础设施见 [`infra::GrpcInfrastructure`]，重试逻辑见 [`retry::with_retry`]。
 
+pub mod auth_outbound;
 pub mod infra;
 pub mod orchestrator;
 pub mod resource_data;

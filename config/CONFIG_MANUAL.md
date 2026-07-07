@@ -20,6 +20,7 @@
 - [节点配置](#节点配置)
 - [基础服务中心配置](#基础服务中心配置)
 - [RPC 配置](#rpc-配置)
+- [服务对外身份配置](#服务对外身份配置)
 - [注册中心 Metadata 配置](#注册中心-metadata-配置)
 - [认证配置](#认证配置)
 - [IAM 权限管理配置](#iam-权限管理配置)
@@ -848,6 +849,36 @@ env = "production"
 | `grpc_port` | gRPC 服务端口 | 由 `[rpc.grpc].port` 自动注入 |
 | `version` | 服务版本号（预留） | 用户自定义 |
 | `protocol` | 支持的协议列表（预留） | 用户自定义 |
+
+---
+
+## 服务对外身份配置
+
+### `[service_auth]`
+
+本服务作为调用方时携带的服务级凭证，用于 gRPC / HTTP 跨服务调用的 M2M 鉴权。
+凭证须同时在 `[[auth.static_api_keys]]` 注册（接收端 mw_auth 据此验证）。
+
+#### `outgoing_api_key`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `""`（空字符串，表示不配置服务身份）
+
+本服务对外服务级凭证，格式 `cmx_sk_xxx`。配置后：
+
+- **gRPC 出站**：所有跨服务 gRPC 调用自动携带 `X-API-Key: <cmx_sk_xxx>` +
+  委托用户 token（若有）+ 请求 ID（见 `docs/20260707_跨服务认证与认证上下文传播设计.md`）。
+- **HTTP 出站**：`RemoteImporterContext` 的跨服务 HTTP 调用携带同样三层 header。
+
+单体无跨服务调用场景可留空（默认）。微服务模式必填，否则跨服务调用会被接收端
+`mw_auth` 以 401 拒绝。
+
+#### 凭证生成与注册
+
+1. 在 `[[auth.static_api_keys]]` 段声明一个服务专用 key（`user_id` 留空即为 M2M key）。
+2. 将该 key 明文填入 `[service_auth].outgoing_api_key`。
+3. 生产环境优先用环境变量注入（见 ENV_MANUAL.md）。
 
 ---
 

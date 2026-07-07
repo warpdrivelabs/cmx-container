@@ -146,6 +146,22 @@ async fn main() -> Result<()> {
     // 初始化认证服务（使用 IAM 创建的 UserAuthQueryImpl）
     let auth_service = init_auth_service(user_auth_query, audit_logger.clone()).await?;
 
+    // 初始化全局系统身份（供后台任务通过 system_auth() 获取，避免 task_local 跨 spawn 丢失）。
+    // system 身份用一个固定的系统级 AuthContext，标记 auth_method=system。
+    {
+        let mut system_ctx = cmx_core::AuthContext::new("system", "system");
+        system_ctx.auth_method = Some("system".to_string());
+        let snap = cmx_traits::auth::RequestAuth {
+            auth_context: Some(system_ctx),
+            original_user_token: None,
+            request_id: "system".to_string(),
+            caller: None,
+        };
+        if let Err(e) = cmx_traits::auth::context_scope::init_system_auth(snap) {
+            tracing::warn!(error = %e, "全局系统身份已初始化，跳过");
+        }
+    }
+
     // 用 auth_service 完成 IamState 的最终组装（注入 UserServiceImpl）
     let iam_state =
         finalize_iam_state(&iam_state, auth_service.clone(), iam_config, audit_logger).await?;
@@ -177,6 +193,7 @@ async fn main() -> Result<()> {
         cmx_traits::service::GlobalServiceInvoker::get().clone(),
         function_invoker,
         resource_data_importer.clone(),
+        Some(auth_service.clone()),
     )
     .await?;
 

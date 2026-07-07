@@ -31,4 +31,5 @@ pub use discover::RegistryAwareDiscover;
 pub use error::RpcFrameworkError;
 pub use factory::{ClientInitError, init_rpc_clients};
 pub use global::{GlobalRpcClient, GlobalRpcClientAlreadySetError};
+pub use server::AuthVerifier;
 pub use server_runner::start_grpc_server;

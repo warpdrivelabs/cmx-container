@@ -34,6 +34,9 @@ pub struct GrpcInfrastructure {
     registry: Arc<dyn ServiceRegistry>,
     /// Discover 缓存（service_name → RegistryAwareDiscover）
     discovers: RwLock<HashMap<String, RegistryAwareDiscover>>,
+    /// 本服务对外服务级凭证（cmx_sk_xxx），由客户端出站时注入到 gRPC metadata。
+    /// `None` 表示未配置服务身份（仅 loopback/单体无跨服务调用场景）。
+    outbound_service_key: Option<String>,
 }
 
 impl GrpcInfrastructure {
@@ -48,7 +51,22 @@ impl GrpcInfrastructure {
             config,
             registry,
             discovers: RwLock::new(HashMap::new()),
+            outbound_service_key: None,
         }
+    }
+
+    /// 设置本服务对外服务级凭证（`cmx_sk_xxx`）。
+    ///
+    /// 由组装层（`web-server`）在 `init_rpc_clients` 后调用，来源为
+    /// `[service_auth].outgoing_api_key` 配置项。
+    pub fn with_outbound_service_key(mut self, key: impl Into<Option<String>>) -> Self {
+        self.outbound_service_key = key.into();
+        self
+    }
+
+    /// 获取本服务对外服务级凭证（出站 header 注入用）。
+    pub fn outbound_service_key(&self) -> Option<&str> {
+        self.outbound_service_key.as_deref()
     }
 
     /// 单次 gRPC `rpc_timeout`（供 volo `rpc_timeout` 设置）。

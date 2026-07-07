@@ -28,6 +28,9 @@ pub struct ServerDeps {
     pub function_invoker: Arc<dyn cmx_traits::function_invoker::FunctionInvoker>,
     /// 资源数据导入器（resource_data 领域使用，可选）。
     pub data_importer: Option<Arc<dyn cmx_traits::resource::ResourceDataImporter>>,
+    /// 服务端鉴权器（各领域 server impl 在方法入口校验 gRPC 凭证）。
+    /// `None` 表示不启用 gRPC 鉴权（兼容单体无 RPC 或 loopback 部署场景）。
+    pub auth_verifier: Option<crate::server::AuthVerifier>,
 }
 
 /// "把 service 加到 server 上"的类型擦除闭包。

@@ -132,9 +132,22 @@ pub async fn init_iam_services(
     );
     let definition_importers: Arc<cmx_traits::resource::DefinitionImporterBundle> = if is_remote {
         tracing::info!("模块资源导入器: 远程模式({})", center_config.mode);
-        let remote_ctx = cmx_plugin::service::remote_importers::RemoteImporterContext::new(
-            center_config,
-        );
+        let remote_ctx = {
+            let ctx = cmx_plugin::service::remote_importers::RemoteImporterContext::new(
+                center_config,
+            );
+            // 注入服务级凭证（来自 [service_auth].outgoing_api_key）
+            match crate::config::rpc::load_outgoing_credential() {
+                Some(cred) => ctx.with_credential(cred),
+                None => {
+                    tracing::warn!(
+                        "远程模式未配置服务对外凭证 [service_auth].outgoing_api_key，\
+                         跨服务 HTTP 调用将无法通过接收端 mw_auth 鉴权"
+                    );
+                    ctx
+                }
+            }
+        };
         Arc::new(cmx_traits::resource::DefinitionImporterBundle {
             form: Arc::new(
                 cmx_plugin::service::remote_importers::RemoteFormDefinitionImporter::new(

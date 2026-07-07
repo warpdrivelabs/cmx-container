@@ -32,7 +32,15 @@ use rand::seq::SliceRandom;
 use crate::center_client::config::CenterClientConfig;
 use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
+use cmx_traits::auth::context_scope;
 use cmx_traits::resource::{ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult};
+
+/// 出站服务凭证（服务级 API Key，统一走 `X-API-Key`）。
+#[derive(Clone, Debug)]
+pub struct Credential {
+    /// 载荷（API Key 明文，`cmx_sk_xxx`）。
+    pub value: String,
+}
 
 /// 远程导入器共享上下文(传输方式 + 服务名/URL 解析配置)。
 #[derive(Clone)]
@@ -41,6 +49,8 @@ pub struct RemoteImporterContext {
     config: CenterClientConfig,
     /// HTTP 客户端(http_url/http_discovery 模式使用;grpc 模式不构造)
     http_client: Option<reqwest::Client>,
+    /// 本服务对外的服务级凭证（cmx_sk_xxx），出站请求统一注入。
+    outgoing_credential: Option<Credential>,
 }
 
 impl RemoteImporterContext {
@@ -64,7 +74,38 @@ impl RemoteImporterContext {
         } else {
             None
         };
-        Self { config, http_client }
+        Self {
+            config,
+            http_client,
+            outgoing_credential: None,
+        }
+    }
+
+    /// 注入本服务对外的服务级凭证（来源：`[service_auth].outgoing_api_key`）。
+    ///
+    /// 构造后所有出站 HTTP 请求都会自动携带三层鉴权 header（服务身份 +
+    /// 委托用户 + 追踪）。委托用户与追踪信息从 task_local 读取。
+    pub fn with_credential(mut self, cred: Credential) -> Self {
+        self.outgoing_credential = Some(cred);
+        self
+    }
+
+    /// 统一给 reqwest 请求打上三层鉴权 header。
+    fn apply_auth_headers(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let mut req = req;
+        // ① 服务身份层：X-API-Key（服务 key 不占用 Authorization，保持 Bearer 专用于 JWT）
+        if let Some(cred) = &self.outgoing_credential {
+            req = req.header("X-API-Key", &cred.value);
+        }
+        // ② 委托用户层：从 task_local 取当前请求的原始终端用户 JWT
+        if let Some(user_jwt) = context_scope::current_original_token() {
+            req = req.header("X-Delegated-User-Token", format!("Bearer {user_jwt}"));
+        }
+        // ③ 追踪层：请求 ID
+        if let Some(request_id) = context_scope::current_request_id() {
+            req = req.header("X-Request-Id", request_id);
+        }
+        req
     }
 
     /// 解析指定数据类别对应的远程服务名(grpc/http_discovery 模式使用)。
@@ -157,14 +198,15 @@ impl RemoteImporterContext {
         );
 
         // GET 查询参数
-        let resp = http_client
-            .get(&url)
-            .query(&[
-                ("category", request.category.as_str()),
-                ("domain_code", request.domain_code.as_str()),
-                ("application_code", request.application_code.as_str()),
-                ("module_code", request.module_code.as_str()),
-            ])
+        let resp = self
+            .apply_auth_headers(
+                http_client.get(&url).query(&[
+                    ("category", request.category.as_str()),
+                    ("domain_code", request.domain_code.as_str()),
+                    ("application_code", request.application_code.as_str()),
+                    ("module_code", request.module_code.as_str()),
+                ]),
+            )
             .send()
             .await
             .map_err(|e| {
@@ -286,9 +328,8 @@ impl RemoteImporterContext {
             .text("app_id", request.app_id.clone())
             .text("version", request.version.clone());
 
-        let resp = http_client
-            .post(&url)
-            .multipart(form)
+        let resp = self
+            .apply_auth_headers(http_client.post(&url).multipart(form))
             .send()
             .await
             .map_err(|e| {
