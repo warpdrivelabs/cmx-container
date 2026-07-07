@@ -196,6 +196,87 @@ impl DbPool {
         encode_stream_footer(out, count as u32, &rows_body);
         Ok(count)
     }
+
+    /// **真·分帧流式**：带 `DataValue` 参数查询，逐行编成长度分帧发到 `chunk_tx`，峰值内存 O(单行)。
+    ///
+    /// 协议见 `cmx_rowsource::encode_frame_*`：header 帧 + N 个 row 帧 + end 帧。
+    /// 每行编完即发、随即 drop，不囤全部 Row/rows_body —— 超大扁平结果的零内存网络流式路径。
+    /// 每积攒到 ~16KB 或每行即刷一次到 channel（背压由 channel 容量控制）。返回行数。
+    ///
+    /// `col_names`：来自定义 schema 的列名（header 帧只带列名，不带类型），**先于访问结果流**发出，
+    /// 保证即使空结果（tokio-postgres `query_raw` 对空结果偶发 "connection closed"）也能收尾。
+    pub async fn query_zmc_stream_chunks(
+        &self,
+        sql: &str,
+        params: &[DataValue],
+        dataset_id: &str,
+        col_names: &[String],
+        chunk_tx: tokio::sync::mpsc::Sender<bytes::Bytes>,
+    ) -> crate::Result<u64> {
+        use crate::zmcdataset::{encode_frame_end, encode_frame_header, encode_frame_row};
+        use crate::zmcdataset::TokioPgRowSource;
+        use cmx_rowsource::{ZmcColType, ZmcSchema};
+        use futures::TryStreamExt;
+
+        const FLUSH_AT: usize = 16 * 1024; // 攒够 16KB 刷一次，减少 channel 往返
+
+        // header 帧：只带列名，来自定义 schema，**不依赖结果流首行** → 空结果也能正常收尾。
+        // 类型用占位（Unknown）——header 不含类型；真正逐行编码时用首行的真实类型 schema。
+        let header_schema = ZmcSchema::from_parts(
+            col_names.to_vec(),
+            vec![ZmcColType::Unknown; col_names.len()],
+        );
+        let mut buf: Vec<u8> = Vec::with_capacity(FLUSH_AT + 1024);
+        encode_frame_header(&mut buf, dataset_id, &header_schema);
+        // 立即把 header 发出（哪怕后续查询失败，客户端也拿到合法头 + 后面的 end）。
+        if chunk_tx
+            .send(bytes::Bytes::copy_from_slice(&buf))
+            .await
+            .is_err()
+        {
+            return Ok(0);
+        }
+        buf.clear();
+
+        let client = self.pool.get().await?;
+        let boxed = bind_data_values_pg(params);
+        let refs = as_param_refs(&boxed);
+        let stream = client.query_raw(sql, refs).await?;
+        futures::pin_mut!(stream);
+
+        let mut count: u64 = 0;
+        let mut row_schema: Option<ZmcSchema> = None;
+        loop {
+            // 空结果时 query_raw 偶发以 Err("connection closed") 结束首次拉取；容错当作流结束。
+            let next = match stream.try_next().await {
+                Ok(v) => v,
+                Err(e) => {
+                    if count == 0 {
+                        tracing::debug!("流式空结果/首拉终止({dataset_id}): {e}");
+                    } else {
+                        tracing::warn!("流式中断({dataset_id}, 已发 {count} 行): {e}");
+                    }
+                    break;
+                }
+            };
+            let Some(row) = next else { break };
+            let r = TokioPgRowSource::from(row);
+            let schema = row_schema.get_or_insert_with(|| ZmcSchema::from_row(&r));
+            encode_frame_row(&mut buf, &r, schema);
+            count += 1;
+            if buf.len() >= FLUSH_AT {
+                let chunk = bytes::Bytes::copy_from_slice(&buf);
+                buf.clear();
+                if chunk_tx.send(chunk).await.is_err() {
+                    return Ok(count); // 客户端断开
+                }
+            }
+        }
+
+        encode_frame_end(&mut buf);
+        let _ = chunk_tx.send(bytes::Bytes::copy_from_slice(&buf)).await;
+        Ok(count)
+    }
 }
 
 /// 数据库连接池 trait

@@ -44,6 +44,17 @@ pub struct LayerView {
     pub schema: Arc<Schema>,
 }
 
+impl LayerView {
+    /// 按列名找 ColumnView（供过滤值类型化 / 列白名单）。
+    pub fn column(&self, name: &str) -> Option<&ColumnView> {
+        self.columns.iter().find(|c| c.name == name)
+    }
+    /// 该列是否存在（白名单校验）。
+    pub fn has_column(&self, name: &str) -> bool {
+        self.schema.get_index(name).is_some()
+    }
+}
+
 /// 一张汇总表（sum 表）的视图 —— 结构同「表」，挂在某张源表下。
 ///
 /// 定义形如 `{ id, name, caption, fields:[<field>] }`；fields 是**已物化的完整列**
@@ -285,6 +296,22 @@ impl DocMetaView {
             .and_then(|gi| self.relations.get(gi))
             .map(|r| r.child_key.clone())
             .unwrap_or_else(|| "upper_id".to_string())
+    }
+
+    /// 取「当 `child_id` 作为子层被装载时」它匹配父的 childKey（懒下钻用）。
+    ///
+    /// child 在第 gi 组，其父在第 gi-1 组，childKey = `relations[gi-1]`（默认 upper_id）。
+    pub fn child_key_for_child(&self, child_id: &str) -> Option<String> {
+        let gi = self.group_index_of(child_id)?;
+        if gi == 0 {
+            return None; // 根层无父
+        }
+        Some(
+            self.relations
+                .get(gi - 1)
+                .map(|r| r.child_key.clone())
+                .unwrap_or_else(|| "upper_id".to_string()),
+        )
     }
 }
 

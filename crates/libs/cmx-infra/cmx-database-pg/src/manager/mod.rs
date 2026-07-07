@@ -362,6 +362,24 @@ impl DatabaseManager {
         dbx.db().query_zmc_with_datavalues(sql, &params, dataset_id).await
     }
 
+    /// **真·分帧流式**：带 `DataValue` 参数查询，逐行编成长度分帧发到 `chunk_tx`，峰值内存 O(单行)。
+    /// 供超大扁平结果的零内存网络流式端点用。`col_names` 为定义 schema 列名（供 header 帧，
+    /// 不依赖首行 → 空结果也能收尾）。返回行数。
+    pub async fn query_sql_zmc_stream_chunks(
+        &self,
+        db_id: &str,
+        sql: &str,
+        params: Vec<cmx_core::model::cell::DataValue>,
+        dataset_id: &str,
+        col_names: Vec<String>,
+        chunk_tx: tokio::sync::mpsc::Sender<bytes::Bytes>,
+    ) -> Result<u64> {
+        let dbx = self.get_dbx(db_id).await?;
+        dbx.db()
+            .query_zmc_stream_chunks(sql, &params, dataset_id, &col_names, chunk_tx)
+            .await
+    }
+
     /// 查询带 serde_json::Value 参数的 SQL 语句
     pub async fn query_sql_with_json(
         &self,

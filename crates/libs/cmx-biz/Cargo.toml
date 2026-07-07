@@ -24,6 +24,8 @@ cmx-database-pg = { workspace = true }
 cmx-utils = { workspace = true }
 # 数值精度（Decimal 列绑定）
 rust_decimal = { workspace = true }
+# keyset 游标编解码（base64）
+base64 = { workspace = true }
 # 内部依赖 - 服务编排
 cmx-service = { workspace = true }
 # 序列化框架

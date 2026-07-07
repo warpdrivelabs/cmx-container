@@ -611,6 +611,52 @@ pub fn encode_stream_footer(out: &mut Vec<u8>, row_count: u32, rows_body: &[u8])
 }
 
 // ============================================================================
+// 真·分帧流式协议(chunked,峰值内存 O(单行))—— 行数未知也能边查边发边收
+// ============================================================================
+//
+// 上面的 encode_stream_header/footer 需先知道行数(msgpack 数组长度),故 driver 仍要把
+// 全部行编进临时 buf → 峰值 O(全部行)。要真正 O(单行) 网络流式,改用**长度分帧**协议:
+//
+//   [帧] = [u32 大端 payload 长度][payload 字节]
+//   第 1 帧: header  payload = msgpack `{datasetId, columns:[...]}`
+//   第 2..N 帧: row  payload = msgpack 行数组 `[值...]`
+//   终止帧: len = 0(无 payload)
+//
+// 每行编完即可作为一帧发出、随即丢弃 → 服务端峰值 O(单行)。前端按帧读取、逐帧解码累积。
+
+/// 写一个长度分帧的头帧:`[u32 len][msgpack {datasetId, columns}]`,追加到 `out`。
+pub fn encode_frame_header(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSchema) {
+    let mut payload = Vec::with_capacity(64);
+    mp::write_map_len(&mut payload, 2).unwrap();
+    mp::write_str(&mut payload, "datasetId").unwrap();
+    mp::write_str(&mut payload, dataset_id).unwrap();
+    mp::write_str(&mut payload, "columns").unwrap();
+    mp::write_array_len(&mut payload, schema.col_count() as u32).unwrap();
+    for name in &schema.columns {
+        mp::write_str(&mut payload, name).unwrap();
+    }
+    push_frame(out, &payload);
+}
+
+/// 写一个行帧:`[u32 len][msgpack 行数组]`,追加到 `out`。行编完即可发出、丢弃。
+pub fn encode_frame_row<R: ZmcRowSource>(out: &mut Vec<u8>, row: &R, schema: &ZmcSchema) {
+    let mut payload = Vec::with_capacity(schema.col_count() * 8);
+    encode_row_into(&mut payload, row, schema);
+    push_frame(out, &payload);
+}
+
+/// 写终止帧:`[u32 = 0]`(无 payload),标识流结束。
+pub fn encode_frame_end(out: &mut Vec<u8>) {
+    out.extend_from_slice(&0u32.to_be_bytes());
+}
+
+/// 帧封装:`[u32 大端 len][payload]`。
+fn push_frame(out: &mut Vec<u8>, payload: &[u8]) {
+    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    out.extend_from_slice(payload);
+}
+
+// ============================================================================
 // 测试:多层 childRows 作用域(回归——防止孙层按祖先重复产出的组合级膨胀)
 // ============================================================================
 #[cfg(test)]
