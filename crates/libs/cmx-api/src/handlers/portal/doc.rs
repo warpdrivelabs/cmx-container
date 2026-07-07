@@ -310,6 +310,95 @@ pub async fn doc_children(
     Ok(Json(ApiResp::ok(pkg)))
 }
 
+// ── 真·流式端点：超大扁平结果零内存 chunked 传输 ──────────────────────────────
+
+/// `GET|POST /api/doc/data/tokio-zmc-stream` 请求参数（**单层扁平**大结果，不下钻）。
+///
+/// GET：URL query（domain/app/module/file + 便捷 filter/limit）；
+/// POST：body = `{ layer?, filter?, orderBy?, limit? }`（不指定 layer 则用根层）。
+/// 出口是**长度分帧**二进制流（`Content-Type: application/octet-stream`，
+/// `Transfer-Encoding: chunked`），服务端峰值内存 O(单行)。前端用 cmx-msgpack-stream 解码。
+pub async fn doc_data_stream(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_ctx): CmxSvrContext,
+    Query(q): Query<DocDataQuery>,
+    headers: HeaderMap,
+    body: Option<Json<Value>>,
+) -> Result<axum::response::Response> {
+    use axum::response::IntoResponse;
+    use cmx_biz::doc::{build_layer_select, LayerQuery};
+    use cmx_database_pg::get_default_pg_db_manager;
+
+    debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file);
+    let db_id = get_db_id_from_header(&headers).await;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+
+    // 目标层：body.layer 指定，否则根层。流式**只装该单层**（扁平大结果，不嵌套）。
+    let body_val = body.map(|b| b.0).unwrap_or(Value::Null);
+    let layer_id = body_val
+        .get("layer")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| meta.root_layer().map(|l| l.id.clone()))
+        .ok_or_else(|| cmx_biz::BizError::business("单据无根层"))?;
+    let layer = meta
+        .layer(&layer_id)
+        .ok_or_else(|| cmx_biz::BizError::business(format!("层 {layer_id} 不在定义中")))?;
+
+    // 该层查询：body 有 filter/orderBy/limit 则用之，否则 GET 便捷 filter/limit。
+    let lq = if body_val.is_object() {
+        let dq = DocQuery::from_json(&serde_json::json!({ "layers": { &layer_id: body_val } }))?;
+        dq.layer(&layer_id)
+    } else {
+        let mut lq = LayerQuery::default();
+        lq.limit = q.limit;
+        if let Some(f) = &q.filter {
+            if let Some((col, val)) = f.split_once(':') {
+                lq.filter = cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?;
+            }
+        }
+        lq
+    };
+    lq.validate_against(layer)?;
+
+    // 生成参数化 SQL（无 parent_scope：单层根查询）
+    let (sql, params) = build_layer_select(layer, &lq, None)?;
+    let dataset_id = layer.id.clone();
+    // header 帧列名（与 SELECT 列顺序一致 = 定义 schema 字段顺序）——先于结果流发出，空结果也收尾。
+    let col_names: Vec<String> = layer.schema.fields.iter().map(|f| f.name.clone()).collect();
+
+    // 背压 channel：容量有限，producer 满则 await（受下游网络速度节流 → 内存平稳）。
+    let (tx, rx) = tokio::sync::mpsc::channel::<bytes::Bytes>(8);
+
+    // producer：独占一条连接跑流式查询，逐帧发到 channel。db_id/sql/params move 进 task。
+    tokio::spawn(async move {
+        let mm = get_default_pg_db_manager();
+        if let Err(e) = mm
+            .query_sql_zmc_stream_chunks(&db_id, &sql, params, &dataset_id, col_names, tx)
+            .await
+        {
+            tracing::warn!("流式装载失败 {}: {e}", dataset_id);
+        }
+    });
+
+    // Body::from_stream over receiver：axum 逐块 flush 给客户端（chunked）。
+    let stream = futures::stream::unfold(rx, |mut rx| async move {
+        rx.recv()
+            .await
+            .map(|chunk| (Ok::<bytes::Bytes, std::io::Error>(chunk), rx))
+    });
+    let response_body = axum::body::Body::from_stream(stream);
+
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/octet-stream"),
+            (axum::http::header::CACHE_CONTROL, "no-cache"),
+        ],
+        response_body,
+    )
+        .into_response())
+}
+
 /// `GET /api/doc/meta` —— 返回单据**显示元数据**(层序 L1..LN + 各层列 caption/类型 + 父子关系)。
 ///
 /// 数据包(`/api/doc/data*`)只带列名,不带 caption/类型/宽度;通用单据前端页据此端点**动态**

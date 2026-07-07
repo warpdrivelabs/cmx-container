@@ -169,6 +169,11 @@ impl ModuleRoutes for PortalModule {
             )
             // 懒下钻：装载某层在给定父 id 下的子树（前端 grid 展开时调用）
             .route("/doc/data/children", post(doc::doc_children))
+            // 真·流式：超大扁平单层结果零内存 chunked 传输（长度分帧二进制）
+            .route(
+                "/doc/data/tokio-zmc-stream",
+                get(doc::doc_data_stream).post(doc::doc_data_stream),
+            )
             // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
             .route("/doc/meta", get(doc::doc_meta))
             .route("/doc/save", post(doc::doc_save))
