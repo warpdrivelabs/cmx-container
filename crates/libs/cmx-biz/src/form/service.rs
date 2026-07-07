@@ -16,8 +16,16 @@ pub struct FormService;
 
 impl FormService {
     /// 创建表单
-    pub async fn create(mm: &DatabaseManager, db_id: &str, data: FormForCreate) -> Result<DataSet> {
-        GenericCrudService::<FormBmc>::create(mm, db_id, None, data)
+    ///
+    /// # Arguments
+    /// * `txn_id` - 外部事务 ID(传 Some 时纳入调用方事务;传 None 时自动提交)
+    pub async fn create(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        data: FormForCreate,
+    ) -> Result<DataSet> {
+        GenericCrudService::<FormBmc>::create(mm, db_id, txn_id, data)
             .await
             .map_err(Into::into)
     }
@@ -50,13 +58,21 @@ impl FormService {
 
     /// 按 code 删除表单(幂等安装用,不存在时静默成功)
     ///
+    /// # Arguments
+    /// * `txn_id` - 外部事务 ID(传 Some 时纳入调用方事务;传 None 时自动提交)
+    ///
     /// # Errors
     /// 数据库执行失败时返回错误
-    pub async fn delete_by_code(mm: &DatabaseManager, db_id: &str, code: &str) -> Result<()> {
+    pub async fn delete_by_code(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        code: &str,
+    ) -> Result<()> {
         use cmx_core::model::cell::DataValue;
         mm.execute_sql_with_datavalues(
             db_id,
-            None,
+            txn_id,
             "DELETE FROM cmx_form WHERE code = $1",
             vec![DataValue::String(code.to_string())],
         )

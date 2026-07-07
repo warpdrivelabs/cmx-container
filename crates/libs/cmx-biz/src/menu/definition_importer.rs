@@ -38,6 +38,7 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
         app_code: &str,
         module_code: &str,
         definitions: &[MenuDefinition],
+        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
@@ -45,7 +46,7 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
         let mut count = 0usize;
         for def in definitions {
             // 幂等:先删同 code 根菜单,再建
-            let _ = MenuService::delete_by_code(&self.mm, &self.db_id, &def.code).await;
+            let _ = MenuService::delete_by_code(&self.mm, &self.db_id, txn_id, &def.code).await;
             let dto = MenuForCreate {
                 code: def.code.clone(),
                 name: def.name.clone(),
@@ -65,7 +66,7 @@ impl MenuDefinitionImporter for LocalMenuDefinitionImporter {
                 application_code: app_code.to_string(),
                 module_code: module_code.to_string(),
             };
-            match MenuService::create(&self.mm, &self.db_id, dto).await {
+            match MenuService::create(&self.mm, &self.db_id, txn_id, dto).await {
                 Ok(_) => {
                     count += 1;
                 }

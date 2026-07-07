@@ -30,20 +30,49 @@ impl MenuService {
     /// 创建菜单：计算标准分级字段(leaf/depth/parent_code/id_path/code_path)后事务内写入，
     /// 并更新父节点 leaf=0。
     ///
+    /// # Arguments
+    /// * `txn_id` - 外部事务 ID。传 Some 时纳入调用方事务(不再自开自提交);
+    ///   传 None 时内部自开事务并提交(向后兼容)
+    ///
     /// # Errors
     /// 父菜单不存在、数据库写入失败时返回错误
     #[instrument(skip(mm, data))]
-    pub async fn create(mm: &DatabaseManager, db_id: &str, data: MenuForCreate) -> Result<DataSet> {
+    pub async fn create(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        data: MenuForCreate,
+    ) -> Result<DataSet> {
+        match txn_id {
+            // 外部事务:直接复用,不自开不提交
+            Some(t) => Self::create_inner(mm, db_id, t, data).await,
+            // 无外部事务:内部自开事务并提交(原行为)
+            None => {
+                let txn_ctx = mm.get_transaction_context();
+                let guard = txn_ctx
+                    .begin_with_guard(db_id)
+                    .await
+                    .map_err(|e| BizError::business(format!("开启事务失败: {e}")))?;
+                let txn = guard.txn_id().to_string();
+                let dataset = Self::create_inner(mm, db_id, &txn, data).await?;
+                guard
+                    .commit()
+                    .await
+                    .map_err(|e| BizError::business(format!("事务提交失败: {e}")))?;
+                Ok(dataset)
+            }
+        }
+    }
+
+    /// create 的核心写入逻辑(INSERT 新节点 + 更新父 leaf=0),不管理事务。
+    async fn create_inner(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        data: MenuForCreate,
+    ) -> Result<DataSet> {
         // 计算分级字段
         let tree = Self::compute_tree_fields(mm, db_id, &data).await?;
-
-        // 开事务:INSERT 新节点 + 更新父 leaf=0
-        let txn_ctx = mm.get_transaction_context();
-        let guard = txn_ctx
-            .begin_with_guard(db_id)
-            .await
-            .map_err(|e| BizError::business(format!("开启事务失败: {e}")))?;
-        let txn_id = guard.txn_id();
 
         let id = uuid::Uuid::new_v4().to_string();
         let definition_str = data
@@ -95,12 +124,6 @@ impl MenuService {
                 )
                 .await;
         }
-
-        // 提交事务
-        guard
-            .commit()
-            .await
-            .map_err(|e| BizError::business(format!("事务提交失败: {e}")))?;
 
         Ok(dataset)
     }
@@ -198,13 +221,21 @@ impl MenuService {
 
     /// 按 code 删除菜单(幂等安装用,不存在时静默成功)
     ///
+    /// # Arguments
+    /// * `txn_id` - 外部事务 ID(传 Some 时纳入调用方事务;传 None 时自动提交)
+    ///
     /// # Errors
     /// 数据库执行失败时返回错误
-    pub async fn delete_by_code(mm: &DatabaseManager, db_id: &str, code: &str) -> Result<()> {
+    pub async fn delete_by_code(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: Option<&str>,
+        code: &str,
+    ) -> Result<()> {
         use cmx_core::model::cell::DataValue;
         mm.execute_sql_with_datavalues(
             db_id,
-            None,
+            txn_id,
             "DELETE FROM cmx_menu WHERE code = $1",
             vec![DataValue::String(code.to_string())],
         )

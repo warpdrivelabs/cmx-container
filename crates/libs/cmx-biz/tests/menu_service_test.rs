@@ -80,7 +80,7 @@ async fn test_menu_root_create_calculates_tree_fields() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    let created = MenuService::create(&mm, db_id, root)
+    let created = MenuService::create(&mm, db_id, None, root)
         .await
         .expect("根菜单创建应成功");
     let json = dataset_to_json(&created);
@@ -134,7 +134,7 @@ async fn test_menu_child_create_inherits_parent_path() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    let root_ds = MenuService::create(&mm, db_id, root)
+    let root_ds = MenuService::create(&mm, db_id, None, root)
         .await
         .expect("父菜单创建应成功");
     let root_id = first_row_field(&dataset_to_json(&root_ds), "id").expect("父 id");
@@ -154,7 +154,7 @@ async fn test_menu_child_create_inherits_parent_path() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    let child_ds = MenuService::create(&mm, db_id, child)
+    let child_ds = MenuService::create(&mm, db_id, None, child)
         .await
         .expect("子菜单创建应成功");
     let child_json = dataset_to_json(&child_ds);

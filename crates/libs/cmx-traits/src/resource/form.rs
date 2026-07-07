@@ -22,6 +22,7 @@ pub trait FormDefinitionImporter: Send + Sync {
     /// * `app_code` - 应用编码
     /// * `module_code` - 模块编码
     /// * `definitions` - 表单定义列表(已解析)
+    /// * `txn_id` - 外部事务 ID(仅本地实现有效;远程实现跨服务无共享事务,会忽略此参数)
     ///
     /// # Returns
     /// 成功处理的表单数量;空列表返回 0。
@@ -31,6 +32,7 @@ pub trait FormDefinitionImporter: Send + Sync {
         app_code: &str,
         module_code: &str,
         definitions: &[FormDefinition],
+        txn_id: Option<&str>,
     ) -> Result<usize, TraitError>;
 
     /// 导出指定模块的所有表单定义。

@@ -30,7 +30,7 @@ async fn test_form_definition_roundtrip_symmetry() {
     let code = "test_form:symmetry";
 
     // 清理
-    let _ = FormService::delete_by_code(&mm, db_id, code).await;
+    let _ = FormService::delete_by_code(&mm, db_id, None, code).await;
 
     // 构造复杂 definition(模拟真实表单:多层嵌套 + 数组 + 各种类型)
     let original_definition = json!({
@@ -76,7 +76,7 @@ async fn test_form_definition_roundtrip_symmetry() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    FormService::create(&mm, db_id, dto)
+    FormService::create(&mm, db_id, None, dto)
         .await
         .expect("创建应成功");
 
@@ -111,7 +111,7 @@ async fn test_form_definition_roundtrip_symmetry() {
     );
 
     // 清理
-    let _ = FormService::delete_by_code(&mm, db_id, code).await;
+    let _ = FormService::delete_by_code(&mm, db_id, None, code).await;
     mm.shutdown().await.ok();
 }
 
@@ -123,7 +123,7 @@ async fn test_menu_definition_roundtrip_symmetry() {
     let code = "test_menu:symmetry";
 
     // 清理
-    let _ = MenuService::delete_by_code(&mm, db_id, code).await;
+    let _ = MenuService::delete_by_code(&mm, db_id, None, code).await;
 
     // 构造复杂菜单树(模拟真实 menudata:items + children 嵌套)
     let original_menu_json = json!({
@@ -165,7 +165,7 @@ async fn test_menu_definition_roundtrip_symmetry() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    MenuService::create(&mm, db_id, dto)
+    MenuService::create(&mm, db_id, None, dto)
         .await
         .expect("创建应成功");
 
@@ -199,7 +199,7 @@ async fn test_menu_definition_roundtrip_symmetry() {
     );
 
     // 清理
-    let _ = MenuService::delete_by_code(&mm, db_id, code).await;
+    let _ = MenuService::delete_by_code(&mm, db_id, None, code).await;
     mm.shutdown().await.ok();
 }
 

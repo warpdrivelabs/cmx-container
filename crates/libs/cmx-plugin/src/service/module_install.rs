@@ -287,6 +287,10 @@ impl ModuleInstallService {
     /// - menus/*.json → bundle.menu.apply_menu_definitions
     /// - metadata/tables/*.json → bundle.table.apply_table_definitions(建表+元数据登记)
     /// - permissions/*.json → bundle.permission.apply_permission_definitions
+    ///
+    /// 四类资源在同一 default 库事务内执行(任一失败整体回滚)。
+    /// 注意:建表 DDL 在 biz_db 上执行,PG DDL 自动提交不进事务;仅 default 库的
+    /// 表单/菜单/权限/表元数据登记纳入事务。远程实现跨服务无共享事务,txn_id 被忽略。
     async fn install_module_resources(
         &self,
         biz_db_id: &str,
@@ -303,59 +307,93 @@ impl ModuleInstallService {
         let module = manifest.module.code.as_str();
         let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
-        // 1. 表单:forms/*.json 解析为 FormDefinition,委托 importer
-        let form_defs = Self::read_form_definitions(module_dir, domain, app, module);
-        if !form_defs.is_empty() {
-            match bundle
-                .form
-                .apply_form_definitions(domain, app, module, &form_defs)
-                .await
-            {
-                Ok(n) => info!(count = n, "表单安装完成"),
-                Err(e) => warn!(error = %e, "表单安装失败"),
+        // 开启 default 库事务,包裹四类资源安装(任一失败回滚)
+        let mm = get_default_db_manager();
+        let default_db_id = mm.get_default_db_id().await;
+        let txn_ctx = mm.get_transaction_context();
+        let guard = txn_ctx
+            .begin_with_guard(&default_db_id)
+            .await
+            .map_err(|e| PluginError::Database(format!("开启模块资源安装事务失败: {e}")))?;
+        let txn = guard.txn_id().to_string();
+
+        // 执行体:任一 apply 失败立即返回(Err 时 guard drop 自动回滚)
+        // 注:TraitError → PluginError 显式映射(无 #[from] 实现)
+        let result: PluginResult<()> = async {
+            let map_trait_err = |e: cmx_traits::error::TraitError| {
+                PluginError::Plugin(format!("模块资源安装失败: {e}"))
+            };
+            // 1. 表单:forms/*.json 解析为 FormDefinition,委托 importer
+            let form_defs = Self::read_form_definitions(module_dir, domain, app, module);
+            if !form_defs.is_empty() {
+                let n = bundle
+                    .form
+                    .apply_form_definitions(domain, app, module, &form_defs, Some(&txn))
+                    .await
+                    .map_err(map_trait_err)?;
+                info!(count = n, "表单安装完成");
+            }
+
+            // 2. 菜单:menus/*.json 解析为 MenuDefinition,委托 importer
+            let menu_defs = Self::read_menu_definitions(module_dir, domain, app, module);
+            if !menu_defs.is_empty() {
+                let n = bundle
+                    .menu
+                    .apply_menu_definitions(domain, app, module, &menu_defs, Some(&txn))
+                    .await
+                    .map_err(map_trait_err)?;
+                info!(count = n, "菜单安装完成");
+            }
+
+            // 3. 元数据:metadata/tables/*.json 解析为 TableDefine,委托 importer(建表+登记)
+            let table_defs = Self::read_table_definitions(module_dir);
+            if !table_defs.is_empty() {
+                let n = bundle
+                    .table
+                    .apply_table_definitions(
+                        domain,
+                        app,
+                        module,
+                        &app_id,
+                        &table_defs,
+                        biz_db_id,
+                        Some(&txn),
+                    )
+                    .await
+                    .map_err(map_trait_err)?;
+                info!(count = n, "表结构安装完成");
+            }
+
+            // 4. 权限:permissions/*.json 解析为 PermissionDefinition,委托 importer
+            let perm_defs = Self::read_permission_definitions(module_dir);
+            if !perm_defs.is_empty() {
+                let n = bundle
+                    .permission
+                    .apply_permission_definitions(domain, app, module, &perm_defs, Some(&txn))
+                    .await
+                    .map_err(map_trait_err)?;
+                info!(count = n, "权限安装完成");
+            }
+            Ok(())
+        }
+        .await;
+
+        // 提交或回滚
+        match result {
+            Ok(()) => {
+                guard
+                    .commit()
+                    .await
+                    .map_err(|e| PluginError::Database(format!("提交模块资源安装事务失败: {e}")))?;
+                info!("模块级资源安装事务已提交");
+                Ok(())
+            }
+            Err(e) => {
+                let _ = guard.rollback().await;
+                error!(error = %e, "模块级资源安装失败,事务已回滚");
+                Err(e)
             }
         }
-
-        // 2. 菜单:menus/*.json 解析为 MenuDefinition,委托 importer
-        let menu_defs = Self::read_menu_definitions(module_dir, domain, app, module);
-        if !menu_defs.is_empty() {
-            match bundle
-                .menu
-                .apply_menu_definitions(domain, app, module, &menu_defs)
-                .await
-            {
-                Ok(n) => info!(count = n, "菜单安装完成"),
-                Err(e) => warn!(error = %e, "菜单安装失败"),
-            }
-        }
-
-        // 3. 元数据:metadata/tables/*.json 解析为 TableDefine,委托 importer(建表+登记)
-        let table_defs = Self::read_table_definitions(module_dir);
-        if !table_defs.is_empty() {
-            match bundle
-                .table
-                .apply_table_definitions(domain, app, module, &app_id, &table_defs, biz_db_id)
-                .await
-            {
-                Ok(n) => info!(count = n, "表结构安装完成"),
-                Err(e) => warn!(error = %e, "表结构安装失败"),
-            }
-        }
-
-        // 4. 权限:permissions/*.json 解析为 PermissionDefinition,委托 importer
-        let perm_defs = Self::read_permission_definitions(module_dir);
-        if !perm_defs.is_empty() {
-            match bundle
-                .permission
-                .apply_permission_definitions(domain, app, module, &perm_defs)
-                .await
-            {
-                Ok(n) => info!(count = n, "权限安装完成"),
-                Err(e) => warn!(error = %e, "权限安装失败"),
-            }
-        }
-
-        Ok(())
     }
 
     /// 读取 forms/*.json,组装 FormDefinition 列表。

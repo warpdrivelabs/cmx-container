@@ -65,7 +65,7 @@ async fn test_form_crud_lifecycle() {
         application_code: "TAPP".to_string(),
         module_code: "TMOD".to_string(),
     };
-    let created = FormService::create(&mm, db_id, create_dto)
+    let created = FormService::create(&mm, db_id, None, create_dto)
         .await
         .expect("创建应成功");
     let created_json = dataset_to_json(&created);

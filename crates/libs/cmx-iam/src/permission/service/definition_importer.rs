@@ -28,6 +28,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
         app_code: &str,
         module_code: &str,
         definitions: &[PermissionDefinition],
+        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
@@ -74,7 +75,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                 .mm
                 .query_sql_with_datavalues(
                     &self.db_id,
-                    None,
+                    txn_id,
                     sql,
                     params,
                     "apply_perm_upsert",
@@ -117,7 +118,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                 .mm
                 .query_sql_with_datavalues(
                     &self.db_id,
-                    None,
+                    txn_id,
                     parent_sql,
                     vec![DataValue::String(parent_id.clone())],
                     "apply_perm_parent",
@@ -149,7 +150,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                     .mm
                     .execute_sql_with_datavalues(
                         &self.db_id,
-                        None,
+                        txn_id,
                         upd_sql,
                         vec![
                             DataValue::String(parent_id.clone()),
@@ -166,7 +167,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                     .mm
                     .execute_sql_with_datavalues(
                         &self.db_id,
-                        None,
+                        txn_id,
                         leaf_sql,
                         vec![DataValue::String(parent_id.clone())],
                     )

@@ -27,6 +27,8 @@ pub trait TableDefinitionImporter: Send + Sync {
     /// * `app_id` - 应用隔离标识(当前 ≡ module_code,见 AGENTS.md 六章)
     /// * `definitions` - 表结构定义列表
     /// * `biz_db_id` - 建表目标业务库 ID(元数据登记库由实现内部决定)
+    /// * `txn_id` - 外部事务 ID(仅本地实现有效,作用于元数据登记;
+    ///   建表 DDL 在 PG 自动提交不进事务;远程实现跨服务无共享事务,会忽略此参数)
     ///
     /// # Returns
     /// 成功处理的表数量。
@@ -38,6 +40,7 @@ pub trait TableDefinitionImporter: Send + Sync {
         app_id: &str,
         definitions: &[TableDefine],
         biz_db_id: &str,
+        txn_id: Option<&str>,
     ) -> Result<usize, TraitError>;
 
     /// 导出指定模块的所有表结构定义。

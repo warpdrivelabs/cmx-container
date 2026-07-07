@@ -1009,6 +1009,7 @@ impl TableMetadataService {
     /// * `biz_db_id` - 业务表所在库(登记到 db_id 列)
     /// * `table_def` - 表结构定义
     /// * `domain_code` / `app` / `module` / `app_id` - 作用域
+    /// * `txn_id` - 外部事务 ID(传 Some 时纳入调用方事务;传 None 时每条自动提交)
     #[allow(clippy::too_many_arguments)]
     pub async fn upsert_by_table_name(
         mm: &DatabaseManager,
@@ -1019,6 +1020,7 @@ impl TableMetadataService {
         app: &str,
         module: &str,
         app_id: &str,
+        txn_id: Option<&str>,
     ) -> PluginResult<()> {
         use cmx_core::model::cell::DataValue;
         let metadata_json = serde_json::to_string(table_def)
@@ -1029,7 +1031,7 @@ impl TableMetadataService {
         let check_ds = mm
             .query_sql_with_datavalues(
                 default_db_id,
-                None,
+                txn_id,
                 check_sql,
                 vec![DataValue::String(table_def.table_name.clone())],
                 "save_meta_check",
@@ -1055,7 +1057,7 @@ impl TableMetadataService {
             let _ = mm
                 .execute_sql_with_datavalues(
                     default_db_id,
-                    None,
+                    txn_id,
                     upd_sql,
                     vec![
                         DataValue::String(table_def.display_name.clone()),
@@ -1078,7 +1080,7 @@ impl TableMetadataService {
             let _ = mm
                 .execute_sql_with_datavalues(
                     default_db_id,
-                    None,
+                    txn_id,
                     ins_sql,
                     vec![
                         DataValue::String(id),
@@ -1101,7 +1103,7 @@ impl TableMetadataService {
         let version_check_ds = mm
             .query_sql_with_datavalues(
                 default_db_id,
-                None,
+                txn_id,
                 version_check_sql,
                 vec![
                     DataValue::String(table_def.table_name.clone()),
@@ -1132,7 +1134,7 @@ impl TableMetadataService {
             let _ = mm
                 .execute_sql_with_datavalues(
                     default_db_id,
-                    None,
+                    txn_id,
                     version_upd_sql,
                     vec![
                         DataValue::String(table_def.display_name.clone()),
@@ -1155,7 +1157,7 @@ impl TableMetadataService {
             let _ = mm
                 .execute_sql_with_datavalues(
                     default_db_id,
-                    None,
+                    txn_id,
                     version_ins_sql,
                     vec![
                         DataValue::String(vid),

@@ -44,11 +44,12 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
         app_id: &str,
         definitions: &[TableDefine],
         biz_db_id: &str,
+        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
         }
-        // 用 PgTableDefineExecutor 建表到业务库(无需分布式锁,模块安装是低频操作)
+        // 用 PgTableDefineExecutor 建表到业务库(DDL 在 PG 自动提交,txn_id 对 DDL 无实际效果)
         let executor = cmx_metadata::executor::PgTableDefineExecutor::new(biz_db_id, None);
         let mut count = 0usize;
         for table_def in definitions {
@@ -59,7 +60,7 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
                     continue;
                 }
             }
-            // 登记元数据到 default 库(记录 db_id 列标记 biz 库)
+            // 登记元数据到 default 库(记录 db_id 列标记 biz 库),txn_id 纳入外部事务
             if let Err(e) = TableMetadataService::upsert_by_table_name(
                 &self.mm,
                 &self.default_db_id,
@@ -69,6 +70,7 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
                 app_code,
                 module_code,
                 app_id,
+                txn_id,
             )
             .await
             {

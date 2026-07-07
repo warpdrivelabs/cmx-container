@@ -36,6 +36,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
         app_id: &str,
         definitions: &[TableDefine],
         _biz_db_id: &str,
+        _txn_id: Option<&str>, // 跨服务无共享事务,远程实现忽略 txn_id
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);

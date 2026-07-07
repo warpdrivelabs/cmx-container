@@ -1544,17 +1544,84 @@ async fn deploy_with_events(
             DataValue::String(version.to_string()), DataValue::Int(created), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
             ]).await.map_err(db_err("写模块台账失败"))?;
 
-            // 4-c 对象台账快照：目标库存在核心元数据版本表时才写；模型中心库只初始化自身台账表，不强依赖此表。
-            if has_table_define_version {
+            // 4-c 对象台账：主表 + 版本表都需登记(check-then-upsert,避免重复部署累积重复行)
+            // 目标库存在核心元数据表时才写;模型中心库只初始化自身台账表,不强依赖此表。
+            // app_id 用当前服务隔离标识(与模块安装守卫一致:app_id ≡ module_code)
+            let current_app_id = cmx_utils::ConfigManager::global().get_app_id();
+            let version_str = version.to_string();
+            let has_meta_table = table_exists(db_id, "cmx_meta_table_define")
+                .await
+                .unwrap_or(false);
+            if has_meta_table && has_table_define_version {
                 for def in &defs {
                     let meta_json = serde_json::to_string(&serde_json::to_value(def).unwrap_or(Value::Null)).unwrap_or_default();
-                    mm.execute_sql_with_datavalues(db_id, Some(&txn),
-                        "INSERT INTO cmx_meta_table_define_version (id, table_name, display_name, db_id, version, domain_code, application_code, module_code, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)",
-                        vec![
-                            DataValue::String(snowflake_id_str()), DataValue::String(def.table_name.clone()), DataValue::String(def.display_name.clone()),
-                            DataValue::String(db_id.into()), DataValue::String(version.to_string()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
-                            DataValue::Json(meta_json),
-                        ]).await.map_err(db_err("写表定义版本快照失败"))?;
+
+                    // (1) 主表 cmx_meta_table_define:check-then-upsert(无 table_name 唯一约束)
+                    let main_check = mm.query_sql_with_datavalues(db_id, Some(&txn),
+                        "SELECT id FROM cmx_meta_table_define WHERE table_name = $1 AND archived = 0",
+                        vec![DataValue::String(def.table_name.clone())],
+                        "deploy_meta_check")
+                        .await
+                        .map_err(db_err("查询表定义主表失败"))?;
+                    let existing_main_id = serde_json::to_value(&main_check).ok()
+                        .and_then(|j| j.get("rows").and_then(|r| r.as_array()).and_then(|rows| rows.first()).cloned())
+                        .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
+                    if let Some(eid) = existing_main_id {
+                        // 已存在 → UPDATE
+                        mm.execute_sql_with_datavalues(db_id, Some(&txn),
+                            "UPDATE cmx_meta_table_define SET display_name = $1, domain_code = $2, application_code = $3, module_code = $4, db_id = $5, version = $6, ddl_status = 'completed', update_time = CURRENT_TIMESTAMP WHERE id = $7",
+                            vec![
+                                DataValue::String(def.display_name.clone()),
+                                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                                DataValue::String(db_id.into()), DataValue::String(version_str.clone()),
+                                DataValue::String(eid),
+                            ]).await.map_err(db_err("更新表定义主表失败"))?;
+                    } else {
+                        // 不存在 → INSERT(完整 12 列,含 app_id/plugin_id=NULL/archived=0)
+                        let main_id = snowflake_id_str();
+                        mm.execute_sql_with_datavalues(db_id, Some(&txn),
+                            "INSERT INTO cmx_meta_table_define (id, table_name, display_name, db_id, plugin_id, version, app_id, ddl_status, domain_code, application_code, module_code, archived) VALUES ($1,$2,$3,$4,NULL,$5,$6,'completed',$7,$8,$9,0)",
+                            vec![
+                                DataValue::String(main_id), DataValue::String(def.table_name.clone()), DataValue::String(def.display_name.clone()),
+                                DataValue::String(db_id.into()), DataValue::String(version_str.clone()), DataValue::String(current_app_id.clone()),
+                                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                            ]).await.map_err(db_err("写表定义主表失败"))?;
+                    }
+
+                    // (2) 版本表 cmx_meta_table_define_version:check-then-upsert
+                    //     按 (table_name, version, app_id) 去重,避免重复部署累积重复行
+                    let ver_check = mm.query_sql_with_datavalues(db_id, Some(&txn),
+                        "SELECT id FROM cmx_meta_table_define_version WHERE table_name = $1 AND version = $2 AND app_id = $3 AND archived = 0",
+                        vec![DataValue::String(def.table_name.clone()), DataValue::String(version_str.clone()), DataValue::String(current_app_id.clone())],
+                        "deploy_meta_ver_check")
+                        .await
+                        .map_err(db_err("查询表定义版本表失败"))?;
+                    let existing_ver_id = serde_json::to_value(&ver_check).ok()
+                        .and_then(|j| j.get("rows").and_then(|r| r.as_array()).and_then(|rows| rows.first()).cloned())
+                        .and_then(|row| row.get("id").and_then(|v| v.as_str()).map(String::from));
+                    if let Some(vid) = existing_ver_id {
+                        // 已存在 → UPDATE metadata + 基础字段
+                        mm.execute_sql_with_datavalues(db_id, Some(&txn),
+                            "UPDATE cmx_meta_table_define_version SET display_name = $1, db_id = $2, domain_code = $3, application_code = $4, module_code = $5, metadata = $6::jsonb, update_time = CURRENT_TIMESTAMP WHERE id = $7",
+                            vec![
+                                DataValue::String(def.display_name.clone()),
+                                DataValue::String(db_id.into()),
+                                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                                DataValue::Json(meta_json),
+                                DataValue::String(vid),
+                            ]).await.map_err(db_err("更新表定义版本快照失败"))?;
+                    } else {
+                        // 不存在 → INSERT 完整 12 列
+                        let vid = snowflake_id_str();
+                        mm.execute_sql_with_datavalues(db_id, Some(&txn),
+                            "INSERT INTO cmx_meta_table_define_version (id, table_name, display_name, db_id, plugin_id, version, app_id, domain_code, application_code, module_code, metadata, archived) VALUES ($1,$2,$3,$4,NULL,$5,$6,$7,$8,$9,$10::jsonb,0)",
+                            vec![
+                                DataValue::String(vid), DataValue::String(def.table_name.clone()), DataValue::String(def.display_name.clone()),
+                                DataValue::String(db_id.into()), DataValue::String(version_str.clone()), DataValue::String(current_app_id.clone()),
+                                DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                                DataValue::Json(meta_json),
+                            ]).await.map_err(db_err("写表定义版本快照失败"))?;
+                    }
                 }
             }
 
