@@ -189,13 +189,52 @@ fn metric_headers(
     h
 }
 
+/// 可选 gzip:压缩 body,置 `Content-Encoding: gzip`(浏览器/fetch 透明解压,前端解码路径不变),
+/// 并在 `x-raw-bytes` / `x-wire-bytes` 头暴露压缩前后体积,供基准精确测量压缩率。
+/// `?gzip=1` 开启。压缩耗时计入 `x-t-gzip-ms`。
+fn maybe_gzip(h: &mut HeaderMap, body: Vec<u8>, want: bool) -> Vec<u8> {
+    let raw = body.len();
+    h.insert("x-raw-bytes", raw.to_string().parse().unwrap());
+    if !want {
+        h.insert("x-wire-bytes", raw.to_string().parse().unwrap());
+        h.insert("x-t-gzip-ms", "0".parse().unwrap());
+        return body;
+    }
+    use flate2::{Compression, write::GzEncoder};
+    use std::io::Write;
+    let t = Instant::now();
+    let mut enc = GzEncoder::new(Vec::with_capacity(raw / 3), Compression::default());
+    enc.write_all(&body).unwrap();
+    let gz = enc.finish().unwrap();
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+    h.insert("content-encoding", "gzip".parse().unwrap());
+    h.insert("x-wire-bytes", gz.len().to_string().parse().unwrap());
+    h.insert("x-t-gzip-ms", format!("{ms:.1}").parse().unwrap());
+    gz
+}
+
+/// 查询参数:`?gzip=1` 开启响应 gzip。
+#[derive(serde::Deserialize, Default)]
+struct Params {
+    #[serde(default)]
+    gzip: Option<u8>,
+}
+impl Params {
+    fn want_gzip(&self) -> bool {
+        self.gzip == Some(1)
+    }
+}
+
 // ───────────────────────── 三个 endpoint ─────────────────────────
 
 /// 老链路:sqlx 流式取行 → DataSet 全量物化 → ColumnarCodec 列式 JSON。
 ///
 /// 注意:「流式」只到驱动取行为止 —— DataSet/ColumnarCodec 结构上要求全量物化,
 /// 这正是与 Zmc 流式的本质差异(对比要点,不是实现偷懒)。
-async fn old_json(axum::extract::State(app): axum::extract::State<App>) -> (HeaderMap, Vec<u8>) {
+async fn old_json(
+    axum::extract::State(app): axum::extract::State<App>,
+    axum::extract::Query(params): axum::extract::Query<Params>,
+) -> (HeaderMap, Vec<u8>) {
     use cmx_core::model::data::dataset::{ColumnarCodec, DataSet};
     use cmx_database::executor::ResultConverter;
 
@@ -226,13 +265,17 @@ async fn old_json(axum::extract::State(app): axum::extract::State<App>) -> (Head
 
     let mut h = metric_headers(fetch_ms, encode_ms, mem_struct, mem_total, mem_peak, rows_n);
     h.insert("content-type", "application/json".parse().unwrap());
+    let body = maybe_gzip(&mut h, body, params.want_gzip());
     (h, body)
 }
 
 /// sqlx 零拷贝流式:逐行 Zmc 编码即弃 → msgpack(信封 {code,msg,data})。
-async fn sqlx_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> (HeaderMap, Vec<u8>) {
+async fn sqlx_zmc_bin(
+    axum::extract::State(app): axum::extract::State<App>,
+    axum::extract::Query(params): axum::extract::Query<Params>,
+) -> (HeaderMap, Vec<u8>) {
     use cmx_database::zmc::SqlxPgRowSource;
-    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
 
     let base = live();
     reset_peak();
@@ -245,12 +288,18 @@ async fn sqlx_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> (
         Some(r) => ZmcSchema::from_row(r),
         None => ZmcSchema::from_parts(vec![], vec![]),
     };
-    let mut rows_body: Vec<u8> = Vec::new();
+
+    // 单缓冲:信封头 + 列式包头(预留 rows 长度)先入 body,各行直接编进 body(免 rows_body)
+    let te = Instant::now();
+    let mut body: Vec<u8> = Vec::new();
+    rmp_envelope_header(&mut body);
+    let marker = encode_stream_open(&mut body, "e2e", &schema);
+    let mut encode_ns: u64 = te.elapsed().as_nanos() as u64;
+
     let mut count: u64 = 0;
-    let mut encode_ns: u64 = 0;
     if let Some(r) = &first {
         let te = Instant::now();
-        encode_row_into(&mut rows_body, r, &schema);
+        encode_row_into(&mut body, r, &schema);
         encode_ns += te.elapsed().as_nanos() as u64;
         count += 1;
     }
@@ -258,20 +307,16 @@ async fn sqlx_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> (
     while let Some(r) = stream.try_next().await.unwrap() {
         let r = SqlxPgRowSource::from(r);
         let te = Instant::now();
-        encode_row_into(&mut rows_body, &r, &schema);
+        encode_row_into(&mut body, &r, &schema);
         encode_ns += te.elapsed().as_nanos() as u64;
         count += 1;
     }
     drop(stream);
 
-    // 信封 + 列式包组装
+    // 回填 rows 数组长度
     let te = Instant::now();
-    let mut body = Vec::with_capacity(rows_body.len() + 64);
-    rmp_envelope_header(&mut body);
-    encode_stream_header(&mut body, "e2e", &schema);
-    encode_stream_footer(&mut body, count as u32, &rows_body);
+    encode_stream_close(&mut body, marker, count as u32);
     encode_ns += te.elapsed().as_nanos() as u64;
-    drop(rows_body);
 
     let total_ms = t0.elapsed().as_secs_f64() * 1000.0;
     let encode_ms = encode_ns as f64 / 1e6;
@@ -281,13 +326,17 @@ async fn sqlx_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> (
 
     let mut h = metric_headers(fetch_ms, encode_ms, 0, mem_total, mem_peak, count);
     h.insert("content-type", "application/x-msgpack".parse().unwrap());
+    let body = maybe_gzip(&mut h, body, params.want_gzip());
     (h, body)
 }
 
 /// tokio-pg 零拷贝流式:query_raw 逐行 Zmc 编码即弃 → msgpack(信封同上)。
-async fn tokio_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> (HeaderMap, Vec<u8>) {
+async fn tokio_zmc_bin(
+    axum::extract::State(app): axum::extract::State<App>,
+    axum::extract::Query(params): axum::extract::Query<Params>,
+) -> (HeaderMap, Vec<u8>) {
     use cmx_database_pg::zmcdataset::TokioPgRowSource;
-    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
 
     let (client, conn) = tokio_postgres::connect(&app.url, tokio_postgres::NoTls)
         .await
@@ -300,20 +349,26 @@ async fn tokio_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> 
     reset_peak();
 
     let t0 = Instant::now();
-    let params: Vec<i32> = Vec::new();
-    let stream = client.query_raw(app.select.as_str(), params).await.unwrap();
+    let qparams: Vec<i32> = Vec::new();
+    let stream = client.query_raw(app.select.as_str(), qparams).await.unwrap();
     futures::pin_mut!(stream);
     let first = stream.try_next().await.unwrap().map(TokioPgRowSource::from);
     let schema = match &first {
         Some(r) => ZmcSchema::from_row(r),
         None => ZmcSchema::from_parts(vec![], vec![]),
     };
-    let mut rows_body: Vec<u8> = Vec::new();
+
+    // 单缓冲:信封头 + 列式包头(预留 rows 长度)入 body,各行直接编进 body(免 rows_body)
+    let te = Instant::now();
+    let mut body: Vec<u8> = Vec::new();
+    rmp_envelope_header(&mut body);
+    let marker = encode_stream_open(&mut body, "e2e", &schema);
+    let mut encode_ns: u64 = te.elapsed().as_nanos() as u64;
+
     let mut count: u64 = 0;
-    let mut encode_ns: u64 = 0;
     if let Some(r) = &first {
         let te = Instant::now();
-        encode_row_into(&mut rows_body, r, &schema);
+        encode_row_into(&mut body, r, &schema);
         encode_ns += te.elapsed().as_nanos() as u64;
         count += 1;
     }
@@ -321,18 +376,14 @@ async fn tokio_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> 
     while let Some(r) = stream.try_next().await.unwrap() {
         let r = TokioPgRowSource::from(r);
         let te = Instant::now();
-        encode_row_into(&mut rows_body, &r, &schema);
+        encode_row_into(&mut body, &r, &schema);
         encode_ns += te.elapsed().as_nanos() as u64;
         count += 1;
     }
 
     let te = Instant::now();
-    let mut body = Vec::with_capacity(rows_body.len() + 64);
-    rmp_envelope_header(&mut body);
-    encode_stream_header(&mut body, "e2e", &schema);
-    encode_stream_footer(&mut body, count as u32, &rows_body);
+    encode_stream_close(&mut body, marker, count as u32);
     encode_ns += te.elapsed().as_nanos() as u64;
-    drop(rows_body);
 
     let total_ms = t0.elapsed().as_secs_f64() * 1000.0;
     let encode_ms = encode_ns as f64 / 1e6;
@@ -343,6 +394,7 @@ async fn tokio_zmc_bin(axum::extract::State(app): axum::extract::State<App>) -> 
 
     let mut h = metric_headers(fetch_ms, encode_ms, 0, mem_total, mem_peak, count);
     h.insert("content-type", "application/x-msgpack".parse().unwrap());
+    let body = maybe_gzip(&mut h, body, params.want_gzip());
     (h, body)
 }
 

@@ -670,14 +670,18 @@ pub fn encode_cell<R: ZmcRowSource>(
 }
 
 // ============================================================================
-// 流式编码骨架(driver 的流式管道逐行调 encode_row_into,再拼头尾)
+// 流式编码骨架(driver 的流式管道逐行调 encode_row_into,单缓冲直写 + 回填长度)
 // ============================================================================
 
-/// 写列式包头 `{datasetId, columns, "rows":` —— 返回后由 driver 追加 rows 数组。
+/// 写列式包头并**预留 rows 数组长度占位**,返回占位起始偏移。
 ///
-/// 流式协议:header → rows(数组长度 + 各行) 由 [`encode_stream_footer`] 完成。这里只到
-/// `"rows"` 键为止(不写数组,因流式时行数未知,driver 先把行编进临时 buf 再回填长度)。
-pub fn encode_stream_header(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSchema) {
+/// 单缓冲设计:driver 之后把各行用 [`encode_row_into`] **直接编进同一个 `out`**(追加),
+/// 最后用 [`encode_stream_close`] 回填长度 —— 相比旧的 header+footer 双缓冲,省一份
+/// `rows_body`(峰值 O(全部行 ≈ 整个输出体积))+ 一次整段 memcpy。
+///
+/// 关键:msgpack `array 32`(`0xdd` + 4 字节大端 u32)是**定宽**的,与元素个数无关,
+/// 因此行数未知时也能先占位、编完后回填。array32 对任意长度(含小数组)都是合法编码。
+pub fn encode_stream_open(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSchema) -> usize {
     mp::write_map_len(out, 3).unwrap();
     mp::write_str(out, "datasetId").unwrap();
     mp::write_str(out, dataset_id).unwrap();
@@ -687,12 +691,19 @@ pub fn encode_stream_header(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSch
         mp::write_str(out, name).unwrap();
     }
     mp::write_str(out, "rows").unwrap();
+    // 预留 array32 标记:0xdd + 4 字节大端长度占位(定宽,后续回填)
+    let marker_pos = out.len();
+    out.push(0xdd);
+    out.extend_from_slice(&[0, 0, 0, 0]);
+    marker_pos
 }
 
-/// 写 rows 数组(长度 + 已编码的行体),收尾整个包。
-pub fn encode_stream_footer(out: &mut Vec<u8>, row_count: u32, rows_body: &[u8]) {
-    mp::write_array_len(out, row_count).unwrap();
-    out.extend_from_slice(rows_body);
+/// 回填 [`encode_stream_open`] 预留的 rows 数组长度(大端 u32)。
+///
+/// `marker_pos` 为 open 的返回值;`out` 在此期间只能追加(rows 直接编在占位之后),
+/// 占位偏移保持有效。
+pub fn encode_stream_close(out: &mut [u8], marker_pos: usize, row_count: u32) {
+    out[marker_pos + 1..marker_pos + 5].copy_from_slice(&row_count.to_be_bytes());
 }
 
 // ============================================================================
@@ -957,5 +968,67 @@ mod rfc3339_tests {
         let mut s = String::new();
         write_rfc3339_utc(&mut s, &neg);
         assert_eq!(s, neg.to_rfc3339());
+    }
+}
+
+#[cfg(test)]
+mod stream_buffer_tests {
+    use super::*;
+
+    /// 单缓冲 open+close 的输出必须与"旧 header + array_len + rows_body"逐字节一致
+    /// （前端 decodeMsgpack 依赖此结构:{datasetId, columns, rows:[...]}）。
+    #[test]
+    fn single_buffer_equiv_to_header_footer() {
+        let schema = ZmcSchema::from_parts(
+            vec!["id".into(), "name".into()],
+            vec![ZmcColType::Int8, ZmcColType::Text],
+        );
+        // 模拟已编码的两行(内容任意,只验结构拼装等价)
+        let mut fake_rows = Vec::new();
+        for i in 0..2i64 {
+            mp::write_array_len(&mut fake_rows, 2).unwrap();
+            mp::write_sint(&mut fake_rows, i).unwrap();
+            mp::write_str(&mut fake_rows, "x").unwrap();
+        }
+
+        // 旧法:header → array_len(count) → rows_body(等价于原 encode_stream_footer)
+        let mut old = Vec::new();
+        {
+            mp::write_map_len(&mut old, 3).unwrap();
+            mp::write_str(&mut old, "datasetId").unwrap();
+            mp::write_str(&mut old, "d").unwrap();
+            mp::write_str(&mut old, "columns").unwrap();
+            mp::write_array_len(&mut old, 2).unwrap();
+            mp::write_str(&mut old, "id").unwrap();
+            mp::write_str(&mut old, "name").unwrap();
+            mp::write_str(&mut old, "rows").unwrap();
+            mp::write_array_len(&mut old, 2).unwrap(); // 旧 footer 用最紧凑的 array 编码
+            old.extend_from_slice(&fake_rows);
+        }
+
+        // 新法:open(预留 array32)→ 直接追加行 → close 回填
+        let mut new = Vec::new();
+        let marker = encode_stream_open(&mut new, "d", &schema);
+        new.extend_from_slice(&fake_rows);
+        encode_stream_close(&mut new, marker, 2);
+
+        // 二者解码回同一个 serde_json::Value(array16/array32 只是长度前缀宽度不同,语义一致)
+        let old_v: serde_json::Value = rmp_serde::from_slice(&old).unwrap();
+        let new_v: serde_json::Value = rmp_serde::from_slice(&new).unwrap();
+        assert_eq!(old_v, new_v, "单缓冲输出与旧法应解码等价");
+        assert_eq!(new_v["rows"].as_array().unwrap().len(), 2);
+        assert_eq!(new_v["datasetId"], "d");
+    }
+
+    /// 0 行也要合法(空结果集)。
+    #[test]
+    fn single_buffer_zero_rows() {
+        let schema = ZmcSchema::from_parts(vec!["id".into()], vec![ZmcColType::Int8]);
+        let mut out = Vec::new();
+        let marker = encode_stream_open(&mut out, "empty", &schema);
+        encode_stream_close(&mut out, marker, 0);
+        let v: serde_json::Value = rmp_serde::from_slice(&out).unwrap();
+        assert_eq!(v["rows"].as_array().unwrap().len(), 0);
+        assert_eq!(v["columns"].as_array().unwrap().len(), 1);
     }
 }

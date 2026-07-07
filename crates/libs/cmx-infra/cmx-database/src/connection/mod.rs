@@ -159,7 +159,7 @@ impl DbPool {
         dataset_id: &str,
         out: &mut Vec<u8>,
     ) -> crate::Result<u64> {
-        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+        use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
         use crate::zmc::SqlxPgRowSource;
         use futures::TryStreamExt;
 
@@ -173,21 +173,21 @@ impl DbPool {
                     None => ZmcSchema::from_parts(vec![], vec![]),
                 };
 
-                let mut rows_body: Vec<u8> = Vec::new();
+                // 单缓冲:头 + 预留 rows 长度,各行直接编进 out(免 rows_body 双缓冲)
+                let marker = encode_stream_open(out, dataset_id, &schema);
                 let mut count: u64 = 0;
                 if let Some(r) = &first {
-                    encode_row_into(&mut rows_body, r, &schema);
+                    encode_row_into(out, r, &schema);
                     count += 1;
                 }
                 drop(first);
                 while let Some(r) = stream.try_next().await? {
                     let r = SqlxPgRowSource::from(r);
-                    encode_row_into(&mut rows_body, &r, &schema);
+                    encode_row_into(out, &r, &schema);
                     count += 1;
                 }
 
-                encode_stream_header(out, dataset_id, &schema);
-                encode_stream_footer(out, count as u32, &rows_body);
+                encode_stream_close(out, marker, count as u32);
                 Ok(count)
             }
             _ => Err(crate::Error::UnsupportedDbType),

@@ -301,7 +301,7 @@ async fn measure_zmc(url: &str, select: &str, _rows: u64) -> anyhow::Result<Path
 /// tokio-pg / ZmcDataSet 流式路径:query_raw → 边取边编码,不囤 Row。峰值 O(单行 + 输出)。
 async fn measure_zmc_streaming(url: &str, select: &str) -> anyhow::Result<PathMem> {
     use cmx_database_pg::zmcdataset::TokioPgRowSource;
-    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
     use futures::TryStreamExt;
 
     let (client, conn) = tokio_postgres::connect(url, tokio_postgres::NoTls).await?;
@@ -321,21 +321,21 @@ async fn measure_zmc_streaming(url: &str, select: &str) -> anyhow::Result<PathMe
         Some(r) => ZmcSchema::from_row(r),
         None => ZmcSchema::from_parts(vec![], vec![]),
     };
-    let mut rows_body: Vec<u8> = Vec::new();
+    // 单缓冲:头 + 预留 rows 长度,各行直接编进 buf(免 rows_body,省一份输出体积的峰值)
+    let mut buf: Vec<u8> = Vec::new();
+    let marker = encode_stream_open(&mut buf, "mem", &schema);
     let mut count: u64 = 0;
     if let Some(r) = &first {
-        encode_row_into(&mut rows_body, r, &schema);
+        encode_row_into(&mut buf, r, &schema);
         count += 1;
     }
     drop(first);
     while let Some(r) = stream.try_next().await? {
         let r = TokioPgRowSource::from(r);
-        encode_row_into(&mut rows_body, &r, &schema);
+        encode_row_into(&mut buf, &r, &schema);
         count += 1;
     }
-    let mut buf = Vec::new();
-    encode_stream_header(&mut buf, "mem", &schema);
-    encode_stream_footer(&mut buf, count as u32, &rows_body);
+    encode_stream_close(&mut buf, marker, count as u32);
     let output_bytes = buf.len();
 
     let after_c_total = live().saturating_sub(base);
@@ -343,7 +343,6 @@ async fn measure_zmc_streaming(url: &str, select: &str) -> anyhow::Result<PathMe
 
     std::hint::black_box(&buf);
     drop(buf);
-    drop(rows_body);
     handle.abort();
 
     Ok(PathMem {
@@ -409,7 +408,7 @@ async fn measure_sqlx_zmc(url: &str, select: &str) -> anyhow::Result<PathMem> {
 /// sqlx / ZmcDataSet 流式:sqlx fetch → 边取边编码,不囤 PgRow。
 async fn measure_sqlx_zmc_streaming(url: &str, select: &str) -> anyhow::Result<PathMem> {
     use cmx_database::zmc::SqlxPgRowSource;
-    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_footer, encode_stream_header};
+    use cmx_rowsource::{ZmcSchema, encode_row_into, encode_stream_close, encode_stream_open};
     use futures::TryStreamExt;
     use sqlx::postgres::PgPoolOptions;
 
@@ -423,28 +422,27 @@ async fn measure_sqlx_zmc_streaming(url: &str, select: &str) -> anyhow::Result<P
         Some(r) => ZmcSchema::from_row(r),
         None => ZmcSchema::from_parts(vec![], vec![]),
     };
-    let mut rows_body: Vec<u8> = Vec::new();
+    // 单缓冲:头 + 预留 rows 长度,各行直接编进 buf(免 rows_body)
+    let mut buf: Vec<u8> = Vec::new();
+    let marker = encode_stream_open(&mut buf, "mem", &schema);
     let mut count: u64 = 0;
     if let Some(r) = &first {
-        encode_row_into(&mut rows_body, r, &schema);
+        encode_row_into(&mut buf, r, &schema);
         count += 1;
     }
     drop(first);
     while let Some(r) = stream.try_next().await? {
         let r = SqlxPgRowSource::from(r);
-        encode_row_into(&mut rows_body, &r, &schema);
+        encode_row_into(&mut buf, &r, &schema);
         count += 1;
     }
-    let mut buf = Vec::new();
-    encode_stream_header(&mut buf, "mem", &schema);
-    encode_stream_footer(&mut buf, count as u32, &rows_body);
+    encode_stream_close(&mut buf, marker, count as u32);
     let output_bytes = buf.len();
 
     let after_c_total = live().saturating_sub(base);
     let p = peak().saturating_sub(base);
     std::hint::black_box(&buf);
     drop(buf);
-    drop(rows_body);
     drop(stream);
     pool.close().await;
 

@@ -330,7 +330,51 @@
 <b>第二轮小结:</b>最优路径(tokio/Zmc)端到端 1719 → <b>1582ms</b>,老链路也顺带受益(fromJSON 是共享代码)。剩余最大空间仍在前端解析(448ms,需引官方 msgpack 库)与真实网络下的体积(需路线 B)——两者都有明确代价,按需取用。
 </div>
 
+<!-- ============ 第三轮优化实测 ============ -->
+<h2>⑦ 第三轮优化实测(单缓冲 + 官方 msgpack + gzip)</h2>
+<div class="sub">承接第二轮遗留项,再做三件:服务端单缓冲消除双拷贝、前端换官方 msgpack 库、HTTP gzip 压缩。全部通过契约验证(单缓冲等价单测、zmc 两侧集成测试、前端 256 用例)。</div>
+
+<div class="kpi">
+  <div class="kpi-card"><div class="kpi-val win">−85%</div><div class="kpi-lbl">服务端峰值内存<br>1318 → 192 MB</div></div>
+  <div class="kpi-card"><div class="kpi-val win">2.8×</div><div class="kpi-lbl">端到端总用时<br>3939 → 1411 ms</div></div>
+  <div class="kpi-card"><div class="kpi-val win">翻正</div><div class="kpi-lbl">前端解析<br>450→270ms 反超JSON.parse</div></div>
+  <div class="kpi-card"><div class="kpi-val win">~70%+</div><div class="kpi-lbl">gzip 传输体积<br>(真实数据估计)</div></div>
+</div>
+
+<table>
+<thead><tr><th>环节</th><th>改动</th><th>第二轮</th><th>第三轮</th><th>效果</th></tr></thead>
+<tbody>
+<tr><td>服务端峰值内存</td><td>单缓冲:msgpack array32 定宽占位 + 回填长度,行直接编进最终 buffer,删掉 <code>rows_body</code> 双缓冲 + 一次 105MB memcpy</td><td class="num">453 MB</td><td class="num win">192 MB</td><td class="win">再省 58%</td></tr>
+<tr><td>前端解析</td><td>换 <code>@msgpack/msgpack</code> 官方库(V8 手工优化)替代手写 JS 解码器</td><td class="num lose">450 ms</td><td class="num win">270 ms</td><td class="win">−40%,<b>反超 JSON.parse(312ms)</b></td></tr>
+<tr><td>传输体积</td><td>HTTP gzip(生产 tower-http CompressionLayer 已配置且正确排除流式端点)</td><td class="num">105 MB</td><td class="num win">~30 MB*</td><td class="win">~省 70%*</td></tr>
+</tbody>
+</table>
+
+<h3>第三轮端到端(10 万行 × 50 列,5 轮中位)</h3>
+<table>
+<thead><tr><th>链路</th><th>服端峰值内存</th><th>前端解析</th><th>端到端总用时</th><th>vs 老链路</th></tr></thead>
+<tbody>
+<tr><td><span class="badge b-old">A</span>老 DataSet→JSON</td><td class="num">1318 MB</td><td class="num">312 ms</td><td class="num">3939 ms</td><td class="num">—</td></tr>
+<tr><td><span class="badge b-sqlx">B</span>sqlx/Zmc 流式</td><td class="num win">192 MB</td><td class="num win">269 ms</td><td class="num win">1414 ms</td><td class="win">快 2.8×</td></tr>
+<tr><td><span class="badge b-tokio">C</span>tokio/Zmc 流式</td><td class="num win">192 MB</td><td class="num win">273 ms</td><td class="num win">1411 ms</td><td class="win">快 2.8×</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<b>1. 服务端峰值内存 453 → 192 MB(累计 −85% vs 老链路)。</b>单缓冲的关键:msgpack <code>array 32</code>(<code>0xdd</code>+4 字节大端)是<b>定宽</b>编码,与元素个数无关,所以行数未知时也能先占位、编完回填。省掉了 <code>rows_body</code>(一份完整输出体积)+ 一次整段 memcpy。生产 <code>query_zmc_streaming</code> 两侧同步受益。
+</div>
+<div class="callout good">
+<b>2. 前端解析二进制从"净亏"翻成"净赢"(450→270ms,反超 JSON.parse)。</b>第二轮实测手写 JS 解码器比 JSON.parse 慢 32%,是二进制路线唯一的软肋;换官方 <code>@msgpack/msgpack</code>(内部按 V8 特性手工优化)后 −40%,<b>现在比 JSON.parse 还快</b>。契约零破坏:官方 decode 对字符串键 map 返回普通对象、对 bin 返回 Uint8Array,与手写解码器输出一致,两个消费方(全量 + 逐帧)零改动。
+</div>
+<div class="callout warn">
+<b>3. gzip 体积:实测 99%,但*这个数字被合成数据夸大*——诚实修正为真实场景 ~70%。</b>基准表每行值完全相同(同一段文本/金额重复 10 万次),gzip 对高重复数据近乎全压到 0.8MB。<b>真实业务数据(每行不同的金额/名称/时间)压缩率约 70~85%。</b>但即便按 70% 算,gzip 仍是体积维度 ROI 最高:<b>生产 CompressionLayer 早已配置好</b>(且正确排除 <code>application/octet-stream</code> 流式端点以保 O(单行) 分帧),<code>application/x-msgpack</code> 非流式端点自动享压缩,前端浏览器自动解压,零代码、零精度风险。远超"改原生类型"的 −14%。
+</div>
+<div class="callout">
+<b>第三轮小结:</b>三轮累计,最优路径服务端内存 <b>1318→192MB(−85%)</b>、端到端 <b>3939→1411ms(2.8×)</b>、前端解析<b>反超 JSON.parse</b>、传输体积真实场景可再 gzip 掉 ~70%。<b>关键:全部零前端契约破坏、零精度风险</b>——单缓冲是纯后端、官方 msgpack 是 API 名不变的库替换、gzip 是生产早已配好的传输层。上一轮评估里"不建议改原生类型"的结论因此更稳:gzip 用零成本拿到了远超改类型的体积收益。
+</div>
+
 <div class="foot">
+* gzip 99% 为合成数据(每行相同)结果,真实业务数据约 70~85%;报告取保守 ~70% 陈述。
 计数分配器统计 Rust 堆分配(含网络缓冲/驱动缓存);前端 V8 <code>heapUsed</code> 于 <code>--expose-gc</code> 强制 GC 后取值。单机回环,5 轮取中位,数值随机器/负载波动,重点看同指标的相对差。<br>
 测试代码:<code>crates/tests/cmx-database-test/src/e2e_server.rs</code>(服务端)、<code>e2e_bench.mjs</code>(前端侧)、<code>src/mem_bench.rs</code>(五方内存)。生成于 2026-07。
 </div>

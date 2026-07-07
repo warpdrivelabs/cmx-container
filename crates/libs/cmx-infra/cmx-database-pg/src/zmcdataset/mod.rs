@@ -119,5 +119,5 @@ fn map_type(ty: &Type) -> ZmcColType {
 pub type ZmcDataSet = cmx_rowsource::ZmcDataSet<TokioPgRowSource>;
 pub type ZmcChildGroup = cmx_rowsource::ZmcChildGroup<TokioPgRowSource>;
 pub use cmx_rowsource::ZmcSchema;
-pub use cmx_rowsource::{encode_row_into, encode_stream_footer, encode_stream_header};
+pub use cmx_rowsource::{encode_row_into, encode_stream_close, encode_stream_open};
 pub use cmx_rowsource::{encode_frame_end, encode_frame_header, encode_frame_row};

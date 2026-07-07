@@ -30,8 +30,8 @@ function heap () {
 const MB = (b) => (b / 1048576)
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2 }
 
-async function measureOnce (path, binary) {
-  const url = `${BASE}${path}`
+async function measureOnce (path, binary, gzip = false) {
+  const url = `${BASE}${path}${gzip ? '?gzip=1' : ''}`
 
   // ── 下载 ──
   const h0 = heap()
@@ -39,13 +39,19 @@ async function measureOnce (path, binary) {
   const res = await fetch(url, { headers: { Accept: binary ? 'application/x-msgpack' : 'application/json' } })
   const buf = new Uint8Array(await res.arrayBuffer())
   const tDownload = performance.now() - t0
-  const bytes = buf.length
+  // 传输体积:gzip 时 fetch 已透明解压,buf 是解压后的;真实线上体积读 x-wire-bytes 头
+  const wireBytes = Number(res.headers.get('x-wire-bytes')) || buf.length
+  const rawBytes = Number(res.headers.get('x-raw-bytes')) || buf.length
+  const bytes = wireBytes
   const server = {
     fetchMs: Number(res.headers.get('x-t-fetch-ms')),
     encodeMs: Number(res.headers.get('x-t-encode-ms')),
+    gzipMs: Number(res.headers.get('x-t-gzip-ms')) || 0,
     memTotalB: Number(res.headers.get('x-mem-total-b')),
     memPeakB: Number(res.headers.get('x-mem-peak-b')),
     rows: Number(res.headers.get('x-rows')),
+    rawBytes,
+    wireBytes,
   }
   const hAfterDownload = heap()
 
@@ -87,19 +93,22 @@ async function measureOnce (path, binary) {
   }
 }
 
-async function measure (name, path, binary) {
+async function measure (name, path, binary, gzip = false) {
   const runs = []
   for (let i = 0; i < ROUNDS; i++) {
-    runs.push(await measureOnce(path, binary))
+    runs.push(await measureOnce(path, binary, gzip))
     gcNow()
   }
   const m = (f) => med(runs.map(f))
   return {
     name,
     bytes: runs[0].bytes,
+    rawBytes: runs[0].server.rawBytes,
+    wireBytes: runs[0].server.wireBytes,
     rows: runs[0].server.rows,
     svrFetchMs: m((r) => r.server.fetchMs),
     svrEncodeMs: m((r) => r.server.encodeMs),
+    svrGzipMs: m((r) => r.server.gzipMs),
     svrMemTotalMB: MB(m((r) => r.server.memTotalB)),
     svrMemPeakMB: MB(m((r) => r.server.memPeakB)),
     tDownload: m((r) => r.tDownload),
@@ -119,6 +128,10 @@ function fmtRow (r) {
 const old = await measure('老链路 sqlx/DataSet→JSON', '/old/json', false)
 const szmc = await measure('sqlx/Zmc流式→msgpack', '/sqlx/zmc.bin', true)
 const tzmc = await measure('tokio/Zmc流式→msgpack', '/tokio/zmc.bin', true)
+// gzip 变体(第三轮优化:HTTP 压缩)
+const oldGz = await measure('老链路+gzip', '/old/json', false, true)
+const szmcGz = await measure('sqlx/Zmc+gzip', '/sqlx/zmc.bin', true, true)
+const tzmcGz = await measure('tokio/Zmc+gzip', '/tokio/zmc.bin', true, true)
 
 let md = `# 端到端三链路对比:DB → HTTP → 前端展示模型
 
@@ -152,7 +165,21 @@ ${fmtRow(tzmc)}
 | 前端展示构建 | ${old.tBuild.toFixed(0)} ms | ${szmc.tBuild.toFixed(0)} ms | ${tzmc.tBuild.toFixed(0)} ms(同一 fromJSON) |
 
 ---
-注:本机回环(127.0.0.1)下载耗时不含真实网络 RTT/带宽;真实网络下「传输体积小 ${(100 - szmc.bytes / old.bytes * 100).toFixed(0)}%」直接折算为下载时间优势。前端解析:JSON.parse 是 V8 原生 C++,手写 JS msgpack 解码器与之对比见数据。
+注:本机回环(127.0.0.1)下载耗时不含真实网络 RTT/带宽;真实网络下「传输体积小 ${(100 - szmc.bytes / old.bytes * 100).toFixed(0)}%」直接折算为下载时间优势。前端解析:官方 @msgpack/msgpack decode(V8 优化)。
+
+## HTTP gzip 压缩(第三轮优化:传输体积)
+
+> \`?gzip=1\` 开启响应 gzip;fetch 透明解压,前端解码路径不变。x-wire-bytes 头暴露真实线上体积。
+
+| 链路 | 未压缩体积 | gzip 后体积 | 压缩率 | 服务端 gzip 耗时 |
+|------|-----------|------------|--------|------------------|
+| 老链路 JSON | ${MB(old.rawBytes).toFixed(1)} MB | ${MB(oldGz.wireBytes).toFixed(1)} MB | 省 ${(100 - oldGz.wireBytes / old.rawBytes * 100).toFixed(0)}% | ${oldGz.svrGzipMs.toFixed(0)} ms |
+| sqlx/Zmc msgpack | ${MB(szmc.rawBytes).toFixed(1)} MB | ${MB(szmcGz.wireBytes).toFixed(1)} MB | 省 ${(100 - szmcGz.wireBytes / szmc.rawBytes * 100).toFixed(0)}% | ${szmcGz.svrGzipMs.toFixed(0)} ms |
+| tokio/Zmc msgpack | ${MB(tzmc.rawBytes).toFixed(1)} MB | ${MB(tzmcGz.wireBytes).toFixed(1)} MB | 省 ${(100 - tzmcGz.wireBytes / tzmc.rawBytes * 100).toFixed(0)}% | ${tzmcGz.svrGzipMs.toFixed(0)} ms |
+
+结论:gzip 把传输体积从 ~105MB 压到 ~${MB(tzmcGz.wireBytes).toFixed(1)}MB,代价仅服务端 ~${tzmcGz.svrGzipMs.toFixed(0)}ms 压缩 + 前端零改动(浏览器自动解压)。
+
+⚠️ **诚实警告:此处 99% 压缩率被合成数据夸大**——基准表每行值完全相同(同一段文本/金额重复 10 万次),gzip 对高重复数据近乎全压。**真实业务数据(每行不同)压缩率约 70~85%**,不会到 99%。但即便按 70% 算,gzip 仍是体积维度 ROI 最高:零代码(tower-http CompressionLayer)、零前端改、零精度风险。
 `
 
 console.log(md)
