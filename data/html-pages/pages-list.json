@@ -890,6 +890,95 @@
       "page": "doc-service-test",
       "relPath": "fi/cmxfico/doc-service-test.html",
       "latestHtmlFile": "doc-service-test.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-model",
+      "latestHtmlFile": "fico-ws-doc-model.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··共享模型(隐藏)",
+      "page": "fico-ws-doc-model",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-model",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-explorer",
+      "latestHtmlFile": "fico-ws-doc-explorer.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··凭证批列表(explorer)",
+      "page": "fico-ws-doc-explorer",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-explorer",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-content",
+      "latestHtmlFile": "fico-ws-doc-content.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··凭证头+科目行+辅助行(content)",
+      "page": "fico-ws-doc-content",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-content",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-content.html",
+      "details": ""
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-source",
+      "latestHtmlFile": "fico-ws-doc-source.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··源数据(content)",
+      "page": "fico-ws-doc-source",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-source",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-source.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-prop-detail",
+      "latestHtmlFile": "fico-ws-doc-prop-detail.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··明细(property)",
+      "page": "fico-ws-doc-prop-detail",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-prop-detail",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-prop-detail.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-prop-actions",
+      "latestHtmlFile": "fico-ws-doc-prop-actions.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··扩展操作(property)",
+      "page": "fico-ws-doc-prop-actions",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-prop-actions",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-prop-actions.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-prop-fx",
+      "latestHtmlFile": "fico-ws-doc-prop-fx.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··外币管理(property)",
+      "page": "fico-ws-doc-prop-fx",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-prop-fx",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-prop-fx.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.fico-ws-doc-prop-budget",
+      "latestHtmlFile": "fico-ws-doc-prop-budget.html",
+      "module": "gl",
+      "name": "cmx-fico三区·doc服务版··预算管理(property)",
+      "page": "fico-ws-doc-prop-budget",
+      "pageId": "fi.cmxfico.gl.fico-ws-doc-prop-budget",
+      "relPath": "fi/cmxfico/gl/fico-ws-doc-prop-budget.html"
     }
   ]
 }

@@ -963,6 +963,89 @@
      }
     },
     {
+     "id": "fi-gl-fico-ws-doc",
+     "name": "fico-ws-doc",
+     "caption": "ERP凭证(doc服务版)",
+     "type": "workspace-node",
+     "permissionId": null,
+     "icon": "business-objects-experience",
+     "workspace": {
+      "id": "fico_ws_doc",
+      "model": {
+       "type": "html_pages",
+       "html_page": "fi.cmxfico.gl.fico-ws-doc-model",
+       "id": "fico-ws-doc-model"
+      },
+      "explorer": {
+       "caption": "凭证批",
+       "icon": "list",
+       "views": [
+        {
+         "id": "fico-ws-doc-explorer",
+         "tabLabel": "凭证批",
+         "icon": "list",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-explorer"
+        }
+       ]
+      },
+      "content": {
+       "caption": "凭证",
+       "icon": "document-text",
+       "views": [
+        {
+         "id": "fico-ws-doc-content",
+         "tabLabel": "凭证视图",
+         "icon": "document-text",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-content"
+        },
+        {
+         "id": "fico-ws-doc-source",
+         "tabLabel": "凭证数据",
+         "icon": "source-code",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-source"
+        }
+       ]
+      },
+      "property": {
+       "caption": "属性/操作",
+       "icon": "detail-view",
+       "views": [
+        {
+         "id": "fico-ws-doc-prop-detail",
+         "tabLabel": "详情",
+         "icon": "detail-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-detail"
+        },
+        {
+         "id": "fico-ws-doc-prop-actions",
+         "tabLabel": "扩展操作",
+         "icon": "action-settings",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-actions"
+        },
+        {
+         "id": "fico-ws-doc-prop-fx",
+         "tabLabel": "外币管理",
+         "icon": "currency",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-fx"
+        },
+        {
+         "id": "fico-ws-doc-prop-budget",
+         "tabLabel": "预算管理",
+         "icon": "money-bills",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.fico-ws-doc-prop-budget"
+        }
+       ]
+      }
+     }
+    },
+    {
      "id": "fi-gl-dict-ws",
      "name": "dict-ws",
      "caption": "合并组织机构维护",
