@@ -1,5 +1,7 @@
 //! 通知存储：`notification-center/<userId>/<center>/<file>.json`，一条通知一个文件。
 
+use std::cmp::Reverse;
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -149,7 +151,7 @@ async fn read_center(user_id: &str, center: NotifyCenter) -> PortalResult<Vec<No
             Err(_) => continue, // 单条损坏不影响其余
         }
     }
-    out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    out.sort_by_key(|b| Reverse(b.created_at));
     Ok(out)
 }
 
@@ -163,7 +165,7 @@ pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<V
             for c in NotifyCenter::all() {
                 out.extend(read_center(&u, c).await?);
             }
-            out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            out.sort_by_key(|b| Reverse(b.created_at));
         }
     }
     Ok(out)
@@ -327,6 +329,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn publish_count_read_roundtrip() {
         let _env = crate::util::test_data_root_lock().lock().unwrap();
         let unique = format!("notify-it-{}-{}", std::process::id(), now_millis());

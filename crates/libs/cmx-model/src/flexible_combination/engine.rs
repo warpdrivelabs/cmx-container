@@ -314,7 +314,7 @@ impl<'a> Engine<'a> {
 
         // 按定义顺序（order 升序）
         let mut by_def = matched.clone();
-        by_def.sort_by(|a, b| a.2.cmp(&b.2));
+        by_def.sort_by_key(|a| a.2);
 
         // 字段：位置取首现，值取高分（同分保留先到）
         let mut by_code: std::collections::HashMap<String, (Value, f64, usize)> =
@@ -347,7 +347,7 @@ impl<'a> Engine<'a> {
             }
         }
         let mut field_entries: Vec<(Value, f64, usize)> = by_code.into_values().collect();
-        field_entries.sort_by(|a, b| a.2.cmp(&b.2));
+        field_entries.sort_by_key(|a| a.2);
         let fields: Vec<Value> = field_entries.into_iter().map(|x| x.0).collect();
 
         // 分组：定义顺序拼接
@@ -932,7 +932,7 @@ impl<'a> Engine<'a> {
         // 去重保序（direct 在前）
         let mut seen = std::collections::HashSet::new();
         let mut out = Vec::new();
-        for id in direct.into_iter().chain(downstream.into_iter()) {
+        for id in direct.into_iter().chain(downstream) {
             if seen.insert(id.clone()) {
                 out.push(id);
             }

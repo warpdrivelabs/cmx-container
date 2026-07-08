@@ -4,6 +4,7 @@
 //!   - 驱动：`sqlx`（PG/MySQL/SQLite）| `tokio`（tokio-postgres）
 //!   - 内存模式：`dataset`（老 DataSet，全拷贝）| `zmc`（ZmcDataSet，持原始行零拷贝）
 //!   - 传输：`json`（ApiResp JSON 信封）| `msgpack`（列式二进制信封）
+//!
 //!   驱动 sqlx|tokio × 内存 dataset|zmc × 传输 json|msgpack 的组合端点：
 //!     · `sqlx-dataset-json`   sqlx + DataSet + JSON（老链路）
 //!     · `tokio-zmc-msgpack`   tokio + ZmcDataSet + msgpack 二进制
@@ -73,14 +74,13 @@ enum Exit {
 fn simple_doc_query(meta: &DocMetaView, q: &DocDataQuery) -> DocQuery {
     let root_id = meta.root_layer().map(|l| l.id.clone()).unwrap_or_default();
     let mut dq = DocQuery::simple(&root_id, q.limit, q.depth);
-    if let Some(f) = &q.filter {
-        if let Some((col, val)) = f.split_once(':') {
+    if let Some(f) = &q.filter
+        && let Some((col, val)) = f.split_once(':') {
             // 简单等值 → 根层 filter JSON
             let filter = serde_json::json!({ col: val });
             let lq = dq.layers.entry(root_id.clone()).or_default();
             lq.filter = cmx_biz::doc::Filter::from_json(&filter).ok().flatten();
         }
-    }
     dq
 }
 
@@ -282,15 +282,14 @@ pub async fn doc_children(
         depth: req.depth,
         ..Default::default()
     };
-    if let Some(v) = &req.query {
-        if !v.is_null() {
+    if let Some(v) = &req.query
+        && !v.is_null() {
             let lq_json = serde_json::json!({ "layers": { &req.layer: v } });
             let parsed = DocQuery::from_json(&lq_json)?;
             if let Some(lq) = parsed.layers.get(&req.layer) {
                 dq.layers.insert(req.layer.clone(), lq.clone());
             }
         }
-    }
     dq.validate(&meta)?;
 
     // 以该层为根、给定父 id 下钻装载子树（sqlx 可选，默认 tokio）。
@@ -350,14 +349,17 @@ pub async fn doc_data_stream(
         let dq = DocQuery::from_json(&serde_json::json!({ "layers": { &layer_id: body_val } }))?;
         dq.layer(&layer_id)
     } else {
-        let mut lq = LayerQuery::default();
-        lq.limit = q.limit;
-        if let Some(f) = &q.filter {
-            if let Some((col, val)) = f.split_once(':') {
-                lq.filter = cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?;
-            }
+        let filter = if let Some(f) = &q.filter
+            && let Some((col, val)) = f.split_once(':') {
+                cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?
+            } else {
+                None
+            };
+        LayerQuery {
+            limit: q.limit,
+            filter,
+            ..Default::default()
         }
-        lq
     };
     lq.validate_against(layer)?;
 
@@ -545,11 +547,10 @@ pub async fn doc_save(
     let (mode, changes) = saver::parse_save_body(&body);
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
-    if !meta.validation_rules.is_empty() {
-        if let Some(vr) = run_validation(&meta, &changes) {
+    if !meta.validation_rules.is_empty()
+        && let Some(vr) = run_validation(&meta, &changes) {
             return Ok(Json(ApiResp::ok(vr)));
         }
-    }
 
     let result = DocSaver::save(mm, &db_id, &meta, mode, &changes).await?;
 

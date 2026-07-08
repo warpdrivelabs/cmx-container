@@ -304,14 +304,13 @@ impl Parser {
         Ok(left)
     }
     fn parse_unary(&mut self) -> Result<Node, String> {
-        if let Some(Tok::Op(o)) = self.peek() {
-            if o == "-" || o == "!" {
+        if let Some(Tok::Op(o)) = self.peek()
+            && (o == "-" || o == "!") {
                 let op = o.clone();
                 self.next();
                 let operand = self.parse_unary()?;
                 return Ok(Node::Unary(op, Box::new(operand)));
             }
-        }
         self.parse_primary()
     }
     fn parse_primary(&mut self) -> Result<Node, String> {
@@ -427,7 +426,7 @@ fn eval_call(name: &str, args: &[Node], scope: &Scope) -> Result<FValue, String>
         "ABS" => Ok(FValue::Num(ev(&args[0])?.as_num().abs())),
         "ROUND" => {
             let x = ev(&args[0])?.as_num();
-            let digits = args.get(1).map(|a| ev(a)).transpose()?.map(|v| v.as_num() as i32).unwrap_or(0);
+            let digits = args.get(1).map(&ev).transpose()?.map(|v| v.as_num() as i32).unwrap_or(0);
             let f = 10f64.powi(digits);
             Ok(FValue::Num((x * f).round() / f))
         }
@@ -558,6 +557,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn functions() {
         let s = scope(&[("x", -7.0)]);
         assert_eq!(eval_formula("ABS(x)", &s).unwrap(), FValue::Num(7.0));

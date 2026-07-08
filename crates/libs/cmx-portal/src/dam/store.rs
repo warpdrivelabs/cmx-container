@@ -277,7 +277,7 @@ async fn ensure_tree_dirs(parts: &[String]) -> PortalResult<()> {
 /// 为整份注册表创建所有层级目录。
 async fn ensure_registry_dirs(reg: &DamRegistry) -> PortalResult<()> {
     for d in &reg.domains {
-        ensure_tree_dirs(&[d.id.clone()]).await?;
+        ensure_tree_dirs(std::slice::from_ref(&d.id)).await?;
     }
     for a in &reg.applications {
         ensure_tree_dirs(&[a.domain.clone(), a.id.clone()]).await?;
@@ -455,7 +455,7 @@ pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain>
             }
             m.domain = item.id.clone();
         }
-        rename_tree_dirs(&[old_id.clone()], &[item.id.clone()]).await?;
+        rename_tree_dirs(std::slice::from_ref(&old_id), std::slice::from_ref(&item.id)).await?;
     }
     ensure_registry_dirs(&reg).await?;
     save_registry(&reg).await?;

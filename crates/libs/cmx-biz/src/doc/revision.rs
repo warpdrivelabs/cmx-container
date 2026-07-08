@@ -194,7 +194,7 @@ impl DocRevision {
             .rows
             .first()
             .and_then(|r| snap_idx.and_then(|i| r.get(i)))
-            .map(|dv| datavalue_to_json(dv))
+            .map(datavalue_to_json)
             .unwrap_or(Value::Null);
         // JSONB 列取回可能是 Json(String)，解析成对象
         Ok(normalize_jsonb(val))

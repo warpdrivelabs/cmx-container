@@ -367,6 +367,7 @@ mod tests {
 
     /// 用一个唯一的临时数据根验证 help store 的 save → catalog → get → delete 全链路 + 校验。
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn help_doc_roundtrip_and_validation() {
         // 串行化对 CMX_PORTAL_DATA_ROOT 的修改，避免与其它切换数据根的测试并行污染。
         let _env = crate::util::test_data_root_lock().lock().unwrap();

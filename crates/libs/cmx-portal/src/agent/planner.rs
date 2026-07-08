@@ -102,11 +102,9 @@ fn parse_loose_value(raw: &str) -> Value {
     if regex::Regex::new(r"^-?\d+(\.\d+)?$")
         .unwrap()
         .is_match(text)
-    {
-        if let Ok(n) = text.parse::<f64>() {
+        && let Ok(n) = text.parse::<f64>() {
             return json!(n);
         }
-    }
     json!(text.trim_matches(|c| "\"'“”‘’".contains(c)))
 }
 

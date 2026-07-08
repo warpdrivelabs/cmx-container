@@ -189,20 +189,17 @@ where
             if data.is_empty() || data == "[DONE]" {
                 continue;
             }
-            if let Ok(v) = serde_json::from_str::<Value>(data) {
-                if let Some(delta) = v
+            if let Ok(v) = serde_json::from_str::<Value>(data)
+                && let Some(delta) = v
                     .get("choices")
                     .and_then(|c| c.get(0))
                     .and_then(|c| c.get("delta"))
                     .and_then(|d| d.get("content"))
                     .and_then(|s| s.as_str())
-                {
-                    if !delta.is_empty() {
+                    && !delta.is_empty() {
                         full.push_str(delta);
                         on_delta(delta);
                     }
-                }
-            }
         }
     }
     if full.trim().is_empty() {

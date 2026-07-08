@@ -246,11 +246,10 @@ impl LayerQuery {
         }
         lq.limit = v.get("limit").and_then(|x| x.as_u64());
         lq.offset = v.get("offset").and_then(|x| x.as_u64());
-        if let Some(c) = v.get("cursor").and_then(|x| x.as_str()) {
-            if !c.is_empty() {
+        if let Some(c) = v.get("cursor").and_then(|x| x.as_str())
+            && !c.is_empty() {
                 lq.cursor = Some(Cursor::decode(c)?);
             }
-        }
         Ok(lq)
     }
 

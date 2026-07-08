@@ -49,6 +49,7 @@ pub async fn setup_db_manager() -> DatabaseManager {
 ///
 /// # Panics
 /// DDL 执行失败时 panic
+#[allow(dead_code)]
 pub async fn ensure_tables(manager: &DatabaseManager) {
     // 逐条执行(prepared statement 不支持多条 SQL 合并)
     let stmts: &[&str] = &[

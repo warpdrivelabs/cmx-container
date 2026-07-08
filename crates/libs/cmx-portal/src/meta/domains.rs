@@ -104,6 +104,7 @@ mod tests {
     /// 用 CMXPortalManager 的真实 `data/` 目录验证 DAM 派生逻辑与 Node 等价：
     /// 必须 `source=dam`、版本=1、domains 非空，且每个域含完整字段且 application==activitie==id。
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn domains_derived_from_dam_registry() {
         // 串行化对 CMX_PORTAL_DATA_ROOT 的修改，避免与其它切换数据根的测试并行污染。
         let _env = crate::util::test_data_root_lock().lock().unwrap();

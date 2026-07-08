@@ -632,10 +632,9 @@ fn pct_save(base: usize, v: usize) -> String {
 }
 
 fn mask(url: &str) -> String {
-    if let Some(at) = url.rfind('@') {
-        if let Some(scheme) = url.find("://") {
+    if let Some(at) = url.rfind('@')
+        && let Some(scheme) = url.find("://") {
             return format!("{}://***@{}", &url[..scheme], &url[at + 1..]);
         }
-    }
     url.to_string()
 }

@@ -153,7 +153,7 @@ async fn persist_datasource_configs(
         .await
         .map_err(|e| Error::DatasourceInit(format!("查询数据源失败: {}", e)))?;
 
-        let entity_for_update = dbconfig_to_entity_for_update(&config);
+        let entity_for_update = dbconfig_to_entity_for_update(config);
 
         if existing.iter().count() > 0 {
             if let Some(data_row) = existing.iter().next() {
@@ -176,7 +176,7 @@ async fn persist_datasource_configs(
             continue;
         }
 
-        let entity = dbconfig_to_entity(&config);
+        let entity = dbconfig_to_entity(config);
 
         GenericCrudService::<SysDatasourceBmc>::create(mm, db_id, None, entity)
             .await

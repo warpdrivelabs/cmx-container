@@ -31,7 +31,7 @@ pub enum SaveMode {
 }
 
 impl SaveMode {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "replace" => SaveMode::Replace,
             _ => SaveMode::Merge,
@@ -126,18 +126,16 @@ impl DocSaver {
                 continue;
             };
 
-            if let Some(rows) = layer_changes.get("inserted").and_then(|v| v.as_array()) {
-                if !rows.is_empty() {
+            if let Some(rows) = layer_changes.get("inserted").and_then(|v| v.as_array())
+                && !rows.is_empty() {
                     write_expected += rows.len() as u64;
                     write_affected += Self::upsert_rows(mm, db_id, txn_id, layer, rows).await?;
                 }
-            }
-            if let Some(rows) = layer_changes.get("updated").and_then(|v| v.as_array()) {
-                if !rows.is_empty() {
+            if let Some(rows) = layer_changes.get("updated").and_then(|v| v.as_array())
+                && !rows.is_empty() {
                     write_expected += rows.len() as u64;
                     write_affected += Self::update_rows(mm, db_id, txn_id, layer, rows).await?;
                 }
-            }
         }
         affected += write_affected;
 
@@ -150,11 +148,10 @@ impl DocSaver {
             else {
                 continue;
             };
-            if let Some(ids) = layer_changes.get("deleted").and_then(|v| v.as_array()) {
-                if !ids.is_empty() {
+            if let Some(ids) = layer_changes.get("deleted").and_then(|v| v.as_array())
+                && !ids.is_empty() {
                     affected += Self::delete_ids(mm, db_id, txn_id, layer, ids).await?;
                 }
-            }
         }
 
         // 对账（H1/H2）：INSERT+UPDATE 每行必须精确落地。实际 < 期望 = 有行未写
@@ -445,12 +442,11 @@ impl DocSaver {
         let mut vals = Vec::new();
         // 顶层 id / upper_id / line_no（若在 schema）
         for top in ["id", "upper_id", "line_no"] {
-            if layer.schema.get_index(top).is_some() {
-                if let Some(v) = row.get(top) {
+            if layer.schema.get_index(top).is_some()
+                && let Some(v) = row.get(top) {
                     cols.push(top.to_string());
                     vals.push(dv_for_col(v, layer, top));
                 }
-            }
         }
         // fields 里的业务列
         if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
@@ -702,7 +698,7 @@ pub fn parse_save_body(body: &Value) -> (SaveMode, Value) {
     let mode = body
         .get("saveMode")
         .and_then(|v| v.as_str())
-        .map(SaveMode::from_str)
+        .map(SaveMode::parse)
         .unwrap_or(SaveMode::Merge);
     let changes = match mode {
         SaveMode::Merge => body.get("changes").cloned().unwrap_or(Value::Null),
@@ -739,10 +735,10 @@ mod tests {
     }
 
     #[test]
-    fn save_mode_from_str() {
-        assert_eq!(SaveMode::from_str("replace"), SaveMode::Replace);
-        assert_eq!(SaveMode::from_str("merge"), SaveMode::Merge);
-        assert_eq!(SaveMode::from_str("xyz"), SaveMode::Merge);
+    fn save_mode_parse() {
+        assert_eq!(SaveMode::parse("replace"), SaveMode::Replace);
+        assert_eq!(SaveMode::parse("merge"), SaveMode::Merge);
+        assert_eq!(SaveMode::parse("xyz"), SaveMode::Merge);
     }
 
     #[test]

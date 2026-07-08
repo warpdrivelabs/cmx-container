@@ -265,11 +265,10 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
         for group in &self.children {
             let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
             for (child_row_idx, pid) in group.parent_ids.iter().enumerate() {
-                if let Some(set) = scope {
-                    if !set.contains(pid) {
+                if let Some(set) = scope
+                    && !set.contains(pid) {
                         continue; // 该子行的父不在当前子集内,跳过(核心:限定下钻范围)
                     }
-                }
                 buckets.entry(pid.clone()).or_default().push(child_row_idx);
             }
             for (pid, idxs) in buckets {
@@ -529,11 +528,11 @@ fn write_rfc3339_utc(out: &mut String, dt: &chrono::DateTime<chrono::Utc>) {
     // 小数秒对齐 to_rfc3339 的 AutoSi:0 → 省略;毫秒整 → 3 位;微秒整 → 6 位;否则 9 位
     if nanos != 0 {
         out.push('.');
-        if nanos % 1_000_000 == 0 {
+        if nanos.is_multiple_of(1_000_000) {
             let ms = nanos / 1_000_000;
             out.push((b'0' + (ms / 100) as u8) as char);
             push2(out, ms % 100);
-        } else if nanos % 1_000 == 0 {
+        } else if nanos.is_multiple_of(1_000) {
             let us = nanos / 1_000;
             let mut div = 100_000;
             for _ in 0..6 {

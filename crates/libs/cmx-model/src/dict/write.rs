@@ -119,7 +119,7 @@ fn big_query() -> repo::SearchQuery {
 fn merge_by_id(existing: Vec<Value>, incoming: Vec<Value>, id_field: &str) -> Vec<Value> {
     let mut order: Vec<String> = Vec::new();
     let mut map: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
-    for r in existing.into_iter().chain(incoming.into_iter()) {
+    for r in existing.into_iter().chain(incoming) {
         let k = field_str(&r, id_field);
         if !map.contains_key(&k) {
             order.push(k.clone());
@@ -151,7 +151,7 @@ fn build_tree_fields(
     fn visit(
         id: &str,
         map: &HashMap<String, Value>,
-        id_field: &str,
+        _id_field: &str,
         parent_field: &str,
         visited: &mut std::collections::HashSet<String>,
         computed: &mut HashMap<String, (i64, Vec<String>)>,
@@ -163,7 +163,7 @@ fn build_tree_fields(
         let Some(node) = map.get(id) else { return };
         let pid = field_str(node, parent_field);
         let (level, path) = if !pid.is_empty() && map.contains_key(&pid) {
-            visit(&pid, map, id_field, parent_field, visited, computed);
+            visit(&pid, map, _id_field, parent_field, visited, computed);
             let (plevel, ppath) = computed
                 .get(&pid)
                 .cloned()
@@ -227,9 +227,7 @@ fn enrich_batch(
         if let Some(v) = enriched_map.get(id) {
             return v.clone();
         }
-        let Some(e) = batch_map.get(id) else {
-            return None;
-        };
+        let e = batch_map.get(id)?;
         // 占位防循环
         enriched_map.insert(id.to_string(), None);
         let pid = field_str(e, parent_field);

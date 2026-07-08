@@ -70,7 +70,7 @@ fn opt_str<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
-fn app_arg<'a>(args: &'a Value) -> Option<&'a str> {
+fn app_arg(args: &Value) -> Option<&str> {
     opt_str(args, "app").or_else(|| opt_str(args, "application"))
 }
 
@@ -756,13 +756,12 @@ pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value>
     }
     let mut diagnostics: Vec<Value> = Vec::new();
     for file in files.iter().take(200) {
-        if let Ok(content) = tokio::fs::read_to_string(file).await {
-            if let Err(e) = serde_json::from_str::<Value>(&content) {
+        if let Ok(content) = tokio::fs::read_to_string(file).await
+            && let Err(e) = serde_json::from_str::<Value>(&content) {
                 diagnostics.push(
                     json!({ "file": relative_from_root(root, file), "error": e.to_string() }),
                 );
             }
-        }
     }
     Ok(json!({ "checked": files.len(), "errors": diagnostics }))
 }
@@ -1581,8 +1580,8 @@ fn parse_lint_diagnostics(cmd: &str, output: &str) -> Vec<Value> {
             current_file = trimmed.to_string();
             continue;
         }
-        if let Some(c) = re.captures(line) {
-            if !current_file.is_empty() {
+        if let Some(c) = re.captures(line)
+            && !current_file.is_empty() {
                 diagnostics.push(json!({
                     "file": current_file,
                     "line": c[1].parse::<i64>().unwrap_or(0),
@@ -1592,7 +1591,6 @@ fn parse_lint_diagnostics(cmd: &str, output: &str) -> Vec<Value> {
                     "rule": &c[5],
                 }));
             }
-        }
     }
     diagnostics
 }

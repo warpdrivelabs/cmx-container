@@ -4,7 +4,7 @@
 //! - `db_state`：读目标库台账（cmx_model_meta / cmx_model_module），组合出每模块每 kind 的 scenario。
 //! - `init_db`：在目标库建 5 张台账系统表 + 写 cmx_model_meta + 历史（真实建表）。
 //! - `deploy`：把选中的 DCT/DOC 定义编译成 TableDefine，用 PgTableDefineExecutor 建到目标库，
-//!             写对象台账 + cmx_model_module + cmx_model_source（源 JSON 留档）+ 历史。
+//!   写对象台账 + cmx_model_module + cmx_model_source（源 JSON 留档）+ 历史。
 //!
 //! 关键约束（见 docs/模型中心-…设计.md）：
 //! - 建表现状对比只用数据库内省（PgTableDefineExecutor 内部走 information_schema，不读台账）。
@@ -17,6 +17,7 @@ use cmx_database::get_default_db_manager;
 use cmx_metadata::{PgTableDefineExecutor, TableDefineDbExecutor};
 use cmx_utils::snowflake_id_str;
 use serde_json::{Value, json};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
 use crate::Result;
@@ -228,22 +229,20 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
                            ord: &mut u32| {
             for f in fields {
                 *ord += 1;
-                if let Some(c) = field_to_column(f, id_field, *ord) {
-                    if seen.insert(c.name.clone()) {
+                if let Some(c) = field_to_column(f, id_field, *ord)
+                    && seen.insert(c.name.clone()) {
                         columns.push(c);
                     }
-                }
             }
         };
         if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
             push_fields(own, &mut columns, &mut seen, &mut ord);
         }
         for set_key in ["baseFieldSet", "auditFieldSet", "systemFieldSet"] {
-            if let Some(set_name) = t.get(set_key).and_then(|v| v.as_str()) {
-                if let Some(fields) = base_fieldset(base, set_name) {
+            if let Some(set_name) = t.get(set_key).and_then(|v| v.as_str())
+                && let Some(fields) = base_fieldset(base, set_name) {
                     push_fields(fields, &mut columns, &mut seen, &mut ord);
                 }
-            }
         }
 
         let primary_keys: Vec<String> = columns
@@ -298,29 +297,26 @@ fn compile_doc_table(t: &Value, base: &Value) -> Option<TableDefine> {
     if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
         for f in own {
             ord += 1;
-            if let Some(c) = field_to_column(f, id_field, ord) {
-                if seen.insert(c.name.clone()) {
+            if let Some(c) = field_to_column(f, id_field, ord)
+                && seen.insert(c.name.clone()) {
                     columns.push(c);
                 }
-            }
         }
     }
     // documentFieldSets: [ "voucherCommonFields", ... ] 引用 base。汇总表通常不配，
     // 但保留同样展开能力，便于后续把通用审计字段抽到 base。
     if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
         for s in sets {
-            if let Some(set_name) = s.as_str() {
-                if let Some(fields) = base_fieldset(base, set_name) {
+            if let Some(set_name) = s.as_str()
+                && let Some(fields) = base_fieldset(base, set_name) {
                     for f in fields {
                         ord += 1;
-                        if let Some(c) = field_to_column(f, id_field, ord) {
-                            if seen.insert(c.name.clone()) {
+                        if let Some(c) = field_to_column(f, id_field, ord)
+                            && seen.insert(c.name.clone()) {
                                 columns.push(c);
                             }
-                        }
                     }
                 }
-            }
         }
     }
 
@@ -361,19 +357,17 @@ fn compile_doc(doc: &Value, base: &Value) -> Vec<TableDefine> {
     let mut out = Vec::new();
     let mut seen_tables: std::collections::HashSet<String> = std::collections::HashSet::new();
     for t in tables {
-        if let Some(def) = compile_doc_table(t, base) {
-            if seen_tables.insert(def.table_name.clone()) {
+        if let Some(def) = compile_doc_table(t, base)
+            && seen_tables.insert(def.table_name.clone()) {
                 out.push(def);
             }
-        }
         for key in ["summaries", "sum"] {
             if let Some(summaries) = t.get(key).and_then(|v| v.as_array()) {
                 for summary in summaries {
-                    if let Some(def) = compile_doc_table(summary, base) {
-                        if seen_tables.insert(def.table_name.clone()) {
+                    if let Some(def) = compile_doc_table(summary, base)
+                        && seen_tables.insert(def.table_name.clone()) {
                             out.push(def);
                         }
-                    }
                 }
             }
         }
@@ -381,9 +375,9 @@ fn compile_doc(doc: &Value, base: &Value) -> Vec<TableDefine> {
     out
 }
 
-/// 台账系统表本身的 TableDefine（初始化时建入目标库）。此处直接给最小结构，
-/// 完整列由迁移 SQL 保证；这里仅用于「目标库没有该表时」由引擎补齐 + 未来 diff 升级。
-/// 为稳妥，实际初始化改为直接执行 CREATE TABLE IF NOT EXISTS（见 init_db）。
+// 台账系统表本身的 TableDefine（初始化时建入目标库）。此处直接给最小结构，
+// 完整列由迁移 SQL 保证；这里仅用于「目标库没有该表时」由引擎补齐 + 未来 diff 升级。
+// 为稳妥，实际初始化改为直接执行 CREATE TABLE IF NOT EXISTS（见 init_db）。
 
 // ════════════════════════════════════════════════════════════════════════
 //  二、内省辅助：读定义文件（复用 definitions store）
@@ -828,7 +822,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         tables: i64,
         summary: String,
     }
-    let mut mods: std::collections::BTreeMap<
+    // module -> (domain, application, module_code, display_name, kinds)
+    type ModuleMap = std::collections::BTreeMap<
         String,
         (
             String,
@@ -837,7 +832,8 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             String,
             std::collections::HashMap<&'static str, KindDef>,
         ),
-    > = std::collections::BTreeMap::new();
+    >;
+    let mut mods: ModuleMap = std::collections::BTreeMap::new();
     let mut versions: std::collections::BTreeMap<
         String,
         std::collections::HashMap<&'static str, Vec<KindDef>>,
@@ -941,7 +937,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
                 .and_then(|m| m.get(kind))
                 .cloned()
                 .unwrap_or_default();
-            vers.sort_by(|a, b| b.ver.cmp(&a.ver));
+            vers.sort_by_key(|b| Reverse(b.ver));
             let latest = def.map(|k| k.ver.to_string());
             let (app_ver, status) = applied
                 .and_then(|a| a.get(kind.to_lowercase()))
@@ -1000,7 +996,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         let domain = applied
             .get("domain")
             .and_then(|v| v.as_str())
-            .unwrap_or_else(|| parts.get(0).copied().unwrap_or(""));
+            .unwrap_or_else(|| parts.first().copied().unwrap_or(""));
         let app = applied
             .get("application")
             .and_then(|v| v.as_str())
@@ -1017,7 +1013,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
                 .and_then(|m| m.get(kind))
                 .cloned()
                 .unwrap_or_default();
-            vers.sort_by(|a, b| b.ver.cmp(&a.ver));
+            vers.sort_by_key(|b| Reverse(b.ver));
             let k = applied
                 .get(kind.to_lowercase())
                 .cloned()

@@ -457,26 +457,23 @@ fn parse_layer(
 
     if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
         for f in own {
-            if let Some(c) = parse_column(f) {
-                if seen.insert(c.name.clone()) {
+            if let Some(c) = parse_column(f)
+                && seen.insert(c.name.clone()) {
                     columns.push(c);
                 }
-            }
         }
     }
     if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
         for s in sets {
-            if let Some(set_name) = s.as_str() {
-                if let Some(fields) = base_fieldset(base, set_name) {
+            if let Some(set_name) = s.as_str()
+                && let Some(fields) = base_fieldset(base, set_name) {
                     for f in fields {
-                        if let Some(c) = parse_column(f) {
-                            if seen.insert(c.name.clone()) {
+                        if let Some(c) = parse_column(f)
+                            && seen.insert(c.name.clone()) {
                                 columns.push(c);
                             }
-                        }
                     }
                 }
-            }
         }
     }
 
@@ -561,11 +558,10 @@ fn parse_summaries(t: &Value, source_table: &str) -> Result<Vec<SummaryView>> {
         let mut seen: HashSet<String> = HashSet::new();
         if let Some(fields) = s.get("fields").and_then(|v| v.as_array()) {
             for f in fields {
-                if let Some(c) = parse_column(f) {
-                    if seen.insert(c.name.clone()) {
+                if let Some(c) = parse_column(f)
+                    && seen.insert(c.name.clone()) {
                         columns.push(c);
                     }
-                }
             }
         }
         let schema = build_schema(&id, &columns)
@@ -750,7 +746,7 @@ mod tests {
         // Schema 建成，字段数一致
         assert_eq!(batch.schema.field_count(), batch.columns.len());
         // id 列类型为 Int（BIGINT→Int）
-        assert_eq!(batch.schema.get_index("id").is_some(), true);
+        assert!(batch.schema.get_index("id").is_some());
     }
 
     #[test]
