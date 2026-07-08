@@ -205,7 +205,7 @@ base_path = "cmx-server/"
 # ============================================
 [center_client]
 # 模式：local（默认）| grpc（gRPC 调用）| http_url（HTTP 直连）| http_discovery（HTTP 服务发现）
-mode = "local"
+mode = "grpc"
 # 请求超时（毫秒，仅 http_url / http_discovery 模式生效）
 timeout_ms = 30000
 
@@ -252,6 +252,17 @@ retry_count = 0
 # default_clusters = []
 # 服务发现变更通知通道容量（可选，默认 1024，用于缓冲高频服务变更如 k8s 滚动更新）
 # discover_channel_capacity = 1024
+
+# ============================================
+# 服务对外身份配置
+# ============================================
+# 本服务作为调用方时携带的服务级凭证，用于 gRPC / HTTP 跨服务调用的 M2M 鉴权。
+# 凭证须同时在下方 [[auth.static_api_keys]] 注册，否则接收端 mw_auth 无法验证。
+# 单体无跨服务调用场景可留空（默认）。
+[service_auth]
+# 本服务对外服务级凭证（cmx_sk_xxx）
+# 留空表示不配置服务身份（RPC 出站不携带服务凭证，HTTP 跨服务调用无法通过 mw_auth）
+outgoing_api_key = "cmx_sk_dev_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"
 
 # ============================================
 # 认证配置
