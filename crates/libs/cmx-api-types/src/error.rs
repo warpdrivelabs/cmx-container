@@ -97,6 +97,10 @@ pub enum Error {
     #[error("请求错误: {0}")]
     BadRequest(String),
 
+    /// 资源冲突（乐观锁：单据已被他人修改）。映射 HTTP 409。
+    #[error("{0}")]
+    Conflict(String),
+
     /// 服务器内部错误。
     #[error("{0}")]
     InternalError(String),
@@ -160,6 +164,7 @@ impl Error {
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::ValidationError { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Conflict(_) => StatusCode::CONFLICT,
             Self::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
@@ -214,6 +219,11 @@ impl Error {
     /// `Error::NotFound` 变体。
     pub fn not_found(msg: impl Into<String>) -> Self {
         Self::NotFound(msg.into())
+    }
+
+    /// 创建资源冲突错误（乐观锁，HTTP 409）。
+    pub fn conflict(msg: impl Into<String>) -> Self {
+        Self::Conflict(msg.into())
     }
 
     /// 创建数据验证失败错误。

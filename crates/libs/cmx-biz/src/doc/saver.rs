@@ -13,13 +13,52 @@
 //!                  "deleted": [ "id1", "id2" ] } }
 //! ```
 
+use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 
 use cmx_core::model::cell::DataValue;
+use cmx_core::model::data::dataset::Schema;
 use cmx_database::DatabaseManager;
 
+use super::loader::DocLoader;
 use super::meta::{DocMetaView, LayerView};
+use super::query::DocQuery;
+use super::revision::DocRevision;
 use crate::{BizError, Result};
+
+/// 审计上下文（方案 C）：由服务端权威填充审计列，覆盖前端传值。
+///
+/// - `actor`：当前操作者用户 id（BIGINT）。缺失/非数字身份（如系统身份）兜底为 `0`（约定 0=系统）——
+///   保存永不因身份缺失失败。
+/// - `now`：本次保存的统一时间戳，`DocSaver::save` 入口一次性捕获，全事务共用。
+#[derive(Debug, Clone, Copy)]
+struct AuditCtx {
+    actor: i64,
+    now: DateTime<Utc>,
+}
+
+/// 保存上下文（操作者身份 + 单据定位 + 操作类型）。
+///
+/// 承载两件事：
+///   - 审计填充（方案 C）：`actor_id` → [`AuditCtx`]。
+///   - 版本快照（B1）：`actor_id`/`actor_name`/`doc_file`/`op_override` → [`DocRevision::record`]。
+///
+/// 由 handler 从 `CmxSvrContext` 构造（见 doc.rs `save_ctx`）。
+#[derive(Debug, Clone, Default)]
+pub struct SaveCtx {
+    /// 操作者用户 id（BIGINT 审计列用；缺失/非数字兜底 0）。
+    pub actor_id: i64,
+    /// 操作者显示名（版本台账 actor_name 用；缺省 "系统"）。
+    pub actor_name: String,
+    /// 单据定义文件名（版本台账 doc_file 用，定位「哪种单据」）。
+    pub doc_file: String,
+    /// 操作类型覆盖（如 restore 传 Some("restore")）；None 时按 changeset 桶推断 create/update。
+    pub op_override: Option<String>,
+}
+
+/// 创建审计列（一旦写入不可变）：UPSERT 撞已存在 id 时，ON CONFLICT SET **不得**覆盖这两列，
+/// 否则会把原创建人/创建时间冲掉。更新审计列（update_by/update_time）不在此列，仍随 EXCLUDED 刷新。
+const CREATE_AUDIT_COLS: [&str; 2] = ["create_by", "create_time"];
 
 /// 保存模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +76,14 @@ impl SaveMode {
             _ => SaveMode::Merge,
         }
     }
+
+    /// 模式名（"merge"/"replace"），供结果序列化。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SaveMode::Merge => "merge",
+            SaveMode::Replace => "replace",
+        }
+    }
 }
 
 /// 保存结果。
@@ -45,18 +92,54 @@ pub struct SaveResult {
     pub ok: bool,
     pub mode: String,
     pub affected: u64,
+    /// B2：本次保存后各根层已更新行的新 `update_time`（RFC3339），供前端刷新乐观锁基线，
+    /// 支持「连续保存不刷新页」。空则不回传（`camelCase` 序列化为 `updatedAt`）。
+    #[serde(rename = "updatedAt", skip_serializing_if = "Vec::is_empty")]
+    pub updated_at: Vec<UpdatedBaseline>,
+}
+
+/// 一行更新后的新基线（id + 新 update_time）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UpdatedBaseline {
+    pub id: String,
+    #[serde(rename = "updateTime")]
+    pub update_time: String,
+}
+
+/// 批量保存的一个单据项（方案 F）。各单自带定义（meta）+ 模式 + changeset + 上下文，故一批可混多种单据。
+pub struct BatchItem<'a> {
+    pub meta: &'a DocMetaView,
+    pub mode: SaveMode,
+    pub changes: &'a Value,
+    pub sctx: &'a SaveCtx,
+}
+
+/// 批量保存里单个单据的结果（方案 F）。`ok=false` 时 `error` 带原因（仅非 atomic 逐单模式会出现）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BatchOutcome {
+    /// 在 items 里的下标（定位是哪一单）。
+    pub index: usize,
+    pub ok: bool,
+    pub mode: String,
+    pub affected: u64,
+    #[serde(rename = "updatedAt", skip_serializing_if = "Vec::is_empty")]
+    pub updated_at: Vec<UpdatedBaseline>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 pub struct DocSaver;
 
 impl DocSaver {
     /// 回存单据。`changes` 为 merge 模式 changeset；`snapshot` 为 replace 模式整树列式包。
+    /// `sctx` 为保存上下文（审计填充 + 版本快照，见 [`SaveCtx`]）。
     pub async fn save(
         mm: &DatabaseManager,
         db_id: &str,
         meta: &DocMetaView,
         mode: SaveMode,
         changes: &Value,
+        sctx: &SaveCtx,
     ) -> Result<SaveResult> {
         let ctx = mm.get_transaction_context();
         let guard = ctx
@@ -65,25 +148,20 @@ impl DocSaver {
             .map_err(|e| BizError::internal(format!("开启事务失败: {e}")))?;
         let txn_id = guard.txn_id().to_string();
 
-        // 保存 + 对账，任一失败即回滚。
-        let affected = match mode {
-            SaveMode::Merge => Self::apply_merge(mm, db_id, &txn_id, meta, changes).await,
-            SaveMode::Replace => Self::apply_replace(mm, db_id, &txn_id, meta, changes).await,
-        };
+        // 写入 + 记版本 + 算基线（事务内一体，任一步失败即回滚）。
+        let outcome = Self::apply_and_version(mm, db_id, &txn_id, meta, mode, changes, sctx).await;
 
-        match affected {
-            Ok(n) => {
+        match outcome {
+            Ok((affected, updated_at)) => {
                 guard
                     .commit()
                     .await
                     .map_err(|e| BizError::internal(format!("提交事务失败: {e}")))?;
                 Ok(SaveResult {
                     ok: true,
-                    mode: match mode {
-                        SaveMode::Merge => "merge".into(),
-                        SaveMode::Replace => "replace".into(),
-                    },
-                    affected: n,
+                    mode: mode.as_str().into(),
+                    affected,
+                    updated_at,
                 })
             }
             Err(e) => {
@@ -94,6 +172,131 @@ impl DocSaver {
         }
     }
 
+    /// 批量保存多单（方案 F）。一批可混多种单据（各 item 自带 meta/mode/changes/sctx）。
+    ///
+    /// - `atomic = true`：N 单共用**一个大事务**，任一单失败 → 整批回滚（真批量原子，过账/导入语义）。
+    ///   返回的 outcomes 全 `ok=true`；失败时返回 `Err`（带出错单 index），无部分提交。
+    /// - `atomic = false`：**每单独立事务**（复用单单 [`save`]），逐单成败互不影响，全部收进 outcomes
+    ///   （失败单 `ok=false` + `error`），永不整体 `Err`（除非批本身非法）。
+    ///
+    /// C（审计）/B1（版本快照）/B2（乐观锁）对每单自动生效——批量只是外层事务编排，不改单单语义。
+    pub async fn save_batch(
+        mm: &DatabaseManager,
+        db_id: &str,
+        items: &[BatchItem<'_>],
+        atomic: bool,
+    ) -> Result<Vec<BatchOutcome>> {
+        if atomic {
+            Self::save_batch_atomic(mm, db_id, items).await
+        } else {
+            let mut outcomes = Vec::with_capacity(items.len());
+            for (index, item) in items.iter().enumerate() {
+                let outcome = match Self::save(mm, db_id, item.meta, item.mode, item.changes, item.sctx).await {
+                    Ok(r) => BatchOutcome {
+                        index,
+                        ok: true,
+                        mode: r.mode,
+                        affected: r.affected,
+                        updated_at: r.updated_at,
+                        error: None,
+                    },
+                    Err(e) => BatchOutcome {
+                        index,
+                        ok: false,
+                        mode: item.mode.as_str().into(),
+                        affected: 0,
+                        updated_at: Vec::new(),
+                        error: Some(e.to_string()),
+                    },
+                };
+                outcomes.push(outcome);
+            }
+            Ok(outcomes)
+        }
+    }
+
+    /// atomic 批量：一个 guard 包住 N 单，任一失败即回滚整批。
+    async fn save_batch_atomic(
+        mm: &DatabaseManager,
+        db_id: &str,
+        items: &[BatchItem<'_>],
+    ) -> Result<Vec<BatchOutcome>> {
+        let ctx = mm.get_transaction_context();
+        let guard = ctx
+            .begin_with_guard(db_id)
+            .await
+            .map_err(|e| BizError::internal(format!("开启批量事务失败: {e}")))?;
+        let txn_id = guard.txn_id().to_string();
+
+        let mut outcomes = Vec::with_capacity(items.len());
+        let mut failed: Option<BizError> = None;
+        for (index, item) in items.iter().enumerate() {
+            match Self::apply_and_version(mm, db_id, &txn_id, item.meta, item.mode, item.changes, item.sctx)
+                .await
+            {
+                Ok((affected, updated_at)) => outcomes.push(BatchOutcome {
+                    index,
+                    ok: true,
+                    mode: item.mode.as_str().into(),
+                    affected,
+                    updated_at,
+                    error: None,
+                }),
+                Err(e) => {
+                    // 定位到出错单（第 index 单），整批回滚。
+                    failed = Some(BizError::from_batch_item(index, e));
+                    break;
+                }
+            }
+        }
+
+        match failed {
+            None => {
+                guard
+                    .commit()
+                    .await
+                    .map_err(|e| BizError::internal(format!("提交批量事务失败: {e}")))?;
+                Ok(outcomes)
+            }
+            Some(e) => {
+                let _ = guard.rollback().await;
+                Err(e)
+            }
+        }
+    }
+
+    /// 事务内一体：写入（apply_merge/replace）+ 版本快照（record_versions）+ 算新基线（B2）。
+    ///
+    /// 抽出供单单 [`save`]（自开 guard）与批量 [`save_batch`]（多单共用一个 guard）复用——
+    /// **不含 begin/commit/rollback**，事务生命周期由调用方掌握。任一步 `?` 失败即向上抛（调用方回滚）。
+    /// 返回 (影响行数, 已更新根行新基线)。审计时间戳每次调用独立捕获（`Utc::now()`）。
+    async fn apply_and_version(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        meta: &DocMetaView,
+        mode: SaveMode,
+        changes: &Value,
+        sctx: &SaveCtx,
+    ) -> Result<(u64, Vec<UpdatedBaseline>)> {
+        // 审计上下文：本单据全程共用一个时间戳，由服务端权威填充（覆盖前端传值）。
+        let audit = AuditCtx {
+            actor: sctx.actor_id,
+            now: Utc::now(),
+        };
+        let affected = match mode {
+            SaveMode::Merge => Self::apply_merge(mm, db_id, txn_id, meta, changes, &audit).await?,
+            SaveMode::Replace => {
+                Self::apply_replace(mm, db_id, txn_id, meta, changes, &audit).await?
+            }
+        };
+        // B1：版本快照接线 —— 仅当单据定义开启 versioning 时记（record 内部再判一次，双保险）。
+        Self::record_versions(mm, db_id, txn_id, meta, mode, changes, sctx).await?;
+        // B2：本次已更新根行的新基线（新 update_time = audit.now，服务端已知无需再查）。
+        let updated_at = new_root_baselines(changes, meta, mode, &audit);
+        Ok((affected, updated_at))
+    }
+
     // ─────────────────── merge 模式 ───────────────────
 
     async fn apply_merge(
@@ -102,6 +305,7 @@ impl DocSaver {
         txn_id: &str,
         meta: &DocMetaView,
         changes: &Value,
+        audit: &AuditCtx,
     ) -> Result<u64> {
         let mut affected: u64 = 0;
         // 对账分两类：
@@ -129,12 +333,16 @@ impl DocSaver {
             if let Some(rows) = layer_changes.get("inserted").and_then(|v| v.as_array())
                 && !rows.is_empty() {
                     write_expected += rows.len() as u64;
-                    write_affected += Self::upsert_rows(mm, db_id, txn_id, layer, rows).await?;
+                    write_affected +=
+                        Self::upsert_rows(mm, db_id, txn_id, layer, rows, audit).await?;
                 }
             if let Some(rows) = layer_changes.get("updated").and_then(|v| v.as_array())
                 && !rows.is_empty() {
                     write_expected += rows.len() as u64;
-                    write_affected += Self::update_rows(mm, db_id, txn_id, layer, rows).await?;
+                    // B2 乐观锁仅根层（idx==0）：带前端回传的 update_time 基线做并发冲突检测。
+                    let oplock = idx == 0;
+                    write_affected +=
+                        Self::update_rows(mm, db_id, txn_id, layer, rows, audit, oplock).await?;
                 }
         }
         affected += write_affected;
@@ -173,6 +381,7 @@ impl DocSaver {
         txn_id: &str,
         meta: &DocMetaView,
         snapshot: &Value,
+        audit: &AuditCtx,
     ) -> Result<u64> {
         // snapshot 结构同 merge 的按层 { table: { rows: [ {id,upper_id,fields} ] } }
         // 简化：replace 也按层给全量行；先删（子先）、再插（父先）。
@@ -226,11 +435,68 @@ impl DocSaver {
                 continue;
             };
             if !rows.is_empty() {
-                affected += Self::insert_rows(mm, db_id, txn_id, layer, rows).await?;
+                affected += Self::insert_rows(mm, db_id, txn_id, layer, rows, audit).await?;
             }
         }
 
         Ok(affected)
+    }
+
+    // ─────────────────── 版本快照（B1：事务内接线 DocRevision::record） ───────────────────
+
+    /// 保存事务内、写入后 commit 前，为**受影响的每个 rootId** 重装载整单 → 列式快照 → 追加一版。
+    ///
+    /// 「仅 versioning 开启时记」：单据定义 `moduleMeta.versioning.enabled != true` 直接返回，
+    /// 通用存储层不强制版本化，是否开启由定义控制。
+    ///
+    /// 关键（B1 核心）：用 [`DocLoader::load_txn`] 传 `Some(txn_id)` 在**同一事务连接**上重装载，
+    /// 才能看到本事务刚写入、尚未 commit 的行 —— 快照因此反映「保存后」的整单终态。
+    async fn record_versions(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        meta: &DocMetaView,
+        mode: SaveMode,
+        changes: &Value,
+        sctx: &SaveCtx,
+    ) -> Result<()> {
+        if !meta.versioning_enabled() {
+            return Ok(());
+        }
+        let root = meta
+            .root_layer()
+            .ok_or_else(|| BizError::business("单据无根层，无法版本化"))?;
+
+        // 受影响 rootId + 每个的 op（create/update）。本期只快照仍存在的根（inserted/updated）；
+        // deleted 根的版本化（记一版 op=delete 的空/末态快照）留待后续。
+        let roots = collect_versioned_roots(changes, meta, mode, root, sctx)?;
+
+        for (root_id, op) in roots {
+            // 单根 DocQuery：根层 filter id = <root_id>，全深度、含兄弟表。
+            let dq = DocQuery::from_json(&serde_json::json!({
+                "layers": { root.id.clone(): { "filter": { "id": root_id.clone() } } }
+            }))?;
+            // 事务内重装载（看得到未提交写）→ 整单终态 DataSet。
+            let root_ds = DocLoader::load_txn(mm, db_id, meta, &dq, Some(txn_id)).await?;
+            let actor_id = sctx.actor_id.to_string();
+            // record 内部用 ColumnarCodec 编列式快照存 JSONB（与装载同序列化器）。
+            DocRevision::record(
+                mm,
+                db_id,
+                txn_id,
+                &sctx.doc_file,
+                &root.table_name,
+                &root_id,
+                &op,
+                &root_ds,
+                Some(&actor_id),
+                Some(&sctx.actor_name),
+                None,
+                None,
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     // ─────────────────── 批量 SQL（方案 A：消除逐行 N+1） ───────────────────
@@ -247,8 +513,9 @@ impl DocSaver {
         txn_id: &str,
         layer: &LayerView,
         rows: &[Value],
+        audit: &AuditCtx,
     ) -> Result<u64> {
-        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, true).await
+        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, true, audit).await
     }
 
     /// 批量纯 INSERT（replace 模式；子树已先删）。
@@ -258,8 +525,9 @@ impl DocSaver {
         txn_id: &str,
         layer: &LayerView,
         rows: &[Value],
+        audit: &AuditCtx,
     ) -> Result<u64> {
-        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, false).await
+        Self::batch_insert_grouped(mm, db_id, txn_id, layer, rows, false, audit).await
     }
 
     /// 批量 INSERT 内核：按列集合分组 → 每组多值 INSERT（可选 ON CONFLICT UPSERT），按参数上限分批。
@@ -270,12 +538,16 @@ impl DocSaver {
         layer: &LayerView,
         rows: &[Value],
         upsert: bool,
+        audit: &AuditCtx,
     ) -> Result<u64> {
         use std::collections::BTreeMap;
         // 按「列名序列」分组：同列集的行走同一条多值 INSERT
         let mut groups: BTreeMap<Vec<String>, Vec<Vec<DataValue>>> = BTreeMap::new();
         for row in rows {
-            let (cols, vals) = Self::row_cols_vals(layer, row)?;
+            let (mut cols, mut vals) = Self::row_cols_vals(layer, row)?;
+            // 审计填充（方案 C）：服务端权威写 create_*/update_*/delete_flag，覆盖前端传值。
+            // 审计列对全表统一，反使按列集分组更聚合（同层新增行通常收敛到一组）。
+            apply_audit_insert(&mut cols, &mut vals, &layer.schema, audit);
             if cols.is_empty() {
                 continue;
             }
@@ -300,16 +572,24 @@ impl DocSaver {
 
     /// 批量 UPDATE：按「变更列集合」分组，每组一条 `UPDATE ... SET c=v.c FROM (VALUES ...) AS v(id,cols) WHERE t.id=v.id`。
     /// 各行变更列不同（updated.fields 稀疏），故先分组。
+    ///
+    /// `oplock`（B2 乐观锁，仅根层传 true）：带 `baseline`（前端回传的装载时 update_time）的行，UPDATE
+    /// 加 `AND update_time = baseline` 谓词——基线陈旧则该行不更新，由对账判为冲突（409）。
+    /// 分组键含 `has_baseline`，保证同组 SQL 结构一致（带锁/不带锁不混批）。
     async fn update_rows(
         mm: &DatabaseManager,
         db_id: &str,
         txn_id: &str,
         layer: &LayerView,
         rows: &[Value],
+        audit: &AuditCtx,
+        oplock: bool,
     ) -> Result<u64> {
         use std::collections::BTreeMap;
-        // 分组键 = 排序后的变更列名；值 = 每行 (id_dv, [col_dv...])
-        let mut groups: BTreeMap<Vec<String>, Vec<(DataValue, Vec<DataValue>)>> = BTreeMap::new();
+        // 分组键 = (排序后的变更列名, 是否带基线锁)；值 = 每行 (id_dv, [col_dv...], baseline?)。
+        let has_update_time = layer.schema.get_index("update_time").is_some();
+        type Grp = Vec<(DataValue, Vec<DataValue>, Option<DataValue>)>;
+        let mut groups: BTreeMap<(Vec<String>, bool), Grp> = BTreeMap::new();
         for row in rows {
             let Some(id) = row.get("id") else {
                 return Err(BizError::business("updated 行缺少 id"));
@@ -327,32 +607,91 @@ impl DocSaver {
                 .collect();
             cols.sort();
             if cols.is_empty() {
-                continue;
+                continue; // 无业务变更列 → 跳过整行（不因审计而写幽灵更新）
             }
             let id_dv = dv_for_col(id, layer, "id");
-            let col_vals: Vec<DataValue> = cols
+            let mut col_vals: Vec<DataValue> = cols
                 .iter()
                 .map(|c| dv_for_col(&fields[c], layer, c))
                 .collect();
-            groups.entry(cols).or_default().push((id_dv, col_vals));
+            // 审计填充（方案 C）：强制注入/覆盖 update_by、update_time（服务端权威，覆盖前端传值）。
+            apply_audit_update(&mut cols, &mut col_vals, &layer.schema, audit);
+            // B2：仅根层 + 该行带 baseline + 表有 update_time 列 → 走带锁分支。
+            // baseline 是「装载时」的 update_time（WHERE 比旧值）；SET 里写的是新值（apply_audit_update），二者分离。
+            let baseline = if oplock && has_update_time {
+                row.get("baseline")
+                    .filter(|b| !b.is_null())
+                    .map(|b| dv_for_col(b, layer, "update_time"))
+            } else {
+                None
+            };
+            groups
+                .entry((cols, baseline.is_some()))
+                .or_default()
+                .push((id_dv, col_vals, baseline));
         }
 
         let mut affected: u64 = 0;
-        for (cols, id_rows) in groups {
-            let ncol = cols.len() + 1; // +1 for id
-            let rows_per_batch = (Self::MAX_PARAMS / ncol).max(1);
+        for ((cols, locked), id_rows) in groups {
+            let per_row = cols.len() + 1 + if locked { 1 } else { 0 }; // id + cols [+ baseline]
+            let rows_per_batch = (Self::MAX_PARAMS / per_row).max(1);
             for chunk in id_rows.chunks(rows_per_batch) {
-                let sql = build_multi_update_sql(&layer.table_name, &cols, chunk.len());
-                // 展平参数：每行 (id, col1, col2, ...)
-                let mut flat: Vec<DataValue> = Vec::with_capacity(chunk.len() * ncol);
-                for (id_dv, col_vals) in chunk {
+                let oplock_col = if locked { Some("update_time") } else { None };
+                let sql = build_multi_update_sql(&layer.table_name, &cols, chunk.len(), oplock_col);
+                // 展平参数：每行 (id, col1..colN [, baseline])
+                let mut flat: Vec<DataValue> = Vec::with_capacity(chunk.len() * per_row);
+                for (id_dv, col_vals, baseline) in chunk {
                     flat.push(id_dv.clone());
                     flat.extend(col_vals.iter().cloned());
+                    if let Some(b) = baseline {
+                        flat.push(b.clone());
+                    }
                 }
-                affected += Self::exec(mm, db_id, txn_id, &sql, flat).await?;
+                let got = Self::exec(mm, db_id, txn_id, &sql, flat).await?;
+                // B2 冲突判定：带锁组若命中 < 期望，补 SELECT 区分「冲突」vs「行不存在」。
+                if locked && got < chunk.len() as u64 {
+                    let ids: Vec<DataValue> = chunk.iter().map(|(id, _, _)| id.clone()).collect();
+                    Self::classify_update_shortfall(mm, db_id, txn_id, layer, &ids).await?;
+                }
+                affected += got;
             }
         }
         Ok(affected)
+    }
+
+    /// 带锁 UPDATE 命中不足时判因（B2）：对本组 id 补一次 `SELECT id WHERE id = ANY($1)`。
+    /// 存在的 id（却没更新成功）= 基线陈旧 → 冲突 409；不存在 = 行已被删/id 错 → 沿用 H2 业务错。
+    async fn classify_update_shortfall(
+        mm: &DatabaseManager,
+        db_id: &str,
+        txn_id: &str,
+        layer: &LayerView,
+        ids: &[DataValue],
+    ) -> Result<()> {
+        let sql = format!(
+            "SELECT id FROM {} WHERE id = ANY($1)",
+            quote_ident(&layer.table_name)
+        );
+        let ds = mm
+            .query_sql_with_datavalues(
+                db_id,
+                Some(txn_id),
+                &sql,
+                vec![DataValue::Array(ids.to_vec())],
+                "oplock_probe",
+            )
+            .await
+            .map_err(|e| BizError::internal(format!("冲突判定查询失败: {e}")))?;
+        // 有任一 id 仍存在（却没被 UPDATE 命中）→ 基线不符 = 并发冲突。
+        if !ds.rows.is_empty() {
+            return Err(BizError::conflict(
+                "单据已被他人修改，请刷新后重试（乐观锁冲突）",
+            ));
+        }
+        // 全部 id 都不存在 → 非冲突，交回原 H2 对账报「行不存在」业务错。
+        Err(BizError::business(
+            "回存的行不存在（可能已被删除），请刷新后重试",
+        ))
     }
 
     // ─────────────────── 批量 DELETE / 子层圈定 ───────────────────
@@ -520,10 +859,209 @@ fn layer_changes_for<'a>(
     changes.get(&nested)
 }
 
+/// 收集本次保存**受影响的根单据**及其操作类型（B1 版本快照用）。
+///
+/// - merge：读根层桶的 `inserted`（op=create）与 `updated`（op=update），各取行 id。
+/// - replace：取根层 rows 的 id，op 统一 `update`（先删后插，视为整单覆盖）。
+/// - `op_override`（如 restore）优先于上面推断。
+///
+/// 只收「仍存在」的根（inserted/updated / replace rows）——本期不为 deleted 根记版本。
+/// id 统一字符串化（`cmx_doc_revision.root_id` 为 VARCHAR）。返回 (root_id, op) 列表（去重、稳定序）。
+fn collect_versioned_roots(
+    changes: &Value,
+    meta: &DocMetaView,
+    mode: SaveMode,
+    root: &LayerView,
+    sctx: &SaveCtx,
+) -> Result<Vec<(String, String)>> {
+    let obj = changes
+        .as_object()
+        .ok_or_else(|| BizError::business("changes 必须是对象"))?;
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut push = |id: &Value, op: &str, out: &mut Vec<(String, String)>| {
+        if let Some(s) = value_to_id_string(id) {
+            if seen.insert(s.clone()) {
+                let op = sctx.op_override.clone().unwrap_or_else(|| op.to_string());
+                out.push((s, op));
+            }
+        }
+    };
+
+    match mode {
+        SaveMode::Merge => {
+            let Some(bucket) = layer_changes_for(obj, meta, 0, root) else {
+                return Ok(out); // 根层无变更（只动了子层）：本期不为其单独记版本
+            };
+            for (b, op) in [("inserted", "create"), ("updated", "update")] {
+                if let Some(rows) = bucket.get(b).and_then(|v| v.as_array()) {
+                    for r in rows {
+                        if let Some(id) = r.get("id") {
+                            push(id, op, &mut out);
+                        }
+                    }
+                }
+            }
+        }
+        SaveMode::Replace => {
+            let rows = obj
+                .get(&root.table_name)
+                .or_else(|| obj.get(&root.id))
+                .and_then(|l| l.get("rows"))
+                .and_then(|v| v.as_array());
+            if let Some(rows) = rows {
+                for r in rows {
+                    if let Some(id) = r.get("id") {
+                        push(id, "update", &mut out);
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// changeset 里的 id 值（可能是 JSON 数字或字符串）→ 稳定字符串。null/其它 → None。
+fn value_to_id_string(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// B2：本次保存后各根层已更新行的新基线（id + 新 update_time = `audit.now`）。
+///
+/// 只对 merge 的根层 `updated` 行回传（replace 是整树覆盖，前端会整体重载，无需增量刷基线）。
+/// 根表无 `update_time` 列时返回空（该单据不参与乐观锁）。新 update_time 对所有根更新行相同
+/// （= `apply_audit_update` 写入的 `audit.now`），故服务端直接取，无需回查库。
+fn new_root_baselines(
+    changes: &Value,
+    meta: &DocMetaView,
+    mode: SaveMode,
+    audit: &AuditCtx,
+) -> Vec<UpdatedBaseline> {
+    if mode != SaveMode::Merge {
+        return Vec::new();
+    }
+    let Some(root) = meta.root_layer() else {
+        return Vec::new();
+    };
+    if root.schema.get_index("update_time").is_none() {
+        return Vec::new();
+    }
+    let Some(obj) = changes.as_object() else {
+        return Vec::new();
+    };
+    let Some(bucket) = layer_changes_for(obj, meta, 0, root) else {
+        return Vec::new();
+    };
+    let new_ts = DataValue::DateTime(audit.now);
+    // 与 apply_audit_update 写库口径一致：DataValue::DateTime 的序列化即 to_rfc3339。
+    let ts_str = match serde_json::to_value(&new_ts) {
+        Ok(Value::String(s)) => s,
+        _ => audit.now.to_rfc3339(),
+    };
+    let mut out = Vec::new();
+    if let Some(rows) = bucket.get("updated").and_then(|v| v.as_array()) {
+        for r in rows {
+            // 只回传「有实际变更列」的行（与 update_rows 的 cols.is_empty() 跳过口径一致）——
+            // 无变更列的行不会被 UPDATE，其 update_time 未变，不应误导前端刷新。
+            let has_field = r
+                .get("fields")
+                .and_then(|v| v.as_object())
+                .map(|f| f.keys().any(|c| root.schema.get_index(c).is_some()))
+                .unwrap_or(false);
+            if !has_field {
+                continue;
+            }
+            if let Some(id) = r.get("id").and_then(value_to_id_string) {
+                out.push(UpdatedBaseline {
+                    id,
+                    update_time: ts_str.clone(),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// PG 标识符双引号包裹（防列名/表名撞关键字，与 sql_builder.rs 的 SELECT 侧风格对齐）。
 /// 内部双引号转义为两个双引号。列名已过 schema 白名单，这里只防关键字冲突。
 fn quote_ident(ident: &str) -> String {
     format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
+/// 审计填充（方案 C）—— INSERT 路径：服务端权威写审计列，覆盖前端可能传来的同名值。
+///
+/// 对每行：先剔除 cols/vals 里任何既存审计列（防重复列名把多值 INSERT 拼炸），
+/// 再按该列**是否在 schema**（通用单据不一定每张表都有全套审计列）追加：
+///   create_by=actor, create_time=now, update_by=actor, update_time=now, delete_flag=0。
+/// insert 时 create/update 同值——无 NULL、语义一致；delete_flag=0 满足 NOT NULL 无默认的物理约束。
+fn apply_audit_insert(
+    cols: &mut Vec<String>,
+    vals: &mut Vec<DataValue>,
+    schema: &Schema,
+    audit: &AuditCtx,
+) {
+    const AUDIT_COLS: [&str; 5] = [
+        "create_by",
+        "create_time",
+        "update_by",
+        "update_time",
+        "delete_flag",
+    ];
+    remove_cols(cols, vals, &AUDIT_COLS);
+    let actor = DataValue::Int(audit.actor);
+    let now = DataValue::DateTime(audit.now);
+    for (col, dv) in [
+        ("create_by", actor.clone()),
+        ("create_time", now.clone()),
+        ("update_by", actor),
+        ("update_time", now),
+        ("delete_flag", DataValue::Int(0)),
+    ] {
+        if schema.get_index(col).is_some() {
+            cols.push(col.to_string());
+            vals.push(dv);
+        }
+    }
+}
+
+/// 审计填充（方案 C）—— UPDATE 路径：强制注入/覆盖 update_by、update_time（服务端权威）。
+///
+/// 先剔除既存的 update_by/update_time（前端若传了则覆盖），再按 schema 存在性追加。
+/// 保持 cols 与 col_vals 一一对应；调用方随后按 cols 分组。
+fn apply_audit_update(
+    cols: &mut Vec<String>,
+    col_vals: &mut Vec<DataValue>,
+    schema: &Schema,
+    audit: &AuditCtx,
+) {
+    const UPDATE_AUDIT_COLS: [&str; 2] = ["update_by", "update_time"];
+    remove_cols(cols, col_vals, &UPDATE_AUDIT_COLS);
+    for (col, dv) in [
+        ("update_by", DataValue::Int(audit.actor)),
+        ("update_time", DataValue::DateTime(audit.now)),
+    ] {
+        if schema.get_index(col).is_some() {
+            cols.push(col.to_string());
+            col_vals.push(dv);
+        }
+    }
+}
+
+/// 从并列的 cols/vals 里删除指定列名（保持两者一一对应）。审计填充前的去重用。
+fn remove_cols(cols: &mut Vec<String>, vals: &mut Vec<DataValue>, drop: &[&str]) {
+    let mut i = 0;
+    while i < cols.len() {
+        if drop.contains(&cols[i].as_str()) {
+            cols.remove(i);
+            vals.remove(i);
+        } else {
+            i += 1;
+        }
+    }
 }
 
 /// 构造多值 INSERT（方案 A）：`INSERT INTO t (c...) VALUES ($1..$k),($k+1..) [ON CONFLICT (id) DO ...]`。
@@ -555,9 +1093,11 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
         value_groups.join(", ")
     );
     if upsert {
+        // ON CONFLICT DO UPDATE SET：排除 id（冲突键）与创建审计列（create_by/create_time 不可变，
+        // 否则「inserted 撞已存在 id」会把原创建人/创建时间冲掉）。update_by/update_time 仍随 EXCLUDED 刷新。
         let updates: Vec<String> = cols
             .iter()
-            .filter(|c| c.as_str() != "id")
+            .filter(|c| c.as_str() != "id" && !CREATE_AUDIT_COLS.contains(&c.as_str()))
             .map(|c| format!("{q} = EXCLUDED.{q}", q = quote_ident(c)))
             .collect();
         if updates.is_empty() {
@@ -571,16 +1111,24 @@ fn build_multi_insert_sql(table: &str, cols: &[String], nrows: usize, upsert: bo
 
 /// 构造多值 UPDATE（方案 A）：`UPDATE t SET c=v.c FROM (VALUES (id,c..),...) AS v(id,c..) WHERE t.id=v.id`。
 /// 每行参数序 = (id, col1, col2, ...)，占位符自 $1 连续。纯函数，便于单测。
-fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize) -> String {
-    let ncol = cols.len() + 1; // +id
+///
+/// `oplock`（B2 乐观锁）：Some(col) 时，每行 VALUES 末尾追加一个基线占位（该行装载时的 `col` 值），
+/// alias 加 `__oplock` 列，WHERE 加 `AND t.col = v.__oplock` —— 基线陈旧的行不匹配 → 不更新 →
+/// affected 减少（由调用方对账判为冲突）。None 时退化为原始无锁 UPDATE。
+/// 注意参数序：Some 时每行为 (id, col1..colN, baseline)，即末位是基线。
+fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize, oplock: Option<&str>) -> String {
+    let extra = if oplock.is_some() { 2 } else { 1 }; // id (+ baseline)
+    let ncol = cols.len() + extra;
     let t = quote_ident(table);
     let set_sql = cols
         .iter()
         .map(|c| format!("{q} = v.{q}", q = quote_ident(c)))
         .collect::<Vec<_>>()
         .join(", ");
+    // alias: id, col1..colN [, __oplock]
     let alias_cols = std::iter::once("id".to_string())
         .chain(cols.iter().map(|c| quote_ident(c)))
+        .chain(oplock.map(|_| "__oplock".to_string()))
         .collect::<Vec<_>>()
         .join(", ");
     let mut p = 0usize;
@@ -595,12 +1143,17 @@ fn build_multi_update_sql(table: &str, cols: &[String], nrows: usize) -> String 
             format!("({})", group.join(", "))
         })
         .collect();
+    let where_sql = match oplock {
+        Some(col) => format!("{t}.id = v.id AND {t}.{q} = v.\"__oplock\"", t = t, q = quote_ident(col)),
+        None => format!("{t}.id = v.id", t = t),
+    };
     format!(
-        "UPDATE {t} SET {set} FROM (VALUES {vals}) AS v({alias}) WHERE {t}.id = v.id",
+        "UPDATE {t} SET {set} FROM (VALUES {vals}) AS v({alias}) WHERE {where_sql}",
         t = t,
         set = set_sql,
         vals = value_groups.join(", "),
         alias = alias_cols,
+        where_sql = where_sql,
     )
 }
 
@@ -789,13 +1342,26 @@ mod tests {
     #[test]
     fn multi_update_from_values() {
         let cols = vec!["a".to_string(), "b".to_string()];
-        let sql = build_multi_update_sql("cv_header", &cols, 2);
+        let sql = build_multi_update_sql("cv_header", &cols, 2, None);
         // 每行 (id,a,b) = 3 参，2 行 = $1..$6
         assert_eq!(
             sql,
             "UPDATE \"cv_header\" SET \"a\" = v.\"a\", \"b\" = v.\"b\" \
              FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS v(id, \"a\", \"b\") \
              WHERE \"cv_header\".id = v.id"
+        );
+    }
+
+    #[test]
+    fn multi_update_with_oplock_baseline() {
+        // B2 乐观锁：带 update_time 基线 → 每行 (id, a, baseline) = 3 参，WHERE 加基线谓词。
+        let cols = vec!["a".to_string()];
+        let sql = build_multi_update_sql("cv_batch", &cols, 2, Some("update_time"));
+        assert_eq!(
+            sql,
+            "UPDATE \"cv_batch\" SET \"a\" = v.\"a\" \
+             FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS v(id, \"a\", __oplock) \
+             WHERE \"cv_batch\".id = v.id AND \"cv_batch\".\"update_time\" = v.\"__oplock\""
         );
     }
 
@@ -810,4 +1376,296 @@ mod tests {
             .unwrap();
         assert_eq!(max_ph, 4 * 3); // 12 个占位符
     }
+
+    // ─────────────────── 审计填充（方案 C）单测 ───────────────────
+
+    use cmx_core::model::cell::{Field, FieldType};
+    use cmx_core::model::data::dataset::Schema;
+
+    /// 建含全套审计列的 schema（模拟 documentTechnicalFields 已并入层）。
+    fn schema_with_audit() -> Schema {
+        let f = |n: &str, t: FieldType| Field {
+            name: n.to_string(),
+            field_type: t,
+            label: String::new(),
+        };
+        Schema::new_unchecked(
+            "t",
+            vec![
+                f("id", FieldType::Int),
+                f("amount", FieldType::Decimal),
+                f("create_by", FieldType::Int),
+                f("create_time", FieldType::DateTime),
+                f("update_by", FieldType::Int),
+                f("update_time", FieldType::DateTime),
+                f("delete_flag", FieldType::Int),
+            ],
+        )
+    }
+
+    fn audit_at(actor: i64) -> AuditCtx {
+        // 固定时间戳，便于断言（不依赖 Utc::now()）
+        use chrono::TimeZone;
+        AuditCtx {
+            actor,
+            now: Utc.with_ymd_and_hms(2026, 7, 7, 1, 2, 3).unwrap(),
+        }
+    }
+
+    #[test]
+    fn audit_insert_injects_five_cols_with_delete_flag_zero() {
+        let schema = schema_with_audit();
+        let mut cols = vec!["id".to_string(), "amount".to_string()];
+        let mut vals = vec![DataValue::Int(1000), DataValue::Decimal(5.into())];
+        apply_audit_insert(&mut cols, &mut vals, &schema, &audit_at(42));
+
+        // 业务列在前，审计 5 列追加在后
+        assert_eq!(
+            cols,
+            vec![
+                "id",
+                "amount",
+                "create_by",
+                "create_time",
+                "update_by",
+                "update_time",
+                "delete_flag"
+            ]
+        );
+        assert_eq!(cols.len(), vals.len(), "cols/vals 一一对应");
+        // create_by / update_by = actor
+        assert_eq!(vals[2], DataValue::Int(42));
+        assert_eq!(vals[4], DataValue::Int(42));
+        // create_time / update_time = 同一 now（insert 时 create/update 同值）
+        assert_eq!(vals[3], vals[5]);
+        assert!(matches!(vals[3], DataValue::DateTime(_)));
+        // delete_flag = 0
+        assert_eq!(vals[6], DataValue::Int(0));
+    }
+
+    #[test]
+    fn audit_insert_overwrites_client_supplied_audit_cols() {
+        // 前端若传了 create_by/delete_flag，服务端权威值必须覆盖，且不出现重复列（防 SQL 拼炸）。
+        let schema = schema_with_audit();
+        let mut cols = vec![
+            "id".to_string(),
+            "create_by".to_string(),
+            "delete_flag".to_string(),
+        ];
+        let mut vals = vec![
+            DataValue::Int(1000),
+            DataValue::Int(999), // 伪造的创建人
+            DataValue::Int(1),   // 伪造的删除标识
+        ];
+        apply_audit_insert(&mut cols, &mut vals, &schema, &audit_at(42));
+
+        // 每个审计列只出现一次
+        assert_eq!(cols.iter().filter(|c| *c == "create_by").count(), 1);
+        assert_eq!(cols.iter().filter(|c| *c == "delete_flag").count(), 1);
+        // 服务端值胜出：create_by=42，delete_flag=0
+        let idx = |name: &str| cols.iter().position(|c| c == name).unwrap();
+        assert_eq!(vals[idx("create_by")], DataValue::Int(42));
+        assert_eq!(vals[idx("delete_flag")], DataValue::Int(0));
+    }
+
+    #[test]
+    fn audit_insert_actor_zero_fallback() {
+        // 未认证/非数字身份兜底 0（永不阻断）。
+        let schema = schema_with_audit();
+        let mut cols = vec!["id".to_string()];
+        let mut vals = vec![DataValue::Int(1)];
+        apply_audit_insert(&mut cols, &mut vals, &schema, &audit_at(0));
+        let idx = |name: &str| cols.iter().position(|c| c == name).unwrap();
+        assert_eq!(vals[idx("create_by")], DataValue::Int(0));
+        assert_eq!(vals[idx("update_by")], DataValue::Int(0));
+    }
+
+    #[test]
+    fn audit_insert_only_injects_columns_present_in_schema() {
+        // 通用单据：某表无审计列时，一列都不注入（不硬造不存在的列）。
+        let schema = Schema::new_unchecked(
+            "bare",
+            vec![Field {
+                name: "id".to_string(),
+                field_type: FieldType::Int,
+                label: String::new(),
+            }],
+        );
+        let mut cols = vec!["id".to_string()];
+        let mut vals = vec![DataValue::Int(1)];
+        apply_audit_insert(&mut cols, &mut vals, &schema, &audit_at(42));
+        assert_eq!(cols, vec!["id"], "无审计列的表不注入任何审计列");
+        assert_eq!(vals.len(), 1);
+    }
+
+    #[test]
+    fn audit_update_injects_update_cols_only() {
+        let schema = schema_with_audit();
+        let mut cols = vec!["amount".to_string()];
+        let mut vals = vec![DataValue::Decimal(9.into())];
+        apply_audit_update(&mut cols, &mut vals, &schema, &audit_at(42));
+        assert_eq!(cols, vec!["amount", "update_by", "update_time"]);
+        assert_eq!(cols.len(), vals.len());
+        assert_eq!(vals[1], DataValue::Int(42));
+        assert!(matches!(vals[2], DataValue::DateTime(_)));
+        // update 路径不碰 create_*
+        assert!(!cols.iter().any(|c| c == "create_by" || c == "create_time"));
+    }
+
+    #[test]
+    fn audit_update_overwrites_client_supplied_update_cols() {
+        // 前端若传了 update_by/update_time，覆盖为服务端值且不重复。
+        let schema = schema_with_audit();
+        let mut cols = vec!["update_by".to_string(), "update_time".to_string()];
+        let mut vals = vec![
+            DataValue::Int(999),
+            DataValue::DateTime(audit_at(0).now),
+        ];
+        apply_audit_update(&mut cols, &mut vals, &schema, &audit_at(42));
+        assert_eq!(cols.iter().filter(|c| *c == "update_by").count(), 1);
+        assert_eq!(cols.iter().filter(|c| *c == "update_time").count(), 1);
+        let idx = |name: &str| cols.iter().position(|c| c == name).unwrap();
+        assert_eq!(vals[idx("update_by")], DataValue::Int(42));
+    }
+
+    #[test]
+    fn on_conflict_set_excludes_create_audit_keeps_update_audit() {
+        // UPSERT 撞已存在 id：ON CONFLICT SET 不得覆盖 create_by/create_time（创建审计不可变），
+        // 但仍刷新 update_by/update_time。
+        let cols = vec![
+            "id".to_string(),
+            "amount".to_string(),
+            "create_by".to_string(),
+            "create_time".to_string(),
+            "update_by".to_string(),
+            "update_time".to_string(),
+            "delete_flag".to_string(),
+        ];
+        let sql = build_multi_insert_sql("cv_header", &cols, 1, true);
+        // 创建审计列不在 SET 子句
+        assert!(!sql.contains("\"create_by\" = EXCLUDED"));
+        assert!(!sql.contains("\"create_time\" = EXCLUDED"));
+        // 更新审计列在 SET 子句
+        assert!(sql.contains("\"update_by\" = EXCLUDED.\"update_by\""));
+        assert!(sql.contains("\"update_time\" = EXCLUDED.\"update_time\""));
+        // 普通业务列照常刷新
+        assert!(sql.contains("\"amount\" = EXCLUDED.\"amount\""));
+    }
+
+    // ─────────────────── 版本快照根提取（B1：collect_versioned_roots）单测 ───────────────────
+
+    #[test]
+    fn value_to_id_string_variants() {
+        assert_eq!(value_to_id_string(&json!("1001")), Some("1001".into()));
+        assert_eq!(value_to_id_string(&json!(1001)), Some("1001".into()));
+        assert_eq!(value_to_id_string(&json!("")), None); // 空串跳过
+        assert_eq!(value_to_id_string(&json!(null)), None);
+        assert_eq!(value_to_id_string(&json!(true)), None);
+    }
+
+    /// 建一个最小两层 DocMetaView（根 cv_batch），供 collect_versioned_roots 测试。
+    fn mini_meta() -> DocMetaView {
+        let doc = json!({
+            "moduleMeta": { "moduleCode": "GL", "metaKind": "DOC", "version": 1 },
+            "voucherSchema": {
+                "schema": [
+                    [ { "id": "cv_batch",  "level": "L1" } ],
+                    [ { "id": "cv_header", "level": "L2" } ]
+                ],
+                "relations": [
+                    { "parent": "cv_batch", "child": "cv_header", "parentKey": "id", "childKey": "upper_id" }
+                ]
+            },
+            "voucherTables": [
+                { "level": "L1", "tableName": "cv_batch",  "fields": [ { "name": "id", "dataType": "BIGINT" } ] },
+                { "level": "L2", "tableName": "cv_header", "fields": [ { "name": "id", "dataType": "BIGINT" }, { "name": "upper_id", "dataType": "BIGINT" } ] }
+            ]
+        });
+        DocMetaView::parse(&doc, &Value::Null).unwrap()
+    }
+
+    fn ctx_no_override() -> SaveCtx {
+        SaveCtx { actor_id: 7, actor_name: "张三".into(), doc_file: "f.json".into(), op_override: None }
+    }
+
+    #[test]
+    fn collect_roots_merge_inserted_is_create_updated_is_update() {
+        let meta = mini_meta();
+        let root = meta.root_layer().unwrap();
+        let changes = json!({
+            "cv_batch": {
+                "inserted": [ { "id": "1001", "fields": {} } ],
+                "updated":  [ { "id": 1002, "fields": { "x": 1 } } ]
+            }
+        });
+        let mut roots =
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+        roots.sort();
+        assert_eq!(
+            roots,
+            vec![("1001".to_string(), "create".to_string()), ("1002".to_string(), "update".to_string())]
+        );
+    }
+
+    #[test]
+    fn collect_roots_merge_child_only_change_yields_none() {
+        // 只动子层（根层无桶）→ 本期不为根记版本。
+        let meta = mini_meta();
+        let root = meta.root_layer().unwrap();
+        let changes = json!({
+            "cv_header": { "updated": [ { "id": "2001", "fields": { "x": 1 } } ] }
+        });
+        let roots =
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+        assert!(roots.is_empty());
+    }
+
+    #[test]
+    fn collect_roots_replace_uses_root_rows_update_op() {
+        let meta = mini_meta();
+        let root = meta.root_layer().unwrap();
+        let snapshot = json!({
+            "cv_batch": { "rows": [ { "id": "3001" }, { "id": "3002" } ] }
+        });
+        let mut roots =
+            collect_versioned_roots(&snapshot, &meta, SaveMode::Replace, root, &ctx_no_override()).unwrap();
+        roots.sort();
+        assert_eq!(
+            roots,
+            vec![("3001".to_string(), "update".to_string()), ("3002".to_string(), "update".to_string())]
+        );
+    }
+
+    #[test]
+    fn collect_roots_op_override_wins() {
+        // restore 传 op_override=Some("restore") → 覆盖桶推断。
+        let meta = mini_meta();
+        let root = meta.root_layer().unwrap();
+        let ctx = SaveCtx {
+            actor_id: 7,
+            actor_name: "张三".into(),
+            doc_file: "f.json".into(),
+            op_override: Some("restore".into()),
+        };
+        let snapshot = json!({ "cv_batch": { "rows": [ { "id": "4001" } ] } });
+        let roots = collect_versioned_roots(&snapshot, &meta, SaveMode::Replace, root, &ctx).unwrap();
+        assert_eq!(roots, vec![("4001".to_string(), "restore".to_string())]);
+    }
+
+    #[test]
+    fn collect_roots_dedups_same_id() {
+        // 同 id 同时在 inserted 与 updated（异常但要稳）→ 只记一次（首次 create 胜）。
+        let meta = mini_meta();
+        let root = meta.root_layer().unwrap();
+        let changes = json!({
+            "cv_batch": {
+                "inserted": [ { "id": "5001", "fields": {} } ],
+                "updated":  [ { "id": "5001", "fields": { "x": 1 } } ]
+            }
+        });
+        let roots =
+            collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
+        assert_eq!(roots, vec![("5001".to_string(), "create".to_string())]);
+    }
 }
+

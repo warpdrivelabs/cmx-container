@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业务单据回存（doc save）完整方案与调用说明</title>
+<style>
+  :root{
+    --ins:#42a86b; --upd:#4a90d9; --del:#e0857a; --sys:#f0b429;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 90px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:28px 0 10px;color:var(--accent)}
+  h4{font-size:14px;font-weight:600;margin:20px 0 8px;color:var(--txt)}
+  p{margin:10px 0}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:var(--code);
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;margin:14px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0;color:#c9d6e3}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#20272f}
+  .num{font-variant-numeric:tabular-nums;font-family:"SF Mono",Menlo,monospace}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-ins{background:rgba(66,168,107,.18);color:#7fd4a3}
+  .b-upd{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .b-del{background:rgba(224,133,122,.18);color:#e6a79e}
+  .b-get{background:rgba(66,168,107,.2);color:#7fd4a3}
+  .b-post{background:rgba(74,144,217,.2);color:#8fc0ef}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;padding:12px 18px;margin:16px 0}
+  .callout.good{border-left-color:var(--ins)}
+  .callout.warn{border-left-color:var(--del)}
+  .callout b{color:var(--txt)}
+  .flow{background:var(--card);border-radius:10px;padding:20px 24px;margin:18px 0;font-family:"SF Mono",Menlo,monospace;font-size:12.5px;color:#c9d6e3;line-height:1.9;white-space:pre;overflow-x:auto}
+  .toc{background:var(--card);border-radius:10px;padding:16px 22px;margin:22px 0;columns:2;column-gap:36px}
+  .toc a{color:var(--code);text-decoration:none;display:block;padding:3px 0;font-size:13px;break-inside:avoid}
+  .toc a:hover{color:var(--accent)}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .k{color:#f0b429}.s{color:#7fd4a3}.c{color:#8b98a5;font-style:italic}.n{color:#e0857a}
+  ul,ol{margin:10px 0;padding-left:24px}li{margin:5px 0}
+  .tag{font-size:11px;color:var(--dim);font-weight:600}
+  .phase{display:inline-block;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;background:rgba(240,180,41,.15);color:var(--accent)}
+  .stepnum{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:var(--card2);color:var(--accent);font-size:12px;font-weight:700;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>业务单据回存 · doc save</h1>
+<div class="sub">changeset 增量回存 · 事务内批量写 + 审计填充 + 版本快照 + 乐观锁 + 批量端点 · 完整方案与调用说明</div>
+
+<div class="meta">
+<b>定位</b>：通用业务单据存储层的<b>写侧</b>。纯通用机制、零业务规则（不涉状态/过账/单据类型）——审计、版本、并发锁、批量都是任意业务表通用能力。<br>
+<b>后端</b>：<code>crates/libs/cmx-biz/src/doc/{saver,revision,meta}.rs</code> · <code>error.rs</code> · handler <code>crates/libs/cmx-api/src/handlers/portal/doc.rs</code><br>
+<b>前端</b>：<code>packages/cmx-data-comp/src/lib/cmx-doc-source.js</code>（<code>ChangeSetCollector</code> / <code>saveDocData</code> / <code>saveDocDataBatch</code>）<br>
+<b>配套文档</b>：读侧见《业务单据装载 · doc load》。
+</div>
+
+<div class="toc">
+<a href="#overview">① 全景：端到端回存链路</a>
+<a href="#protocol">② 增量协议（changeset）</a>
+<a href="#modes">③ 两种模式：merge / replace</a>
+<a href="#pipeline">④ 事务内一体流水线</a>
+<a href="#batchsql">⑤ 批量 SQL（消除 N+1）</a>
+<a href="#audit">⑥ 审计字段自动填充（方案 C）</a>
+<a href="#version">⑦ 版本快照（方案 B1）</a>
+<a href="#oplock">⑧ 乐观锁（方案 B2）</a>
+<a href="#batch">⑨ 批量单据端点（方案 F）</a>
+<a href="#endpoints">⑩ 端点与响应</a>
+<a href="#frontend">⑪ 前端调用（collector / save）</a>
+<a href="#recipes">⑫ 常用调用配方</a>
+</div>
+
+<!-- ① -->
+<h2 id="overview">① 全景：端到端回存链路</h2>
+<div class="flow">前端 ChangeSetCollector.export()   <span class="c"># 增量协议：仅回传变更，见 §2</span>
+  ▼  saveDocData(host, def, { saveMode, changes | snapshot, collector? })
+  ▼
+POST /api/doc/save?domain&amp;application&amp;module&amp;file
+  ▼  handler doc_save：
+  │    resolve_doc_meta（读定义 + base，带缓存）→ DocMetaView
+  │    run_validation（事务外二次校验，error 阻断）      <span class="c"># §14.2</span>
+  │    save_ctx(ctx) → SaveCtx { actor_id, actor_name, doc_file, op_override }
+  ▼  DocSaver::save(mm, db_id, meta, mode, changes, sctx)
+  │    begin_with_guard → txn_id
+  │    apply_and_version(txn_id)：       <span class="c"># 事务内一体，任一步失败即回滚</span>
+  │      ├ apply_merge | apply_replace   <span class="c"># 批量写 §5 + 审计 §6 + 乐观锁 §8</span>
+  │      ├ record_versions               <span class="c"># 版本快照 §7（versioning 开启时）</span>
+  │      └ new_root_baselines            <span class="c"># 算回传基线 §8</span>
+  │    commit
+  ▼  SaveResult { ok, mode, affected, updatedAt }
+  ▼
+前端：collector.reset() + refreshBaselines(updatedAt)</div>
+
+<div class="callout"><b>四期能力叠加</b>，全部通用、零业务规则：<span class="phase">第一期</span>批量 SQL（消 N+1）· <span class="phase">C</span>审计填充 · <span class="phase">B1</span>版本快照 · <span class="phase">B2</span>乐观锁 · <span class="phase">F</span>批量端点。每一层都对任意 L1..Ln 单据自动生效。</div>
+
+<!-- ② -->
+<h2 id="protocol">② 增量协议（changeset）</h2>
+<p>前端 <code>ChangeSetCollector</code> 订阅协调器各层 CmxDataSet 事件，累积「按层」的最小变更集——只回传变了的东西。</p>
+
+<pre><code>{
+  <span class="s">"cv_header"</span>: {                                <span class="c">// 层 key：表名 / 层 id / 嵌套全路径</span>
+    <span class="k">"inserted"</span>: [ { id, upper_id?, line_no?, <span class="k">fields</span>:{...整行} } ],
+    <span class="k">"updated"</span>:  [ { id, <span class="k">fields</span>:{仅变更列}, <span class="k">baseline</span>: update_time } ],
+    <span class="k">"deleted"</span>:  [ <span class="s">"id1"</span>, <span class="s">"id2"</span> ]              <span class="c">// 裸 id 数组</span>
+  }
+}</code></pre>
+
+<table>
+<thead><tr><th>桶</th><th>内容</th><th>净化规则</th></tr></thead>
+<tbody>
+<tr><td><span class="b-ins badge">inserted</span></td><td>整行 fields + 结构列</td><td>新增又删 → 净零抵消，不回传</td></tr>
+<tr><td><span class="b-upd badge">updated</span></td><td><b>仅变更列</b> + <code>baseline</code>（乐观锁基线，§8）</td><td>updated 只带用户改过的键（脏列集）</td></tr>
+<tr><td><span class="b-del badge">deleted</span></td><td>裸 id 数组</td><td>删的若是新增行 → 从 inserted 移除，不进 deleted</td></tr>
+</tbody>
+</table>
+
+<div class="callout good"><b>设计优点</b>：① 净零抵消 —— 新增后又删除的行不回后端。② updated 只传变更列（稀疏），省体积。③ 按层分组，后端按 <code>layer_order</code> 拓扑序精确写。层 key 兼容三形态：表名 / 层 id / 嵌套全路径（前端 collector 用点分路径，如 <code>cv_batch.cv_header.cv_acc_line</code>）。</div>
+
+<!-- ③ -->
+<h2 id="modes">③ 两种模式：merge / replace</h2>
+<table>
+<thead><tr><th>模式</th><th>语义</th><th>写法</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td><b>merge</b>（默认）</td><td>按 changeset 精确 INSERT(UPSERT)/UPDATE/DELETE，保主键/审计，写入最小</td><td>父先（layer_order 正序）UPSERT+UPDATE → 子先（逆序）DELETE</td><td>常规编辑保存</td></tr>
+<tr><td><b>replace</b></td><td>对 rootId 子树先 DELETE 旧行、再全量 INSERT snapshot（前端免 diff）</td><td>子先（逆序）子查询链删子树 → 父先全量插</td><td>整单覆盖 / 版本回滚</td></tr>
+</tbody>
+</table>
+
+<h4>replace 的子查询链删除（方案 E，第一期）</h4>
+<p>沿 <code>upper_id</code> 链圈定 rootId 子树：每层一条 <code>DELETE</code>，WHERE 用嵌套子查询上溯到根层，<b>零预 SELECT、无 id 物化</b>（避免并发漂移），往返数 = 层数。childKey 由元数据相邻推导（与装载器同源，独立于 relation 命名）。</p>
+
+<!-- ④ -->
+<h2 id="pipeline">④ 事务内一体流水线</h2>
+<p>核心是 <code>DocSaver::save</code>（<code>saver.rs</code>）：一个事务 guard 包住「写入 + 记版本 + 算基线」，任一步失败整体回滚——快照失败绝不 commit。</p>
+
+<pre><code><span class="k">pub async fn</span> save(mm, db_id, meta, mode, changes, sctx) -&gt; Result&lt;SaveResult&gt; {
+    <span class="k">let</span> guard = ctx.begin_with_guard(db_id).<span class="k">await</span>?;   <span class="c">// 开事务</span>
+    <span class="k">let</span> txn_id = guard.txn_id();
+    <span class="k">let</span> outcome = Self::apply_and_version(mm, db_id, txn_id, meta, mode, changes, sctx).<span class="k">await</span>;
+    <span class="k">match</span> outcome {
+        Ok((affected, updated_at)) =&gt; { guard.commit().<span class="k">await</span>?; Ok(SaveResult{..}) }
+        Err(e) =&gt; { guard.rollback().<span class="k">await</span>; Err(e) }        <span class="c">// 全回滚</span>
+    }
+}
+
+<span class="c">// apply_and_version：事务内一体（供单单 save 与批量 save_batch 共用，不含 begin/commit）</span>
+<span class="k">async fn</span> apply_and_version(...) -&gt; Result&lt;(u64, Vec&lt;UpdatedBaseline&gt;)&gt; {
+    <span class="k">let</span> audit = AuditCtx { actor: sctx.actor_id, now: Utc::now() };  <span class="c">// 全程共用一个时间戳</span>
+    <span class="k">let</span> affected = <span class="k">match</span> mode { Merge =&gt; apply_merge(...), Replace =&gt; apply_replace(...) }?;
+    Self::record_versions(...).<span class="k">await</span>?;              <span class="c">// B1</span>
+    <span class="k">let</span> updated_at = new_root_baselines(...);        <span class="c">// B2</span>
+    Ok((affected, updated_at))
+}</code></pre>
+
+<!-- ⑤ -->
+<h2 id="batchsql">⑤ 批量 SQL（消除 N+1，第一期）</h2>
+<p>旧实现逐行 <code>INSERT ... ON CONFLICT</code>，1000 行 = 1000+ 往返。第一期改为同层多行合并：</p>
+
+<table>
+<thead><tr><th>操作</th><th>SQL</th><th>分组</th></tr></thead>
+<tbody>
+<tr><td>UPSERT / INSERT</td><td><code>INSERT INTO t (cols) VALUES ($1..),($n..) ON CONFLICT(id) DO UPDATE</code></td><td>按「列集合」分组（各行 fields 稀疏）</td></tr>
+<tr><td>UPDATE</td><td><code>UPDATE t SET c=v.c FROM (VALUES ...) AS v(id,cols) WHERE t.id=v.id</code></td><td>按「变更列集合」分组</td></tr>
+<tr><td>DELETE</td><td><code>DELETE FROM t WHERE id = ANY($1)</code></td><td>批量（本就是）</td></tr>
+</tbody>
+</table>
+
+<p>参数上限 60000 分批；SQL 构造抽为纯函数 <code>build_multi_insert_sql</code> / <code>build_multi_update_sql</code>（可单测）。<b>1000 行分录：1000+ 往返 → O(层数×列集组) 条 SQL。</b></p>
+
+<h4>正确性兜底（通用，不涉业务）</h4>
+<ul>
+<li><b>H1 静默零写防护</b>：<code>assert_all_keys_matched</code> —— changeset 每个 key 必须对上某层，否则报错，杜绝「path 漂移导致保存成功却一行没写」。</li>
+<li><b>H2 对账</b>：INSERT+UPDATE 严格对账（期望行数 == 实际 affected），实际 &lt; 期望即报错回滚（id 不存在/并发删）；DELETE 幂等不纳入。</li>
+<li><b>防注入一致性</b>：写 SQL 全部 <code>quote_ident</code> 双引号包裹表/列名，列撞关键字也安全；列名过 schema 白名单。</li>
+</ul>
+
+<!-- ⑥ -->
+<h2 id="audit">⑥ 审计字段自动填充（方案 C，第二期）</h2>
+<p>保存时由<b>服务端权威</b>填充审计列，<b>忽略/覆盖前端传值</b>——审计不可伪造。</p>
+
+<table>
+<thead><tr><th>路径</th><th>填充列</th></tr></thead>
+<tbody>
+<tr><td>INSERT（新增/UPSERT）</td><td><code>create_by=actor, create_time=now, update_by=actor, update_time=now, delete_flag=0</code></td></tr>
+<tr><td>UPDATE</td><td>强制注入 <code>update_by=actor, update_time=now</code>（覆盖前端传值）</td></tr>
+<tr><td>ON CONFLICT DO UPDATE SET</td><td><b>排除</b> <code>create_by/create_time</code>（创建审计不可变，撞已存在 id 时不冲掉原创建人）</td></tr>
+</tbody>
+</table>
+
+<div class="callout good"><b>顺带修一个潜在 bug</b>：<code>create_by/create_time/delete_flag</code> 是 NOT NULL 无默认，而前端 <code>_insertedRow</code> 不回传技术列 → 纯新增行 INSERT 本会因 NOT NULL 失败。后端填充补上此缺口。</div>
+
+<div class="callout warn"><b>actor 兜底 0，永不阻断</b>：<code>create_by/update_by</code> 是 BIGINT，而 <code>auth_context.user_id</code> 是 String（系统身份为字面量 "system"）。缺失/空/非数字 → 兜底 <code>0</code>（约定 0=系统）。保存<b>永不因身份缺失失败</b>，兼容认证白名单/未配置认证服务。<code>now</code> 全事务共用一个 <code>Utc::now()</code>。</div>
+
+<!-- ⑦ -->
+<h2 id="version">⑦ 版本快照（方案 B1，第三期）</h2>
+<p>单据开启 versioning 时，每次 save 在<b>同一事务内、写入后 commit 前</b>：重装载整单 → 列式快照 → 追加一版（append-only 台账 <code>cmx_doc_revision</code>）。</p>
+
+<div class="flow">record_versions(txn_id)：
+  if !meta.versioning_enabled() { return }        <span class="c"># 仅开启时记（定义 moduleMeta.versioning.enabled）</span>
+  收集受影响 rootId + op（inserted→create / updated→update）
+  for each root：
+    DocQuery { layers:{ 根层:{ filter:{ id: rootId } } } }
+    DocLoader::load_txn(txn_id = Some(..))         <span class="c"># 事务内重装载，看得到未提交写！</span>
+    ColumnarCodec::encode → 列式快照 JSONB
+    DocRevision::record（旧版 is_current=0，插新版 rev_no+1，actor/op 落台账）</div>
+
+<div class="callout"><b>within-txn 重装载是关键</b>：<code>DocLoader::load</code> 默认走连接池（<code>txn_id=None</code>）看不到未提交写；快照必须用 <code>load_txn(Some(txn_id))</code> 在同事务连接上重装载，才能反映「保存后」的整单终态。<span class="tag">副作用：事务内遇缺失兄弟表会污染整个 PG 事务，故非主兄弟查询套 SAVEPOINT，失败回滚到 savepoint 再跳过。</span></div>
+
+<p>配套读端点（已存在）：<code>GET /api/doc/revisions</code>（版本时间线）、<code>GET /api/doc/revision</code>（取某版快照）、<code>POST /api/doc/restore</code>（把某历史版恢复为新当前版，走 replace 模式，<code>op_override="restore"</code>）。</p>
+
+<!-- ⑧ -->
+<h2 id="oplock">⑧ 乐观锁（方案 B2，第三期）</h2>
+<p>并发下防「后保存者静默覆盖先保存者」（lost update）。<b>仅根层加锁</b>（单据级并发防护）。</p>
+
+<h4>机制</h4>
+<div class="flow">1. 前端 export() 每 updated 行带 baseline = row.update_time  <span class="c"># 装载时的旧值（readonly 列，未被用户改）</span>
+2. 后端根层 UPDATE 加谓词：
+   UPDATE t SET ..., update_time = &lt;新now&gt;                <span class="c"># SET 写新值（方案 C）</span>
+     FROM (VALUES (id, cols.., baseline)) AS v(id, cols.., __oplock)
+     WHERE t.id = v.id AND t.update_time = v.__oplock       <span class="c"># WHERE 比旧值</span>
+3. 基线陈旧的行不匹配 → 不更新 → affected &lt; expected
+4. 冲突判定：对该组 id 补 SELECT —— id 存在=冲突(409) / 不存在=行不存在(H2)
+5. save 成功回传 updatedAt（每根新 update_time），前端 refreshBaselines 刷新</div>
+
+<div class="callout good"><b>WHERE 比旧值、SET 写新值——两者分离，天然正确</b>：baseline 是装载时的 update_time（WHERE 用它检测并发），<code>apply_audit_update</code> 把新 <code>now</code> 写进 SET。二者互不干扰。</div>
+
+<div class="callout warn"><b>冲突 = HTTP 409</b>：新增 <code>BizError::Conflict</code> → <code>cmx_api_types::Error::Conflict</code> → 409。<code>classify_update_shortfall</code> 补一次 <code>SELECT id WHERE id=ANY($缺失)</code>：命中=冲突（"单据已被他人修改，请刷新后重试"），未命中=沿用 H2「行不存在」业务错。前端 <code>saveDocData</code> 见 409 抛 <code>err.conflict=true</code>。</div>
+
+<div class="callout"><b>基线精度安全</b>：装载路径把 <code>timestamptz</code> 读为全精度 <code>DateTime&lt;Utc&gt;</code> → <code>to_rfc3339()</code>（保微秒）→ 回传绑定同类型。实测 <code>update_time = '…123456+00:00'::timestamptz</code> 等值匹配为真，DB→前端→DB 往返逐字节可比。<span class="tag">注：只有服务端权威 readonly 列（update_time）能当基线；用户可编辑列不行（无原值快照）。</span></div>
+
+<!-- ⑨ -->
+<h2 id="batch">⑨ 批量单据端点（方案 F，第四期）</h2>
+<p>一次请求保存多单。一批可<b>混多种单据定义</b>（每单自带坐标）。<code>POST /api/doc/save/batch</code>。</p>
+
+<table>
+<thead><tr><th>事务边界</th><th>语义</th><th>失败行为</th></tr></thead>
+<tbody>
+<tr><td><code>atomic: true</code>（默认）</td><td>N 单共用<b>一个大事务</b></td><td>任一单失败 → 整批回滚，返回 <code>Err</code>（带出错单 index，冲突仍 409），无部分提交</td></tr>
+<tr><td><code>atomic: false</code></td><td><b>每单独立事务</b>（复用单单 save）</td><td>逐单成败互不影响，全收进 <code>results</code>（失败单 <code>ok=false</code> + <code>error</code>），永不整体 Err</td></tr>
+</tbody>
+</table>
+
+<p>C/B1/B2 对每单自动生效——批量只是外层事务编排，不改单单语义。错误经 <code>from_batch_item</code> 加「第 N 单」前缀且<b>保留变体</b>（Conflict 仍映射 409）。</p>
+
+<pre><code><span class="c">// 请求体</span>
+{
+  <span class="k">"atomic"</span>: <span class="k">true</span>,
+  <span class="k">"docs"</span>: [
+    { domain, application, module, file, saveMode?, changes | snapshot },
+    ...
+  ]
+}
+<span class="c">// 响应</span>
+{ atomic, count, results: [ { index, ok, mode, affected, updatedAt?, error? } ] }</code></pre>
+
+<!-- ⑩ -->
+<h2 id="endpoints">⑩ 端点与响应</h2>
+<table>
+<thead><tr><th>端点</th><th>方法</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>/api/doc/save</code></td><td><span class="b-post badge">POST</span></td><td>单单回存（merge/replace）</td></tr>
+<tr><td><code>/api/doc/save/batch</code></td><td><span class="b-post badge">POST</span></td><td>批量回存（方案 F）</td></tr>
+<tr><td><code>/api/doc/revisions</code></td><td><span class="b-get badge">GET</span></td><td>版本时间线</td></tr>
+<tr><td><code>/api/doc/revision</code></td><td><span class="b-get badge">GET</span></td><td>取某历史版快照</td></tr>
+<tr><td><code>/api/doc/restore</code></td><td><span class="b-post badge">POST</span></td><td>回滚到某历史版（走 replace）</td></tr>
+</tbody>
+</table>
+
+<h4>save 请求 / 响应</h4>
+<pre><code><span class="c">// 请求：坐标走 query，body 带模式 + 变更</span>
+POST /api/doc/save?domain=fi&amp;application=cmxfico&amp;module=gl&amp;file=...v2.json
+Header: db_id: fico
+Body:   { <span class="k">"saveMode"</span>: <span class="s">"merge"</span>, <span class="k">"changes"</span>: {...} }   <span class="c">// replace 用 "snapshot"</span>
+
+<span class="c">// 响应（SaveResult，信封内）</span>
+{ <span class="k">"ok"</span>: true, <span class="k">"mode"</span>: <span class="s">"merge"</span>, <span class="k">"affected"</span>: 12,
+  <span class="k">"updatedAt"</span>: [ { <span class="k">"id"</span>:<span class="s">"H1"</span>, <span class="k">"updateTime"</span>:<span class="s">"2026-07-08T09:00:00Z"</span> } ] }  <span class="c">// B2 新基线</span>
+
+<span class="c">// 冲突（B2）：HTTP 409</span>
+{ <span class="k">"error"</span>: <span class="s">"单据已被他人修改，请刷新后重试（乐观锁冲突）"</span> }
+
+<span class="c">// 校验失败（run_validation，事务外）：HTTP 200 内嵌错误</span>
+{ <span class="k">"ok"</span>: false, <span class="k">"errorCode"</span>: <span class="s">"DOC_VALIDATION_FAILED"</span>, <span class="k">"violations"</span>: [...] }</code></pre>
+
+<!-- ⑪ -->
+<h2 id="frontend">⑪ 前端调用（collector / save）</h2>
+
+<h4>ChangeSetCollector — 累积变更</h4>
+<pre><code><span class="k">import</span> { ChangeSetCollector, saveDocData } <span class="k">from</span> <span class="s">'cmx-data-comp'</span>
+
+<span class="k">const</span> cs = <span class="k">new</span> ChangeSetCollector(ms).attach()   <span class="c">// ms = CmxMasterSlave；装载后 attach</span>
+<span class="c">// ... 用户编辑（增/改/删行）...</span>
+cs.isDirty()                    <span class="c">// 是否有未保存变更</span>
+<span class="k">const</span> changes = cs.export()      <span class="c">// { path: { inserted, updated(带baseline), deleted } }</span></code></pre>
+
+<table>
+<thead><tr><th>方法</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><code>attach()</code></td><td>订阅协调器各层 CmxDataSet 事件（装载后调）</td></tr>
+<tr><td><code>export()</code></td><td>导出最小 changeset；updated 行带 <code>baseline: row.update_time</code>（B2）</td></tr>
+<tr><td><code>reset()</code></td><td>清空累积（保存成功后调）</td></tr>
+<tr><td><code>refreshBaselines(updatedAt)</code></td><td>用后端回传新 update_time 刷新行基线（B2，支持连续保存不刷新页）</td></tr>
+</tbody>
+</table>
+
+<h4>saveDocData — 单单保存</h4>
+<pre><code><span class="k">try</span> {
+  <span class="k">const</span> result = <span class="k">await</span> saveDocData(host, def, {
+    saveMode: <span class="s">'merge'</span>,          <span class="c">// 'merge' | 'replace'</span>
+    changes,                     <span class="c">// merge 用 changes；replace 用 snapshot</span>
+    collector: cs,               <span class="c">// 传则成功后自动 refreshBaselines(result.updatedAt)</span>
+    signal: ac.signal
+  })
+  cs.reset()                     <span class="c">// { ok, mode, affected, updatedAt }</span>
+} <span class="k">catch</span> (e) {
+  <span class="k">if</span> (e.conflict) alert(<span class="s">'单据已被他人修改，请刷新后重试'</span>)  <span class="c">// HTTP 409（B2）</span>
+  <span class="k">else</span> <span class="k">throw</span> e
+}</code></pre>
+<p><code>def</code> 同 loadDocData 的坐标（domain/application/module/file/dbId），加可选 <code>saveApiPath</code> 覆盖端点。<code>dbId</code> 走 <code>db_id</code> 请求头。响应兼容「带信封 <code>{code,msg,data}</code>」与「门户拆信封的裸 <code>{ok,mode,affected}</code>」两形态。</p>
+
+<h4>saveDocDataBatch — 批量保存</h4>
+<pre><code><span class="k">const</span> r = <span class="k">await</span> saveDocDataBatch(host, {
+  atomic: <span class="k">true</span>,                <span class="c">// true=一事务全成全败；false=逐单隔离</span>
+  docs: [
+    { domain, application, module, file, saveMode:<span class="s">'merge'</span>, changes: cs1.export() },
+    { domain, application, module, file, saveMode:<span class="s">'replace'</span>, snapshot: {...} }
+  ],
+  collector: cs,               <span class="c">// 逐单回传 updatedAt 都刷新基线</span>
+  dbId: <span class="s">'fico'</span>
+})
+<span class="c">// r = { atomic, count, results:[{index,ok,mode,affected,updatedAt?,error?}] }</span>
+<span class="c">// atomic 模式任一单冲突 → 抛 err.conflict=true（整批回滚）</span></code></pre>
+
+<!-- ⑫ -->
+<h2 id="recipes">⑫ 常用调用配方</h2>
+
+<h4>A. 标准编辑保存（merge + 乐观锁 + 基线刷新）</h4>
+<pre><code><span class="k">const</span> cs = <span class="k">new</span> ChangeSetCollector(ms).attach()
+<span class="c">// 用户编辑后：</span>
+<span class="k">if</span> (cs.isDirty()) {
+  <span class="k">await</span> saveDocData(host, def, { saveMode:<span class="s">'merge'</span>, changes: cs.export(), collector: cs })
+  cs.reset()
+}</code></pre>
+
+<h4>B. 整单覆盖（replace）</h4>
+<pre><code><span class="k">const</span> snapshot = rootDs.exportColumnar({ includeChildren: <span class="k">true</span> })  <span class="c">// 整树列式包</span>
+<span class="k">await</span> saveDocData(host, def, { saveMode:<span class="s">'replace'</span>, snapshot })</code></pre>
+
+<h4>C. 批量过账/导入（atomic 全成全败）</h4>
+<pre><code><span class="k">const</span> docs = selectedDocs.map(d =&gt; ({
+  domain:<span class="s">'fi'</span>, application:<span class="s">'cmxfico'</span>, module:<span class="s">'gl'</span>, file:d.file,
+  saveMode:<span class="s">'merge'</span>, changes: d.collector.export()
+}))
+<span class="k">try</span> {
+  <span class="k">const</span> r = <span class="k">await</span> saveDocDataBatch(host, { atomic:<span class="k">true</span>, docs, dbId:<span class="s">'fico'</span> })
+  <span class="c">// 全部成功：r.results 全 ok=true</span>
+} <span class="k">catch</span> (e) {
+  <span class="k">if</span> (e.conflict) alert(<span class="s">'批量中有单据被他人修改，整批已回滚'</span>)
+}</code></pre>
+
+<h4>D. 批量导入（非 atomic，容忍部分失败）</h4>
+<pre><code><span class="k">const</span> r = <span class="k">await</span> saveDocDataBatch(host, { atomic:<span class="k">false</span>, docs, dbId:<span class="s">'fico'</span> })
+<span class="k">const</span> failed = r.results.filter(x =&gt; !x.ok)
+<span class="k">if</span> (failed.length) reportFailures(failed)  <span class="c">// 每项带 index + error；成功单已提交</span></code></pre>
+
+<div class="callout"><b>版本化开启</b>：给单据定义 <code>moduleMeta</code> 加 <code>"versioning": { "enabled": true }</code> 即启用版本快照（B1）。关闭时 save 不写 <code>cmx_doc_revision</code>——通用存储层不强制版本化，由定义控制。</div>
+
+<div class="foot">
+业务单据回存（doc save）方案与调用说明 · 通用存储写侧（第一期批量 + C 审计 + B1 版本 + B2 乐观锁 + F 批量）· 与《doc load》配套。<br>
+后端 <code>cmx-biz/src/doc/{saver,revision}.rs</code> + <code>cmx-api/.../portal/doc.rs</code>；前端 <code>packages/cmx-data-comp/src/lib/cmx-doc-source.js</code>。生成于 2026-07。
+</div>
+
+</div>
+</body>
+</html>

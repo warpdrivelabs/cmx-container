@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业务单据装载（doc load）完整方案与调用说明</title>
+<style>
+  :root{
+    --root:#4a90d9; --child:#42a86b; --sys:#f0b429; --warn:#e0857a;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 90px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:28px 0 10px;color:var(--accent)}
+  h4{font-size:14px;font-weight:600;margin:20px 0 8px;color:var(--txt)}
+  p{margin:10px 0}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:var(--code);
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;margin:14px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0;color:#c9d6e3}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#20272f}
+  .num{font-variant-numeric:tabular-nums;font-family:"SF Mono",Menlo,monospace}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-root{background:rgba(74,144,217,.18);color:#8fc0ef}
+  .b-child{background:rgba(66,168,107,.18);color:#7fd4a3}
+  .b-sys{background:rgba(240,180,41,.18);color:#f0cd76}
+  .b-get{background:rgba(66,168,107,.2);color:#7fd4a3}
+  .b-post{background:rgba(74,144,217,.2);color:#8fc0ef}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;padding:12px 18px;margin:16px 0}
+  .callout.good{border-left-color:var(--child)}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout b{color:var(--txt)}
+  .flow{background:var(--card);border-radius:10px;padding:20px 24px;margin:18px 0;font-family:"SF Mono",Menlo,monospace;font-size:12.5px;color:#c9d6e3;line-height:1.9;white-space:pre;overflow-x:auto}
+  .pill{display:inline-block;padding:1px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-right:4px}
+  .toc{background:var(--card);border-radius:10px;padding:16px 22px;margin:22px 0;columns:2;column-gap:36px}
+  .toc a{color:var(--code);text-decoration:none;display:block;padding:3px 0;font-size:13px;break-inside:avoid}
+  .toc a:hover{color:var(--accent)}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .k{color:#f0b429}.s{color:#7fd4a3}.c{color:#8b98a5;font-style:italic}
+  ul,ol{margin:10px 0;padding-left:24px}li{margin:5px 0}
+  .tag{font-size:11px;color:var(--dim);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>业务单据装载 · doc load</h1>
+<div class="sub">元数据驱动的通用单据数据装载：DB → 逐层查询 → 嵌套主从树 → 前端 CmxDataSet · 完整方案与调用说明</div>
+
+<div class="meta">
+<b>定位</b>：通用业务单据存储层的<b>读侧</b>。纯元数据驱动（DocMetaView），装载器不含任何单据专属列名/表名——换任意 L1..Ln 单据定义即可用。<br>
+<b>后端</b>：<code>crates/libs/cmx-biz/src/doc/{loader,zmc_loader,zmc_loader_sqlx,query,sql_builder,meta}.rs</code> · handler <code>crates/libs/cmx-api/src/handlers/portal/doc.rs</code><br>
+<b>前端</b>：<code>packages/cmx-data-comp/src/lib/{cmx-doc-source,cmx-data-set,cmx-doc-query,cmx-doc-meta-loader,cmx-doc-stream,cmx-msgpack-decode}.js</code><br>
+<b>配套文档</b>：写侧见《业务单据回存 · doc save》。
+</div>
+
+<div class="toc">
+<a href="#overview">① 全景：端到端装载链路</a>
+<a href="#meta">② 元数据模型（DocMetaView）</a>
+<a href="#query">③ 富查询模型（DocQuery）</a>
+<a href="#algo">④ 装载算法（广度优先下钻）</a>
+<a href="#endpoints">⑤ 装载端点（6 通道）</a>
+<a href="#package">⑥ 列式包结构（wire 格式）</a>
+<a href="#frontend">⑦ 前端调用（loadDocData 等）</a>
+<a href="#lazy">⑧ 懒下钻 loadChildren</a>
+<a href="#stream">⑨ 流式装载 loadDocDataStream</a>
+<a href="#meta-fetch">⑩ 定义获取与建表建列</a>
+<a href="#recipes">⑪ 常用调用配方</a>
+</div>
+
+<!-- ① -->
+<h2 id="overview">① 全景：端到端装载链路</h2>
+<p>一次装载把「单据定义 + 查询指令」变成前端可直接渲染的嵌套主从树。全链路：</p>
+<div class="flow">前端 loadDocData(host, def)
+  │  def = { domain, application, module, file, filter?, limit?, depth?, query?, dbId?, binary? }
+  ▼
+GET|POST /api/doc/data/&lt;驱动&gt;-&lt;内存模式&gt;-&lt;传输&gt;      <span class="c"># 6 个组合端点，见 §5</span>
+  ▼  handler: resolve_doc_meta（读定义 + base 字段集，带缓存）→ DocMetaView
+  ▼           DocQuery::from_json(body) | simple_doc_query(GET query)
+  ▼           dq.validate(meta)   <span class="c"># 列名白名单，防注入</span>
+  ▼  DocLoader::load(mm, db_id, meta, dq)
+  │     1. 根层查询 build_layer_select → DataSet，收集 rootIds
+  │     2. 逐层下钻：子层 childKey = ANY($parentIds) + 该层富条件，一条 SQL 取全部子行
+  │     3. 按 childKey 分桶挂到父行 _children[childId]
+  ▼  ColumnarCodec::encode(ds) | zmc.encode_columnar_json/binary  <span class="c"># 列式包，见 §6</span>
+  ▼
+前端 _unwrapPkg → CmxDataSet.fromJSON(pkg)   <span class="c"># 还原嵌套主从树</span>
+  ▼  { dsMap: { [datasetId]: rootDs }, pkg }  →  绑定 CmxMasterSlave / grid</div>
+
+<div class="callout"><b>通用性铁律</b>：所有 SQL 由 <code>sql_builder::build_layer_select</code> 按 <code>LayerView</code> / <code>LayerQuery</code> 元数据生成，装载器本身不含任何单据专属列名/表名。每层查询指令来自 <code>DocQuery</code>（缺省用默认）。</div>
+
+<!-- ② -->
+<h2 id="meta">② 元数据模型（DocMetaView）</h2>
+<p><code>DocMetaView</code>（<code>meta.rs</code>）是单据定义 DOC 的强类型只读投影，由 <code>DocMetaView::parse(doc, base)</code> 从两份 JSON 解析：<code>doc</code>（含 <code>moduleMeta</code> / <code>voucherSchema</code> / <code>voucherTables</code>）+ <code>base</code>（base 字段集，供 <code>documentFieldSets</code> 展开）。</p>
+
+<table>
+<thead><tr><th>字段</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td><code>layer_order</code></td><td>层序（自顶向下 L1..Ln）的<b>主链路</b>——每 level-group 取首表，装载器据此下钻。</td></tr>
+<tr><td><code>layers</code></td><td>各层视图 <code>LayerView</code>（含每层<b>全部表</b>，不止主链路）：<code>id</code> / <code>table_name</code> / <code>level</code> / <code>columns</code> / <code>schema</code>(Arc) / <code>summaries</code> / <code>agg_fields</code>。</td></tr>
+<tr><td><code>layer_groups</code></td><td>同 level 下全部并列表（同层多表保真，如 L4 = [cv_aux_line, cv_zycb_line]）。</td></tr>
+<tr><td><code>relations</code></td><td>父子关系 <code>RelationView</code>：<code>parent</code> / <code>child</code> / <code>parent_key</code>(默认 id) / <code>child_key</code>(默认 upper_id)。</td></tr>
+<tr><td><code>validation_rules</code></td><td>校验规则原始数组（回存时二次校验用，读侧不涉）。</td></tr>
+<tr><td><code>status_flow</code> / <code>versioning</code></td><td>状态机 / 版本化开关（原始透传）。</td></tr>
+</tbody>
+</table>
+
+<h4>关键方法</h4>
+<ul>
+<li><code>root_layer()</code> — 层序首个层（根）。</li>
+<li><code>layer(id_or_table)</code> — 按 schema id 或表名找层。</li>
+<li><code>child_layers(parent_id)</code> — 某父的全部<b>直接子表</b>（同父兄弟；<code>parentTable</code> 声明则精确匹配，否则整组回退）。</li>
+<li><code>child_key_for(parent_id)</code> / <code>child_key_for_child(child_id)</code> — 父→子的 childKey（默认 <code>upper_id</code>）。</li>
+<li><code>is_primary_in_group(table_id)</code> — 是否层组主表（孙层只从主表下钻）。</li>
+</ul>
+
+<div class="callout warn"><b>逻辑名 vs 物理名</b>：定义里 <code>relations</code> 的 parent/child 用逻辑名（headers/account_lines），而 schema 节点与表用物理名（cv_header/cv_acc_line）。装载器<b>不按 relations 名字匹配层</b>，而是按 <code>layer_groups</code> 相邻推导父子 + <code>child_layers</code> 取兄弟。这是通用性的关键。</div>
+
+<!-- ③ -->
+<h2 id="query">③ 富查询模型（DocQuery）</h2>
+<p><code>DocQuery</code>（<code>query.rs</code>）是每层独立的富查询指令，推翻了旧「根层单等值」的贫弱设计。</p>
+
+<pre><code><span class="c">// DocQuery 结构</span>
+{
+  <span class="k">depth</span>?: number,          <span class="c">// 装载深度：None=全部层；Some(n)=只装前 n 层</span>
+  <span class="k">includeSiblings</span>?: bool, <span class="c">// 是否装同父兄弟表（默认 true）</span>
+  <span class="k">onlyParents</span>?: any[],    <span class="c">// 懒下钻：只装这些父 id 的子树</span>
+  <span class="k">layers</span>: {                <span class="c">// 按层 id 指定该层 LayerQuery（未指定用默认）</span>
+    <span class="s">"cv_batch"</span>:   { filter, orderBy, limit, offset, cursor },
+    <span class="s">"cv_acc_line"</span>: { filter: { local_dr: { <span class="s">"$gt"</span>: 1000 } } }
+  }
+}</code></pre>
+
+<h4>LayerQuery 的四要素</h4>
+<table>
+<thead><tr><th>要素</th><th>形态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><b>filter</b></td><td>过滤树（AND/OR 组 + 叶子）</td><td>算子：<code>$eq $ne $gt $gte $lt $lte $in $notIn $like $ilike $contains $startsWith $endsWith $null</code>。简写等值 <code>{status:"posted"}</code> ≡ <code>{status:{$eq:"posted"}}</code>。显式组 <code>{$or:[...]}</code>。</td></tr>
+<tr><td><b>orderBy</b></td><td>字符串或字符串数组</td><td><code>"!col"</code>=DESC，<code>"col"</code>=ASC。缺省根层 <code>[id]</code>、子层 <code>[child_key, line_no]</code>。</td></tr>
+<tr><td><b>分页</b></td><td><code>limit</code>/<code>offset</code> 或 <code>cursor</code></td><td>keyset 游标（稳定无漂移，优先游标）。wire 形态 base64(JSON <code>{vals,id}</code>)。</td></tr>
+</tbody>
+</table>
+
+<div class="callout"><b>安全</b>：所有列名在构建 SQL 前用 <code>layer.schema.get_index(col)</code> 白名单校验（<code>validate_against</code>），值按列 <code>data_type</code> 类型化成 <code>DataValue</code>，全部走 <code>$N</code> 参数绑定——零字符串拼接注入面，且绕开 sea-query 的 decimal/array feature 缺口。</div>
+
+<!-- ④ -->
+<h2 id="algo">④ 装载算法（广度优先下钻）</h2>
+<p><code>DocLoader::load</code>（<code>loader.rs</code>）按层广度优先，父批量驱动子，避免 N+1：</p>
+<ol>
+<li><b>根层</b>：<code>build_layer_select</code>（该层 filter/orderBy/limit/offset/cursor）→ DataSet，收集 rootIds。</li>
+<li><b>逐层下钻</b>（<code>descend</code>）：沿 <code>layer_groups</code> 取下一层组全部兄弟表；每张子表一条 SQL <code>childKey = ANY($parentIds)</code> + 该层富条件取全部子行；按 childKey 分桶挂到父行 <code>_children[childId]</code>。孙层只从每组主表继续。</li>
+<li>返回根层嵌套 DataSet（完整主从树）。</li>
+</ol>
+
+<h4>两个容错/事务要点</h4>
+<ul>
+<li><b>兄弟表容错</b>：非主兄弟表装载失败（元数据定义了但物理表未部署）→ 跳过 + 警告，不中断整单。</li>
+<li><b>事务内装载</b>：<code>load_txn(txn_id: Some(..))</code> 在指定事务连接上查询（看得到未提交写）——供<b>回存事务内重装载做版本快照</b>用（见 doc save · B1）。此时非主兄弟查询套 <code>SAVEPOINT</code>，失败回滚到 savepoint 再跳过，避免污染整个事务。普通装载用 <code>load</code>（走连接池，<code>txn_id=None</code>）。</li>
+</ul>
+
+<!-- ⑤ -->
+<h2 id="endpoints">⑤ 装载端点（6 通道）</h2>
+<p>装载端点命名 <code>/api/doc/data/&lt;驱动&gt;-&lt;内存模式&gt;-&lt;传输&gt;</code>，三段一眼可辨。GET（URL query 便捷）与 POST（body = 完整 DocQuery JSON）共用入口 <code>doc_load_entry</code>。路由注册见 <code>handlers/portal/mod.rs:148-175</code>。</p>
+
+<table>
+<thead><tr><th>端点</th><th>驱动</th><th>内存</th><th>传输</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>/doc/data/sqlx-dataset-json</code></td><td>sqlx</td><td>老 DataSet（全物化）</td><td>JSON 信封</td><td><b>默认</b>；兼容老链路</td></tr>
+<tr><td><code>/doc/data/tokio-zmc-msgpack</code></td><td>tokio-pg</td><td>ZmcDataSet（零拷贝）</td><td>msgpack 二进制</td><td><b>最快</b>；大结果首选</td></tr>
+<tr><td><code>/doc/data/sqlx-zmc-msgpack</code></td><td>sqlx</td><td>ZmcDataSet</td><td>msgpack 二进制</td><td>sqlx 侧零拷贝二进制</td></tr>
+<tr><td><code>/doc/data/tokio-zmc-json</code></td><td>tokio-pg</td><td>ZmcDataSet</td><td>纯 JSON</td><td>零拷贝 + JSON 兼容</td></tr>
+<tr><td><code>/doc/data/sqlx-zmc-json</code></td><td>sqlx</td><td>ZmcDataSet</td><td>纯 JSON</td><td>同上，sqlx 侧</td></tr>
+<tr><td><code>/doc/data/tokio-zmc-stream</code></td><td>tokio-pg</td><td>ZmcDataSet 流式</td><td>长度分帧 octet-stream</td><td><b>超大扁平</b>结果零内存 chunked（单层，不下钻）</td></tr>
+</tbody>
+</table>
+
+<div class="callout"><b>选型指引</b>：常规主从树用默认 <code>sqlx-dataset-json</code>（前端 <code>def.binary</code> 缺省）；追求最优内存/传输用 <code>tokio-zmc-msgpack</code>（<code>def.binary=true</code>）；十万行级单层扁平大结果用 stream 端点（<code>loadDocDataStream</code>）。<span class="tag">注：tokio 驱动无老 DataSet 通道，该组合返回业务错误。</span></div>
+
+<h4>GET 便捷参数（URL query）</h4>
+<pre><code>domain, application, module, file   <span class="c">// 单据坐标（必填）</span>
+filter=<span class="s">"col:value"</span>                <span class="c">// 根层简单等值</span>
+limit=50                            <span class="c">// 根层限行</span>
+depth=2                             <span class="c">// 装载深度</span></code></pre>
+
+<!-- ⑥ -->
+<h2 id="package">⑥ 列式包结构（wire 格式）</h2>
+<p>三种传输（JSON 信封 / 纯 JSON / msgpack 二进制）承载的<b>都是同一个「列式包」结构</b>——<code>ColumnarCodec::encode</code>（<code>columnar.rs</code>）产出，前端 <code>CmxDataSet.fromJSON</code> 逐字段同构还原。</p>
+
+<pre><code>{
+  <span class="k">"datasetId"</span>: <span class="s">"cv_batch"</span>,               <span class="c">// = 根层 schema id</span>
+  <span class="k">"columns"</span>: [<span class="s">"id"</span>,<span class="s">"upper_id"</span>,<span class="s">"total_dr"</span>,...], <span class="c">// 列名，取自 schema.fields 顺序</span>
+  <span class="k">"rows"</span>: [                            <span class="c">// 每项 = 与 columns 对齐的纯值数组</span>
+    [<span class="s">"H1"</span>, null, 100],
+    [<span class="s">"H2"</span>, null, 50]
+  ],
+  <span class="k">"childRows"</span>: {                       <span class="c">// 父行 id → { childKey → 递归列式包 }</span>
+    <span class="s">"H1"</span>: {
+      <span class="s">"cv_line"</span>: { datasetId, columns, rows, childRows? }  <span class="c">// 递归同构</span>
+    }
+  }
+}</code></pre>
+
+<div class="callout good"><b>要点</b>：① <code>rows</code> 是<b>位置数组</b>（非对象），列名只出现一次——比每行重复键的 JSON 省一大截体积。② 子集按<b>父行 id</b> 挂进 <code>childRows[父id][childKey]</code>，递归；父行 id 取自名为 <code>id</code> 的列，无该列或无子集时不产出 <code>childRows</code>。③ 三种传输仅编码不同，结构一致：JSON 信封 = <code>{code,msg,data:&lt;列式包&gt;}</code>；msgpack = 同结构的二进制。</div>
+
+<h4>信封（envelope）</h4>
+<p>JSON/msgpack 端点外层包 <code>ApiResp</code> 信封 <code>{ code:0, msg:"success", data:&lt;列式包&gt; }</code>；前端 <code>_unwrapPkg</code> 兼容「带信封」与「门户拦截器已拆信封的裸列式包」两种形态。</p>
+
+<!-- ⑦ -->
+<h2 id="frontend">⑦ 前端调用（loadDocData）</h2>
+<p>主入口 <code>loadDocData(host, def)</code>（<code>cmx-doc-source.js:45</code>）——两个位置参数，无第三个 options。</p>
+
+<pre><code><span class="k">import</span> { loadDocData } <span class="k">from</span> <span class="s">'cmx-data-comp'</span>
+
+<span class="k">const</span> { dsMap, pkg } = <span class="k">await</span> loadDocData(host, {
+  domain: <span class="s">'fi'</span>, application: <span class="s">'cmxfico'</span>, module: <span class="s">'gl'</span>,
+  file: <span class="s">'cmxfico_doc_meta_v2.json'</span>,   <span class="c">// 单据定义文件名</span>
+  <span class="c">// 便捷参数（走 GET）：</span>
+  filter: <span class="s">'period_code:2026'</span>,          <span class="c">// 根层等值</span>
+  limit: 50, depth: 2,
+  <span class="c">// 通道 / 目标库：</span>
+  binary: <span class="k">true</span>,                       <span class="c">// true→msgpack 零拷贝通道；缺省→JSON</span>
+  dbId: <span class="s">'fico'</span>,                       <span class="c">// 写入 db_id 请求头（非 query）</span>
+  apiPath: <span class="s">'/api/doc/data/...'</span>,      <span class="c">// 可选：覆盖默认端点</span>
+  <span class="c">// 富查询（存在则改走 POST，body=DocQuery）：</span>
+  query: { depth: 2, layers: { cv_batch: { filter: { period_code: <span class="s">'2026'</span> } } } },
+  signal: abortController.signal
+})
+
+<span class="c">// 返回：{ dsMap: { [datasetId]: rootCmxDataSet }, pkg: 原始列式包 }</span>
+<span class="k">const</span> rootDs = dsMap[pkg.datasetId]   <span class="c">// 根层 CmxDataSet（已含 _children 嵌套）</span></code></pre>
+
+<table>
+<thead><tr><th>def 字段</th><th>去向</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>domain/application/module/file</code></td><td>URL query</td><td>单据坐标，必填</td></tr>
+<tr><td><code>filter/limit/depth</code></td><td>URL query</td><td>GET 便捷（根层）</td></tr>
+<tr><td><code>query</code></td><td>POST body</td><td>存在且非空 → 改走 <span class="b-post badge">POST</span>，body = DocQuery JSON</td></tr>
+<tr><td><code>binary</code></td><td>端点 + Accept 头</td><td><code>true</code> → <code>/tokio-zmc-msgpack</code> + <code>application/x-msgpack</code>；否则 JSON</td></tr>
+<tr><td><code>dbId</code></td><td><code>db_id</code> 请求头</td><td><b>头</b>，不是 query 参数</td></tr>
+<tr><td><code>apiPath</code></td><td>端点覆盖</td><td>字段名是 <code>apiPath</code>（无 <code>loadApiPath</code>）</td></tr>
+</tbody>
+</table>
+
+<div class="callout"><b>GET vs POST</b>：由 <code>def.query</code> 是否存在且非空<b>唯一决定</b>。有富查询走 POST（body=DocQuery），否则走 GET（便捷参数）。DocQuery 的构建器见 <code>cmx-doc-query.js</code>（<code>buildDocQuery</code>）。</p></div>
+
+<h4>还原：CmxDataSet.fromJSON</h4>
+<p><code>loadDocData</code> 内部 <code>_unwrapPkg</code> 拆信封后调 <code>CmxDataSet.fromJSON(pkg)</code>（<code>cmx-data-set.js:362</code>）——把列式包还原成嵌套主从树：每行 <code>columns[i]→rows[i]</code> 重建 <code>{col:value}</code>（缺 id 自动生成），<code>childRows</code> 按父 id 递归 <code>fromJSON</code> 挂到 <code>row._children[childId]</code>。父 id 查找对 BIGINT 做字符串宽松匹配，避免类型不一致丢子层。</p>
+
+<!-- ⑧ -->
+<h2 id="lazy">⑧ 懒下钻 loadChildren</h2>
+<p>grid 展开某父行时按需拉取子树，避免一次装满整棵深树。<code>loadChildren(host, def, opts)</code>（<code>cmx-doc-source.js:105</code>）→ <span class="b-post badge">POST</span> <code>/api/doc/data/children</code>。</p>
+
+<pre><code><span class="k">import</span> { loadChildren } <span class="k">from</span> <span class="s">'cmx-data-comp'</span>
+
+<span class="k">const</span> { pkg, ds } = <span class="k">await</span> loadChildren(host,
+  { domain:<span class="s">'fi'</span>, application:<span class="s">'cmxfico'</span>, module:<span class="s">'gl'</span>, file:<span class="s">'...v2.json'</span>, dbId:<span class="s">'fico'</span> },
+  {
+    layer: <span class="s">'cv_acc_line'</span>,          <span class="c">// 要下钻的层 id（任意层，childKey 由元数据推导）</span>
+    parentIds: [<span class="s">'H1'</span>, <span class="s">'H2'</span>],       <span class="c">// 上层选中的父 id 列表</span>
+    query: { filter: { local_dr: { <span class="s">'$gt'</span>: 1000 } } },  <span class="c">// 该层 LayerQuery（可选）</span>
+    depth: 1,                       <span class="c">// 从该层继续下钻几层（None=只装该层）</span>
+    exit: <span class="s">'sqlx-zmc-json'</span>         <span class="c">// 出口通道（缺省 tokio-zmc-json）</span>
+  })
+<span class="c">// 返回 { pkg, ds }：ds = CmxDataSet.fromJSON(pkg)，回填父行 _children</span></code></pre>
+
+<p>后端 <code>doc_children</code> 以该层为根、给定父 id 下钻装载子树（<code>ZmcDocLoader::load_subtree</code>），出口纯 JSON 列式包，可直接 <code>fromJSON</code> 回填父行 <code>_children</code>。全部经 <code>build_layer_select</code>，通用无单据专属逻辑。</p>
+
+<!-- ⑨ -->
+<h2 id="stream">⑨ 流式装载 loadDocDataStream</h2>
+<p>超大<b>单层扁平</b>结果（十万行级，不下钻）零内存 chunked 传输。<code>loadDocDataStream(host, def, opts)</code>（<code>cmx-doc-stream.js:29</code>）→ <code>/api/doc/data/tokio-zmc-stream</code>，<code>Accept: application/octet-stream</code>。</p>
+
+<h4>长度分帧协议</h4>
+<div class="flow">[u32 大端 len][payload]  [u32 len][payload]  ...  [u32=0]（终止）
+  帧 1 payload = msgpack { datasetId, columns }   <span class="c"># 头</span>
+  帧 2..N payload = msgpack 行值数组               <span class="c"># 每行一帧</span>
+  len=0 = 流终止</div>
+
+<pre><code><span class="k">import</span> { loadDocDataStream } <span class="k">from</span> <span class="s">'cmx-data-comp/lib/cmx-doc-stream.js'</span>
+
+<span class="k">const</span> pkg = <span class="k">await</span> loadDocDataStream(host, def, {
+  onRow: (row, i) =&gt; { <span class="c">/* 增量渲染，边收边画 */</span> },
+  onProgress: (n) =&gt; updateBar(n)
+})
+<span class="c">// 组装成扁平列式包 { datasetId, columns, rows }（无 childRows）→ CmxDataSet.fromJSON</span></code></pre>
+
+<p><code>FrameStreamParser</code>（<code>cmx-doc-stream.js:94</code>）跨 chunk 边界缓冲字节：<code>push(chunk)</code> 追加、<code>next()</code> 在 len=0 返回 <code>{end:true}</code>、整帧未齐时返回 <code>null</code>、否则 <code>{end:false, payload}</code>。每帧 <code>decodeMsgpack(payload)</code>。</p>
+
+<h4>msgpack 解码</h4>
+<p><code>decodeMsgpack(buf)</code>（<code>cmx-msgpack-decode.js</code>）现委托官方 <code>@msgpack/msgpack</code> 的 <code>decode</code>（V8 手工优化，比手写 JS 解码器快 2~3 倍）。对字符串键 map 返回普通对象、对 bin 返回 Uint8Array，与旧手写解码器输出一致——两消费方（<code>cmx-doc-source</code> 全量、<code>cmx-doc-stream</code> 逐帧）零改动。</p>
+
+<!-- ⑩ -->
+<h2 id="meta-fetch">⑩ 定义获取与建表建列</h2>
+<p>装载<b>数据</b>前需先拿<b>定义</b>（voucherTables/moduleMeta）。定义走独立端点，与数据端点分离：</p>
+
+<table>
+<thead><tr><th>用途</th><th>端点</th><th>方法</th></tr></thead>
+<tbody>
+<tr><td>单个定义</td><td><code>/api/definitions/config</code></td><td><span class="b-get badge">GET</span> query <code>kind,id,domain,module,file</code></td></tr>
+<tr><td>批量定义（含 base 字段集，<b>首选</b>）</td><td><code>/api/definitions/batch</code></td><td><span class="b-post badge">POST</span> <code>{ refs, includeBase }</code></td></tr>
+<tr><td>装载器视角的层/列元数据</td><td><code>/api/doc/meta</code></td><td><span class="b-get badge">GET</span>（handler <code>doc_meta</code> → <code>project_doc_meta</code>）</td></tr>
+</tbody>
+</table>
+
+<p>前端定义模型 <code>CmxDOCMeta</code>（<code>cmx-doc-meta.js</code>，<code>tableProp:'voucherTables'</code> / <code>metaProp:'moduleMeta'</code>）；<code>baseDocMetaRef.file</code> 推断 base 字段集（默认 <code>base_doc_meta_v1.json</code>），批量端点可一并返回。</p>
+
+<h4>定义 → 建表建列（cmx-doc-meta-loader.js）</h4>
+<p>拿到定义后，四个纯函数把它转成 CmxMasterSlave schema + grid 列：</p>
+<ul>
+<li><code>buildMasterSlaveSchema(meta)</code> → 单根 N 层线性父子 schema <code>[{id, children:[...]}]</code>（按 <code>layerOrder</code> 相邻链，忽略 relations 名字）。</li>
+<li><code>layerPaths(meta)</code> → 每层 DFS 点分路径 <code>{layerId, path, level, levelName, columns}</code>（如 <code>cv_batch.cv_header</code>），供 <code>bindTable</code>/<code>setColumnModel</code>。</li>
+<li><code>buildColumnModel(C, path, columns, opts)</code> → 一层 <code>CmxColumnModel</code>，每列 <code>id/caption/dataType/width/align</code>，主键与系统列 <code>editMode:'readonly'</code>。</li>
+<li><code>orderColumns(columns)</code> → 业务列在前、系统列在后。</li>
+</ul>
+<p><span class="b-sys badge">系统列 SYSTEM_COLS</span> <code>id, upper_id, line_no, create_by, create_time, update_by, update_time, delete_flag, client_code</code>——默认排到显示末尾且只读。</p>
+
+<!-- ⑪ -->
+<h2 id="recipes">⑪ 常用调用配方</h2>
+
+<h4>A. 最简：装一棵单据树（默认 JSON 通道）</h4>
+<pre><code><span class="k">const</span> { dsMap, pkg } = <span class="k">await</span> loadDocData(host, {
+  domain:<span class="s">'fi'</span>, application:<span class="s">'cmxfico'</span>, module:<span class="s">'gl'</span>, file:<span class="s">'...v2.json'</span>, dbId:<span class="s">'fico'</span>
+})
+ms.setDataSet({ [pkg.datasetId]: dsMap[pkg.datasetId] })  <span class="c">// 绑定 CmxMasterSlave</span></code></pre>
+
+<h4>B. 富查询 + 二进制通道（大结果最优）</h4>
+<pre><code><span class="k">const</span> { dsMap } = <span class="k">await</span> loadDocData(host, {
+  domain:<span class="s">'fi'</span>, application:<span class="s">'cmxfico'</span>, module:<span class="s">'gl'</span>, file:<span class="s">'...v2.json'</span>, dbId:<span class="s">'fico'</span>,
+  binary: <span class="k">true</span>,
+  query: {
+    depth: 3,
+    layers: {
+      cv_batch:    { filter: { period_code: <span class="s">'2026'</span> }, orderBy: [<span class="s">'!doc_date'</span>], limit: 100 },
+      cv_acc_line: { filter: { local_dr: { <span class="s">'$gte'</span>: 1000 } } }
+    }
+  }
+})</code></pre>
+
+<h4>C. 懒加载：只装根层，展开时拉子树</h4>
+<pre><code><span class="c">// 1) 只装根层</span>
+<span class="k">await</span> loadDocData(host, { ...def, depth: 1 })
+<span class="c">// 2) grid 展开某父行 → 拉该父的子层</span>
+<span class="k">const</span> { ds } = <span class="k">await</span> loadChildren(host, def, { layer:<span class="s">'cv_header'</span>, parentIds:[clickedId] })</code></pre>
+
+<h4>D. 流式：十万行单层扁平表边收边画</h4>
+<pre><code><span class="k">await</span> loadDocDataStream(host, { ...def, apiPath:<span class="s">'/api/doc/data/tokio-zmc-stream'</span> }, {
+  onRow: (row) =&gt; grid.appendRow(row)
+})</code></pre>
+
+<div class="foot">
+业务单据装载（doc load）方案与调用说明 · 通用元数据驱动读侧 · 与《doc save》配套。<br>
+后端 <code>cmx-biz/src/doc/</code> + <code>cmx-api/.../portal/doc.rs</code>；前端 <code>packages/cmx-data-comp/src/lib/</code>。生成于 2026-07。
+</div>
+
+</div>
+</body>
+</html>

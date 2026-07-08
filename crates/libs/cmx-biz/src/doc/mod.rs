@@ -23,7 +23,7 @@ pub use meta::{ColumnView, DocMetaView, LayerView, LevelGroup, RelationView, Sum
 pub use query::{json_to_datavalue, Cond, Cursor, DocQuery, Filter, LayerQuery, Op, OrderBy};
 pub use revision::DocRevision;
 pub use rule::{validate, ValidateResult, Violation};
-pub use saver::{DocSaver, SaveMode, SaveResult};
+pub use saver::{BatchItem, BatchOutcome, DocSaver, SaveCtx, SaveMode, SaveResult};
 pub use sql_builder::build_layer_select;
 pub use zmc_loader::ZmcDocLoader;
 pub use zmc_loader_sqlx::ZmcDocLoaderSqlx;

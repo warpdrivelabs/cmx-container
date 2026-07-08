@@ -11,7 +11,8 @@
     "keyDicts": "gl_account",
     "documentTypeDict": "doc_type",
     "versionName": "",
-    "isDefault": true
+    "isDefault": true,
+    "versioning": { "enabled": true }
   },
   "baseDocMetaRef": {
     "file": "base_doc_meta_v1.json",

@@ -534,7 +534,7 @@ pub struct DocSaveQuery {
 /// body: `{ saveMode, changes | snapshot }`（§6.4）。单据坐标走 query 参数。
 pub async fn doc_save(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
+    CmxSvrContext(ctx): CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -552,11 +552,119 @@ pub async fn doc_save(
             return Ok(Json(ApiResp::ok(vr)));
         }
 
-    let result = DocSaver::save(mm, &db_id, &meta, mode, &changes).await?;
+    let result = DocSaver::save(
+        mm,
+        &db_id,
+        &meta,
+        mode,
+        &changes,
+        &save_ctx(&ctx, &q.file, None),
+    )
+    .await?;
 
     Ok(Json(ApiResp::ok(
         serde_json::to_value(result).map_err(serde_err_to_api)?,
     )))
+}
+
+/// 从 `CmxSvrContext` 构造保存上下文（审计填充 方案 C + 版本快照 B1）。
+///
+/// - `actor_id`：`create_by`/`update_by` 是 BIGINT，而 `auth_context.user_id` 是 String（系统身份为
+///   字面量 "system"）。缺失/空/非数字 → 兜底 `0`（约定 0=系统），保存**永不因身份缺失失败**。
+/// - `actor_name`：版本台账 actor_name；空则 "系统"（对齐 `handler.rs` 的 `model_operator` 兜底惯例）。
+/// - `doc_file`：单据定义文件名，版本台账定位「哪种单据」。
+/// - `op_override`：restore 等传 Some("restore")；None 时 saver 按 changeset 桶推断 create/update。
+fn save_ctx(
+    ctx: &cmx_core::model::service::context::SVRContext,
+    doc_file: &str,
+    op_override: Option<&str>,
+) -> cmx_biz::doc::SaveCtx {
+    let auth = ctx.auth_context.as_ref();
+    let actor_id = auth
+        .map(|a| a.user_id.trim())
+        .filter(|u| !u.is_empty())
+        .and_then(|u| u.parse::<i64>().ok())
+        .unwrap_or(0);
+    let actor_name = auth
+        .map(|a| a.username.trim())
+        .filter(|u| !u.is_empty())
+        .unwrap_or("系统")
+        .to_string();
+    cmx_biz::doc::SaveCtx {
+        actor_id,
+        actor_name,
+        doc_file: doc_file.to_string(),
+        op_override: op_override.map(String::from),
+    }
+}
+
+/// `POST /api/doc/save/batch` —— 批量回存多单（方案 F）。
+///
+/// body: `{ atomic?: bool = true, docs: [ { domain, application, module, file, saveMode?, changes|snapshot } ] }`。
+/// 一批可混多种单据（每单自带坐标）。`atomic=true` 一个大事务全成全败；`false` 每单独立事务逐单成败。
+/// 每单自动享 C（审计）/B1（版本快照）/B2（乐观锁）。
+pub async fn doc_save_batch(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<ApiResp<Value>>> {
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let atomic = body.get("atomic").and_then(|v| v.as_bool()).unwrap_or(true);
+    let docs = body
+        .get("docs")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| cmx_biz::BizError::business("批量保存缺少 docs 数组"))?;
+    if docs.is_empty() {
+        return Ok(Json(ApiResp::ok(serde_json::json!({ "atomic": atomic, "results": [] }))));
+    }
+
+    // 逐单解析：resolve meta（缓存）+ parse_save_body + 校验 + save_ctx。
+    // 先落地各单的 owned 数据（meta/changes/sctx），再借用构造 BatchItem（借用检查要求）。
+    let mut metas: Vec<std::sync::Arc<DocMetaView>> = Vec::with_capacity(docs.len());
+    let mut parsed: Vec<(saver::SaveMode, Value)> = Vec::with_capacity(docs.len());
+    let mut ctxs: Vec<cmx_biz::doc::SaveCtx> = Vec::with_capacity(docs.len());
+    for (i, d) in docs.iter().enumerate() {
+        let get = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("");
+        let (domain, app, module, file) =
+            (get("domain"), get("application"), get("module"), get("file"));
+        if file.is_empty() {
+            return Err(cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into());
+        }
+        let meta = resolve_doc_meta(domain, app, module, file).await?;
+        let (mode, changes) = saver::parse_save_body(d);
+        // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
+        if !meta.validation_rules.is_empty() {
+            if let Some(vr) = run_validation(&meta, &changes) {
+                return Ok(Json(ApiResp::ok(serde_json::json!({
+                    "atomic": atomic,
+                    "failedIndex": i,
+                    "validation": vr,
+                }))));
+            }
+        }
+        ctxs.push(save_ctx(&ctx, file, None));
+        metas.push(meta);
+        parsed.push((mode, changes));
+    }
+
+    let items: Vec<cmx_biz::doc::BatchItem> = (0..docs.len())
+        .map(|i| cmx_biz::doc::BatchItem {
+            meta: &metas[i],
+            mode: parsed[i].0,
+            changes: &parsed[i].1,
+            sctx: &ctxs[i],
+        })
+        .collect();
+
+    let results = DocSaver::save_batch(mm, &db_id, &items, atomic).await?;
+    Ok(Json(ApiResp::ok(serde_json::json!({
+        "atomic": atomic,
+        "count": results.len(),
+        "results": serde_json::to_value(&results).map_err(serde_err_to_api)?,
+    }))))
 }
 
 /// 对 changeset 各层各行跑校验规则。返回 Some(错误响应) 表示有 error 违规（阻断）；None 表示通过。
@@ -658,7 +766,7 @@ pub async fn doc_revision(
 /// body: `{ docFile, rootId, rev }`。取该版快照 → replace 模式写回。
 pub async fn doc_restore(
     State(_s): State<CmxAppState>,
-    CmxSvrContext(_ctx): CmxSvrContext,
+    CmxSvrContext(ctx): CmxSvrContext,
     Query(q): Query<DocSaveQuery>,
     headers: HeaderMap,
     Json(body): Json<Value>,
@@ -689,6 +797,7 @@ pub async fn doc_restore(
         &meta,
         cmx_biz::doc::SaveMode::Replace,
         &replace_input,
+        &save_ctx(&ctx, &q.file, Some("restore")),
     )
     .await?;
 

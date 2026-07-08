@@ -21,6 +21,10 @@ pub enum BizError {
     #[error("数据未找到: {0}")]
     NotFound(String),
 
+    /// 资源冲突（乐观锁：单据已被他人修改）。映射 HTTP 409。
+    #[error("{0}")]
+    Conflict(String),
+
     /// JSON 序列化/反序列化错误
     #[error("JSON 解析错误: {0}")]
     SerdeJson(#[from] serde_json::Error),
@@ -52,6 +56,22 @@ impl BizError {
         Self::NotFound(msg.into())
     }
 
+    /// 创建资源冲突错误（乐观锁，映射 HTTP 409）
+    pub fn conflict(msg: impl Into<String>) -> Self {
+        Self::Conflict(msg.into())
+    }
+
+    /// 批量保存里给错误加「第 N 单」定位前缀，**保留原变体**（如 Conflict 仍映射 409）。
+    pub fn from_batch_item(index: usize, e: BizError) -> Self {
+        let tag = format!("第 {} 单保存失败: ", index + 1);
+        match e {
+            BizError::Conflict(m) => BizError::Conflict(format!("{tag}{m}")),
+            BizError::NotFound(m) => BizError::NotFound(format!("{tag}{m}")),
+            BizError::Business(m) => BizError::Business(format!("{tag}{m}")),
+            other => BizError::Internal(format!("{tag}{other}")),
+        }
+    }
+
     /// 创建内部错误
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::Internal(msg.into())
@@ -68,6 +88,8 @@ impl From<BizError> for cmx_traits::error::TraitError {
         match e {
             BizError::Business(msg) => cmx_traits::error::TraitError::Business(msg),
             BizError::NotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
+            // TraitError 无 Conflict 语义（rpc/wasm 层不区分）→ 归为 Business，保留文案。
+            BizError::Conflict(msg) => cmx_traits::error::TraitError::Business(msg),
             BizError::PluginInvoke(msg) => cmx_traits::error::TraitError::WasmInvokeFailed(msg),
             BizError::Orchestration(msg) => cmx_traits::error::TraitError::OrchestrationFailed(msg),
             BizError::Crud(err) => {
@@ -90,6 +112,7 @@ impl From<BizError> for cmx_api_types::Error {
             BizError::Crud(e) => cmx_api_types::Error::from(e),
             BizError::Business(msg) => cmx_api_types::Error::business_error(msg),
             BizError::NotFound(msg) => cmx_api_types::Error::not_found(msg),
+            BizError::Conflict(msg) => cmx_api_types::Error::conflict(msg),
             BizError::SerdeJson(e) => cmx_api_types::Error::from(e),
             BizError::Database(msg)
             | BizError::PluginInvoke(msg)

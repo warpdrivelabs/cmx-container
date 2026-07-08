@@ -177,6 +177,7 @@ impl ModuleRoutes for PortalModule {
             // 业务单据**显示元数据**(层序/各层列 caption·类型/父子关系)——通用单据前端页动态建表用
             .route("/doc/meta", get(doc::doc_meta))
             .route("/doc/save", post(doc::doc_save))
+            .route("/doc/save/batch", post(doc::doc_save_batch))
             // 业务单据版本化（方案 §6A / Phase 8）
             .route("/doc/revisions", get(doc::doc_revisions))
             .route("/doc/revision", get(doc::doc_revision))

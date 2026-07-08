@@ -26,22 +26,36 @@ pub struct DocLoader;
 
 impl DocLoader {
     /// 按定义 + 查询指令装载整棵单据树，返回根层嵌套 DataSet。
+    ///
+    /// `txn_id`：`None` 走连接池（装载端点常态，看不到未提交写）；`Some(txn_id)` 在该事务连接上
+    /// 查询——供保存事务内「写完立即重装载整单」做版本快照（B1）用，能看到本事务未提交的写。
     pub async fn load(
         mm: &DatabaseManager,
         db_id: &str,
         meta: &DocMetaView,
         query: &DocQuery,
     ) -> Result<DataSet> {
+        Self::load_txn(mm, db_id, meta, query, None).await
+    }
+
+    /// 同 [`load`]，但可指定在某事务连接上装载（版本快照用，见 [`load`] 的 `txn_id` 说明）。
+    pub async fn load_txn(
+        mm: &DatabaseManager,
+        db_id: &str,
+        meta: &DocMetaView,
+        query: &DocQuery,
+        txn_id: Option<&str>,
+    ) -> Result<DataSet> {
         let root = meta
             .root_layer()
             .ok_or_else(|| BizError::business("单据定义无根层"))?;
 
         // 1. 根层查询
-        let mut root_ds = Self::query_root(mm, db_id, root, query).await?;
+        let mut root_ds = Self::query_root(mm, db_id, root, query, txn_id).await?;
 
         // 2. 逐层下钻（沿 layer_groups 递归挂子集）
         let max_depth = query.depth.unwrap_or(usize::MAX);
-        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query).await?;
+        Self::descend(mm, db_id, meta, root, &mut root_ds, 1, max_depth, query, txn_id).await?;
 
         Ok(root_ds)
     }
@@ -52,10 +66,11 @@ impl DocLoader {
         db_id: &str,
         layer: &LayerView,
         query: &DocQuery,
+        txn_id: Option<&str>,
     ) -> Result<DataSet> {
         let lq = query.layer(&layer.id);
         let (sql, params) = build_layer_select(layer, &lq, None)?;
-        mm.query_sql_with_datavalues(db_id, None, &sql, params, &layer.table_name)
+        mm.query_sql_with_datavalues(db_id, txn_id, &sql, params, &layer.table_name)
             .await
             .map(|ds| rebind_schema(ds, layer))
             .map_err(|e| BizError::internal(format!("装载根层 {} 失败: {e}", layer.table_name)))
@@ -77,6 +92,7 @@ impl DocLoader {
         cur_depth: usize,
         max_depth: usize,
         query: &DocQuery,
+        txn_id: Option<&str>,
     ) -> Result<()> {
         if cur_depth >= max_depth {
             return Ok(());
@@ -100,13 +116,42 @@ impl DocLoader {
         // 同父兄弟：下一层组全部子表，各查一次、各挂一次（各吃自己的 LayerQuery）
         for child_layer in child_layers {
             let is_primary = meta.is_primary_in_group(&child_layer.id);
+
             // 兄弟表容错：非主表装载失败（元数据定义了但物理表未部署）→ 跳过 + 警告，不中断整单。
+            //
+            // **事务内关键点（B1）**：PG 里事务内任一语句失败会**污染整个事务**（后续命令全废
+            // "current transaction is aborted"）。非事务装载每条 SELECT 独立、失败可隔离；但保存事务内
+            // 重装载做版本快照时，若直接查缺失的兄弟表，会把外层保存事务一起带废。故此处在事务内为
+            // 非主兄弟查询套 SAVEPOINT：失败则 ROLLBACK TO 复活事务再跳过，成功则 RELEASE。
+            let use_sp = txn_id.is_some() && !is_primary;
+            let sp = "cmx_sibling_sp";
+            if use_sp {
+                if let Some(tx) = txn_id {
+                    let _ = mm.execute_sql(db_id, Some(tx), &format!("SAVEPOINT {sp}")).await;
+                }
+            }
             let mut child_ds =
-                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query)
+                match Self::query_children_by_key(mm, db_id, child_layer, &child_key, &parent_ids, query, txn_id)
                     .await
                 {
-                    Ok(ds) => ds,
+                    Ok(ds) => {
+                        if use_sp {
+                            if let Some(tx) = txn_id {
+                                let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
+                            }
+                        }
+                        ds
+                    }
                     Err(e) if !is_primary => {
+                        // 事务内：回滚到 savepoint 复活事务；非事务：无 savepoint，直接跳过。
+                        if use_sp {
+                            if let Some(tx) = txn_id {
+                                let _ = mm
+                                    .execute_sql(db_id, Some(tx), &format!("ROLLBACK TO SAVEPOINT {sp}"))
+                                    .await;
+                                let _ = mm.execute_sql(db_id, Some(tx), &format!("RELEASE SAVEPOINT {sp}")).await;
+                            }
+                        }
                         tracing::warn!(
                             "跳过并列兄弟子表 {}（装载失败，可能未物理部署）: {e}",
                             child_layer.table_name
@@ -119,7 +164,7 @@ impl DocLoader {
             // 孙层：仅从该组主表继续下钻
             if is_primary {
                 Box::pin(Self::descend(
-                    mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth, query,
+                    mm, db_id, meta, child_layer, &mut child_ds, cur_depth + 1, max_depth, query, txn_id,
                 ))
                 .await?;
             }
@@ -137,10 +182,11 @@ impl DocLoader {
         child_key: &str,
         parent_ids: &[DataValue],
         query: &DocQuery,
+        txn_id: Option<&str>,
     ) -> Result<DataSet> {
         let lq = query.layer(&layer.id);
         let (sql, params) = build_layer_select(layer, &lq, Some((child_key, parent_ids)))?;
-        mm.query_sql_with_datavalues(db_id, None, &sql, params, &layer.table_name)
+        mm.query_sql_with_datavalues(db_id, txn_id, &sql, params, &layer.table_name)
             .await
             .map(|ds| rebind_schema(ds, layer))
             .map_err(|e| BizError::internal(format!("装载子层 {} 失败: {e}", layer.table_name)))
