@@ -18,11 +18,24 @@ use cmx_core::model::module::manifest::{
     ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources, ModuleStats,
 };
 use cmx_database::DatabaseManager;
+use cmx_traits::error::TraitError;
 use cmx_traits::resource::DefinitionImporterBundle;
 use cmx_utils::zip::ZipCompressor;
 use tracing::{info, warn};
 
 use crate::error::{PluginError, PluginResult};
+
+/// 将 [`TraitError`] 按来源归类映射为 [`PluginError`],保留远程/RPC/DB 错误类别。
+///
+/// 映射规则:`RemoteCenter` → [`PluginError::CenterData`],
+/// `Rpc` → [`PluginError::Network`],其余 → [`PluginError::Database`](本地 DB 默认)。
+fn trait_err_to_plugin(e: TraitError) -> PluginError {
+    match e {
+        TraitError::RemoteCenter(msg) => PluginError::CenterData(msg),
+        TraitError::Rpc(msg) => PluginError::Network(msg),
+        other => PluginError::Database(other.to_string()),
+    }
+}
 
 /// 模块导出服务
 pub struct ModuleExportService {
@@ -85,7 +98,7 @@ impl ModuleExportService {
                 .form
                 .list_form_definitions(module_code)
                 .await
-                .map_err(|e| PluginError::Database(format!("导出表单失败: {e}")))?;
+                .map_err(trait_err_to_plugin)?;
             let form_count = form_defs.len();
             if form_count > 0 {
                 let forms_dir = export_dir.join("forms");
@@ -103,7 +116,7 @@ impl ModuleExportService {
                 .menu
                 .list_menu_definitions(module_code)
                 .await
-                .map_err(|e| PluginError::Database(format!("导出菜单失败: {e}")))?;
+                .map_err(trait_err_to_plugin)?;
             let menu_count = menu_defs.len();
             if menu_count > 0 {
                 let menus_dir = export_dir.join("menus");
@@ -121,7 +134,7 @@ impl ModuleExportService {
                 .table
                 .list_table_definitions(application_code, module_code)
                 .await
-                .map_err(|e| PluginError::Database(format!("导出表元数据失败: {e}")))?;
+                .map_err(trait_err_to_plugin)?;
             let table_count = table_defs.len();
             if table_count > 0 {
                 let tables_dir = export_dir.join("metadata").join("tables");
@@ -136,7 +149,7 @@ impl ModuleExportService {
                 .permission
                 .list_permission_definitions(domain_code, application_code, module_code)
                 .await
-                .map_err(|e| PluginError::Database(format!("导出权限失败: {e}")))?;
+                .map_err(trait_err_to_plugin)?;
             let perm_count = perm_defs.len();
             if perm_count > 0 {
                 let perms_dir = export_dir.join("permissions");
@@ -246,7 +259,7 @@ impl ModuleExportService {
                 "export_plugins",
             )
             .await
-            .map_err(|e| PluginError::Database(format!("查询插件失败: {e}")))?;
+            .map_err(|e| PluginError::Database(format!("{e}")))?;
         let json = serde_json::to_value(&ds)?;
         let rows = json.get("rows").and_then(|r| r.as_array());
         let mut entries = Vec::new();

@@ -30,6 +30,19 @@ use tracing::instrument;
 use super::infra::GrpcInfrastructure;
 use crate::bundle::{RpcServiceBundle, ServerDeps, ServerRegistration};
 
+/// 将 volo_grpc::Status 结构化映射为 RpcError(保留认证/权限类别,避免全部坍缩为 RpcCallFailed)。
+///
+/// 保留类别:Unauthenticated → [`RpcError::Unauthenticated`],
+/// PermissionDenied → [`RpcError::PermissionDenied`],其余 → [`RpcError::RpcCallFailed`]。
+fn status_to_rpc_error(e: volo_grpc::Status) -> RpcError {
+    use volo_grpc::Code;
+    match e.code() {
+        Code::Unauthenticated => RpcError::Unauthenticated(e.message().to_string()),
+        Code::PermissionDenied => RpcError::PermissionDenied(e.message().to_string()),
+        _ => RpcError::RpcCallFailed(e.to_string()),
+    }
+}
+
 // ==================== 领域全局访问器 ====================
 
 static RESOURCE_DATA_CLIENT: OnceLock<Arc<dyn ResourceDataClient>> = OnceLock::new();
@@ -154,7 +167,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
                     error = %e,
                     "RPC import_resource_data 失败"
                 );
-                Err(RpcError::RpcCallFailed(e.to_string()))
+                Err(status_to_rpc_error(e))
             }
         }
     }
@@ -209,7 +222,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
                     error = %e,
                     "RPC cleanup_resource_data 失败"
                 );
-                Err(RpcError::RpcCallFailed(e.to_string()))
+                Err(status_to_rpc_error(e))
             }
         }
     }
@@ -259,7 +272,7 @@ impl ResourceDataClient for ResourceDataGrpcClient {
                     error = %e,
                     "RPC list_resource_data 失败"
                 );
-                Err(RpcError::RpcCallFailed(e.to_string()))
+                Err(status_to_rpc_error(e))
             }
         }
     }

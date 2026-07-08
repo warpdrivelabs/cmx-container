@@ -57,6 +57,14 @@ pub enum TraitError {
     /// 资源已初始化。
     #[error("{0}")]
     AlreadyInitialized(String),
+
+    /// 远程服务中心错误(gRPC/HTTP 传输层 + 远端业务错误)。
+    #[error("远程调用错误: {0}")]
+    RemoteCenter(String),
+
+    /// RPC 传输错误(认证/超时/网络等,消息本身已含语义)。
+    #[error("{0}")]
+    Rpc(String),
 }
 
 /// 宿主函数错误类型。

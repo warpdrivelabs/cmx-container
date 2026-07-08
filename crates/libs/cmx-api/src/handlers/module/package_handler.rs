@@ -175,7 +175,7 @@ pub async fn module_package_export(
     let zip_bytes = export_svc
         .export_module(mm, &db_id, &q.domain_code, &q.application_code, &q.module_code)
         .await
-        .map_err(|e| crate::Error::InternalError(format!("导出失败: {e}")))?;
+        .map_err(|e| crate::Error::InternalError(format!("{e}")))?;
 
     info!(module_code = %q.module_code, size = zip_bytes.len(), "模块包导出成功");
 

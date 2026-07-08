@@ -10,7 +10,7 @@ use cmx_traits::resource::PermissionDefinitionImporter;
 use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use tracing::info;
 
-use super::RemoteImporterContext;
+use super::{RemoteImporterContext, plugin_err_to_trait};
 
 /// 远程权限定义导入器(经 gRPC 或 HTTP 调用权限中心)。
 pub struct RemotePermissionDefinitionImporter {
@@ -65,7 +65,7 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
             .ctx
             .send(crate::center_client::types::DataCategory::Perm, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         info!(
             created = result.created_count,
             updated = result.updated_count,
@@ -94,7 +94,7 @@ impl PermissionDefinitionImporter for RemotePermissionDefinitionImporter {
             .ctx
             .send_list(crate::center_client::types::DataCategory::Perm, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         serde_json::from_slice(&result.json_data)
             .map_err(|e| TraitError::Business(format!("反序列化远程权限定义失败: {e}")))
     }

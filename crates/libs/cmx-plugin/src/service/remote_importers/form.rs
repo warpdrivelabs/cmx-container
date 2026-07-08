@@ -7,7 +7,7 @@ use cmx_traits::resource::FormDefinitionImporter;
 use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use tracing::info;
 
-use super::RemoteImporterContext;
+use super::{RemoteImporterContext, plugin_err_to_trait};
 
 /// 远程表单定义导入器(经 gRPC 或 HTTP 调用表单中心)。
 pub struct RemoteFormDefinitionImporter {
@@ -54,7 +54,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
             .ctx
             .send(crate::center_client::types::DataCategory::Form, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         info!(
             created = result.created_count,
             updated = result.updated_count,
@@ -81,7 +81,7 @@ impl FormDefinitionImporter for RemoteFormDefinitionImporter {
             .ctx
             .send_list(crate::center_client::types::DataCategory::Form, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         serde_json::from_slice(&result.json_data)
             .map_err(|e| TraitError::Business(format!("反序列化远程表单定义失败: {e}")))
     }

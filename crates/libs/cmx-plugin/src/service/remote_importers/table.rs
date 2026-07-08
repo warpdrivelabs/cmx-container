@@ -12,7 +12,7 @@ use cmx_traits::resource::{ResourceDataCategory, ResourceDataImportRequest};
 use serde_json::json;
 use tracing::info;
 
-use super::RemoteImporterContext;
+use super::{RemoteImporterContext, plugin_err_to_trait};
 
 /// 远程表结构定义导入器(经 gRPC 或 HTTP 调用元数据/表单中心)。
 pub struct RemoteTableDefinitionImporter {
@@ -64,7 +64,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
             .ctx
             .send(crate::center_client::types::DataCategory::Form, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         info!(
             created = result.created_count,
             updated = result.updated_count,
@@ -92,7 +92,7 @@ impl TableDefinitionImporter for RemoteTableDefinitionImporter {
             .ctx
             .send_list(crate::center_client::types::DataCategory::Form, req)
             .await
-            .map_err(|e| TraitError::Business(e.to_string()))?;
+            .map_err(plugin_err_to_trait)?;
         // 远程返回的是 JSON 数组,但 TableDefineImporter.list 返回的是 Vec<TableDefine>
         // 接收端 list_data 对 Form 类别返回 FormDefinition 列表(不含 TableDefine)
         // 这里需要特殊处理:Table 走 Form 通道时,接收端应返回 TableDefine 列表

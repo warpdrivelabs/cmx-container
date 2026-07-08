@@ -18,4 +18,10 @@ pub enum RpcError {
     /// 调用超时。
     #[error("调用超时: {0}")]
     Timeout(String),
+    /// 认证失败(服务凭证缺失或无效)。
+    #[error("认证失败: {0}")]
+    Unauthenticated(String),
+    /// 权限不足。
+    #[error("权限不足: {0}")]
+    PermissionDenied(String),
 }

@@ -33,7 +33,20 @@ use crate::center_client::config::CenterClientConfig;
 use crate::center_client::types::DataCategory;
 use crate::error::{PluginError, PluginResult};
 use cmx_traits::auth::context_scope;
+use cmx_traits::error::TraitError;
 use cmx_traits::resource::{ResourceDataImportRequest, ResourceDataImportResult, ResourceDataListResult};
+
+/// 将 [`PluginError`] 结构化映射为 [`TraitError`],保留远程/网络类别(避免全部坍缩为 Business 字符串)。
+///
+/// 映射规则:`CenterData` → [`TraitError::RemoteCenter`],
+/// `Network`/`Timeout` → [`TraitError::Rpc`],其余 → [`TraitError::Business`]。
+pub(crate) fn plugin_err_to_trait(e: PluginError) -> TraitError {
+    match e {
+        PluginError::CenterData(msg) => TraitError::RemoteCenter(msg),
+        PluginError::Network(msg) | PluginError::Timeout(msg) => TraitError::Rpc(msg),
+        other => TraitError::Business(other.to_string()),
+    }
+}
 
 /// 出站服务凭证（服务级 API Key，统一走 `X-API-Key`）。
 #[derive(Clone, Debug)]
@@ -176,7 +189,7 @@ impl RemoteImporterContext {
             .list_resource_data(&service_name, request)
             .await
             .map_err(|e| {
-                PluginError::CenterData(format!("gRPC 远程 {} 导出失败: {e}", category.center_name()))
+                PluginError::CenterData(format!("gRPC远程[{}]导出失败: {e}", category.center_name()))
             })
     }
 
