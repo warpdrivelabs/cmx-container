@@ -1780,6 +1780,10 @@ COMMENT ON COLUMN cmx_permission.domain_code IS '所属域编码（如 platform�
 COMMENT ON COLUMN cmx_permission.app_code IS '所属应用编码（如 user-center、billing）';
 COMMENT ON COLUMN cmx_permission.module_code IS '所属模块编码（如 user、order）';
 COMMENT ON COLUMN cmx_permission.extension IS '扩展配置（用户自定义 JSON 文本）';
+COMMENT ON COLUMN cmx_permission.parent_code IS '父权限编码（根节点为 NULL）';
+COMMENT ON COLUMN cmx_permission.full_code_path IS '权限编码全路径（如 /user:list/user:delete）';
+COMMENT ON COLUMN cmx_permission.is_leaf IS '是否叶子节点：1-是，0-否';
+COMMENT ON COLUMN cmx_permission.level IS '层级深度（根节点为 1）';
 COMMENT ON COLUMN cmx_permission.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_permission.archived IS '归档标志：0-未归档，1-已归档';
 COMMENT ON COLUMN cmx_permission.create_time IS '创建时间';
