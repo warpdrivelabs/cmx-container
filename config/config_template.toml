@@ -470,8 +470,8 @@ auth.whitelist = []
 # - username: 直接使用 Provider 返回的 username 字段，缺失时回退到 username
 # - email_prefix: 邮箱 @ 前部分，如 user from user@gmail.com
 # - display_name: 使用昵称，冲突时追加随机后缀
-## 用户名生成策略（可选，默认 provider_prefix）
-# username_strategy = "provider_prefix"
+## 用户名生成策略（可选，默认 username）
+# username_strategy = "username"
 
 ## Google OAuth2（示例，需替换为实际值）
 # [[auth.oauth2.providers]]
