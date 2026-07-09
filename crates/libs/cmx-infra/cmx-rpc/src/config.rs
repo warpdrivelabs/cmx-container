@@ -48,7 +48,7 @@ pub struct GrpcConfig {
 }
 
 fn default_timeout_ms() -> u64 {
-    5000
+    30000
 }
 
 fn default_connect_timeout_ms() -> u64 {

@@ -15,6 +15,24 @@ use tracing::{debug, instrument};
 use crate::error::{BizError, Result};
 use crate::menu::{MenuBmc, MenuFilter, MenuForCreate, MenuForUpdate};
 
+/// 把主键 `Value`(String 或其他 JSON)归一化为 `DataValue::String`。
+///
+/// 统一 delete/update 中对 `serde_json::Value` 主键的转换,消除重复 match。
+fn value_to_datavalue(v: &Value) -> DataValue {
+    match v {
+        Value::String(s) => DataValue::String(s.clone()),
+        _ => DataValue::String(v.to_string().trim_matches('"').to_string()),
+    }
+}
+
+/// 把主键 `Value` 归一化为 `String`。
+fn value_to_id_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        _ => v.to_string().trim_matches('"').to_string(),
+    }
+}
+
 /// 创建菜单时计算出的分级字段
 struct TreeFields {
     parent_code: Option<String>,
@@ -251,10 +269,7 @@ impl MenuService {
         id: Value,
         data: MenuForUpdate,
     ) -> Result<DataSet> {
-        let menu_id = match &id {
-            Value::String(s) => s.clone(),
-            _ => id.as_str().unwrap_or("").trim_matches('"').to_string(),
-        };
+        let menu_id = value_to_id_string(&id);
 
         // 开启事务(级联更新需原子性)
         let txn_ctx = mm.get_transaction_context();
@@ -531,102 +546,77 @@ impl MenuService {
             .map_err(|e| BizError::business(format!("开启事务失败: {e}")))?;
         let txn_id = guard.txn_id();
 
-        // 收集待删节点的 parent_id(用于删除后 leaf 重置)
-        // 与 code_path(用于级联删后代,含根节点,否则删根会留下孤儿后代)
+        // 一次查询拿到 parent_id 与 code_path 两列(合并原两次查询,2 次往返 → 1 次)
+        // parent_id:仅非根(用于删除后 leaf 重置);code_path:所有待删节点(用于级联删后代)
         let id_placeholders: Vec<String> = ids
             .iter()
             .enumerate()
             .map(|(i, _)| format!("${}", i + 1))
             .collect();
-        let id_params: Vec<DataValue> = ids
-            .iter()
-            .map(|v| match v {
-                Value::String(s) => DataValue::String(s.clone()),
-                _ => DataValue::String(v.to_string().trim_matches('"').to_string()),
-            })
-            .collect();
-
-        // parent_id(仅非根节点,用于 leaf 重置)
-        let parent_sql = format!(
-            "SELECT DISTINCT parent_id FROM cmx_menu \
-             WHERE id IN ({}) AND parent_id IS NOT NULL",
+        let id_params: Vec<DataValue> = ids.iter().map(value_to_datavalue).collect();
+        let meta_sql = format!(
+            "SELECT parent_id, code_path FROM cmx_menu WHERE id IN ({})",
             id_placeholders.join(", ")
         );
-        let parent_ds = mm
-            .query_sql_with_datavalues(db_id, Some(txn_id), &parent_sql, id_params.clone(), "menu_delete_parent_ids")
+        let meta_ds = mm
+            .query_sql_with_datavalues(db_id, Some(txn_id), &meta_sql, id_params, "menu_delete_meta")
             .await
-            .map_err(|e| BizError::internal(format!("查询待删菜单父节点失败: {e}")))?;
-        let p_schema = parent_ds.schema.as_ref();
-        let parent_ids: Vec<String> = parent_ds
-            .iter()
-            .filter_map(|row| row.get_by_name_as::<String>(p_schema, "parent_id"))
-            .collect();
-
-        // code_path(所有待删节点,含根,用于级联删后代)
-        let cp_sql = format!(
-            "SELECT code_path FROM cmx_menu WHERE id IN ({})",
-            id_placeholders.join(", ")
-        );
-        let cp_ds = mm
-            .query_sql_with_datavalues(db_id, Some(txn_id), &cp_sql, id_params, "menu_delete_code_paths")
-            .await
-            .map_err(|e| BizError::internal(format!("查询待删菜单 code_path 失败: {e}")))?;
-        let cp_schema = cp_ds.schema.as_ref();
-        let code_paths: Vec<String> = cp_ds
-            .iter()
-            .filter_map(|row| row.get_by_name_as::<String>(cp_schema, "code_path"))
-            .filter(|s| !s.is_empty())
-            .collect();
+            .map_err(|e| BizError::internal(format!("查询待删菜单元数据失败: {e}")))?;
+        let m_schema = meta_ds.schema.as_ref();
+        // parent_id 去重(仅非空);code_path 去重(仅非空)
+        let parent_ids: Vec<String> = {
+            let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for row in meta_ds.iter() {
+                if let Some(pid) = row.get_by_name_as::<String>(m_schema, "parent_id")
+                    && !pid.is_empty()
+                {
+                    set.insert(pid);
+                }
+            }
+            set.into_iter().collect()
+        };
+        let code_paths: Vec<String> = {
+            let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for row in meta_ds.iter() {
+                if let Some(cp) = row.get_by_name_as::<String>(m_schema, "code_path")
+                    && !cp.is_empty()
+                {
+                    set.insert(cp);
+                }
+            }
+            set.into_iter().collect()
+        };
 
         // 级联删除:删除传入节点及其所有后代(code_path 前缀匹配)
-        // 用 IN 直接删传入的根 + 对每个 code_path 删其后代
-        let root_placeholders = id_placeholders.clone();
-        let root_ids: Vec<DataValue> = ids
-            .iter()
-            .map(|v| match v {
-                Value::String(s) => DataValue::String(s.clone()),
-                _ => DataValue::String(v.to_string().trim_matches('"').to_string()),
-            })
-            .collect();
+        let root_ids: Vec<DataValue> = ids.iter().map(value_to_datavalue).collect();
 
-        if code_paths.is_empty() {
+        let dataset = if code_paths.is_empty() {
             // 无 code_path 信息(可能是叶子),直接按 id 删
             let sql = format!(
                 "DELETE FROM cmx_menu WHERE id IN ({})",
-                root_placeholders.join(", ")
+                id_placeholders.join(", ")
             );
-            let dataset = mm
-                .query_sql_with_datavalues(db_id, Some(txn_id), &sql, root_ids, "menu_delete")
+            mm.query_sql_with_datavalues(db_id, Some(txn_id), &sql, root_ids, "menu_delete")
                 .await
-                .map_err(|e| BizError::business(format!("删除菜单失败: {e}")))?;
-            guard
-                .commit()
-                .await
-                .map_err(|e| BizError::business(format!("事务提交失败: {e}")))?;
-            for pid in parent_ids {
-                Self::recompute_parent_leaf(mm, db_id, &pid).await;
+                .map_err(|e| BizError::business(format!("删除菜单失败: {e}")))?
+        } else {
+            // 删传入节点本身 + 它们的后代子树
+            // 后代:对每个 code_path,匹配 code_path = X 或 code_path LIKE 'X/%'
+            let mut descendant_conditions: Vec<String> = Vec::new();
+            let mut descendant_params: Vec<DataValue> = root_ids.clone();
+            for (i, cp) in code_paths.iter().enumerate() {
+                let idx = ids.len() + 1 + i;
+                descendant_conditions.push(format!(
+                    "code_path = ${idx} OR code_path LIKE (${idx} || '/%')"
+                ));
+                descendant_params.push(DataValue::String(cp.clone()));
             }
-            return Ok(dataset);
-        }
-
-        // 先删传入节点本身 + 它们的后代子树
-        // 后代:对每个 code_path,匹配 code_path = X 或 code_path LIKE 'X/%'
-        let mut descendant_conditions: Vec<String> = Vec::new();
-        let mut descendant_params: Vec<DataValue> = root_ids.clone();
-        for (i, cp) in code_paths.iter().enumerate() {
-            let idx = ids.len() + 1 + i;
-            descendant_conditions.push(format!(
-                "code_path = ${idx} OR code_path LIKE (${idx} || '/%')"
-            ));
-            descendant_params.push(DataValue::String(cp.clone()));
-        }
-        let del_sql = format!(
-            "DELETE FROM cmx_menu WHERE id IN ({}) OR ({})",
-            root_placeholders.join(", "),
-            descendant_conditions.join(" OR ")
-        );
-        let dataset = mm
-            .query_sql_with_datavalues(
+            let del_sql = format!(
+                "DELETE FROM cmx_menu WHERE id IN ({}) OR ({})",
+                id_placeholders.join(", "),
+                descendant_conditions.join(" OR ")
+            );
+            mm.query_sql_with_datavalues(
                 db_id,
                 Some(txn_id),
                 &del_sql,
@@ -634,16 +624,17 @@ impl MenuService {
                 "menu_delete_cascade",
             )
             .await
-            .map_err(|e| BizError::business(format!("级联删除菜单失败: {e}")))?;
+            .map_err(|e| BizError::business(format!("级联删除菜单失败: {e}")))?
+        };
 
         guard
             .commit()
             .await
             .map_err(|e| BizError::business(format!("事务提交失败: {e}")))?;
 
-        // 重置各父节点 leaf(提交后执行)
-        for pid in parent_ids {
-            Self::recompute_parent_leaf(mm, db_id, &pid).await;
+        // 批量重置父节点 leaf(单 SQL,N 次往返 → 1 次;提交后执行)
+        if !parent_ids.is_empty() {
+            Self::recompute_parents_leaf(mm, db_id, &parent_ids).await;
         }
 
         Ok(dataset)
@@ -705,6 +696,32 @@ impl MenuService {
                  WHERE id = $1 AND NOT EXISTS \
                  (SELECT 1 FROM cmx_menu WHERE parent_id = $1)",
                 vec![DataValue::String(parent_id.to_string())],
+            )
+            .await;
+    }
+
+    /// 批量重算多个父节点 leaf:对每个父节点,若无其他子节点则置 1。
+    ///
+    /// 单条 SQL 完成,替代逐个 `recompute_parent_leaf` 的 N 次往返。
+    /// 在事务提交后调用(使用 None txn_id)。
+    async fn recompute_parents_leaf(mm: &DatabaseManager, db_id: &str, parent_ids: &[String]) {
+        if parent_ids.is_empty() {
+            return;
+        }
+        // $1 为待重算的父 id 数组;对每个父 id:若已无子节点(无行的 parent_id 指向它),则 leaf = 1
+        let arr: DataValue = parent_ids
+            .iter()
+            .map(|s| DataValue::String(s.clone()))
+            .collect::<Vec<DataValue>>()
+            .into();
+        let _ = mm
+            .execute_sql_with_datavalues(
+                db_id,
+                None,
+                "UPDATE cmx_menu SET leaf = 1 \
+                 WHERE id = ANY($1) AND NOT EXISTS \
+                 (SELECT 1 FROM cmx_menu sub WHERE sub.parent_id = cmx_menu.id)",
+                vec![arr],
             )
             .await;
     }

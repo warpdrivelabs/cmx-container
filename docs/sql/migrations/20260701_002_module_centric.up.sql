@@ -93,6 +93,9 @@ CREATE UNIQUE INDEX uk_cmx_menu_code ON cmx_menu (code);
 
 CREATE INDEX IF NOT EXISTS idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code);
 CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent_id ON cmx_menu (parent_id);
+-- 级联操作(移动/删除/树查询)按 code_path/id_path 前缀匹配,需索引支撑
+CREATE INDEX IF NOT EXISTS idx_cmx_menu_code_path ON cmx_menu (code_path);
+CREATE INDEX IF NOT EXISTS idx_cmx_menu_id_path ON cmx_menu (id_path);
 
 COMMENT ON TABLE cmx_menu IS '菜单定义表';
 COMMENT ON COLUMN cmx_menu.id IS '主键ID';
