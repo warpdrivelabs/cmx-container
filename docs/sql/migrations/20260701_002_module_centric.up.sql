@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS cmx_menu (
     component        VARCHAR(512),
     sort_order       INT4       DEFAULT 0,
     visible          INT4       DEFAULT 1,
+    open_type        INT4       DEFAULT 0,
+    fun_code         VARCHAR(200),
     domain_code      VARCHAR(64)   NOT NULL,
     application_code VARCHAR(64)   NOT NULL,
     module_code      VARCHAR(64)   NOT NULL,
@@ -85,9 +87,9 @@ CREATE TABLE IF NOT EXISTS cmx_menu (
     update_name      VARCHAR(100),
     -- 标准扩展信息字段
     ext_attributes   TEXT,
-    CONSTRAINT pk_cmx_menu PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_menu_code UNIQUE (code)
+    PRIMARY KEY (id)
 );
+CREATE UNIQUE INDEX uk_cmx_menu_code ON cmx_menu (code);
 
 CREATE INDEX IF NOT EXISTS idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code);
 CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent_id ON cmx_menu (parent_id);
@@ -102,6 +104,8 @@ COMMENT ON COLUMN cmx_menu.icon IS '菜单图标';
 COMMENT ON COLUMN cmx_menu.component IS '前端组件路径';
 COMMENT ON COLUMN cmx_menu.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_menu.visible IS '是否可见：0-隐藏，1-显示';
+COMMENT ON COLUMN cmx_menu.open_type IS '打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单';
+COMMENT ON COLUMN cmx_menu.fun_code IS '功能码，关联 cmx_permission.code';
 COMMENT ON COLUMN cmx_menu.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_menu.application_code IS '所属应用编码';
 COMMENT ON COLUMN cmx_menu.module_code IS '所属模块编码';

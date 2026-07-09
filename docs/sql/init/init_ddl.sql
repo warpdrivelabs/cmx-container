@@ -2008,6 +2008,8 @@ CREATE TABLE cmx_menu
     component        VARCHAR(512),
     sort_order       INT4       DEFAULT 0,
     visible          INT4       DEFAULT 1,
+    open_type        INT4       DEFAULT 0,
+    fun_code         VARCHAR(200),
     domain_code      VARCHAR(64)   NOT NULL,
     application_code VARCHAR(64)   NOT NULL,
     module_code      VARCHAR(64)   NOT NULL,
@@ -2040,6 +2042,8 @@ COMMENT ON COLUMN cmx_menu.icon IS '菜单图标';
 COMMENT ON COLUMN cmx_menu.component IS '前端组件路径';
 COMMENT ON COLUMN cmx_menu.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_menu.visible IS '是否可见：0-隐藏，1-显示';
+COMMENT ON COLUMN cmx_menu.open_type IS '打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单';
+COMMENT ON COLUMN cmx_menu.fun_code IS '功能码，关联 cmx_permission.code';
 COMMENT ON COLUMN cmx_menu.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_menu.application_code IS '所属应用编码';
 COMMENT ON COLUMN cmx_menu.module_code IS '所属模块编码';
