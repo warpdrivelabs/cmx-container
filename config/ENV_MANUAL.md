@@ -91,6 +91,21 @@
 
 ---
 
+## OpenCode AI 中继环境变量
+
+cmx-ai 薄代理连接 OpenCode 的配置，优先级高于 `config.toml` 的 `[opencode]` 段。
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `OPENCODE_BASE_URL` | String | `http://127.0.0.1:4096` | OpenCode 服务地址（含协议与端口） |
+| `OPENCODE_SERVER_PASSWORD` | String | 空 | OpenCode 访问凭证；留空表示不启用鉴权（仅开发环境）。生产必须配置强密码 |
+
+> **鉴权说明**：OpenCode `serve` 默认挂载 Authorization 中间件；未设置 `OPENCODE_SERVER_PASSWORD`
+> 时打印 `server is unsecured` 警告。cmx-ai 调用 OpenCode 的所有请求（含 SSE 连接）以
+> `Authorization: Bearer <password>` 携带该凭证。该密码也是 OpenCode 面向 cmx-ai 的唯一访问边界。
+
+---
+
 ## 基础服务中心环境变量覆盖
 
 `center_client` 配置节支持通过环境变量覆盖，格式为 `CENTER_CLIENT__<KEY>` 或 `CENTER_CLIENT__<SECTION>__<KEY>`：

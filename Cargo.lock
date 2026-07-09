@@ -839,12 +839,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
+name = "cmx-ai"
+version = "0.1.12"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "cmx-api-types",
+ "cmx-utils",
+ "dashmap",
+ "futures",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "utoipa",
+]
+
+[[package]]
 name = "cmx-api"
 version = "0.1.12"
 dependencies = [
  "axum",
  "bytes",
  "chrono",
+ "cmx-ai",
  "cmx-api-types",
  "cmx-auth",
  "cmx-biz",
@@ -8398,6 +8421,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "cmx-ai",
  "cmx-api",
  "cmx-audit",
  "cmx-auth",

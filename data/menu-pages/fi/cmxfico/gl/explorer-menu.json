@@ -1399,6 +1399,28 @@
        ]
       }
      }
+    },
+    {
+     "id": "fi-cmxfico-gl-employee",
+     "name": "employee",
+     "caption": "AI员工信息表单",
+     "type": "workspace-node",
+     "icon": "tabler-outline/users",
+     "permissionId": null,
+     "workspace": {
+      "content": {
+       "caption": "AI员工信息表单",
+       "icon": "tabler-outline/users",
+       "views": [
+        {
+         "tabLabel": "员工信息",
+         "icon": "tabler-outline/users",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.employee"
+        }
+       ]
+      }
+     }
     }
    ]
   },

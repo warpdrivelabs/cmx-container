@@ -1,0 +1,58 @@
+[package]
+name = "cmx-ai"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# AI 生成能力中继层（一期薄代理）。
+# 作为前端与 OpenCode(:4096) 之间的纯转发层：
+# - opencode_client：reqwest 封装 OpenCode 的 session/prompt_async/question/permission 等接口
+# - sse_relay：维护到 OpenCode GET /event 的全局单流 SSE 长连接，按 sessionID 分发并翻译为 cmx-ai 事件
+# - session_registry：前端订阅路由表 + 待处理 question/permission id 管理
+# 一期不持久化会话、不保存生成产物；二期演进为胖代理时新增 session_store.rs（ai_sessions 表）。
+
+[dependencies]
+# 内部依赖 - API 通用类型（AiError → cmx_api_types::Error 映射）
+cmx-api-types = { workspace = true }
+# 内部依赖 - 工具库（ConfigManager 读取 opencode.* 配置）
+cmx-utils = { workspace = true }
+
+# 异步运行时（SSE 长连接、后台 relay task、mpsc 通道）
+tokio = { workspace = true }
+# 序列化框架
+serde = { workspace = true }
+# JSON 序列化/反序列化
+serde_json = { workspace = true }
+# OpenAPI 文档生成 - 派生 ToSchema（供 Swagger 展示前端契约）
+utoipa = { workspace = true }
+# 字节缓冲区（SSE 字节流类型 bytes::Bytes）
+bytes = { workspace = true }
+# 错误处理 - 自定义错误类型派生
+thiserror = { workspace = true }
+# 错误处理 - 动态错误上下文
+anyhow = { workspace = true }
+# HTTP 客户端（转发请求到 OpenCode、拉取 SSE 流）
+reqwest = { workspace = true }
+# 异步流处理（SSE 字节流解析）
+futures = { workspace = true }
+# Futures 工具（StreamExt 等）
+futures-util = { workspace = true }
+# 日志追踪
+tracing = { workspace = true }
+# Web 框架（Sse/Event 响应类型，供 handler 层使用）
+axum = { workspace = true }
+# 并发 HashMap（sessionID → 前端订阅通道路由表）
+dashmap = { workspace = true }
+# URL 解析（OpenCode base_url 拼接）
+url = { workspace = true }
+
+[dev-dependencies]
+# 单元测试异步运行时
+tokio = { workspace = true }
+# JSON 序列化/反序列化（集成测试构造请求体）
+serde_json = { workspace = true }
+# 异步流处理（集成测试消费 SSE 字节流）
+futures = { workspace = true }
+futures-util = { workspace = true }
+# 内部依赖 - 工具库（集成测试初始化 ConfigManager，等价 web-server 启动前置）
+cmx-utils = { workspace = true }

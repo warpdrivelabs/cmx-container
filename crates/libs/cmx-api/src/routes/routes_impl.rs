@@ -4,6 +4,7 @@
 
 use crate::app_state::CmxAppState;
 use crate::handlers::application;
+use crate::handlers::ai;
 use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;
@@ -92,6 +93,9 @@ pub fn api_routes() -> Router<CmxAppState> {
 
     // 注册门户/设计器业务路由（迁移自 Node 后端，使用 ModuleRoutes）
     let router = router.merge(portal::PortalModule.routes());
+
+    // 注册 AI 生成中继路由（薄代理转发 OpenCode + SSE，使用 ModuleRoutes）
+    let router = router.merge(ai::AiModule.routes());
 
     // 注册开发工具路由（使用 ModuleRoutes）
 

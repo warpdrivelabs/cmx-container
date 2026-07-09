@@ -294,3 +294,10 @@ whitelist = [
 key = "cmx_sk_dev_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"
 service_name = "dev-internal"
 description = "开发环境默认 API Key"
+
+[auth.token]
+access_ttl_secs=1800000
+
+[opencode]
+enabled = false
+base_url = "http://127.0.0.1:4096"
