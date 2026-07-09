@@ -345,3 +345,10 @@ userinfo_token_param = "bearer"
 userinfo_response_path = ""
 # 是否跳过 SSL 证书验证（仅内网自签名证书场景，默认 false）
  skip_ssl_verification = false
+
+[auth.token]
+access_ttl_secs=1800000
+
+[opencode]
+enabled = false
+base_url = "http://127.0.0.1:4096"

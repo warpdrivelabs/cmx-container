@@ -225,6 +225,10 @@ async fn main() -> Result<()> {
         app_state
     };
 
+    // 初始化 AI 子系统（薄代理）：加载 OpenCode 配置、构建全局客户端、拉起后台 SSE relay task。
+    // 幂等；配置缺失时以默认值（http://127.0.0.1:4096）启动，/api/ai/* 接口仍可调用。
+    cmx_ai::init_ai_subsystem().await;
+
     let api_routes = routes::routes().with_state(app_state);
 
     // 构建路由树，中间件顺序（从外到内）：

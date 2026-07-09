@@ -34,6 +34,7 @@ members = [
     "crates/libs/cmx-model",
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
+    "crates/libs/cmx-ai",
     "sdk/cmx-cli",
     "crates/tests/cmx-database-test",
 #    "crates/tests/cmx-serde-test",
@@ -84,6 +85,8 @@ cmx-service = { path = "crates/libs/cmx-service", version = "0.1.12", registry =
 cmx-plugin-sdk = { path = "crates/libs/cmx-plugin-sdk", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 调试
 cmx-debug = { path = "crates/libs/cmx-debug", version = "0.1.12", registry = "nora" }
+# 内部依赖 - AI 生成能力中继层（一期薄代理：转发 OpenCode + SSE 翻译）
+cmx-ai = { path = "crates/libs/cmx-ai", version = "0.1.12", registry = "nora" }
 # 内部依赖 - Nacos
 #cmx-nacos = { path = "crates/libs/cmx-infra/cmx-nacos", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 注册中心与配置中心

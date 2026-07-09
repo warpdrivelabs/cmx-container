@@ -222,6 +222,14 @@ use utoipa::OpenApi;
         // Dev handlers
         crate::handlers::dev::handler::list_templates,
         crate::handlers::dev::handler::create_project,
+        // AI handlers（薄代理转发 OpenCode + SSE 中继）
+        crate::handlers::ai::handler::create_session,
+        crate::handlers::ai::handler::send_message,
+        crate::handlers::ai::handler::answer_question,
+        crate::handlers::ai::handler::approve,
+        crate::handlers::ai::handler::abort_session,
+        crate::handlers::ai::handler::delete_session,
+        crate::handlers::ai::handler::subscribe_events,
     ),
 
     components(
@@ -432,6 +440,28 @@ use utoipa::OpenApi;
             crate::handlers::dev::response::CreateProjectResponse,
             crate::handlers::dev::response::TemplateInfo,
             crate::ApiResp<Vec<crate::handlers::dev::response::TemplateInfo>>,
+            // AI schemas（薄代理转发 OpenCode + SSE 事件契约）
+            cmx_ai::types::CreateSessionReq,
+            cmx_ai::types::TextPartInput,
+            cmx_ai::types::SendMessageReq,
+            cmx_ai::types::AnswerReq,
+            cmx_ai::types::ApprovalReq,
+            cmx_ai::types::ApprovalDecision,
+            cmx_ai::types::SessionInfo,
+            cmx_ai::types::TextDeltaEvent,
+            cmx_ai::types::ReasoningDeltaEvent,
+            cmx_ai::types::ToolCallEvent,
+            cmx_ai::types::AskUserEvent,
+            cmx_ai::types::AskUserQuestion,
+            cmx_ai::types::AskUserOption,
+            cmx_ai::types::RequireApprovalEvent,
+            cmx_ai::types::ApprovalDiff,
+            cmx_ai::types::ResultEvent,
+            cmx_ai::types::ResultValidation,
+            cmx_ai::types::JsonChunkEvent,
+            cmx_ai::types::ErrorEvent,
+            cmx_ai::types::DoneEvent,
+            crate::ApiResp<cmx_ai::types::SessionInfo>,
         )
     )
 )]

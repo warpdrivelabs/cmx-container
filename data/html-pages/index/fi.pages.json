@@ -569,6 +569,28 @@
       "page": "fico-ws-doc-prop-budget",
       "relPath": "fi/cmxfico/gl/fico-ws-doc-prop-budget.html",
       "latestHtmlFile": "fico-ws-doc-prop-budget.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.employee",
+      "name": "员工信息",
+      "details": "员工信息列表：选择(复选框多选)+姓名/工号(只读)/部门(下拉)/入职日期(日期)四列+操作(编辑/删除)列。复选框与序号合并为同一列([☐] n)；复选框勾选多条后可批量删除(带确认)；编辑打开右侧抽屉编辑当前行(工号只读)；删除均带确认。单表声明式结构。",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "employee",
+      "relPath": "fi/cmxfico/gl/employee.html",
+      "latestHtmlFile": "employee.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.salesOrder",
+      "name": "销售订单录入",
+      "details": "单据型页面：表头含订单号/客户选择(select)/订单日期/业务员，明细为商品/数量/单价/金额(=数量×单价)，明细金额汇总到表尾合计金额（聚合 + grid 合计行）",
+      "domain": "fi",
+      "app": "cmxfico",
+      "module": "gl",
+      "page": "salesOrder",
+      "relPath": "fi/cmxfico/gl/salesOrder.html",
+      "latestHtmlFile": "salesOrder.html"
     }
   ]
 }

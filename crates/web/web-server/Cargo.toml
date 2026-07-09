@@ -25,6 +25,8 @@ cmx-biz = { workspace = true }
 cmx-buffer = { workspace = true }
 # 内部依赖 - 插件
 cmx-plugin = { workspace = true }
+# 内部依赖 - AI 生成中继层（启动期初始化 AI 子系统）
+cmx-ai = { workspace = true }
 # 内部依赖 - 运行时
 cmx-runtime = { workspace = true }
 # 内部依赖 - 特征定义

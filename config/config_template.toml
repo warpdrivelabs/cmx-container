@@ -435,7 +435,27 @@ lock_duration_secs = 900
 #
 ## 配置示例：白名单（可选，默认 [] 仅使用内置白名单）
 # whitelist = ["/api/public", "/api/v1/webhook", "/api/biz/*", "/api/docs/**"]
+#
+# 注意：AI SSE 端点 GET /api/ai/events 因 EventSource 无法发 Authorization header，
+# 需加入白名单（由 handler 内部校验 query access_token）。启用 AI 功能时取消下行注释：
+# whitelist = ["/api/ai/events"]
 auth.whitelist = []
+
+# ==================== OpenCode AI 中继配置（可选） ====================
+# cmx-ai 薄代理连接 OpenCode（:4096）的配置。环境变量优先级高于本段：
+#   OPENCODE_BASE_URL > opencode.base_url > 默认 http://127.0.0.1:4096
+#   OPENCODE_SERVER_PASSWORD > opencode.password > 无密码
+# 一期不持久化会话、不保存生成产物；二期演进为胖代理时新增 session_store 配置。
+[opencode]
+# OpenCode 服务地址（含协议与端口）。对应 `opencode serve --host 0.0.0.0 --port 4096`。
+base_url = "http://127.0.0.1:4096"
+# OpenCode 访问凭证（OPENCODE_SERVER_PASSWORD）。开发环境可留空（OpenCode 不启用鉴权）；
+# 生产部署必须配置强密码，cmx-ai 所有请求（含 SSE）会以 Authorization: Bearer 携带。
+# password = ""
+# 普通 HTTP 请求（创建会话/发消息/abort 等）超时时间（毫秒），默认 30000。
+request_timeout_ms = 30000
+# SSE 长连接心跳/健康检查周期（秒），默认 30（OpenCode 每 10 秒推送 server.heartbeat）。
+sse_heartbeat_secs = 30
 
 # ==================== OAuth2 配置（可选） ====================
 [auth.oauth2]

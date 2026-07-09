@@ -367,19 +367,72 @@ fn extract_delegated_user_token(req: &Request<Body>) -> Option<String> {
 }
 
 /// 从 Authorization 头提取 Bearer Token
+///
+/// 提取顺序：
+/// 1. `Authorization: Bearer <token>` 头（大小写均支持）
+/// 2. query 参数 `access_token=<token>` —— EventSource 无法设置请求头，SSE 等场景需走 query。
+///    仅在 header 缺失时兜底，不影响常规请求的鉴权语义。
 fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
-    let auth_header = req.headers().get("authorization")?.to_str().ok()?;
-
-    if let Some(token) = auth_header.strip_prefix("Bearer ") {
-        return Some(token.to_string());
+    // 1. 优先 Authorization 头
+    if let Some(auth_header) = req.headers().get("authorization") {
+        if let Ok(s) = auth_header.to_str() {
+            if let Some(token) = s.strip_prefix("Bearer ") {
+                return Some(token.to_string());
+            }
+            // 也支持小写的 bearer
+            if let Some(token) = s.strip_prefix("bearer ") {
+                return Some(token.to_string());
+            }
+        }
     }
 
-    // 也支持小写的 bearer
-    if let Some(token) = auth_header.strip_prefix("bearer ") {
-        return Some(token.to_string());
+    // 2. 兜底：query 参数 access_token（EventSource 无法发 header）
+    if let Some(query) = req.uri().query() {
+        for pair in query.split('&') {
+            let mut it = pair.splitn(2, '=');
+            if it.next() == Some("access_token") {
+                if let Some(val) = it.next() {
+                    // URL 解码（JWT 含点号等安全字符，通常无需解码，但稳妥处理）
+                    let decoded = urlencoding_decode(val);
+                    if !decoded.is_empty() {
+                        return Some(decoded);
+                    }
+                }
+            }
+        }
     }
 
     None
+}
+
+/// 轻量 URL 解码（仅 %XX），避免引入新依赖。
+fn urlencoding_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = hex_val(bytes[i + 1]);
+            let lo = hex_val(bytes[i + 2]);
+            if let (Some(h), Some(l)) = (hi, lo) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        if bytes[i] == b'+' { out.push(b' '); } else { out.push(bytes[i]); }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// 从 X-API-Key 头提取 API Key

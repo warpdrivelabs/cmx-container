@@ -356,6 +356,50 @@
 
 ---
 
+## OpenCode AI 中继配置
+
+### `[opencode]`
+
+cmx-ai 薄代理连接 OpenCode（:4096）的配置。优先级：环境变量 > 本段 > 默认值。
+一期不持久化会话、不保存生成产物；二期演进为胖代理时新增 `session_store` 子段。
+
+#### `base_url`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: `http://127.0.0.1:4096`
+- **说明**: OpenCode 服务地址（含协议与端口），对应 `opencode serve --host 0.0.0.0 --port 4096`
+- **环境变量**: `OPENCODE_BASE_URL`（优先级更高）
+
+#### `password`
+
+- **类型**: String
+- **必需**: 否
+- **默认值**: 空
+- **说明**: OpenCode 访问凭证（`OPENCODE_SERVER_PASSWORD`）。开发环境可留空（OpenCode 不启用鉴权）；
+  生产部署必须配置强密码，cmx-ai 所有请求（含 SSE）会以 `Authorization: Bearer` 携带
+- **环境变量**: `OPENCODE_SERVER_PASSWORD`（优先级更高）
+
+#### `request_timeout_ms`
+
+- **类型**: Integer (毫秒)
+- **必需**: 否
+- **默认值**: `30000`
+- **说明**: 普通 HTTP 请求（创建会话/发消息/abort 等）超时时间，最小 1000ms
+
+#### `sse_heartbeat_secs`
+
+- **类型**: Integer (秒)
+- **必需**: 否
+- **默认值**: `30`
+- **说明**: SSE 长连接的心跳/健康检查周期（仅作日志参考，OpenCode 实际每 10 秒推送 `server.heartbeat`）
+
+> **注意**：AI SSE 端点 `GET /api/ai/events` 因 EventSource 无法发 Authorization header，需在
+> `[auth].whitelist` 中加入 `"/api/ai/events"`，由 handler 内部校验 query `access_token`。
+> 其他 `/api/ai/*` 接口（创建会话/发消息/审批等）**不要**加入白名单，需正常 Bearer 认证。
+
+---
+
 ## 插件配置
 
 ### `[plugin]`
