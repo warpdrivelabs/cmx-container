@@ -12,7 +12,7 @@ pub use cmx_biz::menu::{
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 
 /// Menu 模块路由
@@ -20,12 +20,16 @@ pub struct MenuModule;
 
 impl ModuleRoutes for MenuModule {
     fn routes(self) -> Router<CmxAppState> {
-        let router = Router::new();
-        // 注册 Menu 标准 CRUD 路由
-        let router = crate::register_crud_handlers_module!(router, menu_crud, "/menu");
-        // 注册自定义路由
-        router
-            // .route("/menu/list", post(handler::menu_list))  // 通用的 list 接口已由宏生成
+        // 菜单增删改涉及树形字段(leaf/depth/parent_code/id_path/code_path)的组装与级联,
+        // 不能使用标准 CRUD 宏(宏走 GenericCrudService 直接写库,绕过 MenuService),
+        // 故全部手写委托 MenuService。
+        Router::new()
+            .route("/menu/create", post(handler::create_menu))
+            .route("/menu/get", get(handler::get_menu))
+            .route("/menu/update", post(handler::update_menu))
+            .route("/menu/delete", post(handler::delete_menu))
+            .route("/menu/list", post(handler::list_menus))
+            .route("/menu/page", post(handler::page_menus))
             .route("/menu/tree", get(handler::get_menu_tree))
     }
 

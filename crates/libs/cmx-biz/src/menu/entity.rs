@@ -35,6 +35,12 @@ pub struct Menu {
     /// 是否可见：0-隐藏，1-显示
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<i32>,
+    /// 打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_type: Option<i32>,
+    /// 功能码，关联 cmx_permission.code
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fun_code: Option<String>,
     /// 所属域编码
     pub domain_code: String,
     /// 所属应用编码
@@ -95,8 +101,12 @@ pub struct MenuForCreate {
     pub code: String,
     /// 菜单名称
     pub name: String,
+    /// 菜单描述
+    pub description: Option<String>,
     /// 父菜单ID(可选，None 表示根节点)
     pub parent_id: Option<String>,
+    /// 父菜单编码(可选，与 parent_id 二选一；同时提供时 parent_code 优先)
+    pub parent_code: Option<String>,
     /// 前端路由路径
     pub path: Option<String>,
     /// 菜单图标
@@ -107,6 +117,10 @@ pub struct MenuForCreate {
     pub sort_order: i32,
     /// 是否可见：0-隐藏，1-显示
     pub visible: i32,
+    /// 打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单
+    pub open_type: i32,
+    /// 功能码，关联 cmx_permission.code
+    pub fun_code: Option<String>,
     /// 菜单完整定义JSON(模块导入时整体 items/children 树形 JSON 透传存入)
     pub definition: Option<serde_json::Value>,
     /// 扩展属性，存储JSON格式的额外业务属性
@@ -124,12 +138,21 @@ pub struct MenuForCreate {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct MenuForUpdate {
     pub name: Option<String>,
+    pub description: Option<String>,
     pub path: Option<String>,
     pub icon: Option<String>,
     pub component: Option<String>,
     pub sort_order: Option<i32>,
     pub visible: Option<i32>,
+    /// 打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单
+    pub open_type: Option<i32>,
+    /// 功能码，关联 cmx_permission.code
+    pub fun_code: Option<String>,
     pub status: Option<i32>,
+    /// 父菜单ID(传值时触发移动:级联重算该节点及后代路径/depth,并维护新旧父 leaf)
+    pub parent_id: Option<String>,
+    /// 父菜单编码(与 parent_id 二选一；同时提供时 parent_code 优先)
+    pub parent_code: Option<String>,
     /// 扩展属性，存储JSON格式的额外业务属性
     pub ext_attributes: Option<String>,
 }
@@ -138,12 +161,15 @@ pub struct MenuForUpdate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct MenuTreeNodeData {
-    /// 节点 ID(code 字段)
+    /// 菜单主键 ID（雪花算法生成，树的唯一标识）
     pub id: String,
-    /// 父节点编码(根节点为 None)
-    pub parent_code: Option<String>,
-    /// 菜单编码(唯一标识)
+    /// 父菜单 ID（根节点为 None）
+    pub parent_id: Option<String>,
+    /// 菜单编码(唯一业务标识)
     pub code: String,
+    /// 父节点编码(根节点为 None)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_code: Option<String>,
     /// 菜单名称
     pub name: String,
     /// 菜单描述
@@ -162,6 +188,11 @@ pub struct MenuTreeNodeData {
     pub sort_order: i32,
     /// 是否可见：0-隐藏，1-显示
     pub visible: i32,
+    /// 打开方式：0-应用页标签,1-浏览器标签,2-弹窗,3-抽屉,4-全屏显示,5-下拉菜单
+    pub open_type: i32,
+    /// 功能码，关联 cmx_permission.code
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fun_code: Option<String>,
     /// 级数：根节点为1
     pub depth: i32,
     /// 所属域编码
@@ -180,11 +211,11 @@ pub struct MenuTreeNodeData {
 
 impl cmx_api_types::TreeNodeData for MenuTreeNodeData {
     fn node_id(&self) -> &str {
-        &self.code
+        &self.id
     }
 
     fn parent_id(&self) -> Option<&str> {
-        self.parent_code.as_deref()
+        self.parent_id.as_deref()
     }
 
     fn sort_key(&self) -> i32 {

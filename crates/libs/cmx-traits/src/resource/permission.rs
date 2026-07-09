@@ -18,15 +18,13 @@ use crate::resource::ResourceDataImportResult;
 pub trait PermissionDefinitionImporter: Send + Sync {
     /// 将权限定义列表 upsert 到指定作用域。
     ///
-    /// # Arguments
-    /// * `txn_id` - 外部事务 ID(仅本地实现有效;远程实现跨服务无共享事务,会忽略此参数)
+    /// 本地实现内部自行开启并提交事务(一次 apply 一个事务);远程实现跨服务无共享事务。
     async fn apply_permission_definitions(
         &self,
         domain_code: &str,
         app_code: &str,
         module_code: &str,
         definitions: &[PermissionDefinition],
-        txn_id: Option<&str>,
     ) -> Result<usize, TraitError>;
 
     /// 导出指定模块的所有权限定义(重建 parent_code)。

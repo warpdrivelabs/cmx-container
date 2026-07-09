@@ -61,13 +61,6 @@ declare_crud_handlers!(
     "/form"
 );
 
-declare_crud_handlers!(
-    menu_crud,
-    crate::handlers::menu::Menu,
-    crate::handlers::menu::MenuBmc,
-    crate::handlers::menu::MenuForCreate,
-    crate::handlers::menu::MenuForUpdate,
-    crate::handlers::menu::MenuFilter,
-    "Menu",
-    "/menu"
-);
+// 注：menu 的 CRUD 已改为手写 handler（menu/handler.rs），不再用宏。
+// 原因：菜单增删改需维护树形字段(code_path/id_path/depth/leaf)，宏走 GenericCrudService
+// 会绕过 MenuService，无法组装分级字段。

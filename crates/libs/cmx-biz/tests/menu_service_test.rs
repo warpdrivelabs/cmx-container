@@ -69,12 +69,14 @@ async fn test_menu_root_create_calculates_tree_fields() {
     let root = MenuForCreate {
         code: root_code.to_string(),
         name: "根菜单".to_string(),
+        description: None,
         parent_id: None,
+        parent_code: None,
         path: Some("/root".to_string()),
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1, definition: None,
+        visible: 1, open_type: 0, fun_code: None, definition: None,
                 ext_attributes: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
@@ -98,6 +100,13 @@ async fn test_menu_root_create_calculates_tree_fields() {
     );
 
     let root_id = first_row_field(&json, "id").expect("应返回 id");
+    // id_path 末尾应为真实入库 id(回归:create 用预生成 id 拼 id_path,不再用 throwaway UUID)
+    let id_path = first_row_field(&json, "id_path").expect("应返回 id_path");
+    assert_eq!(
+        id_path,
+        format!("/{root_id}"),
+        "根菜单 id_path 应以真实入库 id 结尾"
+    );
 
     // 清理
     let _ = MenuService::delete(
@@ -123,12 +132,14 @@ async fn test_menu_child_create_inherits_parent_path() {
     let root = MenuForCreate {
         code: root_code.to_string(),
         name: "父菜单".to_string(),
+        description: None,
         parent_id: None,
+        parent_code: None,
         path: None,
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1, definition: None,
+        visible: 1, open_type: 0, fun_code: None, definition: None,
                 ext_attributes: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),
@@ -143,12 +154,14 @@ async fn test_menu_child_create_inherits_parent_path() {
     let child = MenuForCreate {
         code: child_code.to_string(),
         name: "子菜单".to_string(),
+        description: None,
         parent_id: Some(root_id.clone()),
+        parent_code: None,
         path: None,
         icon: None,
         component: None,
         sort_order: 0,
-        visible: 1, definition: None,
+        visible: 1, open_type: 0, fun_code: None, definition: None,
                 ext_attributes: None,
         domain_code: "TEST".to_string(),
         application_code: "TAPP".to_string(),

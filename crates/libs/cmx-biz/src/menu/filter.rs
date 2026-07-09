@@ -12,6 +12,8 @@ pub struct MenuFilter {
     pub code: Option<OpValsString>,
     /// 名称过滤
     pub name: Option<OpValsString>,
+    /// 描述过滤
+    pub description: Option<OpValsString>,
     /// 域编码过滤
     pub domain_code: Option<OpValsString>,
     /// 应用编码过滤
@@ -20,6 +22,10 @@ pub struct MenuFilter {
     pub module_code: Option<OpValsString>,
     /// 是否可见过滤
     pub visible: Option<OpValsInt64>,
+    /// 打开方式过滤
+    pub open_type: Option<OpValsInt64>,
+    /// 功能码过滤(关联 cmx_permission.code)
+    pub fun_code: Option<OpValsString>,
     /// 状态过滤
     pub status: Option<OpValsInt64>,
     /// 归档标志过滤

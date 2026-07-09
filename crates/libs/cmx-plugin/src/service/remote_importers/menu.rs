@@ -29,7 +29,6 @@ impl MenuDefinitionImporter for RemoteMenuDefinitionImporter {
         app_code: &str,
         module_code: &str,
         definitions: &[MenuDefinition],
-        _txn_id: Option<&str>, // 跨服务无共享事务,远程实现忽略 txn_id
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);

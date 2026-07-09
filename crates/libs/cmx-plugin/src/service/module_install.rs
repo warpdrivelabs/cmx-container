@@ -280,7 +280,7 @@ impl ModuleInstallService {
         }
     }
 
-    /// 安装模块级资源:forms/menus/metadata/permissions
+    /// 安装模块级资源:forms/menus/metadata/permissions。
     ///
     /// 统一委托注入的 DefinitionImporterBundle(本地或远程实现,调用代码一致):
     /// - forms/*.json → bundle.form.apply_form_definitions
@@ -288,9 +288,8 @@ impl ModuleInstallService {
     /// - metadata/tables/*.json → bundle.table.apply_table_definitions(建表+元数据登记)
     /// - permissions/*.json → bundle.permission.apply_permission_definitions
     ///
-    /// 四类资源在同一 default 库事务内执行(任一失败整体回滚)。
-    /// 注意:建表 DDL 在 biz_db 上执行,PG DDL 自动提交不进事务;仅 default 库的
-    /// 表单/菜单/权限/表元数据登记纳入事务。远程实现跨服务无共享事务,txn_id 被忽略。
+    /// **事务边界**:每类资源的 apply 各自内部开启并提交独立事务(一次 apply 一个事务),
+    /// 本编排层不再管理事务。一类失败仅回滚自身,不波及其他类。
     async fn install_module_resources(
         &self,
         biz_db_id: &str,
@@ -307,93 +306,56 @@ impl ModuleInstallService {
         let module = manifest.module.code.as_str();
         let app_id = cmx_utils::ConfigManager::global().get_app_id();
 
-        // 开启 default 库事务,包裹四类资源安装(任一失败回滚)
-        let mm = get_default_db_manager();
-        let default_db_id = mm.get_default_db_id().await;
-        let txn_ctx = mm.get_transaction_context();
-        let guard = txn_ctx
-            .begin_with_guard(&default_db_id)
-            .await
-            .map_err(|e| PluginError::Database(format!("开启模块资源安装事务失败: {e}")))?;
-        let txn = guard.txn_id().to_string();
+        // TraitError → PluginError 显式映射(无 #[from] 实现)
+        let map_trait_err = |e: cmx_traits::error::TraitError| {
+            PluginError::Plugin(format!("模块资源安装失败: {e}"))
+        };
 
-        // 执行体:任一 apply 失败立即返回(Err 时 guard drop 自动回滚)
-        // 注:TraitError → PluginError 显式映射(无 #[from] 实现)
-        let result: PluginResult<()> = async {
-            let map_trait_err = |e: cmx_traits::error::TraitError| {
-                PluginError::Plugin(format!("模块资源安装失败: {e}"))
-            };
-            // 1. 表单:forms/*.json 解析为 FormDefinition,委托 importer
-            let form_defs = Self::read_form_definitions(module_dir, domain, app, module);
-            if !form_defs.is_empty() {
-                let n = bundle
-                    .form
-                    .apply_form_definitions(domain, app, module, &form_defs, Some(&txn))
-                    .await
-                    .map_err(map_trait_err)?;
-                info!(count = n, "表单安装完成");
-            }
-
-            // 2. 菜单:menus/*.json 解析为 MenuDefinition,委托 importer
-            let menu_defs = Self::read_menu_definitions(module_dir, domain, app, module);
-            if !menu_defs.is_empty() {
-                let n = bundle
-                    .menu
-                    .apply_menu_definitions(domain, app, module, &menu_defs, Some(&txn))
-                    .await
-                    .map_err(map_trait_err)?;
-                info!(count = n, "菜单安装完成");
-            }
-
-            // 3. 元数据:metadata/tables/*.json 解析为 TableDefine,委托 importer(建表+登记)
-            let table_defs = Self::read_table_definitions(module_dir);
-            if !table_defs.is_empty() {
-                let n = bundle
-                    .table
-                    .apply_table_definitions(
-                        domain,
-                        app,
-                        module,
-                        &app_id,
-                        &table_defs,
-                        biz_db_id,
-                        Some(&txn),
-                    )
-                    .await
-                    .map_err(map_trait_err)?;
-                info!(count = n, "表结构安装完成");
-            }
-
-            // 4. 权限:permissions/*.json 解析为 PermissionDefinition,委托 importer
-            let perm_defs = Self::read_permission_definitions(module_dir);
-            if !perm_defs.is_empty() {
-                let n = bundle
-                    .permission
-                    .apply_permission_definitions(domain, app, module, &perm_defs, Some(&txn))
-                    .await
-                    .map_err(map_trait_err)?;
-                info!(count = n, "权限安装完成");
-            }
-            Ok(())
+        // 1. 表单:forms/*.json
+        let form_defs = Self::read_form_definitions(module_dir, domain, app, module);
+        if !form_defs.is_empty() {
+            bundle
+                .form
+                .apply_form_definitions(domain, app, module, &form_defs)
+                .await
+                .map_err(map_trait_err)?;
+            info!("表单安装完成");
         }
-        .await;
 
-        // 提交或回滚
-        match result {
-            Ok(()) => {
-                guard
-                    .commit()
-                    .await
-                    .map_err(|e| PluginError::Database(format!("提交模块资源安装事务失败: {e}")))?;
-                info!("模块级资源安装事务已提交");
-                Ok(())
-            }
-            Err(e) => {
-                let _ = guard.rollback().await;
-                error!(error = %e, "模块级资源安装失败,事务已回滚");
-                Err(e)
-            }
+        // 2. 菜单:menus/*.json
+        let menu_defs = Self::read_menu_definitions(module_dir, domain, app, module);
+        if !menu_defs.is_empty() {
+            bundle
+                .menu
+                .apply_menu_definitions(domain, app, module, &menu_defs)
+                .await
+                .map_err(map_trait_err)?;
+            info!("菜单安装完成");
         }
+
+        // 3. 元数据:metadata/tables/*.json
+        let table_defs = Self::read_table_definitions(module_dir);
+        if !table_defs.is_empty() {
+            bundle
+                .table
+                .apply_table_definitions(domain, app, module, &app_id, &table_defs, biz_db_id)
+                .await
+                .map_err(map_trait_err)?;
+            info!("表结构安装完成");
+        }
+
+        // 4. 权限:permissions/*.json
+        let perm_defs = Self::read_permission_definitions(module_dir);
+        if !perm_defs.is_empty() {
+            bundle
+                .permission
+                .apply_permission_definitions(domain, app, module, &perm_defs)
+                .await
+                .map_err(map_trait_err)?;
+            info!("权限安装完成");
+        }
+
+        Ok(())
     }
 
     /// 读取 forms/*.json,组装 FormDefinition 列表。
@@ -419,24 +381,97 @@ impl ModuleInstallService {
             .collect()
     }
 
-    /// 读取 menus/*.json,组装 MenuDefinition 列表(根菜单)。
+    /// 读取 menus/*.json,树状 JSON 递归展平为节点列表(模式A:一节点一行)。
+    ///
+    /// 每个 menus/*.json 是树状结构(根节点数组,每个节点含业务字段 + children)。
+    /// 直接反序列化为 `Vec<MenuDefinition>`(根数组),递归展平 children 为扁平节点:
+    /// - 每个节点的 code/name 等业务字段直接取自 JSON(不重新生成)。
+    /// - 子节点的 `parent_code` 由父节点 code 自动填充(若 JSON 未显式声明)。
+    /// - 展平后清空 children(DB 层一节点一行,不存 children)。
+    ///
+    /// 递归天然保证父先于子,供 apply 按序建立。
     fn read_menu_definitions(
         module_dir: &Path,
         domain: &str,
         app: &str,
         module: &str,
     ) -> Vec<cmx_core::model::module::MenuDefinition> {
-        Self::read_definition_files(module_dir, "menus")
-            .into_iter()
-            .map(|(stem, name, definition)| cmx_core::model::module::MenuDefinition {
-                code: format!("{module}:{stem}"),
-                name,
-                definition,
-                domain_code: domain.to_string(),
-                application_code: app.to_string(),
-                module_code: module.to_string(),
-            })
-            .collect()
+        let dir = module_dir.join("menus");
+        if !dir.exists() {
+            return Vec::new();
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!(error = %e, "读取 menus 目录失败");
+                return Vec::new();
+            }
+        };
+        let mut result = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!(file = ?path.file_name(), error = %e, "读取菜单文件失败,跳过");
+                    continue;
+                }
+            };
+            // 树状 JSON:根节点数组(每个根含 children)。兼容单根对象。
+            let parsed: serde_json::Value = match serde_json::from_str(&content) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(file = ?path.file_name(), error = %e, "解析菜单 JSON 失败,跳过");
+                    continue;
+                }
+            };
+            let roots: Vec<serde_json::Value> = match parsed {
+                serde_json::Value::Array(arr) => arr,
+                obj @ serde_json::Value::Object(_) => vec![obj],
+                _ => {
+                    warn!(file = ?path.file_name(), "菜单 JSON 既非数组也非对象,跳过");
+                    continue;
+                }
+            };
+            for root_val in roots {
+                if let Ok(mut node) =
+                    serde_json::from_value::<cmx_core::model::module::MenuDefinition>(root_val)
+                {
+                    // 补齐归属三段式 + 递归填充子节点 parent_code 并展平
+                    node.domain_code = domain.to_string();
+                    node.application_code = app.to_string();
+                    node.module_code = module.to_string();
+                    Self::flatten_menu_tree(node, None, &mut result);
+                } else {
+                    warn!(file = ?path.file_name(), "菜单节点反序列化失败,跳过");
+                }
+            }
+        }
+        result
+    }
+
+    /// 递归展平菜单树:当前节点入列(按树形关系归一化 parent_code、清空 children),再处理 children。
+    ///
+    /// parent_code 以树形嵌套关系(children)为权威来源:
+    /// 根节点归一化为 None(忽略 JSON 里的空串/null);子节点用父节点 code 填充。
+    fn flatten_menu_tree(
+        mut node: cmx_core::model::module::MenuDefinition,
+        parent_code: Option<&str>,
+        out: &mut Vec<cmx_core::model::module::MenuDefinition>,
+    ) {
+        // 按树形关系归一化 parent_code(忽略 JSON 里可能为 "" 的脏值)
+        node.parent_code = parent_code.map(|s| s.to_string());
+        let node_code = node.code.clone();
+        let children = std::mem::take(&mut node.children);
+        // 当前节点入列(children 已清空)
+        out.push(node);
+        // 递归子节点,天然父先于子
+        for child in children {
+            Self::flatten_menu_tree(child, Some(&node_code), out);
+        }
     }
 
     /// 读取 metadata/tables/*.json,解析为 TableDefine 列表。

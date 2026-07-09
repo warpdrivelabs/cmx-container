@@ -15,14 +15,15 @@ use crate::error::TraitError;
 /// [`list_menu_definitions`]: MenuDefinitionImporter::list_menu_definitions
 #[async_trait]
 pub trait MenuDefinitionImporter: Send + Sync {
-    /// 将根菜单定义列表安装到指定作用域。
+    /// 将菜单节点定义列表安装到指定作用域。
+    ///
+    /// 本地实现内部自行开启并提交事务(一次 apply 一个事务);远程实现跨服务无共享事务。
     ///
     /// # Arguments
     /// * `domain_code` - 域编码
     /// * `app_code` - 应用编码
     /// * `module_code` - 模块编码
-    /// * `definitions` - 根菜单定义列表(每个含完整菜单树)
-    /// * `txn_id` - 外部事务 ID(仅本地实现有效;远程实现跨服务无共享事务,会忽略此参数)
+    /// * `definitions` - 菜单节点定义列表
     ///
     /// # Returns
     /// 成功处理的菜单数量。
@@ -32,7 +33,6 @@ pub trait MenuDefinitionImporter: Send + Sync {
         app_code: &str,
         module_code: &str,
         definitions: &[MenuDefinition],
-        txn_id: Option<&str>,
     ) -> Result<usize, TraitError>;
 
     /// 导出指定模块的所有根菜单定义。

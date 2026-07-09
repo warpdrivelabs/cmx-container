@@ -38,15 +38,23 @@ impl FormDefinitionImporter for LocalFormDefinitionImporter {
         app_code: &str,
         module_code: &str,
         definitions: &[FormDefinition],
-        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
         }
+        // 内部自开事务:一次 apply 一个事务,异常时 guard drop 自动回滚
+        let guard = self
+            .mm
+            .get_transaction_context()
+            .begin_with_guard(&self.db_id)
+            .await
+            .map_err(|e| TraitError::Business(format!("开启表单导入事务失败: {e}")))?;
+        let txn_id = guard.txn_id();
         let mut count = 0usize;
         for def in definitions {
             // 幂等:先删同 code 记录,再创建
-            let _ = FormService::delete_by_code(&self.mm, &self.db_id, txn_id, &def.code).await;
+            let _ = FormService::delete_by_code(&self.mm, &self.db_id, Some(txn_id), &def.code)
+                .await;
             let dto = FormForCreate {
                 code: def.code.clone(),
                 name: def.name.clone(),
@@ -56,7 +64,7 @@ impl FormDefinitionImporter for LocalFormDefinitionImporter {
                 application_code: app_code.to_string(),
                 module_code: module_code.to_string(),
             };
-            match FormService::create(&self.mm, &self.db_id, txn_id, dto).await {
+            match FormService::create(&self.mm, &self.db_id, Some(txn_id), dto).await {
                 Ok(_) => {
                     count += 1;
                 }
@@ -65,6 +73,10 @@ impl FormDefinitionImporter for LocalFormDefinitionImporter {
                 }
             }
         }
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::Business(format!("提交表单导入事务失败: {e}")))?;
         info!(count, "表单定义导入完成");
         Ok(count)
     }

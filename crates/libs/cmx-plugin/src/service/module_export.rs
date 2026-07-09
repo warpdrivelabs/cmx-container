@@ -13,6 +13,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::Serialize;
+
 use cmx_core::model::cell::DataValue;
 use cmx_core::model::module::manifest::{
     ModuleInfo, ModuleManifest, ModulePluginEntry, ModuleResources, ModuleStats,
@@ -111,7 +113,7 @@ impl ModuleExportService {
                 }
             }
 
-            // 2. 菜单
+            // 2. 菜单(树状单文件:扁平节点按 parent_code 组装为树,写 menu_0.json)
             let menu_defs = bundle
                 .menu
                 .list_menu_definitions(module_code)
@@ -121,12 +123,10 @@ impl ModuleExportService {
             if menu_count > 0 {
                 let menus_dir = export_dir.join("menus");
                 tokio::fs::create_dir_all(&menus_dir).await.ok();
-                for (i, def) in menu_defs.iter().enumerate() {
-                    Self::write_json(&menus_dir.join(format!("menu_{i}.json")), &def.definition)?;
-                }
-                for i in 0..menu_count {
-                    resources.menus.push(format!("menus/menu_{i}.json"));
-                }
+                // 扁平节点 → 树状(根节点数组,每个根含 children),对偶导入侧树状解析
+                let menu_tree = Self::build_menu_tree(menu_defs);
+                Self::write_json(&menus_dir.join("menu_0.json"), &menu_tree)?;
+                resources.menus.push("menus/menu_0.json".to_string());
             }
 
             // 3. 元数据
@@ -322,12 +322,54 @@ impl ModuleExportService {
         Ok(entries)
     }
 
-    /// 写 JSON 到文件(美化格式,便于校验)
-    fn write_json(path: &Path, value: &serde_json::Value) -> PluginResult<()> {
+    /// 写 JSON 到文件(美化格式,便于校验)。
+    ///
+    /// 泛型实现,支持任意可序列化类型(serde_json::Value / Vec 等)。
+    fn write_json<T: Serialize>(path: &Path, value: &T) -> PluginResult<()> {
         let content = serde_json::to_string_pretty(value)
             .map_err(|e| PluginError::Config(format!("序列化 JSON 失败: {e}")))?;
         std::fs::write(path, content)
             .map_err(|e| PluginError::Config(format!("写入文件失败: {e}")))?;
         Ok(())
+    }
+
+    /// 把扁平菜单节点按 `parent_code` 组装成树(根节点数组,每个根含 children)。
+    ///
+    /// 用于导出 menu_0.json:DB 一节点一行 → 树状 JSON,对偶导入侧的树状解析。
+    fn build_menu_tree(
+        defs: Vec<cmx_core::model::module::MenuDefinition>,
+    ) -> Vec<cmx_core::model::module::MenuDefinition> {
+        use std::collections::HashMap;
+        // 建立 parent_code → 子节点列表 映射(空 parent_code 视为根键 "")
+        let mut children_map: HashMap<String, Vec<cmx_core::model::module::MenuDefinition>> =
+            HashMap::new();
+        let mut roots: Vec<cmx_core::model::module::MenuDefinition> = Vec::new();
+        for mut d in defs {
+            d.children.clear();
+            match &d.parent_code {
+                Some(pc) if !pc.is_empty() => {
+                    children_map.entry(pc.clone()).or_default().push(d);
+                }
+                _ => {
+                    roots.push(d);
+                }
+            }
+        }
+        // 自顶向下递归填充每个根的 children
+        Self::fill_children(&mut roots, &children_map);
+        roots
+    }
+
+    /// 递归为每个节点填充 children(从 children_map 查找其子节点)。
+    fn fill_children(
+        nodes: &mut [cmx_core::model::module::MenuDefinition],
+        children_map: &std::collections::HashMap<String, Vec<cmx_core::model::module::MenuDefinition>>,
+    ) {
+        for node in nodes.iter_mut() {
+            if let Some(child_list) = children_map.get(&node.code) {
+                node.children = child_list.clone();
+                Self::fill_children(&mut node.children, children_map);
+            }
+        }
     }
 }

@@ -28,11 +28,18 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
         app_code: &str,
         module_code: &str,
         definitions: &[PermissionDefinition],
-        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
         }
+        // 内部自开事务:一次 apply 一个事务,异常时 guard drop 自动回滚
+        let guard = self
+            .mm
+            .get_transaction_context()
+            .begin_with_guard(&self.db_id)
+            .await
+            .map_err(|e| TraitError::Business(format!("开启权限导入事务失败: {e}")))?;
+        let txn_id = guard.txn_id();
 
         // 1. 第一阶段:upsert 所有权限(parent_id 暂置 NULL,full_code_path='/'+code)
         let mut code_to_id: std::collections::HashMap<String, String> =
@@ -75,7 +82,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                 .mm
                 .query_sql_with_datavalues(
                     &self.db_id,
-                    txn_id,
+                    Some(txn_id),
                     sql,
                     params,
                     "apply_perm_upsert",
@@ -118,7 +125,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                 .mm
                 .query_sql_with_datavalues(
                     &self.db_id,
-                    txn_id,
+                    Some(txn_id),
                     parent_sql,
                     vec![DataValue::String(parent_id.clone())],
                     "apply_perm_parent",
@@ -150,7 +157,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                     .mm
                     .execute_sql_with_datavalues(
                         &self.db_id,
-                        txn_id,
+                        Some(txn_id),
                         upd_sql,
                         vec![
                             DataValue::String(parent_id.clone()),
@@ -167,13 +174,17 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                     .mm
                     .execute_sql_with_datavalues(
                         &self.db_id,
-                        txn_id,
+                        Some(txn_id),
                         leaf_sql,
                         vec![DataValue::String(parent_id.clone())],
                     )
                     .await;
             }
         }
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::Business(format!("提交权限导入事务失败: {e}")))?;
         info!(count = definitions.len(), "权限定义 upsert 完成");
         Ok(definitions.len())
     }

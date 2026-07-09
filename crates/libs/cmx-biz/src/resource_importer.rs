@@ -133,7 +133,6 @@ impl ResourceDataImporter for ResourceDataImporterImpl {
                         &request.application_code,
                         &request.module_code,
                         &defs,
-                        None, // RPC 接收端:跨服务无共享事务,暂不开事务
                     )
                     .await?;
                 Ok(ResourceDataImportResult {
@@ -163,7 +162,6 @@ impl ResourceDataImporter for ResourceDataImporterImpl {
                         &request.application_code,
                         &request.module_code,
                         &defs,
-                        None, // RPC 接收端:跨服务无共享事务,暂不开事务
                     )
                     .await?;
                 Ok(ResourceDataImportResult {

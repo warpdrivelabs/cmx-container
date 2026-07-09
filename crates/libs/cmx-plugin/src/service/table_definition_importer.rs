@@ -44,12 +44,20 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
         app_id: &str,
         definitions: &[TableDefine],
         biz_db_id: &str,
-        txn_id: Option<&str>,
     ) -> Result<usize, TraitError> {
         if definitions.is_empty() {
             return Ok(0);
         }
-        // 用 PgTableDefineExecutor 建表到业务库(DDL 在 PG 自动提交,txn_id 对 DDL 无实际效果)
+        // 内部自开事务(仅作用于 default 库的元数据登记);
+        // 建表 DDL 在 biz 库,PG 自动提交不进事务
+        let guard = self
+            .mm
+            .get_transaction_context()
+            .begin_with_guard(&self.default_db_id)
+            .await
+            .map_err(|e| TraitError::Business(format!("开启表元数据导入事务失败: {e}")))?;
+        let txn_id = guard.txn_id();
+
         let executor = cmx_metadata::executor::PgTableDefineExecutor::new(biz_db_id, None);
         let mut count = 0usize;
         for table_def in definitions {
@@ -60,7 +68,7 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
                     continue;
                 }
             }
-            // 登记元数据到 default 库(记录 db_id 列标记 biz 库),txn_id 纳入外部事务
+            // 登记元数据到 default 库(记录 db_id 列标记 biz 库)
             if let Err(e) = TableMetadataService::upsert_by_table_name(
                 &self.mm,
                 &self.default_db_id,
@@ -70,7 +78,7 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
                 app_code,
                 module_code,
                 app_id,
-                txn_id,
+                Some(txn_id),
             )
             .await
             {
@@ -78,6 +86,10 @@ impl TableDefinitionImporter for LocalTableDefinitionImporter {
             }
             count += 1;
         }
+        guard
+            .commit()
+            .await
+            .map_err(|e| TraitError::Business(format!("提交表元数据导入事务失败: {e}")))?;
         info!(count, "表结构定义导入完成");
         Ok(count)
     }

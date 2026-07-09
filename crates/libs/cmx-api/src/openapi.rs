@@ -57,16 +57,13 @@ use utoipa::OpenApi;
         crate::routes::crud_handlers::form_crud::delete,
         crate::routes::crud_handlers::form_crud::list,
         crate::routes::crud_handlers::form_crud::page,
-        // Menu CRUD handlers
-        crate::routes::crud_handlers::menu_crud::create,
-        crate::routes::crud_handlers::menu_crud::create_many,
-        crate::routes::crud_handlers::menu_crud::get,
-        crate::routes::crud_handlers::menu_crud::update,
-        crate::routes::crud_handlers::menu_crud::update_many,
-        crate::routes::crud_handlers::menu_crud::delete,
-        crate::routes::crud_handlers::menu_crud::list,
-        crate::routes::crud_handlers::menu_crud::page,
-        // Menu 自定义 handler
+        // Menu 手写 handlers（增删改走 MenuService 维护树形字段）
+        crate::handlers::menu::handler::create_menu,
+        crate::handlers::menu::handler::get_menu,
+        crate::handlers::menu::handler::update_menu,
+        crate::handlers::menu::handler::delete_menu,
+        crate::handlers::menu::handler::list_menus,
+        crate::handlers::menu::handler::page_menus,
         crate::handlers::menu::handler::get_menu_tree,
 
         // Domain handlers
