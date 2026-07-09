@@ -171,7 +171,7 @@ CREATE TABLE cmx_permission
     extension     TEXT,
     parent_code    VARCHAR(200),
     full_code_path VARCHAR(1000) NOT NULL,
-    is_leaf        INT4      DEFAULT 1,
+    is_leaf        INT4      DEFAULT 0,
     level          INT4      DEFAULT 1,
     status        INT4      DEFAULT 1,
     archived      INT4      DEFAULT 0,

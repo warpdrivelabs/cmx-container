@@ -1755,7 +1755,7 @@ CREATE TABLE cmx_permission
     extension     TEXT,
     parent_code    VARCHAR(200),                   -- 父权限 code（根为 NULL）
     full_code_path VARCHAR(1000) NOT NULL,         -- code 全路径，如 /user:list/user:delete
-    is_leaf        INT4      DEFAULT 1,            -- 1 叶子 / 0 非叶子
+    is_leaf        INT4      DEFAULT 0,            -- 1 叶子 / 0 非叶子
     level          INT4      DEFAULT 1,            -- 层级深度，根=1
     status        INT4      DEFAULT 1,
     archived      INT4      DEFAULT 0,
