@@ -2,7 +2,7 @@
 //!
 //! 提供分页查询等参数的解析。
 
-use modql::filter::ListOptions;
+use modql::filter::{ListOptions, OrderBy, OrderBys};
 use serde::Deserialize;
 use serde_json::Value;
 #[cfg(feature = "openapi")]
@@ -47,6 +47,20 @@ pub struct DeletePayload {
     pub ids: Vec<Value>,
 }
 
+/// 将逗号分隔的排序字符串解析为 `OrderBys`。
+///
+/// 每个字段前缀 `!` 或 `-` 表示降序，否则升序。例如 `"!priority,create_time"`
+/// 解析为 `priority DESC, create_time ASC`。
+fn parse_order_bys(order_bys: &str) -> OrderBys {
+    let items: Vec<OrderBy> = order_bys
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.into())
+        .collect();
+    OrderBys::new(items)
+}
+
 /// 列表查询参数
 ///
 /// 用于列表查询的通用参数结构。
@@ -69,7 +83,7 @@ impl<F> ListParams<F> {
         ListOptions {
             limit: Some(LIST_LIMIT_DEFAULT),
             offset: None,
-            order_bys: self.order_bys.as_ref().map(|s| s.as_str().into()),
+            order_bys: self.order_bys.as_ref().map(|s| parse_order_bys(s)),
         }
     }
 }
@@ -144,7 +158,7 @@ impl<F> PageParams<F> {
         ListOptions {
             limit: Some(size),
             offset: Some(self.get_offset()),
-            order_bys: self.order_bys.as_ref().map(|s| s.as_str().into()),
+            order_bys: self.order_bys.as_ref().map(|s| parse_order_bys(s)),
         }
     }
 }

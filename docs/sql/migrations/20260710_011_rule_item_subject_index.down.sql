@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_cmx_exclusion_rule_item_subject_id;
