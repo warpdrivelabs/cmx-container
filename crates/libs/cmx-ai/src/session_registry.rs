@@ -369,8 +369,7 @@ mod tests {
     #[tokio::test]
     async fn pending_question_lifecycle() {
         let reg = SessionRegistry::new();
-        let timer = tokio::spawn(async {});
-        reg.register_pending_question("ses_t2", "que_abc", timer);
+        reg.register_pending_question("ses_t2", "que_abc");
         assert_eq!(reg.take_pending_question("ses_t2"), Some("que_abc".into()));
         assert_eq!(reg.take_pending_question("ses_t2"), None);
     }
@@ -378,8 +377,7 @@ mod tests {
     #[tokio::test]
     async fn purge_clears_all() {
         let reg = SessionRegistry::new();
-        let timer = tokio::spawn(async {});
-        reg.register_pending_permission("ses_t3", "per_xyz", timer);
+        reg.register_pending_permission("ses_t3", "per_xyz");
         reg.purge("ses_t3");
         assert_eq!(reg.take_pending_permission("ses_t3"), None);
     }
