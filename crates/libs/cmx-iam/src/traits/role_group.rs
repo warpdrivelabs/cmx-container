@@ -151,4 +151,19 @@ pub trait RoleGroupService: Send + Sync {
     ///
     /// 当 SQL 查询失败时返回错误。
     async fn get_role_group_tree(&self) -> Result<Vec<RoleGroupTreeNode>, TraitError>;
+
+    /// 查询角色组组合树，并聚合每个组的角色数量。
+    ///
+    /// 与 [`RoleGroupService::get_role_group_tree`] 的区别在于每个节点额外携带
+    /// `role_count`（该组下未归档角色数）。角色计数通过单条 `GROUP BY` 聚合
+    /// SQL 一次性查出，在内存中合并到树，不逐组查询。
+    ///
+    /// # Returns
+    ///
+    /// 树根列表（每个节点包含 `role_count` 字段）。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 查询失败时返回错误。
+    async fn get_role_group_combined_tree(&self) -> Result<Vec<RoleGroupTreeNode>, TraitError>;
 }

@@ -26,6 +26,10 @@ pub struct RoleGroupForCreate {
     /// 角色组描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 状态（1 启用 / 0 停用），默认 1。
+    #[serde(default)]
+    pub status: Option<i64>,
 }
 
 /// 更新角色组 DTO（全 `Option`，未提供字段不更新）。
@@ -47,4 +51,8 @@ pub struct RoleGroupForUpdate {
     /// 角色组描述/备注。
     #[serde(default)]
     pub description: Option<String>,
+
+    /// 状态（1 启用 / 0 停用）。
+    #[serde(default)]
+    pub status: Option<i64>,
 }

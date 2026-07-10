@@ -10,8 +10,10 @@ use cmx_core::ParamsBuilder;
 use cmx_core::SVRContext;
 use cmx_core::model::cell::DataValue;
 use cmx_database::DatabaseManager;
+use cmx_database::crud::GenericCrudService;
 use cmx_traits::error::TraitError;
 use cmx_utils::snowflake_id_str;
+use modql::filter::{ListOptions, OpValInt64, OpValString, OpValsInt64, OpValsString};
 use tracing::{debug, info};
 
 use crate::audit_helper::AuditHelper;
@@ -21,6 +23,7 @@ use crate::rule::entity::{
     CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, RuleViolationDetail,
     UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
 };
+use crate::rule::{ExclusionRuleBmc, ExclusionRuleFilter};
 
 /// 互斥规则 Service trait。
 ///
@@ -103,12 +106,17 @@ pub trait ExclusionRuleService: Send + Sync {
         rule_id: &str,
     ) -> Result<(ExclusionRule, Vec<ExclusionRuleItem>), TraitError>;
 
-    /// 分页查询规则。
+    /// 分页查询规则（支持过滤 + 跨表 subject_id）。
+    ///
+    /// 默认附加 `archived = 0` 过滤；无 `subject_id` 跨表条件时走
+    /// `GenericCrudService`（单表索引），含 `subject_id` 时走 raw SQL
+    /// （JOIN items + DISTINCT + 走 `subject_id` 索引）。
     ///
     /// # Arguments
     ///
-    /// * `current` - 当前页码（从 1 开始）。
-    /// * `size` - 每页记录数。
+    /// * `filters` - 规则查询过滤器数组（每个 filter 为一个 AND 组，组间 OR）。
+    ///   `subject_id` 为跨表字段，触发 raw SQL 分支。
+    /// * `list_options` - 分页与排序选项。
     ///
     /// # Returns
     ///
@@ -116,11 +124,11 @@ pub trait ExclusionRuleService: Send + Sync {
     ///
     /// # Errors
     ///
-    /// 当 `current < 1` 或 SQL 查询失败时返回错误。
+    /// 当 SQL 查询或反序列化失败时返回错误。
     async fn page_rules(
         &self,
-        current: u64,
-        size: u64,
+        filters: Option<Vec<crate::rule::ExclusionRuleFilter>>,
+        list_options: ListOptions,
     ) -> Result<(Vec<ExclusionRule>, i64), TraitError>;
 
     /// 切换规则状态（启用/禁用）。
@@ -286,40 +294,6 @@ impl ExclusionRuleServiceImpl {
         })
     }
 
-    /// 从 DataSet 提取 ExclusionRule 列表
-    fn extract_rules_from_dataset(
-        dataset: cmx_core::model::data::dataset::DataSet,
-    ) -> Vec<ExclusionRule> {
-        let schema = dataset.schema.as_ref();
-        dataset
-            .iter()
-            .filter_map(|row| {
-                Some(ExclusionRule {
-                    id: row.get_by_name_as(schema, "id")?,
-                    code: row.get_by_name_as(schema, "code")?,
-                    name: row.get_by_name_as(schema, "name")?,
-                    subject_type: row.get_by_name_as(schema, "subject_type")?,
-                    primary_subject_id: row.get_by_name_as(schema, "primary_subject_id")?,
-                    violation_message: row.get_by_name_as(schema, "violation_message"),
-                    priority: row.get_by_name_as::<i64>(schema, "priority").unwrap_or(0),
-                    description: row.get_by_name_as(schema, "description"),
-                    status: row.get_by_name_as::<i64>(schema, "status").unwrap_or(1),
-                    archived: row.get_by_name_as::<i64>(schema, "archived").unwrap_or(0),
-                    create_time: row
-                        .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "create_time")
-                        .unwrap_or_else(chrono::Utc::now),
-                    update_time: row
-                        .get_by_name_as::<chrono::DateTime<chrono::Utc>>(schema, "update_time")
-                        .unwrap_or_else(chrono::Utc::now),
-                    create_by: row.get_by_name_as(schema, "create_by"),
-                    create_name: row.get_by_name_as(schema, "create_name"),
-                    update_by: row.get_by_name_as(schema, "update_by"),
-                    update_name: row.get_by_name_as(schema, "update_name"),
-                })
-            })
-            .collect()
-    }
-
     /// 从 DataSet 提取 ExclusionRuleItem 列表
     fn extract_items(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<ExclusionRuleItem> {
         let schema = dataset.schema.as_ref();
@@ -333,6 +307,53 @@ impl ExclusionRuleServiceImpl {
                 })
             })
             .collect()
+    }
+
+    /// 从 DataSet 提取 `ExclusionRule` 列表（`to_json_value` + serde 反序列化模式）。
+    ///
+    /// 与 `role::extract_roles` / `role_group::extract_role_groups` 一致，
+    /// 依赖 `SELECT` 列名与 `ExclusionRule` 字段名对齐。
+    fn extract_rules(dataset: cmx_core::model::data::dataset::DataSet) -> Vec<ExclusionRule> {
+        let schema = dataset.schema.as_ref();
+        dataset
+            .iter()
+            .filter_map(|row| {
+                let json_val = row.to_json_value(schema);
+                serde_json::from_value::<ExclusionRule>(json_val).ok()
+            })
+            .collect()
+    }
+
+    /// 构造带 `archived = 0` 默认过滤的 `ExclusionRuleFilter`。
+    fn with_default_archived(mut filter: ExclusionRuleFilter) -> ExclusionRuleFilter {
+        if filter.archived.is_none() {
+            filter.archived = Some(OpValsInt64(vec![OpValInt64::Eq(0)]));
+        }
+        filter
+    }
+
+    /// 从 `OpValsString` 中提取首个 `Eq` / `Ilike` / `Contains` 等操作符的字面量值。
+    ///
+    /// 用于跨表 raw SQL 分支：前端通常传 `{"Eq": "xxx"}`，取首个操作符的值即可。
+    /// 复杂操作符（`In` 等）返回 `None`（raw SQL 路径仅支持等值/模糊）。
+    fn first_string_opval(opvals: &OpValsString) -> Option<String> {
+        opvals.0.first().and_then(|op| match op {
+            OpValString::Eq(s)
+            | OpValString::Ilike(s)
+            | OpValString::Contains(s)
+            | OpValString::ContainsCi(s)
+            | OpValString::StartsWith(s)
+            | OpValString::EndsWith(s) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// 从 `OpValsInt64` 中提取首个 `Eq` 的数值。
+    fn first_int_opval(opvals: &OpValsInt64) -> Option<i64> {
+        opvals.0.first().and_then(|op| match op {
+            OpValInt64::Eq(n) => Some(*n),
+            _ => None,
+        })
     }
 
     /// 查询单条规则
@@ -412,6 +433,114 @@ impl ExclusionRuleServiceImpl {
             }
         }
         Ok(())
+    }
+
+    /// 跨表分页查询：主体作为主主体或排除项参与的规则。
+    ///
+    /// 当 filters 含 `subject_id` 时由 `page_rules` 调用。动态拼 WHERE：
+    /// `r.archived = 0` + 其他单表条件（subject_type/status/code/name）+
+    /// `(r.primary_subject_id = $N OR i.subject_id = $N)`，LEFT JOIN items 表，
+    /// DISTINCT 去重，按 `priority DESC, create_time DESC` 分页。
+    ///
+    /// §十合规：所有 raw SQL 参数用 `cmx_core::dv!` 宏构造。
+    ///
+    /// # Arguments
+    ///
+    /// * `mm` - 数据库管理器。
+    /// * `db_id` - 认证库 ID。
+    /// * `filters` - 过滤器数组（提取其中 subject_type/status/code/name 等单表条件）。
+    /// * `list_options` - 分页与排序选项。
+    /// * `subject_id` - 跨表匹配的主体 ID。
+    ///
+    /// # Returns
+    ///
+    /// 元组 `(规则列表, 总记录数)`。
+    async fn page_rules_cross_table(
+        mm: &DatabaseManager,
+        db_id: &str,
+        filters: Option<Vec<ExclusionRuleFilter>>,
+        list_options: ListOptions,
+        subject_id: String,
+    ) -> Result<(Vec<ExclusionRule>, i64), TraitError> {
+        // 动态拼 WHERE 条件与参数（占位符从 $1 起）
+        let mut conds: Vec<String> = vec!["r.archived = 0".to_string()];
+        let mut pvals: Vec<DataValue> = Vec::new();
+
+        // 从首个 filter 组提取单表条件（跨表 filter 通常只含一个 AND 组）
+        if let Some(fs) = filters.as_ref() {
+            for f in fs {
+                if let Some(v) = f.subject_type.as_ref().and_then(Self::first_string_opval) {
+                    let idx = pvals.len() + 1;
+                    conds.push(format!("r.subject_type = ${idx}"));
+                    pvals.extend(cmx_core::dv![v]);
+                }
+                if let Some(v) = f.status.as_ref().and_then(Self::first_int_opval) {
+                    let idx = pvals.len() + 1;
+                    conds.push(format!("r.status = ${idx}"));
+                    pvals.extend(cmx_core::dv![v]);
+                }
+                if let Some(v) = f.code.as_ref().and_then(Self::first_string_opval) {
+                    let idx = pvals.len() + 1;
+                    conds.push(format!("r.code ILIKE ${idx}"));
+                    pvals.extend(cmx_core::dv![format!("%{v}%")]);
+                }
+                if let Some(v) = f.name.as_ref().and_then(Self::first_string_opval) {
+                    let idx = pvals.len() + 1;
+                    conds.push(format!("r.name ILIKE ${idx}"));
+                    pvals.extend(cmx_core::dv![format!("%{v}%")]);
+                }
+            }
+        }
+
+        // 跨表条件：(r.primary_subject_id = $N OR i.subject_id = $N)
+        let join = " LEFT JOIN cmx_exclusion_rule_item i ON i.rule_id = r.id AND i.archived = 0 ";
+        let subj_idx = pvals.len() + 1;
+        conds.push(format!(
+            "(r.primary_subject_id = ${subj_idx} OR i.subject_id = ${subj_idx})"
+        ));
+        pvals.extend(cmx_core::dv![subject_id]);
+
+        let where_sql = conds.join(" AND ");
+
+        // count 查询（DISTINCT 去重后计数）
+        let count_sql = format!(
+            "SELECT COUNT(DISTINCT r.id) AS cnt FROM cmx_exclusion_rule r {join} WHERE {where_sql}"
+        );
+        let count_ds = mm
+            .query_sql_with_datavalues(db_id, None, &count_sql, pvals.clone(), "rule_count_x")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("规则计数失败: {e}"))))?;
+        let schema = count_ds.schema.as_ref();
+        let total: i64 = count_ds
+            .iter()
+            .next()
+            .and_then(|row| row.get_by_name_as::<i64>(schema, "cnt"))
+            .unwrap_or(0);
+
+        // page 查询：追加 limit/offset 参数
+        let limit = list_options.limit.unwrap_or(10);
+        let offset = list_options.offset.unwrap_or(0);
+        let limit_idx = subj_idx + 1;
+        let offset_idx = limit_idx + 1;
+
+        let page_sql = format!(
+            r#"SELECT DISTINCT r.id, r.code, r.name, r.subject_type, r.primary_subject_id,
+                      r.violation_message, r.priority, r.description, r.status, r.archived,
+                      r.create_time, r.update_time,
+                      r.create_by, r.create_name, r.update_by, r.update_name
+               FROM cmx_exclusion_rule r {join}
+               WHERE {where_sql}
+               ORDER BY r.priority DESC, r.create_time DESC
+               LIMIT ${limit_idx} OFFSET ${offset_idx}"#
+        );
+        let mut page_pvals = pvals;
+        page_pvals.extend(cmx_core::dv![limit, offset]);
+        let ds = mm
+            .query_sql_with_datavalues(db_id, None, &page_sql, page_pvals, "rule_page_x")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("规则分页失败: {e}"))))?;
+
+        Ok((Self::extract_rules(ds), total))
     }
 }
 
@@ -697,56 +826,53 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
 
     async fn page_rules(
         &self,
-        current: u64,
-        size: u64,
+        filters: Option<Vec<ExclusionRuleFilter>>,
+        list_options: ListOptions,
     ) -> Result<(Vec<ExclusionRule>, i64), TraitError> {
-        debug!(
-            "{:<12} - ExclusionRuleServiceImpl::page_rules - current: {}, size: {}",
-            "IAM-RULE", current, size
-        );
+        debug!("{:<12} - ExclusionRuleServiceImpl::page_rules", "IAM-RULE");
 
-        let offset = if current > 0 {
-            ((current - 1) * size) as i64
+        // 检测是否含跨表 subject_id 过滤（取首个 filter 组中首个 subject_id 等值操作符值）。
+        let cross_subject_id: Option<String> = filters.as_ref().and_then(|fs| {
+            fs.iter().find_map(|f| {
+                f.subject_id.as_ref().and_then(Self::first_string_opval)
+            })
+        });
+
+        if let Some(subject_id) = cross_subject_id {
+            // 路径 B：跨表 raw SQL（JOIN items + DISTINCT + 走 subject_id 索引）
+            Self::page_rules_cross_table(
+                &self.mm,
+                &self.db_id,
+                filters,
+                list_options,
+                subject_id,
+            )
+            .await
         } else {
-            return Err(TraitError::from(IamError::Business(
-                "current 必须 >= 1".to_string(),
-            )));
-        };
-
-        // 查询总数
-        let count_sql = "SELECT COUNT(*) as cnt FROM cmx_exclusion_rule WHERE archived = 0";
-        let params: Vec<DataValue> = vec![];
-        let dataset = self
-            .mm
-            .query_sql_with_datavalues(&self.db_id, None, count_sql, params, "rule_count")
-            .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("查询规则总数失败: {e}"))))?;
-        let schema = dataset.schema.as_ref();
-        let total: i64 = dataset
-            .iter()
-            .next()
-            .and_then(|row| row.get_by_name_as::<i64>(schema, "cnt"))
-            .unwrap_or(0);
-
-        // 查询分页数据
-        let page_sql = r#"
-            SELECT id, code, name, subject_type, primary_subject_id, violation_message,
-                   priority, description, status, archived, create_time, update_time,
-                   create_by, create_name, update_by, update_name
-            FROM cmx_exclusion_rule
-            WHERE archived = 0
-            ORDER BY priority DESC, create_time DESC
-            LIMIT $1 OFFSET $2
-        "#;
-        let params = vec![DataValue::Int(size as i64), DataValue::Int(offset)];
-        let dataset = self
-            .mm
-            .query_sql_with_datavalues(&self.db_id, None, page_sql, params, "rule_page")
-            .await
-            .map_err(|e| TraitError::from(IamError::Business(format!("分页查询规则失败: {e}"))))?;
-
-        let rules: Vec<ExclusionRule> = Self::extract_rules_from_dataset(dataset);
-        Ok((rules, total))
+            // 路径 A：标准 GenericCrudService（与 role/role_group 一致，单表索引）
+            // 注入默认 archived=0，并将 subject_id 置 None（避免生成无效列谓词）
+            let filters = filters.map(|fs| {
+                fs.into_iter()
+                    .map(|mut f| {
+                        f.subject_id = None;
+                        Self::with_default_archived(f)
+                    })
+                    .collect::<Vec<_>>()
+            });
+            let (dataset, total) =
+                GenericCrudService::<ExclusionRuleBmc, ExclusionRuleFilter>::page(
+                    &self.mm,
+                    &self.db_id,
+                    None,
+                    filters,
+                    list_options,
+                )
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("规则分页失败: {e}")))
+                })?;
+            Ok((Self::extract_rules(dataset), total))
+        }
     }
 
     async fn toggle_rule_status(

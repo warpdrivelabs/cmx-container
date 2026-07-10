@@ -19,4 +19,8 @@ pub struct RoleGroupTreeNode {
     /// 子节点列表，递归引用自身构成树形结构；`openapi` 模式下禁用递归类型展开。
     #[cfg_attr(feature = "openapi", schema(no_recursion))]
     pub children: Vec<RoleGroupTreeNode>,
+
+    /// 该组下的角色数量（仅 `combined-tree` 接口填充，普通 tree 为 `None`）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role_count: Option<i64>,
 }

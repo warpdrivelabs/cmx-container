@@ -11,6 +11,7 @@ use cmx_iam::rule::entity::{
     CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, UpdateExclusionRuleRequest,
     ValidateRuleRequest, ValidateRuleResponse,
 };
+use cmx_iam::rule::ExclusionRuleFilter;
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
@@ -68,28 +69,6 @@ pub struct RuleDetailResponse {
 pub struct BatchResponse {
     /// 受影响的记录数。
     pub affected: u64,
-}
-
-/// 分页查询互斥规则请求载荷。
-///
-/// 采用页码 + 页大小模式，页码从 1 开始。
-#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
-pub struct PageRulesRequest {
-    /// 当前页码，从 1 开始。
-    pub current: u64,
-    /// 每页大小。
-    pub size: u64,
-}
-
-/// 分页查询互斥规则响应载荷。
-///
-/// 包含当前页规则列表与总记录数。
-#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
-pub struct PageRulesResponse {
-    /// 规则列表。
-    pub rules: Vec<ExclusionRule>,
-    /// 总记录数。
-    pub total: i64,
 }
 
 /// 创建规则
@@ -367,21 +346,18 @@ pub async fn remove_rule_items(
 #[utoipa::path(
     post,
     path = "/api/iam/exclusion-rules/page",
-    request_body = PageRulesRequest,
+    request_body = cmx_core::PageParams<serde_json::Value>,
     responses(
-        (status = 200, description = "查询成功", body = ApiResp<PageRulesResponse>)
+        (status = 200, description = "查询成功", body = ApiResp<Vec<ExclusionRule>>)
     ),
     tag = "IAM-Exclusion"
 )]
 pub async fn page_rules(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
-    Json(req): Json<PageRulesRequest>,
-) -> Result<Json<ApiResp<PageRulesResponse>>> {
-    debug!(
-        "{:<12} - handler::page_rules - current: {}, size: {}",
-        "HANDLER", req.current, req.size
-    );
+    Json(params): Json<cmx_core::PageParams<ExclusionRuleFilter>>,
+) -> Result<Json<ApiResp<Vec<ExclusionRule>>>> {
+    debug!("{:<12} - handler::page_rules", "HANDLER");
 
     let iam = cmx_state
         .iam()
@@ -392,12 +368,22 @@ pub async fn page_rules(
         .as_ref()
         .ok_or_else(|| Error::business_error("互斥规则服务未初始化".to_string()))?;
 
+    let page_number = params.get_page() as u64;
+    let page_size = params.get_size() as u64;
+    let list_options = params.to_list_options();
+    let filters = params.filters.clone().filter(|v| !v.is_empty());
+
     let (rules, total) = rule_service
-        .page_rules(req.current, req.size)
+        .page_rules(filters, list_options)
         .await
         .map_err(|e| Error::business_error(e.to_string()))?;
 
-    Ok(Json(ApiResp::ok(PageRulesResponse { rules, total })))
+    Ok(Json(ApiResp::ok_with_pagination(
+        rules,
+        page_number,
+        page_size,
+        total as u64,
+    )))
 }
 
 /// 规则校验测试

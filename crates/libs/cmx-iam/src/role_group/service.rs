@@ -105,7 +105,22 @@ impl RoleGroupServiceImpl {
     }
 
     /// 将扁平角色组列表组装为树形结构（按 `parent_id` 递归）。
-    fn build_tree(role_groups: Vec<RoleGroup>) -> Vec<RoleGroupTreeNode> {
+    ///
+    /// `count_map` 提供 `role_group_id -> 角色数` 映射，用于填充节点的 `role_count`；
+    /// 传入空映射时所有节点 `role_count` 均为 `None`（普通 tree 场景）。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_groups` - 扁平角色组列表。
+    /// * `count_map` - 角色计数映射（`role_group_id -> 数量`）。
+    ///
+    /// # Returns
+    ///
+    /// 树根节点列表。
+    fn build_tree(
+        role_groups: Vec<RoleGroup>,
+        count_map: &std::collections::HashMap<String, i64>,
+    ) -> Vec<RoleGroupTreeNode> {
         // 找出根节点（parent_id 为 None 或空字符串）
         let roots: Vec<RoleGroup> = role_groups
             .iter()
@@ -116,22 +131,38 @@ impl RoleGroupServiceImpl {
         // 递归构建子树
         roots
             .into_iter()
-            .map(|root| Self::build_subtree(root, &role_groups))
+            .map(|root| Self::build_subtree(root, &role_groups, count_map))
             .collect()
     }
 
-    /// 递归构建子树。
-    fn build_subtree(parent: RoleGroup, all: &[RoleGroup]) -> RoleGroupTreeNode {
+    /// 递归构建子树，并按 `count_map` 填充 `role_count`。
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - 当前父节点。
+    /// * `all` - 全量角色组列表（用于查找子节点）。
+    /// * `count_map` - 角色计数映射（`role_group_id -> 数量`）。
+    ///
+    /// # Returns
+    ///
+    /// 当前节点对应的树节点（含子树）。
+    fn build_subtree(
+        parent: RoleGroup,
+        all: &[RoleGroup],
+        count_map: &std::collections::HashMap<String, i64>,
+    ) -> RoleGroupTreeNode {
+        let role_count = count_map.get(parent.id.as_str()).copied();
         let children: Vec<RoleGroupTreeNode> = all
             .iter()
             .filter(|g| g.parent_id.as_deref() == Some(parent.id.as_str()))
             .cloned()
-            .map(|child| Self::build_subtree(child, all))
+            .map(|child| Self::build_subtree(child, all, count_map))
             .collect();
 
         RoleGroupTreeNode {
             role_group: parent,
             children,
+            role_count,
         }
     }
 }
@@ -477,7 +508,7 @@ impl RoleGroupService for RoleGroupServiceImpl {
         debug!("{:<12} - RoleGroupServiceImpl::get_role_group_tree", "IAM");
 
         let sql = r#"
-            SELECT id, name, parent_id, sort_order, description, archived,
+            SELECT id, name, parent_id, sort_order, status, description, archived,
                    create_time, update_time,
                    create_by, create_name, update_by, update_name
             FROM cmx_role_group
@@ -493,6 +524,72 @@ impl RoleGroupService for RoleGroupServiceImpl {
 
         let role_groups = Self::extract_role_groups(dataset);
 
-        Ok(Self::build_tree(role_groups))
+        // 普通 tree 不带角色计数，传入空映射，所有节点 role_count 均为 None。
+        let empty_map = std::collections::HashMap::new();
+        Ok(Self::build_tree(role_groups, &empty_map))
+    }
+
+    /// 获取角色组组合树（含每个组的角色计数）。
+    ///
+    /// 角色计数通过单条 `GROUP BY role_group_id` 聚合 SQL 一次性查出，
+    /// 在内存中合并到树结构，不逐组查询。
+    ///
+    /// # Returns
+    ///
+    /// 树根列表（每个节点包含 `role_count` 字段）。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询或聚合失败。
+    async fn get_role_group_combined_tree(&self) -> Result<Vec<RoleGroupTreeNode>, TraitError> {
+        debug!(
+            "{:<12} - RoleGroupServiceImpl::get_role_group_combined_tree",
+            "IAM"
+        );
+
+        // 1) 查全量角色组（含 status 列）
+        let group_sql = r#"
+            SELECT id, name, parent_id, sort_order, status, description, archived,
+                   create_time, update_time,
+                   create_by, create_name, update_by, update_name
+            FROM cmx_role_group
+            WHERE archived = 0
+            ORDER BY sort_order ASC NULLS LAST
+        "#;
+        let dataset = self
+            .mm
+            .query_sql(&self.db_id, None, group_sql, "role_group_combined_tree")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询角色组失败: {e}"))))?;
+        let role_groups = Self::extract_role_groups(dataset);
+
+        // 2) 单条聚合 SQL：每个组的角色数（走 idx_cmx_role_role_group_id 索引）
+        let count_sql = r#"
+            SELECT role_group_id, COUNT(*) AS cnt
+            FROM cmx_role
+            WHERE archived = 0 AND role_group_id IS NOT NULL
+            GROUP BY role_group_id
+        "#;
+        let count_ds = self
+            .mm
+            .query_sql(&self.db_id, None, count_sql, "role_group_role_count")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("聚合角色计数失败: {e}"))))?;
+
+        // 3) 构建 role_group_id -> count 映射
+        let schema = count_ds.schema.as_ref();
+        let mut count_map: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        for row in count_ds.iter() {
+            if let (Some(gid), Some(cnt)) = (
+                row.get_by_name_as::<String>(schema, "role_group_id"),
+                row.get_by_name_as::<i64>(schema, "cnt"),
+            ) {
+                count_map.insert(gid, cnt);
+            }
+        }
+
+        // 4) 构建树（build_tree 内部按 id 填充 role_count）
+        Ok(Self::build_tree(role_groups, &count_map))
     }
 }

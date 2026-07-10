@@ -22,6 +22,11 @@ impl ModuleRoutes for RoleGroupModule {
             .route("/iam/role-groups/list", post(handler::list_role_groups))
             // 角色组树
             .route("/iam/role-groups/tree", get(handler::get_role_group_tree))
+            // 角色组组合树（含角色计数）
+            .route(
+                "/iam/role-groups/combined-tree",
+                get(handler::get_role_group_combined_tree),
+            )
     }
 
     fn prefix() -> &'static str {

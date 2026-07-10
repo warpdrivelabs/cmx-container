@@ -207,7 +207,7 @@ impl UserServiceImpl {
             return Ok(());
         }
 
-        // 使用事务保证软删除+物理删除的原子性
+        // 使用事务保证删除+物理删除的原子性
         let txn_ctx = self.mm.get_transaction_context();
         let guard = txn_ctx
             .begin_with_guard(&self.db_id)
@@ -215,15 +215,16 @@ impl UserServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
-        // 1. 软删除 cmx_user（archived = 1）
+        // 1. 删除 cmx_user
         for user_id in user_ids {
-            let sql = "UPDATE cmx_user SET archived = 1, update_time = NOW() WHERE id = $1";
+            // let sql = "UPDATE cmx_user SET archived = 1, update_time = NOW() WHERE id = $1";
+            let sql = "delete from cmx_user  WHERE id = $1";
             let params = vec![DataValue::String(user_id.clone())];
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
                 .await
                 .map_err(|e| {
-                    TraitError::from(IamError::Business(format!("软删除用户失败: {e}")))
+                    TraitError::from(IamError::Business(format!("删除用户失败: {e}")))
                 })?;
         }
 

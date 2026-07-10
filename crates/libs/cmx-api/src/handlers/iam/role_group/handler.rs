@@ -262,3 +262,34 @@ pub async fn get_role_group_tree(
 
     Ok(Json(ApiResp::ok(tree)))
 }
+
+/// 获取角色组组合树（含角色计数）
+#[utoipa::path(
+    get,
+    path = "/api/iam/role-groups/combined-tree",
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleGroupTreeNode>>)
+    ),
+    tag = "IAM-RoleGroup"
+)]
+pub async fn get_role_group_combined_tree(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+) -> Result<Json<ApiResp<Vec<RoleGroupTreeNode>>>> {
+    debug!(
+        "{:<12} - handler::get_role_group_combined_tree",
+        "HANDLER"
+    );
+
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
+
+    let tree = iam
+        .role_group_service
+        .get_role_group_combined_tree()
+        .await
+        .map_err(|e| Error::business_error(e.to_string()))?;
+
+    Ok(Json(ApiResp::ok(tree)))
+}

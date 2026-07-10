@@ -1632,6 +1632,7 @@ CREATE TABLE cmx_role_group
     sort_order  INT4      DEFAULT 0,
     description VARCHAR(500),
     archived    INT4      DEFAULT 0,
+    status      INT4      DEFAULT 1,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_by   VARCHAR(100),
@@ -1648,6 +1649,7 @@ COMMENT ON COLUMN cmx_role_group.parent_id IS '父角色组ID（NULL=根节点�
 COMMENT ON COLUMN cmx_role_group.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role_group.description IS '描述';
 COMMENT ON COLUMN cmx_role_group.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_role_group.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_role_group.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_role_group.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_role_group.create_by IS '创建人ID';
@@ -1656,6 +1658,7 @@ COMMENT ON COLUMN cmx_role_group.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_role_group.update_name IS '更新人姓名';
 
 CREATE INDEX idx_cmx_role_group_parent ON cmx_role_group (parent_id);
+CREATE INDEX idx_cmx_role_group_status ON cmx_role_group (status);
 
 -- =============================================
 -- 30. 角色表 (cmx_role)
@@ -1939,6 +1942,7 @@ CREATE TABLE cmx_exclusion_rule_item
 
 CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
 CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_subject_id ON cmx_exclusion_rule_item (subject_id);
 
 COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
 COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';

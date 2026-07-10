@@ -88,3 +88,20 @@ pub struct AssignRoleUsersRequest {
     /// 待分配的用户 ID 列表（全量替换语义）。
     pub user_ids: Vec<String>,
 }
+
+/// 角色下永久授权用户的精简投影（不含密码等敏感字段）。
+///
+/// 仅用于查询返回，不是 CRUD 实体，故不 derive Fields。
+/// 通过 `get_role_users` 单次 JOIN 查询直接构造。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct RoleUserSummary {
+    /// 用户 ID。
+    pub user_id: String,
+
+    /// 用户名（唯一）。
+    pub username: String,
+
+    /// 昵称，可空。
+    pub nickname: Option<String>,
+}

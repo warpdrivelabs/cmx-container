@@ -4,6 +4,7 @@
 //! 包括规则主体、明细项、创建/更新请求以及规则校验请求/响应。
 //! 用于 SoD（职责分离）场景下的权限与角色互斥约束。
 
+use modql::field::Fields;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -57,7 +58,7 @@ impl SubjectType {
 /// 互斥规则记录。
 ///
 /// 对应数据库 `cmx_exclusion_rule` 表的一行，描述一条完整的互斥规则。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Fields)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ExclusionRule {
     /// 规则唯一标识。

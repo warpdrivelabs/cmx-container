@@ -11,7 +11,7 @@ use cmx_traits::error::TraitError;
 use modql::filter::ListOptions;
 
 use super::audit::{PermissionSummary, RoleSummary};
-use crate::role::{RoleFilter, RoleForCreate, RoleForUpdate};
+use crate::role::{RoleFilter, RoleForCreate, RoleForUpdate, RoleUserSummary};
 
 /// 角色权限差异响应。
 ///
@@ -209,6 +209,24 @@ pub trait RoleService: Send + Sync {
     ///
     /// 当 SQL 查询失败时返回错误。
     async fn get_role_permissions(&self, role_id: &str) -> Result<Vec<Permission>, TraitError>;
+
+    /// 查询角色下的永久授权用户（单次 JOIN 查询，消除前端 N+1）。
+    ///
+    /// 仅返回 `cmx_user_role` 中永久关联且双方未归档的用户精简投影，
+    /// 不包含密码等敏感字段。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_id` - 目标角色 ID。
+    ///
+    /// # Returns
+    ///
+    /// 该角色的永久授权用户精简列表（最多 500 条），可能为空。
+    ///
+    /// # Errors
+    ///
+    /// 当 SQL 查询失败时返回错误。
+    async fn get_role_users(&self, role_id: &str) -> Result<Vec<RoleUserSummary>, TraitError>;
 
     // ===== 审计查询（阶段5新增） =====
 
