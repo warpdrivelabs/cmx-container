@@ -24,7 +24,7 @@ use crate::{ApiResp, Result};
 
 use cmx_biz::menu::{MenuFilter, MenuForCreate, MenuForUpdate, MenuService, MenuTreeNodeData};
 
-/// 创建菜单。
+/// 创建菜单
 ///
 /// 由 MenuService 计算 id_path/code_path/depth/parent_code 后事务内写入,
 /// 并将父节点 leaf 置为 0。
@@ -54,7 +54,7 @@ pub async fn create_menu(
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 查询单个菜单。
+/// 获取菜单详情
 #[utoipa::path(
     get,
     path = "/api/menu/get",
@@ -83,7 +83,7 @@ pub async fn get_menu(
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 更新菜单。
+/// 更新菜单
 ///
 /// 当 parent_id 变更时级联重算该节点及其所有后代的 depth/id_path/code_path,
 /// 并同步维护新旧父节点的 leaf 标志。
@@ -113,7 +113,7 @@ pub async fn update_menu(
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 删除菜单。
+/// 删除菜单
 ///
 /// 级联删除传入节点的所有后代(基于 code_path 前缀),并重置父节点 leaf。
 #[utoipa::path(
@@ -141,7 +141,7 @@ pub async fn delete_menu(
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 列表查询(扁平结构,前端自行组装树)。
+/// 列表查询(扁平结构,前端自行组装树)
 #[utoipa::path(
     post,
     path = "/api/menu/list",
@@ -168,7 +168,7 @@ pub async fn list_menus(
     Ok(Json(ApiResp::ok(dataset)))
 }
 
-/// 分页查询。
+/// 分页查询
 #[utoipa::path(
     post,
     path = "/api/menu/page",
@@ -202,7 +202,7 @@ pub async fn page_menus(
     )))
 }
 
-/// 菜单树查询参数(支持按域/应用/模块过滤)。
+/// 菜单树查询参数(支持按域/应用/模块过滤)
 #[derive(Debug, Deserialize, Default, utoipa::IntoParams)]
 pub struct MenuTreeQuery {
     /// 所属域编码
