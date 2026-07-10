@@ -13,6 +13,7 @@ use futures::StreamExt;
 /// 构造指向本机 OpenCode 的客户端。
 fn local_client() -> OpenCodeClient {
     let cfg = OpenCodeConfig {
+        enabled: true,
         base_url: "http://127.0.0.1:4096".into(),
         password: None,
         request_timeout_ms: 30_000,
