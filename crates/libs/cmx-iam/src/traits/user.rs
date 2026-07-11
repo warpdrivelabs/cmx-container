@@ -40,6 +40,10 @@ pub struct UserRoleAssignment {
     pub id: String,
     /// 目标用户 ID。
     pub user_id: String,
+    /// 目标用户名（关联 `cmx_user.username` 查询得到）。
+    pub username: String,
+    /// 目标用户昵称（关联 `cmx_user.nickname` 查询得到）。
+    pub nickname: Option<String>,
     /// 目标角色 ID。
     pub role_id: String,
     /// 角色编码（关联 `cmx_role.code` 查询得到）。

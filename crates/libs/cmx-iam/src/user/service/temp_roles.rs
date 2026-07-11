@@ -89,13 +89,15 @@ impl UserServiceImpl {
             checker.invalidate_user_cache(user_id).await;
         }
 
-        // 查询返回完整记录（含 role_code/role_name）
+        // 查询返回完整记录（含 role_code/role_name/username/nickname）
         let query_sql = r#"
             SELECT a.id, a.user_id, a.role_id, a.effective_from, a.effective_until,
                    a.reason, a.source, a.status, a.revoked_by, a.revoked_at, a.create_time,
-                   r.code, r.name
+                   r.code, r.name,
+                   u.username, u.nickname
             FROM cmx_user_role_assignment a
             INNER JOIN cmx_role r ON r.id = a.role_id
+            LEFT JOIN cmx_user u ON u.id = a.user_id
             WHERE a.id = $1
         "#;
         let params = vec![DataValue::String(assignment_id)];
