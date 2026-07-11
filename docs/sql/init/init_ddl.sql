@@ -349,8 +349,7 @@ COMMENT ON COLUMN cmx_plugin_versions.marketplace_source_id IS '市场版本来�
 
 CREATE INDEX idx_version_plugin ON cmx_plugin_versions (plugin_id);
 CREATE INDEX idx_plugin_versions_app_id ON cmx_plugin_versions (app_id);
-ALTER TABLE cmx_plugin_versions
-    ADD CONSTRAINT uk_cmx_plugin_versions_plugin_version UNIQUE (plugin_id, app_id, version);
+CREATE UNIQUE INDEX uk_cmx_plugin_versions_plugin_version ON cmx_plugin_versions (plugin_id, app_id, version);
 
 -- =============================================
 -- 7. 依赖关系表 (cmx_plugin_dependencies)
@@ -555,7 +554,7 @@ CREATE TABLE cmx_audit_log
     create_name     VARCHAR(100),
     update_by       VARCHAR(100),
     update_name     VARCHAR(100),
-    CONSTRAINT pk_cmx_audit_log PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_audit_log IS '通用审计日志表（Auth/Iam/Plugin/Biz 四域）';
@@ -985,9 +984,10 @@ CREATE TABLE cmx_marketplace_plugin
     create_name       VARCHAR(100),
     update_by         VARCHAR(100),
     update_name       VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id)
+    PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX uk_cmx_marketplace_plugin_plugin_id ON cmx_marketplace_plugin (plugin_id);
 
 COMMENT ON TABLE cmx_marketplace_plugin IS '插件市场-插件主表';
 COMMENT ON COLUMN cmx_marketplace_plugin.id IS '主键';
@@ -1062,10 +1062,10 @@ CREATE TABLE cmx_marketplace_plugin_version
     create_name          VARCHAR(100),
     update_by            VARCHAR(100),
     update_name          VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version),
-    CONSTRAINT fk_mpversion_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
+    PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX uk_cmx_marketplace_plugin_version_pver ON cmx_marketplace_plugin_version (plugin_id, version);
 
 COMMENT ON TABLE cmx_marketplace_plugin_version IS '插件市场-版本表';
 COMMENT ON COLUMN cmx_marketplace_plugin_version.id IS '主键';
@@ -1119,9 +1119,10 @@ CREATE TABLE cmx_marketplace_download_stats
     create_name    VARCHAR(100),
     update_by      VARCHAR(100),
     update_name    VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version, download_date, source_type)
+    PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX uk_cmx_marketplace_dstats_unique ON cmx_marketplace_download_stats (plugin_id, version, download_date, source_type);
 
 COMMENT ON TABLE cmx_marketplace_download_stats IS '插件市场-下载统计表';
 COMMENT ON COLUMN cmx_marketplace_download_stats.id IS '主键';
@@ -1161,10 +1162,10 @@ CREATE TABLE cmx_marketplace_rating
     create_name VARCHAR(100),
     update_by   VARCHAR(100),
     update_name VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, user_id),
-    CONSTRAINT fk_rating_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
+    PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX uk_cmx_marketplace_rating_unique ON cmx_marketplace_rating (plugin_id, user_id);
 
 COMMENT ON TABLE cmx_marketplace_rating IS '插件市场-评分表';
 COMMENT ON COLUMN cmx_marketplace_rating.id IS '主键';
@@ -1494,7 +1495,7 @@ CREATE TABLE cmx_auth_token_event
     create_name  VARCHAR(100),
     update_by    VARCHAR(100),
     update_name  VARCHAR(100),
-    CONSTRAINT pk_cmx_auth_token_event PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_auth_token_event IS 'Token 事件审计表（记录签发/撤销/刷新等关键事件）';
@@ -1632,6 +1633,7 @@ CREATE TABLE cmx_role_group
     sort_order  INT4      DEFAULT 0,
     description VARCHAR(500),
     archived    INT4      DEFAULT 0,
+    status      INT4      DEFAULT 1,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_by   VARCHAR(100),
@@ -1648,6 +1650,7 @@ COMMENT ON COLUMN cmx_role_group.parent_id IS '父角色组ID（NULL=根节点�
 COMMENT ON COLUMN cmx_role_group.sort_order IS '排序序号';
 COMMENT ON COLUMN cmx_role_group.description IS '描述';
 COMMENT ON COLUMN cmx_role_group.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_role_group.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_role_group.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_role_group.update_time IS '更新时间';
 COMMENT ON COLUMN cmx_role_group.create_by IS '创建人ID';
@@ -1656,6 +1659,7 @@ COMMENT ON COLUMN cmx_role_group.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_role_group.update_name IS '更新人姓名';
 
 CREATE INDEX idx_cmx_role_group_parent ON cmx_role_group (parent_id);
+CREATE INDEX idx_cmx_role_group_status ON cmx_role_group (status);
 
 -- =============================================
 -- 30. 角色表 (cmx_role)
@@ -1857,7 +1861,7 @@ CREATE TABLE cmx_user_role_assignment
     create_name     varchar(100),
     update_by       varchar(100),
     update_name     varchar(100),
-    CONSTRAINT pk_cmx_user_role_assignment PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_user_role_assignment IS '用户角色临时授权表';
@@ -1904,9 +1908,10 @@ CREATE TABLE cmx_exclusion_rule
     create_name         varchar(100),
     update_by           varchar(100),
     update_name         varchar(100),
-    CONSTRAINT pk_cmx_exclusion_rule PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_exclusion_rule_code UNIQUE (code)
+    PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code);
 
 COMMENT ON TABLE cmx_exclusion_rule IS '互斥规则表（功能互斥/角色互斥）';
 COMMENT ON COLUMN cmx_exclusion_rule.id IS '主键ID';
@@ -1933,10 +1938,17 @@ CREATE TABLE cmx_exclusion_rule_item
     id          varchar(64) NOT NULL,
     rule_id     varchar(64) NOT NULL,
     subject_id  varchar(64) NOT NULL,
-    CONSTRAINT pk_cmx_exclusion_rule_item PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_exclusion_rule_item UNIQUE (rule_id, subject_id)
+    archived    int4 DEFAULT 0,
+    create_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+    create_by   varchar(100),
+    create_name varchar(100),
+    update_by   varchar(100),
+    update_name varchar(100),
+    PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX uk_cmx_exclusion_rule_item ON cmx_exclusion_rule_item (rule_id, subject_id);
 CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
 CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
 
@@ -1944,6 +1956,13 @@ COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
 COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';
+COMMENT ON COLUMN cmx_exclusion_rule_item.archived IS '是否归档：0-否，1-是';
+COMMENT ON COLUMN cmx_exclusion_rule_item.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_exclusion_rule_item.update_time IS '更新时间';
+COMMENT ON COLUMN cmx_exclusion_rule_item.create_by IS '创建人ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.create_name IS '创建人姓名';
+COMMENT ON COLUMN cmx_exclusion_rule_item.update_by IS '更新人ID';
+COMMENT ON COLUMN cmx_exclusion_rule_item.update_name IS '更新人姓名';
 
 -- =============================================
 -- 37. 表单定义表 (cmx_form)
@@ -2172,7 +2191,6 @@ COMMENT ON COLUMN cmx_module_version_history.update_name IS '更新人姓名';
 
 CREATE UNIQUE INDEX uk_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
 CREATE INDEX idx_cmx_module_version_history_module ON cmx_module_version_history (module_id);
-CREATE INDEX idx_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
 
 -- =============================================
 -- 37. 模型中心台账自描述表 (cmx_model_meta)

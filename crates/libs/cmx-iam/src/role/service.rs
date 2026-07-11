@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::audit_helper::AuditHelper;
 use crate::config::IamConfig;
 use crate::error::IamError;
-use crate::role::{RoleBmc, RoleFilter, RoleForCreate, RoleForUpdate};
+use crate::role::{RoleBmc, RoleFilter, RoleForCreate, RoleForUpdate, RoleUserSummary};
 use crate::rule::RuleEnforcer;
 use crate::service_traits::RoleService;
 use async_trait::async_trait;
@@ -768,6 +768,59 @@ impl RoleService for RoleServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("查询角色权限失败: {e}"))))?;
 
         Ok(Self::extract_permissions(dataset))
+    }
+
+    /// 查询角色下的永久授权用户（单次 JOIN 查询，消除前端 N+1）。
+    ///
+    /// 通过 `cmx_user_role` JOIN `cmx_user`，仅返回双方 `archived = 0` 的记录，
+    /// 不包含密码等敏感字段。结果按 `username` 升序、最多 500 条。
+    /// 依赖既有索引 `idx_cmx_user_role_role`（`role_id` 单列）。
+    ///
+    /// # Arguments
+    ///
+    /// * `role_id` - 目标角色 ID。
+    ///
+    /// # Returns
+    ///
+    /// 该角色的永久授权用户精简列表，可能为空。
+    ///
+    /// # Errors
+    ///
+    /// * `IamError::Business` - SQL 查询或反序列化失败。
+    async fn get_role_users(&self, role_id: &str) -> Result<Vec<RoleUserSummary>, TraitError> {
+        debug!(
+            "{:<12} - RoleServiceImpl::get_role_users - role: {}",
+            "IAM", role_id
+        );
+
+        // 单条 JOIN 查询，走 idx_cmx_user_role_role 索引；列别名对齐 RoleUserSummary 字段名
+        // 以便直接走 to_json_value + serde 反序列化（与 extract_permissions 同一模式）。
+        // §十：用 dv! 宏构造参数（禁止裸 DataValue::String）。
+        let sql = r#"
+            SELECT u.id AS user_id, u.username, u.nickname
+            FROM cmx_user u
+            INNER JOIN cmx_user_role ur ON ur.user_id = u.id
+            WHERE ur.role_id = $1 AND ur.archived = 0 AND u.archived = 0
+            ORDER BY u.username ASC
+            LIMIT 500
+        "#;
+        let params: Vec<DataValue> = cmx_core::dv![role_id.to_string()];
+
+        let dataset = self
+            .mm
+            .query_sql_with_datavalues(&self.db_id, None, sql, params, "role_users")
+            .await
+            .map_err(|e| TraitError::from(IamError::Business(format!("查询角色用户失败: {e}"))))?;
+
+        let schema = dataset.schema.as_ref();
+        let users = dataset
+            .iter()
+            .filter_map(|row| {
+                let json_val = row.to_json_value(schema);
+                serde_json::from_value::<RoleUserSummary>(json_val).ok()
+            })
+            .collect();
+        Ok(users)
     }
 
     /// 比较两个角色的权限差异

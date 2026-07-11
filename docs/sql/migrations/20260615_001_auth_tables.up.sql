@@ -4,7 +4,7 @@
 -- =====================================================
 
 -- OAuth2 客户端表
-CREATE TABLE cmx_auth_client (
+CREATE TABLE IF NOT EXISTS cmx_auth_client (
     id varchar(64) NOT NULL,
     client_id varchar(100) NOT NULL,
     client_name varchar(200) NOT NULL,
@@ -23,8 +23,7 @@ CREATE TABLE cmx_auth_client (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_client PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_auth_client_client_id UNIQUE (client_id)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_auth_client IS 'OAuth2 客户端表';
@@ -47,8 +46,10 @@ COMMENT ON COLUMN cmx_auth_client.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_auth_client.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_auth_client.update_name IS '更新人姓名';
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_auth_client_client_id ON cmx_auth_client (client_id);
+
 -- API Key 表（服务间调用认证）
-CREATE TABLE cmx_auth_api_key (
+CREATE TABLE IF NOT EXISTS cmx_auth_api_key (
     id varchar(64) NOT NULL,
     key_prefix varchar(20) NOT NULL,
     key_hash varchar(255) NOT NULL,
@@ -66,11 +67,10 @@ CREATE TABLE cmx_auth_api_key (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_api_key PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_auth_api_key_prefix UNIQUE (key_prefix)
+    PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_cmx_auth_api_key_user ON cmx_auth_api_key (user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_auth_api_key_user ON cmx_auth_api_key (user_id);
 
 COMMENT ON TABLE cmx_auth_api_key IS 'API Key 表（服务间调用认证）';
 COMMENT ON COLUMN cmx_auth_api_key.id IS '主键ID';
@@ -87,8 +87,10 @@ COMMENT ON COLUMN cmx_auth_api_key.archived IS '是否归档：0-否，1-是';
 COMMENT ON COLUMN cmx_auth_api_key.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_auth_api_key.update_time IS '更新时间';
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_auth_api_key_prefix ON cmx_auth_api_key (key_prefix);
+
 -- 密码历史表（防止密码重复使用）
-CREATE TABLE cmx_auth_password_history (
+CREATE TABLE IF NOT EXISTS cmx_auth_password_history (
     id varchar(64) NOT NULL,
     user_id varchar(64) NOT NULL,
     password_hash varchar(500) NOT NULL,
@@ -99,10 +101,10 @@ CREATE TABLE cmx_auth_password_history (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_password_history PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_cmx_auth_password_history_user ON cmx_auth_password_history (user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_auth_password_history_user ON cmx_auth_password_history (user_id);
 
 COMMENT ON TABLE cmx_auth_password_history IS '密码历史表（防止密码重复使用）';
 COMMENT ON COLUMN cmx_auth_password_history.id IS '主键ID';
@@ -113,7 +115,7 @@ COMMENT ON COLUMN cmx_auth_password_history.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_auth_password_history.update_time IS '更新时间';
 
 -- JWT 密钥表（密钥轮换管理）
-CREATE TABLE cmx_auth_jwt_key (
+CREATE TABLE IF NOT EXISTS cmx_auth_jwt_key (
     id varchar(64) NOT NULL,
     kid varchar(100) NOT NULL,
     algorithm varchar(20) NOT NULL,
@@ -128,8 +130,7 @@ CREATE TABLE cmx_auth_jwt_key (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_jwt_key PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_auth_jwt_key_kid UNIQUE (kid)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_auth_jwt_key IS 'JWT 密钥表（密钥轮换管理）';
@@ -143,6 +144,8 @@ COMMENT ON COLUMN cmx_auth_jwt_key.expired_at IS '失效时间';
 COMMENT ON COLUMN cmx_auth_jwt_key.archived IS '是否归档：0-否，1-是';
 COMMENT ON COLUMN cmx_auth_jwt_key.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_auth_jwt_key.update_time IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_auth_jwt_key_kid ON cmx_auth_jwt_key (kid);
 
 
 -- Token 事件审计表
@@ -160,7 +163,7 @@ CREATE TABLE IF NOT EXISTS cmx_auth_token_event (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_token_event PRIMARY KEY (id)
+    PRIMARY KEY (id)
     );
 
 CREATE INDEX IF NOT EXISTS idx_cmx_auth_token_event_user ON cmx_auth_token_event (user_id);

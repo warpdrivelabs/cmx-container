@@ -28,6 +28,7 @@ impl ModuleRoutes for RoleModule {
             )
             .route("/iam/roles/assign-users", post(handler::assign_role_users))
             .route("/iam/roles/permissions", get(handler::get_role_permissions))
+            .route("/iam/roles/users", get(handler::get_role_users))
             // 审计查询（阶段5新增）
             .route(
                 "/iam/roles/permission-diff",

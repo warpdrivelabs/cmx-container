@@ -13,6 +13,7 @@ use crate::{ApiResp, Error, Result};
 
 use cmx_iam::role::{
     AssignPermissionsRequest, AssignRoleUsersRequest, RoleFilter, RoleForCreate, RoleForUpdate,
+    RoleUserSummary,
 };
 
 /// 创建角色
@@ -333,4 +334,39 @@ pub async fn get_role_permissions(
         .map_err(|e| Error::business_error(e.to_string()))?;
 
     Ok(Json(ApiResp::ok(permissions)))
+}
+
+/// 查询角色下的永久授权用户（单次 JOIN，消除前端 N+1）。
+#[utoipa::path(
+    get,
+    path = "/api/iam/roles/users",
+    params(
+        ("id" = String, Query, description = "角色ID")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResp<Vec<RoleUserSummary>>)
+    ),
+    tag = "IAM-Role"
+)]
+pub async fn get_role_users(
+    State(cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    Query(params): Query<cmx_core::GetParams>,
+) -> Result<Json<ApiResp<Vec<RoleUserSummary>>>> {
+    debug!(
+        "{:<12} - handler::get_role_users - id: {}",
+        "HANDLER", params.id
+    );
+
+    let iam = cmx_state
+        .iam()
+        .ok_or_else(|| Error::business_error("IAM 服务未初始化".to_string()))?;
+
+    let users = iam
+        .role_service
+        .get_role_users(&params.id)
+        .await
+        .map_err(|e| Error::business_error(e.to_string()))?;
+
+    Ok(Json(ApiResp::ok(users)))
 }

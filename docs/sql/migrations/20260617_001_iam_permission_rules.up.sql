@@ -5,7 +5,7 @@
 
 -- 用户角色临时授权表
 DROP TABLE IF EXISTS cmx_user_role_assignment;
-CREATE TABLE cmx_user_role_assignment (
+CREATE TABLE IF NOT EXISTS cmx_user_role_assignment (
     id varchar(64) NOT NULL,
     user_id varchar(64) NOT NULL,
     role_id varchar(64) NOT NULL,
@@ -23,13 +23,13 @@ CREATE TABLE cmx_user_role_assignment (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_user_role_assignment PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_cmx_user_role_assignment_user ON cmx_user_role_assignment (user_id);
-CREATE INDEX idx_cmx_user_role_assignment_role ON cmx_user_role_assignment (role_id);
-CREATE INDEX idx_cmx_user_role_assignment_time ON cmx_user_role_assignment (effective_from, effective_until);
-CREATE INDEX idx_cmx_user_role_assignment_expire ON cmx_user_role_assignment (effective_until) WHERE status = 1 AND archived = 0;
+CREATE INDEX IF NOT EXISTS idx_cmx_user_role_assignment_user ON cmx_user_role_assignment (user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_user_role_assignment_role ON cmx_user_role_assignment (role_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_user_role_assignment_time ON cmx_user_role_assignment (effective_from, effective_until);
+CREATE INDEX IF NOT EXISTS idx_cmx_user_role_assignment_expire ON cmx_user_role_assignment (effective_until) WHERE status = 1 AND archived = 0;
 
 COMMENT ON TABLE cmx_user_role_assignment IS '用户角色临时授权表';
 COMMENT ON COLUMN cmx_user_role_assignment.id IS '主键ID';
@@ -58,7 +58,7 @@ COMMENT ON COLUMN cmx_user_role_assignment.update_name IS '更新人姓名';
 
 -- 互斥规则表
 DROP TABLE IF EXISTS cmx_exclusion_rule;
-CREATE TABLE cmx_exclusion_rule (
+CREATE TABLE IF NOT EXISTS cmx_exclusion_rule (
     id varchar(64) NOT NULL,
     code varchar(100) NOT NULL,
     name varchar(200) NOT NULL,
@@ -75,8 +75,7 @@ CREATE TABLE cmx_exclusion_rule (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_exclusion_rule PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_exclusion_rule_code UNIQUE (code)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_exclusion_rule IS '互斥规则表（功能互斥/角色互斥）';
@@ -97,23 +96,27 @@ COMMENT ON COLUMN cmx_exclusion_rule.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_exclusion_rule.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_exclusion_rule.update_name IS '更新人姓名';
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code);
+
 -- 互斥对象明细表
 DROP TABLE IF EXISTS cmx_exclusion_rule_item;
-CREATE TABLE cmx_exclusion_rule_item (
+CREATE TABLE IF NOT EXISTS cmx_exclusion_rule_item (
     id varchar(64) NOT NULL,
     rule_id varchar(64) NOT NULL,
     subject_id varchar(64) NOT NULL,
-    CONSTRAINT pk_cmx_exclusion_rule_item PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_exclusion_rule_item UNIQUE (rule_id, subject_id)
+    PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
-CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_exclusion_rule_item_subject_id ON cmx_exclusion_rule_item (subject_id);
 
 COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
 COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.rule_id IS '关联规则ID';
 COMMENT ON COLUMN cmx_exclusion_rule_item.subject_id IS '互斥对象ID（权限ID或角色ID，与规则 subject_type 一致）';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_exclusion_rule_item ON cmx_exclusion_rule_item (rule_id, subject_id);
 
 -- -- 新增权限码（规则管理）
 -- INSERT INTO cmx_permission (id, code, name, resource_type, sort_order, status, description) VALUES

@@ -5,6 +5,7 @@
 pub mod bmc;
 pub mod enforcer;
 pub mod entity;
+pub mod filter;
 pub mod service;
 
 pub use bmc::{ExclusionRuleBmc, ExclusionRuleItemBmc};
@@ -13,4 +14,5 @@ pub use entity::{
     CreateExclusionRuleRequest, ExclusionRule, ExclusionRuleItem, RuleViolationDetail, SubjectType,
     UpdateExclusionRuleRequest, ValidateRuleRequest, ValidateRuleResponse,
 };
+pub use filter::ExclusionRuleFilter;
 pub use service::{ExclusionRuleService, ExclusionRuleServiceImpl};

@@ -66,8 +66,9 @@ impl UserServiceImpl {
 
     /// 从 DataSet 提取 `UserRoleAssignment` 列表（JOIN 结果）。
     ///
-    /// 期望列：id / user_id / role_id / code / name / effective_from /
-    /// effective_until / reason / source / status / revoked_by / revoked_at / create_time。
+    /// 期望列：id / user_id / username / nickname / role_id / code / name /
+    /// effective_from / effective_until / reason / source / status /
+    /// revoked_by / revoked_at / create_time。
     pub(super) fn extract_assignments(
         dataset: cmx_core::model::data::dataset::DataSet,
     ) -> Vec<UserRoleAssignment> {
@@ -78,6 +79,8 @@ impl UserServiceImpl {
                 Some(UserRoleAssignment {
                     id: row.get_by_name_as(schema, "id")?,
                     user_id: row.get_by_name_as(schema, "user_id")?,
+                    username: row.get_by_name_as(schema, "username").unwrap_or_default(),
+                    nickname: row.get_by_name_as(schema, "nickname"),
                     role_id: row.get_by_name_as(schema, "role_id")?,
                     role_code: row.get_by_name_as(schema, "code").unwrap_or_default(),
                     role_name: row.get_by_name_as(schema, "name").unwrap_or_default(),

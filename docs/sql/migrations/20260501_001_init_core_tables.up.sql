@@ -808,8 +808,7 @@ CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin
     create_name       VARCHAR(100),
     update_by         VARCHAR(100),
     update_name       VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_marketplace_plugin IS '插件市场-插件主表';
@@ -852,6 +851,7 @@ CREATE INDEX idx_mp_status ON cmx_marketplace_plugin (status);
 CREATE INDEX idx_mp_featured ON cmx_marketplace_plugin (is_featured) WHERE is_featured = 1;
 CREATE INDEX idx_mp_download_count ON cmx_marketplace_plugin (download_count DESC);
 CREATE INDEX idx_mp_rating ON cmx_marketplace_plugin (avg_rating DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_plugin_plugin_id ON cmx_marketplace_plugin (plugin_id);
 
 -- =============================================
 -- 18. 插件市场 - 版本表 (cmx_marketplace_plugin_version)
@@ -884,9 +884,7 @@ CREATE TABLE IF NOT EXISTS cmx_marketplace_plugin_version
     create_name          VARCHAR(100),
     update_by            VARCHAR(100),
     update_name          VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version),
-    CONSTRAINT fk_mpversion_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_marketplace_plugin_version IS '插件市场-版本表';
@@ -919,6 +917,7 @@ COMMENT ON COLUMN cmx_marketplace_plugin_version.update_name IS '更新人姓名
 
 CREATE INDEX idx_mpv_plugin_id ON cmx_marketplace_plugin_version (plugin_id);
 CREATE INDEX idx_mpv_latest ON cmx_marketplace_plugin_version (plugin_id, is_latest) WHERE is_latest = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_plugin_version_pver ON cmx_marketplace_plugin_version (plugin_id, version);
 
 -- =============================================
 -- 19. 插件市场 - 下载统计表 (cmx_marketplace_download_stats)
@@ -940,8 +939,7 @@ CREATE TABLE IF NOT EXISTS cmx_marketplace_download_stats
     create_name    VARCHAR(100),
     update_by      VARCHAR(100),
     update_name    VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, version, download_date, source_type)
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_marketplace_download_stats IS '插件市场-下载统计表';
@@ -962,6 +960,7 @@ COMMENT ON COLUMN cmx_marketplace_download_stats.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_marketplace_download_stats.update_name IS '更新人姓名';
 
 CREATE INDEX idx_dstats_date ON cmx_marketplace_download_stats (download_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_dstats_unique ON cmx_marketplace_download_stats (plugin_id, version, download_date, source_type);
 
 -- =============================================
 -- 20. 插件市场 - 评分表 (cmx_marketplace_rating)
@@ -981,9 +980,7 @@ CREATE TABLE IF NOT EXISTS cmx_marketplace_rating
     create_name VARCHAR(100),
     update_by   VARCHAR(100),
     update_name VARCHAR(100),
-    PRIMARY KEY (id),
-    UNIQUE (plugin_id, user_id),
-    CONSTRAINT fk_rating_plugin FOREIGN KEY (plugin_id) REFERENCES cmx_marketplace_plugin (plugin_id) ON DELETE CASCADE
+    PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE cmx_marketplace_rating IS '插件市场-评分表';
@@ -1002,6 +999,7 @@ COMMENT ON COLUMN cmx_marketplace_rating.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_marketplace_rating.update_name IS '更新人姓名';
 
 CREATE INDEX idx_rating_plugin ON cmx_marketplace_rating (plugin_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_marketplace_rating_unique ON cmx_marketplace_rating (plugin_id, user_id);
 
 -- =============================================
 -- 21. 文件详情表 (cmx_file_detail)

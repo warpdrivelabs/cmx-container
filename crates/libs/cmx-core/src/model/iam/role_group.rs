@@ -32,6 +32,10 @@ pub struct RoleGroup {
     #[serde(default)]
     pub archived: Option<i64>,
 
+    /// 状态（1 启用 / 0 停用）。
+    #[serde(default)]
+    pub status: Option<i64>,
+
     /// 创建时间（ISO8601 字符串），可空。
     #[serde(default)]
     pub create_time: Option<String>,

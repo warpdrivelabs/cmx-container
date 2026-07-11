@@ -17,4 +17,7 @@ pub struct RoleGroupFilter {
 
     /// 按归档标记过滤（0 未归档 / 1 已归档），Service 层默认追加 `Eq(0)`。
     pub archived: Option<OpValsInt64>,
+
+    /// 按状态过滤（1 启用 / 0 停用）。
+    pub status: Option<OpValsInt64>,
 }

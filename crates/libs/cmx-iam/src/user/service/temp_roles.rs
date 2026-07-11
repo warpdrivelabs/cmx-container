@@ -89,13 +89,15 @@ impl UserServiceImpl {
             checker.invalidate_user_cache(user_id).await;
         }
 
-        // 查询返回完整记录（含 role_code/role_name）
+        // 查询返回完整记录（含 role_code/role_name/username/nickname）
         let query_sql = r#"
             SELECT a.id, a.user_id, a.role_id, a.effective_from, a.effective_until,
                    a.reason, a.source, a.status, a.revoked_by, a.revoked_at, a.create_time,
-                   r.code, r.name
+                   r.code, r.name,
+                   u.username, u.nickname
             FROM cmx_user_role_assignment a
             INNER JOIN cmx_role r ON r.id = a.role_id
+            LEFT JOIN cmx_user u ON u.id = a.user_id
             WHERE a.id = $1
         "#;
         let params = vec![DataValue::String(assignment_id)];
@@ -397,16 +399,28 @@ impl UserServiceImpl {
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("查询用户失败: {e}"))))?;
         let schema = dataset.schema.as_ref();
-        let (uid, username) = dataset
-            .iter()
-            .next()
-            .and_then(|row| {
-                Some((
-                    row.get_by_name_as::<String>(schema, "id")?,
-                    row.get_by_name_as::<String>(schema, "username")?,
-                ))
-            })
-            .ok_or_else(|| TraitError::from(IamError::UserNotFound(user_id.to_string())))?;
+        // 用户不存在或已归档（archived=1）时返回空结果，而非报错。
+        // 这是一个查询类接口：前端用户详情抽屉依赖它展示数据，
+        // 用户被删除后应显示空权限，而非弹"资源未找到"错误。
+        let (uid, username) = match dataset.iter().next().and_then(|row| {
+            Some((
+                row.get_by_name_as::<String>(schema, "id")?,
+                row.get_by_name_as::<String>(schema, "username")?,
+            ))
+        }) {
+            Some(info) => info,
+            None => {
+                return Ok(EffectivePermissionsResponse {
+                    user_id: user_id.to_string(),
+                    username: String::new(),
+                    roles: Vec::new(),
+                    permissions: Vec::new(),
+                    active_temp_roles: 0,
+                    expired_temp_roles: 0,
+                    upcoming_expirations: 0,
+                })
+            }
+        };
 
         // 2. 查询有效角色（永久 + 临时）
         let roles_sql = r#"

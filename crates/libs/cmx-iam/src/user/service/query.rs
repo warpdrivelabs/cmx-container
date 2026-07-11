@@ -118,7 +118,8 @@ impl UserServiceImpl {
             "IAM", user_id, status_filter
         );
 
-        let mut where_clause = String::from("a.user_id = $1 AND a.archived = 0 AND r.archived = 0");
+        let mut where_clause =
+            String::from("a.user_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {
@@ -138,9 +139,11 @@ impl UserServiceImpl {
             r#"
             SELECT a.id, a.user_id, a.role_id, a.effective_from, a.effective_until,
                    a.reason, a.source, a.status, a.revoked_by, a.revoked_at, a.create_time,
-                   r.code, r.name
+                   r.code, r.name,
+                   u.username, u.nickname
             FROM cmx_user_role_assignment a
             INNER JOIN cmx_role r ON r.id = a.role_id
+            LEFT JOIN cmx_user u ON u.id = a.user_id
             WHERE {where_clause}
             ORDER BY a.create_time DESC
             "#
@@ -169,7 +172,8 @@ impl UserServiceImpl {
             "IAM", role_id, status_filter
         );
 
-        let mut where_clause = String::from("a.role_id = $1 AND a.archived = 0 AND r.archived = 0");
+        let mut where_clause =
+            String::from("a.role_id = $1 AND a.archived = 0 AND r.archived = 0");
         match status_filter {
             TempAssignmentStatusFilter::All => {}
             TempAssignmentStatusFilter::Active => {
@@ -189,9 +193,11 @@ impl UserServiceImpl {
             r#"
             SELECT a.id, a.user_id, a.role_id, a.effective_from, a.effective_until,
                    a.reason, a.source, a.status, a.revoked_by, a.revoked_at, a.create_time,
-                   r.code, r.name
+                   r.code, r.name,
+                   u.username, u.nickname
             FROM cmx_user_role_assignment a
             INNER JOIN cmx_role r ON r.id = a.role_id
+            LEFT JOIN cmx_user u ON u.id = a.user_id
             WHERE {where_clause}
             ORDER BY a.create_time DESC
             "#
