@@ -8,10 +8,14 @@
 
 use serde_json::{Map, Value, json};
 
-/// 引擎：持有 dimensions + rules。
+/// 引擎：持有 dimensions + rules（可选 DRN 引用上下文）。
 pub struct Engine<'a> {
     dimensions: &'a Value,
     rules: Vec<Value>,
+    /// 引用方 DAM（DRN 别名/相对引用补全继承段用）；缺省为空 DAM。
+    ref_from: crate::flexible_combination::drn::FromDam,
+    /// 顶层 imports（DRN 别名表）。
+    ref_imports: Option<Value>,
 }
 
 /// 两值「相等」（数字/字符串宽松比较，与 Node sameValue 一致）。
@@ -105,7 +109,22 @@ impl<'a> Engine<'a> {
         Engine {
             dimensions,
             rules: rules.as_array().cloned().unwrap_or_default(),
+            ref_from: crate::flexible_combination::drn::FromDam::default(),
+            ref_imports: None,
         }
+    }
+
+    /// 注入 DRN 引用上下文（引用方 DAM + imports 别名表），使字段 refDict 支持
+    /// `@别名` / `drn:…` / `DCT/x` 写法归一为有效 dictId。链式调用。
+    pub fn with_ref_context(mut self, from: crate::flexible_combination::drn::FromDam, imports: Option<Value>) -> Self {
+        self.ref_from = from;
+        self.ref_imports = imports;
+        self
+    }
+
+    /// 归一字段 refDict → 有效 dict/维度 code（裸 code 原样，DRN/别名展开取 name）。
+    fn effective_ref(&self, raw: &str) -> String {
+        crate::flexible_combination::drn::effective_dict_id(raw, &self.ref_from, self.ref_imports.as_ref())
     }
 
     fn get_dimension(&self, code: &str) -> Option<&Value> {
@@ -803,8 +822,8 @@ impl<'a> Engine<'a> {
         let dim_code = field
             .get("refDict")
             .and_then(|v| v.as_str())
-            .unwrap_or(&id)
-            .to_string();
+            .map(|s| self.effective_ref(s))
+            .unwrap_or_else(|| id.clone());
         let dim = self.get_dimension(&dim_code).cloned().unwrap_or(json!({}));
         // dim.dict：对象或字符串
         let dim_dict = match dim.get("dict") {
@@ -816,7 +835,7 @@ impl<'a> Engine<'a> {
         let dict_code = field
             .get("refDict")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+            .map(|s| self.effective_ref(s))
             .or_else(|| dd("dictId").and_then(|v| v.as_str().map(|s| s.to_string())))
             .or_else(|| dd("dictCode").and_then(|v| v.as_str().map(|s| s.to_string())))
             .or_else(|| dd("code").and_then(|v| v.as_str().map(|s| s.to_string())));

@@ -7,12 +7,25 @@ use serde_json::{Value, json};
 
 use crate::dict::schema::try_get_schema;
 use crate::error::PortalResult;
+use crate::flexible_combination::drn::{effective_dict_id, FromDam};
+
+/// 由 combination 顶层 DAM（或 docRef）构造引用方 DAM，供 DRN 别名/相对引用补全继承段。
+fn from_dam_of(cfg: &Value) -> FromDam {
+    let g = |k: &str| cfg.get(k).and_then(|v| v.as_str()).map(String::from);
+    FromDam {
+        domain: g("domain"),
+        app: g("app").or_else(|| g("application")),
+        module: g("module"),
+    }
+}
 
 /// 对整份 combination 的 dimensions 做 dict 元数据补全（返回新对象，不改原值）。
 pub async fn enrich_flexible_combination_dict_meta(cfg: &Value) -> PortalResult<Value> {
     if !cfg.is_object() {
         return Ok(cfg.clone());
     }
+    let from = from_dam_of(cfg);
+    let imports = cfg.get("imports").cloned();
     let mut out = cfg.clone();
     let dims = match out.get_mut("dimensions").and_then(|v| v.as_object_mut()) {
         Some(d) => d,
@@ -29,7 +42,8 @@ pub async fn enrich_flexible_combination_dict_meta(cfg: &Value) -> PortalResult<
         if dict.is_none() || dict == Some(&Value::Null) {
             continue;
         }
-        let enriched_dict = enrich_dimension_dict_meta(dict.unwrap(), &dim).await?;
+        let enriched_dict =
+            enrich_dimension_dict_meta(dict.unwrap(), &dim, &from, imports.as_ref()).await?;
         if let Some(obj) = dims.get_mut(&k).and_then(|v| v.as_object_mut()) {
             obj.insert("dict".to_string(), enriched_dict);
             obj.insert("valueType".to_string(), json!("dict-select"));
@@ -73,7 +87,12 @@ fn derive_dict_code_field(
 }
 
 /// 补全单个维度的 dict 元数据。
-async fn enrich_dimension_dict_meta(dict_def: &Value, dim: &Value) -> PortalResult<Value> {
+async fn enrich_dimension_dict_meta(
+    dict_def: &Value,
+    dim: &Value,
+    from: &FromDam,
+    imports: Option<&Value>,
+) -> PortalResult<Value> {
     // base：dict 为字符串视为 { dictId }，对象则克隆
     let base = match dict_def {
         Value::String(s) => json!({ "dictId": s }),
@@ -81,13 +100,15 @@ async fn enrich_dimension_dict_meta(dict_def: &Value, dim: &Value) -> PortalResu
         _ => json!({}),
     };
     let bget = |k: &str| base.get(k).cloned();
-    let dict_id = bget("dictId")
+    let raw_dict_id = bget("dictId")
         .or_else(|| bget("dictCode"))
         .or_else(|| bget("code"))
         .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let Some(dict_id) = dict_id else {
+    let Some(raw_dict_id) = raw_dict_id else {
         return Ok(base);
     };
+    // 归一 DRN/别名 → 有效 dictId（裸 code 原样，向后兼容）
+    let dict_id = effective_dict_id(&raw_dict_id, from, imports);
     let schema = try_get_schema(&dict_id).await?;
 
     let id_col = bget("idCol")
