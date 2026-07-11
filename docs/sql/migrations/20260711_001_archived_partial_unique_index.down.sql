@@ -28,3 +28,12 @@ CREATE UNIQUE INDEX uk_cmx_user_role ON cmx_user_role (user_id, role_id);
 -- 7. cmx_role_permission (role_id, permission_id)
 DROP INDEX IF EXISTS uk_cmx_role_permission;
 CREATE UNIQUE INDEX uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id);
+-- 回滚：cmx_auth_client 唯一索引恢复为普通唯一索引
+
+DROP INDEX IF EXISTS uk_cmx_auth_client_client_id;
+CREATE UNIQUE INDEX uk_cmx_auth_client_client_id ON cmx_auth_client (client_id);
+
+-- 回滚：cmx_exclusion_rule 唯一索引恢复为普通唯一索引
+
+DROP INDEX IF EXISTS uk_cmx_exclusion_rule_code;
+CREATE UNIQUE INDEX uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code);

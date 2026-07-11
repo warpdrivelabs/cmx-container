@@ -1353,7 +1353,7 @@ COMMENT ON COLUMN cmx_auth_client.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_auth_client.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_auth_client.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_auth_client_client_id ON cmx_auth_client (client_id);
+CREATE UNIQUE INDEX uk_cmx_auth_client_client_id ON cmx_auth_client (client_id) WHERE archived = 0;
 
 -- =============================================
 -- 25. API Key 表 (cmx_auth_api_key)
@@ -1736,7 +1736,7 @@ COMMENT ON COLUMN cmx_user_role.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_user_role.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_user_role.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_user_role ON cmx_user_role (user_id, role_id);
+CREATE UNIQUE INDEX uk_cmx_user_role ON cmx_user_role (user_id, role_id) WHERE archived = 0;
 CREATE INDEX idx_cmx_user_role_user ON cmx_user_role (user_id);
 CREATE INDEX idx_cmx_user_role_role ON cmx_user_role (role_id);
 
@@ -1911,7 +1911,7 @@ CREATE TABLE cmx_exclusion_rule
     PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code);
+CREATE UNIQUE INDEX uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code) WHERE archived = 0;
 
 COMMENT ON TABLE cmx_exclusion_rule IS '互斥规则表（功能互斥/角色互斥）';
 COMMENT ON COLUMN cmx_exclusion_rule.id IS '主键ID';

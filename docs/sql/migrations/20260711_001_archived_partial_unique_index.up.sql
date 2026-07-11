@@ -44,3 +44,23 @@ DROP INDEX IF EXISTS uk_cmx_role_permission;
 ALTER TABLE cmx_role_permission
 DROP CONSTRAINT IF EXISTS uk_cmx_role_permission;
 CREATE UNIQUE INDEX uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id) WHERE archived = 0;
+
+-- cmx_auth_client 唯一索引改为部分唯一索引（WHERE archived = 0）
+-- 目的：配合逻辑删除（archived=1），归档记录不再占用 client_id 唯一键，
+--       允许同名 client_id 在归档后重新插入。
+-- 关联表：cmx_auth_client（软删除，见 oauth2_client_handler.rs:485）
+
+DROP INDEX IF EXISTS uk_cmx_auth_client_client_id;
+ALTER TABLE cmx_auth_client
+DROP CONSTRAINT IF EXISTS uk_cmx_auth_client_client_id;
+CREATE UNIQUE INDEX uk_cmx_auth_client_client_id ON cmx_auth_client (client_id) WHERE archived = 0;
+
+-- cmx_exclusion_rule 唯一索引改为部分唯一索引（WHERE archived = 0）
+-- 目的：配合逻辑删除（archived=1），归档记录不再占用 code 唯一键，
+--       允许同名 code 在归档后重新插入。
+-- 关联表：cmx_exclusion_rule（软删除，见 rule/service.rs:784）
+
+DROP INDEX IF EXISTS uk_cmx_exclusion_rule_code;
+ALTER TABLE cmx_exclusion_rule
+DROP CONSTRAINT IF EXISTS uk_cmx_exclusion_rule_code;
+CREATE UNIQUE INDEX uk_cmx_exclusion_rule_code ON cmx_exclusion_rule (code) WHERE archived = 0;
