@@ -97,7 +97,7 @@ impl UserServiceImpl {
                    u.username, u.nickname
             FROM cmx_user_role_assignment a
             INNER JOIN cmx_role r ON r.id = a.role_id
-            LEFT JOIN cmx_user u ON u.id = a.user_id
+            LEFT JOIN cmx_user u ON u.id = a.user_id AND u.archived = 0
             WHERE a.id = $1
         "#;
         let params = vec![DataValue::String(assignment_id)];

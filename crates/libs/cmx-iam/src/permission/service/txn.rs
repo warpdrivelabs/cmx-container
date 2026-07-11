@@ -13,9 +13,7 @@ use crate::error::IamError;
 use crate::permission::service::PermissionServiceImpl;
 
 impl PermissionServiceImpl {
-    /// 事务内查询指定三元组作用域下的权限集合（code → id）。
-    ///
-    /// 不限定 archived，物理删除场景需感知所有历史记录。
+    /// 事务内查询指定三元组作用域下的权限集合（code -> id）。
     pub(super) async fn query_permission_ids_by_scope_txn(
         &self,
         txn_id: &str,
@@ -24,7 +22,7 @@ impl PermissionServiceImpl {
         module_code: &str,
     ) -> Result<HashMap<String, String>, TraitError> {
         let sql = "SELECT id, code FROM cmx_permission \
-                   WHERE domain_code = $1 AND app_code = $2 AND module_code = $3";
+                   WHERE domain_code = $1 AND app_code = $2 AND module_code = $3 AND archived = 0";
         let params = vec![
             DataValue::String(domain_code.to_string()),
             DataValue::String(app_code.to_string()),
@@ -65,7 +63,7 @@ impl PermissionServiceImpl {
             .collect();
         let in_clause = placeholders.join(",");
         let sql = format!(
-            "SELECT DISTINCT role_id FROM cmx_role_permission WHERE permission_id IN ({in_clause})"
+            "SELECT DISTINCT role_id FROM cmx_role_permission WHERE permission_id IN ({in_clause}) AND archived = 0"
         );
         let params: Vec<DataValue> = permission_ids
             .iter()
@@ -99,7 +97,7 @@ impl PermissionServiceImpl {
         txn_id: &str,
         parent_id: &str,
     ) -> Result<Option<(String, String, i64)>, TraitError> {
-        let sql = "SELECT code, full_code_path, level FROM cmx_permission WHERE id = $1";
+        let sql = "SELECT code, full_code_path, level FROM cmx_permission WHERE id = $1 AND archived = 0";
         let params = vec![DataValue::String(parent_id.to_string())];
         let dataset = self
             .mm
@@ -124,7 +122,7 @@ impl PermissionServiceImpl {
         txn_id: &str,
         root_path: &str,
     ) -> Result<Vec<String>, TraitError> {
-        let sql = "SELECT id FROM cmx_permission WHERE full_code_path = $1 OR full_code_path LIKE ($2 || '/%')";
+        let sql = "SELECT id FROM cmx_permission WHERE (full_code_path = $1 OR full_code_path LIKE ($2 || '/%')) AND archived = 0";
         let params = vec![
             DataValue::String(root_path.to_string()),
             DataValue::String(root_path.to_string()),
@@ -166,9 +164,9 @@ impl PermissionServiceImpl {
             "SELECT p.id AS pid, p.code AS pcode, p.name AS pname, \
              r.id AS rid, r.code AS rcode, r.name AS rname \
              FROM cmx_permission p \
-             JOIN cmx_role_permission rp ON rp.permission_id = p.id \
+             JOIN cmx_role_permission rp ON rp.permission_id = p.id AND rp.archived = 0 \
              JOIN cmx_role r ON r.id = rp.role_id AND r.archived = 0 \
-             WHERE p.id IN ({in_clause})"
+             WHERE p.id IN ({in_clause}) AND p.archived = 0"
         );
         let params: Vec<DataValue> = permission_ids
             .iter()

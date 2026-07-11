@@ -21,4 +21,9 @@ pub struct ExclusionRuleItemBmc;
 impl DbBmc for ExclusionRuleItemBmc {
     const TABLE: &'static str = "cmx_exclusion_rule_item";
     const PK_COLUMN: &'static str = "id";
+
+    /// 物理删除表，不启用 archived 过滤
+    fn use_archived() -> bool {
+        false
+    }
 }

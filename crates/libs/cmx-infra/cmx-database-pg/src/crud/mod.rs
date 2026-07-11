@@ -54,4 +54,14 @@ pub trait DbBmc {
     fn encrypted_fields() -> &'static [&'static str] {
         &[]
     }
+
+    /// 指定此 Bmc 的表是否启用 `archived` 过滤。
+    /// 为 true 时，GenericCrudService::get 自动追加 `archived = 0` 过滤，
+    /// 确保已归档（逻辑删除）的数据不会被查出。
+    /// 物理删除的表（无 archived=1 残留行）应覆写为 false。
+    ///
+    /// 默认值：true
+    fn use_archived() -> bool {
+        true
+    }
 }

@@ -435,7 +435,7 @@ impl PermissionServiceImpl {
         // 1.1 查询受影响角色（用子查询避免依赖额外参数）
         let affected_roles_sql = "SELECT DISTINCT role_id FROM cmx_role_permission \
              WHERE permission_id IN (SELECT id FROM cmx_permission \
-             WHERE domain_code = $1 AND app_code = $2 AND module_code = $3)";
+             WHERE domain_code = $1 AND app_code = $2 AND module_code = $3) AND archived = 0";
         let affected_roles_params = vec![
             DataValue::String(domain_code.to_string()),
             DataValue::String(app_code.to_string()),

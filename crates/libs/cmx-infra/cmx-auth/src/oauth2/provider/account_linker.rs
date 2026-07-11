@@ -61,6 +61,8 @@ pub struct OAuth2AccountFilter {
     pub provider_user_id: Option<OpValsString>,
     pub user_id: Option<OpValsString>,
     pub status: Option<OpValsInt64>,
+    /// 归档过滤（0-未归档，1-已归档）
+    pub archived: Option<OpValsInt64>,
 }
 
 /// 第三方账号关联结果。

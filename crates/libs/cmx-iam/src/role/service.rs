@@ -307,7 +307,7 @@ impl RoleService for RoleServiceImpl {
         }
 
         // 1. 批量查询角色信息（内置角色保护检查，消除 N+1 查询）
-        let select_sql = "SELECT id, code FROM cmx_role WHERE id = ANY($1)";
+        let select_sql = "SELECT id, code FROM cmx_role WHERE id = ANY($1) AND archived = 0";
         let select_params = vec![DataValue::Array(
             role_ids
                 .iter()
@@ -358,7 +358,7 @@ impl RoleService for RoleServiceImpl {
         let txn_id = guard.txn_id();
 
         // 2. 删除前查询受影响用户（供提交后失效缓存，必须在 cmx_user_role 物理删除前查询）
-        let affected_user_sql = "SELECT DISTINCT user_id FROM cmx_user_role WHERE role_id = ANY($1)";
+        let affected_user_sql = "SELECT DISTINCT user_id FROM cmx_user_role WHERE role_id = ANY($1) AND archived = 0";
         let affected_user_params = vec![DataValue::Array(
             role_ids
                 .iter()
@@ -680,7 +680,7 @@ impl RoleService for RoleServiceImpl {
 
         // 事务内先查询「原用户集合」，供提交后缓存失效使用
         // （必须在 DELETE 之前查，否则会漏掉被移除的旧用户）
-        let select_sql = "SELECT user_id FROM cmx_user_role WHERE role_id = $1";
+        let select_sql = "SELECT user_id FROM cmx_user_role WHERE role_id = $1 AND archived = 0";
         let ds = self
             .mm
             .query_sql_with_datavalues(

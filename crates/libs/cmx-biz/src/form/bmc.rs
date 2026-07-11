@@ -25,4 +25,9 @@ impl DbBmc for FormBmc {
     fn has_owner_id() -> bool {
         false
     }
+
+    /// 物理删除表，不启用 archived 过滤
+    fn use_archived() -> bool {
+        false
+    }
 }

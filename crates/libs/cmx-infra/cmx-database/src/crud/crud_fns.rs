@@ -220,6 +220,11 @@ where
         let pk_col = SIden(MC::PK_COLUMN).into_iden();
         query.and_where(Expr::col(pk_col).eq(json_value_to_sea_query(id.clone())));
 
+        // 自动追加 archived = 0 过滤（物理删除表可通过 use_archived()=false 跳过）
+        if MC::use_archived() {
+            query.and_where(Expr::col(SIden("archived").into_iden()).eq(0));
+        }
+
         let (sql, sql_values) = query.build_sqlx(PostgresQueryBuilder);
         debug!("{:<12} - SQL: {}", "CRUD", sql);
 
@@ -479,6 +484,10 @@ where
             query.cond_where(cond);
         }
 
+        // 注意：list/page 不在此处自动追加 archived=0，因为外部 filter 可能已包含 archived 条件
+        // （如管理员查归档数据 archived=1）。archived=0 默认过滤由各 Service 的 with_default_archived 注入。
+        // get 方法在此层自动追加是安全的（按 PK 查，不会与 filter 冲突）。
+
         if let Some(lo) = list_options {
             lo.apply_to_sea_query(&mut query);
         }
@@ -539,6 +548,8 @@ where
             })?;
             query.cond_where(cond);
         }
+
+        // 注意：page 不在此处自动追加 archived=0（同 list，外部 filter 可能已包含 archived 条件）
 
         list_options.clone().apply_to_sea_query(&mut query);
 

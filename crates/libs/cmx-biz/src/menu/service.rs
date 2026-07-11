@@ -188,7 +188,7 @@ impl MenuService {
                 .query_sql_with_datavalues(
                     db_id,
                     txn_id,
-                    "SELECT id FROM cmx_menu WHERE code = $1",
+                    "SELECT id FROM cmx_menu WHERE code = $1 AND archived = 0",
                     vec![DataValue::String(pcode.to_string())],
                     "menu_resolve_parent_by_code",
                 )
@@ -289,7 +289,7 @@ impl MenuService {
 
         // 查询当前节点 meta: parent_id / code_path / id_path / depth / code
         let meta_sql =
-            "SELECT parent_id, code_path, id_path, depth, code FROM cmx_menu WHERE id = $1";
+            "SELECT parent_id, code_path, id_path, depth, code FROM cmx_menu WHERE id = $1 AND archived = 0";
         let meta_ds = mm
             .query_sql_with_datavalues(
                 db_id,
@@ -563,7 +563,7 @@ impl MenuService {
             .collect();
         let id_params: Vec<DataValue> = ids.iter().map(value_to_datavalue).collect();
         let meta_sql = format!(
-            "SELECT parent_id, code_path FROM cmx_menu WHERE id IN ({})",
+            "SELECT parent_id, code_path FROM cmx_menu WHERE id IN ({}) AND archived = 0",
             id_placeholders.join(", ")
         );
         let meta_ds = mm
@@ -666,7 +666,7 @@ impl MenuService {
         parent_id: &str,
     ) -> Result<(String, String, String, i32)> {
         let sql =
-            "SELECT code, id_path, code_path, depth FROM cmx_menu WHERE id = $1";
+            "SELECT code, id_path, code_path, depth FROM cmx_menu WHERE id = $1 AND archived = 0";
         let ds = mm
             .query_sql_with_datavalues(
                 db_id,

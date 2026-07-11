@@ -363,7 +363,7 @@ impl ExclusionRuleServiceImpl {
                    priority, description, status, archived, create_time, update_time,
                    create_by, create_name, update_by, update_name
             FROM cmx_exclusion_rule
-            WHERE id = $1
+            WHERE id = $1 AND archived = 0
         "#;
         let params = vec![DataValue::String(rule_id.to_string())];
         let dataset = self
