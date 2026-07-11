@@ -13,6 +13,7 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 2. **禁止外键约束**：**禁止**生成任何 `FOREIGN KEY ... REFERENCES ...` 语句。如有关联字段，保留字段并用 `CREATE INDEX` 替代。
 3. **索引必须单独创建**：所有 `UNIQUE` 约束、普通索引、唯一索引都必须用 `CREATE UNIQUE INDEX` / `CREATE INDEX` 写在 `CREATE TABLE` 之后，**禁止**在 `CREATE TABLE` 内部使用 `CONSTRAINT ... UNIQUE (...)` 或 `UNIQUE (...)` 列约束/表约束。
 4. **`CREATE TABLE`** **内部不出现任何** **`CONSTRAINT`** **子句**：除了上面 1/3 点的限制，`CREATE TABLE (...)` 体内不得出现 `CONSTRAINT ...` 形式。
+5. **唯一索引必须为部分唯一索引（Partial Unique Index）**：所有 `CREATE UNIQUE INDEX` 语句必须包含 `WHERE archived = 0` 条件，**仅对"未归档"记录**强制唯一。已归档（`archived = 1`）的记录不参与唯一性检查，允许存在同名字段的历史快照。
 
 ## 标识符命名规则
 
@@ -70,6 +71,39 @@ description: "Generates PostgreSQL DDL table definitions with standard audit fie
 2. **可选字段**：所有非主键、非唯一索引字段均为可选（可NULL）。
 3. **唯一性约束**：**不**在列上写 `UNIQUE`，**不**在表内写表级 `UNIQUE(...)`。唯一性由 `CREATE UNIQUE INDEX` 在 `CREATE TABLE` 之外承担（见硬约束 3）。
 4. **主键约束**：列上写 `NOT NULL`，表内末尾用 `PRIMARY KEY (id)`，**不**写 `CONSTRAINT pk_xxx PRIMARY KEY (id)`（见硬约束 1）。
+5. **部分唯一索引**（见硬约束 5）：所有 `CREATE UNIQUE INDEX` **必须**追加 `WHERE archived = 0` 条件。
+
+### 部分唯一索引（Partial Unique Index）
+
+**硬约束 5 的展开说明**：
+
+#### 强制写法
+
+```sql
+-- ✅ 正确：部分唯一索引，仅约束未归档记录
+CREATE UNIQUE INDEX uk_table_name_field ON table_name (field) WHERE archived = 0;
+
+-- ❌ 错误：完整唯一索引（不允许）
+CREATE UNIQUE INDEX uk_table_name_field ON table_name (field);
+```
+
+#### 业务语义
+
+- `archived = 0`（未归档）的记录必须唯一
+- `archived = 1`（已归档）的记录不参与唯一性检查
+- 允许场景：先归档 `code = 'A'` 的记录（保留历史），再新建 `code = 'A'` 的新记录
+
+#### 适用范围
+
+- 所有具有 `archived` 字段的表（系统标准表均满足）
+- 所有 `CREATE UNIQUE INDEX` 语句（无论单列还是复合列）
+- 复合唯一索引：`CREATE UNIQUE INDEX uk_xxx ON table (col1, col2) WHERE archived = 0;`
+
+#### 注意事项
+
+- `WHERE archived = 0` 是硬性要求，**不允许省略**
+- 普通索引（`CREATE INDEX`）**不**需要 `WHERE` 子句
+- 迁移文件中也必须使用部分唯一索引，与 `init_ddl.sql` 保持一致
 
 ### 注释规则
 
@@ -125,8 +159,8 @@ CREATE TABLE table_name (
     PRIMARY KEY (id)
 );
 
--- 唯一索引（如有，单独写在表外）
-CREATE UNIQUE INDEX uk_table_name_field ON table_name (field_name);
+-- 唯一索引（如有，单独写在表外，部分唯一索引：仅约束未归档记录）
+CREATE UNIQUE INDEX uk_table_name_field ON table_name (field_name) WHERE archived = 0;
 
 -- 分级字段索引（仅树形表，单独写在表外）
 CREATE INDEX idx_table_name_parent_id ON table_name (parent_id);
@@ -226,7 +260,7 @@ CREATE TABLE product (
     PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX uk_product_code ON product (code);
+CREATE UNIQUE INDEX uk_product_code ON product (code) WHERE archived = 0;
 
 COMMENT ON TABLE product IS '商品表';
 COMMENT ON COLUMN product.id IS '主键ID';
@@ -277,7 +311,7 @@ CREATE TABLE order (
     PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX uk_order_order_no ON order (order_no);
+CREATE UNIQUE INDEX uk_order_order_no ON order (order_no) WHERE archived = 0;
 
 COMMENT ON TABLE order IS '订单表';
 COMMENT ON COLUMN order.id IS '主键ID';
