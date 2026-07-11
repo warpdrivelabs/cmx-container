@@ -851,13 +851,20 @@ impl ExclusionRuleService for ExclusionRuleServiceImpl {
         } else {
             // 路径 A：标准 GenericCrudService（与 role/role_group 一致，单表索引）
             // 注入默认 archived=0，并将 subject_id 置 None（避免生成无效列谓词）
-            let filters = filters.map(|fs| {
-                fs.into_iter()
+            // filters=None 时构造默认 filter，确保归档数据不泄露
+            let filters = Some(match filters {
+                Some(fs) => fs
+                    .into_iter()
                     .map(|mut f| {
                         f.subject_id = None;
                         Self::with_default_archived(f)
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>(),
+                None => {
+                    let mut f = Self::with_default_archived(ExclusionRuleFilter::default());
+                    f.subject_id = None;
+                    vec![f]
+                }
             });
             let (dataset, total) =
                 GenericCrudService::<ExclusionRuleBmc, ExclusionRuleFilter>::page(

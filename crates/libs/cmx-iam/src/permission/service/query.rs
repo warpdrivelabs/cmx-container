@@ -25,11 +25,10 @@ impl PermissionServiceImpl {
     ) -> Result<(Vec<Permission>, i64), TraitError> {
         debug!("{:<12} - PermissionServiceImpl::page_permissions", "IAM");
 
-        // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        // 对每个 filter 组注入默认 archived = 0（filters=None 时构造默认 filter，确保归档数据不泄露）
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(PermissionFilter::default())],
         });
 
         let (dataset, total) = GenericCrudService::<PermissionBmc, PermissionFilter>::page(
@@ -56,11 +55,10 @@ impl PermissionServiceImpl {
     ) -> Result<Vec<Permission>, TraitError> {
         debug!("{:<12} - PermissionServiceImpl::list_permissions", "IAM");
 
-        // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        // 对每个 filter 组注入默认 archived = 0（filters=None 时构造默认 filter，确保归档数据不泄露）
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(PermissionFilter::default())],
         });
 
         let dataset = GenericCrudService::<PermissionBmc, PermissionFilter>::list(

@@ -277,9 +277,10 @@ impl RoleService for RoleServiceImpl {
         Ok(role)
     }
 
-    /// 批量删除角色（事务保证软删除 + 权限关联清理的原子性）。
+    /// 批量删除角色（事务保证软删除 + 用户/权限关联清理的原子性）。
     ///
     /// 内置角色（`builtin_role_codes` 配置项）受保护，不可删除。
+    /// 删除后失效原关联用户的权限缓存。
     ///
     /// # Arguments
     ///
@@ -356,7 +357,36 @@ impl RoleService for RoleServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
-        // 2. 批量软删除 cmx_role（单条 SQL 替代循环 N 次往返）
+        // 2. 删除前查询受影响用户（供提交后失效缓存，必须在 cmx_user_role 物理删除前查询）
+        let affected_user_sql = "SELECT DISTINCT user_id FROM cmx_user_role WHERE role_id = ANY($1)";
+        let affected_user_params = vec![DataValue::Array(
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
+        )];
+        let affected_ds = self
+            .mm
+            .query_sql_with_datavalues(
+                &self.db_id,
+                Some(txn_id),
+                affected_user_sql,
+                affected_user_params,
+                "delete_role_affected_users",
+            )
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("查询受影响用户失败: {e}")))
+            })?;
+        let affected_schema = affected_ds.schema.as_ref();
+        let mut affected_user_ids: Vec<String> = Vec::new();
+        for row in affected_ds.iter() {
+            if let Some(uid) = row.get_by_name_as::<String>(affected_schema, "user_id") {
+                affected_user_ids.push(uid);
+            }
+        }
+
+        // 3. 批量软删除 cmx_role（单条 SQL 替代循环 N 次往返）
         let update_sql = "UPDATE cmx_role SET archived = 1, update_time = NOW() WHERE id = ANY($1)";
         let update_params = vec![DataValue::Array(
             role_ids
@@ -369,7 +399,7 @@ impl RoleService for RoleServiceImpl {
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("软删除角色失败: {e}"))))?;
 
-        // 3. 批量物理删除 cmx_role_permission 关联（单条 SQL 替代循环 N 次往返）
+        // 4. 批量物理删除 cmx_role_permission 关联（单条 SQL 替代循环 N 次往返）
         let delete_sql = "DELETE FROM cmx_role_permission WHERE role_id = ANY($1)";
         let delete_params = vec![DataValue::Array(
             role_ids
@@ -384,19 +414,41 @@ impl RoleService for RoleServiceImpl {
                 TraitError::from(IamError::Business(format!("删除角色权限关联失败: {e}")))
             })?;
 
+        // 5. 批量物理删除 cmx_user_role 关联（删除角色时用户侧关联也需清理，避免脏数据）
+        let delete_ur_sql = "DELETE FROM cmx_user_role WHERE role_id = ANY($1)";
+        let delete_ur_params = vec![DataValue::Array(
+            role_ids
+                .iter()
+                .map(|id| DataValue::String(id.clone()))
+                .collect(),
+        )];
+        self.mm
+            .execute_sql_with_datavalues(&self.db_id, Some(txn_id), delete_ur_sql, delete_ur_params)
+            .await
+            .map_err(|e| {
+                TraitError::from(IamError::Business(format!("删除用户角色关联失败: {e}")))
+            })?;
+
         // 提交事务
         guard
             .commit()
             .await
             .map_err(|e| TraitError::from(IamError::Business(format!("事务提交失败: {e}"))))?;
 
-        // 4. 审计日志（事务提交后）
+        // 6. 审计日志（事务提交后）
         let audit_detail = serde_json::json!({
             "role_ids": role_ids,
             "count": role_ids.len(),
         });
         self.audit_write(svr_ctx, "delete_role", "role", "batch", &audit_detail)
             .await;
+
+        // 7. 失效受影响用户的权限缓存（角色删除后，原关联用户的权限集已变）
+        if let Some(checker) = &self.permission_checker {
+            for uid in &affected_user_ids {
+                checker.invalidate_user_cache(uid).await;
+            }
+        }
 
         info!(count = role_ids.len(), "角色删除成功");
         Ok(())
@@ -427,10 +479,9 @@ impl RoleService for RoleServiceImpl {
         debug!("{:<12} - RoleServiceImpl::page_roles", "IAM");
 
         // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(RoleFilter::default())],
         });
 
         let (dataset, total) = GenericCrudService::<RoleBmc, RoleFilter>::page(
@@ -470,10 +521,9 @@ impl RoleService for RoleServiceImpl {
         debug!("{:<12} - RoleServiceImpl::list_roles", "IAM");
 
         // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(RoleFilter::default())],
         });
 
         let dataset = GenericCrudService::<RoleBmc, RoleFilter>::list(
@@ -543,7 +593,7 @@ impl RoleService for RoleServiceImpl {
         for perm_id in permission_ids {
             let rp_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_role_permission (id, role_id, permission_id, archived) \
-                              VALUES ($1, $2, $3, 0) ON CONFLICT (role_id, permission_id) DO NOTHING";
+                              VALUES ($1, $2, $3, 0) ON CONFLICT (role_id, permission_id) WHERE archived = 0 DO NOTHING";
             let params = vec![
                 DataValue::String(rp_id),
                 DataValue::String(role_id.to_string()),
@@ -679,7 +729,7 @@ impl RoleService for RoleServiceImpl {
                 .join(",");
             let insert_sql = format!(
                 "INSERT INTO cmx_user_role (id, user_id, role_id, archived) VALUES {} \
-                 ON CONFLICT (user_id, role_id) DO NOTHING",
+                 ON CONFLICT (user_id, role_id) WHERE archived = 0 DO NOTHING",
                 values_clause
             );
             // 参数列表：每行 [id, user_id, role_id]

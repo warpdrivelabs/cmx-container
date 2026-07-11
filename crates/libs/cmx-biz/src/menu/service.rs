@@ -8,7 +8,7 @@ use cmx_core::model::cell::DataValue;
 use cmx_core::model::data::dataset::DataSet;
 use cmx_database::crud::GenericCrudService;
 use cmx_database::DatabaseManager;
-use modql::filter::ListOptions;
+use modql::filter::{ListOptions, OpValInt64, OpValsInt64};
 use serde_json::Value;
 use tracing::{debug, instrument};
 
@@ -45,6 +45,14 @@ struct TreeFields {
 pub struct MenuService;
 
 impl MenuService {
+    /// 构造带 `archived = 0` 默认过滤的 `MenuFilter`（与 Role/RoleGroup 模式一致）。
+    fn with_default_archived(mut filter: MenuFilter) -> MenuFilter {
+        if filter.archived.is_none() {
+            filter.archived = Some(OpValsInt64(vec![OpValInt64::Eq(0)]));
+        }
+        filter
+    }
+
     /// 创建菜单：计算标准分级字段(leaf/depth/parent_code/id_path/code_path)后事务内写入，
     /// 并更新父节点 leaf=0。
     ///
@@ -849,6 +857,10 @@ impl MenuService {
         filters: Option<Vec<MenuFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<DataSet> {
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(MenuFilter::default())],
+        });
         GenericCrudService::<MenuBmc, MenuFilter>::list(mm, db_id, None, filters, list_options)
             .await
             .map_err(Into::into)
@@ -861,6 +873,10 @@ impl MenuService {
         filters: Option<Vec<MenuFilter>>,
         list_options: ListOptions,
     ) -> Result<(DataSet, i64)> {
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(MenuFilter::default())],
+        });
         GenericCrudService::<MenuBmc, MenuFilter>::page(mm, db_id, None, filters, list_options)
             .await
             .map_err(Into::into)

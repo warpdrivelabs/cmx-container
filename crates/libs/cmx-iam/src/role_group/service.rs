@@ -430,10 +430,9 @@ impl RoleGroupService for RoleGroupServiceImpl {
         debug!("{:<12} - RoleGroupServiceImpl::page_role_groups", "IAM");
 
         // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(RoleGroupFilter::default())],
         });
 
         let (dataset, total) = GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::page(
@@ -473,10 +472,9 @@ impl RoleGroupService for RoleGroupServiceImpl {
         debug!("{:<12} - RoleGroupServiceImpl::list_role_groups", "IAM");
 
         // 对每个 filter 组注入默认 archived = 0
-        let filters = filters.map(|fs| {
-            fs.into_iter()
-                .map(Self::with_default_archived)
-                .collect::<Vec<_>>()
+        let filters = Some(match filters {
+            Some(fs) => fs.into_iter().map(Self::with_default_archived).collect::<Vec<_>>(),
+            None => vec![Self::with_default_archived(RoleGroupFilter::default())],
         });
 
         let dataset = GenericCrudService::<RoleGroupBmc, RoleGroupFilter>::list(

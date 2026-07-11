@@ -313,7 +313,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
                 if let Some(role_id) = row.get_by_name_as::<String>(role_schema, "id") {
                     let ur_id = cmx_utils::snowflake_id_str();
                     let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
-                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
+                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) WHERE archived = 0 DO NOTHING";
                     let ur_params: Vec<DataValue> = vec![
                         DataValue::String(ur_id),
                         DataValue::String(user_id.clone()),
@@ -438,7 +438,7 @@ impl UserAuthQuery for UserAuthQueryImpl {
             {
                 let ur_id = cmx_utils::snowflake_id_str();
                 let insert_ur_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
-                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
+                                         VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) WHERE archived = 0 DO NOTHING";
                 let ur_params: Vec<DataValue> = vec![
                     DataValue::String(ur_id),
                     DataValue::String(user_id.clone()),

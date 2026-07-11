@@ -1618,8 +1618,8 @@ COMMENT ON COLUMN cmx_user.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_user.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_user.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_user_username ON cmx_user (username);
-CREATE UNIQUE INDEX uk_cmx_user_email ON cmx_user (email) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX uk_cmx_user_username ON cmx_user (username) WHERE archived = 0;
+CREATE UNIQUE INDEX uk_cmx_user_email ON cmx_user (email) WHERE email IS NOT NULL AND archived = 0;
 
 -- =============================================
 -- 29a. 角色组表 (cmx_role_group)
@@ -1702,7 +1702,7 @@ COMMENT ON COLUMN cmx_role.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_role.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_role.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_role_code ON cmx_role (code);
+CREATE UNIQUE INDEX uk_cmx_role_code ON cmx_role (code) WHERE archived = 0;
 CREATE INDEX idx_cmx_role_group_id ON cmx_role (role_group_id);
 
 -- =============================================
@@ -1797,7 +1797,7 @@ COMMENT ON COLUMN cmx_permission.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_permission.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_permission.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_permission_code ON cmx_permission (code);
+CREATE UNIQUE INDEX uk_cmx_permission_code ON cmx_permission (code) WHERE archived = 0;
 CREATE INDEX idx_cmx_permission_parent ON cmx_permission (parent_id);
 CREATE INDEX idx_cmx_permission_full_path ON cmx_permission (full_code_path);
 CREATE INDEX idx_cmx_permission_parent_code ON cmx_permission (parent_code);
@@ -1836,7 +1836,7 @@ COMMENT ON COLUMN cmx_role_permission.create_name IS '创建人姓名';
 COMMENT ON COLUMN cmx_role_permission.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_role_permission.update_name IS '更新人姓名';
 
-CREATE UNIQUE INDEX uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id);
+CREATE UNIQUE INDEX uk_cmx_role_permission ON cmx_role_permission (role_id, permission_id) WHERE archived = 0;
 CREATE INDEX idx_cmx_role_permission_role ON cmx_role_permission (role_id);
 CREATE INDEX idx_cmx_role_permission_permission ON cmx_role_permission (permission_id);
 
@@ -2083,7 +2083,7 @@ COMMENT ON COLUMN cmx_menu.update_by IS '更新人ID';
 COMMENT ON COLUMN cmx_menu.update_name IS '更新人姓名';
 COMMENT ON COLUMN cmx_menu.ext_attributes IS '扩展属性，存储JSON格式的额外业务属性';
 
-CREATE UNIQUE INDEX uk_cmx_menu_code ON cmx_menu (code);
+CREATE UNIQUE INDEX uk_cmx_menu_code ON cmx_menu (code) WHERE archived = 0;
 CREATE INDEX idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code);
 CREATE INDEX idx_cmx_menu_parent_id ON cmx_menu (parent_id);
 -- 级联操作(移动/删除/树查询)按 code_path/id_path 前缀匹配,需索引支撑,否则全表扫描

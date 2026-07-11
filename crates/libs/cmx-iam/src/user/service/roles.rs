@@ -81,7 +81,7 @@ impl UserServiceImpl {
         for role_id in role_ids {
             let ur_id = snowflake_id_str();
             let insert_sql = "INSERT INTO cmx_user_role (id, user_id, role_id, archived) \
-                              VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) DO NOTHING";
+                              VALUES ($1, $2, $3, 0) ON CONFLICT (user_id, role_id) WHERE archived = 0 DO NOTHING";
             let params = vec![
                 DataValue::String(ur_id),
                 DataValue::String(user_id.clone()),

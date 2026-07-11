@@ -191,7 +191,8 @@ impl UserServiceImpl {
 
     /// 批量删除用户（[`crate::service_traits::UserService::delete_user`] 的实现）。
     ///
-    /// 事务保证软删除 `cmx_user`（archived=1）+ 物理删除 `cmx_user_role` 关联的原子性。
+    /// 事务保证软删除 `cmx_user`（archived=1）+ 物理删除 `cmx_user_role` 与
+    /// `cmx_user_role_assignment` 关联的原子性。
     pub(super) async fn delete_user(
         &self,
         svr_ctx: &SVRContext,
@@ -215,10 +216,9 @@ impl UserServiceImpl {
             .map_err(|e| TraitError::from(IamError::Business(format!("开启事务失败: {e}"))))?;
         let txn_id = guard.txn_id();
 
-        // 1. 删除 cmx_user
+        // 1. 软删除 cmx_user（archived=1，保留记录供审计追溯，配合部分唯一索引允许同名重建）
         for user_id in user_ids {
-            // let sql = "UPDATE cmx_user SET archived = 1, update_time = NOW() WHERE id = $1";
-            let sql = "delete from cmx_user  WHERE id = $1";
+            let sql = "UPDATE cmx_user SET archived = 1, update_time = NOW() WHERE id = $1";
             let params = vec![DataValue::String(user_id.clone())];
             self.mm
                 .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
@@ -237,6 +237,18 @@ impl UserServiceImpl {
                 .await
                 .map_err(|e| {
                     TraitError::from(IamError::Business(format!("删除用户角色关联失败: {e}")))
+                })?;
+        }
+
+        // 3. 物理删除 cmx_user_role_assignment 临时授权关联
+        for user_id in user_ids {
+            let sql = "DELETE FROM cmx_user_role_assignment WHERE user_id = $1";
+            let params = vec![DataValue::String(user_id.clone())];
+            self.mm
+                .execute_sql_with_datavalues(&self.db_id, Some(txn_id), sql, params)
+                .await
+                .map_err(|e| {
+                    TraitError::from(IamError::Business(format!("删除用户临时授权失败: {e}")))
                 })?;
         }
 

@@ -55,7 +55,7 @@ impl PermissionDefinitionImporter for PermissionServiceImpl {
                         domain_code, app_code, module_code, extension, status, archived, \
                         parent_code, full_code_path, is_leaf, level) \
                        VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9, $10, $11, 0, NULL, $12, 1, 1) \
-                       ON CONFLICT (code) DO UPDATE SET \
+                       ON CONFLICT (code) WHERE archived = 0 DO UPDATE SET \
                        name = EXCLUDED.name, resource_type = EXCLUDED.resource_type, \
                        sort_order = EXCLUDED.sort_order, description = EXCLUDED.description, \
                        extension = EXCLUDED.extension, status = EXCLUDED.status, \
