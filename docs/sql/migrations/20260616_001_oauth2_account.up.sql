@@ -22,10 +22,10 @@ CREATE TABLE IF NOT EXISTS cmx_auth_oauth2_account (
     create_name varchar(100),
     update_by varchar(100),
     update_name varchar(100),
-    CONSTRAINT pk_cmx_auth_oauth2_account PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_auth_oauth2_account_provider_user UNIQUE (provider, provider_user_id)
+    PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_auth_oauth2_account_provider_user ON cmx_auth_oauth2_account (provider, provider_user_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_auth_oauth2_account_user ON cmx_auth_oauth2_account (user_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_auth_oauth2_account_provider_email ON cmx_auth_oauth2_account (provider, provider_email);
 

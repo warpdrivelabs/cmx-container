@@ -25,10 +25,10 @@ CREATE TABLE IF NOT EXISTS cmx_form (
     create_name      VARCHAR(100),
     update_by        VARCHAR(100),
     update_name      VARCHAR(100),
-    CONSTRAINT pk_cmx_form PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_form_code UNIQUE (code)
+    PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_form_code ON cmx_form (code);
 CREATE INDEX IF NOT EXISTS idx_cmx_form_module ON cmx_form (domain_code, application_code, module_code);
 
 COMMENT ON TABLE cmx_form IS '表单定义表';
@@ -151,10 +151,10 @@ CREATE TABLE IF NOT EXISTS cmx_module_current_version (
     create_name       VARCHAR(100),
     update_by         VARCHAR(100),
     update_name       VARCHAR(100),
-    CONSTRAINT pk_cmx_module_current_version PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_module_current_version_module UNIQUE (module_code)
+    PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_module_current_version_module ON cmx_module_current_version (module_code);
 CREATE INDEX IF NOT EXISTS idx_cmx_module_current_version_dom_app_mod
     ON cmx_module_current_version (domain_code, application_code, module_code);
 
@@ -201,10 +201,10 @@ CREATE TABLE IF NOT EXISTS cmx_module_version_history (
     create_name       VARCHAR(100),
     update_by         VARCHAR(100),
     update_name       VARCHAR(100),
-    CONSTRAINT pk_cmx_module_version_history PRIMARY KEY (id),
-    CONSTRAINT uk_cmx_module_version_history_pkg UNIQUE (module_code, package_version)
+    PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
 CREATE INDEX IF NOT EXISTS idx_cmx_module_version_history_module ON cmx_module_version_history (module_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_module_version_history_pkg ON cmx_module_version_history (module_code, package_version);
 

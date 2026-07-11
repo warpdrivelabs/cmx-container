@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS cmx_audit_log (
     create_name     VARCHAR(100),
     update_by       VARCHAR(100),
     update_name     VARCHAR(100),
-    CONSTRAINT pk_cmx_audit_log PRIMARY KEY (id)
+    PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cmx_audit_log_app_id    ON cmx_audit_log (app_id);
