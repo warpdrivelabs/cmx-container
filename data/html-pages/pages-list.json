@@ -1001,6 +1001,138 @@
       "page": "salesOrder",
       "relPath": "fi/cmxfico/gl/salesOrder.html",
       "latestHtmlFile": "salesOrder.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictflat-model",
+      "latestHtmlFile": "dictflat-model.html",
+      "module": "gl",
+      "name": "币种字典维护·共享模型(隐藏)",
+      "page": "dictflat-model",
+      "pageId": "fi.cmxfico.gl.dictflat-model",
+      "relPath": "fi/cmxfico/gl/dictflat-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictflat-explorer",
+      "latestHtmlFile": "dictflat-explorer.html",
+      "module": "gl",
+      "name": "币种字典维护·检索",
+      "page": "dictflat-explorer",
+      "pageId": "fi.cmxfico.gl.dictflat-explorer",
+      "relPath": "fi/cmxfico/gl/dictflat-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictflat-content",
+      "latestHtmlFile": "dictflat-content.html",
+      "module": "gl",
+      "name": "币种字典维护·列表",
+      "page": "dictflat-content",
+      "pageId": "fi.cmxfico.gl.dictflat-content",
+      "relPath": "fi/cmxfico/gl/dictflat-content.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictflat-prop-detail",
+      "latestHtmlFile": "dictflat-prop-detail.html",
+      "module": "gl",
+      "name": "币种字典维护·详情",
+      "page": "dictflat-prop-detail",
+      "pageId": "fi.cmxfico.gl.dictflat-prop-detail",
+      "relPath": "fi/cmxfico/gl/dictflat-prop-detail.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dicttree-model",
+      "latestHtmlFile": "dicttree-model.html",
+      "module": "gl",
+      "name": "总账科目字典维护·共享模型(隐藏)",
+      "page": "dicttree-model",
+      "pageId": "fi.cmxfico.gl.dicttree-model",
+      "relPath": "fi/cmxfico/gl/dicttree-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dicttree-explorer",
+      "latestHtmlFile": "dicttree-explorer.html",
+      "module": "gl",
+      "name": "总账科目字典维护·科目树",
+      "page": "dicttree-explorer",
+      "pageId": "fi.cmxfico.gl.dicttree-explorer",
+      "relPath": "fi/cmxfico/gl/dicttree-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dicttree-content",
+      "latestHtmlFile": "dicttree-content.html",
+      "module": "gl",
+      "name": "总账科目字典维护·子科目",
+      "page": "dicttree-content",
+      "pageId": "fi.cmxfico.gl.dicttree-content",
+      "relPath": "fi/cmxfico/gl/dicttree-content.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dicttree-prop-detail",
+      "latestHtmlFile": "dicttree-prop-detail.html",
+      "module": "gl",
+      "name": "总账科目字典维护·详情",
+      "page": "dicttree-prop-detail",
+      "pageId": "fi.cmxfico.gl.dicttree-prop-detail",
+      "relPath": "fi/cmxfico/gl/dicttree-prop-detail.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictcls-model",
+      "latestHtmlFile": "dictcls-model.html",
+      "module": "gl",
+      "name": "合作伙伴字典维护·共享模型(隐藏)",
+      "page": "dictcls-model",
+      "pageId": "fi.cmxfico.gl.dictcls-model",
+      "relPath": "fi/cmxfico/gl/dictcls-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictcls-explorer",
+      "latestHtmlFile": "dictcls-explorer.html",
+      "module": "gl",
+      "name": "合作伙伴字典维护·分类树",
+      "page": "dictcls-explorer",
+      "pageId": "fi.cmxfico.gl.dictcls-explorer",
+      "relPath": "fi/cmxfico/gl/dictcls-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictcls-content",
+      "latestHtmlFile": "dictcls-content.html",
+      "module": "gl",
+      "name": "合作伙伴字典维护·伙伴列表",
+      "page": "dictcls-content",
+      "pageId": "fi.cmxfico.gl.dictcls-content",
+      "relPath": "fi/cmxfico/gl/dictcls-content.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictcls-prop-detail",
+      "latestHtmlFile": "dictcls-prop-detail.html",
+      "module": "gl",
+      "name": "合作伙伴字典维护·详情",
+      "page": "dictcls-prop-detail",
+      "pageId": "fi.cmxfico.gl.dictcls-prop-detail",
+      "relPath": "fi/cmxfico/gl/dictcls-prop-detail.html"
     }
   ]
 }

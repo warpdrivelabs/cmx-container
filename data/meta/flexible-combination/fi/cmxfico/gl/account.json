@@ -595,308 +595,12 @@
           "gl_account.cashflow_related": "true"
         }
       },
-      "detail": {
-        "fields": [
-          {
-            "dataType": "BIGINT",
-            "nullable": false,
-            "dimType": "relation",
-            "edit": {
-              "mode": "input",
-              "required": true
-            },
-            "id": "entry_id",
-            "name": "entry_id",
-            "caption": {
-              "zh_CN": "所属分录ID"
-            }
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 20,
-            "intDigits": 18,
-            "decimalDigits": 2,
-            "nullable": false,
-            "dimType": "measure",
-            "agg": "sum",
-            "edit": {
-              "mode": "input",
-              "required": true
-            },
-            "id": "amount",
-            "name": "amount",
-            "caption": {
-              "zh_CN": "明细金额"
-            }
-          },
-          {
-            "dataType": "VARCHAR",
-            "fieldLength": 1,
-            "nullable": false,
-            "dimType": "attribute",
-            "edit": {
-              "mode": "input",
-              "required": true
-            },
-            "id": "direction",
-            "name": "direction",
-            "caption": {
-              "zh_CN": "方向(D借/C贷，承袭分录)"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "profit_center",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "profit_center_id",
-            "name": "profit_center_id",
-            "caption": {
-              "zh_CN": "利润中心"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "cost_center",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "cost_center_id",
-            "name": "cost_center_id",
-            "caption": {
-              "zh_CN": "成本中心"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "project",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "project_id",
-            "name": "project_id",
-            "caption": {
-              "zh_CN": "项目"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "partner",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "partner_id",
-            "name": "partner_id",
-            "caption": {
-              "zh_CN": "合作伙伴(客户/供应商)"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "contract",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "contract_id",
-            "name": "contract_id",
-            "caption": {
-              "zh_CN": "合同"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "bank",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "bank_id",
-            "name": "bank_id",
-            "caption": {
-              "zh_CN": "银行/账户"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "cashflow_item",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "cashflow_item_id",
-            "name": "cashflow_item_id",
-            "caption": {
-              "zh_CN": "现金流量项目"
-            }
-          },
-          {
-            "dataType": "VARCHAR",
-            "fieldLength": 64,
-            "nullable": true,
-            "dimType": "dimension",
-            "refDict": "currency",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "currency_id",
-            "name": "currency_id",
-            "caption": {
-              "zh_CN": "币种"
-            }
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 20,
-            "intDigits": 18,
-            "decimalDigits": 2,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "orig_amount",
-            "name": "orig_amount",
-            "caption": {
-              "zh_CN": "原币金额"
-            }
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 16,
-            "intDigits": 8,
-            "decimalDigits": 6,
-            "nullable": true,
-            "dimType": "attribute",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "exchange_rate",
-            "name": "exchange_rate",
-            "caption": {
-              "zh_CN": "汇率"
-            }
-          },
-          {
-            "dataType": "DECIMAL",
-            "fieldLength": 20,
-            "intDigits": 14,
-            "decimalDigits": 4,
-            "nullable": true,
-            "dimType": "measure",
-            "agg": "sum",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "quantity",
-            "name": "quantity",
-            "caption": {
-              "zh_CN": "数量(数量金额核算)"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "edit": {
-              "mode": "input"
-            },
-            "refDict": "ext_dim1",
-            "id": "ext_dim1",
-            "name": "ext_dim1",
-            "caption": {
-              "zh_CN": "扩展维度槽位1(由gl_ext_dimension绑定)"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "edit": {
-              "mode": "input"
-            },
-            "refDict": "ext_dim2",
-            "id": "ext_dim2",
-            "name": "ext_dim2",
-            "caption": {
-              "zh_CN": "扩展维度槽位2"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "edit": {
-              "mode": "input"
-            },
-            "refDict": "ext_dim3",
-            "id": "ext_dim3",
-            "name": "ext_dim3",
-            "caption": {
-              "zh_CN": "扩展维度槽位3"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "edit": {
-              "mode": "input"
-            },
-            "refDict": "ext_dim4",
-            "id": "ext_dim4",
-            "name": "ext_dim4",
-            "caption": {
-              "zh_CN": "扩展维度槽位4"
-            }
-          },
-          {
-            "dataType": "BIGINT",
-            "nullable": true,
-            "dimType": "dimension",
-            "edit": {
-              "mode": "input"
-            },
-            "refDict": "ext_dim5",
-            "id": "ext_dim5",
-            "name": "ext_dim5",
-            "caption": {
-              "zh_CN": "扩展维度槽位5"
-            }
-          },
-          {
-            "dataType": "VARCHAR",
-            "fieldLength": 512,
-            "nullable": true,
-            "dimType": "attribute",
-            "edit": {
-              "mode": "input"
-            },
-            "id": "remark",
-            "name": "remark",
-            "caption": {
-              "zh_CN": "明细备注"
-            }
-          }
-        ],
-        "table": "voucher_detail",
-        "fieldTabs": []
-      },
       "panel": "voucher_entry",
-      "caption": "现金"
+      "caption": "现金",
+      "detail": {
+        "table": "voucher_detail",
+        "use": "*"
+      }
     },
     {
       "id": "fi-bank",
@@ -1174,59 +878,46 @@
         ],
         "match": {}
       },
+      "panel": "voucher_entry",
       "detail": {
-        "fields": [
+        "table": "voucher_detail",
+        "pick": [
           {
-            "edit": {
-              "mode": "select",
-              "required": true
-            },
-            "dimType": "dimension",
-            "refDict": "cost_center",
-            "id": "department",
-            "name": "department",
-            "caption": {
-              "zh_CN": "部门"
+            "ref": "voucher_detail.cost_center_id",
+            "as": "department",
+            "over": {
+              "caption": {
+                "zh_CN": "部门"
+              },
+              "edit": {
+                "mode": "select",
+                "required": true
+              }
             }
           },
           {
-            "edit": {
-              "mode": "select"
-            },
-            "dimType": "dimension",
-            "refDict": "project",
-            "id": "project",
-            "name": "project",
-            "caption": {
-              "zh_CN": "项目"
+            "ref": "voucher_detail.project_id",
+            "as": "project",
+            "over": {
+              "caption": {
+                "zh_CN": "项目"
+              },
+              "edit": {
+                "mode": "select"
+              }
             }
           },
           {
-            "edit": {
-              "mode": "input"
-            },
-            "dimType": "",
-            "id": "remark",
-            "name": "remark",
-            "caption": {
-              "zh_CN": "备注"
-            }
+            "ref": "voucher_detail.remark"
           },
           {
-            "edit": {
-              "mode": "input"
-            },
-            "display": {
-              "decimals": 2,
-              "thousand": ",",
-              "zeroBlank": true,
-              "negativeColor": true
-            },
-            "dimType": "measure",
-            "id": "amount",
-            "name": "amount",
-            "caption": {
-              "zh_CN": "金额"
+            "ref": "voucher_detail.amount",
+            "over": {
+              "display": {
+                "decimalDigits": 2,
+                "thousandSeparator": true,
+                "negativeColor": true
+              }
             }
           }
         ],
@@ -1245,11 +936,8 @@
               "amount"
             ]
           }
-        ],
-        "fieldTabs": [],
-        "table": "voucher_detail"
-      },
-      "panel": "voucher_entry"
+        ]
+      }
     },
     {
       "id": "fi-default",

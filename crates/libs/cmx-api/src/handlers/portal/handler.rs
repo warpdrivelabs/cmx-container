@@ -1289,6 +1289,98 @@ pub async fn fc_preview(
     )))
 }
 
+// ───────────────────────── 三元定义统一注册（/api/defs/*） ─────────────────────────
+
+/// `/api/defs/*` 查询参数：DAM + kind + drn（DRN 解析用）。
+#[derive(serde::Deserialize)]
+pub struct DefsQuery {
+    #[serde(default)]
+    pub domain: Option<String>,
+    #[serde(default)]
+    pub app: Option<String>,
+    #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// 单个 DRN 字符串（resolve/deps/compile 用）。
+    #[serde(default)]
+    pub drn: Option<String>,
+    /// 锚点（compile 用，形如 gl_account=1122）。
+    #[serde(default, flatten)]
+    pub rest: std::collections::HashMap<String, String>,
+}
+
+impl DefsQuery {
+    fn from_dam(&self) -> cmx_portal::flexible_combination::drn::FromDam {
+        cmx_portal::flexible_combination::drn::FromDam {
+            domain: self.domain.clone(),
+            app: self.app.clone(),
+            module: self.module.clone(),
+        }
+    }
+}
+
+/// `GET /api/defs/list` —— 按 kind/DAM 列出可引用定义（DCT/DOC/FLC/BASE）。
+pub async fn defs_list(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<DefsQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    let items = cmx_portal::flexible_combination::defs::list(
+        q.kind.as_deref(),
+        q.domain.as_deref(),
+        q.app.as_deref(),
+        q.module.as_deref(),
+    )
+    .await?;
+    Ok(Json(ApiResp::ok(serde_json::json!({ "items": items }))))
+}
+
+/// `GET /api/defs/resolve?drn=…&domain&app&module` —— 解析单个 DRN → 定义全文。
+pub async fn defs_resolve(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<DefsQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    let drn = q
+        .drn
+        .as_deref()
+        .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 drn 参数"))?;
+    let def = cmx_portal::flexible_combination::defs::resolve(drn, &q.from_dam()).await?;
+    Ok(Json(ApiResp::ok(def)))
+}
+
+/// `GET /api/defs/deps?drn=…` —— 某定义的直接依赖（imports/docRef/refDict → 绝对 DRN）。
+pub async fn defs_deps(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<DefsQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    let drn = q
+        .drn
+        .as_deref()
+        .ok_or_else(|| cmx_api_types::Error::bad_request("缺少 drn 参数"))?;
+    let from = q.from_dam();
+    let def = cmx_portal::flexible_combination::defs::resolve(drn, &from).await?;
+    let deps = cmx_portal::flexible_combination::defs::dependencies_of(&def, &from);
+    Ok(Json(ApiResp::ok(serde_json::json!({
+        "drn": drn,
+        "dependencies": deps,
+    }))))
+}
+
+/// `GET /api/defs/compile?domain&app&module&scenario&<anchor>` —— FLC overlay 编译 + 按锚点解析。
+/// 复用 flexible-combination resolve（已内置 overlay 展开）。
+pub async fn defs_compile(
+    State(_s): State<CmxAppState>,
+    CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<FcQuery>,
+) -> Result<Json<ApiResp<serde_json::Value>>> {
+    Ok(Json(ApiResp::ok(
+        cmx_portal::flexible_combination::api::resolve(&q.to_ref(), &q.anchor_map()).await?,
+    )))
+}
+
 // ───────────────────────── AI 对话中继 ─────────────────────────
 
 /// `POST /api/ai/chat` —— 转发到 DeepSeek/OpenAI 兼容服务。未配置返回 501 业务码。

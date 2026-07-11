@@ -230,6 +230,11 @@ impl ModuleRoutes for PortalModule {
             .route("/flexible-combination/validate", post(handler::fc_validate))
             .route("/flexible-combination/preview", post(handler::fc_preview))
             .route("/flexible-combination/default", post(handler::fc_set_default))
+            // 三元定义统一注册（DCT/DOC/FLC）+ DRN 解析 + 依赖图 + overlay 编译
+            .route("/defs/list", get(handler::defs_list))
+            .route("/defs/resolve", get(handler::defs_resolve))
+            .route("/defs/deps", get(handler::defs_deps))
+            .route("/defs/compile", get(handler::defs_compile))
     }
 
     fn prefix() -> &'static str {

@@ -8,7 +8,10 @@
 //! - 处理器侧 `enrichFlexibleCombinationDictMeta`（[`dict_meta`]）：维度 dict 元数据补全。
 
 pub mod api;
+pub mod defs;
 pub mod dict_meta;
+pub mod drn;
 pub mod engine;
+pub mod overlay;
 pub mod store;
 pub mod validator;

@@ -296,12 +296,23 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
             &mut d,
         );
 
-        let fields = rule.get("detail").and_then(|de| de.get("fields"));
-        if !fields.map(|v| v.is_array()).unwrap_or(false) {
+        // overlay 形态（use:"*" / pick[]）在编译期展开为 fields，结构上不要求 detail.fields；
+        // 三入口至少有其一即可。纯 inline 规则仍要求 fields 为数组。
+        let detail = rule.get("detail");
+        let has_overlay = detail
+            .and_then(|de| de.get("use"))
+            .map(|v| !v.is_null())
+            .unwrap_or(false)
+            || detail
+                .and_then(|de| de.get("pick"))
+                .map(|v| v.is_array())
+                .unwrap_or(false);
+        let fields = detail.and_then(|de| de.get("fields"));
+        if !has_overlay && !fields.map(|v| v.is_array()).unwrap_or(false) {
             d.error(
                 &format!("{r_path}.detail.fields"),
                 "FIELDS_REQUIRED",
-                "规则缺少 detail.fields 数组",
+                "规则缺少 detail.fields 数组（或改用 overlay 的 use/pick）",
             );
         }
         let fields_arr = fields
@@ -309,12 +320,15 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
             .cloned()
             .unwrap_or_default();
         validate_fields(&fields_arr, &r_path, dimensions, &dim_codes, &mut d);
-        validate_groups(
-            rule.get("detail").and_then(|de| de.get("groups")),
-            &fields_arr,
-            &r_path,
-            &mut d,
-        );
+        // 分组成员存在性依赖展开后字段：overlay 规则跳过（成员由 ref 展开后产生），纯 inline 照常。
+        if !has_overlay {
+            validate_groups(
+                rule.get("detail").and_then(|de| de.get("groups")),
+                &fields_arr,
+                &r_path,
+                &mut d,
+            );
+        }
     }
 
     d.finish()

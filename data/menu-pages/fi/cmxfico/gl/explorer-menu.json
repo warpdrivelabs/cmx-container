@@ -1211,6 +1211,177 @@
      }
     },
     {
+     "id": "fi-gl-dictflat-ws",
+     "name": "dictflat-ws",
+     "caption": "币种字典维护(平级)",
+     "type": "workspace-node",
+     "permissionId": null,
+     "icon": "currency",
+     "workspace": {
+      "id": "dictflat_ws",
+      "explorerWidth": 240,
+      "propertyWidth": 320,
+      "model": {
+       "type": "html_pages",
+       "html_page": "fi.cmxfico.gl.dictflat-model",
+       "id": "dictflat-model"
+      },
+      "explorer": {
+       "caption": "检索",
+       "icon": "filter",
+       "views": [
+        {
+         "id": "dictflat-explorer",
+         "tabLabel": "检索",
+         "icon": "filter",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictflat-explorer"
+        }
+       ]
+      },
+      "content": {
+       "caption": "币种列表",
+       "icon": "table-view",
+       "views": [
+        {
+         "id": "dictflat-content",
+         "tabLabel": "币种列表",
+         "icon": "table-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictflat-content"
+        }
+       ]
+      },
+      "property": {
+       "caption": "详情",
+       "icon": "detail-view",
+       "views": [
+        {
+         "id": "dictflat-prop-detail",
+         "tabLabel": "详情",
+         "icon": "detail-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictflat-prop-detail"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-gl-dicttree-ws",
+     "name": "dicttree-ws",
+     "caption": "总账科目维护(自分级)",
+     "type": "workspace-node",
+     "permissionId": null,
+     "icon": "tree",
+     "workspace": {
+      "id": "dicttree_ws",
+      "explorerWidth": 280,
+      "propertyWidth": 320,
+      "model": {
+       "type": "html_pages",
+       "html_page": "fi.cmxfico.gl.dicttree-model",
+       "id": "dicttree-model"
+      },
+      "explorer": {
+       "caption": "科目树",
+       "icon": "tree",
+       "views": [
+        {
+         "id": "dicttree-explorer",
+         "tabLabel": "科目树",
+         "icon": "tree",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dicttree-explorer"
+        }
+       ]
+      },
+      "content": {
+       "caption": "子科目",
+       "icon": "table-view",
+       "views": [
+        {
+         "id": "dicttree-content",
+         "tabLabel": "子科目表格",
+         "icon": "table-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dicttree-content"
+        }
+       ]
+      },
+      "property": {
+       "caption": "详情",
+       "icon": "detail-view",
+       "views": [
+        {
+         "id": "dicttree-prop-detail",
+         "tabLabel": "详情",
+         "icon": "detail-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dicttree-prop-detail"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "fi-gl-dictcls-ws",
+     "name": "dictcls-ws",
+     "caption": "合作伙伴维护(带分类)",
+     "type": "workspace-node",
+     "permissionId": null,
+     "icon": "customer",
+     "workspace": {
+      "id": "dictcls_ws",
+      "explorerWidth": 260,
+      "propertyWidth": 320,
+      "model": {
+       "type": "html_pages",
+       "html_page": "fi.cmxfico.gl.dictcls-model",
+       "id": "dictcls-model"
+      },
+      "explorer": {
+       "caption": "伙伴分类",
+       "icon": "tree",
+       "views": [
+        {
+         "id": "dictcls-explorer",
+         "tabLabel": "伙伴分类",
+         "icon": "tree",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictcls-explorer"
+        }
+       ]
+      },
+      "content": {
+       "caption": "合作伙伴",
+       "icon": "table-view",
+       "views": [
+        {
+         "id": "dictcls-content",
+         "tabLabel": "伙伴列表",
+         "icon": "table-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictcls-content"
+        }
+       ]
+      },
+      "property": {
+       "caption": "详情",
+       "icon": "detail-view",
+       "views": [
+        {
+         "id": "dictcls-prop-detail",
+         "tabLabel": "详情",
+         "icon": "detail-view",
+         "type": "html_pages",
+         "html_page": "fi.cmxfico.gl.dictcls-prop-detail"
+        }
+       ]
+      }
+     }
+    },
+    {
      "id": "fi-cmxfico-voucher-doc-json",
      "name": "voucher-doc-json",
      "caption": "会计凭证①(html·DataSet)",
