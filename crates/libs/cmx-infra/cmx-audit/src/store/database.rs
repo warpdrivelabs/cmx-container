@@ -507,7 +507,7 @@ mod tests {
 
         // ensure schema（幂等，无参数 DDL）
         let ddl =
-            include_str!("../../../../../../docs/sql/migrations/20260624_008_cmx_audit_log.up.sql");
+            include_str!("../../../../../../docs/sql/migrations/20260624_001_cmx_audit_log.up.sql");
         mm.execute_sql(TEST_DB_ID, None, ddl)
             .await
             .expect("ensure cmx_audit_log schema");
