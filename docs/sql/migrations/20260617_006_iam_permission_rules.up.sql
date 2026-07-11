@@ -109,6 +109,7 @@ CREATE TABLE cmx_exclusion_rule_item (
 
 CREATE INDEX idx_cmx_exclusion_rule_item_rule ON cmx_exclusion_rule_item (rule_id);
 CREATE INDEX idx_cmx_exclusion_rule_item_subject ON cmx_exclusion_rule_item (subject_id);
+CREATE INDEX idx_cmx_exclusion_rule_item_subject_id ON cmx_exclusion_rule_item (subject_id);
 
 COMMENT ON TABLE cmx_exclusion_rule_item IS '互斥对象明细表';
 COMMENT ON COLUMN cmx_exclusion_rule_item.id IS '主键ID';
