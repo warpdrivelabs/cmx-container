@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>错误码管理 + 信息提示对话框（cmx-message-dialog）使用说明</title>
+<style>
+  :root{
+    --info:#0a6ed1; --warn:#e9730c; --err:#bb0000; --sys:#f0b429;
+    --bg:#0f1419; --card:#1a2028; --card2:#232b35; --txt:#e6edf3; --dim:#8b98a5;
+    --line:#2d3742; --accent:#f0b429; --code:#a9c7e8; --ok:#42a86b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 90px}
+  h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:.3px}
+  h2{font-size:20px;font-weight:600;margin:52px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;font-weight:600;margin:30px 0 10px;color:var(--accent)}
+  h4{font-size:14px;font-weight:600;margin:20px 0 8px;color:var(--txt)}
+  p{margin:10px 0}
+  a{color:#6cb0f0}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .meta{background:var(--card);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--dim)}
+  .meta b{color:var(--txt)}
+  code{background:#0d1117;padding:1.5px 6px;border-radius:4px;font-size:12.5px;color:var(--code);
+    font-family:"SF Mono",Menlo,Consolas,monospace}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;margin:14px 0;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0;color:#c9d6e3}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--card2);font-weight:600;color:var(--dim);font-size:12px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#20272f}
+  .num{font-variant-numeric:tabular-nums;font-family:"SF Mono",Menlo,monospace;color:#f0c674}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;margin-right:6px}
+  .b-info{background:rgba(10,110,209,.2);color:#6cb0f0}
+  .b-warn{background:rgba(233,115,12,.2);color:#f0a860}
+  .b-err{background:rgba(187,0,0,.22);color:#ef7a7a}
+  .b-seg{background:rgba(240,180,41,.16);color:#f0c674}
+  .callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;padding:12px 18px;margin:16px 0}
+  .callout.good{border-left-color:var(--ok)}
+  .callout.warn{border-left-color:var(--err)}
+  .callout b{color:var(--txt)}
+  .toc{background:var(--card);border-radius:10px;padding:18px 22px;margin:22px 0}
+  .toc ol{margin:6px 0;padding-left:22px}
+  .toc a{color:#8fc0ef;text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .pill{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-family:"SF Mono",monospace;background:#0d1117;color:var(--dim);border:1px solid var(--line)}
+  .path{color:#8fc0ef;font-family:"SF Mono",Menlo,monospace;font-size:12.5px}
+  .k{color:#c678dd}.s{color:#98c379}.c{color:#5c6370;font-style:italic}.f{color:#61afef}.n{color:#d19a66}
+  hr{border:none;border-top:1px solid var(--line);margin:30px 0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.two{grid-template-columns:1fr}}
+  .dlg-demo{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="sub">CMX 前端组件 · 数据服务 · 内部技术说明</p>
+  <h1>错误码管理 + 信息提示对话框使用说明</h1>
+  <p style="color:var(--dim);max-width:820px">
+    本文说明两件事：<b style="color:var(--txt)">①</b> DCT/DOC 落库校验的<b style="color:var(--txt)">错误码在哪里定义、如何管理、如何保证不重复</b>；
+    <b style="color:var(--txt)">②</b> 专业信息提示对话框 <code>cmx-message-dialog</code> 的<b style="color:var(--txt)">完整使用说明</b>，
+    以及把后端存储错误一行接入对话框的 <code>presentDocError</code>。
+  </p>
+
+  <div class="meta">
+    <b>适用范围</b>：会计凭证 5 页、字典维护 3 页（平级/自分级/带分类）等所有走 <code>/api/doc/save</code>、<code>/api/dict/save</code> 的页面。<br>
+    <b>唯一事实源</b>：错误码 = <span class="path">cmx-container/crates/libs/cmx-biz/src/errcode/mod.rs</span>；
+    对话框 = <span class="path">packages/cmx-data-comp/src/lib/cmx-message-dialog.js</span>；
+    接入层 = <span class="path">packages/cmx-data-comp/src/lib/cmx-doc-error-presenter.js</span>。
+  </div>
+
+  <div class="toc">
+    <b>目录</b>
+    <ol>
+      <li><a href="#part1">第一部分 · 错误码定义与管理</a>
+        <ol>
+          <li><a href="#codes">错误码全表（整数码 + 字符串码）</a></li>
+          <li><a href="#where">在哪里定义</a></li>
+          <li><a href="#nodup">如何保证不重复（编译期 + 测试）</a></li>
+          <li><a href="#addcode">如何新增一个错误码</a></li>
+          <li><a href="#wire">错误码怎么流到前端</a></li>
+        </ol>
+      </li>
+      <li><a href="#part2">第二部分 · 信息提示对话框使用说明</a>
+        <ol>
+          <li><a href="#quick">快速上手</a></li>
+          <li><a href="#api">showCmxMessage API</a></li>
+          <li><a href="#levels">三个级别</a></li>
+          <li><a href="#theme">主题（亮/暗自适应）</a></li>
+          <li><a href="#help">获取帮助 → 帮助中心</a></li>
+          <li><a href="#present">presentDocError（存储错误一行接入）</a></li>
+          <li><a href="#e2e">端到端：一次保存失败的完整链路</a></li>
+        </ol>
+      </li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════ PART 1 ══════════════════ -->
+  <h2 id="part1">第一部分 · 错误码定义与管理</h2>
+
+  <p>每个错误码有<b>两种形态</b>，永远成对出现、一一对应：</p>
+  <table>
+    <thead><tr><th style="width:180px">形态</th><th style="width:150px">例</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td><b>整数码</b> <span class="pill">code_num: u32</span></td><td><span class="num">1002</span></td><td>便于口头 / 工单 / 日志快速引用（"1002 错误"）。</td></tr>
+      <tr><td><b>字符串码</b> <span class="pill">code: &amp;'static str</span></td><td><code>VALUE_TOO_LONG</code></td><td>SCREAMING_SNAKE，<b>稳定判定 key</b>：前端 if 判定、审计、i18n key、帮助中心定位。<b>永不随文案变化</b>。</td></tr>
+    </tbody>
+  </table>
+  <p>对话框明细行末尾统一显示 <code>[整数码-字符串码]</code>，例如：</p>
+  <pre><code>• [凭证批(cv_batch)] 「凭证批名称」长度超限：最多 50 个字符，实际 116 个  <span class="n">[1002-VALUE_TOO_LONG]</span></code></pre>
+
+  <div class="callout">
+    <b>为什么不用 HTTP 状态码当错误码？</b> HTTP 码是<b>粗分类</b>——十几种校验错都映射到同一个 <code>422</code>，无法区分具体是"超长"还是"必填"。
+    能精确区分"哪种错"的稳定标识，只有这里的 <code>code_num</code> / <code>code_str</code>。
+  </div>
+
+  <h3 id="codes">1.1　错误码全表</h3>
+  <p>共 <b>14</b> 个码，按语义分 4 段（<span class="badge b-seg">1000+</span> 前置列级校验 · <span class="badge b-seg">1100+</span> DB 约束 · <span class="badge b-seg">1200+</span> 并发 · <span class="badge b-seg">1900+</span> 兜底）：</p>
+  <table>
+    <thead><tr><th style="width:90px">整数码</th><th style="width:210px">字符串码</th><th style="width:110px">HTTP</th><th>含义 / 中文消息模板</th></tr></thead>
+    <tbody>
+      <tr><td colspan="4" style="background:#1d242c;color:var(--dim);font-weight:600">前置列级校验（落库前，来自定义规范）</td></tr>
+      <tr><td class="num">1001</td><td><code>TYPE_MISMATCH</code></td><td>422</td><td>值类型与列定义不匹配 · 「{caption}」类型不匹配：期望 {type}，实际值「{actual}」</td></tr>
+      <tr><td class="num">1002</td><td><code>VALUE_TOO_LONG</code></td><td>422</td><td>字符串超列最大长度 · 「{caption}」长度超限：最多 {max} 个字符，实际 {actual} 个</td></tr>
+      <tr><td class="num">1003</td><td><code>NOT_NULL_VIOLATION</code></td><td>422</td><td>非空列缺值 · 「{caption}」不能为空</td></tr>
+      <tr><td class="num">1004</td><td><code>NUMERIC_OUT_OF_RANGE</code></td><td>422</td><td>整数超类型范围 · 「{caption}」数值超出范围：允许 {type}，实际 {actual}</td></tr>
+      <tr><td class="num">1005</td><td><code>DECIMAL_SCALE_EXCEEDED</code></td><td>422</td><td>DECIMAL 精度/标度超限 · 「{caption}」精度超限：最多 {max}，实际 {actual}</td></tr>
+      <tr><td class="num">1006</td><td><code>INVALID_DATE</code></td><td>422</td><td>日期/时间无法解析 · 「{caption}」不是合法的日期/时间：「{actual}」</td></tr>
+      <tr><td class="num">1007</td><td><code>UNKNOWN_COLUMN</code></td><td>422</td><td>目标表不存在的列 · 字段「{column}」在表「{table}」中不存在</td></tr>
+      <tr><td colspan="4" style="background:#1d242c;color:var(--dim);font-weight:600">落库时 DB 约束（PG 原始错误翻译，兜底）</td></tr>
+      <tr><td class="num">1101</td><td><code>UNIQUE_VIOLATION</code></td><td>400</td><td>唯一/主键冲突 · 数据已存在（唯一约束冲突）：{detail}</td></tr>
+      <tr><td class="num">1102</td><td><code>FOREIGN_KEY_VIOLATION</code></td><td>400</td><td>外键不存在 · 引用的关联数据不存在（外键约束）：{detail}</td></tr>
+      <tr><td class="num">1103</td><td><code>CHECK_VIOLATION</code></td><td>400</td><td>CHECK 约束不满足 · 数据不满足校验约束：{detail}</td></tr>
+      <tr><td class="num">1104</td><td><code>NOT_NULL_DB_VIOLATION</code></td><td>400</td><td>DB 层非空（前置漏过兜底） · 「{caption}」不能为空</td></tr>
+      <tr><td colspan="4" style="background:#1d242c;color:var(--dim);font-weight:600">并发</td></tr>
+      <tr><td class="num">1201</td><td><code>OPTIMISTIC_LOCK_CONFLICT</code></td><td>409</td><td>乐观锁冲突 · 数据已被他人修改，请刷新后重试</td></tr>
+      <tr><td colspan="4" style="background:#1d242c;color:var(--dim);font-weight:600">兜底</td></tr>
+      <tr><td class="num">1901</td><td><code>DB_ERROR</code></td><td>500*</td><td>未归类 DB 错误 · 数据保存失败：{detail}</td></tr>
+      <tr><td class="num">1902</td><td><code>INTERNAL_ERROR</code></td><td>500</td><td>内部错误 · 系统内部错误：{detail}</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">* DB_ERROR 映射到 <code>BusinessError</code>；INTERNAL_ERROR 映射到 <code>InternalError</code>。HTTP 列为 <code>http_code()</code> 的粗分类，仅供响应信封使用，不用于区分具体错误。</p>
+
+  <h3 id="where">1.2　在哪里定义</h3>
+  <p>全部集中在一个文件、一个枚举 —— <b>唯一事实源</b>：</p>
+  <pre><code class="path">cmx-container/crates/libs/cmx-biz/src/errcode/mod.rs</code></pre>
+  <p>枚举 <code>CmxErrCode</code> 的每个变体带三段元信息，用 <code>match</code> 一处集中维护：</p>
+  <pre><code><span class="k">pub enum</span> <span class="f">CmxErrCode</span> {
+    TypeMismatch, ValueTooLong, NotNullViolation, <span class="c">/* … 共 14 个变体 */</span>
+}
+
+<span class="k">impl</span> CmxErrCode {
+    <span class="k">pub fn</span> <span class="f">code_str</span>(&<span class="k">self</span>) -> &<span class="s">'static str</span> { <span class="c">// 字符串码</span>
+        <span class="k">match</span> <span class="k">self</span> { Self::ValueTooLong => <span class="s">"VALUE_TOO_LONG"</span>, <span class="c">/* … */</span> }
+    }
+    <span class="k">pub fn</span> <span class="f">code_num</span>(&<span class="k">self</span>) -> <span class="f">u32</span> {       <span class="c">// 整数码（分段：1000/1100/1200/1900）</span>
+        <span class="k">match</span> <span class="k">self</span> { Self::ValueTooLong => <span class="n">1002</span>, <span class="c">/* … */</span> }
+    }
+    <span class="k">pub fn</span> <span class="f">http_code</span>(&<span class="k">self</span>) -> ErrCode { <span class="c">/* → 422/400/409/500 粗分类 */</span> }
+    <span class="k">pub fn</span> <span class="f">message_template</span>(&<span class="k">self</span>) -> &<span class="s">'static str</span> { <span class="c">/* 中文 {占位} 模板 */</span> }
+}</code></pre>
+  <p>校验失败以 <code>Violation</code> 结构承载，<b>整数码 + 字符串码一起</b>下发前端：</p>
+  <pre><code><span class="k">pub struct</span> <span class="f">Violation</span> {
+    <span class="k">pub</span> row:    Option&lt;usize&gt;,    <span class="c">// 出错行索引（0 基）</span>
+    <span class="k">pub</span> table:  String,          <span class="c">// 表名 / 字典 code</span>
+    <span class="k">pub</span> column: Option&lt;String&gt;,   <span class="c">// 出错列（DB 列名）</span>
+    <span class="k">pub</span> caption:Option&lt;String&gt;,   <span class="c">// 列中文名</span>
+    <span class="k">pub</span> code:     &<span class="s">'static str</span>,  <span class="c">// 字符串码 code_str()</span>
+    <span class="k">pub</span> code_num: <span class="f">u32</span>,           <span class="c">// 整数码 code_num()  ← 与 code 一一对应</span>
+    <span class="k">pub</span> message:  String,        <span class="c">// 渲染后的中文提示</span>
+}</code></pre>
+  <div class="callout">
+    <b>唯一构造入口 <code>Violation::new(code, …)</code></b>：内部同时写 <code>code: code.code_str()</code> 和 <code>code_num: code.code_num()</code>。
+    <b>没有任何地方用 struct 字面量手工构造</b>，所以两个码永远同步、不会漏填。
+  </div>
+
+  <h3 id="nodup">1.3　如何保证不重复</h3>
+  <p>两道防线：</p>
+  <table>
+    <thead><tr><th style="width:180px">防线</th><th>机制</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① 编译期</b>（字符串码 / 枚举）</td>
+        <td>码值全在 <code>match self { … }</code> 里，一个变体一个分支。Rust 编译器强制 <b>match 穷尽且不可重复分支</b>——写重了同一个变体编译不过。字符串码天然按变体唯一。</td>
+      </tr>
+      <tr>
+        <td><b>② 测试期</b>（整数码不重复）</td>
+        <td>整数码是人工分配的数字，编译器不管数值是否撞。用单元测试 <code>code_num_stable_and_unique</code> 把 14 个码收进 <code>HashSet</code>，断言 <code>set.len() == 数组长度</code>——<b>撞码即测试失败</b>；并锁定关键码值防误改/重排。</td>
+      </tr>
+    </tbody>
+  </table>
+  <pre><code><span class="c">// cmx-container/crates/libs/cmx-biz/src/errcode/mod.rs（#[cfg(test)]）</span>
+<span class="attr">#[test]</span>
+<span class="k">fn</span> <span class="f">code_num_stable_and_unique</span>() {
+    <span class="k">let</span> all = [ <span class="c">/* 全部 14 个变体 */</span> ];
+    <span class="k">let</span> nums: HashSet&lt;u32&gt; = all.iter().map(|c| c.code_num()).collect();
+    <span class="f">assert_eq!</span>(nums.len(), all.len(), <span class="s">"code_num 必须互不重复"</span>);  <span class="c">// ← 撞码即挂</span>
+    <span class="f">assert_eq!</span>(CmxErrCode::ValueTooLong.code_num(), <span class="n">1002</span>);           <span class="c">// ← 锁定关键值</span>
+    <span class="f">assert_eq!</span>(CmxErrCode::OptimisticLockConflict.code_num(), <span class="n">1201</span>);
+}</code></pre>
+  <p>运行：<code>cargo test -p cmx-biz --lib</code>（errcode 相关随 lib 91 个测试一起跑）。</p>
+
+  <h3 id="addcode">1.4　如何新增一个错误码</h3>
+  <p>只改 <b>一个文件</b>，四处同步（都在同一 <code>impl</code> 内，改动集中）：</p>
+  <ol>
+    <li>在 <code>enum CmxErrCode</code> 加变体（放对应语义段）。</li>
+    <li><code>code_str()</code> 加 <code>Self::X =&gt; "X_SCREAMING_SNAKE"</code>。</li>
+    <li><code>code_num()</code> 加一个<b>该语义段未用过</b>的整数（如列校验类取 1008）。</li>
+    <li><code>http_code()</code> + <code>message_template()</code> 各加一行。</li>
+    <li>把新变体加进 <code>code_num_stable_and_unique</code> 测试的 <code>all[]</code> 数组。</li>
+  </ol>
+  <div class="callout warn">
+    <b>红线</b>：<b>整数码一经分配，永不复用、永不重排</b>（下线的码也不要让给新码）。否则历史日志/工单里的旧号会指向新语义。段内往后取新号即可，段号（1000/1100/…）用完再开新段。
+  </div>
+
+  <h3 id="wire">1.5　错误码怎么流到前端</h3>
+  <pre><code>DocSaver::save 校验失败
+  └─ Violation::new(CmxErrCode::ValueTooLong, …)     <span class="c">// code + code_num 同时写入</span>
+       └─ doc.rs: ApiResp::fail_with_data(422, msg, { violations:[…] })
+            └─ <span class="c">门户 fetch 拦截器（api-client.js）透传 data.violations</span>
+                 └─ 页面 saveVoucher: toErr(res, body) → err.violations
+                      └─ presentDocError(err) → describeDocError → 对话框
+                           └─ formatViolations() 拼出 <span class="n">[1002-VALUE_TOO_LONG]</span></code></pre>
+  <div class="callout">
+    <b>历史坑（已修）</b>：门户全局 fetch 拦截器 <span class="path">api-client.js</span> 早期把业务错误信封转成 <code>{error, code}</code> 时<b>丢掉了整个 <code>data</code></b>，导致 <code>violations</code> 全没了、对话框退化成一句"数据校验未通过"。现已透传 <code>data</code> 及 <code>data.violations</code>。
+  </div>
+
+  <!-- ══════════════════ PART 2 ══════════════════ -->
+  <h2 id="part2">第二部分 · 信息提示对话框使用说明</h2>
+
+  <p><code>cmx-message-dialog</code> 是<b>通用、零依赖、自包含</b>的信息提示对话框：纯 DOM + Shadow DOM 隔离样式，不依赖 UI5/外部 CSS，不污染宿主。三个级别、亮/暗主题自适应、居中适中、可访问（<code>alertdialog</code> / ESC / 焦点锁）。</p>
+
+  <h3 id="quick">2.1　快速上手</h3>
+  <p>从 <code>cmx-data-comp</code> 导入，或页面里经 <code>globalThis.__cmxDataComp</code> 取用：</p>
+  <pre><code><span class="c">// ① ES module 导入</span>
+<span class="k">import</span> { showCmxMessage, cmxInfo, cmxWarn, cmxError } <span class="k">from</span> <span class="s">'cmx-data-comp'</span>
+
+<span class="c">// ② html-pages / native-pages 里（全局对象）</span>
+<span class="k">const</span> C = globalThis.__cmxDataComp
+C.<span class="f">showCmxMessage</span>({ level:<span class="s">'error'</span>, title:<span class="s">'保存失败'</span>, message:<span class="s">'字段超长'</span> })
+
+<span class="c">// ③ 便捷别名（第一参就是正文）</span>
+C.<span class="f">cmxInfo</span>(<span class="s">'已保存'</span>)
+C.<span class="f">cmxWarn</span>(<span class="s">'版本号已存在'</span>, { helpCode:<span class="s">'DEF_VERSION_DUP'</span> })
+<span class="k">await</span> C.<span class="f">cmxError</span>(<span class="s">'服务器 500'</span>, { title:<span class="s">'新建失败'</span>, helpCode:<span class="s">'DEF_CREATE_FAILED'</span> })</code></pre>
+
+  <h3 id="api">2.2　showCmxMessage(opts) API</h3>
+  <table>
+    <thead><tr><th style="width:150px">参数</th><th style="width:170px">类型 / 默认</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>level</code></td><td><span class="pill">'info'|'warning'|'error'</span> = <code>'info'</code></td><td>级别。非法值回退 <code>info</code>。</td></tr>
+      <tr><td><code>title</code></td><td>string</td><td>标题。缺省用级别名（信息/警告/错误）。</td></tr>
+      <tr><td><code>message</code></td><td>string</td><td>正文，支持多行 <code>\n</code>（渲染为换行）。</td></tr>
+      <tr><td><code>details</code></td><td>string[]</td><td>明细列表，每项一行（如各条 violation）。渲染成带滚动的明细框。</td></tr>
+      <tr><td><code>helpCode</code></td><td>string</td><td>帮助定位码（如错误码）。<b>warning/error</b> 且有 helpCode/helpUrl 时显示「获取帮助」。</td></tr>
+      <tr><td><code>helpUrl</code></td><td>string</td><td>帮助 URL。门户无监听时回退 <code>window.open</code> 新标签打开。</td></tr>
+      <tr><td><code>okText</code></td><td>string = <code>'确定'</code></td><td>主按钮文案。</td></tr>
+      <tr><td><code>allowCopy</code></td><td>boolean</td><td>是否显示「复制详情」。缺省：error 且有 details 时为 true。</td></tr>
+      <tr><td><code>onClose</code></td><td>function(how)</td><td>关闭回调，<code>how</code> = <code>'ok'</code> 或 <code>'help'</code>。</td></tr>
+    </tbody>
+  </table>
+  <p><b>返回</b> <code>Promise&lt;'ok'|'help'&gt;</code>：点确定/ESC/点遮罩 → <code>'ok'</code>；点获取帮助 → <code>'help'</code>。</p>
+  <p><b>关闭方式</b>：确定按钮、ESC 键、点击遮罩，三者都关闭并 resolve <code>'ok'</code>。</p>
+
+  <h3 id="levels">2.3　三个级别</h3>
+  <div class="two">
+    <table>
+      <thead><tr><th>级别</th><th>用途</th><th>获取帮助</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge b-info">信息 info</span></td><td>成功/中性告知，如"已保存"</td><td>不显示</td></tr>
+        <tr><td><span class="badge b-warn">警告 warning</span></td><td>可恢复/需注意，如"版本已存在""保存冲突"</td><td>显示</td></tr>
+        <tr><td><span class="badge b-err">错误 error</span></td><td>失败，如"保存失败""校验未通过"</td><td>显示</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout"><b>选级别的经验法则</b>：能让用户改一下就好的 → <b>警告</b>（前置校验没填、版本重名、乐观锁冲突）；操作确实失败了 → <b>错误</b>（列校验失败、500、网络异常）；纯告知/成功 → <b>信息</b>。</div>
+
+  <h3 id="theme">2.4　主题（亮 / 暗自适应）</h3>
+  <p>对话框<b>自动跟随门户 UI5 主题</b>，无需传参。判定顺序：</p>
+  <ol>
+    <li>读门户主题键 <code>__portal_ui5_theme__</code>——<b>先 <code>sessionStorage</code>、后 <code>localStorage</code></b>（门户实际写 sessionStorage）。含 <code>dark</code>/<code>hcb</code> → 暗色；亮色/<code>hcw</code> → 亮色。</li>
+    <li>读不到 → 回退系统偏好 <code>prefers-color-scheme</code>。</li>
+  </ol>
+  <p><b>实时跟随</b>：已打开的对话框会监听 <code>cmx-portal-theme-change</code>（门户切主题）与 <code>storage</code>（跨标签页），明暗变化时按新主题重开并保留内容。</p>
+  <div class="callout warn">
+    <b>历史坑（已修）</b>：门户主题写在 <code>sessionStorage</code>，而对话框早期只读 <code>localStorage</code>——键名相同但存储不同，永远读不到 → 亮色主题下对话框仍是暗的。现已两处都查、且 session 优先。
+  </div>
+
+  <h3 id="help">2.5　获取帮助 → 帮助中心</h3>
+  <p>warning/error 级点「获取帮助」时，对话框派发 <code>cmx-help-request</code> 事件（<code>composed</code> 冒泡到 <code>window</code>）：</p>
+  <pre><code>detail = { code: opts.helpCode, level, title, url: opts.helpUrl }</code></pre>
+  <p>门户 <span class="path">portal-app.js</span> 监听此事件 → 打开<b>帮助中心</b>，并把错误码/标题作为上下文传给 AI 助手就地答疑；<code>preventDefault</code> 表示已接管，对话框便不再回退 <code>window.open</code>。<b>门户是常驻根组件，全局生效</b>——任何页面弹的对话框都能跳帮助中心。</p>
+
+  <h3 id="present">2.6　presentDocError —— 存储错误一行接入</h3>
+  <p>调 DCT/DOC 存储服务（<code>saveDocData</code> / <code>/api/doc/save</code> / <code>/api/dict/save</code>）的页面，<b>不用自己判断错误类型</b>，catch 里一行交给 <code>presentDocError</code>：</p>
+  <pre><code><span class="k">try</span> {
+  <span class="k">await</span> saveDocData(host, def, { saveMode:<span class="s">'merge'</span>, changes })
+} <span class="k">catch</span> (err) {
+  <span class="k">const</span> r = <span class="k">await</span> C.<span class="f">presentDocError</span>(err, {
+    action: <span class="s">'save'</span>,                        <span class="c">// save|load|delete|op → 默认标题/帮助码</span>
+    tableNames: { cv_batch:<span class="s">'凭证批'</span>, cv_acc_line:<span class="s">'科目行'</span> }  <span class="c">// 表名→中文层名（violation 前缀）</span>
+  })
+  <span class="k">if</span> (r &amp;&amp; r.kind === <span class="s">'conflict'</span>) <span class="k">await</span> reload()   <span class="c">// 冲突：确认后刷新到最新版</span>
+}</code></pre>
+  <p><code>presentDocError</code> 自动把存储层错误分成四类、映射到对话框：</p>
+  <table>
+    <thead><tr><th style="width:130px">err 形态</th><th style="width:110px">kind</th><th style="width:90px">级别</th><th>对话框</th></tr></thead>
+    <tbody>
+      <tr><td><code>err.conflict</code>（409）</td><td>conflict</td><td><span class="badge b-warn">警告</span></td><td>"他人已修改，请刷新重试"；返回后可 <code>reload()</code></td></tr>
+      <tr><td><code>err.validation</code> + <code>err.violations</code>（422）</td><td>validation</td><td><span class="badge b-err">错误</span></td><td>标题"数据校验未通过" + 逐行明细 <code>[码] 层[列] 原因</code></td></tr>
+      <tr><td>普通 Error（500/网络）</td><td>generic</td><td><span class="badge b-err">错误</span></td><td>剥掉 <code>[funcName]</code> 技术前缀后展示</td></tr>
+      <tr><td><code>AbortError</code>（请求取消）</td><td>abort</td><td>—</td><td><b>静默不弹</b>（正常中断），返回 <code>null</code></td></tr>
+    </tbody>
+  </table>
+  <p><b>返回</b> <code>Promise&lt;{kind, choice}|null&gt;</code>：已弹出 → <code>{kind, choice:'ok'|'help'}</code>；被静默 → <code>null</code>。</p>
+  <p class="sub">另有纯映射函数 <code>describeDocError(err, opts)</code>（不碰 DOM，返回 <code>{kind, level, title, message, details, helpCode}</code>），供单测或自定义渲染。</p>
+
+  <h4><span class="badge b-info">action</span> 默认标题 / 帮助码</h4>
+  <table>
+    <thead><tr><th>action</th><th>generic 标题</th><th>generic 帮助码</th></tr></thead>
+    <tbody>
+      <tr><td><code>save</code></td><td>保存失败</td><td>DOC_SAVE_FAILED</td></tr>
+      <tr><td><code>load</code></td><td>装载失败</td><td>DOC_LOAD_FAILED</td></tr>
+      <tr><td><code>delete</code></td><td>删除失败</td><td>DOC_DELETE_FAILED</td></tr>
+      <tr><td><code>op</code></td><td>操作失败</td><td>DOC_OP_FAILED</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="e2e">2.7　端到端 —— 一次保存失败的完整链路</h3>
+  <p>用户在凭证页把批名称填成 116 字（列限 50），点保存：</p>
+  <pre><code><span class="c">1) 后端 DocSaver 校验失败 → Violation::new(ValueTooLong, "cv_batch", "batch_name", "凭证批名称", …)</span>
+<span class="c">   下发 { code:422, msg:"数据校验未通过（1 处）",</span>
+<span class="c">          data:{ violations:[{ table:"cv_batch", column:"batch_name", caption:"凭证批名称",</span>
+<span class="c">                               code:"VALUE_TOO_LONG", code_num:1002,</span>
+<span class="c">                               message:"「凭证批名称」长度超限：最多 50 个字符，实际 116 个" }] } }</span>
+
+<span class="c">2) 门户 fetch 拦截器透传 data.violations（不再丢弃）</span>
+
+<span class="c">3) 页面 toErr(res, body) → err.validation=true, err.violations=[…]</span>
+
+<span class="c">4) presentDocError(err, { action:'save', tableNames:{cv_batch:'凭证批'} })</span></code></pre>
+  <p><b>最终对话框</b>：</p>
+  <pre style="border-color:var(--err)"><code><span class="b-err badge">错误</span> <b style="color:var(--txt)">数据校验未通过</b>
+
+以下字段未通过校验，请修正后重试：
+┌─────────────────────────────────────────────────────────────┐
+│ • [凭证批(cv_batch)] 「凭证批名称」长度超限：最多 50 个字符，       │
+│   实际 116 个  <span class="n">[1002-VALUE_TOO_LONG]</span>                              │
+└─────────────────────────────────────────────────────────────┘
+        [获取帮助]              [复制详情]  [确定]</code></pre>
+  <p class="sub">「获取帮助」带的定位码是首条 violation 的字符串码 <code>VALUE_TOO_LONG</code>（稳定 key）；明细行同时显示整数码，便于口头引用"1002 错误"。</p>
+
+  <hr>
+  <div class="meta">
+    <b>相关源文件</b><br>
+    错误码：<span class="path">cmx-container/crates/libs/cmx-biz/src/errcode/mod.rs</span><br>
+    对话框：<span class="path">packages/cmx-data-comp/src/lib/cmx-message-dialog.js</span><br>
+    接入层：<span class="path">packages/cmx-data-comp/src/lib/cmx-doc-error-presenter.js</span><br>
+    明细格式化：<span class="path">packages/cmx-data-comp/src/lib/cmx-doc-source.js</span> · <code>formatViolations()</code><br>
+    fetch 拦截器：<span class="path">CMXPortalManager/src/lib/api-client.js</span><br>
+    帮助中心桥：<span class="path">CMXPortalManager/src/components/portal-app.js</span><br>
+    <b>可视预览</b>：<span class="path">packages/cmx-data-comp/preview-message-dialog.html</span>（vite 起，可切明暗、看六类错误）
+  </div>
+  <p class="sub" style="text-align:center;margin-top:30px">CMX 内部技术说明 · 内容与源码一致（如源码变更请同步本文）</p>
+
+</div>
+</body>
+</html>

@@ -552,7 +552,7 @@ pub async fn doc_save(
             return Ok(Json(ApiResp::ok(vr)));
         }
 
-    let result = DocSaver::save(
+    let result = match DocSaver::save(
         mm,
         &db_id,
         &meta,
@@ -560,7 +560,21 @@ pub async fn doc_save(
         &changes,
         &save_ctx(&ctx, &q.file, None),
     )
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        // 列级校验失败：返回结构化 422（data.violations），前端逐行逐列高亮。
+        Err(e) => {
+            if let Some(vs) = e.violations() {
+                return Ok(Json(ApiResp::fail_with_data(
+                    422,
+                    format!("数据校验未通过（{} 处）", vs.len()),
+                    serde_json::json!({ "violations": vs }),
+                )));
+            }
+            return Err(e.into());
+        }
+    };
 
     Ok(Json(ApiResp::ok(
         serde_json::to_value(result).map_err(serde_err_to_api)?,

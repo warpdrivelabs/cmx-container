@@ -42,6 +42,8 @@ pub struct LayerView {
     pub agg_fields: Vec<String>,
     /// 该层物理 Schema（Arc 共享，供装载零拷贝复用）
     pub schema: Arc<Schema>,
+    /// 落库前列级校验规范（含类型/长度/精度/nullable；从合并后原始字段构建）。
+    pub spec: Arc<crate::validation::TableSpec>,
 }
 
 impl LayerView {
@@ -454,11 +456,14 @@ fn parse_layer(
     // 列 = 本表 fields + documentFieldSets 展开（去重）
     let mut columns: Vec<ColumnView> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
+    // 合并后的原始字段（带 fieldLength/decimalDigits），供构建落库校验规范 TableSpec。
+    let mut raw_fields: Vec<Value> = Vec::new();
 
     if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
         for f in own {
             if let Some(c) = parse_column(f)
                 && seen.insert(c.name.clone()) {
+                    raw_fields.push(f.clone());
                     columns.push(c);
                 }
         }
@@ -470,6 +475,7 @@ fn parse_layer(
                     for f in fields {
                         if let Some(c) = parse_column(f)
                             && seen.insert(c.name.clone()) {
+                                raw_fields.push(f.clone());
                                 columns.push(c);
                             }
                     }
@@ -498,6 +504,13 @@ fn parse_layer(
         .unwrap_or("")
         .to_string();
 
+    // 落库前列级校验规范（从合并后原始字段构建；DOC 层主键约定为 "id"）。
+    let spec = Arc::new(crate::validation::build_table_spec(
+        table_name.clone(),
+        "id",
+        &raw_fields,
+    ));
+
     Ok(LayerView {
         id,
         table_name,
@@ -508,6 +521,7 @@ fn parse_layer(
         summaries,
         agg_fields,
         schema,
+        spec,
     })
 }
 

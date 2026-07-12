@@ -128,7 +128,14 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
         .get("decimalDigits")
         .and_then(|v| v.as_u64())
         .map(|n| n as u32);
-    let is_pk = !id_field.is_empty() && name == id_field;
+    let is_pk = (!id_field.is_empty() && name == id_field)
+        || f.get("isPrimaryKey")
+            .and_then(|v| v.as_i64())
+            .map(|n| n != 0)
+            .unwrap_or(false)
+        || f.get("isPrimaryKey")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
     // 长度 / 精度：VARCHAR 用 length；DECIMAL 用 precision(=fieldLength)+scale(=decimalDigits)。
     let (length, precision, scale) = match ft {
@@ -238,11 +245,42 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
         if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
             push_fields(own, &mut columns, &mut seen, &mut ord);
         }
-        for set_key in ["baseFieldSet", "auditFieldSet", "systemFieldSet"] {
+        // 合并全部 *FieldSet 引用（base/hierarchy/audit/effective/disable/scope/system…）。
+        // 固定顺序保证列序稳定；hierarchyFieldSet 提供自分级字典的 parent_id/full_path/level_no/is_leaf。
+        for set_key in [
+            "baseFieldSet",
+            "hierarchyFieldSet",
+            "scopeFieldSet",
+            "effectiveFieldSet",
+            "disableFieldSet",
+            "auditFieldSet",
+            "systemFieldSet",
+        ] {
             if let Some(set_name) = t.get(set_key).and_then(|v| v.as_str())
                 && let Some(fields) = base_fieldset(base, set_name) {
                     push_fields(fields, &mut columns, &mut seen, &mut ord);
                 }
+        }
+        // 兜底：捕获上面未列出的任何 `*FieldSet` 键（前向兼容新增字段集）。
+        if let Some(obj) = t.as_object() {
+            for (k, v) in obj {
+                if k.ends_with("FieldSet")
+                    && !matches!(
+                        k.as_str(),
+                        "baseFieldSet"
+                            | "hierarchyFieldSet"
+                            | "scopeFieldSet"
+                            | "effectiveFieldSet"
+                            | "disableFieldSet"
+                            | "auditFieldSet"
+                            | "systemFieldSet"
+                    )
+                    && let Some(set_name) = v.as_str()
+                    && let Some(fields) = base_fieldset(base, set_name)
+                {
+                    push_fields(fields, &mut columns, &mut seen, &mut ord);
+                }
+            }
         }
 
         let primary_keys: Vec<String> = columns
