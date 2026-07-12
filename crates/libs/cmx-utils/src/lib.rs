@@ -59,6 +59,8 @@ pub use config::{
     Config, ConfigBuilder, ConfigManager, ConfigStore, ConfigValue, DefaultConfigLoader,
     FromConfigValue,
 };
-pub use id::{SnowflakeGenerator, UuidGenerator, snowflake_id, snowflake_id_str};
+pub use id::{
+    Pk52Generator, SnowflakeGenerator, UuidGenerator, next_pk_id, snowflake_id, snowflake_id_str,
+};
 pub use sync_utils::{read_lock, write_lock};
 pub use zip::{ZipCompressor, ZipError, ZipExtractor, ZipResult};

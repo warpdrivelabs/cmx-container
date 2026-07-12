@@ -370,6 +370,11 @@ mod tests {
             summaries: Vec::new(),
             agg_fields: Vec::new(),
             schema: Arc::new(Schema::new_unchecked(table, fields)),
+            spec: Arc::new(crate::validation::TableSpec {
+                table: table.to_string(),
+                columns: std::collections::HashMap::new(),
+                order: Vec::new(),
+            }),
         }
     }
 

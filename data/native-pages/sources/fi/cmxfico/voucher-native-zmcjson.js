@@ -111,6 +111,15 @@ const COLUMN_DEFS = {
 
 /* ── 主从 schema（与后端 relations 对齐：id→upper_id 四层） ───────────────── */
 
+
+/* ── 物理表名 → 中文层名（校验失败提示定位「哪一层」用） ─────────────────── */
+const TABLE_NAMES = {
+  cv_batch: '凭证批',
+  cv_header: '凭证头',
+  cv_acc_line: '科目行',
+  cv_aux_line: '辅助核算行',
+}
+
 const SCHEMA = [{
   id: 'cv_batch',
   children: [{
@@ -167,7 +176,10 @@ function styleHtml () {
 
 function setMsg (root, text) {
   const el = root.querySelector('#vchMsg')
-  if (el) el.textContent = text || ''
+  if (el) {
+    el.style.whiteSpace = 'pre-wrap'
+    el.textContent = text || ''
+  }
 }
 
 function buildColumnModel (C, datasetId, cols) {
@@ -251,14 +263,14 @@ async function saveVoucher (root) {
   try {
     let result
     if (typeof C.saveDocData === 'function') {
-      result = await C.saveDocData(null, { ...DEF, dbId: DB_ID }, { saveMode: 'merge', changes })
+      result = await C.saveDocData(null, { ...DEF, dbId: DB_ID }, { saveMode: 'merge', changes, tableNames: TABLE_NAMES })
     } else {
       result = await apiPost(saveQuery(), { saveMode: 'merge', changes })
     }
     state.collector.reset()
     setMsg(root, `保存成功：影响 ${result.affected} 行`)
   } catch (e) {
-    setMsg(root, `保存失败：${e.message}`)
+    setMsg(root, e && e.violations ? `数据校验未通过：\n${C.formatViolations(e.violations, TABLE_NAMES)}` : `保存失败：${e.message}`)
   }
 }
 

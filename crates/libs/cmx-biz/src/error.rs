@@ -2,6 +2,8 @@
 
 use thiserror::Error;
 
+use crate::errcode::{CmxErrCode, Violation};
+
 /// cmx-biz 统一错误类型
 #[derive(Debug, Error)]
 pub enum BizError {
@@ -24,6 +26,14 @@ pub enum BizError {
     /// 资源冲突（乐观锁：单据已被他人修改）。映射 HTTP 409。
     #[error("{0}")]
     Conflict(String),
+
+    /// 落库前列级校验失败（结构化 violations，一次回报全部）。映射 HTTP 422。
+    #[error("数据校验未通过（{} 处）", .0.len())]
+    Validation(Vec<Violation>),
+
+    /// 数据库约束错误（PG 原始错误已翻译成优雅提示 + 稳定错误码）。
+    #[error("{message}")]
+    DbConstraint { code: CmxErrCode, message: String },
 
     /// JSON 序列化/反序列化错误
     #[error("JSON 解析错误: {0}")]
@@ -61,6 +71,30 @@ impl BizError {
         Self::Conflict(msg.into())
     }
 
+    /// 创建列级校验失败错误（结构化 violations）。
+    pub fn validation(violations: Vec<Violation>) -> Self {
+        Self::Validation(violations)
+    }
+
+    /// 从 PG 原始错误串创建「已翻译的约束错误」——不再暴露英文原文给前端。
+    pub fn from_db_error(raw: &str) -> Self {
+        let code = crate::errcode::classify_db_error(raw);
+        let detail = crate::errcode::brief_db_detail(raw);
+        let message = crate::errcode::render(
+            code.message_template(),
+            &[("detail", detail)],
+        );
+        Self::DbConstraint { code, message }
+    }
+
+    /// 取结构化 violations（仅 Validation 变体有）。供 handler 组装 `data.violations`。
+    pub fn violations(&self) -> Option<&[Violation]> {
+        match self {
+            Self::Validation(v) => Some(v),
+            _ => None,
+        }
+    }
+
     /// 批量保存里给错误加「第 N 单」定位前缀，**保留原变体**（如 Conflict 仍映射 409）。
     pub fn from_batch_item(index: usize, e: BizError) -> Self {
         let tag = format!("第 {} 单保存失败: ", index + 1);
@@ -68,6 +102,9 @@ impl BizError {
             BizError::Conflict(m) => BizError::Conflict(format!("{tag}{m}")),
             BizError::NotFound(m) => BizError::NotFound(format!("{tag}{m}")),
             BizError::Business(m) => BizError::Business(format!("{tag}{m}")),
+            // Validation/DbConstraint 已是结构化/优雅错误，不加前缀污染（保留原样）。
+            v @ BizError::Validation(_) => v,
+            c @ BizError::DbConstraint { .. } => c,
             other => BizError::Internal(format!("{tag}{other}")),
         }
     }
@@ -90,6 +127,13 @@ impl From<BizError> for cmx_traits::error::TraitError {
             BizError::NotFound(msg) => cmx_traits::error::TraitError::NotFound(msg),
             // TraitError 无 Conflict 语义（rpc/wasm 层不区分）→ 归为 Business，保留文案。
             BizError::Conflict(msg) => cmx_traits::error::TraitError::Business(msg),
+            // 校验/约束错误在 rpc/wasm 层归为 Business，保留优雅文案。
+            BizError::Validation(vs) => cmx_traits::error::TraitError::Business(
+                vs.first().map(|v| v.message.clone()).unwrap_or_else(|| "数据校验未通过".into()),
+            ),
+            BizError::DbConstraint { message, .. } => {
+                cmx_traits::error::TraitError::Business(message)
+            }
             BizError::PluginInvoke(msg) => cmx_traits::error::TraitError::WasmInvokeFailed(msg),
             BizError::Orchestration(msg) => cmx_traits::error::TraitError::OrchestrationFailed(msg),
             BizError::Crud(err) => {
@@ -113,6 +157,24 @@ impl From<BizError> for cmx_api_types::Error {
             BizError::Business(msg) => cmx_api_types::Error::business_error(msg),
             BizError::NotFound(msg) => cmx_api_types::Error::not_found(msg),
             BizError::Conflict(msg) => cmx_api_types::Error::conflict(msg),
+            // 列级校验失败：铺平成消息列表（走 422）。handler 通常直接返回结构化 data.violations，
+            // 不经此路径；此为 `?` 冒泡时的兜底。
+            BizError::Validation(vs) => {
+                let msgs: Vec<String> = vs.into_iter().map(|v| v.message).collect();
+                cmx_api_types::Error::validation_error(msgs)
+            }
+            // 已翻译的约束错误：按错误码的 HTTP 类别映射，绝不暴露 PG 原文。
+            BizError::DbConstraint { code, message } => {
+                use cmx_api_types::ErrCode;
+                match code.http_code() {
+                    ErrCode::Conflict => cmx_api_types::Error::conflict(message),
+                    ErrCode::ValidationError => {
+                        cmx_api_types::Error::validation_error(vec![message])
+                    }
+                    ErrCode::BadRequest => cmx_api_types::Error::bad_request(message),
+                    _ => cmx_api_types::Error::business_error(message),
+                }
+            }
             BizError::SerdeJson(e) => cmx_api_types::Error::from(e),
             BizError::Database(msg)
             | BizError::PluginInvoke(msg)

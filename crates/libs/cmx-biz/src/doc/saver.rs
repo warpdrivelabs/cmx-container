@@ -96,6 +96,10 @@ pub struct SaveResult {
     /// 支持「连续保存不刷新页」。空则不回传（`camelCase` 序列化为 `updatedAt`）。
     #[serde(rename = "updatedAt", skip_serializing_if = "Vec::is_empty")]
     pub updated_at: Vec<UpdatedBaseline>,
+    /// 后端首次存储铸号后的「前端临时 id → 新真 id」映射（merge 新增行）。供前端把临时行的
+    /// id 换成真号（避免「新建后立即再改」错位）。空则不回传（序列化为 `idMap`）。
+    #[serde(rename = "idMap", skip_serializing_if = "Map::is_empty")]
+    pub id_map: Map<String, Value>,
 }
 
 /// 一行更新后的新基线（id + 新 update_time）。
@@ -124,6 +128,8 @@ pub struct BatchOutcome {
     pub affected: u64,
     #[serde(rename = "updatedAt", skip_serializing_if = "Vec::is_empty")]
     pub updated_at: Vec<UpdatedBaseline>,
+    #[serde(rename = "idMap", skip_serializing_if = "Map::is_empty")]
+    pub id_map: Map<String, Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -152,7 +158,7 @@ impl DocSaver {
         let outcome = Self::apply_and_version(mm, db_id, &txn_id, meta, mode, changes, sctx).await;
 
         match outcome {
-            Ok((affected, updated_at)) => {
+            Ok((affected, updated_at, id_map)) => {
                 guard
                     .commit()
                     .await
@@ -162,6 +168,7 @@ impl DocSaver {
                     mode: mode.as_str().into(),
                     affected,
                     updated_at,
+                    id_map,
                 })
             }
             Err(e) => {
@@ -198,6 +205,7 @@ impl DocSaver {
                         mode: r.mode,
                         affected: r.affected,
                         updated_at: r.updated_at,
+                        id_map: r.id_map,
                         error: None,
                     },
                     Err(e) => BatchOutcome {
@@ -206,6 +214,7 @@ impl DocSaver {
                         mode: item.mode.as_str().into(),
                         affected: 0,
                         updated_at: Vec::new(),
+                        id_map: Map::new(),
                         error: Some(e.to_string()),
                     },
                 };
@@ -234,12 +243,13 @@ impl DocSaver {
             match Self::apply_and_version(mm, db_id, &txn_id, item.meta, item.mode, item.changes, item.sctx)
                 .await
             {
-                Ok((affected, updated_at)) => outcomes.push(BatchOutcome {
+                Ok((affected, updated_at, id_map)) => outcomes.push(BatchOutcome {
                     index,
                     ok: true,
                     mode: item.mode.as_str().into(),
                     affected,
                     updated_at,
+                    id_map,
                     error: None,
                 }),
                 Err(e) => {
@@ -269,7 +279,7 @@ impl DocSaver {
     ///
     /// 抽出供单单 [`save`]（自开 guard）与批量 [`save_batch`]（多单共用一个 guard）复用——
     /// **不含 begin/commit/rollback**，事务生命周期由调用方掌握。任一步 `?` 失败即向上抛（调用方回滚）。
-    /// 返回 (影响行数, 已更新根行新基线)。审计时间戳每次调用独立捕获（`Utc::now()`）。
+    /// 返回 (影响行数, 已更新根行新基线, 铸号 idMap)。审计时间戳每次调用独立捕获（`Utc::now()`）。
     async fn apply_and_version(
         mm: &DatabaseManager,
         db_id: &str,
@@ -278,12 +288,29 @@ impl DocSaver {
         mode: SaveMode,
         changes: &Value,
         sctx: &SaveCtx,
-    ) -> Result<(u64, Vec<UpdatedBaseline>)> {
+    ) -> Result<(u64, Vec<UpdatedBaseline>, Map<String, Value>)> {
         // 审计上下文：本单据全程共用一个时间戳，由服务端权威填充（覆盖前端传值）。
         let audit = AuditCtx {
             actor: sctx.actor_id,
             now: Utc::now(),
         };
+        // 后端首次存储铸号（merge）：为 inserted 的「临时 id」行铸真号（52 位 JS 安全），
+        // 并把子层外键（upper_id 或命名 childKey 如 header_id）指向的父临时 id 重指向为真号。
+        // 全局两遍改写，与层序无关。在 apply/version/baseline **之前**做，确保写库、版本快照、
+        // 基线都看到真号。
+        let (changes_owned, id_map) = match mode {
+            SaveMode::Merge => {
+                // 本单据全部 childKey（去重）：upper_id + 命名外键。子行的父引用可能落在其中任一列。
+                let mut child_keys: Vec<String> =
+                    meta.relations.iter().map(|r| r.child_key.clone()).collect();
+                child_keys.push("upper_id".to_string()); // 前端 collector 规范化的默认外键
+                child_keys.sort();
+                child_keys.dedup();
+                mint_ids_for_changeset(changes, &child_keys)
+            }
+            SaveMode::Replace => (changes.clone(), Map::new()),
+        };
+        let changes = &changes_owned;
         let affected = match mode {
             SaveMode::Merge => Self::apply_merge(mm, db_id, txn_id, meta, changes, &audit).await?,
             SaveMode::Replace => {
@@ -294,7 +321,7 @@ impl DocSaver {
         Self::record_versions(mm, db_id, txn_id, meta, mode, changes, sctx).await?;
         // B2：本次已更新根行的新基线（新 update_time = audit.now，服务端已知无需再查）。
         let updated_at = new_root_baselines(changes, meta, mode, &audit);
-        Ok((affected, updated_at))
+        Ok((affected, updated_at, id_map))
     }
 
     // ─────────────────── merge 模式 ───────────────────
@@ -319,6 +346,13 @@ impl DocSaver {
 
         // 静默零写防护（H1）：changes 里每个 key 都必须能对上某一层，否则报错而非静默丢弃。
         Self::assert_all_keys_matched(changes, meta)?;
+
+        // 落库前列级校验（类型/长度/精度/非空）：逐层 inserted 整行校验 + updated 字段校验。
+        // 有违规 → BizError::Validation（handler 转 422 + 结构化 violations），开写前拦截。
+        let violations = Self::validate_changeset(changes, meta);
+        if !violations.is_empty() {
+            return Err(BizError::validation(violations));
+        }
 
         // 父先：按 layer_order 正序 批量 UPSERT / UPDATE
         for (idx, layer_id) in meta.layer_order.iter().enumerate() {
@@ -808,7 +842,9 @@ impl DocSaver {
     ) -> Result<u64> {
         mm.execute_sql_with_datavalues(db_id, Some(txn_id), sql, params)
             .await
-            .map_err(|e| BizError::internal(format!("执行回存 SQL 失败: {e} | {sql}")))
+            // 落库失败：把 PG 原始错误翻译成优雅提示 + 稳定错误码（唯一键/外键/非空等），
+            // 不再暴露英文原文 + SQL。前置列校验已拦大部分，此为兜底。
+            .map_err(|e| BizError::from_db_error(&e.to_string()))
     }
 
     /// 静默零写防护（H1）：changes 里每个 key 必须能对上某一层，否则报错。
@@ -835,6 +871,71 @@ impl DocSaver {
         }
         Ok(())
     }
+
+    /// 落库前列级校验：逐层 inserted 整行校验（含 NOT NULL，跳过服务端 backfill 列）+
+    /// updated 字段校验（不做整表 NOT NULL）。返回全部 [`Violation`]（不遇错即停）。
+    fn validate_changeset(
+        changes: &Map<String, Value>,
+        meta: &DocMetaView,
+    ) -> Vec<crate::errcode::Violation> {
+        use crate::validation::{validate_insert_row, validate_update_fields, ValidateOptions};
+        let vopts_insert = ValidateOptions {
+            server_filled: DOC_SERVER_FILLED_COLS,
+            server_replaced: DOC_SERVER_REPLACED_COLS,
+            check_unknown: false,
+            check_not_null: true,
+        };
+        let vopts_update = ValidateOptions {
+            server_filled: DOC_SERVER_FILLED_COLS,
+            server_replaced: DOC_SERVER_REPLACED_COLS,
+            check_unknown: false,
+            check_not_null: false,
+        };
+        let mut out = Vec::new();
+        for (idx, layer_id) in meta.layer_order.iter().enumerate() {
+            let Some(layer) = meta.layer(layer_id) else { continue };
+            let Some(lc) = layer_changes_for(changes, meta, idx, layer) else { continue };
+            // inserted：{ id, upper_id?, fields:{...} } → 铺平成整行对象再校验（含顶层 id/upper_id）。
+            if let Some(rows) = lc.get("inserted").and_then(|v| v.as_array()) {
+                for (i, row) in rows.iter().enumerate() {
+                    let flat = flatten_insert_row(row);
+                    out.extend(validate_insert_row(&layer.spec, &flat, Some(i), &vopts_insert));
+                }
+            }
+            // updated：只校验 fields。
+            if let Some(rows) = lc.get("updated").and_then(|v| v.as_array()) {
+                for (i, row) in rows.iter().enumerate() {
+                    if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
+                        out.extend(validate_update_fields(&layer.spec, fields, Some(i), &vopts_update));
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+/// DOC 服务端 backfill 列（仅影响 NOT NULL；用户提供值仍校验）——审计人/删除标识。
+const DOC_SERVER_FILLED_COLS: &[&str] = &["create_by", "update_by", "delete_flag"];
+
+/// DOC 服务端**始终替换值**的列（完全跳过值校验）——id 铸号、结构键、时间戳。
+const DOC_SERVER_REPLACED_COLS: &[&str] =
+    &["id", "upper_id", "line_no", "create_time", "update_time"];
+
+/// 把 inserted 行 `{ id, upper_id?, line_no?, fields:{...} }` 铺平成整行对象（顶层键 + fields）。
+fn flatten_insert_row(row: &Value) -> Map<String, Value> {
+    let mut flat = Map::new();
+    for top in ["id", "upper_id", "line_no"] {
+        if let Some(v) = row.get(top) {
+            flat.insert(top.to_string(), v.clone());
+        }
+    }
+    if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
+        for (k, v) in fields {
+            flat.insert(k.clone(), v.clone());
+        }
+    }
+    flat
 }
 
 /// 从 changes 里取某层的变更桶，兼容三种 key 形态：
@@ -990,6 +1091,102 @@ fn new_root_baselines(
 /// 内部双引号转义为两个双引号。列名已过 schema 白名单，这里只防关键字冲突。
 fn quote_ident(ident: &str) -> String {
     format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
+// ─────────────────── 后端首次存储铸号（merge changeset 预处理） ───────────────────
+
+/// 后端为 merge changeset 的**新增行**铸主键 id（52 位 JS 安全），并重指向跨层父外键。
+///
+/// 背景：id 原由前端生成（`maxId+1`，跨系统必撞）。改为后端首次存储铸号后，前端新增行只带
+/// **临时 id**（缺失/null/非纯数字串，如 `t3`）。本函数：
+///   1. **第一遍**：遍历所有层的 `inserted`，对临时 id 行铸真号，登记 `临时id→真id`（全局 map，
+///      跨层唯一，故一张表足矣）。已带真数字 id 的行保留（导入既有真号 / 重存）。
+///   2. **第二遍**：遍历所有 `inserted` 行的每个 childKey 外键（`upper_id` 或命名如 `header_id`；
+///      前端 collector 把默认外键提到顶层，命名外键留在 `fields` 里，故两处都查），若指向某临时
+///      父 id → 换成父的真号。跨层父子（父在 L1、子在 L2）因用同一张 map，天然连对，与层序无关。
+///
+/// `child_keys`：本单据全部父子外键列名（去重）。只改 `inserted`；`updated`/`deleted` 不动。
+/// 返回 (改写后的 changeset, idMap)。非对象 changeset 原样返回、空 map。
+fn mint_ids_for_changeset(changes: &Value, child_keys: &[String]) -> (Value, Map<String, Value>) {
+    let Some(obj) = changes.as_object() else {
+        return (changes.clone(), Map::new());
+    };
+    let mut out = obj.clone();
+    let mut id_map: Map<String, Value> = Map::new();
+
+    // 第一遍：铸号。
+    for layer in out.values_mut() {
+        let Some(ins) = layer.get_mut("inserted").and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        for row in ins.iter_mut() {
+            let Some(r) = row.as_object_mut() else { continue };
+            let cur = r.get("id");
+            if !is_temp_id(cur) {
+                continue; // 已是真号 → 不重铸。
+            }
+            let old_key = id_to_key(cur);
+            let new_id = cmx_utils::next_pk_id();
+            r.insert("id".into(), Value::Number(new_id.into()));
+            if let Some(k) = old_key {
+                id_map.insert(k, Value::Number(new_id.into()));
+            }
+        }
+    }
+
+    if id_map.is_empty() {
+        return (Value::Object(out), id_map);
+    }
+
+    // 第二遍：父外键重指向（子行外键 == 某临时父 id → 父的真号）。顶层 + fields 两处都查。
+    for layer in out.values_mut() {
+        let Some(ins) = layer.get_mut("inserted").and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        for row in ins.iter_mut() {
+            let Some(r) = row.as_object_mut() else { continue };
+            for ck in child_keys {
+                // ① 顶层外键（collector 规范化的 upper_id）。
+                if let Some(uv) = r.get(ck).cloned()
+                    && let Some(k) = id_to_key(Some(&uv))
+                    && let Some(real) = id_map.get(&k)
+                {
+                    r.insert(ck.clone(), real.clone());
+                }
+                // ② fields 内的命名外键（如 header_id/entry_id）。
+                if let Some(fields) = r.get_mut("fields").and_then(|v| v.as_object_mut())
+                    && let Some(uv) = fields.get(ck).cloned()
+                    && let Some(k) = id_to_key(Some(&uv))
+                    && let Some(real) = id_map.get(&k)
+                {
+                    fields.insert(ck.clone(), real.clone());
+                }
+            }
+        }
+    }
+
+    (Value::Object(out), id_map)
+}
+
+/// 判断一个 changeset id 值是否为「前端临时 id」——需要后端铸真号的占位。
+///
+/// 临时形态：① 缺失/null；② 空串或**非纯数字**字符串（如 CmxDataSet 的 `r{rand}`、约定的 `t3`）。
+/// 纯数字（字符串或数字）视为**真号**（既有行 / 导入带真号），不铸——避免把已存在行误判为新增而写重。
+fn is_temp_id(v: Option<&Value>) -> bool {
+    match v {
+        None | Some(Value::Null) => true,
+        Some(Value::String(s)) => s.is_empty() || !s.chars().all(|c| c.is_ascii_digit()),
+        _ => false,
+    }
+}
+
+/// id 值 → 稳定字符串键（数字/非空串统一）。null/空 → None。
+fn id_to_key(v: Option<&Value>) -> Option<String> {
+    match v {
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 /// 审计填充（方案 C）—— INSERT 路径：服务端权威写审计列，覆盖前端可能传来的同名值。
@@ -1666,6 +1863,122 @@ mod tests {
         let roots =
             collect_versioned_roots(&changes, &meta, SaveMode::Merge, root, &ctx_no_override()).unwrap();
         assert_eq!(roots, vec![("5001".to_string(), "create".to_string())]);
+    }
+
+    // ─────────────────── 后端铸号（mint_ids_for_changeset）单测 ───────────────────
+
+    #[test]
+    fn is_temp_id_classification() {
+        // 临时：缺失 / null / 空串 / 非纯数字串。
+        assert!(is_temp_id(None));
+        assert!(is_temp_id(Some(&json!(null))));
+        assert!(is_temp_id(Some(&json!(""))));
+        assert!(is_temp_id(Some(&json!("t3"))));
+        assert!(is_temp_id(Some(&json!("r7x9k"))));
+        // 真号：纯数字串 / 数字。
+        assert!(!is_temp_id(Some(&json!("1002"))));
+        assert!(!is_temp_id(Some(&json!(1002))));
+    }
+
+    #[test]
+    fn mint_assigns_js_safe_ids_to_temp_rows() {
+        // 临时 id 行被铸真号；真号 < 2^53（JS 安全）；idMap 记录 临时→真。
+        let changes = json!({
+            "cv_batch": { "inserted": [ { "id": "t1", "fields": { "code": "A" } } ] }
+        });
+        let (out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        let new_id = out["cv_batch"]["inserted"][0]["id"].as_i64().unwrap();
+        assert!(new_id > 0 && new_id <= 9_007_199_254_740_991, "id 必须 JS 安全");
+        assert_eq!(id_map.get("t1").and_then(|v| v.as_i64()), Some(new_id));
+    }
+
+    #[test]
+    fn mint_preserves_real_ids() {
+        // 已带真号的行不铸、不进 idMap（重存/导入既有真号幂等）。
+        let changes = json!({
+            "cv_batch": { "inserted": [ { "id": "1002", "fields": {} } ] }
+        });
+        let (out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        assert_eq!(out["cv_batch"]["inserted"][0]["id"], json!("1002"));
+        assert!(id_map.is_empty());
+    }
+
+    #[test]
+    fn mint_remaps_cross_layer_upper_id() {
+        // 父在 L1（临时 t1）、子在 L2（upper_id=t1）→ 子的 upper_id 重指向父的真号。
+        let changes = json!({
+            "cv_batch":  { "inserted": [ { "id": "t1", "fields": {} } ] },
+            "cv_header": { "inserted": [ { "id": "t2", "upper_id": "t1", "fields": {} } ] }
+        });
+        let (out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        let parent_real = id_map.get("t1").unwrap().as_i64().unwrap();
+        let child_upper = out["cv_header"]["inserted"][0]["upper_id"].as_i64().unwrap();
+        assert_eq!(child_upper, parent_real, "子 upper_id 应指向父真号");
+        // 子自身也铸了真号。
+        assert!(id_map.contains_key("t2"));
+    }
+
+    #[test]
+    fn mint_remaps_named_fk_inside_fields() {
+        // 命名外键（header_id 在 fields 里）也要重指向父真号。
+        let changes = json!({
+            "cv_header":   { "inserted": [ { "id": "h1", "fields": {} } ] },
+            "cv_acc_line": { "inserted": [ { "id": "e1", "fields": { "header_id": "h1", "amount": 5 } } ] }
+        });
+        let (out, id_map) = mint_ids_for_changeset(&changes, &["header_id".to_string()]);
+        let parent_real = id_map.get("h1").unwrap().as_i64().unwrap();
+        let child_fk = out["cv_acc_line"]["inserted"][0]["fields"]["header_id"].as_i64().unwrap();
+        assert_eq!(child_fk, parent_real, "fields 里的 header_id 应指向父真号");
+    }
+
+    #[test]
+    fn mint_preserves_real_ids_child_only() {
+        // child_keys 空也安全（无 relations 的单表单据）。
+        let changes = json!({
+            "cv_batch": { "inserted": [ { "id": "1002", "fields": {} } ] }
+        });
+        let (out, id_map) = mint_ids_for_changeset(&changes, &[]);
+        assert_eq!(out["cv_batch"]["inserted"][0]["id"], json!("1002"));
+        assert!(id_map.is_empty());
+    }
+
+    #[test]
+    fn mint_child_upper_id_to_existing_parent_untouched() {
+        // 子挂到「已存在的真号父」（upper_id=已有真号，父不在本批 inserted）→ upper_id 原样保留。
+        let changes = json!({
+            "cv_header": { "inserted": [ { "id": "t9", "upper_id": "5000", "fields": {} } ] }
+        });
+        let (out, _id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        assert_eq!(out["cv_header"]["inserted"][0]["upper_id"], json!("5000"));
+    }
+
+    #[test]
+    fn mint_leaves_updated_deleted_untouched() {
+        // 只动 inserted；updated/deleted 的 id 不变。
+        let changes = json!({
+            "cv_batch": {
+                "inserted": [ { "id": "t1", "fields": {} } ],
+                "updated":  [ { "id": "1002", "fields": { "x": 1 } } ],
+                "deleted":  [ "1003" ]
+            }
+        });
+        let (out, _id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        assert_eq!(out["cv_batch"]["updated"][0]["id"], json!("1002"));
+        assert_eq!(out["cv_batch"]["deleted"][0], json!("1003"));
+    }
+
+    #[test]
+    fn mint_ids_are_globally_unique() {
+        // 多层多行临时 id 各得唯一真号。
+        let changes = json!({
+            "cv_batch":  { "inserted": [ { "id": "t1", "fields": {} } ] },
+            "cv_header": { "inserted": [ { "id": "t2", "upper_id": "t1", "fields": {} },
+                                        { "id": "t3", "upper_id": "t1", "fields": {} } ] }
+        });
+        let (_out, id_map) = mint_ids_for_changeset(&changes, &["upper_id".to_string()]);
+        let ids: std::collections::HashSet<i64> =
+            id_map.values().filter_map(|v| v.as_i64()).collect();
+        assert_eq!(ids.len(), 3, "3 个临时 id 应铸出 3 个互异真号");
     }
 }
 

@@ -3,6 +3,7 @@
 //! 路由路径与 Node 后端保持一致（挂在 `/api` 下），响应统一用 [`crate::ApiResp`] 信封。
 //! 阶段 1：域/菜单/活动、工作区节点、表单页、原生页面、事实数据等简单文件 CRUD。
 
+pub mod dct;
 pub mod doc;
 pub mod handler;
 pub mod model_center;
@@ -182,6 +183,21 @@ impl ModuleRoutes for PortalModule {
             .route("/doc/revisions", get(doc::doc_revisions))
             .route("/doc/revision", get(doc::doc_revision))
             .route("/doc/restore", post(doc::doc_restore))
+            // 数据字典（DCT）数据服务：tokio-postgres 直读/写 cf_* 物理表
+            .route("/dct/meta", get(dct::dct_meta))
+            .route(
+                "/dct/data/search",
+                get(dct::dct_search).post(dct::dct_search),
+            )
+            // 零拷贝装载：tokio-postgres + ZmcDataSet + 列式 msgpack 二进制（对标 doc）
+            .route(
+                "/dct/data/tokio-zmc-msgpack",
+                get(dct::dct_search_zmc_msgpack).post(dct::dct_search_zmc_msgpack),
+            )
+            .route("/dct/entries", post(dct::dct_upsert))
+            .route("/dct/entries/{id}", axum::routing::delete(dct::dct_delete))
+            // 基于 changeset 的回存（对标 doc ChangeSetCollector/DocSaver）
+            .route("/dct/save", post(dct::dct_save))
             .route(
                 "/definitions/default",
                 post(handler::definitions_set_default),

@@ -24,3 +24,9 @@ pub mod service_executor;
 
 pub mod error;
 pub use error::{BizError, Result};
+
+// 统一错误码 + 错误信息库（落库校验 / 约束翻译）
+pub mod errcode;
+// 落库前列级校验（列规范 + 缓存 + 校验器）
+pub mod validation;
+

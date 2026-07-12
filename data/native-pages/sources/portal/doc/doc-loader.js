@@ -374,7 +374,24 @@ async function saveVoucher (root) {
     }
     state.collector.reset()
     setMsg(root, `保存成功：影响 ${result.affected} 行`)
-  } catch (e) { setMsg(root, `保存失败：${e.message}`) }
+  } catch (e) {
+    // 保存失败 → 专业信息对话框（冲突/列校验/普通失败分级，violations 逐行，可跳帮助中心）。
+    // presentDocError 未加载（老 bundle）时回退到内联消息，保证不崩。
+    setMsg(root, `保存失败：${e.message}`)
+    if (typeof C.presentDocError === 'function') {
+      const r = await C.presentDocError(e, { action: 'save', tableNames: layerTableNames() })
+      // 乐观锁冲突：用户确认后重新装载到最新版，避免覆盖他人改动。
+      if (r && r.kind === 'conflict') { state.meta = null; await loadVoucher(root) }
+    }
+  }
+}
+
+/** 物理表名(层 id) → 中文层名 映射，供列校验 violations 前缀「中文名(表名)」显示。 */
+function layerTableNames () {
+  const layers = (state.meta && state.meta.layers) || []
+  const map = {}
+  for (const l of layers) { if (l && l.id) map[l.id] = l.levelName || l.level || l.id }
+  return map
 }
 
 function bindPage (root) {

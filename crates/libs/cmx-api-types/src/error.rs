@@ -31,6 +31,8 @@ pub enum ErrCode {
     BadRequest = 400,
     /// 数据验证失败。
     ValidationError = 422,
+    /// 资源冲突（乐观锁 / 并发修改）。
+    Conflict = 409,
     /// 请求频率超限。
     RateLimitExceeded = 429,
     /// 服务器内部错误。
@@ -142,6 +144,7 @@ impl Error {
             Self::Forbidden(_) => ErrCode::Forbidden,
             Self::NotFound(_) => ErrCode::NotFound,
             Self::ValidationError { .. } => ErrCode::ValidationError,
+            Self::Conflict(_) => ErrCode::Conflict,
             Self::BadRequest(_) => ErrCode::BadRequest,
             Self::RateLimitExceeded { .. } => ErrCode::RateLimitExceeded,
             Self::InternalError(_) => ErrCode::InternalError,

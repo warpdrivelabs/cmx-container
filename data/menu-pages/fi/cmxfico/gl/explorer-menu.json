@@ -1327,7 +1327,7 @@
     {
      "id": "fi-gl-dictcls-ws",
      "name": "dictcls-ws",
-     "caption": "合作伙伴维护(带分类)",
+     "caption": "总账科目维护(带分类)",
      "type": "workspace-node",
      "permissionId": null,
      "icon": "customer",
