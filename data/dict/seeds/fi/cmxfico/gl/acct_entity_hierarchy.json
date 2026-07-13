@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "dictCode": "acct_entity_hierarchy",
+    "dictName": "核算主体管理层级",
+    "tableName": "acct_entity_hierarchy",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "rowCount": 3
+  },
+  "columns": ["id", "code", "name", "sort_no", "status", "parent_id", "full_path", "level_no", "is_leaf", "create_by", "create_time", "update_by", "update_time", "effective_from", "effective_to", "disabled_reason", "disabled_time"],
+  "rows": [
+    {"id": 101, "code": "MGT01", "name": "经营管理层级", "sort_no": 1, "status": 1, "parent_id": null, "full_path": "101", "level_no": 1, "is_leaf": 1, "create_by": "SYS", "create_time": "2026-01-01 00:00:00", "update_by": null, "update_time": null, "effective_from": "2026-01-01", "effective_to": null, "disabled_reason": null, "disabled_time": null},
+    {"id": 102, "code": "TRD01", "name": "贸易板块", "sort_no": 2, "status": 1, "parent_id": null, "full_path": "102", "level_no": 1, "is_leaf": 1, "create_by": "SYS", "create_time": "2026-01-01 00:00:00", "update_by": null, "update_time": null, "effective_from": "2026-01-01", "effective_to": null, "disabled_reason": null, "disabled_time": null},
+    {"id": 103, "code": "FIN01", "name": "金融板块", "sort_no": 3, "status": 1, "parent_id": null, "full_path": "103", "level_no": 1, "is_leaf": 1, "create_by": "SYS", "create_time": "2026-01-01 00:00:00", "update_by": null, "update_time": null, "effective_from": "2026-01-01", "effective_to": null, "disabled_reason": null, "disabled_time": null}
+  ]
+}

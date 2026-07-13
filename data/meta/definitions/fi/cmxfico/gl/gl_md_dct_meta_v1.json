@@ -1139,7 +1139,7 @@
         "dictCode": "acct_entity_group",
         "dictKind": "RELATION",
         "selfHierarchy": false,
-        "tableName": "new_dict",
+        "tableName": "gl_acct_entity_group",
         "idField": "id",
         "codeField": "code",
         "labelField": "name",
@@ -1147,7 +1147,21 @@
         "codeStructure": "",
         "codeRule": "",
         "remark": "",
-        "dictName": "核算主体管理层级"
+        "dictName": "核算主体分组关系",
+        "relation": {
+          "master": {
+            "dict": "acct_entity_hierarchy",
+            "valueField": "code",
+            "labelField": "name"
+          },
+          "auxiliary": {
+            "dict": "acct_entity",
+            "valueField": "code",
+            "labelField": "name"
+          },
+          "cardinality": "many-to-many",
+          "uniqueMember": true
+        }
       },
       "fields": [],
       "extraFieldSets": [
@@ -1155,11 +1169,7 @@
         "dictionaryAuditFields",
         "dictionaryEffectiveFields",
         "dictionaryDisableFields"
-      ],
-      "fieldRefDicts": {
-        "group_id": "acct_entity_hierarchy",
-        "business_id": "acct_entity"
-      }
+      ]
     },
     {
       "dictMeta": {

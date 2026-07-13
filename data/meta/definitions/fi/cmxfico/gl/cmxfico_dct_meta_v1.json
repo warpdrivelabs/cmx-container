@@ -17,7 +17,8 @@
       "dictionaryAuditFields",
       "dictionaryEffectiveFields",
       "dictionaryDisableFields",
-      "dictionarySystemFields"
+      "dictionarySystemFields",
+      "relationCommonFields"
     ],
     "remark": "复用 base_dct_meta_v1.json fieldSet"
   },
@@ -2847,6 +2848,63 @@
           "code"
         ]
       ]
+    },
+    {
+      "dictMeta": {
+        "dictCode": "acct_entity_hierarchy",
+        "dictName": "核算主体管理层级",
+        "dictKind": "GROUP",
+        "selfHierarchy": false,
+        "tableName": "acct_entity_hierarchy",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "maxLevel": 1,
+        "codeStructure": "",
+        "codeRule": "",
+        "remark": "关系字典的主分组维度（左树）"
+      },
+      "fields": [],
+      "baseFieldSet": "dictionaryCommonFields",
+      "hierarchyFieldSet": "dictionaryHierarchyFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields"
+    },
+    {
+      "dictMeta": {
+        "dictCode": "acct_entity_group",
+        "dictName": "核算主体分组关系",
+        "dictKind": "RELATION",
+        "selfHierarchy": false,
+        "tableName": "gl_acct_entity_group",
+        "idField": "id",
+        "codeField": "code",
+        "labelField": "name",
+        "maxLevel": 1,
+        "codeStructure": "",
+        "codeRule": "",
+        "remark": "主分组↔辅业务的多对多成员关系",
+        "relation": {
+          "master": {
+            "dict": "acct_entity_hierarchy",
+            "valueField": "code",
+            "labelField": "name"
+          },
+          "auxiliary": {
+            "dict": "acct_entity",
+            "valueField": "code",
+            "labelField": "name"
+          },
+          "cardinality": "many-to-many",
+          "uniqueMember": true
+        }
+      },
+      "fields": [],
+      "baseFieldSet": "relationCommonFields",
+      "auditFieldSet": "dictionaryAuditFields",
+      "effectiveFieldSet": "dictionaryEffectiveFields",
+      "disableFieldSet": "dictionaryDisableFields"
     }
   ],
   "updatedAt": "2026-06-17T00:00:00+08:00"

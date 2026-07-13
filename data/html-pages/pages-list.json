@@ -1133,6 +1133,50 @@
       "page": "dictcls-prop-detail",
       "pageId": "fi.cmxfico.gl.dictcls-prop-detail",
       "relPath": "fi/cmxfico/gl/dictcls-prop-detail.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictrel-model",
+      "latestHtmlFile": "dictrel-model.html",
+      "module": "gl",
+      "name": "核算主体分组关系维护·共享模型(隐藏)",
+      "page": "dictrel-model",
+      "pageId": "fi.cmxfico.gl.dictrel-model",
+      "relPath": "fi/cmxfico/gl/dictrel-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictrel-explorer",
+      "latestHtmlFile": "dictrel-explorer.html",
+      "module": "gl",
+      "name": "核算主体分组关系维护·主分组树",
+      "page": "dictrel-explorer",
+      "pageId": "fi.cmxfico.gl.dictrel-explorer",
+      "relPath": "fi/cmxfico/gl/dictrel-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictrel-content",
+      "latestHtmlFile": "dictrel-content.html",
+      "module": "gl",
+      "name": "核算主体分组关系维护·关系成员",
+      "page": "dictrel-content",
+      "pageId": "fi.cmxfico.gl.dictrel-content",
+      "relPath": "fi/cmxfico/gl/dictrel-content.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.dictrel-prop-detail",
+      "latestHtmlFile": "dictrel-prop-detail.html",
+      "module": "gl",
+      "name": "核算主体分组关系维护·详情",
+      "page": "dictrel-prop-detail",
+      "pageId": "fi.cmxfico.gl.dictrel-prop-detail",
+      "relPath": "fi/cmxfico/gl/dictrel-prop-detail.html"
     }
   ]
 }
