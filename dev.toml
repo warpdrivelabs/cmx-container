@@ -52,13 +52,15 @@ web_shared_dist = "../packages/cmx-ui5-runtime/dist"
 [[databases]]
 # 数据源唯一标识符（必需）
 db_id = "primary"
+db_name = "主控数据库"
 # 数据库类型：postgres | mysql | sqlite（必需）
 db_type = "postgres"
 # 数据库连接 URL（必需）
 #db_url = "postgresql://postgres:postgres@192.168.137.80:5432/postgres"
 #db_url = "postgresql://postgres:postgres@localhost:5432/fico"
-db_url = "postgresql://postgres:postgres@192.168.137.80:5432/cmx"
+#db_url = "postgresql://postgres:postgres@192.168.137.80:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
+db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmxlocal"
 # 是否为默认数据库（可选，默认 false）
 default = true
 ## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
@@ -86,11 +88,14 @@ health_check_timeout = 5
 
 ## 第二个数据源 - Postgres
 [[databases]]
-db_id = "biz"
+db_id = "fico-db"
+db_name = "总账数据库"
 db_type = "postgres"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx"
 #db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.157.46:5432/cmx"
-db_url = "postgresql://postgres:postgres@192.168.137.80:5432/testyqs"
+#db_url = "postgresql://postgres:postgres@192.168.137.80:5432/testyqs"
+db_url = "postgres://dbuser_dba:hkO4Mjkgih6dYVVhmuFYRLm5@192.168.1.14:5432/cmx_fico"
+
 default = false
 ## 数据源类型（可选，默认按 default 标志判定：default=true 时为 default，否则为 other）
 ## 取值：default-默认库，biz-业务库，other-其他
