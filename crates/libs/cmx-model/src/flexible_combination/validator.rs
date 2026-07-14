@@ -44,6 +44,7 @@ const EDIT_MODES: &[&str] = &[
 const GROUP_AGG_KEYS: &[&str] = &["sum", "avg", "max", "min", "count"];
 const GROUP_AGG_POSITIONS: &[&str] = &["before", "after"];
 
+/// 校验诊断收集器：累积 errors / warnings，最终汇总为 `{ valid, errors, warnings }`。
 struct Diag {
     errors: Vec<Value>,
     warnings: Vec<Value>,
@@ -56,24 +57,29 @@ impl Diag {
             warnings: Vec::new(),
         }
     }
+    /// 记录一条错误（path + code + message）。
     fn error(&mut self, path: &str, code: &str, message: impl Into<String>) {
         self.errors
             .push(json!({ "path": path, "code": code, "message": message.into() }));
     }
+    /// 记录一条警告（path + code + message）。
     fn warn(&mut self, path: &str, code: &str, message: impl Into<String>) {
         self.warnings
             .push(json!({ "path": path, "code": code, "message": message.into() }));
     }
+    /// 汇总为最终结果：valid 取决于 errors 是否为空。
     fn finish(self) -> Value {
         json!({ "valid": self.errors.is_empty(), "errors": self.errors, "warnings": self.warnings })
     }
 }
 
+/// 取字段 id（兼容字符串与数字 id，统一归一为字符串）。
 fn field_id(field: &Value) -> String {
     field
         .get("id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+        // 兼容数字 id：转字符串
         .or_else(|| {
             field.get("id").map(|v| match v {
                 Value::Number(n) => n.to_string(),
@@ -92,6 +98,7 @@ fn check_formula(expr: &Value) -> Result<(), String> {
     if s.trim().is_empty() {
         return Err("公式不能为空".to_string());
     }
+    // 逐字符统计括号深度，中途为负说明右括号多余
     let mut depth = 0i32;
     for c in s.chars() {
         match c {
@@ -105,6 +112,7 @@ fn check_formula(expr: &Value) -> Result<(), String> {
             _ => {}
         }
     }
+    // 最终非零说明左括号多余
     if depth != 0 {
         return Err(format!("公式括号不配平：{s}"));
     }
@@ -112,20 +120,33 @@ fn check_formula(expr: &Value) -> Result<(), String> {
 }
 
 /// 入口：校验弹性组合。
+///
+/// 校验 dimensions / rules / columnModel 三大块，以及规则内的锚点/字段/分组/公式。
+///
+/// # Arguments
+///
+/// * `combination` - 弹性组合定义 JSON。
+///
+/// # Returns
+///
+/// 返回 `{ valid, errors, warnings }`；errors 非空时 valid 为 false。
 pub fn validate_flexible_combination(combination: &Value) -> Value {
     let mut d = Diag::new();
+    // 顶层必须是对象
     if !combination.is_object() {
         d.error("", "COMBINATION_OBJECT_REQUIRED", "FlexibleCombination 必须是对象");
         return d.finish();
     }
     let dimensions = combination.get("dimensions");
     let rules = combination.get("rules");
+    // dimensions 须为对象，rules 须为数组（硬性要求）
     if !dimensions.map(|v| v.is_object()).unwrap_or(false) {
         d.error("dimensions", "DIMENSIONS_REQUIRED", "缺少 dimensions 对象");
     }
     if !rules.map(|v| v.is_array()).unwrap_or(false) {
         d.error("rules", "RULES_REQUIRED", "缺少 rules 数组");
     }
+    // 结构性错误时提前返回，不做后续细查
     if !d.errors.is_empty() {
         return d.finish();
     }
@@ -135,12 +156,14 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
         d.warn("dimensions", "NO_DIMENSIONS", "未定义任何上下文维度");
     }
 
+    // 校验各维度定义
     for (dim_code, dim) in dimensions.as_object().unwrap() {
         let base = format!("dimensions.{dim_code}");
         if !dim.is_object() {
             d.error(&base, "DIMENSION_OBJECT_REQUIRED", "维度定义必须是对象");
             continue;
         }
+        // 维度须有 name 或 caption
         if dim.get("name").is_none() && dim.get("caption").is_none() {
             d.warn(
                 &base,
@@ -148,6 +171,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                 format!("维度 {dim_code} 未设置 name/caption"),
             );
         }
+        // attributes 须为数组或对象
         if let Some(attrs) = dim.get("attributes")
             && !attrs.is_null()
             && !attrs.is_array()
@@ -159,6 +183,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                 "attributes 必须是数组或对象",
             );
         }
+        // values 须为数组
         if let Some(values) = dim.get("values")
             && !values.is_null()
             && !values.is_array()
@@ -171,6 +196,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
         }
     }
 
+    // 校验顶层 anchorDimensions 引用的维度是否存在
     let combination_anchor_dims: Vec<String> = combination
         .get("anchorDimensions")
         .and_then(|v| v.as_array())
@@ -190,8 +216,10 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
         }
     }
 
+    // 校验顶层 columnModel
     validate_column_model_props(combination.get("columnModel"), "columnModel", &mut d);
 
+    // 逐条校验规则
     let mut rule_ids: HashSet<String> = HashSet::new();
     let rules_arr = rules.unwrap().as_array().unwrap();
     for (rule_index, rule) in rules_arr.iter().enumerate() {
@@ -200,6 +228,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
             d.error(&r_path, "RULE_OBJECT_REQUIRED", "规则必须是对象");
             continue;
         }
+        // 规则 id 唯一性
         match rule.get("id").and_then(|v| v.as_str()) {
             None => d.warn(&format!("{r_path}.id"), "RULE_ID_MISSING", "规则未设置 id"),
             Some(id) => {
@@ -215,6 +244,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
             }
         }
 
+        // 规则锚点维度存在性（缺省继承顶层 anchorDimensions）
         let anchor_dims: Vec<String> = rule
             .get("anchor")
             .and_then(|a| a.get("dimensions"))
@@ -234,6 +264,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                 );
             }
         }
+        // 规则锚点列（须为非空字符串）
         let anchor_cols: Vec<String> = rule
             .get("anchor")
             .and_then(|a| a.get("columns"))
@@ -255,6 +286,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                     .collect()
             })
             .unwrap_or_default();
+        // 无锚点维度且无锚点列：仅作兜底规则
         if anchor_dims.is_empty() && anchor_cols.is_empty() {
             d.warn(
                 &format!("{r_path}.anchor"),
@@ -262,7 +294,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                 "规则未声明锚点维度/列，解析时只能作为兜底规则",
             );
         }
-        // valid match keys
+        // 计算 match 合法键集合：锚点列 + 锚点维度 + 维度属性路径
         let mut valid_match_keys: HashSet<String> = anchor_cols
             .iter()
             .cloned()
@@ -290,6 +322,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
             &mut d,
         );
 
+        // 校验规则级 columnModel
         validate_column_model_props(
             rule.get("columnModel"),
             &format!("{r_path}.columnModel"),
@@ -308,6 +341,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
                 .map(|v| v.is_array())
                 .unwrap_or(false);
         let fields = detail.and_then(|de| de.get("fields"));
+        // 非 overlay 规则必须有 fields 数组
         if !has_overlay && !fields.map(|v| v.is_array()).unwrap_or(false) {
             d.error(
                 &format!("{r_path}.detail.fields"),
@@ -334,6 +368,7 @@ pub fn validate_flexible_combination(combination: &Value) -> Value {
     d.finish()
 }
 
+/// 校验规则字段集合：id 唯一性、维度引用、source/defaultFrom、公式良构、依赖存在性、列属性。
 fn validate_fields(
     fields: &[Value],
     r_path: &str,
@@ -349,6 +384,7 @@ fn validate_fields(
             d.error(&f_path, "FIELD_OBJECT_REQUIRED", "字段必须是对象");
             continue;
         }
+        // 字段 id 唯一性
         let id = field_id(field);
         if id.is_empty() {
             d.error(
@@ -365,6 +401,7 @@ fn validate_fields(
         } else {
             field_codes.insert(id.clone());
         }
+        // dimType 合法性（警告级）
         if let Some(dt) = field.get("dimType").and_then(|v| v.as_str())
             && !FIELD_KINDS.contains(&dt)
         {
@@ -374,6 +411,7 @@ fn validate_fields(
                 format!("未知字段 dimType：{dt}"),
             );
         }
+        // dimension 字段：引用的维度须存在
         if field.get("dimType").and_then(|v| v.as_str()) == Some("dimension") {
             let dim_code = field
                 .get("refDict")
@@ -388,6 +426,7 @@ fn validate_fields(
                 );
             }
         }
+        // source.dimension 存在性 + attribute 声明性
         if let Some(src_dim) = field
             .get("source")
             .and_then(|s| s.get("dimension"))
@@ -412,6 +451,7 @@ fn validate_fields(
                 );
             }
         }
+        // defaultFrom.dimension 存在性 + attribute 声明性
         if let Some(df_dim) = field
             .get("defaultFrom")
             .and_then(|s| s.get("dimension"))
@@ -436,6 +476,7 @@ fn validate_fields(
                 );
             }
         }
+        // 公式字段：良构检查 + 收集用于循环检测
         if let Some(formula) = field.get("formula")
             && !formula.is_null()
         {
@@ -444,6 +485,7 @@ fn validate_fields(
                 d.error(&format!("{f_path}.formula"), "FORMULA_INVALID", msg);
             }
         }
+        // dependsOn：依赖字段须存在
         if let Some(deps) = field.get("dependsOn").and_then(|v| v.as_array()) {
             for (di, dep) in deps.iter().enumerate() {
                 let dep_s = dep.as_str().unwrap_or("");
@@ -458,6 +500,7 @@ fn validate_fields(
                 }
             }
         }
+        // validations：每条须含 expr 且良构
         if let Some(vals) = field.get("validations").and_then(|v| v.as_array()) {
             for (vi, rule) in vals.iter().enumerate() {
                 match rule.get("expr") {
@@ -478,11 +521,14 @@ fn validate_fields(
                 }
             }
         }
+        // 列属性校验
         validate_column_props(field.get("column"), &format!("{f_path}.column"), d);
     }
+    // 公式循环依赖检测
     detect_formula_cycles(&computed, r_path, d);
 }
 
+/// 校验分组：递归遍历分组成员，检查字段引用存在性与重复引用。
 fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &mut Diag) {
     let Some(groups) = groups.filter(|v| !v.is_null()) else {
         return;
@@ -495,6 +541,7 @@ fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &m
         );
         return;
     }
+    // 收集合法字段 id 集合
     let field_codes: HashSet<String> = fields
         .iter()
         .map(field_id)
@@ -502,6 +549,7 @@ fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &m
         .collect();
     let mut seen: HashSet<String> = HashSet::new();
 
+    // 递归遍历分组树
     fn walk(
         node: &Value,
         path: &str,
@@ -522,10 +570,12 @@ fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &m
             );
             return;
         }
+        // 分组节点自身属性校验（aggregate/aggregatePosition）
         validate_group_props(node, path, d);
         for (index, member) in members.unwrap().as_array().unwrap().iter().enumerate() {
             let m_path = format!("{path}.members.{index}");
             match member {
+                // 字符串成员：按字段 id 校验存在性与重复引用
                 Value::String(s) => {
                     if !field_codes.contains(s) {
                         d.error(
@@ -543,6 +593,7 @@ fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &m
                         seen.insert(s.clone());
                     }
                 }
+                // 对象成员：递归子分组
                 _ => walk(member, &m_path, field_codes, seen, d),
             }
         }
@@ -558,6 +609,7 @@ fn validate_groups(groups: Option<&Value>, fields: &[Value], r_path: &str, d: &m
     }
 }
 
+/// 校验 match 对象：键须在合法键集合内，操作符与属性条件不可混用。
 fn check_match_object(m: Option<&Value>, path: &str, valid_keys: &HashSet<String>, d: &mut Diag) {
     let Some(m) = m.filter(|v| !v.is_null()) else {
         return;
@@ -567,6 +619,7 @@ fn check_match_object(m: Option<&Value>, path: &str, valid_keys: &HashSet<String
         return;
     }
     for (dim, cond) in m.as_object().unwrap() {
+        // 匹配键须在锚点列/维度/属性列中
         if !valid_keys.is_empty() && !valid_keys.contains(dim) {
             d.error(
                 &format!("{path}.{dim}"),
@@ -574,6 +627,7 @@ fn check_match_object(m: Option<&Value>, path: &str, valid_keys: &HashSet<String
                 format!("匹配列 {dim} 不在锚点列、锚点维度或其属性列中"),
             );
         }
+        // 对象条件：$ 操作符与属性条件不可混用
         if cond.is_object() && !cond.is_array() {
             let o = cond.as_object().unwrap();
             let ops = o.keys().filter(|k| k.starts_with('$')).count();
@@ -589,6 +643,7 @@ fn check_match_object(m: Option<&Value>, path: &str, valid_keys: &HashSet<String
     }
 }
 
+/// 校验 field.column 属性：type/agg/frozen/visible/display/edit 等的取值合法性。
 fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
     let Some(column) = column.filter(|v| !v.is_null()) else {
         return;
@@ -597,6 +652,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
         d.error(path, "COLUMN_OBJECT_REQUIRED", "field.column 必须是对象");
         return;
     }
+    // 列类型（警告级）
     if let Some(t) = column.get("type").and_then(|v| v.as_str())
         && !COLUMN_TYPES.contains(&t)
     {
@@ -606,6 +662,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             format!("未知列类型：{t}"),
         );
     }
+    // 聚合类型（错误级）
     if let Some(a) = column.get("agg").and_then(|v| v.as_str())
         && !COLUMN_AGGS.contains(&a)
     {
@@ -615,6 +672,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             format!("agg 必须是 sum/count/avg/max/min，实际：{a}"),
         );
     }
+    // frozen 须为布尔
     if let Some(f) = column.get("frozen")
         && !f.is_null()
         && !f.is_boolean()
@@ -625,6 +683,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             "frozen 必须是布尔值",
         );
     }
+    // visible 须为布尔
     if let Some(v) = column.get("visible")
         && !v.is_null()
         && !v.is_boolean()
@@ -635,6 +694,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             "visible 必须是布尔值",
         );
     }
+    // width 须为字符串/数字/对象
     if let Some(w) = column.get("width")
         && !w.is_null()
         && !w.is_string()
@@ -647,6 +707,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             "width 必须是字符串/数字/对象",
         );
     }
+    // display 块校验
     if let Some(disp) = column.get("display").filter(|v| !v.is_null()) {
         if !disp.is_object() {
             d.error(
@@ -655,6 +716,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
                 "display 必须是对象",
             );
         } else {
+            // align 须为 left/center/right
             if let Some(al) = disp.get("align").and_then(|v| v.as_str())
                 && !COLUMN_ALIGNS.contains(&al)
             {
@@ -664,6 +726,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
                     "display.align 必须是 left/center/right",
                 );
             }
+            // display.mode（警告级）
             if let Some(md) = disp.get("mode").and_then(|v| v.as_str())
                 && !DISPLAY_MODES.contains(&md)
             {
@@ -673,6 +736,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
                     format!("未知 display.mode：{md}"),
                 );
             }
+            // cellStyle 须为数组，且每条 when 公式良构
             match disp.get("cellStyle") {
                 Some(cs) if !cs.is_null() && !cs.is_array() => {
                     d.error(
@@ -698,6 +762,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
             }
         }
     }
+    // edit 块校验
     if let Some(edit) = column.get("edit").filter(|v| !v.is_null()) {
         if !edit.is_object() {
             d.error(
@@ -706,6 +771,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
                 "edit 必须是对象",
             );
         } else {
+            // edit.mode（警告级）
             if let Some(md) = edit.get("mode").and_then(|v| v.as_str())
                 && !EDIT_MODES.contains(&md)
             {
@@ -715,6 +781,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
                     format!("未知 edit.mode：{md}"),
                 );
             }
+            // requiredWhen/readonlyWhen/validateWhen 公式良构
             for key in ["requiredWhen", "readonlyWhen", "validateWhen"] {
                 if let Some(expr) = edit.get(key).filter(|v| !v.is_null())
                     && let Err(msg) = check_formula(expr)
@@ -730,6 +797,7 @@ fn validate_column_props(column: Option<&Value>, path: &str, d: &mut Diag) {
     }
 }
 
+/// 校验分组节点属性：aggregate 键值合法性 + aggregatePosition 取值。
 fn validate_group_props(node: &Value, path: &str, d: &mut Diag) {
     if let Some(agg) = node.get("aggregate").filter(|v| !v.is_null()) {
         if !agg.is_object() {
@@ -740,6 +808,7 @@ fn validate_group_props(node: &Value, path: &str, d: &mut Diag) {
             );
         } else {
             for (k, v) in agg.as_object().unwrap() {
+                // 未知聚合键（警告级）
                 if !GROUP_AGG_KEYS.contains(&k.as_str()) {
                     d.warn(
                         &format!("{path}.aggregate.{k}"),
@@ -747,6 +816,7 @@ fn validate_group_props(node: &Value, path: &str, d: &mut Diag) {
                         format!("未知聚合类型：{k}（支持 sum/avg/max/min/count）"),
                     );
                 } else if !v.is_boolean() {
+                    // 聚合键值须为布尔
                     d.error(
                         &format!("{path}.aggregate.{k}"),
                         "GROUP_AGGREGATE_VALUE_INVALID",
@@ -756,6 +826,7 @@ fn validate_group_props(node: &Value, path: &str, d: &mut Diag) {
             }
         }
     }
+    // aggregatePosition 须为 before/after
     if let Some(pos) = node.get("aggregatePosition").and_then(|v| v.as_str())
         && !GROUP_AGG_POSITIONS.contains(&pos)
     {
@@ -767,6 +838,7 @@ fn validate_group_props(node: &Value, path: &str, d: &mut Diag) {
     }
 }
 
+/// 校验 columnModel 属性：caption/datasetId/toTitleCols/iconCol 须为字符串。
 fn validate_column_model_props(cm: Option<&Value>, path: &str, d: &mut Diag) {
     let Some(cm) = cm.filter(|v| !v.is_null()) else {
         return;
@@ -792,16 +864,23 @@ fn validate_column_model_props(cm: Option<&Value>, path: &str, d: &mut Diag) {
     }
 }
 
+/// 判定维度是否声明了某属性（attributes 为数组或对象时分别判定）。
+///
+/// 维度缺省（None）时返回 true，表示不强制校验。
 fn has_dimension_attribute(dim: Option<&Value>, attr: &str) -> bool {
     let Some(dim) = dim else { return true };
     match dim.get("attributes") {
+        // 数组形式：元素是否含该属性名
         Some(Value::Array(a)) => a.iter().any(|x| x.as_str() == Some(attr)),
+        // 对象形式：键是否含该属性名
         Some(Value::Object(o)) => o.contains_key(attr),
         _ => false,
     }
 }
 
+/// 检测计算公式字段的循环依赖（DFS 三色标记法）。
 fn detect_formula_cycles(computed: &[Value], r_path: &str, d: &mut Diag) {
+    // 建 code → 字段 映射
     let by_code: std::collections::HashMap<String, Value> = computed
         .iter()
         .map(|f| (field_id(f), f.clone()))
@@ -811,6 +890,7 @@ fn detect_formula_cycles(computed: &[Value], r_path: &str, d: &mut Diag) {
     let mut visited: HashSet<String> = HashSet::new();
     let mut stack: Vec<String> = Vec::new();
 
+    // DFS 访问单个字段，发现回边即报告循环
     fn visit(
         field: &Value,
         by_code: &std::collections::HashMap<String, Value>,
@@ -824,6 +904,7 @@ fn detect_formula_cycles(computed: &[Value], r_path: &str, d: &mut Diag) {
         if id.is_empty() || visited.contains(&id) {
             return;
         }
+        // visiting 中命中 → 发现环
         if visiting.contains(&id) {
             let start = stack.iter().position(|x| *x == id).unwrap_or(0);
             let mut cycle: Vec<String> = stack[start..].to_vec();
@@ -837,6 +918,7 @@ fn detect_formula_cycles(computed: &[Value], r_path: &str, d: &mut Diag) {
         }
         visiting.insert(id.clone());
         stack.push(id.clone());
+        // 递归访问依赖字段
         if let Some(deps) = field.get("dependsOn").and_then(|v| v.as_array()) {
             for dep in deps {
                 if let Some(dep_s) = dep.as_str()
@@ -851,6 +933,7 @@ fn detect_formula_cycles(computed: &[Value], r_path: &str, d: &mut Diag) {
         visited.insert(id);
     }
 
+    // 遍历所有计算字段，触发 DFS
     for f in computed {
         visit(
             f,
