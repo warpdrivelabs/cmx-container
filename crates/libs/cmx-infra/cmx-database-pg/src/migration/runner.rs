@@ -1,3 +1,7 @@
+//! 数据库迁移执行器。
+//!
+//! [`MigrationRunner`] 负责加载迁移历史、校验完整性、执行待迁移项与回滚。
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;

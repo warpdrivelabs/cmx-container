@@ -14,28 +14,37 @@ use crate::util::{validate_id, write_lock};
 /// 列表项摘要。
 #[derive(Debug, Clone, Serialize)]
 pub struct FormPageSummary {
+    /// 表单页唯一标识。
     pub id: String,
+    /// 表单页名称。
     pub name: String,
+    /// 表单页描述。
     pub details: String,
 }
 
 /// 保存入参。
 #[derive(Debug, Clone, Deserialize)]
 pub struct FormPageInput {
+    /// 表单页唯一标识（仅允许字母、数字、._-，长度 1–128）。
     #[serde(default)]
     pub id: String,
+    /// 表单页名称。
     #[serde(default)]
     pub name: Option<String>,
+    /// 表单页描述。
     #[serde(default)]
     pub details: Option<String>,
+    /// CMX 表单 JSON 字符串（必填）。
     #[serde(default)]
     pub form: Option<String>,
 }
 
+/// 列表索引文件路径（`form-pages/pages-list.json`）。
 fn list_path() -> std::path::PathBuf {
     data_path(["form-pages", "pages-list.json"])
 }
 
+/// 版本源文件路径（`form-pages/sources/<fname>`）。
 fn source_path(fname: &str) -> std::path::PathBuf {
     data_path(["form-pages", "sources", fname])
 }
@@ -58,20 +67,32 @@ async fn load_pages() -> PortalResult<Vec<serde_json::Value>> {
     }
 }
 
+/// 持久化列表索引（覆盖写，pretty 格式便于 diff）。
 async fn persist_pages(pages: &[serde_json::Value]) -> PortalResult<()> {
     write_json_atomic(&list_path(), &json!({ "version": 1, "pages": pages }), true).await
 }
 
 /// 分页列出表单页。返回 `{ items, total, page, pageSize }`。
+///
+/// # Arguments
+///
+/// * `page` - 页码（从 1 起，缺省 1）。
+/// * `page_size` - 每页条数（缺省 20，范围 1–200）。
+///
+/// # Returns
+///
+/// 返回分页结果 JSON，items 为 [`FormPageSummary`] 数组。
 pub async fn list_form_pages_paged(
     page: Option<i64>,
     page_size: Option<i64>,
 ) -> PortalResult<serde_json::Value> {
+    // 归一页码与每页条数
     let p = page.unwrap_or(1).max(1);
     let size = page_size.unwrap_or(20).clamp(1, 200);
     let pages = load_pages().await?;
     let total = pages.len() as i64;
     let start = ((p - 1) * size).max(0) as usize;
+    // 切片当前页并映射为摘要
     let items: Vec<FormPageSummary> = pages
         .iter()
         .skip(start)
@@ -98,6 +119,16 @@ pub async fn list_form_pages_paged(
 }
 
 /// 保存表单页（版本化 + 索引 upsert）。
+///
+/// 写入带时间戳的版本源文件，并在列表索引中 upsert 该页记录。
+///
+/// # Arguments
+///
+/// * `input` - 保存入参（id/name/details/form）。
+///
+/// # Returns
+///
+/// 返回新写入的列表行 JSON（含 latestFormFile）。
 pub async fn save_form_page(input: FormPageInput) -> PortalResult<serde_json::Value> {
     let id = validate_id(&input.id, "表单页 ID")?;
     let name = input.name.unwrap_or_default();
@@ -106,10 +137,13 @@ pub async fn save_form_page(input: FormPageInput) -> PortalResult<serde_json::Va
         .form
         .ok_or_else(|| PortalError::bad_request("form 必须为字符串（CMX 表单 JSON）"))?;
 
+    // 全局写锁串行化，避免并发覆盖
     let _guard = write_lock().lock().await;
+    // 写带时间戳的版本源文件
     let fname = version_file_name(&id);
     write_json_atomic(&source_path(&fname), &json!({ "form": form }), true).await?;
 
+    // 列表索引 upsert：存在则更新，否则追加
     let mut pages = load_pages().await?;
     let row = json!({ "id": id, "name": name, "details": details, "latestFormFile": fname });
     if let Some(existing) = pages
@@ -125,9 +159,18 @@ pub async fn save_form_page(input: FormPageInput) -> PortalResult<serde_json::Va
 }
 
 /// 按 id 读取表单页（含最新版本的 form 内容）。
+///
+/// # Arguments
+///
+/// * `id` - 表单页唯一标识。
+///
+/// # Returns
+///
+/// 返回含 form 内容的完整页面 JSON；页面或文档缺失返回 `PortalError::NotFound`。
 pub async fn get_form_page_by_id(id: &str) -> PortalResult<serde_json::Value> {
     let pid = validate_id(id, "表单页 ID")?;
     let pages = load_pages().await?;
+    // 在列表索引中定位记录
     let row = pages
         .iter()
         .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(pid.as_str()))

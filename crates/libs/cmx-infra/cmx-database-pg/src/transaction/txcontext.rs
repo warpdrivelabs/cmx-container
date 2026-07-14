@@ -1,16 +1,20 @@
+//! 事务上下文模块。
+//!
+//! 提供事务栈管理支持，用于嵌套事务的挂起与恢复。
+
 use crate::error::Result;
 use crate::transaction::core::{Propagation, TxnHolder};
-/// 事务上下文模块
-///
-/// 提供事务栈管理支持
 use std::sync::Arc;
 
 /// 事务帧
 ///
 /// 用于保存事务状态，支持挂起和恢复
 pub struct TransactionFrame {
+    /// 事务持有者（引用计数共享）。
     pub handle: Arc<TxnHolder>,
+    /// 事务传播行为。
     pub propagation: Propagation,
+    /// 所属数据库 ID。
     pub db_id: String,
 }
 
@@ -67,8 +71,11 @@ impl Default for TransactionContextStack {
 /// 挂起的事务状态
 #[derive(Debug, Clone)]
 pub struct SuspendedTransaction {
+    /// 事务持有者（引用计数共享）。
     pub handle: Arc<TxnHolder>,
+    /// 事务传播行为。
     pub propagation: Propagation,
+    /// 所属数据库 ID。
     pub db_id: String,
 }
 

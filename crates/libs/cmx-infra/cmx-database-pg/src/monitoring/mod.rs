@@ -1,6 +1,6 @@
-/*
- * 监控模块（tokio-postgres 版），负责数据库连接池健康检查和事务超时监控
- */
+//! 监控模块（tokio-postgres 版）。
+//!
+//! 负责数据库连接池健康检查和事务超时监控。
 use crate::get_default_pg_db_manager;
 use crate::transaction::{
     TransactionStatus, TxnHolder, check_long_running_transactions,

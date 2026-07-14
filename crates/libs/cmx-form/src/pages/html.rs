@@ -14,21 +14,31 @@ use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{read_json_opt, read_text_opt, write_json_atomic, write_text_atomic};
 use crate::util::{is_safe_id, is_safe_segment, write_lock};
 
+/// 旧式无命名空间页面归入的虚拟域。
 const LEGACY_DOMAIN: &str = "_legacy";
+/// 批量读取单次最大页面数。
 const MAX_BATCH: usize = 64;
 
 /// 解析出的页面命名空间。
 #[derive(Debug, Clone)]
 pub struct PageNamespace {
+    /// 原始页面 id。
     pub id: String,
+    /// 域（id 首段，旧式 id 归 `_legacy`）。
     pub domain: String,
+    /// 应用（id 中间段首项，可能为空）。
     pub app: String,
+    /// 模块（id 中间段次项，可能为空）。
     pub module: String,
+    /// 页面名（id 末段）。
     pub page: String,
+    /// 源文件相对路径（由命名空间推导）。
     pub rel_path: String,
+    /// 是否为旧式无命名空间页面。
     pub is_legacy: bool,
 }
 
+/// 断言页面 id 非空且为 safe-id。
 fn assert_page_id(id: &str) -> PortalResult<String> {
     let t = id.trim();
     if t.is_empty() {
@@ -43,9 +53,21 @@ fn assert_page_id(id: &str) -> PortalResult<String> {
 }
 
 /// 解析页面 id 的命名空间（复刻 `parsePageNamespace`）。
+///
+/// 单段 id 归 `_legacy` 域；多段 id（2–4 段 `domain[.app[.module]].page`）拆分各段。
+/// 每段须为 safe-segment，禁止空段。
+///
+/// # Arguments
+///
+/// * `id` - 页面 id（点分命名空间或旧式单段）。
+///
+/// # Returns
+///
+/// 返回解析出的 [`PageNamespace`]；id 非法（空、段非法）返回 `PortalError::BadRequest`。
 pub fn parse_page_namespace(id: &str) -> PortalResult<PageNamespace> {
     let clean = assert_page_id(id)?;
     let segs: Vec<&str> = clean.split('.').collect();
+    // 逐段校验：禁止空段与非法段
     for s in &segs {
         if s.is_empty() {
             return Err(PortalError::bad_request(
@@ -58,6 +80,7 @@ pub fn parse_page_namespace(id: &str) -> PortalResult<PageNamespace> {
             )));
         }
     }
+    // 单段：归 _legacy 域
     if segs.len() == 1 {
         let only = segs[0].to_string();
         return Ok(PageNamespace {
@@ -70,11 +93,13 @@ pub fn parse_page_namespace(id: &str) -> PortalResult<PageNamespace> {
             is_legacy: true,
         });
     }
+    // 多段：首段为 domain，末段为 page，中间为 app/module
     let domain = segs[0].to_string();
     let page = segs[segs.len() - 1].to_string();
     let middle: Vec<&str> = segs[1..segs.len() - 1].to_vec();
     let app = middle.first().map(|s| s.to_string()).unwrap_or_default();
     let module = middle.get(1).map(|s| s.to_string()).unwrap_or_default();
+    // 拼源文件相对路径：domain/middle.../page.html
     let mut rel_parts = vec![domain.clone()];
     rel_parts.extend(middle.iter().map(|s| s.to_string()));
     rel_parts.push(format!("{page}.html"));
@@ -91,15 +116,19 @@ pub fn parse_page_namespace(id: &str) -> PortalResult<PageNamespace> {
     })
 }
 
+/// v1 列表文件路径（`html-pages/pages-list.json`）。
 fn list_path() -> std::path::PathBuf {
     data_path(["html-pages", "pages-list.json"])
 }
+/// v2 域清单文件路径（`html-pages/index.json`）。
 fn top_index_path() -> std::path::PathBuf {
     data_path(["html-pages", "index.json"])
 }
+/// v2 分片文件路径（`html-pages/index/<domain>.pages.json`）。
 fn shard_path(domain: &str) -> std::path::PathBuf {
     data_path(["html-pages", "index", &format!("{domain}.pages.json")])
 }
+/// 由相对路径拼源文件绝对路径（`html-pages/sources/<rel>`）。
 fn source_abs(rel: &str) -> std::path::PathBuf {
     let mut p = data_path(["html-pages", "sources"]);
     for seg in rel.split('/') {
@@ -115,6 +144,7 @@ async fn load_list() -> PortalResult<Vec<serde_json::Value>> {
         .and_then(|d| d.get("pages").and_then(|p| p.as_array()).cloned())
         .unwrap_or_default())
 }
+/// 持久化 v1 列表（覆盖写）。
 async fn persist_list(pages: &[serde_json::Value]) -> PortalResult<()> {
     write_json_atomic(&list_path(), &json!({ "version": 1, "pages": pages }), true).await
 }
@@ -126,6 +156,7 @@ async fn load_shard(domain: &str) -> PortalResult<Vec<serde_json::Value>> {
         .and_then(|d| d.get("pages").and_then(|p| p.as_array()).cloned())
         .unwrap_or_default())
 }
+/// 持久化某域分片（覆盖写，带 domain 标记）。
 async fn persist_shard(domain: &str, pages: &[serde_json::Value]) -> PortalResult<()> {
     write_json_atomic(
         &shard_path(domain),
@@ -135,6 +166,7 @@ async fn persist_shard(domain: &str, pages: &[serde_json::Value]) -> PortalResul
     .await
 }
 
+/// 读取顶层域清单。
 async fn load_top_domains() -> PortalResult<Vec<String>> {
     Ok(read_json_opt(&top_index_path())
         .await?
@@ -146,6 +178,7 @@ async fn load_top_domains() -> PortalResult<Vec<String>> {
         })
         .unwrap_or_default())
 }
+/// 持久化顶层域清单（排序去重后写）。
 async fn persist_top_domains(domains: &[String]) -> PortalResult<()> {
     let mut set: Vec<String> = domains.to_vec();
     set.sort();
@@ -169,7 +202,10 @@ fn safe_rel(rel: &str) -> PortalResult<String> {
 }
 
 /// 由 row 解析出 html 源码绝对路径（v2 relPath 优先，v1 latestHtmlFile 次之）。
+///
+/// 三级回退：relPath → latestHtmlFile（取 basename）→ `<id>.html`。
 fn resolve_html_abs(row: &serde_json::Value) -> PortalResult<std::path::PathBuf> {
+    // 优先 v2 relPath
     if let Some(rel) = row
         .get("relPath")
         .and_then(|v| v.as_str())
@@ -178,6 +214,7 @@ fn resolve_html_abs(row: &serde_json::Value) -> PortalResult<std::path::PathBuf>
         let safe = safe_rel(rel)?;
         return Ok(source_abs(&safe));
     }
+    // 次选 v1 latestHtmlFile（取 basename 防穿越）
     if let Some(latest) = row
         .get("latestHtmlFile")
         .and_then(|v| v.as_str())
@@ -192,6 +229,7 @@ fn resolve_html_abs(row: &serde_json::Value) -> PortalResult<std::path::PathBuf>
         }
         return Ok(source_abs(&base));
     }
+    // 兜底：<id>.html
     let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
     if id.is_empty() {
         return Err(PortalError::business(
@@ -202,7 +240,10 @@ fn resolve_html_abs(row: &serde_json::Value) -> PortalResult<std::path::PathBuf>
 }
 
 /// 跨分片/列表查 row。
+///
+/// 先按命名空间域查 v2 分片，未命中再查 v1 列表。
 async fn find_row_anywhere(id: &str) -> PortalResult<Option<serde_json::Value>> {
+    // 先查 v2 分片
     if let Ok(ns) = parse_page_namespace(id) {
         let shard = load_shard(&ns.domain).await?;
         if let Some(r) = shard
@@ -212,6 +253,7 @@ async fn find_row_anywhere(id: &str) -> PortalResult<Option<serde_json::Value>> 
             return Ok(Some(r));
         }
     }
+    // 回退 v1 列表
     let list = load_list().await?;
     Ok(list
         .into_iter()
@@ -219,23 +261,24 @@ async fn find_row_anywhere(id: &str) -> PortalResult<Option<serde_json::Value>> 
 }
 
 /// 由 row 读取完整页面（含 html，带 v2→v1 回退）。
+///
+/// v2 relPath 源文件缺失时回退到 v1 latestHtmlFile 扁平文件。
 async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json::Value> {
     let abs = resolve_html_abs(row)?;
     let mut html = read_text_opt(&abs).await?;
-    if html.is_none() {
-        // v2 relPath 失败时回退到 v1 latestHtmlFile 扁平文件
-        if row.get("relPath").is_some()
-            && let Some(latest) = row
-                .get("latestHtmlFile")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-        {
-            let base = std::path::Path::new(latest)
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-            html = read_text_opt(&source_abs(&base)).await?;
-        }
+    // v2 relPath 失败时回退到 v1 latestHtmlFile
+    if html.is_none()
+        && row.get("relPath").is_some()
+        && let Some(latest) = row
+            .get("latestHtmlFile")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+    {
+        let base = std::path::Path::new(latest)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        html = read_text_opt(&source_abs(&base)).await?;
     }
     let html = html.ok_or_else(|| PortalError::not_found("HTML 源码文件缺失或损坏"))?;
     let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -254,6 +297,16 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
 }
 
 /// 分页列表（带 domain/app/module 过滤）。
+///
+/// # Arguments
+///
+/// * `page` - 页码（从 1 起，缺省 1）。
+/// * `page_size` - 每页条数（缺省 20，范围 1–200）。
+/// * `f_domain` / `f_app` / `f_module` - 可选过滤条件，`None` 表示不过滤。
+///
+/// # Returns
+///
+/// 返回 `{ items, total, page, pageSize }`，items 为列表摘要 JSON。
 pub async fn list_html_pages_paged(
     page: Option<i64>,
     page_size: Option<i64>,
@@ -261,12 +314,14 @@ pub async fn list_html_pages_paged(
     f_app: Option<&str>,
     f_module: Option<&str>,
 ) -> PortalResult<serde_json::Value> {
+    // 归一页码、每页条数与过滤参数
     let p = page.unwrap_or(1).max(1);
     let size = page_size.unwrap_or(20).clamp(1, 200);
     let pages = load_list().await?;
     let fd = f_domain.unwrap_or("").trim();
     let fa = f_app.unwrap_or("").trim();
     let fm = f_module.unwrap_or("").trim();
+    // 逐条应用 domain/app/module 过滤（domain 缺省归 _legacy）
     let filtered: Vec<&serde_json::Value> = pages
         .iter()
         .filter(|r| {
@@ -291,6 +346,7 @@ pub async fn list_html_pages_paged(
         .collect();
     let total = filtered.len() as i64;
     let start = ((p - 1) * size).max(0) as usize;
+    // 切片当前页并映射为摘要
     let items: Vec<serde_json::Value> = filtered
         .into_iter()
         .skip(start)
@@ -320,23 +376,38 @@ pub async fn list_html_pages_paged(
 /// 保存入参。
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct HtmlPageInput {
+    /// 页面唯一标识。
     #[serde(default)]
     pub id: String,
+    /// 页面名称。
     #[serde(default)]
     pub name: Option<String>,
+    /// 页面描述。
     #[serde(default)]
     pub details: Option<String>,
+    /// HTML 源码（必填）。
     #[serde(default)]
     pub html: Option<String>,
+    /// 域（缺省由 id 命名空间推导）。
     #[serde(default)]
     pub domain: Option<String>,
+    /// 应用（缺省由 id 命名空间推导）。
     #[serde(default)]
     pub app: Option<String>,
+    /// 模块（缺省由 id 命名空间推导）。
     #[serde(default)]
     pub module: Option<String>,
 }
 
 /// 保存页面（写源文件 + v2 分片 + v1 列表双写）。
+///
+/// # Arguments
+///
+/// * `input` - 保存入参。
+///
+/// # Returns
+///
+/// 返回新写入的行 JSON。
 pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Value> {
     let id = assert_page_id(&input.id)?;
     let name = input.name.unwrap_or_default();
@@ -344,6 +415,7 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
     let html = input
         .html
         .ok_or_else(|| PortalError::bad_request("html 必须为字符串"))?;
+    // 解析命名空间，推导 domain/app/module/relPath
     let ns = parse_page_namespace(&id)?;
     let domain = input
         .domain
@@ -359,6 +431,7 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| ns.module.clone());
     let rel_path = ns.rel_path.clone();
+    // latestHtmlFile：旧式用 <page>.html，否则取 relPath basename
     let latest = if ns.is_legacy {
         format!("{}.html", ns.page)
     } else {
@@ -366,7 +439,9 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         rel_path.rsplit('/').next().unwrap_or(&rel_path).to_string()
     };
 
+    // 全局写锁串行化
     let _guard = write_lock().lock().await;
+    // 写源文件
     write_text_atomic(&source_abs(&rel_path), &html).await?;
 
     let row = json!({
@@ -386,6 +461,7 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         shard.push(row.clone());
     }
     persist_shard(&domain, &shard).await?;
+    // 维护顶层域清单
     let mut domains = load_top_domains().await?;
     if !domains.iter().any(|d| d == &domain) {
         domains.push(domain.clone());
@@ -412,8 +488,17 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
 }
 
 /// 按 id 读取完整页面。
+///
+/// # Arguments
+///
+/// * `id` - 页面唯一标识。
+///
+/// # Returns
+///
+/// 返回含 html 源码的完整页面 JSON；页面不存在返回 `PortalError::NotFound`。
 pub async fn get_html_page_by_id(id: &str) -> PortalResult<serde_json::Value> {
     let pid = assert_page_id(id)?;
+    // 跨分片/列表查找
     let row = find_row_anywhere(&pid)
         .await?
         .ok_or_else(|| PortalError::not_found("页面不存在"))?;
@@ -421,7 +506,16 @@ pub async fn get_html_page_by_id(id: &str) -> PortalResult<serde_json::Value> {
 }
 
 /// 批量按 id 取完整页面（domain 分桶 + 分片缓存），返回 `{ pages, errors }`。
+///
+/// # Arguments
+///
+/// * `body` - 请求体，支持 `{ ids: string[] }` 或顶层数组。
+///
+/// # Returns
+///
+/// 返回 `{ pages, errors }`；单条失败不阻断，记入 errors。
 pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<serde_json::Value> {
+    // 解析 ids：支持 { ids: [...] } 或顶层数组
     let ids: Vec<String> = if let Some(arr) = body.as_array() {
         arr.iter()
             .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
@@ -435,6 +529,7 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
             "请求体须为 { ids: string[] } 或 JSON 字符串数组",
         ));
     };
+    // 去重 + 去空
     let mut seen = std::collections::HashSet::new();
     let cleaned: Vec<String> = ids
         .into_iter()
@@ -443,13 +538,14 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
     if cleaned.is_empty() {
         return Err(PortalError::bad_request("ids 不能为空"));
     }
+    // 单次上限保护
     if cleaned.len() > MAX_BATCH {
         return Err(PortalError::bad_request(format!(
             "单次最多 {MAX_BATCH} 个页面 ID"
         )));
     }
 
-    // domain 分桶
+    // domain 分桶：按命名空间域聚合，减少分片读取次数
     let mut by_domain: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     let mut errors: Vec<serde_json::Value> = Vec::new();
@@ -460,17 +556,20 @@ pub async fn get_html_pages_by_ids(body: &serde_json::Value) -> PortalResult<ser
         }
     }
 
+    // 分片缓存：同域只读一次
     let mut shard_cache: std::collections::HashMap<String, Vec<serde_json::Value>> =
         std::collections::HashMap::new();
     let mut legacy_list: Option<Vec<serde_json::Value>> = None;
     let mut pages: Vec<serde_json::Value> = Vec::new();
 
+    // 逐域逐 id 查找并读取
     for (domain, id_list) in by_domain {
         if !shard_cache.contains_key(&domain) {
             shard_cache.insert(domain.clone(), load_shard(&domain).await?);
         }
         let shard = shard_cache.get(&domain).cloned().unwrap_or_default();
         for id in id_list {
+            // 先查分片，未命中回退 v1 列表
             let mut row = shard
                 .iter()
                 .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))

@@ -21,7 +21,7 @@
 
 use super::DdlDialect;
 use crate::MetadataError;
-use cmx_core::model::cell::{ColumnDefine, IndexDefine, TableDefine};
+use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, TableDefine};
 use std::collections::HashMap;
 use tracing::info;
 
@@ -222,8 +222,14 @@ impl DdlDiff {
     /// - 可空性（is_nullable）
     /// - 默认值（default_value）
     /// - 长度（length）
-    /// - 精度（precision）
-    /// - 小数位（scale）
+    /// - 精度（precision）、小数位（scale）：仅对 [`FieldType::Decimal`] 比较
+    ///
+    /// # 精度/标度的特殊处理
+    /// PostgreSQL 对 `integer`/`bigint`/`smallint`/`double precision` 等内置类型
+    /// 会报告类型派生的 `numeric_precision`/`numeric_scale`（如 `bigint` 恒为 64/0），
+    /// 这些并非用户定义，不应参与 diff；否则会把「设计期未定义精度」与
+    /// 「数据库类型派生精度」误判为变更，产生永久假阳性。因此仅当新列类型为
+    /// `Decimal`（用户显式定义精度的 `NUMERIC(p,s)`）时才比较 precision/scale。
     ///
     /// # 参数
     /// * `old` - 旧列定义
@@ -232,12 +238,17 @@ impl DdlDiff {
     /// # 返回值
     /// * `bool` - 是否发生实质性变更
     fn column_changed(old: &ColumnDefine, new: &ColumnDefine) -> bool {
-        old.field_type != new.field_type
+        if old.field_type != new.field_type
             || old.is_nullable != new.is_nullable
             || old.default_value != new.default_value
             || old.length != new.length
-            || old.precision != new.precision
-            || old.scale != new.scale
+        {
+            return true;
+        }
+        // 精度/标度仅对 Decimal 有意义：integer/bigint/smallint/double 等类型的
+        // numeric_precision/scale 是 PG 类型派生属性（如 bigint 恒为 64/0），不应参与 diff。
+        matches!(new.field_type, FieldType::Decimal)
+            && (old.precision != new.precision || old.scale != new.scale)
     }
 
     /// 比对索引变更
@@ -631,5 +642,44 @@ mod tests {
         )];
         let changes = DdlDiff::diff(&tables, &tables);
         assert!(changes.is_empty());
+    }
+
+    /// bigint 列经 PG 内省还原后携带派生精度（precision=64, scale=0），
+    /// 设计期定义未设置精度。两者类型相同（同为 `Int`），不应判为变更。
+    #[test]
+    fn column_changed_ignores_int_precision() {
+        let mut db_restored = make_col("sort_no", FieldType::Int, true);
+        db_restored.precision = Some(64);
+        db_restored.scale = Some(0);
+        db_restored.db_type = Some("BIGINT".to_string());
+        let desired = make_col("sort_no", FieldType::Int, true); // precision/scale = None
+
+        assert!(
+            !DdlDiff::column_changed(&db_restored, &desired),
+            "bigint 派生精度不应触发列变更"
+        );
+
+        // 整张表 diff 也应无变更
+        let old = vec![make_simple_table("cf_client", vec![db_restored.clone()], vec![])];
+        let new = vec![make_simple_table("cf_client", vec![desired], vec![])];
+        assert!(
+            DdlDiff::diff(&old, &new).is_empty(),
+            "bigint 精度假阳性：表 diff 应为空"
+        );
+    }
+
+    /// Decimal 类型的精度/标度变化仍应被检出。
+    #[test]
+    fn column_changed_detects_decimal_precision() {
+        let mut old = make_col("amount", FieldType::Decimal, true);
+        old.precision = Some(10);
+        old.scale = Some(2);
+        let mut new = make_col("amount", FieldType::Decimal, true);
+        new.precision = Some(12);
+        new.scale = Some(2);
+        assert!(
+            DdlDiff::column_changed(&old, &new),
+            "Decimal 精度变化应判为变更"
+        );
     }
 }

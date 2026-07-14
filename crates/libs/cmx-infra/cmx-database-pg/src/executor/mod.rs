@@ -125,16 +125,27 @@ impl ToSql for PgIntNull {
 /// 参数值类型（面向 types/mod.rs 的 DSL 门面，非执行路径；与 sqlx 版逐字节一致）。
 #[derive(Debug, Clone)]
 pub enum ParamValue {
+    /// SQL NULL。
     Null,
+    /// 布尔值。
     Bool(bool),
+    /// 整数（i64）。
     Int(i64),
+    /// 浮点数（f64）。
     Float(f64),
+    /// 字符串。
     String(String),
+    /// 高精度十进制数。
     Decimal(Decimal),
+    /// UTC 日期时间。
     DateTime(chrono::DateTime<chrono::Utc>),
+    /// 无时区日期。
     Date(chrono::NaiveDate),
+    /// JSON 值。
     Json(serde_json::Value),
+    /// 二进制字节串。
     Binary(Vec<u8>),
+    /// UUID。
     Uuid(Uuid),
 }
 

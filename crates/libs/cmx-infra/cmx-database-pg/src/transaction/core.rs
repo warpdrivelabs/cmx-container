@@ -370,6 +370,7 @@ pub struct TxnHolder {
 }
 
 impl TxnHolder {
+    /// 构造事务持有者（引用计数初始为 1，分配新 txn_id）。
     pub fn new(txn: DbTransaction, db_id: &str) -> Self {
         TxnHolder {
             txn,
@@ -380,10 +381,12 @@ impl TxnHolder {
         }
     }
 
+    /// 递增引用计数。
     pub fn inc(&mut self) {
         self.counter += 1;
     }
 
+    /// 递减引用计数，返回递减后的值。
     pub fn dec(&mut self) -> i32 {
         self.counter -= 1;
         self.counter
@@ -399,14 +402,17 @@ impl TxnHolder {
         self.txn.commit().await
     }
 
+    /// 返回事务 ID。
     pub fn txn_id(&self) -> &str {
         &self.txn_id
     }
 
+    /// 返回数据库 ID。
     pub fn db_id(&self) -> &str {
         &self.db_id
     }
 
+    /// 返回事务已存活时长。
     pub fn elapsed(&self) -> std::time::Duration {
         self.create_time.elapsed()
     }

@@ -65,6 +65,7 @@ pub struct TransactionGuard {
 }
 
 impl TransactionGuard {
+    /// 构造事务守卫（初始未提交）。
     pub fn new(txn_id: String, db_id: String) -> Self {
         Self {
             txn_id,
@@ -73,14 +74,17 @@ impl TransactionGuard {
         }
     }
 
+    /// 返回事务 ID。
     pub fn txn_id(&self) -> &str {
         &self.txn_id
     }
 
+    /// 返回数据库 ID。
     pub fn db_id(&self) -> &str {
         &self.db_id
     }
 
+    /// 是否已提交。
     pub fn is_committed(&self) -> bool {
         self.committed
     }
@@ -154,9 +158,13 @@ impl Drop for TransactionGuard {
 /// - **SeaValues**：sea-query 构建器产出的 `sea_query::Values`（替代 sqlx 版的 SqlxValues）。
 /// - **Typed**：强类型参数（带类型 NULL 支持），内部转 DataValue。
 pub enum SqlParams {
+    /// JSON 输入（内部转 DataValue）。
     Json(serde_json::Value),
+    /// Rust 侧已构建的 DataValue 数组。
     DataValues(Vec<DataValue>),
+    /// sea-query 构建器产出的 `sea_query::Values`。
     SeaValues(sea_query::Values),
+    /// 强类型参数（带类型 NULL 支持，内部转 DataValue）。
     Typed(Vec<cmx_core::model::cell::SqlParam>),
 }
 
