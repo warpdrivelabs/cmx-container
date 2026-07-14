@@ -173,8 +173,6 @@
           },
           "fieldLength": 20,
           "refDict": "comp_unit",
-          "refField": "code",
-          "displayField": "name",
           "physicalField": "BUKRS",
           "intDigits": 20,
           "decimalDigits": 0,
@@ -182,8 +180,15 @@
             "mode": "cmx-dict-selct"
           },
           "editSettings": {
-            "dictCode": "cf_comp_unit"
-          }
+            "dictCode": "cf_comp_unit",
+            "coord": {
+              "domain": "fi",
+              "application": "cmxfico",
+              "module": "gl"
+            }
+          },
+          "refField": "id",
+          "displayField": "code"
         },
         {
           "dataType": "VARCHAR",
@@ -3387,7 +3392,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-13T12:23:18.439Z",
+  "updatedAt": "2026-07-14T08:33:47.183Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

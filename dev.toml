@@ -364,5 +364,5 @@ userinfo_response_path = ""
 access_ttl_secs=1800000
 
 [opencode]
-enabled = false
+enabled = true
 base_url = "http://127.0.0.1:4096"

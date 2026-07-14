@@ -21,7 +21,6 @@ use cmx_database_pg::get_default_pg_db_manager;
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
-use crate::rest::header_parse::get_db_id_from_header;
 use crate::{ApiResp, Result};
 
 // ============================================================================
@@ -29,13 +28,17 @@ use crate::{ApiResp, Result};
 // ============================================================================
 
 /// `/api/dct/*` 共用坐标：定位定义文件 + 其中哪张字典表。
+///
+/// `file` 可选：缺失时由 [`resolve_dict_file`] 在 domain/app/module 下自动扫描
+/// 含该 dictCode 的 DCT 文件（优先 isDefault、回退 version 最大）。
+/// 这样前端运行时只需传 domain/app/module/dict 四元（运行时 host 无 file 坐标）。
 #[derive(Debug, Deserialize)]
 pub struct DctQuery {
     pub domain: String,
     pub application: String,
     pub module: String,
-    /// 定义文件名（如 cmxfico_dct_meta_v1.json）
-    pub file: String,
+    /// 定义文件名（如 cmxfico_dct_meta_v1.json）；可选，缺失时自动解析。
+    pub file: Option<String>,
     /// 字典表 dictCode（如 currency / gl_account / bus_partner）
     pub dict: String,
 }
@@ -71,14 +74,149 @@ struct DictColumn {
     nullable: bool,
 }
 
+/// file 缺失时自动解析的进程内缓存：`domain/app/module/dict` → file。
+/// 避免每次 search 都扫描该模块下的所有 DCT 文件（文件小、数量有限，但仍省 IO）。
+/// 开发期改了定义文件后缓存可能短暂过期，但 dictCode→file 的归属关系极少变。
+static DICT_FILE_CACHE: std::sync::OnceLock<tokio::sync::RwLock<std::collections::HashMap<String, String>>> =
+    std::sync::OnceLock::new();
+
+fn dict_file_cache() -> &'static tokio::sync::RwLock<std::collections::HashMap<String, String>> {
+    DICT_FILE_CACHE.get_or_init(|| tokio::sync::RwLock::new(std::collections::HashMap::new()))
+}
+
+/// 解析字典操作的 db_id：前端显式传 `db_id` header 时用它，缺失时回退到业务库（source_type=biz）。
+/// 字典数据通常建在业务库（如 fico-db），而非默认的主控库（primary）。
+/// 前端字典兜底数据源（cmx-dict-select 的 createRestDictDataSource）不带 db_id，
+/// 这里经 get_biz_db_id() 自动路由到业务库，免去前端手填。
+async fn resolve_db_id(headers: &HeaderMap) -> String {
+    if let Some(v) = headers.get("db_id").and_then(|h| h.to_str().ok()) {
+        let s = v.trim();
+        if !s.is_empty() {
+            return s.to_string();
+        }
+    }
+    get_default_pg_db_manager().get_biz_db_id().await
+}
+
+/// 判断字典表项是否与目标标识匹配：同时认 dictCode（如 comp_unit）和 tableName（如 cf_comp_unit）。
+/// 前端字典池统一用 tableName（物理表名），但 DctQuery.dict 也可能传 dictCode，故两者都比对。
+fn dict_matches(t: &Value, target: &str) -> bool {
+    let m = match t.get("dictMeta") {
+        Some(m) => m,
+        None => return false,
+    };
+    m.get("dictCode").and_then(|v| v.as_str()) == Some(target)
+        || m.get("tableName").and_then(|v| v.as_str()) == Some(target)
+}
+
+/// file 缺失时：在 domain/app/module 下扫描 DCT 文件，找含 dictCode 的那份定义文件。
+///
+/// 选版本策略（与前端 `_pickDefaultDefinitions` 一致）：
+///   1. 优先该 stem 组里 `isDefault=true` 的；多个取 version 最大；
+///   2. 无 isDefault 则取该 stem 组 version 最大的；
+///   3. 逐候选文件读 `dictionaryTables` 找 `dictMeta.dictCode == dict`，第一个命中的返回。
+///
+/// 缓存结果（键 `domain/app/module/dict`）。定义文件改动后若需立即生效，重启服务即可。
+async fn resolve_dict_file(domain: &str, app: &str, module: &str, dict: &str) -> Result<String> {
+    let cache_key = format!("{domain}/{app}/{module}/{dict}");
+    if let Some(f) = dict_file_cache().read().await.get(&cache_key).cloned() {
+        return Ok(f);
+    }
+    let items = cmx_portal::definitions::store::list_definitions(
+        Some("DCT"),
+        Some(domain),
+        Some(app),
+        Some(module),
+    )
+    .await?;
+    // 提取 owned 摘要元组，避开对 items 的引用生命周期纠缠。
+    // (stem, file, is_default, version)：stem 用于分组，其余用于选版本。
+    let entries: Vec<(String, String, bool, u64)> = items
+        .iter()
+        .filter_map(|it| {
+            let stem = it.get("stem").and_then(|v| v.as_str())?.to_string();
+            let file = it.get("file").and_then(|v| v.as_str())?.to_string();
+            let is_default = it.get("isDefault").and_then(|x| x.as_bool()).unwrap_or(false);
+            let version = it.get("version").and_then(|x| x.as_u64()).unwrap_or(0);
+            Some((stem, file, is_default, version))
+        })
+        .collect();
+    // 按 stem 分组，每组选出代表（isDefault 优先，否则 version 最大）。
+    let mut groups: std::collections::HashMap<String, Vec<(String, bool, u64)>> =
+        std::collections::HashMap::new();
+    for (stem, file, is_default, version) in &entries {
+        groups
+            .entry(stem.clone())
+            .or_default()
+            .push((file.clone(), *is_default, *version));
+    }
+    let pick = |arr: &[(String, bool, u64)]| -> Option<String> {
+        // 优先 isDefault=true 的；无则全员；组内取 version 最大者的 file。
+        let any_default = arr.iter().any(|(_, d, _)| *d);
+        arr.iter()
+            .filter(|(_, d, _)| if any_default { *d } else { true })
+            .max_by_key(|(_, _, v)| *v)
+            .map(|(f, _, _)| f.clone())
+    };
+    // 收集候选文件（每组代表优先），逐文件读 dictionaryTables 找 dictCode。
+    let mut candidates: Vec<String> = Vec::new();
+    for arr in groups.values() {
+        if let Some(f) = pick(arr) {
+            candidates.push(f);
+        }
+    }
+    // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好不含该 dict）。
+    let mut fallback: Vec<String> = Vec::new();
+    for (_, file, _, _) in &entries {
+        if !candidates.contains(file) {
+            fallback.push(file.clone());
+        }
+    }
+    for f in candidates.iter().chain(fallback.iter()) {
+        let doc_ref = cmx_portal::definitions::store::DefRef {
+            domain: Some(domain.to_string()),
+            application: Some(app.to_string()),
+            app: Some(app.to_string()),
+            module: Some(module.to_string()),
+            file: Some(f.clone()),
+            id: None,
+        };
+        let doc = match cmx_portal::definitions::store::get_definition(&doc_ref).await {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let hit = doc
+            .get("dictionaryTables")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().any(|t| dict_matches(t, dict)))
+            .unwrap_or(false);
+        if hit {
+            dict_file_cache()
+                .write()
+                .await
+                .insert(cache_key, f.clone());
+            return Ok(f.clone());
+        }
+    }
+    Err(api_err(&format!(
+        "未在 {domain}/{app}/{module} 下找到含字典 {dict} 的 DCT 定义文件"
+    )))
+}
+
 /// 读定义 + base，解析出指定 dictCode 的 DictView。
 async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
+    // file 缺失时自动解析：在该 domain/app/module 下扫描含 dictCode 的 DCT 文件。
+    // 前端运行时只持有 dictCode + domain/app/module（host 无 file 坐标），故 file 由后端兜底。
+    let file = match &q.file {
+        Some(f) if !f.is_empty() => f.clone(),
+        _ => resolve_dict_file(&q.domain, &q.application, &q.module, &q.dict).await?,
+    };
     let doc_ref = cmx_portal::definitions::store::DefRef {
         domain: Some(q.domain.clone()),
         application: Some(q.application.clone()),
         app: Some(q.application.clone()),
         module: Some(q.module.clone()),
-        file: Some(q.file.clone()),
+        file: Some(file.clone()),
         id: None,
     };
     let doc = cmx_portal::definitions::store::get_definition(&doc_ref).await?;
@@ -91,12 +229,7 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
 
     let t = tables
         .iter()
-        .find(|t| {
-            t.get("dictMeta")
-                .and_then(|m| m.get("dictCode"))
-                .and_then(|v| v.as_str())
-                == Some(q.dict.as_str())
-        })
+        .find(|t| dict_matches(t, &q.dict))
         .ok_or_else(|| api_err(&format!("未找到字典 {}", q.dict)))?;
 
     let dm = t.get("dictMeta").cloned().unwrap_or_else(|| json!({}));
@@ -192,7 +325,7 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))
         .unwrap_or(0);
     let spec_key = cmx_biz::validation::spec_key(
-        &q.domain, &q.application, &q.module, &q.file, &table_name, version,
+        &q.domain, &q.application, &q.module, &file, &table_name, version,
     );
     let spec = match cmx_biz::validation::get_spec(&spec_key) {
         Some(s) => s,
@@ -520,7 +653,7 @@ pub async fn dct_search(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_db_id(&headers).await;
     let view = resolve_dict(&q).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!("{:<12} - dct_search {} table={}", "HANDLER", q.dict, view.table_name);
@@ -569,7 +702,7 @@ pub async fn dct_search_zmc_msgpack(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_db_id(&headers).await;
     let view = resolve_dict(&q).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     debug!("{:<12} - dct zmc-msgpack {} table={}", "HANDLER", q.dict, view.table_name);
@@ -620,7 +753,7 @@ pub async fn dct_upsert(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_db_id(&headers).await;
     let view = resolve_dict(&q).await?;
     debug!("{:<12} - dct_upsert {} table={}", "HANDLER", q.dict, view.table_name);
 
@@ -847,7 +980,7 @@ pub async fn dct_delete(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_db_id(&headers).await;
     let view = resolve_dict(&q).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
 
@@ -893,7 +1026,7 @@ pub async fn dct_save(
     Json(body): Json<Value>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    let db_id = get_db_id_from_header(&headers).await;
+    let db_id = resolve_db_id(&headers).await;
     let view = resolve_dict(&q).await?;
     let save_mode = body
         .get("saveMode")
