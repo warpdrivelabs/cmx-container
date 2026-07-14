@@ -12,7 +12,9 @@
     "documentTypeDict": "doc_type",
     "versionName": "",
     "isDefault": true,
-    "versioning": { "enabled": true }
+    "versioning": {
+      "enabled": true
+    }
   },
   "baseDocMetaRef": {
     "file": "base_doc_meta_v1.json",
@@ -175,7 +177,13 @@
           "displayField": "name",
           "physicalField": "BUKRS",
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "edit": {
+            "mode": "cmx-dict-selct"
+          },
+          "editSettings": {
+            "dictCode": "cf_comp_unit"
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -372,11 +380,19 @@
         "documentLifecycleFields",
         "documentTechnicalFields"
       ],
-      "fieldRefDicts": {
-        "client_code": "client",
-        "comp_unit_id": "comp_unit",
-        "ledger_code": "ledger",
-        "period_code": "fisc_period"
+      "fieldOverrides": {
+        "client_code": {
+          "refDict": "client"
+        },
+        "comp_unit_id": {
+          "refDict": "comp_unit"
+        },
+        "ledger_code": {
+          "refDict": "ledger"
+        },
+        "period_code": {
+          "refDict": "fisc_period"
+        }
       }
     },
     {
@@ -662,6 +678,34 @@
           "caption": {
             "zh_CN": "集团币贷方"
           }
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "doc_type_id",
+          "name": "doc_type_id",
+          "caption": {
+            "zh_CN": "单据类型ID"
+          },
+          "refDict": "doc_type"
+        },
+        {
+          "dataType": "BIGINT",
+          "fieldLength": 20,
+          "nullable": false,
+          "dimType": "dimension",
+          "intDigits": 20,
+          "decimalDigits": 0,
+          "id": "entity_id",
+          "name": "entity_id",
+          "caption": {
+            "zh_CN": "业务主体"
+          },
+          "refDict": "comp_unit"
         }
       ],
       "remark": "参考 SAP BKPF:客户端/公司代码/凭证类型/日期/参考/抬头文本/分类账/汇率 + 6 币种合计(由科目行上卷)。凭证头不承载会计科目,会计科目从 L3 科目行开始。",
@@ -672,15 +716,25 @@
         "documentLifecycleFields",
         "documentTechnicalFields"
       ],
-      "fieldRefDicts": {
-        "client_code": "client",
-        "comp_unit_id": "comp_unit",
-        "doc_currency_code": "currency",
-        "group_currency_code": "currency",
-        "doc_type_code": "doc_type",
-        "ledger_code": "ledger",
-        "entity_id": "comp_unit",
-        "doc_type_id": "doc_type"
+      "fieldOverrides": {
+        "client_code": {
+          "refDict": "client"
+        },
+        "comp_unit_id": {
+          "refDict": "comp_unit"
+        },
+        "doc_currency_code": {
+          "refDict": "currency"
+        },
+        "group_currency_code": {
+          "refDict": "currency"
+        },
+        "doc_type_code": {
+          "refDict": "doc_type"
+        },
+        "ledger_code": {
+          "refDict": "ledger"
+        }
       }
     },
     {
@@ -905,16 +959,30 @@
         "documentLevelFields",
         "documentTechnicalFields"
       ],
-      "fieldRefDicts": {
-        "client_code": "client",
-        "comp_unit_id": "comp_unit",
-        "gl_account_id": "gl_account",
-        "posting_key_code": "posting_key",
-        "debit_credit_code": "dc_indicator",
-        "tax_code": "tax_code",
-        "spl_gl_ind_code": "spl_gl_ind"
-      },
-      "parentTable": "cv_header"
+      "parentTable": "cv_header",
+      "fieldOverrides": {
+        "client_code": {
+          "refDict": "client"
+        },
+        "comp_unit_id": {
+          "refDict": "comp_unit"
+        },
+        "gl_account_id": {
+          "refDict": "gl_account"
+        },
+        "posting_key_code": {
+          "refDict": "posting_key"
+        },
+        "debit_credit_code": {
+          "refDict": "dc_indicator"
+        },
+        "tax_code": {
+          "refDict": "tax_code"
+        },
+        "spl_gl_ind_code": {
+          "refDict": "spl_gl_ind"
+        }
+      }
     },
     {
       "level": "L4",
@@ -1315,29 +1383,6 @@
         "documentLevelFields",
         "documentTechnicalFields"
       ],
-      "fieldRefDicts": {
-        "client_code": "client",
-        "gl_account_id": "gl_account",
-        "comp_unit_id": "comp_unit",
-        "ledger_code": "ledger",
-        "ctrl_area_id": "ctrl_area",
-        "profit_ctr_id": "profit_ctr",
-        "cost_center_id": "cost_center",
-        "segment_id": "segment",
-        "bus_area_id": "bus_area",
-        "func_area_id": "func_area",
-        "trading_partner_id": "company",
-        "int_order_id": "int_order",
-        "wbs_element_id": "wbs_element",
-        "bus_partner_id": "bus_partner",
-        "customer_id": "bus_partner",
-        "supplier_id": "bus_partner",
-        "tax_code": "tax_code",
-        "spl_gl_ind_code": "spl_gl_ind",
-        "pay_terms_code": "pay_terms",
-        "pay_method_code": "pay_method",
-        "house_bank_id": "house_bank"
-      },
       "summaries": [
         {
           "id": "cv_aux_line_sum",
@@ -2324,7 +2369,72 @@
           ]
         }
       ],
-      "parentTable": "cv_acc_line"
+      "parentTable": "cv_acc_line",
+      "fieldOverrides": {
+        "client_code": {
+          "refDict": "client"
+        },
+        "gl_account_id": {
+          "refDict": "gl_account"
+        },
+        "comp_unit_id": {
+          "refDict": "comp_unit"
+        },
+        "ledger_code": {
+          "refDict": "ledger"
+        },
+        "ctrl_area_id": {
+          "refDict": "ctrl_area"
+        },
+        "profit_ctr_id": {
+          "refDict": "profit_ctr"
+        },
+        "cost_center_id": {
+          "refDict": "cost_center"
+        },
+        "segment_id": {
+          "refDict": "segment"
+        },
+        "bus_area_id": {
+          "refDict": "bus_area"
+        },
+        "func_area_id": {
+          "refDict": "func_area"
+        },
+        "trading_partner_id": {
+          "refDict": "company"
+        },
+        "int_order_id": {
+          "refDict": "int_order"
+        },
+        "wbs_element_id": {
+          "refDict": "wbs_element"
+        },
+        "bus_partner_id": {
+          "refDict": "bus_partner"
+        },
+        "customer_id": {
+          "refDict": "bus_partner"
+        },
+        "supplier_id": {
+          "refDict": "bus_partner"
+        },
+        "tax_code": {
+          "refDict": "tax_code"
+        },
+        "spl_gl_ind_code": {
+          "refDict": "spl_gl_ind"
+        },
+        "pay_terms_code": {
+          "refDict": "pay_terms"
+        },
+        "pay_method_code": {
+          "refDict": "pay_method"
+        },
+        "house_bank_id": {
+          "refDict": "house_bank"
+        }
+      }
     },
     {
       "level": "L4",
@@ -3277,7 +3387,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-06T05:29:14.059Z",
+  "updatedAt": "2026-07-13T12:23:18.439Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",
