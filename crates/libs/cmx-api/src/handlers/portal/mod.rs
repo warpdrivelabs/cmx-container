@@ -216,23 +216,6 @@ impl ModuleRoutes for PortalModule {
                 post(handler::model_deploy_plan_stream),
             )
             .route("/model/deploy-stream", post(handler::model_deploy_stream))
-            // 字典检索服务
-            .route("/dict/_schemas", get(handler::dict_schemas))
-            .route("/dict/_schema", post(handler::dict_register_schema))
-            .route("/dict/multi-search", post(handler::dict_multi_search))
-            .route("/dict/batch-data", post(handler::dict_batch_data))
-            .route("/dict/{dictId}/search", post(handler::dict_search))
-            .route("/dict/{dictId}/suggest", get(handler::dict_suggest))
-            .route(
-                "/dict/{dictId}/entries",
-                post(handler::dict_upsert_entries).delete(handler::dict_clear_entries),
-            )
-            .route(
-                "/dict/{dictId}/entries/{id}",
-                axum::routing::delete(handler::dict_delete_entry),
-            )
-            .route("/dict/{dictId}/deactivate", post(handler::dict_deactivate))
-            .route("/dict/{dictId}/supersede", post(handler::dict_supersede))
             // 弹性组合
             .route("/flexible-combination/list", get(handler::fc_list))
             .route(
@@ -251,6 +234,24 @@ impl ModuleRoutes for PortalModule {
             .route("/defs/resolve", get(handler::defs_resolve))
             .route("/defs/deps", get(handler::defs_deps))
             .route("/defs/compile", get(handler::defs_compile))
+            // ────────────── 旧接口（不推荐使用 ─ 基于 JSON 文件存储） ──────────────
+            // 字典检索服务（基于 data/dict/ 文件存储，新增字典功能请走 /api/dct/*）
+            .route("/dict/_schemas", get(handler::dict_schemas))
+            .route("/dict/_schema", post(handler::dict_register_schema))
+            .route("/dict/multi-search", post(handler::dict_multi_search))
+            .route("/dict/batch-data", post(handler::dict_batch_data))
+            .route("/dict/{dictId}/search", post(handler::dict_search))
+            .route("/dict/{dictId}/suggest", get(handler::dict_suggest))
+            .route(
+                "/dict/{dictId}/entries",
+                post(handler::dict_upsert_entries).delete(handler::dict_clear_entries),
+            )
+            .route(
+                "/dict/{dictId}/entries/{id}",
+                axum::routing::delete(handler::dict_delete_entry),
+            )
+            .route("/dict/{dictId}/deactivate", post(handler::dict_deactivate))
+            .route("/dict/{dictId}/supersede", post(handler::dict_supersede))
     }
 
     fn prefix() -> &'static str {

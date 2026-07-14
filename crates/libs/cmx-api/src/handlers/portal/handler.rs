@@ -988,6 +988,8 @@ pub struct DictEntryPath {
 }
 
 /// `GET /api/dict/_schemas` —— schema 列表。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/registry.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_schemas(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -997,6 +999,8 @@ pub async fn dict_schemas(
 }
 
 /// `POST /api/dict/_schema` —— 注册/更新 schema。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/registry.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_register_schema(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1008,6 +1012,8 @@ pub async fn dict_register_schema(
 }
 
 /// `POST /api/dict/multi-search` —— 多字典联查。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_multi_search(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1019,6 +1025,8 @@ pub async fn dict_multi_search(
 }
 
 /// `POST /api/dict/batch-data` —— 多字典内容批量加载。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_batch_data(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1030,6 +1038,8 @@ pub async fn dict_batch_data(
 }
 
 /// `POST /api/dict/:dictId/search` —— 单字典检索。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_search(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1042,6 +1052,8 @@ pub async fn dict_search(
 }
 
 /// `GET /api/dict/:dictId/suggest?q=` —— 自动补全。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_suggest(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1054,6 +1066,8 @@ pub async fn dict_suggest(
 }
 
 /// `POST /api/dict/:dictId/entries?rebuild=` —— 写入条目。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_upsert_entries(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1068,6 +1082,8 @@ pub async fn dict_upsert_entries(
 }
 
 /// `DELETE /api/dict/:dictId/entries/:id` —— 删除单条目。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_delete_entry(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1079,6 +1095,8 @@ pub async fn dict_delete_entry(
 }
 
 /// `DELETE /api/dict/:dictId/entries` —— 清空条目。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_clear_entries(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1090,6 +1108,8 @@ pub async fn dict_clear_entries(
 }
 
 /// `POST /api/dict/:dictId/deactivate` —— 停用一个码。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_deactivate(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -1105,6 +1125,8 @@ pub async fn dict_deactivate(
 }
 
 /// `POST /api/dict/:dictId/supersede` —— 停旧启新。
+///
+/// ⚠️ 不推荐使用 —— 基于 `data/dict/entries/*.json` 文件存储的旧接口。新增字典功能请走 `/api/dct/*`（数据库）。
 pub async fn dict_supersede(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,

@@ -369,3 +369,24 @@ git push origin main
 所有 `init()` / `initialize()` / `setup_*()` 函数**必须**返回 `Result<()>`，**禁止**使用 `panic!` / `expect` / `unwrap`。错误通过 `thiserror` 定义，向上传播。
 
 > 与第一章 1.4（禁裸 unwrap）配合：1.4 管所有代码路径的 unwrap，本章专门约束初始化函数的错误传播方式。
+
+---
+
+## 十八、旧接口/旧代码标记（禁止参考）
+
+### 18.1 目录标记
+
+以下目录对应的接口和代码为**旧实现**，基于 JSON 文件存储，不走数据库。开发过程中**禁止参考**这些代码，新增功能应基于数据库的新接口（`/api/dct/*`、`/api/doc/*` 等）：
+
+| 目录 | 说明 | 对应旧接口 |
+|------|------|-----------|
+| `data/dict/` | 字典数据 JSON 文件存储（registry.json + entries/*.json） | `/api/dict/*`（cmx-model/src/dict/） |
+| `data/fact/` | 业务凭证事实数据 JSON 文件存储 | 旧凭证接口 |
+| `data/form-pages/` | 表单页面定义 JSON 文件存储 | 旧表单接口 |
+
+### 18.2 开发约束
+
+1. **新增字典功能** → 走 `/api/dct/*`（[dct.rs](file:///media/yqs/工作/rustspace/cmx/cmx-container/crates/libs/cmx-api/src/handlers/portal/dct.rs)），直读/写 PostgreSQL 表。
+2. **禁止参考** `cmx-model/src/dict/` 下的 `schema.rs`、`repo.rs`、`api.rs`、`write.rs` 等文件存储代码。
+3. **禁止参考** `data/dict/`、`data/fact/`、`data/form-pages/` 目录下的 JSON 文件结构。
+4. 旧代码仅做**维护兼容**使用，新增功能不得沿用其模式。
