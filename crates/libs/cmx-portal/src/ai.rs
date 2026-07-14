@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use crate::error::{PortalError, PortalResult};
 
+/// 返回 AI 服务的 base URL（CMX_AI_BASE_URL，默认 DeepSeek）。
 fn ai_base_url() -> String {
     std::env::var("CMX_AI_BASE_URL")
         .unwrap_or_else(|_| "https://api.deepseek.com".to_string())
@@ -17,10 +18,12 @@ fn ai_base_url() -> String {
         .to_string()
 }
 
+/// 返回 AI 模型名（CMX_AI_MODEL，默认 deepseek-v4-flash）。
 fn ai_model() -> String {
     std::env::var("CMX_AI_MODEL").unwrap_or_else(|_| "deepseek-v4-flash".to_string())
 }
 
+/// 返回 AI 请求超时毫秒（CMX_AI_TIMEOUT_MS，下限 1000）。
 fn ai_timeout_ms() -> u64 {
     std::env::var("CMX_AI_TIMEOUT_MS")
         .ok()
@@ -29,6 +32,7 @@ fn ai_timeout_ms() -> u64 {
         .max(1000)
 }
 
+/// 返回 AI 最大历史消息数（CMX_AI_MAX_HISTORY，范围 1..=50）。
 fn ai_max_history() -> usize {
     std::env::var("CMX_AI_MAX_HISTORY")
         .ok()
@@ -37,6 +41,7 @@ fn ai_max_history() -> usize {
         .clamp(1, 50)
 }
 
+/// 返回 AI 系统提示词（CMX_AI_SYSTEM_PROMPT，默认 CMXPortalManager 助手）。
 fn ai_system_prompt() -> String {
     std::env::var("CMX_AI_SYSTEM_PROMPT").unwrap_or_else(|_| {
         "你是 CMXPortalManager 的 AI 助手。请使用简洁、准确的中文回答用户问题，必要时结合传入的门户工作区上下文。".to_string()
@@ -60,6 +65,20 @@ pub fn is_configured() -> bool {
 /// 调用 OpenAI 兼容 chat/completions，返回 assistant 文本（供 agent LlmPlanner 复用）。
 ///
 /// `messages` 为完整消息数组（含 system）。`json_mode` 为 true 时请求 `response_format: json_object`。
+///
+/// # Arguments
+///
+/// * `messages` - 完整消息数组（含 system 消息）。
+/// * `json_mode` - 是否请求 JSON 对象响应格式。
+/// * `temperature` - 采样温度。
+///
+/// # Returns
+///
+/// 成功时返回 assistant 文本内容。
+///
+/// # Errors
+///
+/// 当 AI 服务未配置、请求失败或上游未返回有效回复时返回 `PortalError`。
 pub async fn raw_chat_completion(
     messages: Value,
     json_mode: bool,
@@ -123,6 +142,20 @@ pub async fn raw_chat_completion(
 ///
 /// 每收到一个 token 增量即调用 `on_delta(&str)`，返回拼接后的完整文本。用于 agent 逐字输出。
 /// 任一环节失败返回 Err（调用方可回退到非流式或本地总结）。
+///
+/// # Arguments
+///
+/// * `messages` - 完整消息数组（含 system 消息）。
+/// * `temperature` - 采样温度。
+/// * `on_delta` - 每收到一个 token 增量时调用的回调。
+///
+/// # Returns
+///
+/// 成功时返回拼接后的完整 assistant 文本。
+///
+/// # Errors
+///
+/// 当 AI 服务未配置、请求失败或上游未返回有效回复时返回 `PortalError`。
 pub async fn stream_chat_completion<F>(
     messages: Value,
     temperature: f64,
@@ -242,6 +275,18 @@ fn truncate_chars(s: &str, max: usize) -> String {
 }
 
 /// 执行 AI 对话补全。body 形如 `{ messages:[{role,content}], context?, model? }`。
+///
+/// # Arguments
+///
+/// * `body` - 请求体，包含 messages、可选 context 与 model。
+///
+/// # Returns
+///
+/// 成功时返回包含 id、model、message、usage 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当 AI 服务未配置、messages 为空、请求失败或上游未返回有效回复时返回 `PortalError`。
 pub async fn chat(body: &Value) -> PortalResult<Value> {
     if !is_configured() {
         return Err(PortalError::Business(

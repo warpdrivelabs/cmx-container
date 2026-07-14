@@ -21,6 +21,7 @@ fn normalize_set_name(name: &str) -> String {
     }
 }
 
+/// 判断状态是否为启用（非 disabled 即视为启用）。
 fn active_only(status: &str) -> bool {
     status.trim() != "disabled"
 }
@@ -53,8 +54,18 @@ fn build_applications(
 
 /// DAM 派生活动栏文档（无可用应用时返回 None 以回退文件）。
 ///
-/// - `name` 归一出非空域（如 `fiportal`→`fi`）：只取该域的应用。
-/// - `name` 归一为空域（如门户级 `portal`）：聚合**全部启用域**的应用，门户即全域聚合。
+/// # Arguments
+///
+/// * `name` - 活动栏名称，归一出非空域（如 `fiportal`->`fi`）时只取该域的应用；
+///   归一为空域（如门户级 `portal`）时聚合**全部启用域**的应用，门户即全域聚合。
+///
+/// # Returns
+///
+/// 有可用应用时返回 `Some(文档)`；无可用应用时返回 `None` 以回退文件读取。
+///
+/// # Errors
+///
+/// 列举 DAM 域/应用/模块失败时返回底层错误。
 async fn dam_activities_doc(name: &str) -> PortalResult<Option<serde_json::Value>> {
     let domain = normalize_set_name(name);
 
@@ -108,6 +119,18 @@ async fn dam_activities_doc(name: &str) -> PortalResult<Option<serde_json::Value
 }
 
 /// 读取活动栏（域应用清单）文档。
+///
+/// # Arguments
+///
+/// * `name` - 活动栏名称（如 `fiportal`、`portal`），仅允许字母、数字、._-。
+///
+/// # Returns
+///
+/// DAM 派生优先；无可用应用时回退读 `activities/<name>.json` 文件原样返回。
+///
+/// # Errors
+///
+/// `name` 为空或非法返回 `bad_request`；文件不存在返回 `not_found`；读取失败返回底层错误。
 pub async fn get_activities_doc(name: &str) -> PortalResult<serde_json::Value> {
     let n = name.trim();
     if n.is_empty() {

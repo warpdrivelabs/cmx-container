@@ -15,15 +15,21 @@ use crate::util::{validate_id, write_lock};
 /// 节点完整记录。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceNodeRecord {
+    /// 节点唯一标识。
     pub id: String,
+    /// 节点名称。
     #[serde(default)]
     pub name: String,
+    /// 图标名。
     #[serde(default)]
     pub icon: String,
+    /// 详情描述。
     #[serde(default)]
     pub details: String,
+    /// 工作区配置（完整 workspace 定义）。
     #[serde(default)]
     pub workspace: serde_json::Value,
+    /// 最后更新时间（RFC3339，服务端维护）。
     #[serde(default, rename = "updatedAt")]
     pub updated_at: String,
 }
@@ -31,10 +37,15 @@ pub struct WorkspaceNodeRecord {
 /// 列表摘要项（不含 workspace 内容）。
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkspaceNodeSummary {
+    /// 节点唯一标识。
     pub id: String,
+    /// 节点名称。
     pub name: String,
+    /// 图标名。
     pub icon: String,
+    /// 详情描述。
     pub details: String,
+    /// 最后更新时间（RFC3339）。
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
 }
@@ -42,23 +53,37 @@ pub struct WorkspaceNodeSummary {
 /// 保存入参（来自 HTTP body）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct WorkspaceNodeInput {
+    /// 节点唯一标识（新建时可为空，由服务端生成）。
     #[serde(default)]
     pub id: String,
+    /// 节点名称。
     #[serde(default)]
     pub name: Option<String>,
+    /// 图标名。
     #[serde(default)]
     pub icon: Option<String>,
+    /// 详情描述。
     #[serde(default)]
     pub details: Option<String>,
+    /// 工作区配置（必须为对象）。
     #[serde(default)]
     pub workspace: Option<serde_json::Value>,
 }
 
+/// 返回节点存储文件的绝对路径（`node/nodes.json`）。
 fn nodes_path() -> std::path::PathBuf {
     data_path(["node", "nodes.json"])
 }
 
 /// 读取节点文档（容错：缺失 / 结构非法时返回空文档）。
+///
+/// # Returns
+///
+/// 节点文档 JSON（保证含 `version` 和 `nodes` 对象字段）。
+///
+/// # Errors
+///
+/// 读取文件失败（非 NotFound）时返回底层 IO/解析错误。
 async fn read_doc() -> PortalResult<serde_json::Value> {
     match read_json_opt(&nodes_path()).await? {
         Some(v) if v.get("nodes").map(|n| n.is_object()).unwrap_or(false) => Ok(v),
@@ -67,6 +92,14 @@ async fn read_doc() -> PortalResult<serde_json::Value> {
 }
 
 /// 列出节点摘要，按 updatedAt 倒序。
+///
+/// # Returns
+///
+/// `{ items: [WorkspaceNodeSummary], total: usize }`，按 updatedAt 字典序倒序。
+///
+/// # Errors
+///
+/// 读取节点文档失败时返回底层错误。
 pub async fn list_workspace_nodes() -> PortalResult<serde_json::Value> {
     let doc = read_doc().await?;
     let mut items: Vec<WorkspaceNodeSummary> = doc["nodes"]
@@ -110,6 +143,18 @@ pub async fn list_workspace_nodes() -> PortalResult<serde_json::Value> {
 }
 
 /// 按 id 读取完整节点定义。
+///
+/// # Arguments
+///
+/// * `id` - 节点唯一标识。
+///
+/// # Returns
+///
+/// 节点完整记录（含 workspace 内容）。
+///
+/// # Errors
+///
+/// `id` 非法返回 `bad_request`；节点不存在返回 `not_found`；读取/反序列化失败返回底层错误。
 pub async fn get_workspace_node_by_id(id: &str) -> PortalResult<WorkspaceNodeRecord> {
     let key = validate_id(id, "id")?;
     let doc = read_doc().await?;
@@ -122,6 +167,18 @@ pub async fn get_workspace_node_by_id(id: &str) -> PortalResult<WorkspaceNodeRec
 }
 
 /// upsert 保存节点（updatedAt 由服务端写当前时间）。
+///
+/// # Arguments
+///
+/// * `input` - 保存入参（来自 HTTP body），id 可为空（新建）。
+///
+/// # Returns
+///
+/// 保存后的节点完整记录。
+///
+/// # Errors
+///
+/// `id` 非法或 workspace 非对象返回 `bad_request`；读取/写入文件失败返回底层错误。
 pub async fn save_workspace_node(input: WorkspaceNodeInput) -> PortalResult<WorkspaceNodeRecord> {
     let id = validate_id(&input.id, "id")?;
     let workspace = match input.workspace {
@@ -144,7 +201,19 @@ pub async fn save_workspace_node(input: WorkspaceNodeInput) -> PortalResult<Work
     Ok(record)
 }
 
-/// 删除节点。返回 `{ id, removed }`。
+/// 删除节点。
+///
+/// # Arguments
+///
+/// * `id` - 待删除节点唯一标识。
+///
+/// # Returns
+///
+/// `{ id, removed }`，`removed` 为 `true` 表示已删除，`false` 表示节点不存在。
+///
+/// # Errors
+///
+/// `id` 非法返回 `bad_request`；读取/写入文件失败返回底层错误。
 pub async fn delete_workspace_node(id: &str) -> PortalResult<serde_json::Value> {
     let key = validate_id(id, "id")?;
     let _guard = write_lock().lock().await;

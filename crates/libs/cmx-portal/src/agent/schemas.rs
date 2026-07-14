@@ -3,6 +3,10 @@
 use serde_json::{Value, json};
 
 /// Agent 工具公开 schema（capabilities 返回）。
+///
+/// # Returns
+///
+/// 返回一个 JSON 数组，每个元素描述一个工具的名称、描述、是否需要审批以及输入 schema。
 pub fn public_tool_schemas() -> Value {
     json!([
         {

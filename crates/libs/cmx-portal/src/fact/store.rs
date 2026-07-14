@@ -10,19 +10,26 @@ use crate::util::{is_safe_json_file, is_safe_segment};
 /// 事实文件引用（domain/app/module/file）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct FactRef {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 事实文件名（须 `*.json`）。
     pub file: String,
 }
 
 /// list 查询过滤（任一缺省则该级放宽）。
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct FactQuery {
+    /// 可选域 id 过滤条件。
     #[serde(default)]
     pub domain: Option<String>,
+    /// 可选应用 id 过滤条件。
     #[serde(default)]
     pub app: Option<String>,
+    /// 可选模块 id 过滤条件。
     #[serde(default)]
     pub module: Option<String>,
 }
@@ -30,9 +37,13 @@ pub struct FactQuery {
 /// list 返回项。
 #[derive(Debug, Clone, Serialize)]
 pub struct FactItem {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 事实文件名。
     pub file: String,
 }
 
@@ -69,6 +80,18 @@ fn validate_ref(r: &FactRef) -> PortalResult<[String; 4]> {
 }
 
 /// 读取某 DAM+file 的事实数据（原样 JSON）。
+///
+/// # Arguments
+///
+/// * `r` - 事实文件引用（domain/app/module/file）。
+///
+/// # Returns
+///
+/// 返回该文件的原始 JSON 内容。
+///
+/// # Errors
+///
+/// 参数非法返回 `PortalError::BadRequest`；文件不存在返回 `PortalError::NotFound`。
 pub async fn get_fact(r: &FactRef) -> PortalResult<serde_json::Value> {
     let parts = validate_ref(r)?;
     let path = data_path(["fact", &parts[0], &parts[1], &parts[2], &parts[3]]);
@@ -83,6 +106,18 @@ pub async fn get_fact(r: &FactRef) -> PortalResult<serde_json::Value> {
 }
 
 /// 列出某 DAM 目录下的事实文件（按 domain/app/module 逐级过滤）。
+///
+/// # Arguments
+///
+/// * `q` - 查询过滤条件，任一字段缺省则该级放宽。
+///
+/// # Returns
+///
+/// 返回匹配的事实文件列表，按 domain/app/module/file 排序。
+///
+/// # Errors
+///
+/// 目录读取失败时返回 `PortalError::Io`。
 pub async fn list_facts(q: &FactQuery) -> PortalResult<Vec<FactItem>> {
     let root = data_path(["fact"]);
     let want_domain = q.domain.as_deref().unwrap_or("").trim().to_string();

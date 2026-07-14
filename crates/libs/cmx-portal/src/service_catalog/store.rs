@@ -6,12 +6,16 @@ use crate::config::data_path;
 use crate::error::PortalResult;
 use crate::util::is_safe_segment;
 
+/// 预览环境名称（用于展开 urlPreview 的变量）。
 const PREVIEW_ENV: &str = "dev";
+/// HTTP 方法块名集合（用于识别 .bru 中的请求定义块）。
 const METHOD_BLOCKS: &[&str] = &["get", "post", "put", "patch", "delete", "head", "options"];
 
 /// 顶层块 `<name> { ... }`。
 struct BruBlock {
+    /// 块名（如 meta、get、headers 等）。
     name: String,
+    /// 块体文本（花括号内的原始内容）。
     body: String,
 }
 
@@ -87,6 +91,7 @@ fn parse_kv_block(body: &str) -> Vec<(String, String)> {
     out
 }
 
+/// 将键值对列表转为 JSON 对象。
 fn kv_to_object(kv: &[(String, String)]) -> serde_json::Map<String, Value> {
     let mut m = serde_json::Map::new();
     for (k, v) in kv {
@@ -95,6 +100,7 @@ fn kv_to_object(kv: &[(String, String)]) -> serde_json::Map<String, Value> {
     m
 }
 
+/// 按键名查找首个匹配的值。
 fn kv_get(kv: &[(String, String)], key: &str) -> String {
     kv.iter()
         .find(|(k, _)| k == key)
@@ -128,17 +134,27 @@ fn dedent_raw_block(body: &str) -> String {
 
 /// 解析单个 .bru 中间结构。
 struct Bru {
+    /// meta 块解析出的元信息。
     meta: serde_json::Map<String, Value>,
+    /// HTTP 方法（大写）。
     method: String,
+    /// 请求 URL。
     url: String,
+    /// 请求体模式（none/json 等）。
     body_mode: String,
+    /// 请求头集合。
     headers: serde_json::Map<String, Value>,
+    /// 查询参数列表。
     query: Vec<(String, String)>,
+    /// JSON 请求体模板。
     body_json: String,
+    /// WebSocket URL。
     ws_url: String,
+    /// 文档说明。
     docs: String,
 }
 
+/// 解析 .bru 文本为中间结构。
 fn parse_bru(text: &str) -> Bru {
     let mut res = Bru {
         meta: serde_json::Map::new(),
@@ -242,6 +258,18 @@ fn derive_dam(rel_parts: &[String], file_name: &str) -> (String, String, String,
 }
 
 /// 递归收集 .bru 文件（跳过根 environments/、folder.bru、隐藏文件）。
+///
+/// # Arguments
+///
+/// * `root` - 服务目录根路径。
+///
+/// # Returns
+///
+/// 元组列表：(相对路径段, 文件名, 绝对路径)。
+///
+/// # Errors
+///
+/// 读取目录项失败时返回 `PortalError`。
 async fn collect_bru_files(
     root: &std::path::Path,
 ) -> PortalResult<Vec<(Vec<String>, String, std::path::PathBuf)>> {
@@ -283,7 +311,15 @@ async fn collect_bru_files(
     Ok(out)
 }
 
-/// 解析全部服务（无缓存——按需读盘；与 Node 缓存语义等价的「调一次解析一次」）。
+/// 解析全部服务（无缓存--按需读盘；与 Node 缓存语义等价的「调一次解析一次」）。
+///
+/// # Returns
+///
+/// 全部服务的 JSON 值列表。
+///
+/// # Errors
+///
+/// 收集 .bru 文件失败时返回 `PortalError`。
 async fn load_all() -> PortalResult<Vec<Value>> {
     let dir = data_path(["service-catalog"]);
     if tokio::fs::metadata(&dir).await.is_err() {
@@ -364,6 +400,20 @@ async fn load_all() -> PortalResult<Vec<Value>> {
 }
 
 /// 列出服务（按 domain/app/module 过滤）。
+///
+/// # Arguments
+///
+/// * `domain` - 领域过滤；`None` 或空表示不过滤。
+/// * `app` - 应用过滤；`None` 或空表示不过滤。
+/// * `module` - 模块过滤；`None` 或空表示不过滤。
+///
+/// # Returns
+///
+/// 符合过滤条件的服务列表。
+///
+/// # Errors
+///
+/// 加载全部服务失败时返回 `PortalError`。
 pub async fn list_services(
     domain: Option<&str>,
     app: Option<&str>,
@@ -384,6 +434,18 @@ pub async fn list_services(
 }
 
 /// 按 id 取单个服务（不存在返回 None）。
+///
+/// # Arguments
+///
+/// * `id` - 服务标识。
+///
+/// # Returns
+///
+/// 匹配到的服务；不存在时返回 `None`。
+///
+/// # Errors
+///
+/// 加载全部服务失败时返回 `PortalError`。
 pub async fn get_service_by_id(id: &str) -> PortalResult<Option<Value>> {
     let all = load_all().await?;
     Ok(all

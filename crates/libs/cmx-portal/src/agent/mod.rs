@@ -14,6 +14,10 @@ pub mod schemas;
 pub mod tools;
 
 /// agent 操作的根目录（CMX_AGENT_ROOT 或当前工作目录）。
+///
+/// # Returns
+///
+/// 返回规范化后的根目录路径，失败时回退到 `.`。
 pub fn root_dir() -> std::path::PathBuf {
     std::env::var("CMX_AGENT_ROOT")
         .ok()

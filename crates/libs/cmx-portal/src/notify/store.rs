@@ -14,12 +14,20 @@ use crate::util::{is_safe_segment, write_lock};
 /// 三个中心。值即落盘目录名；label 为前端默认显示名。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotifyCenter {
+    /// 任务中心。
     Task,
+    /// 消息中心。
     Message,
+    /// 日志中心。
     Log,
 }
 
 impl NotifyCenter {
+    /// 返回中心对应的落盘目录名。
+    ///
+    /// # Returns
+    ///
+    /// 中心的小写目录名字符串。
     pub fn as_str(self) -> &'static str {
         match self {
             NotifyCenter::Task => "task",
@@ -27,6 +35,11 @@ impl NotifyCenter {
             NotifyCenter::Log => "log",
         }
     }
+    /// 返回中心的前端默认显示名。
+    ///
+    /// # Returns
+    ///
+    /// 中心的中文显示名。
     pub fn label(self) -> &'static str {
         match self {
             NotifyCenter::Task => "任务中心",
@@ -34,6 +47,15 @@ impl NotifyCenter {
             NotifyCenter::Log => "日志中心",
         }
     }
+    /// 将字符串解析为中心枚举。
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - 待解析的字符串（task/message/log）。
+    ///
+    /// # Returns
+    ///
+    /// 匹配到的中心枚举；无法匹配时返回 `None`。
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "task" => Some(NotifyCenter::Task),
@@ -42,6 +64,11 @@ impl NotifyCenter {
             _ => None,
         }
     }
+    /// 返回全部三个中心。
+    ///
+    /// # Returns
+    ///
+    /// 包含任务、消息、日志中心的数组。
     pub fn all() -> [NotifyCenter; 3] {
         [NotifyCenter::Task, NotifyCenter::Message, NotifyCenter::Log]
     }
@@ -51,9 +78,13 @@ impl NotifyCenter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotifyItem {
+    /// 通知唯一标识。
     pub id: String,
+    /// 所属中心（task/message/log）。
     pub center: String,
+    /// 通知标题。
     pub title: String,
+    /// 通知正文（可选）。
     #[serde(default)]
     pub body: String,
     /// 业务等级：info | success | warning | error。
@@ -69,6 +100,7 @@ pub struct NotifyItem {
     pub created_at: i64,
 }
 
+/// 返回默认的业务等级。
 fn default_level() -> String {
     "info".to_string()
 }
@@ -80,12 +112,17 @@ pub struct NotifyInput {
     /// 目标用户；缺省时由 handler 用当前登录用户回填。
     #[serde(default)]
     pub user_id: Option<String>,
+    /// 通知中心（task/message/log）。
     pub center: String,
+    /// 通知标题。
     pub title: String,
+    /// 通知正文（可选）。
     #[serde(default)]
     pub body: Option<String>,
+    /// 业务等级（info/success/warning/error，可选）。
     #[serde(default)]
     pub level: Option<String>,
+    /// 点击跳转目标（可选）。
     #[serde(default)]
     pub link: Option<String>,
 }
@@ -94,13 +131,29 @@ pub struct NotifyInput {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotifyCounts {
+    /// 任务中心未读数。
     pub task: i64,
+    /// 消息中心未读数。
     pub message: i64,
+    /// 日志中心未读数。
     pub log: i64,
     /// 三中心未读合计 = shellbar 红色数字。
     pub total: i64,
 }
 
+/// 校验并清洗用户标识（非空 + 仅允许安全字符）。
+///
+/// # Arguments
+///
+/// * `user_id` - 待校验的用户标识。
+///
+/// # Returns
+///
+/// 清洗后的合法用户标识。
+///
+/// # Errors
+///
+/// 用户标识为空或含非法字符时返回 `PortalError`。
 fn safe_user(user_id: &str) -> PortalResult<String> {
     let u = user_id.trim();
     if u.is_empty() {
@@ -114,14 +167,17 @@ fn safe_user(user_id: &str) -> PortalResult<String> {
     Ok(u.to_string())
 }
 
+/// 构造某用户某中心的通知目录路径。
 fn center_dir(user_id: &str, center: NotifyCenter) -> std::path::PathBuf {
     data_path(["notification-center", user_id, center.as_str()])
 }
 
+/// 构造某用户某中心单条通知的文件路径。
 fn item_path(user_id: &str, center: NotifyCenter, file: &str) -> std::path::PathBuf {
     data_path(["notification-center", user_id, center.as_str(), file])
 }
 
+/// 返回当前时间的 epoch 毫秒数。
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -130,6 +186,19 @@ fn now_millis() -> i64 {
 }
 
 /// 读取某用户某中心的全部通知（按 createdAt 倒序）。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
+/// * `center` - 通知中心。
+///
+/// # Returns
+///
+/// 该中心全部通知列表（按创建时间倒序）。
+///
+/// # Errors
+///
+/// 读取目录失败时返回 `PortalError`；目录不存在时返回空列表。
 async fn read_center(user_id: &str, center: NotifyCenter) -> PortalResult<Vec<NotifyItem>> {
     let dir = center_dir(user_id, center);
     let mut rd = match tokio::fs::read_dir(&dir).await {
@@ -156,6 +225,19 @@ async fn read_center(user_id: &str, center: NotifyCenter) -> PortalResult<Vec<No
 }
 
 /// 列出某用户的通知。center=None 表示三中心全部。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
+/// * `center` - 通知中心；`None` 表示三中心全部。
+///
+/// # Returns
+///
+/// 通知列表（按创建时间倒序）。
+///
+/// # Errors
+///
+/// 用户标识非法时返回 `PortalError`。
 pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<Vec<NotifyItem>> {
     let u = safe_user(user_id)?;
     let mut out = Vec::new();
@@ -172,6 +254,18 @@ pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<V
 }
 
 /// 计算某用户各中心未读数 + 合计。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
+///
+/// # Returns
+///
+/// 各中心未读数及合计。
+///
+/// # Errors
+///
+/// 用户标识非法时返回 `PortalError`。
 pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
     let u = safe_user(user_id)?;
     let mut c = NotifyCounts {
@@ -197,6 +291,18 @@ pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
 }
 
 /// 发布一条通知：落盘 + 广播 SSE（新通知事件 + 最新 counts 事件）。
+///
+/// # Arguments
+///
+/// * `input` - 通知发布入参。
+///
+/// # Returns
+///
+/// 已落盘的通知项。
+///
+/// # Errors
+///
+/// 用户标识非法、center 不支持或 title 为空时返回 `PortalError`。
 pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
     let user_id = safe_user(input.user_id.as_deref().unwrap_or(""))?;
     let center = NotifyCenter::parse(input.center.trim())
@@ -248,6 +354,20 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
 }
 
 /// 标记单条已读。返回是否发生变化。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
+/// * `center` - 通知中心。
+/// * `id` - 通知标识。
+///
+/// # Returns
+///
+/// 通知是否由未读变为已读。
+///
+/// # Errors
+///
+/// 用户标识或通知 id 非法、通知不存在时返回 `PortalError`。
 pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalResult<bool> {
     let u = safe_user(user_id)?;
     if !is_safe_segment(&id.replace('.', "_")) && !id.starts_with("n_") {
@@ -275,6 +395,19 @@ pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalR
 }
 
 /// 标记某用户全部（或某中心）已读。返回标记的条数。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
+/// * `center` - 通知中心；`None` 表示三中心全部。
+///
+/// # Returns
+///
+/// 本次标记已读的条数。
+///
+/// # Errors
+///
+/// 用户标识非法时返回 `PortalError`。
 pub async fn mark_all_read(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<i64> {
     let u = safe_user(user_id)?;
     let centers: Vec<NotifyCenter> = match center {
@@ -303,6 +436,10 @@ pub async fn mark_all_read(user_id: &str, center: Option<NotifyCenter>) -> Porta
 }
 
 /// 重新计算并广播某用户的 counts（标记已读后刷新角标）。
+///
+/// # Arguments
+///
+/// * `user_id` - 用户标识。
 async fn broadcast_counts(user_id: &str) {
     if let Ok(c) = counts(user_id).await {
         hub::publish_event(NotifyEvent {
@@ -314,6 +451,10 @@ async fn broadcast_counts(user_id: &str) {
 }
 
 /// 三中心元信息（前端下拉用：值/标签/图标）。静态注册。
+///
+/// # Returns
+///
+/// 包含三中心元信息的 JSON 值。
 pub fn centers_meta() -> serde_json::Value {
     json!({
         "centers": [
