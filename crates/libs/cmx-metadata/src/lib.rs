@@ -18,3 +18,6 @@ pub use executor::{
     BaseError, PgTableDefineExecutor, TableDefineDbExecutor, execute_ddl_by_ids,
     execute_ddl_statement_by_ids,
 };
+pub use ddl::DdlDialect;
+pub use ddl::diff::{ColumnChange, DdlDiff, TableChange};
+pub use ddl::postgres::PostgresDdlDialect;

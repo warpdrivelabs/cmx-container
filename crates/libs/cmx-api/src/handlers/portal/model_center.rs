@@ -11,14 +11,17 @@
 //! - DDL 用 txn_id=None（PG DDL 自动提交）；台账 DML 在事务内；失败经 deploy_history 状态可对账。
 //! - additive-only：create_or_upgrade_table 只加列/加索引，不 DROP。
 
-use cmx_core::model::cell::DataValue;
-use cmx_core::model::cell::{ColumnDefine, FieldType, IndexDefine, IndexKind, TableDefine};
+use cmx_core::model::cell::{
+    ColumnDefine, DataValue, FieldType, IndexDefine, IndexKind, TableDefine,
+};
 use cmx_database::get_default_db_manager;
-use cmx_metadata::{PgTableDefineExecutor, TableDefineDbExecutor};
+use cmx_metadata::{
+    ColumnChange, DdlDiff, DdlDialect, PgTableDefineExecutor, PostgresDdlDialect, TableChange,
+    TableDefineDbExecutor,
+};
 use cmx_utils::snowflake_id_str;
 use serde_json::{Value, json};
 use std::cmp::Reverse;
-use std::collections::HashMap;
 
 use crate::Result;
 use cmx_api_types::Error;
@@ -516,88 +519,6 @@ async fn table_exists(db_id: &str, table: &str) -> Result<bool> {
     Ok(n > 0)
 }
 
-#[derive(Debug, Clone)]
-struct DbColumnSnapshot {
-    data_type: String,
-    length: Option<i64>,
-    precision: Option<i64>,
-    scale: Option<i64>,
-    nullable: bool,
-    default_value: Option<String>,
-}
-
-fn data_value_i64(v: &DataValue) -> Option<i64> {
-    match v {
-        DataValue::Int(i) => Some(*i),
-        DataValue::Float(f) => Some(*f as i64),
-        DataValue::Decimal(d) => d.to_string().parse::<i64>().ok(),
-        DataValue::String(s) => s.trim().parse::<i64>().ok(),
-        DataValue::ShortStr(s) => s.trim().parse::<i64>().ok(),
-        DataValue::LongStr(s) => s.trim().parse::<i64>().ok(),
-        _ => None,
-    }
-}
-
-fn desired_type_name(c: &ColumnDefine) -> &'static str {
-    match c.field_type {
-        FieldType::String => "character varying",
-        FieldType::Text => "text",
-        FieldType::Int => "integer",
-        FieldType::Decimal => "numeric",
-        FieldType::Float => "double precision",
-        FieldType::Date => "date",
-        FieldType::DateTime => "timestamp without time zone",
-        FieldType::Bool => "boolean",
-        FieldType::Json => "jsonb",
-        FieldType::Uuid => "uuid",
-        FieldType::Binary => "bytea",
-        _ => "character varying",
-    }
-}
-
-fn desired_column_snapshot(c: &ColumnDefine) -> DbColumnSnapshot {
-    DbColumnSnapshot {
-        data_type: desired_type_name(c).to_string(),
-        length: c.length.map(|n| n as i64),
-        precision: c.precision.map(|n| n as i64),
-        scale: c.scale.map(|n| n as i64),
-        nullable: c.is_nullable,
-        default_value: c.default_value.clone(),
-    }
-}
-
-fn column_shape_changes(before: &DbColumnSnapshot, desired: &DbColumnSnapshot) -> Vec<Value> {
-    let mut diffs = Vec::new();
-    let mut push = |field: &str, from: String, to: String| {
-        if from != to {
-            diffs.push(json!({ "field": field, "from": from, "to": to }));
-        }
-    };
-    push("dataType", before.data_type.clone(), desired.data_type.clone());
-    push(
-        "length",
-        before.length.map(|n| n.to_string()).unwrap_or_default(),
-        desired.length.map(|n| n.to_string()).unwrap_or_default(),
-    );
-    push(
-        "precision",
-        before.precision.map(|n| n.to_string()).unwrap_or_default(),
-        desired.precision.map(|n| n.to_string()).unwrap_or_default(),
-    );
-    push(
-        "scale",
-        before.scale.map(|n| n.to_string()).unwrap_or_default(),
-        desired.scale.map(|n| n.to_string()).unwrap_or_default(),
-    );
-    push("nullable", before.nullable.to_string(), desired.nullable.to_string());
-    push(
-        "default",
-        before.default_value.clone().unwrap_or_default(),
-        desired.default_value.clone().unwrap_or_default(),
-    );
-    diffs
-}
-
 fn table_action_label(change: &Value) -> &'static str {
     match change.get("action").and_then(|v| v.as_str()) {
         Some("create_table") => "创建表",
@@ -607,118 +528,184 @@ fn table_action_label(change: &Value) -> &'static str {
     }
 }
 
-async fn table_columns(db_id: &str, table: &str) -> Result<HashMap<String, DbColumnSnapshot>> {
-    let mm = get_default_db_manager();
-    let sql = "SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default \
-               FROM information_schema.columns \
-               WHERE table_schema = current_schema() AND table_name = $1 \
-               ORDER BY ordinal_position";
-    let ds = mm
-        .query_sql_with_datavalues(
-            db_id,
-            None,
-            sql,
-            vec![DataValue::String(table.to_string())],
-            "mc_columns",
-        )
-        .await
-        .map_err(db_err("查询表列信息失败"))?;
-    let mut out = HashMap::new();
-    for row in ds.iter() {
-        let name = row
-            .get(0)
-            .and_then(data_value_string)
-            .unwrap_or_default();
-        if name.is_empty() {
-            continue;
-        }
-        let data_type = row
-            .get(1)
-            .and_then(data_value_string)
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        let is_nullable = row
-            .get(5)
-            .and_then(data_value_string)
-            .map(|s| s.eq_ignore_ascii_case("YES"))
-            .unwrap_or(true);
-        out.insert(
-            name.clone(),
-            DbColumnSnapshot {
-                data_type,
-                length: row.get(2).and_then(data_value_i64),
-                precision: row.get(3).and_then(data_value_i64),
-                scale: row.get(4).and_then(data_value_i64),
-                nullable: is_nullable,
-                default_value: row.get(6).and_then(data_value_string),
-            },
-        );
-    }
-    Ok(out)
+/// 列类型 → 前端展示的 PG 类型字符串，与建表 DDL 基准（`PostgresDdlDialect::map_column_type`）一致。
+///
+/// 统一从这里取类型字符串，保证「计划报告」与「实际建表/升级」使用同一套类型映射，
+/// 避免出现 `integer` vs `bigint`、`timestamp without time zone` vs `timestamp with time zone`
+/// 这类永久假阳性。
+fn pg_display_type(c: &ColumnDefine) -> String {
+    PostgresDdlDialect::default().map_column_type(c)
 }
 
-async fn table_change_plan(db_id: &str, def: &TableDefine) -> Result<Value> {
-    let exists = table_exists(db_id, &def.table_name).await?;
-    if !exists {
-        return Ok(json!({
-            "table": def.table_name,
-            "displayName": def.display_name,
-            "action": "create_table",
-            "created": true,
-            "addedColumns": def.columns.iter().map(|c| json!({
-                "name": c.name,
-                "label": c.label,
-                "dataType": desired_type_name(c),
-                "nullable": c.is_nullable,
-            })).collect::<Vec<Value>>(),
-            "modifiedColumns": [],
-            "unchangedColumns": [],
-            "columnCount": def.columns.len(),
-        }));
-    }
-
-    let before = table_columns(db_id, &def.table_name).await?;
-    let mut added = Vec::new();
-    let mut modified = Vec::new();
-    let mut unchanged = Vec::new();
-    for c in &def.columns {
-        let desired = desired_column_snapshot(c);
-        match before.get(&c.name) {
-            None => added.push(json!({
-                "name": c.name,
-                "label": c.label,
-                "dataType": desired.data_type,
-                "nullable": c.is_nullable,
-            })),
-            Some(old) => {
-                let diffs = column_shape_changes(old, &desired);
-                if diffs.is_empty() {
-                    unchanged.push(c.name.clone());
-                } else {
-                    modified.push(json!({
-                        "name": c.name,
-                        "label": c.label,
-                        "changes": diffs,
-                    }));
-                }
-            }
+/// 将单列 `old → new` 的实质差异映射为前端消费的 `{field, from, to}` 变更明细。
+///
+/// 依赖 [`DdlDiff::column_changed`] 的判定逻辑（精度/标度仅对 Decimal 比较），保证这里产出的
+/// `changes` 与执行路径（`DdlDiff::diff_to_ddl`）完全一致：报告说要改的列，执行时确实会改；
+/// 报告说不改的列，执行时确实不改。
+fn column_change_detail(old: &ColumnDefine, new: &ColumnDefine) -> Vec<Value> {
+    let mut diffs = Vec::new();
+    let mut push = |field: &str, from: String, to: String| {
+        if from != to {
+            diffs.push(json!({ "field": field, "from": from, "to": to }));
         }
-    }
-    let action = if added.is_empty() && modified.is_empty() {
-        "no_change"
-    } else {
-        "upgrade_table"
     };
-    Ok(json!({
+    if old.field_type != new.field_type {
+        push("dataType", pg_display_type(old), pg_display_type(new));
+    }
+    push(
+        "length",
+        old.length.map(|n| n.to_string()).unwrap_or_default(),
+        new.length.map(|n| n.to_string()).unwrap_or_default(),
+    );
+    // 精度/标度仅 Decimal 类型展示（与 DdlDiff::column_changed 一致，非 Decimal 不比较）
+    if matches!(new.field_type, FieldType::Decimal) {
+        push(
+            "precision",
+            old.precision.map(|n| n.to_string()).unwrap_or_default(),
+            new.precision.map(|n| n.to_string()).unwrap_or_default(),
+        );
+        push(
+            "scale",
+            old.scale.map(|n| n.to_string()).unwrap_or_default(),
+            new.scale.map(|n| n.to_string()).unwrap_or_default(),
+        );
+    }
+    push(
+        "nullable",
+        old.is_nullable.to_string(),
+        new.is_nullable.to_string(),
+    );
+    push(
+        "default",
+        old.default_value.clone().unwrap_or_default(),
+        new.default_value.clone().unwrap_or_default(),
+    );
+    diffs
+}
+
+/// 把 DdlDiff 产出的「新表/建表」变更映射为前端 JSON（`addedColumns` 为全列）。
+fn report_create_table(def: &TableDefine) -> Value {
+    json!({
         "table": def.table_name,
         "displayName": def.display_name,
-        "action": action,
-        "created": false,
-        "addedColumns": added,
-        "modifiedColumns": modified,
-        "unchangedColumns": unchanged,
+        "action": "create_table",
+        "created": true,
+        "addedColumns": def.columns.iter().map(|c| json!({
+            "name": c.name,
+            "label": c.label,
+            "dataType": pg_display_type(c),
+            "nullable": c.is_nullable,
+        })).collect::<Vec<Value>>(),
+        "modifiedColumns": [],
+        "unchangedColumns": [],
         "columnCount": def.columns.len(),
-    }))
+    })
+}
+
+/// 纯函数：基于「数据库还原定义 current」与「设计期定义 desired」生成单表的部署计划报告。
+///
+/// 复用执行路径已验证可靠的 [`DdlDiff::diff`] 比较引擎，消除「报告」与「执行」两套类型基准
+/// 不一致导致的假阳性。返回 JSON 结构与旧实现保持一致，前端零改动。
+///
+/// - 无变更 → `action: "no_change"`，`unchangedColumns` 为设计期全部列名。
+/// - 有新增/修改列 → `action: "upgrade_table"`。
+/// - 删列（设计期不再有某列）遵循 additive-only 约束，**不报告、不执行**，仅忽略。
+fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
+    let changes = DdlDiff::diff(std::slice::from_ref(current), std::slice::from_ref(desired));
+    match changes.as_slice() {
+        // 表无实质变更（DdlDiff 未产出任何 TableChange）
+        [] => json!({
+            "table": desired.table_name,
+            "displayName": desired.display_name,
+            "action": "no_change",
+            "created": false,
+            "addedColumns": [],
+            "modifiedColumns": [],
+            "unchangedColumns": desired.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+            "columnCount": desired.columns.len(),
+        }),
+        // 仅可能是 AlterTable（CreateTable/DropTable 不会出现，因为表已存在且两边表名相同）
+        [TableChange::AlterTable { column_changes, .. }, ..] => {
+            let mut added = Vec::new();
+            let mut modified = Vec::new();
+            for cc in column_changes {
+                match cc {
+                    ColumnChange::AddColumn(c) => added.push(json!({
+                        "name": c.name,
+                        "label": c.label,
+                        "dataType": pg_display_type(c),
+                        "nullable": c.is_nullable,
+                    })),
+                    ColumnChange::AlterColumn { old, new } => {
+                        let detail = column_change_detail(old, new);
+                        if !detail.is_empty() {
+                            modified.push(json!({
+                                "name": new.name,
+                                "label": new.label,
+                                "changes": detail,
+                            }));
+                        }
+                    }
+                    // DropColumn：additive-only，忽略（不报删列）
+                    ColumnChange::DropColumn(_) => {}
+                }
+            }
+            // 已变更列名集合（新增 + 修改）
+            let changed_names: std::collections::HashSet<&str> = added
+                .iter()
+                .filter_map(|v| v.get("name").and_then(|n| n.as_str()))
+                .chain(
+                    modified
+                        .iter()
+                        .filter_map(|v| v.get("name").and_then(|n| n.as_str())),
+                )
+                .collect();
+            let unchanged: Vec<String> = desired
+                .columns
+                .iter()
+                .map(|c| c.name.clone())
+                .filter(|n| !changed_names.contains(n.as_str()))
+                .collect();
+            json!({
+                "table": desired.table_name,
+                "displayName": desired.display_name,
+                "action": "upgrade_table",
+                "created": false,
+                "addedColumns": added,
+                "modifiedColumns": modified,
+                "unchangedColumns": unchanged,
+                "columnCount": desired.columns.len(),
+            })
+        }
+        // 兜底：理论上不可达（表已存在，DdlDiff 只可能产出 AlterTable 或空）
+        _ => json!({
+            "table": desired.table_name,
+            "displayName": desired.display_name,
+            "action": "no_change",
+            "created": false,
+            "addedColumns": [],
+            "modifiedColumns": [],
+            "unchangedColumns": desired.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+            "columnCount": desired.columns.len(),
+        }),
+    }
+}
+
+/// 生成单张表的部署计划报告（含建表/升级/无变化判定）。
+///
+/// 与执行路径共用同一套 DdlDiff 比较引擎：表不存在 → 建表报告；表已存在 → 通过
+/// [`PgTableDefineExecutor::query_current_table_define`] 内省还原当前结构，再调用
+/// [`diff_table_to_report`] 生成与执行结果一致的变更明细。
+async fn table_change_plan(db_id: &str, def: &TableDefine) -> Result<Value> {
+    if !table_exists(db_id, &def.table_name).await? {
+        return Ok(report_create_table(def));
+    }
+    let executor = PgTableDefineExecutor::new(db_id.to_string(), None);
+    let current = executor
+        .query_current_table_define(def)
+        .await
+        .map_err(db_err("内省当前表结构失败"))?;
+    Ok(diff_table_to_report(&current, def))
 }
 
 /// 读 cmx_model_meta 单行（未初始化返回 None）。
@@ -2100,6 +2087,160 @@ mod tests {
         assert!(
             sum.primary_keys == vec!["id".to_string()],
             "汇总表 id 应作为主键"
+        );
+    }
+
+    // ── diff_table_to_report：复用 DdlDiff 引擎后的假阳性修复 ──────────────
+
+    /// 构造最小可用的 ColumnDefine（仅 name/field_type/nullable，其余默认）。
+    fn mk_col(name: &str, ft: FieldType, nullable: bool) -> ColumnDefine {
+        ColumnDefine {
+            name: name.to_string(),
+            label: name.to_string(),
+            field_type: ft,
+            is_primary_key: false,
+            is_nullable: nullable,
+            default_value: None,
+            i18n: false,
+            length: None,
+            precision: None,
+            scale: None,
+            db_type: None,
+            ordinal: None,
+            create_time: None,
+            update_time: None,
+            is_foreign_key: false,
+            foreign_key_table: None,
+            foreign_key_column: None,
+            extensions: std::collections::HashMap::new(),
+        }
+    }
+
+    /// 构造最小可用的 TableDefine。
+    fn mk_table(name: &str, cols: Vec<ColumnDefine>) -> TableDefine {
+        TableDefine {
+            table_name: name.to_string(),
+            display_name: name.to_string(),
+            columns: cols,
+            primary_keys: vec![],
+            indexes: vec![],
+            version: 1,
+            create_time: None,
+            update_time: None,
+            i18n: false,
+            comment: None,
+            schema: None,
+            tablespace: None,
+            is_partitioned: false,
+            partition_type: None,
+            partition_columns: vec![],
+            extensions: std::collections::HashMap::new(),
+        }
+    }
+
+    /// 核心场景：PG 内省还原的 bigint 列（带派生 precision=64/scale=0、db_type=BIGINT）
+    /// 与设计期 Int 列（precision/scale=None）对比，不应再误报「升级表/修改列」。
+    /// 这是用户报告的 `cf_client` sort_no/status/create_by 等字段的典型情况。
+    #[test]
+    fn diff_table_report_no_false_positive_for_bigint() {
+        // 模拟 query_current_table_define 还原出的 bigint 列
+        let mut db_sort_no = mk_col("sort_no", FieldType::Int, true);
+        db_sort_no.precision = Some(64);
+        db_sort_no.scale = Some(0);
+        db_sort_no.db_type = Some("BIGINT".to_string());
+        let mut db_create_time = mk_col("create_time", FieldType::DateTime, true);
+        db_create_time.db_type = Some("TIMESTAMP WITH TIME ZONE".to_string());
+
+        let current = mk_table(
+            "cf_client",
+            vec![db_sort_no, db_create_time],
+        );
+        // 设计期定义：同类型，但 precision/scale/db_type 未设置
+        let desired = mk_table(
+            "cf_client",
+            vec![
+                mk_col("sort_no", FieldType::Int, true),
+                mk_col("create_time", FieldType::DateTime, true),
+            ],
+        );
+
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(
+            report["action"].as_str(),
+            Some("no_change"),
+            "bigint/timestamptz 与设计期 Int/DateTime 不应报变更: {report}"
+        );
+        assert!(
+            report["modifiedColumns"].as_array().unwrap().is_empty(),
+            "modifiedColumns 应为空: {report}"
+        );
+        assert_eq!(
+            report["unchangedColumns"]
+                .as_array()
+                .map(|a| a.len())
+                .unwrap_or(0),
+            2,
+            "两列都应归入 unchangedColumns: {report}"
+        );
+    }
+
+    /// 真实差异：设计期新增一列，应报 upgrade_table + addedColumns。
+    #[test]
+    fn diff_table_report_detects_added_column() {
+        let current = mk_table("t", vec![mk_col("id", FieldType::Int, false)]);
+        let desired = mk_table(
+            "t",
+            vec![
+                mk_col("id", FieldType::Int, false),
+                mk_col("name", FieldType::String, true),
+            ],
+        );
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(report["action"].as_str(), Some("upgrade_table"));
+        let added = report["addedColumns"].as_array().unwrap();
+        assert_eq!(added.len(), 1, "应报 1 个新增列: {report}");
+        assert_eq!(added[0]["name"].as_str(), Some("name"));
+        // dataType 应使用建表基准（String → VARCHAR/TEXT），不再是旧的 "character varying"
+        assert!(
+            added[0]["dataType"]
+                .as_str()
+                .map(|s| s != "character varying" && !s.is_empty())
+                .unwrap_or(false),
+            "新增列 dataType 应为建表基准类型而非 information_schema 小写名: {report}"
+        );
+    }
+
+    /// 真实差异：列类型 Int → Decimal，应报 upgrade_table + modifiedColumns。
+    #[test]
+    fn diff_table_report_detects_type_change() {
+        let current = mk_table("t", vec![mk_col("amount", FieldType::Int, true)]);
+        let desired = mk_table("t", vec![mk_col("amount", FieldType::Decimal, true)]);
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(report["action"].as_str(), Some("upgrade_table"));
+        let modified = report["modifiedColumns"].as_array().unwrap();
+        assert_eq!(modified.len(), 1, "应报 1 个修改列: {report}");
+        let changes = modified[0]["changes"].as_array().unwrap();
+        assert!(
+            changes
+                .iter()
+                .any(|c| c["field"].as_str() == Some("dataType")),
+            "修改明细应含 dataType 变更: {report}"
+        );
+    }
+
+    /// nullable 变更应被检出（如 NOT NULL → NULL）。
+    #[test]
+    fn diff_table_report_detects_nullable_change() {
+        let current = mk_table("t", vec![mk_col("code", FieldType::String, false)]);
+        let desired = mk_table("t", vec![mk_col("code", FieldType::String, true)]);
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(report["action"].as_str(), Some("upgrade_table"));
+        assert!(
+            !report["modifiedColumns"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "nullable 变更应报修改列: {report}"
         );
     }
 }

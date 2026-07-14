@@ -164,7 +164,7 @@ impl PgTableDefineExecutor {
     /// # 返回值
     /// * 成功返回从数据库查询还原的 TableDefine
     /// * 失败返回 MetadataError（如表不存在或查询失败）
-    async fn query_current_table_define(
+    pub async fn query_current_table_define(
         &self,
         define: &TableDefine,
     ) -> Result<TableDefine, MetadataError> {
