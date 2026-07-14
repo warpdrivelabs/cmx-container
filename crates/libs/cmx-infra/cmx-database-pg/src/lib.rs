@@ -1,9 +1,7 @@
-/*
- * @Describe: 基于 tokio-postgres 的数据库操作模块（PG-only），与 cmx-database（sqlx）并行。
- *
- * 独立门面：入口 `get_default_pg_db_manager()`，与 cmx-database 完全隔离（独立全局单例
- * 与注册表）。模块名对齐 cmx-database 以便逐一对照。
- */
+//! 基于 tokio-postgres 的数据库操作模块（PG-only），与 cmx-database（sqlx）并行。
+//!
+//! 独立门面：入口 [`get_default_pg_db_manager`]，与 cmx-database 完全隔离（独立全局单例
+//! 与注册表）。模块名对齐 cmx-database 以便逐一对照。
 pub mod config;
 pub mod connection;
 pub mod executor;

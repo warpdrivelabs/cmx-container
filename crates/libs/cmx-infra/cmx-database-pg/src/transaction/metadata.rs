@@ -7,17 +7,24 @@ use tokio::sync::RwLock;
 /// 事务状态
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionStatus {
+    /// 活跃中（未提交也未回滚）。
     Active,
+    /// 已提交。
     Committed,
+    /// 已回滚。
     RolledBack,
 }
 
 /// 事务元数据
 #[derive(Debug, Clone)]
 pub struct TransactionMetadata {
+    /// 事务唯一标识。
     pub txn_id: String,
+    /// 所属数据库 ID。
     pub db_id: String,
+    /// 创建时刻（用于超时检测）。
     pub create_time: std::time::Instant,
+    /// 当前状态。
     pub status: TransactionStatus,
 }
 

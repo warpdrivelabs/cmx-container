@@ -1,6 +1,6 @@
-/// 数据库管理器模块
-///
-/// 提供 DatabaseManager 结构体，将全局状态封装为实例级状态
+//! 数据库管理器模块。
+//!
+//! 提供 [`DatabaseManager`] 结构体，将全局状态封装为实例级状态，管理多数据源连接池与事务。
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -13,8 +13,11 @@ use cmx_core::model::data::dataset::DataSet;
 /// 数据库管理器配置
 #[derive(Debug, Clone)]
 pub struct DatabaseManagerConfig {
+    /// 默认连接池配置（未显式指定时的新数据源兜底）。
     pub default_pool_config: PoolConfig,
+    /// 健康检查间隔。
     pub health_check_interval: std::time::Duration,
+    /// 健康检查超时。
     pub health_check_timeout: std::time::Duration,
     // pub txn_timeout: std::time::Duration,
     // pub cleanup_interval: std::time::Duration,
@@ -37,6 +40,7 @@ impl Default for DatabaseManagerConfig {
 /// 事务选项
 #[derive(Debug, Clone)]
 pub struct TransactionOptions {
+    /// 事务传播行为（Required/RequiresNew 等）。
     pub propagation: crate::transaction::Propagation,
 }
 
@@ -76,6 +80,7 @@ impl DatabaseManager {
         }
     }
 
+    /// 获取默认数据源的 db_id。
     pub async fn get_default_db_id(&self) -> String {
         self.default_db_id.read().await.clone()
     }
@@ -121,11 +126,12 @@ impl DatabaseManager {
         self.pool_manager.get_dbx(db_id).await
     }
 
-    /// 获取数据库访问对象（非事务）
+    /// 获取数据库配置（非事务）。
     pub async fn get_db_config(&self, db_id: &str) -> Result<DbConfig> {
         self.pool_manager.get_db_config(db_id).await
     }
 
+    /// 获取数据库访问对象 + 配置（非事务，返回 `(Dbx, DbConfig)`）。
     pub async fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
         self.pool_manager.get_db(db_id).await
     }
@@ -477,33 +483,40 @@ impl Default for PoolManager {
 }
 
 impl PoolManager {
+    /// 创建连接池管理器（持有全局注册表）。
     pub fn new() -> Self {
         Self {
             registry: crate::connection::get_global_registry(),
         }
     }
 
+    /// 注册新数据源配置并初始化其连接池。
     pub async fn register(&self, config: DbConfig) -> Result<()> {
         self.registry.register(config).await
     }
 
+    /// 注销数据源（关闭其连接池）。
     pub async fn unregister(&self, key: &str) -> Result<()> {
         self.registry.unregister(key).await;
         Ok(())
     }
 
+    /// 按 db_id 获取数据库访问对象（非事务）。
     pub async fn get_dbx(&self, key: &str) -> Result<Dbx> {
         self.registry.get_db_access(key).await.ok_or(Error::NoDb)
     }
 
+    /// 按 db_id 获取数据库配置。
     pub async fn get_db_config(&self, key: &str) -> Result<DbConfig> {
         self.registry.get_db_config(key).await.ok_or(Error::NoDb)
     }
 
+    /// 按 db_id 获取数据库访问对象 + 配置。
     pub async fn get_db(&self, db_id: &str) -> Result<(Dbx, DbConfig)> {
         self.registry.get(db_id).await.ok_or(Error::NoDb)
     }
 
+    /// 列出所有已注册数据源的 db_id。
     pub async fn list(&self) -> Vec<String> {
         self.registry.list().await
     }
@@ -513,6 +526,11 @@ impl PoolManager {
         self.registry.list_configs().await
     }
 
+    /// 对指定数据源执行健康检查（`SELECT 1`）。
+    ///
+    /// # Returns
+    ///
+    /// 成功执行返回 `Ok(true)`，执行失败返回 `Ok(false)`。
     pub async fn health_check(&self, db_id: &str) -> Result<bool> {
         let result = crate::transaction::query_sql(db_id, None, "SELECT 1", "health_check").await;
         match result {

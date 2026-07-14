@@ -13,7 +13,10 @@ use tokio_postgres::types::Type;
 ///
 /// 透明包装,`Vec<TokioPgRowSource>` 与 `Vec<Row>` 内存布局一致(newtype 零开销)。
 #[repr(transparent)]
-pub struct TokioPgRowSource(pub Row);
+pub struct TokioPgRowSource(
+    /// 底层 tokio-postgres 行。
+    pub Row,
+);
 
 impl From<Row> for TokioPgRowSource {
     fn from(r: Row) -> Self {

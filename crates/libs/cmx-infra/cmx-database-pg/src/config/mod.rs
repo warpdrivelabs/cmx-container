@@ -1,3 +1,5 @@
+//! 数据库配置定义（连接串解析、连接池配置、多数据源管理）。
+
 use std::str::FromStr;
 
 use cmx_utils::ConfigResult;
@@ -6,8 +8,11 @@ use cmx_utils::ConfigResult;
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DbType {
+    /// PostgreSQL（本 crate 唯一实际支持的后端）。
     Postgres,
+    /// MySQL（仅占位，未实现）。
     MySql,
+    /// SQLite（仅占位，未实现）。
     Sqlite,
 }
 

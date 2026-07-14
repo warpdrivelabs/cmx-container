@@ -1,54 +1,85 @@
-/// 类型安全模块
-///
-/// 提供编译时类型检查的 SQL 查询构建器
+//! 类型安全模块。
+//!
+//! 提供编译时类型检查的 SQL 查询构建器（`QueryBuilder` / `ConditionExpr` / `CompareOp` 等）。
 use crate::executor::ParamValue;
 
 /// SQL 关键字
 #[derive(Debug, Clone)]
 pub enum SqlKeyword {
+    /// `SELECT`
     Select,
+    /// `INSERT`
     Insert,
+    /// `UPDATE`
     Update,
+    /// `DELETE`
     Delete,
+    /// `FROM`
     From,
+    /// `WHERE`
     Where,
+    /// `ORDER BY`
     OrderBy,
+    /// `GROUP BY`
     GroupBy,
+    /// `HAVING`
     Having,
+    /// `JOIN`（携带连接类型）
     Join(JoinType),
+    /// `LIMIT`
     Limit,
+    /// `OFFSET`
     Offset,
+    /// `SET`
     Set,
+    /// `VALUES`
     Values,
+    /// `AND`
     And,
+    /// `OR`
     Or,
 }
 
 /// 连接类型
 #[derive(Debug, Clone)]
 pub enum JoinType {
+    /// `INNER JOIN`
     Inner,
+    /// `LEFT JOIN`
     Left,
+    /// `RIGHT JOIN`
     Right,
+    /// `FULL JOIN`
     Full,
 }
 
 /// 比较运算符
 #[derive(Debug, Clone)]
 pub enum CompareOp {
+    /// `=`
     Equal,
+    /// `<>`
     NotEqual,
+    /// `>`
     GreaterThan,
+    /// `>=`
     GreaterThanOrEqual,
+    /// `<`
     LessThan,
+    /// `<=`
     LessThanOrEqual,
+    /// `LIKE`
     Like,
+    /// `NOT LIKE`
     NotLike,
+    /// `IN`
     In,
+    /// `NOT IN`
     NotIn,
 }
 
 impl CompareOp {
+    /// 转为 SQL 运算符字符串。
     pub fn to_sql_string(&self) -> &'static str {
         match self {
             CompareOp::Equal => "=",
@@ -65,19 +96,25 @@ impl CompareOp {
     }
 }
 
+/// 扩展比较运算符（IS NULL / IS NOT NULL）。
 pub enum CompareOpEx {
+    /// `IS NULL`
     IsNull,
+    /// `IS NOT NULL`
     IsNotNull,
 }
 
 /// 逻辑运算符
 #[derive(Debug, Clone)]
 pub enum LogicalOp {
+    /// `AND`
     And,
+    /// `OR`
     Or,
 }
 
 impl LogicalOp {
+    /// 转为 SQL 逻辑运算符字符串。
     pub fn to_sql_string(&self) -> &'static str {
         match self {
             LogicalOp::And => "AND",
@@ -89,12 +126,16 @@ impl LogicalOp {
 /// 值表达式
 #[derive(Debug, Clone)]
 pub enum ValueExpr {
+    /// 列引用。
     Column(String),
+    /// 参数占位符（`$idx`）。
     Param(usize),
+    /// 字面量值。
     Value(ParamValue),
 }
 
 impl ValueExpr {
+    /// 转为 SQL 片段字符串。
     pub fn to_sql_string(&self) -> String {
         match self {
             ValueExpr::Column(name) => name.clone(),
@@ -103,6 +144,7 @@ impl ValueExpr {
         }
     }
 
+    /// 返回该值表达式占用的参数个数。
     pub fn param_count(&self) -> usize {
         match self {
             ValueExpr::Column(_) => 0,
@@ -115,20 +157,30 @@ impl ValueExpr {
 /// 条件表达式
 #[derive(Debug, Clone)]
 pub enum ConditionExpr {
+    /// 比较条件（左值 运算符 右值）。
     Compare {
+        /// 左操作数。
         left: ValueExpr,
+        /// 比较运算符。
         op: CompareOp,
+        /// 右操作数。
         right: ValueExpr,
     },
+    /// 逻辑组合（左条件 逻辑运算符 右条件）。
     Logical {
+        /// 左子条件。
         left: Box<ConditionExpr>,
+        /// 逻辑运算符。
         op: LogicalOp,
+        /// 右子条件。
         right: Box<ConditionExpr>,
     },
+    /// 括号嵌套的子条件。
     Nested(Box<ConditionExpr>),
 }
 
 impl ConditionExpr {
+    /// 转为 SQL 片段字符串，参数从 `start_index` 起编号。
     pub fn to_sql_string(&self, start_index: usize) -> String {
         match self {
             ConditionExpr::Compare { left, op, .. } => {
@@ -153,6 +205,7 @@ impl ConditionExpr {
         }
     }
 
+    /// 返回该条件占用的参数总个数。
     pub fn param_count(&self) -> usize {
         match self {
             ConditionExpr::Compare { left, right, .. } => left.param_count() + right.param_count(),
@@ -165,23 +218,31 @@ impl ConditionExpr {
 /// 查询类型
 #[derive(Debug, Clone)]
 pub enum QueryType {
+    /// SELECT 查询。
     Select,
+    /// INSERT 查询（携带插入值来源）。
     Insert(InsertValues),
+    /// UPDATE 查询（携带列-值赋值列表）。
     Update(Vec<(String, ValueExpr)>),
+    /// DELETE 查询。
     Delete,
 }
 
 /// 插入值
 #[derive(Debug, Clone)]
 pub enum InsertValues {
+    /// 显式值列表。
     Values(Vec<Vec<ValueExpr>>),
+    /// 由子查询提供。
     Select(String),
 }
 
 /// 排序方向
 #[derive(Debug, Clone)]
 pub enum OrderDirection {
+    /// 升序（`ASC`）。
     Asc,
+    /// 降序（`DESC`）。
     Desc,
 }
 
@@ -219,6 +280,7 @@ impl TypedRow {
         Self { values }
     }
 
+    /// 按列下标取字符串值（类型不匹配返回 None）。
     pub fn get_string(&self, index: usize) -> Option<&str> {
         match self.values.get(index)? {
             ParamValue::String(s) => Some(s),
@@ -226,6 +288,7 @@ impl TypedRow {
         }
     }
 
+    /// 按列下标取 i64 值（类型不匹配返回 None）。
     pub fn get_i64(&self, index: usize) -> Option<i64> {
         match self.values.get(index)? {
             ParamValue::Int(i) => Some(*i),
@@ -233,6 +296,7 @@ impl TypedRow {
         }
     }
 
+    /// 按列下标取 f64 值（类型不匹配返回 None）。
     pub fn get_f64(&self, index: usize) -> Option<f64> {
         match self.values.get(index)? {
             ParamValue::Float(f) => Some(*f),
@@ -240,6 +304,7 @@ impl TypedRow {
         }
     }
 
+    /// 按列下标取 bool 值（类型不匹配返回 None）。
     pub fn get_bool(&self, index: usize) -> Option<bool> {
         match self.values.get(index)? {
             ParamValue::Bool(b) => Some(*b),
@@ -256,22 +321,27 @@ pub struct TypedResult {
 }
 
 impl TypedResult {
+    /// 构造结果集。
     pub fn new(rows: Vec<TypedRow>, columns: Vec<String>) -> Self {
         Self { rows, columns }
     }
 
+    /// 返回行数。
     pub fn len(&self) -> usize {
         self.rows.len()
     }
 
+    /// 是否为空结果集。
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
     }
 
+    /// 返回所有行的切片。
     pub fn rows(&self) -> &[TypedRow] {
         &self.rows
     }
 
+    /// 返回首行（空集时为 None）。
     pub fn first(&self) -> Option<&TypedRow> {
         self.rows.first()
     }

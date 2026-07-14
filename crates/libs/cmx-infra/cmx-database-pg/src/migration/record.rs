@@ -1,3 +1,7 @@
+//! 数据库迁移记录与状态类型。
+//!
+//! 定义迁移状态枚举、历史记录、待执行项、校验结果等数据结构，供 runner 追踪迁移进度。
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

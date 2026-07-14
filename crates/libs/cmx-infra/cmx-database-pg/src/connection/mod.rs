@@ -296,6 +296,7 @@ pub struct DatabasePoolImpl {
 }
 
 impl DatabasePoolImpl {
+    /// 按配置创建连接池实现（建立底层 tokio-postgres 连接）。
     pub async fn new(config: DbConfig) -> crate::Result<Self> {
         let dbx = create_dbx(&config).await?;
         Ok(Self {
@@ -306,31 +307,37 @@ impl DatabasePoolImpl {
         })
     }
 
+    /// 获取一个连接（克隆 Dbx）并递增活跃计数。
     pub fn acquire(&self) -> Dbx {
         self.active_connections
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.dbx.clone()
     }
 
+    /// 归还连接，递减活跃计数。
     pub fn release(&self) {
         self.active_connections
             .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 
+    /// 是否已标记为关闭中。
     pub fn is_closing(&self) -> bool {
         self.is_closing.load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    /// 标记为关闭中。
     pub fn mark_closing(&self) {
         self.is_closing
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
+    /// 当前活跃连接数。
     pub fn active_count(&self) -> usize {
         self.active_connections
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    /// 等待所有活跃连接归还（超时返回 false）。
     pub async fn wait_for_idle(&self, timeout: std::time::Duration) -> bool {
         let start = std::time::Instant::now();
         while self.active_count() > 0 {
@@ -359,12 +366,14 @@ pub(crate) struct DbRegistry {
 }
 
 impl DbRegistry {
+    /// 创建空注册表。
     pub fn new() -> Self {
         Self {
             pools: RwLock::new(HashMap::new()),
         }
     }
 
+    /// 注册新数据源（按 db_id 建池并存入注册表）。
     pub async fn register(&self, config: DbConfig) -> crate::Result<()> {
         let db_key = config.db_id.clone();
         let pool = DatabasePoolImpl::new(config).await?;
@@ -373,15 +382,18 @@ impl DbRegistry {
         Ok(())
     }
 
+    /// 热更新数据源：标记旧池关闭、等待空闲后用新配置重建。
     #[allow(dead_code)]
     pub async fn update(&self, config: DbConfig) -> crate::Result<()> {
         let key = config.db_id.clone();
+        // 先标记旧池关闭中
         {
             let pools = self.pools.read().await;
             if let Some(pool) = pools.get(&key) {
                 pool.mark_closing();
             }
         }
+        // 等待旧池活跃连接归还
         {
             let pools = self.pools.read().await;
             if let Some(pool) = pools.get(&key) {
@@ -394,12 +406,14 @@ impl DbRegistry {
                 }
             }
         }
+        // 用新配置重建
         let pool = DatabasePoolImpl::new(config).await?;
         let mut pools = self.pools.write().await;
         pools.insert(key, pool);
         Ok(())
     }
 
+    /// 注销数据源（标记关闭并移出注册表）。
     pub async fn unregister(&self, key: &str) -> Option<DatabasePoolImpl> {
         {
             let pools = self.pools.read().await;
@@ -411,11 +425,13 @@ impl DbRegistry {
         pools.remove(key)
     }
 
+    /// 列出所有已注册数据源的 db_id。
     pub async fn list(&self) -> Vec<String> {
         let pools = self.pools.read().await;
         pools.keys().cloned().collect()
     }
 
+    /// 按 db_id 获取访问对象 + 配置。
     pub async fn get(&self, key: &str) -> Option<(Dbx, DbConfig)> {
         let pools = self.pools.read().await;
         pools
@@ -423,14 +439,17 @@ impl DbRegistry {
             .map(|pool| (pool.get_dbx(), pool.get_config()))
     }
 
+    /// 按 db_id 仅获取访问对象。
     pub async fn get_db_access(&self, key: &str) -> Option<Dbx> {
         self.get(key).await.map(|(dbx, _)| dbx)
     }
 
+    /// 按 db_id 仅获取配置。
     pub async fn get_db_config(&self, key: &str) -> Option<DbConfig> {
         self.get(key).await.map(|(_, config)| config)
     }
 
+    /// 列出所有已注册数据源的配置。
     pub async fn list_configs(&self) -> Vec<DbConfig> {
         let pools = self.pools.read().await;
         pools.values().map(|p| p.get_config()).collect()
@@ -439,6 +458,7 @@ impl DbRegistry {
 
 static GLOBAL_REGISTRY: OnceLock<Arc<DbRegistry>> = OnceLock::new();
 
+/// 获取全局数据源注册表单例（惰性初始化）。
 pub(crate) fn get_global_registry() -> &'static Arc<DbRegistry> {
     GLOBAL_REGISTRY.get_or_init(|| Arc::new(DbRegistry::new()))
 }
