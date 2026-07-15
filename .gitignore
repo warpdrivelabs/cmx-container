@@ -35,3 +35,5 @@ docker/V2/certs/cert.pem
 
 
 __pycache__/
+/.zcode/
+/.superpowers/
