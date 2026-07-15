@@ -1350,6 +1350,7 @@ dependencies = [
  "cmx-form",
  "cmx-model",
  "cmx-portal-base",
+ "cmx-utils",
  "futures-util",
  "regex",
  "reqwest",
