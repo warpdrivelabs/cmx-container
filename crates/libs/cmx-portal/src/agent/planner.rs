@@ -20,6 +20,7 @@ fn value_to_string(v: &Value) -> String {
     }
 }
 
+/// 返回默认的三步计划模板。
 fn default_plan() -> Value {
     json!([
         "理解请求与当前工作区上下文",
@@ -29,6 +30,14 @@ fn default_plan() -> Value {
 }
 
 /// 取最近一条 user 消息文本。
+///
+/// # Arguments
+///
+/// * `messages` - 消息数组。
+///
+/// # Returns
+///
+/// 返回最近一条 user 消息的文本，无则返回空字符串。
 pub fn latest_user_text(messages: &[Value]) -> String {
     for m in messages.iter().rev() {
         if m.get("role").and_then(|v| v.as_str()) == Some("user") {
@@ -108,6 +117,7 @@ fn parse_loose_value(raw: &str) -> Value {
     json!(text.trim_matches(|c| "\"'“”‘’".contains(c)))
 }
 
+/// 去除 `CMXPortalManager/` 路径前缀。
 fn strip_portal_prefix(s: &str) -> String {
     s.strip_prefix("CMXPortalManager/").unwrap_or(s).to_string()
 }
@@ -229,12 +239,14 @@ fn infer_command_approval(text: &str) -> Option<Value> {
     None
 }
 
+/// 判断用户消息是否涉及自定义 HTML 页面上下文。
 fn wants_html_page_context(text: &str) -> bool {
     regex::Regex::new(r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产")
         .unwrap()
         .is_match(text)
 }
 
+/// 从用户消息中抽取 HTML 页面 ID。
 fn extract_html_page_id(text: &str) -> String {
     if let Some(c) = regex::Regex::new(
         r"(?i)(?:页面\s*ID|html\s*page\s*id|pageId|id)\s*[:：=]\s*([a-zA-Z0-9._-]{1,128})",
@@ -262,6 +274,15 @@ fn extract_html_page_id(text: &str) -> String {
 }
 
 /// 计划 decision：CMX_AGENT_PLANNER=llm 时走 LLM 规划（失败回退本地规则），否则纯本地规则。
+///
+/// # Arguments
+///
+/// * `messages` - 消息数组。
+/// * `root` - agent 根目录，用于本地规则判断路径是否存在。
+///
+/// # Returns
+///
+/// 返回包含 kind（analysis / approval）及相应字段的 decision JSON 对象。
 pub async fn plan(messages: &[Value], root: &std::path::Path) -> Value {
     if std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm")
         && crate::ai::is_configured()
@@ -277,6 +298,15 @@ pub async fn plan(messages: &[Value], root: &std::path::Path) -> Value {
 }
 
 /// 本地规则规划（LocalRulePlanner）。`root` 用于判断 readFile 候选路径是否存在。
+///
+/// # Arguments
+///
+/// * `messages` - 消息数组。
+/// * `root` - agent 根目录，用于判断 readFile 候选路径是否存在。
+///
+/// # Returns
+///
+/// 返回基于正则意图抽取的 decision JSON 对象。
 pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
     let text = latest_user_text(messages);
 
@@ -332,6 +362,16 @@ pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
     })
 }
 
+/// 从用户消息中抽取存在的可读文件相对路径。
+///
+/// # Arguments
+///
+/// * `text` - 用户消息文本。
+/// * `root` - agent 根目录，用于拼接并校验候选路径是否存在。
+///
+/// # Returns
+///
+/// 返回存在文件的相对路径，不存在时返回空字符串。
 async fn extract_readable_path(text: &str, root: &std::path::Path) -> String {
     let re = regex::Regex::new(&format!(
         r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
@@ -350,6 +390,15 @@ async fn extract_readable_path(text: &str, root: &std::path::Path) -> String {
 }
 
 /// 本地总结（无 LLM 时）。
+///
+/// # Arguments
+///
+/// * `events` - agent 流程产生的事件列表。
+/// * `context` - 门户上下文 JSON 对象。
+///
+/// # Returns
+///
+/// 返回基于工具结果的本地中文总结文本。
 pub fn build_local_summary(events: &[Value], context: &Value) -> String {
     let results: Vec<&Value> = events
         .iter()
@@ -462,6 +511,7 @@ fn parse_planner_json(content: &str) -> Option<Value> {
     }
 }
 
+/// 取字符串值，空则返回兜底值。
 fn string_or(v: Option<&Value>, fallback: &str) -> String {
     let s = v.map(value_to_string).unwrap_or_default();
     let s = s.trim();
@@ -472,6 +522,7 @@ fn string_or(v: Option<&Value>, fallback: &str) -> String {
     }
 }
 
+/// 取字符串数组值，空或非法则返回兜底值。
 fn string_array_or(v: Option<&Value>, fallback: Value) -> Value {
     match v.and_then(|x| x.as_array()) {
         Some(arr) => {
@@ -510,6 +561,7 @@ fn normalize_optional_object(v: Option<&Value>, required: &[&str]) -> Value {
     obj.clone()
 }
 
+/// 从 args 中提取白名单键构造新对象。
 fn passthrough_object(args: &Value, allowed_keys: &[&str]) -> Value {
     let mut out = serde_json::Map::new();
     for key in allowed_keys {
@@ -768,6 +820,18 @@ fn normalize_decision(raw: &Value) -> Result<Value, String> {
 }
 
 /// LLM 规划：调 DeepSeek 出 decision JSON，归一后返回（失败 Err 让上层回退）。
+///
+/// # Arguments
+///
+/// * `messages` - 消息数组，取最近 12 条构造请求。
+///
+/// # Returns
+///
+/// 成功时返回归一后的 decision JSON 对象。
+///
+/// # Errors
+///
+/// 当 LLM 请求失败、未返回 JSON 或归一校验失败时返回 `PortalError`。
 async fn llm_plan(messages: &[Value]) -> PortalResult<Value> {
     let safe_messages: Vec<Value> = messages
         .iter()
@@ -791,6 +855,17 @@ async fn llm_plan(messages: &[Value]) -> PortalResult<Value> {
 /// LLM 总结：基于工具事件用 DeepSeek 出简洁中文总结（失败回退本地总结）。
 ///
 /// `on_delta` 在每个 token 增量到达时被调用，用于逐字流式输出（emit `assistant_delta`）。
+///
+/// # Arguments
+///
+/// * `events` - agent 流程产生的事件列表。
+/// * `context` - 门户上下文 JSON 对象。
+/// * `messages` - 消息数组。
+/// * `on_delta` - token 增量回调。
+///
+/// # Returns
+///
+/// 返回中文总结文本，LLM 失败时回退本地总结。
 pub async fn build_summary<F>(
     events: &[Value],
     context: &Value,
@@ -811,6 +886,22 @@ where
     build_local_summary(events, context)
 }
 
+/// 调用 LLM 流式接口生成中文总结。
+///
+/// # Arguments
+///
+/// * `events` - agent 流程产生的事件列表。
+/// * `context` - 门户上下文 JSON 对象。
+/// * `messages` - 消息数组。
+/// * `on_delta` - token 增量回调。
+///
+/// # Returns
+///
+/// 成功时返回流式拼接的中文总结文本（最多 6000 字符）。
+///
+/// # Errors
+///
+/// 当 LLM 流式请求失败或上游未返回有效回复时返回 `PortalError`。
 async fn llm_summary<F>(
     events: &[Value],
     context: &Value,

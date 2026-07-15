@@ -14,46 +14,72 @@ use crate::fsutil::{read_json, read_json_opt};
 /// 单个域条目（对前端输出形状，与 Node 完全一致）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainItem {
+    /// 域唯一标识。
     pub id: String,
+    /// 图标名（回退 `folder`）。
     pub icon: String,
+    /// 短标签（取 name，回退 title，再回退 id）。
     pub label: String,
+    /// 完整标题。
     pub title: String,
+    /// 域描述。
     pub description: String,
+    /// 应用标识（与 id 相同，前端约定字段）。
     pub application: String,
+    /// 活动栏标识（与 id 相同，前端约定字段）。
     pub activitie: String,
 }
 
 /// `/api/domains` 响应文档。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainsDoc {
+    /// 文档版本号。
     pub version: u32,
+    /// 数据来源（`"dam"` 或文件原始来源）。
     pub source: String,
+    /// 域条目列表。
     pub domains: Vec<DomainItem>,
 }
 
 /// DAM 注册表中的域原始结构（仅取所需字段）。
 #[derive(Debug, Clone, Deserialize)]
 struct DamDomainRaw {
+    /// 域唯一标识。
     id: String,
+    /// 短名称（可选）。
     #[serde(default)]
     name: Option<String>,
+    /// 完整标题（可选）。
     #[serde(default)]
     title: Option<String>,
+    /// 图标名（可选）。
     #[serde(default)]
     icon: Option<String>,
+    /// 状态（可选，`disabled` 表示禁用）。
     #[serde(default)]
     status: Option<String>,
+    /// 域描述（可选）。
     #[serde(default)]
     description: Option<String>,
 }
 
+/// DAM 注册表文件的反序列化结构（仅取 domains 字段）。
 #[derive(Debug, Clone, Deserialize)]
 struct DamRegistryRaw {
+    /// 注册表中的域列表。
     #[serde(default)]
     domains: Vec<DamDomainRaw>,
 }
 
 /// 获取域清单文档。DAM 优先，回退 `activities/domains.json`。
+///
+/// # Returns
+///
+/// DAM 注册表有域时返回派生文档（`source="dam"`）；否则回退读文件原样返回。
+///
+/// # Errors
+///
+/// 读取 DAM 注册表或回退文件失败时返回底层 IO/解析错误。
 pub async fn get_domains_doc() -> PortalResult<serde_json::Value> {
     // 1) DAM 注册表派生
     let dam_path = data_path(["dam-registry", "registry.json"]);

@@ -22,11 +22,13 @@ struct PendingApproval {
     context: Value,
 }
 
+/// 返回全局待审批映射的静态引用。
 fn pending() -> &'static Mutex<HashMap<String, PendingApproval>> {
     static M: OnceLock<Mutex<HashMap<String, PendingApproval>>> = OnceLock::new();
     M.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// 返回当前 UNIX 毫秒时间戳。
 fn now_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -57,6 +59,14 @@ fn event(event_type: &str, mut payload: Value) -> Value {
 }
 
 /// 归一消息（role 合法 + content 截断 + 取最近 20）。
+///
+/// # Arguments
+///
+/// * `raw` - 原始消息 JSON 值（期望为数组）。
+///
+/// # Returns
+///
+/// 返回过滤并截断后的消息数组，最多保留最近 20 条。
 pub fn normalize_messages(raw: &Value) -> Vec<Value> {
     let arr = raw.as_array().cloned().unwrap_or_default();
     let mut out: Vec<Value> = arr
@@ -79,6 +89,20 @@ pub fn normalize_messages(raw: &Value) -> Vec<Value> {
 }
 
 /// 运行 agent 流程，收集事件（非流式）。`emit` 回调用于流式增量推送。
+///
+/// # Arguments
+///
+/// * `messages` - 已归一的消息数组。
+/// * `context` - 门户上下文 JSON 对象。
+/// * `emit` - 流式增量推送回调。
+///
+/// # Returns
+///
+/// 成功时返回本次流程产生的全部事件列表。
+///
+/// # Errors
+///
+/// 当缺少用户消息或审批事件构建失败时返回 `PortalError`。
 pub async fn run_agent_flow<F>(
     messages: &[Value],
     context: &Value,
@@ -327,6 +351,20 @@ where
 }
 
 /// 审批分支：生成补丁预览 + approval_required，并暂存 pending。
+///
+/// # Arguments
+///
+/// * `root` - agent 根目录。
+/// * `decision` - planner 产出的审批 decision。
+/// * `context` - 门户上下文 JSON 对象。
+///
+/// # Returns
+///
+/// 成功时返回审批相关的事件列表。
+///
+/// # Errors
+///
+/// 当补丁预览准备失败时返回 `PortalError`。
 async fn build_approval_events(
     root: &std::path::Path,
     decision: &Value,
@@ -416,6 +454,7 @@ async fn build_approval_events(
     Ok(events)
 }
 
+/// 根据工具动作与结果数据生成可读摘要。
 fn tool_result_summary(action: &str, data: &Value) -> String {
     match action {
         "run_command" => format!(
@@ -516,6 +555,7 @@ fn tool_result_summary(action: &str, data: &Value) -> String {
     }
 }
 
+/// 根据工具动作与结果数据判定状态字符串。
 fn tool_result_status(action: &str, data: &Value) -> &'static str {
     match action {
         "run_command" => {
@@ -597,6 +637,19 @@ fn create_lint_approval(approval_id: &str) -> Value {
 }
 
 /// 处理审批决定。
+///
+/// # Arguments
+///
+/// * `id` - 审批请求 ID。
+/// * `decision` - 审批决定（approve / 其他视为拒绝）。
+///
+/// # Returns
+///
+/// 成功时返回包含审批结果事件列表的 JSON 对象。
+///
+/// # Errors
+///
+/// 当审批请求不存在、已过期或工具执行失败时返回 `PortalError`。
 pub async fn handle_approval(id: &str, decision: &str) -> PortalResult<Value> {
     let root = root_dir();
     let approval = pending().lock().await.remove(id);
@@ -669,6 +722,10 @@ pub async fn handle_approval(id: &str, decision: &str) -> PortalResult<Value> {
 }
 
 /// capabilities 响应。
+///
+/// # Returns
+///
+/// 返回包含模式、planner 类型、根目录与工具 schema 的 JSON 对象。
 pub fn capabilities() -> Value {
     let llm = std::env::var("CMX_AGENT_PLANNER").ok().as_deref() == Some("llm");
     json!({
@@ -681,6 +738,18 @@ pub fn capabilities() -> Value {
 }
 
 /// /agent/message：一次性返回所有事件。
+///
+/// # Arguments
+///
+/// * `body` - 请求体，包含 messages、可选 context 与 conversationId。
+///
+/// # Returns
+///
+/// 成功时返回包含 conversationId 与 events 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当 agent 流程执行失败时返回 `PortalError`。
 pub async fn message(body: &Value) -> PortalResult<Value> {
     let messages = normalize_messages(body.get("messages").unwrap_or(&Value::Null));
     let context = body

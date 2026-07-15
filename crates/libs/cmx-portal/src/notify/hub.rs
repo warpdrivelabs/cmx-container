@@ -20,8 +20,12 @@ pub struct NotifyEvent {
     pub data: serde_json::Value,
 }
 
-/// 全局广播发送端（容量有限的环形缓冲；滞后的订阅者会丢最旧消息，但不影响计数——
+/// 全局广播发送端（容量有限的环形缓冲；滞后的订阅者会丢最旧消息，但不影响计数--
 /// 计数始终以落盘文件为准，SSE 仅作即时提醒）。
+///
+/// # Returns
+///
+/// 全局广播通道的静态发送端引用。
 pub fn sender() -> &'static broadcast::Sender<NotifyEvent> {
     static TX: OnceLock<broadcast::Sender<NotifyEvent>> = OnceLock::new();
     TX.get_or_init(|| {
@@ -31,11 +35,19 @@ pub fn sender() -> &'static broadcast::Sender<NotifyEvent> {
 }
 
 /// 订阅广播（每个 SSE 连接调用一次）。
+///
+/// # Returns
+///
+/// 新的广播接收端。
 pub fn subscribe() -> broadcast::Receiver<NotifyEvent> {
     sender().subscribe()
 }
 
 /// 广播一条事件（无订阅者时静默忽略）。
+///
+/// # Arguments
+///
+/// * `ev` - 待广播的通知事件。
 pub fn publish_event(ev: NotifyEvent) {
     let _ = sender().send(ev);
 }

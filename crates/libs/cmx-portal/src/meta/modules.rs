@@ -13,6 +13,7 @@ use crate::error::{PortalError, PortalResult};
 use crate::fsutil::read_json;
 use crate::util::is_safe_segment;
 
+/// 校验路径段非空且仅含安全字符，返回 trim 后的字符串。
 fn assert_seg(name: &str, value: &str) -> PortalResult<String> {
     let v = value.trim();
     if v.is_empty() {
@@ -27,6 +28,19 @@ fn assert_seg(name: &str, value: &str) -> PortalResult<String> {
 }
 
 /// 列出模块清单（DAM 优先）。
+///
+/// # Arguments
+///
+/// * `domain` - 可选域过滤。
+/// * `application` - 可选应用过滤。
+///
+/// # Returns
+///
+/// DAM 有模块时返回映射后的清单列表（已排序）；DAM 为空时回退文件系统扫描。
+///
+/// # Errors
+///
+/// 列举 DAM 模块或文件系统扫描失败时返回底层错误。
 pub async fn list_module_manifests(
     domain: Option<&str>,
     application: Option<&str>,
@@ -75,6 +89,19 @@ pub async fn list_module_manifests(
 }
 
 /// 文件系统扫描回退（DAM 为空时）。
+///
+/// # Arguments
+///
+/// * `domain` - 可选域过滤。
+/// * `application` - 可选应用过滤。
+///
+/// # Returns
+///
+/// 扫描 `modules/` 目录下所有 `module.json` 的清单列表（已排序）。
+///
+/// # Errors
+///
+/// 读取目录或文件失败时返回底层 IO 错误。
 async fn list_manifests_from_fs(
     domain: Option<&str>,
     application: Option<&str>,
@@ -147,6 +174,20 @@ async fn list_manifests_from_fs(
 }
 
 /// 解析注册表中模块的 manifestPath（相对 data 根），无则用默认路径。
+///
+/// # Arguments
+///
+/// * `domain` - 域标识。
+/// * `application` - 应用标识。
+/// * `module` - 模块标识。
+///
+/// # Returns
+///
+/// manifest 文件的绝对路径（注册表有 manifestPath 时用之，否则用默认 `modules/<d>/<a>/<m>/module.json`）。
+///
+/// # Errors
+///
+/// 列举 DAM 模块失败时返回底层错误。
 async fn registered_manifest_path(
     domain: &str,
     application: &str,
@@ -183,6 +224,20 @@ async fn registered_manifest_path(
 }
 
 /// 读取模块 manifest（含 manifestPath 字段，相对 data 根）。
+///
+/// # Arguments
+///
+/// * `domain` - 域标识。
+/// * `application` - 应用标识。
+/// * `module` - 模块标识。
+///
+/// # Returns
+///
+/// 模块 manifest JSON（已注入 `manifestPath` 字段）。
+///
+/// # Errors
+///
+/// 参数为空或非法返回 `bad_request`；manifest 不存在返回 `not_found`；读取失败返回底层错误。
 pub async fn load_module_manifest(
     domain: &str,
     application: &str,
@@ -212,6 +267,21 @@ pub async fn load_module_manifest(
 }
 
 /// 解析模块某类资源（标注每项 exists/kind）。
+///
+/// # Arguments
+///
+/// * `domain` - 域标识。
+/// * `application` - 应用标识。
+/// * `module` - 模块标识。
+/// * `res_type` - 资源类型（如 `menus`、`htmlPages` 等）。
+///
+/// # Returns
+///
+/// 资源列表 JSON（每项含 path/absPath/exists/kind 字段）。
+///
+/// # Errors
+///
+/// `res_type` 非法返回 `bad_request`；加载 manifest 失败返回底层错误。
 pub async fn resolve_module_resource(
     domain: &str,
     application: &str,

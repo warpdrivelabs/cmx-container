@@ -18,8 +18,11 @@ use crate::fsutil::read_json;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherItem {
+    /// 功能项唯一标识（取自菜单节点 id）。
     pub id: String,
+    /// 展示标题（取自菜单节点 caption，回退 name）。
     pub caption: String,
+    /// 图标名（取自菜单节点 icon，可能为空）。
     pub icon: String,
     /// 该项来自哪个菜单文件（点分 menuRef），用于二次取完整 workspace。
     pub menu_ref: String,
@@ -30,12 +33,15 @@ pub struct LauncherItem {
 /// resolve 入参。
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResolveInput {
+    /// 用户输入的自然语言意图描述。
     #[serde(default)]
     pub query: String,
 }
 
-/// 所有 menu-pages 文件的点分 menuRef。当前固定枚举（与 data/menu-pages 对齐）；
-/// 未来菜单增多可改为扫描目录。保持与 get_menu_page_json 的 menuRef 语义一致。
+/// 所有 menu-pages 文件的点分 menuRef。
+///
+/// 当前固定枚举（与 data/menu-pages 对齐）；未来菜单增多可改为扫描目录。
+/// 保持与 get_menu_page_json 的 menuRef 语义一致。
 const MENU_REFS: &[&str] = &[
     "fi.cmxfico.gl.explorer-menu",
     "fi.cmxfico.report.report-menu",
@@ -139,6 +145,14 @@ fn derive_keywords(caption: &str, id: &str) -> Vec<String> {
 }
 
 /// 列出全部可打开功能（轻量目录）。
+///
+/// # Returns
+///
+/// 功能目录列表（已按 id 去重，同 id 取第一个）。
+///
+/// # Errors
+///
+/// 读取菜单文件失败（非 NotFound）时返回底层 IO/解析错误。
 pub async fn list_catalog() -> PortalResult<Vec<LauncherItem>> {
     let mut out: Vec<LauncherItem> = Vec::new();
     for menu_ref in MENU_REFS {
@@ -174,6 +188,19 @@ fn menu_ref_to_path(menu_ref: &str) -> Vec<String> {
 }
 
 /// 从菜单文件里按 id 取出某功能项的**完整**节点（含 workspace）。
+///
+/// # Arguments
+///
+/// * `menu_ref` - 点分菜单引用，用于定位菜单文件。
+/// * `id` - 目标功能项 id。
+///
+/// # Returns
+///
+/// 找到时返回 `Some(完整节点)`；菜单文件不存在或未命中时返回 `None`。
+///
+/// # Errors
+///
+/// 读取菜单文件失败（非 NotFound）时返回底层 IO/解析错误。
 async fn find_full_node(menu_ref: &str, id: &str) -> PortalResult<Option<Value>> {
     let path = data_path(menu_ref_to_path(menu_ref));
     let doc = match read_json::<Value>(&path).await {
@@ -229,6 +256,19 @@ fn rule_match<'a>(query: &str, catalog: &'a [LauncherItem]) -> Option<(&'a Launc
 }
 
 /// 让 AI 从功能清单里选最匹配 query 的 id（json 模式）。返回 (id, confidence, reason)。
+///
+/// # Arguments
+///
+/// * `query` - 用户自然语言意图描述。
+/// * `catalog` - 可选功能目录清单（仅传 id/caption/keywords 给 AI）。
+///
+/// # Returns
+///
+/// AI 未配置或未命中时返回 `Ok(None)`；命中时返回 `Ok(Some((id, confidence, reason)))`。
+///
+/// # Errors
+///
+/// AI 请求失败或返回非法 JSON 时返回对应错误。
 async fn ai_match(
     query: &str,
     catalog: &[LauncherItem],
@@ -283,9 +323,18 @@ async fn ai_match(
 
 /// 解析意图 → 命中的功能（含完整 workspace 节点），供前端直接打开。
 ///
-/// 返回：
+/// # Arguments
+///
+/// * `input` - 解析入参，包含用户自然语言 query。
+///
+/// # Returns
+///
 /// - 命中：`{ matched:true, id, caption, icon, confidence, reason, source, node:{...} }`
 /// - 未命中：`{ matched:false, query, candidates:[{id,caption}...] }`（给前端兜底提示/选择）
+///
+/// # Errors
+///
+/// query 为空返回 `bad_request`；加载目录或读取完整节点失败时返回底层错误。
 pub async fn resolve(input: ResolveInput) -> PortalResult<Value> {
     let query = input.query.trim().to_string();
     if query.is_empty() {

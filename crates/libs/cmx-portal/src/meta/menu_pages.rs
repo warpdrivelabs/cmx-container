@@ -33,6 +33,18 @@ fn resource_caption(t: &str) -> &str {
 }
 
 /// 解析 menu 引用为相对路径段（最后一段补 `.json`）。
+///
+/// # Arguments
+///
+/// * `menu_ref` - 点分菜单引用（如 `fi.cmxfico.gl.explorer-menu`）。
+///
+/// # Returns
+///
+/// 相对 data 根的路径段数组（首段为 `menu-pages`）。
+///
+/// # Errors
+///
+/// `menu_ref` 为空、含非法字符或段为空时返回 `bad_request`。
 fn parse_menu_ref(menu_ref: &str) -> PortalResult<Vec<String>> {
     let r = menu_ref.trim();
     if r.is_empty() {
@@ -200,6 +212,22 @@ fn build_dam_resource_menu(manifest: &Value) -> Value {
 }
 
 /// 构建单模块菜单组。
+///
+/// # Arguments
+///
+/// * `domain` - 域标识。
+/// * `application` - 应用标识。
+/// * `module` - 模块标识。
+/// * `registry_module` - DAM 注册表中的模块信息（可选，用于取 name/icon/theme）。
+/// * `index` - 模块在列表中的序号（用于稳定配色）。
+///
+/// # Returns
+///
+/// 单模块菜单组 JSON（含 id/domain/application/module/title/icon/theme/items）。
+///
+/// # Errors
+///
+/// 加载模块 manifest 失败时返回底层错误（manifest 缺失时用空 manifest 兜底）。
 async fn build_dam_module_group(
     domain: &str,
     application: &str,
@@ -279,6 +307,18 @@ async fn build_dam_module_group(
 }
 
 /// DAM 派生菜单文档（None 表示非 dam: 引用）。
+///
+/// # Arguments
+///
+/// * `menu_name` - 菜单引用，支持 `dam:<domain>/<app>[/<module>]` 形式。
+///
+/// # Returns
+///
+/// 非 `dam:` 前缀返回 `Ok(None)`；应用级返回聚合多模块的菜单文档；模块级返回单组菜单文档。
+///
+/// # Errors
+///
+/// `dam:` 引用缺少 application 或段非法时返回 `bad_request`；列举模块失败返回底层错误。
 async fn get_dam_menu_page_json(menu_name: &str) -> PortalResult<Option<Value>> {
     let Some((domain, application, module)) = parse_dam_menu_ref(menu_name) else {
         return Ok(None);
@@ -309,8 +349,22 @@ async fn get_dam_menu_page_json(menu_name: &str) -> PortalResult<Option<Value>> 
     })))
 }
 
-/// 内部读取实现（带递归深度保护，避免 menu→module→menu 循环）。
+/// 内部读取实现（带递归深度保护，避免 menu->module->menu 循环）。
+///
 /// 返回 boxed future：async fn 自递归（经 build_dam_module_group）需要装箱。
+///
+/// # Arguments
+///
+/// * `menu_name` - 菜单引用（点分或 `dam:` 前缀）。
+/// * `depth` - 递归深度，顶层为 0（仅顶层尝试 DAM 派生，递归只走文件）。
+///
+/// # Returns
+///
+/// 菜单 JSON 文档。
+///
+/// # Errors
+///
+/// `menu_name` 非法返回 `bad_request`；菜单文件不存在返回 `not_found`；读取失败返回底层错误。
 fn get_menu_page_json_inner(
     menu_name: &str,
     depth: u8,
@@ -335,6 +389,18 @@ fn get_menu_page_json_inner(
 }
 
 /// 读取菜单 JSON 文档（DAM 派生优先，回退文件）。
+///
+/// # Arguments
+///
+/// * `menu_name` - 菜单引用（点分或 `dam:<domain>/<app>[/<module>]`）。
+///
+/// # Returns
+///
+/// 菜单 JSON 文档（DAM 派生或文件读取）。
+///
+/// # Errors
+///
+/// `menu_name` 非法返回 `bad_request`；菜单不存在返回 `not_found`；读取失败返回底层错误。
 pub async fn get_menu_page_json(menu_name: &str) -> PortalResult<serde_json::Value> {
     get_menu_page_json_inner(menu_name, 0).await
 }

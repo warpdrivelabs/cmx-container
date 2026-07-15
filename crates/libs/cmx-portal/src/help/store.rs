@@ -17,19 +17,26 @@ use crate::util::{is_safe_json_file, is_safe_segment, write_lock};
 /// 帮助文档引用（domain/app/module/file）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct HelpRef {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 帮助文件名（须 `*.json`）。
     pub file: String,
 }
 
 /// catalog 查询过滤（任一缺省则该级放宽）。
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct HelpQuery {
+    /// 可选域 id 过滤条件。
     #[serde(default)]
     pub domain: Option<String>,
+    /// 可选应用 id 过滤条件。
     #[serde(default)]
     pub app: Option<String>,
+    /// 可选模块 id 过滤条件。
     #[serde(default)]
     pub module: Option<String>,
 }
@@ -38,17 +45,25 @@ pub struct HelpQuery {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HelpCatalogItem {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 帮助文件名。
     pub file: String,
     /// 文件名去掉 `.json` 后缀，作为模块内主题 id。
     pub id: String,
     /// 模块内分级路径（斜杠分级，如 `voucher/create`），用于多级目录。
     pub path: String,
+    /// 文档标题（显示用）。
     pub title: String,
+    /// 文档摘要。
     pub summary: String,
+    /// 关键词列表（供搜索）。
     pub keywords: Vec<String>,
+    /// 排序序号。
     pub order: i64,
     /// 是否含样例/示例（property 区是否有内容）。
     pub has_examples: bool,
@@ -58,19 +73,29 @@ pub struct HelpCatalogItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HelpDoc {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 帮助文件名。
     pub file: String,
+    /// 模块内主题 id（文件名去掉 `.json`）。
     pub id: String,
+    /// 模块内分级路径（斜杠分级）。
     #[serde(default)]
     pub path: String,
+    /// 文档标题（显示用）。
     #[serde(default)]
     pub title: String,
+    /// 文档摘要。
     #[serde(default)]
     pub summary: String,
+    /// 关键词列表（供搜索）。
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// 排序序号。
     #[serde(default)]
     pub order: i64,
     /// 详细内容（markdown），渲染在 content 区。
@@ -93,27 +118,40 @@ pub struct HelpDoc {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HelpDocInput {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub app: String,
+    /// 所属模块 id。
     pub module: String,
+    /// 帮助文件名（缺省时由 id 推导为 `<id>.json`）。
     #[serde(default)]
     pub file: Option<String>,
+    /// 模块内主题 id（缺省时由 file 推导）。
     #[serde(default)]
     pub id: Option<String>,
+    /// 模块内分级路径（斜杠分级）。
     #[serde(default)]
     pub path: Option<String>,
+    /// 文档标题（显示用）。
     #[serde(default)]
     pub title: Option<String>,
+    /// 文档摘要。
     #[serde(default)]
     pub summary: Option<String>,
+    /// 关键词列表（供搜索）。
     #[serde(default)]
     pub keywords: Option<Vec<String>>,
+    /// 排序序号。
     #[serde(default)]
     pub order: Option<i64>,
+    /// 详细内容（markdown），渲染在 content 区。
     #[serde(default)]
     pub content: Option<String>,
+    /// 样例/示例数组，渲染在 property 区。
     #[serde(default)]
     pub examples: Option<Vec<serde_json::Value>>,
+    /// 文档内联定义的可执行动作（JSON 对象）。
     #[serde(default)]
     pub actions: Option<serde_json::Value>,
 }
@@ -171,6 +209,18 @@ fn now_millis() -> i64 {
 }
 
 /// 读取某 DAM+file 的完整帮助文档。
+///
+/// # Arguments
+///
+/// * `r` - 帮助文档引用（domain/app/module/file）。
+///
+/// # Returns
+///
+/// 返回该文件的完整 `HelpDoc`（含正文与样例）。
+///
+/// # Errors
+///
+/// 参数非法返回 `PortalError::BadRequest`；文件不存在返回 `PortalError::NotFound`。
 pub async fn get_doc(r: &HelpRef) -> PortalResult<HelpDoc> {
     let [d, a, m, f] = validate_ref(r)?;
     let path = data_path(["help", &d, &a, &m, &f]);
@@ -193,6 +243,18 @@ pub async fn get_doc(r: &HelpRef) -> PortalResult<HelpDoc> {
 }
 
 /// 遍历 help 树，按 domain/app/module 逐级过滤，投影出轻量目录项。
+///
+/// # Arguments
+///
+/// * `q` - 查询过滤条件，任一字段缺省则该级放宽。
+///
+/// # Returns
+///
+/// 返回匹配的轻量目录项列表，按 domain/app/module -> order -> path -> id 排序。
+///
+/// # Errors
+///
+/// 目录读取失败时返回 `PortalError::Io`。
 pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
     let root = data_path(["help"]);
     let want_domain = q.domain.as_deref().unwrap_or("").trim().to_string();
@@ -299,6 +361,18 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
 }
 
 /// 保存帮助文档（写 `help/<domain>/<app>/<module>/<file>.json`，原子写）。
+///
+/// # Arguments
+///
+/// * `input` - 保存入参（file 可缺省，缺省时由 id 推导为 `<id>.json`）。
+///
+/// # Returns
+///
+/// 返回保存后的完整 `HelpDoc`（含服务端写入的 `updated_at`）。
+///
+/// # Errors
+///
+/// 参数非法或缺少 file/id 时返回 `PortalError::BadRequest`；写入失败返回对应 `PortalError`。
 pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
     let [d, a, m] = validate_dam(&input.domain, &input.app, &input.module)?;
     // file 优先取 input.file，否则由 id 推导 `<id>.json`。
@@ -347,6 +421,18 @@ pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
 }
 
 /// 删除帮助文档。
+///
+/// # Arguments
+///
+/// * `r` - 帮助文档引用（domain/app/module/file）。
+///
+/// # Returns
+///
+/// 成功返回 `Ok(())`。
+///
+/// # Errors
+///
+/// 参数非法返回 `PortalError::BadRequest`；文件不存在返回 `PortalError::NotFound`。
 pub async fn delete_doc(r: &HelpRef) -> PortalResult<()> {
     let [d, a, m, f] = validate_ref(r)?;
     let _guard = write_lock().lock().await;

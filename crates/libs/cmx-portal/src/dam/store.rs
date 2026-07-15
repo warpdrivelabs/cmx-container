@@ -31,6 +31,16 @@ fn is_dam_id(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// 校验 id 段合法性并返回 trim 后的字符串。
+///
+/// # Arguments
+///
+/// * `field` - 字段名（用于错误提示）。
+/// * `value` - 待校验的原始值。
+///
+/// # Errors
+///
+/// 若值不匹配 `[a-zA-Z0-9_-]{1,64}` 则返回 `PortalError::BadRequest`。
 fn assert_id(field: &str, value: &str) -> PortalResult<String> {
     let s = value.trim();
     if !is_dam_id(s) {
@@ -41,10 +51,12 @@ fn assert_id(field: &str, value: &str) -> PortalResult<String> {
     Ok(s.to_string())
 }
 
+/// 清理并返回 trim 后的文本（None 或空白返回空串）。
 fn clean_text(v: Option<&str>) -> String {
     v.unwrap_or("").trim().to_string()
 }
 
+/// 清理状态值，空值或缺省回退为 `active`。
 fn clean_status(v: Option<&str>) -> String {
     let s = v.unwrap_or("active").trim();
     if s.is_empty() {
@@ -59,47 +71,75 @@ fn clean_status(v: Option<&str>) -> String {
 /// 域。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamDomain {
+    /// 域唯一标识。
     pub id: String,
+    /// 域名称。
     pub name: String,
+    /// 域标题（显示用）。
     pub title: String,
+    /// 域图标标识。
     pub icon: String,
+    /// 域状态（active 等）。
     pub status: String,
+    /// 域描述。
     pub description: String,
 }
 
 /// 应用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamApplication {
+    /// 所属域 id。
     pub domain: String,
+    /// 应用唯一标识。
     pub id: String,
+    /// 应用名称。
     pub name: String,
+    /// 应用标题（显示用）。
     pub title: String,
+    /// 应用图标标识。
     pub icon: String,
+    /// 应用状态（active 等）。
     pub status: String,
+    /// 应用描述。
     pub description: String,
 }
 
 /// 模块（含 app/module 别名字段，与 Node 输出一致）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamModule {
+    /// 所属域 id。
     pub domain: String,
+    /// 所属应用 id。
     pub application: String,
+    /// 应用别名字段（与 application 同值，兼容 Node 输出）。
     pub app: String,
+    /// 模块唯一标识。
     pub id: String,
+    /// 模块别名字段（与 id 同值，兼容 Node 输出）。
     pub module: String,
+    /// 模块名称。
     pub name: String,
+    /// 模块标题（显示用）。
     pub title: String,
+    /// 模块图标标识。
     pub icon: String,
+    /// 模块状态（active 等）。
     pub status: String,
+    /// 模块描述。
     pub description: String,
+    /// 资源根路径（相对 data root）。
     #[serde(rename = "resourceRoot")]
     pub resource_root: String,
+    /// manifest 文件路径（相对 data root）。
     #[serde(rename = "manifestPath")]
     pub manifest_path: String,
+    /// 模块别名列表。
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// 模块主题配置（可选 JSON 对象）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<serde_json::Value>,
+    /// 主题色标识。
     #[serde(rename = "themeColor")]
     pub theme_color: String,
 }
@@ -107,18 +147,24 @@ pub struct DamModule {
 /// 规范化后的完整注册表。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamRegistry {
+    /// 注册表版本号。
     pub version: u32,
+    /// 域列表。
     pub domains: Vec<DamDomain>,
+    /// 应用列表。
     pub applications: Vec<DamApplication>,
+    /// 模块列表。
     pub modules: Vec<DamModule>,
 }
 
+/// 返回注册表文件路径 `dam-registry/registry.json`。
 fn registry_path() -> std::path::PathBuf {
     data_path(["dam-registry", "registry.json"])
 }
 
 // ───────────────────────── normalize ─────────────────────────
 
+/// 按候选 key 顺序取首个非空 trim 字符串。
 fn str_field<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
     for k in keys {
         if let Some(s) = v
@@ -132,6 +178,11 @@ fn str_field<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
     None
 }
 
+/// 将原始 JSON 文档规范化为 `DamRegistry`。
+///
+/// # Errors
+///
+/// 若任何 id 段不合法则返回 `PortalError::BadRequest`。
 fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
     let empty = vec![];
     let domains_raw = doc
@@ -241,6 +292,11 @@ fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
     })
 }
 
+/// 加载注册表文件并规范化（文件不存在时返回空注册表）。
+///
+/// # Errors
+///
+/// 读取或规范化失败时返回对应 `PortalError`。
 async fn load_registry() -> PortalResult<DamRegistry> {
     let doc = read_json_opt(&registry_path()).await?.unwrap_or_else(
         || json!({ "version": 1, "domains": [], "applications": [], "modules": [] }),
@@ -248,6 +304,11 @@ async fn load_registry() -> PortalResult<DamRegistry> {
     normalize(&doc)
 }
 
+/// 原子写入注册表到磁盘。
+///
+/// # Errors
+///
+/// 写入失败时返回 `PortalError`。
 async fn save_registry(reg: &DamRegistry) -> PortalResult<()> {
     write_json_atomic(&registry_path(), reg, true).await
 }
@@ -365,16 +426,44 @@ async fn rename_tree_dirs(from_parts: &[String], to_parts: &[String]) -> PortalR
 // ───────────────────────── 读 ─────────────────────────
 
 /// 完整注册表。
+///
+/// # Returns
+///
+/// 返回加载并规范化后的完整 `DamRegistry`。
+///
+/// # Errors
+///
+/// 读取或规范化失败时返回对应 `PortalError`。
 pub async fn get_dam_registry() -> PortalResult<DamRegistry> {
     load_registry().await
 }
 
 /// 域列表。
+///
+/// # Returns
+///
+/// 返回注册表中所有域的列表。
+///
+/// # Errors
+///
+/// 读取注册表失败时返回对应 `PortalError`。
 pub async fn list_domains() -> PortalResult<Vec<DamDomain>> {
     Ok(load_registry().await?.domains)
 }
 
 /// 应用列表（按 domain 过滤）。
+///
+/// # Arguments
+///
+/// * `domain` - 可选域 id 过滤条件，`None` 或空则返回全部。
+///
+/// # Returns
+///
+/// 返回匹配域下的应用列表。
+///
+/// # Errors
+///
+/// 读取注册表失败时返回对应 `PortalError`。
 pub async fn list_applications(domain: Option<&str>) -> PortalResult<Vec<DamApplication>> {
     let d = domain.unwrap_or("").trim();
     Ok(load_registry()
@@ -386,6 +475,19 @@ pub async fn list_applications(domain: Option<&str>) -> PortalResult<Vec<DamAppl
 }
 
 /// 模块列表（按 domain/application 过滤）。
+///
+/// # Arguments
+///
+/// * `domain` - 可选域 id 过滤条件，`None` 或空则该级放宽。
+/// * `application` - 可选应用 id 过滤条件，`None` 或空则该级放宽。
+///
+/// # Returns
+///
+/// 返回匹配条件下的模块列表。
+///
+/// # Errors
+///
+/// 读取注册表失败时返回对应 `PortalError`。
 pub async fn list_modules(
     domain: Option<&str>,
     application: Option<&str>,
@@ -402,6 +504,7 @@ pub async fn list_modules(
 
 // ───────────────────────── upsert / delete ─────────────────────────
 
+/// 解析 `originalKey`（斜杠分隔）为路径段列表。
 fn parse_original_key(v: Option<&str>) -> Vec<String> {
     v.unwrap_or("")
         .split('/')
@@ -411,6 +514,18 @@ fn parse_original_key(v: Option<&str>) -> Vec<String> {
 }
 
 /// upsert 域（含改名级联 + 目录搬移）。返回保存后的域。
+///
+/// # Arguments
+///
+/// * `input` - 包含域字段及可选 `originalKey` 的 JSON 对象。
+///
+/// # Returns
+///
+/// 返回保存后的 `DamDomain`。
+///
+/// # Errors
+///
+/// id 非法、域已存在或 IO 失败时返回对应 `PortalError`。
 pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain> {
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
@@ -463,6 +578,18 @@ pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain>
 }
 
 /// upsert 应用（含改名级联 + 目录搬移）。
+///
+/// # Arguments
+///
+/// * `input` - 包含应用字段及可选 `originalKey` 的 JSON 对象。
+///
+/// # Returns
+///
+/// 返回保存后的 `DamApplication`。
+///
+/// # Errors
+///
+/// id 非法、所属域不存在、应用已存在或 IO 失败时返回对应 `PortalError`。
 pub async fn upsert_application(input: &serde_json::Value) -> PortalResult<DamApplication> {
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
@@ -551,6 +678,18 @@ pub async fn upsert_application(input: &serde_json::Value) -> PortalResult<DamAp
 }
 
 /// upsert 模块（含改名 + 目录搬移）。
+///
+/// # Arguments
+///
+/// * `input` - 包含模块字段及可选 `originalKey` 的 JSON 对象。
+///
+/// # Returns
+///
+/// 返回保存后的 `DamModule`。
+///
+/// # Errors
+///
+/// id 非法、所属域/应用不存在、模块已存在或 IO 失败时返回对应 `PortalError`。
 pub async fn upsert_module(input: &serde_json::Value) -> PortalResult<DamModule> {
     let _guard = write_lock().lock().await;
     let mut reg = load_registry().await?;
@@ -671,6 +810,14 @@ pub async fn upsert_module(input: &serde_json::Value) -> PortalResult<DamModule>
 }
 
 /// 同步所有 DAM 目录（按当前注册表补建）。
+///
+/// # Returns
+///
+/// 返回 `{"ok": true}` JSON 对象。
+///
+/// # Errors
+///
+/// 创建目录失败时返回 `PortalError::Io`。
 pub async fn sync_dirs() -> PortalResult<serde_json::Value> {
     let _guard = write_lock().lock().await;
     let reg = load_registry().await?;
@@ -679,6 +826,18 @@ pub async fn sync_dirs() -> PortalResult<serde_json::Value> {
 }
 
 /// 删除域（要求其下无 app/module）。
+///
+/// # Arguments
+///
+/// * `id` - 待删除的域 id。
+///
+/// # Returns
+///
+/// 返回 `{"ok": true}` JSON 对象。
+///
+/// # Errors
+///
+/// 域下仍有 application/module 或域不存在时返回对应 `PortalError`。
 pub async fn delete_domain(id: &str) -> PortalResult<serde_json::Value> {
     let domain = assert_id("domain.id", id)?;
     let _guard = write_lock().lock().await;
@@ -700,6 +859,19 @@ pub async fn delete_domain(id: &str) -> PortalResult<serde_json::Value> {
 }
 
 /// 删除应用（要求其下无 module）。
+///
+/// # Arguments
+///
+/// * `domain` - 所属域 id。
+/// * `app` - 待删除的应用 id。
+///
+/// # Returns
+///
+/// 返回 `{"ok": true}` JSON 对象。
+///
+/// # Errors
+///
+/// 应用下仍有 module 或应用不存在时返回对应 `PortalError`。
 pub async fn delete_application(domain: &str, app: &str) -> PortalResult<serde_json::Value> {
     let domain = assert_id("application.domain", domain)?;
     let id = assert_id("application.id", app)?;
@@ -727,6 +899,20 @@ pub async fn delete_application(domain: &str, app: &str) -> PortalResult<serde_j
 }
 
 /// 删除模块。
+///
+/// # Arguments
+///
+/// * `domain` - 所属域 id。
+/// * `app` - 所属应用 id。
+/// * `module` - 待删除的模块 id。
+///
+/// # Returns
+///
+/// 返回 `{"ok": true}` JSON 对象。
+///
+/// # Errors
+///
+/// 模块不存在或 id 非法时返回对应 `PortalError`。
 pub async fn delete_module(
     domain: &str,
     app: &str,

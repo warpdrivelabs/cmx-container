@@ -45,6 +45,7 @@ fn clean_theme_color(value: &str) -> String {
     if ok { s.to_string() } else { String::new() }
 }
 
+/// 生成亮色主题侧配置（accent 驱动 headerBg/border 等）。
 fn light_side(accent: &str) -> Value {
     json!({
         "accent": accent,
@@ -55,6 +56,7 @@ fn light_side(accent: &str) -> Value {
     })
 }
 
+/// 生成暗色主题侧配置（accent 可单独指定暗色变体）。
 fn dark_side(accent_light: &str, accent_dark: Option<&str>) -> Value {
     let accent = accent_dark.unwrap_or(accent_light);
     json!({
@@ -73,6 +75,7 @@ fn stable_module_theme(key: &str, index: usize) -> Value {
     json!({ "light": light_side(light), "dark": dark_side(light, Some(dark)) })
 }
 
+/// 归一化单侧主题（light 或 dark），缺失字段用 fallback 或由 accent 重新生成。
 fn normalize_side(
     side: Option<&Value>,
     fallback: &Value,
@@ -119,7 +122,18 @@ fn normalize_side(
     })
 }
 
-/// 解析模块主题：themeColor 优先 → 显式 raw theme → 稳定回退。
+/// 解析模块主题：themeColor 优先 -> 显式 raw theme -> 稳定回退。
+///
+/// # Arguments
+///
+/// * `module_key` - 模块标识键（如 `domain/app/module`），用于稳定配色 hash。
+/// * `raw_theme` - manifest 中显式声明的 theme 对象（可选）。
+/// * `index` - 模块序号，用于调色板偏移。
+/// * `theme_color_raw` - manifest 中声明的 themeColor 字符串（可选）。
+///
+/// # Returns
+///
+/// 包含 `light` 和 `dark` 两侧的主题配置 JSON。
 pub fn resolve_module_theme(
     module_key: &str,
     raw_theme: Option<&Value>,

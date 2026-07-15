@@ -8,13 +8,20 @@ use serde_json::{Map, Value, json};
 
 use crate::error::{PortalError, PortalResult};
 
+/// 单文件读取的最大字节数。
 const MAX_FILE_BYTES: u64 = 180_000;
+/// 命令输出（stdout/stderr）保留的最大字符数。
 const MAX_COMMAND_OUTPUT: usize = 60_000;
+/// 补丁操作（文本替换/JSON 补丁/创建文件）的最大字节数。
 const MAX_PATCH_BYTES: u64 = 120_000;
+/// 单次文本替换补丁允许的最大替换次数。
 const MAX_TEXT_REPLACEMENTS: usize = 200;
+/// 视为文本文件进行搜索的扩展名白名单。
 const TEXT_FILE_EXTS: &[&str] = &["json", "html", "mjs", "cjs", "css", "md", "ts", "js"];
+/// 通用进程输出保留的最大字符数。
 const MAX_GENERIC_OUTPUT: usize = 80_000;
 
+/// 构造一个 bad_request 错误。
 fn bad(msg: impl Into<String>) -> PortalError {
     PortalError::bad_request(msg)
 }
@@ -50,12 +57,14 @@ fn normalize_path(p: &Path) -> PathBuf {
     out
 }
 
+/// 将绝对路径转换为相对于 root 的正斜杠路径字符串。
 fn relative_from_root(root: &Path, abs: &Path) -> String {
     abs.strip_prefix(root)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| abs.to_string_lossy().to_string())
 }
 
+/// 判断文件名是否具有可搜索的文本扩展名。
 fn has_text_ext(name: &str) -> bool {
     let lower = name.to_lowercase();
     TEXT_FILE_EXTS
@@ -63,6 +72,7 @@ fn has_text_ext(name: &str) -> bool {
         .any(|e| lower.ends_with(&format!(".{e}")))
 }
 
+/// 从参数对象中提取非空字符串字段。
 fn opt_str<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
     args.get(key)
         .and_then(|v| v.as_str())
@@ -70,10 +80,12 @@ fn opt_str<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
+/// 从参数中提取 app 或 application 字段（兼容两种命名）。
 fn app_arg(args: &Value) -> Option<&str> {
     opt_str(args, "app").or_else(|| opt_str(args, "application"))
 }
 
+/// 从参数中提取 limit 字段并钳制到 `[1, max]` 区间。
 fn limit_arg(args: &Value, default: usize, max: usize) -> usize {
     args.get("limit")
         .and_then(|v| v.as_u64())
@@ -81,6 +93,7 @@ fn limit_arg(args: &Value, default: usize, max: usize) -> usize {
         .clamp(1, max as u64) as usize
 }
 
+/// 从参数对象构造弹性组合引用 FcRef。
 fn fc_ref_from_args(args: &Value) -> crate::flexible_combination::store::FcRef {
     crate::flexible_combination::store::FcRef {
         domain: opt_str(args, "domain").map(str::to_string),
@@ -90,6 +103,7 @@ fn fc_ref_from_args(args: &Value) -> crate::flexible_combination::store::FcRef {
     }
 }
 
+/// 从参数对象中提取 anchor 字段并克隆为 Map。
 fn anchor_from_args(args: &Value) -> Map<String, Value> {
     args.get("anchor")
         .and_then(|v| v.as_object())
@@ -97,6 +111,7 @@ fn anchor_from_args(args: &Value) -> Map<String, Value> {
         .unwrap_or_default()
 }
 
+/// 探测仓库根目录（含 Cargo.toml / package.json / .git 的目录）。
 fn repo_root(root: &Path) -> PathBuf {
     if root.join("Cargo.toml").exists()
         || root.join("package.json").exists()
@@ -111,6 +126,7 @@ fn repo_root(root: &Path) -> PathBuf {
     root.parent().unwrap_or(root).to_path_buf()
 }
 
+/// 探测 Cargo 工作区根目录。
 fn cargo_root(root: &Path) -> PathBuf {
     if root.join("Cargo.toml").exists() {
         root.to_path_buf()
@@ -121,6 +137,7 @@ fn cargo_root(root: &Path) -> PathBuf {
     }
 }
 
+/// 探测 npm 项目根目录（含 package.json 的目录）。
 fn npm_root(root: &Path) -> PathBuf {
     if root.join("package.json").exists() {
         root.to_path_buf()
@@ -135,6 +152,22 @@ fn npm_root(root: &Path) -> PathBuf {
     }
 }
 
+/// 在指定工作目录异步执行外部命令并收集输出。
+///
+/// # Arguments
+///
+/// * `cwd` - 子进程工作目录。
+/// * `command` - 可执行程序名称。
+/// * `argv` - 命令行参数列表。
+/// * `timeout_ms` - 超时毫秒数，钳制到 `[1000, 300000]`。
+///
+/// # Returns
+///
+/// 返回包含 command、cwd、exitCode、stdout、stderr、timedOut 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当子进程 spawn 或等待输出发生 IO 错误时返回 `PortalError`；超时和 spawn 失败以 JSON 形式返回而非报错。
 async fn run_process(
     cwd: &Path,
     command: &str,
@@ -187,6 +220,23 @@ async fn run_process(
     }))
 }
 
+/// 在指定工作目录异步执行外部命令，写入 stdin 后收集输出。
+///
+/// # Arguments
+///
+/// * `cwd` - 子进程工作目录。
+/// * `command` - 可执行程序名称。
+/// * `argv` - 命令行参数列表。
+/// * `stdin` - 写入子进程标准输入的内容。
+/// * `timeout_ms` - 超时毫秒数，钳制到 `[1000, 300000]`。
+///
+/// # Returns
+///
+/// 返回包含 command、cwd、exitCode、stdout、stderr、timedOut 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当写入 stdin 或等待输出发生 IO 错误时返回 `PortalError`；超时和 spawn 失败以 JSON 形式返回而非报错。
 async fn run_process_with_stdin(
     cwd: &Path,
     command: &str,
@@ -252,6 +302,15 @@ async fn run_process_with_stdin(
 // ── lineDiff（复刻 Node lineDiff）─────────────────────────────────
 
 /// 生成简易行级 diff（前后各保留 3 行上下文）。
+///
+/// # Arguments
+///
+/// * `before` - 修改前的文本。
+/// * `after` - 修改后的文本。
+///
+/// # Returns
+///
+/// 返回 unified diff 风格的差异字符串。
 pub fn line_diff(before: &str, after: &str) -> String {
     let a: Vec<&str> = before.split('\n').collect();
     let b: Vec<&str> = after.split('\n').collect();
@@ -308,6 +367,7 @@ pub fn line_diff(before: &str, after: &str) -> String {
 
 // ── JSON Pointer（复刻 setJsonPointer）────────────────────────────
 
+/// 将 JSON Pointer 字符串拆分为已反转义的路径段列表。
 fn json_pointer_parts(pointer: &str) -> PortalResult<Vec<String>> {
     let p = pointer.trim();
     if !p.starts_with('/') {
@@ -319,6 +379,7 @@ fn json_pointer_parts(pointer: &str) -> PortalResult<Vec<String>> {
         .collect())
 }
 
+/// 按 JSON Pointer 在文档中写入指定值，自动补建中间节点。
 fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResult<()> {
     let parts = json_pointer_parts(pointer)?;
     if parts.is_empty() {
@@ -392,6 +453,19 @@ fn set_json_pointer(doc: &mut Value, pointer: &str, value: Value) -> PortalResul
 // ── 工具：搜索 ────────────────────────────────────────────────────
 
 /// search_files：优先 ripgrep（若可用），回退目录遍历。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 `query` 字段，可选 `limit` 字段。
+///
+/// # Returns
+///
+/// 返回匹配文件列表的 JSON 数组，每项含 file、line、text 字段。
+///
+/// # Errors
+///
+/// 当缺少 query 参数或遍历目录发生 IO 错误时返回 `PortalError`。
 pub async fn search_files(root: &Path, args: &Value) -> PortalResult<Value> {
     let query = args
         .get("query")
@@ -412,6 +486,9 @@ pub async fn search_files(root: &Path, args: &Value) -> PortalResult<Value> {
     Ok(Value::Array(results))
 }
 
+/// 递归遍历目录搜索文本文件中匹配查询关键词的行。
+///
+/// 跳过 node_modules、dist、.git、target 目录，仅搜索文本扩展名文件。
 async fn walk_search(root: &Path, query: &str, limit: usize) -> PortalResult<Vec<Value>> {
     let q = query.to_lowercase();
     let skip = ["node_modules", "dist", ".git", "target"];
@@ -461,6 +538,20 @@ async fn walk_search(root: &Path, query: &str, limit: usize) -> PortalResult<Vec
 
 // ── 工具：读文件 / 数据列举 ────────────────────────────────────────
 
+/// 读取项目内指定文件内容。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 `path` 字段。
+///
+/// # Returns
+///
+/// 返回含 path、bytes、content 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、目标非文件、文件过大或读取失败时返回 `PortalError`。
 pub async fn read_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let p = resolve_inside_root(
         root,
@@ -482,6 +573,18 @@ pub async fn read_file(root: &Path, args: &Value) -> PortalResult<Value> {
 }
 
 /// list_definitions：复用 definitions store。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 kind、domain、module、limit 字段。
+///
+/// # Returns
+///
+/// 返回定义摘要列表的 JSON 数组。
+///
+/// # Errors
+///
+/// 当底层 store 查询失败时返回 `PortalError`。
 pub async fn list_definitions(args: &Value) -> PortalResult<Value> {
     let kind = args
         .get("kind")
@@ -500,6 +603,18 @@ pub async fn list_definitions(args: &Value) -> PortalResult<Value> {
 }
 
 /// list_html_pages：复用 html store（裁剪字段）。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 page、pageSize/limit、domain、app、module 字段。
+///
+/// # Returns
+///
+/// 返回分页 HTML 页面摘要 JSON 对象，items 中每项仅保留 id、name 等裁剪字段。
+///
+/// # Errors
+///
+/// 当底层 html store 查询失败时返回 `PortalError`。
 pub async fn list_html_pages(args: &Value) -> PortalResult<Value> {
     let page = args
         .get("page")
@@ -542,6 +657,18 @@ pub async fn list_html_pages(args: &Value) -> PortalResult<Value> {
 }
 
 /// read_html_page：复用 html store（截断 html 到 24000 字符）。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 `id` 字段。
+///
+/// # Returns
+///
+/// 返回含 id、name、html（截断）等字段的 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 id 或页面不存在时返回 `PortalError`。
 pub async fn read_html_page(args: &Value) -> PortalResult<Value> {
     let id = args
         .get("id")
@@ -565,6 +692,19 @@ pub async fn read_html_page(args: &Value) -> PortalResult<Value> {
 
 // ── 工具：门户业务查询 ──────────────────────────────────────────────
 
+/// 列出 DAM/模块清单摘要。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、limit 字段。
+///
+/// # Returns
+///
+/// 返回含 items 数组的 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层模块清单查询失败时返回 `PortalError`。
 pub async fn list_modules_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
     let items =
@@ -572,6 +712,19 @@ pub async fn list_modules_tool(args: &Value) -> PortalResult<Value> {
     Ok(json!({ "items": items.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
+/// 读取指定模块的 module.json 清单。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 domain、app/application、module 字段。
+///
+/// # Returns
+///
+/// 返回模块清单 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少必要参数或加载清单失败时返回 `PortalError`。
 pub async fn get_module_manifest_tool(args: &Value) -> PortalResult<Value> {
     let domain = opt_str(args, "domain").ok_or_else(|| bad("get_module_manifest 需要 domain"))?;
     let app = app_arg(args).ok_or_else(|| bad("get_module_manifest 需要 app/application"))?;
@@ -579,6 +732,19 @@ pub async fn get_module_manifest_tool(args: &Value) -> PortalResult<Value> {
     crate::meta::modules::load_module_manifest(domain, app, module).await
 }
 
+/// 解析模块指定类型资源并标注存在性。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 domain、app/application、module、type 字段。
+///
+/// # Returns
+///
+/// 返回资源解析结果的 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少必要参数或解析资源失败时返回 `PortalError`。
 pub async fn get_module_resource_tool(args: &Value) -> PortalResult<Value> {
     let domain = opt_str(args, "domain").ok_or_else(|| bad("get_module_resource 需要 domain"))?;
     let app = app_arg(args).ok_or_else(|| bad("get_module_resource 需要 app/application"))?;
@@ -587,6 +753,19 @@ pub async fn get_module_resource_tool(args: &Value) -> PortalResult<Value> {
     crate::meta::modules::resolve_module_resource(domain, app, module, res_type).await
 }
 
+/// 列出字典 schema 注册表。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 limit 字段。
+///
+/// # Returns
+///
+/// 返回含 schemas 数组的 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层 schema 查询失败时返回 `PortalError`。
 pub async fn list_dict_schemas_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 200, 500);
     let schemas = crate::dict::schema::list_schemas_json().await?;
@@ -600,6 +779,19 @@ pub async fn list_dict_schemas_tool(args: &Value) -> PortalResult<Value> {
     Ok(json!({ "schemas": items }))
 }
 
+/// 按字典 ID 检索字典项。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 dictId，可选 q/query、limit、body 字段。
+///
+/// # Returns
+///
+/// 返回字典搜索结果的 JSON 值。
+///
+/// # Errors
+///
+/// 当缺少 dictId 或底层搜索失败时返回 `PortalError`。
 pub async fn dict_search_tool(args: &Value) -> PortalResult<Value> {
     let dict_id = opt_str(args, "dictId").ok_or_else(|| bad("dict_search 需要 dictId"))?;
     let mut body = args
@@ -620,11 +812,37 @@ pub async fn dict_search_tool(args: &Value) -> PortalResult<Value> {
     crate::dict::api::search_endpoint(dict_id, &body).await
 }
 
+/// 按字典 ID 获取输入建议。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 dictId，可选 q 字段。
+///
+/// # Returns
+///
+/// 返回字典建议结果的 JSON 值。
+///
+/// # Errors
+///
+/// 当缺少 dictId 或底层建议查询失败时返回 `PortalError`。
 pub async fn dict_suggest_tool(args: &Value) -> PortalResult<Value> {
     let dict_id = opt_str(args, "dictId").ok_or_else(|| bad("dict_suggest 需要 dictId"))?;
     crate::dict::api::suggest_endpoint(dict_id, opt_str(args, "q").unwrap_or("")).await
 }
 
+/// 列出事实数据文件。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、limit 字段。
+///
+/// # Returns
+///
+/// 返回含 items 数组的 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层事实数据查询失败时返回 `PortalError`。
 pub async fn list_facts_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 100, 500);
     let q = crate::fact::store::FactQuery {
@@ -641,6 +859,19 @@ pub async fn list_facts_tool(args: &Value) -> PortalResult<Value> {
     Ok(json!({ "items": values }))
 }
 
+/// 读取指定事实数据 JSON。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 domain、app/application、module、file 字段。
+///
+/// # Returns
+///
+/// 返回事实数据 JSON 值。
+///
+/// # Errors
+///
+/// 当缺少必要参数或读取失败时返回 `PortalError`。
 pub async fn get_fact_tool(args: &Value) -> PortalResult<Value> {
     let r = crate::fact::store::FactRef {
         domain: opt_str(args, "domain")
@@ -659,6 +890,19 @@ pub async fn get_fact_tool(args: &Value) -> PortalResult<Value> {
     crate::fact::store::get_fact(&r).await
 }
 
+/// 列出服务目录摘要。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、limit 字段。
+///
+/// # Returns
+///
+/// 返回含 services 数组的 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层服务目录查询失败时返回 `PortalError`。
 pub async fn service_catalog_list_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
     let services = crate::service_catalog::store::list_services(
@@ -670,6 +914,19 @@ pub async fn service_catalog_list_tool(args: &Value) -> PortalResult<Value> {
     Ok(json!({ "services": services.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
+/// 读取指定服务目录详情。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，需包含 `id` 字段。
+///
+/// # Returns
+///
+/// 返回服务详情 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 id 或服务不存在时返回 `PortalError`。
 pub async fn service_catalog_get_tool(args: &Value) -> PortalResult<Value> {
     let id = opt_str(args, "id").ok_or_else(|| bad("service_catalog_get 需要 id"))?;
     match crate::service_catalog::store::get_service_by_id(id).await? {
@@ -678,6 +935,19 @@ pub async fn service_catalog_get_tool(args: &Value) -> PortalResult<Value> {
     }
 }
 
+/// 列出弹性组合。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、limit 字段。
+///
+/// # Returns
+///
+/// 返回含 items 数组的 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层弹性组合查询失败时返回 `PortalError`。
 pub async fn flexible_combination_list_tool(args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 200);
     let items = crate::flexible_combination::store::list_flexible_combinations(
@@ -689,15 +959,54 @@ pub async fn flexible_combination_list_tool(args: &Value) -> PortalResult<Value>
     Ok(json!({ "items": items.into_iter().take(limit).collect::<Vec<_>>() }))
 }
 
+/// 读取指定弹性组合。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、scenario 字段。
+///
+/// # Returns
+///
+/// 返回弹性组合 JSON 对象。
+///
+/// # Errors
+///
+/// 当底层弹性组合查询失败时返回 `PortalError`。
 pub async fn flexible_combination_get_tool(args: &Value) -> PortalResult<Value> {
     crate::flexible_combination::store::get_flexible_combination(&fc_ref_from_args(args)).await
 }
 
+/// 校验弹性组合配置。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 combination、domain、app/application、module、scenario 字段。
+///
+/// # Returns
+///
+/// 返回校验结果的 JSON 值。
+///
+/// # Errors
+///
+/// 当底层校验失败时返回 `PortalError`。
 pub async fn flexible_combination_validate_tool(args: &Value) -> PortalResult<Value> {
     let body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
     crate::flexible_combination::api::validate(&body, &fc_ref_from_args(args)).await
 }
 
+/// 预览弹性组合解析结果。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 combination、anchor、domain、app/application、module、scenario 字段。
+///
+/// # Returns
+///
+/// 返回预览结果的 JSON 值。
+///
+/// # Errors
+///
+/// 当底层预览失败时返回 `PortalError`。
 pub async fn flexible_combination_preview_tool(args: &Value) -> PortalResult<Value> {
     let mut body = args.get("combination").cloned().unwrap_or_else(|| json!({}));
     if let Some(anchor) = args.get("anchor").filter(|v| v.is_object()) {
@@ -711,15 +1020,54 @@ pub async fn flexible_combination_preview_tool(args: &Value) -> PortalResult<Val
     crate::flexible_combination::api::preview(&body, &fc_ref_from_args(args)).await
 }
 
+/// 按锚点解析弹性组合字段/列模型。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、scenario、anchor 字段。
+///
+/// # Returns
+///
+/// 返回解析结果的 JSON 值。
+///
+/// # Errors
+///
+/// 当底层解析失败时返回 `PortalError`。
 pub async fn flexible_combination_resolve_tool(args: &Value) -> PortalResult<Value> {
     crate::flexible_combination::api::resolve(&fc_ref_from_args(args), &anchor_from_args(args)).await
 }
 
+/// 按锚点获取命中的上下文规则。
+///
+/// # Arguments
+///
+/// * `args` - 工具参数，可选 domain、app/application、module、scenario、anchor 字段。
+///
+/// # Returns
+///
+/// 返回命中规则的 JSON 值。
+///
+/// # Errors
+///
+/// 当底层规则查询失败时返回 `PortalError`。
 pub async fn flexible_combination_rule_tool(args: &Value) -> PortalResult<Value> {
     crate::flexible_combination::api::rule(&fc_ref_from_args(args), &anchor_from_args(args)).await
 }
 
 /// validate_metadata：递归校验 JSON 可解析性。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 `path` 字段指定目标文件或目录。
+///
+/// # Returns
+///
+/// 返回含 checked（检查文件数）和 errors（诊断列表）的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界或遍历目录发生 IO 错误时返回 `PortalError`。
 pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value> {
     let target = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) if !p.trim().is_empty() => resolve_inside_root(root, p)?,
@@ -768,6 +1116,20 @@ pub async fn validate_metadata(root: &Path, args: &Value) -> PortalResult<Value>
 
 // ── 工具：Git / 插件发现 ───────────────────────────────────────────
 
+/// 读取 git 工作区状态。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `_args` - 工具参数（未使用）。
+///
+/// # Returns
+///
+/// 返回 git status --short 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当 git 命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn git_status_tool(root: &Path, _args: &Value) -> PortalResult<Value> {
     run_process(
         &repo_root(root),
@@ -778,6 +1140,20 @@ pub async fn git_status_tool(root: &Path, _args: &Value) -> PortalResult<Value> 
     .await
 }
 
+/// 读取 git diff，可指定文件路径和是否暂存区。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 staged、path、maxBytes 字段。
+///
+/// # Returns
+///
+/// 返回 git diff 的执行结果 JSON 对象，stdout 按 maxBytes 截断。
+///
+/// # Errors
+///
+/// 当路径越界或 git 命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn git_diff_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["diff".to_string()];
     if args
@@ -811,6 +1187,20 @@ pub async fn git_diff_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     Ok(out)
 }
 
+/// 读取最近 git 提交摘要。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 limit 字段（默认 10，最大 50）。
+///
+/// # Returns
+///
+/// 返回 git log --oneline 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当 git 命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn git_log_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 10, 50).to_string();
     run_process(
@@ -827,6 +1217,20 @@ pub async fn git_log_tool(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 扫描本地插件 manifest / mcpdata / .agents 目录。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 limit 字段。
+///
+/// # Returns
+///
+/// 返回含 plugins 数组的 JSON 对象，每项含 path、pluginId、name、version 等字段。
+///
+/// # Errors
+///
+/// 当遍历目录发生 IO 错误时返回 `PortalError`。
 pub async fn list_local_plugins(root: &Path, args: &Value) -> PortalResult<Value> {
     let limit = limit_arg(args, 80, 300);
     let mut items = Vec::new();
@@ -878,6 +1282,20 @@ pub async fn list_local_plugins(root: &Path, args: &Value) -> PortalResult<Value
     Ok(json!({ "plugins": items }))
 }
 
+/// 读取本地插件 manifest.json。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需提供 path 或 pluginId 字段。
+///
+/// # Returns
+///
+/// 返回含 path 和 manifest 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少参数、插件未找到或文件读取失败时返回 `PortalError`。
 pub async fn inspect_plugin_manifest(root: &Path, args: &Value) -> PortalResult<Value> {
     if let Some(path) = opt_str(args, "path") {
         return read_file(root, &json!({ "path": path }))
@@ -916,6 +1334,20 @@ pub async fn inspect_plugin_manifest(root: &Path, args: &Value) -> PortalResult<
         })
 }
 
+/// 声明插件函数调用能力（当前返回占位响应，需运行时桥接后启用）。
+///
+/// # Arguments
+///
+/// * `_root` - 项目根目录（未使用）。
+/// * `args` - 工具参数，需包含 pluginId、functionName，可选 serviceName、input 字段。
+///
+/// # Returns
+///
+/// 返回含 configured=false 的占位 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 pluginId 或 functionName 时返回 `PortalError`。
 pub async fn call_plugin_function_tool(_root: &Path, args: &Value) -> PortalResult<Value> {
     let plugin_id =
         opt_str(args, "pluginId").ok_or_else(|| bad("call_plugin_function 需要 pluginId"))?;
@@ -931,6 +1363,20 @@ pub async fn call_plugin_function_tool(_root: &Path, args: &Value) -> PortalResu
     }))
 }
 
+/// 声明服务编排流程调用能力（当前返回占位响应，需注入客户端后启用）。
+///
+/// # Arguments
+///
+/// * `_root` - 项目根目录（未使用）。
+/// * `args` - 工具参数，需包含 serviceKey，可选 serviceName、input、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回含 configured=false 的占位 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 serviceKey 时返回 `PortalError`。
 pub async fn call_service_flow_tool(_root: &Path, args: &Value) -> PortalResult<Value> {
     let service_key =
         opt_str(args, "serviceKey").ok_or_else(|| bad("call_service_flow 需要 serviceKey"))?;
@@ -943,6 +1389,20 @@ pub async fn call_service_flow_tool(_root: &Path, args: &Value) -> PortalResult<
     }))
 }
 
+/// 生成服务编排 API 文档（当前返回占位响应，需插件运行时上下文）。
+///
+/// # Arguments
+///
+/// * `_root` - 项目根目录（未使用）。
+/// * `args` - 工具参数，可选 pluginId、version、orchestration、installPath 字段。
+///
+/// # Returns
+///
+/// 返回含 configured=false 的占位 JSON 对象。
+///
+/// # Errors
+///
+/// 该函数当前不返回错误（始终返回占位 JSON）。
 pub async fn generate_api_doc_tool(_root: &Path, args: &Value) -> PortalResult<Value> {
     Ok(json!({
         "configured": false,
@@ -957,6 +1417,19 @@ pub async fn generate_api_doc_tool(_root: &Path, args: &Value) -> PortalResult<V
 // ── 补丁预览/应用 ────────────────────────────────────────────────
 
 /// 文本替换补丁预览（不写盘）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path、oldText、newText，可选 occurrence 字段。
+///
+/// # Returns
+///
+/// 返回含 path、oldText、newText、occurrence、replacements、before、after、diff 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、文件过大、未找到文本或替换过多时返回 `PortalError`。
 pub async fn prepare_text_replace(root: &Path, args: &Value) -> PortalResult<Value> {
     let p = resolve_inside_root(
         root,
@@ -1021,6 +1494,19 @@ pub async fn prepare_text_replace(root: &Path, args: &Value) -> PortalResult<Val
 }
 
 /// 应用文本替换补丁（写盘）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path、oldText、newText，可选 occurrence 字段。
+///
+/// # Returns
+///
+/// 返回含 path、occurrence、replacements、bytes、diff 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当预览失败或写盘发生 IO 错误时返回 `PortalError`。
 pub async fn apply_text_replace(root: &Path, args: &Value) -> PortalResult<Value> {
     let preview = prepare_text_replace(root, args).await?;
     let rel = preview.get("path").and_then(|v| v.as_str()).unwrap_or("");
@@ -1036,6 +1522,19 @@ pub async fn apply_text_replace(root: &Path, args: &Value) -> PortalResult<Value
 }
 
 /// JSON 补丁预览。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path、pointer、value 字段。
+///
+/// # Returns
+///
+/// 返回含 path、pointer、value、before、after、diff 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、文件过大、JSON 解析失败或指针写入失败时返回 `PortalError`。
 pub async fn prepare_json_patch(root: &Path, args: &Value) -> PortalResult<Value> {
     let p = resolve_inside_root(
         root,
@@ -1068,6 +1567,19 @@ pub async fn prepare_json_patch(root: &Path, args: &Value) -> PortalResult<Value
 }
 
 /// 应用 JSON 补丁（写盘）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path、pointer、value 字段。
+///
+/// # Returns
+///
+/// 返回含 path、pointer、bytes、diff 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当预览失败或写盘发生 IO 错误时返回 `PortalError`。
 pub async fn apply_json_patch(root: &Path, args: &Value) -> PortalResult<Value> {
     let preview = prepare_json_patch(root, args).await?;
     let rel = preview.get("path").and_then(|v| v.as_str()).unwrap_or("");
@@ -1082,6 +1594,19 @@ pub async fn apply_json_patch(root: &Path, args: &Value) -> PortalResult<Value> 
 }
 
 /// 创建文本文件。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path、content，可选 overwrite 字段。
+///
+/// # Returns
+///
+/// 返回含 path、bytes、created 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、文件已存在且未设置 overwrite、内容过大或写盘失败时返回 `PortalError`。
 pub async fn create_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let path = opt_str(args, "path").ok_or_else(|| bad("create_file 需要 path"))?;
     let abs = resolve_inside_root(root, path)?;
@@ -1111,6 +1636,19 @@ pub async fn create_file(root: &Path, args: &Value) -> PortalResult<Value> {
 }
 
 /// 重命名/移动文件。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 from、to 字段。
+///
+/// # Returns
+///
+/// 返回含 from、to、renamed 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、源文件不存在、目标已存在或重命名失败时返回 `PortalError`。
 pub async fn rename_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let from = resolve_inside_root(
         root,
@@ -1143,6 +1681,19 @@ pub async fn rename_file(root: &Path, args: &Value) -> PortalResult<Value> {
 }
 
 /// 应用 unified diff patch（stdin 传给 git apply）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 patch 字段。
+///
+/// # Returns
+///
+/// 返回含 applied、check、result 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当 patch 为空、过大或 git apply 执行发生 IO 错误时返回 `PortalError`。
 pub async fn apply_file_patch(root: &Path, args: &Value) -> PortalResult<Value> {
     let patch = args.get("patch").and_then(|v| v.as_str()).unwrap_or("");
     if patch.trim().is_empty() {
@@ -1177,6 +1728,19 @@ pub async fn apply_file_patch(root: &Path, args: &Value) -> PortalResult<Value> 
 }
 
 /// 格式化单个文件。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 path，可选 timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回格式化命令的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当路径越界、扩展名不支持或格式化命令执行失败时返回 `PortalError`。
 pub async fn format_file(root: &Path, args: &Value) -> PortalResult<Value> {
     let path = opt_str(args, "path").ok_or_else(|| bad("format_file 需要 path"))?;
     let abs = resolve_inside_root(root, path)?;
@@ -1210,6 +1774,20 @@ pub async fn format_file(root: &Path, args: &Value) -> PortalResult<Value> {
     }
 }
 
+/// 执行 cargo check。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 package、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 cargo check 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn cargo_check(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["check".to_string()];
     if let Some(pkg) = opt_str(args, "package") {
@@ -1226,6 +1804,20 @@ pub async fn cargo_check(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 执行 cargo build。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 package、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 cargo build 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn cargo_build(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["build".to_string()];
     if let Some(pkg) = opt_str(args, "package") {
@@ -1242,6 +1834,20 @@ pub async fn cargo_build(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 执行 cargo test。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 package、test、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 cargo test 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn cargo_test(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["test".to_string()];
     if let Some(pkg) = opt_str(args, "package") {
@@ -1261,6 +1867,20 @@ pub async fn cargo_test(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 执行 cargo clippy（-D warnings）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 package、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 cargo clippy 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn cargo_clippy(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["clippy".to_string()];
     if let Some(pkg) = opt_str(args, "package") {
@@ -1278,6 +1898,20 @@ pub async fn cargo_clippy(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 执行 npm test，可指定 workspace。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 workspace、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 npm test 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn npm_test(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["test".to_string()];
     if let Some(workspace) = opt_str(args, "workspace") {
@@ -1294,6 +1928,20 @@ pub async fn npm_test(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 执行 npm run build，可指定 workspace 或根脚本。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 workspace、script、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 npm run build 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当脚本名不在白名单或命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn npm_build_workspace(root: &Path, args: &Value) -> PortalResult<Value> {
     let script = opt_str(args, "script").unwrap_or("build");
     if ![
@@ -1322,6 +1970,20 @@ pub async fn npm_build_workspace(root: &Path, args: &Value) -> PortalResult<Valu
     .await
 }
 
+/// 执行 Playwright 测试。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 project、grep、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 playwright test 的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn run_playwright(root: &Path, args: &Value) -> PortalResult<Value> {
     let mut argv = vec!["playwright".to_string(), "test".to_string()];
     if let Some(project) = opt_str(args, "project") {
@@ -1341,6 +2003,20 @@ pub async fn run_playwright(root: &Path, args: &Value) -> PortalResult<Value> {
     .await
 }
 
+/// 用 Playwright 对指定 URL 截图。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 url，可选 output、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回含 output 和 result 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 url、路径越界或截图命令执行失败时返回 `PortalError`。
 pub async fn capture_page_screenshot(root: &Path, args: &Value) -> PortalResult<Value> {
     let url = opt_str(args, "url").ok_or_else(|| bad("capture_page_screenshot 需要 url"))?;
     let output = opt_str(args, "output").unwrap_or("agent-screenshot.png");
@@ -1378,6 +2054,20 @@ const { chromium } = require('playwright');
     Ok(json!({ "output": relative_from_root(root, &out_abs), "result": res }))
 }
 
+/// 用 Playwright 读取页面标题和指定选择器文本。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 url，可选 selector、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回 node 命令的执行结果 JSON 对象。
+///
+/// # Errors
+///
+/// 当缺少 url 或命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn inspect_dom(root: &Path, args: &Value) -> PortalResult<Value> {
     let url = opt_str(args, "url").ok_or_else(|| bad("inspect_dom 需要 url"))?;
     let selector = opt_str(args, "selector").unwrap_or("body");
@@ -1410,6 +2100,20 @@ const { chromium } = require('playwright');
     .await
 }
 
+/// 运行可访问性检查（无 URL 时通过 Playwright grep 约定执行）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，可选 url、timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回可访问性检查结果的 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn check_accessibility(root: &Path, args: &Value) -> PortalResult<Value> {
     let url = opt_str(args, "url").unwrap_or("");
     if url.is_empty() {
@@ -1496,6 +2200,19 @@ fn normalize_command(args: &Value) -> PortalResult<(String, Vec<String>)> {
 }
 
 /// run_command：执行白名单命令（cwd = rootDir 的父目录，与 Node 一致）。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `args` - 工具参数，需包含 command、args，可选 timeoutMs 字段。
+///
+/// # Returns
+///
+/// 返回含 command、exitCode、stdout、stderr、diagnostics 的 JSON 对象。
+///
+/// # Errors
+///
+/// 当命令不在白名单或执行发生 IO 错误时返回 `PortalError`。
 pub async fn run_command(root: &Path, args: &Value) -> PortalResult<Value> {
     let (command, argv) = normalize_command(args)?;
     let timeout_ms = args
@@ -1556,6 +2273,7 @@ pub async fn run_command(root: &Path, args: &Value) -> PortalResult<Value> {
     }))
 }
 
+/// 截取字符串末尾最多 max 个字符。
 fn tail_str(s: &str, max: usize) -> String {
     let chars: Vec<char> = s.chars().collect();
     if chars.len() <= max {
@@ -1596,6 +2314,20 @@ fn parse_lint_diagnostics(cmd: &str, output: &str) -> Vec<Value> {
 }
 
 /// 派发工具调用。
+///
+/// # Arguments
+///
+/// * `root` - 项目根目录。
+/// * `name` - 工具名称。
+/// * `args` - 工具参数 JSON 值。
+///
+/// # Returns
+///
+/// 返回对应工具的执行结果 JSON 值。
+///
+/// # Errors
+///
+/// 当工具名称未知或对应工具执行出错时返回 `PortalError`。
 pub async fn run_tool(root: &Path, name: &str, args: &Value) -> PortalResult<Value> {
     match name {
         "search_files" => search_files(root, args).await,
