@@ -1,6 +1,9 @@
 //! service-catalog store 实现：mini `.bru` 解析器 + 目录遍历 + DAM 分类。
 
+use std::sync::OnceLock;
+
 use serde_json::{Value, json};
+use tokio::sync::Mutex;
 
 use crate::config::data_path;
 use crate::error::PortalResult;
@@ -209,7 +212,12 @@ fn parse_env_vars(text: &str) -> serde_json::Map<String, Value> {
 
 /// 用 env 变量展开 `{{var}}`（缺失原样保留）。
 fn expand_vars(s: &str, vars: &serde_json::Map<String, Value>) -> String {
-    let re = regex::Regex::new(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}").unwrap();
+    let re = {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| {
+            regex::Regex::new(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}").expect("字面量正则编译失败")
+        })
+    };
     re.replace_all(s, |c: &regex::Captures| {
         let name = &c[1];
         vars.get(name)
@@ -231,11 +239,11 @@ fn derive_service_type(bru: &Bru) -> &'static str {
     if t == "ws" || t == "websocket" || !bru.ws_url.is_empty() {
         return "websocket";
     }
-    if bru.body_mode == "json"
-        && regex::Regex::new(r#""jsonrpc"\s*:"#)
-            .unwrap()
+    if bru.body_mode == "json" && {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| regex::Regex::new(r#""jsonrpc"\s*:"#).expect("字面量正则编译失败"))
             .is_match(&bru.body_json)
-    {
+    } {
         return "jsonrpc";
     }
     "rest"
@@ -311,7 +319,76 @@ async fn collect_bru_files(
     Ok(out)
 }
 
-/// 解析全部服务（无缓存--按需读盘；与 Node 缓存语义等价的「调一次解析一次」）。
+/// 返回 service-catalog 目录树的最新 mtime（递归取所有 .bru 与目录的 max mtime）。
+///
+/// 用于缓存键：mtime 未变即可安全复用上次解析结果，避免每次全量读盘 + 解析。
+/// 目录不存在或无法读取时返回 `None`（调用方退化为不缓存）。
+async fn catalog_dir_mtime(root: &std::path::Path) -> Option<std::time::SystemTime> {
+    let mut latest: Option<std::time::SystemTime> = None;
+    let mut stack: Vec<std::path::PathBuf> = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let mut rd = tokio::fs::read_dir(&dir).await.ok()?;
+        while let Some(entry) = rd.next_entry().await.ok()? {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            let ft = entry.file_type().await.ok()?;
+            if ft.is_dir() {
+                if let Ok(m) = entry.metadata().await.and_then(|m| m.modified()) {
+                    latest = Some(latest.map_or(m, |l| if m > l { m } else { l }));
+                }
+                stack.push(entry.path());
+            } else if ft.is_file() {
+                let lower = name.to_lowercase();
+                if !lower.ends_with(".bru") || lower == "folder.bru" {
+                    continue;
+                }
+                if let Ok(m) = entry.metadata().await.and_then(|m| m.modified()) {
+                    latest = Some(latest.map_or(m, |l| if m > l { m } else { l }));
+                }
+            }
+        }
+    }
+    latest
+}
+
+/// 目录树 mtime + 解析结果，作为 service-catalog 的缓存条目。
+type CatalogCacheEntry = (std::time::SystemTime, Vec<Value>);
+
+/// 全局解析缓存：`(目录树 mtime, 解析结果)`，mtime 未变即复用。
+fn catalog_cache() -> &'static Mutex<Option<CatalogCacheEntry>> {
+    static CACHE: OnceLock<Mutex<Option<CatalogCacheEntry>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// 解析全部服务（带 mtime 缓存：目录树未变化时复用上次结果，避免全量读盘）。
+///
+/// # Returns
+///
+/// 全部服务的 JSON 值列表。
+///
+/// # Errors
+///
+/// 收集 .bru 文件失败时返回 `PortalError`。
+async fn load_all_cached() -> PortalResult<Vec<Value>> {
+    let dir = data_path(["service-catalog"]);
+    // 目录树最新 mtime 作为缓存键；缺失（目录不存在等）则不缓存，每次实时算。
+    let key = catalog_dir_mtime(&dir).await;
+    if let Some(mtime) = key
+        && let Some((cached_mtime, ref cached)) = *catalog_cache().lock().await
+        && cached_mtime == mtime
+    {
+        return Ok(cached.clone());
+    }
+    let fresh = load_all().await?;
+    if let Some(mtime) = key {
+        *catalog_cache().lock().await = Some((mtime, fresh.clone()));
+    }
+    Ok(fresh)
+}
+
+/// 解析全部服务（无缓存--按需读盘；由 [`load_all_cached`] 包装缓存层）。
 ///
 /// # Returns
 ///
@@ -345,7 +422,10 @@ async fn load_all() -> PortalResult<Vec<Value>> {
     for (rel_parts, file_name, abs) in files {
         let text = match tokio::fs::read_to_string(&abs).await {
             Ok(t) => t,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!(error = %e, path = %abs.display(), "service-catalog .bru 读取失败，跳过");
+                continue;
+            }
         };
         let bru = parse_bru(&text);
         let (domain, app, module, page) = derive_dam(&rel_parts, &file_name);
@@ -419,7 +499,7 @@ pub async fn list_services(
     app: Option<&str>,
     module: Option<&str>,
 ) -> PortalResult<Vec<Value>> {
-    let all = load_all().await?;
+    let all = load_all_cached().await?;
     let d = domain.unwrap_or("").trim();
     let a = app.unwrap_or("").trim();
     let m = module.unwrap_or("").trim();
@@ -447,7 +527,7 @@ pub async fn list_services(
 ///
 /// 加载全部服务失败时返回 `PortalError`。
 pub async fn get_service_by_id(id: &str) -> PortalResult<Option<Value>> {
-    let all = load_all().await?;
+    let all = load_all_cached().await?;
     Ok(all
         .into_iter()
         .find(|s| s.get("id").and_then(|v| v.as_str()) == Some(id)))

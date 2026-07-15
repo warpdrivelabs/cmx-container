@@ -21,6 +21,8 @@ cmx-model = { workspace = true }
 cmx-database = { workspace = true }
 # 内部依赖 - 核心类型（DataSet/Row/Schema/DataValue，store::list_* 查 DB 结果映射用）
 cmx-core = { workspace = true }
+# 内部依赖 - 工具库（snowflake_id 用于 notify 唯一 id 生成，避免撞号）
+cmx-utils = { workspace = true }
 
 # 异步运行时（tokio::fs 文件读写 + 并发锁）
 tokio = { workspace = true }

@@ -9,6 +9,39 @@ use crate::error::PortalResult;
 
 const TEXT_FILE_EXT_PATTERN: &str = "json|html|mjs|cjs|css|md|ts|js";
 
+/// 字面量正则编译为 `&'static Regex`（OnceLock 缓存，仅首次编译）。
+///
+/// 用法：`cached_re!(RE_NAME, r"pattern")` 展开为一个 `&'static regex::Regex`。
+/// 字面量正则编译失败属于程序错误，用 `expect` 直接 panic（与原 `.unwrap()` 语义一致）。
+macro_rules! cached_re {
+    ($name:ident, $pat:expr) => {{
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| regex::Regex::new($pat).expect("字面量正则编译失败"))
+    }};
+}
+
+/// 匹配文本文件相对路径（扩展名白名单随 `TEXT_FILE_EXT_PATTERN`）。多处共享，OnceLock 缓存。
+fn text_file_re() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(&format!(
+            r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
+        ))
+        .expect("字面量正则编译失败")
+    })
+}
+
+/// 匹配尾部「在/到 <file>」后缀（用于剥离文本替换尾部的位置说明）。多处共享，OnceLock 缓存。
+fn trailing_file_suffix_re() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(&format!(
+            r"(?i)\s*(?:在|到)\s*[a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN})\s*$"
+        ))
+        .expect("字面量正则编译失败")
+    })
+}
+
 /// 值转字符串（数字/布尔也转，对象/数组保持 JSON）。
 fn value_to_string(v: &Value) -> String {
     match v {
@@ -55,21 +88,16 @@ pub fn latest_user_text(messages: &[Value]) -> String {
 /// 猜测搜索关键词（引号 > 路径 > 末尾 token）。
 fn guess_search_query(text: &str) -> String {
     // 引号内 2-120 字符
-    let quoted = regex::Regex::new(r#"["'`“”‘’]([^"'`“”‘’]{2,120})["'`“”‘’]"#).unwrap();
+    let quoted = cached_re!(QUOTED, r#"["'`“”‘’]([^"'`“”‘’]{2,120})["'`“”‘’]"#);
     if let Some(c) = quoted.captures(text) {
         return c[1].trim().to_string();
     }
-    let path_like = regex::Regex::new(&format!(
-        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
-    ))
-    .unwrap();
+    let path_like = text_file_re();
     if let Some(c) = path_like.captures(text) {
         return c[1].trim().to_string();
     }
-    let stop = regex::Regex::new(r"^(请|帮我|如何|怎么|一下|实现|方案|这个|那个)$").unwrap();
-    let cleaned = regex::Regex::new(r"[，。！？；：、]")
-        .unwrap()
-        .replace_all(text, " ");
+    let stop = cached_re!(STOP, r"^(请|帮我|如何|怎么|一下|实现|方案|这个|那个)$");
+    let cleaned = cached_re!(PUNCT, r"[，。！？；：、]").replace_all(text, " ");
     let tokens: Vec<&str> = cleaned
         .split_whitespace()
         .map(|s| s.trim())
@@ -108,8 +136,7 @@ fn parse_loose_value(raw: &str) -> Value {
     if lower == "null" {
         return Value::Null;
     }
-    if regex::Regex::new(r"^-?\d+(\.\d+)?$")
-        .unwrap()
+    if cached_re!(NUM, r"^-?\d+(\.\d+)?$")
         .is_match(text)
         && let Ok(n) = text.parse::<f64>() {
             return json!(n);
@@ -124,28 +151,22 @@ fn strip_portal_prefix(s: &str) -> String {
 
 /// 抽取 JSON 补丁请求（file + pointer + value）。
 fn extract_json_patch_request(text: &str) -> Option<Value> {
-    let file = regex::Regex::new(r"([a-zA-Z0-9_.@/-]+\.json)")
-        .unwrap()
+    let file = cached_re!(JSON_FILE, r"([a-zA-Z0-9_.@/-]+\.json)")
         .captures(text)
         .map(|c| strip_portal_prefix(&c[1]))?;
-    let pointer =
-        regex::Regex::new(r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)")
-            .unwrap()
-            .captures(text)
-            .map(|c| c[1].to_string())
-            .or_else(|| {
-                regex::Regex::new(r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*")
-                    .unwrap()
-                    .captures(text)
-                    .map(|c| c[1].to_string())
-            })?;
-    let value_str = regex::Regex::new(r"(?i)(?:值|value)\s*[:：]\s*([\s\S]+)$")
-        .unwrap()
+    let pointer = cached_re!(PTR, r"(?i)(?:pointer|路径|字段|json\s*pointer)\s*[:：]?\s*(/[^\s，。；]+)")
         .captures(text)
         .map(|c| c[1].to_string())
         .or_else(|| {
-            regex::Regex::new(r"(?i)(?:改为|设置为|set\s+to)\s*([\s\S]+)$")
-                .unwrap()
+            cached_re!(PTR2, r"(?i)(/[a-zA-Z0-9_~/-]+)\s*(?:改为|设置为|set\s+to)\s*")
+                .captures(text)
+                .map(|c| c[1].to_string())
+        })?;
+    let value_str = cached_re!(VAL, r"(?i)(?:值|value)\s*[:：]\s*([\s\S]+)$")
+        .captures(text)
+        .map(|c| c[1].to_string())
+        .or_else(|| {
+            cached_re!(VAL2, r"(?i)(?:改为|设置为|set\s+to)\s*([\s\S]+)$")
                 .captures(text)
                 .map(|c| c[1].to_string())
         })?;
@@ -160,9 +181,9 @@ fn extract_quoted_parts(text: &str) -> Vec<String> {
     let normalized = text.replace(['“', '”'], "\"").replace(['‘', '’'], "'");
     let mut found: Vec<(usize, String)> = Vec::new();
     for re in [
-        regex::Regex::new(r#""([\s\S]*?)""#).unwrap(),
-        regex::Regex::new(r#"'([\s\S]*?)'"#).unwrap(),
-        regex::Regex::new(r#"`([\s\S]*?)`"#).unwrap(),
+        cached_re!(DQUOTE, r#""([\s\S]*?)""#),
+        cached_re!(SQUOTE, r#"'([\s\S]*?)'"#),
+        cached_re!(BTICK, r#"`([\s\S]*?)`"#),
     ] {
         for c in re.captures_iter(&normalized) {
             let m = c.get(0).unwrap();
@@ -178,21 +199,13 @@ fn extract_quoted_parts(text: &str) -> Vec<String> {
 
 /// 抽取文本替换请求。
 fn extract_text_replace_request(text: &str) -> Option<Value> {
-    if !regex::Regex::new(r"(?i)(替换|replace|改成|改为)")
-        .unwrap()
-        .is_match(text)
-    {
+    if !cached_re!(REPLACE_KW, r"(?i)(替换|replace|改成|改为)").is_match(text) {
         return None;
     }
-    let file = regex::Regex::new(&format!(
-        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
-    ))
-    .unwrap()
-    .captures(text)
-    .map(|c| strip_portal_prefix(&c[1]))?;
-    let all = regex::Regex::new(r"(?iu)全部|所有|all|global")
-        .unwrap()
-        .is_match(text);
+    let file = text_file_re()
+        .captures(text)
+        .map(|c| strip_portal_prefix(&c[1]))?;
+    let all = cached_re!(ALL_KW, r"(?iu)全部|所有|all|global").is_match(text);
     let occurrence = if all { "all" } else { "first" };
     let quoted = extract_quoted_parts(text);
     if quoted.len() >= 2 {
@@ -200,15 +213,14 @@ fn extract_text_replace_request(text: &str) -> Option<Value> {
             json!({ "path": file, "oldText": quoted[0], "newText": quoted[1], "occurrence": occurrence }),
         );
     }
-    let m = regex::Regex::new(r"把\s+([\s\S]+?)\s*(?:替换为|替换成|改成|改为)\s*([\s\S]+)$")
-        .unwrap()
-        .captures(text)?;
-    let new_text = regex::Regex::new(&format!(
-        r"(?i)\s*(?:在|到)\s*[a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN})\s*$"
-    ))
-    .unwrap()
-    .replace(m[2].trim(), "")
-    .to_string();
+    let m = cached_re!(
+        BA_REP,
+        r"把\s+([\s\S]+?)\s*(?:替换为|替换成|改成|改为)\s*([\s\S]+)$"
+    )
+    .captures(text)?;
+    let new_text = trailing_file_suffix_re()
+        .replace(m[2].trim(), "")
+        .to_string();
     Some(
         json!({ "path": file, "oldText": m[1].trim(), "newText": new_text.trim(), "occurrence": occurrence }),
     )
@@ -216,20 +228,14 @@ fn extract_text_replace_request(text: &str) -> Option<Value> {
 
 /// 推断命令审批（lint / build）。
 fn infer_command_approval(text: &str) -> Option<Value> {
-    if regex::Regex::new(r"(?i)lint|eslint|代码检查|静态检查")
-        .unwrap()
-        .is_match(text)
-    {
+    if cached_re!(LINT, r"(?i)lint|eslint|代码检查|静态检查").is_match(text) {
         return Some(json!({
             "title": "运行 CMXPortalManager lint",
             "risk": "只读检查命令，会读取源码并输出诊断，不写业务文件。",
             "args": { "command": "npm", "args": ["run", "lint", "-w", "cmx-portal-manager"] }
         }));
     }
-    if regex::Regex::new(r"(?i)build|构建|打包")
-        .unwrap()
-        .is_match(text)
-    {
+    if cached_re!(BUILD, r"(?i)build|构建|打包").is_match(text) {
         return Some(json!({
             "title": "构建 CMXPortalManager",
             "risk": "构建命令可能写入 dist 等构建产物，耗时也更长。",
@@ -241,25 +247,21 @@ fn infer_command_approval(text: &str) -> Option<Value> {
 
 /// 判断用户消息是否涉及自定义 HTML 页面上下文。
 fn wants_html_page_context(text: &str) -> bool {
-    regex::Regex::new(r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产")
-        .unwrap()
-        .is_match(text)
+    cached_re!(HTML_CTX, r"(?i)自定义页面|html\s*page|html页面|页面设计|设计器|html_pages|页面资产").is_match(text)
 }
 
 /// 从用户消息中抽取 HTML 页面 ID。
 fn extract_html_page_id(text: &str) -> String {
-    if let Some(c) = regex::Regex::new(
-        r"(?i)(?:页面\s*ID|html\s*page\s*id|pageId|id)\s*[:：=]\s*([a-zA-Z0-9._-]{1,128})",
+    if let Some(c) = cached_re!(
+        PAGE_ID,
+        r"(?i)(?:页面\s*ID|html\s*page\s*id|pageId|id)\s*[:：=]\s*([a-zA-Z0-9._-]{1,128})"
     )
-    .unwrap()
     .captures(text)
     {
         return c[1].to_string();
     }
-    let stop =
-        regex::Regex::new(r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$").unwrap();
-    for c in regex::Regex::new(r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b")
-        .unwrap()
+    let stop = cached_re!(STOP_ID, r"(?i)^(json|html|css|js|ts|md|lint|build|agent|deepseek)$");
+    for c in cached_re!(TOKEN_ID, r"\b([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){0,5})\b")
         .captures_iter(text)
     {
         let s = c[1].to_string();
@@ -352,11 +354,11 @@ pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
         "kind": "analysis",
         "intro": "我先按只读方式查看项目上下文，尽量把定位结果和下一步动作说清楚。",
         "plan": default_plan(),
-        "wantsDefinitions": regex::Regex::new(r"(?i)定义|字典|单据|metadata|meta|definition").unwrap().is_match(&text),
+        "wantsDefinitions": cached_re!(WANTS_DEF, r"(?i)定义|字典|单据|metadata|meta|definition").is_match(&text),
         "wantsHtmlPages": wants_html,
         "htmlPagesFilter": if wants_html { json!({ "page": 1, "pageSize": 20 }) } else { Value::Null },
         "readHtmlPage": if !html_id.is_empty() { json!({ "id": html_id }) } else { Value::Null },
-        "wantsValidate": regex::Regex::new(r"(?i)校验|验证|validate|检查").unwrap().is_match(&text),
+        "wantsValidate": cached_re!(WANTS_VAL, r"(?i)校验|验证|validate|检查").is_match(&text),
         "readFile": if !readable_path.is_empty() { json!({ "path": readable_path }) } else { Value::Null },
         "search": if readable_path.is_empty() { json!({ "query": guess_search_query(&text), "limit": 20 }) } else { Value::Null },
     })
@@ -373,10 +375,7 @@ pub async fn local_plan(messages: &[Value], root: &std::path::Path) -> Value {
 ///
 /// 返回存在文件的相对路径，不存在时返回空字符串。
 async fn extract_readable_path(text: &str, root: &std::path::Path) -> String {
-    let re = regex::Regex::new(&format!(
-        r"([a-zA-Z0-9_.@/-]+\.(?:{TEXT_FILE_EXT_PATTERN}))"
-    ))
-    .unwrap();
+    let re = text_file_re();
     let Some(c) = re.captures(text) else {
         return String::new();
     };

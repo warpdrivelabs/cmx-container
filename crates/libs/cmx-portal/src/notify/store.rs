@@ -1,9 +1,12 @@
 //! 通知存储：`notification-center/<userId>/<center>/<file>.json`，一条通知一个文件。
 
 use std::cmp::Reverse;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tokio::sync::Mutex;
 
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
@@ -185,6 +188,42 @@ fn now_millis() -> i64 {
         .unwrap_or(0)
 }
 
+// ───────────────────── 未读计数内存索引 ─────────────────────
+//
+// counts() 原先每次都全量读盘 + filter 未读；角标查询是高频读路径。这里维护一个进程内
+// 未读计数缓存：counts 命中则 O(1) 返回，未命中时全量回填；**写路径（publish/mark_read/
+// mark_all_read）成功后直接让该用户的缓存失效**，下次 counts 重新全量回填。
+//
+// 采用「写即失效」而非「写即增量」：增量更新与全量回填混用会引入 TOCTOU 竞态（落盘后
+// 释放写锁、增量更新前，若并发 counts 回填，会导致计数重复）。失效策略让缓存永远等价于
+// 「最近一次全量读盘的快照」，写后第一次 counts 才读盘，写本身低频，代价可接受。
+//
+// 同进程单实例假设（与 util::write_lock 全局锁一致）。进程重启后首次 counts 触发回填。
+
+/// 某用户三中心的未读计数缓存（None 表示尚未加载，需全量回填）。
+type UnreadMap = HashMap<String, Option<NotifyCounts>>;
+
+/// 返回全局未读计数缓存的静态引用。
+fn unread_cache() -> &'static Mutex<UnreadMap> {
+    static CACHE: OnceLock<Mutex<UnreadMap>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 把某中心未读数写进指定 counts 结构（就地更新）。
+fn set_center_unread(c: &mut NotifyCounts, center: NotifyCenter, n: i64) {
+    match center {
+        NotifyCenter::Task => c.task = n,
+        NotifyCenter::Message => c.message = n,
+        NotifyCenter::Log => c.log = n,
+    }
+    c.total = c.task + c.message + c.log;
+}
+
+/// 标记某用户缓存失效（下次 counts 重新全量回填）。写路径成功后调用。
+async fn invalidate_unread(user_id: &str) {
+    unread_cache().lock().await.remove(user_id);
+}
+
 /// 读取某用户某中心的全部通知（按 createdAt 倒序）。
 ///
 /// # Arguments
@@ -217,7 +256,11 @@ async fn read_center(user_id: &str, center: NotifyCenter) -> PortalResult<Vec<No
                 it.center = center.as_str().to_string(); // 以目录为准回填
                 out.push(it);
             }
-            Err(_) => continue, // 单条损坏不影响其余
+            Err(e) => {
+                // 单条损坏不影响其余，但记录告警便于排查落盘异常。
+                tracing::warn!(error = %e, path = %entry.path().display(), "通知文件解析失败，跳过");
+                continue;
+            }
         }
     }
     out.sort_by_key(|b| Reverse(b.created_at));
@@ -268,6 +311,11 @@ pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<V
 /// 用户标识非法时返回 `PortalError`。
 pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
     let u = safe_user(user_id)?;
+    // 优先读缓存；命中则避免全量读盘。
+    if let Some(Some(c)) = unread_cache().lock().await.get(u.as_str()).cloned() {
+        return Ok(c);
+    }
+    // 缓存未命中：全量回填后写入缓存。
     let mut c = NotifyCounts {
         task: 0,
         message: 0,
@@ -280,13 +328,9 @@ pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
             .iter()
             .filter(|x| !x.read)
             .count() as i64;
-        match center {
-            NotifyCenter::Task => c.task = unread,
-            NotifyCenter::Message => c.message = unread,
-            NotifyCenter::Log => c.log = unread,
-        }
+        set_center_unread(&mut c, center, unread);
     }
-    c.total = c.task + c.message + c.log;
+    unread_cache().lock().await.insert(u.clone(), Some(c.clone()));
     Ok(c)
 }
 
@@ -312,7 +356,8 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
         return Err(PortalError::bad_request("title 不能为空"));
     }
     let ts = now_millis();
-    let id = format!("n_{}_{}", ts, std::process::id());
+    // 复用项目雪花 id 生成器：全局唯一、有序，避免同毫秒并发 publish 撞号致通知丢失。
+    let id = format!("n_{}", cmx_utils::id::snowflake_id_str());
     let item = NotifyItem {
         id: id.clone(),
         center: center.as_str().to_string(),
@@ -336,6 +381,8 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
         )
         .await?;
     }
+    // 落盘成功后让该用户缓存失效：下次 counts 重新全量回填，避免增量更新与并发回填的 TOCTOU。
+    invalidate_unread(&user_id).await;
 
     // 广播：先发新通知，再发最新计数（前端据此更新列表与红色角标）。
     hub::publish_event(NotifyEvent {
@@ -370,9 +417,6 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
 /// 用户标识或通知 id 非法、通知不存在时返回 `PortalError`。
 pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalResult<bool> {
     let u = safe_user(user_id)?;
-    if !is_safe_segment(&id.replace('.', "_")) && !id.starts_with("n_") {
-        // id 形如 n_<ts>_<pid>；宽松校验避免穿越
-    }
     let file = format!("{}.json", id.trim());
     if !crate::util::is_safe_json_file(&file) {
         return Err(PortalError::bad_request("通知 id 非法"));
@@ -390,6 +434,8 @@ pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalR
     item.read = true;
     write_json_atomic(&path, &item, true).await?;
     drop(_guard);
+    // 写盘成功后让该用户缓存失效：下次 counts 重新全量回填。
+    invalidate_unread(&u).await;
     broadcast_counts(&u).await;
     Ok(true)
 }
@@ -430,6 +476,8 @@ pub async fn mark_all_read(user_id: &str, center: Option<NotifyCenter>) -> Porta
         }
     }
     if n > 0 {
+        // 写盘成功后让该用户缓存失效：下次 counts 重新全量回填。
+        invalidate_unread(&u).await;
         broadcast_counts(&u).await;
     }
     Ok(n)

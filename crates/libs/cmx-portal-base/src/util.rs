@@ -2,6 +2,7 @@
 //!
 //! 复刻 Node 各 store 的 `SAFE_ID` / `SAFE_SEGMENT` 正则与 `withLock` 串行化语义。
 
+use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 
 use tokio::sync::Mutex;
@@ -66,4 +67,46 @@ pub fn write_lock() -> &'static Mutex<()> {
 pub fn test_data_root_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+/// 解析相对路径 `rel` 到 `base` 下，保证结果落在 `base` 内（拒绝穿越）。
+///
+/// 规则：
+/// - 去掉 `rel` 的前导 `/`（绝对路径）与可选的 `data/` 前缀；
+/// - 逐段拼接，遇到 `..` 直接拒绝（词法校验，不依赖文件存在性，故不存在路径也能解析）；
+/// - 结果保证是 `base` 的下属路径。
+///
+/// # Arguments
+///
+/// * `base` - 锚定根目录。
+/// * `rel` - 相对路径字符串（可能带前导 `/` 或 `data/` 前缀）。
+///
+/// # Returns
+///
+/// 落在 `base` 内的绝对路径。
+///
+/// # Errors
+///
+/// `rel` 含 `..`、绝对路径分量或其他可越界的分量时返回 [`PortalError::BadRequest`]。
+pub fn resolve_within(base: &Path, rel: &str) -> PortalResult<PathBuf> {
+    let trimmed = rel.trim();
+    // 去前导 `/`，再尝试去掉 `data/` 前缀（门户资源 path 约定以 data/ 起算）。
+    let stripped = trimmed
+        .trim_start_matches('/')
+        .strip_prefix("data/")
+        .unwrap_or_else(|| trimmed.trim_start_matches('/'));
+    let mut out = base.to_path_buf();
+    for comp in Path::new(stripped).components() {
+        match comp {
+            Component::Normal(seg) => out.push(seg),
+            Component::CurDir => {} // `.` 无影响
+            // 父目录 `..`、根 `/`、盘符前缀均视为穿越企图，直接拒绝。
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(PortalError::bad_request(format!(
+                    "路径含非法分量（禁止 .. 或绝对路径）：\"{rel}\""
+                )));
+            }
+        }
+    }
+    Ok(out)
 }

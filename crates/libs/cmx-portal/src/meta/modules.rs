@@ -11,7 +11,7 @@ use crate::config::{data_path, data_root};
 use crate::dam::store::list_modules;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::read_json;
-use crate::util::is_safe_segment;
+use crate::util::{is_safe_segment, resolve_within};
 
 /// 校验路径段非空且仅含安全字符，返回 trim 后的字符串。
 fn assert_seg(name: &str, value: &str) -> PortalResult<String> {
@@ -202,16 +202,8 @@ async fn registered_manifest_path(
         .filter(|s| !s.trim().is_empty());
     match rel {
         Some(r) => {
-            let cleaned = r
-                .trim_start_matches('/')
-                .strip_prefix("data/")
-                .unwrap_or(r.trim_start_matches('/'))
-                .to_string();
-            let mut p = data_root();
-            for seg in cleaned.split('/') {
-                p.push(seg);
-            }
-            Ok(p)
+            // 用 resolve_within 校验：拒绝 `..` / 绝对路径穿越，保证落在 data root 内。
+            resolve_within(&data_root(), &r)
         }
         None => Ok(data_path([
             "modules",
@@ -304,17 +296,10 @@ pub async fn resolve_module_resource(
         } else {
             item
         };
-        let rel = entry
-            .get("path")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim_start_matches('/')
-            .to_string();
-        let cleaned = rel.strip_prefix("data/").unwrap_or(&rel).to_string();
-        let mut abs = data_root();
-        for seg in cleaned.split('/') {
-            abs.push(seg);
-        }
+        let raw_path = entry.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let rel = raw_path.trim_start_matches('/').to_string();
+        // 用 resolve_within 校验：拒绝 `..` / 绝对路径穿越，保证 absPath 落在 data root 内。
+        let abs = resolve_within(&data_root(), &rel)?;
         let meta = tokio::fs::metadata(&abs).await.ok();
         let exists = meta.is_some();
         let mut kind = entry

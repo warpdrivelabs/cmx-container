@@ -132,9 +132,12 @@ pub struct DamRegistry {
 ///
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
 pub async fn get_dam_registry(active_only: bool) -> crate::error::PortalResult<DamRegistry> {
-    let domains = list_domains(active_only).await?;
-    let applications = list_applications(None, active_only).await?;
-    let modules = list_modules(None, None, active_only).await?;
+    // 三表查询互不依赖，并行执行缩短 RTT。
+    let (domains, applications, modules) = tokio::try_join!(
+        list_domains(active_only),
+        list_applications(None, active_only),
+        list_modules(None, None, active_only),
+    )?;
     Ok(DamRegistry {
         version: 1,
         domains,
@@ -228,10 +231,12 @@ pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<D
 pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate::error::PortalResult<Vec<DamApplication>> {
     let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
-    // 组合 WHERE 条件：domain_code 和 status
+    // 组合 WHERE 条件：domain_code 和 status（参数化，避免 SQL 注入）。
     let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<cmx_core::model::cell::DataValue> = Vec::new();
     if !d.is_empty() {
-        conditions.push(format!("domain_code = '{}'", d));
+        params.push(d.to_string().into());
+        conditions.push(format!("domain_code = ${}", params.len()));
     }
     if active_only {
         conditions.push("status = 1".to_string());
@@ -246,7 +251,7 @@ pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate
         where_clause
     );
     let ds = mm
-        .query_sql(&db_id, None, &sql, "dam_applications")
+        .query_sql_with_datavalues(&db_id, None, &sql, params, "dam_applications")
         .await
         .map_err(|e| crate::error::PortalError::business(format!("查询应用失败: {}", e)))?;
     let schema = ds.schema.as_ref();
@@ -284,19 +289,23 @@ pub async fn list_modules(
     let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
     let a = application.unwrap_or("").trim();
-    // 组合 WHERE 条件：domain_code / application_code / status
+    // 组合 WHERE 条件：domain_code / application_code / status（参数化，避免 SQL 注入）。
     let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<cmx_core::model::cell::DataValue> = Vec::new();
     if !d.is_empty() {
-        conditions.push(format!("domain_code = '{}'", d));
+        params.push(d.to_string().into());
+        conditions.push(format!("domain_code = ${}", params.len()));
     }
     if !a.is_empty() {
         // a 是原始 app_id，DB 里 application_code = {domain}_{app_id}
-        let app_code = if d.is_empty() {
-            format!("%_{}", a) // 不确定 domain，用 LIKE
+        if d.is_empty() {
+            // 不确定 domain：用 LIKE 匹配 `*_<app_id>` 后缀（真正用 LIKE 运算符）。
+            params.push(format!("%_{}", a).into());
+            conditions.push(format!("application_code LIKE ${}", params.len()));
         } else {
-            format!("{}_{}", d, a)
-        };
-        conditions.push(format!("application_code = '{}'", app_code));
+            params.push(format!("{}_{}", d, a).into());
+            conditions.push(format!("application_code = ${}", params.len()));
+        }
     }
     if active_only {
         conditions.push("status = 1".to_string());
@@ -311,7 +320,7 @@ pub async fn list_modules(
         where_clause
     );
     let ds = mm
-        .query_sql(&db_id, None, &sql, "dam_modules")
+        .query_sql_with_datavalues(&db_id, None, &sql, params, "dam_modules")
         .await
         .map_err(|e| crate::error::PortalError::business(format!("查询模块失败: {}", e)))?;
     let schema = ds.schema.as_ref();
@@ -327,7 +336,13 @@ pub async fn list_modules(
         let aliases: Vec<String> = if tags_str.is_empty() {
             Vec::new()
         } else {
-            serde_json::from_str(&tags_str).unwrap_or_default()
+            match serde_json::from_str::<Vec<String>>(&tags_str) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(error = %e, tags = %tags_str, "cmx_module.tags 解析失败，按空别名处理");
+                    Vec::new()
+                }
+            }
         };
         let resource_root = row_str(row, schema, "resource_root");
         let manifest_path = row_str(row, schema, "manifest_path");

@@ -4,11 +4,76 @@
 //! 配置环境变量：CMX_AI_BASE_URL / CMX_AI_API_KEY|DEEPSEEK_API_KEY / CMX_AI_MODEL /
 //! CMX_AI_TIMEOUT_MS / CMX_AI_MAX_HISTORY / CMX_AI_SYSTEM_PROMPT。
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
+use reqwest::RequestBuilder;
 use serde_json::{Value, json};
 
 use crate::error::{PortalError, PortalResult};
+
+/// 单例 HTTP 客户端（复用连接池 keep-alive，避免每次请求重新 TLS 握手）。
+fn ai_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_millis(ai_timeout_ms()))
+            .build()
+            .expect("AI HTTP 客户端初始化不应失败")
+    })
+}
+
+/// 读取上游错误响应体为 JSON；解析失败不阻塞错误构造，仅记录告警。
+async fn error_body(resp: reqwest::Response) -> Value {
+    match resp.json::<Value>().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "上游错误响应体非合法 JSON，按空对象处理");
+            Value::Object(serde_json::Map::new())
+        }
+    }
+}
+///
+/// 4xx（除 429 外）视为不可重试错误，直接返回响应由调用方按状态码处理。
+/// 连接/超时类 `reqwest::Error` 也会重试——上游抖动常见于此。
+async fn send_with_retry(req: RequestBuilder) -> PortalResult<reqwest::Response> {
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut attempt: u32 = 0;
+    loop {
+        attempt += 1;
+        let res = req
+            .try_clone()
+            .ok_or_else(|| PortalError::business("AI 请求不可重试（body 非可克隆流）"))?
+            .send()
+            .await;
+        match res {
+            Ok(r) => {
+                let code = r.status().as_u16();
+                let retryable = code == 429 || (500..600).contains(&code);
+                if retryable && attempt < MAX_ATTEMPTS {
+                    let backoff = 500u64 * 2u64.pow(attempt - 1);
+                    tracing::warn!(code = code, attempt = attempt, backoff_ms = backoff, "AI 上游返回可重试状态码，退避后重试");
+                    tokio::time::sleep(Duration::from_millis(backoff)).await;
+                    continue;
+                }
+                return Ok(r);
+            }
+            Err(e) => {
+                if attempt < MAX_ATTEMPTS {
+                    let backoff = 500u64 * 2u64.pow(attempt - 1);
+                    tracing::warn!(error = %e, attempt = attempt, backoff_ms = backoff, "AI 请求发送失败，退避后重试");
+                    tokio::time::sleep(Duration::from_millis(backoff)).await;
+                    continue;
+                }
+                return Err(if e.is_timeout() {
+                    PortalError::business("AI 服务请求超时")
+                } else {
+                    PortalError::business(format!("AI 服务请求失败：{e}"))
+                });
+            }
+        }
+    }
+}
 
 /// 返回 AI 服务的 base URL（CMX_AI_BASE_URL，默认 DeepSeek）。
 fn ai_base_url() -> String {
@@ -93,30 +158,23 @@ pub async fn raw_chat_completion(
         "temperature": temperature,
     });
     if json_mode {
-        payload.as_object_mut().unwrap().insert(
-            "response_format".to_string(),
-            serde_json::json!({ "type": "json_object" }),
-        );
+        payload
+            .as_object_mut()
+            .expect("payload 由 json! 宏构造，必为 object")
+            .insert(
+                "response_format".to_string(),
+                serde_json::json!({ "type": "json_object" }),
+            );
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(ai_timeout_ms()))
-        .build()
-        .map_err(|e| PortalError::business(format!("AI 客户端初始化失败：{e}")))?;
-    let resp = client
-        .post(format!("{}/chat/completions", ai_base_url()))
-        .bearer_auth(ai_api_key())
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                PortalError::business("AI 服务请求超时")
-            } else {
-                PortalError::business(format!("AI 服务请求失败：{e}"))
-            }
-        })?;
+    let resp = send_with_retry(
+        ai_client()
+            .post(format!("{}/chat/completions", ai_base_url()))
+            .bearer_auth(ai_api_key())
+            .json(&payload),
+    )
+    .await?;
     let status = resp.status();
-    let data: Value = resp.json().await.unwrap_or(serde_json::json!({}));
+    let data: Value = error_body(resp).await;
     if !status.is_success() {
         let msg = data
             .get("error")
@@ -175,26 +233,16 @@ where
         "temperature": temperature,
         "stream": true,
     });
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(ai_timeout_ms()))
-        .build()
-        .map_err(|e| PortalError::business(format!("AI 客户端初始化失败：{e}")))?;
-    let resp = client
-        .post(format!("{}/chat/completions", ai_base_url()))
-        .bearer_auth(ai_api_key())
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                PortalError::business("AI 服务请求超时")
-            } else {
-                PortalError::business(format!("AI 服务请求失败：{e}"))
-            }
-        })?;
+    let resp = send_with_retry(
+        ai_client()
+            .post(format!("{}/chat/completions", ai_base_url()))
+            .bearer_auth(ai_api_key())
+            .json(&payload),
+    )
+    .await?;
     let status = resp.status();
     if !status.is_success() {
-        let data: Value = resp.json().await.unwrap_or(serde_json::json!({}));
+        let data: Value = error_body(resp).await;
         let msg = data
             .get("error")
             .and_then(|e| e.get("message"))
@@ -204,17 +252,22 @@ where
         return Err(PortalError::business(msg));
     }
 
-    // SSE 解析：逐块累积，按行切分 `data: {...}` / `data: [DONE]`，提取 choices[0].delta.content。
+    // SSE 解析：字节缓冲累积，按行切分 `data: {...}` / `data: [DONE]`，提取 choices[0].delta.content。
+    // 用 Vec<u8> 在换行边界解码，避免 from_utf8_lossy 逐 chunk 解码导致多字节 UTF-8（如中文）跨 chunk 损坏。
     let mut full = String::new();
-    let mut buf = String::new();
+    let mut bytes_buf: Vec<u8> = Vec::new();
     let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| PortalError::business(format!("AI 流读取失败：{e}")))?;
-        buf.push_str(&String::from_utf8_lossy(&bytes));
-        // 按行处理，保留最后一段不完整行在 buf 里。
-        while let Some(nl) = buf.find('\n') {
-            let line = buf[..nl].trim().to_string();
-            buf.drain(..=nl);
+        bytes_buf.extend_from_slice(&bytes);
+        // 按换行边界切行；不完整的尾段留在 bytes_buf 等下一 chunk 补齐。
+        while let Some(nl) = bytes_buf.iter().position(|&b| b == b'\n') {
+            // 先把行内容拷成 owned，再 drain，避免 from_utf8 的不可变借用与 drain 冲突。
+            let line = std::str::from_utf8(&bytes_buf[..nl])
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            bytes_buf.drain(..=nl);
             let Some(data) = line.strip_prefix("data:") else {
                 continue;
             };
@@ -289,7 +342,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
 /// 当 AI 服务未配置、messages 为空、请求失败或上游未返回有效回复时返回 `PortalError`。
 pub async fn chat(body: &Value) -> PortalResult<Value> {
     if !is_configured() {
-        return Err(PortalError::Business(
+        return Err(PortalError::business(
             "AI 服务未配置：请设置 CMX_AI_API_KEY 或 DEEPSEEK_API_KEY".to_string(),
         ));
     }
@@ -344,26 +397,16 @@ pub async fn chat(body: &Value) -> PortalResult<Value> {
 
     let payload = json!({ "model": model, "messages": messages, "temperature": 0.7 });
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(ai_timeout_ms()))
-        .build()
-        .map_err(|e| PortalError::business(format!("AI 客户端初始化失败：{e}")))?;
-    let resp = client
-        .post(format!("{}/chat/completions", ai_base_url()))
-        .bearer_auth(ai_api_key())
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                PortalError::business("AI 服务请求超时")
-            } else {
-                PortalError::business(format!("AI 服务请求失败：{e}"))
-            }
-        })?;
+    let resp = send_with_retry(
+        ai_client()
+            .post(format!("{}/chat/completions", ai_base_url()))
+            .bearer_auth(ai_api_key())
+            .json(&payload),
+    )
+    .await?;
 
     let status = resp.status();
-    let data: Value = resp.json().await.unwrap_or(json!({}));
+    let data: Value = error_body(resp).await;
     if !status.is_success() {
         let msg = data
             .get("error")

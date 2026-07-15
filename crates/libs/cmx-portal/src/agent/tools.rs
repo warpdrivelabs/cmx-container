@@ -26,6 +26,20 @@ fn bad(msg: impl Into<String>) -> PortalError {
     PortalError::bad_request(msg)
 }
 
+/// 校验 URL 仅允许 http(s) 协议，阻止 file:// / 内网/非预期协议的 SSRF。
+///
+/// planner 侧虽有同样校验，但 tools 层是命令执行的最后一道防线，绕过 planner 直接调
+/// tools 时仍需拦截。
+fn require_http_url(url: &str) -> PortalResult<()> {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        Ok(())
+    } else {
+        Err(bad(format!(
+            "browser 工具仅允许 http(s) URL，收到：\"{url}\""
+        )))
+    }
+}
+
 /// 把相对路径解析为 rootDir 内的绝对路径，防穿越。
 fn resolve_inside_root(root: &Path, input: &str) -> PortalResult<PathBuf> {
     let raw = input.trim();
@@ -1703,10 +1717,26 @@ pub async fn apply_file_patch(root: &Path, args: &Value) -> PortalResult<Value> 
         return Err(bad("patch 过大"));
     }
     let cwd = repo_root(root);
+    // 把 git apply 可改写范围钉死在 rootDir 内：追加 --directory=<root 相对 repo_root 的路径>。
+    // 这样 patch 内若含 `../` 或绝对路径前缀，git 会拒绝应用，阻止越界写。
+    // root 即是 repo_root 时退化为 `.`（cwd 本身）。
+    let dir_arg = match root.strip_prefix(&cwd) {
+        Ok(rel) if !rel.as_os_str().is_empty() => {
+            format!("--directory={}", rel.to_string_lossy().replace('\\', "/"))
+        }
+        _ => {
+            tracing::warn!(
+                root = %root.display(),
+                repo_root = %cwd.display(),
+                "apply_file_patch 无法计算相对目录，未施加 --directory 限制"
+            );
+            "--directory=.".to_string()
+        }
+    };
     let check = run_process_with_stdin(
         &cwd,
         "git",
-        &["apply".to_string(), "--check".to_string()],
+        &["apply".to_string(), "--check".to_string(), dir_arg.clone()],
         patch,
         60_000,
     )
@@ -1717,7 +1747,11 @@ pub async fn apply_file_patch(root: &Path, args: &Value) -> PortalResult<Value> 
     let result = run_process_with_stdin(
         &cwd,
         "git",
-        &["apply".to_string(), "--whitespace=nowarn".to_string()],
+        &[
+            "apply".to_string(),
+            "--whitespace=nowarn".to_string(),
+            dir_arg,
+        ],
         patch,
         60_000,
     )
@@ -2019,6 +2053,7 @@ pub async fn run_playwright(root: &Path, args: &Value) -> PortalResult<Value> {
 /// 当缺少 url、路径越界或截图命令执行失败时返回 `PortalError`。
 pub async fn capture_page_screenshot(root: &Path, args: &Value) -> PortalResult<Value> {
     let url = opt_str(args, "url").ok_or_else(|| bad("capture_page_screenshot 需要 url"))?;
+    require_http_url(url)?;
     let output = opt_str(args, "output").unwrap_or("agent-screenshot.png");
     let out_abs = resolve_inside_root(root, output)?;
     if let Some(parent) = out_abs.parent() {
@@ -2070,6 +2105,7 @@ const { chromium } = require('playwright');
 /// 当缺少 url 或命令执行发生 IO 错误时返回 `PortalError`。
 pub async fn inspect_dom(root: &Path, args: &Value) -> PortalResult<Value> {
     let url = opt_str(args, "url").ok_or_else(|| bad("inspect_dom 需要 url"))?;
+    require_http_url(url)?;
     let selector = opt_str(args, "selector").unwrap_or("body");
     let script = r#"
 const { chromium } = require('playwright');
@@ -2119,6 +2155,7 @@ pub async fn check_accessibility(root: &Path, args: &Value) -> PortalResult<Valu
     if url.is_empty() {
         return run_playwright(root, &json!({ "grep": "accessibility", "timeoutMs": args.get("timeoutMs").cloned().unwrap_or(json!(180000)) })).await;
     }
+    require_http_url(url)?;
     let script = r#"
 const { chromium } = require('playwright');
 (async () => {
@@ -2288,8 +2325,21 @@ fn parse_lint_diagnostics(cmd: &str, output: &str) -> Vec<Value> {
     if !cmd.contains("lint") {
         return vec![];
     }
-    let re = regex::Regex::new(r"^\s+(\d+):(\d+)\s+(warning|error)\s+(.+?)\s+([@\w/-]+)$").unwrap();
-    let file_re = regex::Regex::new(r"^/.+\.(?:js|mjs|cjs|ts|json|css|html)$").unwrap();
+    // 字面量正则：OnceLock 缓存，避免每次调用重新编译。
+    let re = {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| {
+            regex::Regex::new(r"^\s+(\d+):(\d+)\s+(warning|error)\s+(.+?)\s+([@\w/-]+)$")
+                .expect("字面量正则编译失败")
+        })
+    };
+    let file_re = {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| {
+            regex::Regex::new(r"^/.+\.(?:js|mjs|cjs|ts|json|css|html)$")
+                .expect("字面量正则编译失败")
+        })
+    };
     let mut diagnostics = Vec::new();
     let mut current_file = String::new();
     for line in output.split('\n') {

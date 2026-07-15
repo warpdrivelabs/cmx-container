@@ -28,6 +28,18 @@ fn pending() -> &'static Mutex<HashMap<String, PendingApproval>> {
     M.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// 审批项过期阈值（10 分钟），与 build_approval_events 的 expiresInMs 一致。
+const APPROVAL_TTL_MS: u128 = 10 * 60 * 1000;
+
+/// 清理所有过期的待审批项（created_at 超过 TTL），避免长期堆积导致内存泄漏。
+///
+/// 在 handle_approval 入口顺带调用——未 approve/reject 的审批项无独立后台清理，
+/// 借每次审批操作顺手回收。
+fn evict_expired(map: &mut HashMap<String, PendingApproval>) {
+    let cutoff = now_ms().saturating_sub(APPROVAL_TTL_MS);
+    map.retain(|_, v| v.created_at > cutoff);
+}
+
 /// 返回当前 UNIX 毫秒时间戳。
 fn now_ms() -> u128 {
     SystemTime::now()
@@ -52,7 +64,10 @@ fn iso_now() -> String {
 
 /// 构造一个 agent 事件。
 fn event(event_type: &str, mut payload: Value) -> Value {
-    let obj = payload.as_object_mut().unwrap();
+    // event 的 payload 均由 json!({}) 宏构造，必为 object。
+    let obj = payload
+        .as_object_mut()
+        .expect("event payload 由 json! 宏构造，必为 object");
     obj.insert("type".to_string(), json!(event_type));
     obj.insert("at".to_string(), json!(iso_now()));
     payload
@@ -652,11 +667,16 @@ fn create_lint_approval(approval_id: &str) -> Value {
 /// 当审批请求不存在、已过期或工具执行失败时返回 `PortalError`。
 pub async fn handle_approval(id: &str, decision: &str) -> PortalResult<Value> {
     let root = root_dir();
-    let approval = pending().lock().await.remove(id);
+    // 同一把锁内：先清理所有过期项（顺手回收无人处理的审批），再取出目标项。
+    let approval = {
+        let mut map = pending().lock().await;
+        evict_expired(&mut map);
+        map.remove(id)
+    };
     let Some(approval) = approval else {
         return Err(PortalError::bad_request("审批请求不存在或已处理"));
     };
-    if now_ms() - approval.created_at > 10 * 60 * 1000 {
+    if now_ms() - approval.created_at > APPROVAL_TTL_MS {
         return Err(PortalError::bad_request("审批请求已过期"));
     }
     let decision = decision.to_lowercase();

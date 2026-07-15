@@ -293,8 +293,15 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
                     dirs.push((entry.path(), next));
                 }
             } else if ft.is_file() && name.ends_with(".json") && parts.len() == 3 {
-                // 读取文件投影轻量目录项；单个文件损坏不影响其余目录项。
-                if let Ok(doc) = read_json::<serde_json::Value>(&entry.path()).await {
+                // 读取文件投影轻量目录项；单个文件损坏不影响其余目录项，但记录告警便于排查。
+                let doc = match read_json::<serde_json::Value>(&entry.path()).await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        tracing::warn!(error = %e, path = %entry.path().display(), "help 文档解析失败，跳过");
+                        continue;
+                    }
+                };
+                {
                     let id = id_from_file(&name);
                     let title = doc
                         .get("title")
