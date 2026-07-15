@@ -40,8 +40,10 @@ pub struct DocDataQuery {
     pub domain: String,
     pub application: String,
     pub module: String,
-    /// 单据定义文件名（如 cmxfico_doc_meta_v1.json）
-    pub file: String,
+    /// 单据定义文件名（如 cmxfico_doc_meta_v1.json）；缺失时由 [`resolve_doc_file`]
+    /// 在 domain/app/module 下自动选默认/最高版本。
+    #[serde(default)]
+    pub file: Option<String>,
     /// GET 便捷：根层过滤 `col:value`（简单等值）
     #[serde(default)]
     pub filter: Option<String>,
@@ -163,7 +165,7 @@ async fn doc_load_entry(
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
     let dq = match body {
         Some(b) if !b.is_null() => DocQuery::from_json(&b)?,
         _ => simple_doc_query(&meta, &q),
@@ -181,7 +183,7 @@ pub async fn doc_data_sqlx_dataset_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-dataset-json {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - sqlx-dataset-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     doc_load_entry(Driver::Sqlx, Exit::DatasetJson, q, headers, body.map(|b| b.0)).await
 }
 
@@ -193,7 +195,7 @@ pub async fn doc_data_tokio_zmc_msgpack(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - tokio-zmc-msgpack {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - tokio-zmc-msgpack {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     doc_load_entry(Driver::Tokio, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
 }
 
@@ -205,7 +207,7 @@ pub async fn doc_data_sqlx_zmc_msgpack(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-zmc-msgpack {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - sqlx-zmc-msgpack {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     doc_load_entry(Driver::Sqlx, Exit::ZmcMsgpack, q, headers, body.map(|b| b.0)).await
 }
 
@@ -217,7 +219,7 @@ pub async fn doc_data_tokio_zmc_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - tokio-zmc-json {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - tokio-zmc-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     doc_load_entry(Driver::Tokio, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
 
@@ -229,7 +231,7 @@ pub async fn doc_data_sqlx_zmc_json(
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
-    debug!("{:<12} - sqlx-zmc-json {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - sqlx-zmc-json {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     doc_load_entry(Driver::Sqlx, Exit::ZmcJson, q, headers, body.map(|b| b.0)).await
 }
 
@@ -274,7 +276,7 @@ pub async fn doc_children(
 
     debug!("{:<12} - doc_children {}/{}", "HANDLER", req.module, req.layer);
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, &req.file).await?;
+    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, Some(req.file.as_str())).await?;
 
     // 组一个 DocQuery：把该层的查询塞进去 + depth。
     let mut dq = DocQuery {
@@ -328,9 +330,9 @@ pub async fn doc_data_stream(
     use cmx_biz::doc::{build_layer_select, LayerQuery};
     use cmx_database_pg::get_default_pg_db_manager;
 
-    debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
 
     // 目标层：body.layer 指定，否则根层。流式**只装该单层**（扁平大结果，不嵌套）。
     let body_val = body.map(|b| b.0).unwrap_or(Value::Null);
@@ -413,9 +415,9 @@ pub async fn doc_meta(
     headers: HeaderMap,
 ) -> Result<Json<ApiResp<Value>>> {
     let _ = &headers; // meta 与 db_id 无关(定义读取不走数据源);保留签名一致
-    debug!("{:<12} - doc_meta {}/{}", "HANDLER", q.module, q.file);
+    debug!("{:<12} - doc_meta {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
     Ok(Json(ApiResp::ok(project_doc_meta(&meta))))
 }
 
@@ -543,7 +545,7 @@ pub async fn doc_save(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str())).await?;
     let (mode, changes) = saver::parse_save_body(&body);
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
@@ -647,7 +649,7 @@ pub async fn doc_save_batch(
         if file.is_empty() {
             return Err(cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into());
         }
-        let meta = resolve_doc_meta(domain, app, module, file).await?;
+        let meta = resolve_doc_meta(domain, app, module, Some(file)).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty() {
@@ -801,7 +803,7 @@ pub async fn doc_restore(
     }
 
     // 用 replace 模式把快照写回（DocSaver 内部单事务）
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, &q.file).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str())).await?;
     // 快照是列式包 { datasetId, columns, rows, childRows }；replace 期望 { table:{rows:[{id,upper_id,fields}]} }
     // 这里把列式包转成 replace 输入（简化：交给 DocSaver 前先归一）
     let replace_input = columnar_to_replace_input(&snapshot);
@@ -880,14 +882,121 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
     }
 }
 
+/// doc file 自动解析结果缓存（键 `domain/app/module` → file）。镜像 DCT 的 DICT_FILE_CACHE。
+/// DOC 无 dict 维度，故缓存键比 DCT 少一段。定义文件改动后若需立即生效，重启服务即可。
+static DOC_FILE_CACHE: std::sync::OnceLock<tokio::sync::RwLock<std::collections::HashMap<String, String>>> =
+    std::sync::OnceLock::new();
+
+fn doc_file_cache() -> &'static tokio::sync::RwLock<std::collections::HashMap<String, String>> {
+    DOC_FILE_CACHE.get_or_init(|| tokio::sync::RwLock::new(std::collections::HashMap::new()))
+}
+
+/// file 缺失时：在该 domain/app/module 下扫描 DOC 定义，选「isDefault 优先，否则 version 最大」者。
+///
+/// DOC 定义文件的 `moduleMeta.isDefault/version` 与 DCT 完全一致，故复用同款 stem 分组 + 选代表算法，
+/// 但省去 DCT 那步「读文件内容找 dictCode 二次校验」——DOC 不按 dictCode 二次定位，选到代表即返回。
+async fn resolve_doc_file(domain: &str, app: &str, module: &str) -> Result<String> {
+    let cache_key = format!("{domain}/{app}/{module}");
+    if let Some(f) = doc_file_cache().read().await.get(&cache_key).cloned() {
+        return Ok(f);
+    }
+    let items = cmx_portal::definitions::store::list_definitions(
+        Some("DOC"),
+        Some(domain),
+        Some(app),
+        Some(module),
+    )
+    .await?;
+    // 提取 owned 摘要元组，避开对 items 的引用生命周期纠缠（同 DCT 写法）。
+    // (stem, file, is_default, version)：stem 用于分组，其余用于选版本。
+    let entries: Vec<(String, String, bool, u64)> = items
+        .iter()
+        .filter_map(|it| {
+            let stem = it.get("stem").and_then(|v| v.as_str())?.to_string();
+            let file = it.get("file").and_then(|v| v.as_str())?.to_string();
+            let is_default = it
+                .get("isDefault")
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false);
+            let version = it.get("version").and_then(|x| x.as_u64()).unwrap_or(0);
+            Some((stem, file, is_default, version))
+        })
+        .collect();
+    if entries.is_empty() {
+        return Err(cmx_biz::BizError::business(format!(
+            "未在 {domain}/{app}/{module} 下找到 DOC 定义文件"
+        ))
+        .into());
+    }
+    // 按 stem 分组，每组选出代表（isDefault 优先，否则 version 最大）——同 DCT。
+    let mut groups: std::collections::HashMap<String, Vec<(String, bool, u64)>> =
+        std::collections::HashMap::new();
+    for (stem, file, is_default, version) in &entries {
+        groups
+            .entry(stem.clone())
+            .or_default()
+            .push((file.clone(), *is_default, *version));
+    }
+    let pick = |arr: &[(String, bool, u64)]| -> Option<String> {
+        // 优先 isDefault=true 的；无则全员；组内取 version 最大者的 file。
+        let any_default = arr.iter().any(|(_, d, _)| *d);
+        arr.iter()
+            .filter(|(_, d, _)| if any_default { *d } else { true })
+            .max_by_key(|(_, _, v)| *v)
+            .map(|(f, _, _)| f.clone())
+    };
+    // 收集各组代表，再做一次全局选代表（跨 stem 取 isDefault 优先 / version 最大）。
+    // DOC 一个 module 通常单 stem 单默认版本；多 stem 时按同一规则收敛到唯一结果。
+    let candidates: Vec<(String, bool, u64)> = groups
+        .values()
+        .filter_map(|arr| {
+            let f = pick(arr)?;
+            let any_default = arr.iter().any(|(_, d, _)| *d);
+            let top_version = arr
+                .iter()
+                .filter(|(_, d, _)| if any_default { *d } else { true })
+                .map(|(_, _, v)| *v)
+                .max()
+                .unwrap_or(0);
+            Some((f, any_default, top_version))
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Err(cmx_biz::BizError::business(format!(
+            "未在 {domain}/{app}/{module} 下解析出可用的 DOC 默认定义"
+        ))
+        .into());
+    }
+    let any_default = candidates.iter().any(|(_, d, _)| *d);
+    let resolved = candidates
+        .iter()
+        .filter(|(_, d, _)| if any_default { *d } else { true })
+        .max_by_key(|(_, _, v)| *v)
+        .map(|(f, _, _)| f.clone())
+        .ok_or_else(|| {
+            cmx_biz::BizError::business(format!(
+                "未在 {domain}/{app}/{module} 下解析出可用的 DOC 默认定义"
+            ))
+        })?;
+    doc_file_cache().write().await.insert(cache_key, resolved.clone());
+    Ok(resolved)
+}
+
 /// 读单据定义 + base 字段集，解析为 DocMetaView（命中缓存则直接返回）。
+///
+/// `file` 为 `None` 或空串时，自动调 [`resolve_doc_file`] 选默认/最高版本。
 async fn resolve_doc_meta(
     domain: &str,
     app: &str,
     module: &str,
-    file: &str,
+    file: Option<&str>,
 ) -> Result<Arc<DocMetaView>> {
-    let key = cache::doc_key(domain, app, module, file);
+    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（选默认/最高版本 DOC 定义）。
+    let file = match file {
+        Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.to_string(),
+        _ => resolve_doc_file(domain, app, module).await?,
+    };
+    let key = cache::doc_key(domain, app, module, &file);
     if let Some(hit) = cache::get(&key) {
         return Ok(hit);
     }
