@@ -144,6 +144,7 @@ pub fn is_configured() -> bool {
 /// # Errors
 ///
 /// 当 AI 服务未配置、请求失败或上游未返回有效回复时返回 `PortalError`。
+#[tracing::instrument(skip(messages))]
 pub async fn raw_chat_completion(
     messages: Value,
     json_mode: bool,
@@ -214,6 +215,7 @@ pub async fn raw_chat_completion(
 /// # Errors
 ///
 /// 当 AI 服务未配置、请求失败或上游未返回有效回复时返回 `PortalError`。
+#[tracing::instrument(skip(messages, on_delta))]
 pub async fn stream_chat_completion<F>(
     messages: Value,
     temperature: f64,
@@ -340,6 +342,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
 /// # Errors
 ///
 /// 当 AI 服务未配置、messages 为空、请求失败或上游未返回有效回复时返回 `PortalError`。
+#[tracing::instrument(skip(body))]
 pub async fn chat(body: &Value) -> PortalResult<Value> {
     if !is_configured() {
         return Err(PortalError::business(

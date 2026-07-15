@@ -118,6 +118,7 @@ pub fn normalize_messages(raw: &Value) -> Vec<Value> {
 /// # Errors
 ///
 /// 当缺少用户消息或审批事件构建失败时返回 `PortalError`。
+#[tracing::instrument(skip(messages, context, emit))]
 pub async fn run_agent_flow<F>(
     messages: &[Value],
     context: &Value,
@@ -665,6 +666,7 @@ fn create_lint_approval(approval_id: &str) -> Value {
 /// # Errors
 ///
 /// 当审批请求不存在、已过期或工具执行失败时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn handle_approval(id: &str, decision: &str) -> PortalResult<Value> {
     let root = root_dir();
     // 同一把锁内：先清理所有过期项（顺手回收无人处理的审批），再取出目标项。
@@ -770,6 +772,7 @@ pub fn capabilities() -> Value {
 /// # Errors
 ///
 /// 当 agent 流程执行失败时返回 `PortalError`。
+#[tracing::instrument(skip(body))]
 pub async fn message(body: &Value) -> PortalResult<Value> {
     let messages = normalize_messages(body.get("messages").unwrap_or(&Value::Null));
     let context = body

@@ -494,6 +494,7 @@ async fn load_all() -> PortalResult<Vec<Value>> {
 /// # Errors
 ///
 /// 加载全部服务失败时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn list_services(
     domain: Option<&str>,
     app: Option<&str>,
@@ -526,6 +527,7 @@ pub async fn list_services(
 /// # Errors
 ///
 /// 加载全部服务失败时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn get_service_by_id(id: &str) -> PortalResult<Option<Value>> {
     let all = load_all_cached().await?;
     Ok(all

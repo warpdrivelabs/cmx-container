@@ -131,6 +131,7 @@ pub struct DamRegistry {
 /// 此函数查 DB 后反向映射回 DamRegistry shape（供 /api/registry/dam 等只读消费方）。
 ///
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
+#[tracing::instrument]
 pub async fn get_dam_registry(active_only: bool) -> crate::error::PortalResult<DamRegistry> {
     // 三表查询互不依赖，并行执行缩短 RTT。
     let (domains, applications, modules) = tokio::try_join!(
@@ -195,6 +196,7 @@ fn row_i32(
 /// 域列表（查 cmx_domain，反向映射回 DamDomain shape）。
 ///
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
+#[tracing::instrument]
 pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<DamDomain>> {
     let (mm, db_id) = db_handle().await?;
     let sql = if active_only {
@@ -228,6 +230,7 @@ pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<D
 ///
 /// DB 的 application_code 是 `{domain}_{app_id}` 拼接，反向拆出原始 app_id 作为 id。
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
+#[tracing::instrument]
 pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate::error::PortalResult<Vec<DamApplication>> {
     let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
@@ -281,6 +284,7 @@ pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate
 /// DB 的 module_code 是 `{domain}_{app}_{module_id}` 拼接，反向拆出原始三段。
 /// application_code 是 `{domain}_{app}`，反向拆出 app_id。
 /// `active_only` 为 true 时只返回 status=1（启用）的记录。
+#[tracing::instrument]
 pub async fn list_modules(
     domain: Option<&str>,
     application: Option<&str>,

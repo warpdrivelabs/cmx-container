@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::data_path;
+use crate::now_millis;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{read_json, write_json_atomic};
 use crate::util::{is_safe_json_file, is_safe_segment, write_lock};
@@ -200,13 +201,7 @@ fn id_from_file(file: &str) -> String {
     file.strip_suffix(".json").unwrap_or(file).to_string()
 }
 
-/// 当前 epoch 毫秒（保存时间戳）。
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+// now_millis 复用 cmx-portal-base 下沉的实现（见 crate 根 re-export）。
 
 /// 读取某 DAM+file 的完整帮助文档。
 ///
@@ -221,6 +216,7 @@ fn now_millis() -> i64 {
 /// # Errors
 ///
 /// 参数非法返回 `PortalError::BadRequest`；文件不存在返回 `PortalError::NotFound`。
+#[tracing::instrument]
 pub async fn get_doc(r: &HelpRef) -> PortalResult<HelpDoc> {
     let [d, a, m, f] = validate_ref(r)?;
     let path = data_path(["help", &d, &a, &m, &f]);
@@ -255,6 +251,7 @@ pub async fn get_doc(r: &HelpRef) -> PortalResult<HelpDoc> {
 /// # Errors
 ///
 /// 目录读取失败时返回 `PortalError::Io`。
+#[tracing::instrument]
 pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
     let root = data_path(["help"]);
     let want_domain = q.domain.as_deref().unwrap_or("").trim().to_string();
@@ -380,6 +377,7 @@ pub async fn list_catalog(q: &HelpQuery) -> PortalResult<Vec<HelpCatalogItem>> {
 /// # Errors
 ///
 /// 参数非法或缺少 file/id 时返回 `PortalError::BadRequest`；写入失败返回对应 `PortalError`。
+#[tracing::instrument(skip(input))]
 pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
     let [d, a, m] = validate_dam(&input.domain, &input.app, &input.module)?;
     // file 优先取 input.file，否则由 id 推导 `<id>.json`。
@@ -440,6 +438,7 @@ pub async fn save_doc(input: HelpDocInput) -> PortalResult<HelpDoc> {
 /// # Errors
 ///
 /// 参数非法返回 `PortalError::BadRequest`；文件不存在返回 `PortalError::NotFound`。
+#[tracing::instrument]
 pub async fn delete_doc(r: &HelpRef) -> PortalResult<()> {
     let [d, a, m, f] = validate_ref(r)?;
     let _guard = write_lock().lock().await;

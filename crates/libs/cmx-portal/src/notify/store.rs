@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
 use crate::fsutil::{read_json, write_json_atomic};
+use crate::now_millis;
 use crate::notify::hub::{self, NotifyEvent};
 use crate::util::{is_safe_segment, write_lock};
 
@@ -180,13 +181,7 @@ fn item_path(user_id: &str, center: NotifyCenter, file: &str) -> std::path::Path
     data_path(["notification-center", user_id, center.as_str(), file])
 }
 
-/// 返回当前时间的 epoch 毫秒数。
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+// now_millis 复用 cmx-portal-base 下沉的实现（见 crate 根 re-export）。
 
 // ───────────────────── 未读计数内存索引 ─────────────────────
 //
@@ -281,6 +276,7 @@ async fn read_center(user_id: &str, center: NotifyCenter) -> PortalResult<Vec<No
 /// # Errors
 ///
 /// 用户标识非法时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<Vec<NotifyItem>> {
     let u = safe_user(user_id)?;
     let mut out = Vec::new();
@@ -309,6 +305,7 @@ pub async fn list(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<V
 /// # Errors
 ///
 /// 用户标识非法时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
     let u = safe_user(user_id)?;
     // 优先读缓存；命中则避免全量读盘。
@@ -347,6 +344,7 @@ pub async fn counts(user_id: &str) -> PortalResult<NotifyCounts> {
 /// # Errors
 ///
 /// 用户标识非法、center 不支持或 title 为空时返回 `PortalError`。
+#[tracing::instrument(skip(input))]
 pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
     let user_id = safe_user(input.user_id.as_deref().unwrap_or(""))?;
     let center = NotifyCenter::parse(input.center.trim())
@@ -415,6 +413,7 @@ pub async fn publish(input: NotifyInput) -> PortalResult<NotifyItem> {
 /// # Errors
 ///
 /// 用户标识或通知 id 非法、通知不存在时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalResult<bool> {
     let u = safe_user(user_id)?;
     let file = format!("{}.json", id.trim());
@@ -454,6 +453,7 @@ pub async fn mark_read(user_id: &str, center: NotifyCenter, id: &str) -> PortalR
 /// # Errors
 ///
 /// 用户标识非法时返回 `PortalError`。
+#[tracing::instrument]
 pub async fn mark_all_read(user_id: &str, center: Option<NotifyCenter>) -> PortalResult<i64> {
     let u = safe_user(user_id)?;
     let centers: Vec<NotifyCenter> = match center {
