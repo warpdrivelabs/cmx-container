@@ -345,6 +345,11 @@ mod tests {
                 caption: n.to_string(),
                 dim_type: String::new(),
                 agg: String::new(),
+                ref_dict: String::new(),
+                display_field: String::new(),
+                ref_field: String::new(),
+                edit: None,
+                edit_settings: None,
             })
             .collect();
         let fields: Vec<Field> = cols

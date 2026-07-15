@@ -99,6 +99,17 @@ pub struct ColumnView {
     pub dim_type: String,
     /// 度量聚合方式（如 "sum"；无则空）—— 汇总表度量列 + 主表 measure 列携带。
     pub agg: String,
+    // ── 前端录入控件透传（原样保留原始 JSON，供动态列模型复用）──────────────
+    /// 引用字典编码（如 comp_unit）。空 = 非字典列。
+    pub ref_dict: String,
+    /// 显示字段（字典回显用，如 code/name）。
+    pub display_field: String,
+    /// 写回字段（字典选值写回行，如 id/code）。
+    pub ref_field: String,
+    /// 录入控件配置（原样透传 edit{}，如 {mode:"cmx-dict-selct"}）。
+    pub edit: Option<Value>,
+    /// 编辑设置（原样透传 editSettings{}，如 {dictCode, coord}）。
+    pub edit_settings: Option<Value>,
 }
 
 /// 父子关系（来自 `voucherSchema.relations`）。
@@ -629,6 +640,24 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    // 字典/录入控件配置：原样透传，供前端动态列模型复用（cmx-dict-selct 等）。
+    let ref_dict = f
+        .get("refDict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let display_field = f
+        .get("displayField")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let ref_field = f
+        .get("refField")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let edit = f.get("edit").filter(|v| v.is_object()).cloned();
+    let edit_settings = f.get("editSettings").filter(|v| v.is_object()).cloned();
     Some(ColumnView {
         name,
         data_type,
@@ -637,6 +666,11 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         caption,
         dim_type,
         agg,
+        ref_dict,
+        display_field,
+        ref_field,
+        edit,
+        edit_settings,
     })
 }
 

@@ -497,7 +497,7 @@ fn project_doc_meta(meta: &DocMetaView) -> Value {
 
 /// 单列 → 前端 JSON（层列与汇总表列共用）。
 fn column_to_json(c: &cmx_biz::doc::ColumnView) -> Value {
-    serde_json::json!({
+    let mut obj = serde_json::json!({
         "name": c.name,
         "caption": c.caption,
         "dataType": c.data_type,
@@ -505,7 +505,24 @@ fn column_to_json(c: &cmx_biz::doc::ColumnView) -> Value {
         "agg": c.agg,
         "nullable": c.nullable,
         "isPrimaryKey": c.is_primary_key,
-    })
+    });
+    // 字典/录入控件配置：有值才输出，避免前端列对象携带大量空键。
+    if !c.ref_dict.is_empty() {
+        obj["refDict"] = serde_json::Value::String(c.ref_dict.clone());
+    }
+    if !c.display_field.is_empty() {
+        obj["displayField"] = serde_json::Value::String(c.display_field.clone());
+    }
+    if !c.ref_field.is_empty() {
+        obj["refField"] = serde_json::Value::String(c.ref_field.clone());
+    }
+    if let Some(edit) = &c.edit {
+        obj["edit"] = edit.clone();
+    }
+    if let Some(es) = &c.edit_settings {
+        obj["editSettings"] = es.clone();
+    }
+    obj
 }
 
 /// 构造成功信封的 msgpack 字节:`{code:0, msg:"success", data:<已编码的 data 字节>}`。
