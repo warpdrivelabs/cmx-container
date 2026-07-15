@@ -1,299 +1,218 @@
 ---
 name: rust-arch-review
-description: "Rust 架构级代码审查，涵盖模块解耦、Trait 设计、依赖管理、错误处理等维度，生成结构化审查报告和优化建议指导 AI 修改。Invoke when user asks for Rust architecture review, module decoupling analysis, crate structure audit, or refactoring guidance."
+description: "Rust 架构与代码质量综合审查技能，覆盖 4 大类 11 个子维度（含代码复用与 Rust 最佳实践），对照项目 AGENTS.md 18 章规范，输出结构化审查报告与优化路线图。Invoke when user asks for Rust 代码评审 / 架构审查 / 代码复查 / 看看这段代码 / 目录结构合不合理 / 是否复用了已有代码 / 是否符合最佳实践 / 重构建议."
 ---
 
-# Rust 架构审查技能
+# Rust 架构与代码质量审查
 
-以资深 Rust 架构师视角，对 Rust 代码或项目进行架构级深度审查，重点聚焦模块解耦和分包合理性，生成结构化审查报告和优化方案文档。
+> 适用项目：`cmx-container`（含全部 workspace 成员）。
+> 维护规范：[AGENTS.md 18 章](../../../AGENTS.md) + [project_rule.md](../../../.trae/rules/project_rule.md)。
+> 关联文件：[references/reuse-catalog.md](./references/reuse-catalog.md) · [references/checklist.md](./references/checklist.md) · [references/anti-patterns.md](./references/anti-patterns.md) · [references/report-template.md](./references/report-template.md)
 
-## 角色设定
+---
 
-你现在是一位拥有 10 年经验的资深 Rust 架构师，精通：
+## 一、角色设定
 
-- Rust 所有权机制、生命周期、借用规则
-- 异步编程（Tokio/Async-std）与并发模型
-- SOLID 原则在 Rust 中的落地实践
-- 高内聚低耦合设计
-- Rust 社区最佳实践与惯用法
+你是一位拥有 10 年经验的资深 Rust 架构师，**精通 cmx-container 项目规范（AGENTS.md 18 章）和项目内已有可复用资产**（[reuse-catalog.md](./references/reuse-catalog.md) 14 大类资产清单）。你能从架构师视角审视代码，给出务实、可落地、不破坏向后兼容性的修改建议。
 
-## 触发条件
+---
 
-当用户提出以下请求时调用本技能：
+## 二、触发条件
+
+### 2.1 显式触发
 
 - "审查架构"、"架构审查"、"架构分析"
+- "代码评审"、"代码复查"、"review 这段代码"
+- "看看这段代码写得怎么样"
 - "模块解耦"、"分包合理性"、"模块划分"
 - "代码审查报告"、"深度审查"
 - "重构建议"、"重构方案"
 - "依赖管理审查"、"Cargo.toml 审查"
 - "Trait 设计审查"、"抽象分析"
 
-## 审查维度
+### 2.2 口语化触发（**核心新增**）
 
-### 维度一：Crate 与模块划分（Mod & Crate Structure）
-
-审查要点：
-
-1. **模块嵌套深度**：当前 mod 嵌套是否过深（建议不超过 3 层）？是否应将某些模块拆分为独立 crate（工作区成员）以降低编译依赖和提升复用性？
-2. **可见性控制**：包内的 `pub`、`pub(crate)`、`pub(super)` 控制是否合理？是否存在过度暴露内部实现细节的情况？
-3. **编译依赖优化**：是否存在循环依赖？拆分后是否能显著缩短编译时间？
-4. **职责划分**：每个 crate/module 是否有清晰的单一职责？是否存在职责混淆的模块？
-
-评估标准：
-
-```
-✅ 良好：模块嵌套 ≤ 3 层，可见性精确控制，职责清晰
-⚠️ 一般：部分模块嵌套过深，少量 pub 应收紧为 pub(crate)
-❌ 差：大量 pub 暴露内部细节，职责不清，存在循环依赖
-```
-
-### 维度二：基于 Trait 的解耦（Trait-based Decoupling）
-
-审查要点：
-
-1. **依赖倒置（DIP）**：业务逻辑是否紧密耦合了具体的类型？是否应引入 Trait 进行抽象，以便实现依赖倒置和更方便的单元测试（Mocking）？
-2. **上帝 Struct 检测**：是否存在承担过多职责的"上帝 Struct"？建议如何通过组合（Composition）或提取 Trait 来拆分？
-3. **Trait 粒度**：Trait 是否过大？是否应遵循接口隔离原则（ISP）拆分为更小的 Trait？
-4. **泛型 vs Trait Object**：是否在合适的场景使用了泛型（静态分发）或 `dyn Trait`（动态分发）？
-
-评估标准：
-
-```
-✅ 良好：通过 Trait 解耦核心业务，便于测试和替换实现
-⚠️ 一般：部分关键抽象缺失，少量耦合可优化
-❌ 差：大量具体类型直接耦合，难以测试和替换
-```
-
-### 维度三：依赖管理与 Cargo 最佳实践
-
-审查要点：
-
-1. **依赖合理性**：Cargo.toml 中的依赖是否合理？是否存在可替换为更轻量级 crate 的依赖？
-2. **Feature 控制**：是否正确使用了 features 控制可选依赖，避免引入不必要的编译开销？
-3. **Workspace 依赖**：是否使用 workspace 统一管理依赖版本？子 crate 是否通过 `workspace = true` 引用？
-4. **依赖注释**：每个依赖是否有清晰的用途注释？
-5. **重复依赖**：是否存在功能重叠的依赖（如同时使用 log 和 tracing）？
-
-评估标准：
-
-```
-✅ 良好：workspace 统一管理，features 精确控制，无冗余依赖
-⚠️ 一般：大部分遵循规范，少量遗漏
-❌ 差：依赖混乱，版本不统一，存在冗余和冲突
-```
-
-### 维度四：错误处理与状态管理
-
-审查要点：
-
-1. **错误类型隔离**：各模块的错误类型是否正确隔离和转换（使用 thiserror 定义，#[from] 转换）？是否存在跨模块的错误泄露（如模块
-   A 直接暴露模块 B 的错误类型）？
-2. **Error 层级设计**：是否按模块/领域定义了独立的 Error 类型？是否有统一的顶层 Error？
-3. **异步状态共享**：在异步环境下，状态（State）的共享和传递是否导致了隐式的紧密耦合？是否滥用 `Arc<Mutex<...>>` 导致性能瓶颈？
-4. **错误传播策略**：是否在合适的边界使用 `?` 操作符、`map_err`、`anyhow` 等？
-
-评估标准：
-
-```
-✅ 良好：错误隔离完善，thiserror + anyhow 配合得当，状态管理清晰
-⚠️ 一般：错误边界基本清晰，少量泄露可修复
-❌ 差：错误类型混乱，跨模块泄露严重，状态耦合度高
-```
-
-### 维度五：异步编程模式（Async Patterns）
-
-审查要点：
-
-1. **异步边界**：异步函数是否在真正需要异步的场景使用？是否存在不必要的 async fn？
-2. **并发安全**：`Send`、`Sync` 约束是否合理？是否存在不必要的锁竞争？
-3. **资源管理**：异步资源（连接池、文件句柄）的生命周期管理是否正确？
-4. **取消安全**：异步操作是否考虑了取消场景？是否存在资源泄露风险？
-
-评估标准：
-
-```
-✅ 良好：异步边界清晰，并发安全，资源管理得当
-⚠️ 一般：基本合理，少量优化空间
-❌ 差：滥用异步，锁竞争严重，资源管理混乱
-```
-
-## 执行流程
-
-### 步骤一：项目结构扫描
-
-1. 读取 workspace 根目录 `Cargo.toml`，了解 workspace 成员和依赖
-2. 扫描每个 crate 的 `Cargo.toml` 和 `src/` 目录结构
-3. 绘制模块依赖关系图（文本形式）
-4. 识别关键入口文件（main.rs、lib.rs）
-
-### 步骤二：逐维度深度审查
-
-按照上述五个维度逐一审查：
-
-1. 阅读关键源文件，重点关注 `lib.rs`、`mod.rs`、`Cargo.toml`
-2. 标记每个维度的问题点
-3. 为每个问题分配严重级别：🔴 严重 / 🟡 警告 / 🔵 建议
-
-### 步骤三：生成审查报告
-
-在 `.trae/documents/` 目录下生成 `rust-arch-review-YYYY-MM-DD.md`，格式如下：
-
-```markdown
-# Rust 架构审查报告
-
-**审查日期**：YYYY-MM-DD
-**项目名称**：{project_name}
-**审查范围**：{scope_description}
+- "目录结构合不合理"
+- "是否复用了已有代码 / 通用代码"
+- "是否符合最佳实践 / 规范"
+- "这段代码质量怎么样"
 
 ---
 
-## 一、审查总览
+## 三、4 大类 11 子维度
 
-### 总体评分
+> 详细检查项与通过标准：见 [references/checklist.md](./references/checklist.md)。
+> 项目内可复用资产清单：见 [references/reuse-catalog.md](./references/reuse-catalog.md)。
+> 反模式与真实案例：见 [references/anti-patterns.md](./references/anti-patterns.md)。
 
-| 维度 | 评分 | 状态 |
-|------|------|------|
-| Crate 与模块划分 | X/10 | 🟡/🔴/✅ |
-| Trait 解耦设计 | X/10 | 🟡/🔴/✅ |
-| 依赖管理 | X/10 | 🟡/🔴/✅ |
-| 错误处理与状态管理 | X/10 | 🟡/🔴/✅ |
-| 异步编程模式 | X/10 | 🟡/🔴/✅ |
-
-### 问题统计
-
-| 严重级别 | 数量 |
-|---------|------|
-| 🔴 严重 | N |
-| 🟡 警告 | M |
-| 🔵 建议 | K |
-
----
-
-## 二、维度一：Crate 与模块划分
-
-### 问题列表
-
-#### 🔴/🟡/🔵 {问题标题}
-
-- **文件位置**：`path/to/file.rs:L{line}`
-- **问题描述**：{具体描述}
-- **当前代码**：
-```rust
-// 当前代码片段
-```
-
-- **建议修改**：
-
-```rust
-// 修改后的代码
-```
-
-- **修改理由**：{详细解释}
+| 大类 | 子维度 | 核心检查 |
+|------|--------|----------|
+| **A. 宏观架构** | A1 Crate 划分 | workspace 成员职责、依赖方向、cmx-core 零业务约束、旧接口清理 |
+| | A2 目录结构 | mod 嵌套 ≤ 3 层、文件粒度、可见性、命名约定、相似职责集中 |
+| **B. 模块设计** | B1 Trait 解耦 | DIP / ISP / Trait 粒度、上帝 Struct 拆分、错误不跨模块泄露 |
+| | **B2 代码复用** ⭐ | **Service / Entity / Filter / BMC / Handler / SQL 参数 / 权限宏 / 错误 / 响应 / ID / 配置** 等项目已有资产的复用偏离度 |
+| **C. 实现质量** | C1 错误处理 | thiserror 必用、禁裸 unwrap、init 返 Result、跨模块错误 `#[from]` 转换 |
+| | C2 异步模式 | Send/Sync 约束、async 边界、取消安全、Arc<Mutex> 滥用 |
+| | **C3 Rust 最佳实践** ⭐ | 命名 / 注释（必含 `# Arguments`/`# Returns`）/ 集合 / Option-Result / 错误信息 / 文档覆盖率 |
+| **D. 工程规范** | D1 依赖管理 | workspace=true 必用、禁 log crate、依赖必注释、`version = "x.y"` 硬编码 |
+| | D2 命名规范 | snake_case / PascalCase / SCREAMING_SNAKE_CASE、plugin_id 下划线、表名 cmx_ 前缀、禁外键 |
+| | D3 注释规范 | `pub fn` 必带 `///`、`# Arguments`/`# Returns`/`# Examples`、摘要以句号结尾、禁 `////`/块注释 |
+| | D4 测试 | 单元测试覆盖率、Service happy path + error path、Handler e2e |
 
 ---
 
-## 三、维度二：基于 Trait 的解耦
-
-{同上格式}
-
----
-
-## 四、维度三：依赖管理
-
-{同上格式}
-
----
-
-## 五、维度四：错误处理与状态管理
-
-{同上格式}
-
----
-
-## 六、维度五：异步编程模式
-
-{同上格式}
-
----
-
-## 七、优化路线图
-
-按优先级排序的优化建议：
-
-### P0 - 立即修复（🔴 严重问题）
-
-1. {问题描述}
-    - 影响范围：{影响}
-    - 修改方案：{方案}
-    - 涉及文件：`{files}`
-
-### P1 - 短期优化（🟡 警告）
-
-{同上格式}
-
-### P2 - 长期改进（🔵 建议）
-
-{同上格式}
-
----
-
-## 八、模块依赖关系图
-
-\`\`\`
-crate-a
-├── crate-b (pub(crate) 接口)
-│ └── crate-c (内部实现)
-└── crate-d
-└── crate-b (⚠️ 可能的循环依赖)
-\`\`\`
+## 四、执行流程（7 步）
 
 ```
-
-### 步骤四：生成优化任务清单
-
-在审查报告末尾附带具体的代码修改任务清单，格式：
-
-```markdown
-## 九、修改任务清单
-
-- [ ] 任务1：{具体修改内容} → `file_path:L{line}`
-- [ ] 任务2：{具体修改内容} → `file_path:L{line}`
-...
+步骤 0：确定审查范围
+步骤 1：扫描 workspace 与依赖拓扑
+步骤 2：复用偏离度扫描（按 reuse-catalog.md）
+步骤 3：规范符合度扫描（按 AGENTS.md 18 章）
+步骤 4：分维度深度审查（按 checklist.md 11 子维度）
+步骤 5：交叉问题聚类（根因分析）
+步骤 6：生成报告（按 report-template.md）
+步骤 7：与用户确认修改计划
 ```
 
-### 步骤五：与用户确认修改计划
+### 步骤 0：确定审查范围
 
-将报告展示给用户后，询问：
+1. **输入类型**：审查目标是什么？单文件 / 单 crate / 整个 workspace / 一次 diff？
+2. **工具**：如未指定，调 AskUserQuestion。
+3. **产物**：审查范围声明（`{crate 或文件路径}`）。
 
-1. 是否同意整体优化方向
-2. 优先处理哪些问题
-3. 是否需要调整修改方案
+### 步骤 1：扫描 workspace 与依赖拓扑
 
-## 审查原则
+1. **命令**：
+   ```bash
+   cat Cargo.toml                          # workspace 成员
+   ls crates/libs/                         # crate 列表
+   ls crates/libs/cmx-<target>/            # 目标 crate 目录
+   ```
+2. **工具**：`Read` + `LS`。
+3. **产物**：crate 依赖拓扑（文本 mermaid，模板见 [report-template.md §七](./references/report-template.md)）。
 
-1. **务实优先**：不过度设计，只建议有实际收益的优化
-2. **渐进式重构**：优先建议可逐步实施的小改动，避免大规模重写
-3. **上下文感知**：考虑项目当前阶段和团队情况，建议是否适合立即执行
-4. **性能敏感**：关注编译时间、运行时性能、内存使用等实际指标
-5. **可测试性**：所有重构建议应考虑如何验证正确性
+### 步骤 2：复用偏离度扫描 ⭐ 核心新增
 
-## 项目规范遵循
+1. **命令**（按 [reuse-catalog.md](./references/reuse-catalog.md) 14 类资产清单 Grep 锚点）：
+   ```bash
+   # 应复用 GenericCrudService
+   grep -rn "GenericCrudService" crates/libs/<target>/src/
 
-审查时需检查是否符合项目 `.trae/rules/project_rules.md` 中定义的规范：
+   # 应使用 dv! 宏
+   grep -rn "vec!\[.*\.into()\]" crates/libs/<target>/src/
 
-- 错误处理是否使用 `thiserror`
-- 日志是否使用 `tracing`
-- 依赖是否通过 `workspace = true` 引用
-- 依赖注释是否符合规范
-- 是否存在使用 `log` crate 的情况
+   # 应使用 ParamsBuilder
+   grep -rn 'format!("\$\d' crates/libs/<target>/src/
 
-## 注意事项
+   # 应使用 cmx-macros 属性宏
+   grep -rn "require_permission" crates/libs/<target>/src/
 
-1. 审查报告必须包含**具体的代码示例**（修改前/修改后），不能只有抽象描述
-2. 每个问题必须标注**文件路径和行号**
-3. 严重级别判断标准：
-    - 🔴 严重：影响编译、存在 bug、违反安全原则、架构严重缺陷
-    - 🟡 警告：可维护性差、性能隐患、违反最佳实践
-    - 🔵 建议：代码风格、可读性优化、防御性编程建议
-4. 修改建议必须考虑向后兼容性，标注是否为破坏性变更
-5. 如果审查范围较大，按模块分批审查，每批生成独立章节
+   # 应使用 cmx-traits 抽象
+   grep -rn "use cmx_xxx::" crates/libs/<target>/src/
+   ```
+2. **产物**：复用偏离度表（模板见 [report-template.md §3.1](./references/report-template.md)）。
+
+### 步骤 3：规范符合度扫描
+
+1. **命令**：按 [AGENTS.md 18 章](../../../AGENTS.md) 逐条 Read + Grep。
+2. **重点条目**（来源 [AGENTS.md](../../../AGENTS.md)）：
+   - §1.1-1.4 错误处理（thiserror / 禁 unwrap / init 返 Result）
+   - §3.1-3.6 依赖管理（workspace / 注释 / 禁 log）
+   - §5.4-5.6 SQL 与表规范
+   - §6.1-6.2 app_id 与 module_code
+   - §7-§10 Service / Handler / Entity / Filter / SQL 规范
+   - §11-§12 WASM 插件与元数据
+   - §13 注释规范
+   - §14 cmx-core 依赖约束
+   - §17 init 返 Result
+   - §18 旧接口不参考
+3. **产物**：规范符合度矩阵（模板见 [report-template.md §十一](./references/report-template.md)）。
+
+### 步骤 4：分维度深度审查
+
+1. **工具**：`Read` + `Grep`（按 [checklist.md](./references/checklist.md) 11 张子维度表逐项检查）。
+2. **产物**：4 大类问题列表（按 🔴/🟡/🔵 分级）。
+
+### 步骤 5：交叉问题聚类
+
+1. **方法**：识别"同一根本原因触发的多个问题"，合并。
+2. **示例**：
+   - "未用 GenericCrudService" + "Handler 手写 CRUD" + "Entity 未 derive(Fields)" → 根因："未走标准四件套"
+   - "裸 unwrap" + "init panic" + "anyhow 直接返回" → 根因："错误处理不严谨"
+3. **产物**：根因分析 + 关联问题列表。
+
+### 步骤 6：生成报告
+
+1. **工具**：`Write`（按 [report-template.md](./references/report-template.md)）。
+2. **路径**：`cmx-container/.trae/documents/rust-arch-review-YYYY-MM-DD.md`。
+3. **产物**：完整报告 + TODO 任务清单 + 复用偏离度表 + 规范符合度矩阵。
+
+### 步骤 7：与用户确认修改计划
+
+1. **工具**：`AskUserQuestion`（优先级 / 范围 / 是否破坏性变更）。
+2. **示例问题**：
+   - "P0 问题是否本周内全部修复？"
+   - "修复方案是否需保持向后兼容？"
+   - "P1 警告是否进入下个迭代？"
+
+---
+
+## 五、严重级别判定标准
+
+| 级别 | 图标 | 判定标准 | 典型场景 |
+|------|------|---------|---------|
+| 🔴 严重 | P0 | 编译错误 / 安全漏洞 / 违反项目硬约束 / 复用偏离 > 60% | 缺 thiserror、Entity 未 derive(Fields)、cmx-core 引入业务依赖 |
+| 🟡 警告 | P1 | 可维护性差 / 性能隐患 / 违反最佳实践 / 复用偏离 10%-60% | 裸 unwrap、文件超大、pub 过度暴露 |
+| 🔵 建议 | P2 | 代码风格 / 可读性 / 防御性编程 / 复用偏离 < 10% | 命名违例、注释格式、文档覆盖率 < 100% |
+
+---
+
+## 六、与其他技能的联动
+
+| 场景 | 调用的技能 | 备注 |
+|------|----------|------|
+| 注释规范细节 | [rust-comment-convention](../../rust-comment-convention/SKILL.md) | 本技能只做覆盖率检查，不另起标准 |
+| Handler / Service 生成 | [axum-handler-generator](../../axum-handler-generator/SKILL.md) | 审查时发现"应使用此技能生成"型反模式 |
+| Entity / Filter / BMC 设计 | [modql](../../modql/SKILL.md) | 审查时发现"未按 modql 规范 derive"型反模式 |
+| SQL 编写 | [cmx-sql-execution](../../cmx-sql-execution/SKILL.md) | 审查时发现"应使用 DataValue 而非 json"型反模式 |
+| WASM 插件 | [wasm-plugin-developer](../../wasm-plugin-developer/SKILL.md) | 审查插件工程时联动 |
+| 表结构 DDL | [pg-table-generator](../../pg-table-generator/SKILL.md) | 审查 DDL 合规时联动 |
+| Clippy 警告 | [clippy-fix](../../clippy-fix/SKILL.md) | 本技能不覆盖 lint 警告，clippy-fix 负责 |
+
+---
+
+## 七、审查原则
+
+1. **务实优先**：不过度设计，只建议有实际收益的优化。
+2. **渐进式重构**：优先建议可逐步实施的小改动，避免大规模重写。
+3. **上下文感知**：考虑项目当前阶段和团队情况，建议是否适合立即执行。
+4. **性能敏感**：关注编译时间、运行时性能、内存使用等实际指标。
+5. **可测试性**：所有重构建议应考虑如何验证正确性。
+6. **复用优先**：发现"重复造轮子"时，**优先建议复用项目已有资产**而非新抽象。
+7. **规范联动**：所有具体子领域规范以 [AGENTS.md](../../../AGENTS.md) 为准，不另起标准。
+
+---
+
+## 八、注意事项
+
+1. **审查报告必须包含**：
+   - 文件路径和行号
+   - 修改前/修改后代码对比
+   - 复用偏离度表（B2 维度强制）
+   - 规范符合度矩阵（AGENTS.md 18 章逐条）
+2. **复用偏离度是核心指标**：发现疑似"重复造轮子"必须先查 [reuse-catalog.md](./references/reuse-catalog.md) 确认是否真重复。
+3. **跨技能引用要明确**：审查中遇到"具体子领域"细节时，必须先调对应技能获取权威标准。
+4. **修改建议考虑向后兼容**：标注是否为破坏性变更。
+5. **审查范围较大时按模块分批**：每批生成独立章节（参考 [checklist.md §F](./references/checklist.md#f-审查执行细节)）。
+
+---
+
+## 九、关联文件
+
+- 项目规范：[cmx-container/AGENTS.md](../../../AGENTS.md)（18 章）
+- 技能规范文件：[.trae/rules/project_rule.md](../../../.trae/rules/project_rule.md)
+- 复用资产清单：[references/reuse-catalog.md](./references/reuse-catalog.md)
+- 4 大类 11 子维度检查清单：[references/checklist.md](./references/checklist.md)
+- 反模式与项目内真实案例：[references/anti-patterns.md](./references/anti-patterns.md)
+- 报告输出模板：[references/report-template.md](./references/report-template.md)
+- 技能完善计划：[20260715_rust-arch-review_技能完善方案.md](../../../.trae/documents/20260715_rust-arch-review_技能完善方案.md)

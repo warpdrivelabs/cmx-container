@@ -37,23 +37,90 @@ description: 指导在 Rust 代码中执行 SQL 的规范,涵盖 DatabaseManager
 
 ## 二、DatabaseManager API 层级与选择
 
-### 2.1 API 全景
+### 2.0 cmx-database vs cmx-database-pg（先选 crate）
 
-`DatabaseManager`(cmx-database)提供 4 组 execute + 4 组 query 方法,按参数类型区分:
+项目有**两个并行数据库 crate**，API 高度对齐，必须先选对 crate：
+
+| 维度 | cmx-database（sqlx） | cmx-database-pg（tokio-postgres） |
+|------|----------------------|-----------------------------------|
+| **定位** | 默认主用，多数据库驱动（PG/MySQL/SQLite） | PG-only 性能优化分支 |
+| **全局入口** | `get_default_db_manager()` | `get_default_pg_db_manager()` |
+| **API 对齐** | execute_sql_with_datavalues / query_sql_with_datavalues 等 | 同名同签，完全对齐 |
+| **ZmcDataSet** | ✅ `query_sql_zmc` / `query_sql_zmc_with_datavalues`（sqlx PgRow） | ✅ 同名方法（tokio-postgres Row） |
+| **query_zmc_streaming** | ✅ 有（写入 `Vec<u8>`） | ✅ 有（写入 `Vec<u8>`） |
+| **独有能力** | 无 | 4 项（见下方详表） |
+| **消费方** | 9 个 crate 独占依赖 | 0 个 crate 独占依赖（4 个同时挂两者） |
+
+**cmx-database-pg 真正独有的 4 项能力**：
+
+| # | 独有能力 | 位置 | 说明 |
+|---|---------|------|------|
+| ① | **`query_sql_zmc_stream_chunks`** | `manager/mod.rs:374` + `connection/mod.rs:207` | 真·分帧流式：基于 `mpsc::Sender<Bytes>`，逐行编码为长度分帧发送，峰值内存 O(单行)，16KB 攒批刷写，header 帧先发、空结果容错。cmx-database **完全无此方法** |
+| ② | **数组类型列读取还原** | `executor/mod.rs:435-452`（`PgResultConverter::convert_rows`） | 读取阶段支持 TEXT_ARRAY / INT8_ARRAY / UUID_ARRAY -> `DataValue::Array`。cmx-database 读取方向**不还原数组**（只在绑定时 `bind_pg_array_postgres` 支持写入） |
+| ③ | **`get_conn()` 方法** | `connection/mod.rs:112` | 返回 `deadpool_postgres::Object`，供事务层跨 await 手动驱动 BEGIN/COMMIT。cmx-database 用 sqlx 的 `pool.begin()`，无需此方法 |
+| ④ | **4 个 ToSql 适配器** | `executor/mod.rs:24-123` | `PgInt` / `PgDateTime` / `PgDateTimeNull` / `PgIntNull`。tokio-postgres 类型校验严格（i64 绑 INT4 列会 WrongType），需宽度/时区自适应包装。sqlx 隐式协调，不需要 |
+
+> ⚠️ **注意区分**：`query_zmc_streaming`（写入 `Vec<u8>`）**两者都有**；唯独 `*_stream_chunks`（mpsc 通道）是 pg 独有。
+
+**选择规则**：
 
 ```
-DatabaseManager
-├── execute_sql(db_id, txn_id, sql)                              → 无参数
-├── execute_sql_with_json(db_id, txn_id, sql, Value)             → JSON 参数(旧,向后兼容)
-├── execute_sql_with_datavalues(db_id, txn_id, sql, Vec<DataValue>) → DataValue 参数(★推荐)
-├── execute_sql_typed(db_id, txn_id, sql, Vec<SqlParam>)         → 强类型参数(带类型 NULL)
-├── execute_sql_with_sqlxvalues(db_id, txn_id, sql, SqlxValues)  → sea-query 构建器参数
+需要 query_sql_zmc_stream_chunks（mpsc 分帧流式）?
+├─ 是 -> ★ cmx-database-pg（独占能力）
+└─ 否 -> 需要数组列读取还原（DataValue::Array 从数据库读取）?
+    ├─ 是 -> ★ cmx-database-pg
+    └─ 否 -> ★★★ cmx-database（默认首选）
+```
+
+**依赖现状**（无任何 crate 独家依赖 cmx-database-pg）：
+
+| 情形 | crate 数 | 具体 |
+|------|---------|------|
+| 同时依赖两者 | 4 | cmx-api、cmx-biz、cmx-database-test、web-server |
+| 只依赖 cmx-database-pg | **0** | 无 |
+| 只依赖 cmx-database | 9 | cmx-api-types、cmx-iam、cmx-audit、cmx-auth、cmx-storage、cmx-metadata、cmx-plugin、cmx-portal、cmx-service |
+
+**能否将 cmx-database-pg 的消费方替换为 cmx-database？**
+
+🟢 **可以无痛替换**（占大多数场景）：
+- 凡只用到 `execute_sql*` / `query_sql*` / `query_sql_zmc` / `query_sql_zmc_with_datavalues` / `crud::*` / `transaction::*` / `migration::*` / `host_functions` / `ZmcDataSet` 的消费方
+- 注意 `SqlParams::SeaValues` -> `SqlxValues` 的枚举变体替换
+- 具体使用点：cmx-api 的 `dct.rs`/`doc.rs`、web-server 的 `datasource.rs`、cmx-biz 的 `zmc_loader.rs`
+
+🔴 **不能简单替换**（需迁移实现）：
+- 依赖 `query_sql_zmc_stream_chunks` 的场景（如 `mem_bench.rs`、需要 O(单行) 内存的流式消费）
+- 依赖数组列读取还原（`DataValue::Array` 从数据库读取）的场景
+- 直接依赖 `TokioPgRowSource` 全路径的代码（如 `cmx-database-test` 的 `e2e_server.rs:338`、`mem_bench.rs`）需改为 `SqlxPgRowSource`
+
+> **默认使用 `cmx-database`**。除非必须使用上述 4 项独有能力，否则不引入 cmx-database-pg。
+>
+> **两 crate 的 `with_json` 系列 API 均不推荐**：`execute_sql_with_json` / `query_sql_with_json` 仅维护旧代码，新代码必须用 `_with_datavalues`。
+>
+> **导出对称性缺口**（不影响功能）：cmx-database 把 `SqlxPgRowSource` 提升到了 crate 根（`lib.rs:29`），而 pg 侧的 `TokioPgRowSource` 只能走全路径 `cmx_database_pg::zmcdataset::TokioPgRowSource`。
+
+### 2.1 API 全景
+
+`DatabaseManager`(cmx-database / cmx-database-pg 两者 API 对齐)提供 4 组 execute + 4 组 query + 2 组 zmc 方法,按参数类型区分:
+
+```
+DatabaseManager (cmx-database / cmx-database-pg 两者 API 对齐)
+├── execute_sql(db_id, txn_id, sql)                              -> 无参数
+├── execute_sql_with_json(db_id, txn_id, sql, Value)             -> JSON 参数(旧,向后兼容,不推荐)
+├── execute_sql_with_datavalues(db_id, txn_id, sql, Vec<DataValue>) -> DataValue 参数(★推荐)
+├── execute_sql_typed(db_id, txn_id, sql, Vec<SqlParam>)         -> 强类型参数(带类型 NULL)
+├── execute_sql_with_sqlxvalues(db_id, txn_id, sql, SqlxValues)  -> sea-query 构建器参数
 │
-├── query_sql(db_id, txn_id, sql, dataset_id)                              → 无参数
-├── query_sql_with_json(db_id, txn_id, sql, Value, dataset_id)             → JSON 参数(旧)
-├── query_sql_with_datavalues(db_id, txn_id, sql, Vec<DataValue>, dataset_id) → ★推荐
-├── query_sql_typed(db_id, txn_id, sql, Vec<SqlParam>, dataset_id)         → 强类型
-└── query_sql_with_sqlxvalues(db_id, txn_id, sql, SqlxValues, dataset_id)  → sea-query
+├── query_sql(db_id, txn_id, sql, dataset_id)                              -> 无参数
+├── query_sql_with_json(db_id, txn_id, sql, Value, dataset_id)             -> JSON 参数(旧,不推荐)
+├── query_sql_with_datavalues(db_id, txn_id, sql, Vec<DataValue>, dataset_id) -> ★推荐
+├── query_sql_typed(db_id, txn_id, sql, Vec<SqlParam>, dataset_id)         -> 强类型
+├── query_sql_with_sqlxvalues(db_id, txn_id, sql, SqlxValues, dataset_id)  -> sea-query
+│
+├── query_sql_zmc(db_id, sql, dataset_id)                                  -> 零拷贝 ZmcDataSet(只读,不参与事务)
+├── query_sql_zmc_with_datavalues(db_id, sql, Vec<DataValue>, dataset_id)  -> 零拷贝 + DataValue 参数
+│
+└── [仅 cmx-database-pg] query_sql_zmc_stream_chunks(db_id, sql, params, dataset_id, col_names, chunk_tx)
+    -> 真·分帧流式(峰值内存 O(单行),超大结果集网络零内存路径)
 ```
 
 ### 2.2 选择决策树
@@ -659,16 +726,69 @@ let params: Vec<DataValue> = vec![
 let params = dv![id, count];
 ```
 
+### 11.6 ❌ 滥用 cmx-database-pg 替代 cmx-database
+
+```rust
+// ❌ 反模式：非流式场景引入 cmx-database-pg
+use cmx_database_pg::get_default_pg_db_manager;
+let mm = get_default_pg_db_manager();
+mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
+```
+
+```rust
+// ✅ 正确：默认用 cmx-database
+use cmx_database::get_default_db_manager;
+let mm = get_default_db_manager();
+mm.execute_sql_with_datavalues(&db_id, None, sql, params).await?;
+```
+
+> cmx-database-pg 仅在需要 `query_sql_zmc_stream_chunks` 或数组列读取还原时引入。
+
+### 11.7 ❌ 用 cmx-database-pg 的 with_json API
+
+```rust
+// ❌ 反模式：cmx-database-pg 的 with_json 同样不推荐
+use cmx_database_pg::get_default_pg_db_manager;
+let mm = get_default_pg_db_manager();
+mm.query_sql_with_json(&db_id, None, sql, json!([id]), "ds").await?;
+```
+
+```rust
+// ✅ 正确：两 crate 均用 _with_datavalues
+mm.query_sql_with_datavalues(&db_id, None, sql, dv![id], "ds").await?;
+```
+
+### 11.8 ❌ 在事务内调 query_sql_zmc（ZmcDataSet 不参与事务）
+
+```rust
+// ❌ 反模式：query_sql_zmc 是只读连接池路径，不走事务
+let txn_id = mm.get_transaction_context().begin(&db_id).await?;
+let zmc_ds = mm.query_sql_zmc_with_datavalues(&db_id, sql, params, "ds").await?;
+// ⚠️ zmc_ds 不在事务内，读到的是其他连接的快照
+mm.commit_transaction(&txn_id).await?;
+```
+
+```rust
+// ✅ 正确：事务内用 query_sql_with_datavalues（返回 DataSet）
+let ds = mm.query_sql_with_datavalues(&db_id, Some(&txn_id), sql, params, "ds").await?;
+```
+
+> `query_sql_zmc*` 系列只读、走连接池、不参与事务；业务单据装载是只读场景才用 ZmcDataSet。
+
 ---
 
 ## 十二、关键源文件参考
 
 | 文件 | 职责 |
 |------|------|
-| `crates/libs/cmx-infra/cmx-database/src/manager/mod.rs` | DatabaseManager API(execute_sql_with_datavalues 等) |
+| `crates/libs/cmx-infra/cmx-database/src/manager/mod.rs` | cmx-database DatabaseManager API(execute_sql_with_datavalues / query_sql_zmc 等) |
 | `crates/libs/cmx-infra/cmx-database/src/transaction/api.rs` | SqlParams 枚举、execute_sql_with_params 底层 |
 | `crates/libs/cmx-infra/cmx-database/src/executor/mod.rs` | bind_data_value_postgres/mysql/sqlite 绑定层 |
 | `crates/libs/cmx-infra/cmx-database/src/host_functions.rs` | WASM do_query/do_execute(data_values 优先) |
+| `crates/libs/cmx-infra/cmx-database/src/zmc.rs` | sqlx 侧 ZmcRowSource 实现 + query_zmc 出口 |
+| `crates/libs/cmx-infra/cmx-database-pg/src/manager/mod.rs` | cmx-database-pg DatabaseManager API(含 query_sql_zmc_stream_chunks 独占) |
+| `crates/libs/cmx-infra/cmx-database-pg/src/connection/mod.rs` | DbPool 层 query_zmc / query_zmc_stream_chunks / query_zmc_streaming 实现 |
+| `crates/libs/cmx-infra/cmx-database-pg/src/zmcdataset/mod.rs` | tokio-postgres 侧 ZmcDataSet + 分帧编码器 |
 | `crates/libs/cmx-core/src/model/cell.rs` | DataValue/SqlTypeMarker/SqlParam/dv! 宏/From<Option<T>> |
 | `crates/libs/cmx-core/src/model/builder.rs` | ParamsBuilder |
 | `crates/libs/cmx-core/src/wasm_types/database.rs` | DbRequest(data_values 字段) |
