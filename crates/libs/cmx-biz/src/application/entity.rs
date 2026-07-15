@@ -25,6 +25,12 @@ pub struct Application {
     pub domain_code: String,
     /// 应用名称，如: 财务会计, 管理会计
     pub name: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 应用描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -79,6 +85,12 @@ pub struct ApplicationForCreate {
 
     /// 所属域编码，逻辑关联到cmx_domain.code
     pub domain_code: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 应用描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -106,6 +118,12 @@ pub struct ApplicationForUpdate {
     /// 所属域编码，逻辑关联到cmx_domain.code
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain_code: Option<String>,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 应用描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

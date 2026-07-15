@@ -19,6 +19,12 @@ pub struct Domain {
     pub code: String,
     /// 名称
     pub name: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -68,6 +74,12 @@ pub struct DomainForCreate {
     pub code: String,
     /// 名称
     pub name: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -92,6 +104,12 @@ pub struct DomainForUpdate {
     /// 名称
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

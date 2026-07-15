@@ -1,15 +1,15 @@
 //! 域清单（domains）读取。
 //!
 //! 复刻 Node `lib/domainsStore.js` 的 `getDomainsDoc()`：
-//! 1. 优先从 DAM 注册表（`dam-registry/registry.json`）派生 —— 过滤掉 `status=disabled`，
+//! 1. 优先从数据库（cmx_domain 表，经 store::list_domains 查询）派生 —— 过滤掉 `status=disabled`，
 //!    映射为前端期望的 `{ id, icon, label, title, description, application, activitie }`。
-//! 2. DAM 无域时回退读 `activities/domains.json` 原样返回。
+//! 2. DB 无域时回退读 `activities/domains.json` 原样返回。
 
 use serde::{Deserialize, Serialize};
 
 use crate::config::data_path;
 use crate::error::PortalResult;
-use crate::fsutil::{read_json, read_json_opt};
+use crate::fsutil::read_json;
 
 /// 单个域条目（对前端输出形状，与 Node 完全一致）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,37 +41,7 @@ pub struct DomainsDoc {
     pub domains: Vec<DomainItem>,
 }
 
-/// DAM 注册表中的域原始结构（仅取所需字段）。
-#[derive(Debug, Clone, Deserialize)]
-struct DamDomainRaw {
-    /// 域唯一标识。
-    id: String,
-    /// 短名称（可选）。
-    #[serde(default)]
-    name: Option<String>,
-    /// 完整标题（可选）。
-    #[serde(default)]
-    title: Option<String>,
-    /// 图标名（可选）。
-    #[serde(default)]
-    icon: Option<String>,
-    /// 状态（可选，`disabled` 表示禁用）。
-    #[serde(default)]
-    status: Option<String>,
-    /// 域描述（可选）。
-    #[serde(default)]
-    description: Option<String>,
-}
-
-/// DAM 注册表文件的反序列化结构（仅取 domains 字段）。
-#[derive(Debug, Clone, Deserialize)]
-struct DamRegistryRaw {
-    /// 注册表中的域列表。
-    #[serde(default)]
-    domains: Vec<DamDomainRaw>,
-}
-
-/// 获取域清单文档。DAM 优先，回退 `activities/domains.json`。
+/// 获取域清单文档。DB 优先，回退 `activities/domains.json`。
 ///
 /// # Returns
 ///
@@ -81,40 +51,42 @@ struct DamRegistryRaw {
 ///
 /// 读取 DAM 注册表或回退文件失败时返回底层 IO/解析错误。
 pub async fn get_domains_doc() -> PortalResult<serde_json::Value> {
-    // 1) DAM 注册表派生
-    let dam_path = data_path(["dam-registry", "registry.json"]);
-    if let Some(value) = read_json_opt(&dam_path).await?
-        && let Ok(reg) = serde_json::from_value::<DamRegistryRaw>(value)
-    {
-        let domains: Vec<DomainItem> = reg
-            .domains
-            .into_iter()
-            .filter(|d| d.status.as_deref().unwrap_or("active") != "disabled")
-            .map(|d| {
-                let label = d
-                    .name
-                    .clone()
-                    .or_else(|| d.title.clone())
-                    .unwrap_or_else(|| d.id.clone());
-                DomainItem {
-                    application: d.id.clone(),
-                    activitie: d.id.clone(),
-                    icon: d.icon.unwrap_or_else(|| "folder".to_string()),
-                    label,
-                    title: d.title.unwrap_or_default(),
-                    description: d.description.unwrap_or_default(),
-                    id: d.id,
+    // 1) 从数据库查启用域（active_only=true，只返回 status=1）
+    let dam_domains = crate::dam::store::list_domains(true).await?;
+    let domains: Vec<DomainItem> = dam_domains
+        .into_iter()
+        .map(|d| {
+            let label = if d.name.is_empty() {
+                if d.title.is_empty() {
+                    d.id.clone()
+                } else {
+                    d.title.clone()
                 }
-            })
-            .collect();
-        if !domains.is_empty() {
-            let doc = DomainsDoc {
-                version: 1,
-                source: "dam".to_string(),
-                domains,
+            } else {
+                d.name.clone()
             };
-            return Ok(serde_json::to_value(doc)?);
-        }
+            DomainItem {
+                application: d.id.clone(),
+                activitie: d.id.clone(),
+                icon: if d.icon.is_empty() {
+                    "folder".to_string()
+                } else {
+                    d.icon
+                },
+                label,
+                title: d.title,
+                description: d.description,
+                id: d.id,
+            }
+        })
+        .collect();
+    if !domains.is_empty() {
+        let doc = DomainsDoc {
+            version: 1,
+            source: "dam".to_string(),
+            domains,
+        };
+        return Ok(serde_json::to_value(doc)?);
     }
 
     // 2) 回退：activities/domains.json 原样返回

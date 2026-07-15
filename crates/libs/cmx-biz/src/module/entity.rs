@@ -25,6 +25,12 @@ pub struct Module {
     pub application_code: String,
     /// 模块名称，如: 总账模块, 应收模块
     pub name: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 模块描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -35,6 +41,18 @@ pub struct Module {
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    /// 模块资源目录相对路径（相对 data/ 根），格式 domain/application/module
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_root: Option<String>,
+    /// 模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_path: Option<String>,
+    /// 模块主题名
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// 模块主题色（十六进制或色名）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<String>,
     /// 排序字段，数值小的靠前
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<i32>,
@@ -80,6 +98,12 @@ pub struct ModuleForCreate {
     pub domain_code: String,
     /// 所属应用编码，逻辑关联到cmx_application.code
     pub application_code: String,
+    /// 英文标题/副标题
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// 图标名（UI5 图标标识）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// 模块描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -90,6 +114,18 @@ pub struct ModuleForCreate {
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    /// 模块资源目录相对路径（相对 data/ 根），格式 domain/application/module
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_root: Option<String>,
+    /// 模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_path: Option<String>,
+    /// 模块主题名
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// 模块主题色（十六进制或色名）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<String>,
     /// 排序字段，数值小的靠前
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<i32>,
@@ -120,6 +156,18 @@ pub struct ModuleForUpdate {
     /// 多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    /// 模块资源目录相对路径（相对 data/ 根），格式 domain/application/module
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_root: Option<String>,
+    /// 模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_path: Option<String>,
+    /// 模块主题名
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// 模块主题色（十六进制或色名）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<String>,
     /// 排序字段，数值小的靠前
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<i32>,

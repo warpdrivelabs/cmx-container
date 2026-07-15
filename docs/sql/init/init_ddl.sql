@@ -12,6 +12,8 @@ CREATE TABLE cmx_domain
     id          VARCHAR(64)  NOT NULL,
     code        VARCHAR(64)  NOT NULL,
     name        VARCHAR(200) NOT NULL,
+    title       VARCHAR(200),
+    icon        VARCHAR(100),
     description TEXT,
     type        VARCHAR(50),
     tags        TEXT,
@@ -31,6 +33,8 @@ COMMENT ON TABLE cmx_domain IS '域表';
 COMMENT ON COLUMN cmx_domain.id IS 'ID';
 COMMENT ON COLUMN cmx_domain.code IS '域编码，全局唯一，如: FIN, HR, SCM';
 COMMENT ON COLUMN cmx_domain.name IS '域名称，如: 财务域, 人力资源域';
+COMMENT ON COLUMN cmx_domain.title IS '域英文标题/副标题';
+COMMENT ON COLUMN cmx_domain.icon IS '域图标名（UI5 图标标识）';
 COMMENT ON COLUMN cmx_domain.description IS '域描述';
 COMMENT ON COLUMN cmx_domain.type IS '类型: business(业务域), technical(技术域), product_line(产品线)';
 COMMENT ON COLUMN cmx_domain.tags IS '多标签，JSON数组字符串，如 ["财务","核心","S4HANA"]';
@@ -56,6 +60,8 @@ CREATE TABLE cmx_application
     code        VARCHAR(64)  NOT NULL,
     domain_code VARCHAR(64)  NOT NULL,
     name        VARCHAR(200) NOT NULL,
+    title       VARCHAR(200),
+    icon        VARCHAR(100),
     description TEXT,
     type        VARCHAR(50),
     tags        TEXT,
@@ -76,6 +82,8 @@ COMMENT ON COLUMN cmx_application.id IS 'ID';
 COMMENT ON COLUMN cmx_application.code IS '应用编码，全局唯一，如: FI, CO, MM';
 COMMENT ON COLUMN cmx_application.domain_code IS '所属域编码，逻辑关联到cmx_domain.code';
 COMMENT ON COLUMN cmx_application.name IS '应用名称，如: 财务会计, 管理会计';
+COMMENT ON COLUMN cmx_application.title IS '应用英文标题/副标题';
+COMMENT ON COLUMN cmx_application.icon IS '应用图标名（UI5 图标标识）';
 COMMENT ON COLUMN cmx_application.description IS '应用描述';
 COMMENT ON COLUMN cmx_application.type IS '类型: product(产品应用), platform(平台应用), integration(集成应用)';
 COMMENT ON COLUMN cmx_application.tags IS '多标签，JSON数组字符串，如 ["财务核心","SAP_FI"]';
@@ -102,9 +110,15 @@ CREATE TABLE cmx_module
     domain_code      VARCHAR(64)  NOT NULL,
     application_code VARCHAR(64)  NOT NULL,
     name             VARCHAR(200) NOT NULL,
+    title            VARCHAR(200),
+    icon             VARCHAR(100),
     description      TEXT,
     type             VARCHAR(50),
     tags             TEXT,
+    resource_root    VARCHAR(255),
+    manifest_path    VARCHAR(500),
+    theme            VARCHAR(100),
+    theme_color      VARCHAR(50),
     sort_order       INT4      DEFAULT 0,
     status           INT4      DEFAULT 1,
     archived         INT4      DEFAULT 0,
@@ -123,9 +137,15 @@ COMMENT ON COLUMN cmx_module.code IS '模块编码，全局唯一，如: GL, AR,
 COMMENT ON COLUMN cmx_module.domain_code IS '所属域编码';
 COMMENT ON COLUMN cmx_module.application_code IS '所属应用编码，逻辑关联到cmx_application.code';
 COMMENT ON COLUMN cmx_module.name IS '模块名称，如: 总账模块, 应收模块';
+COMMENT ON COLUMN cmx_module.title IS '模块英文标题/副标题';
+COMMENT ON COLUMN cmx_module.icon IS '模块图标名（UI5 图标标识）';
 COMMENT ON COLUMN cmx_module.description IS '模块描述';
 COMMENT ON COLUMN cmx_module.type IS '类型: business(业务模块), extension(扩展点), integration(集成点)';
 COMMENT ON COLUMN cmx_module.tags IS '多标签，JSON数组字符串，如 ["总账","核心","FI-GL"]';
+COMMENT ON COLUMN cmx_module.resource_root IS '模块资源目录相对路径（相对 data/ 根），格式 domain/application/module';
+COMMENT ON COLUMN cmx_module.manifest_path IS '模块清单文件相对路径，格式 modules/<d>/<a>/<m>/module.json';
+COMMENT ON COLUMN cmx_module.theme IS '模块主题名';
+COMMENT ON COLUMN cmx_module.theme_color IS '模块主题色（十六进制或色名）';
 COMMENT ON COLUMN cmx_module.sort_order IS '排序字段，数值小的靠前';
 COMMENT ON COLUMN cmx_module.status IS '状态：0-禁用，1-启用';
 COMMENT ON COLUMN cmx_module.archived IS '归档标志：0-未归档，1-已归档';

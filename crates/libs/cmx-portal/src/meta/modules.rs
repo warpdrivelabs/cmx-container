@@ -45,7 +45,7 @@ pub async fn list_module_manifests(
     domain: Option<&str>,
     application: Option<&str>,
 ) -> PortalResult<Vec<serde_json::Value>> {
-    let modules = list_modules(domain, application).await?;
+    let modules = list_modules(domain, application, true).await?;
     if !modules.is_empty() {
         let mut items: Vec<serde_json::Value> = modules
             .iter()
@@ -193,7 +193,7 @@ async fn registered_manifest_path(
     application: &str,
     module: &str,
 ) -> PortalResult<std::path::PathBuf> {
-    let hit = list_modules(Some(domain), Some(application))
+    let hit = list_modules(Some(domain), Some(application), false)
         .await?
         .into_iter()
         .find(|m| m.id == module);

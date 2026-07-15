@@ -5,121 +5,73 @@
 
 -- =============================================
 -- 1. 域数据
+-- 来源：data/dam-registry/registry.json（含补录 portal 域）
+-- code 规则：domain = 原始 id；id = code
 -- =============================================
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000001', 'FIN', '资金与价值流领域', '企业的记账本，所有业务最终化为货币数字流入此领域', 'business',
-        1, 1, 0);
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000002', 'LOG', '物流与供应链领域', '管理实物资产的买入、存放和流转', 'business', 2, 1, 0);
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000003', 'SAL', '营收与客户领域', '企业的赚钱引擎', 'business', 3, 1, 0);
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000004', 'MFG', '制造与工程领域', '把原材料变成可以卖出去的成品', 'business', 4, 1, 0);
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000005', 'HCM', '组织与人力领域', '企业的社会网络', 'business', 5, 1, 0);
-INSERT INTO cmx_domain (id, code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000006', 'XAP', '跨应用基座领域', '公共底层领域，为全系统提供主数据和公共服务', 'technical', 6, 1,
-        0);
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi',     'fi',     '财务资源管理',   'Finance',                'expense-report', '财务、会计核算、总账及 ERP 凭证相关资源。', 1, 0, 1);
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('hr',     'hr',     '人力资源管理',   'Human Resources',         'employee',       '招聘与候选人等人力资源资源。',           1, 0, 2);
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('cr',     'cr',     '客户资源管理',   'Collaboration Resources', 'collaborate',    '协作资源、示例页面与门户扩展资源。',       1, 0, 3);
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('dr',     'dr',     '数据资源管理',   'data Resources',          'database',       '',                                       1, 0, 4);
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('sc',     'sc',     '生产资源管理',   '生产资源管理',             'machine',        '',                                       1, 0, 5);
+-- 补录：applications/modules 引用 domain=portal 但 registry domains 缺失
+INSERT INTO cmx_domain (id, code, name, title, icon, description, status, archived, sort_order)
+VALUES ('portal', 'portal', '门户',           'Portal',                  'home',           '门户平台域。',                            1, 0, 0);
 
 -- =============================================
 -- 2. 应用数据
+-- 来源：data/dam-registry/registry.json
+-- code 规则：app = {domain}_{id}；id = code
 -- =============================================
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000011', 'FI', 'FIN', '财务会计', '对外报告，满足税务审计合规要求', 'product', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000012', 'CO', 'FIN', '管理会计', '对内分析，算清部门和产品的盈亏', 'product', 2, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000013', 'MM', 'LOG', '物料管理', '采购、库存、发票校验', 'product', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000014', 'EWM', 'LOG', '仓储管理', '管理物理货架与仓库作业', 'product', 2, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000015', 'SD', 'SAL', '销售与分销', '销售订单、交货、开票与定价', 'product', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000016', 'PP', 'MFG', '生产计划', '物料需求运算、车间排程', 'product', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000017', 'QPM', 'MFG', '质量管理与设备维护', '质量检验与设备维护', 'product', 2, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000018', 'HRM', 'HCM', '人力资源管理', '组织、人事、薪资、考勤', 'product', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000019', 'BP', 'XAP', '商业伙伴主数据', '统一管理客户、供应商、联系人', 'platform', 1, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000020', 'MDM', 'XAP', '物料主数据', '物料基本信息与分类，全系统共享', 'platform', 2, 1, 0);
-INSERT INTO cmx_application (id, code, domain_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000021', 'CA', 'XAP', '跨应用组件', '分类系统、文档管理、权限管理', 'platform', 3, 1, 0);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('portal_portal',  'portal_portal',  'portal', '门户',         'Portal',                'home',                          '门户平台应用。',           1, 0, 0);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi_cmxfico',     'fi_cmxfico',     'fi',     '会计核算',     'CMX FICO',              'expense-report',                '自研会计核算应用。',       1, 0, 1);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi_sap',         'fi_sap',         'fi',     'SAP',          'SAP FI',                'business-objects-experience',   'SAP 总账样例资源。',       1, 0, 2);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi_ebs',         'fi_ebs',         'fi',     'Oracle EBS',   'Oracle EBS',            'decrease-line-height',          'Oracle EBS 总账样例资源。', 1, 0, 3);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi_yonyou',      'fi_yonyou',      'fi',     '用友',         'Yonyou',                'developer-settings',            '用友总账样例资源。',       1, 0, 4);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('fi_kingdee',     'fi_kingdee',     'fi',     '金蝶',         'Kingdee',               'electronic-medical-record',     '金蝶总账样例资源。',       1, 0, 5);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('hr_recruit',     'hr_recruit',     'hr',     '招聘',         'Recruitment',           'add-employee',                  '招聘服务目录。',           1, 0, 6);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('cr_explorer',    'cr_explorer',    'cr',     '资源浏览',     'Explorer',              'documents',                     '资源浏览与菜单页面示例。', 1, 0, 7);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('dr_zhili',       'dr_zhili',       'dr',     '数据中台',     '',                      'display-more',                  '',                        1, 0, 8);
+INSERT INTO cmx_application (id, code, domain_code, name, title, icon, description, status, archived, sort_order)
+VALUES ('sc_datalake',    'sc_datalake',    'sc',     '数据湖',       '',                      'background',                    '',                        1, 0, 9);
 
 -- =============================================
 -- 3. 模块数据
+-- 来源：data/dam-registry/registry.json
+-- code 规则：module = {domain}_{app}_{id}；id = code
+-- aliases → tags（JSON 数组字符串）
 -- =============================================
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000101', 'GL', 'FIN', 'FI', '总账', '总分类账管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000102', 'AR', 'FIN', 'FI', '应收账款', '应收账款管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000103', 'AP', 'FIN', 'FI', '应付账款', '应付账款管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000104', 'AA', 'FIN', 'FI', '固定资产', '固定资产核算', 'business', 4, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000105', 'CCA', 'FIN', 'CO', '成本中心会计', '成本中心核算', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000106', 'PCA', 'FIN', 'CO', '利润中心会计', '利润中心核算', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000107', 'IO', 'FIN', 'CO', '内部订单', '内部订单管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000108', 'PUR', 'LOG', 'MM', '采购管理', '采购流程管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000109', 'INV', 'LOG', 'MM', '库存管理', '库存数量与价值管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000110', 'IV', 'LOG', 'MM', '发票校验', '采购发票校验', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000111', 'INB', 'LOG', 'EWM', '入库管理', '入库流程管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000112', 'OUT', 'LOG', 'EWM', '出库管理', '出库流程管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000113', 'BIN', 'LOG', 'EWM', '货位管理', '仓库货位管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000114', 'SOM', 'SAL', 'SD', '销售订单管理', '销售订单全流程管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000115', 'DLM', 'SAL', 'SD', '交货管理', '交货流程管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000116', 'BLM', 'SAL', 'SD', '开票管理', '开票流程管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000117', 'PRM', 'SAL', 'SD', '定价管理', '定价策略管理', 'business', 4, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000118', 'BOM', 'MFG', 'PP', '物料清单', '物料清单管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000119', 'RTG', 'MFG', 'PP', '工艺路线', '工艺路线管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000120', 'PROD', 'MFG', 'PP', '生产订单', '生产订单管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000121', 'QI', 'MFG', 'QPM', '质量检验', '质量检验管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000122', 'PM', 'MFG', 'QPM', '设备维护', '设备维护管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000123', 'FL', 'MFG', 'QPM', '功能位置', '功能位置管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000124', 'OM', 'HCM', 'HRM', '组织管理', '组织架构管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000125', 'PAM', 'HCM', 'HRM', '人事管理', '人事信息管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000126', 'PAY', 'HCM', 'HRM', '薪资管理', '薪资核算管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000127', 'TA', 'HCM', 'HRM', '考勤管理', '考勤记录管理', 'business', 4, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000128', 'CUS', 'XAP', 'BP', '客户管理', '客户信息管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000129', 'VEN', 'XAP', 'BP', '供应商管理', '供应商信息管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000130', 'CON', 'XAP', 'BP', '联系人管理', '联系人信息管理', 'business', 3, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000131', 'MBI', 'XAP', 'MDM', '物料基本信息', '物料基本信息管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000132', 'MCL', 'XAP', 'MDM', '物料分类', '物料分类管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000133', 'CLS', 'XAP', 'CA', '分类系统', '分类体系管理', 'business', 1, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000134', 'DMS', 'XAP', 'CA', '文档管理', '文档存储与管理', 'business', 2, 1, 0);
-INSERT INTO cmx_module (id, code, domain_code, application_code, name, description, type, sort_order, status, archived)
-VALUES ('1898765432100000135', 'AUTH', 'XAP', 'CA', '权限管理', '权限配置与管理', 'business', 3, 1, 0);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('portal_portal_overview', 'portal_portal_overview', 'portal', 'portal_portal', '平台总览', '门户平台总览', 'home', '门户平台使用入门与总览帮助。', '[]', 'portal/portal/overview', 'modules/portal/portal/overview/module.json', 1, 0, 0);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_cmxfico_gl', 'fi_cmxfico_gl', 'fi', 'fi_cmxfico', '总账', '会计核算管理 / 总账', 'activity-items', '会计核算管理、ERP 凭证、总账科目、辅助核算等资源。', '["fi.cmxfico.gl","cmxfico.gl"]', 'fi/cmxfico/gl', 'modules/fi/cmxfico/gl/module.json', 1, 0, 1);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_sap_gl', 'fi_sap_gl', 'fi', 'fi_sap', 'SAP 总账', 'SAP 总账样例', 'business-objects-experience', 'SAP FI 总账样例。', '[]', 'fi/sap/gl', 'modules/fi/sap/gl/module.json', 1, 0, 2);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_ebs_gl', 'fi_ebs_gl', 'fi', 'fi_ebs', 'Oracle EBS 总账', 'Oracle EBS 总账样例', 'database', 'Oracle EBS 总账样例。', '[]', 'fi/ebs/gl', 'modules/fi/ebs/gl/module.json', 1, 0, 3);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_yonyou_gl', 'fi_yonyou_gl', 'fi', 'fi_yonyou', '用友总账', '用友总账样例', 'database', '用友总账样例。', '[]', 'fi/yonyou/gl', 'modules/fi/yonyou/gl/module.json', 1, 0, 4);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_kingdee_gl', 'fi_kingdee_gl', 'fi', 'fi_kingdee', '金蝶总账', '金蝶总账样例', 'database', '金蝶总账样例。', '[]', 'fi/kingdee/gl', 'modules/fi/kingdee/gl/module.json', 1, 0, 5);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('hr_recruit_candidate', 'hr_recruit_candidate', 'hr', 'hr_recruit', '候选人', '招聘候选人服务目录', 'employee', '候选人服务目录。', '[]', 'hr/recruit/candidate', 'modules/hr/recruit/candidate/module.json', 1, 0, 6);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('cr_explorer_explorer-menu', 'cr_explorer_explorer-menu', 'cr', 'cr_explorer', 'Explorer 菜单', 'CR Explorer 菜单页面示例', 'documents', 'CR Explorer 菜单页面示例。', '[]', 'cr/explorer/explorer-menu', 'modules/cr/explorer/explorer-menu/module.json', 1, 0, 7);
+INSERT INTO cmx_module (id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, status, archived, sort_order)
+VALUES ('fi_cmxfico_report', 'fi_cmxfico_report', 'fi', 'fi_cmxfico', '报表', '报表', 'excel-attachment', '', '[]', 'fi/cmxfico/report', 'modules/fi/cmxfico/report/module.json', 1, 0, 8);
 
 -- =============================================
 -- 4. 内置角色数据 (cmx_role)
@@ -132,30 +84,30 @@ VALUES ('1898765432100001002', 'user', '普通用户', 5, 2, 1, 0, '仅查看本
 -- =============================================
 -- 5. 内置权限数据 (cmx_permission)
 -- =============================================
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848667162255360', 'gl:account', '科目管理', 'menu', null, 3, '会计科目体系维护', 1, 0, '2026-06-25 09:53:36.798272', '2026-06-25 09:53:36.798272', null, null, null, null, 'FIN', 'FI', 'GL', null, null, '/gl:account', 0, 1);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848676112900096', 'gl:account:add', '科目新增', 'button', '7475848667162255360', 1, '新增会计科目', 1, 0, '2026-06-25 09:53:38.915084', '2026-06-25 09:53:38.915084', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:account', '/gl:account/gl:account:add', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848677895479296', 'gl:account:delete', '科目删除', 'button', '7475848667162255360', 3, '删除末级科目', 1, 0, '2026-06-25 09:53:39.343854', '2026-06-25 09:53:39.343854', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:account', '/gl:account/gl:account:delete', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848676989509632', 'gl:account:edit', '科目编辑', 'button', '7475848667162255360', 2, '修改科目信息', 1, 0, '2026-06-25 09:53:39.129204', '2026-06-25 09:53:39.129204', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:account', '/gl:account/gl:account:edit', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848679703224320', 'gl:account:export', '科目导出', 'button', '7475848667162255360', 5, '导出科目体系', 1, 0, '2026-06-25 09:53:39.776420', '2026-06-25 09:53:39.776420', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:account', '/gl:account/gl:account:export', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848678809837568', 'gl:account:query', '科目查询', 'api', '7475848667162255360', 4, '查询科目树形列表', 1, 0, '2026-06-25 09:53:39.562303', '2026-06-25 09:53:39.562303', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:account', '/gl:account/gl:account:query', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848665702637568', 'gl:dashboard', '总账仪表盘', 'menu', null, 1, '总账模块概览看板', 1, 0, '2026-06-25 09:53:36.449545', '2026-06-25 09:53:36.449545', null, null, null, null, 'FIN', 'FI', 'GL', null, null, '/gl:dashboard', 0, 1);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848670211514368', 'gl:dashboard:refresh', '数据刷新', 'button', '7475848665702637568', 2, '手动刷新仪表盘统计', 1, 0, '2026-06-25 09:53:37.499114', '2026-06-25 09:53:37.499114', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:dashboard', '/gl:dashboard/gl:dashboard:refresh', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848669469122560', 'gl:dashboard:view', '仪表盘查看', 'api', '7475848665702637568', 1, '查看总账仪表盘数据', 1, 0, '2026-06-25 09:53:37.325539', '2026-06-25 09:53:37.325539', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:dashboard', '/gl:dashboard/gl:dashboard:view', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848667845926912', 'gl:period', '期末处理', 'menu', null, 4, '期末结账与损益结转', 1, 0, '2026-06-25 09:53:36.957909', '2026-06-25 09:53:36.957909', null, null, null, null, 'FIN', 'FI', 'GL', null, null, '/gl:period', 0, 1);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848680584028160', 'gl:period:close', '期末结账', 'button', '7475848667845926912', 1, '对当前会计期间结账', 1, 0, '2026-06-25 09:53:39.985243', '2026-06-25 09:53:39.985243', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:period', '/gl:period/gl:period:close', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848682249166848', 'gl:period:settle', '损益结转', 'button', '7475848667845926912', 3, '结转本期损益至本年利润', 1, 0, '2026-06-25 09:53:40.383092', '2026-06-25 09:53:40.383092', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:period', '/gl:period/gl:period:settle', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848681427083264', 'gl:period:unclose', '反结账', 'button', '7475848667845926912', 2, '撤销已结账期间', 1, 0, '2026-06-25 09:53:40.186302', '2026-06-25 09:53:40.186302', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:period', '/gl:period/gl:period:unclose', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848668558958592', 'gl:report', '报表中心', 'menu', null, 5, '总账报表查询与导出', 1, 0, '2026-06-25 09:53:37.122063', '2026-06-25 09:53:37.122063', null, null, null, null, 'FIN', 'FI', 'GL', null, null, '/gl:report', 0, 1);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848683444543488', 'gl:report:balance', '资产负债表', 'api', '7475848668558958592', 1, '生成资产负债表', 1, 0, '2026-06-25 09:53:40.665266', '2026-06-25 09:53:40.665266', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:report', '/gl:report/gl:report:balance', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848685168402432', 'gl:report:cashflow', '现金流量表', 'api', '7475848668558958592', 3, '生成现金流量表', 1, 0, '2026-06-25 09:53:41.078737', '2026-06-25 09:53:41.078737', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:report', '/gl:report/gl:report:cashflow', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848684400844800', 'gl:report:income', '利润表', 'api', '7475848668558958592', 2, '生成利润表', 1, 0, '2026-06-25 09:53:40.893176', '2026-06-25 09:53:40.893176', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:report', '/gl:report/gl:report:income', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848666486972416', 'gl:voucher', '凭证管理', 'menu', null, 2, '会计凭证全生命周期管理', 1, 0, '2026-06-25 09:53:36.636949', '2026-06-25 09:53:36.636949', null, null, null, null, 'FIN', 'FI', 'GL', null, null, '/gl:voucher', 0, 1);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848670991654912', 'gl:voucher:add', '凭证录入', 'button', '7475848666486972416', 1, '新增会计凭证', 1, 0, '2026-06-25 09:53:37.676977', '2026-06-25 09:53:37.676977', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:add', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848673445322752', 'gl:voucher:audit', '凭证审核', 'button', '7475848666486972416', 4, '审核/反审核凭证', 1, 0, '2026-06-25 09:53:38.281608', '2026-06-25 09:53:38.281608', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:audit', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848675001409536', 'gl:voucher:delete', '凭证删除', 'button', '7475848666486972416', 6, '删除作废凭证', 1, 0, '2026-06-25 09:53:38.655424', '2026-06-25 09:53:38.655424', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:delete', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848672686153728', 'gl:voucher:edit', '凭证修改', 'button', '7475848666486972416', 3, '修改未审核凭证', 1, 0, '2026-06-25 09:53:38.088995', '2026-06-25 09:53:38.088995', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:edit', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848674095439872', 'gl:voucher:post', '凭证过账', 'button', '7475848666486972416', 5, '将审核凭证过账到账簿', 1, 0, '2026-06-25 09:53:38.439356', '2026-06-25 09:53:38.439356', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:post', 1, 2);
-INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848671801155584', 'gl:voucher:query', '凭证查询', 'api', '7475848666486972416', 2, '按条件查询凭证列表', 1, 0, '2026-06-25 09:53:37.878384', '2026-06-25 09:53:37.878384', null, null, null, null, 'FIN', 'FI', 'GL', null, 'gl:voucher', '/gl:voucher/gl:voucher:query', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848667162255360', 'gl:account', '科目管理', 'menu', null, 3, '会计科目体系维护', 1, 0, '2026-06-25 09:53:36.798272', '2026-06-25 09:53:36.798272', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, null, '/gl:account', 0, 1);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848676112900096', 'gl:account:add', '科目新增', 'button', '7475848667162255360', 1, '新增会计科目', 1, 0, '2026-06-25 09:53:38.915084', '2026-06-25 09:53:38.915084', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:account', '/gl:account/gl:account:add', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848677895479296', 'gl:account:delete', '科目删除', 'button', '7475848667162255360', 3, '删除末级科目', 1, 0, '2026-06-25 09:53:39.343854', '2026-06-25 09:53:39.343854', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:account', '/gl:account/gl:account:delete', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848676989509632', 'gl:account:edit', '科目编辑', 'button', '7475848667162255360', 2, '修改科目信息', 1, 0, '2026-06-25 09:53:39.129204', '2026-06-25 09:53:39.129204', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:account', '/gl:account/gl:account:edit', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848679703224320', 'gl:account:export', '科目导出', 'button', '7475848667162255360', 5, '导出科目体系', 1, 0, '2026-06-25 09:53:39.776420', '2026-06-25 09:53:39.776420', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:account', '/gl:account/gl:account:export', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848678809837568', 'gl:account:query', '科目查询', 'api', '7475848667162255360', 4, '查询科目树形列表', 1, 0, '2026-06-25 09:53:39.562303', '2026-06-25 09:53:39.562303', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:account', '/gl:account/gl:account:query', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848665702637568', 'gl:dashboard', '总账仪表盘', 'menu', null, 1, '总账模块概览看板', 1, 0, '2026-06-25 09:53:36.449545', '2026-06-25 09:53:36.449545', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, null, '/gl:dashboard', 0, 1);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848670211514368', 'gl:dashboard:refresh', '数据刷新', 'button', '7475848665702637568', 2, '手动刷新仪表盘统计', 1, 0, '2026-06-25 09:53:37.499114', '2026-06-25 09:53:37.499114', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:dashboard', '/gl:dashboard/gl:dashboard:refresh', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848669469122560', 'gl:dashboard:view', '仪表盘查看', 'api', '7475848665702637568', 1, '查看总账仪表盘数据', 1, 0, '2026-06-25 09:53:37.325539', '2026-06-25 09:53:37.325539', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:dashboard', '/gl:dashboard/gl:dashboard:view', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848667845926912', 'gl:period', '期末处理', 'menu', null, 4, '期末结账与损益结转', 1, 0, '2026-06-25 09:53:36.957909', '2026-06-25 09:53:36.957909', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, null, '/gl:period', 0, 1);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848680584028160', 'gl:period:close', '期末结账', 'button', '7475848667845926912', 1, '对当前会计期间结账', 1, 0, '2026-06-25 09:53:39.985243', '2026-06-25 09:53:39.985243', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:period', '/gl:period/gl:period:close', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848682249166848', 'gl:period:settle', '损益结转', 'button', '7475848667845926912', 3, '结转本期损益至本年利润', 1, 0, '2026-06-25 09:53:40.383092', '2026-06-25 09:53:40.383092', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:period', '/gl:period/gl:period:settle', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848681427083264', 'gl:period:unclose', '反结账', 'button', '7475848667845926912', 2, '撤销已结账期间', 1, 0, '2026-06-25 09:53:40.186302', '2026-06-25 09:53:40.186302', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:period', '/gl:period/gl:period:unclose', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848668558958592', 'gl:report', '报表中心', 'menu', null, 5, '总账报表查询与导出', 1, 0, '2026-06-25 09:53:37.122063', '2026-06-25 09:53:37.122063', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, null, '/gl:report', 0, 1);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848683444543488', 'gl:report:balance', '资产负债表', 'api', '7475848668558958592', 1, '生成资产负债表', 1, 0, '2026-06-25 09:53:40.665266', '2026-06-25 09:53:40.665266', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:report', '/gl:report/gl:report:balance', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848685168402432', 'gl:report:cashflow', '现金流量表', 'api', '7475848668558958592', 3, '生成现金流量表', 1, 0, '2026-06-25 09:53:41.078737', '2026-06-25 09:53:41.078737', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:report', '/gl:report/gl:report:cashflow', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848684400844800', 'gl:report:income', '利润表', 'api', '7475848668558958592', 2, '生成利润表', 1, 0, '2026-06-25 09:53:40.893176', '2026-06-25 09:53:40.893176', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:report', '/gl:report/gl:report:income', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848666486972416', 'gl:voucher', '凭证管理', 'menu', null, 2, '会计凭证全生命周期管理', 1, 0, '2026-06-25 09:53:36.636949', '2026-06-25 09:53:36.636949', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, null, '/gl:voucher', 0, 1);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848670991654912', 'gl:voucher:add', '凭证录入', 'button', '7475848666486972416', 1, '新增会计凭证', 1, 0, '2026-06-25 09:53:37.676977', '2026-06-25 09:53:37.676977', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:add', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848673445322752', 'gl:voucher:audit', '凭证审核', 'button', '7475848666486972416', 4, '审核/反审核凭证', 1, 0, '2026-06-25 09:53:38.281608', '2026-06-25 09:53:38.281608', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:audit', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848675001409536', 'gl:voucher:delete', '凭证删除', 'button', '7475848666486972416', 6, '删除作废凭证', 1, 0, '2026-06-25 09:53:38.655424', '2026-06-25 09:53:38.655424', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:delete', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848672686153728', 'gl:voucher:edit', '凭证修改', 'button', '7475848666486972416', 3, '修改未审核凭证', 1, 0, '2026-06-25 09:53:38.088995', '2026-06-25 09:53:38.088995', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:edit', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848674095439872', 'gl:voucher:post', '凭证过账', 'button', '7475848666486972416', 5, '将审核凭证过账到账簿', 1, 0, '2026-06-25 09:53:38.439356', '2026-06-25 09:53:38.439356', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:post', 1, 2);
+INSERT INTO cmx_permission (id, code, name, resource_type, parent_id, sort_order, description, status, archived, create_time, update_time, create_by, create_name, update_by, update_name, domain_code, app_code, module_code, extension, parent_code, full_code_path, is_leaf, level) VALUES ('7475848671801155584', 'gl:voucher:query', '凭证查询', 'api', '7475848666486972416', 2, '按条件查询凭证列表', 1, 0, '2026-06-25 09:53:37.878384', '2026-06-25 09:53:37.878384', null, null, null, null, 'fi', 'fi_cmxfico', 'fi_cmxfico_gl', null, 'gl:voucher', '/gl:voucher/gl:voucher:query', 1, 2);
 
 
 

@@ -991,6 +991,7 @@ dependencies = [
  "cmx-core",
  "cmx-database",
  "cmx-database-pg",
+ "cmx-portal-base",
  "cmx-service",
  "cmx-traits",
  "cmx-utils",
@@ -1344,6 +1345,8 @@ name = "cmx-portal"
 version = "0.1.12"
 dependencies = [
  "chrono",
+ "cmx-core",
+ "cmx-database",
  "cmx-form",
  "cmx-model",
  "cmx-portal-base",

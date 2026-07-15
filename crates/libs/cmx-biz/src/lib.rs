@@ -10,6 +10,9 @@ pub mod doc;
 pub mod domain;
 pub mod module;
 
+// DAM 资产文件服务（模块资源目录创建/改名搬移/引用校验）
+pub mod dam_asset_service;
+
 pub mod form;
 pub mod menu;
 

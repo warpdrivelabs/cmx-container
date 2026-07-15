@@ -28,6 +28,10 @@ rust_decimal = { workspace = true }
 base64 = { workspace = true }
 # 内部依赖 - 服务编排
 cmx-service = { workspace = true }
+# 内部依赖 - 门户基础设施（data_root / data_path 路径解析，DAM 资产服务用）
+cmx-portal-base = { workspace = true }
+# 异步运行时（tokio::fs 文件目录搬移，DAM 资产服务用）
+tokio = { workspace = true }
 # 序列化框架
 serde = { workspace = true }
 # JSON 序列化/反序列化

@@ -1,12 +1,15 @@
 //! Module 实体的自定义 Handler
 //!
-//! 提供模块实体的自定义分页查询功能
+//! 写操作（create/update/delete）手写委托 ModuleService 以触发 DAM 资产文件副作用
+//! （创建时确保模块资源目录存在；改名时搬移目录；删除时无子级直接删）。
+//! 另提供自定义分页查询（联表带 application_name + domain_name）。
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use cmx_core::PageParams;
 use cmx_core::model::data::dataset::DataSet;
+use cmx_core::{DeletePayload, UpdatePayload};
 use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
@@ -16,7 +19,7 @@ use crate::Result;
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
-use cmx_biz::module::ModuleFilter;
+use cmx_biz::module::{ModuleFilter, ModuleForCreate, ModuleForUpdate, ModuleService};
 
 /// Module 自定义分页查询 Handler
 ///
@@ -85,4 +88,88 @@ pub async fn module_custom_page(
         page_size,
         total as u64,
     )))
+}
+
+/// 创建模块 Handler
+///
+/// 委托 ModuleService::create。写库后确保模块资源目录存在。
+#[utoipa::path(
+    post,
+    path = "/api/module/create",
+    request_body = ModuleForCreate,
+    responses(
+        (status = 200, description = "创建成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Module"
+)]
+pub async fn create_module(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(data): Json<ModuleForCreate>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::create_module", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ModuleService::create(mm, &db_id, data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 更新模块 Handler
+///
+/// 委托 ModuleService::update。若 code 变更，触发 DAM 资产目录搬移。
+#[utoipa::path(
+    post,
+    path = "/api/module/update",
+    request_body = UpdatePayload<ModuleForUpdate>,
+    responses(
+        (status = 200, description = "更新成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Module"
+)]
+pub async fn update_module(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<UpdatePayload<ModuleForUpdate>>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::update_module", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ModuleService::update(mm, &db_id, payload.id, payload.data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 删除模块 Handler
+///
+/// 委托 ModuleService::delete。模块无子级，直接删。
+#[utoipa::path(
+    post,
+    path = "/api/module/delete",
+    request_body = DeletePayload,
+    responses(
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Module"
+)]
+pub async fn delete_module(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<DeletePayload>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::delete_module", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ModuleService::delete(mm, &db_id, payload.ids).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
 }

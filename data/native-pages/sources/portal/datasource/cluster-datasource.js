@@ -98,7 +98,7 @@ async function apiJson (url, options = {}) {
 // ─── 数据加载 ──────────────────────────────────────────────────────────────
 async function loadDam () {
   try {
-    const dam = await apiJson('/api/registry/dam')
+    const dam = await apiJson('/api/registry/dam?active_only=true')
     state.dam = {
       domains: Array.isArray(dam.domains) ? dam.domains : [],
       apps: Array.isArray(dam.apps) ? dam.apps : (Array.isArray(dam.applications) ? dam.applications : []),

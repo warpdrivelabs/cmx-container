@@ -5,13 +5,13 @@ const state = {
   selectedKeys: { domain: '', application: '', module: '' },
   draft: null,
   drafts: { domain: null, application: null, module: null },
-  message: '',
   loading: null,
   filter: { domain: '', application: '' },
   resources: { moduleKey: '', loading: false, html: '<div class="dam-empty">选择模块后查看资源清单</div>' },
   split: { explorerY: 62, contentX: 48, appY: 62, moduleY: 62 },
   scrollTop: { domain: 0, application: 0, module: 0 },
   hosts: new Set(),
+  loadingPromise: null,
 }
 
 const esc = (s) => String(s ?? '')
@@ -27,14 +27,73 @@ async function apiJson (url, options = {}) {
     credentials: 'same-origin',
   })
   if (!res.ok) {
+    // HTTP 层错误（4xx/5xx）
     let msg = `HTTP ${res.status}`
     try {
       const j = await res.json()
-      if (j && j.error) msg = j.error
+      if (j && (j.msg || j.error)) msg = j.msg || j.error
     } catch {}
     throw new Error(msg)
   }
-  return res.status === 204 ? {} : res.json()
+  if (res.status === 204) return {}
+  const json = await res.json()
+  // 业务层错误：后端对 BusinessError 返回 HTTP 200 + {code:非0, msg}
+  // code 为 0 表示成功，非 0 表示业务失败，需抛出 msg 供调用方提示。
+  if (json && typeof json.code === 'number' && json.code !== 0) {
+    throw new Error(json.msg || `业务错误(${json.code})`)
+  }
+  return json
+}
+
+// ─── DB 编码与 payload 转换 ──────────────────────────────────────────────
+// 仅写操作（create/update/delete）需要转 DB 风格；读路径仍用 registry shape。
+// 取数据库真实主键（雪花号），用于 update/delete 的 id 参数。
+// registry 数据从 /api/registry/dam 返回，每条记录带 dbId 字段。
+function dbDomainId (d) { return d.dbId || d.id }
+function dbAppId (a) { return a.dbId || dbAppCode(a) }
+function dbModuleId (m) { return m.dbId || dbModuleCode(m) }
+// 业务 code（拼接规则，用于 create payload 的 code 字段）。
+function dbDomainCode (d) { return d.id }
+function dbAppCode (a) { return `${a.domain}_${a.id}` }
+function dbModuleCode (m) { return `${m.domain}_${(m.application || m.app)}_${m.id || m.module}` }
+
+// draft → DB create payload（字段名转 DB 风格）。
+function toCreatePayload (kind, d) {
+  if (kind === 'domain') return {
+    code: d.id, name: d.name, title: d.title, icon: d.icon,
+    description: d.description,
+    status: d.status === 'active' ? 1 : 0,
+    sort_order: d.sortOrder || 0,
+  }
+  if (kind === 'application') return {
+    code: dbAppCode(d), domain_code: d.domain, name: d.name, title: d.title,
+    icon: d.icon, description: d.description,
+    status: d.status === 'active' ? 1 : 0,
+    sort_order: d.sortOrder || 0,
+  }
+  // module
+  return {
+    code: dbModuleCode(d), domain_code: d.domain,
+    application_code: dbAppCode({ domain: d.domain, id: (d.application || d.app) }),
+    name: d.name, title: d.title, icon: d.icon, description: d.description,
+    tags: JSON.stringify(d.aliases || []),
+    resource_root: d.resourceRoot || `${d.domain}/${(d.application || d.app)}/${d.id}`,
+    manifest_path: d.manifestPath || `modules/${d.domain}/${(d.application || d.app)}/${d.id}/module.json`,
+    status: d.status === 'active' ? 1 : 0,
+    sort_order: d.sortOrder || 0,
+  }
+}
+
+// draft → DB update payload（同 create 但 code 不可改，不传 code）。
+function toUpdatePayload (kind, d) {
+  const p = toCreatePayload(kind, d)
+  delete p.code
+  return p
+}
+
+// kind → DB CRUD 端点前缀（domain/application 复数，module 单数）。
+function dbEndpoint (kind) {
+  return kind === 'domain' ? '/api/domains' : kind === 'application' ? '/api/applications' : '/api/module'
 }
 
 function keyOf (kind, item) {
@@ -132,8 +191,20 @@ function reconcileSelection () {
 }
 
 async function loadRegistry () {
-  state.registry = await apiJson('/api/dam-registry')
-  reconcileSelection()
+  // 幂等：多个视图入口（manager/explorer/property）共享同一次加载，
+  // 避免进入页面时 /api/registry/dam 被重复调用三次。
+  // 写操作（save/delete）后会调 resetRegistryLoad() 清缓存强制刷新。
+  if (state.loadingPromise) return state.loadingPromise
+  state.loadingPromise = (async () => {
+    state.registry = await apiJson('/api/registry/dam')
+    reconcileSelection()
+  })().finally(() => { state.loadingPromise = null })
+  return state.loadingPromise
+}
+
+// 写操作后调用，清掉幂等缓存，使下次 loadRegistry 重新拉取。
+function resetRegistryLoad () {
+  state.loadingPromise = null
 }
 
 function refreshAll () {
@@ -214,7 +285,6 @@ function selectItem (kind, key, redraw = true) {
   }
   const selected = findSelected()
   state.draft = state.drafts[state.selectedKind] || structuredClone(selected || item || newDraft(state.selectedKind))
-  state.message = ''
   if (redraw) refreshAll()
 }
 
@@ -226,8 +296,8 @@ function newDraft (kind) {
     ? state.filter.application.split('/')[1]
     : ''
   const app = selectedApp || filteredApps[0]?.id || 'cmxfico'
-  if (kind === 'domain') return { id: '', name: '', title: '', icon: '', status: 'active', description: '' }
-  if (kind === 'application') return { domain, id: '', name: '', title: '', icon: '', status: 'active', description: '' }
+  if (kind === 'domain') return { id: '', name: '', title: '', icon: '', status: 'active', description: '', sortOrder: 0 }
+  if (kind === 'application') return { domain, id: '', name: '', title: '', icon: '', status: 'active', description: '', sortOrder: 0 }
   return {
     domain,
     application: app,
@@ -242,6 +312,7 @@ function newDraft (kind) {
     resourceRoot: '',
     manifestPath: '',
     aliases: [],
+    sortOrder: 0,
   }
 }
 
@@ -263,7 +334,6 @@ function startNew (kind) {
   }
   state.drafts[kind] = newDraft(kind)
   state.draft = state.drafts[kind]
-  state.message = ''
   refreshAll()
 }
 
@@ -271,6 +341,10 @@ function setDraft (field, value, kind = state.selectedKind) {
   const draft = getDraftForKind(kind)
   if (field === 'aliases') {
     draft.aliases = String(value || '').split(',').map((x) => x.trim()).filter(Boolean)
+  } else if (field === 'sortOrder') {
+    // 排序值转整数（空值/非法值回 0）
+    const n = parseInt(value, 10)
+    draft.sortOrder = Number.isFinite(n) ? n : 0
   } else {
     draft[field] = value
     if (field === 'application') draft.app = value
@@ -284,8 +358,9 @@ async function reloadRegistry (message = '') {
   state.loading = '加载中...'
   refreshAll()
   try {
+    resetRegistryLoad()
     await loadRegistry()
-    state.message = message
+    if (message) showToast(message, 'ok')
   } finally {
     state.loading = null
   }
@@ -293,19 +368,34 @@ async function reloadRegistry (message = '') {
 }
 
 async function saveDraft (kind = state.selectedKind) {
-  const body = { ...(getDraftForKind(kind) || {}) }
-  if (state.selectedKeys[kind]) body.originalKey = state.selectedKeys[kind]
-  const url = kind === 'domain'
-    ? '/api/dam-registry/domains'
-    : kind === 'application'
-      ? '/api/dam-registry/applications'
-      : '/api/dam-registry/modules'
-  const out = await apiJson(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const saved = out.saved || body
+  const draft = getDraftForKind(kind) || {}
+  const originalKey = state.selectedKeys[kind] || ''
+  const base = dbEndpoint(kind)
+  let saved
+  if (originalKey) {
+    // 编辑：POST /{base}/update，body = { id: dbId, data: payload }
+    // id 用数据库真实主键（雪花号），从 registry 数据的 dbId 字段取。
+    const existing = findItem(kind, originalKey)
+    const dbId = kind === 'domain'
+      ? dbDomainId(existing || draft)
+      : kind === 'application'
+        ? dbAppId(existing || draft)
+        : dbModuleId(existing || draft)
+    await apiJson(`${base}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: dbId, data: toUpdatePayload(kind, draft) }),
+    })
+    saved = draft
+  } else {
+    // 新增：POST /{base}/create，body = payload
+    await apiJson(`${base}/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toCreatePayload(kind, draft)),
+    })
+    saved = draft
+  }
   state.selectedKey = keyOf(kind, saved)
   state.selectedKind = kind
   setFilterFromItem(kind, saved)
@@ -313,8 +403,9 @@ async function saveDraft (kind = state.selectedKind) {
   if (kind === 'domain') state.selectedKeys.domain = state.selectedKey
   if (kind === 'application') state.selectedKeys.application = state.selectedKey
   if (kind === 'module') state.selectedKeys.module = state.selectedKey
+  resetRegistryLoad()
   await loadRegistry()
-  state.message = '已保存'
+  showToast('已保存', 'ok')
   refreshAll()
 }
 
@@ -335,12 +426,17 @@ async function deleteItem (kind, key) {
   if (!item) return
   const ok = window.confirm(`确认删除 ${titleOf(kind, item)}？`)
   if (!ok) return
-  const url = kind === 'domain'
-    ? `/api/dam-registry/domains/${encodeURIComponent(item.id)}`
+  const dbId = kind === 'domain'
+    ? dbDomainId(item)
     : kind === 'application'
-      ? `/api/dam-registry/applications/${encodeURIComponent(item.domain)}/${encodeURIComponent(item.id)}`
-      : `/api/dam-registry/modules/${encodeURIComponent(item.domain)}/${encodeURIComponent(item.application || item.app)}/${encodeURIComponent(item.id || item.module)}`
-  await apiJson(url, { method: 'DELETE' })
+      ? dbAppId(item)
+      : dbModuleId(item)
+  const url = `${dbEndpoint(kind)}/delete`
+  await apiJson(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [dbId] }),
+  })
   if (state.selectedKind === kind && state.selectedKey === key) {
     state.selectedKey = ''
     state.draft = null
@@ -355,8 +451,9 @@ async function deleteItem (kind, key) {
     state.filter.application = ''
     state.selectedKeys.module = ''
   }
+  resetRegistryLoad()
   await loadRegistry()
-  state.message = '已删除'
+  showToast('已删除', 'ok')
   refreshAll()
 }
 
@@ -473,9 +570,13 @@ function fieldHtml (kind, cfg, d) {
   const tone = cfg.tone ? ` data-tone="${esc(cfg.tone)}"` : ''
   const lock = readonly ? '<span class="dam-field-lock">LOCKED</span>' : ''
   const common = `data-field="${esc(field)}" data-field-kind="${esc(kind)}" ${readonly ? 'readonly' : ''} placeholder="${esc(cfg.placeholder || '')}"`
-  const control = cfg.type === 'textarea'
-    ? `<textarea ${common}>${esc(value)}</textarea>`
-    : `<input ${common} value="${esc(value)}">`
+  const control = cfg.type === 'select'
+    ? `<select ${common}>${(cfg.options || []).map((o) => `<option value="${esc(o.value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`
+    : cfg.type === 'textarea'
+      ? `<textarea ${common}>${esc(value)}</textarea>`
+      : cfg.type === 'number'
+        ? `<input type="number" ${common} value="${esc(value)}">`
+        : `<input ${common} value="${esc(value)}">`
   const chips = field === 'aliases' && value
     ? `<div class="dam-alias-row">${String(value).split(',').map((x) => x.trim()).filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>`
     : ''
@@ -497,7 +598,8 @@ function formGroups (kind, d) {
         { label: '名称', field: 'name', icon: 'text' },
         { label: '标题', field: 'title', icon: 'header' },
         { label: '图标', field: 'icon', icon: 'palette' },
-        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok', type: 'select', options: [{ value: 'active', label: '启用' }, { value: 'disabled', label: '禁用' }] },
+        { label: '排序', field: 'sortOrder', icon: 'sort', type: 'number' },
       ] },
       { title: '说明', icon: 'hint', fields: [
         { label: '说明', field: 'description', icon: 'notes', type: 'textarea', wide: true },
@@ -512,7 +614,8 @@ function formGroups (kind, d) {
         { label: '名称', field: 'name', icon: 'text' },
         { label: '标题', field: 'title', icon: 'header' },
         { label: '图标', field: 'icon', icon: 'palette' },
-        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+        { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok', type: 'select', options: [{ value: 'active', label: '启用' }, { value: 'disabled', label: '禁用' }] },
+        { label: '排序', field: 'sortOrder', icon: 'sort', type: 'number' },
       ] },
       { title: '说明', icon: 'hint', fields: [
         { label: '说明', field: 'description', icon: 'notes', type: 'textarea', wide: true },
@@ -527,7 +630,8 @@ function formGroups (kind, d) {
       { label: '名称', field: 'name', icon: 'text' },
       { label: '标题', field: 'title', icon: 'header' },
       { label: '图标', field: 'icon', icon: 'palette' },
-      { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok' },
+      { label: '状态', field: 'status', icon: 'sys-enter-2', tone: 'ok', type: 'select', options: [{ value: 'active', label: '启用' }, { value: 'disabled', label: '禁用' }] },
+      { label: '排序', field: 'sortOrder', icon: 'sort', type: 'number' },
     ] },
     { title: '运行挂载', icon: 'chain-link', fields: [
       { label: '资源根', field: 'resourceRoot', icon: 'folder', wide: true },
@@ -663,7 +767,7 @@ function bindPage (root, mode = 'manager') {
       ev.preventDefault()
       ev.stopPropagation()
       deleteItem(btn.getAttribute('data-delete-kind'), btn.getAttribute('data-delete-key'))
-        .catch((err) => { state.message = err.message || String(err); refreshAll() })
+        .catch((err) => { showToast(err.message || String(err), 'err') })
     })
   })
   root.querySelectorAll('[data-new]').forEach((btn) => {
@@ -672,12 +776,12 @@ function bindPage (root, mode = 'manager') {
   root.querySelectorAll('[data-field]').forEach((el) => {
     el.addEventListener('input', () => setDraft(el.getAttribute('data-field'), el.value, el.getAttribute('data-field-kind') || state.selectedKind))
   })
-  root.querySelector('[data-action="refresh"]')?.addEventListener('click', () => reloadRegistry('已刷新').catch((err) => { state.loading = null; state.message = err.message || String(err); refreshAll() }))
+  root.querySelector('[data-action="refresh"]')?.addEventListener('click', () => reloadRegistry('已刷新').catch((err) => { state.loading = null; showToast(err.message || String(err), 'err') }))
   root.querySelectorAll('[data-save-kind]').forEach((btn) => {
-    btn.addEventListener('click', () => saveDraft(btn.getAttribute('data-save-kind') || state.selectedKind).catch((err) => { state.message = err.message || String(err); refreshAll() }))
+    btn.addEventListener('click', () => saveDraft(btn.getAttribute('data-save-kind') || state.selectedKind).catch((err) => { showToast(err.message || String(err), 'err') }))
   })
   root.querySelectorAll('[data-delete-selected-kind]').forEach((btn) => {
-    btn.addEventListener('click', () => deleteSelectedKind(btn.getAttribute('data-delete-selected-kind') || state.selectedKind).catch((err) => { state.message = err.message || String(err); refreshAll() }))
+    btn.addEventListener('click', () => deleteSelectedKind(btn.getAttribute('data-delete-selected-kind') || state.selectedKind).catch((err) => { showToast(err.message || String(err), 'err') }))
   })
   if (mode === 'property') {
     renderResourcesInto(root)
@@ -853,9 +957,10 @@ function styleHtml () {
     .dam-field-label ui5-icon{width:.72rem;height:.72rem;color:var(--neo-cyan);flex:0 0 auto}
     .dam-smart-field[data-tone="ok"] .dam-field-label ui5-icon{color:var(--neo-mint)}
     .dam-field-lock{flex:0 0 auto;font-size:8px;font-weight:800;letter-spacing:.08em;color:var(--sapContent_LabelColor,#6a6d70);background:color-mix(in srgb,var(--sapContent_LabelColor,#6a6d70) 10%,transparent);border-radius:999px;padding:1px 5px}
-    .dam-smart-field input,.dam-smart-field textarea{width:100%;box-sizing:border-box;border:0;border-radius:0;padding:0;background:transparent;color:var(--sapField_TextColor,var(--sapTextColor,#1d2d3e));font:inherit;font-size:12px;font-weight:600;line-height:1.28;outline:none}
+    .dam-smart-field input,.dam-smart-field textarea,.dam-smart-field select{width:100%;box-sizing:border-box;border:0;border-radius:0;padding:0;background:transparent;color:var(--sapField_TextColor,var(--sapTextColor,#1d2d3e));font:inherit;font-size:12px;font-weight:600;line-height:1.28;outline:none}
     .dam-smart-field input[readonly]{color:var(--sapContent_LabelColor,#6a6d70);cursor:not-allowed}
     .dam-smart-field textarea{min-height:48px;resize:vertical;font-weight:500}
+    .dam-smart-field select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:0 14px 0 0;background-image:linear-gradient(45deg,transparent 50%,var(--sapContent_LabelColor,#6a6d70) 50%),linear-gradient(135deg,var(--sapContent_LabelColor,#6a6d70) 50%,transparent 50%);background-position:calc(100% - 8px) 50%,calc(100% - 4px) 50%;background-size:4px 4px;background-repeat:no-repeat;cursor:pointer}
     .dam-smart-field input::placeholder,.dam-smart-field textarea::placeholder{color:var(--sapField_PlaceholderTextColor,var(--sapContent_LabelColor,#6a6d70))}
     .dam-alias-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
     .dam-alias-row span{font-size:10px;font-weight:700;color:var(--neo-violet);background:color-mix(in srgb,var(--neo-violet) 10%,transparent);border:1px solid color-mix(in srgb,var(--neo-violet) 25%,transparent);border-radius:999px;padding:1px 7px}
@@ -876,6 +981,49 @@ function styleHtml () {
     .dam-empty{padding:18px 12px;color:var(--sapContent_LabelColor,#6a6d70);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:80px}
     .dam-empty ui5-icon{width:1.4rem;height:1.4rem;color:color-mix(in srgb,var(--neo-cyan) 55%,var(--sapContent_LabelColor,#6a6d70));opacity:.85}
   </style>`
+}
+
+// 全局轻提示 Toast（挂到 document.body，自动居中、自动消失）。
+// 脱离三视图独立渲染，避免每个视图各弹一条。
+// tone: 'ok'(成功/绿) | 'err'(失败/红)；duration 默认 3000ms，可覆盖。
+let _toastTimer = null
+function showToast (message, tone = 'ok', duration = 3000) {
+  // 复用同一个 toast 元素，避免叠加
+  let el = document.getElementById('cmx-native-toast')
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'cmx-native-toast'
+    el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;font:500 14px/1.4 var(--sapFontFamily,Arial,sans-serif);box-shadow:0 4px 16px rgba(0,0,0,.16);pointer-events:none;opacity:0;transition:opacity .18s ease'
+    document.body.appendChild(el)
+    // 注入图标容器
+    const icon = document.createElement('span')
+    icon.style.cssText = 'display:inline-flex;width:16px;height:16px;flex-shrink:0'
+    const text = document.createElement('span')
+    el.appendChild(icon)
+    el.appendChild(text)
+    el._icon = icon
+    el._text = text
+  }
+  // 清掉上一次的定时器（连续触发时重置计时）
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null }
+
+  // 配色
+  const isErr = tone === 'err'
+  el.style.color = isErr ? 'var(--sapNegativeTextColor,#b00)' : 'var(--sapPositiveTextColor,#107e3e)'
+  el.style.background = isErr ? 'color-mix(in srgb,#b00 10%,#fff)' : 'color-mix(in srgb,#107e3e 10%,#fff)'
+  el.style.border = `1px solid ${isErr ? 'color-mix(in srgb,#b00 24%,transparent)' : 'color-mix(in srgb,#107e3e 24%,transparent)'}`
+  // 图标（用 UI5 icon SVG 兜底，避免依赖图标注册时序）
+  el._icon.innerHTML = isErr
+    ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5A5.5 5.5 0 118 2.5a5.5 5.5 0 010 11zM7.25 4h1.5v5h-1.5V4zm0 6h1.5v1.5h-1.5V10z"/></svg>'
+    : '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.4 5.1L7 10.5 4.6 8.1l1-1L7 8.5l3.4-3.4 1 1z"/></svg>'
+  el._text.textContent = String(message ?? '')
+
+  // 显示
+  requestAnimationFrame(() => { el.style.opacity = '1' })
+  _toastTimer = setTimeout(() => {
+    el.style.opacity = '0'
+    _toastTimer = null
+  }, duration)
 }
 
 function mount (ctx, html, after) {

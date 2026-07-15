@@ -21,11 +21,6 @@ fn normalize_set_name(name: &str) -> String {
     }
 }
 
-/// 判断状态是否为启用（非 disabled 即视为启用）。
-fn active_only(status: &str) -> bool {
-    status.trim() != "disabled"
-}
-
 /// 把一组应用合成活动栏条目（每个 app 一项，sideNav 走 `dam:<domain>/<app>` 模块菜单）。
 fn build_applications(
     apps: &[DamApplication],
@@ -71,47 +66,27 @@ async fn dam_activities_doc(name: &str) -> PortalResult<Option<serde_json::Value
 
     if domain.is_empty() {
         // 门户级：聚合所有启用域的应用。
-        let domains: Vec<_> = list_domains()
-            .await?
-            .into_iter()
-            .filter(|d| active_only(&d.status))
-            .collect();
+        let domains: Vec<_> = list_domains(true).await?;
         let mut apps: Vec<DamApplication> = Vec::new();
         for d in &domains {
-            let mut da: Vec<DamApplication> = list_applications(Some(&d.id))
-                .await?
-                .into_iter()
-                .filter(|a| active_only(&a.status))
-                .collect();
+            let mut da: Vec<DamApplication> = list_applications(Some(&d.id), true).await?;
             apps.append(&mut da);
         }
         if apps.is_empty() {
             return Ok(None);
         }
-        let all_modules: Vec<_> = list_modules(None, None)
-            .await?
-            .into_iter()
-            .filter(|m| active_only(&m.status))
-            .collect();
+        let all_modules: Vec<_> = list_modules(None, None, true).await?;
         let applications = build_applications(&apps, &all_modules);
         return Ok(Some(
             json!({ "version": 1, "source": "dam", "applications": applications }),
         ));
     }
 
-    let apps: Vec<DamApplication> = list_applications(Some(&domain))
-        .await?
-        .into_iter()
-        .filter(|a| active_only(&a.status))
-        .collect();
+    let apps: Vec<DamApplication> = list_applications(Some(&domain), true).await?;
     if apps.is_empty() {
         return Ok(None);
     }
-    let all_modules: Vec<_> = list_modules(Some(&domain), None)
-        .await?
-        .into_iter()
-        .filter(|m| active_only(&m.status))
-        .collect();
+    let all_modules: Vec<_> = list_modules(Some(&domain), None, true).await?;
     let applications = build_applications(&apps, &all_modules);
     Ok(Some(
         json!({ "version": 1, "source": "dam", "domain": domain, "applications": applications }),

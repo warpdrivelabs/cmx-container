@@ -3,41 +3,12 @@
 //! 为各实体生成带 OpenAPI 文档的 CRUD handler 模块
 //!
 //! 通过 `declare_crud_handlers!` 宏生成，每个实体的 handlers 都可以独立注册到 OpenAPI
+//!
+//! 注：domain/application/module 的 CRUD 已改为手写 handler（各自 handler.rs），
+//! 不再用宏。原因：写操作需触发 DAM 资产文件副作用（目录搬移/引用校验），
+//! 宏走 GenericCrudService 会绕过 Service 层钩子。
 
 use crate::declare_crud_handlers;
-
-declare_crud_handlers!(
-    domain_crud,
-    crate::handlers::domain::Domain,
-    crate::handlers::domain::DomainBmc,
-    crate::handlers::domain::DomainForCreate,
-    crate::handlers::domain::DomainForUpdate,
-    crate::handlers::domain::DomainFilter,
-    "Domain",
-    "/domains"
-);
-
-declare_crud_handlers!(
-    application_crud,
-    crate::handlers::application::Application,
-    crate::handlers::application::ApplicationBmc,
-    crate::handlers::application::ApplicationForCreate,
-    crate::handlers::application::ApplicationForUpdate,
-    crate::handlers::application::ApplicationFilter,
-    "Application",
-    "/applications"
-);
-
-declare_crud_handlers!(
-    module_crud,
-    crate::handlers::module::Module,
-    crate::handlers::module::ModuleBmc,
-    crate::handlers::module::ModuleForCreate,
-    crate::handlers::module::ModuleForUpdate,
-    crate::handlers::module::ModuleFilter,
-    "Module",
-    "/module"
-);
 
 declare_crud_handlers!(
     sys_datasource_crud,

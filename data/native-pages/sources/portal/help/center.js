@@ -9,7 +9,7 @@
 // 与 registry-center 的 selectItem→refreshAll 同构。数据全部来自后端（cmx-container Rust）：
 //   GET  /api/help/catalog?domain=&app=&module=   → 轻量目录项（建树+搜索）
 //   POST /api/help/get  { domain, app, module, file }  → 完整文档（content + examples）
-//   GET  /api/dam-registry                         → DAM 注册表（取 域/应用/模块 显示名）
+//   GET  /api/registry/dam                         → DAM 注册表（取 域/应用/模块 显示名）
 
 const state = {
   catalog: [],
@@ -190,7 +190,7 @@ function selectedKey () {
 
 async function loadRegistry () {
   try {
-    state.registry = await apiJson('/api/dam-registry')
+    state.registry = await apiJson('/api/registry/dam?active_only=true')
   } catch {
     state.registry = { domains: [], applications: [], modules: [] }
   }

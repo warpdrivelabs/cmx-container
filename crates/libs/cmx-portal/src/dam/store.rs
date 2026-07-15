@@ -1,77 +1,23 @@
 //! DAM 注册表 store 实现。
+//!
+//! 原先读写 `dam-registry/registry.json` 的实现已废弃：DAM 主数据（域/应用/模块）
+//! 已迁入数据库（`cmx_domain`/`cmx_application`/`cmx_module` 三表），写操作走
+//! `cmx-biz` 的 Service。本模块只保留从数据库查询并反向映射回原 registry shape
+//! 的只读读路径（`get_dam_registry`/`list_domains`/`list_applications`/`list_modules`），
+//! 供 `/api/registry/dam` 等只读消费方使用。
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-
-use crate::config::{data_path, data_root};
-use crate::error::{PortalError, PortalResult};
-use crate::fsutil::{read_json_opt, write_json_atomic};
-use crate::util::write_lock;
-
-/// DAM 树根：upsert 时在每个根下创建 `<domain>[/<app>[/<module>]]` 目录；改名时整体搬移。
-const DAM_TREE_ROOTS: &[&[&str]] = &[
-    &["dict", "entries"],
-    &["dict", "seeds"],
-    &["fact"],
-    &["meta", "definitions"],
-    &["meta", "flexible-combination"],
-    &["form-pages", "sources"],
-    &["html-pages", "sources"],
-    &["menu-pages"],
-    &["modules"],
-    &["native-pages", "sources"],
-    &["service-catalog"],
-];
-
-/// id 段：`[a-zA-Z0-9_-]{1,64}`。
-fn is_dam_id(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 64
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-/// 校验 id 段合法性并返回 trim 后的字符串。
-///
-/// # Arguments
-///
-/// * `field` - 字段名（用于错误提示）。
-/// * `value` - 待校验的原始值。
-///
-/// # Errors
-///
-/// 若值不匹配 `[a-zA-Z0-9_-]{1,64}` 则返回 `PortalError::BadRequest`。
-fn assert_id(field: &str, value: &str) -> PortalResult<String> {
-    let s = value.trim();
-    if !is_dam_id(s) {
-        return Err(PortalError::bad_request(format!(
-            "{field} 仅允许字母、数字、_-，长度 1-64"
-        )));
-    }
-    Ok(s.to_string())
-}
-
-/// 清理并返回 trim 后的文本（None 或空白返回空串）。
-fn clean_text(v: Option<&str>) -> String {
-    v.unwrap_or("").trim().to_string()
-}
-
-/// 清理状态值，空值或缺省回退为 `active`。
-fn clean_status(v: Option<&str>) -> String {
-    let s = v.unwrap_or("active").trim();
-    if s.is_empty() {
-        "active".to_string()
-    } else {
-        s.to_string()
-    }
-}
 
 // ───────────────────────── 实体结构 ─────────────────────────
 
 /// 域。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamDomain {
-    /// 域唯一标识。
+    /// 数据库真实主键（雪花号，update/delete 操作用）。
+    #[serde(default)]
+    #[serde(rename = "dbId")]
+    pub db_id: String,
+    /// 域唯一标识（业务键，即 DB 的 code，显示用）。
     pub id: String,
     /// 域名称。
     pub name: String,
@@ -83,14 +29,22 @@ pub struct DamDomain {
     pub status: String,
     /// 域描述。
     pub description: String,
+    /// 排序值（数值小的靠前）。
+    #[serde(default)]
+    #[serde(rename = "sortOrder")]
+    pub sort_order: i32,
 }
 
 /// 应用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamApplication {
+    /// 数据库真实主键（雪花号，update/delete 操作用）。
+    #[serde(default)]
+    #[serde(rename = "dbId")]
+    pub db_id: String,
     /// 所属域 id。
     pub domain: String,
-    /// 应用唯一标识。
+    /// 应用唯一标识（业务键，即反拆后的 app_id，显示用）。
     pub id: String,
     /// 应用名称。
     pub name: String,
@@ -102,11 +56,19 @@ pub struct DamApplication {
     pub status: String,
     /// 应用描述。
     pub description: String,
+    /// 排序值（数值小的靠前）。
+    #[serde(default)]
+    #[serde(rename = "sortOrder")]
+    pub sort_order: i32,
 }
 
 /// 模块（含 app/module 别名字段，与 Node 输出一致）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DamModule {
+    /// 数据库真实主键（雪花号，update/delete 操作用）。
+    #[serde(default)]
+    #[serde(rename = "dbId")]
+    pub db_id: String,
     /// 所属域 id。
     pub domain: String,
     /// 所属应用 id。
@@ -142,6 +104,10 @@ pub struct DamModule {
     /// 主题色标识。
     #[serde(rename = "themeColor")]
     pub theme_color: String,
+    /// 排序值（数值小的靠前）。
+    #[serde(default)]
+    #[serde(rename = "sortOrder")]
+    pub sort_order: i32,
 }
 
 /// 规范化后的完整注册表。
@@ -157,133 +123,18 @@ pub struct DamRegistry {
     pub modules: Vec<DamModule>,
 }
 
-/// 返回注册表文件路径 `dam-registry/registry.json`。
-fn registry_path() -> std::path::PathBuf {
-    data_path(["dam-registry", "registry.json"])
-}
+// ───────────────────────── 读 ─────────────────────────
 
-// ───────────────────────── normalize ─────────────────────────
-
-/// 按候选 key 顺序取首个非空 trim 字符串。
-fn str_field<'a>(v: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
-    for k in keys {
-        if let Some(s) = v
-            .get(*k)
-            .and_then(|x| x.as_str())
-            .filter(|s| !s.trim().is_empty())
-        {
-            return Some(s);
-        }
-    }
-    None
-}
-
-/// 将原始 JSON 文档规范化为 `DamRegistry`。
+/// 完整注册表（从数据库聚合，保持与原 registry.json 相同的返回形状）。
 ///
-/// # Errors
+/// 数据主数据已迁入 cmx_domain/cmx_application/cmx_module 三表，
+/// 此函数查 DB 后反向映射回 DamRegistry shape（供 /api/registry/dam 等只读消费方）。
 ///
-/// 若任何 id 段不合法则返回 `PortalError::BadRequest`。
-fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
-    let empty = vec![];
-    let domains_raw = doc
-        .get("domains")
-        .and_then(|v| v.as_array())
-        .unwrap_or(&empty);
-    let apps_raw = doc
-        .get("applications")
-        .and_then(|v| v.as_array())
-        .unwrap_or(&empty);
-    let mods_raw = doc
-        .get("modules")
-        .and_then(|v| v.as_array())
-        .unwrap_or(&empty);
-
-    let mut domains = Vec::with_capacity(domains_raw.len());
-    for d in domains_raw {
-        let id = assert_id("domain.id", str_field(d, &["id"]).unwrap_or(""))?;
-        domains.push(DamDomain {
-            name: clean_text(str_field(d, &["name", "label", "id"])),
-            title: clean_text(str_field(d, &["title"])),
-            icon: clean_text(str_field(d, &["icon"])),
-            status: clean_status(d.get("status").and_then(|v| v.as_str())),
-            description: clean_text(str_field(d, &["description"])),
-            id,
-        });
-    }
-
-    let mut applications = Vec::with_capacity(apps_raw.len());
-    for a in apps_raw {
-        let domain = assert_id(
-            "application.domain",
-            str_field(a, &["domain"]).unwrap_or(""),
-        )?;
-        let id = assert_id(
-            "application.id",
-            str_field(a, &["id", "application", "app"]).unwrap_or(""),
-        )?;
-        applications.push(DamApplication {
-            name: clean_text(str_field(a, &["name", "label", "id", "application", "app"])),
-            title: clean_text(str_field(a, &["title"])),
-            icon: clean_text(str_field(a, &["icon"])),
-            status: clean_status(a.get("status").and_then(|v| v.as_str())),
-            description: clean_text(str_field(a, &["description"])),
-            domain,
-            id,
-        });
-    }
-
-    let mut modules = Vec::with_capacity(mods_raw.len());
-    for m in mods_raw {
-        let domain = assert_id("module.domain", str_field(m, &["domain"]).unwrap_or(""))?;
-        let application = assert_id(
-            "module.application",
-            str_field(m, &["application", "app"]).unwrap_or(""),
-        )?;
-        let id = assert_id("module.id", str_field(m, &["id", "module"]).unwrap_or(""))?;
-        let aliases = m
-            .get("aliases")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
-                    .filter(|s| !s.is_empty())
-                    .collect()
-            })
-            .unwrap_or_default();
-        let theme = m.get("theme").filter(|v| v.is_object()).cloned();
-        modules.push(DamModule {
-            name: clean_text(str_field(m, &["name", "label", "title", "id", "module"])),
-            title: clean_text(str_field(m, &["title", "name", "id", "module"])),
-            icon: clean_text(str_field(m, &["icon"])),
-            status: clean_status(m.get("status").and_then(|v| v.as_str())),
-            description: clean_text(str_field(m, &["description"])),
-            resource_root: {
-                let rr = clean_text(str_field(m, &["resourceRoot"]));
-                if rr.is_empty() {
-                    format!("{domain}/{application}/{id}")
-                } else {
-                    rr
-                }
-            },
-            manifest_path: {
-                let mp = clean_text(str_field(m, &["manifestPath"]));
-                if mp.is_empty() {
-                    format!("modules/{domain}/{application}/{id}/module.json")
-                } else {
-                    mp
-                }
-            },
-            aliases,
-            theme,
-            theme_color: clean_text(str_field(m, &["themeColor", "accentColor", "color"])),
-            app: application.clone(),
-            module: id.clone(),
-            domain,
-            application,
-            id,
-        });
-    }
-
+/// `active_only` 为 true 时只返回 status=1（启用）的记录。
+pub async fn get_dam_registry(active_only: bool) -> crate::error::PortalResult<DamRegistry> {
+    let domains = list_domains(active_only).await?;
+    let applications = list_applications(None, active_only).await?;
+    let modules = list_modules(None, None, active_only).await?;
     Ok(DamRegistry {
         version: 1,
         domains,
@@ -292,645 +143,222 @@ fn normalize(doc: &serde_json::Value) -> PortalResult<DamRegistry> {
     })
 }
 
-/// 加载注册表文件并规范化（文件不存在时返回空注册表）。
-///
-/// # Errors
-///
-/// 读取或规范化失败时返回对应 `PortalError`。
-async fn load_registry() -> PortalResult<DamRegistry> {
-    let doc = read_json_opt(&registry_path()).await?.unwrap_or_else(
-        || json!({ "version": 1, "domains": [], "applications": [], "modules": [] }),
-    );
-    normalize(&doc)
+/// 从 DB 获取默认 DatabaseManager + db_id。
+async fn db_handle() -> crate::error::PortalResult<(&'static cmx_database::DatabaseManager, String)> {
+    let mm = cmx_database::get_default_db_manager();
+    let db_id = mm.get_default_db_id().await;
+    Ok((mm, db_id))
 }
 
-/// 原子写入注册表到磁盘。
+/// 从 DataSet 行提取字符串字段。
+fn row_str(
+    row: &cmx_core::model::data::dataset::Row,
+    schema: &cmx_core::model::data::dataset::Schema,
+    name: &str,
+) -> String {
+    row.get_by_name_as(schema, name).unwrap_or_default()
+}
+
+/// 从 DataSet 行提取可选字符串字段。
+fn row_str_opt(
+    row: &cmx_core::model::data::dataset::Row,
+    schema: &cmx_core::model::data::dataset::Schema,
+    name: &str,
+) -> Option<String> {
+    row.get_by_name_as(schema, name)
+}
+
+/// 从 DataSet 行提取 i32 status 并转为 "active"/"disabled" 字符串。
+fn row_status(
+    row: &cmx_core::model::data::dataset::Row,
+    schema: &cmx_core::model::data::dataset::Schema,
+) -> String {
+    let v: Option<i32> = row.get_by_name_as(schema, "status");
+    match v {
+        Some(0) => "disabled".to_string(),
+        _ => "active".to_string(),
+    }
+}
+
+/// 从 DataSet 行提取 i32 字段（缺失回 0）。
+fn row_i32(
+    row: &cmx_core::model::data::dataset::Row,
+    schema: &cmx_core::model::data::dataset::Schema,
+    name: &str,
+) -> i32 {
+    row.get_by_name_as(schema, name).unwrap_or(0)
+}
+
+/// 域列表（查 cmx_domain，反向映射回 DamDomain shape）。
 ///
-/// # Errors
-///
-/// 写入失败时返回 `PortalError`。
-async fn save_registry(reg: &DamRegistry) -> PortalResult<()> {
-    write_json_atomic(&registry_path(), reg, true).await
-}
-
-// ───────────────────────── 目录同步 ─────────────────────────
-
-/// 在每个 DAM 树根下创建 `parts` 目录（parts 已校验）。
-async fn ensure_tree_dirs(parts: &[String]) -> PortalResult<()> {
-    for seg in parts {
-        assert_id("path.segment", seg)?;
-    }
-    for root in DAM_TREE_ROOTS {
-        let mut p = data_root();
-        for r in *root {
-            p.push(r);
-        }
-        for seg in parts {
-            p.push(seg);
-        }
-        tokio::fs::create_dir_all(&p)
-            .await
-            .map_err(PortalError::Io)?;
-    }
-    Ok(())
-}
-
-/// 为整份注册表创建所有层级目录。
-async fn ensure_registry_dirs(reg: &DamRegistry) -> PortalResult<()> {
-    for d in &reg.domains {
-        ensure_tree_dirs(std::slice::from_ref(&d.id)).await?;
-    }
-    for a in &reg.applications {
-        ensure_tree_dirs(&[a.domain.clone(), a.id.clone()]).await?;
-    }
-    for m in &reg.modules {
-        ensure_tree_dirs(&[m.domain.clone(), m.application.clone(), m.id.clone()]).await?;
-    }
-    Ok(())
-}
-
-/// 递归把 from 目录内容并入 to（已存在的子目录递归合并；冲突文件报错）。
-async fn move_dir_contents(from: &std::path::Path, to: &std::path::Path) -> PortalResult<()> {
-    if tokio::fs::metadata(from).await.is_err() {
-        return Ok(());
-    }
-    tokio::fs::create_dir_all(to)
+/// `active_only` 为 true 时只返回 status=1（启用）的记录。
+pub async fn list_domains(active_only: bool) -> crate::error::PortalResult<Vec<DamDomain>> {
+    let (mm, db_id) = db_handle().await?;
+    let sql = if active_only {
+        "SELECT id, code, name, title, icon, description, status, sort_order FROM cmx_domain WHERE status = 1 ORDER BY sort_order, code"
+    } else {
+        "SELECT id, code, name, title, icon, description, status, sort_order FROM cmx_domain ORDER BY sort_order, code"
+    };
+    let ds = mm
+        .query_sql(&db_id, None, sql, "dam_domains")
         .await
-        .map_err(PortalError::Io)?;
-    // 用栈做迭代式递归，避免 async 递归装箱
-    let mut stack = vec![(from.to_path_buf(), to.to_path_buf())];
-    while let Some((fd, td)) = stack.pop() {
-        let mut rd = match tokio::fs::read_dir(&fd).await {
-            Ok(rd) => rd,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(PortalError::Io(e)),
-        };
-        tokio::fs::create_dir_all(&td)
-            .await
-            .map_err(PortalError::Io)?;
-        while let Some(entry) = rd.next_entry().await.map_err(PortalError::Io)? {
-            let from_path = entry.path();
-            let to_path = td.join(entry.file_name());
-            let ft = entry.file_type().await.map_err(PortalError::Io)?;
-            let to_exists = tokio::fs::metadata(&to_path).await.is_ok();
-            let to_is_dir = tokio::fs::metadata(&to_path)
-                .await
-                .map(|m| m.is_dir())
-                .unwrap_or(false);
-            if ft.is_dir() && to_exists && to_is_dir {
-                stack.push((from_path, to_path));
-                continue;
-            }
-            if to_exists {
-                return Err(PortalError::bad_request(format!(
-                    "目标路径已存在，不能覆盖：{}",
-                    to_path.display()
-                )));
-            }
-            tokio::fs::rename(&from_path, &to_path)
-                .await
-                .map_err(PortalError::Io)?;
-        }
-        // 该层处理完后删源目录（叶子在出栈时已空）
-        let _ = tokio::fs::remove_dir_all(&fd).await;
+        .map_err(|e| crate::error::PortalError::business(format!("查询域失败: {}", e)))?;
+    let schema = ds.schema.as_ref();
+    let mut out = Vec::new();
+    for row in ds.iter() {
+        let code = row_str(row, schema, "code");
+        out.push(DamDomain {
+            db_id: row_str(row, schema, "id"),
+            id: code,
+            name: row_str(row, schema, "name"),
+            title: row_str(row, schema, "title"),
+            icon: row_str(row, schema, "icon"),
+            status: row_status(row, schema),
+            description: row_str(row, schema, "description"),
+            sort_order: row_i32(row, schema, "sort_order"),
+        });
     }
-    Ok(())
+    Ok(out)
 }
 
-/// 把每个 DAM 树根下 from_parts 目录搬到 to_parts。
-async fn rename_tree_dirs(from_parts: &[String], to_parts: &[String]) -> PortalResult<()> {
-    for seg in from_parts.iter().chain(to_parts.iter()) {
-        assert_id("path.segment", seg)?;
-    }
-    if from_parts.join("/") == to_parts.join("/") {
-        return Ok(());
-    }
-    for root in DAM_TREE_ROOTS {
-        let mut from = data_root();
-        let mut to = data_root();
-        for r in *root {
-            from.push(r);
-            to.push(r);
-        }
-        for seg in from_parts {
-            from.push(seg);
-        }
-        for seg in to_parts {
-            to.push(seg);
-        }
-        move_dir_contents(&from, &to).await?;
-    }
-    Ok(())
-}
-
-// ───────────────────────── 读 ─────────────────────────
-
-/// 完整注册表。
+/// 应用列表（按 domain 过滤，查 cmx_application，反向映射回 DamApplication shape）。
 ///
-/// # Returns
-///
-/// 返回加载并规范化后的完整 `DamRegistry`。
-///
-/// # Errors
-///
-/// 读取或规范化失败时返回对应 `PortalError`。
-pub async fn get_dam_registry() -> PortalResult<DamRegistry> {
-    load_registry().await
-}
-
-/// 域列表。
-///
-/// # Returns
-///
-/// 返回注册表中所有域的列表。
-///
-/// # Errors
-///
-/// 读取注册表失败时返回对应 `PortalError`。
-pub async fn list_domains() -> PortalResult<Vec<DamDomain>> {
-    Ok(load_registry().await?.domains)
-}
-
-/// 应用列表（按 domain 过滤）。
-///
-/// # Arguments
-///
-/// * `domain` - 可选域 id 过滤条件，`None` 或空则返回全部。
-///
-/// # Returns
-///
-/// 返回匹配域下的应用列表。
-///
-/// # Errors
-///
-/// 读取注册表失败时返回对应 `PortalError`。
-pub async fn list_applications(domain: Option<&str>) -> PortalResult<Vec<DamApplication>> {
+/// DB 的 application_code 是 `{domain}_{app_id}` 拼接，反向拆出原始 app_id 作为 id。
+/// `active_only` 为 true 时只返回 status=1（启用）的记录。
+pub async fn list_applications(domain: Option<&str>, active_only: bool) -> crate::error::PortalResult<Vec<DamApplication>> {
+    let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
-    Ok(load_registry()
-        .await?
-        .applications
-        .into_iter()
-        .filter(|a| d.is_empty() || a.domain == d)
-        .collect())
+    // 组合 WHERE 条件：domain_code 和 status
+    let mut conditions: Vec<String> = Vec::new();
+    if !d.is_empty() {
+        conditions.push(format!("domain_code = '{}'", d));
+    }
+    if active_only {
+        conditions.push("status = 1".to_string());
+    }
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+    let sql = format!(
+        "SELECT id, code, domain_code, name, title, icon, description, status, sort_order FROM cmx_application{} ORDER BY sort_order, code",
+        where_clause
+    );
+    let ds = mm
+        .query_sql(&db_id, None, &sql, "dam_applications")
+        .await
+        .map_err(|e| crate::error::PortalError::business(format!("查询应用失败: {}", e)))?;
+    let schema = ds.schema.as_ref();
+    let mut out = Vec::new();
+    for row in ds.iter() {
+        let code = row_str(row, schema, "code");
+        let domain_code = row_str(row, schema, "domain_code");
+        // 反向拆解：code = {domain}_{app_id}，去掉 domain_ 前缀得 app_id
+        let app_id = strip_prefix(&code, &format!("{domain_code}_"));
+        out.push(DamApplication {
+            db_id: row_str(row, schema, "id"),
+            domain: domain_code,
+            id: app_id,
+            name: row_str(row, schema, "name"),
+            title: row_str(row, schema, "title"),
+            icon: row_str(row, schema, "icon"),
+            status: row_status(row, schema),
+            description: row_str(row, schema, "description"),
+            sort_order: row_i32(row, schema, "sort_order"),
+        });
+    }
+    Ok(out)
 }
 
-/// 模块列表（按 domain/application 过滤）。
+/// 模块列表（按 domain/application 过滤，查 cmx_module，反向映射回 DamModule shape）。
 ///
-/// # Arguments
-///
-/// * `domain` - 可选域 id 过滤条件，`None` 或空则该级放宽。
-/// * `application` - 可选应用 id 过滤条件，`None` 或空则该级放宽。
-///
-/// # Returns
-///
-/// 返回匹配条件下的模块列表。
-///
-/// # Errors
-///
-/// 读取注册表失败时返回对应 `PortalError`。
+/// DB 的 module_code 是 `{domain}_{app}_{module_id}` 拼接，反向拆出原始三段。
+/// application_code 是 `{domain}_{app}`，反向拆出 app_id。
+/// `active_only` 为 true 时只返回 status=1（启用）的记录。
 pub async fn list_modules(
     domain: Option<&str>,
     application: Option<&str>,
-) -> PortalResult<Vec<DamModule>> {
+    active_only: bool,
+) -> crate::error::PortalResult<Vec<DamModule>> {
+    let (mm, db_id) = db_handle().await?;
     let d = domain.unwrap_or("").trim();
     let a = application.unwrap_or("").trim();
-    Ok(load_registry()
-        .await?
-        .modules
-        .into_iter()
-        .filter(|m| (d.is_empty() || m.domain == d) && (a.is_empty() || m.application == a))
-        .collect())
-}
-
-// ───────────────────────── upsert / delete ─────────────────────────
-
-/// 解析 `originalKey`（斜杠分隔）为路径段列表。
-fn parse_original_key(v: Option<&str>) -> Vec<String> {
-    v.unwrap_or("")
-        .split('/')
-        .map(|x| x.trim().to_string())
-        .filter(|x| !x.is_empty())
-        .collect()
-}
-
-/// upsert 域（含改名级联 + 目录搬移）。返回保存后的域。
-///
-/// # Arguments
-///
-/// * `input` - 包含域字段及可选 `originalKey` 的 JSON 对象。
-///
-/// # Returns
-///
-/// 返回保存后的 `DamDomain`。
-///
-/// # Errors
-///
-/// id 非法、域已存在或 IO 失败时返回对应 `PortalError`。
-pub async fn upsert_domain(input: &serde_json::Value) -> PortalResult<DamDomain> {
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    let original = parse_original_key(input.get("originalKey").and_then(|v| v.as_str()));
-
-    let item = DamDomain {
-        id: assert_id("domain.id", str_field(input, &["id"]).unwrap_or(""))?,
-        name: clean_text(str_field(input, &["name", "label", "id"])),
-        title: clean_text(str_field(input, &["title"])),
-        icon: clean_text(str_field(input, &["icon"])),
-        status: clean_status(input.get("status").and_then(|v| v.as_str())),
-        description: clean_text(str_field(input, &["description"])),
-    };
-    let old_id = match original.first() {
-        Some(s) => assert_id("domain.originalKey", s)?,
-        None => item.id.clone(),
-    };
-    if old_id != item.id && reg.domains.iter().any(|d| d.id == item.id) {
-        return Err(PortalError::bad_request(format!(
-            "Domain 已存在：{}",
-            item.id
-        )));
+    // 组合 WHERE 条件：domain_code / application_code / status
+    let mut conditions: Vec<String> = Vec::new();
+    if !d.is_empty() {
+        conditions.push(format!("domain_code = '{}'", d));
     }
-    if let Some(existing) = reg.domains.iter_mut().find(|d| d.id == old_id) {
-        *existing = item.clone();
-    } else {
-        reg.domains.push(item.clone());
-    }
-    if old_id != item.id {
-        for a in reg.applications.iter_mut().filter(|a| a.domain == old_id) {
-            a.domain = item.id.clone();
-        }
-        for m in reg.modules.iter_mut().filter(|m| m.domain == old_id) {
-            let rr_old = format!("{}/{}/{}", old_id, m.application, m.id);
-            let mp_old = format!("modules/{}/{}/{}/module.json", old_id, m.application, m.id);
-            if m.resource_root == rr_old {
-                m.resource_root = format!("{}/{}/{}", item.id, m.application, m.id);
-            }
-            if m.manifest_path == mp_old {
-                m.manifest_path =
-                    format!("modules/{}/{}/{}/module.json", item.id, m.application, m.id);
-            }
-            m.domain = item.id.clone();
-        }
-        rename_tree_dirs(std::slice::from_ref(&old_id), std::slice::from_ref(&item.id)).await?;
-    }
-    ensure_registry_dirs(&reg).await?;
-    save_registry(&reg).await?;
-    Ok(item)
-}
-
-/// upsert 应用（含改名级联 + 目录搬移）。
-///
-/// # Arguments
-///
-/// * `input` - 包含应用字段及可选 `originalKey` 的 JSON 对象。
-///
-/// # Returns
-///
-/// 返回保存后的 `DamApplication`。
-///
-/// # Errors
-///
-/// id 非法、所属域不存在、应用已存在或 IO 失败时返回对应 `PortalError`。
-pub async fn upsert_application(input: &serde_json::Value) -> PortalResult<DamApplication> {
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    let original = parse_original_key(input.get("originalKey").and_then(|v| v.as_str()));
-
-    let item = DamApplication {
-        domain: assert_id(
-            "application.domain",
-            str_field(input, &["domain"]).unwrap_or(""),
-        )?,
-        id: assert_id(
-            "application.id",
-            str_field(input, &["id", "application", "app"]).unwrap_or(""),
-        )?,
-        name: clean_text(str_field(
-            input,
-            &["name", "label", "id", "application", "app"],
-        )),
-        title: clean_text(str_field(input, &["title"])),
-        icon: clean_text(str_field(input, &["icon"])),
-        status: clean_status(input.get("status").and_then(|v| v.as_str())),
-        description: clean_text(str_field(input, &["description"])),
-    };
-    if !reg.domains.iter().any(|d| d.id == item.domain) {
-        return Err(PortalError::bad_request(format!(
-            "Domain 不存在：{}",
-            item.domain
-        )));
-    }
-    let old_domain = match original.first() {
-        Some(s) => assert_id("application.originalDomain", s)?,
-        None => item.domain.clone(),
-    };
-    let old_app = match original.get(1) {
-        Some(s) => assert_id("application.originalId", s)?,
-        None => item.id.clone(),
-    };
-    let new_key = format!("{}/{}", item.domain, item.id);
-    if (old_domain != item.domain || old_app != item.id)
-        && reg
-            .applications
-            .iter()
-            .any(|a| format!("{}/{}", a.domain, a.id) == new_key)
-    {
-        return Err(PortalError::bad_request(format!(
-            "Application 已存在：{new_key}"
-        )));
-    }
-    if let Some(existing) = reg
-        .applications
-        .iter_mut()
-        .find(|a| a.domain == old_domain && a.id == old_app)
-    {
-        *existing = item.clone();
-    } else {
-        reg.applications.push(item.clone());
-    }
-    if old_domain != item.domain || old_app != item.id {
-        for m in reg
-            .modules
-            .iter_mut()
-            .filter(|m| m.domain == old_domain && m.application == old_app)
-        {
-            let rr_old = format!("{}/{}/{}", old_domain, old_app, m.id);
-            let mp_old = format!("modules/{}/{}/{}/module.json", old_domain, old_app, m.id);
-            if m.resource_root == rr_old {
-                m.resource_root = format!("{}/{}/{}", item.domain, item.id, m.id);
-            }
-            if m.manifest_path == mp_old {
-                m.manifest_path =
-                    format!("modules/{}/{}/{}/module.json", item.domain, item.id, m.id);
-            }
-            m.domain = item.domain.clone();
-            m.application = item.id.clone();
-            m.app = item.id.clone();
-        }
-        rename_tree_dirs(
-            &[old_domain.clone(), old_app.clone()],
-            &[item.domain.clone(), item.id.clone()],
-        )
-        .await?;
-    }
-    ensure_registry_dirs(&reg).await?;
-    save_registry(&reg).await?;
-    Ok(item)
-}
-
-/// upsert 模块（含改名 + 目录搬移）。
-///
-/// # Arguments
-///
-/// * `input` - 包含模块字段及可选 `originalKey` 的 JSON 对象。
-///
-/// # Returns
-///
-/// 返回保存后的 `DamModule`。
-///
-/// # Errors
-///
-/// id 非法、所属域/应用不存在、模块已存在或 IO 失败时返回对应 `PortalError`。
-pub async fn upsert_module(input: &serde_json::Value) -> PortalResult<DamModule> {
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    let original = parse_original_key(input.get("originalKey").and_then(|v| v.as_str()));
-
-    let domain = assert_id("module.domain", str_field(input, &["domain"]).unwrap_or(""))?;
-    let application = assert_id(
-        "module.application",
-        str_field(input, &["application", "app"]).unwrap_or(""),
-    )?;
-    let id = assert_id(
-        "module.id",
-        str_field(input, &["id", "module"]).unwrap_or(""),
-    )?;
-    if !reg.domains.iter().any(|d| d.id == domain) {
-        return Err(PortalError::bad_request(format!("Domain 不存在：{domain}")));
-    }
-    if !reg
-        .applications
-        .iter()
-        .any(|a| a.domain == domain && a.id == application)
-    {
-        return Err(PortalError::bad_request(format!(
-            "Application 不存在：{domain}/{application}"
-        )));
-    }
-    let resource_root = {
-        let rr = clean_text(str_field(input, &["resourceRoot"]));
-        if rr.is_empty() {
-            format!("{domain}/{application}/{id}")
+    if !a.is_empty() {
+        // a 是原始 app_id，DB 里 application_code = {domain}_{app_id}
+        let app_code = if d.is_empty() {
+            format!("%_{}", a) // 不确定 domain，用 LIKE
         } else {
-            rr
-        }
-    };
-    let manifest_path = {
-        let mp = clean_text(str_field(input, &["manifestPath"]));
-        if mp.is_empty() {
-            format!("modules/{domain}/{application}/{id}/module.json")
-        } else {
-            mp
-        }
-    };
-    let aliases = input
-        .get("aliases")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-    let item = DamModule {
-        name: clean_text(str_field(
-            input,
-            &["name", "label", "title", "id", "module"],
-        )),
-        title: clean_text(str_field(input, &["title", "name", "id", "module"])),
-        icon: clean_text(str_field(input, &["icon"])),
-        status: clean_status(input.get("status").and_then(|v| v.as_str())),
-        description: clean_text(str_field(input, &["description"])),
-        resource_root,
-        manifest_path,
-        aliases,
-        theme: input.get("theme").filter(|v| v.is_object()).cloned(),
-        theme_color: clean_text(str_field(input, &["themeColor", "accentColor", "color"])),
-        app: application.clone(),
-        module: id.clone(),
-        domain: domain.clone(),
-        application: application.clone(),
-        id: id.clone(),
-    };
-    let old_domain = original
-        .first()
-        .map(|s| assert_id("module.originalDomain", s))
-        .transpose()?
-        .unwrap_or_else(|| domain.clone());
-    let old_app = original
-        .get(1)
-        .map(|s| assert_id("module.originalApplication", s))
-        .transpose()?
-        .unwrap_or_else(|| application.clone());
-    let old_id = original
-        .get(2)
-        .map(|s| assert_id("module.originalId", s))
-        .transpose()?
-        .unwrap_or_else(|| id.clone());
-    let new_key = format!("{}/{}/{}", domain, application, id);
-    if (old_domain != domain || old_app != application || old_id != id)
-        && reg
-            .modules
-            .iter()
-            .any(|m| format!("{}/{}/{}", m.domain, m.application, m.id) == new_key)
-    {
-        return Err(PortalError::bad_request(format!(
-            "Module 已存在：{new_key}"
-        )));
+            format!("{}_{}", d, a)
+        };
+        conditions.push(format!("application_code = '{}'", app_code));
     }
-    if let Some(existing) = reg
-        .modules
-        .iter_mut()
-        .find(|m| m.domain == old_domain && m.application == old_app && m.id == old_id)
-    {
-        *existing = item.clone();
+    if active_only {
+        conditions.push("status = 1".to_string());
+    }
+    let where_clause = if conditions.is_empty() {
+        String::new()
     } else {
-        reg.modules.push(item.clone());
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+    let sql = format!(
+        "SELECT id, code, domain_code, application_code, name, title, icon, description, tags, resource_root, manifest_path, theme, theme_color, status, sort_order FROM cmx_module{} ORDER BY sort_order, code",
+        where_clause
+    );
+    let ds = mm
+        .query_sql(&db_id, None, &sql, "dam_modules")
+        .await
+        .map_err(|e| crate::error::PortalError::business(format!("查询模块失败: {}", e)))?;
+    let schema = ds.schema.as_ref();
+    let mut out = Vec::new();
+    for row in ds.iter() {
+        let code = row_str(row, schema, "code");
+        let domain_code = row_str(row, schema, "domain_code");
+        let app_code = row_str(row, schema, "application_code");
+        // 反向拆解：app_code = {domain}_{app_id} → app_id；code = {domain}_{app}_{module_id} → module_id
+        let app_id = strip_prefix(&app_code, &format!("{domain_code}_"));
+        let module_id = strip_prefix(&code, &format!("{app_code}_"));
+        let tags_str = row_str(row, schema, "tags");
+        let aliases: Vec<String> = if tags_str.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&tags_str).unwrap_or_default()
+        };
+        let resource_root = row_str(row, schema, "resource_root");
+        let manifest_path = row_str(row, schema, "manifest_path");
+        out.push(DamModule {
+            db_id: row_str(row, schema, "id"),
+            domain: domain_code,
+            application: app_id.clone(),
+            app: app_id.clone(),
+            id: module_id.clone(),
+            module: module_id,
+            name: row_str(row, schema, "name"),
+            title: row_str(row, schema, "title"),
+            icon: row_str(row, schema, "icon"),
+            status: row_status(row, schema),
+            description: row_str(row, schema, "description"),
+            resource_root,
+            manifest_path,
+            aliases,
+            theme: row_str_opt(row, schema, "theme").filter(|s| !s.is_empty()).map(|s| serde_json::json!({"name": s})),
+            theme_color: row_str(row, schema, "theme_color"),
+            sort_order: row_i32(row, schema, "sort_order"),
+        });
     }
-    if old_domain != domain || old_app != application || old_id != id {
-        rename_tree_dirs(
-            &[old_domain.clone(), old_app.clone(), old_id.clone()],
-            &[domain.clone(), application.clone(), id.clone()],
-        )
-        .await?;
-    }
-    ensure_registry_dirs(&reg).await?;
-    save_registry(&reg).await?;
-    Ok(item)
+    Ok(out)
 }
 
-/// 同步所有 DAM 目录（按当前注册表补建）。
-///
-/// # Returns
-///
-/// 返回 `{"ok": true}` JSON 对象。
-///
-/// # Errors
-///
-/// 创建目录失败时返回 `PortalError::Io`。
-pub async fn sync_dirs() -> PortalResult<serde_json::Value> {
-    let _guard = write_lock().lock().await;
-    let reg = load_registry().await?;
-    ensure_registry_dirs(&reg).await?;
-    Ok(json!({ "ok": true }))
-}
-
-/// 删除域（要求其下无 app/module）。
-///
-/// # Arguments
-///
-/// * `id` - 待删除的域 id。
-///
-/// # Returns
-///
-/// 返回 `{"ok": true}` JSON 对象。
-///
-/// # Errors
-///
-/// 域下仍有 application/module 或域不存在时返回对应 `PortalError`。
-pub async fn delete_domain(id: &str) -> PortalResult<serde_json::Value> {
-    let domain = assert_id("domain.id", id)?;
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    if reg.applications.iter().any(|a| a.domain == domain)
-        || reg.modules.iter().any(|m| m.domain == domain)
-    {
-        return Err(PortalError::bad_request(format!(
-            "Domain {domain} 下仍有 application/module，不能删除"
-        )));
+/// 去掉字符串前缀（若无前缀则返回原值）。
+fn strip_prefix(s: &str, prefix: &str) -> String {
+    if let Some(rest) = s.strip_prefix(prefix) {
+        rest.to_string()
+    } else {
+        s.to_string()
     }
-    let before = reg.domains.len();
-    reg.domains.retain(|d| d.id != domain);
-    if reg.domains.len() == before {
-        return Err(PortalError::not_found(format!("Domain 不存在：{domain}")));
-    }
-    save_registry(&reg).await?;
-    Ok(json!({ "ok": true }))
-}
-
-/// 删除应用（要求其下无 module）。
-///
-/// # Arguments
-///
-/// * `domain` - 所属域 id。
-/// * `app` - 待删除的应用 id。
-///
-/// # Returns
-///
-/// 返回 `{"ok": true}` JSON 对象。
-///
-/// # Errors
-///
-/// 应用下仍有 module 或应用不存在时返回对应 `PortalError`。
-pub async fn delete_application(domain: &str, app: &str) -> PortalResult<serde_json::Value> {
-    let domain = assert_id("application.domain", domain)?;
-    let id = assert_id("application.id", app)?;
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    if reg
-        .modules
-        .iter()
-        .any(|m| m.domain == domain && m.application == id)
-    {
-        return Err(PortalError::bad_request(format!(
-            "Application {domain}/{id} 下仍有 module，不能删除"
-        )));
-    }
-    let before = reg.applications.len();
-    reg.applications
-        .retain(|a| !(a.domain == domain && a.id == id));
-    if reg.applications.len() == before {
-        return Err(PortalError::not_found(format!(
-            "Application 不存在：{domain}/{id}"
-        )));
-    }
-    save_registry(&reg).await?;
-    Ok(json!({ "ok": true }))
-}
-
-/// 删除模块。
-///
-/// # Arguments
-///
-/// * `domain` - 所属域 id。
-/// * `app` - 所属应用 id。
-/// * `module` - 待删除的模块 id。
-///
-/// # Returns
-///
-/// 返回 `{"ok": true}` JSON 对象。
-///
-/// # Errors
-///
-/// 模块不存在或 id 非法时返回对应 `PortalError`。
-pub async fn delete_module(
-    domain: &str,
-    app: &str,
-    module: &str,
-) -> PortalResult<serde_json::Value> {
-    let domain = assert_id("module.domain", domain)?;
-    let application = assert_id("module.application", app)?;
-    let id = assert_id("module.id", module)?;
-    let _guard = write_lock().lock().await;
-    let mut reg = load_registry().await?;
-    let before = reg.modules.len();
-    reg.modules
-        .retain(|m| !(m.domain == domain && m.application == application && m.id == id));
-    if reg.modules.len() == before {
-        return Err(PortalError::not_found(format!(
-            "Module 不存在：{domain}/{application}/{id}"
-        )));
-    }
-    save_registry(&reg).await?;
-    Ok(json!({ "ok": true }))
 }

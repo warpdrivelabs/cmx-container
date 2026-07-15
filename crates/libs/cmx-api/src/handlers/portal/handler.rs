@@ -74,6 +74,9 @@ pub struct DamQuery {
     pub domain: Option<String>,
     #[serde(default, alias = "application")]
     pub app: Option<String>,
+    /// 仅返回启用（status=1）的记录。除 DAM 维护页外，其他消费方应传 true。
+    #[serde(default)]
+    pub active_only: Option<bool>,
 }
 
 /// 服务目录过滤（domain / app / module）。
@@ -677,150 +680,55 @@ pub async fn get_html_page(
     )))
 }
 
-// ───────────────────────── DAM 注册表（读写 CRUD）─────────────────────────
-
-/// `GET /api/dam-registry` —— 完整注册表。
-pub async fn dam_registry(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let reg = cmx_portal::dam::store::get_dam_registry().await?;
-    Ok(Json(ApiResp::ok(
-        serde_json::to_value(reg).map_err(cmx_portal::PortalError::from)?,
-    )))
-}
-
-/// `GET /api/dam-registry/domains` —— 域列表。
-pub async fn dam_list_domains(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let domains = cmx_portal::dam::store::list_domains().await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "domains": domains }))))
-}
-
-/// `POST /api/dam-registry/domains` —— upsert 域。
-pub async fn dam_upsert_domain(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let saved = cmx_portal::dam::store::upsert_domain(&body).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "saved": saved }))))
-}
-
-/// `DELETE /api/dam-registry/domains/:domain` —— 删除域。
-pub async fn dam_delete_domain(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Path(domain): Path<String>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(
-        cmx_portal::dam::store::delete_domain(&domain).await?,
-    )))
-}
-
-/// `GET /api/dam-registry/applications?domain=` —— 应用列表。
-pub async fn dam_list_applications(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<DamQuery>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let apps = cmx_portal::dam::store::list_applications(q.domain.as_deref()).await?;
-    Ok(Json(ApiResp::ok(
-        serde_json::json!({ "applications": apps }),
-    )))
-}
-
-/// `POST /api/dam-registry/applications` —— upsert 应用。
-pub async fn dam_upsert_application(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let saved = cmx_portal::dam::store::upsert_application(&body).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "saved": saved }))))
-}
-
-/// `DELETE /api/dam-registry/applications/:domain/:application` —— 删除应用。
-pub async fn dam_delete_application(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Path(p): Path<AppDelPath>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(
-        cmx_portal::dam::store::delete_application(&p.domain, &p.application).await?,
-    )))
-}
-
-/// `GET /api/dam-registry/modules?domain=&app=` —— 模块列表。
-pub async fn dam_list_modules(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Query(q): Query<DamQuery>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let mods = cmx_portal::dam::store::list_modules(q.domain.as_deref(), q.app.as_deref()).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "modules": mods }))))
-}
-
-/// `POST /api/dam-registry/modules` —— upsert 模块。
-pub async fn dam_upsert_module(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let saved = cmx_portal::dam::store::upsert_module(&body).await?;
-    Ok(Json(ApiResp::ok(serde_json::json!({ "saved": saved }))))
-}
-
-/// `DELETE /api/dam-registry/modules/:domain/:application/:module` —— 删除模块。
-pub async fn dam_delete_module(
-    State(_s): State<CmxAppState>,
-    CmxSvrContext(_c): CmxSvrContext,
-    Path(p): Path<ModulePath>,
-) -> Result<Json<ApiResp<serde_json::Value>>> {
-    Ok(Json(ApiResp::ok(
-        cmx_portal::dam::store::delete_module(&p.domain, &p.application, &p.module).await?,
-    )))
-}
-
 // ───────────────────────── 注册表只读派生（/registry/*）─────────────────────────
 
-/// `GET /api/registry/domains` —— 域列表（DAM 派生）。
+/// `GET /api/registry/domains?active_only=` —— 域列表（DAM 派生）。
+///
+/// `active_only=true` 只返回 status=1（启用）的域。
 pub async fn registry_domains(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let domains = cmx_portal::dam::store::list_domains().await?;
+    let domains = cmx_portal::dam::store::list_domains(q.active_only.unwrap_or(false)).await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "domains": domains }))))
 }
 
-/// `GET /api/registry/apps?domain=` —— 应用列表（DAM 派生）。
+/// `GET /api/registry/apps?domain=&active_only=` —— 应用列表（DAM 派生）。
+///
+/// `active_only=true` 只返回 status=1（启用）的应用。
 pub async fn registry_apps(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let apps = cmx_portal::dam::store::list_applications(q.domain.as_deref()).await?;
+    let apps = cmx_portal::dam::store::list_applications(q.domain.as_deref(), q.active_only.unwrap_or(false)).await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "apps": apps }))))
 }
 
-/// `GET /api/registry/modules?domain=&app=` —— 模块列表（DAM 派生）。
+/// `GET /api/registry/modules?domain=&app=&active_only=` —— 模块列表（DAM 派生）。
+///
+/// `active_only=true` 只返回 status=1（启用）的模块。
 pub async fn registry_modules(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
     Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let mods = cmx_portal::dam::store::list_modules(q.domain.as_deref(), q.app.as_deref()).await?;
+    let mods = cmx_portal::dam::store::list_modules(q.domain.as_deref(), q.app.as_deref(), q.active_only.unwrap_or(false)).await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "modules": mods }))))
 }
 
-/// `GET /api/registry/dam` —— 一次返回 { domains, apps, applications, modules }。
+/// `GET /api/registry/dam?active_only=` —— 一次返回 { domains, apps, applications, modules }。
+///
+/// `active_only=true` 只返回 status=1（启用）的记录。
+/// DAM 维护页（registry-center.js）不传此参数以查看含禁用的全量数据；
+/// 其他消费方（活动栏/菜单/帮助中心/定义管理器/弹性组合管理器等）应传 true。
 pub async fn registry_dam(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
+    Query(q): Query<DamQuery>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
-    let reg = cmx_portal::dam::store::get_dam_registry().await?;
+    let reg = cmx_portal::dam::store::get_dam_registry(q.active_only.unwrap_or(false)).await?;
     Ok(Json(ApiResp::ok(serde_json::json!({
         "domains": reg.domains,
         "apps": reg.applications,

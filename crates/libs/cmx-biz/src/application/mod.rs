@@ -7,3 +7,4 @@ pub mod service;
 pub use bmc::ApplicationBmc;
 pub use entity::{Application, ApplicationForCreate, ApplicationForUpdate};
 pub use filter::ApplicationFilter;
+pub use service::ApplicationService;

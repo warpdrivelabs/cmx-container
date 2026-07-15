@@ -85,33 +85,7 @@ impl ModuleRoutes for PortalModule {
             .route("/notifications/publish", post(handler::notify_publish))
             .route("/notifications/mark-read", post(handler::notify_mark_read))
             .route("/notifications/stream", get(handler::notify_stream))
-            // DAM 注册表（读写 CRUD）
-            .route("/dam-registry", get(handler::dam_registry))
-            .route(
-                "/dam-registry/domains",
-                get(handler::dam_list_domains).post(handler::dam_upsert_domain),
-            )
-            .route(
-                "/dam-registry/domains/{domain}",
-                axum::routing::delete(handler::dam_delete_domain),
-            )
-            .route(
-                "/dam-registry/applications",
-                get(handler::dam_list_applications).post(handler::dam_upsert_application),
-            )
-            .route(
-                "/dam-registry/applications/{domain}/{application}",
-                axum::routing::delete(handler::dam_delete_application),
-            )
-            .route(
-                "/dam-registry/modules",
-                get(handler::dam_list_modules).post(handler::dam_upsert_module),
-            )
-            .route(
-                "/dam-registry/modules/{domain}/{application}/{module}",
-                axum::routing::delete(handler::dam_delete_module),
-            )
-            // 注册表只读派生
+            // 注册表只读派生（查 DB，保持返回形状兼容前端）
             .route("/registry/domains", get(handler::registry_domains))
             .route("/registry/apps", get(handler::registry_apps))
             .route("/registry/modules", get(handler::registry_modules))

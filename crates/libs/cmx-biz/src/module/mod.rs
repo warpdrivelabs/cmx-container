@@ -8,3 +8,4 @@ pub mod version;
 pub use bmc::ModuleBmc;
 pub use entity::{Module, ModuleForCreate, ModuleForUpdate};
 pub use filter::ModuleFilter;
+pub use service::ModuleService;

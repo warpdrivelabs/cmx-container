@@ -330,7 +330,7 @@ async fn get_dam_menu_page_json(menu_name: &str) -> PortalResult<Option<Value>> 
     }
     if module.is_empty() {
         // 应用级：列出该 app 下所有模块各成一组
-        let modules = list_modules(Some(&domain), Some(&application)).await?;
+        let modules = list_modules(Some(&domain), Some(&application), true).await?;
         let mut groups = Vec::new();
         for (i, m) in modules.iter().enumerate() {
             groups
@@ -341,7 +341,7 @@ async fn get_dam_menu_page_json(menu_name: &str) -> PortalResult<Option<Value>> 
         })));
     }
     // 模块级：单组
-    let modules = list_modules(Some(&domain), Some(&application)).await?;
+    let modules = list_modules(Some(&domain), Some(&application), true).await?;
     let reg_mod = modules.iter().find(|m| m.id == module);
     let group = build_dam_module_group(&domain, &application, &module, reg_mod, 0).await?;
     Ok(Some(json!({

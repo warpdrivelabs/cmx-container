@@ -1,12 +1,15 @@
 //! Application 实体的自定义 Handler
 //!
-//! 提供应用实体的自定义分页查询功能
+//! 写操作（create/update/delete）手写委托 ApplicationService 以触发 DAM 资产文件副作用
+//! （应用改名时级联搬移目录 + 重写 module 列；删除时引用完整性校验）。
+//! 另提供自定义分页查询（联表带 domain_name）。
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use cmx_core::PageParams;
 use cmx_core::model::data::dataset::DataSet;
+use cmx_core::{DeletePayload, UpdatePayload};
 use cmx_database::crud::CustomQueryService;
 use cmx_database::get_default_db_manager;
 use tracing::debug;
@@ -16,7 +19,7 @@ use crate::Result;
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
-use cmx_biz::application::ApplicationFilter;
+use cmx_biz::application::{ApplicationFilter, ApplicationForCreate, ApplicationForUpdate, ApplicationService};
 
 /// Application 自定义分页查询 Handler
 ///
@@ -84,4 +87,88 @@ pub async fn application_custom_page(
         page_size,
         total as u64,
     )))
+}
+
+/// 创建应用 Handler
+///
+/// 委托 ApplicationService::create。写库后确保应用级资源目录存在。
+#[utoipa::path(
+    post,
+    path = "/api/applications/create",
+    request_body = ApplicationForCreate,
+    responses(
+        (status = 200, description = "创建成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Application"
+)]
+pub async fn create_application(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(data): Json<ApplicationForCreate>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::create_application", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ApplicationService::create(mm, &db_id, data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 更新应用 Handler
+///
+/// 委托 ApplicationService::update。若 code 变更，触发 DAM 资产目录搬移 + module 列重写。
+#[utoipa::path(
+    post,
+    path = "/api/applications/update",
+    request_body = UpdatePayload<ApplicationForUpdate>,
+    responses(
+        (status = 200, description = "更新成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Application"
+)]
+pub async fn update_application(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<UpdatePayload<ApplicationForUpdate>>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::update_application", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ApplicationService::update(mm, &db_id, payload.id, payload.data).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
+}
+
+/// 删除应用 Handler
+///
+/// 委托 ApplicationService::delete。删前校验应用下无 module。
+#[utoipa::path(
+    post,
+    path = "/api/applications/delete",
+    request_body = DeletePayload,
+    responses(
+        (status = 200, description = "删除成功", body = ApiResp<serde_json::Value>)
+    ),
+    tag = "Application"
+)]
+pub async fn delete_application(
+    State(_cmx_state): State<CmxAppState>,
+    CmxSvrContext(_svr_ctx): CmxSvrContext,
+    headers: HeaderMap,
+    Json(payload): Json<DeletePayload>,
+) -> Result<Json<ApiResp<DataSet>>> {
+    debug!("{:<12} - handler::delete_application", "HANDLER");
+
+    let mm = get_default_db_manager();
+    let db_id = get_db_id_from_header(&headers).await;
+
+    let dataset = ApplicationService::delete(mm, &db_id, payload.ids).await?;
+
+    Ok(Json(ApiResp::ok(dataset)))
 }

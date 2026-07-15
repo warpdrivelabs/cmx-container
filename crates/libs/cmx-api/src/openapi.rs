@@ -13,33 +13,20 @@ use utoipa::OpenApi;
         description = "CMX 系统 API 文档",
     ),
     paths(
-        // Domain CRUD handlers
-        crate::routes::crud_handlers::domain_crud::create,
-        crate::routes::crud_handlers::domain_crud::create_many,
-        crate::routes::crud_handlers::domain_crud::get,
-        crate::routes::crud_handlers::domain_crud::update,
-        crate::routes::crud_handlers::domain_crud::update_many,
-        crate::routes::crud_handlers::domain_crud::delete,
-        crate::routes::crud_handlers::domain_crud::list,
-        crate::routes::crud_handlers::domain_crud::page,
-        // Application CRUD handlers
-        crate::routes::crud_handlers::application_crud::create,
-        crate::routes::crud_handlers::application_crud::create_many,
-        crate::routes::crud_handlers::application_crud::get,
-        crate::routes::crud_handlers::application_crud::update,
-        crate::routes::crud_handlers::application_crud::update_many,
-        crate::routes::crud_handlers::application_crud::delete,
-        crate::routes::crud_handlers::application_crud::list,
-        crate::routes::crud_handlers::application_crud::page,
-        // Module CRUD handlers
-        crate::routes::crud_handlers::module_crud::create,
-        crate::routes::crud_handlers::module_crud::create_many,
-        crate::routes::crud_handlers::module_crud::get,
-        crate::routes::crud_handlers::module_crud::update,
-        crate::routes::crud_handlers::module_crud::update_many,
-        crate::routes::crud_handlers::module_crud::delete,
-        crate::routes::crud_handlers::module_crud::list,
-        crate::routes::crud_handlers::module_crud::page,
+        // Domain handlers（写操作手写委托 DomainService 带 DAM 资产钩子；读操作复用 rest::handler 泛型）
+        crate::handlers::domain::handler::create_domain,
+        crate::handlers::domain::handler::update_domain,
+        crate::handlers::domain::handler::delete_domain,
+        crate::handlers::domain::handler::get_tree,
+        // Application handlers（写操作手写委托 ApplicationService 带 DAM 资产钩子；读操作复用 rest::handler 泛型）
+        crate::handlers::application::handler::create_application,
+        crate::handlers::application::handler::update_application,
+        crate::handlers::application::handler::delete_application,
+        crate::handlers::application::handler::application_custom_page,
+        // Module handlers（写操作手写委托 ModuleService 带 DAM 资产钩子；读操作复用 rest::handler 泛型）
+        crate::handlers::module::handler::create_module,
+        crate::handlers::module::handler::update_module,
+        crate::handlers::module::handler::delete_module,
         crate::handlers::module::handler::module_custom_page,
         // Module package 导入/导出
         crate::handlers::module::package_handler::module_package_import,
@@ -66,9 +53,6 @@ use utoipa::OpenApi;
         crate::handlers::menu::handler::page_menus,
         crate::handlers::menu::handler::get_menu_tree,
 
-        // Domain handlers
-        crate::handlers::domain::handler::get_tree,
-        crate::handlers::application::handler::application_custom_page,
         // crate::handlers::domain::handler::get_by_name,
 
 
