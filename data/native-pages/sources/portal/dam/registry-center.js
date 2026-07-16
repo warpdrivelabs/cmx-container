@@ -178,12 +178,14 @@ function reconcileSelection () {
       return
     }
   }
-  const firstModule = all.modules[0]
-  const firstApp = all.applications[0]
+  // 回退：优先选第一个 domain（左侧列表第一项成为初始焦点，符合直觉），
+  // 再回退到 application、module。
   const firstDomain = all.domains[0]
-  if (firstModule) selectItem('module', keyOf('module', firstModule), false)
+  const firstApp = all.applications[0]
+  const firstModule = all.modules[0]
+  if (firstDomain) selectItem('domain', keyOf('domain', firstDomain), false)
   else if (firstApp) selectItem('application', keyOf('application', firstApp), false)
-  else if (firstDomain) selectItem('domain', keyOf('domain', firstDomain), false)
+  else if (firstModule) selectItem('module', keyOf('module', firstModule), false)
   else {
     state.selectedKey = ''
     state.draft = null
@@ -480,15 +482,21 @@ async function loadResources (root, force = false) {
   }
   state.resources = { moduleKey, loading: true, html: '<div class="dam-empty"><ui5-icon name="synchronize"></ui5-icon><span>加载资源清单...</span></div>' }
   renderResourcesInto(root)
-  const types = ['menus', 'htmlPages', 'metaDefinitions', 'flexibleCombinations', 'dictEntries', 'dictSeeds', 'facts', 'serviceCatalog']
+  const types = [
+    { key: 'menus', label: '菜单' },
+    { key: 'htmlPages', label: 'HTML 页面' },
+    { key: 'metaDefinitions', label: '元数据定义' },
+    { key: 'flexibleCombinations', label: '弹性组合' },
+    { key: 'serviceCatalog', label: '服务目录' },
+  ]
   const rows = []
-  for (const type of types) {
+  for (const t of types) {
     try {
-      const data = await apiJson(`/api/modules/${encodeURIComponent(item.domain)}/${encodeURIComponent(item.application || item.app)}/${encodeURIComponent(item.id || item.module)}/resources/${encodeURIComponent(type)}`)
+      const data = await apiJson(`/api/modules/${encodeURIComponent(item.domain)}/${encodeURIComponent(item.application || item.app)}/${encodeURIComponent(item.id || item.module)}/resources/${encodeURIComponent(t.key)}`)
       const resources = data.resources || []
-      rows.push(...resources.map((r) => ({ type, ...r })))
+      rows.push(...resources.map((r) => ({ type: t.label, ...r })))
     } catch (err) {
-      rows.push({ type, path: err.message || String(err), exists: false, kind: 'error' })
+      rows.push({ type: t.label, path: err.message || String(err), exists: false, kind: 'error' })
     }
   }
   state.resources = { moduleKey, loading: false, html: `<div class="dam-res-table-wrap"><table class="dam-table dam-neo-table">

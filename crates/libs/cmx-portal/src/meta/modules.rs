@@ -274,6 +274,15 @@ pub async fn load_module_manifest(
 /// # Errors
 ///
 /// `res_type` 非法返回 `bad_request`；加载 manifest 失败返回底层错误。
+///
+/// # 弃用资源类型
+///
+/// 以下资源类型对应的目录已废弃（文档《data 目录结构》+ AGENTS 第十八章），
+/// 前端 DAM 资源态势已移除展示，保留此处仅为存量 module.json 兼容：
+/// - `dictEntries` / `dictSeeds` / `dictRegistry` → `dict/`（已被 `/api/dict/*` 替代）
+/// - `facts` → `fact/`（已被数据库凭证接口替代）
+///
+/// 新功能不应再向 manifest 声明这些资源类型。
 pub async fn resolve_module_resource(
     domain: &str,
     application: &str,

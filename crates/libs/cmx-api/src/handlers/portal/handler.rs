@@ -763,6 +763,9 @@ pub async fn get_module_manifest(
 }
 
 /// `GET /api/modules/:domain/:application/:module/resources/:type` —— 解析模块资源。
+///
+/// 注意：`dictEntries` / `dictSeeds` / `dictRegistry` / `facts` 等废弃资源类型仍可被请求
+///（向后兼容存量 module.json），但前端 DAM 资源态势已不再请求这些类型。
 pub async fn get_module_resource(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
@@ -779,6 +782,9 @@ pub async fn get_module_resource(
 }
 
 /// `GET /api/module-resources?domain=&app=&module=&type=` —— 按 query 解析资源。
+///
+/// 注意：`dictEntries` / `dictSeeds` / `dictRegistry` / `facts` 等废弃资源类型仍可被请求
+///（向后兼容存量 module.json），但前端 DAM 资源态势已不再请求这些类型。
 pub async fn module_resources(
     State(_s): State<CmxAppState>,
     CmxSvrContext(_c): CmxSvrContext,
