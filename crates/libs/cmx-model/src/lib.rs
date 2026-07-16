@@ -9,6 +9,8 @@
 //! 基础设施（config/error/fsutil/util）从 [`cmx_portal_base`] 再导出，使被移动代码里既有的
 //! `crate::config` / `crate::error` / `crate::fsutil` / `crate::util` 路径无需改动即可解析。
 
+// 32 行的递归 derive 嵌套较深（HashMap/BTreeSet/serde_json::Value 多层泛型 + #[serde(flatten)]）,
+// 默认 128 上限在编译期会触发 `recursion limit reached` 错误,故放宽到 256。
 #![recursion_limit = "256"]
 
 // 基础设施再导出：保持被移动代码里的 crate::{config,error,fsutil,util} 路径有效。

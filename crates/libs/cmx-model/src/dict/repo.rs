@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 
 use crate::config::data_path;
 use crate::dict::schema::{DictSchema, get_schema, try_get_schema};
+use crate::dict::util::field_str;
 use crate::error::PortalResult;
 use crate::fsutil::{read_json_opt, write_json_atomic};
 use crate::util::write_lock;
@@ -113,17 +114,13 @@ fn current_date_str() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-/// 字段取字符串（数字也转字符串，缺失为空）。
-fn field_str(row: &Value, field: &str) -> String {
-    match row.get(field) {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Bool(b)) => b.to_string(),
-        _ => String::new(),
-    }
-}
-
 // ── 模糊匹配工具（复刻 Node）──────────────────────────────────────────────
+
+/// Levenshtein 计算的文本前缀截断长度。
+///
+/// 模糊匹配仅服务于短查询（2-8 字符，见 `search`），过长的 text 不可能命中且有性能风险,
+/// 故只取前 300 字符参与计算（与 Node `JsonFileRepo.search` 对齐）。
+const MAX_LEVENSHTEIN_TEXT_LEN: usize = 300;
 
 /// 简易 Levenshtein（含早停：>2 即返回 3）。
 fn levenshtein(text: &str, pattern: &str) -> usize {
@@ -136,7 +133,7 @@ fn levenshtein(text: &str, pattern: &str) -> usize {
         return pchars.len();
     }
     let mut prev: Vec<usize> = (0..=pchars.len()).collect();
-    for (i, tc) in tchars.iter().take(300).enumerate() {
+    for (i, tc) in tchars.iter().take(MAX_LEVENSHTEIN_TEXT_LEN).enumerate() {
         let mut curr = vec![i + 1];
         for (j, pc) in pchars.iter().enumerate() {
             let v = if tc == pc {
@@ -146,7 +143,8 @@ fn levenshtein(text: &str, pattern: &str) -> usize {
             };
             curr.push(v);
         }
-        if *curr.iter().min().unwrap() > 2 {
+        // curr 至少含初始的 i+1(见循环上方 curr.push),必非空。
+        if *curr.iter().min().expect("invariant: curr 非空(已 push i+1)") > 2 {
             return 3;
         }
         prev = curr;

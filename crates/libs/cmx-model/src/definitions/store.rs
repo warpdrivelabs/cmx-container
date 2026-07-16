@@ -376,7 +376,9 @@ fn summarize(
         "version": version, "versionName": version_name,
         "isDefault": is_default, "updatedAt": updated_at, "stem": stem,
     });
-    let obj = base.as_object_mut().unwrap();
+    let obj = base
+        .as_object_mut()
+        .expect("invariant: base 由 json!({{...}}) 构造,必为对象");
     // 按 kind 补充各自特有的摘要字段（title/moduleCode/remark + 数量统计）
     match kind.as_str() {
         // DCT 数据字典：表数取自 dictionaryTables

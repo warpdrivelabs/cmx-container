@@ -128,7 +128,9 @@ where
     let mut base = col.clone();
     // DOC 非空列 ⇒ 默认必填（over 之前，作者仍可用 over.edit.required:false 放松）
     if col.get("nullable") == Some(&Value::Bool(false)) {
-        let obj = base.as_object_mut().unwrap();
+        let obj = base
+            .as_object_mut()
+            .expect("invariant: col 能经 field_id 取到 id,必为对象");
         let mut edit = obj
             .get("edit")
             .and_then(|e| e.as_object())
@@ -144,7 +146,9 @@ where
         None => base,
     };
 
-    let obj = merged.as_object_mut().unwrap();
+    let obj = merged
+        .as_object_mut()
+        .expect("invariant: merged 基底为 DOC 列对象(必为对象),deep_merge 双对象保持对象");
     match as_name {
         // as 重命名：id 与 name 都改为新名
         Some(name) => {

@@ -5,19 +5,11 @@ use serde_json::{Value, json};
 
 use crate::dict::repo;
 use crate::dict::schema::{DictSchema, get_schema};
+use crate::dict::util::field_str;
 use crate::error::{PortalError, PortalResult};
 
 fn today_str() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
-}
-
-fn field_str(row: &Value, field: &str) -> String {
-    match row.get(field) {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Bool(b)) => b.to_string(),
-        _ => String::new(),
-    }
 }
 
 /// 拼接 fullText（fullTextFields 或 [idField, labelField]）。
@@ -126,7 +118,13 @@ fn merge_by_id(existing: Vec<Value>, incoming: Vec<Value>, id_field: &str) -> Ve
         }
         map.insert(k, r);
     }
-    order.into_iter().map(|k| map.remove(&k).unwrap()).collect()
+    order
+        .into_iter()
+        .map(|k| {
+            map.remove(&k)
+                .expect("invariant: order 的 key 全部来自上方 map.insert,remove 必命中")
+        })
+        .collect()
 }
 
 /// 拓扑计算 level/path/pathStr/sortKey + fullText（全量）。
@@ -191,7 +189,9 @@ fn build_tree_fields(
     order
         .into_iter()
         .map(|id| {
-            let mut node = map.remove(&id).unwrap();
+            let mut node = map
+                .remove(&id)
+                .expect("invariant: order 的 id 全部来自上方 map.insert,remove 必命中");
             let (level, path) = computed.get(&id).cloned().unwrap_or((1, vec![id.clone()]));
             if let Some(obj) = node.as_object_mut() {
                 obj.insert("level".to_string(), json!(level));

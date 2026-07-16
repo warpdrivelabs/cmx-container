@@ -14,4 +14,5 @@ pub mod multi;
 pub mod repo;
 pub mod schema;
 pub mod tree;
+pub mod util;
 pub mod write;

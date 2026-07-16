@@ -89,31 +89,45 @@ async fn expand_combination_overlay(cfg: &Value) -> Value {
     Value::Object(out)
 }
 
-/// 由查询参数 + combination.anchorDimensions 构造 anchor（排除 DAM 键）。
+/// 选定参与锚点的维度键集合。
 ///
-/// anchorDimensions 非空时按其声明的维度键从 raw 取值；否则取 raw 的全部键（排除 DAM 键）。
-fn resolve_anchor(raw: &Map<String, Value>, combination: &Value) -> Map<String, Value> {
-    // 确定参与锚点的维度键集合
-    let dims: Vec<String> = match combination.get("anchorDimensions").and_then(|v| v.as_array()) {
+/// `combination.anchorDimensions` 为非空数组时取其元素；否则用 `fallback`
+/// （调用方决定回退源——`/resolve`、`/rule` 回退到 query 键，`/preview` 回退到 raw 键并排除 DAM 键）。
+fn anchor_dims_from_cfg(combination: &Value, fallback: Vec<String>) -> Vec<String> {
+    match combination.get("anchorDimensions").and_then(|v| v.as_array()) {
         Some(a) if !a.is_empty() => a
             .iter()
             .filter_map(|x| x.as_str().map(|s| s.to_string()))
             .collect(),
-        // 兜底：raw 全部键，排除 DAM 键
-        _ => raw
-            .keys()
-            .filter(|k| !["domain", "app", "module", "scenario"].contains(&k.as_str()))
-            .cloned()
-            .collect(),
-    };
+        _ => fallback,
+    }
+}
+
+/// 按 `dims` 从 `source` 收集锚点（仅非 null 值，归一为字符串）。
+fn collect_anchor(source: &Map<String, Value>, dims: &[String]) -> Map<String, Value> {
     let mut anchor = Map::new();
-    // 仅收集非 null 值，并归一为字符串
     for d in dims {
-        if let Some(v) = raw.get(&d).filter(|v| !v.is_null()) {
-            anchor.insert(d, json!(value_to_string(v)));
+        if let Some(v) = source.get(d).filter(|v| !v.is_null()) {
+            anchor.insert(d.clone(), json!(value_to_string(v)));
         }
     }
     anchor
+}
+
+/// DAM 保留键（锚点维度不应取这些）。
+const DAM_KEYS: [&str; 4] = ["domain", "app", "module", "scenario"];
+
+/// 由查询参数 + combination.anchorDimensions 构造 anchor（排除 DAM 键）。
+///
+/// preview 专用：anchorDimensions 非空时按其声明的维度键从 raw 取值；否则取 raw 的全部键（排除 DAM 键）。
+fn resolve_anchor(raw: &Map<String, Value>, combination: &Value) -> Map<String, Value> {
+    let fallback = raw
+        .keys()
+        .filter(|k| !DAM_KEYS.contains(&k.as_str()))
+        .cloned()
+        .collect();
+    let dims = anchor_dims_from_cfg(combination, fallback);
+    collect_anchor(raw, &dims)
 }
 
 /// 将 JSON 标量值归一为字符串（字符串/数字/布尔原样转，其余返回空串）。
@@ -153,20 +167,9 @@ pub async fn resolve(r: &FcRef, query: &Map<String, Value>) -> PortalResult<Valu
     );
 
     // anchorDims：cfg.anchorDimensions 非空则用之，否则用 query 键
-    let anchor_dims: Vec<String> = match cfg.get("anchorDimensions").and_then(|v| v.as_array()) {
-        Some(a) if !a.is_empty() => a
-            .iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-            .collect(),
-        _ => query.keys().cloned().collect(),
-    };
+    let anchor_dims = anchor_dims_from_cfg(&cfg, query.keys().cloned().collect());
     // 收集锚点（非 null 值，归一为字符串）
-    let mut anchor = Map::new();
-    for d in &anchor_dims {
-        if let Some(v) = query.get(d).filter(|v| !v.is_null()) {
-            anchor.insert(d.clone(), json!(value_to_string(v)));
-        }
-    }
+    let anchor = collect_anchor(query, &anchor_dims);
     // 锚点评分合并 → 命中规则
     let rule = engine.resolve_merged_rule(&anchor);
     let Some(rule) = rule else {
@@ -212,19 +215,8 @@ pub async fn rule(r: &FcRef, query: &Map<String, Value>) -> PortalResult<Value> 
     );
 
     // 构造锚点（同 resolve）
-    let anchor_dims: Vec<String> = match cfg.get("anchorDimensions").and_then(|v| v.as_array()) {
-        Some(a) if !a.is_empty() => a
-            .iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-            .collect(),
-        _ => query.keys().cloned().collect(),
-    };
-    let mut anchor = Map::new();
-    for d in &anchor_dims {
-        if let Some(v) = query.get(d).filter(|v| !v.is_null()) {
-            anchor.insert(d.clone(), json!(value_to_string(v)));
-        }
-    }
+    let anchor_dims = anchor_dims_from_cfg(&cfg, query.keys().cloned().collect());
+    let anchor = collect_anchor(query, &anchor_dims);
     let rule = engine.resolve_merged_rule(&anchor);
     let Some(rule) = rule else {
         return Ok(json!({ "ruleId": null, "anchor": anchor, "rule": null, "dimensions": {} }));

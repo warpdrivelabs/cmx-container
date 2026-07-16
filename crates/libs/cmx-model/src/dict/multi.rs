@@ -8,18 +8,10 @@ use serde_json::{Value, json};
 use crate::dict::repo::{self, SearchQuery};
 use crate::dict::schema::get_schema;
 use crate::dict::tree;
+use crate::dict::util::field_str;
 use crate::error::{PortalError, PortalResult};
 
 const MAX_JOIN_BATCH: usize = 200;
-
-fn field_str(row: &Value, field: &str) -> String {
-    match row.get(field) {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Bool(b)) => b.to_string(),
-        _ => String::new(),
-    }
-}
 
 /// 入口：`{ q?, propagateQ?, query: <rootNode> }` → `{ <rootDictId>: <result> }`。
 pub async fn execute(body: &Value) -> PortalResult<Value> {
