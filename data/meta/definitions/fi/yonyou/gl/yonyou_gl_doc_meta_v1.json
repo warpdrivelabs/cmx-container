@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "GL",
-    "moduleName": "总账(用友 ERP)",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "GL",
     "metaName": "用友 ERP GL 会计凭证单据元数据",
+    "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "用友 ERP(NC/U8) 会计凭证三层单据结构:L1 凭证头 → L2 分录(借贷分录) → L3 分录辅助核算明细。字段含 physicalField(用友真实字段名 pk_accasoa/debitamount/creditamount…)便于集成。用友精髓:辅助核算为分录 1:N 子表(NC gl_freevalue/U8 辅助核算),一条分录按科目所挂辅助项动态挂任意多个 {辅助类型,取值},非固定列;借贷由借列/贷列定方向(direction 派生);凭证头借贷合计为派生缓存。含制单-审核-记账-冲销状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",

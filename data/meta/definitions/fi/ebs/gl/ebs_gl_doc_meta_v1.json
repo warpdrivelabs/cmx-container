@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "GL",
-    "moduleName": "总账(Oracle EBS)",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "GL",
     "metaName": "Oracle EBS GL 会计凭证单据元数据",
+    "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "Oracle EBS GL 会计凭证三层单据结构:L1 凭证批 GL_JE_BATCHES → L2 凭证头 GL_JE_HEADERS → L3 凭证行 GL_JE_LINES(batch→header→line 一对多)。字段含 physicalField(EBS 真实列名 LEDGER_ID/CODE_COMBINATION_ID/ACCOUNTED_DR…)便于集成。核心维度为代码组合 CCID(弹性域各段在 GL_CODE_COMBINATIONS,非凭证行物理列,段数由 Accounting Flexfield 配置)。凭证多来自 Journal Import / 子分类账 Subledger Accounting(SLA:XLA_AE_HEADERS/LINES、GL_IMPORT_REFERENCES),行上 GL_SL_LINK_ID/TABLE 为关联键。批/头借贷合计(running_total)为 Oracle 系统维护字段。STATUS 为单字符码(U/P/I/E/S),批动作历史记于 GL_JE_ACTION_LOG。含审批-过账(处理中/错误)-冲销状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",

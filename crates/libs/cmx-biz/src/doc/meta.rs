@@ -126,7 +126,7 @@ pub struct RelationView {
 /// 单据定义的强类型投影。
 #[derive(Debug, Clone)]
 pub struct DocMetaView {
-    pub module_code: String,
+    pub meta_code: String,
     pub version: u64,
     /// 层序（自顶向下，L1..Ln）：schema id 列表。**主链路**——每 level-group 取首表，
     /// 装载器（DocLoader/ZmcDocLoader）据此下钻。同层多表见 `layer_groups`。
@@ -141,7 +141,7 @@ pub struct DocMetaView {
     pub validation_rules: Vec<serde_json::Value>,
     /// 状态机（原始透传，§14.1）：{ stateField, states:[{code,editable}], transitions:[...] }
     pub status_flow: Option<serde_json::Value>,
-    /// 版本化开关（原始透传，§6A）：moduleMeta.versioning
+    /// 版本化开关（原始透传，§6A）：docMeta.versioning
     pub versioning: Option<serde_json::Value>,
 }
 
@@ -180,16 +180,16 @@ impl DocMetaView {
     }
     /// 从 DOC 定义 doc + 其 base 字段集 base 解析。
     ///
-    /// - `doc`：单据定义 JSON（含 moduleMeta / voucherSchema / voucherTables）
+    /// - `doc`：单据定义 JSON（含 docMeta / voucherSchema / voucherTables）
     /// - `base`：base 字段集 JSON（含 `fieldSets`），供 documentFieldSets 展开；无则传 `Value::Null`
     pub fn parse(doc: &Value, base: &Value) -> Result<Self> {
-        let module_meta = doc.get("moduleMeta");
-        let module_code = module_meta
-            .and_then(|m| m.get("moduleCode"))
+        let doc_meta = doc.get("docMeta");
+        let meta_code = doc_meta
+            .and_then(|m| m.get("metaCode"))
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let version = module_meta
+        let version = doc_meta
             .and_then(|m| m.get("version"))
             .and_then(|v| v.as_u64())
             .unwrap_or(1);
@@ -220,7 +220,7 @@ impl DocMetaView {
         }
 
         Ok(DocMetaView {
-            module_code,
+            meta_code,
             version,
             layer_order,
             layers,
@@ -232,7 +232,7 @@ impl DocMetaView {
                 .cloned()
                 .unwrap_or_default(),
             status_flow: doc.get("voucherStatusFlow").cloned(),
-            versioning: module_meta.and_then(|m| m.get("versioning")).cloned(),
+            versioning: doc_meta.and_then(|m| m.get("versioning")).cloned(),
         })
     }
 
@@ -706,7 +706,7 @@ mod tests {
 
     fn sample_doc() -> Value {
         json!({
-            "moduleMeta": { "moduleCode": "GL", "metaKind": "DOC", "version": 1 },
+            "docMeta": { "metaCode": "GL", "metaKind": "DOC", "version": 1 },
             "voucherSchema": {
                 "schema": [
                     [ { "id": "cv_batch",  "level": "L1", "levelName": "凭证批" } ],
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn parses_layer_order_and_relations() {
         let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
-        assert_eq!(v.module_code, "GL");
+        assert_eq!(v.meta_code, "GL");
         assert_eq!(v.layer_order, vec!["cv_batch", "cv_header", "cv_line"]);
         assert_eq!(v.relations.len(), 2);
         assert_eq!(v.relations[0].child_key, "upper_id");
@@ -907,7 +907,7 @@ mod tests {
     #[test]
     fn state_machine_and_versioning_helpers() {
         let mut doc = sample_doc();
-        doc["moduleMeta"]["versioning"] = json!({ "enabled": true });
+        doc["docMeta"]["versioning"] = json!({ "enabled": true });
         doc["voucherStatusFlow"] = json!({
             "stateField": "doc_status",
             "states": [

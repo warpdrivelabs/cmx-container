@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "FICO",
-    "moduleName": "cmx-fico 总账",
-    "metaKind": "DCT",
+  "dctMeta": {
+    "metaCode": "FICO",
     "metaName": "cmx-fico 会计凭证数据字典元数据",
+    "metaKind": "DCT",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "cmx-fico 自研总账模块,数据字典完整参考 SAP 会计凭证字典(32个):客户端/组织架构/科目体系/凭证控制/币种期间/税/往来/CO对象。通用列引用 base_dct_meta_v1.json。"

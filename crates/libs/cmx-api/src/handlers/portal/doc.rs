@@ -486,7 +486,7 @@ fn project_doc_meta(meta: &DocMetaView) -> Value {
         .collect();
 
     serde_json::json!({
-        "moduleCode": meta.module_code,
+        "metaCode": meta.meta_code,
         "version": meta.version,
         "layerOrder": meta.layer_order,
         "layers": layers,

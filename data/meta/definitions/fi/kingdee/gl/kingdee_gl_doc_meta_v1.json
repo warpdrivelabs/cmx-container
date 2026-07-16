@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "GL",
-    "moduleName": "总账(金蝶 ERP)",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "GL",
     "metaName": "金蝶 ERP GL 会计凭证单据元数据",
+    "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "金蝶 ERP(K/3,云星空 EAS) 会计凭证三层单据结构:L1 凭证头 → L2 分录 → L3 分录核算项目明细。字段含 physicalField(金蝶 K/3 真实字段名 FAccountID/FDebit/FCredit/FDC…)便于集成。金蝶精髓:核算项目为分录 1:N 子表(K/3 t_VoucherGroup,云星空可配置弹性域),一条分录按科目所挂核算维度动态挂任意多个 {核算维度,取值},非固定列;凭证头借贷合计为派生缓存。含暂存-审核-过账-冲销状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",

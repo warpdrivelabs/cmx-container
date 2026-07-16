@@ -47,7 +47,7 @@ fn build_meta(enable_versioning: bool) -> DocMetaView {
     let mut doc = read_json("data/meta/definitions/fi/cmxfico/gl/cmxfico_doc_meta_v2.json");
     let base = read_json("data/meta/definitions/base/base_doc_meta_v1.json");
     // 按需覆盖 versioning flag（未开分支：显式关掉，验证「仅开启时记」）
-    doc["moduleMeta"]["versioning"] = json!({ "enabled": enable_versioning });
+    doc["docMeta"]["versioning"] = json!({ "enabled": enable_versioning });
     DocMetaView::parse(&doc, &base).expect("解析 cmxfico 定义失败")
 }
 

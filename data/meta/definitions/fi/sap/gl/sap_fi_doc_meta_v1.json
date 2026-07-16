@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "FI",
-    "moduleName": "财务会计(SAP)",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "FI",
     "metaName": "SAP FI 会计凭证单据元数据",
+    "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "SAP ERP(ECC/S4) FI 会计凭证单据结构：L1 凭证头 BKPF → L2 行项目 BSEG。真实凭证主键为 BUKRS(公司代码)+BELNR(凭证号)+GJAHR(会计年度) 三段复合键，BELNR 由凭证类型的 FI number range 生成。S/4HANA 行项目对应 Universal Journal 通用日记账 ACDOCA(更宽、含并行分类账/多币种，非同一物理表)，本模型以经典 BSEG 建模并把分类账 RLDNR 下沉到行层。字段含 physicalField(SAP 真实技术字段名 BUKRS/HKONT/DMBTR…)便于集成对接；按 dimType 区分维度/属性/度量；借贷由金额+借贷标志 SHKZG 表达(不另存借贷分栏)；凭证头借贷合计为派生缓存(真实 BKPF 无此列)。含 held/parked/posted/reversed 状态机与借贷平衡校验。通用单据列引用 base_doc_meta_v1.json。",

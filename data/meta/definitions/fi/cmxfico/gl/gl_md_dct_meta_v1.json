@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "GL",
-    "moduleName": "总账",
-    "metaKind": "DCT",
+  "dctMeta": {
+    "metaCode": "GL",
     "metaName": "总账数据字典元数据",
+    "metaKind": "DCT",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "总账模块数据字典元数据：每类业务字典/主数据单独建表，通用字典列引用 base_dct_meta_v1.json；本文件仅包含字典、分类/分组、扩展维度和字典级元数据控制。"

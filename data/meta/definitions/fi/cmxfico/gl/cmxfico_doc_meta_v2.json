@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "FICO",
-    "moduleName": "cmx-fico 总账",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "FICO",
     "metaName": "cmx-fico 会计凭证单据元数据",
+    "metaKind": "DOC",
     "version": 2,
     "designStyle": "separate-dictionary-tables",
     "remark": "cmx-fico 凭证集各家所长 4 层:L1 凭证批(参考 Oracle GL_JE_BATCHES)→L2 凭证头(参考 SAP BKPF)→L3 凭证科目行(科目+6币种借贷)→L4 凭证辅助核算行(SAP 主数据/附加字典作维度+6币种借贷)。6 币种金额(输入币/本位币/集团币 各借贷)在批/头/科目行/辅助行都有并逐层上卷。通用单据列引用 base_doc_meta_v1.json。",

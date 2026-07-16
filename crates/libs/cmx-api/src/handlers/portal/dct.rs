@@ -319,7 +319,7 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
 
     // 落库前列级校验规范：从合并后的原始字段构建 TableSpec，进程内缓存（键含版本，免失效）。
     let version = doc
-        .get("moduleMeta")
+        .get("dctMeta")
         .and_then(|m| m.get("version"))
         .and_then(|v| v.as_u64())
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))

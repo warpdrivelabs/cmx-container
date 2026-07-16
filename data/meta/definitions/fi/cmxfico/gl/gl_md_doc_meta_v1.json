@@ -1,9 +1,8 @@
 {
-  "moduleMeta": {
-    "moduleCode": "GL",
-    "moduleName": "总账",
-    "metaKind": "DOC",
+  "docMeta": {
+    "metaCode": "GL",
     "metaName": "总账业务单据元数据",
+    "metaKind": "DOC",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
     "remark": "总账模块业务单据元数据：凭证头/分录/明细结构引用 base_doc_meta_v1.json 中的通用单据 fieldSet；本文件仅包含凭证单据结构、字段、状态流和校验规则。",
