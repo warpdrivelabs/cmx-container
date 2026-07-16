@@ -392,8 +392,8 @@ fn summarize(
                 ),
             );
             obj.insert(
-                "dctCode".into(),
-                json!(mm.get("dctCode").and_then(|v| v.as_str()).unwrap_or("")),
+                "dctGroupCode".into(),
+                json!(mm.get("dctGroupCode").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "remark".into(),

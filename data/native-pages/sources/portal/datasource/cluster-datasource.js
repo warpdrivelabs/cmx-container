@@ -943,6 +943,10 @@ function mcResultDetailHtml (r, summary = '查看详情') {
         const added = Array.isArray(ch.addedColumns) ? ch.addedColumns : []
         const modified = Array.isArray(ch.modifiedColumns) ? ch.modifiedColumns : []
         const unchanged = Array.isArray(ch.unchangedColumns) ? ch.unchangedColumns : []
+        const addedIdx = Array.isArray(ch.addedIndexes) ? ch.addedIndexes : []
+        const droppedIdx = Array.isArray(ch.droppedIndexes) ? ch.droppedIndexes : []
+        const cmt = ch.commentChange || null
+        const colCmts = Array.isArray(ch.modifiedColumnComments) ? ch.modifiedColumnComments : []
         const addedHtml = added.length
           ? `<div class="mc-change-sec"><b>新增列 ${added.length}</b><div class="mc-change-tags">${added.map((c) => `<span title="${esc(c.dataType || '')}${c.nullable === false ? ' · NOT NULL' : ''}">${esc(c.name || '')}${c.label ? `<em>${esc(c.label)}</em>` : ''}</span>`).join('')}</div></div>`
           : ''
@@ -952,7 +956,23 @@ function mcResultDetailHtml (r, summary = '查看详情') {
               return `<div class="mc-mod-col"><span>${esc(c.name || '')}${c.label ? `<em>${esc(c.label)}</em>` : ''}</span>${diffs.map((d) => `<code>${esc(d.field || '')}: ${esc(d.from || '∅')} → ${esc(d.to || '∅')}</code>`).join('')}</div>`
             }).join('')}</div>`
           : ''
-        const noChangeHtml = (!added.length && !modified.length)
+        // 索引变更：按列+类型匹配，名字可能不同（设计期名 vs PG 自动名），展示列与唯一性。
+        const idxLabel = (i) => `${i.unique ? '唯一' : '普通'} (${(Array.isArray(i.columns) ? i.columns : []).join(', ')})`
+        const addedIdxHtml = addedIdx.length
+          ? `<div class="mc-change-sec"><b>新增索引 ${addedIdx.length}</b><div class="mc-change-tags">${addedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
+          : ''
+        const droppedIdxHtml = droppedIdx.length
+          ? `<div class="mc-change-sec"><b>删除索引 ${droppedIdx.length}</b><div class="mc-change-tags">${droppedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
+          : ''
+        const commentHtml = cmt
+          ? `<div class="mc-change-sec"><b>表注释</b><div class="mc-mod-col"><code>${esc(cmt.from || '∅')} → ${esc(cmt.to || '∅')}</code></div></div>`
+          : ''
+        // 列注释变更：label 不一致（DB 缺失/不一致 → 设计期 caption）。
+        const colCommentHtml = colCmts.length
+          ? `<div class="mc-change-sec"><b>列注释 ${colCmts.length}</b>${colCmts.map((c) => `<div class="mc-mod-col"><span>${esc(c.name || '')}</span><code>${esc(c.from || '∅')} → ${esc(c.to || '∅')}</code></div>`).join('')}</div>`
+          : ''
+        // 列+索引+注释全无变更时才显示「一致性校验通过」。
+        const noChangeHtml = (!added.length && !modified.length && !addedIdx.length && !droppedIdx.length && !cmt && !colCmts.length)
           ? `<div class="mc-change-empty">未发现需执行的列级变更；已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}</div>`
           : ''
         return `<div class="mc-change-table">
@@ -962,7 +982,7 @@ function mcResultDetailHtml (r, summary = '查看详情') {
             ${ch.displayName ? `<small>${esc(ch.displayName)}</small>` : ''}
             <i>${Number(ch.columnCount || 0)} 列</i>
           </div>
-          ${addedHtml}${modifiedHtml}${noChangeHtml}
+          ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
         </div>`
       }).join('')
     : `<div class="mc-change-table"><div class="mc-change-sec"><b>涉及表</b><div class="mc-change-tags">${tableNames.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>`
@@ -1159,6 +1179,10 @@ function mcPlanHtml () {
           const added = Array.isArray(ch.addedColumns) ? ch.addedColumns : []
           const modified = Array.isArray(ch.modifiedColumns) ? ch.modifiedColumns : []
           const unchanged = Array.isArray(ch.unchangedColumns) ? ch.unchangedColumns : []
+          const addedIdx = Array.isArray(ch.addedIndexes) ? ch.addedIndexes : []
+          const droppedIdx = Array.isArray(ch.droppedIndexes) ? ch.droppedIndexes : []
+          const cmt = ch.commentChange || null
+          const colCmts = Array.isArray(ch.modifiedColumnComments) ? ch.modifiedColumnComments : []
           const addedHtml = added.length
             ? `<div class="mc-change-sec"><b>新增列 ${added.length}</b><div class="mc-change-tags">${added.map((c) => `<span title="${esc(c.dataType || '')}${c.nullable === false ? ' · NOT NULL' : ''}">${esc(c.name || '')}${c.label ? `<em>${esc(c.label)}</em>` : ''}</span>`).join('')}</div></div>`
             : ''
@@ -1168,7 +1192,23 @@ function mcPlanHtml () {
                 return `<div class="mc-mod-col"><span>${esc(c.name || '')}${c.label ? `<em>${esc(c.label)}</em>` : ''}</span>${diffs.map((d) => `<code>${esc(d.field || '')}: ${esc(d.from || '∅')} → ${esc(d.to || '∅')}</code>`).join('')}</div>`
               }).join('')}</div>`
             : ''
-          const noChangeHtml = (!added.length && !modified.length)
+          // 索引变更：按列+类型匹配，名字可能不同（设计期名 vs PG 自动名），展示列与唯一性。
+          const idxLabel = (i) => `${i.unique ? '唯一' : '普通'} (${(Array.isArray(i.columns) ? i.columns : []).join(', ')})`
+          const addedIdxHtml = addedIdx.length
+            ? `<div class="mc-change-sec"><b>新增索引 ${addedIdx.length}</b><div class="mc-change-tags">${addedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
+            : ''
+          const droppedIdxHtml = droppedIdx.length
+            ? `<div class="mc-change-sec"><b>删除索引 ${droppedIdx.length}</b><div class="mc-change-tags">${droppedIdx.map((i) => `<span title="${esc(idxLabel(i))}">${esc(i.name || '')}<em>${esc(idxLabel(i))}</em></span>`).join('')}</div></div>`
+            : ''
+          const commentHtml = cmt
+            ? `<div class="mc-change-sec"><b>表注释</b><div class="mc-mod-col"><code>${esc(cmt.from || '∅')} → ${esc(cmt.to || '∅')}</code></div></div>`
+            : ''
+          // 列注释变更：label 不一致（DB 缺失/不一致 → 设计期 caption）。
+          const colCommentHtml = colCmts.length
+            ? `<div class="mc-change-sec"><b>列注释 ${colCmts.length}</b>${colCmts.map((c) => `<div class="mc-mod-col"><span>${esc(c.name || '')}</span><code>${esc(c.from || '∅')} → ${esc(c.to || '∅')}</code></div>`).join('')}</div>`
+            : ''
+          // 列+索引+注释全无变更时才显示「一致性校验通过」。
+          const noChangeHtml = (!added.length && !modified.length && !addedIdx.length && !droppedIdx.length && !cmt && !colCmts.length)
             ? `<div class="mc-change-empty">未发现需执行的列级变更；已完成一致性校验。${unchanged.length ? ` ${unchanged.length} 列一致` : ''}</div>`
             : ''
           return `<div class="mc-change-table">
@@ -1178,7 +1218,7 @@ function mcPlanHtml () {
               ${ch.displayName ? `<small>${esc(ch.displayName)}</small>` : ''}
               <i>${Number(ch.columnCount || 0)} 列</i>
             </div>
-            ${addedHtml}${modifiedHtml}${noChangeHtml}
+            ${addedHtml}${modifiedHtml}${addedIdxHtml}${droppedIdxHtml}${commentHtml}${colCommentHtml}${noChangeHtml}
           </div>`
         }).join('')
       : `<div class="mc-change-table"><div class="mc-change-sec"><b>涉及表</b><div class="mc-change-tags">${tableNames.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>`

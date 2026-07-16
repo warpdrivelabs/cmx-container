@@ -420,6 +420,23 @@ impl ResultConverter {
         let type_info = row.column(index).type_info();
         let type_name = type_info.to_string().to_lowercase();
 
+        // PostgreSQL 数组类型优先处理：sqlx 对数组（如 name[]、text[]）的 type_info 形如
+        // "_name"、"_text"（前导下划线）或 "xxx[]"。必须放在具体类型分支之前，否则
+        // "_int4" 会被 contains("int") 误命中、"_text" 会被兜底 try_get::<String> 失败 → Null。
+        // array_agg(...) 的结果（如索引列 {code}）若解码失败，会让内省还原出空列数组，
+        // 导致 diff 误报「新增+删除索引」的假阳性。
+        if type_name.starts_with('_') || type_name.contains("[]") {
+            // 优先按字符串数组解码（覆盖 name[]/text[]/varchar[] 等文本数组）。
+            if let Ok(arr) = row.try_get::<Vec<String>, _>(index) {
+                return DataValue::Array(arr.into_iter().map(DataValue::String).collect());
+            }
+            // 兜底：部分驱动对数组以 "{a,b}" 文本返回，交给上层 parse_pg_array_column 处理。
+            if let Ok(s) = row.try_get::<String, _>(index) {
+                return DataValue::String(s);
+            }
+            return DataValue::Null;
+        }
+
         if type_name.contains("int") {
             // 尝试 i32，如果失败尝试 i64
             if let Ok(v) = row.try_get::<i32, _>(index) {

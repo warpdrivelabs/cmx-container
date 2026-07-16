@@ -747,5 +747,21 @@ mod tests {
             Vec::<String>::new()
         );
         assert_eq!(parse_pg_array_column(None), Vec::<String>::new());
+        // 驱动对 PG 数组（name[]/text[]）解码出的 DataValue::Array 变体。
+        // 这是 array_agg 列经 get_postgres_value_from_row 数组分支后的实际形态。
+        let arr = DataValue::Array(vec![
+            DataValue::String("code".to_string()),
+            DataValue::String("name".to_string()),
+        ]);
+        assert_eq!(
+            parse_pg_array_column(Some(&arr)),
+            vec!["code", "name"],
+            "DataValue::Array 变体应正确解析出列名"
+        );
+        // 空数组
+        assert_eq!(
+            parse_pg_array_column(Some(&DataValue::Array(vec![]))),
+            Vec::<String>::new()
+        );
     }
 }

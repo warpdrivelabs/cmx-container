@@ -151,7 +151,7 @@ pub enum IndexKind {
 }
 
 /// 单条表索引定义
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IndexDefine {
     /// 索引名（如 "idx_order_date"、"uk_doc_no"）
     pub name: String,
