@@ -390,8 +390,8 @@ fn summarize(
                 ),
             );
             obj.insert(
-                "metaCode".into(),
-                json!(mm.get("metaCode").and_then(|v| v.as_str()).unwrap_or("")),
+                "dctCode".into(),
+                json!(mm.get("dctCode").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "remark".into(),
@@ -418,8 +418,8 @@ fn summarize(
                 ),
             );
             obj.insert(
-                "metaCode".into(),
-                json!(mm.get("metaCode").and_then(|v| v.as_str()).unwrap_or("")),
+                "docCode".into(),
+                json!(mm.get("docCode").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert(
                 "remark".into(),

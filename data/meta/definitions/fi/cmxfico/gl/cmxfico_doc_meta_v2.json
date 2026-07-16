@@ -1,6 +1,6 @@
 {
   "docMeta": {
-    "metaCode": "FICO",
+    "docCode": "voucher",
     "metaName": "cmx-fico 会计凭证单据元数据",
     "metaKind": "DOC",
     "version": 2,

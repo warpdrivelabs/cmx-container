@@ -126,7 +126,8 @@ pub struct RelationView {
 /// 单据定义的强类型投影。
 #[derive(Debug, Clone)]
 pub struct DocMetaView {
-    pub meta_code: String,
+    /// 单据编码（docMeta.docCode），用于一模块多单据时精确定位。
+    pub doc_code: String,
     pub version: u64,
     /// 层序（自顶向下，L1..Ln）：schema id 列表。**主链路**——每 level-group 取首表，
     /// 装载器（DocLoader/ZmcDocLoader）据此下钻。同层多表见 `layer_groups`。
@@ -184,8 +185,8 @@ impl DocMetaView {
     /// - `base`：base 字段集 JSON（含 `fieldSets`），供 documentFieldSets 展开；无则传 `Value::Null`
     pub fn parse(doc: &Value, base: &Value) -> Result<Self> {
         let doc_meta = doc.get("docMeta");
-        let meta_code = doc_meta
-            .and_then(|m| m.get("metaCode"))
+        let doc_code = doc_meta
+            .and_then(|m| m.get("docCode"))
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -220,7 +221,7 @@ impl DocMetaView {
         }
 
         Ok(DocMetaView {
-            meta_code,
+            doc_code,
             version,
             layer_order,
             layers,
@@ -706,7 +707,7 @@ mod tests {
 
     fn sample_doc() -> Value {
         json!({
-            "docMeta": { "metaCode": "GL", "metaKind": "DOC", "version": 1 },
+            "docMeta": { "docCode": "voucher", "metaKind": "DOC", "version": 1 },
             "voucherSchema": {
                 "schema": [
                     [ { "id": "cv_batch",  "level": "L1", "levelName": "凭证批" } ],
@@ -771,7 +772,7 @@ mod tests {
     #[test]
     fn parses_layer_order_and_relations() {
         let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
-        assert_eq!(v.meta_code, "GL");
+        assert_eq!(v.doc_code, "voucher");
         assert_eq!(v.layer_order, vec!["cv_batch", "cv_header", "cv_line"]);
         assert_eq!(v.relations.len(), 2);
         assert_eq!(v.relations[0].child_key, "upper_id");

@@ -1763,7 +1763,7 @@ mod tests {
     /// 建一个最小两层 DocMetaView（根 cv_batch），供 collect_versioned_roots 测试。
     fn mini_meta() -> DocMetaView {
         let doc = json!({
-            "docMeta": { "metaCode": "GL", "metaKind": "DOC", "version": 1 },
+            "docMeta": { "docCode": "voucher", "metaKind": "DOC", "version": 1 },
             "voucherSchema": {
                 "schema": [
                     [ { "id": "cv_batch",  "level": "L1" } ],

@@ -289,6 +289,7 @@ async fn read_full_from_row(row: &serde_json::Value) -> PortalResult<serde_json:
         "domain": row.get("domain"),
         "app": row.get("app"),
         "module": row.get("module"),
+        "doc": row.get("doc"),
         "relPath": row.get("relPath"),
         "latestHtmlFile": row.get("latestHtmlFile").and_then(|v| v.as_str()).map(|s| s.to_string())
             .unwrap_or_else(|| format!("{id}.html")),
@@ -367,6 +368,7 @@ pub async fn list_html_pages_paged(
                 "domain": r.get("domain"),
                 "app": r.get("app"),
                 "module": r.get("module"),
+                "doc": r.get("doc"),
             })
         })
         .collect();
@@ -397,6 +399,9 @@ pub struct HtmlPageInput {
     /// 模块（缺省由 id 命名空间推导）。
     #[serde(default)]
     pub module: Option<String>,
+    /// 单据编码 docCode（绑定页面加载的业务单据；缺省无）。
+    #[serde(default)]
+    pub doc: Option<String>,
 }
 
 /// 保存页面（写源文件 + v2 分片 + v1 列表双写）。
@@ -430,6 +435,7 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
         .module
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| ns.module.clone());
+    let doc = input.doc.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let rel_path = ns.rel_path.clone();
     // latestHtmlFile：旧式用 <page>.html，否则取 relPath basename
     let latest = if ns.is_legacy {
@@ -447,7 +453,7 @@ pub async fn save_html_page(input: HtmlPageInput) -> PortalResult<serde_json::Va
     let row = json!({
         "id": id, "name": name, "details": details,
         "domain": domain, "app": app, "module": module, "page": ns.page,
-        "relPath": rel_path, "latestHtmlFile": latest,
+        "doc": doc, "relPath": rel_path, "latestHtmlFile": latest,
     });
 
     // v2 分片 upsert

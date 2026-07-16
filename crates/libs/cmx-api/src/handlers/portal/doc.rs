@@ -44,6 +44,9 @@ pub struct DocDataQuery {
     /// 在 domain/app/module 下自动选默认/最高版本。
     #[serde(default)]
     pub file: Option<String>,
+    /// 单据编码（docCode，如 voucher / transfer）；缺失时盲选默认文件，有值时按 docMeta.docCode 精确定位。
+    #[serde(default)]
+    pub doc: Option<String>,
     /// GET 便捷：根层过滤 `col:value`（简单等值）
     #[serde(default)]
     pub filter: Option<String>,
@@ -165,7 +168,7 @@ async fn doc_load_entry(
     body: Option<Value>,
 ) -> Result<axum::response::Response> {
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
     let dq = match body {
         Some(b) if !b.is_null() => DocQuery::from_json(&b)?,
         _ => simple_doc_query(&meta, &q),
@@ -276,7 +279,7 @@ pub async fn doc_children(
 
     debug!("{:<12} - doc_children {}/{}", "HANDLER", req.module, req.layer);
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, Some(req.file.as_str())).await?;
+    let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, Some(req.file.as_str()), None).await?;
 
     // 组一个 DocQuery：把该层的查询塞进去 + depth。
     let mut dq = DocQuery {
@@ -332,7 +335,7 @@ pub async fn doc_data_stream(
 
     debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
     let db_id = get_db_id_from_header(&headers).await;
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
 
     // 目标层：body.layer 指定，否则根层。流式**只装该单层**（扁平大结果，不嵌套）。
     let body_val = body.map(|b| b.0).unwrap_or(Value::Null);
@@ -417,7 +420,7 @@ pub async fn doc_meta(
     let _ = &headers; // meta 与 db_id 无关(定义读取不走数据源);保留签名一致
     debug!("{:<12} - doc_meta {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref()).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, q.file.as_deref(), q.doc.as_deref()).await?;
     Ok(Json(ApiResp::ok(project_doc_meta(&meta))))
 }
 
@@ -486,7 +489,7 @@ fn project_doc_meta(meta: &DocMetaView) -> Value {
         .collect();
 
     serde_json::json!({
-        "metaCode": meta.meta_code,
+        "docCode": meta.doc_code,
         "version": meta.version,
         "layerOrder": meta.layer_order,
         "layers": layers,
@@ -562,7 +565,7 @@ pub async fn doc_save(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str())).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str()), None).await?;
     let (mode, changes) = saver::parse_save_body(&body);
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
@@ -666,7 +669,7 @@ pub async fn doc_save_batch(
         if file.is_empty() {
             return Err(cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into());
         }
-        let meta = resolve_doc_meta(domain, app, module, Some(file)).await?;
+        let meta = resolve_doc_meta(domain, app, module, Some(file), None).await?;
         let (mode, changes) = saver::parse_save_body(d);
         // 后端二次校验（同单单路径）：有 error 违规即整批拒（atomic）/该单在 save 阶段无从表达，故这里统一先拒。
         if !meta.validation_rules.is_empty() {
@@ -820,7 +823,7 @@ pub async fn doc_restore(
     }
 
     // 用 replace 模式把快照写回（DocSaver 内部单事务）
-    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str())).await?;
+    let meta = resolve_doc_meta(&q.domain, &q.application, &q.module, Some(q.file.as_str()), None).await?;
     // 快照是列式包 { datasetId, columns, rows, childRows }；replace 期望 { table:{rows:[{id,upper_id,fields}]} }
     // 这里把列式包转成 replace 输入（简化：交给 DocSaver 前先归一）
     let replace_input = columnar_to_replace_input(&snapshot);
@@ -899,8 +902,8 @@ fn flatten_columnar(pkg: &Value, out: &mut serde_json::Map<String, Value>) {
     }
 }
 
-/// doc file 自动解析结果缓存（键 `domain/app/module` → file）。镜像 DCT 的 DICT_FILE_CACHE。
-/// DOC 无 dict 维度，故缓存键比 DCT 少一段。定义文件改动后若需立即生效，重启服务即可。
+/// doc file 自动解析结果缓存（键 `domain/app/module[/doc]` → file）。镜像 DCT 的 DICT_FILE_CACHE。
+/// doc 缺失时键三段（盲选默认），有值时键四段（按 docCode 精确定位）。定义文件改动后若需立即生效，重启服务即可。
 static DOC_FILE_CACHE: std::sync::OnceLock<tokio::sync::RwLock<std::collections::HashMap<String, String>>> =
     std::sync::OnceLock::new();
 
@@ -908,12 +911,25 @@ fn doc_file_cache() -> &'static tokio::sync::RwLock<std::collections::HashMap<St
     DOC_FILE_CACHE.get_or_init(|| tokio::sync::RwLock::new(std::collections::HashMap::new()))
 }
 
-/// file 缺失时：在该 domain/app/module 下扫描 DOC 定义，选「isDefault 优先，否则 version 最大」者。
+/// 判断 DOC 定义文件的 docMeta.docCode 是否与目标单据编码匹配（仿 DCT dict_matches）。
+fn doc_matches(doc: &serde_json::Value, target: &str) -> bool {
+    doc.get("docMeta")
+        .and_then(|m| m.get("docCode"))
+        .and_then(|v| v.as_str())
+        == Some(target)
+}
+
+/// file 缺失时：在该 domain/app/module 下扫描 DOC 定义。
 ///
-/// DOC 定义文件的 `moduleMeta.isDefault/version` 与 DCT 完全一致，故复用同款 stem 分组 + 选代表算法，
-/// 但省去 DCT 那步「读文件内容找 dictCode 二次校验」——DOC 不按 dictCode 二次定位，选到代表即返回。
-async fn resolve_doc_file(domain: &str, app: &str, module: &str) -> Result<String> {
-    let cache_key = format!("{domain}/{app}/{module}");
+/// - doc 缺失：选「isDefault 优先，否则 version 最大」者（盲选默认，向后兼容）。
+/// - doc 有值：仿 DCT resolve_dict_file——stem 分组选代表 → 逐文件读 docMeta.docCode 验证匹配 → 命中返回；
+///   代表未命中则回退扫描该 stem 组其余版本。
+async fn resolve_doc_file(domain: &str, app: &str, module: &str, doc: Option<&str>) -> Result<String> {
+    // 缓存键：doc 有值时四段（精确定位），缺失时三段（盲选默认）。
+    let cache_key = match doc {
+        Some(d) if !d.is_empty() => format!("{domain}/{app}/{module}/{d}"),
+        _ => format!("{domain}/{app}/{module}"),
+    };
     if let Some(f) = doc_file_cache().read().await.get(&cache_key).cloned() {
         return Ok(f);
     }
@@ -962,7 +978,53 @@ async fn resolve_doc_file(domain: &str, app: &str, module: &str) -> Result<Strin
             .max_by_key(|(_, _, v)| *v)
             .map(|(f, _, _)| f.clone())
     };
-    // 收集各组代表，再做一次全局选代表（跨 stem 取 isDefault 优先 / version 最大）。
+    // doc 有值：仿 DCT resolve_dict_file，逐候选文件读 docMeta.docCode 验证匹配（精确定位）。
+    if let Some(doc_code) = doc.filter(|d| !d.is_empty()) {
+        // 收集候选文件（每组代表优先）。
+        let candidates: Vec<String> = groups.values().filter_map(|arr| pick(arr)).collect();
+        // 代表都没命中时，回退扫描该 stem 组其余版本（防 isDefault 版本恰好 docCode 不符）。
+        let mut fallback: Vec<String> = Vec::new();
+        for (_, file, _, _) in &entries {
+            if !candidates.contains(file) {
+                fallback.push(file.clone());
+            }
+        }
+        // 逐候选验证 docCode，收集所有命中的（同 docCode 多文件时按 isDefault/version 选最优）。
+        let mut hits: Vec<(String, bool, u64)> = Vec::new();
+        let entry_meta = |file: &str| -> (bool, u64) {
+            entries.iter()
+                .find(|(_, f, _, _)| f == file)
+                .map(|(_, _, d, v)| (*d, *v))
+                .unwrap_or((false, 0))
+        };
+        for f in candidates.iter().chain(fallback.iter()) {
+            let doc_ref = cmx_portal::definitions::store::DefRef {
+                domain: Some(domain.to_string()),
+                application: Some(app.to_string()),
+                app: Some(app.to_string()),
+                module: Some(module.to_string()),
+                file: Some(f.clone()),
+                id: None,
+            };
+            let doc_json = match cmx_portal::definitions::store::get_definition(&doc_ref).await {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            if doc_matches(&doc_json, doc_code) {
+                let (is_default, version) = entry_meta(f);
+                hits.push((f.clone(), is_default, version));
+            }
+        }
+        if let Some(resolved) = pick(&hits) {
+            doc_file_cache().write().await.insert(cache_key, resolved.clone());
+            return Ok(resolved);
+        }
+        return Err(cmx_biz::BizError::business(format!(
+            "未在 {domain}/{app}/{module} 下找到 docCode={doc_code} 的 DOC 定义文件"
+        ))
+        .into());
+    }
+    // doc 缺失：盲选默认（向后兼容）。收集各组代表，再做一次全局选代表（跨 stem 取 isDefault 优先 / version 最大）。
     // DOC 一个 module 通常单 stem 单默认版本；多 stem 时按同一规则收敛到唯一结果。
     let candidates: Vec<(String, bool, u64)> = groups
         .values()
@@ -1007,11 +1069,12 @@ async fn resolve_doc_meta(
     app: &str,
     module: &str,
     file: Option<&str>,
+    doc: Option<&str>,
 ) -> Result<Arc<DocMetaView>> {
-    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（选默认/最高版本 DOC 定义）。
+    // file 兜底：缺失/空/脏值（"undefined"/"null" 等）时自动解析（按 doc 盲选或 docCode 精确定位）。
     let file = match file {
         Some(f) if !f.is_empty() && f != "undefined" && f != "null" => f.to_string(),
-        _ => resolve_doc_file(domain, app, module).await?,
+        _ => resolve_doc_file(domain, app, module, doc).await?,
     };
     let key = cache::doc_key(domain, app, module, &file);
     if let Some(hit) = cache::get(&key) {
