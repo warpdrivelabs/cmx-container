@@ -2,10 +2,10 @@
   "dctMeta": {
     "metaName": "Oracle EBS GL 会计凭证数据字典元数据",
     "metaKind": "DCT",
+    "dctGroupCode": "GL",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
-    "remark": "Oracle E-Business Suite GL 模块会计凭证(GL_JE_BATCHES/HEADERS/LINES)所引用的全部主数据与配置字典:账本组织(账本Ledger/法律实体/经营单位/库存组织)、会计弹性域(结构/段/值集/段值/代码组合CCID/自然账户类型)、凭证控制(来源/类别/余额类型/币种类别)、币种期间(币种/汇率类型/会计日历/会计期间)、税务往来(税率/供应商/客户/付款条件/人员/国家)。通用列引用 base_dct_meta_v1.json。",
-    "dctCode": "GL"
+    "remark": "Oracle E-Business Suite GL 模块会计凭证(GL_JE_BATCHES/HEADERS/LINES)所引用的全部主数据与配置字典:账本组织(账本Ledger/法律实体/经营单位/库存组织)、会计弹性域(结构/段/值集/段值/代码组合CCID/自然账户类型)、凭证控制(来源/类别/余额类型/币种类别)、币种期间(币种/汇率类型/会计日历/会计期间)、税务往来(税率/供应商/客户/付款条件/人员/国家)。通用列引用 base_dct_meta_v1.json。"
   },
   "baseDctMetaRef": {
     "file": "base_dct_meta_v1.json",

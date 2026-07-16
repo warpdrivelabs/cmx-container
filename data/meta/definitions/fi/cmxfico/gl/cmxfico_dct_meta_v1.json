@@ -2,10 +2,10 @@
   "dctMeta": {
     "metaName": "cmx-fico 会计凭证数据字典元数据",
     "metaKind": "DCT",
+    "dctGroupCode": "FICO",
     "version": 1,
     "designStyle": "separate-dictionary-tables",
-    "remark": "cmx-fico 自研总账模块,数据字典完整参考 SAP 会计凭证字典(32个):客户端/组织架构/科目体系/凭证控制/币种期间/税/往来/CO对象。通用列引用 base_dct_meta_v1.json。",
-    "dctCode": "FICO"
+    "remark": "cmx-fico 自研总账模块,数据字典完整参考 SAP 会计凭证字典(32个):客户端/组织架构/科目体系/凭证控制/币种期间/税/往来/CO对象。通用列引用 base_dct_meta_v1.json。"
   },
   "baseDctMetaRef": {
     "file": "base_dct_meta_v1.json",

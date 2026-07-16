@@ -2,12 +2,12 @@
   "dctMeta": {
     "metaName": "SAP FI 会计凭证数据字典元数据",
     "metaKind": "DCT",
+    "dctGroupCode": "FI",
     "version": 2,
-    "designStyle": "separate-dictionary-tables",
-    "remark": "SAP ERP(ECC/S4) FI 模块会计凭证(BKPF/BSEG/ACDOCA)所引用的全部主数据与配置取值字典：组织架构(公司/公司代码/利润中心/成本中心/段/业务范围/功能范围/控制范围)、科目体系(科目表/总账科目/科目组/账户类型/报表版本)、凭证控制(凭证类型/记账码/特别总账标识/字段状态组)、货币期间(货币/汇率类型/会计年度变式/会计期间/分类账)、税务(税码)、往来资金(业务伙伴/付款条件/付款方式/开户行)、CO对象(内部订单/WBS)。通用列引用 base_dct_meta_v1.json 的 fieldSet。",
     "versionName": "",
+    "designStyle": "separate-dictionary-tables",
     "isDefault": true,
-    "dctCode": "FI"
+    "remark": "SAP ERP(ECC/S4) FI 模块会计凭证(BKPF/BSEG/ACDOCA)所引用的全部主数据与配置取值字典：组织架构(公司/公司代码/利润中心/成本中心/段/业务范围/功能范围/控制范围)、科目体系(科目表/总账科目/科目组/账户类型/报表版本)、凭证控制(凭证类型/记账码/特别总账标识/字段状态组)、货币期间(货币/汇率类型/会计年度变式/会计期间/分类账)、税务(税码)、往来资金(业务伙伴/付款条件/付款方式/开户行)、CO对象(内部订单/WBS)。通用列引用 base_dct_meta_v1.json 的 fieldSet。"
   },
   "baseDctMetaRef": {
     "file": "base_dct_meta_v1.json",
