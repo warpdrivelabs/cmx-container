@@ -9,11 +9,83 @@
 //! 可无改动复用):`{datasetId, columns:[名...], rows:[[值...]...], childRows:{父id:{childKey:子包}}}`。
 //! 值编码对齐老 `DataValue` 契约:`Binary→"B64:"+base64`、`Decimal/DateTime/Date/Uuid→字符串`、
 //! `Json→原字符串`、`Null→nil`、`Int→msgpack int`、`Float→msgpack float`、`Bool→msgpack bool`。
+//!
+//! # 为什么不复用 cmx-core 的 `DataValue`
+//!
+//! 本 crate 刻意**不依赖任何 cmx-\* crate**(包括 cmx-core 的 `DataValue`),以保持三个特性:
+//! 1. **wasm 安全**——无 `tokio`/`sqlx` 等重运行时,可被插件 SDK 在 wasm 端复用同一编码契约。
+//! 2. **近叶子**——位于依赖图底层,被 `cmx-database`(sqlx)与 `cmx-database-pg`(tokio-postgres)
+//!    同时依赖;若反向依赖 cmx-core 会形成循环或把核心类型绑死到驱动层。
+//! 3. **驱动中立**——[`ZmcColType`] 是 `DataValue` 编码契约的**驱动中立投影**,只描述
+//!    「如何把一列编码成 msgpack/JSON」,不承载业务语义,非重定义。
+//!
+//! 代价:值编码策略(字符串化/前缀约定)与 `DataValue` 的实现在两处各维护一份,由「值编码对齐
+//! 老 DataValue 契约」的注释 + `json_encoding_matches_binary` 回归测试共同约束不漂移。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use rmp::encode as mp;
+
+// ============================================================================
+// msgpack 写入糖:把 `mp::write_xxx(buf, ...).unwrap()` 收敛为一组 `buf.mp_xxx(...)` 方法。
+//
+// rmp 的 write_* 全部返回 `Result<(), MarkerError>`,但写入目标固定为 `&mut Vec<u8>`——
+// Vec<u8> 的 push/extend 只在 OOM 时 panic(直接 abort,不走 Err),故这些写操作**实际不可失败**。
+// 用 trait 把 `.expect("infallible")` 收敛到单一 impl 块,调用点清爽且符合 §1.4(禁裸 unwrap)。
+// ============================================================================
+
+/// msgpack 写入糖:对 `&mut Vec<u8>` 的 rmp 写入操作做 infallible 包装。
+trait MsgPackWrite {
+    /// 写 map 头(N 个键值对)。
+    fn mp_map(&mut self, n: u32);
+    /// 写 array 头(N 个元素)。
+    fn mp_array(&mut self, n: u32);
+    /// 写 UTF-8 字符串。
+    fn mp_str(&mut self, s: &str);
+    /// 写有符号整数。
+    fn mp_i64(&mut self, i: i64);
+    /// 写 f64。
+    fn mp_f64(&mut self, f: f64);
+    /// 写 nil。
+    fn mp_nil(&mut self);
+    /// 写 bool。
+    fn mp_bool(&mut self, b: bool);
+}
+
+impl MsgPackWrite for Vec<u8> {
+    #[inline]
+    fn mp_map(&mut self, n: u32) {
+        mp::write_map_len(self, n).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_array(&mut self, n: u32) {
+        mp::write_array_len(self, n).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_str(&mut self, s: &str) {
+        mp::write_str(self, s).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_i64(&mut self, i: i64) {
+        mp::write_sint(self, i).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_f64(&mut self, f: f64) {
+        mp::write_f64(self, f).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_nil(&mut self) {
+        mp::write_nil(self).expect(INFALLIBLE_WRITE);
+    }
+    #[inline]
+    fn mp_bool(&mut self, b: bool) {
+        mp::write_bool(self, b).expect(INFALLIBLE_WRITE);
+    }
+}
+
+/// rmp 写 Vec<u8> 不可失败的统一提示语(仅 OOM 时 panic,走 abort 不走 Err)。
+const INFALLIBLE_WRITE: &str = "msgpack write to Vec<u8> infallible (OOM panics, never returns Err)";
 
 /// 中立列类型(driver 把自己的 PG 类型映射过来,编码器只认这个)。
 ///
@@ -219,25 +291,25 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
     pub fn encode_columnar_binary(&self, buf: &mut Vec<u8>) {
         let has_children = !self.children.is_empty();
         let map_len = if has_children { 4 } else { 3 };
-        mp::write_map_len(buf, map_len).unwrap();
+        buf.mp_map(map_len);
 
-        mp::write_str(buf, "datasetId").unwrap();
-        mp::write_str(buf, &self.id).unwrap();
+        buf.mp_str("datasetId");
+        buf.mp_str(&self.id);
 
-        mp::write_str(buf, "columns").unwrap();
-        mp::write_array_len(buf, self.schema.col_count() as u32).unwrap();
+        buf.mp_str("columns");
+        buf.mp_array(self.schema.col_count() as u32);
         for name in &self.schema.columns {
-            mp::write_str(buf, name).unwrap();
+            buf.mp_str(name);
         }
 
-        mp::write_str(buf, "rows").unwrap();
-        mp::write_array_len(buf, self.rows.len() as u32).unwrap();
+        buf.mp_str("rows");
+        buf.mp_array(self.rows.len() as u32);
         for row in &self.rows {
             encode_row_into(buf, row, &self.schema);
         }
 
         if has_children {
-            mp::write_str(buf, "childRows").unwrap();
+            buf.mp_str("childRows");
             self.encode_child_rows(buf);
         }
     }
@@ -293,12 +365,12 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
     /// 按父 id 分桶写 `childRows`(msgpack)。分桶复用 [`bucket_children`](Self::bucket_children)。
     fn encode_child_rows_scoped(&self, buf: &mut Vec<u8>, scope: Option<&HashSet<String>>) {
         let buckets = self.bucket_children(scope);
-        mp::write_map_len(buf, buckets.len() as u32).unwrap();
+        buf.mp_map(buckets.len() as u32);
         for (pid, child_groups) in &buckets {
-            mp::write_str(buf, pid).unwrap();
-            mp::write_map_len(buf, child_groups.len() as u32).unwrap();
+            buf.mp_str(pid);
+            buf.mp_map(child_groups.len() as u32);
             for (child_key, child_ds, idxs) in child_groups {
-                mp::write_str(buf, child_key).unwrap();
+                buf.mp_str(child_key);
                 child_ds.encode_child_subset(buf, idxs);
             }
         }
@@ -321,29 +393,29 @@ impl<R: ZmcRowSource> ZmcDataSet<R> {
     fn encode_child_subset(&self, buf: &mut Vec<u8>, row_idxs: &[usize]) {
         let has_children = !self.children.is_empty();
         let map_len = if has_children { 4 } else { 3 };
-        mp::write_map_len(buf, map_len).unwrap();
+        buf.mp_map(map_len);
 
-        mp::write_str(buf, "datasetId").unwrap();
-        mp::write_str(buf, &self.id).unwrap();
+        buf.mp_str("datasetId");
+        buf.mp_str(&self.id);
 
-        mp::write_str(buf, "columns").unwrap();
-        mp::write_array_len(buf, self.schema.col_count() as u32).unwrap();
+        buf.mp_str("columns");
+        buf.mp_array(self.schema.col_count() as u32);
         for name in &self.schema.columns {
-            mp::write_str(buf, name).unwrap();
+            buf.mp_str(name);
         }
 
-        mp::write_str(buf, "rows").unwrap();
-        mp::write_array_len(buf, row_idxs.len() as u32).unwrap();
+        buf.mp_str("rows");
+        buf.mp_array(row_idxs.len() as u32);
         for &ri in row_idxs {
             if let Some(row) = self.rows.get(ri) {
                 encode_row_into(buf, row, &self.schema);
             } else {
-                mp::write_array_len(buf, 0).unwrap();
+                buf.mp_array(0);
             }
         }
 
         if has_children {
-            mp::write_str(buf, "childRows").unwrap();
+            buf.mp_str("childRows");
             // 只对本子集这批父行下钻孙层:作用域 = 本子集行的 id 集合,
             // 避免把整层孙数据按祖先重复产出。
             let scope = self.subset_id_scope(row_idxs);
@@ -490,7 +562,7 @@ pub fn encode_cell_json<R: ZmcRowSource>(
 /// String(10 万行 × 多列 = 上百万次分配)。文本列仍零拷贝借出、不经 scratch。
 pub fn encode_row_into<R: ZmcRowSource>(body: &mut Vec<u8>, row: &R, schema: &ZmcSchema) {
     let mut scratch = String::with_capacity(48);
-    mp::write_array_len(body, schema.col_count() as u32).unwrap();
+    body.mp_array(schema.col_count() as u32);
     for col in 0..schema.col_count() {
         encode_cell(body, row, col, schema.types[col], &mut scratch);
     }
@@ -566,7 +638,7 @@ pub fn encode_cell<R: ZmcRowSource>(
 
     macro_rules! nil {
         () => {{
-            mp::write_nil(buf).unwrap();
+            buf.mp_nil();
             return;
         }};
     }
@@ -575,39 +647,33 @@ pub fn encode_cell<R: ZmcRowSource>(
         ($v:expr) => {{
             scratch.clear();
             let _ = write!(scratch, "{}", $v);
-            mp::write_str(buf, scratch).unwrap();
+            buf.mp_str(scratch);
         }};
     }
 
     match ty {
         ZmcColType::Bool => match row.get_bool(col) {
-            Some(v) => mp::write_bool(buf, v).unwrap(),
+            Some(v) => buf.mp_bool(v),
             None => nil!(),
         },
         ZmcColType::Int2 => match row.get_i16(col) {
-            Some(v) => {
-                mp::write_sint(buf, v as i64).unwrap();
-            }
+            Some(v) => buf.mp_i64(v as i64),
             None => nil!(),
         },
         ZmcColType::Int4 => match row.get_i32(col) {
-            Some(v) => {
-                mp::write_sint(buf, v as i64).unwrap();
-            }
+            Some(v) => buf.mp_i64(v as i64),
             None => nil!(),
         },
         ZmcColType::Int8 => match row.get_i64(col) {
-            Some(v) => {
-                mp::write_sint(buf, v).unwrap();
-            }
+            Some(v) => buf.mp_i64(v),
             None => nil!(),
         },
         ZmcColType::Float4 => match row.get_f32(col) {
-            Some(v) => mp::write_f64(buf, v as f64).unwrap(),
+            Some(v) => buf.mp_f64(v as f64),
             None => nil!(),
         },
         ZmcColType::Float8 => match row.get_f64(col) {
-            Some(v) => mp::write_f64(buf, v).unwrap(),
+            Some(v) => buf.mp_f64(v),
             None => nil!(),
         },
         // NUMERIC → Decimal → 字符串(保精度;经 scratch 免临时分配)
@@ -617,7 +683,7 @@ pub fn encode_cell<R: ZmcRowSource>(
         },
         // 文本/JSON:零拷贝借出 &str
         ZmcColType::Text | ZmcColType::Json => match row.get_str(col) {
-            Some(s) => mp::write_str(buf, s).unwrap(),
+            Some(s) => buf.mp_str(s),
             None => nil!(),
         },
         // JSONB:解码后序列化成字符串(serde_json 序列化必然分配,经 scratch 统一)
@@ -635,7 +701,7 @@ pub fn encode_cell<R: ZmcRowSource>(
                 scratch.clear();
                 scratch.push_str("B64:");
                 BASE64.encode_string(b, scratch);
-                mp::write_str(buf, scratch).unwrap();
+                buf.mp_str(scratch);
             }
             None => nil!(),
         },
@@ -649,7 +715,7 @@ pub fn encode_cell<R: ZmcRowSource>(
                     chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc);
                 scratch.clear();
                 write_rfc3339_utc(scratch, &dt);
-                mp::write_str(buf, scratch).unwrap();
+                buf.mp_str(scratch);
             }
             None => nil!(),
         },
@@ -657,12 +723,12 @@ pub fn encode_cell<R: ZmcRowSource>(
             Some(dt) => {
                 scratch.clear();
                 write_rfc3339_utc(scratch, &dt);
-                mp::write_str(buf, scratch).unwrap();
+                buf.mp_str(scratch);
             }
             None => nil!(),
         },
         ZmcColType::Unknown => match row.get_str(col) {
-            Some(s) => mp::write_str(buf, s).unwrap(),
+            Some(s) => buf.mp_str(s),
             None => nil!(),
         },
     }
@@ -681,15 +747,15 @@ pub fn encode_cell<R: ZmcRowSource>(
 /// 关键:msgpack `array 32`(`0xdd` + 4 字节大端 u32)是**定宽**的,与元素个数无关,
 /// 因此行数未知时也能先占位、编完后回填。array32 对任意长度(含小数组)都是合法编码。
 pub fn encode_stream_open(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSchema) -> usize {
-    mp::write_map_len(out, 3).unwrap();
-    mp::write_str(out, "datasetId").unwrap();
-    mp::write_str(out, dataset_id).unwrap();
-    mp::write_str(out, "columns").unwrap();
-    mp::write_array_len(out, schema.col_count() as u32).unwrap();
+    out.mp_map(3);
+    out.mp_str("datasetId");
+    out.mp_str(dataset_id);
+    out.mp_str("columns");
+    out.mp_array(schema.col_count() as u32);
     for name in &schema.columns {
-        mp::write_str(out, name).unwrap();
+        out.mp_str(name);
     }
-    mp::write_str(out, "rows").unwrap();
+    out.mp_str("rows");
     // 预留 array32 标记:0xdd + 4 字节大端长度占位(定宽,后续回填)
     let marker_pos = out.len();
     out.push(0xdd);
@@ -722,13 +788,13 @@ pub fn encode_stream_close(out: &mut [u8], marker_pos: usize, row_count: u32) {
 /// 写一个长度分帧的头帧:`[u32 len][msgpack {datasetId, columns}]`,追加到 `out`。
 pub fn encode_frame_header(out: &mut Vec<u8>, dataset_id: &str, schema: &ZmcSchema) {
     let mut payload = Vec::with_capacity(64);
-    mp::write_map_len(&mut payload, 2).unwrap();
-    mp::write_str(&mut payload, "datasetId").unwrap();
-    mp::write_str(&mut payload, dataset_id).unwrap();
-    mp::write_str(&mut payload, "columns").unwrap();
-    mp::write_array_len(&mut payload, schema.col_count() as u32).unwrap();
+    payload.mp_map(2);
+    payload.mp_str("datasetId");
+    payload.mp_str(dataset_id);
+    payload.mp_str("columns");
+    payload.mp_array(schema.col_count() as u32);
     for name in &schema.columns {
-        mp::write_str(&mut payload, name).unwrap();
+        payload.mp_str(name);
     }
     push_frame(out, &payload);
 }
@@ -985,23 +1051,23 @@ mod stream_buffer_tests {
         // 模拟已编码的两行(内容任意,只验结构拼装等价)
         let mut fake_rows = Vec::new();
         for i in 0..2i64 {
-            mp::write_array_len(&mut fake_rows, 2).unwrap();
-            mp::write_sint(&mut fake_rows, i).unwrap();
-            mp::write_str(&mut fake_rows, "x").unwrap();
+            fake_rows.mp_array(2);
+            fake_rows.mp_i64(i);
+            fake_rows.mp_str("x");
         }
 
         // 旧法:header → array_len(count) → rows_body(等价于原 encode_stream_footer)
         let mut old = Vec::new();
         {
-            mp::write_map_len(&mut old, 3).unwrap();
-            mp::write_str(&mut old, "datasetId").unwrap();
-            mp::write_str(&mut old, "d").unwrap();
-            mp::write_str(&mut old, "columns").unwrap();
-            mp::write_array_len(&mut old, 2).unwrap();
-            mp::write_str(&mut old, "id").unwrap();
-            mp::write_str(&mut old, "name").unwrap();
-            mp::write_str(&mut old, "rows").unwrap();
-            mp::write_array_len(&mut old, 2).unwrap(); // 旧 footer 用最紧凑的 array 编码
+            old.mp_map(3);
+            old.mp_str("datasetId");
+            old.mp_str("d");
+            old.mp_str("columns");
+            old.mp_array(2);
+            old.mp_str("id");
+            old.mp_str("name");
+            old.mp_str("rows");
+            old.mp_array(2); // 旧 footer 用最紧凑的 array 编码
             old.extend_from_slice(&fake_rows);
         }
 
