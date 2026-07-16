@@ -44,7 +44,7 @@ pub struct DocDataQuery {
     /// 在 domain/app/module 下自动选默认/最高版本。
     #[serde(default)]
     pub file: Option<String>,
-    /// 单据编码（docCode，如 voucher / transfer）；缺失时盲选默认文件，有值时按 docMeta.docCode 精确定位。
+    /// 单据编码（docMeta.docCode，取值通常为定义文件 stem 中 `_doc_meta` 前段，如 cmxfico / gl_md）；缺失时盲选默认文件，有值时按 docCode 精确定位。
     #[serde(default)]
     pub doc: Option<String>,
     /// GET 便捷：根层过滤 `col:value`（简单等值）

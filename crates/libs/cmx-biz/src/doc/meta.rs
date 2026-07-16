@@ -707,7 +707,7 @@ mod tests {
 
     fn sample_doc() -> Value {
         json!({
-            "docMeta": { "docCode": "voucher", "metaKind": "DOC", "version": 1 },
+            "docMeta": { "docCode": "cmxfico", "metaKind": "DOC", "version": 1 },
             "voucherSchema": {
                 "schema": [
                     [ { "id": "cv_batch",  "level": "L1", "levelName": "凭证批" } ],
@@ -772,7 +772,7 @@ mod tests {
     #[test]
     fn parses_layer_order_and_relations() {
         let v = DocMetaView::parse(&sample_doc(), &sample_base()).unwrap();
-        assert_eq!(v.doc_code, "voucher");
+        assert_eq!(v.doc_code, "cmxfico");
         assert_eq!(v.layer_order, vec!["cv_batch", "cv_header", "cv_line"]);
         assert_eq!(v.relations.len(), 2);
         assert_eq!(v.relations[0].child_key, "upper_id");
