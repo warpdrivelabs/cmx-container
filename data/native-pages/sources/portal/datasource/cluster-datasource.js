@@ -12,8 +12,9 @@
  *           cmx-ui5-form / CmxColumnModel）经 globalThis.__cmxDataComp 取用——原生页由 Blob import
  *           加载，无法裸引 'cmx-data-comp'。
  *
- * 说明：数据源记录当前无 domain/app/module 字段（将来会加），故 DAM 下拉只过滤 content 区，
- *       数据库列表始终展示集群全部数据源（按用户要求"没有定义的按全部处理"）。
+ * 说明：DAM 下拉同时过滤「数据库列表」与 content 区——数据库列表按所选 domain/app/module
+ *       调用 /api/sys-datasource/list 的 filters（domain_code/application_code/module_code）过滤；
+ *       三者均为空时展示集群全部数据源。列表项标题展示「db_id-db_name」。
  */
 
 // ─── 共享状态（模块级单例，三区共用） ─────────────────────────────────────
@@ -111,25 +112,40 @@ async function loadDatasources () {
   state.dsLoading = true
   try {
     // 通用 CRUD list 是 POST；返回 { id, schema, rows:[...] }（经 fetch 拦截器拆 ApiResp）。
+    // 按所选 domain/app/module 过滤：filters 为单元素数组，对象内各字段 AND。
+    //   字段名对齐后端 SysDatasourceFilter：domain_code / application_code / module_code。
+    const f = state.filter || {}
+    const cond = {}
+    if (f.domain) cond.domain_code = f.domain
+    if (f.app) cond.application_code = f.app
+    if (f.module) cond.module_code = f.module
+    const body = Object.keys(cond).length ? { filters: [cond] } : {}
     const data = await apiJson('/api/sys-datasource/list', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     const rows = Array.isArray(data?.rows) ? data.rows : (Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []))
     // 归一：补 id（cmx-ignite-list 需要）+ 展示字段。
     state.datasources = rows.map((r, i) => {
       const meta = dbTypeMeta(r.db_type)
-      const name = r.db_id || r.id || `ds_${i}`
+      // 标题：db_id-db_name（db_name 缺省时只展示 db_id，避免出现 "id-"）。
+      const dbId = r.db_id || r.id || `ds_${i}`
+      const dbName = r.db_name || ''
+      const title = dbName ? `${dbId}-${dbName}` : String(dbId)
       return {
         ...r,
         id: String(r.id || r.db_id || `ds_${i}`),
         icon: meta.icon,
-        title: name,
+        title,
         subtitle: `${meta.label}${r.default_flag === 1 ? ' · 默认' : ''}${r.status === 0 ? ' · 已禁用' : ''}`,
         _typeLabel: meta.label,
       }
     })
     if (state.datasources.length && (!state.selectedDsId || !state.datasources.some((d) => d.id === state.selectedDsId))) {
       state.selectedDsId = state.datasources[0].id
+      resetBuildStateForDatasource()
+    } else if (!state.datasources.length && state.selectedDsId) {
+      // 当前过滤下无数据源：清空选中态与工作台状态，避免残留指向已不存在的项。
+      state.selectedDsId = ''
       resetBuildStateForDatasource()
     }
   } catch (err) {
@@ -232,16 +248,23 @@ function damSelectsHtml () {
 function explorerHtml () {
   const selected = state.datasources.find((d) => d.id === state.selectedDsId) || null
   const pct = Math.max(20, Math.min(80, Number(state.explorer.splitPct) || 52))
+  // 列表范围文案：有任一 DAM 筛选时显示筛选维度，否则「集群全部」。
+  const f = state.filter || {}
+  const scopeParts = [
+    ['域', f.domain], ['应用', f.app], ['模块', f.module],
+  ].filter(([, v]) => v).map(([k, v]) => `${k}:${esc(v)}`)
+  const scopeHint = scopeParts.length ? `（筛选 ${scopeParts.join(' · ')}）` : '（集群全部）'
+  const emptyHint = scopeParts.length ? '当前筛选下无数据源' : '暂无已配置数据源'
   return `
     <div class="cds-neo cds-wrap">
       <div class="cds-banner"><ui5-icon name="database" class="cds-banner-ic"></ui5-icon><span class="cds-banner-title">集群数据源</span><span class="cds-kpi">${state.datasources.length}</span></div>
       <div class="cds-dam">${damSelectsHtml()}</div>
       <div class="cds-split" style="--cds-split:${pct}%">
         <div class="cds-split-top">
-          <div class="cds-section-label">数据库列表<span class="cds-hint">（集群全部）</span></div>
+          <div class="cds-section-label">数据库列表<span class="cds-hint">${scopeHint}</span></div>
           <div class="cds-list-region" data-ds-list-host>
             ${state.dsLoading ? '<div class="cds-empty">加载中…</div>'
-              : (state.datasources.length ? '<cmx-ignite-list data-cmx-layout="card" data-cmx-density="compact" id="cds-list"></cmx-ignite-list>' : '<div class="cds-empty"><ui5-icon name="database"></ui5-icon>暂无已配置数据源</div>')}
+              : (state.datasources.length ? '<cmx-ignite-list data-cmx-layout="card" data-cmx-density="compact" id="cds-list"></cmx-ignite-list>' : `<div class="cds-empty"><ui5-icon name="database"></ui5-icon>${emptyHint}</div>`)}
           </div>
         </div>
         <div class="cds-splitter" data-cds-splitter title="拖动调整上下高度"><span class="cds-splitter-grip"></span></div>
@@ -296,10 +319,27 @@ function dbSummaryHtml (ds) {
   const statusOn = ds.status !== 0
   const isDefault = ds.default_flag === 1
   const dbId = ds.db_id || ds.id || ''
-  const name = ds.description || ds.db_id || ds.id || ''
-  // 从连接 URL 里粗提主机（仅展示，容错）
-  let host = ''
-  try { const m = String(ds.db_url || '').match(/@([^/?#]+)|\/\/([^/?#]+)/); host = (m && (m[1] || m[2])) || '' } catch { host = '' }
+  // 标题统一为「db_id-db_name」，与左侧列表项一致；db_name 缺省时回退 description，再缺省只显 db_id。
+  const dbName = ds.db_name || ds.description || ''
+  const name = dbName ? `${dbId}-${dbName}` : String(dbId)
+  // 从连接 URL 脱敏提取「主机:端口/库名」——必须剥离 userinfo（账号密码），避免泄露凭据。
+  //   例：postgres://dbuser_dba:hkO4****@192.168.1.14:5432/cmxlocal → 192.168.1.14:5432/cmxlocal
+  const safeHostFromUrl = (raw) => {
+    const s = String(raw || '').trim()
+    if (!s) return ''
+    // 优先用 URL 解析（标准 scheme://user:pass@host:port/path）；解析失败再回退正则。
+    try {
+      const u = new URL(s)
+      // host 含端口（URL.host 形如 192.168.1.14:5432），pathname 形如 /cmxlocal
+      const path = u.pathname && u.pathname !== '/' ? u.pathname : ''
+      return `${u.host}${path}`
+    } catch { /* 非 URL 或无 scheme，回退正则 */ }
+    // 回退：从最后一个 '@' 之后取（确保剥离 userinfo），到第一个 '?' 或 '#' 前。
+    const afterAt = s.includes('@') ? s.slice(s.lastIndexOf('@') + 1) : s.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+    const end = afterAt.search(/[?#]/)
+    return end >= 0 ? afterAt.slice(0, end) : afterAt
+  }
+  const safeHost = safeHostFromUrl(ds.db_url)
   // 「连接健康」为示意演示：按状态给个稳定的百分比（非真实指标）。
   const healthPct = statusOn ? 96 : 0
   const poolMax = Number(ds.max_connections) || 0
@@ -330,7 +370,7 @@ function dbSummaryHtml (ds) {
           </div>
         </div>
         <div class="cds-ov-hero-right">
-          ${chip('cloud', host || '本地/未知主机')}
+          ${chip('cloud', safeHost || '本地/未知主机')}
           ${chip(statusOn ? 'accept' : 'decline', statusOn ? '在线' : '离线')}
           ${chip('fob-watch', `健康检查 ${esc((ds.health_check_interval ?? '—') + '')}s`)}
         </div>
@@ -1649,8 +1689,9 @@ function bindExplorer (root) {
       if (kind === 'domain') { state.filter.domain = val; state.filter.app = ''; state.filter.module = '' }
       else if (kind === 'app') { state.filter.app = val; state.filter.module = '' }
       else state.filter.module = val
-      // DAM 变化 → content 区各 embed 组件重挂（带新过滤），property 跟随。
-      refreshAll()
+      // DAM 变化 → 数据源列表按新过滤重新拉取，content 区各 embed 组件重挂，property 跟随。
+      //   loadDatasources 内部会校正 selectedDsId（命中失效则回退首个；结果为空则清空）。
+      loadDatasources().finally(refreshAll)
     })
   })
   // 数据源列表 → cmx-ignite-list + CmxDataSet
