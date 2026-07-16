@@ -58,7 +58,9 @@ fn resolve_rel(r: &FcRef) -> PortalResult<Vec<String>> {
         out.push(v.to_string());
     }
     // scenario 末段补 .json 后缀
-    let scenario = out.pop().unwrap();
+    let scenario = out
+        .pop()
+        .expect("invariant: 循环已 push 四段(domain/app/module/scenario),out 必非空");
     out.push(format!("{scenario}.json"));
     Ok(out)
 }
@@ -278,13 +280,13 @@ pub async fn save_flexible_combination(
     if let Some(cm) = doc.get("columnModel").filter(|v| v.is_object()) {
         merged
             .as_object_mut()
-            .unwrap()
+            .expect("invariant: merged 由 json!({{...}}) 构造,必为对象")
             .insert("columnModel".to_string(), cm.clone());
     }
     if let Some(dr) = doc.get("docRef").filter(|v| v.is_object()) {
         merged
             .as_object_mut()
-            .unwrap()
+            .expect("invariant: merged 由 json!({{...}}) 构造,必为对象")
             .insert("docRef".to_string(), dr.clone());
     }
     // 全局写锁，保证原子写不被并发覆盖

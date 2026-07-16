@@ -40,12 +40,15 @@ pub struct DictSchema {
 }
 
 impl DictSchema {
+    /// 取主键字段名（未声明时兜底 `id`）。
     pub fn id_field(&self) -> &str {
         self.id_field.as_deref().unwrap_or("id")
     }
+    /// 取父级字段名（未声明时兜底 `parentId`，树形字典用于建立层级关系）。
     pub fn parent_field(&self) -> &str {
         self.parent_field.as_deref().unwrap_or("parentId")
     }
+    /// 取展示名字段（未声明时兜底 `name`，suggest/label 取值用）。
     pub fn label_field(&self) -> &str {
         self.label_field.as_deref().unwrap_or("name")
     }

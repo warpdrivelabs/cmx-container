@@ -3,6 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::dict::schema::DictSchema;
+use crate::dict::util::field_str;
 
 /// 分页结果 `{ rows, total, page, pageSize, totalPages }`。
 pub fn to_paged_result(hits: Vec<Value>, total: usize, page: i64, page_size: i64) -> Value {
@@ -14,15 +15,6 @@ pub fn to_paged_result(hits: Vec<Value>, total: usize, page: i64, page_size: i64
         "pageSize": page_size,
         "totalPages": (total as i64 + ps - 1) / ps,
     })
-}
-
-fn field_str(row: &Value, field: &str) -> String {
-    match row.get(field) {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Bool(b)) => b.to_string(),
-        _ => String::new(),
-    }
 }
 
 /// 平铺 hits → 树形 `{ treeMode:true, rows:[...children...], total, page, pageSize }`。

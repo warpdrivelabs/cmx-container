@@ -57,8 +57,13 @@ pub async fn enrich_flexible_combination_dict_meta(cfg: &Value) -> PortalResult<
         if dict.is_none() || dict == Some(&Value::Null) {
             continue;
         }
-        let enriched_dict =
-            enrich_dimension_dict_meta(dict.unwrap(), &dim, &from, imports.as_ref()).await?;
+        let enriched_dict = enrich_dimension_dict_meta(
+            dict.expect("invariant: 上面 dict.is_none() 已 continue,此处必 Some"),
+            &dim,
+            &from,
+            imports.as_ref(),
+        )
+        .await?;
         // 回写补全后的 dict 并标记 valueType
         if let Some(obj) = dims.get_mut(&k).and_then(|v| v.as_object_mut()) {
             obj.insert("dict".to_string(), enriched_dict);
