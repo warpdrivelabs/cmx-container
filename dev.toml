@@ -13,12 +13,18 @@ port = 8080
 # 当前实例所属的域/应用/模块，用于数据源过滤（load_active_datasources 仅加载归属本实例域的数据源）。
 # 支持环境变量覆盖：APP__DOMAIN_CODE / APP__APPLICATION_CODE / APP__MODULE_CODE
 [app]
+## 所属域编码（必需，默认 default）
+#domain_code = "FIN"
+## 所属应用编码（必需，默认 default）
+#application_code = "FI"
+## 所属模块编码（必需，默认 default）
+#module_code = "GL"
 # 所属域编码（必需，默认 default）
-domain_code = "FIN"
+domain_code = "fi"
 # 所属应用编码（必需，默认 default）
-application_code = "FI"
+application_code = "cmxfico"
 # 所属模块编码（必需，默认 default）
-module_code = "GL"
+module_code = "gl"
 
 # ============================================
 # 主键 ID 生成（DCT 数据字典 / DOC 业务单据的 bigint id 列）
