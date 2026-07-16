@@ -350,6 +350,7 @@ mod tests {
                 ref_field: String::new(),
                 edit: None,
                 edit_settings: None,
+                display: None,
             })
             .collect();
         let fields: Vec<Field> = cols
