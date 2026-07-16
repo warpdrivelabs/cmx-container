@@ -53,8 +53,23 @@ pub enum ColumnChange {
 pub enum IndexChange {
     /// 新增索引
     AddIndex(IndexDefine),
-    /// 删除索引
-    DropIndex(String),
+    /// 删除索引（携带旧索引定义，name 为数据库真实索引名，columns/kind 供报告展示）
+    DropIndex(IndexDefine),
+}
+
+/// 列注释变更（仅 `COMMENT ON COLUMN` 的 label 不同，列结构无变化）
+///
+/// 独立于 [`ColumnChange`]：列结构 diff（`column_changed`）不比较 label，
+/// 避免单纯注释变化被误报为「修改列」却无结构 DDL 可执行。列注释同步通过此结构
+/// 单独捕获，由 `changes_to_ddl` 生成 `COMMENT ON COLUMN`。
+#[derive(Debug, Clone)]
+pub struct ColumnCommentChange {
+    /// 列名
+    pub column: String,
+    /// 旧注释（数据库现有 `col_description`，缺失时为空串）
+    pub old_label: String,
+    /// 新注释（设计期 `caption`，缺失时为空串）
+    pub new_label: String,
 }
 
 /// 表级别的变更描述
@@ -76,6 +91,8 @@ pub enum TableChange {
         column_changes: Vec<ColumnChange>,
         index_changes: Vec<IndexChange>,
         comment_change: Option<String>,
+        /// 列注释变更（label 不一致的列）
+        column_comment_changes: Vec<ColumnCommentChange>,
     },
 }
 
@@ -147,11 +164,21 @@ impl DdlDiff {
                 } else {
                     None
                 };
+                // 比对列注释变更（label 不一致，独立于列结构 diff）
+                let column_comment_changes =
+                    Self::diff_column_comments(&old_table.columns, &new_table.columns);
 
-                // 只有当有实质变更时才记录
-                if !column_changes.is_empty()
+                // 只有当有实质变更时才记录。
+                // 注意：DropColumn（DB 多出列）不算实质变更——生产环境允许 DB 比元数据多列
+                // （additive-only：只加列不删列），故 DB 多出列不应触发表的升级判定。
+                // column_changes 仍完整保留 DropColumn 传给执行层（执行层仅记日志、不删列）。
+                let has_substantive_column_change = column_changes
+                    .iter()
+                    .any(|c| !matches!(c, ColumnChange::DropColumn(_)));
+                if has_substantive_column_change
                     || !index_changes.is_empty()
                     || comment_change.is_some()
+                    || !column_comment_changes.is_empty()
                 {
                     changes.push(TableChange::AlterTable {
                         table_name: new_table.table_name.clone(),
@@ -159,11 +186,38 @@ impl DdlDiff {
                         column_changes,
                         index_changes,
                         comment_change,
+                        column_comment_changes,
                     });
                 }
             }
         }
 
+        changes
+    }
+
+    /// 比对列注释（label）变更
+    ///
+    /// 遍历同时存在于新旧两组的列，收集 `label` 不一致的列（旧来自数据库
+    /// `col_description`、新来自设计期 `caption`）。仅比较 label，不触发列结构变更，
+    /// 由 `changes_to_ddl` 生成 `COMMENT ON COLUMN` 同步。
+    fn diff_column_comments(
+        old_cols: &[ColumnDefine],
+        new_cols: &[ColumnDefine],
+    ) -> Vec<ColumnCommentChange> {
+        let old_map: HashMap<&str, &ColumnDefine> =
+            old_cols.iter().map(|c| (c.name.as_str(), c)).collect();
+        let mut changes = Vec::new();
+        for new_col in new_cols {
+            if let Some(old_col) = old_map.get(new_col.name.as_str())
+                && old_col.label != new_col.label
+            {
+                changes.push(ColumnCommentChange {
+                    column: new_col.name.clone(),
+                    old_label: old_col.label.clone(),
+                    new_label: new_col.label.clone(),
+                });
+            }
+        }
         changes
     }
 
@@ -253,8 +307,14 @@ impl DdlDiff {
 
     /// 比对索引变更
     ///
-    /// 比对两组索引定义，返回索引变更列表。
-    /// 包括：新增索引、删除索引
+    /// 按「索引列 + 索引类型」匹配（忽略索引名），返回索引变更列表。
+    /// 包括：新增索引、删除索引。
+    ///
+    /// # 为何按列匹配而非按名匹配
+    /// 设计期索引名通常是规范化命名（如 `uk_<table>_1`），而 PostgreSQL 对列级 UNIQUE 或
+    /// `ADD CONSTRAINT ... UNIQUE` 会自动命名（如 `<table>_<col>_key`）。若按名字字符串匹配，
+    /// 同一组列+类型的索引会被误判为「先删后建」，产生永久假阳性。故此处只比较语义内容
+    /// （columns 顺序敏感 + kind），名字仅用于执行 DDL（AddIndex 用设计期名，DropIndex 用 DB 真实名）。
     ///
     /// # 参数
     /// * `old_idxs` - 旧版本索引定义列表
@@ -263,22 +323,24 @@ impl DdlDiff {
     /// # 返回值
     /// * `Vec<IndexChange>` - 索引变更列表
     fn diff_indexes(old_idxs: &[IndexDefine], new_idxs: &[IndexDefine]) -> Vec<IndexChange> {
-        let old_map: HashMap<&str, &IndexDefine> =
-            old_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
-        let new_map: HashMap<&str, &IndexDefine> =
-            new_idxs.iter().map(|i| (i.name.as_str(), i)).collect();
+        // 索引内容相等：列名序列与类型都一致（顺序敏感，与复合索引语义一致）。
+        let same_content = |a: &IndexDefine, b: &IndexDefine| {
+            a.columns == b.columns && a.kind == b.kind
+        };
 
         let mut changes = Vec::new();
 
+        // 新增索引：new 中无任何 old 索引与之内容相等。
         for new_idx in new_idxs {
-            if !old_map.contains_key(new_idx.name.as_str()) {
+            if !old_idxs.iter().any(|o| same_content(o, new_idx)) {
                 changes.push(IndexChange::AddIndex(new_idx.clone()));
             }
         }
 
+        // 删除索引：old 中无任何 new 索引与之内容相等（携带旧定义，name 为 DB 真实名供 DROP）。
         for old_idx in old_idxs {
-            if !new_map.contains_key(old_idx.name.as_str()) {
-                changes.push(IndexChange::DropIndex(old_idx.name.clone()));
+            if !new_idxs.iter().any(|n| same_content(n, old_idx)) {
+                changes.push(IndexChange::DropIndex(old_idx.clone()));
             }
         }
 
@@ -295,7 +357,7 @@ impl DdlDiff {
     /// - `TableChange::AlterTable`：
     ///   - 列变更：ADD COLUMN / ALTER COLUMN（类型/nullable/default）
     ///   - 索引变更：CREATE INDEX / DROP INDEX
-    ///   - 注释变更：COMMENT ON TABLE
+    ///   - 注释变更：COMMENT ON TABLE（表注释）/ COMMENT ON COLUMN（列注释）
     ///
     /// # 参数
     /// * `dialect` - DDL 方言实现
@@ -336,6 +398,7 @@ impl DdlDiff {
                     column_changes,
                     index_changes,
                     comment_change,
+                    column_comment_changes,
                 } => {
                     // 处理列变更
                     for cc in column_changes {
@@ -392,9 +455,9 @@ impl DdlDiff {
                                     unique, idx.name, qualified, cols
                                 ));
                             }
-                            // 删除索引
-                            IndexChange::DropIndex(name) => {
-                                stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", name));
+                            // 删除索引（name 为 DB 真实索引名）
+                            IndexChange::DropIndex(idx) => {
+                                stmts.push(format!("DROP INDEX IF EXISTS \"{}\";", idx.name));
                             }
                         }
                     }
@@ -406,6 +469,26 @@ impl DdlDiff {
                         };
                         let escaped = comment.replace('\'', "''");
                         stmts.push(format!("COMMENT ON TABLE {} IS '{}';", qualified, escaped));
+                    }
+                    // 处理列注释变更：对 label 不一致的列生成 COMMENT ON COLUMN。
+                    // new_label 为空表示设计期清除注释 → IS NULL。
+                    for cc in column_comment_changes {
+                        let qualified = match schema {
+                            Some(s) => format!("\"{}\".\"{}\"", s, table_name),
+                            None => format!("\"{}\"", table_name),
+                        };
+                        if cc.new_label.is_empty() {
+                            stmts.push(format!(
+                                "COMMENT ON COLUMN {}.\"{}\" IS NULL;",
+                                qualified, cc.column
+                            ));
+                        } else {
+                            let escaped = cc.new_label.replace('\'', "''");
+                            stmts.push(format!(
+                                "COMMENT ON COLUMN {}.\"{}\" IS '{}';",
+                                qualified, cc.column, escaped
+                            ));
+                        }
                     }
                 }
             }
@@ -536,6 +619,8 @@ mod tests {
 
     #[test]
     fn test_diff_drop_column() {
+        // additive-only 语义：DB 比元数据多列（old 有 old_col、new 没有），
+        // 不应触发表的升级判定（生产允许 DB 多列，只加不删）。
         let old = vec![make_simple_table(
             "t",
             vec![
@@ -551,16 +636,10 @@ mod tests {
         )];
 
         let changes = DdlDiff::diff(&old, &new);
-        assert_eq!(changes.len(), 1);
-        if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
-            assert!(
-                column_changes
-                    .iter()
-                    .any(|c| matches!(c, ColumnChange::DropColumn(n) if n == "old_col"))
-            );
-        } else {
-            panic!("Expected AlterTable");
-        }
+        assert!(
+            changes.is_empty(),
+            "DB 多出列不应触发表变更（additive-only）: {changes:?}"
+        );
     }
 
     #[test]
@@ -681,5 +760,151 @@ mod tests {
             DdlDiff::column_changed(&old, &new),
             "Decimal 精度变化应判为变更"
         );
+    }
+
+    /// 索引按「列+类型」匹配：设计期名 uk_t_1 与 PG 自动名 t_code_key 不同，
+    /// 但列+唯一性相同，不应判为变更（消除索引名错配假阳性）。
+    #[test]
+    fn diff_indexes_matches_by_columns_ignoring_name() {
+        // DB 还原侧（PG 真实名）
+        let db_idx = IndexDefine {
+            name: "cf_t_code_key".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+        };
+        // 设计期侧（规范化名 uk_t_1）
+        let design_idx = IndexDefine {
+            name: "uk_cf_t_1".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+        };
+        let old = vec![make_simple_table("cf_t", vec![], vec![db_idx.clone()])];
+        let new = vec![make_simple_table("cf_t", vec![], vec![design_idx])];
+        let changes = DdlDiff::diff(&old, &new);
+        // 列+类型相同 → 不应产出任何 AlterTable
+        assert!(
+            changes.is_empty(),
+            "索引名不同但列+类型相同，不应判变更: {changes:?}"
+        );
+    }
+
+    /// 索引列不同时仍应正确报 AddIndex + DropIndex。
+    #[test]
+    fn diff_indexes_detects_real_column_change() {
+        let db_idx = IndexDefine {
+            name: "cf_t_code_key".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+        };
+        let design_idx = IndexDefine {
+            name: "uk_cf_t_1".to_string(),
+            columns: vec!["name".to_string()], // 列不同
+            kind: IndexKind::Unique,
+        };
+        let old = vec![make_simple_table("cf_t", vec![], vec![db_idx.clone()])];
+        let new = vec![make_simple_table("cf_t", vec![], vec![design_idx.clone()])];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1, "应产出 1 个 AlterTable");
+        if let TableChange::AlterTable { index_changes, .. } = &changes[0] {
+            assert_eq!(index_changes.len(), 2, "应报 AddIndex + DropIndex");
+            assert!(
+                index_changes.iter().any(|c| matches!(c, IndexChange::AddIndex(i) if i.name == "uk_cf_t_1")),
+                "应有 AddIndex(设计期名): {index_changes:?}"
+            );
+            // DropIndex 应携带 DB 真实名（供 DROP 执行）
+            assert!(
+                index_changes.iter().any(|c| matches!(c, IndexChange::DropIndex(i) if i.name == "cf_t_code_key")),
+                "应有 DropIndex(DB真实名): {index_changes:?}"
+            );
+        } else {
+            panic!("Expected AlterTable");
+        }
+    }
+
+    /// 列注释（label）变更：结构相同但 label 不同，应产出 AlterTable 且
+    /// column_comment_changes 非空、column_changes 为空（不触发结构变更）。
+    #[test]
+    fn diff_detects_column_comment_change() {
+        // old：DB 还原，label=""（DB 缺注释）；new：设计期 label="字典项主键"。
+        let mut old_col = make_col("id", FieldType::Int, false);
+        old_col.label = String::new();
+        let mut new_col = make_col("id", FieldType::Int, false);
+        new_col.label = "字典项主键".to_string();
+        let old = vec![make_simple_table("t", vec![old_col], vec![])];
+        let new = vec![make_simple_table("t", vec![new_col], vec![])];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1, "列注释差异应触发 AlterTable");
+        if let TableChange::AlterTable {
+            column_changes,
+            column_comment_changes,
+            ..
+        } = &changes[0]
+        {
+            assert!(
+                column_changes.is_empty(),
+                "结构相同，column_changes 应为空: {column_changes:?}"
+            );
+            assert_eq!(column_comment_changes.len(), 1, "应有 1 条列注释变更");
+            assert_eq!(column_comment_changes[0].column, "id");
+            assert_eq!(column_comment_changes[0].old_label, "");
+            assert_eq!(column_comment_changes[0].new_label, "字典项主键");
+        } else {
+            panic!("Expected AlterTable");
+        }
+        // changes_to_ddl 应生成 COMMENT ON COLUMN（非 ALTER COLUMN TYPE）
+        let dialect = PostgresDdlDialect::default();
+        let stmts = DdlDiff::changes_to_ddl(&dialect, &changes).unwrap();
+        assert!(
+            stmts.iter().any(|s| s.contains("COMMENT ON COLUMN") && s.contains("字典项主键")),
+            "应生成 COMMENT ON COLUMN 写入新注释: {stmts:?}"
+        );
+        assert!(
+            stmts.iter().all(|s| !s.contains("ALTER COLUMN")),
+            "结构无变化，不应生成 ALTER COLUMN: {stmts:?}"
+        );
+    }
+
+    /// label 相同时不应报列注释变更（避免假阳性）。
+    #[test]
+    fn diff_no_column_comment_change_when_label_equal() {
+        let col = make_col("id", FieldType::Int, false);
+        let tables = vec![make_simple_table("t", vec![col], vec![])];
+        let changes = DdlDiff::diff(&tables, &tables);
+        assert!(changes.is_empty(), "label 相同应无任何变更");
+    }
+
+    /// DB 多出列 + 设计期新增列（真实变更）：应产出 AlterTable。
+    /// 验证 DropColumn 不影响判定，但真实 AddColumn 仍能触发升级。
+    #[test]
+    fn diff_db_extra_column_plus_real_add_still_reports() {
+        let old = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("id", FieldType::Int, false),
+                make_col("extra_col", FieldType::String, true), // DB 多出
+            ],
+            vec![],
+        )];
+        let new = vec![make_simple_table(
+            "t",
+            vec![
+                make_col("id", FieldType::Int, false),
+                make_col("name", FieldType::String, true), // 设计期新增（真实变更）
+            ],
+            vec![],
+        )];
+        let changes = DdlDiff::diff(&old, &new);
+        assert_eq!(changes.len(), 1, "有真实新增列应产出 AlterTable");
+        if let TableChange::AlterTable { column_changes, .. } = &changes[0] {
+            // 应含 AddColumn(name)（真实变更），也可含 DropColumn(extra_col)（不参与判定但保留）
+            assert!(
+                column_changes
+                    .iter()
+                    .any(|c| matches!(c, ColumnChange::AddColumn(c) if c.name == "name")),
+                "应有 AddColumn(name): {column_changes:?}"
+            );
+        } else {
+            panic!("Expected AlterTable");
+        }
     }
 }

@@ -16,18 +16,22 @@ use cmx_core::model::cell::{
 };
 use cmx_database::get_default_db_manager;
 use cmx_metadata::{
-    ColumnChange, DdlDiff, DdlDialect, PgTableDefineExecutor, PostgresDdlDialect, TableChange,
-    TableDefineDbExecutor,
+    ColumnChange, DdlDiff, DdlDialect, IndexChange, PgTableDefineExecutor, PostgresDdlDialect,
+    TableChange, TableDefineDbExecutor,
 };
 use cmx_utils::snowflake_id_str;
 use serde_json::{Value, json};
 use std::cmp::Reverse;
+use tracing::debug;
 
 use crate::Result;
 use cmx_api_types::Error;
 
 const META_VERSION: i32 = 1;
 const ENGINE_VERSION: &str = "1.0.0";
+/// VARCHAR 字段未指定 fieldLength 时的默认长度。
+/// 避免无长度 VARCHAR 被当成 TEXT 建表，导致与设计期望不一致时无法 ALTER 修正。
+const VARCHAR_DEFAULT_LENGTH: u32 = 255;
 /// 台账系统表清单（初始化时建入目标库）。
 const LEDGER_TABLES: &[&str] = &[
     "cmx_model_meta",
@@ -141,8 +145,9 @@ fn field_to_column(f: &Value, id_field: &str, ordinal: u32) -> Option<ColumnDefi
             .unwrap_or(false);
 
     // 长度 / 精度：VARCHAR 用 length；DECIMAL 用 precision(=fieldLength)+scale(=decimalDigits)。
+    // VARCHAR 未指定 fieldLength 时默认 255（避免被建表逻辑当成 TEXT，导致与期望不一致时无法 ALTER 修正）。
     let (length, precision, scale) = match ft {
-        FieldType::String => (field_len, None, None),
+        FieldType::String => (Some(field_len.unwrap_or(VARCHAR_DEFAULT_LENGTH)), None, None),
         FieldType::Decimal => (None, field_len, dec.or(Some(0))),
         _ => (None, None, None),
     };
@@ -537,6 +542,15 @@ fn pg_display_type(c: &ColumnDefine) -> String {
     PostgresDdlDialect::default().map_column_type(c)
 }
 
+/// 单个索引定义 → 前端展示 JSON（含 name/columns/unique）。
+fn index_to_json(idx: &IndexDefine) -> Value {
+    json!({
+        "name": idx.name,
+        "columns": idx.columns,
+        "unique": matches!(idx.kind, IndexKind::Unique),
+    })
+}
+
 /// 将单列 `old → new` 的实质差异映射为前端消费的 `{field, from, to}` 变更明细。
 ///
 /// 依赖 [`DdlDiff::column_changed`] 的判定逻辑（精度/标度仅对 Decimal 比较），保证这里产出的
@@ -549,8 +563,14 @@ fn column_change_detail(old: &ColumnDefine, new: &ColumnDefine) -> Vec<Value> {
             diffs.push(json!({ "field": field, "from": from, "to": to }));
         }
     };
-    if old.field_type != new.field_type {
-        push("dataType", pg_display_type(old), pg_display_type(new));
+    // dataType 比较基于渲染后的类型字符串（与建表/执行基准 map_column_type 一致），
+    // 而非 field_type 枚举：同为 String 时，TEXT 与 VARCHAR(255) 是不同 PG 类型，必须报告。
+    {
+        let old_t = pg_display_type(old);
+        let new_t = pg_display_type(new);
+        if old_t != new_t {
+            push("dataType", old_t, new_t);
+        }
     }
     push(
         "length",
@@ -599,6 +619,10 @@ fn report_create_table(def: &TableDefine) -> Value {
         "modifiedColumns": [],
         "unchangedColumns": [],
         "columnCount": def.columns.len(),
+        "addedIndexes": def.indexes.iter().map(index_to_json).collect::<Vec<_>>(),
+        "droppedIndexes": [],
+        "commentChange": null,
+        "modifiedColumnComments": [],
     })
 }
 
@@ -623,9 +647,13 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
             "modifiedColumns": [],
             "unchangedColumns": desired.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
             "columnCount": desired.columns.len(),
+            "addedIndexes": [],
+            "droppedIndexes": [],
+            "commentChange": null,
+            "modifiedColumnComments": [],
         }),
         // 仅可能是 AlterTable（CreateTable/DropTable 不会出现，因为表已存在且两边表名相同）
-        [TableChange::AlterTable { column_changes, .. }, ..] => {
+        [TableChange::AlterTable { column_changes, index_changes, comment_change, column_comment_changes, .. }, ..] => {
             let mut added = Vec::new();
             let mut modified = Vec::new();
             for cc in column_changes {
@@ -650,6 +678,33 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
                     ColumnChange::DropColumn(_) => {}
                 }
             }
+            // 索引变更：AddIndex 用设计期名，DropIndex 用 DB 真实名（均为 IndexDefine）。
+            let mut added_idx = Vec::new();
+            let mut dropped_idx = Vec::new();
+            for ic in index_changes {
+                match ic {
+                    IndexChange::AddIndex(i) => added_idx.push(index_to_json(i)),
+                    IndexChange::DropIndex(i) => dropped_idx.push(index_to_json(i)),
+                }
+            }
+            // 表注释变更：DdlDiff 的 comment_change 只存新值，from 需从 current 取。
+            let comment_change_json = if comment_change.is_some() || current.comment != desired.comment {
+                Some(json!({
+                    "from": current.comment.clone().unwrap_or_default(),
+                    "to": desired.comment.clone().unwrap_or_default(),
+                }))
+            } else {
+                None
+            };
+            // 列注释变更：label 不一致的列（old 来自 DB col_description，new 来自设计期 caption）。
+            let modified_col_comments: Vec<Value> = column_comment_changes
+                .iter()
+                .map(|cc| json!({
+                    "name": cc.column,
+                    "from": cc.old_label,
+                    "to": cc.new_label,
+                }))
+                .collect();
             // 已变更列名集合（新增 + 修改）
             let changed_names: std::collections::HashSet<&str> = added
                 .iter()
@@ -675,6 +730,10 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
                 "modifiedColumns": modified,
                 "unchangedColumns": unchanged,
                 "columnCount": desired.columns.len(),
+                "addedIndexes": added_idx,
+                "droppedIndexes": dropped_idx,
+                "commentChange": comment_change_json,
+                "modifiedColumnComments": modified_col_comments,
             })
         }
         // 兜底：理论上不可达（表已存在，DdlDiff 只可能产出 AlterTable 或空）
@@ -687,6 +746,10 @@ fn diff_table_to_report(current: &TableDefine, desired: &TableDefine) -> Value {
             "modifiedColumns": [],
             "unchangedColumns": desired.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
             "columnCount": desired.columns.len(),
+            "addedIndexes": [],
+            "droppedIndexes": [],
+            "commentChange": null,
+            "modifiedColumnComments": [],
         }),
     }
 }
@@ -705,7 +768,29 @@ async fn table_change_plan(db_id: &str, def: &TableDefine) -> Result<Value> {
         .query_current_table_define(def)
         .await
         .map_err(db_err("内省当前表结构失败"))?;
-    Ok(diff_table_to_report(&current, def))
+    let report = diff_table_to_report(&current, def);
+    // 排查日志（debug 级）：判定为升级表时，打印 DB vs 设计期的逐列差异字段，
+    // 便于定位「列注释/结构看似一致却报升级」的真实来源（length/db_type/label 等）。
+    if report.get("action").and_then(|v| v.as_str()) == Some("upgrade_table") {
+        let cur_map: std::collections::HashMap<&str, &ColumnDefine> =
+            current.columns.iter().map(|c| (c.name.as_str(), c)).collect();
+        for d in &def.columns {
+            if let Some(c) = cur_map.get(d.name.as_str()) {
+                let diff = (pg_display_type(c) != pg_display_type(d))
+                    .then(|| format!("dataType({}→{})", pg_display_type(c), pg_display_type(d)))
+                    .or_else(|| (c.is_nullable != d.is_nullable).then(|| format!("nullable({}→{})", c.is_nullable, d.is_nullable)))
+                    .or_else(|| (c.label != d.label).then(|| format!("label({:?}→{:?})", c.label, d.label)))
+                    .or_else(|| (c.default_value != d.default_value).then(|| format!("default({:?}→{:?})", c.default_value, d.default_value)));
+                if let Some(what) = diff {
+                    debug!(
+                        "[table_change_plan] {} 列 {} 差异: {}",
+                        def.table_name, d.name, what
+                    );
+                }
+            }
+        }
+    }
+    Ok(report)
 }
 
 /// 读 cmx_model_meta 单行（未初始化返回 None）。
@@ -2247,6 +2332,159 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "nullable 变更应报修改列: {report}"
+        );
+    }
+
+    /// cf_fs_version 场景：列全部一致，但设计期有表注释（remark）、DB 无表注释。
+    /// 应报 upgrade_table，且 commentChange 透出 from=∅→to=注释，让用户看到「为什么要升级」。
+    #[test]
+    fn diff_table_report_shows_comment_change() {
+        let current = mk_table("cf_fs_version", vec![mk_col("code", FieldType::String, false)]);
+        let mut desired = mk_table("cf_fs_version", vec![mk_col("code", FieldType::String, false)]);
+        desired.comment = Some("报表上滚结构".to_string());
+        let report = diff_table_to_report(&current, &desired);
+        // 列一致但因注释差异仍报升级表（保留同步语义）
+        assert_eq!(
+            report["action"].as_str(),
+            Some("upgrade_table"),
+            "表注释差异应触发 upgrade_table: {report}"
+        );
+        // 列级无变更
+        assert!(
+            report["modifiedColumns"].as_array().unwrap().is_empty(),
+            "列应无变更: {report}"
+        );
+        // 但 commentChange 必须透出，让用户看到原因
+        let cmt = &report["commentChange"];
+        assert!(!cmt.is_null(), "commentChange 不应为 null: {report}");
+        assert_eq!(cmt["from"].as_str(), Some(""), "from 应为空(DB无注释)");
+        assert_eq!(cmt["to"].as_str(), Some("报表上滚结构"));
+    }
+
+    /// 索引名错配场景：设计期 uk_t_1(Unique,code) vs DB cf_t_code_key(Unique,code)。
+    /// 列+类型相同 → addedIndexes/droppedIndexes 都为空，且列也一致 → action 应为 no_change。
+    #[test]
+    fn diff_table_report_no_false_positive_for_index_name() {
+        let mut current = mk_table("cf_t", vec![mk_col("code", FieldType::String, false)]);
+        let mut desired = mk_table("cf_t", vec![mk_col("code", FieldType::String, false)]);
+        current.indexes = vec![IndexDefine {
+            name: "cf_t_code_key".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+        }];
+        desired.indexes = vec![IndexDefine {
+            name: "uk_cf_t_1".to_string(),
+            columns: vec!["code".to_string()],
+            kind: IndexKind::Unique,
+        }];
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(
+            report["action"].as_str(),
+            Some("no_change"),
+            "索引名不同但列+类型相同，应判无变化: {report}"
+        );
+        assert!(
+            report["addedIndexes"].as_array().unwrap().is_empty(),
+            "addedIndexes 应为空: {report}"
+        );
+        assert!(
+            report["droppedIndexes"].as_array().unwrap().is_empty(),
+            "droppedIndexes 应为空: {report}"
+        );
+    }
+
+    /// 列注释透出：DB 列无注释（label=""）、设计期有 caption，结构相同。
+    /// 报告应透出 modifiedColumnComments 且 action=upgrade_table，让用户看到「列注释要同步」。
+    #[test]
+    fn diff_table_report_shows_column_comment_change() {
+        // current：DB 还原，列 label 为空（DB 缺 COMMENT ON COLUMN）
+        let mut cur_col = mk_col("id", FieldType::Int, false);
+        cur_col.label = String::new();
+        let current = mk_table("cf_t", vec![cur_col]);
+        // desired：设计期 label="字典项主键"
+        let mut des_col = mk_col("id", FieldType::Int, false);
+        des_col.label = "字典项主键".to_string();
+        let desired = mk_table("cf_t", vec![des_col]);
+        let report = diff_table_to_report(&current, &desired);
+        // 列结构无变更
+        assert!(
+            report["modifiedColumns"].as_array().unwrap().is_empty(),
+            "结构相同，modifiedColumns 应为空: {report}"
+        );
+        // 但应报 upgrade_table（因列注释差异）
+        assert_eq!(
+            report["action"].as_str(),
+            Some("upgrade_table"),
+            "列注释差异应触发 upgrade_table: {report}"
+        );
+        // modifiedColumnComments 透出 from→to
+        let cmts = report["modifiedColumnComments"].as_array().unwrap();
+        assert_eq!(cmts.len(), 1, "应有 1 条列注释变更: {report}");
+        assert_eq!(cmts[0]["name"].as_str(), Some("id"));
+        assert_eq!(cmts[0]["from"].as_str(), Some(""));
+        assert_eq!(cmts[0]["to"].as_str(), Some("字典项主键"));
+    }
+
+    /// cf_company 真实场景：DB 把无长度 VARCHAR 建成了 TEXT（旧行为），
+    /// 设计期期望 varchar(255)（新默认值）。应报修改列 dataType TEXT→VARCHAR(255)，
+    /// 且执行路径生成 ALTER COLUMN TYPE。
+    #[test]
+    fn varchar_default_length_triggers_alter_from_text() {
+        let doc = load("fi/cmxfico/gl/cmxfico_dct_meta_v3.json");
+        let base = load("base/base_dct_meta_v1.json");
+        let defs = compile_dct(&doc, &base);
+        let desired = defs
+            .iter()
+            .find(|d| d.table_name == "cf_company")
+            .expect("应编译出 cf_company")
+            .clone();
+
+        // 1) 设计期 country_code 应默认 varchar(255)
+        let cc = desired
+            .columns
+            .iter()
+            .find(|c| c.name == "country_code")
+            .expect("应有 country_code 列");
+        assert_eq!(
+            cc.length, Some(255),
+            "无 fieldLength 的 VARCHAR 应默认 255: country_code length={:?}",
+            cc.length
+        );
+
+        // 2) 模拟 DB 还原：country_code 是 TEXT（旧行为建出来的）
+        let mut current = desired.clone();
+        for c in &mut current.columns {
+            if c.name == "country_code" {
+                c.length = None; // TEXT 无长度
+                c.db_type = Some("TEXT".to_string());
+            }
+        }
+        let report = diff_table_to_report(&current, &desired);
+        assert_eq!(
+            report["action"].as_str(),
+            Some("upgrade_table"),
+            "TEXT vs varchar(255) 应报升级: {report}"
+        );
+        let modified = report["modifiedColumns"].as_array().unwrap();
+        let cc_mod = modified
+            .iter()
+            .find(|m| m["name"].as_str() == Some("country_code"))
+            .expect("应报 country_code 修改");
+        let changes = cc_mod["changes"].as_array().unwrap();
+        assert!(
+            changes.iter().any(|d| d["field"].as_str() == Some("dataType")
+                && d["from"].as_str() == Some("TEXT")
+                && d["to"].as_str() == Some("VARCHAR(255)")),
+            "应报 dataType TEXT→VARCHAR(255): {changes:?}"
+        );
+
+        // 3) 执行路径应生成 ALTER COLUMN TYPE VARCHAR(255)
+        let dialect = PostgresDdlDialect::default();
+        let stmts = DdlDiff::diff_to_ddl(&dialect, &[current], std::slice::from_ref(&desired))
+            .unwrap();
+        assert!(
+            stmts.iter().any(|s| s.contains("ALTER COLUMN \"country_code\" TYPE VARCHAR(255)")),
+            "应生成 ALTER COLUMN TYPE VARCHAR(255): {stmts:?}"
         );
     }
 }

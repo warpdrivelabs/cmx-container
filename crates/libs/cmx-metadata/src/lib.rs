@@ -19,5 +19,5 @@ pub use executor::{
     execute_ddl_statement_by_ids,
 };
 pub use ddl::DdlDialect;
-pub use ddl::diff::{ColumnChange, DdlDiff, TableChange};
+pub use ddl::diff::{ColumnChange, ColumnCommentChange, DdlDiff, IndexChange, TableChange};
 pub use ddl::postgres::PostgresDdlDialect;
