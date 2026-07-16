@@ -10,9 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::ai;
-use crate::config::data_path;
 use crate::error::{PortalError, PortalResult};
-use crate::fsutil::read_json;
+use crate::meta::menu_pages::get_menu_page_json;
 
 /// 功能目录项（轻量，供匹配 + 展示）。
 #[derive(Debug, Clone, Serialize)]
@@ -152,17 +151,12 @@ fn derive_keywords(caption: &str, id: &str) -> Vec<String> {
 ///
 /// # Errors
 ///
-/// 读取菜单文件失败（非 NotFound）时返回底层 IO/解析错误。
+/// 数据库读取失败时返回底层错误。
 pub async fn list_catalog() -> PortalResult<Vec<LauncherItem>> {
     let mut out: Vec<LauncherItem> = Vec::new();
     for menu_ref in MENU_REFS {
-        let rel = menu_ref_to_path(menu_ref);
-        let path = data_path(rel);
-        let doc = match read_json::<Value>(&path).await {
-            Ok(v) => v,
-            Err(PortalError::NotFound(_)) => continue,
-            Err(e) => return Err(e),
-        };
+        // 从 cmx_menu 数据库回源（替代原 menu-pages 文件读取）
+        let doc = get_menu_page_json(menu_ref).await?;
         if let Some(items) = doc.get("items").and_then(|v| v.as_array()) {
             collect_nodes(items, menu_ref, &mut out);
         }
@@ -173,41 +167,23 @@ pub async fn list_catalog() -> PortalResult<Vec<LauncherItem>> {
     Ok(out)
 }
 
-/// menuRef(点分) → data 相对路径段（menu-pages/<a>/<b>/<c>.json）。
-fn menu_ref_to_path(menu_ref: &str) -> Vec<String> {
-    let mut rel = vec!["menu-pages".to_string()];
-    let parts: Vec<&str> = menu_ref.split('.').collect();
-    for (i, p) in parts.iter().enumerate() {
-        if i + 1 == parts.len() {
-            rel.push(format!("{p}.json"));
-        } else {
-            rel.push((*p).to_string());
-        }
-    }
-    rel
-}
-
-/// 从菜单文件里按 id 取出某功能项的**完整**节点（含 workspace）。
+/// 从菜单（cmx_menu 数据库回源）里按 id 取出某功能项的**完整**节点（含 workspace）。
 ///
 /// # Arguments
 ///
-/// * `menu_ref` - 点分菜单引用，用于定位菜单文件。
+/// * `menu_ref` - 点分菜单引用，用于定位菜单。
 /// * `id` - 目标功能项 id。
 ///
 /// # Returns
 ///
-/// 找到时返回 `Some(完整节点)`；菜单文件不存在或未命中时返回 `None`。
+/// 找到时返回 `Some(完整节点)`；未命中时返回 `None`。
 ///
 /// # Errors
 ///
-/// 读取菜单文件失败（非 NotFound）时返回底层 IO/解析错误。
+/// 数据库读取失败时返回底层错误。
 async fn find_full_node(menu_ref: &str, id: &str) -> PortalResult<Option<Value>> {
-    let path = data_path(menu_ref_to_path(menu_ref));
-    let doc = match read_json::<Value>(&path).await {
-        Ok(v) => v,
-        Err(PortalError::NotFound(_)) => return Ok(None),
-        Err(e) => return Err(e),
-    };
+    // 从 cmx_menu 数据库回源（替代原 menu-pages 文件读取）
+    let doc = get_menu_page_json(menu_ref).await?;
     fn dfs(items: &[Value], id: &str) -> Option<Value> {
         for it in items {
             if it.get("id").and_then(|v| v.as_str()) == Some(id) {
@@ -422,13 +398,5 @@ mod tests {
         assert_eq!(hit2.id, "fi-gl-acct-ws");
         // 完全不相关 → 无命中
         assert!(rule_match("今天天气怎么样", &catalog).is_none());
-    }
-
-    #[test]
-    fn menu_ref_path_mapping() {
-        assert_eq!(
-            menu_ref_to_path("fi.cmxfico.gl.explorer-menu"),
-            vec!["menu-pages", "fi", "cmxfico", "gl", "explorer-menu.json"]
-        );
     }
 }

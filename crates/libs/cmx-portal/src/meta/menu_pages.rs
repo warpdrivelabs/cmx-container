@@ -3,15 +3,16 @@
 //!
 //! 复刻 Node `lib/menuPagesStore.js`：`parseMenuRef`（文件读）+ `getDamMenuPageJson`（DAM 派生）。
 
+use std::collections::HashMap;
+
+use cmx_core::model::cell::DataValue;
 use serde_json::{Value, json};
 
-use crate::config::data_path;
 use crate::dam::store::list_modules;
 use crate::error::{PortalError, PortalResult};
-use crate::fsutil::read_json;
 use crate::meta::module_theme::resolve_module_theme;
 use crate::meta::modules::load_module_manifest;
-use crate::util::{is_safe_id, is_safe_segment};
+use crate::util::is_safe_segment;
 
 /// 资源类型中文名（与 Node resourceCaption 一致，仅列常用）。
 fn resource_caption(t: &str) -> &str {
@@ -32,55 +33,138 @@ fn resource_caption(t: &str) -> &str {
     }
 }
 
-/// 解析 menu 引用为相对路径段（最后一段补 `.json`）。
+/// 从 DB 获取默认 DatabaseManager + db_id（与 `dam::store::db_handle` 同模式）。
+async fn db_handle() -> PortalResult<(&'static cmx_database::DatabaseManager, String)> {
+    let mm = cmx_database::get_default_db_manager();
+    let db_id = mm.get_default_db_id().await;
+    Ok((mm, db_id))
+}
+
+/// 解析点分 menuRef 前 3 段为 `(domain, application, module)`。
+///
+/// 段不足 3 或含非法字符返回 `None`（短 ref 不支持 DB 回源）。
+fn parse_module_menu_ref(menu_ref: &str) -> Option<(&str, &str, &str)> {
+    let segs: Vec<&str> = menu_ref.trim().split('.').collect();
+    if segs.len() < 3 {
+        return None;
+    }
+    for s in &segs[..3] {
+        if s.is_empty() || !is_safe_segment(s) {
+            return None;
+        }
+    }
+    Some((segs[0], segs[1], segs[2]))
+}
+
+/// 从 `cmx_menu` 按 `domain/application/module` 查询并重建菜单页文档。
+///
+/// 输出 `{version:1, source:"db", items:[<ExplorerMenuNode>]}`，每个节点嵌入
+/// `_cmxId`（`cmx_menu` 主键）供编辑弹框调 `/api/menu/update` 定位。
 ///
 /// # Arguments
 ///
-/// * `menu_ref` - 点分菜单引用（如 `fi.cmxfico.gl.explorer-menu`）。
+/// * `menu_ref` - 点分菜单引用（前 3 段为 domain/application/module）。
 ///
 /// # Returns
 ///
-/// 相对 data 根的路径段数组（首段为 `menu-pages`）。
+/// 重建后的菜单 JSON 文档。
 ///
 /// # Errors
 ///
-/// `menu_ref` 为空、含非法字符或段为空时返回 `bad_request`。
-fn parse_menu_ref(menu_ref: &str) -> PortalResult<Vec<String>> {
-    let r = menu_ref.trim();
-    if r.is_empty() {
-        return Err(PortalError::bad_request("缺少必填查询参数 menu"));
-    }
-    if !is_safe_id(r) {
-        return Err(PortalError::bad_request(
-            "menu 仅允许字母、数字、._-，长度 1–128",
-        ));
-    }
-    let segs: Vec<&str> = r.split('.').collect();
-    for s in &segs {
-        if s.is_empty() {
-            return Err(PortalError::bad_request(
-                "menu 段不能为空（禁止前导/尾随点或连续点）",
-            ));
-        }
-        if !is_safe_segment(s) {
-            return Err(PortalError::bad_request(format!(
-                "menu 段非法：\"{s}\"（仅允许字母、数字、_-）"
-            )));
-        }
-    }
-    let mut parts: Vec<String> = if segs.len() == 1 {
-        vec![format!("{}.json", segs[0])]
-    } else {
-        let mut middle: Vec<String> = segs[..segs.len() - 1]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        middle.push(format!("{}.json", segs[segs.len() - 1]));
-        middle
+/// `menu_ref` 段不足 3 返回 `bad_request`；数据库查询失败返回底层错误。
+async fn get_menu_page_json_from_db(menu_ref: &str) -> PortalResult<Value> {
+    let Some((domain, application, module)) = parse_module_menu_ref(menu_ref) else {
+        return Err(PortalError::bad_request(format!(
+            "DB 菜单引用需至少含 domain.application.module 三段：{menu_ref}"
+        )));
     };
-    let mut rel = vec!["menu-pages".to_string()];
-    rel.append(&mut parts);
-    Ok(rel)
+    let (mm, db_id) = db_handle().await?;
+    let sql = "SELECT id, code, name, icon, fun_code, parent_id, definition \
+               FROM cmx_menu WHERE domain_code = $1 AND application_code = $2 \
+               AND module_code = $3 AND archived = 0 ORDER BY sort_order";
+    let ds = mm
+        .query_sql_with_datavalues(
+            &db_id,
+            None,
+            sql,
+            vec![
+                DataValue::String(domain.to_string()),
+                DataValue::String(application.to_string()),
+                DataValue::String(module.to_string()),
+            ],
+            "menu_pages_db",
+        )
+        .await
+        .map_err(|e| PortalError::business(format!("查询菜单失败: {e}")))?;
+
+    let schema = ds.schema.as_ref();
+    // pk -> 节点 JSON；parent pk -> 子 pk 列表（保留 sort_order 顺序）
+    let mut nodes: HashMap<String, Value> = HashMap::new();
+    let mut children_of: HashMap<String, Vec<String>> = HashMap::new();
+    let mut roots: Vec<String> = Vec::new();
+    for row in ds.iter() {
+        let pk: String = row.get_by_name_as(schema, "id").unwrap_or_default();
+        let code: String = row.get_by_name_as(schema, "code").unwrap_or_default();
+        let name: String = row.get_by_name_as(schema, "name").unwrap_or_default();
+        let icon: Option<String> = row.get_by_name_as(schema, "icon");
+        let fun_code: Option<String> = row.get_by_name_as(schema, "fun_code");
+        let parent_id: Option<String> = row.get_by_name_as(schema, "parent_id");
+        let definition: Value = row
+            .get_by_name_as::<Value>(schema, "definition")
+            .unwrap_or(Value::Null);
+        let def_obj = definition.as_object();
+
+        let mut node = serde_json::Map::new();
+        node.insert("id".into(), json!(code));
+        // caption：优先 definition.caption（保留 i18n 对象），回退 name
+        let caption = def_obj
+            .and_then(|o| o.get("caption").cloned())
+            .unwrap_or(json!(name));
+        node.insert("caption".into(), caption);
+        if let Some(ic) = icon {
+            node.insert("icon".into(), json!(ic));
+        }
+        if let Some(fc) = fun_code {
+            node.insert("permissionId".into(), json!(fc));
+        }
+        if let Some(def) = def_obj {
+            for k in ["workspace", "dialogspace", "expanded", "type", "name"] {
+                if let Some(v) = def.get(k) {
+                    node.insert(k.into(), v.clone());
+                }
+            }
+        }
+        node.insert("_cmxId".into(), json!(pk));
+        node.insert("children".into(), json!([]));
+
+        match &parent_id {
+            None => roots.push(pk.clone()),
+            Some(pid) => children_of.entry(pid.clone()).or_default().push(pk.clone()),
+        }
+        nodes.insert(pk, Value::Object(node));
+    }
+
+    // 递归组装树（按 sort_order 顺序填充 children）
+    fn assemble(
+        pk: &str,
+        nodes: &HashMap<String, Value>,
+        children_of: &HashMap<String, Vec<String>>,
+    ) -> Value {
+        let mut node = nodes.get(pk).cloned().unwrap_or(Value::Null);
+        if let Some(obj) = node.as_object_mut() {
+            let children: Vec<Value> = children_of
+                .get(pk)
+                .map(|cs| cs.iter().map(|c| assemble(c, nodes, children_of)).collect())
+                .unwrap_or_default();
+            obj.insert("children".into(), Value::Array(children));
+        }
+        node
+    }
+    let items: Vec<Value> = roots
+        .iter()
+        .map(|pk| assemble(pk, &nodes, &children_of))
+        .collect();
+    Ok(json!({ "version": 1, "source": "db", "items": items }))
 }
 
 /// 解析 `dam:<domain>/<app>[/<module>]`。
@@ -371,20 +455,13 @@ fn get_menu_page_json_inner(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = PortalResult<Value>> + Send + '_>> {
     Box::pin(async move {
         if depth == 0 {
-            // 顶层才尝试 DAM 派生；递归读引用菜单时只走文件，避免无限递归
+            // 顶层才尝试 DAM 派生；递归读引用菜单时只走 DB，避免无限递归
             if let Some(doc) = get_dam_menu_page_json(menu_name).await? {
                 return Ok(doc);
             }
         }
-        let rel = parse_menu_ref(menu_name)?;
-        let path = data_path(rel);
-        match read_json::<serde_json::Value>(&path).await {
-            Ok(v) => Ok(v),
-            Err(PortalError::NotFound(_)) => Err(PortalError::not_found(format!(
-                "菜单数据不存在：{menu_name}"
-            ))),
-            Err(e) => Err(e),
-        }
+        // 点分 menuRef：从 cmx_menu 数据库回源（替代原文件读取）
+        get_menu_page_json_from_db(menu_name).await
     })
 }
 
@@ -403,4 +480,33 @@ fn get_menu_page_json_inner(
 /// `menu_name` 非法返回 `bad_request`；菜单不存在返回 `not_found`；读取失败返回底层错误。
 pub async fn get_menu_page_json(menu_name: &str) -> PortalResult<serde_json::Value> {
     get_menu_page_json_inner(menu_name, 0).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_module_menu_ref_ok() {
+        let (d, a, m) = parse_module_menu_ref("fi.cmxfico.gl.explorer-menu").unwrap();
+        assert_eq!((d, a, m), ("fi", "cmxfico", "gl"));
+    }
+
+    #[test]
+    fn parse_module_menu_ref_three_segs() {
+        // 恰好 3 段也支持（无文件名后缀）
+        let (d, a, m) = parse_module_menu_ref("fi.cmxfico.report").unwrap();
+        assert_eq!((d, a, m), ("fi", "cmxfico", "report"));
+    }
+
+    #[test]
+    fn parse_module_menu_ref_short() {
+        assert!(parse_module_menu_ref("explorer-menu").is_none());
+        assert!(parse_module_menu_ref("fi.cmxfico").is_none());
+    }
+
+    #[test]
+    fn parse_module_menu_ref_unsafe() {
+        assert!(parse_module_menu_ref("fi.cmx fico.gl").is_none());
+    }
 }
