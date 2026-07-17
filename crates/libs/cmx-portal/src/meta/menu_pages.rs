@@ -58,6 +58,10 @@ fn parse_module_menu_ref(menu_ref: &str) -> Option<(&str, &str, &str)> {
 
 /// 从 `cmx_menu` 按 `domain/application/module` 查询并重建菜单页文档。
 ///
+/// 行列直接映射为 ExplorerMenuNode（id←code, name←name, icon←icon, permissionId←fun_code,
+/// children←parent_id 组装, _cmxId←id）；仅 `workspace`/`dialogspace`/`type`/`expanded`
+/// 4 个富字段从 definition JSONB 取（表无独立列）。`caption` 直接用 name 列。
+///
 /// 输出 `{version:1, source:"db", items:[<ExplorerMenuNode>]}`，每个节点嵌入
 /// `_cmxId`（`cmx_menu` 主键）供编辑弹框调 `/api/menu/update` 定位。
 ///
@@ -114,21 +118,19 @@ async fn get_menu_page_json_from_db(menu_ref: &str) -> PortalResult<Value> {
             .unwrap_or(Value::Null);
         let def_obj = definition.as_object();
 
+        // 行列直接映射；caption 直接用 name 列（迁移数据中 caption 与 name 一致）
         let mut node = serde_json::Map::new();
         node.insert("id".into(), json!(code));
-        // caption：优先 definition.caption（保留 i18n 对象），回退 name
-        let caption = def_obj
-            .and_then(|o| o.get("caption").cloned())
-            .unwrap_or(json!(name));
-        node.insert("caption".into(), caption);
+        node.insert("caption".into(), json!(name));
         if let Some(ic) = icon {
             node.insert("icon".into(), json!(ic));
         }
         if let Some(fc) = fun_code {
             node.insert("permissionId".into(), json!(fc));
         }
+        // 仅 4 个富字段从 definition 取（表无独立列）
         if let Some(def) = def_obj {
-            for k in ["workspace", "dialogspace", "expanded", "type", "name"] {
+            for k in ["workspace", "dialogspace", "expanded", "type"] {
                 if let Some(v) = def.get(k) {
                     node.insert(k.into(), v.clone());
                 }
