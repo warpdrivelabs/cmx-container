@@ -134,7 +134,7 @@ INSERT INTO cmx_domain (id, code, name, type, sort_order, status, archived) VALU
 
 - 日期：YYYYMMDD
 - 序号：3 位数字，按日期从 001 开始；同一天多个文件依次递增（001、002、003...）；新日期重新从 001 开始
-- 描述：使用下划线分隔单词
+- 描述：建议使用下划线分隔的**中文短语**，更直观易读；如 `新增用户手机号` / `新建市场插件表`；英文短语同样允许
 
 **示例：**
 
@@ -145,7 +145,36 @@ INSERT INTO cmx_domain (id, code, name, type, sort_order, status, archived) VALU
 20260520_002_add_user_phone.down.sql
 20260521_001_create_marketplace_table.up.sql
 20260521_001_create_marketplace_table.down.sql
+
+20260522_001_新增用户手机号.up.sql
+20260522_001_新增用户手机号.down.sql
+20260522_002_新建市场插件表.up.sql
+20260522_002_新建市场插件表.down.sql
 ```
+
+### 3.2.1 SQL 文件头注释规范
+
+每个 `.up.sql` / `.down.sql` 文件**必须**在开头使用注释写明本次迁移的主要目的，便于审查与回溯。推荐格式：
+
+```sql
+-- =============================================
+-- 迁移说明：<一句话描述本次变更做了什么>
+-- 影响表：<涉及的表名，多个用逗号分隔>
+-- 操作类型：<ADD COLUMN / CREATE TABLE / CREATE INDEX / INSERT / ...>
+-- 回滚方式：<对应的 down.sql 文件名 或 "无">
+-- =============================================
+
+-- 实际 SQL 语句
+ALTER TABLE cmx_user ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+COMMENT ON COLUMN cmx_user.phone IS '手机号';
+```
+
+**要求：**
+
+- 注释块放在文件最顶部，紧跟在注释之后立即写 SQL 语句
+- `迁移说明` 用一句中文概括本次变更的目的
+- 涉及多张表时在 `影响表` 列出全部表名
+- `回滚方式` 必须填写对应的 `.down.sql` 文件名，若无回滚则写 `无`
 
 ### 3.3 up.sql 规范
 
@@ -258,16 +287,30 @@ DROP TABLE IF EXISTS cmx_marketplace_plugin;
 
 **Step 1: 创建迁移文件**
 
-`20260521_001_add_phone_to_user.up.sql`:
+`20260521_001_新增用户手机号.up.sql`:
 
 ```sql
+-- =============================================
+-- 迁移说明：在 cmx_user 表中新增 phone 字段
+-- 影响表：cmx_user
+-- 操作类型：ADD COLUMN
+-- 回滚方式：20260521_001_新增用户手机号.down.sql
+-- =============================================
+
 ALTER TABLE cmx_user ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
 COMMENT ON COLUMN cmx_user.phone IS '手机号';
 ```
 
-`20260521_001_add_phone_to_user.down.sql`:
+`20260521_001_新增用户手机号.down.sql`:
 
 ```sql
+-- =============================================
+-- 迁移说明：回滚——删除 cmx_user 表的 phone 字段
+-- 影响表：cmx_user
+-- 操作类型：DROP COLUMN
+-- 回滚方式：无
+-- =============================================
+
 ALTER TABLE cmx_user DROP COLUMN IF EXISTS phone;
 ```
 
@@ -295,8 +338,9 @@ COMMENT ON COLUMN cmx_user.phone IS '手机号';
 
 编写 SQL 时，确认以下事项：
 
-- [ ] 文件命名符合规范（日期_序号_描述）
+- [ ] 文件命名符合规范（日期_序号_描述，中文描述更直观）
 - [ ] migrations 提供了 down.sql
+- [ ] SQL 文件开头已写迁移说明 / 影响表 / 操作类型 / 回滚方式 注释块
 - [ ] init_ddl.sql 已同步最新变更
 - [ ] COMMENT 不换行，一行写完
 - [ ] 使用 `IF NOT EXISTS` / `DROP IF EXISTS` 确保幂等
