@@ -476,9 +476,9 @@
       "app": "cmxfico",
       "module": "gl",
       "page": "voucher-doc-sqlxbin",
+      "doc": null,
       "relPath": "fi/cmxfico/gl/voucher-doc-sqlxbin.html",
-      "latestHtmlFile": "voucher-doc-sqlxbin.html",
-      "doc": "cmxfico"
+      "latestHtmlFile": "voucher-doc-sqlxbin.html"
     },
     {
       "id": "fi.cmxfico.gl.doc-service-test",

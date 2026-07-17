@@ -72,6 +72,22 @@ struct DictColumn {
     data_type: String,
     is_pk: bool,
     nullable: bool,
+    /// 维度类型（attribute|dimension），供前端列模型分组/排序。
+    dim_type: String,
+    /// 引用字典编码（如 comp_unit）。空 = 非字典列。
+    ref_dict: String,
+    /// 显示字段（字典回显用，如 name）。
+    display_field: String,
+    /// 写回字段（字典选值写回行，如 code/id）。
+    ref_field: String,
+    /// 物理字段名（如 MANDT），空则无。
+    physical_field: String,
+    /// 录入控件配置（原样透传 edit{}）。
+    edit: Option<Value>,
+    /// 编辑设置（原样透传 editSettings{}）。
+    edit_settings: Option<Value>,
+    /// 显示属性（原样透传 display{}，如下沉后的 decimalDigits/format）。
+    display: Option<Value>,
 }
 
 /// file 缺失时自动解析的进程内缓存：`domain/app/module/dict` → file。
@@ -262,6 +278,11 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
                 .and_then(|c| c.get("zh_CN").and_then(|v| v.as_str()).or_else(|| c.as_str()))
                 .unwrap_or(&name)
                 .to_string();
+            // 录入控件/编辑设置/显示属性/维度类型/字典引用/物理字段：原样透传，
+            // 供前端 DCT→列模型转换时派生 cmx-dict-select 录入控件与字典回显。
+            let edit = f.get("edit").filter(|v| v.is_object()).cloned();
+            let edit_settings = f.get("editSettings").filter(|v| v.is_object()).cloned();
+            let display = f.get("display").filter(|v| v.is_object()).cloned();
             columns.push(DictColumn {
                 caption,
                 data_type: f
@@ -275,6 +296,34 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
                     .map(|n| n != 0)
                     .unwrap_or(false),
                 nullable: f.get("nullable").and_then(|v| v.as_bool()).unwrap_or(true),
+                dim_type: f
+                    .get("dimType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                ref_dict: f
+                    .get("refDict")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                display_field: f
+                    .get("displayField")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                ref_field: f
+                    .get("refField")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                physical_field: f
+                    .get("physicalField")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                edit,
+                edit_settings,
+                display,
                 name,
             });
         }
@@ -496,13 +545,40 @@ pub async fn dct_meta(
         .columns
         .iter()
         .map(|c| {
-            json!({
+            let mut obj = json!({
                 "name": c.name,
                 "caption": c.caption,
                 "dataType": c.data_type,
                 "isPrimaryKey": c.is_pk,
                 "nullable": c.nullable,
-            })
+            });
+            // 维度类型/字典引用/物理字段/录入控件/编辑设置/显示属性：有值才输出，
+            // 供前端 DCT→列模型转换时派生 cmx-dict-select 控件与字典外键回显。
+            if !c.dim_type.is_empty() {
+                obj["dimType"] = Value::String(c.dim_type.clone());
+            }
+            if !c.ref_dict.is_empty() {
+                obj["refDict"] = Value::String(c.ref_dict.clone());
+            }
+            if !c.display_field.is_empty() {
+                obj["displayField"] = Value::String(c.display_field.clone());
+            }
+            if !c.ref_field.is_empty() {
+                obj["refField"] = Value::String(c.ref_field.clone());
+            }
+            if !c.physical_field.is_empty() {
+                obj["physicalField"] = Value::String(c.physical_field.clone());
+            }
+            if let Some(edit) = &c.edit {
+                obj["edit"] = edit.clone();
+            }
+            if let Some(es) = &c.edit_settings {
+                obj["editSettings"] = es.clone();
+            }
+            if let Some(d) = &c.display {
+                obj["display"] = d.clone();
+            }
+            obj
         })
         .collect();
     Ok(Json(ApiResp::ok(json!({
