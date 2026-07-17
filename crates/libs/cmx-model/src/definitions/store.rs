@@ -29,6 +29,10 @@ pub struct DefRef {
     /// 文件名（兼容字段，与 `file` 等价，作为兜底）。
     #[serde(default)]
     pub id: Option<String>,
+    /// 定义类型（"DOC" / "DCT" / "BASE"）。批量加载时用于判断 id 为业务编码（非 .json）时
+    /// 走哪种反查：DOC 按 docCode、DCT 按 dictCode（并过滤只返回命中单表）。
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 impl DefRef {
@@ -408,6 +412,24 @@ fn summarize(
                         .unwrap_or(0)
                 ),
             );
+            // 组内每张字典表的 dictCode/dictName 清单：供前端「字典组浏览器」类页面
+            // 在不加载整组元数据的情况下填充字典下拉（单表化后按 dictCode 逐表加载）。
+            let dicts = doc
+                .get("dictionaryTables")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .map(|t| {
+                            let m = t.get("dictMeta").cloned().unwrap_or(json!({}));
+                            json!({
+                                "dictCode": m.get("dictCode").cloned().unwrap_or(json!("")),
+                                "dictName": m.get("dictName").cloned().unwrap_or(json!("")),
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            obj.insert("dictionaries".into(), json!(dicts));
         }
         "DOC" => {
             // DOC 业务单据：表数含主表与 summaries/sum 子表

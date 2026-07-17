@@ -438,6 +438,7 @@ async fn read_def(domain: &str, app: &str, module: &str, file: &str) -> Result<V
         module: Some(module.to_string()),
         file: Some(file.to_string()),
         id: None,
+        kind: None,
     };
     cmx_portal::definitions::store::get_definition(&r)
         .await
@@ -453,6 +454,7 @@ async fn read_base(file: &str) -> Result<Value> {
         module: None,
         file: Some(file.to_string()),
         id: None,
+        kind: None,
     };
     cmx_portal::definitions::store::get_definition(&r)
         .await

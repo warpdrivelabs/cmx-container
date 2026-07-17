@@ -54,6 +54,7 @@ pub async fn load_abs(abs: &AbsDrn) -> PortalResult<Value> {
                 module: None,
                 file: Some(with_json(&abs.name, abs.version)),
                 id: None,
+                kind: None,
             };
             get_definition(&r).await
         }
@@ -66,6 +67,7 @@ pub async fn load_abs(abs: &AbsDrn) -> PortalResult<Value> {
                 module: Some(abs.module.clone()),
                 file: Some(with_json(&abs.name, abs.version)),
                 id: None,
+                kind: None,
             };
             get_definition(&r).await
         }
