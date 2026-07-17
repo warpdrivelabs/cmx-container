@@ -116,7 +116,7 @@ async fn resolve_db_id(headers: &HeaderMap) -> String {
 
 /// 判断字典表项是否与目标标识匹配：同时认 dictCode（如 comp_unit）和 tableName（如 cf_comp_unit）。
 /// 前端字典池统一用 tableName（物理表名），但 DctQuery.dict 也可能传 dictCode，故两者都比对。
-fn dict_matches(t: &Value, target: &str) -> bool {
+pub(crate) fn dict_matches(t: &Value, target: &str) -> bool {
     let m = match t.get("dictMeta") {
         Some(m) => m,
         None => return false,
@@ -133,7 +133,7 @@ fn dict_matches(t: &Value, target: &str) -> bool {
 ///   3. 逐候选文件读 `dictionaryTables` 找 `dictMeta.dictCode == dict`，第一个命中的返回。
 ///
 /// 缓存结果（键 `domain/app/module/dict`）。定义文件改动后若需立即生效，重启服务即可。
-async fn resolve_dict_file(domain: &str, app: &str, module: &str, dict: &str) -> Result<String> {
+pub(crate) async fn resolve_dict_file(domain: &str, app: &str, module: &str, dict: &str) -> Result<String> {
     let cache_key = format!("{domain}/{app}/{module}/{dict}");
     if let Some(f) = dict_file_cache().read().await.get(&cache_key).cloned() {
         return Ok(f);
@@ -196,6 +196,7 @@ async fn resolve_dict_file(domain: &str, app: &str, module: &str, dict: &str) ->
             module: Some(module.to_string()),
             file: Some(f.clone()),
             id: None,
+            kind: None,
         };
         let doc = match cmx_portal::definitions::store::get_definition(&doc_ref).await {
             Ok(d) => d,
@@ -234,6 +235,7 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         module: Some(q.module.clone()),
         file: Some(file.clone()),
         id: None,
+        kind: None,
     };
     let doc = cmx_portal::definitions::store::get_definition(&doc_ref).await?;
     let base = load_base(&doc).await;
@@ -421,6 +423,7 @@ async fn load_base(doc: &Value) -> Value {
         module: None,
         file: Some(file.to_string()),
         id: None,
+        kind: None,
     };
     cmx_portal::definitions::store::get_definition(&base_ref)
         .await

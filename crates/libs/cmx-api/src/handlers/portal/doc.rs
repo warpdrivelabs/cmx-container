@@ -916,7 +916,7 @@ fn doc_file_cache() -> &'static tokio::sync::RwLock<std::collections::HashMap<St
 }
 
 /// 判断 DOC 定义文件的 docMeta.docCode 是否与目标单据编码匹配（仿 DCT dict_matches）。
-fn doc_matches(doc: &serde_json::Value, target: &str) -> bool {
+pub(crate) fn doc_matches(doc: &serde_json::Value, target: &str) -> bool {
     doc.get("docMeta")
         .and_then(|m| m.get("docCode"))
         .and_then(|v| v.as_str())
@@ -928,7 +928,7 @@ fn doc_matches(doc: &serde_json::Value, target: &str) -> bool {
 /// - doc 缺失：选「isDefault 优先，否则 version 最大」者（盲选默认，向后兼容）。
 /// - doc 有值：仿 DCT resolve_dict_file——stem 分组选代表 → 逐文件读 docMeta.docCode 验证匹配 → 命中返回；
 ///   代表未命中则回退扫描该 stem 组其余版本。
-async fn resolve_doc_file(domain: &str, app: &str, module: &str, doc: Option<&str>) -> Result<String> {
+pub(crate) async fn resolve_doc_file(domain: &str, app: &str, module: &str, doc: Option<&str>) -> Result<String> {
     // 缓存键：doc 有值时四段（精确定位），缺失时三段（盲选默认）。
     let cache_key = match doc {
         Some(d) if !d.is_empty() => format!("{domain}/{app}/{module}/{d}"),
@@ -1009,6 +1009,7 @@ async fn resolve_doc_file(domain: &str, app: &str, module: &str, doc: Option<&st
                 module: Some(module.to_string()),
                 file: Some(f.clone()),
                 id: None,
+                kind: None,
             };
             let doc_json = match cmx_portal::definitions::store::get_definition(&doc_ref).await {
                 Ok(d) => d,
@@ -1093,6 +1094,7 @@ async fn resolve_doc_meta(
         module: Some(module.to_string()),
         file: Some(file.to_string()),
         id: None,
+        kind: None,
     };
     let doc = cmx_portal::definitions::store::get_definition(&doc_ref).await?;
 
@@ -1120,6 +1122,7 @@ async fn load_base(doc: &Value) -> Value {
         module: None,
         file: Some(base_file.to_string()),
         id: None,
+        kind: None,
     };
     cmx_portal::definitions::store::get_definition(&base_ref)
         .await

@@ -53,6 +53,7 @@ async fn expand_combination_overlay(cfg: &Value) -> Value {
                 module: dr.get("module").and_then(|v| v.as_str()).map(String::from),
                 file: dr.get("file").and_then(|v| v.as_str()).map(String::from),
                 id: None,
+                kind: None,
             };
             match get_definition(&def_ref).await {
                 Ok(doc) => doc
