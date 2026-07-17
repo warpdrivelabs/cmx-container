@@ -110,6 +110,7 @@ for (const d of DOCS) {
   const items = Array.isArray(doc) ? doc : (doc.items ?? [])
   // explorer 原样（suffix=false）；report 冲突加 _rpt（suffix=true）
   const suffix = d.module === 'report'
+  // 模块本身由 DAM 派生（不落入 cmx_menu）；此处仅导入模块下的菜单 items 作为各模块的菜单根节点。
   all.push(...flatten(items, null, 1, '', '', d.domain, d.app, d.module, usedCodes, suffix))
 }
 
@@ -125,6 +126,7 @@ const lines = all.map(n => {
 })
 
 const up = `-- 菜单文件(menu-pages)迁移到 cmx_menu（由 scripts/gen_menu_migration.mjs 生成，可重跑）
+-- 模块本身由 DAM 派生（不在 cmx_menu）；此处仅导入各模块下的菜单 items 作为该模块菜单根节点。
 -- 节点级映射：workspace/dialogspace 等富数据入 definition JSONB；report 冲突 code 加 _rpt 后缀。
 
 ${lines.join('\n')}

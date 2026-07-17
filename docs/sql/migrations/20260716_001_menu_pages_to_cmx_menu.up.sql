@@ -1,4 +1,5 @@
 -- 菜单文件(menu-pages)迁移到 cmx_menu（由 scripts/gen_menu_migration.mjs 生成，可重跑）
+-- 模块本身由 DAM 派生（不在 cmx_menu）；此处仅导入各模块下的菜单 items 作为该模块菜单根节点。
 -- 节点级映射：workspace/dialogspace 等富数据入 definition JSONB；report 冲突 code 加 _rpt 后缀。
 
 INSERT INTO cmx_menu (id, code, name, icon, fun_code, sort_order, definition, domain_code, application_code, module_code, parent_id, parent_code, depth, leaf, code_path, id_path, visible, status, open_type, archived, create_time, update_time) VALUES ('fi.cmxfico.gl/gl', 'gl', '基础数据管理', 'tabler-filled/home', NULL, 1, '{"caption":"基础数据管理","expanded":true,"name":"gl"}'::jsonb, 'fi', 'cmxfico', 'gl', NULL, NULL, 1, 0, '/gl', '/fi.cmxfico.gl/gl', 1, 1, 0, 0, now(), now()) ON CONFLICT (code) WHERE archived = 0 DO NOTHING;
