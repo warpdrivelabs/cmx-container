@@ -79,7 +79,7 @@ pub async fn ensure_tables(manager: &DatabaseManager) {
             CONSTRAINT uk_cmx_form_code UNIQUE (code)
         )"#,
         r#"CREATE INDEX IF NOT EXISTS idx_cmx_form_module ON cmx_form (domain_code, application_code, module_code)"#,
-        // cmx_menu(标准分级字段)
+        // cmx_menu(标准分级字段，与 docs/sql/init/init_ddl.sql 对齐)
         r#"CREATE TABLE IF NOT EXISTS cmx_menu (
             id VARCHAR(64) NOT NULL,
             code VARCHAR(128) NOT NULL,
@@ -90,6 +90,8 @@ pub async fn ensure_tables(manager: &DatabaseManager) {
             component VARCHAR(512),
             sort_order INT4 DEFAULT 0,
             visible INT4 DEFAULT 1,
+            open_type INT4 DEFAULT 0,
+            fun_code VARCHAR(200),
             domain_code VARCHAR(64) NOT NULL,
             application_code VARCHAR(64) NOT NULL,
             module_code VARCHAR(64) NOT NULL,
@@ -109,11 +111,14 @@ pub async fn ensure_tables(manager: &DatabaseManager) {
             update_by VARCHAR(100),
             update_name VARCHAR(100),
             ext_attributes TEXT,
-            CONSTRAINT pk_cmx_menu PRIMARY KEY (id),
-            CONSTRAINT uk_cmx_menu_code UNIQUE (code)
+            CONSTRAINT pk_cmx_menu PRIMARY KEY (id)
         )"#,
+        // 部分唯一索引（与生产一致：ON CONFLICT (code) WHERE archived = 0 依赖此索引）
+        r#"CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_menu_code ON cmx_menu (code) WHERE archived = 0"#,
         r#"CREATE INDEX IF NOT EXISTS idx_cmx_menu_module ON cmx_menu (domain_code, application_code, module_code)"#,
         r#"CREATE INDEX IF NOT EXISTS idx_cmx_menu_parent_id ON cmx_menu (parent_id)"#,
+        r#"CREATE INDEX IF NOT EXISTS idx_cmx_menu_code_path ON cmx_menu (code_path)"#,
+        r#"CREATE INDEX IF NOT EXISTS idx_cmx_menu_id_path ON cmx_menu (id_path)"#,
     ];
     for sql in stmts {
         manager

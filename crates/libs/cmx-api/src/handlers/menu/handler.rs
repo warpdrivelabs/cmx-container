@@ -20,7 +20,7 @@ use tracing::debug;
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
 use crate::rest::header_parse::get_db_id_from_header;
-use crate::{ApiResp, Result};
+use crate::{ApiResp, Error, Result};
 
 use cmx_biz::menu::{MenuFilter, MenuForCreate, MenuForUpdate, MenuService, MenuTreeNodeData};
 
@@ -101,14 +101,29 @@ pub async fn update_menu(
     State(_cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
     headers: HeaderMap,
-    Json(payload): Json<UpdatePayload<MenuForUpdate>>,
+    Json(raw): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<DataSet>>> {
     debug!("{:<12} - handler::update_menu", "HANDLER");
+
+    // 解析 UpdatePayload<MenuForUpdate>，并检测 data 里是否显式带了 parent_id 键（含 null）。
+    // serde 的 Option<String> 无法区分"未传"与"传 null"，故这里用原始 JSON 判断，
+    // 传 true 给 service 以支持"parent_id:null → 变根节点"。
+    let payload: UpdatePayload<MenuForUpdate> = serde_json::from_value(raw.clone())
+        .map_err(|e| Error::business_error(format!("请求体解析失败: {e}")))?;
+    // 检测 data 对象是否显式带 parent_id 键（含 null）。
+    // serde 的 Option<String> 无法区分"未传"与"传 null"，故用原始 JSON 判断，
+    // 传 true 给 service 以支持"parent_id:null → 变根节点"。
+    let parent_id_explicit = raw
+        .get("data")
+        .and_then(|d| d.as_object())
+        .map(|o| o.contains_key("parent_id"))
+        .unwrap_or(false);
 
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
 
-    let dataset = MenuService::update(mm, &db_id, payload.id, payload.data).await?;
+    let dataset =
+        MenuService::update(mm, &db_id, payload.id, payload.data, parent_id_explicit).await?;
 
     Ok(Json(ApiResp::ok(dataset)))
 }

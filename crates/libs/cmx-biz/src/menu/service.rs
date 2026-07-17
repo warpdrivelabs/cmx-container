@@ -267,6 +267,9 @@ impl MenuService {
     ///
     /// # Arguments
     /// * `id` - 菜单主键(serde_json::Value,通常为 String)
+    /// * `parent_id_explicit` - 请求体是否显式带了 `parent_id` 键(含 null)。
+    ///   serde 的 `Option<String>` 无法区分"未传"与"传 null",故由 handler 用原始
+    ///   JSON 判断后传入。`true` + `parent_id=None` 表示变根节点。
     ///
     /// # Errors
     /// 菜单/新父菜单不存在、数据库执行失败时返回错误
@@ -276,6 +279,7 @@ impl MenuService {
         db_id: &str,
         id: Value,
         data: MenuForUpdate,
+        parent_id_explicit: bool,
     ) -> Result<DataSet> {
         let menu_id = value_to_id_string(&id);
 
@@ -322,8 +326,10 @@ impl MenuService {
 
         // 规范化:空字符串视为 None(根节点)
         let old_parent_norm = old_parent_id.as_deref().filter(|s| !s.is_empty());
-        // 解析新父:parent_code 优先(查出 id),回退 parent_id;两者均空则成为根节点
-        let parent_provided = data.parent_id.is_some() || data.parent_code.is_some();
+        // 解析新父:parent_code 优先(查出 id),回退 parent_id;
+        // parent_provided = 请求体显式带了 parent_id 键(含 null)或 parent_code。
+        //   区分"未传 parent_id"(不动父节点)与"传了 null"(变根节点)。
+        let parent_provided = parent_id_explicit || data.parent_code.is_some();
         let resolved_new_parent = if parent_provided {
             Self::resolve_parent_id(mm, db_id, Some(txn_id), &data.parent_id, &data.parent_code)
                 .await?
@@ -362,8 +368,10 @@ impl MenuService {
             // (旧前缀 old_code_path/old_id_path → 新前缀 new_code_path/new_id_path)
             // 注:SUBSTRING(code_path FROM $3) 的 $3 用 old_path.len()+1(字节数)。
             //     code_path 仅由 UUID/菜单编码(ASCII)与 '/' 组成,字节数 == 字符数,故安全。
+            //     $3 显式 ::integer cast:DataValue::Int 是 i64,PG 的 substring(varchar, bigint)
+            //     无此重载,须 cast 为 integer。
             let code_cascade =
-                "UPDATE cmx_menu SET code_path = $2 || SUBSTRING(code_path FROM $3) \
+                "UPDATE cmx_menu SET code_path = $2 || SUBSTRING(code_path FROM ($3)::integer) \
                  WHERE code_path = $1 OR code_path LIKE ($1 || '/%')";
             mm.execute_sql_with_datavalues(
                 db_id,
@@ -379,7 +387,7 @@ impl MenuService {
             .map_err(|e| BizError::business(format!("级联更新 code_path 失败: {e}")))?;
 
             let id_cascade =
-                "UPDATE cmx_menu SET id_path = $2 || SUBSTRING(id_path FROM $3) \
+                "UPDATE cmx_menu SET id_path = $2 || SUBSTRING(id_path FROM ($3)::integer) \
                  WHERE id_path = $1 OR id_path LIKE ($1 || '/%')";
             mm.execute_sql_with_datavalues(
                 db_id,
