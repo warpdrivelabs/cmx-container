@@ -110,6 +110,9 @@ pub struct ColumnView {
     pub edit: Option<Value>,
     /// 编辑设置（原样透传 editSettings{}，如 {dictCode, coord}）。
     pub edit_settings: Option<Value>,
+    /// 显示属性（原样透传 display{}，如 {decimalDigits:0, format:"thousands"}）。
+    /// 表现交互层属性，下沉到 DOC 元数据后由前端列模型直接消费。
+    pub display: Option<Value>,
 }
 
 /// 父子关系（来自 `voucherSchema.relations`）。
@@ -659,6 +662,8 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         .to_string();
     let edit = f.get("edit").filter(|v| v.is_object()).cloned();
     let edit_settings = f.get("editSettings").filter(|v| v.is_object()).cloned();
+    // 显示属性：原样透传 display{}（表现交互层，如 decimalDigits/format/align）。
+    let display = f.get("display").filter(|v| v.is_object()).cloned();
     Some(ColumnView {
         name,
         data_type,
@@ -672,6 +677,7 @@ fn parse_column(f: &Value) -> Option<ColumnView> {
         ref_field,
         edit,
         edit_settings,
+        display,
     })
 }
 

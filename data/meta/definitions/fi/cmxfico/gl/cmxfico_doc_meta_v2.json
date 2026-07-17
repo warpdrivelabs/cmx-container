@@ -187,7 +187,11 @@
             }
           },
           "refField": "id",
-          "displayField": "code"
+          "displayField": "code",
+          "display": {
+            "mode": "text",
+            "decimalDigits": 0
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -739,7 +743,8 @@
         "ledger_code": {
           "refDict": "ledger"
         }
-      }
+      },
+      "parentTable": "cv_batch"
     },
     {
       "level": "L3",
@@ -1023,7 +1028,10 @@
             "zh_CN": "公司代码"
           },
           "intDigits": 20,
-          "decimalDigits": 0
+          "decimalDigits": 0,
+          "display": {
+            "mode": "text"
+          }
         },
         {
           "dataType": "VARCHAR",
@@ -3391,7 +3399,7 @@
       }
     ]
   },
-  "updatedAt": "2026-07-14T08:33:47.183Z",
+  "updatedAt": "2026-07-16T11:34:21.433Z",
   "validationRules": [
     {
       "code": "voucher_local_balance",

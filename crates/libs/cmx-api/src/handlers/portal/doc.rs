@@ -525,6 +525,10 @@ fn column_to_json(c: &cmx_biz::doc::ColumnView) -> Value {
     if let Some(es) = &c.edit_settings {
         obj["editSettings"] = es.clone();
     }
+    // 显示属性（表现交互层）：有值才输出，供前端动态列模型格式化/对齐/显示精度。
+    if let Some(d) = &c.display {
+        obj["display"] = d.clone();
+    }
     obj
 }
 
