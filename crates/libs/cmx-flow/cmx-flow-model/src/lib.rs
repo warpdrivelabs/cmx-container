@@ -19,13 +19,14 @@ pub mod ir;
 pub mod resolver;
 pub mod runtime;
 pub mod store;
+pub mod subflow;
 pub mod variables;
 
 // —— 扁平化再导出，给消费方一个稳定的浅层 API —— //
 pub use error::{Error, Result};
 pub use ir::{
-    BoundaryTimer, CandidateKind, CandidateRef, FlowNode, MultiInstance, NodeId, NodeKind,
-    ProcessDefinition, SequenceFlow, ServiceTask, TimerDuration, UserTask,
+    BoundaryTimer, CallActivity, CandidateKind, CandidateRef, FlowNode, MultiInstance, NodeId,
+    NodeKind, ProcessDefinition, SequenceFlow, ServiceTask, TimerDuration, UserTask, VarMapping,
 };
 pub use resolver::{AssigneeResolver, ResolveError, ResolveResult};
 pub use runtime::{
@@ -33,6 +34,7 @@ pub use runtime::{
     ProcessInstance, Task, TaskCandidate, TaskDelegation, TimerJob, Token, TokenState,
 };
 pub use store::{RuntimeStore, StoreError, StoreResult};
+pub use subflow::{RouteError, RouteResult, SubflowRouter};
 pub use variables::Variables;
 
 #[cfg(test)]

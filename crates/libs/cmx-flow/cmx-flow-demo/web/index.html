@@ -40,6 +40,17 @@
   .node.svc{background:#f5f0ff;border-color:#d9c8ef}
   .node.timer{border-radius:50%;background:#fff4ec;border-color:#e0a878;min-width:auto;padding:8px 10px}
   .node.miTask{border-style:dashed;border-color:var(--purple);background:var(--purple-soft)}
+  .node.callAct{border-color:#0e7c66;background:#eafaf6;border-width:2px}
+  /* callActivity 节点 + 内嵌子流程图 竖向堆叠 */
+  .node-wrap{display:inline-flex;flex-direction:column;align-items:center;gap:0}
+  .subflow-graph{margin-top:6px;border:1.5px dashed #6bc3b0;border-radius:10px;background:#f2fbf9;
+    padding:8px 10px 6px;max-width:100%}
+  .subflow-graph-h{font-size:11px;color:#0e7c66;font-family:var(--mono);font-weight:700;margin-bottom:6px;text-align:left}
+  .flow.sub{gap:4px;padding:0}
+  .flow.sub .node{min-width:64px;padding:5px 8px;font-size:12px}
+  .flow.sub .node .kd{font-size:9px}
+  .flow.sub .node .nm{font-size:11.5px}
+  .flow.sub .arrow{font-size:13px}
   .node.active{border-color:var(--active);background:var(--active-soft);
     box-shadow:0 0 0 3px rgba(9,105,218,.15);animation:pulse 1.6s infinite}
   .node.done{border-color:var(--ok);background:var(--ok-soft)}
@@ -75,6 +86,9 @@
   .tag.cs{background:var(--purple-soft);color:var(--purple)}
   .tag.timer{background:#fff4ec;color:#c26a2a}
   .tag.cand{background:#e6f6eb;color:#1a7f37}
+  .tag.sub{background:#e2f7f2;color:#0e7c66}
+  .subflow-card{border:1px solid #a8ddd2;border-radius:9px;padding:10px 12px;background:#f2fbf9;margin-bottom:8px}
+  .subflow-h{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
   .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;font-family:var(--mono)}
   .pill.ACTIVE{background:var(--active-soft);color:var(--brand)}
   .pill.COMPLETED{background:var(--ok-soft);color:var(--ok)}
@@ -149,6 +163,7 @@
           <option value="expense_countersign">报销会签审批（M3 会签）</option>
           <option value="timed_approval">限时审批（M2.5 定时器）</option>
           <option value="candidate_approval">候选人认领审批（M4.1 角色/岗位）</option>
+          <option value="subflow_main">报销主流程（M5.1 子流程）</option>
         </select>
         <label>申请人</label>
         <input id="applicant" placeholder="如：张三" value="张三"/>
@@ -170,6 +185,20 @@
           <b>部门经理初审</b>按岗位 <code>position(df_mgr)</code> 解析（1 人 → 直派）；<br>
           <b>财务组审批</b>按角色 <code>role(df_finance)</code> 解析（3 人 → 落候选池，需<b>认领</b>后办理）。<br>
           办理人从 cmx 库 IAM 实时解析。
+        </div>
+        <div id="subHint" class="hint" style="display:none">
+          经理审批后走 <b>callActivity 子流程</b>（逻辑 key <code>fin_review</code>，按发起组织路由）：<br>
+          <b>总部</b> → 总部三级复核（财务初审→财务经理复核）；<b>北京分公司</b> → 沿组织树<b>继承总部</b>；
+          <b>上海分公司</b> → 分公司单签。<b>同一份主流程，不同组织跑不同子流程。</b><br>
+          详情面板会显示解析到的子流程实例，可直接办理。
+        </div>
+        <div id="orgRow" style="display:none">
+          <label>发起组织（决定子流程路由）</label>
+          <select id="orgId">
+            <option value="df_root">演示总部（→ 总部三级复核）</option>
+            <option value="df_bj">北京分公司（未绑定 → 继承总部）</option>
+            <option value="df_sh">上海分公司（→ 分公司单签）</option>
+          </select>
         </div>
         <button class="btn-primary" style="width:100%;margin-top:14px" onclick="startInstance()">发起流程</button>
         <button class="btn-ghost btn-sm" style="width:100%;margin-top:8px" onclick="triggerTimers()">⏰ 立即检查定时器</button>
@@ -211,9 +240,9 @@ async function api(path, opts){
 function escapeHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function fmt(n){return n==null?'?':Number(n).toLocaleString('zh-CN');}
 const KIND_CN = {startEvent:'开始',endEvent:'结束',userTask:'用户任务',serviceTask:'服务任务',
-  exclusiveGateway:'排他网关',parallelGateway:'并行网关',boundaryTimerEvent:'边界定时器'};
-const KIND_CLS = {startEvent:'start',endEvent:'end',exclusiveGateway:'gw',parallelGateway:'gw',serviceTask:'svc',boundaryTimerEvent:'timer'};
-const DEF_CN = {credit_approval:'信用额度审批', expense_countersign:'报销会签审批', timed_approval:'限时审批', candidate_approval:'候选人认领审批'};
+  exclusiveGateway:'排他网关',parallelGateway:'并行网关',boundaryTimerEvent:'边界定时器',callActivity:'调用子流程'};
+const KIND_CLS = {startEvent:'start',endEvent:'end',exclusiveGateway:'gw',parallelGateway:'gw',serviceTask:'svc',boundaryTimerEvent:'timer',callActivity:'callAct'};
+const DEF_CN = {credit_approval:'信用额度审批', expense_countersign:'报销会签审批', timed_approval:'限时审批', candidate_approval:'候选人认领审批', subflow_main:'报销主流程(子流程)', fin_review_hq:'总部财务复核', fin_review_branch:'分公司财务复核'};
 let USER_MAP = {};  // user id → 友好名字（M4.1）
 function uname(id){ return USER_MAP[id] || (id ? id.slice(0,10) : '-'); }
 
@@ -222,12 +251,16 @@ function onDefChange(){
   const isCs = k==='expense_countersign';
   const isTimed = k==='timed_approval';
   const isCand = k==='candidate_approval';
+  const isSub = k==='subflow_main';
   document.getElementById('approversWrap').style.display = isCs?'block':'none';
-  document.getElementById('creditHint').style.display = (isCs||isTimed||isCand)?'none':'block';
+  document.getElementById('creditHint').style.display = (isCs||isTimed||isCand||isSub)?'none':'block';
   document.getElementById('timedHint').style.display = isTimed?'block':'none';
   document.getElementById('candHint').style.display = isCand?'block':'none';
+  document.getElementById('subHint').style.display = isSub?'block':'none';
+  document.getElementById('orgRow').style.display = isSub?'block':'none';
   document.getElementById('amountRow').style.display = (isTimed||isCand)?'none':'block';
   if(isCs) document.getElementById('amount').value='50000';
+  else if(isSub) document.getElementById('amount').value='88000';
   else if(!isTimed && !isCand) document.getElementById('amount').value='80000';
   renderFlow(k, [], null);
 }
@@ -238,11 +271,17 @@ function renderFlow(defKey, activeNodes, completedState){
   const DEF = DEFS[defKey];
   document.getElementById('flowTitle').textContent = '流程图 · '+(DEF_CN[defKey]||defKey);
   if(!DEF){flow.innerHTML='';return;}
-  const active = new Set(activeNodes||[]);
+  flow.innerHTML = buildFlowStrip(DEF, new Set(activeNodes||[]), completedState, 0);
+}
+
+// 构建一条流程图 HTML（节点 + 箭头）。callActivity 节点内嵌其子流程路径图。
+// depth 防子流程无限递归（最多下钻 3 层）。
+function buildFlowStrip(DEF, active, completedState, depth){
   const parts = [];
   DEF.nodes.forEach((n)=>{
     let cls = KIND_CLS[n.kind]||'';
     if(n.multiInstance) cls += ' miTask';
+    if(n.kind==='callActivity') cls += ' callAct';
     let stateCls = '';
     if(active.has(n.id)) stateCls='active';
     else if(completedState==='COMPLETED') stateCls='done';
@@ -254,11 +293,31 @@ function renderFlow(defKey, activeNodes, completedState){
       const kind = n.boundaryTimer.cancelActivity ? '中断' : '催办';
       btLbl = `⏰ ${secs}s ${kind}`;
     }
-    parts.push(`<div class="node ${cls} ${stateCls}">
-      <span class="kd">${KIND_CN[n.kind]||n.kind}</span>
-      <span class="nm">${escapeHtml(label)}</span>
-      ${miLbl?`<span class="mi">${miLbl}</span>`:''}
-      ${btLbl?`<span class="mi" style="color:#c26a2a">${btLbl}</span>`:''}</div>`);
+    // callActivity：节点 + 内嵌子流程路径图。
+    if(n.kind==='callActivity' && n.calledElement){
+      const subDef = DEFS[n.calledElement];
+      const subActive = (subDef && active.has(n.id)) ? active : new Set(); // 主节点激活时高亮子图
+      const subStrip = (subDef && depth < 3)
+        ? `<div class="subflow-graph">
+             <div class="subflow-graph-h">📂 子流程：${escapeHtml(DEF_CN[n.calledElement]||n.calledElement)}</div>
+             <div class="flow sub">${buildFlowStrip(subDef, subActive, null, depth+1)}</div>
+           </div>`
+        : (subDef?'':`<div class="subflow-graph"><div class="subflow-graph-h">子流程 ${escapeHtml(n.calledElement)}（未部署图）</div></div>`);
+      parts.push(`<div class="node-wrap">
+        <div class="node ${cls} ${stateCls}">
+          <span class="kd">${KIND_CN[n.kind]||n.kind}</span>
+          <span class="nm">${escapeHtml(label)}</span>
+          <span class="mi" style="color:#0e7c66">⤵ 调用 ${escapeHtml(n.calledElement)}</span>
+        </div>
+        ${subStrip}
+      </div>`);
+    } else {
+      parts.push(`<div class="node ${cls} ${stateCls}">
+        <span class="kd">${KIND_CN[n.kind]||n.kind}</span>
+        <span class="nm">${escapeHtml(label)}</span>
+        ${miLbl?`<span class="mi">${miLbl}</span>`:''}
+        ${btLbl?`<span class="mi" style="color:#c26a2a">${btLbl}</span>`:''}</div>`);
+    }
     const outs = DEF.edges.filter(e=>e.from===n.id);
     if(outs.length===1){
       const e=outs[0];
@@ -269,21 +328,25 @@ function renderFlow(defKey, activeNodes, completedState){
       parts.push(`<span class="arrow cond">⇉</span><span class="arrow-lbl">${escapeHtml(lbls)}</span>`);
     }
   });
-  flow.innerHTML = parts.join('');
+  return parts.join('');
 }
 
 // —— 实例列表 —— //
 async function loadInstances(){
-  const {instances} = await api('/api/instances');
+  const resp = await api('/api/instances');
+  // 隐藏子流程实例（fin_review_hq / fin_review_branch），它们在主实例详情里展示。
+  const instances = resp.instances.filter(it=>it.definitionKey!=='fin_review_hq' && it.definitionKey!=='fin_review_branch');
   const box = document.getElementById('instances');
   if(!instances.length){box.innerHTML='<div class="empty">暂无实例</div>';return;}
   box.innerHTML = instances.map(it=>{
     const isCs = it.definitionKey==='expense_countersign';
     const isTimed = it.definitionKey==='timed_approval';
     const isCand = it.definitionKey==='candidate_approval';
+    const isSub = it.definitionKey==='subflow_main';
     const tag = isCs?'<span class="tag cs">会签</span>'
       :isTimed?'<span class="tag timer">限时</span>'
       :isCand?'<span class="tag cand">候选</span>'
+      :isSub?'<span class="tag sub">子流程</span>'
       :'<span class="tag credit">信用</span>';
     const amountPart = (isTimed||isCand)?'':` · ¥${fmt(it.amount)}`;
     return `
@@ -389,6 +452,12 @@ function renderDetail(){
     html += `<div class="empty">无待办任务</div>`;
   }
 
+  // 子流程实例（M5.1）：主流程挂起等子时，展示子实例并可直接办理。
+  if(SELECTED.waitingSubflow){
+    html += `<h3 style="margin:18px 0 8px;font-size:13px">🧩 子流程实例（主流程挂起等待中）</h3>
+      <div id="subflowBox"><div class="empty">加载子流程…</div></div>`;
+  }
+
   // 转签流转链（M4.3）。
   const dels = SELECTED.delegations||[];
   if(dels.length){
@@ -408,6 +477,46 @@ function renderDetail(){
     </div>`;
   }
   d.innerHTML = html;
+  // 若有子流程，异步载入并渲染到 subflowBox。
+  if(SELECTED.waitingSubflow) loadChildren(SELECTED.id);
+}
+
+// —— M5.1：载入并渲染子流程实例 —— //
+async function loadChildren(mainId){
+  const box = document.getElementById('subflowBox');
+  if(!box) return;
+  try{
+    const {children} = await api('/api/instances/'+mainId+'/children');
+    if(!children.length){ box.innerHTML='<div class="empty">无子流程实例</div>'; return; }
+    box.innerHTML = children.map(c=>{
+      const done = c.state==='COMPLETED';
+      const open = c.openTasks||[];
+      const tasks = open.map(t=>`
+        <div class="task" style="margin-top:6px">
+          <div class="tn">${escapeHtml(t.name||t.nodeBpmnId)}</div>
+          <div class="as">办理人: ${escapeHtml(t.assignee||'-')}　节点: ${t.nodeBpmnId}</div>
+          <div class="row">
+            <button class="btn-ok btn-sm" onclick="doCompleteSub('${c.id}','${t.id}')">✓ 同意</button>
+          </div>
+        </div>`).join('');
+      return `<div class="subflow-card">
+        <div class="subflow-h">🧩 ${escapeHtml(DEF_CN[c.definitionKey]||c.definitionKey)}
+          <span class="pill ${c.state}">${c.state}</span></div>
+        ${done?'<div class="banner ok" style="margin-top:8px">✅ 子流程已完成，主流程已继续</div>':(tasks||'<div class="empty">无待办</div>')}
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML='<div class="empty">子流程加载失败</div>'; }
+}
+
+// 办结子流程任务后，刷新主实例（子完成会唤醒主流程）。
+async function doCompleteSub(subId, taskId){
+  try{
+    await api('/api/tasks/'+taskId+'/complete',
+      {method:'POST',body:JSON.stringify({instance_id:subId, decision:'同意'})});
+    toast('✅ 子流程已办理');
+    // 重新拉主实例（可能已被唤醒推进）。
+    if(SELECTED) await openInstance(SELECTED.id);
+  }catch(e){toast(e.message,true);}
 }
 
 // —— 操作 —— //
@@ -418,6 +527,9 @@ async function startInstance(){
   const body = {definitionKey, applicant, amount};
   if(definitionKey==='expense_countersign'){
     body.approvers = document.getElementById('approvers').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+  }
+  if(definitionKey==='subflow_main'){
+    body.orgId = document.getElementById('orgId').value;
   }
   try{
     const inst = await api('/api/instances',{method:'POST',body:JSON.stringify(body)});

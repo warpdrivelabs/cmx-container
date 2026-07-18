@@ -1,6 +1,6 @@
 # cmx-flow 流程引擎 · 数据库表结构
 
-> 里程碑：M1（顺序审批）+ M2（并行网关 · 历史归档）+ M3（多实例会签/或签 · 实例取消）+ M2.5（边界定时器）+ M4.1（角色/岗位候选人）+ M4.2（抄送）+ M4.3（转签）
+> 里程碑：M1（顺序审批）+ M2（并行网关 · 历史归档）+ M3（多实例会签/或签 · 实例取消）+ M2.5（边界定时器）+ M4.1（角色/岗位候选人）+ M4.2（抄送）+ M4.3（转签）+ M5.1（子流程 callActivity）+ M5.2（子流程组织路由）
 > 数据库：PostgreSQL · schema：`public` · 表前缀：`cmx_flow_` · **无外键约束**（关联字段 + 索引替代）
 > 迁移文件见文末「说明」。
 
@@ -64,10 +64,15 @@ cmx_flow_instance (聚合根)
 | 6 | `created_at` | timestamptz | NOT NULL | — | 创建时间 |
 | 7 | `updated_at` | timestamptz | NOT NULL | — | 最近更新时间 |
 | 8 | `ended_at` | timestamptz | NULL | — | 完成/终止时间 |
+| 9 | `org_id` | varchar(64) | NULL | — | **M5**：所属组织（M5.2 子流程组织路由依据；M5.1 恒空） |
+| 10 | `parent_instance_id` 🔍 | varchar(64) | NULL | — | **M5**：父实例 id（子流程实例指向主实例；主实例为 NULL） |
+| 11 | `parent_token_id` | varchar(64) | NULL | — | **M5**：父实例中挂起等待的令牌 id（子完成时精确唤醒） |
 
-**索引**：`PK(id)` · `idx_..._defkey(definition_key)` · `idx_..._bizkey(business_key)` · `idx_..._state(state)`
+**索引**：`PK(id)` · `idx_..._defkey(definition_key)` · `idx_..._bizkey(business_key)` · `idx_..._state(state)` · `idx_..._parent(parent_instance_id)`
 
 **`state` 枚举**：`ACTIVE`（活动中）· `COMPLETED`（已完成）· `TERMINATED`（已终止）
+
+**子流程（M5.1）**：`callActivity` 节点调用一份独立部署的子流程并**同步等待**——主令牌转 `WAITING_SUBFLOW` 挂起，子实例（`parent_instance_id`/`parent_token_id` 指回主）跑完后按 `parent_token_id` 精确唤醒主令牌、回写输出变量、继续推进。子流程复用完整推进内核（可含会签/定时器/转签等全部能力），可嵌套。
 
 ---
 
@@ -87,7 +92,7 @@ cmx_flow_instance (聚合根)
 
 **索引**：`PK(id)` · `idx_..._instance(instance_id)`
 
-**`state` 枚举**：`ACTIVE`（可推进）· `WAITING`（停在 userTask 等外部触发）· `JOINING`（停在并行网关 join 等兄弟令牌到齐）· `ENDED`（抵达结束事件）
+**`state` 枚举**：`ACTIVE`（可推进）· `WAITING`（停在 userTask 等外部触发）· `JOINING`（停在并行网关 join 等兄弟令牌到齐）· `WAITING_SUBFLOW`（停在 callActivity 等子实例完成，M5）· `ENDED`（抵达结束事件）
 
 > **M2 新增 `JOINING`**：并行网关合流时，先到的分支令牌以 `JOINING` 状态阻塞落库；当入边令牌全部到齐，合并为一个幸存令牌继续推进。这是「结构性阻塞」，无需外部触发。
 
@@ -279,12 +284,26 @@ cmx_flow_instance (聚合根)
 | `boolean` | `bool` | |
 | `state` 文本列 | `InstanceState` / `TokenState` 枚举 | SCREAMING_SNAKE_CASE 字符串 |
 
+## 定义态配置表（非实例聚合）
+
+`cmx_flow_subflow_binding`（M5.2）——**子流程组织绑定**，不是实例运行态，而是「同一主流程按组织跑不同子流程」的路由配置。主流程 callActivity 写逻辑 key（`cmx:calledKey`，如 `fin_review`），各组织把「逻辑 key + 本组织 → 具体子流程定义 key」绑定在此表。
+
+| 列名 | 类型 | 说明 |
+|------|------|------|
+| `id` 🔑 | varchar(64) | 绑定 id |
+| `called_key` 🔍 | varchar(128) | 逻辑子流程 key |
+| `org_id` 🔍 | varchar(64) | 适用组织（NULL = 默认兜底绑定） |
+| `target_definition_key` | varchar(128) | 解析到的具体子流程定义 key |
+| `enabled` | boolean | 是否启用（FALSE 不参与解析） |
+
+**运行期解析**（`PgSubflowRouter`，与 `cmx_org` 同库）三层：① **精确**（本组织绑定）→ ② **继承**（沿 `cmx_org.path` 向上找最近祖先绑定，path 最长优先）→ ③ **兜底**（`org_id IS NULL` 默认绑定）。全无 → 报错。是继 `AssigneeResolver`（M4.1）之后引擎的第 4 个可注入扩展点。
+
 ## 说明
 
 - 🔑 = 主键，🔍 = 建有索引。
 - 表结构目前由 `cmx-flow-store-pg` 内置 DDL 自举（`ensure_schema()`），并已同步到 `docs/sql/migrations/` 与 `docs/sql/init/init_ddl.sql`。
-- 迁移文件：`20260717_001_cmx_flow_engine_tables.{up,down}.sql`（M1+M2）、`20260717_002_cmx_flow_multi_instance.{up,down}.sql`（M3）、`20260717_003_cmx_flow_job.{up,down}.sql`（M2.5）、`20260718_001_cmx_flow_identity.{up,down}.sql`（M4.1）、`20260718_002_cmx_flow_cc.{up,down}.sql`（M4.2）、`20260718_003_cmx_flow_delegation.{up,down}.sql`（M4.3）。
+- 迁移文件：`20260717_001_cmx_flow_engine_tables.{up,down}.sql`（M1+M2）、`20260717_002_cmx_flow_multi_instance.{up,down}.sql`（M3）、`20260717_003_cmx_flow_job.{up,down}.sql`（M2.5）、`20260718_001_cmx_flow_identity.{up,down}.sql`（M4.1）、`20260718_002_cmx_flow_cc.{up,down}.sql`（M4.2）、`20260718_003_cmx_flow_delegation.{up,down}.sql`（M4.3）、`20260718_004_cmx_flow_subflow.{up,down}.sql`（M5.1）、`20260718_005_cmx_flow_subflow_binding.{up,down}.sql`（M5.2）。
 - M3 的 `element_value` 补列在 001 已建表的库上以 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 幂等补齐。
 - M4.1 的 IAM 表（`cmx_role`/`cmx_user_role`）**复用既有**，仅新建 `cmx_org`/`cmx_position`/`cmx_user_position`/`cmx_flow_task_candidate`；这些通用身份表位于 **cmx** 库（IAM 所在），与 flow 运行态表可同库或分库部署。
 
-_生成日期：2026-07-18 · cmx-flow 流程引擎 M1+M2+M3+M2.5+M4.1+M4.2+M4.3_
+_生成日期：2026-07-18 · cmx-flow 流程引擎 M1+M2+M3+M2.5+M4.1+M4.2+M4.3+M5.1+M5.2_

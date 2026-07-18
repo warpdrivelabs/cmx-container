@@ -15,18 +15,28 @@
 pub const DDL_STATEMENTS: &[&str] = &[
     // —— 实例表 —— //
     r#"CREATE TABLE IF NOT EXISTS cmx_flow_instance (
-        id             VARCHAR(64)  PRIMARY KEY,
-        definition_key VARCHAR(128) NOT NULL,
-        business_key   VARCHAR(128),
-        state          VARCHAR(16)  NOT NULL,
-        variables      JSONB        NOT NULL DEFAULT '{}'::jsonb,
-        created_at     TIMESTAMPTZ  NOT NULL,
-        updated_at     TIMESTAMPTZ  NOT NULL,
-        ended_at       TIMESTAMPTZ
+        id                 VARCHAR(64)  PRIMARY KEY,
+        definition_key     VARCHAR(128) NOT NULL,
+        business_key       VARCHAR(128),
+        state              VARCHAR(16)  NOT NULL,
+        variables          JSONB        NOT NULL DEFAULT '{}'::jsonb,
+        created_at         TIMESTAMPTZ  NOT NULL,
+        updated_at         TIMESTAMPTZ  NOT NULL,
+        ended_at           TIMESTAMPTZ,
+        org_id             VARCHAR(64),
+        parent_instance_id VARCHAR(64),
+        parent_token_id    VARCHAR(64),
+        parent_node_bpmn_id VARCHAR(128)
     )"#,
+    // 幂等补列：既有库升级到 M5 时补上子流程父子/组织列。
+    "ALTER TABLE cmx_flow_instance ADD COLUMN IF NOT EXISTS org_id VARCHAR(64)",
+    "ALTER TABLE cmx_flow_instance ADD COLUMN IF NOT EXISTS parent_instance_id VARCHAR(64)",
+    "ALTER TABLE cmx_flow_instance ADD COLUMN IF NOT EXISTS parent_token_id VARCHAR(64)",
+    "ALTER TABLE cmx_flow_instance ADD COLUMN IF NOT EXISTS parent_node_bpmn_id VARCHAR(128)",
     "CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_defkey ON cmx_flow_instance (definition_key)",
     "CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_bizkey ON cmx_flow_instance (business_key)",
     "CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_state ON cmx_flow_instance (state)",
+    "CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_parent ON cmx_flow_instance (parent_instance_id)",
     // —— 令牌表 —— //
     r#"CREATE TABLE IF NOT EXISTS cmx_flow_token (
         id            VARCHAR(64)  PRIMARY KEY,
@@ -157,4 +167,17 @@ pub const DDL_STATEMENTS: &[&str] = &[
     )"#,
     "CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_instance ON cmx_flow_hi_task (instance_id)",
     "CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_assignee ON cmx_flow_hi_task (assignee)",
+    // —— 子流程组织绑定表（M5.2：逻辑 key + 组织 → 具体子流程定义；定义态配置，非实例聚合） —— //
+    r#"CREATE TABLE IF NOT EXISTS cmx_flow_subflow_binding (
+        id                    VARCHAR(64)  PRIMARY KEY,
+        called_key            VARCHAR(128) NOT NULL,
+        org_id                VARCHAR(64),
+        target_definition_key VARCHAR(128) NOT NULL,
+        enabled               BOOLEAN      NOT NULL DEFAULT TRUE,
+        remark                VARCHAR(500),
+        created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+        updated_at            TIMESTAMPTZ  NOT NULL DEFAULT now()
+    )"#,
+    "CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_key ON cmx_flow_subflow_binding (called_key)",
+    "CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_org ON cmx_flow_subflow_binding (org_id)",
 ];

@@ -84,6 +84,9 @@ pub struct Engine<S: RuntimeStore> {
     /// 候选人解析器（M4.1）：把角色/岗位/部门引用解析成真实用户。None = 未注入，
     /// 此时含候选引用的任务退回静态 assignee（宽容降级，不阻断）。
     resolver: Option<Arc<dyn AssigneeResolver>>,
+    /// 子流程路由器（M5.2）：把 callActivity 的逻辑 key + 组织解析成具体子流程 key。
+    /// None = 未注入，此时 callActivity 仅支持写死的 calledElement（M5.1 行为）。
+    subflow_router: Option<Arc<dyn cmx_flow_model::SubflowRouter>>,
 }
 
 impl<S: RuntimeStore> Engine<S> {
@@ -101,12 +104,18 @@ impl<S: RuntimeStore> Engine<S> {
             delegates: DelegateRegistry::new(),
             clock,
             resolver: None,
+            subflow_router: None,
         }
     }
 
     /// 注入候选人解析器（M4.1）。生产接 cmx-iam 适配器，测试用假实现。
     pub fn set_resolver(&mut self, resolver: Arc<dyn AssigneeResolver>) {
         self.resolver = Some(resolver);
+    }
+
+    /// 注入子流程路由器（M5.2）。生产接 PgSubflowRouter（查绑定表 + 组织继承），测试用假实现。
+    pub fn set_subflow_router(&mut self, router: Arc<dyn cmx_flow_model::SubflowRouter>) {
+        self.subflow_router = Some(router);
     }
 
     /// 解析候选引用为用户 id 集合（并集去重）。无 resolver 或无引用 → 空 Vec（调用方降级）。
@@ -163,6 +172,8 @@ impl<S: RuntimeStore> Engine<S> {
                 NodeKind::ParallelGateway => out >= 1,
                 // 边界定时器事件：触发后沿唯一出边走升级/催办分支，需恰好一条出边。
                 NodeKind::BoundaryTimerEvent(_) => out == 1,
+                // 调用活动：子流程完成后沿唯一出边继续，需恰好一条出边。
+                NodeKind::CallActivity(_) => out == 1,
             };
             if !ok {
                 return Err(Error::UnsupportedTopology(format!(
@@ -185,6 +196,40 @@ impl<S: RuntimeStore> Engine<S> {
         variables: Variables,
         business_key: Option<String>,
     ) -> Result<ExecutionResult> {
+        self.start_process_org(definition_key, variables, business_key, None)
+            .await
+    }
+
+    /// 启动一个流程实例并指定所属组织（M5.2）。顶层实例的组织决定其内 callActivity 子流程的
+    /// 路由归属；子实例默认继承主实例组织。org=None 等价于 `start_process`。
+    pub async fn start_process_org(
+        &self,
+        definition_key: &str,
+        variables: Variables,
+        business_key: Option<String>,
+        org_id: Option<String>,
+    ) -> Result<ExecutionResult> {
+        let snap = self
+            .start_process_inner(definition_key, variables, business_key, org_id, None, None, None)
+            .await?;
+        // 若起始段就走到 callActivity，挂起了 WaitingSubflow 令牌，启动其子实例。
+        let snap = self.launch_subflows_for(&snap.instance.id).await?;
+        Ok(Self::result_of(&snap))
+    }
+
+    /// 启动实例（可指定组织与父实例链接）。顶层实例 parent 为 None；子流程由 callActivity
+    /// 调用时传入 parent_instance/parent_token，建立父子关系。返回落库后的子实例快照。
+    #[allow(clippy::too_many_arguments)]
+    async fn start_process_inner(
+        &self,
+        definition_key: &str,
+        variables: Variables,
+        business_key: Option<String>,
+        org_id: Option<String>,
+        parent_instance_id: Option<String>,
+        parent_token_id: Option<String>,
+        parent_node_bpmn_id: Option<String>,
+    ) -> Result<InstanceSnapshot> {
         let def = self
             .definitions
             .get(definition_key)
@@ -203,6 +248,10 @@ impl<S: RuntimeStore> Engine<S> {
             created_at: now,
             updated_at: now,
             ended_at: None,
+            org_id,
+            parent_instance_id,
+            parent_token_id,
+            parent_node_bpmn_id,
         };
         let token = Token {
             id: Uuid::new_v4().to_string(),
@@ -226,8 +275,221 @@ impl<S: RuntimeStore> Engine<S> {
 
         self.run_to_wait(def, &mut snapshot, now).await?;
         self.store.create_snapshot(&snapshot).await?;
+        Ok(snapshot)
+    }
 
-        Ok(Self::result_of(&snapshot))
+    /// 为某实例中所有「已挂起但尚未启动子实例」的 callActivity 令牌启动子流程（M5）。
+    ///
+    /// 令牌进入 WaitingSubflow 后并不立即建子实例（避免与同步推进循环纠缠）；由本方法在
+    /// 推进段结束后统一处理。子实例可能立即完成（子流程无等待态）→ 递归回写唤醒父令牌。
+    /// 返回最终的父实例快照。用 Box::pin 显式装箱以支持递归 async。
+    fn launch_subflows_for<'a>(
+        &'a self,
+        instance_id: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<InstanceSnapshot>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            loop {
+                let snapshot = self.store.load_snapshot(instance_id).await?;
+                // 找一个 WaitingSubflow 且还没有对应子实例的令牌。
+                let pending = snapshot
+                    .tokens
+                    .iter()
+                    .find(|t| t.state == TokenState::WaitingSubflow)
+                    .map(|t| (t.id.clone(), t.node_bpmn_id.clone()));
+                let Some((token_id, node_bpmn)) = pending else {
+                    return Ok(snapshot);
+                };
+                // 已存在「同一令牌 + 同一 callActivity 节点」发起的子实例？（防重复启动）
+                // 去重键必须含节点：同一令牌可串行经过多个 callActivity，仅凭 token 会把
+                // 前一挂载点已完成的子实例误判成"本挂载点已启动"，导致后续挂载点漏起。
+                let existing = self.store.find_child_instances(instance_id).await?;
+                let already = existing.iter().any(|c| {
+                    c.parent_token_id.as_deref() == Some(&token_id)
+                        && c.parent_node_bpmn_id.as_deref() == Some(&node_bpmn)
+                });
+                if already {
+                    // 本挂载点的子实例已在跑（等其完成回调）→ 找下一个尚未启动的挂载点令牌。
+                    if let Some(next) = self.next_unlaunched_subflow(&snapshot, &existing) {
+                        self.launch_one_subflow(&snapshot, &next.0, &next.1).await?;
+                        continue;
+                    }
+                    return Ok(snapshot);
+                }
+                // 启动这一个子实例。
+                self.launch_one_subflow(&snapshot, &token_id, &node_bpmn).await?;
+                // 循环：可能子实例立即完成已唤醒父令牌，或还有别的待启动令牌。
+            }
+        })
+    }
+
+    /// 找一个「WaitingSubflow 但当前挂载点尚无子实例」的令牌。
+    /// 去重键 = (令牌 id, callActivity 节点 bpmn id)：同一令牌串行经过多个 callActivity 时，
+    /// 每个节点各算一个独立挂载点，前一节点已启动/已完成的子实例不阻塞后一节点。
+    fn next_unlaunched_subflow(
+        &self,
+        snapshot: &InstanceSnapshot,
+        existing_children: &[ProcessInstance],
+    ) -> Option<(String, String)> {
+        snapshot
+            .tokens
+            .iter()
+            .filter(|t| t.state == TokenState::WaitingSubflow)
+            .find(|t| {
+                !existing_children.iter().any(|c| {
+                    c.parent_token_id.as_deref() == Some(&t.id)
+                        && c.parent_node_bpmn_id.as_deref() == Some(&t.node_bpmn_id)
+                })
+            })
+            .map(|t| (t.id.clone(), t.node_bpmn_id.clone()))
+    }
+
+    /// 启动一个子实例：解析子流程定义 + 传入变量 → start_process_inner。若子实例立即完成，
+    /// 递归调 complete_subflow 唤醒父令牌。
+    async fn launch_one_subflow(
+        &self,
+        parent_snap: &InstanceSnapshot,
+        parent_token_id: &str,
+        node_bpmn: &str,
+    ) -> Result<()> {
+        let def = self
+            .definitions
+            .get(&parent_snap.instance.definition_key)
+            .ok_or_else(|| Error::DefinitionNotFound(parent_snap.instance.definition_key.clone()))?;
+        let node = def
+            .node_by_bpmn(node_bpmn)
+            .ok_or_else(|| Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中")))?;
+        let ca = match &node.kind {
+            NodeKind::CallActivity(ca) => ca.clone(),
+            other => {
+                return Err(Error::IllegalTokenState(format!(
+                    "节点 {node_bpmn} 非 callActivity，实际 {other:?}"
+                )));
+            }
+        };
+        // 子流程组织默认继承主实例。
+        let org = parent_snap.instance.org_id.clone();
+
+        // 解析子流程定义 key：
+        // - called_key 非空（M5.2 逻辑名）→ 走 SubflowRouter 按组织路由；
+        // - 否则用 called_element 写死值（M5.1 行为）。
+        let sub_key = match &ca.called_key {
+            Some(key) if !key.is_empty() => match &self.subflow_router {
+                Some(router) => router
+                    .resolve(key, org.as_deref())
+                    .await
+                    .map_err(Error::from)?,
+                None => {
+                    return Err(Error::DefinitionNotFound(format!(
+                        "callActivity {node_bpmn} 用逻辑 key '{key}' 但未注入 SubflowRouter"
+                    )));
+                }
+            },
+            _ => ca.called_element.clone(),
+        };
+        if !self.definitions.contains_key(&sub_key) {
+            return Err(Error::DefinitionNotFound(format!(
+                "子流程 {sub_key}（callActivity {node_bpmn} 调用）未部署"
+            )));
+        }
+
+        // 输入变量映射：主 → 子。空映射 = 全量传递。
+        let child_vars = map_vars(&parent_snap.instance.variables, &ca.input_vars, true);
+
+        let child_snap = self
+            .start_process_inner(
+                &sub_key,
+                child_vars,
+                parent_snap.instance.business_key.clone(),
+                org,
+                Some(parent_snap.instance.id.clone()),
+                Some(parent_token_id.to_string()),
+                Some(node_bpmn.to_string()),
+            )
+            .await?;
+
+        // 子实例若立即完成（无等待态）→ 唤醒父令牌。
+        if child_snap.instance.state == InstanceState::Completed {
+            self.complete_subflow(&child_snap.instance.id).await?;
+        } else {
+            // 子实例自身也可能起始就有 callActivity，递归启动其子流程。
+            self.launch_subflows_for(&child_snap.instance.id).await?;
+        }
+        Ok(())
+    }
+
+    /// 子实例完成回调（M5）：把子实例输出变量回写主实例 → 唤醒父令牌沿 callActivity 出边前进
+    /// → 继续推进主实例。用 Box::pin 支持递归（父完成又可能唤醒祖父）。
+    fn complete_subflow<'a>(
+        &'a self,
+        child_instance_id: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            let child = self.store.load_snapshot(child_instance_id).await?;
+            let (Some(parent_id), Some(parent_token_id)) = (
+                child.instance.parent_instance_id.clone(),
+                child.instance.parent_token_id.clone(),
+            ) else {
+                return Ok(()); // 顶层实例，无父可唤醒。
+            };
+
+            let mut parent = self.store.load_snapshot(&parent_id).await?;
+            let now = self.clock.now();
+            let def = self
+                .definitions
+                .get(&parent.instance.definition_key)
+                .ok_or_else(|| Error::DefinitionNotFound(parent.instance.definition_key.clone()))?
+                .clone();
+
+            // 定位父令牌，必须是 WaitingSubflow。
+            let Some(tidx) = parent.tokens.iter().position(|t| t.id == parent_token_id) else {
+                return Ok(()); // 父令牌已不存在（父被取消等），静默收尾。
+            };
+            if parent.tokens[tidx].state != TokenState::WaitingSubflow {
+                return Ok(()); // 已被唤醒（幂等）。
+            }
+            let node_bpmn = parent.tokens[tidx].node_bpmn_id.clone();
+            let node = def
+                .node_by_bpmn(&node_bpmn)
+                .ok_or_else(|| Error::IllegalTokenState(format!("节点 {node_bpmn} 不在定义中")))?;
+            let (outgoing, ca) = match &node.kind {
+                NodeKind::CallActivity(ca) => (node.outgoing.clone(), ca.clone()),
+                other => {
+                    return Err(Error::IllegalTokenState(format!(
+                        "父令牌节点 {node_bpmn} 非 callActivity，实际 {other:?}"
+                    )));
+                }
+            };
+
+            // 输出变量映射：子 → 父。空映射 = 全量回写。
+            let back = map_vars(&child.instance.variables, &ca.output_vars, true);
+            parent.instance.variables.merge(back);
+
+            // 父令牌离开 callActivity 沿唯一出边，转 Active。
+            let target = outgoing
+                .first()
+                .map(|f| f.target_bpmn_id.clone())
+                .ok_or_else(|| {
+                    Error::IllegalTokenState(format!("callActivity {node_bpmn} 无出边可离开"))
+                })?;
+            {
+                let tok = &mut parent.tokens[tidx];
+                tok.node_bpmn_id = target;
+                tok.state = TokenState::Active;
+                tok.updated_at = now;
+            }
+
+            self.run_to_wait(&def, &mut parent, now).await?;
+            self.store.save_snapshot(&parent).await?;
+
+            // 父推进后可能又停在新的 callActivity，或自身完成再唤醒祖父。
+            if parent.instance.state == InstanceState::Completed {
+                self.complete_subflow(&parent_id).await?;
+            } else {
+                self.launch_subflows_for(&parent_id).await?;
+            }
+            Ok(())
+        })
     }
 
     /// 办结一个用户任务：合并变量 → 令牌离开 userTask → 继续推进 → 落库。
@@ -353,6 +615,14 @@ impl<S: RuntimeStore> Engine<S> {
         self.run_to_wait(def, &mut snapshot, now).await?;
         self.store.save_snapshot(&snapshot).await?;
 
+        // 办结可能把令牌推进到 callActivity（挂起 WaitingSubflow）→ 启动子实例。
+        let snapshot = self.launch_subflows_for(instance_id).await?;
+        // 若本实例是子流程且已完成 → 唤醒父实例（回写变量 + 推进父流程）。
+        if snapshot.instance.state == InstanceState::Completed
+            && snapshot.instance.parent_instance_id.is_some()
+        {
+            self.complete_subflow(instance_id).await?;
+        }
         Ok(Self::result_of(&snapshot))
     }
 
@@ -952,6 +1222,15 @@ impl<S: RuntimeStore> Engine<S> {
                         choose_target(&node_bpmn, &kind, &outgoing, &snapshot.instance.variables)?;
                     move_token(&mut snapshot.tokens[idx], target, now);
                 }
+
+                NodeKind::CallActivity(_) => {
+                    // 子流程调用是等待态：令牌挂起为 WaitingSubflow，停止推进本令牌（提交点）。
+                    // 实际启动子实例在 run_to_wait 返回后的 launch_pending_subflows 里做——
+                    // 那里可安全地 async 启动子实例（可能递归含孙流程），不与本同步循环纠缠。
+                    let tok = &mut snapshot.tokens[idx];
+                    tok.state = TokenState::WaitingSubflow;
+                    tok.updated_at = now;
+                }
             }
         }
 
@@ -993,6 +1272,23 @@ impl<S: RuntimeStore> Engine<S> {
 fn move_token(token: &mut Token, target_bpmn_id: String, now: DateTime<Utc>) {
     token.node_bpmn_id = target_bpmn_id;
     token.updated_at = now;
+}
+
+/// 变量映射（M5）：按 mappings 把 src 里的变量拷成一个新 Variables。
+///
+/// `full_if_empty=true` 且 mappings 为空 → 全量拷贝 src（默认行为）。否则只拷映射命中的，
+/// source 缺失则跳过该条。
+fn map_vars(src: &Variables, mappings: &[cmx_flow_model::VarMapping], full_if_empty: bool) -> Variables {
+    if mappings.is_empty() {
+        return if full_if_empty { src.clone() } else { Variables::new() };
+    }
+    let mut out = Variables::new();
+    for m in mappings {
+        if let Some(v) = src.get(&m.source) {
+            out.set(m.target.clone(), v.clone());
+        }
+    }
+    out
 }
 
 // ============================ 候选人解析 / 认领（M4.1） ============================

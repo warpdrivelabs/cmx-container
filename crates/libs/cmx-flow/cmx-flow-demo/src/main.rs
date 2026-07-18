@@ -31,7 +31,7 @@ use cmx_flow_engine::{
     DelegateContext, Engine, JavaDelegate, ProcessDefinition, RuntimeStore, Variables,
 };
 use cmx_flow_model::{InstanceSnapshot, NodeKind};
-use cmx_flow_store_pg::{PgIamAssigneeResolver, PgRuntimeStore};
+use cmx_flow_store_pg::{PgIamAssigneeResolver, PgRuntimeStore, PgSubflowRouter};
 
 const DB_ID: &str = "fico";
 /// IAM 所在库（候选人解析：cmx_role/cmx_user_role/cmx_position/cmx_user_position 在此库）。
@@ -40,6 +40,9 @@ const BPMN_CREDIT: &str = include_str!("../resources/credit_approval.bpmn20.xml"
 const BPMN_COUNTERSIGN: &str = include_str!("../resources/expense_countersign.bpmn20.xml");
 const BPMN_TIMED: &str = include_str!("../resources/timed_approval.bpmn20.xml");
 const BPMN_CANDIDATE: &str = include_str!("../resources/candidate_approval.bpmn20.xml");
+const BPMN_SUBFLOW_MAIN: &str = include_str!("../resources/subflow_main.bpmn20.xml");
+const BPMN_FIN_HQ: &str = include_str!("../resources/fin_review_hq.bpmn20.xml");
+const BPMN_FIN_BRANCH: &str = include_str!("../resources/fin_review_branch.bpmn20.xml");
 const INDEX_HTML: &str = include_str!("../web/index.html");
 
 /// 共享应用状态：引擎（含 PG store）+ 全部已编译定义（供前端画图）。
@@ -88,25 +91,37 @@ async fn main() {
     // 2.5) 幂等播种演示 IAM 数据（角色/岗位/用户关联，df_ 前缀，供候选人解析演示）。
     seed_demo_iam().await;
 
-    // 3) 编译 + 部署四个流程定义，注册 delegate + 候选人解析器（连 cmx 库 IAM）。
+    // 3) 编译 + 部署流程定义（含 M5.1 主/子流程），注册 delegate + 候选人解析器（连 cmx 库 IAM）。
     let credit = compile(BPMN_CREDIT).expect("信用审批 BPMN 编译失败");
     let countersign = compile(BPMN_COUNTERSIGN).expect("报销会签 BPMN 编译失败");
     let timed = compile(BPMN_TIMED).expect("限时审批 BPMN 编译失败");
     let candidate = compile(BPMN_CANDIDATE).expect("候选人审批 BPMN 编译失败");
+    let subflow_main = compile(BPMN_SUBFLOW_MAIN).expect("子流程主流程 BPMN 编译失败");
+    let fin_hq = compile(BPMN_FIN_HQ).expect("总部财务复核 BPMN 编译失败");
+    let fin_branch = compile(BPMN_FIN_BRANCH).expect("分公司财务复核 BPMN 编译失败");
+    // 全部定义都给前端（供画图/画子流程内嵌图）；子流程由 startable 标记区分，
+    // 前端选择器只列可发起的顶层流程，子流程仅用于在主流程 callActivity 节点内展示路径图。
     let defs_for_state = vec![
         credit.clone(),
         countersign.clone(),
         timed.clone(),
         candidate.clone(),
+        subflow_main.clone(),
+        fin_hq.clone(),
+        fin_branch.clone(),
     ];
     let mut engine = Engine::new(store);
     engine.deploy(credit).expect("部署信用审批失败");
     engine.deploy(countersign).expect("部署报销会签失败");
     engine.deploy(timed).expect("部署限时审批失败");
     engine.deploy(candidate).expect("部署候选人审批失败");
+    engine.deploy(subflow_main).expect("部署子流程主流程失败");
+    engine.deploy(fin_hq).expect("部署总部财务复核失败");
+    engine.deploy(fin_branch).expect("部署分公司财务复核失败");
     engine.register_delegate("riskDelegate", RiskDelegate);
     engine.set_resolver(Arc::new(PgIamAssigneeResolver::new(IAM_DB_ID)));
-    tracing::info!("✅ 流程定义已部署：credit / countersign / timed / candidate（含 IAM 候选人解析）");
+    engine.set_subflow_router(Arc::new(PgSubflowRouter::new(IAM_DB_ID)));
+    tracing::info!("✅ 流程定义已部署：credit / countersign / timed / candidate / subflow_main(+hq/branch 子流程)");
 
     let state = AppState {
         engine: Arc::new(engine),
@@ -144,6 +159,7 @@ async fn main() {
         .route("/api/definitions", get(get_definitions))
         .route("/api/instances", get(list_instances).post(start_instance))
         .route("/api/instances/{id}", get(get_instance))
+        .route("/api/instances/{id}/children", get(get_children))
         .route("/api/instances/{id}/cancel", post(cancel_instance))
         .route("/api/tasks/{id}/complete", post(complete_task))
         .route("/api/tasks/{id}/claim", post(claim_task))
@@ -231,13 +247,26 @@ async fn seed_demo_iam() {
         format!("INSERT INTO cmx_user_role (id, user_id, role_id, archived) VALUES ('df_ur_3','{}','df_role_fin',0) ON CONFLICT (id) DO NOTHING", users[2]),
         // 部门经理岗位一人（第 4 个，或复用第 1 个）。
         format!("INSERT INTO cmx_user_position (id, user_id, position_id, archived) VALUES ('df_up_1','{}','df_pos_mgr',0) ON CONFLICT (id) DO NOTHING", users.get(3).unwrap_or(&users[0])),
+        // —— M5.2 组织树 + 子流程绑定 —— //
+        // 绑定表建在 cmx 库（与 cmx_org 同库，PgSubflowRouter 指向 IAM_DB_ID）。
+        "CREATE TABLE IF NOT EXISTS cmx_flow_subflow_binding (id VARCHAR(64) PRIMARY KEY, called_key VARCHAR(128) NOT NULL, org_id VARCHAR(64), target_definition_key VARCHAR(128) NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE, remark VARCHAR(500), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())".to_string(),
+        "CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_key ON cmx_flow_subflow_binding (called_key)".to_string(),
+        // 组织树：df_root 总部 → df_bj 北京(挂总部下) / df_sh 上海(挂总部下)。path 物化路径。
+        "INSERT INTO cmx_org (id, code, name, parent_id, path, archived) VALUES ('df_root','df_root','演示总部',NULL,'/df_root',0) ON CONFLICT (id) DO UPDATE SET path='/df_root', archived=0".to_string(),
+        "INSERT INTO cmx_org (id, code, name, parent_id, path, archived) VALUES ('df_bj','df_bj','北京分公司','df_root','/df_root/df_bj',0) ON CONFLICT (id) DO UPDATE SET path='/df_root/df_bj', archived=0".to_string(),
+        "INSERT INTO cmx_org (id, code, name, parent_id, path, archived) VALUES ('df_sh','df_sh','上海分公司','df_root','/df_root/df_sh',0) ON CONFLICT (id) DO UPDATE SET path='/df_root/df_sh', archived=0".to_string(),
+        // 子流程绑定：总部 fin_review→总部三级(fin_review_hq)；上海精确绑→分公司单签(fin_review_branch)；
+        // 北京不绑（跑时应沿 path 继承总部）；默认兜底→总部三级。
+        "INSERT INTO cmx_flow_subflow_binding (id, called_key, org_id, target_definition_key, enabled, created_at, updated_at) VALUES ('df_sb_hq','fin_review','df_root','fin_review_hq',TRUE,now(),now()) ON CONFLICT (id) DO UPDATE SET target_definition_key='fin_review_hq', enabled=TRUE".to_string(),
+        "INSERT INTO cmx_flow_subflow_binding (id, called_key, org_id, target_definition_key, enabled, created_at, updated_at) VALUES ('df_sb_sh','fin_review','df_sh','fin_review_branch',TRUE,now(),now()) ON CONFLICT (id) DO UPDATE SET target_definition_key='fin_review_branch', enabled=TRUE".to_string(),
+        "INSERT INTO cmx_flow_subflow_binding (id, called_key, org_id, target_definition_key, enabled, created_at, updated_at) VALUES ('df_sb_def','fin_review',NULL,'fin_review_hq',TRUE,now(),now()) ON CONFLICT (id) DO UPDATE SET target_definition_key='fin_review_hq', enabled=TRUE".to_string(),
     ];
     for sql in stmts {
         if let Err(e) = execute_sql(IAM_DB_ID, None, &sql).await {
             tracing::warn!(error = %e, "播种 IAM 语句失败");
         }
     }
-    tracing::info!("✅ 演示 IAM 数据已播种（df_finance 角色 3 人 · df_mgr 岗位 1 人）");
+    tracing::info!("✅ 演示数据已播种（角色/岗位 + 组织树 df_root/df_bj/df_sh + 子流程绑定 fin_review）");
 }
 
 // ============================ handlers ============================
@@ -248,7 +277,7 @@ async fn get_definitions(State(st): State<AppState>) -> Json<Value> {
     Json(json!({ "definitions": defs }))
 }
 
-/// 单份流程定义 → JSON（key/name/节点/边）。
+/// 单份流程定义 → JSON（key/名/节点/边/是否可发起）。
 fn definition_view(def: &ProcessDefinition) -> Value {
     let nodes: Vec<Value> = def
         .nodes
@@ -260,6 +289,7 @@ fn definition_view(def: &ProcessDefinition) -> Value {
                 "kind": node_kind_str(&n.kind),
                 "multiInstance": node_multi_instance(&n.kind),
                 "boundaryTimer": node_boundary_timer(&n.kind),
+                "calledElement": node_called_element(&n.kind),
             })
         })
         .collect();
@@ -277,7 +307,23 @@ fn definition_view(def: &ProcessDefinition) -> Value {
             })
         })
         .collect();
-    json!({ "key": def.key, "name": def.name, "nodes": nodes, "edges": edges })
+    // 子流程（被 callActivity 调用的）不在发起列表；其余为可发起顶层流程。
+    let startable = !matches!(def.key.as_str(), "fin_review_hq" | "fin_review_branch");
+    json!({ "key": def.key, "name": def.name, "nodes": nodes, "edges": edges, "startable": startable })
+}
+
+/// 节点若为 callActivity，返回其调用的子流程定义 key（供前端画子流程内嵌路径图）。
+fn node_called_element(kind: &NodeKind) -> Value {
+    if let NodeKind::CallActivity(ca) = kind {
+        // M5.1 用 called_element 写死；M5.2 若走 called_key 逻辑名，也一并给前端。
+        let target = if !ca.called_element.is_empty() {
+            ca.called_element.clone()
+        } else {
+            ca.called_key.clone().unwrap_or_default()
+        };
+        return json!(target);
+    }
+    Value::Null
 }
 
 /// 节点若为多实例 userTask，返回其会签/或签摘要（供前端标注）。
@@ -317,6 +363,9 @@ struct StartReq {
     /// 会签审批人列表（报销会签用；credit_approval 忽略）。
     #[serde(default)]
     approvers: Option<Vec<String>>,
+    /// 发起组织（M5.2 子流程路由用；子流程主流程按此选具体子流程）。
+    #[serde(default)]
+    org_id: Option<String>,
 }
 
 /// 启动一个流程实例（信用审批或报销会签）。
@@ -339,7 +388,7 @@ async fn start_instance(
     let biz_key = format!("CR-{}", req.applicant);
     let result = st
         .engine
-        .start_process(&def_key, vars, Some(biz_key))
+        .start_process_org(&def_key, vars, Some(biz_key), req.org_id.clone())
         .await
         .map_err(ApiError::from_engine)?;
 
@@ -376,6 +425,27 @@ async fn get_instance(
         .await
         .map_err(|_| ApiError(format!("实例不存在: {id}")))?;
     Ok(Json(instance_view(&snap)))
+}
+
+/// 列某实例的子实例（M5.1 子流程）——供前端展开「子流程实例」。
+async fn get_children(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let children = st
+        .engine
+        .store()
+        .find_child_instances(&id)
+        .await
+        .map_err(|e| ApiError(format!("查询子实例失败: {e}")))?;
+    // 每个子实例载入其快照取待办任务，便于前端直接办理。
+    let mut items = Vec::new();
+    for c in &children {
+        if let Ok(snap) = st.engine.store().load_snapshot(&c.id).await {
+            items.push(instance_view(&snap));
+        }
+    }
+    Ok(Json(json!({ "children": items })))
 }
 
 #[derive(Deserialize)]
@@ -733,6 +803,8 @@ fn instance_view(snap: &InstanceSnapshot) -> Value {
         "businessKey": snap.instance.business_key,
         "state": instance_state_str(snap.instance.state),
         "variables": snap.instance.variables.to_json(),
+        "parentInstanceId": snap.instance.parent_instance_id,
+        "waitingSubflow": snap.tokens.iter().any(|t| matches!(t.state, cmx_flow_model::TokenState::WaitingSubflow)),
         "tokens": tokens,
         "tasks": tasks,
         "activeNodes": active,
@@ -767,6 +839,7 @@ fn node_kind_str(k: &NodeKind) -> &'static str {
         NodeKind::ExclusiveGateway => "exclusiveGateway",
         NodeKind::ParallelGateway => "parallelGateway",
         NodeKind::BoundaryTimerEvent(_) => "boundaryTimerEvent",
+        NodeKind::CallActivity(_) => "callActivity",
     }
 }
 
@@ -795,6 +868,7 @@ fn token_state_str(s: cmx_flow_model::TokenState) -> &'static str {
         Active => "ACTIVE",
         Waiting => "WAITING",
         Joining => "JOINING",
+        WaitingSubflow => "WAITING_SUBFLOW",
         Ended => "ENDED",
     }
 }

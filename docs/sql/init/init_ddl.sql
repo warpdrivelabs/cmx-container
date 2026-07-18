@@ -2612,22 +2612,28 @@ CREATE INDEX idx_doc_change_row ON cmx_doc_change (root_id, row_id, field);
 -- 流程实例（运行态聚合根）
 CREATE TABLE IF NOT EXISTS cmx_flow_instance
 (
-    id             VARCHAR(64)  NOT NULL,
-    definition_key VARCHAR(128) NOT NULL,
-    business_key   VARCHAR(128),
-    state          VARCHAR(16)  NOT NULL,
-    variables      JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    created_at     TIMESTAMPTZ  NOT NULL,
-    updated_at     TIMESTAMPTZ  NOT NULL,
-    ended_at       TIMESTAMPTZ,
+    id                 VARCHAR(64)  NOT NULL,
+    definition_key     VARCHAR(128) NOT NULL,
+    business_key       VARCHAR(128),
+    state              VARCHAR(16)  NOT NULL,
+    variables          JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at         TIMESTAMPTZ  NOT NULL,
+    updated_at         TIMESTAMPTZ  NOT NULL,
+    ended_at           TIMESTAMPTZ,
+    org_id             VARCHAR(64),
+    parent_instance_id VARCHAR(64),
+    parent_token_id    VARCHAR(64),
     PRIMARY KEY (id)
 );
-COMMENT ON TABLE  cmx_flow_instance                IS '流程实例（运行态聚合根）';
-COMMENT ON COLUMN cmx_flow_instance.state          IS '实例状态：ACTIVE / COMPLETED / TERMINATED';
-COMMENT ON COLUMN cmx_flow_instance.variables      IS '实例级流程变量（JSONB 动态 KV）';
+COMMENT ON TABLE  cmx_flow_instance                    IS '流程实例（运行态聚合根）';
+COMMENT ON COLUMN cmx_flow_instance.state              IS '实例状态：ACTIVE / COMPLETED / TERMINATED';
+COMMENT ON COLUMN cmx_flow_instance.variables          IS '实例级流程变量（JSONB 动态 KV）';
+COMMENT ON COLUMN cmx_flow_instance.parent_instance_id IS '父实例 id（M5 子流程：子实例指向主实例；主实例为 NULL）';
+COMMENT ON COLUMN cmx_flow_instance.parent_token_id    IS '父实例中挂起等待的令牌 id（子完成时精确唤醒）';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_defkey ON cmx_flow_instance (definition_key);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_bizkey ON cmx_flow_instance (business_key);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_state  ON cmx_flow_instance (state);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_parent ON cmx_flow_instance (parent_instance_id);
 
 -- 流程令牌（执行指针）
 CREATE TABLE IF NOT EXISTS cmx_flow_token
@@ -2642,7 +2648,7 @@ CREATE TABLE IF NOT EXISTS cmx_flow_token
     PRIMARY KEY (id)
 );
 COMMENT ON TABLE  cmx_flow_token       IS '流程令牌（执行指针；一实例多令牌）';
-COMMENT ON COLUMN cmx_flow_token.state IS '令牌状态：ACTIVE / WAITING / JOINING / ENDED';
+COMMENT ON COLUMN cmx_flow_token.state IS '令牌状态：ACTIVE / WAITING / JOINING / WAITING_SUBFLOW / ENDED';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_token_instance ON cmx_flow_token (instance_id);
 
 -- 用户任务（等待态外化）
@@ -2859,3 +2865,21 @@ COMMENT ON TABLE  cmx_flow_task_delegation      IS '转签台账（转办/加签
 COMMENT ON COLUMN cmx_flow_task_delegation.kind IS 'TRANSFER / ADDSIGN_BEFORE / ADDSIGN_AFTER / DELEGATE';
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_instance ON cmx_flow_task_delegation (instance_id);
 CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_task     ON cmx_flow_task_delegation (task_id);
+
+-- 子流程组织绑定（M5.2：逻辑 key + 组织 → 具体子流程；详见 migrations/20260718_005_cmx_flow_subflow_binding.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_subflow_binding
+(
+    id                    VARCHAR(64)  NOT NULL,
+    called_key            VARCHAR(128) NOT NULL,
+    org_id                VARCHAR(64),
+    target_definition_key VARCHAR(128) NOT NULL,
+    enabled               BOOLEAN      NOT NULL DEFAULT TRUE,
+    remark                VARCHAR(500),
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_subflow_binding       IS '子流程组织绑定（逻辑 key + 组织 → 具体子流程；M5.2 路由数据源）';
+COMMENT ON COLUMN cmx_flow_subflow_binding.org_id IS '适用组织（NULL = 默认兜底绑定）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_key ON cmx_flow_subflow_binding (called_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_subflow_binding_org ON cmx_flow_subflow_binding (org_id);

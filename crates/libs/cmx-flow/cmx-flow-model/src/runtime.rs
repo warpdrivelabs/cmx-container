@@ -42,6 +42,9 @@ pub enum TokenState {
     /// 合流等待：停在并行网关 join，等待兄弟令牌到齐（结构性阻塞，非外部等待态）。
     /// 与 Waiting 的区别：无需外部触发，在同一次推进段内当最后一个兄弟到达时即被消解。
     Joining,
+    /// 子流程等待（M5）：停在 callActivity，等被调子实例完成。与 Waiting/Joining 并列的
+    /// 「挂起等待」态；唤醒信号来自子实例完成（complete_subflow），按 parent_token_id 精确唤醒。
+    WaitingSubflow,
     /// 已结束：抵达 endEvent，等待实例收尾。
     Ended,
 }
@@ -89,6 +92,20 @@ pub struct ProcessInstance {
     /// 完成时间（完成/终止时置位）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<DateTime<Utc>>,
+    /// 所属组织（M5.2 子流程组织路由的依据；M5.1 恒为 None，向后兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org_id: Option<String>,
+    /// 父实例 id（M5：子实例指向调用它的主实例；主实例/顶层实例为 None）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_instance_id: Option<String>,
+    /// 父实例中挂起等待的令牌 id（M5：子实例完成时据此精确唤醒主令牌）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_token_id: Option<String>,
+    /// 父实例中发起本子实例的 callActivity 节点 bpmn id（M5.3：多挂载去重键）。
+    /// 同一令牌可串行经过多个 callActivity，仅凭 parent_token_id 无法区分是哪一挂载点启动的，
+    /// 故补记节点。去重键 = (parent_token_id, parent_node_bpmn_id)。M5.1/5.2 单挂载恒可为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_node_bpmn_id: Option<String>,
 }
 
 /// 用户任务（等待态节点的外化产物）。

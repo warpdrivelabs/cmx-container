@@ -10,7 +10,9 @@ pub mod ddl;
 pub mod mapping;
 pub mod resolver;
 pub mod store;
+pub mod subflow_router;
 
 pub use ddl::DDL_STATEMENTS;
 pub use resolver::PgIamAssigneeResolver;
 pub use store::PgRuntimeStore;
+pub use subflow_router::PgSubflowRouter;

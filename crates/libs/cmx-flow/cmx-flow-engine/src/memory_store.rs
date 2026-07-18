@@ -157,4 +157,17 @@ impl RuntimeStore for InMemoryStore {
         }
         Ok(false)
     }
+
+    async fn find_child_instances(
+        &self,
+        parent_instance_id: &str,
+    ) -> StoreResult<Vec<cmx_flow_model::ProcessInstance>> {
+        let guard = self.inner.lock().await;
+        let out = guard
+            .values()
+            .filter(|snap| snap.instance.parent_instance_id.as_deref() == Some(parent_instance_id))
+            .map(|snap| snap.instance.clone())
+            .collect();
+        Ok(out)
+    }
 }

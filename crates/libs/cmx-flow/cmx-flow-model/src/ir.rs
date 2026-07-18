@@ -48,6 +48,38 @@ pub enum NodeKind {
     /// 只有定时器到期时引擎把宿主令牌（中断型）或新令牌（非中断型）置于此节点，再沿其
     /// 唯一出边推进到「升级 / 催办」分支。
     BoundaryTimerEvent(BoundaryTimer),
+    /// 调用活动（M5，BPMN callActivity）：调用一份**独立部署的子流程**并同步等待。
+    ///
+    /// 令牌到达时：解析子流程定义 → 启动子实例（父子关系）→ 主令牌转 WaitingSubflow 挂起。
+    /// 子实例跑完（到 endEvent）→ 引擎回调 complete_subflow：回写变量 + 唤醒父令牌沿出边前进。
+    /// M5.1 先支持写死的 calledElement（具体子流程 key）；M5.2 叠组织路由（calledKey 逻辑名）。
+    CallActivity(CallActivity),
+}
+
+/// 调用活动的静态配置（来自 BPMN callActivity）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallActivity {
+    /// 被调子流程的定义 key。M5.1：直接写死（对齐 BPMN `calledElement`）。
+    /// M5.2 将新增 `called_key`（逻辑名）+ 组织路由，二选一。
+    pub called_element: String,
+    /// 逻辑 key（M5.2 组织路由用；M5.1 恒为 None，走 called_element 写死）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub called_key: Option<String>,
+    /// 输入变量映射（主 → 子，启动子实例时拷贝）。空 = 全量传递主实例变量。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_vars: Vec<VarMapping>,
+    /// 输出变量映射（子 → 主，子实例完成回归时拷贝）。空 = 全量回写子实例变量。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_vars: Vec<VarMapping>,
+}
+
+/// 一条变量映射：把 `source` 变量的值拷到 `target` 变量。source==target 即同名传递。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VarMapping {
+    /// 源变量名。
+    pub source: String,
+    /// 目标变量名。
+    pub target: String,
 }
 
 /// 边界定时器的静态配置（来自 BPMN boundaryEvent）。
@@ -78,7 +110,7 @@ impl NodeKind {
     /// 注意：并行网关的 join 是「结构性阻塞」（等兄弟令牌），不是等待态——它不落任务、
     /// 不需外部触发，在一次推进段内即可解除（当最后一个兄弟到达时）。
     pub fn is_wait_state(&self) -> bool {
-        matches!(self, NodeKind::UserTask(_))
+        matches!(self, NodeKind::UserTask(_) | NodeKind::CallActivity(_))
     }
 }
 

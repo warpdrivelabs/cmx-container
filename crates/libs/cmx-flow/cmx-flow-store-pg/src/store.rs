@@ -162,7 +162,8 @@ impl RuntimeStore for PgRuntimeStore {
     async fn load_snapshot(&self, instance_id: &str) -> StoreResult<InstanceSnapshot> {
         // 实例。
         let inst_sql = format!(
-            "SELECT id, definition_key, business_key, state, variables, created_at, updated_at, ended_at \
+            "SELECT id, definition_key, business_key, state, variables, created_at, updated_at, ended_at, \
+                    org_id, parent_instance_id, parent_token_id, parent_node_bpmn_id \
              FROM cmx_flow_instance WHERE id = '{}'",
             escape(instance_id)
         );
@@ -350,6 +351,22 @@ impl RuntimeStore for PgRuntimeStore {
             .map_err(|e| StoreError::Backend(format!("标记抄送已读失败: {e}")))?;
         // affected=0 可能是已读或不存在——都视为「命中/无害」，返回是否存在该记录不强求。
         Ok(affected > 0)
+    }
+
+    async fn find_child_instances(
+        &self,
+        parent_instance_id: &str,
+    ) -> StoreResult<Vec<cmx_flow_model::ProcessInstance>> {
+        let sql = format!(
+            "SELECT id, definition_key, business_key, state, variables, created_at, updated_at, ended_at, \
+                    org_id, parent_instance_id, parent_token_id, parent_node_bpmn_id \
+             FROM cmx_flow_instance WHERE parent_instance_id = '{}'",
+            escape(parent_instance_id)
+        );
+        let ds = query_sql(&self.db_id, None, &sql, "flow_child_instances")
+            .await
+            .map_err(|e| StoreError::Backend(format!("查询子实例失败: {e}")))?;
+        mapping::rows_to_instances(&ds)
     }
 }
 

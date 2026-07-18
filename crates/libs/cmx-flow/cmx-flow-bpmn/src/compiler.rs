@@ -16,9 +16,9 @@
 use std::collections::HashMap;
 
 use cmx_flow_model::{
-    candidate::parse_candidate_expr, duration::parse_iso8601_duration, BoundaryTimer,
+    candidate::parse_candidate_expr, duration::parse_iso8601_duration, BoundaryTimer, CallActivity,
     CandidateKind, CandidateRef, FlowNode, MultiInstance, NodeId, NodeKind, ProcessDefinition,
-    SequenceFlow, ServiceTask, UserTask,
+    SequenceFlow, ServiceTask, UserTask, VarMapping,
 };
 use roxmltree::{Document, Node};
 
@@ -51,6 +51,7 @@ pub fn compile(xml: &str) -> Result<ProcessDefinition> {
             "exclusiveGateway" => Some(NodeKind::ExclusiveGateway),
             "parallelGateway" => Some(NodeKind::ParallelGateway),
             "boundaryEvent" => parse_boundary_event(&child)?,
+            "callActivity" => Some(NodeKind::CallActivity(parse_call_activity(&child)?)),
             // 顺序流在 Pass 2 处理；其余元素（extensionElements/laneSet/文档等）跳过。
             "sequenceFlow" => None,
             _ => {
@@ -288,6 +289,56 @@ fn parse_boundary_event(node: &Node) -> Result<Option<NodeKind>> {
     })))
 }
 
+/// 解析 callActivity（M5）：被调子流程 key + 输入/输出变量映射。
+///
+/// M5.1 支持标准 `calledElement`（写死子流程 key）；预留 `cmx:calledKey`（M5.2 逻辑路由名）。
+/// 变量映射用 flowable/camunda 风格的 `<extensionElements>` 下 `<in source= target=>` /
+/// `<out source= target=>` 子元素（本地名匹配，忽略命名空间前缀，兼容各方言）。
+fn parse_call_activity(node: &Node) -> Result<CallActivity> {
+    let called_element = local_attr(node, "calledElement").unwrap_or_default();
+    let called_key = local_attr(node, "calledKey");
+    // 二者至少有一个：M5.1 通常给 calledElement；M5.2 给 calledKey。
+    if called_element.is_empty() && called_key.is_none() {
+        return Err(Error::MissingElement(format!(
+            "callActivity (id={:?}) 需指定 calledElement 或 cmx:calledKey",
+            node.attribute("id")
+        )));
+    }
+    let input_vars = parse_var_mappings(node, "in");
+    let output_vars = parse_var_mappings(node, "out");
+    Ok(CallActivity {
+        called_element,
+        called_key,
+        input_vars,
+        output_vars,
+    })
+}
+
+/// 递归收集 callActivity 下所有指定本地名（in / out）的变量映射子元素。
+///
+/// 兼容两种放置：直接子元素，或包在 `<extensionElements>` 里。source==target 用 source 一个属性时同名。
+fn parse_var_mappings(node: &Node, local: &str) -> Vec<VarMapping> {
+    let mut out = Vec::new();
+    collect_var_mappings(node, local, &mut out);
+    out
+}
+
+fn collect_var_mappings(node: &Node, local: &str, out: &mut Vec<VarMapping>) {
+    for child in node.children().filter(Node::is_element) {
+        let name = child.tag_name().name();
+        if name == local {
+            let source = local_attr(&child, "source").or_else(|| local_attr(&child, "sourceExpression"));
+            if let Some(source) = source {
+                let target = local_attr(&child, "target").unwrap_or_else(|| source.clone());
+                out.push(VarMapping { source, target });
+            }
+        } else if name == "extensionElements" {
+            // 下钻一层找 in/out。
+            collect_var_mappings(&child, local, out);
+        }
+    }
+}
+
 /// 取某元素下指定本地名子元素的文本内容（trim 后非空才返回）。
 fn child_text(parent: &Node, local_name: &str) -> Option<String> {
     for child in parent.children().filter(Node::is_element) {
@@ -382,7 +433,6 @@ fn is_flow_node_like(local: &str) -> bool {
             | "sendTask"
             | "receiveTask"
             | "manualTask"
-            | "callActivity"
             | "subProcess"
             | "inclusiveGateway"
             | "eventBasedGateway"

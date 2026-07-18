@@ -328,4 +328,75 @@ mod tests {
             other => panic!("review 应为 userTask，实际 {other:?}"),
         }
     }
+
+    #[test]
+    fn compiles_call_activity_with_var_mappings() {
+        // callActivity：calledElement + 输入/输出变量映射（extensionElements 下 in/out）。
+        let xml = r#"<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                     xmlns:flowable="http://flowable.org/bpmn">
+          <process id="main" isExecutable="true">
+            <startEvent id="s"/>
+            <sequenceFlow id="f0" sourceRef="s" targetRef="call"/>
+            <callActivity id="call" name="财务复核" calledElement="fin_review">
+              <extensionElements>
+                <flowable:in source="amount" target="reviewAmount"/>
+                <flowable:out source="approved" target="finApproved"/>
+              </extensionElements>
+            </callActivity>
+            <sequenceFlow id="f1" sourceRef="call" targetRef="done"/>
+            <endEvent id="done"/>
+          </process></definitions>"#;
+        let def = compile(xml).expect("callActivity 应能编译");
+        let call = def.node_by_bpmn("call").unwrap();
+        match &call.kind {
+            NodeKind::CallActivity(ca) => {
+                assert_eq!(ca.called_element, "fin_review");
+                assert!(ca.called_key.is_none());
+                assert_eq!(ca.input_vars.len(), 1);
+                assert_eq!(ca.input_vars[0].source, "amount");
+                assert_eq!(ca.input_vars[0].target, "reviewAmount");
+                assert_eq!(ca.output_vars.len(), 1);
+                assert_eq!(ca.output_vars[0].source, "approved");
+                assert_eq!(ca.output_vars[0].target, "finApproved");
+            }
+            other => panic!("call 应为 callActivity，实际 {other:?}"),
+        }
+        assert_eq!(call.outgoing.len(), 1, "callActivity 有一条出边");
+    }
+
+    #[test]
+    fn call_activity_requires_target() {
+        // 既无 calledElement 也无 calledKey → 报错。
+        let xml = r#"<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+          <process id="p" isExecutable="true">
+            <startEvent id="s"/>
+            <sequenceFlow id="f0" sourceRef="s" targetRef="call"/>
+            <callActivity id="call"/>
+            <sequenceFlow id="f1" sourceRef="call" targetRef="done"/>
+            <endEvent id="done"/>
+          </process></definitions>"#;
+        assert!(matches!(compile(xml).unwrap_err(), Error::MissingElement(_)));
+    }
+
+    #[test]
+    fn compiles_call_activity_with_logical_key() {
+        // M5.2：cmx:calledKey 逻辑名（运行期由 SubflowRouter 按组织解析）。
+        let xml = r#"<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                     xmlns:cmx="http://cmx/flow">
+          <process id="p" isExecutable="true">
+            <startEvent id="s"/>
+            <sequenceFlow id="f0" sourceRef="s" targetRef="call"/>
+            <callActivity id="call" name="财务复核" cmx:calledKey="fin_review"/>
+            <sequenceFlow id="f1" sourceRef="call" targetRef="done"/>
+            <endEvent id="done"/>
+          </process></definitions>"#;
+        let def = compile(xml).expect("逻辑 key callActivity 应能编译");
+        match &def.node_by_bpmn("call").unwrap().kind {
+            NodeKind::CallActivity(ca) => {
+                assert_eq!(ca.called_key.as_deref(), Some("fin_review"));
+                assert!(ca.called_element.is_empty(), "用逻辑 key 时 calledElement 为空");
+            }
+            other => panic!("call 应为 callActivity，实际 {other:?}"),
+        }
+    }
 }

@@ -45,6 +45,7 @@ pub fn token_state_str(s: TokenState) -> &'static str {
         TokenState::Active => "ACTIVE",
         TokenState::Waiting => "WAITING",
         TokenState::Joining => "JOINING",
+        TokenState::WaitingSubflow => "WAITING_SUBFLOW",
         TokenState::Ended => "ENDED",
     }
 }
@@ -55,6 +56,7 @@ fn parse_token_state(s: &str) -> StoreResult<TokenState> {
         "ACTIVE" => Ok(TokenState::Active),
         "WAITING" => Ok(TokenState::Waiting),
         "JOINING" => Ok(TokenState::Joining),
+        "WAITING_SUBFLOW" => Ok(TokenState::WaitingSubflow),
         "ENDED" => Ok(TokenState::Ended),
         other => Err(StoreError::Backend(format!("未知令牌状态: {other}"))),
     }
@@ -112,8 +114,9 @@ fn opt_json(v: &Option<JsonValue>) -> DataValue {
 /// 实例 INSERT。variables 落 jsonb（DataValue::Json 承载 JSON 字符串）。
 pub fn insert_instance(inst: &ProcessInstance) -> (String, SqlParams) {
     let sql = "INSERT INTO cmx_flow_instance \
-        (id, definition_key, business_key, state, variables, created_at, updated_at, ended_at) \
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        (id, definition_key, business_key, state, variables, created_at, updated_at, ended_at, \
+         org_id, parent_instance_id, parent_token_id, parent_node_bpmn_id) \
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"
         .to_string();
     let params = vec![
         DataValue::String(inst.id.clone()),
@@ -124,11 +127,15 @@ pub fn insert_instance(inst: &ProcessInstance) -> (String, SqlParams) {
         DataValue::DateTime(inst.created_at),
         DataValue::DateTime(inst.updated_at),
         opt_ts(&inst.ended_at),
+        opt_text(&inst.org_id),
+        opt_text(&inst.parent_instance_id),
+        opt_text(&inst.parent_token_id),
+        opt_text(&inst.parent_node_bpmn_id),
     ];
     (sql, SqlParams::DataValues(params))
 }
 
-/// 实例 UPDATE（按 id）。
+/// 实例 UPDATE（按 id）。父子/组织列在创建后不变，此处不重复更新，仅更新易变列。
 pub fn update_instance(inst: &ProcessInstance) -> (String, SqlParams) {
     let sql = "UPDATE cmx_flow_instance SET \
         definition_key = $2, business_key = $3, state = $4, variables = $5, \
@@ -373,7 +380,34 @@ pub fn row_to_instance(ds: &DataSet) -> StoreResult<Option<ProcessInstance>> {
         created_at,
         updated_at,
         ended_at,
+        org_id: get_opt_string(row, schema, "org_id"),
+        parent_instance_id: get_opt_string(row, schema, "parent_instance_id"),
+        parent_token_id: get_opt_string(row, schema, "parent_token_id"),
+        parent_node_bpmn_id: get_opt_string(row, schema, "parent_node_bpmn_id"),
     }))
+}
+
+/// DataSet → 实例头列表（find_child_instances 用；含父子/组织列）。
+pub fn rows_to_instances(ds: &DataSet) -> StoreResult<Vec<ProcessInstance>> {
+    let schema = ds.schema.as_ref();
+    let mut out = Vec::with_capacity(ds.row_count());
+    for row in ds.iter() {
+        out.push(ProcessInstance {
+            id: get_string(row, schema, "id")?,
+            definition_key: get_string(row, schema, "definition_key")?,
+            business_key: get_opt_string(row, schema, "business_key"),
+            state: parse_instance_state(&get_string(row, schema, "state")?)?,
+            variables: get_variables(row, schema, "variables")?,
+            created_at: get_ts(row, schema, "created_at")?,
+            updated_at: get_ts(row, schema, "updated_at")?,
+            ended_at: get_opt_ts(row, schema, "ended_at"),
+            org_id: get_opt_string(row, schema, "org_id"),
+            parent_instance_id: get_opt_string(row, schema, "parent_instance_id"),
+            parent_token_id: get_opt_string(row, schema, "parent_token_id"),
+            parent_node_bpmn_id: get_opt_string(row, schema, "parent_node_bpmn_id"),
+        });
+    }
+    Ok(out)
 }
 
 /// DataSet → 令牌列表。

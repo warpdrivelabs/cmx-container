@@ -50,6 +50,10 @@ pub enum Error {
     #[error("候选人解析错误: {0}")]
     Resolve(#[from] cmx_flow_model::ResolveError),
 
+    /// 子流程路由错误（M5.2：逻辑 key + 组织解析不到具体子流程）。
+    #[error("子流程路由错误: {0}")]
+    Route(#[from] cmx_flow_model::RouteError),
+
     /// 任务认领错误（M4.1：认领非候选任务 / 已被认领）。
     #[error("任务认领失败: {0}")]
     ClaimFailed(String),

@@ -82,4 +82,12 @@ pub trait RuntimeStore: Send + Sync {
         cc_id: &str,
         read_at: chrono::DateTime<chrono::Utc>,
     ) -> StoreResult<bool>;
+
+    /// 查某主实例的全部子实例（M5，按 parent_instance_id）。返回子实例头（含 parent_token_id）。
+    ///
+    /// 供 callActivity 判断某令牌是否已启动子实例、以及级联处理。只读，不载完整聚合。
+    async fn find_child_instances(
+        &self,
+        parent_instance_id: &str,
+    ) -> StoreResult<Vec<crate::runtime::ProcessInstance>>;
 }
