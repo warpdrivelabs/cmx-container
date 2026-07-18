@@ -158,6 +158,7 @@ fn meta_node(doc: &serde_json::Value) -> Option<&serde_json::Value> {
 /// # Returns
 ///
 /// 返回关联的 base 字段集文件名；无关联（非 DCT/DOC 或引用缺 file）时返回 `None`。
+/// 由文档推断 base 文件名（DCT→baseDctMetaRef.file，DOC→baseDocMetaRef.file，RPT→baseRptMetaRef.file）。
 fn infer_base_file(doc: &serde_json::Value) -> Option<String> {
     // 按 metaKind 选择引用键：DCT 用 baseDctMetaRef，DOC 用 baseDocMetaRef
     let kind = meta_node(doc)
@@ -166,6 +167,7 @@ fn infer_base_file(doc: &serde_json::Value) -> Option<String> {
     let key = match kind {
         Some("DCT") => "baseDctMetaRef",
         Some("DOC") => "baseDocMetaRef",
+        Some("RPT") => "baseRptMetaRef",
         _ => return None,
     };
     // 取引用对象下的 file 字段，空串视为无引用
@@ -450,6 +452,34 @@ fn summarize(
                 json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
             );
             obj.insert("tableCount".into(), json!(doc_table_count(doc)));
+        }
+        "RPT" => {
+            obj.insert(
+                "title".into(),
+                json!(
+                    mm.get("moduleName")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(file)
+                ),
+            );
+            obj.insert(
+                "moduleCode".into(),
+                json!(mm.get("moduleCode").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            obj.insert(
+                "remark".into(),
+                json!(mm.get("remark").and_then(|v| v.as_str()).unwrap_or("")),
+            );
+            // 报表模板落地共用三张 cr_* 表；此处以单元格数作为规模提示。
+            obj.insert(
+                "cellCount".into(),
+                json!(
+                    doc.get("cells")
+                        .and_then(|v| v.as_object())
+                        .map(|o| o.len())
+                        .unwrap_or(0)
+                ),
+            );
         }
         // BASE 字段集模板：字段集数量取自 fieldSets
         "BASE" => {

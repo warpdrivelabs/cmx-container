@@ -299,6 +299,8 @@ whitelist = [
     "/api/dict",
     "/api/dct",
     "/api/doc",
+    "/api/rpt",
+    "/api/report-design",
     "/api/fact",
     "/api/help",
 ]
@@ -314,5 +316,5 @@ description = "开发环境默认 API Key"
 access_ttl_secs=1800000
 
 [opencode]
-enabled = false
+enabled = true
 base_url = "http://127.0.0.1:4096"

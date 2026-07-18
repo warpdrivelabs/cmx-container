@@ -6,8 +6,8 @@
 
 pub mod handler;
 
-use axum::routing::{delete, get, post};
 use axum::Router;
+use axum::routing::{delete, get, post};
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
@@ -21,22 +21,10 @@ impl ModuleRoutes for AiModule {
             // 创建会话
             .route("/ai/sessions", post(handler::create_session))
             // 会话级操作（{sid} = OpenCode ses_*）
-            .route(
-                "/ai/sessions/{sid}/messages",
-                post(handler::send_message),
-            )
-            .route(
-                "/ai/sessions/{sid}/answer",
-                post(handler::answer_question),
-            )
-            .route(
-                "/ai/sessions/{sid}/approval",
-                post(handler::approve),
-            )
-            .route(
-                "/ai/sessions/{sid}/abort",
-                post(handler::abort_session),
-            )
+            .route("/ai/sessions/{sid}/messages", post(handler::send_message))
+            .route("/ai/sessions/{sid}/answer", post(handler::answer_question))
+            .route("/ai/sessions/{sid}/approval", post(handler::approve))
+            .route("/ai/sessions/{sid}/abort", post(handler::abort_session))
             // 隐式上下文回传（插件工具 ↔ 前端桥接，无询问框）
             .route(
                 "/ai/sessions/{sid}/context-request",
@@ -46,10 +34,7 @@ impl ModuleRoutes for AiModule {
                 "/ai/sessions/{sid}/context-response",
                 post(handler::context_response),
             )
-            .route(
-                "/ai/sessions/{sid}",
-                delete(handler::delete_session),
-            )
+            .route("/ai/sessions/{sid}", delete(handler::delete_session))
             // SSE 事件流（按 sessionID 分发，query token 鉴权）
             .route("/ai/events", get(handler::subscribe_events))
     }

@@ -3577,5 +3577,53 @@
       "parent_id",
       "status"
     ]
+  },
+  {
+    "dictId": "acct_entity_hierarchy",
+    "label": "核算主体管理层级",
+    "domain": "fi",
+    "app": "cmxfico",
+    "module": "gl",
+    "application": "cmxfico",
+    "source": "seeds/fi/cmxfico/gl/acct_entity_hierarchy.json",
+    "hierarchical": false,
+    "idField": "id",
+    "parentField": "parent_id",
+    "labelField": "name",
+    "fullTextFields": [
+      "code",
+      "name"
+    ],
+    "filterFields": [
+      "parent_id",
+      "status",
+      "level_no",
+      "is_leaf"
+    ]
+  },
+  {
+    "dictId": "acct_entity_group",
+    "label": "核算主体分组关系",
+    "domain": "fi",
+    "app": "cmxfico",
+    "module": "gl",
+    "application": "cmxfico",
+    "source": "seeds/fi/cmxfico/gl/acct_entity_group.json",
+    "hierarchical": false,
+    "idField": "id",
+    "labelField": "name",
+    "fullTextFields": [
+      "code",
+      "name",
+      "master_name",
+      "aux_name"
+    ],
+    "filterFields": [
+      "master_id",
+      "master_code",
+      "aux_id",
+      "aux_code",
+      "status"
+    ]
   }
 ]

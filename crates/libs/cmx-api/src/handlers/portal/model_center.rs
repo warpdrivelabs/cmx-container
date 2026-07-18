@@ -22,12 +22,13 @@ use cmx_metadata::{
 use cmx_utils::snowflake_id_str;
 use serde_json::{Value, json};
 use std::cmp::Reverse;
+use std::collections::HashMap;
 use tracing::debug;
 
 use crate::Result;
 use cmx_api_types::Error;
 
-const META_VERSION: i32 = 1;
+const META_VERSION: i32 = 2;
 const ENGINE_VERSION: &str = "1.0.0";
 /// VARCHAR 字段未指定 fieldLength 时的默认长度。
 /// 避免无长度 VARCHAR 被当成 TEXT 建表，导致与设计期望不一致时无法 ALTER 修正。
@@ -36,6 +37,7 @@ const VARCHAR_DEFAULT_LENGTH: u32 = 255;
 const LEDGER_TABLES: &[&str] = &[
     "cmx_model_meta",
     "cmx_model_module",
+    "cmx_model_module_kind",
     "cmx_model_deploy_history",
     "cmx_model_source",
 ];
@@ -245,9 +247,10 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
             for f in fields {
                 *ord += 1;
                 if let Some(c) = field_to_column(f, id_field, *ord)
-                    && seen.insert(c.name.clone()) {
-                        columns.push(c);
-                    }
+                    && seen.insert(c.name.clone())
+                {
+                    columns.push(c);
+                }
             }
         };
         if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
@@ -265,9 +268,10 @@ fn compile_dct(doc: &Value, base: &Value) -> Vec<TableDefine> {
             "systemFieldSet",
         ] {
             if let Some(set_name) = t.get(set_key).and_then(|v| v.as_str())
-                && let Some(fields) = base_fieldset(base, set_name) {
-                    push_fields(fields, &mut columns, &mut seen, &mut ord);
-                }
+                && let Some(fields) = base_fieldset(base, set_name)
+            {
+                push_fields(fields, &mut columns, &mut seen, &mut ord);
+            }
         }
         // 兜底：捕获上面未列出的任何 `*FieldSet` 键（前向兼容新增字段集）。
         if let Some(obj) = t.as_object() {
@@ -344,9 +348,10 @@ fn compile_doc_table(t: &Value, base: &Value) -> Option<TableDefine> {
         for f in own {
             ord += 1;
             if let Some(c) = field_to_column(f, id_field, ord)
-                && seen.insert(c.name.clone()) {
-                    columns.push(c);
-                }
+                && seen.insert(c.name.clone())
+            {
+                columns.push(c);
+            }
         }
     }
     // documentFieldSets: [ "voucherCommonFields", ... ] 引用 base。汇总表通常不配，
@@ -354,15 +359,17 @@ fn compile_doc_table(t: &Value, base: &Value) -> Option<TableDefine> {
     if let Some(sets) = t.get("documentFieldSets").and_then(|v| v.as_array()) {
         for s in sets {
             if let Some(set_name) = s.as_str()
-                && let Some(fields) = base_fieldset(base, set_name) {
-                    for f in fields {
-                        ord += 1;
-                        if let Some(c) = field_to_column(f, id_field, ord)
-                            && seen.insert(c.name.clone()) {
-                                columns.push(c);
-                            }
+                && let Some(fields) = base_fieldset(base, set_name)
+            {
+                for f in fields {
+                    ord += 1;
+                    if let Some(c) = field_to_column(f, id_field, ord)
+                        && seen.insert(c.name.clone())
+                    {
+                        columns.push(c);
                     }
                 }
+            }
         }
     }
 
@@ -404,19 +411,112 @@ fn compile_doc(doc: &Value, base: &Value) -> Vec<TableDefine> {
     let mut seen_tables: std::collections::HashSet<String> = std::collections::HashSet::new();
     for t in tables {
         if let Some(def) = compile_doc_table(t, base)
-            && seen_tables.insert(def.table_name.clone()) {
-                out.push(def);
-            }
+            && seen_tables.insert(def.table_name.clone())
+        {
+            out.push(def);
+        }
         for key in ["summaries", "sum"] {
             if let Some(summaries) = t.get(key).and_then(|v| v.as_array()) {
                 for summary in summaries {
                     if let Some(def) = compile_doc_table(summary, base)
-                        && seen_tables.insert(def.table_name.clone()) {
-                            out.push(def);
-                        }
+                        && seen_tables.insert(def.table_name.clone())
+                    {
+                        out.push(def);
+                    }
                 }
             }
         }
+    }
+    out
+}
+
+/// RPT 报表定义 → Vec<TableDefine>。报表落地的三张 cr_* 物理表
+/// （cr_report_instance / cr_cell_value / cr_report_snapshot）是全部报表模板共享的
+/// 基础设施，其表结构声明在 base_rpt_meta 的 storageTables 中，一次建出、幂等升级。
+/// 报表模板本身（grid/cells/datasets）是运行期概念，不产生 DDL。
+/// 列 = storageTables[i].fields + 其 auditFieldSet 引用的 base 字段集，复用 field_to_column。
+fn compile_rpt(_doc: &Value, base: &Value) -> Vec<TableDefine> {
+    let tables = match base.get("storageTables").and_then(|v| v.as_array()) {
+        Some(t) => t,
+        None => return vec![],
+    };
+    let mut out = Vec::new();
+    let mut seen_tables: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for t in tables {
+        let table_name = t
+            .get("tableName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if table_name.is_empty() || !seen_tables.insert(table_name.clone()) {
+            continue;
+        }
+        let id_field = t.get("idField").and_then(|v| v.as_str()).unwrap_or("id");
+        let display = t
+            .get("displayName")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&table_name)
+            .to_string();
+        let comment = t
+            .get("remark")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let mut columns: Vec<ColumnDefine> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut ord: u32 = 0;
+        let push_fields = |fields: &Vec<Value>,
+                           columns: &mut Vec<ColumnDefine>,
+                           seen: &mut std::collections::HashSet<String>,
+                           ord: &mut u32| {
+            for f in fields {
+                *ord += 1;
+                if let Some(c) = field_to_column(f, id_field, *ord)
+                    && seen.insert(c.name.clone())
+                {
+                    columns.push(c);
+                }
+            }
+        };
+        if let Some(own) = t.get("fields").and_then(|v| v.as_array()) {
+            push_fields(own, &mut columns, &mut seen, &mut ord);
+        }
+        // 合并全部 *FieldSet 引用（当前仅 auditFieldSet；前向兼容任意 *FieldSet 键）。
+        if let Some(obj) = t.as_object() {
+            for (k, v) in obj {
+                if k.ends_with("FieldSet")
+                    && let Some(set_name) = v.as_str()
+                    && let Some(fields) = base_fieldset(base, set_name)
+                {
+                    push_fields(fields, &mut columns, &mut seen, &mut ord);
+                }
+            }
+        }
+
+        let primary_keys: Vec<String> = columns
+            .iter()
+            .filter(|c| c.is_primary_key)
+            .map(|c| c.name.clone())
+            .collect();
+
+        out.push(TableDefine {
+            indexes: unique_indexes(t, &table_name),
+            table_name,
+            display_name: display,
+            columns,
+            primary_keys,
+            version: 1,
+            create_time: None,
+            update_time: None,
+            i18n: false,
+            comment,
+            schema: None,
+            tablespace: None,
+            is_partitioned: false,
+            partition_type: None,
+            partition_columns: vec![],
+            extensions: Default::default(),
+        });
     }
     out
 }
@@ -461,7 +561,7 @@ async fn read_base(file: &str) -> Result<Value> {
         .map_err(db_err("读取 base 字段集失败"))
 }
 
-/// 编译一个定义（kind=DCT/DOC）→ (TableDefine 列表, 源 JSON)。
+/// 编译一个定义（kind=DCT/DOC/RPT）→ (TableDefine 列表, 源 JSON)。
 async fn compile_definition(
     kind: &str,
     domain: &str,
@@ -470,28 +570,29 @@ async fn compile_definition(
     file: &str,
 ) -> Result<(Vec<TableDefine>, Value)> {
     let doc = read_def(domain, app, module, file).await?;
-    let base_ref_key = if kind == "DOC" {
-        "baseDocMetaRef"
-    } else {
-        "baseDctMetaRef"
+    let base_ref_key = match kind {
+        "DOC" => "baseDocMetaRef",
+        "RPT" => "baseRptMetaRef",
+        _ => "baseDctMetaRef",
+    };
+    let default_base = match kind {
+        "DOC" => "base_doc_meta_v1.json",
+        "RPT" => "base_rpt_meta_v1.json",
+        _ => "base_dct_meta_v1.json",
     };
     let base_file = doc
         .get(base_ref_key)
         .and_then(|r| r.get("file"))
         .and_then(|v| v.as_str())
-        .unwrap_or(if kind == "DOC" {
-            "base_doc_meta_v1.json"
-        } else {
-            "base_dct_meta_v1.json"
-        })
+        .unwrap_or(default_base)
         .to_string();
     let base = read_base(&base_file)
         .await
         .unwrap_or(json!({ "fieldSets": {} }));
-    let defs = if kind == "DOC" {
-        compile_doc(&doc, &base)
-    } else {
-        compile_dct(&doc, &base)
+    let defs = match kind {
+        "DOC" => compile_doc(&doc, &base),
+        "RPT" => compile_rpt(&doc, &base),
+        _ => compile_dct(&doc, &base),
     };
     Ok((defs, doc))
 }
@@ -526,6 +627,289 @@ async fn table_exists(db_id: &str, table: &str) -> Result<bool> {
     Ok(n > 0)
 }
 
+const LEDGER_META_UPGRADE_DDL: &[&str] = &[
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS db_id VARCHAR(100)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS meta_version INT4 NOT NULL DEFAULT 1",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS app_id VARCHAR(64) NOT NULL DEFAULT 'default'",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS engine_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS portal_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ready'",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS initialized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS initialized_by VARCHAR(100)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS initialized_name VARCHAR(100)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS last_upgraded_at TIMESTAMP",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS last_upgraded_by VARCHAR(100)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS remark VARCHAR(500)",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE cmx_model_meta ADD COLUMN IF NOT EXISTS update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_meta_db_app ON cmx_model_meta (db_id, app_id)",
+];
+
+const LEDGER_MODULE_UPGRADE_DDL: &[&str] = &[
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS db_id VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS app_id VARCHAR(64) NOT NULL DEFAULT 'default'",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS domain_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS application_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS module_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS module_name VARCHAR(200)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS overall_status VARCHAR(20) DEFAULT 'active'",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS table_count INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS def_source VARCHAR(300)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS def_checksum VARCHAR(64)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS first_deployed_at TIMESTAMP",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS current_deployed_at TIMESTAMP",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS deployed_by VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS deployed_name VARCHAR(100)",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS archived INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE cmx_model_module ADD COLUMN IF NOT EXISTS update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_key ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code)",
+];
+
+const LEDGER_MODULE_KIND_DDL: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_kind_key ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind)",
+    "CREATE INDEX IF NOT EXISTS idx_model_module_kind_module ON cmx_model_module_kind (db_id, domain_code, application_code, module_code)",
+];
+
+const LEDGER_HISTORY_UPGRADE_DDL: &[&str] = &[
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS batch_id VARCHAR(64)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS db_id VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS app_id VARCHAR(64) NOT NULL DEFAULT 'default'",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS domain_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS application_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS module_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS module_name VARCHAR(200)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS kind VARCHAR(20)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS action VARCHAR(20)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS from_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS to_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS status VARCHAR(20)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS ddl_summary JSONB",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS object_count INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS seed_rows INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS def_ref VARCHAR(300)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS def_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS engine_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS error_message TEXT",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS started_at TIMESTAMP",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS duration_ms INT8",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS operator_id VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS operator_name VARCHAR(100)",
+    "ALTER TABLE cmx_model_deploy_history ADD COLUMN IF NOT EXISTS create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "CREATE INDEX IF NOT EXISTS idx_model_history_module ON cmx_model_deploy_history (db_id, domain_code, application_code, module_code)",
+    "CREATE INDEX IF NOT EXISTS idx_model_history_batch ON cmx_model_deploy_history (batch_id)",
+    "CREATE INDEX IF NOT EXISTS idx_model_history_time ON cmx_model_deploy_history (create_time)",
+];
+
+const LEDGER_SOURCE_UPGRADE_DDL: &[&str] = &[
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS db_id VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS app_id VARCHAR(64) NOT NULL DEFAULT 'default'",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS domain_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS application_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS module_code VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS module_name VARCHAR(200)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS kind VARCHAR(20)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS version VARCHAR(50)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS source_file VARCHAR(300)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS source_json JSONB",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS compiled_json JSONB",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS table_count INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS seed_row_count INT4 DEFAULT 0",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS is_current INT4 DEFAULT 1",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS engine_version VARCHAR(50)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS imported_by VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS imported_name VARCHAR(100)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS remark VARCHAR(500)",
+    "ALTER TABLE cmx_model_source ADD COLUMN IF NOT EXISTS create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_source_ver ON cmx_model_source (db_id, app_id, domain_code, application_code, module_code, kind, version)",
+    "CREATE INDEX IF NOT EXISTS idx_model_source_current ON cmx_model_source (db_id, domain_code, application_code, module_code, kind, is_current)",
+];
+
+/// 对已存在的模型中心台账做幂等 schema 补齐。
+///
+/// 模块主表只存模块身份与汇总，具体 DCT/DOC/RPT/SEED 状态按行写入
+/// `cmx_model_module_kind`，以后增加新的模块类型只增加 kind 值，不再给主表加列。
+/// 这里不创建缺失的主台账表，保持“未初始化库仍需初始化”的门闸语义；但已初始化
+/// 的旧库会自动创建/补齐 kind 明细表，并从旧横向列迁移一次当前态。
+async fn ensure_ledger_schema(db_id: &str) -> Result<()> {
+    let mm = get_default_db_manager();
+    let has_module = table_exists(db_id, "cmx_model_module").await?;
+    for (table, ddl) in [
+        ("cmx_model_meta", LEDGER_META_UPGRADE_DDL),
+        ("cmx_model_module", LEDGER_MODULE_UPGRADE_DDL),
+        ("cmx_model_deploy_history", LEDGER_HISTORY_UPGRADE_DDL),
+        ("cmx_model_source", LEDGER_SOURCE_UPGRADE_DDL),
+    ] {
+        if !table_exists(db_id, table).await? {
+            continue;
+        }
+        for sql in ddl {
+            mm.execute_sql(db_id, None, sql)
+                .await
+                .map_err(db_err(&format!("升级模型中心台账结构失败 {table}")))?;
+        }
+    }
+    if has_module {
+        for sql in LEDGER_MODULE_KIND_DDL {
+            mm.execute_sql(db_id, None, sql)
+                .await
+                .map_err(db_err("升级模型中心模块类型台账失败"))?;
+        }
+        migrate_legacy_module_kind_rows(db_id).await?;
+    }
+    Ok(())
+}
+
+async fn migrate_legacy_module_kind_rows(db_id: &str) -> Result<()> {
+    let cols = table_columns(db_id, "cmx_model_module").await?;
+    let mm = get_default_db_manager();
+    for (kind, ver_col, st_col) in [
+        ("DCT", "dct_version", "dct_status"),
+        ("DOC", "doc_version", "doc_status"),
+        ("RPT", "rpt_version", "rpt_status"),
+        ("SEED", "seed_version", "seed_status"),
+    ] {
+        let has_ver = cols.contains_key(ver_col);
+        let has_st = cols.contains_key(st_col);
+        if !has_ver && !has_st {
+            continue;
+        }
+        let version_expr = if has_ver { ver_col } else { "NULL" };
+        let status_expr = if has_st { st_col } else { "'none'" };
+        let sql = format!(
+            "INSERT INTO cmx_model_module_kind \
+             (id, db_id, app_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, def_checksum, deployed_at, deployed_by, deployed_name, archived, create_time, update_time) \
+             SELECT md5(COALESCE(db_id,'') || ':' || COALESCE(app_id,'default') || ':' || COALESCE(domain_code,'') || ':' || COALESCE(application_code,'') || ':' || COALESCE(module_code,'') || ':{kind}'), \
+                    db_id, COALESCE(app_id,'default'), domain_code, application_code, module_code, '{kind}', {version_expr}, COALESCE({status_expr}, 'none'), COALESCE(table_count,0), def_source, def_checksum, current_deployed_at, deployed_by, deployed_name, COALESCE(archived,0), COALESCE(create_time,CURRENT_TIMESTAMP), COALESCE(update_time,CURRENT_TIMESTAMP) \
+               FROM cmx_model_module \
+              WHERE COALESCE(archived,0) = 0 \
+                AND ({version_expr} IS NOT NULL OR COALESCE({status_expr}, 'none') <> 'none') \
+             ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET \
+                    version = COALESCE(EXCLUDED.version, cmx_model_module_kind.version), \
+                    status = COALESCE(NULLIF(EXCLUDED.status, ''), cmx_model_module_kind.status), \
+                    table_count = GREATEST(COALESCE(cmx_model_module_kind.table_count,0), COALESCE(EXCLUDED.table_count,0)), \
+                    def_source = COALESCE(EXCLUDED.def_source, cmx_model_module_kind.def_source), \
+                    def_checksum = COALESCE(EXCLUDED.def_checksum, cmx_model_module_kind.def_checksum), \
+                    deployed_at = COALESCE(EXCLUDED.deployed_at, cmx_model_module_kind.deployed_at), \
+                    deployed_by = COALESCE(EXCLUDED.deployed_by, cmx_model_module_kind.deployed_by), \
+                    deployed_name = COALESCE(EXCLUDED.deployed_name, cmx_model_module_kind.deployed_name), \
+                    update_time = CURRENT_TIMESTAMP"
+        );
+        mm.execute_sql(db_id, None, &sql)
+            .await
+            .map_err(db_err("迁移旧模块类型台账失败"))?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Default)]
+struct LedgerSchemaStatus {
+    needs_upgrade: bool,
+    module_table_exists: bool,
+    module_kind_exists: bool,
+    legacy_kind_columns: Vec<String>,
+    missing_tables: Vec<&'static str>,
+    reasons: Vec<String>,
+}
+
+async fn ledger_schema_status(db_id: &str) -> Result<LedgerSchemaStatus> {
+    let mut st = LedgerSchemaStatus::default();
+    for table in LEDGER_TABLES {
+        if table_exists(db_id, table).await? {
+            if *table == "cmx_model_module" {
+                st.module_table_exists = true;
+            } else if *table == "cmx_model_module_kind" {
+                st.module_kind_exists = true;
+            }
+        } else {
+            st.missing_tables.push(*table);
+        }
+    }
+    if st.module_table_exists {
+        let cols = table_columns(db_id, "cmx_model_module").await?;
+        for col in [
+            "dct_version",
+            "dct_status",
+            "doc_version",
+            "doc_status",
+            "rpt_version",
+            "rpt_status",
+            "seed_version",
+            "seed_status",
+        ] {
+            if cols.contains_key(col) {
+                st.legacy_kind_columns.push(col.to_string());
+            }
+        }
+    }
+    if st.module_table_exists && !st.module_kind_exists {
+        st.needs_upgrade = true;
+        st.reasons
+            .push("缺少模块类型当前态表 cmx_model_module_kind".to_string());
+    }
+    if !st.missing_tables.is_empty() {
+        st.needs_upgrade = true;
+        st.reasons.push(format!(
+            "缺少基础管理台账对象：{}",
+            st.missing_tables.join(", ")
+        ));
+    }
+    Ok(st)
+}
+
+async fn ensure_current_ledger_schema(db_id: &str) -> Result<()> {
+    let meta = read_meta(db_id).await?;
+    let meta_version = meta
+        .as_ref()
+        .and_then(|m| m.get("meta_version"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+    let schema = ledger_schema_status(db_id).await?;
+    if meta.is_none() {
+        return Err(Error::BadRequest(
+            "数据库尚未初始化，请先初始化模型中心".into(),
+        ));
+    }
+    if meta_version < META_VERSION || schema.needs_upgrade {
+        let reason = schema
+            .reasons
+            .first()
+            .cloned()
+            .unwrap_or_else(|| format!("台账版本 v{meta_version} 低于当前 v{META_VERSION}"));
+        return Err(Error::BadRequest(format!(
+            "基础管理需要升级后才能执行模块操作：{reason}"
+        )));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct DbColumnSnapshot {
+    data_type: String,
+    length: Option<i64>,
+    precision: Option<i64>,
+    scale: Option<i64>,
+    nullable: bool,
+    default_value: Option<String>,
+}
+
+fn data_value_i64(v: &DataValue) -> Option<i64> {
+    match v {
+        DataValue::Int(i) => Some(*i),
+        DataValue::Float(f) => Some(*f as i64),
+        DataValue::Decimal(d) => d.to_string().parse::<i64>().ok(),
+        DataValue::String(s) => s.trim().parse::<i64>().ok(),
+        DataValue::ShortStr(s) => s.trim().parse::<i64>().ok(),
+        DataValue::LongStr(s) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
 fn table_action_label(change: &Value) -> &'static str {
     match change.get("action").and_then(|v| v.as_str()) {
         Some("create_table") => "创建表",
@@ -542,6 +926,53 @@ fn table_action_label(change: &Value) -> &'static str {
 /// 这类永久假阳性。
 fn pg_display_type(c: &ColumnDefine) -> String {
     PostgresDdlDialect::default().map_column_type(c)
+}
+
+async fn table_columns(db_id: &str, table: &str) -> Result<HashMap<String, DbColumnSnapshot>> {
+    let mm = get_default_db_manager();
+    let sql = "SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default \
+               FROM information_schema.columns \
+               WHERE table_schema = current_schema() AND table_name = $1 \
+               ORDER BY ordinal_position";
+    let ds = mm
+        .query_sql_with_datavalues(
+            db_id,
+            None,
+            sql,
+            vec![DataValue::String(table.to_string())],
+            "mc_columns",
+        )
+        .await
+        .map_err(db_err("查询表列信息失败"))?;
+    let mut out = HashMap::new();
+    for row in ds.iter() {
+        let name = row.get(0).and_then(data_value_string).unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let data_type = row
+            .get(1)
+            .and_then(data_value_string)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let is_nullable = row
+            .get(5)
+            .and_then(data_value_string)
+            .map(|s| s.eq_ignore_ascii_case("YES"))
+            .unwrap_or(true);
+        out.insert(
+            name.clone(),
+            DbColumnSnapshot {
+                data_type,
+                length: row.get(2).and_then(data_value_i64),
+                precision: row.get(3).and_then(data_value_i64),
+                scale: row.get(4).and_then(data_value_i64),
+                nullable: is_nullable,
+                default_value: row.get(6).and_then(data_value_string),
+            },
+        );
+    }
+    Ok(out)
 }
 
 /// 单个索引定义 → 前端展示 JSON（含 name/columns/unique）。
@@ -801,13 +1232,27 @@ async fn read_meta(db_id: &str) -> Result<Option<Value>> {
         return Ok(None);
     }
     let mm = get_default_db_manager();
+    let cols = table_columns(db_id, "cmx_model_meta").await?;
+    let meta_version_expr = if cols.contains_key("meta_version") {
+        "meta_version"
+    } else {
+        "1 AS meta_version"
+    };
+    let status_expr = if cols.contains_key("status") {
+        "status"
+    } else {
+        "'ready' AS status"
+    };
+    let initialized_at_expr = if cols.contains_key("initialized_at") {
+        "initialized_at"
+    } else {
+        "NULL::timestamp AS initialized_at"
+    };
+    let sql = format!(
+        "SELECT {meta_version_expr}, {status_expr}, {initialized_at_expr} FROM cmx_model_meta LIMIT 1"
+    );
     let ds = mm
-        .query_sql(
-            db_id,
-            None,
-            "SELECT meta_version, status, initialized_at FROM cmx_model_meta LIMIT 1",
-            "mc_meta",
-        )
+        .query_sql(db_id, None, &sql, "mc_meta")
         .await
         .map_err(db_err("读取 cmx_model_meta 失败"))?;
     let schema = ds.schema.clone();
@@ -840,7 +1285,7 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
         return Ok(map);
     }
     let mm = get_default_db_manager();
-    let sql = "SELECT domain_code, application_code, module_code, module_name, dct_version, dct_status, doc_version, doc_status, seed_version, seed_status, table_count, def_source, first_deployed_at, current_deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module WHERE archived = 0";
+    let sql = "SELECT domain_code, application_code, module_code, module_name, table_count, def_source, first_deployed_at, current_deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module WHERE archived = 0";
     let ds = mm
         .query_sql(db_id, None, sql, "mc_modules")
         .await
@@ -869,10 +1314,78 @@ async fn read_modules(db_id: &str) -> Result<std::collections::HashMap<String, V
             "deployed_name": sv(row, "deployed_name"),
             "create_time": sv(row, "create_time"),
             "update_time": sv(row, "update_time"),
-            "dct": { "version": sv(row, "dct_version"), "status": sv(row, "dct_status").unwrap_or_else(|| "none".into()) },
-            "doc": { "version": sv(row, "doc_version"), "status": sv(row, "doc_status").unwrap_or_else(|| "none".into()) },
-            "seed": { "version": sv(row, "seed_version"), "status": sv(row, "seed_status").unwrap_or_else(|| "none".into()) },
         }));
+    }
+    if table_exists(db_id, "cmx_model_module_kind").await? {
+        let ksql = "SELECT domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name, create_time, update_time FROM cmx_model_module_kind WHERE archived = 0";
+        let kds = mm
+            .query_sql(db_id, None, ksql, "mc_module_kinds")
+            .await
+            .map_err(db_err("读取模块类型台账失败"))?;
+        let kschema = kds.schema.clone();
+        let kv = |row: &cmx_core::model::data::dataset::Row, name: &str| -> Option<String> {
+            row.get_by_name(kschema.as_ref(), name)
+                .and_then(data_value_string)
+        };
+        for row in kds.iter() {
+            let d = kv(row, "domain_code").unwrap_or_default();
+            let a = kv(row, "application_code").unwrap_or_default();
+            let m = kv(row, "module_code").unwrap_or_default();
+            let key = format!("{d}/{a}/{m}");
+            let kind = kv(row, "kind").unwrap_or_default().to_ascii_lowercase();
+            if kind.is_empty() {
+                continue;
+            }
+            let entry = map.entry(key.clone()).or_insert_with(|| {
+                json!({
+                    "key": key,
+                    "domain": d,
+                    "application": a,
+                    "module": m,
+                    "module_name": m,
+                    "table_count": 0,
+                })
+            });
+            let kind_tables = kv(row, "table_count")
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let total = entry
+                .get("table_count")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            entry["table_count"] = json!(total.max(kind_tables));
+            if entry.get("def_source").and_then(|v| v.as_str()).is_none() {
+                entry["def_source"] = json!(kv(row, "def_source"));
+            }
+            if entry
+                .get("current_deployed_at")
+                .and_then(|v| v.as_str())
+                .is_none()
+            {
+                entry["current_deployed_at"] = json!(kv(row, "deployed_at"));
+            }
+            if entry.get("deployed_by").and_then(|v| v.as_str()).is_none() {
+                entry["deployed_by"] = json!(kv(row, "deployed_by"));
+            }
+            if entry
+                .get("deployed_name")
+                .and_then(|v| v.as_str())
+                .is_none()
+            {
+                entry["deployed_name"] = json!(kv(row, "deployed_name"));
+            }
+            entry[&kind] = json!({
+                "version": kv(row, "version"),
+                "status": kv(row, "status").unwrap_or_else(|| "none".into()),
+                "table_count": kind_tables,
+                "def_source": kv(row, "def_source"),
+                "deployed_at": kv(row, "deployed_at"),
+                "deployed_by": kv(row, "deployed_by"),
+                "deployed_name": kv(row, "deployed_name"),
+                "create_time": kv(row, "create_time"),
+                "update_time": kv(row, "update_time"),
+            });
+        }
     }
     Ok(map)
 }
@@ -914,6 +1427,38 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
         .and_then(|m| m.get("meta_version"))
         .and_then(|v| v.as_i64())
         .unwrap_or(0) as i32;
+    if !initialized {
+        return Ok(json!({
+            "db_id": db_id,
+            "initialized": false,
+            "meta_version": 0,
+            "expected_meta_version": META_VERSION,
+            "db_status": "UNINITIALIZED",
+            "page_mode": "init",
+            "scenario_counts": json!({ "create": 0, "upgrade": 0, "current": 0, "retry": 0, "drift": 0 }),
+            "installed_modules": [],
+            "modules": [],
+        }));
+    }
+    let schema = ledger_schema_status(db_id).await?;
+    let needs_upgrade = meta_version < META_VERSION || schema.needs_upgrade;
+    if needs_upgrade {
+        return Ok(json!({
+            "db_id": db_id,
+            "initialized": true,
+            "meta_version": meta_version,
+            "expected_meta_version": META_VERSION,
+            "db_status": "META_UPGRADE_REQUIRED",
+            "page_mode": "meta_upgrade",
+            "upgrade_required": true,
+            "upgrade_reasons": schema.reasons,
+            "legacy_kind_columns": schema.legacy_kind_columns,
+            "missing_tables": schema.missing_tables,
+            "scenario_counts": json!({ "create": 0, "upgrade": 0, "current": 0, "retry": 0, "drift": 0 }),
+            "installed_modules": [],
+            "modules": [],
+        }));
+    }
     let applied_modules = read_modules(db_id).await?;
 
     // 定义列表：每模块每 kind 的默认版本 = latest。
@@ -923,6 +1468,9 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     let doc_list = cmx_portal::definitions::store::list_definitions(Some("DOC"), None, None, None)
         .await
         .map_err(db_err("列出 DOC 失败"))?;
+    let rpt_list = cmx_portal::definitions::store::list_definitions(Some("RPT"), None, None, None)
+        .await
+        .map_err(db_err("列出 RPT 失败"))?;
 
     // 归并成 module -> { DCT: {ver,file,title}, DOC: {...} }（取默认/最大版本）
     #[derive(Default, Clone)]
@@ -1031,6 +1579,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
     };
     ingest(&dct_list, "DCT");
     ingest(&doc_list, "DOC");
+    ingest(&rpt_list, "RPT");
 
     let mut modules = Vec::new();
     let mut counts = json!({ "create": 0, "upgrade": 0, "current": 0, "retry": 0, "drift": 0 });
@@ -1097,7 +1646,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_by": applied.and_then(|a| a.get("deployed_by")).and_then(|v| v.as_str()),
             "deployed_name": applied.and_then(|a| a.get("deployed_name")).and_then(|v| v.as_str()),
             "table_count": tblc,
-            "dct": cell("DCT"), "doc": cell("DOC"),
+            "dct": cell("DCT"), "doc": cell("DOC"), "rpt": cell("RPT"),
             "seed": json!({ "applied": null, "latest": null, "status": "none", "scenario": "none", "file": "" }),
         }));
     }
@@ -1161,6 +1710,7 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
             "deployed_name": applied.get("deployed_name").and_then(|v| v.as_str()),
             "dct": def_cell("DCT"),
             "doc": def_cell("DOC"),
+            "rpt": def_cell("RPT"),
             "seed": def_cell("SEED"),
         }));
     }
@@ -1190,27 +1740,28 @@ pub async fn db_state(db_id: &str) -> Result<Value> {
 const INIT_DDL: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS cmx_model_meta (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), meta_version INT4 NOT NULL DEFAULT 1, app_id VARCHAR(64) NOT NULL DEFAULT 'default', engine_version VARCHAR(50), portal_version VARCHAR(50), status VARCHAR(20) NOT NULL DEFAULT 'ready', initialized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, initialized_by VARCHAR(100), initialized_name VARCHAR(100), last_upgraded_at TIMESTAMP, last_upgraded_by VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_meta_db_app ON cmx_model_meta (db_id, app_id)",
-    "CREATE TABLE IF NOT EXISTS cmx_model_module (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), dct_version VARCHAR(50), dct_status VARCHAR(20) DEFAULT 'none', doc_version VARCHAR(50), doc_status VARCHAR(20) DEFAULT 'none', seed_version VARCHAR(50), seed_status VARCHAR(20) DEFAULT 'none', overall_status VARCHAR(20) DEFAULT 'active', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), first_deployed_at TIMESTAMP, current_deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE TABLE IF NOT EXISTS cmx_model_module (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), overall_status VARCHAR(20) DEFAULT 'active', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), first_deployed_at TIMESTAMP, current_deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_key ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code)",
+    "CREATE TABLE IF NOT EXISTS cmx_model_module_kind (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), kind VARCHAR(20) NOT NULL, version VARCHAR(50), status VARCHAR(20) DEFAULT 'none', table_count INT4 DEFAULT 0, def_source VARCHAR(300), def_checksum VARCHAR(64), deployed_at TIMESTAMP, deployed_by VARCHAR(100), deployed_name VARCHAR(100), error_message TEXT, archived INT4 DEFAULT 0, create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_kind_key ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind)",
+    "CREATE INDEX IF NOT EXISTS idx_model_module_kind_module ON cmx_model_module_kind (db_id, domain_code, application_code, module_code)",
     "CREATE TABLE IF NOT EXISTS cmx_model_deploy_history (id VARCHAR(64) NOT NULL, batch_id VARCHAR(64), db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), action VARCHAR(20), from_version VARCHAR(50), to_version VARCHAR(50), status VARCHAR(20), ddl_summary JSONB, object_count INT4 DEFAULT 0, seed_rows INT4 DEFAULT 0, def_ref VARCHAR(300), def_version VARCHAR(50), engine_version VARCHAR(50), error_message TEXT, started_at TIMESTAMP, finished_at TIMESTAMP, duration_ms INT8, operator_id VARCHAR(100), operator_name VARCHAR(100), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE INDEX IF NOT EXISTS idx_model_history_module ON cmx_model_deploy_history (db_id, domain_code, application_code, module_code)",
     "CREATE TABLE IF NOT EXISTS cmx_model_source (id VARCHAR(64) NOT NULL, db_id VARCHAR(100), app_id VARCHAR(64) NOT NULL DEFAULT 'default', domain_code VARCHAR(100), application_code VARCHAR(100), module_code VARCHAR(100), module_name VARCHAR(200), kind VARCHAR(20), version VARCHAR(50), source_file VARCHAR(300), source_json JSONB, compiled_json JSONB, checksum VARCHAR(64), table_count INT4 DEFAULT 0, seed_row_count INT4 DEFAULT 0, is_current INT4 DEFAULT 1, engine_version VARCHAR(50), imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, imported_by VARCHAR(100), imported_name VARCHAR(100), remark VARCHAR(500), create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uk_model_source_ver ON cmx_model_source (db_id, app_id, domain_code, application_code, module_code, kind, version)",
 ];
 
-/// 初始化目标库：建 4 张台账系统表 + 写 cmx_model_meta + 记 INIT 历史。
+/// 初始化目标库：建 5 张台账系统表 + 写 cmx_model_meta + 记 INIT 历史。
 pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Result<Value> {
     let mm = get_default_db_manager();
-    // 幂等：已初始化则直接返回 db-state。
-    if read_meta(db_id).await?.is_some() {
-        return db_state(db_id).await;
-    }
+    let reinit = read_meta(db_id).await?.is_some();
     // 1) 建系统表（DDL 自动提交，txn_id=None）
     for ddl in INIT_DDL {
         mm.execute_sql(db_id, None, ddl)
             .await
             .map_err(db_err("建台账系统表失败"))?;
     }
+    ensure_ledger_schema(db_id).await?;
     // 2) 写 meta + 历史（同一事务）
     let ctx = mm.get_transaction_context();
     let guard = ctx
@@ -1219,7 +1770,8 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
         .map_err(db_err("开启事务失败"))?;
     let txn = guard.txn_id().to_string();
 
-    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,'ready',$5,$6)";
+    let meta_sql = "INSERT INTO cmx_model_meta (id, db_id, meta_version, engine_version, status, initialized_by, initialized_name) VALUES ($1,$2,$3,$4,'ready',$5,$6) \
+        ON CONFLICT (db_id, app_id) DO UPDATE SET meta_version = EXCLUDED.meta_version, engine_version = EXCLUDED.engine_version, status = 'ready', last_upgraded_at = CURRENT_TIMESTAMP, last_upgraded_by = EXCLUDED.initialized_by, update_time = CURRENT_TIMESTAMP";
     mm.execute_sql_with_datavalues(
         db_id,
         Some(&txn),
@@ -1236,7 +1788,8 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
     .await
     .map_err(db_err("写 cmx_model_meta 失败"))?;
 
-    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,'INIT','create',$3,'success',$4,$5,$6,$7,CURRENT_TIMESTAMP)";
+    let action = if reinit { "upgrade" } else { "create" };
+    let hist_sql = "INSERT INTO cmx_model_deploy_history (id, db_id, kind, action, to_version, status, object_count, engine_version, operator_id, operator_name, finished_at) VALUES ($1,$2,'INIT',$3,$4,'success',$5,$6,$7,$8,CURRENT_TIMESTAMP)";
     mm.execute_sql_with_datavalues(
         db_id,
         Some(&txn),
@@ -1244,6 +1797,7 @@ pub async fn init_db(db_id: &str, operator_id: &str, operator_name: &str) -> Res
         vec![
             DataValue::String(snowflake_id_str()),
             DataValue::String(db_id.to_string()),
+            DataValue::String(action.to_string()),
             DataValue::String(META_VERSION.to_string()),
             DataValue::Int(LEDGER_TABLES.len() as i64),
             DataValue::String(ENGINE_VERSION.to_string()),
@@ -1307,13 +1861,37 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
         }
     };
     let reinit = meta.is_some();
+    let meta_version = meta
+        .as_ref()
+        .and_then(|m| m.get("meta_version"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let schema = match ledger_schema_status(db_id).await {
+        Ok(v) => v,
+        Err(e) => {
+            send(ev(
+                "error",
+                json!({ "stage": "state", "message": format!("检查基础管理结构失败: {e}") }),
+            ));
+            return;
+        }
+    };
     send(ev(
         "step",
         json!({
-            "message": if reinit { "该库已初始化：计划执行加性校验/升级，不删除任何数据" } else { "该库尚未初始化：计划创建模型中心台账系统表" },
+            "message": if reinit {
+                if meta_version < META_VERSION as i64 || schema.needs_upgrade {
+                    "检测到旧版基础管理结构：将生成可审核升级计划"
+                } else {
+                    "该库已初始化：计划执行基础管理加性校验，不删除任何数据"
+                }
+            } else {
+                "该库尚未初始化：计划创建模型中心基础管理台账"
+            },
             "reinit": reinit,
-            "meta_version": meta.as_ref().and_then(|m| m.get("meta_version")).and_then(|v| v.as_i64()).unwrap_or(0),
+            "meta_version": meta_version,
             "expected_meta_version": META_VERSION,
+            "upgrade_reasons": schema.reasons,
         }),
     ));
 
@@ -1339,10 +1917,67 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
             }),
         ));
     }
+    if reinit {
+        send(ev(
+            "step",
+            json!({ "message": "升级影响说明：本次为加性升级，只创建缺失台账/索引、补齐缺失列并迁移当前态；不会删除业务表、不会删除台账数据、不会删除旧列。" }),
+        ));
+        send(ev(
+            "progress",
+            json!({
+                "message": "将把 DCT/DOC/RPT/SEED 等类型版本状态迁移到 cmx_model_module_kind；以后新增类型只新增 kind 行，不再修改 cmx_model_module 结构。",
+                "legacy_columns": schema.legacy_kind_columns,
+            }),
+        ));
+        send(ev(
+            "progress",
+            json!({ "message": "升级完成前将锁定模块创建/安装/升级，避免用旧台账结构写入新类型状态。" }),
+        ));
+    }
     send(ev(
         "step",
         json!({ "message": "计划写入/更新 cmx_model_meta，并记录 INIT 执行历史" }),
     ));
+    let mut results = vec![
+        json!({
+            "module": "基础管理台账",
+            "kind": "SYS",
+            "status": "planned",
+            "version": META_VERSION,
+            "tables": LEDGER_TABLES.len(),
+            "table_names": LEDGER_TABLES,
+            "note": if reinit { "校验/补齐基础管理台账表与索引" } else { "创建基础管理台账表与索引" },
+        }),
+        json!({
+            "module": "模块类型当前态",
+            "kind": "SYS",
+            "status": "planned",
+            "version": META_VERSION,
+            "tables": 1,
+            "table_names": ["cmx_model_module_kind"],
+            "note": "按行保存 DCT/DOC/RPT/SEED/... 的版本与状态，新增类型不再改主表",
+        }),
+    ];
+    if reinit && !schema.legacy_kind_columns.is_empty() {
+        results.push(json!({
+            "module": "旧台账数据迁移",
+            "kind": "SYS",
+            "status": "planned",
+            "version": META_VERSION,
+            "tables": 1,
+            "table_names": ["cmx_model_module", "cmx_model_module_kind"],
+            "note": format!("从旧列迁移当前态：{}", schema.legacy_kind_columns.join(", ")),
+        }));
+    }
+    results.push(json!({
+        "module": "版本标记",
+        "kind": "SYS",
+        "status": "planned",
+        "version": META_VERSION,
+        "tables": 1,
+        "table_names": ["cmx_model_meta"],
+        "note": format!("升级 meta_version：v{meta_version} -> v{META_VERSION}"),
+    }));
     send(ev(
         "done",
         json!({
@@ -1350,6 +1985,13 @@ pub async fn init_plan_stream(db_id: &str, tx: &tokio::sync::mpsc::UnboundedSend
             "action": if reinit { "upgrade" } else { "create" },
             "tables": LEDGER_TABLES,
             "ddl_count": total,
+            "results": results,
+            "impacts": [
+                "仅执行加性 DDL：CREATE TABLE IF NOT EXISTS、CREATE INDEX IF NOT EXISTS、ADD COLUMN IF NOT EXISTS。",
+                "不删除业务表、不删除台账数据、不删除旧横向列；旧列只作为迁移来源保留。",
+                "升级完成后模块类型状态写入 cmx_model_module_kind，新增模块类型不再需要改 cmx_model_module 表结构。",
+                "升级未完成前，模块创建/安装/升级会被阻止，以避免新旧台账混写。",
+            ],
             "db_id": db_id,
         }),
     ));
@@ -1431,6 +2073,21 @@ pub async fn init_db_stream(
             }
         }
     }
+    send(ev(
+        "step",
+        json!({ "message": "补齐/升级基础管理结构，并迁移旧版模块类型当前态 …" }),
+    ));
+    if let Err(e) = ensure_ledger_schema(db_id).await {
+        send(ev(
+            "error",
+            json!({ "stage": "ledger_upgrade", "message": format!("升级基础管理结构失败: {e}") }),
+        ));
+        return;
+    }
+    send(ev(
+        "progress",
+        json!({ "message": "基础管理结构已补齐；旧横向类型列如存在，已迁移到 cmx_model_module_kind" }),
+    ));
 
     // 2) 写/更新 meta + 记历史（事务）。UPSERT：首次插入，重复初始化则更新 last_upgraded_at（不动 initialized_*）。
     send(ev("step", json!({ "message": "写入台账元信息与历史 …" })));
@@ -1577,6 +2234,13 @@ pub async fn deploy_plan_stream(
         "connect",
         json!({ "message": format!("检查目标数据库 {db_id} 的模型中心状态 …"), "db_id": db_id }),
     );
+    if let Err(e) = ensure_current_ledger_schema(db_id).await {
+        send(
+            "error",
+            json!({ "stage": "state", "message": e.to_string() }),
+        );
+        return;
+    }
     match read_meta(db_id).await {
         Ok(Some(_)) => send(
             "connect",
@@ -1739,6 +2403,7 @@ async fn deploy_with_events(
         "connect",
         json!({ "message": format!("检查目标数据库 {db_id} 的模型中心状态 …"), "db_id": db_id }),
     );
+    ensure_current_ledger_schema(db_id).await?;
     if read_meta(db_id).await?.is_none() {
         return Err(Error::BadRequest(
             "数据库尚未初始化，请先初始化模型中心".into(),
@@ -1886,7 +2551,8 @@ async fn deploy_with_events(
             continue;
         }
 
-        // 台账 DML（事务）：源 JSON 留档 + 模块态 UPSERT + 对象台账 + 历史 success
+        // 台账 DML（事务）：源 JSON 留档 + 模块态 UPSERT + 对象台账 + 历史 success。
+        // 台账 schema 已在入口统一 ensure，避免浏览、计划、执行三条链路各自补列。
         send(
             "progress",
             json!({ "message": "写入台账事务：源 JSON、模块版本、部署历史 …", "module": module, "kind": kind }),
@@ -1900,7 +2566,6 @@ async fn deploy_with_events(
             }
         };
         let txn = guard.txn_id().to_string();
-        let kind_lc = kind.to_lowercase();
         let has_table_define_version = table_exists(db_id, "cmx_meta_table_define_version")
             .await
             .unwrap_or(false);
@@ -1922,18 +2587,25 @@ async fn deploy_with_events(
                 DataValue::Int(created), DataValue::String(ENGINE_VERSION.into()), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
             ]).await.map_err(db_err("写源 JSON 失败"))?;
 
-            // 4-b 模块态 UPSERT（该 kind 版本+状态=current）
-            let set_ver = format!("{kind_lc}_version");
-            let set_st = format!("{kind_lc}_status");
-            let upsert_sql = format!(
-                "INSERT INTO cmx_model_module (id, db_id, domain_code, application_code, module_code, module_name, {set_ver}, {set_st}, table_count, first_deployed_at, current_deployed_at, deployed_by, deployed_name) \
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$9,$10) \
-                 ON CONFLICT (db_id, app_id, domain_code, application_code, module_code) DO UPDATE SET {set_ver}=EXCLUDED.{set_ver}, {set_st}='current', table_count=cmx_model_module.table_count, current_deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, update_time=CURRENT_TIMESTAMP"
-            );
-            mm.execute_sql_with_datavalues(db_id, Some(&txn), &upsert_sql, vec![
-            DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
-            DataValue::String(version.to_string()), DataValue::Int(created), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
+            // 4-b 模块态 UPSERT：主表只存模块身份；kind 明细按行存版本/状态。
+            mm.execute_sql_with_datavalues(db_id, Some(&txn),
+            "INSERT INTO cmx_model_module (id, db_id, domain_code, application_code, module_code, module_name, table_count, first_deployed_at, current_deployed_at, deployed_by, deployed_name) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$8,$9) \
+             ON CONFLICT (db_id, app_id, domain_code, application_code, module_code) DO UPDATE SET module_name=EXCLUDED.module_name, table_count=GREATEST(COALESCE(cmx_model_module.table_count,0), COALESCE(EXCLUDED.table_count,0)), current_deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, update_time=CURRENT_TIMESTAMP",
+            vec![
+                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()), DataValue::String(module_name.clone()),
+                DataValue::Int(created), DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
             ]).await.map_err(db_err("写模块台账失败"))?;
+
+            mm.execute_sql_with_datavalues(db_id, Some(&txn),
+            "INSERT INTO cmx_model_module_kind (id, db_id, domain_code, application_code, module_code, kind, version, status, table_count, def_source, deployed_at, deployed_by, deployed_name) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,'current',$8,$9,CURRENT_TIMESTAMP,$10,$11) \
+             ON CONFLICT (db_id, app_id, domain_code, application_code, module_code, kind) DO UPDATE SET version=EXCLUDED.version, status='current', table_count=EXCLUDED.table_count, def_source=EXCLUDED.def_source, deployed_at=CURRENT_TIMESTAMP, deployed_by=EXCLUDED.deployed_by, deployed_name=EXCLUDED.deployed_name, error_message=NULL, update_time=CURRENT_TIMESTAMP",
+            vec![
+                DataValue::String(snowflake_id_str()), DataValue::String(db_id.into()), DataValue::String(domain.into()), DataValue::String(app.into()), DataValue::String(module.into()),
+                DataValue::String(kind.clone()), DataValue::String(version.to_string()), DataValue::Int(created), DataValue::String(file.into()),
+                DataValue::String(operator_id.into()), DataValue::String(operator_name.into()),
+            ]).await.map_err(db_err("写模块类型台账失败"))?;
 
             // 4-c 对象台账：主表 + 版本表都需登记(check-then-upsert,避免重复部署累积重复行)
             // 目标库存在核心元数据表时才写;模型中心库只初始化自身台账表,不强依赖此表。
@@ -2488,5 +3160,76 @@ mod tests {
             stmts.iter().any(|s| s.contains("ALTER COLUMN \"country_code\" TYPE VARCHAR(255)")),
             "应生成 ALTER COLUMN TYPE VARCHAR(255): {stmts:?}"
         );
+    }
+
+    #[test]
+    fn compile_rpt_builds_three_storage_tables() {
+        // RPT 落地三表来自 base_rpt_meta.storageTables，报表模板本身不产生 DDL。
+        let doc = load("fi/cmxfico/gl/cmxfico_bs_rpt_meta_v1.json");
+        let base = load("base/base_rpt_meta_v1.json");
+        let defs = compile_rpt(&doc, &base);
+        let names: Vec<&str> = defs.iter().map(|d| d.table_name.as_str()).collect();
+        for t in ["cr_report_instance", "cr_cell_value", "cr_report_snapshot"] {
+            assert!(names.contains(&t), "应编译出报表落地表 {t}，实得 {names:?}");
+        }
+
+        // 实例头：本表字段 + 审计字段集展开，id 主键，唯一键四元组。
+        let inst = defs
+            .iter()
+            .find(|d| d.table_name == "cr_report_instance")
+            .expect("应有 cr_report_instance");
+        let cols: Vec<&str> = inst.columns.iter().map(|c| c.name.as_str()).collect();
+        for c in ["id", "tpl_code", "org_id", "period_code", "scope", "status"] {
+            assert!(cols.contains(&c), "实例头缺列 {c}: {cols:?}");
+        }
+        // 审计字段集（reportAuditFields）展开
+        assert!(
+            cols.contains(&"create_by") && cols.contains(&"delete_flag"),
+            "实例头应展开审计字段集: {cols:?}"
+        );
+        assert_eq!(
+            inst.primary_keys,
+            vec!["id".to_string()],
+            "实例头 id 应为主键"
+        );
+        assert!(
+            inst.indexes.iter().any(|i| i.columns
+                == vec![
+                    "tpl_code".to_string(),
+                    "org_id".to_string(),
+                    "period_code".to_string(),
+                    "scope".to_string()
+                ]
+                && matches!(i.kind, IndexKind::Unique)),
+            "实例头应有 (tpl_code,org_id,period_code,scope) 唯一索引"
+        );
+
+        // 单元格值：num_value 为 Decimal 精度列，drill_key 为 JSON。
+        let cell = defs
+            .iter()
+            .find(|d| d.table_name == "cr_cell_value")
+            .expect("应有 cr_cell_value");
+        let num = cell
+            .columns
+            .iter()
+            .find(|c| c.name == "num_value")
+            .expect("单元格值应有 num_value 列");
+        assert!(
+            matches!(num.field_type, FieldType::Decimal),
+            "num_value 应为 Decimal"
+        );
+
+        // 各表无重复列。
+        for d in &defs {
+            let mut seen = std::collections::HashSet::new();
+            for c in &d.columns {
+                assert!(
+                    seen.insert(c.name.clone()),
+                    "表 {} 列 {} 重复",
+                    d.table_name,
+                    c.name
+                );
+            }
+        }
     }
 }

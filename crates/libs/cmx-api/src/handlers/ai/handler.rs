@@ -4,16 +4,16 @@
 //! AI 错误经 `From<AiError> for cmx_api_types::Error` 自动 `?` 传播为 HTTP 错误。
 //! SSE 订阅端点（`GET /ai/events`）在 handler 内部校验 query `access_token`（EventSource 无法发 header）。
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
 use cmx_ai::types::*;
-use cmx_ai::{get_client, get_registry, AiSseEvent};
+use cmx_ai::{AiSseEvent, get_client, get_registry};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
@@ -70,7 +70,10 @@ pub async fn create_session(
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string(),
-        title: session.get("title").and_then(|v| v.as_str()).map(String::from),
+        title: session
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         created_at: session
             .get("time")
             .and_then(|t| t.get("created"))
@@ -201,7 +204,9 @@ pub async fn approve(
         ApprovalDecision::Approve => ("once", req.comment.as_deref()),
         ApprovalDecision::Reject => ("reject", req.comment.as_deref()),
     };
-    client.reply_permission(&req.approval_id, reply, msg).await?;
+    client
+        .reply_permission(&req.approval_id, reply, msg)
+        .await?;
     Ok(Json(ApiResp::ok(serde_json::json!({ "replied": true }))))
 }
 
@@ -264,7 +269,9 @@ pub async fn context_request(
         Ok(Err(_)) => {
             // sender 已 drop（理论上不会发生：register 和 resolve 都走同一 DashMap）。
             warn!(session_id = %sid, request_id = %req.request_id, "上下文回传 channel 异常关闭");
-            Err(crate::Error::InternalError("上下文回传 channel 异常关闭".into()))
+            Err(crate::Error::InternalError(
+                "上下文回传 channel 异常关闭".into(),
+            ))
         }
         Err(_) => {
             // 超时：前端未响应，清理 pending，返回空信息让工具优雅降级。
@@ -410,14 +417,14 @@ pub async fn subscribe_events(
     // 3. mpsc receiver → SSE 流。每个 AiSseEvent 转为 axum Event（event 字段=类型，data=JSON）。
     let stream = futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|ev| {
-            let event = Event::default()
-                .event(ev.event_name)
-                .data(ev.payload);
+            let event = Event::default().event(ev.event_name).data(ev.payload);
             (Ok::<Event, std::convert::Infallible>(event), rx)
         })
     });
 
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 // ───────────────────────── 内部辅助 ─────────────────────────

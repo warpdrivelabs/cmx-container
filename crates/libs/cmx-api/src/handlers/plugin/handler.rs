@@ -4,17 +4,17 @@
 
 use std::path::PathBuf;
 
+use crate::ApiResp;
+use crate::Result;
+use crate::app_state::CmxAppState;
+use crate::middleware::CmxSvrContext;
+use axum::Json;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::HeaderMap;
-use axum::Json;
 use chrono::DateTime;
-use tracing::{debug, info};
 use cmx_database::get_default_db_manager;
 use cmx_utils::ConfigManager;
-use crate::ApiResp;
-use crate::app_state::CmxAppState;
-use crate::Result;
-use crate::middleware::CmxSvrContext;
+use tracing::{debug, info};
 
 use super::request::*;
 use super::response::*;
@@ -22,11 +22,9 @@ use super::response::*;
 /// 从请求转换为 cmx_plugin 的 PluginSource
 pub fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::PluginSource {
     match req {
-        PluginSourceRequest::Local { path } => {
-            cmx_plugin::domain::plugin::PluginSource::Local {
-                path: PathBuf::from(path),
-            }
-        }
+        PluginSourceRequest::Local { path } => cmx_plugin::domain::plugin::PluginSource::Local {
+            path: PathBuf::from(path),
+        },
         PluginSourceRequest::Remote { url, checksum } => {
             cmx_plugin::domain::plugin::PluginSource::Remote {
                 url: url.clone(),
@@ -36,12 +34,10 @@ pub fn convert_source(req: &PluginSourceRequest) -> cmx_plugin::domain::plugin::
         PluginSourceRequest::Marketplace {
             marketplace_url,
             plugin_id,
-        } => {
-            cmx_plugin::domain::plugin::PluginSource::Marketplace {
-                marketplace_url: Some(marketplace_url.clone()),
-                plugin_id: plugin_id.clone(),
-            }
-        }
+        } => cmx_plugin::domain::plugin::PluginSource::Marketplace {
+            marketplace_url: Some(marketplace_url.clone()),
+            plugin_id: plugin_id.clone(),
+        },
     }
 }
 
@@ -82,9 +78,10 @@ pub async fn plugin_install(
         app_id: Some(app_id),
     };
 
-    let result = manager.install(install_req).await.map_err(|e| {
-        crate::Error::InternalError(format!("插件安装失败: {}", e))
-    })?;
+    let result = manager
+        .install(install_req)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("插件安装失败: {}", e)))?;
 
     let resp = InstallResponse {
         plugin_id: result.plugin_id,
@@ -127,9 +124,10 @@ pub async fn plugin_uninstall(
         app_id: Some(app_id),
     };
 
-    let result = manager.uninstall(uninstall_req).await.map_err(|e| {
-        crate::Error::InternalError(format!("插件卸载失败: {}", e))
-    })?;
+    let result = manager
+        .uninstall(uninstall_req)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("插件卸载失败: {}", e)))?;
 
     let resp = UninstallResponse {
         plugin_id: result.plugin_id,
@@ -174,9 +172,10 @@ pub async fn plugin_upgrade(
         app_id: Some(app_id),
     };
 
-    let result = manager.upgrade(upgrade_req).await.map_err(|e| {
-        crate::Error::InternalError(format!("插件升级失败: {}", e))
-    })?;
+    let result = manager
+        .upgrade(upgrade_req)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("插件升级失败: {}", e)))?;
 
     let resp = UpgradeResponse {
         plugin_id: result.plugin_id,
@@ -220,9 +219,10 @@ pub async fn plugin_downgrade(
         app_id: Some(app_id),
     };
 
-    let result = manager.downgrade(downgrade_req).await.map_err(|e| {
-        crate::Error::InternalError(format!("插件降级失败: {}", e))
-    })?;
+    let result = manager
+        .downgrade(downgrade_req)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("插件降级失败: {}", e)))?;
 
     let resp = DowngradeResponse {
         plugin_id: result.plugin_id,
@@ -262,8 +262,8 @@ pub async fn plugin_deploy(
 ) -> Result<Json<ApiResp<PluginDeployResponse>>> {
     info!("插件部署请求（文件上传）");
 
-
-    let uploads_root = ConfigManager::global().get_string("plugin.upload_root")
+    let uploads_root = ConfigManager::global()
+        .get_string("plugin.upload_root")
         .unwrap_or("plugins/uploads".to_string());
 
     let uploads_dir = PathBuf::from(uploads_root);
@@ -271,56 +271,67 @@ pub async fn plugin_deploy(
     let mut target_db_id: Option<String> = None;
     let mut force_reinstall: bool = false;
     //构建类型 debug /release
-    let mut build_type:Option<String> = None;
+    let mut build_type: Option<String> = None;
     let mut publish_to_marketplace: Option<bool> = None;
 
-    while let Some(field) = multipart.next_field().await
+    while let Some(field) = multipart
+        .next_field()
+        .await
         .map_err(|e| crate::Error::BadRequest(format!("解析 multipart 请求失败: {}", e)))?
     {
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
             "file" => {
-                let data = field.bytes().await
+                let data = field
+                    .bytes()
+                    .await
                     .map_err(|e| crate::Error::BadRequest(format!("读取文件失败: {}", e)))?;
                 file_bytes = Some(data.to_vec());
             }
             "target_db_id" => {
-                let val = field.text().await
-                    .map_err(|e| crate::Error::BadRequest(format!("读取 target_db_id 失败: {}", e)))?;
+                let val = field.text().await.map_err(|e| {
+                    crate::Error::BadRequest(format!("读取 target_db_id 失败: {}", e))
+                })?;
                 if !val.is_empty() {
                     target_db_id = Some(val);
                 }
             }
             "force_reinstall" => {
-                let val = field.text().await
-                    .map_err(|e| crate::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e)))?;
+                let val = field.text().await.map_err(|e| {
+                    crate::Error::BadRequest(format!("读取 force_reinstall 失败: {}", e))
+                })?;
                 force_reinstall = val == "true" || val == "1";
             }
             "build_type" => {
-                let val = field.text().await
-                    .map_err(|e| crate::Error::BadRequest(format!("读取 build_type 失败: {}", e)))?;
+                let val = field.text().await.map_err(|e| {
+                    crate::Error::BadRequest(format!("读取 build_type 失败: {}", e))
+                })?;
                 build_type = Some(val);
             }
             "publish_to_marketplace" => {
-                let text = field.text().await.map_err(|e| crate::Error::internal_error(format!("读取字段失败: {}", e)))?;
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|e| crate::Error::internal_error(format!("读取字段失败: {}", e)))?;
                 publish_to_marketplace = text.parse().ok();
             }
             _ => {}
         }
     }
 
-    let file_bytes = file_bytes.ok_or_else(|| {
-        crate::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string())
-    })?;
+    let file_bytes = file_bytes
+        .ok_or_else(|| crate::Error::BadRequest("未上传文件，请上传插件 zip 包".to_string()))?;
 
     // 确保上传目录存在
-    tokio::fs::create_dir_all(&uploads_dir).await
+    tokio::fs::create_dir_all(&uploads_dir)
+        .await
         .map_err(|e| crate::Error::InternalError(format!("创建上传目录失败: {}", e)))?;
 
     // 使用 UUID 重命名保存 zip 文件
     let file_name = format!("{}.zip", uuid::Uuid::new_v4());
     let file_path = uploads_dir.join(&file_name);
-    tokio::fs::write(&file_path, &file_bytes).await
+    tokio::fs::write(&file_path, &file_bytes)
+        .await
         .map_err(|e| crate::Error::InternalError(format!("保存文件失败: {}", e)))?;
 
     let abs_path = tokio::fs::canonicalize(&file_path)
@@ -334,7 +345,9 @@ pub async fn plugin_deploy(
 
     // publish_to_marketplace 仅控制是否额外发布到市场(展示 + 版本记录)
     let marketplace_source_id: Option<String>;
-    let marketplace_publish_info: Option<cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo>;
+    let marketplace_publish_info: Option<
+        cmx_plugin::service::marketplace_publisher::MarketplacePublishInfo,
+    >;
 
     if publish_to_marketplace.unwrap_or(true) {
         let plugin_def = tokio::task::spawn_blocking({
@@ -347,12 +360,18 @@ pub async fn plugin_deploy(
 
         let publish_req = cmx_plugin::service::marketplace_publisher::PublishFromDeployRequest {
             plugin_id: plugin_def.id.clone(),
-            version: plugin_def.version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+            version: plugin_def
+                .version
+                .clone()
+                .unwrap_or_else(|| "1.0.0".to_string()),
             plugin_def: plugin_def.clone(),
             zip_file_path: abs_path.clone(),
         };
 
-        let result = cmx_plugin::service::marketplace_publisher::MarketplacePublisher::publish_from_deploy(&publish_req)
+        let result =
+            cmx_plugin::service::marketplace_publisher::MarketplacePublisher::publish_from_deploy(
+                &publish_req,
+            )
             .await
             .map_err(|e| crate::Error::InternalError(format!("发布到插件市场失败: {}", e)))?;
 
@@ -381,9 +400,10 @@ pub async fn plugin_deploy(
         marketplace_publish_info,
     };
 
-    let result = manager.deploy(deploy_req).await.map_err(|e| {
-        crate::Error::InternalError(format!("插件部署失败: {}", e))
-    })?;
+    let result = manager
+        .deploy(deploy_req)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("插件部署失败: {}", e)))?;
 
     let resp = PluginDeployResponse {
         plugin_id: result.plugin_id,
@@ -393,11 +413,13 @@ pub async fn plugin_deploy(
         install_path: result.install_path.to_string_lossy().to_string(),
         success: result.success,
         message: Some(result.message),
-        marketplace_publish: result.marketplace_publish.map(|info| MarketplacePublishInfoResponse {
-            marketplace_plugin_id: info.marketplace_plugin_id,
-            marketplace_version_id: info.marketplace_version_id,
-            storage_file_id: info.storage_file_id,
-            is_new_plugin: info.is_new_plugin,
+        marketplace_publish: result.marketplace_publish.map(|info| {
+            MarketplacePublishInfoResponse {
+                marketplace_plugin_id: info.marketplace_plugin_id,
+                marketplace_version_id: info.marketplace_version_id,
+                storage_file_id: info.storage_file_id,
+                is_new_plugin: info.is_new_plugin,
+            }
         }),
     };
 
@@ -405,16 +427,26 @@ pub async fn plugin_deploy(
 }
 
 /// 将 PluginDbRecord 转换为 PluginInfoResponse
-fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::repository::PluginRecord) -> PluginInfoResponse {
+fn convert_db_record_to_response(
+    record: cmx_plugin::infrastructure::database::repository::PluginRecord,
+) -> PluginInfoResponse {
     PluginInfoResponse {
         id: record.id,
         plugin_id: record.plugin_id,
         name: record.name,
         description: record.description,
         version: record.version,
-        wasm_path: if record.wasm_path.is_empty() { None } else { Some(record.wasm_path) },
+        wasm_path: if record.wasm_path.is_empty() {
+            None
+        } else {
+            Some(record.wasm_path)
+        },
         install_path: record.install_path,
-        db_id: if record.db_id.is_empty() { None } else { Some(record.db_id) },
+        db_id: if record.db_id.is_empty() {
+            None
+        } else {
+            Some(record.db_id)
+        },
         status: record.status,
         is_system: record.is_system,
         is_locked: record.is_locked,
@@ -444,16 +476,16 @@ fn convert_db_record_to_response(record: cmx_plugin::infrastructure::database::r
 /// 将 PluginInfo 转换为 PluginInfoResponse
 fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginInfoResponse {
     let (source_type, source_url) = match &info.source {
-        cmx_plugin::domain::plugin::PluginSource::Local { path } => {
-            (Some("local".to_string()), Some(path.to_string_lossy().to_string()))
-        }
+        cmx_plugin::domain::plugin::PluginSource::Local { path } => (
+            Some("local".to_string()),
+            Some(path.to_string_lossy().to_string()),
+        ),
         cmx_plugin::domain::plugin::PluginSource::Remote { url, .. } => {
             (Some("remote".to_string()), Some(url.clone()))
         }
-        cmx_plugin::domain::plugin::PluginSource::Marketplace {
-            plugin_id,
-            ..
-        } => (Some("marketplace".to_string()), Some(plugin_id.clone())),
+        cmx_plugin::domain::plugin::PluginSource::Marketplace { plugin_id, .. } => {
+            (Some("marketplace".to_string()), Some(plugin_id.clone()))
+        }
         cmx_plugin::domain::plugin::PluginSource::Storage { file_id, .. } => {
             (Some("storage".to_string()), Some(file_id.clone()))
         }
@@ -471,9 +503,21 @@ fn convert_plugin_info(info: cmx_plugin::domain::plugin::PluginInfo) -> PluginIn
         status: format!("{:?}", info.status),
         is_system: false,
         is_locked: false,
-        domain_code: if info.domain_code.is_empty() { None } else { Some(info.domain_code) },
-        application_code: if info.application_code.is_empty() { None } else { Some(info.application_code) },
-        module_code: if info.module_code.is_empty() { None } else { Some(info.module_code) },
+        domain_code: if info.domain_code.is_empty() {
+            None
+        } else {
+            Some(info.domain_code)
+        },
+        application_code: if info.application_code.is_empty() {
+            None
+        } else {
+            Some(info.application_code)
+        },
+        module_code: if info.module_code.is_empty() {
+            None
+        } else {
+            Some(info.module_code)
+        },
         domain_name: None,
         application_name: None,
         module_name: None,
@@ -515,7 +559,8 @@ pub async fn plugin_list(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
-    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filters
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params
+        .filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default()
         .into();
@@ -525,9 +570,11 @@ pub async fn plugin_list(
         filter.app_id = Some(app_id);
     }
 
-    let plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
-        crate::Error::InternalError(format!("获取插件列表失败: {}", e))
-    })?;
+    let plugins = manager
+        .repository()
+        .list_plugins(&filter)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("获取插件列表失败: {}", e)))?;
 
     let plugin_responses: Vec<PluginInfoResponse> = plugins
         .into_iter()
@@ -563,9 +610,10 @@ pub async fn plugin_get(
 
     let manager = cmx_plugin::GlobalPluginManager::get();
 
-    let plugin = manager.get_plugin(&params.plugin_id).await.map_err(|e| {
-        crate::Error::InternalError(format!("获取插件详情失败: {}", e))
-    })?;
+    let plugin = manager
+        .get_plugin(&params.plugin_id)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("获取插件详情失败: {}", e)))?;
 
     match plugin {
         Some(info) => Ok(Json(ApiResp::ok(convert_plugin_info(info)))),
@@ -597,7 +645,8 @@ pub async fn plugin_page(
     let page_size = params.get_size() as u64;
     let skip = params.get_offset() as usize;
 
-    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params.filters
+    let mut filter: cmx_plugin::domain::plugin::PluginFilter = params
+        .filters
         .and_then(|v| v.into_iter().next())
         .unwrap_or_default()
         .into();
@@ -608,9 +657,11 @@ pub async fn plugin_page(
     }
 
     let manager = cmx_plugin::GlobalPluginManager::get();
-    let all_plugins = manager.repository().list_plugins(&filter).await.map_err(|e| {
-        crate::Error::InternalError(format!("获取插件列表失败: {}", e))
-    })?;
+    let all_plugins = manager
+        .repository()
+        .list_plugins(&filter)
+        .await
+        .map_err(|e| crate::Error::InternalError(format!("获取插件列表失败: {}", e)))?;
 
     let total = all_plugins.len() as u64;
 
@@ -655,10 +706,15 @@ pub async fn plugin_exists(
     Query(query): Query<PluginExistsQuery>,
 ) -> Result<Json<ApiResp<String>>> {
     let manager = cmx_plugin::GlobalPluginManager::get();
-    let exists = manager.repository().plugin_exists(&query.plugin_id).await
+    let exists = manager
+        .repository()
+        .plugin_exists(&query.plugin_id)
+        .await
         .map_err(|e| crate::Error::internal_error(format!("查询插件存在性失败: {}", e)))?;
 
-    Ok(Json(ApiResp::ok(if exists { "1" } else { "0" }.to_string())))
+    Ok(Json(ApiResp::ok(
+        if exists { "1" } else { "0" }.to_string(),
+    )))
 }
 
 /// 批量获取插件函数列表
@@ -691,59 +747,72 @@ pub async fn plugin_functions(
             Ok(Some(plugin_info)) => {
                 let api_json_path = plugin_info.install_path.join("api").join("api.json");
                 match tokio::fs::read_to_string(&api_json_path).await {
-                    Ok(content) => {
-                        match serde_json::from_str::<serde_json::Value>(&content) {
-                            Ok(json_value) => {
-                                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                    Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(json_value) => {
+                            result.insert(
+                                plugin_id.clone(),
+                                PluginFunctionsResponse {
                                     success: true,
                                     plugin_name: plugin_info.name.clone(),
                                     plugin_version: plugin_info.version.clone(),
                                     functions: json_value,
-                                });
-                            }
-                            Err(e) => {
-                                result.insert(plugin_id.clone(), PluginFunctionsResponse {
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            result.insert(
+                                plugin_id.clone(),
+                                PluginFunctionsResponse {
                                     success: false,
                                     plugin_name: plugin_info.name.clone(),
                                     plugin_version: plugin_info.version.clone(),
                                     functions: serde_json::json!({
                                         "error": format!("解析 api.json 失败: {}", e)
                                     }),
-                                });
-                            }
+                                },
+                            );
                         }
-                    }
+                    },
                     Err(e) => {
-                        result.insert(plugin_id.clone(), PluginFunctionsResponse {
-                            success: false,
-                            plugin_name: plugin_info.name.clone(),
-                            plugin_version: plugin_info.version.clone(),
-                            functions: serde_json::json!({
-                                "error": format!("读取 api.json 失败: {}", e)
-                            }),
-                        });
+                        result.insert(
+                            plugin_id.clone(),
+                            PluginFunctionsResponse {
+                                success: false,
+                                plugin_name: plugin_info.name.clone(),
+                                plugin_version: plugin_info.version.clone(),
+                                functions: serde_json::json!({
+                                    "error": format!("读取 api.json 失败: {}", e)
+                                }),
+                            },
+                        );
                     }
                 }
             }
             Ok(None) => {
-                result.insert(plugin_id.clone(), PluginFunctionsResponse {
-                    success: false,
-                    plugin_name: "".to_string(),
-                    plugin_version: "".to_string(),
-                    functions: serde_json::json!({
-                        "error": format!("插件 {} 不存在", plugin_id)
-                    }),
-                });
+                result.insert(
+                    plugin_id.clone(),
+                    PluginFunctionsResponse {
+                        success: false,
+                        plugin_name: "".to_string(),
+                        plugin_version: "".to_string(),
+                        functions: serde_json::json!({
+                            "error": format!("插件 {} 不存在", plugin_id)
+                        }),
+                    },
+                );
             }
             Err(e) => {
-                result.insert(plugin_id.clone(), PluginFunctionsResponse {
-                    success: false,
-                    plugin_name: "".to_string(),
-                    plugin_version: "".to_string(),
-                    functions: serde_json::json!({
-                        "error": format!("获取插件信息失败: {}", e)
-                    }),
-                });
+                result.insert(
+                    plugin_id.clone(),
+                    PluginFunctionsResponse {
+                        success: false,
+                        plugin_name: "".to_string(),
+                        plugin_version: "".to_string(),
+                        functions: serde_json::json!({
+                            "error": format!("获取插件信息失败: {}", e)
+                        }),
+                    },
+                );
             }
         }
     }

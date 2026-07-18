@@ -6,8 +6,8 @@
 //! 与 `/api/iam/permissions/import` 的区别:本端点是通用的,按 multipart/query 的
 //! `category` 字段路由到 Form/Menu/Perm/Flow,不局限于权限。
 
-use axum::extract::{Multipart, Query, State};
 use axum::Json;
+use axum::extract::{Multipart, Query, State};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -101,8 +101,8 @@ pub async fn import_resource_data(
         }
     }
 
-    let zip_data = file_data
-        .ok_or_else(|| crate::Error::BadRequest("缺少 file 字段".to_string()))?;
+    let zip_data =
+        file_data.ok_or_else(|| crate::Error::BadRequest("缺少 file 字段".to_string()))?;
 
     if domain_code.is_empty() || application_code.is_empty() || module_code.is_empty() {
         return Err(crate::Error::BadRequest(

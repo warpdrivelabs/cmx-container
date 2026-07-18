@@ -12,8 +12,8 @@ pub use cmx_biz::menu::{
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// Menu 模块路由
 pub struct MenuModule;

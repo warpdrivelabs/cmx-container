@@ -35,8 +35,14 @@ members = [
     "crates/libs/cmx-rpc-gen",
     "crates/libs/cmx-infra/cmx-rpc",
     "crates/libs/cmx-ai",
+    "crates/libs/cmx-flow/cmx-flow-model",
+    "crates/libs/cmx-flow/cmx-flow-bpmn",
+    "crates/libs/cmx-flow/cmx-flow-engine",
+    "crates/libs/cmx-flow/cmx-flow-store-pg",
+    "crates/libs/cmx-flow/cmx-flow-demo",
     "sdk/cmx-cli",
     "crates/tests/cmx-database-test",
+    "crates/tests/cmx-flow-tests",
 #    "crates/tests/cmx-serde-test",
 ]
 # 依赖版本解析器,"2" 表示使用新版解析器(支持 Edition 2021+)
@@ -111,6 +117,14 @@ cmx-form = { path = "crates/libs/cmx-form", version = "0.1.12", registry = "nora
 cmx-model = { path = "crates/libs/cmx-model", version = "0.1.12", registry = "nora" }
 # 内部依赖 - 过程宏
 cmx-macros = { path = "crates/libs/cmx-macros", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎 IR 与运行态模型（BPMN 语义中立内核，参考 Flowable 语义/OMG 规范）
+cmx-flow-model = { path = "crates/libs/cmx-flow/cmx-flow-model", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎 BPMN 2.0 XML 编译器（XML → ProcessDefinition IR）
+cmx-flow-bpmn = { path = "crates/libs/cmx-flow/cmx-flow-bpmn", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎令牌执行内核（等待态即提交点）
+cmx-flow-engine = { path = "crates/libs/cmx-flow/cmx-flow-engine", version = "0.1.12", registry = "nora" }
+# 内部依赖 - 流程引擎 PG 持久化（RuntimeStore over cmx-database-pg）
+cmx-flow-store-pg = { path = "crates/libs/cmx-flow/cmx-flow-store-pg", version = "0.1.12", registry = "nora" }
 # 编译期全局注册
 inventory = "0.3"
 # 对象存储访问层
@@ -121,6 +135,8 @@ infer = "0.19"
 mime_guess = "2"
 # MIME 类型
 mime = "0.3"
+# BPMN 2.0 XML 只读解析（DOM 式，零拷贝 borrow，流程引擎编译器用）
+roxmltree = "0.20"
 
 # 异步运行时 - tokio 提供完整的异步编程支持
 tokio = { version = "1.41", features = ["full"] }

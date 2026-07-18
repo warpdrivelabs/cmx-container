@@ -8,7 +8,9 @@ use axum::extract::{Multipart, State};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use cmx_traits::resource::{ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest};
+use cmx_traits::resource::{
+    ResourceDataCategory, ResourceDataCleanupRequest, ResourceDataImportRequest,
+};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
