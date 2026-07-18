@@ -3,22 +3,22 @@
 //! - POST /api/module/package/import  上传模块 zip 导入(multipart)
 //! - GET  /api/module/package/export  导出模块迁移包(返回 zip)
 
+use axum::Json;
 use axum::extract::{Multipart, Query, State};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
-use axum::Json;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use cmx_database::get_default_db_manager;
 use cmx_plugin::common::{PackageUtils, PackageUtilsDeps};
-use cmx_plugin::service::module_install::{ModuleInstallService, ModulePackageSource};
 use cmx_plugin::service::module_export::ModuleExportService;
+use cmx_plugin::service::module_install::{ModuleInstallService, ModulePackageSource};
 
 use crate::app_state::CmxAppState;
 use crate::middleware::CmxSvrContext;
-use crate::{ApiResp, Result};
 use crate::rest::header_parse::get_db_id_from_header;
+use crate::{ApiResp, Result};
 
 /// 模块迁移包导入请求参数
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -79,9 +79,11 @@ pub async fn module_package_import(
     // 1. 接收 multipart zip
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut force: bool = false;
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        crate::Error::BadRequest(format!("解析 multipart 请求失败: {e}"))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| crate::Error::BadRequest(format!("解析 multipart 请求失败: {e}")))?
+    {
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
             "file" => {
@@ -92,16 +94,17 @@ pub async fn module_package_import(
                 file_bytes = Some(data.to_vec());
             }
             "force" => {
-                let val = field.text().await
+                let val = field
+                    .text()
+                    .await
                     .map_err(|e| crate::Error::BadRequest(format!("读取 force 失败: {e}")))?;
                 force = val == "true" || val == "1";
             }
             _ => {}
         }
     }
-    let file_bytes = file_bytes.ok_or_else(|| {
-        crate::Error::BadRequest("未上传文件，请上传模块 zip 包".to_string())
-    })?;
+    let file_bytes = file_bytes
+        .ok_or_else(|| crate::Error::BadRequest("未上传文件，请上传模块 zip 包".to_string()))?;
 
     // 2. 构造 ModuleInstallService
     let manager = cmx_plugin::GlobalPluginManager::get();
@@ -123,16 +126,10 @@ pub async fn module_package_import(
 
     // 3. 执行导入(含版本校验)
     let result = module_install_svc
-        .install_module_package(
-            ModulePackageSource::Bytes(file_bytes),
-            force,
-            None,
-        )
+        .install_module_package(ModulePackageSource::Bytes(file_bytes), force, None)
         .await
         .map_err(|e| match e {
-            cmx_plugin::error::PluginError::CenterData(msg) => {
-                crate::Error::BadRequest(msg)
-            }
+            cmx_plugin::error::PluginError::CenterData(msg) => crate::Error::BadRequest(msg),
             other => crate::Error::InternalError(format!("导入失败: {other}")),
         })?;
 
@@ -173,7 +170,13 @@ pub async fn module_package_export(
     let mm = get_default_db_manager();
     let db_id = get_db_id_from_header(&headers).await;
     let zip_bytes = export_svc
-        .export_module(mm, &db_id, &q.domain_code, &q.application_code, &q.module_code)
+        .export_module(
+            mm,
+            &db_id,
+            &q.domain_code,
+            &q.application_code,
+            &q.module_code,
+        )
         .await
         .map_err(|e| crate::Error::InternalError(format!("{e}")))?;
 
@@ -181,10 +184,13 @@ pub async fn module_package_export(
 
     let filename = format!(
         "module_{}_{}_{}.zip",
-        q.domain_code, q.module_code, chrono::Local::now().format("%Y%m%d%H%M%S")
+        q.domain_code,
+        q.module_code,
+        chrono::Local::now().format("%Y%m%d%H%M%S")
     );
-    let content_disposition =
-        format!("attachment; filename=\"{filename}\"").parse().unwrap_or_else(|_| {
+    let content_disposition = format!("attachment; filename=\"{filename}\"")
+        .parse()
+        .unwrap_or_else(|_| {
             warn!("无效的 Content-Disposition, 使用默认值");
             axum::http::HeaderValue::from_static("attachment")
         });

@@ -3,8 +3,8 @@
 //! 提供统一的路由注册入口，简化 web-server 的路由配置
 
 use crate::app_state::CmxAppState;
-use crate::handlers::application;
 use crate::handlers::ai;
+use crate::handlers::application;
 use crate::handlers::auth;
 use crate::handlers::debug;
 use crate::handlers::dev;

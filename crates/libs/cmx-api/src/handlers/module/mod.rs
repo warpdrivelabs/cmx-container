@@ -13,8 +13,8 @@ pub use handler::module_custom_page;
 
 use crate::app_state::CmxAppState;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// Module 模块路由
 pub struct ModuleHandler;
@@ -28,8 +28,14 @@ impl ModuleRoutes for ModuleHandler {
         let router = router.route("/module/custom-page", post(module_custom_page));
         // 注册模块迁移包导入/导出路由
         router
-            .route("/module/package/import", post(package_handler::module_package_import))
-            .route("/module/package/export", get(package_handler::module_package_export))
+            .route(
+                "/module/package/import",
+                post(package_handler::module_package_import),
+            )
+            .route(
+                "/module/package/export",
+                get(package_handler::module_package_export),
+            )
     }
 
     fn prefix() -> &'static str {

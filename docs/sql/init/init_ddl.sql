@@ -2248,12 +2248,6 @@ CREATE TABLE cmx_model_module
     application_code    VARCHAR(100),
     module_code         VARCHAR(100),
     module_name         VARCHAR(200),
-    dct_version         VARCHAR(50),
-    dct_status          VARCHAR(20) DEFAULT 'none',
-    doc_version         VARCHAR(50),
-    doc_status          VARCHAR(20) DEFAULT 'none',
-    seed_version        VARCHAR(50),
-    seed_status         VARCHAR(20) DEFAULT 'none',
     overall_status      VARCHAR(20) DEFAULT 'active',
     table_count         INT4        DEFAULT 0,
     def_source          VARCHAR(300),
@@ -2270,7 +2264,7 @@ CREATE TABLE cmx_model_module
 
 CREATE UNIQUE INDEX uk_model_module_key ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code);
 
-COMMENT ON TABLE  cmx_model_module IS '模型中心-模块部署当前态（每模块一行）';
+COMMENT ON TABLE  cmx_model_module IS '模型中心-模块部署当前态主表（每模块一行；类型状态见 cmx_model_module_kind）';
 COMMENT ON COLUMN cmx_model_module.id IS '主键ID';
 COMMENT ON COLUMN cmx_model_module.db_id IS '数据库ID';
 COMMENT ON COLUMN cmx_model_module.app_id IS '应用ID';
@@ -2278,12 +2272,6 @@ COMMENT ON COLUMN cmx_model_module.domain_code IS '域编码';
 COMMENT ON COLUMN cmx_model_module.application_code IS '应用编码';
 COMMENT ON COLUMN cmx_model_module.module_code IS '模块编码';
 COMMENT ON COLUMN cmx_model_module.module_name IS '模块名称';
-COMMENT ON COLUMN cmx_model_module.dct_version IS '数据字典版本';
-COMMENT ON COLUMN cmx_model_module.dct_status IS '数据字典状态: none/current/failed/upgrading';
-COMMENT ON COLUMN cmx_model_module.doc_version IS '单据版本';
-COMMENT ON COLUMN cmx_model_module.doc_status IS '单据状态: none/current/failed/upgrading';
-COMMENT ON COLUMN cmx_model_module.seed_version IS '初始数据版本';
-COMMENT ON COLUMN cmx_model_module.seed_status IS '初始数据状态: none/current/failed/upgrading';
 COMMENT ON COLUMN cmx_model_module.overall_status IS '整体状态: active/failed';
 COMMENT ON COLUMN cmx_model_module.table_count IS '表数量';
 COMMENT ON COLUMN cmx_model_module.def_source IS '定义来源文件';
@@ -2297,7 +2285,59 @@ COMMENT ON COLUMN cmx_model_module.create_time IS '创建时间';
 COMMENT ON COLUMN cmx_model_module.update_time IS '更新时间';
 
 -- =============================================
--- 39. 模型中心-部署/升级历史表 (cmx_model_deploy_history)
+-- 39. 模型中心-模块类型当前态表 (cmx_model_module_kind)
+-- =============================================
+DROP TABLE IF EXISTS cmx_model_module_kind;
+CREATE TABLE cmx_model_module_kind
+(
+    id               VARCHAR(64) NOT NULL,
+    db_id            VARCHAR(100),
+    app_id           VARCHAR(64) NOT NULL DEFAULT 'default',
+    domain_code      VARCHAR(100),
+    application_code VARCHAR(100),
+    module_code      VARCHAR(100),
+    kind             VARCHAR(20) NOT NULL,
+    version          VARCHAR(50),
+    status           VARCHAR(20) DEFAULT 'none',
+    table_count      INT4        DEFAULT 0,
+    def_source       VARCHAR(300),
+    def_checksum     VARCHAR(64),
+    deployed_at      TIMESTAMP,
+    deployed_by      VARCHAR(100),
+    deployed_name    VARCHAR(100),
+    error_message    TEXT,
+    archived         INT4        DEFAULT 0,
+    create_time      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_model_module_kind_key ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind);
+CREATE INDEX idx_model_module_kind_module ON cmx_model_module_kind (db_id, domain_code, application_code, module_code);
+
+COMMENT ON TABLE  cmx_model_module_kind IS '模型中心-模块类型当前态（每模块每 kind 一行；新增类型不改表结构）';
+COMMENT ON COLUMN cmx_model_module_kind.id IS '主键ID';
+COMMENT ON COLUMN cmx_model_module_kind.db_id IS '数据库ID';
+COMMENT ON COLUMN cmx_model_module_kind.app_id IS '应用ID';
+COMMENT ON COLUMN cmx_model_module_kind.domain_code IS '域编码';
+COMMENT ON COLUMN cmx_model_module_kind.application_code IS '应用编码';
+COMMENT ON COLUMN cmx_model_module_kind.module_code IS '模块编码';
+COMMENT ON COLUMN cmx_model_module_kind.kind IS '模块类型: DCT/DOC/RPT/SEED/...';
+COMMENT ON COLUMN cmx_model_module_kind.version IS '当前版本';
+COMMENT ON COLUMN cmx_model_module_kind.status IS '类型状态: none/current/failed/upgrading';
+COMMENT ON COLUMN cmx_model_module_kind.table_count IS '表数量';
+COMMENT ON COLUMN cmx_model_module_kind.def_source IS '定义来源文件';
+COMMENT ON COLUMN cmx_model_module_kind.def_checksum IS '定义文件校验和';
+COMMENT ON COLUMN cmx_model_module_kind.deployed_at IS '部署时间';
+COMMENT ON COLUMN cmx_model_module_kind.deployed_by IS '部署人ID';
+COMMENT ON COLUMN cmx_model_module_kind.deployed_name IS '部署人姓名';
+COMMENT ON COLUMN cmx_model_module_kind.error_message IS '错误信息';
+COMMENT ON COLUMN cmx_model_module_kind.archived IS '归档标志：0-未归档，1-已归档';
+COMMENT ON COLUMN cmx_model_module_kind.create_time IS '创建时间';
+COMMENT ON COLUMN cmx_model_module_kind.update_time IS '更新时间';
+
+-- =============================================
+-- 40. 模型中心-部署/升级历史表 (cmx_model_deploy_history)
 -- =============================================
 DROP TABLE IF EXISTS cmx_model_deploy_history;
 CREATE TABLE cmx_model_deploy_history
@@ -2364,7 +2404,7 @@ COMMENT ON COLUMN cmx_model_deploy_history.operator_name IS '操作人姓名';
 COMMENT ON COLUMN cmx_model_deploy_history.create_time IS '创建时间';
 
 -- =============================================
--- 40. 模型中心-源定义/初始数据留档表 (cmx_model_source)
+-- 41. 模型中心-源定义/初始数据留档表 (cmx_model_source)
 -- =============================================
 DROP TABLE IF EXISTS cmx_model_source;
 CREATE TABLE cmx_model_source
@@ -2422,7 +2462,7 @@ COMMENT ON COLUMN cmx_model_source.remark IS '备注';
 COMMENT ON COLUMN cmx_model_source.create_time IS '创建时间';
 
 -- =============================================
--- 41. 模型中心-主控库跨库总览表 (cmx_model_registry)
+-- 42. 模型中心-主控库跨库总览表 (cmx_model_registry)
 -- =============================================
 DROP TABLE IF EXISTS cmx_model_registry;
 CREATE TABLE cmx_model_registry
@@ -2542,3 +2582,260 @@ COMMENT ON COLUMN cmx_doc_change.created_at IS '创建时间';
 
 CREATE INDEX idx_doc_change_rev ON cmx_doc_change (rev_id);
 CREATE INDEX idx_doc_change_row ON cmx_doc_change (root_id, row_id, field);
+
+-- ================================================================
+-- cmx-flow 流程引擎（M1 + M2）：运行态(RU) 3 表 + 历史态(HI) 2 表
+-- 无 FOREIGN KEY（关联字段 + 索引替代）；实例终态时同事务归档到 HI 表。
+-- 详见 docs/sql/migrations/20260717_001_cmx_flow_engine_tables.up.sql
+-- ================================================================
+
+-- 流程实例（运行态聚合根）
+CREATE TABLE IF NOT EXISTS cmx_flow_instance
+(
+    id             VARCHAR(64)  NOT NULL,
+    definition_key VARCHAR(128) NOT NULL,
+    business_key   VARCHAR(128),
+    state          VARCHAR(16)  NOT NULL,
+    variables      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ  NOT NULL,
+    updated_at     TIMESTAMPTZ  NOT NULL,
+    ended_at       TIMESTAMPTZ,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_instance                IS '流程实例（运行态聚合根）';
+COMMENT ON COLUMN cmx_flow_instance.state          IS '实例状态：ACTIVE / COMPLETED / TERMINATED';
+COMMENT ON COLUMN cmx_flow_instance.variables      IS '实例级流程变量（JSONB 动态 KV）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_defkey ON cmx_flow_instance (definition_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_bizkey ON cmx_flow_instance (business_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_instance_state  ON cmx_flow_instance (state);
+
+-- 流程令牌（执行指针）
+CREATE TABLE IF NOT EXISTS cmx_flow_token
+(
+    id           VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    node_bpmn_id VARCHAR(128) NOT NULL,
+    state        VARCHAR(16)  NOT NULL,
+    parent_id    VARCHAR(64),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    updated_at   TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_token       IS '流程令牌（执行指针；一实例多令牌）';
+COMMENT ON COLUMN cmx_flow_token.state IS '令牌状态：ACTIVE / WAITING / JOINING / ENDED';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_token_instance ON cmx_flow_token (instance_id);
+
+-- 用户任务（等待态外化）
+CREATE TABLE IF NOT EXISTS cmx_flow_task
+(
+    id               VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    token_id         VARCHAR(64)  NOT NULL,
+    node_bpmn_id     VARCHAR(128) NOT NULL,
+    name             VARCHAR(255),
+    assignee         VARCHAR(128),
+    candidate_groups VARCHAR(512),
+    element_value    JSONB,
+    owner_user_id    VARCHAR(64),
+    parent_task_id   VARCHAR(64),
+    delegation_state VARCHAR(16),
+    completed        BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at       TIMESTAMPTZ  NOT NULL,
+    completed_at     TIMESTAMPTZ,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task IS '用户任务（userTask 等待态的外化产物）';
+COMMENT ON COLUMN cmx_flow_task.element_value    IS '多实例子任务携带的当前元素（会签每人各自数据；单实例为 NULL）';
+COMMENT ON COLUMN cmx_flow_task.owner_user_id    IS 'M4.3 任务所有者（委派时 ≠ assignee）';
+COMMENT ON COLUMN cmx_flow_task.parent_task_id   IS 'M4.3 父任务（加签临时任务指向原任务）';
+COMMENT ON COLUMN cmx_flow_task.delegation_state IS 'M4.3 转签状态：NULL/DELEGATED/ADDSIGN/SUSPENDED';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_instance ON cmx_flow_task (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_assignee ON cmx_flow_task (assignee);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_open     ON cmx_flow_task (assignee, completed);
+
+-- 历史实例（终态归档）
+CREATE TABLE IF NOT EXISTS cmx_flow_hi_instance
+(
+    id             VARCHAR(64)  NOT NULL,
+    definition_key VARCHAR(128) NOT NULL,
+    business_key   VARCHAR(128),
+    state          VARCHAR(16)  NOT NULL,
+    variables      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ  NOT NULL,
+    ended_at       TIMESTAMPTZ,
+    duration_ms    BIGINT,
+    archived_at    TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_hi_instance             IS '历史流程实例（终态归档，供审计/查询）';
+COMMENT ON COLUMN cmx_flow_hi_instance.duration_ms IS '实例存续时长（毫秒）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_instance_defkey ON cmx_flow_hi_instance (definition_key);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_instance_bizkey ON cmx_flow_hi_instance (business_key);
+
+-- 历史任务（办结归档）
+CREATE TABLE IF NOT EXISTS cmx_flow_hi_task
+(
+    id           VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    node_bpmn_id VARCHAR(128) NOT NULL,
+    name         VARCHAR(255),
+    assignee     VARCHAR(128),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    completed_at TIMESTAMPTZ,
+    duration_ms  BIGINT,
+    archived_at  TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_hi_task             IS '历史用户任务（办结归档，供工时分析/审计）';
+COMMENT ON COLUMN cmx_flow_hi_task.duration_ms IS '任务办理时长（毫秒）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_instance ON cmx_flow_hi_task (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_hi_task_assignee ON cmx_flow_hi_task (assignee);
+
+-- 多实例执行域（M3：会签/或签账本；详见 migrations/20260717_002_cmx_flow_multi_instance.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_mi_scope
+(
+    id                   VARCHAR(64)  NOT NULL,
+    instance_id          VARCHAR(64)  NOT NULL,
+    node_bpmn_id         VARCHAR(128) NOT NULL,
+    sequential           BOOLEAN      NOT NULL DEFAULT FALSE,
+    total                INTEGER      NOT NULL,
+    completed            INTEGER      NOT NULL DEFAULT 0,
+    next_index           INTEGER      NOT NULL DEFAULT 0,
+    collection           JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    element_var          VARCHAR(128),
+    completion_condition VARCHAR(512),
+    finished             BOOLEAN      NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_mi_scope             IS '多实例执行域（会签/或签的一次展开：计数与游标账本）';
+COMMENT ON COLUMN cmx_flow_mi_scope.sequential  IS 'true=顺序(或签)；false=并行(会签)';
+COMMENT ON COLUMN cmx_flow_mi_scope.total       IS '子实例总数（nrOfInstances）';
+COMMENT ON COLUMN cmx_flow_mi_scope.completed   IS '已办结子实例数（nrOfCompletedInstances）';
+COMMENT ON COLUMN cmx_flow_mi_scope.finished    IS '本域是否已收口（完成条件命中或全部完成）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_mi_scope_instance ON cmx_flow_mi_scope (instance_id);
+
+-- 定时器作业（M2.5：边界定时器到期表；详见 migrations/20260717_003_cmx_flow_job.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_job
+(
+    id               VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    token_id         VARCHAR(64)  NOT NULL,
+    boundary_bpmn_id VARCHAR(128) NOT NULL,
+    cancel_activity  BOOLEAN      NOT NULL DEFAULT TRUE,
+    due_at           TIMESTAMPTZ  NOT NULL,
+    created_at       TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_job                 IS '定时器作业（边界定时器到期表）';
+COMMENT ON COLUMN cmx_flow_job.token_id        IS '挂载令牌 id（停在宿主 userTask）；令牌离开即撤销作业';
+COMMENT ON COLUMN cmx_flow_job.cancel_activity IS 'true=中断型；false=非中断型';
+COMMENT ON COLUMN cmx_flow_job.due_at          IS '到期时刻（宿主到达 + 时长）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_job_instance ON cmx_flow_job (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_job_due      ON cmx_flow_job (due_at);
+
+-- 组织/岗位（M4.1：IAM 补齐；详见 migrations/20260718_001_cmx_flow_identity.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_org
+(
+    id             VARCHAR(64)  NOT NULL,
+    code           VARCHAR(100) NOT NULL,
+    name           VARCHAR(100) NOT NULL,
+    parent_id      VARCHAR(64),
+    path           VARCHAR(500),
+    leader_user_id VARCHAR(64),
+    sort_order     INT4      DEFAULT 0,
+    status         INT4      DEFAULT 1,
+    archived       INT4      DEFAULT 0,
+    create_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE cmx_org IS '组织/部门表（树形；补齐 cmx_user.org_id 引用）';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_org_code ON cmx_org (code) WHERE archived = 0;
+CREATE INDEX IF NOT EXISTS idx_cmx_org_parent ON cmx_org (parent_id);
+
+CREATE TABLE IF NOT EXISTS cmx_position
+(
+    id          VARCHAR(64)  NOT NULL,
+    code        VARCHAR(100) NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    org_id      VARCHAR(64),
+    level       INT4      DEFAULT 0,
+    sort_order  INT4      DEFAULT 0,
+    status      INT4      DEFAULT 1,
+    archived    INT4      DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE cmx_position IS '岗位表（组织内职位，与角色正交）';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_cmx_position_code ON cmx_position (code) WHERE archived = 0;
+CREATE INDEX IF NOT EXISTS idx_cmx_position_org ON cmx_position (org_id);
+
+CREATE TABLE IF NOT EXISTS cmx_user_position
+(
+    id          VARCHAR(64) NOT NULL,
+    user_id     VARCHAR(64) NOT NULL,
+    position_id VARCHAR(64) NOT NULL,
+    is_primary  BOOLEAN   DEFAULT FALSE,
+    archived    INT4      DEFAULT 0,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE cmx_user_position IS '用户-岗位关联表（一人可多岗）';
+CREATE INDEX IF NOT EXISTS idx_cmx_user_position_user ON cmx_user_position (user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_user_position_pos  ON cmx_user_position (position_id);
+
+-- 任务候选人池（M4.1：多人候选待认领）
+CREATE TABLE IF NOT EXISTS cmx_flow_task_candidate
+(
+    id               VARCHAR(64)  NOT NULL,
+    task_id          VARCHAR(64)  NOT NULL,
+    instance_id      VARCHAR(64)  NOT NULL,
+    candidate_type   VARCHAR(16)  NOT NULL,
+    candidate_ref    VARCHAR(128) NOT NULL,
+    resolved_user_id VARCHAR(64)  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task_candidate                IS '任务候选人池（多人候选待认领；随快照全删重插）';
+COMMENT ON COLUMN cmx_flow_task_candidate.candidate_type IS '候选来源：USER / ROLE / POSITION / ORG';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_instance ON cmx_flow_task_candidate (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_user     ON cmx_flow_task_candidate (resolved_user_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_candidate_task     ON cmx_flow_task_candidate (task_id);
+
+-- 抄送记录（M4.2：知会 + 已读；详见 migrations/20260718_002_cmx_flow_cc.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_cc
+(
+    id            VARCHAR(64)  NOT NULL,
+    instance_id   VARCHAR(64)  NOT NULL,
+    node_bpmn_id  VARCHAR(128),
+    to_user_id    VARCHAR(64)  NOT NULL,
+    from_user_id  VARCHAR(64),
+    reason        VARCHAR(500),
+    read_at       TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_cc            IS '抄送记录表（只读知会 + 已读追踪；不阻塞流程）';
+COMMENT ON COLUMN cmx_flow_cc.read_at    IS '已读时刻（NULL = 未读）';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_cc_instance ON cmx_flow_cc (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_cc_to_user  ON cmx_flow_cc (to_user_id, read_at);
+
+-- 转签台账（M4.3：转办/加签/委派；详见 migrations/20260718_003_cmx_flow_delegation.up.sql）
+CREATE TABLE IF NOT EXISTS cmx_flow_task_delegation
+(
+    id           VARCHAR(64)  NOT NULL,
+    task_id      VARCHAR(64)  NOT NULL,
+    instance_id  VARCHAR(64)  NOT NULL,
+    kind         VARCHAR(20)  NOT NULL,
+    from_user_id VARCHAR(64)  NOT NULL,
+    to_user_id   VARCHAR(64)  NOT NULL,
+    temp_task_id VARCHAR(64),
+    reason       VARCHAR(500),
+    created_at   TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_flow_task_delegation      IS '转签台账（转办/加签/委派流转链）';
+COMMENT ON COLUMN cmx_flow_task_delegation.kind IS 'TRANSFER / ADDSIGN_BEFORE / ADDSIGN_AFTER / DELEGATE';
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_instance ON cmx_flow_task_delegation (instance_id);
+CREATE INDEX IF NOT EXISTS idx_cmx_flow_task_delegation_task     ON cmx_flow_task_delegation (task_id);

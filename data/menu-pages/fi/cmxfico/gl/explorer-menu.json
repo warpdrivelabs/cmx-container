@@ -963,6 +963,248 @@
           }
         },
         {
+          "id": "fi-gl-rpt-designer",
+          "name": "rpt-designer",
+          "caption": "报表设计器",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "table-chart",
+          "workspace": {
+            "id": "rpt_designer",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.rpt-designer-model",
+              "id": "rpt-designer-model"
+            },
+            "explorer": {
+              "caption": "模板目录",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "rpt-designer-explorer",
+                  "tabLabel": "模板",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-designer-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "设计画布",
+              "icon": "edit",
+              "views": [
+                {
+                  "id": "rpt-designer-content",
+                  "tabLabel": "设计",
+                  "icon": "edit",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-designer-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "公式向导/属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "rpt-designer-prop",
+                  "tabLabel": "配置",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-designer-prop"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-rpt-spreadjs-designer",
+          "name": "rpt-spreadjs-designer",
+          "caption": "报表设计器（SpreadJS）",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "tabler-outline/file-spreadsheet",
+          "workspace": {
+            "id": "rpt_spreadjs_designer",
+            "model": {
+              "type": "html_pages",
+              "html_page": "fi.cmxfico.gl.rpt-spreadjs-designer-model",
+              "id": "rpt-spreadjs-designer-model"
+            },
+            "explorer": {
+              "caption": "报表模板",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "rpt-spreadjs-designer-explorer",
+                  "tabLabel": "模板",
+                  "icon": "tree",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-spreadjs-designer-explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "设计画布",
+              "icon": "edit",
+              "views": [
+                {
+                  "id": "rpt-spreadjs-designer-content",
+                  "tabLabel": "设计",
+                  "icon": "edit",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-spreadjs-designer-content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "公式向导/样式",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "rpt-spreadjs-designer-prop",
+                  "tabLabel": "配置",
+                  "icon": "detail-view",
+                  "type": "html_pages",
+                  "html_page": "fi.cmxfico.gl.rpt-spreadjs-designer-prop"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-rpt-design-workbench",
+          "name": "rpt-design-workbench",
+          "caption": "报表设计工作台",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "table-chart",
+          "workspace": {
+            "id": "rpt_design_workbench",
+            "model": {
+              "type": "native_pages",
+              "native_page": "portal.rpt.design-workbench",
+              "id": "rpt-design-workbench-model",
+              "view": "content",
+              "props": {
+                "mode": "model"
+              }
+            },
+            "explorer": {
+              "caption": "报表类别",
+              "icon": "folder",
+              "views": [
+                {
+                  "id": "rpt-design-workbench-explorer",
+                  "tabLabel": "类别",
+                  "icon": "folder",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.design-workbench",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "报表设计工作台",
+              "icon": "table-chart",
+              "views": [
+                {
+                  "id": "rpt-design-workbench-content",
+                  "tabLabel": "报表",
+                  "icon": "table-chart",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.design-workbench",
+                  "view": "content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "报表属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "rpt-design-workbench-prop",
+                  "tabLabel": "属性",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.design-workbench",
+                  "view": "property"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "fi-gl-rpt-app-workbench",
+          "name": "rpt-app-workbench",
+          "caption": "报表应用工作台",
+          "type": "workspace-node",
+          "permissionId": null,
+          "icon": "table-chart",
+          "workspace": {
+            "id": "rpt_app_workbench",
+            "model": {
+              "type": "native_pages",
+              "native_page": "portal.rpt.report-app-workbench",
+              "id": "rpt-app-workbench-model",
+              "view": "content",
+              "props": {
+                "mode": "data"
+              }
+            },
+            "explorer": {
+              "caption": "组织与期间",
+              "icon": "tree",
+              "views": [
+                {
+                  "id": "rpt-app-workbench-explorer",
+                  "tabLabel": "组织/期间",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.report-app-workbench",
+                  "view": "explorer"
+                }
+              ]
+            },
+            "content": {
+              "caption": "报表应用工作台",
+              "icon": "table-chart",
+              "views": [
+                {
+                  "id": "rpt-app-workbench-content",
+                  "tabLabel": "报表",
+                  "icon": "table-chart",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.report-app-workbench",
+                  "view": "content"
+                }
+              ]
+            },
+            "property": {
+              "caption": "属性",
+              "icon": "detail-view",
+              "views": [
+                {
+                  "id": "rpt-app-workbench-prop",
+                  "tabLabel": "报表属性",
+                  "icon": "detail-view",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.report-app-workbench",
+                  "view": "property"
+                },
+                {
+                  "id": "rpt-app-workbench-prop-org",
+                  "tabLabel": "组织机构",
+                  "icon": "tree",
+                  "type": "native_pages",
+                  "native_page": "portal.rpt.report-app-workbench",
+                  "view": "propertyOrg"
+                }
+              ]
+            }
+          }
+        },
+        {
           "id": "fi-gl-fico-ws-doc",
           "name": "fico-ws-doc",
           "caption": "ERP凭证(doc服务版)",

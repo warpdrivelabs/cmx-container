@@ -7,8 +7,8 @@ use cmx_iam::service_traits::{PermissionService, RoleGroupService, RoleService, 
 use cmx_storage::service::StorageService;
 use cmx_traits::auth::{AuthService, UserAuthQuery};
 use cmx_traits::iam::PermissionChecker;
-use cmx_traits::resource::DefinitionImporterBundle;
 use cmx_traits::plugin::PluginQuery;
+use cmx_traits::resource::DefinitionImporterBundle;
 use cmx_traits::resource::ResourceDataImporter;
 use cmx_traits::runtime::RuntimeInvoker;
 use cmx_traits::service::{ServiceQuery, ServiceStorage};

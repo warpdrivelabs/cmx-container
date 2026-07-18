@@ -420,7 +420,11 @@ fn urlencoding_decode(s: &str) -> String {
                 continue;
             }
         }
-        if bytes[i] == b'+' { out.push(b' '); } else { out.push(bytes[i]); }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(bytes[i]);
+        }
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()

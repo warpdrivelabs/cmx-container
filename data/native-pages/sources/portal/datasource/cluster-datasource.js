@@ -392,7 +392,7 @@ const MC_OP_TABS = [
 const MC_PAGE_MODE = {
   normal:       { },
   init:         { icon: 'add-activity', title: '该数据库尚未初始化模型中心', desc: '将创建台账系统表；初始化完成后方可建表/升级', btn: '初始化数据库', tone: 'blue' },
-  meta_upgrade: { icon: 'synchronize',  title: '系统表需要升级', desc: '台账系统表版本落后，请先升级后再操作模块', btn: '升级系统表', tone: 'amber' },
+  meta_upgrade: { icon: 'synchronize',  title: '基础管理需要升级', desc: '检测到旧版模型中心台账结构；升级前会先生成计划并说明影响，确认后才会执行', btn: '升级基础管理', tone: 'amber' },
   conflict:     { icon: 'alert',        title: '检测到冲突：该库存在非本台账管理的 cmx_ 表', desc: '为避免误操作，模块部署已锁定；请先纳管或人工确认', btn: '', tone: 'red' },
 }
 
@@ -942,11 +942,13 @@ function mcReviewPlanDetailHtml (rv) {
   return `<div class="mc-review-detail">
     <div class="mc-review-detail-h"><span><ui5-icon name="detail-view"></ui5-icon>详细计划</span><b>${results.length} 项 · ${totalTables} 张表</b></div>
     ${results.map((r) => {
-      const km = MC_KINDS.find((k) => k.id === r.kind) || MC_KINDS[0]
+      const km = r.kind === 'SYS'
+        ? { id: 'SYS', label: '基础管理', icon: 'database' }
+        : (MC_KINDS.find((k) => k.id === r.kind) || MC_KINDS[0])
       return `<div class="cds-bd-plan-grp">
         <div class="cds-bd-plan-grp-h">
           <span class="mc-badge t-${stTone(r.status)} sm"><ui5-icon name="${stIcon(r.status)}"></ui5-icon>${r.status === 'failed' ? '失败' : (r.status === 'skipped' ? '跳过' : '计划')}</span>
-          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : 'dct')}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
+          <span class="cds-bd-kbadge ${r.kind === 'DOC' ? 'doc' : (r.kind === 'SEED' ? 'seed' : (r.kind === 'SYS' ? 'seed' : 'dct'))}"><ui5-icon name="${km.icon}"></ui5-icon>${km.label}</span>
           <span class="cds-bd-plan-grp-t">${esc(r.module)}${r.version != null ? ' · v' + esc(r.version) : ''}</span>
           <span class="cds-bd-plan-grp-n">${r.tables != null ? r.tables + ' 张表' : (r.note ? esc(r.note) : '')}</span>
         </div>
@@ -1178,7 +1180,7 @@ async function runMcGate (mode) {
   const b = state.build
   const ds = state.datasources.find((d) => d.id === state.selectedDsId)
   if (!ds || b.running || b.review) return
-  if (mode !== 'init') { window.alert('系统表升级将在后续接入。'); return }
+  if (mode !== 'init' && mode !== 'meta_upgrade') { window.alert('该状态暂不支持自动处理，请先人工确认。'); return }
 
   const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null
   b.initAbort = ac
@@ -1188,7 +1190,7 @@ async function runMcGate (mode) {
   mcSetReview({
     key: 'init',
     kind: 'init',
-    title: '初始化/系统表升级执行计划',
+    title: mode === 'meta_upgrade' ? '基础管理升级执行计划' : '初始化/系统表升级执行计划',
     status: 'streaming',
     approved: false,
     payload: { db_id: ds.db_id || ds.id },

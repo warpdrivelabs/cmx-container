@@ -10,11 +10,11 @@
 //! tableName/列/主键，构造参数化 SQL，经 `cmx_database_pg` 的 tokio-postgres 管理器执行。
 //! 不复用 doc/ 的 DocMetaView/loader（字典是单表，无需跨层机制），保持精简。
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::Json;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 use cmx_database_pg::get_default_pg_db_manager;
@@ -126,7 +126,11 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
             raw_fields.push(f.clone());
             let caption = f
                 .get("caption")
-                .and_then(|c| c.get("zh_CN").and_then(|v| v.as_str()).or_else(|| c.as_str()))
+                .and_then(|c| {
+                    c.get("zh_CN")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| c.as_str())
+                })
                 .unwrap_or(&name)
                 .to_string();
             columns.push(DictColumn {
@@ -169,13 +173,26 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
     }
 
     // 主键：优先 isPrimaryKey 标记列；否则 idField（若存在于列中）；再否则 codeField。
-    let id_field = dm.get("idField").and_then(|v| v.as_str()).unwrap_or("id").to_string();
-    let code_field = dm.get("codeField").and_then(|v| v.as_str()).unwrap_or("code").to_string();
+    let id_field = dm
+        .get("idField")
+        .and_then(|v| v.as_str())
+        .unwrap_or("id")
+        .to_string();
+    let code_field = dm
+        .get("codeField")
+        .and_then(|v| v.as_str())
+        .unwrap_or("code")
+        .to_string();
     let pk = columns
         .iter()
         .find(|c| c.is_pk)
         .map(|c| c.name.clone())
-        .or_else(|| columns.iter().find(|c| c.name == id_field).map(|c| c.name.clone()))
+        .or_else(|| {
+            columns
+                .iter()
+                .find(|c| c.name == id_field)
+                .map(|c| c.name.clone())
+        })
         .unwrap_or_else(|| code_field.clone());
     // 标记 pk 列（供元数据投影）。
     for c in columns.iter_mut() {
@@ -192,7 +209,12 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
         .or_else(|| doc.get("version").and_then(|v| v.as_u64()))
         .unwrap_or(0);
     let spec_key = cmx_biz::validation::spec_key(
-        &q.domain, &q.application, &q.module, &q.file, &table_name, version,
+        &q.domain,
+        &q.application,
+        &q.module,
+        &q.file,
+        &table_name,
+        version,
     );
     let spec = match cmx_biz::validation::get_spec(&spec_key) {
         Some(s) => s,
@@ -208,11 +230,29 @@ async fn resolve_dict(q: &DctQuery) -> Result<DictView> {
     };
 
     Ok(DictView {
-        dict_code: dm.get("dictCode").and_then(|v| v.as_str()).unwrap_or(&q.dict).to_string(),
-        dict_name: dm.get("dictName").and_then(|v| v.as_str()).unwrap_or(&table_name).to_string(),
-        self_hierarchy: dm.get("selfHierarchy").and_then(|v| v.as_bool()).unwrap_or(false),
-        parent_field: dm.get("parentField").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        label_field: dm.get("labelField").and_then(|v| v.as_str()).unwrap_or("name").to_string(),
+        dict_code: dm
+            .get("dictCode")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&q.dict)
+            .to_string(),
+        dict_name: dm
+            .get("dictName")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&table_name)
+            .to_string(),
+        self_hierarchy: dm
+            .get("selfHierarchy")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        parent_field: dm
+            .get("parentField")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        label_field: dm
+            .get("labelField")
+            .and_then(|v| v.as_str())
+            .unwrap_or("name")
+            .to_string(),
         table_name,
         id_field,
         code_field,
@@ -246,7 +286,10 @@ async fn load_base(doc: &Value) -> Value {
 }
 
 fn base_fieldset<'a>(base: &'a Value, set_name: &str) -> Option<&'a Vec<Value>> {
-    base.get("fieldSets")?.get(set_name)?.get("fields")?.as_array()
+    base.get("fieldSets")?
+        .get(set_name)?
+        .get("fields")?
+        .as_array()
 }
 
 // ============================================================================
@@ -345,7 +388,6 @@ fn id_to_key(v: Option<&Value>) -> Option<String> {
         _ => None,
     }
 }
-
 
 // ============================================================================
 // 1) GET /api/dct/meta —— 字典显示元数据
@@ -462,7 +504,10 @@ fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Value>
             if valid_col(view, c) && valid_col(view, l) {
                 n += 1;
                 let p = n;
-                wheres.push(format!("(\"{}\" ILIKE ${} OR \"{}\" ILIKE ${})", c, p, l, p));
+                wheres.push(format!(
+                    "(\"{}\" ILIKE ${} OR \"{}\" ILIKE ${})",
+                    c, p, l, p
+                ));
                 params.push(Value::String(format!("%{}%", kw)));
             }
         }
@@ -482,14 +527,21 @@ fn build_search_sql(view: &DictView, raw: &Value) -> (String, String, Vec<Value>
     };
 
     let page = raw.get("page").and_then(|v| v.as_i64()).unwrap_or(1).max(1);
-    let page_size = raw.get("pageSize").and_then(|v| v.as_i64()).unwrap_or(500).clamp(1, 5000);
+    let page_size = raw
+        .get("pageSize")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(500)
+        .clamp(1, 5000);
     let offset = (page - 1) * page_size;
 
     let data_sql = format!(
         "SELECT {} FROM \"{}\"{}{} LIMIT {} OFFSET {}",
         col_list, view.table_name, where_sql, order, page_size, offset
     );
-    let count_sql = format!("SELECT COUNT(*) AS cnt FROM \"{}\"{}", view.table_name, where_sql);
+    let count_sql = format!(
+        "SELECT COUNT(*) AS cnt FROM \"{}\"{}",
+        view.table_name, where_sql
+    );
     (data_sql, count_sql, params)
 }
 
@@ -523,13 +575,22 @@ pub async fn dct_search(
     let db_id = get_db_id_from_header(&headers).await;
     let view = resolve_dict(&q).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
-    debug!("{:<12} - dct_search {} table={}", "HANDLER", q.dict, view.table_name);
+    debug!(
+        "{:<12} - dct_search {} table={}",
+        "HANDLER", q.dict, view.table_name
+    );
 
     let (sql, count_sql, params) = build_search_sql(&view, &raw);
 
     let mm = get_default_pg_db_manager();
     let ds = mm
-        .query_sql_with_json(&db_id, None, &sql, Value::Array(params.clone()), &view.dict_code)
+        .query_sql_with_json(
+            &db_id,
+            None,
+            &sql,
+            Value::Array(params.clone()),
+            &view.dict_code,
+        )
         .await
         .map_err(|e| api_err(&format!("字典查询失败: {e}")))?;
     let total_ds = mm
@@ -542,12 +603,21 @@ pub async fn dct_search(
     let rows = rows_val.get("rows").cloned().unwrap_or_else(|| json!([]));
     let total = serde_json::to_value(&total_ds)
         .ok()
-        .and_then(|v| v.get("rows").and_then(|r| r.get(0)).and_then(|r0| r0.get("cnt")).cloned())
+        .and_then(|v| {
+            v.get("rows")
+                .and_then(|r| r.get(0))
+                .and_then(|r0| r0.get("cnt"))
+                .cloned()
+        })
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
     let page = raw.get("page").and_then(|v| v.as_i64()).unwrap_or(1).max(1);
-    let page_size = raw.get("pageSize").and_then(|v| v.as_i64()).unwrap_or(500).clamp(1, 5000);
+    let page_size = raw
+        .get("pageSize")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(500)
+        .clamp(1, 5000);
     Ok(Json(ApiResp::ok(json!({
         "rows": rows,
         "total": total,
@@ -572,7 +642,10 @@ pub async fn dct_search_zmc_msgpack(
     let db_id = get_db_id_from_header(&headers).await;
     let view = resolve_dict(&q).await?;
     let raw = body.map(|b| b.0).unwrap_or_else(|| json!({}));
-    debug!("{:<12} - dct zmc-msgpack {} table={}", "HANDLER", q.dict, view.table_name);
+    debug!(
+        "{:<12} - dct zmc-msgpack {} table={}",
+        "HANDLER", q.dict, view.table_name
+    );
 
     let (sql, _count_sql, params) = build_search_sql(&view, &raw);
     let dv_params: Vec<cmx_core::model::cell::DataValue> =
@@ -622,7 +695,10 @@ pub async fn dct_upsert(
 ) -> Result<Json<ApiResp<Value>>> {
     let db_id = get_db_id_from_header(&headers).await;
     let view = resolve_dict(&q).await?;
-    debug!("{:<12} - dct_upsert {} table={}", "HANDLER", q.dict, view.table_name);
+    debug!(
+        "{:<12} - dct_upsert {} table={}",
+        "HANDLER", q.dict, view.table_name
+    );
 
     // body：数组或单对象。
     let items: Vec<Value> = match body {
@@ -630,8 +706,10 @@ pub async fn dct_upsert(
         v => vec![v],
     };
     // 取出可改写的行对象。
-    let mut rows: Vec<serde_json::Map<String, Value>> =
-        items.into_iter().filter_map(|v| v.as_object().cloned()).collect();
+    let mut rows: Vec<serde_json::Map<String, Value>> = items
+        .into_iter()
+        .filter_map(|v| v.as_object().cloned())
+        .collect();
 
     // 主键为服务端生成的 bigint 列时：为「临时 id」行铸真号 + 回填自分级 parent_id。
     // 回传 idMap 供前端把临时行 id 换成真号。NoID(code PK)字典 pk_is_generated=false，跳过铸号。
@@ -651,7 +729,10 @@ pub async fn dct_upsert(
     let mut violations = Vec::new();
     for (i, obj) in rows.iter().enumerate() {
         violations.extend(cmx_biz::validation::validate_insert_row(
-            &view.spec, obj, Some(i), &vopts,
+            &view.spec,
+            obj,
+            Some(i),
+            &vopts,
         ));
     }
     if !violations.is_empty() {
@@ -670,7 +751,9 @@ pub async fn dct_upsert(
         }
     }
 
-    Ok(Json(ApiResp::ok(json!({ "count": affected, "idMap": id_map }))))
+    Ok(Json(ApiResp::ok(
+        json!({ "count": affected, "idMap": id_map }),
+    )))
 }
 
 /// 构造校验失败响应：`{code:422, msg, data:{violations:[...]}}`（结构化，前端逐行逐列高亮）。
@@ -707,7 +790,10 @@ fn dct_validate_bucket(view: &DictView, bucket: &Value) -> Option<ApiResp<Value>
         for (i, row) in ins.iter().enumerate() {
             if let Some(obj) = row_fields(row) {
                 violations.extend(cmx_biz::validation::validate_insert_row(
-                    &view.spec, &obj, Some(i), &vopts_insert,
+                    &view.spec,
+                    &obj,
+                    Some(i),
+                    &vopts_insert,
                 ));
             }
         }
@@ -716,7 +802,10 @@ fn dct_validate_bucket(view: &DictView, bucket: &Value) -> Option<ApiResp<Value>
         for (i, row) in ups.iter().enumerate() {
             if let Some(fields) = row.get("fields").and_then(|v| v.as_object()) {
                 violations.extend(cmx_biz::validation::validate_update_fields(
-                    &view.spec, fields, Some(i), &vopts_update,
+                    &view.spec,
+                    fields,
+                    Some(i),
+                    &vopts_update,
                 ));
             }
         }
@@ -851,7 +940,10 @@ pub async fn dct_delete(
     let view = resolve_dict(&q).await?;
     debug!("{:<12} - dct_delete {} id={}", "HANDLER", q.dict, id);
 
-    let sql = format!("DELETE FROM \"{}\" WHERE \"{}\" = $1", view.table_name, view.pk);
+    let sql = format!(
+        "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+        view.table_name, view.pk
+    );
     // pk 是整数还是字符串：按 pk 列类型决定 JSON 参数（execute_sql_with_json 按值类型绑定）。
     let pk_is_int = view
         .columns
@@ -863,7 +955,9 @@ pub async fn dct_delete(
         })
         .unwrap_or(false);
     let param = if pk_is_int {
-        id.parse::<i64>().map(|n| json!(n)).unwrap_or_else(|_| json!(id))
+        id.parse::<i64>()
+            .map(|n| json!(n))
+            .unwrap_or_else(|_| json!(id))
     } else {
         json!(id)
     };
@@ -985,7 +1079,10 @@ async fn dct_save_apply(
     // deleted：按 pk 删。
     if let Some(dels) = bucket.get("deleted").and_then(|v| v.as_array()) {
         for id in dels {
-            let sql = format!("DELETE FROM \"{}\" WHERE \"{}\" = $1", view.table_name, view.pk);
+            let sql = format!(
+                "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+                view.table_name, view.pk
+            );
             let n = mm
                 .execute_sql_with_json(db_id, Some(txn_id), &sql, json!([id]))
                 .await

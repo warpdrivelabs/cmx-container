@@ -1177,6 +1177,122 @@
       "page": "dictrel-prop-detail",
       "pageId": "fi.cmxfico.gl.dictrel-prop-detail",
       "relPath": "fi/cmxfico/gl/dictrel-prop-detail.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.rpt-ws-model",
+      "latestHtmlFile": "rpt-ws-model.html",
+      "module": "gl",
+      "name": "财务报表·共享模型(隐藏)",
+      "page": "rpt-ws-model",
+      "pageId": "fi.cmxfico.gl.rpt-ws-model",
+      "relPath": "fi/cmxfico/gl/rpt-ws-model.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.rpt-ws-explorer",
+      "latestHtmlFile": "rpt-ws-explorer.html",
+      "module": "gl",
+      "name": "财务报表·报表目录",
+      "page": "rpt-ws-explorer",
+      "pageId": "fi.cmxfico.gl.rpt-ws-explorer",
+      "relPath": "fi/cmxfico/gl/rpt-ws-explorer.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.rpt-ws-content",
+      "latestHtmlFile": "rpt-ws-content.html",
+      "module": "gl",
+      "name": "财务报表·报表视图(表样)",
+      "page": "rpt-ws-content",
+      "pageId": "fi.cmxfico.gl.rpt-ws-content",
+      "relPath": "fi/cmxfico/gl/rpt-ws-content.html"
+    },
+    {
+      "app": "cmxfico",
+      "domain": "fi",
+      "id": "fi.cmxfico.gl.rpt-ws-prop",
+      "latestHtmlFile": "rpt-ws-prop.html",
+      "module": "gl",
+      "name": "财务报表·属性/数据集/勾稽",
+      "page": "rpt-ws-prop",
+      "pageId": "fi.cmxfico.gl.rpt-ws-prop",
+      "relPath": "fi/cmxfico/gl/rpt-ws-prop.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-designer-model",
+      "latestHtmlFile": "rpt-designer-model.html",
+      "module": "gl",
+      "name": "报表设计器·共享模型(隐藏)",
+      "page": "rpt-designer-model",
+      "pageId": "fi.cmxfico.gl.rpt-designer-model",
+      "relPath": "fi/cmxfico/gl/rpt-designer-model.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-designer-explorer",
+      "latestHtmlFile": "rpt-designer-explorer.html",
+      "module": "gl",
+      "name": "报表设计器·模板目录",
+      "page": "rpt-designer-explorer",
+      "pageId": "fi.cmxfico.gl.rpt-designer-explorer",
+      "relPath": "fi/cmxfico/gl/rpt-designer-explorer.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-designer-content",
+      "latestHtmlFile": "rpt-designer-content.html",
+      "module": "gl",
+      "name": "报表设计器·画布",
+      "page": "rpt-designer-content",
+      "pageId": "fi.cmxfico.gl.rpt-designer-content",
+      "relPath": "fi/cmxfico/gl/rpt-designer-content.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-designer-prop",
+      "latestHtmlFile": "rpt-designer-prop.html",
+      "module": "gl",
+      "name": "报表设计器·公式向导/属性",
+      "page": "rpt-designer-prop",
+      "pageId": "fi.cmxfico.gl.rpt-designer-prop",
+      "relPath": "fi/cmxfico/gl/rpt-designer-prop.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-spreadjs-designer-model",
+      "latestHtmlFile": "rpt-spreadjs-designer-model.html",
+      "module": "gl",
+      "name": "报表设计器（SpreadJS）·共享模型(隐藏)",
+      "page": "rpt-spreadjs-designer-model",
+      "pageId": "fi.cmxfico.gl.rpt-spreadjs-designer-model",
+      "relPath": "fi/cmxfico/gl/rpt-spreadjs-designer-model.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-spreadjs-designer-explorer",
+      "latestHtmlFile": "rpt-spreadjs-designer-explorer.html",
+      "module": "gl",
+      "name": "报表设计器（SpreadJS）·模板目录",
+      "page": "rpt-spreadjs-designer-explorer",
+      "pageId": "fi.cmxfico.gl.rpt-spreadjs-designer-explorer",
+      "relPath": "fi/cmxfico/gl/rpt-spreadjs-designer-explorer.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-spreadjs-designer-content",
+      "latestHtmlFile": "rpt-spreadjs-designer-content.html",
+      "module": "gl",
+      "name": "报表设计器（SpreadJS）·画布",
+      "page": "rpt-spreadjs-designer-content",
+      "pageId": "fi.cmxfico.gl.rpt-spreadjs-designer-content",
+      "relPath": "fi/cmxfico/gl/rpt-spreadjs-designer-content.html"
+    },
+    {
+      "id": "fi.cmxfico.gl.rpt-spreadjs-designer-prop",
+      "latestHtmlFile": "rpt-spreadjs-designer-prop.html",
+      "module": "gl",
+      "name": "报表设计器（SpreadJS）·公式向导/属性",
+      "page": "rpt-spreadjs-designer-prop",
+      "pageId": "fi.cmxfico.gl.rpt-spreadjs-designer-prop",
+      "relPath": "fi/cmxfico/gl/rpt-spreadjs-designer-prop.html"
     }
   ]
 }

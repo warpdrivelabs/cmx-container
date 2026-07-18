@@ -1,6 +1,7 @@
 /.idea/
 /target/
 /backup/
+/backups/
 #/example/
 /examples/
 /plugins/

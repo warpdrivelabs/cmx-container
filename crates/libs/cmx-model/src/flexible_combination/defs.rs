@@ -94,8 +94,8 @@ pub async fn list(
     let mut items = Vec::new();
     let want = kind.unwrap_or("").to_uppercase();
 
-    // DCT/DOC/BASE 来自 definitions
-    if want.is_empty() || want == "DCT" || want == "DOC" || want == "BASE" {
+    // DCT/DOC/RPT/BASE 来自 definitions
+    if want.is_empty() || want == "DCT" || want == "DOC" || want == "RPT" || want == "BASE" {
         let defs = list_definitions(kind, domain, app, module).await?;
         items.extend(defs);
     }

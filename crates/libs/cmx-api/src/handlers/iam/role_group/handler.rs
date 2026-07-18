@@ -276,10 +276,7 @@ pub async fn get_role_group_combined_tree(
     State(cmx_state): State<CmxAppState>,
     CmxSvrContext(_svr_ctx): CmxSvrContext,
 ) -> Result<Json<ApiResp<Vec<RoleGroupTreeNode>>>> {
-    debug!(
-        "{:<12} - handler::get_role_group_combined_tree",
-        "HANDLER"
-    );
+    debug!("{:<12} - handler::get_role_group_combined_tree", "HANDLER");
 
     let iam = cmx_state
         .iam()
