@@ -16,8 +16,8 @@ pub use handler::module_custom_page;
 use crate::app_state::CmxAppState;
 use crate::rest::handler as rest_handler;
 use crate::routes::traits::ModuleRoutes;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 
 /// Module 模块路由
 pub struct ModuleHandler;

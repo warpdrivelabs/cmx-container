@@ -42,12 +42,6 @@ CREATE TABLE IF NOT EXISTS cmx_model_module
     application_code     VARCHAR(100),
     module_code          VARCHAR(100),
     module_name          VARCHAR(200),
-    dct_version          VARCHAR(50),
-    dct_status           VARCHAR(20) DEFAULT 'none',
-    doc_version          VARCHAR(50),
-    doc_status           VARCHAR(20) DEFAULT 'none',
-    seed_version         VARCHAR(50),
-    seed_status          VARCHAR(20) DEFAULT 'none',
     overall_status       VARCHAR(20) DEFAULT 'active',
     table_count          INT4        DEFAULT 0,
     def_source           VARCHAR(300),
@@ -61,10 +55,40 @@ CREATE TABLE IF NOT EXISTS cmx_model_module
     update_time          TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 );
-COMMENT ON TABLE  cmx_model_module            IS '模型中心-模块部署当前态（每模块一行）';
-COMMENT ON COLUMN cmx_model_module.dct_status IS '数据字典状态: none/current/failed/upgrading';
+COMMENT ON TABLE  cmx_model_module            IS '模型中心-模块部署当前态主表（每模块一行；类型状态见 cmx_model_module_kind）';
 CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_key
     ON cmx_model_module (db_id, app_id, domain_code, application_code, module_code);
+
+CREATE TABLE IF NOT EXISTS cmx_model_module_kind
+(
+    id                   VARCHAR(64) NOT NULL,
+    db_id                VARCHAR(100),
+    app_id               VARCHAR(64) NOT NULL DEFAULT 'default',
+    domain_code          VARCHAR(100),
+    application_code     VARCHAR(100),
+    module_code          VARCHAR(100),
+    kind                 VARCHAR(20) NOT NULL,
+    version              VARCHAR(50),
+    status               VARCHAR(20) DEFAULT 'none',
+    table_count          INT4        DEFAULT 0,
+    def_source           VARCHAR(300),
+    def_checksum         VARCHAR(64),
+    deployed_at          TIMESTAMP,
+    deployed_by          VARCHAR(100),
+    deployed_name        VARCHAR(100),
+    error_message        TEXT,
+    archived             INT4        DEFAULT 0,
+    create_time          TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+COMMENT ON TABLE  cmx_model_module_kind        IS '模型中心-模块类型当前态（每模块每 kind 一行；新增类型不改表结构）';
+COMMENT ON COLUMN cmx_model_module_kind.kind   IS '模块类型: DCT/DOC/RPT/SEED/...';
+COMMENT ON COLUMN cmx_model_module_kind.status IS '类型状态: none/current/failed/upgrading';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_model_module_kind_key
+    ON cmx_model_module_kind (db_id, app_id, domain_code, application_code, module_code, kind);
+CREATE INDEX IF NOT EXISTS idx_model_module_kind_module
+    ON cmx_model_module_kind (db_id, domain_code, application_code, module_code);
 
 -- =============================================
 -- 3. 追加式部署/升级历史（时间线，永不改写）

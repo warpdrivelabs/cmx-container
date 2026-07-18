@@ -7,6 +7,8 @@ pub mod dct;
 pub mod doc;
 pub mod handler;
 pub mod model_center;
+pub mod report_design;
+pub mod rpt;
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -113,6 +115,60 @@ impl ModuleRoutes for PortalModule {
                     .delete(handler::definitions_delete),
             )
             .route("/definitions/batch", post(handler::definitions_batch))
+            // 报表设计工作台：全部数据来自 fico-db 物理表。
+            .route(
+                "/report-design/overview",
+                get(report_design::report_design_overview),
+            )
+            .route(
+                "/report-design/reports",
+                get(report_design::report_design_reports)
+                    .post(report_design::report_design_create_report),
+            )
+            .route(
+                "/report-design/elements",
+                get(report_design::report_design_elements),
+            )
+            // 报表应用工作台：会计日历（期间）+ 合并组织架构（组织树）读服务，来自 fico-db。
+            .route(
+                "/report-design/calendar",
+                get(report_design::report_design_calendar),
+            )
+            .route(
+                "/report-design/consol-org",
+                get(report_design::report_design_consol_org),
+            )
+            .route(
+                "/report-design/reports/{code}",
+                get(report_design::report_design_report_detail)
+                    .delete(report_design::report_design_delete_report),
+            )
+            .route(
+                "/report-design/reports/{code}/versions",
+                post(report_design::report_design_create_version),
+            )
+            .route(
+                "/report-design/reports/{code}/versions/{version}/default",
+                post(report_design::report_design_set_default_version),
+            )
+            // 报表两模式加载存储（ReportModel 单一事实源）：
+            //   layout = 设计版式（cr_report_fmt BLOB + 关系投影 sheet/region/row/col）
+            //   data   = 报表数据（cr_cell_data 按 org+period，读走 ZmcDataSet 零拷贝）
+            .route(
+                "/report-design/reports/{code}/layout",
+                get(report_design::report_design_load_layout)
+                    .post(report_design::report_design_save_layout),
+            )
+            .route(
+                "/report-design/reports/{code}/data/query",
+                post(report_design::report_design_query_data),
+            )
+            .route(
+                "/report-design/reports/{code}/data",
+                post(report_design::report_design_save_data),
+            )
+            // 旧 html 报表设计器预览兼容接口；新工作台不使用。
+            .route("/rpt/compute", post(rpt::rpt_compute))
             // 业务单据数据装载/回存（方案 Phase 4/5）
             // 端点命名：/doc/data/<驱动>-<内存模式>-<传输> —— 一眼可辨驱动/内存/传输三维度。
             //   驱动 sqlx|tokio · 内存 dataset(全拷贝)|zmc(零拷贝) · 传输 json|msgpack

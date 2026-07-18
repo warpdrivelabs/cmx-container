@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "code": "REL-MGT-01-COMPANY01",
+    "name": "管理层级·华通科技有限公司",
+    "master_id": 101,
+    "master_code": "MGT01",
+    "master_name": "经营管理层级",
+    "aux_id": 2,
+    "aux_code": "COMPANY01",
+    "aux_name": "华通科技有限公司",
+    "status": 1,
+    "create_by": "SYS",
+    "create_time": "2026-01-01 00:00:00",
+    "effective_from": "2026-01-01",
+    "effective_to": null
+  },
+  {
+    "id": 2,
+    "code": "REL-MGT-01-UNIT01",
+    "name": "管理层级·华通科技-软件事业部",
+    "master_id": 101,
+    "master_code": "MGT01",
+    "master_name": "经营管理层级",
+    "aux_id": 3,
+    "aux_code": "UNIT01",
+    "aux_name": "华通科技-软件事业部",
+    "status": 1,
+    "create_by": "SYS",
+    "create_time": "2026-01-01 00:00:00",
+    "effective_from": "2026-01-01",
+    "effective_to": null
+  },
+  {
+    "id": 3,
+    "code": "REL-TRD-01-COMPANY02",
+    "name": "贸易板块·华通商贸有限公司",
+    "master_id": 102,
+    "master_code": "TRD01",
+    "master_name": "贸易板块",
+    "aux_id": 4,
+    "aux_code": "COMPANY02",
+    "aux_name": "华通商贸有限公司",
+    "status": 1,
+    "create_by": "SYS",
+    "create_time": "2026-01-01 00:00:00",
+    "effective_from": "2026-01-01",
+    "effective_to": null
+  }
+]

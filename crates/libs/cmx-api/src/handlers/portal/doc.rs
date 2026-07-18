@@ -25,7 +25,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
 
-use cmx_biz::doc::{cache, saver, DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver};
+use cmx_biz::doc::{DocLoader, DocMetaView, DocQuery, DocRevision, DocSaver, cache, saver};
 use cmx_core::model::data::dataset::ColumnarCodec;
 use cmx_database::get_default_db_manager;
 
@@ -80,12 +80,13 @@ fn simple_doc_query(meta: &DocMetaView, q: &DocDataQuery) -> DocQuery {
     let root_id = meta.root_layer().map(|l| l.id.clone()).unwrap_or_default();
     let mut dq = DocQuery::simple(&root_id, q.limit, q.depth);
     if let Some(f) = &q.filter
-        && let Some((col, val)) = f.split_once(':') {
-            // 简单等值 → 根层 filter JSON
-            let filter = serde_json::json!({ col: val });
-            let lq = dq.layers.entry(root_id.clone()).or_default();
-            lq.filter = cmx_biz::doc::Filter::from_json(&filter).ok().flatten();
-        }
+        && let Some((col, val)) = f.split_once(':')
+    {
+        // 简单等值 → 根层 filter JSON
+        let filter = serde_json::json!({ col: val });
+        let lq = dq.layers.entry(root_id.clone()).or_default();
+        lq.filter = cmx_biz::doc::Filter::from_json(&filter).ok().flatten();
+    }
     dq
 }
 
@@ -277,7 +278,10 @@ pub async fn doc_children(
     use cmx_biz::doc::{ZmcDocLoader, ZmcDocLoaderSqlx};
     use cmx_database_pg::get_default_pg_db_manager;
 
-    debug!("{:<12} - doc_children {}/{}", "HANDLER", req.module, req.layer);
+    debug!(
+        "{:<12} - doc_children {}/{}",
+        "HANDLER", req.module, req.layer
+    );
     let db_id = get_db_id_from_header(&headers).await;
     let meta = resolve_doc_meta(&req.domain, &req.application, &req.module, Some(req.file.as_str()), None).await?;
 
@@ -288,26 +292,28 @@ pub async fn doc_children(
         ..Default::default()
     };
     if let Some(v) = &req.query
-        && !v.is_null() {
-            let lq_json = serde_json::json!({ "layers": { &req.layer: v } });
-            let parsed = DocQuery::from_json(&lq_json)?;
-            if let Some(lq) = parsed.layers.get(&req.layer) {
-                dq.layers.insert(req.layer.clone(), lq.clone());
-            }
+        && !v.is_null()
+    {
+        let lq_json = serde_json::json!({ "layers": { &req.layer: v } });
+        let parsed = DocQuery::from_json(&lq_json)?;
+        if let Some(lq) = parsed.layers.get(&req.layer) {
+            dq.layers.insert(req.layer.clone(), lq.clone());
         }
+    }
     dq.validate(&meta)?;
 
     // 以该层为根、给定父 id 下钻装载子树（sqlx 可选，默认 tokio）。
     let use_sqlx = req.exit.as_deref() == Some("sqlx-zmc-json");
     let pkg = if use_sqlx {
         let mm = get_default_db_manager();
-        let zmc = ZmcDocLoaderSqlx::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq)
-            .await?;
+        let zmc =
+            ZmcDocLoaderSqlx::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq)
+                .await?;
         zmc.encode_columnar_json()
     } else {
         let mm = get_default_pg_db_manager();
-        let zmc = ZmcDocLoader::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq)
-            .await?;
+        let zmc =
+            ZmcDocLoader::load_subtree(mm, &db_id, &meta, &req.layer, &req.parent_ids, &dq).await?;
         zmc.encode_columnar_json()
     };
 
@@ -330,7 +336,7 @@ pub async fn doc_data_stream(
     body: Option<Json<Value>>,
 ) -> Result<axum::response::Response> {
     use axum::response::IntoResponse;
-    use cmx_biz::doc::{build_layer_select, LayerQuery};
+    use cmx_biz::doc::{LayerQuery, build_layer_select};
     use cmx_database_pg::get_default_pg_db_manager;
 
     debug!("{:<12} - doc_data_stream {}/{}", "HANDLER", q.module, q.file.as_deref().unwrap_or("(auto)"));
@@ -355,11 +361,12 @@ pub async fn doc_data_stream(
         dq.layer(&layer_id)
     } else {
         let filter = if let Some(f) = &q.filter
-            && let Some((col, val)) = f.split_once(':') {
-                cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?
-            } else {
-                None
-            };
+            && let Some((col, val)) = f.split_once(':')
+        {
+            cmx_biz::doc::Filter::from_json(&serde_json::json!({ col: val }))?
+        } else {
+            None
+        };
         LayerQuery {
             limit: q.limit,
             filter,
@@ -574,9 +581,10 @@ pub async fn doc_save(
 
     // §14.2 后端二次校验：对 changeset 各行跑 validationRules，error 阻断保存。
     if !meta.validation_rules.is_empty()
-        && let Some(vr) = run_validation(&meta, &changes) {
-            return Ok(Json(ApiResp::ok(vr)));
-        }
+        && let Some(vr) = run_validation(&meta, &changes)
+    {
+        return Ok(Json(ApiResp::ok(vr)));
+    }
 
     let result = match DocSaver::save(
         mm,
@@ -658,7 +666,9 @@ pub async fn doc_save_batch(
         .and_then(|v| v.as_array())
         .ok_or_else(|| cmx_biz::BizError::business("批量保存缺少 docs 数组"))?;
     if docs.is_empty() {
-        return Ok(Json(ApiResp::ok(serde_json::json!({ "atomic": atomic, "results": [] }))));
+        return Ok(Json(ApiResp::ok(
+            serde_json::json!({ "atomic": atomic, "results": [] }),
+        )));
     }
 
     // 逐单解析：resolve meta（缓存）+ parse_save_body + 校验 + save_ctx。
@@ -668,10 +678,16 @@ pub async fn doc_save_batch(
     let mut ctxs: Vec<cmx_biz::doc::SaveCtx> = Vec::with_capacity(docs.len());
     for (i, d) in docs.iter().enumerate() {
         let get = |k: &str| d.get(k).and_then(|v| v.as_str()).unwrap_or("");
-        let (domain, app, module, file) =
-            (get("domain"), get("application"), get("module"), get("file"));
+        let (domain, app, module, file) = (
+            get("domain"),
+            get("application"),
+            get("module"),
+            get("file"),
+        );
         if file.is_empty() {
-            return Err(cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into());
+            return Err(
+                cmx_biz::BizError::business(format!("第 {} 单缺少 file 坐标", i + 1)).into(),
+            );
         }
         let meta = resolve_doc_meta(domain, app, module, Some(file), None).await?;
         let (mode, changes) = saver::parse_save_body(d);

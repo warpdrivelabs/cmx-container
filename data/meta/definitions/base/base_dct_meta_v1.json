@@ -432,7 +432,7 @@
       ]
     },
     "relationCommonFields": {
-      "remark": "关系字典共用的基础列。关系字典用于关联分组字典与业务字典；本字段集冗余存储双方的 ID 与名称，便于直接展示与查询。",
+      "remark": "关系字典共用的基础列。关系字典用于关联主字典（分组）与辅字典（业务）；本字段集用中性的 master_*/aux_* 槽位冗余存储双方的 ID/编码/名称，便于直接展示与查询。绑定到哪个主/辅字典由 dictMeta.relation 声明，编译期落到 master_id/aux_id 两个 dimension 槽。",
       "fields": [
         {
           "dataType": "BIGINT",
@@ -468,10 +468,10 @@
           "nullable": false
         },
         {
-          "id": "hierarchy_node_id",
-          "name": "hierarchy_node_id",
+          "id": "master_id",
+          "name": "master_id",
           "caption": {
-            "zh_CN": "层级节点ID"
+            "zh_CN": "主字典节点ID"
           },
           "dataType": "BIGINT",
           "nullable": false,
@@ -483,10 +483,10 @@
           "nullable": false,
           "refField": "id",
           "displayField": "name",
-          "id": "hierarchy_node_code",
-          "name": "hierarchy_node_code",
+          "id": "master_code",
+          "name": "master_code",
           "caption": {
-            "zh_CN": "层级节点编码"
+            "zh_CN": "主字典节点编码"
           },
           "dimType": "attribute"
         },
@@ -494,20 +494,20 @@
           "dataType": "VARCHAR",
           "fieldLength": 128,
           "nullable": false,
-          "id": "hierarchy_node_name",
-          "name": "hierarchy_node_name",
+          "id": "master_name",
+          "name": "master_name",
           "caption": {
-            "zh_CN": "层级节点名称"
+            "zh_CN": "主字典节点名称"
           },
           "edit": {
             "mode": "input"
           }
         },
         {
-          "id": "business_data_id",
-          "name": "business_data_id",
+          "id": "aux_id",
+          "name": "aux_id",
           "caption": {
-            "zh_CN": "业务数据ID"
+            "zh_CN": "辅字典条目ID"
           },
           "dataType": "BIGINT",
           "nullable": false,
@@ -519,20 +519,20 @@
           "nullable": false,
           "refField": "id",
           "displayField": "name",
-          "id": "business_data_code",
-          "name": "business_data_code",
+          "id": "aux_code",
+          "name": "aux_code",
           "caption": {
-            "zh_CN": "业务数据编码"
+            "zh_CN": "辅字典条目编码"
           }
         },
         {
           "dataType": "VARCHAR",
           "fieldLength": 128,
           "nullable": false,
-          "id": "business_data_name",
-          "name": "business_data_name",
+          "id": "aux_name",
+          "name": "aux_name",
           "caption": {
-            "zh_CN": "业务数据名称"
+            "zh_CN": "辅字典条目名称"
           },
           "edit": {
             "mode": "input"

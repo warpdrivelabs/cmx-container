@@ -1267,7 +1267,8 @@ pub async fn fc_save_config(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResp<serde_json::Value>>> {
     // 校验：无效 422（与 Node 一致用 fail code 422）
-    let diagnostics = cmx_portal::flexible_combination::validator::validate_flexible_combination(&body);
+    let diagnostics =
+        cmx_portal::flexible_combination::validator::validate_flexible_combination(&body);
     if !diagnostics
         .get("valid")
         .and_then(|v| v.as_bool())
@@ -1280,7 +1281,8 @@ pub async fn fc_save_config(
         )));
     }
     let saved =
-        cmx_portal::flexible_combination::store::save_flexible_combination(&q.to_ref(), &body).await?;
+        cmx_portal::flexible_combination::store::save_flexible_combination(&q.to_ref(), &body)
+            .await?;
     Ok(Json(ApiResp::ok(
         serde_json::json!({ "ok": true, "saved": saved }),
     )))

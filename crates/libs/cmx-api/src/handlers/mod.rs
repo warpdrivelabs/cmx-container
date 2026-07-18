@@ -9,8 +9,8 @@
 //! - `service.rs` - Service 实现（业务逻辑，可选）
 //! - `handler.rs` - Handler 实现（HTTP 处理，可选）
 
-pub mod application;
 pub mod ai;
+pub mod application;
 pub mod auth;
 pub mod debug;
 pub mod dev;
